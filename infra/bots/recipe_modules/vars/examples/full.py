@@ -22,13 +22,20 @@ def RunSteps(api):
 
 
 TEST_BUILDERS = [
+  'Build-Debian9-Clang-x86_64-Release-NoDEPS',
+  'Build-Debian9-Clang-x86_64-Release-ParentRevision',
+  'Build-Debian9-Clang-x86_64-Release-SKNX_NO_SIMD',
+  'Build-Debian9-GCC-x86_64-Release-Flutter_Android',
+  'Build-Debian9-GCC-x86_64-Release-PDFium',
   'Build-Mac-Clang-x86_64-Debug-CommandBuffer',
-  'Build-Ubuntu-GCC-x86_64-Release-Flutter_Android',
-  'Build-Ubuntu-GCC-x86_64-Release-PDFium',
-  'Build-Win-MSVC-x86_64-Release-Vulkan',
+  'Build-Win-Clang-x86_64-Release-Vulkan',
   'Housekeeper-Weekly-RecreateSKPs',
-  'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug',
-  'Perf-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release-ASAN',
+  'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug-All',
+  'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-ASAN',
+  'Perf-Ubuntu14-GCC-GCE-CPU-AVX2-x86_64-Release-All-CT_BENCH_1k_SKPs',
+  'Upload-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Coverage-All',
+  'Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All',
+  'Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All'
 ]
 
 
@@ -43,7 +50,7 @@ def GenTests(api):
                        swarm_out_dir='[SWARM_OUT_DIR]')
     )
 
-  buildername = 'Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug'
+  buildername = 'Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug-All'
   yield (
       api.test('win_test') +
       api.properties(buildername=buildername,

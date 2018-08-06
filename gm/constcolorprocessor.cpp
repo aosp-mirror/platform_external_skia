@@ -101,12 +101,12 @@ protected:
                     } else {
                         skPaint.setColor(kPaintColors[paintType]);
                     }
-                    SkAssertResult(SkPaintToGrPaint(context, renderTargetContext, skPaint,
-                                                    viewMatrix, &grPaint));
+                    SkAssertResult(SkPaintToGrPaint(context, renderTargetContext->colorSpaceInfo(),
+                                                    skPaint, viewMatrix, &grPaint));
 
                     GrConstColorProcessor::InputMode mode = (GrConstColorProcessor::InputMode) m;
                     GrColor4f color = GrColor4f::FromGrColor(kColors[procColor]);
-                    sk_sp<GrFragmentProcessor> fp(GrConstColorProcessor::Make(color, mode));
+                    auto fp = GrConstColorProcessor::Make(color, mode);
 
                     grPaint.addColorFragmentProcessor(std::move(fp));
                     renderTargetContext->priv().testingOnly_addDrawOp(

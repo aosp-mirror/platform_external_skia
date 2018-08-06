@@ -8,11 +8,10 @@
 #include "SkBitmapCache.h"
 #include "SkBitmapController.h"
 #include "SkBitmapProcState.h"
-#include "SkColorPriv.h"
+#include "SkColorData.h"
 #include "SkPaint.h"
 #include "SkShader.h"   // for tilemodes
 #include "SkUtilsArm.h"
-#include "SkBitmapScaler.h"
 #include "SkMipMap.h"
 #include "SkPixelRef.h"
 #include "SkImageEncoder.h"
@@ -66,15 +65,11 @@ static bool just_trans_general(const SkMatrix& matrix) {
  *  for the purpose of filtering.
  */
 static bool just_trans_integral(const SkMatrix& m) {
-#ifdef SK_SUPPORT_LEGACY_BILERP
-    return false;
-#else
     static constexpr SkScalar tol = SK_Scalar1 / 256;
 
     return m.getType() <= SkMatrix::kTranslate_Mask
         && SkScalarNearlyEqual(m.getTranslateX(), SkScalarRoundToScalar(m.getTranslateX()), tol)
         && SkScalarNearlyEqual(m.getTranslateY(), SkScalarRoundToScalar(m.getTranslateY()), tol);
-#endif
 }
 
 static bool valid_for_filtering(unsigned dimension) {
@@ -84,13 +79,13 @@ static bool valid_for_filtering(unsigned dimension) {
 }
 
 bool SkBitmapProcInfo::init(const SkMatrix& inv, const SkPaint& paint) {
-    SkASSERT(!inv.hasPerspective());
+    SkASSERT(inv.isScaleTranslate());
 
     fPixmap.reset();
     fInvMatrix = inv;
     fFilterQuality = paint.getFilterQuality();
 
-    SkDefaultBitmapController controller(SkDefaultBitmapController::CanShadeHQ::kNo);
+    SkDefaultBitmapController controller;
     fBMState = controller.requestBitmap(fProvider, inv, paint.getFilterQuality(),
                                         fBMStateStorage.get(), fBMStateStorage.size());
     // Note : we allow the controller to return an empty (zero-dimension) result. Should we?
@@ -102,40 +97,47 @@ bool SkBitmapProcInfo::init(const SkMatrix& inv, const SkPaint& paint) {
     fRealInvMatrix = fBMState->invMatrix();
     fPaintColor = paint.getColor();
     fFilterQuality = fBMState->quality();
+    SkASSERT(fFilterQuality <= kLow_SkFilterQuality);
     SkASSERT(fPixmap.addr());
 
-    // Most of the scanline procs deal with "unit" texture coordinates, as this
-    // makes it easy to perform tiling modes (repeat = (x & 0xFFFF)). To generate
-    // those, we divide the matrix by its dimensions here.
-    //
-    // We don't do this if we're either trivial (can ignore the matrix) or clamping
-    // in both X and Y since clamping to width,height is just as easy as to 0xFFFF.
+    bool integral_translate_only = just_trans_integral(fInvMatrix);
+    if (!integral_translate_only) {
+        // Most of the scanline procs deal with "unit" texture coordinates, as this
+        // makes it easy to perform tiling modes (repeat = (x & 0xFFFF)). To generate
+        // those, we divide the matrix by its dimensions here.
+        //
+        // We don't do this if we're either trivial (can ignore the matrix) or clamping
+        // in both X and Y since clamping to width,height is just as easy as to 0xFFFF.
 
-    if (fTileModeX != SkShader::kClamp_TileMode ||
-        fTileModeY != SkShader::kClamp_TileMode) {
-        fInvMatrix.postIDiv(fPixmap.width(), fPixmap.height());
-    }
-
-    // Now that all possible changes to the matrix have taken place, check
-    // to see if we're really close to a no-scale matrix.  If so, explicitly
-    // set it to be so.  Subsequent code may inspect this matrix to choose
-    // a faster path in this case.
-
-    // This code will only execute if the matrix has some scale component;
-    // if it's already pure translate then we won't do this inversion.
-
-    if (matrix_only_scale_translate(fInvMatrix)) {
-        SkMatrix forward;
-        if (fInvMatrix.invert(&forward) && just_trans_general(forward)) {
-            fInvMatrix.setTranslate(-forward.getTranslateX(), -forward.getTranslateY());
+        if (fTileModeX != SkShader::kClamp_TileMode ||
+            fTileModeY != SkShader::kClamp_TileMode) {
+            fInvMatrix.postIDiv(fPixmap.width(), fPixmap.height());
         }
+
+        // Now that all possible changes to the matrix have taken place, check
+        // to see if we're really close to a no-scale matrix.  If so, explicitly
+        // set it to be so.  Subsequent code may inspect this matrix to choose
+        // a faster path in this case.
+
+        // This code will only execute if the matrix has some scale component;
+        // if it's already pure translate then we won't do this inversion.
+
+        if (matrix_only_scale_translate(fInvMatrix)) {
+            SkMatrix forward;
+            if (fInvMatrix.invert(&forward) && just_trans_general(forward)) {
+                fInvMatrix.setTranslate(-forward.getTranslateX(), -forward.getTranslateY());
+            }
+        }
+
+        // Recompute the flag after matrix adjustments.
+        integral_translate_only = just_trans_integral(fInvMatrix);
     }
 
     fInvType = fInvMatrix.getType();
 
     if (kLow_SkFilterQuality == fFilterQuality &&
         (!valid_for_filtering(fPixmap.width() | fPixmap.height()) ||
-         just_trans_integral(fInvMatrix))) {
+         integral_translate_only)) {
         fFilterQuality = kNone_SkFilterQuality;
     }
 
@@ -153,7 +155,7 @@ bool SkBitmapProcInfo::init(const SkMatrix& inv, const SkPaint& paint) {
  *    and may be removed.
  */
 bool SkBitmapProcState::chooseProcs() {
-    fInvProc            = fInvMatrix.getMapXYProc();
+    fInvProc            = SkMatrixPriv::GetMapXYProc(fInvMatrix);
     fInvSx              = SkScalarToFixed(fInvMatrix.getScaleX());
     fInvSxFractionalInt = SkScalarToFractionalInt(fInvMatrix.getScaleX());
     fInvKy              = SkScalarToFixed(fInvMatrix.getSkewY());
@@ -541,34 +543,6 @@ static void check_scale_filter(uint32_t bitmapXY[], int count,
     }
 }
 
-static void check_affine_nofilter(uint32_t bitmapXY[], int count,
-                                 unsigned mx, unsigned my) {
-    for (int i = 0; i < count; ++i) {
-        uint32_t XY = bitmapXY[i];
-        unsigned x = XY & 0xFFFF;
-        unsigned y = XY >> 16;
-        SkASSERT(x < mx);
-        SkASSERT(y < my);
-    }
-}
-
-static void check_affine_filter(uint32_t bitmapXY[], int count,
-                                 unsigned mx, unsigned my) {
-    for (int i = 0; i < count; ++i) {
-        uint32_t YY = *bitmapXY++;
-        unsigned y0 = YY >> 18;
-        unsigned y1 = YY & 0x3FFF;
-        SkASSERT(y0 < my);
-        SkASSERT(y1 < my);
-
-        uint32_t XX = *bitmapXY++;
-        unsigned x0 = XX >> 18;
-        unsigned x1 = XX & 0x3FFF;
-        SkASSERT(x0 < mx);
-        SkASSERT(x1 < mx);
-    }
-}
-
 void SkBitmapProcState::DebugMatrixProc(const SkBitmapProcState& state,
                                         uint32_t bitmapXY[], int count,
                                         int x, int y) {
@@ -579,16 +553,11 @@ void SkBitmapProcState::DebugMatrixProc(const SkBitmapProcState& state,
 
     void (*proc)(uint32_t bitmapXY[], int count, unsigned mx, unsigned my);
 
-    // There are four formats possible:
-    //  scale -vs- affine
+    // There are two formats possible:
     //  filter -vs- nofilter
-    if (state.fInvType <= (SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask)) {
-        proc = state.fFilterQuality != kNone_SkFilterQuality ?
-                    check_scale_filter : check_scale_nofilter;
-    } else {
-        proc = state.fFilterQuality != kNone_SkFilterQuality ?
-                    check_affine_filter : check_affine_nofilter;
-    }
+    SkASSERT(state.fInvType <= (SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask));
+    proc = state.fFilterQuality != kNone_SkFilterQuality ?
+                check_scale_filter : check_scale_nofilter;
     proc(bitmapXY, count, state.fPixmap.width(), state.fPixmap.height());
 }
 

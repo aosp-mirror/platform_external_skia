@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorSpace_Base.h"
 #include "SkCommonFlagsConfig.h"
 #include "SkImageInfo.h"
+#include "SkTHash.h"
 
 #include <stdlib.h>
 
@@ -43,35 +43,28 @@ static const struct {
     { "glesmsaa4",             "gpu", "api=gles,samples=4" },
     { "glnvpr4",               "gpu", "api=gl,nvpr=true,samples=4" },
     { "glnvpr8" ,              "gpu", "api=gl,nvpr=true,samples=8" },
-    { "glnvprdit4",            "gpu", "api=gl,nvpr=true,samples=4,dit=true" },
-    { "glnvprdit8" ,           "gpu", "api=gl,nvpr=true,samples=8,dit=true" },
     { "glesnvpr4",             "gpu", "api=gles,nvpr=true,samples=4" },
-    { "glesnvprdit4",          "gpu", "api=gles,nvpr=true,samples=4,dit=true" },
-    { "glinst",                "gpu", "api=gl,inst=true" },
-    { "glinst4",               "gpu", "api=gl,inst=true,samples=4" },
-    { "glinstdit4",            "gpu", "api=gl,inst=true,samples=4,dit=true" },
-    { "glinst8" ,              "gpu", "api=gl,inst=true,samples=8" },
-    { "glinstdit8" ,           "gpu", "api=gl,inst=true,samples=8,dit=true" },
-    { "glesinst",              "gpu", "api=gles,inst=true" },
-    { "glesinst4",             "gpu", "api=gles,inst=true,samples=4" },
-    { "glesinstdit4",          "gpu", "api=gles,inst=true,samples=4,dit=true" },
     { "gl4444",                "gpu", "api=gl,color=4444" },
     { "gl565",                 "gpu", "api=gl,color=565" },
     { "glf16",                 "gpu", "api=gl,color=f16" },
+    { "gl1010102",             "gpu", "api=gl,color=1010102" },
     { "glsrgb",                "gpu", "api=gl,color=srgb" },
     { "glsrgbnl",              "gpu", "api=gl,color=srgbnl" },
     { "glesf16",               "gpu", "api=gles,color=f16" },
+    { "gles1010102",           "gpu", "api=gles,color=1010102" },
     { "glessrgb",              "gpu", "api=gles,color=srgb" },
     { "glessrgbnl",            "gpu", "api=gles,color=srgbnl" },
     { "glsrgb",                "gpu", "api=gl,color=srgb" },
     { "glwide",                "gpu", "api=gl,color=f16_wide" },
     { "glnarrow",              "gpu", "api=gl,color=f16_narrow" },
     { "glnostencils",          "gpu", "api=gl,stencils=false" },
+    { "gles4444",              "gpu", "api=gles,color=4444" },
     { "glessrgb",              "gpu", "api=gles,color=srgb" },
     { "gleswide",              "gpu", "api=gles,color=f16_wide" },
     { "glesnarrow",            "gpu", "api=gles,color=f16_narrow" },
     { "gldft",                 "gpu", "api=gl,dit=true" },
     { "glesdft",               "gpu", "api=gles,dit=true" },
+    { "gltestthreading",       "gpu", "api=gl,testThreading=true" },
     { "debuggl",               "gpu", "api=debuggl" },
     { "nullgl",                "gpu", "api=nullgl" },
     { "angle_d3d11_es2",       "gpu", "api=angle_d3d11_es2" },
@@ -85,11 +78,9 @@ static const struct {
     { "angle_gl_es3",          "gpu", "api=angle_gl_es3" },
     { "commandbuffer",         "gpu", "api=commandbuffer" },
     { "mock",                  "gpu", "api=mock" }
-#if SK_MESA
-    ,{ "mesa",                 "gpu", "api=mesa" }
-#endif
 #ifdef SK_VULKAN
     ,{ "vk",                   "gpu", "api=vulkan" }
+    ,{ "vk1010102",            "gpu", "api=vulkan,color=1010102" }
     ,{ "vksrgb",               "gpu", "api=vulkan,color=srgb" }
     ,{ "vkwide",               "gpu", "api=vulkan,color=f16_wide" }
     ,{ "vkmsaa4",              "gpu", "api=vulkan,samples=4" }
@@ -97,6 +88,7 @@ static const struct {
 #endif
 #ifdef SK_METAL
     ,{ "mtl",                   "gpu", "api=metal" }
+    ,{ "mtl1010102",            "gpu", "api=metal,color=1010102" }
     ,{ "mtlsrgb",               "gpu", "api=metal,color=srgb" }
     ,{ "mtlwide",               "gpu", "api=metal,color=f16_wide" }
     ,{ "mtlmsaa4",              "gpu", "api=metal,samples=4" }
@@ -140,9 +132,6 @@ static const char configExtendedHelp[] =
     "\t\tangle_gl_es3\t\t\tUse OpenGL ES3 on the ANGLE OpenGL backend.\n"
     "\t\tcommandbuffer\t\tUse command buffer.\n"
     "\t\tmock\t\tUse mock context.\n"
-#if SK_MESA
-    "\t\tmesa\t\t\tUse MESA.\n"
-#endif
 #ifdef SK_VULKAN
     "\t\tvulkan\t\t\tUse Vulkan.\n"
 #endif
@@ -156,6 +145,7 @@ static const char configExtendedHelp[] =
     "\t\t4444\t\t\tLinear 4444.\n"
     "\t\t565\t\t\tLinear 565.\n"
     "\t\tf16{_gamut}\t\tLinear 16-bit floating point.\n"
+    "\t\t1010102\t\tLinear 1010102.\n"
     "\t\tsrgb{_gamut}\t\tsRGB 8888.\n"
     "\t  gamut\ttype: string\tdefault: srgb.\n"
     "\t    Select color gamut for f16 or sRGB format buffers.\n"
@@ -170,6 +160,8 @@ static const char configExtendedHelp[] =
     "\t    Use multisampling with N samples.\n"
     "\tstencils\ttype: bool\tdefault: true.\n"
     "\t    Allow the use of stencil buffers.\n"
+    "\ttestThreading\ttype: bool\tdefault: false.\n"
+    "\t    Run config with and without worker threads, check that results match.\n"
     "\n"
     "Predefined configs:\n\n"
     // Help text for pre-defined configs is auto-generated from gPredefinedConfigs
@@ -196,44 +188,6 @@ SkCommandLineConfig::SkCommandLineConfig(const SkString& tag, const SkString& ba
 SkCommandLineConfig::~SkCommandLineConfig() {
 }
 
-#if SK_SUPPORT_GPU
-SkCommandLineConfigGpu::SkCommandLineConfigGpu(
-    const SkString& tag, const SkTArray<SkString>& viaParts, ContextType contextType, bool useNVPR,
-    bool useInstanced, bool useDIText, int samples, SkColorType colorType, SkAlphaType alphaType,
-    sk_sp<SkColorSpace> colorSpace, bool useStencilBuffers)
-        : SkCommandLineConfig(tag, SkString("gpu"), viaParts)
-        , fContextType(contextType)
-        , fContextOverrides(ContextOverrides::kNone)
-        , fUseDIText(useDIText)
-        , fSamples(samples)
-        , fColorType(colorType)
-        , fAlphaType(alphaType)
-        , fColorSpace(std::move(colorSpace)) {
-    if (useNVPR) {
-        fContextOverrides |= ContextOverrides::kRequireNVPRSupport;
-    } else if (!useInstanced) {
-        // We don't disable NVPR for instanced configs. Otherwise the caps wouldn't use mixed
-        // samples and we couldn't test the mixed samples backend for simple shapes.
-        fContextOverrides |= ContextOverrides::kDisableNVPR;
-    }
-    if (useInstanced) {
-        fContextOverrides |= ContextOverrides::kUseInstanced;
-    }
-    // Subtle logic: If the config has a color space attached, we're going to be rendering to sRGB,
-    // so we need that capability. In addition, to get the widest test coverage, we DO NOT require
-    // that we can disable sRGB decode. (That's for rendering sRGB sources to legacy surfaces).
-    //
-    // If the config doesn't have a color space attached, we're going to be rendering in legacy
-    // mode. In that case, we don't require sRGB capability and we defer to the client to decide on
-    // sRGB decode control.
-    if (fColorSpace) {
-        fContextOverrides |= ContextOverrides::kRequireSRGBSupport;
-        fContextOverrides |= ContextOverrides::kAllowSRGBWithoutDecodeControl;
-    }
-    if (!useStencilBuffers) {
-        fContextOverrides |= ContextOverrides::kAvoidStencilBuffers;
-    }
-}
 static bool parse_option_int(const SkString& value, int* outInt) {
     if (value.isEmpty()) {
         return false;
@@ -257,6 +211,7 @@ static bool parse_option_bool(const SkString& value, bool* outBool) {
     }
     return false;
 }
+#if SK_SUPPORT_GPU
 static bool parse_option_gpu_api(const SkString& value,
                                  SkCommandLineConfigGpu::ContextType* outContextType) {
     if (value.equals("gl")) {
@@ -303,12 +258,6 @@ static bool parse_option_gpu_api(const SkString& value,
         *outContextType = GrContextFactory::kMock_ContextType;
         return true;
     }
-#if SK_MESA
-    if (value.equals("mesa")) {
-        *outContextType = GrContextFactory::kMESA_ContextType;
-        return true;
-    }
-#endif
 #ifdef SK_VULKAN
     if (value.equals("vulkan")) {
         *outContextType = GrContextFactory::kVulkan_ContextType;
@@ -341,6 +290,10 @@ static bool parse_option_gpu_color(const SkString& value,
     } else if (value.equals("565")) {
         *outColorType = kRGB_565_SkColorType;
         *alphaType = kOpaque_SkAlphaType;
+        *outColorSpace = nullptr;
+        return true;
+    } else if (value.equals("1010102")) {
+        *outColorType = kRGBA_1010102_SkColorType;
         *outColorSpace = nullptr;
         return true;
     }
@@ -398,72 +351,179 @@ static bool parse_option_gpu_color(const SkString& value,
     }
     return false;
 }
+#endif
+
+// Extended options take form --config item[key1=value1,key2=value2,...]
+// Example: --config gpu[api=gl,color=8888]
+class ExtendedOptions {
+public:
+    ExtendedOptions(const SkString& optionsString, bool* outParseSucceeded) {
+        SkTArray<SkString> optionParts;
+        SkStrSplit(optionsString.c_str(), ",", kStrict_SkStrSplitMode, &optionParts);
+        for (int i = 0; i < optionParts.count(); ++i) {
+            SkTArray<SkString> keyValueParts;
+            SkStrSplit(optionParts[i].c_str(), "=", kStrict_SkStrSplitMode, &keyValueParts);
+            if (keyValueParts.count() != 2) {
+                *outParseSucceeded = false;
+                return;
+            }
+            const SkString& key = keyValueParts[0];
+            const SkString& value = keyValueParts[1];
+            if (fOptionsMap.find(key) == nullptr) {
+                fOptionsMap.set(key, value);
+            } else {
+                // Duplicate values are not allowed.
+                *outParseSucceeded = false;
+                return;
+            }
+        }
+        *outParseSucceeded = true;
+    }
+
+#if SK_SUPPORT_GPU
+    bool get_option_gpu_color(const char* optionKey,
+                              SkColorType* outColorType,
+                              SkAlphaType* alphaType,
+                              sk_sp<SkColorSpace>* outColorSpace,
+                              bool optional = true) const {
+        SkString* optionValue = fOptionsMap.find(SkString(optionKey));
+        if (optionValue == nullptr) {
+            return optional;
+        }
+        return parse_option_gpu_color(*optionValue, outColorType, alphaType, outColorSpace);
+    }
+
+    bool get_option_gpu_api(const char* optionKey,
+                            SkCommandLineConfigGpu::ContextType* outContextType,
+                            bool optional = true) const {
+        SkString* optionValue = fOptionsMap.find(SkString(optionKey));
+        if (optionValue == nullptr) {
+            return optional;
+        }
+        return parse_option_gpu_api(*optionValue, outContextType);
+    }
+#endif
+
+    bool get_option_int(const char* optionKey, int* outInt, bool optional = true) const {
+        SkString* optionValue = fOptionsMap.find(SkString(optionKey));
+        if (optionValue == nullptr) {
+            return optional;
+        }
+        return parse_option_int(*optionValue, outInt);
+    }
+
+    bool get_option_bool(const char* optionKey, bool* outBool, bool optional = true) const {
+        SkString* optionValue = fOptionsMap.find(SkString(optionKey));
+        if (optionValue == nullptr) {
+            return optional;
+        }
+        return parse_option_bool(*optionValue, outBool);
+    }
+
+private:
+    SkTHashMap<SkString, SkString> fOptionsMap;
+};
+
+#if SK_SUPPORT_GPU
+SkCommandLineConfigGpu::SkCommandLineConfigGpu(
+    const SkString& tag, const SkTArray<SkString>& viaParts, ContextType contextType, bool useNVPR,
+    bool useDIText, int samples, SkColorType colorType, SkAlphaType alphaType,
+    sk_sp<SkColorSpace> colorSpace, bool useStencilBuffers, bool testThreading)
+        : SkCommandLineConfig(tag, SkString("gpu"), viaParts)
+        , fContextType(contextType)
+        , fContextOverrides(ContextOverrides::kNone)
+        , fUseDIText(useDIText)
+        , fSamples(samples)
+        , fColorType(colorType)
+        , fAlphaType(alphaType)
+        , fColorSpace(std::move(colorSpace))
+        , fTestThreading(testThreading) {
+    if (useNVPR) {
+        fContextOverrides |= ContextOverrides::kRequireNVPRSupport;
+    } else {
+        // We don't disable NVPR for instanced configs. Otherwise the caps wouldn't use mixed
+        // samples and we couldn't test the mixed samples backend for simple shapes.
+        fContextOverrides |= ContextOverrides::kDisableNVPR;
+    }
+    // Subtle logic: If the config has a color space attached, we're going to be rendering to sRGB,
+    // so we need that capability. In addition, to get the widest test coverage, we DO NOT require
+    // that we can disable sRGB decode. (That's for rendering sRGB sources to legacy surfaces).
+    //
+    // If the config doesn't have a color space attached, we're going to be rendering in legacy
+    // mode. In that case, we don't require sRGB capability and we defer to the client to decide on
+    // sRGB decode control.
+    if (fColorSpace) {
+        fContextOverrides |= ContextOverrides::kRequireSRGBSupport;
+        fContextOverrides |= ContextOverrides::kAllowSRGBWithoutDecodeControl;
+    }
+    if (!useStencilBuffers) {
+        fContextOverrides |= ContextOverrides::kAvoidStencilBuffers;
+    }
+}
 
 SkCommandLineConfigGpu* parse_command_line_config_gpu(const SkString& tag,
                                                       const SkTArray<SkString>& vias,
                                                       const SkString& options) {
     // Defaults for GPU backend.
-    bool seenAPI = false;
     SkCommandLineConfigGpu::ContextType contextType = GrContextFactory::kGL_ContextType;
-    bool seenUseNVPR = false;
     bool useNVPR = false;
-    bool seenUseInstanced = false;
-    bool useInstanced = false;
-    bool seenUseDIText =false;
     bool useDIText = false;
-    bool seenSamples = false;
-    int samples = 0;
-    bool seenColor = false;
+    int samples = 1;
     SkColorType colorType = kRGBA_8888_SkColorType;
     SkAlphaType alphaType = kPremul_SkAlphaType;
     sk_sp<SkColorSpace> colorSpace = nullptr;
-    bool seenUseStencils = false;
     bool useStencils = true;
+    bool testThreading = false;
 
-    SkTArray<SkString> optionParts;
-    SkStrSplit(options.c_str(), ",", kStrict_SkStrSplitMode, &optionParts);
-    for (int i = 0; i < optionParts.count(); ++i) {
-        SkTArray<SkString> keyValueParts;
-        SkStrSplit(optionParts[i].c_str(), "=", kStrict_SkStrSplitMode, &keyValueParts);
-        if (keyValueParts.count() != 2) {
-            return nullptr;
-        }
-        const SkString& key = keyValueParts[0];
-        const SkString& value = keyValueParts[1];
-        bool valueOk = false;
-        if (key.equals("api") && !seenAPI) {
-            valueOk = parse_option_gpu_api(value, &contextType);
-            seenAPI = true;
-        } else if (key.equals("nvpr") && !seenUseNVPR) {
-            valueOk = parse_option_bool(value, &useNVPR);
-            seenUseNVPR = true;
-        } else if (key.equals("inst") && !seenUseInstanced) {
-            valueOk = parse_option_bool(value, &useInstanced);
-            seenUseInstanced = true;
-        } else if (key.equals("dit") && !seenUseDIText) {
-            valueOk = parse_option_bool(value, &useDIText);
-            seenUseDIText = true;
-        } else if (key.equals("samples") && !seenSamples) {
-            valueOk = parse_option_int(value, &samples);
-            seenSamples = true;
-        } else if (key.equals("color") && !seenColor) {
-            valueOk = parse_option_gpu_color(value, &colorType, &alphaType, &colorSpace);
-            seenColor = true;
-        } else if (key.equals("stencils") && !seenUseStencils) {
-            valueOk = parse_option_bool(value, &useStencils);
-            seenUseStencils = true;
-        }
-        if (!valueOk) {
-            return nullptr;
-        }
-    }
-    if (!seenAPI) {
+    bool parseSucceeded = false;
+    ExtendedOptions extendedOptions(options, &parseSucceeded);
+    if (!parseSucceeded) {
         return nullptr;
     }
-    return new SkCommandLineConfigGpu(tag, vias, contextType, useNVPR, useInstanced, useDIText,
-                                      samples, colorType, alphaType, colorSpace, useStencils);
+
+    bool validOptions =
+            extendedOptions.get_option_gpu_api("api", &contextType, false) &&
+            extendedOptions.get_option_bool("nvpr", &useNVPR) &&
+            extendedOptions.get_option_bool("dit", &useDIText) &&
+            extendedOptions.get_option_int("samples", &samples) &&
+            extendedOptions.get_option_gpu_color("color", &colorType, &alphaType, &colorSpace) &&
+            extendedOptions.get_option_bool("stencils", &useStencils) &&
+            extendedOptions.get_option_bool("testThreading", &testThreading);
+
+    if (!validOptions) {
+        return nullptr;
+    }
+
+    return new SkCommandLineConfigGpu(tag, vias, contextType, useNVPR, useDIText,
+                                      samples, colorType, alphaType, colorSpace, useStencils,
+                                      testThreading);
 }
 #endif
+
+SkCommandLineConfigSvg::SkCommandLineConfigSvg(const SkString& tag,
+                                               const SkTArray<SkString>& viaParts, int pageIndex)
+        : SkCommandLineConfig(tag, SkString("svg"), viaParts), fPageIndex(pageIndex) {}
+
+SkCommandLineConfigSvg* parse_command_line_config_svg(const SkString& tag,
+                                                      const SkTArray<SkString>& vias,
+                                                      const SkString& options) {
+    // Defaults for SVG backend.
+    int pageIndex = 0;
+
+    bool parseSucceeded = false;
+    ExtendedOptions extendedOptions(options, &parseSucceeded);
+    if (!parseSucceeded) {
+        return nullptr;
+    }
+
+    bool validOptions = extendedOptions.get_option_int("page", &pageIndex);
+
+    if (!validOptions) {
+        return nullptr;
+    }
+
+    return new SkCommandLineConfigSvg(tag, vias, pageIndex);
+}
 
 void ParseConfigs(const SkCommandLineFlags::StringArray& configs,
                   SkCommandLineConfigArray* outResult) {
@@ -514,6 +574,9 @@ void ParseConfigs(const SkCommandLineFlags::StringArray& configs,
             parsedConfig = parse_command_line_config_gpu(tag, vias, extendedOptions);
         }
 #endif
+        if (extendedBackend.equals("svg")) {
+            parsedConfig = parse_command_line_config_svg(tag, vias, extendedOptions);
+        }
         if (!parsedConfig) {
             parsedConfig = new SkCommandLineConfig(tag, simpleBackend, vias);
         }

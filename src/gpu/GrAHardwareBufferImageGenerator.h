@@ -9,7 +9,9 @@
 
 #include "SkImageGenerator.h"
 
-struct AHardwareBuffer;
+extern "C" {
+    typedef struct AHardwareBuffer AHardwareBuffer;
+}
 
 /**
  *  GrAHardwareBufferImageGenerator allows to create an SkImage attached to
@@ -36,7 +38,8 @@ protected:
 #if SK_SUPPORT_GPU
     TexGenType onCanGenerateTexture() const override { return TexGenType::kCheap; }
     sk_sp<GrTextureProxy> onGenerateTexture(GrContext*, const SkImageInfo&, const SkIPoint&,
-                                            SkTransferFunctionBehavior) override;
+                                            SkTransferFunctionBehavior,
+                                            bool willNeedMipMaps) override;
 #endif
 
 private:

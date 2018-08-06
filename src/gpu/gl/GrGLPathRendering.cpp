@@ -68,7 +68,7 @@ static void verify_floats(const float* floats, int count) {
 static GrGLenum gr_stencil_op_to_gl_path_rendering_fill_mode(GrStencilOp op) {
     switch (op) {
         default:
-            SkFAIL("Unexpected path fill.");
+            SK_ABORT("Unexpected path fill.");
             /* fallthrough */;
         case GrStencilOp::kIncWrap:
             return GR_GL_COUNT_UP;
@@ -81,8 +81,7 @@ GrGLPathRendering::GrGLPathRendering(GrGLGpu* gpu)
     : GrPathRendering(gpu)
     , fPreallocatedPathCount(0) {
     const GrGLInterface* glInterface = gpu->glInterface();
-    fCaps.bindFragmentInputSupport =
-        nullptr != glInterface->fFunctions.fBindFragmentInputLocation;
+    fCaps.bindFragmentInputSupport = (bool)glInterface->fFunctions.fBindFragmentInputLocation;
 }
 
 GrGLPathRendering::~GrGLPathRendering() {
@@ -120,12 +119,12 @@ void GrGLPathRendering::onStencilPath(const StencilPathArgs& args, const GrPath*
     SkASSERT(gpu->caps()->shaderCaps()->pathRenderingSupport());
     gpu->flushColorWrite(false);
 
-    GrGLRenderTarget* rt = static_cast<GrGLRenderTarget*>(args.fRenderTarget);
+    GrGLRenderTarget* rt = static_cast<GrGLRenderTarget*>(args.fProxy->priv().peekRenderTarget());
     SkISize size = SkISize::Make(rt->width(), rt->height());
-    this->setProjectionMatrix(*args.fViewMatrix, size, rt->origin());
-    gpu->flushScissor(*args.fScissor, rt->getViewport(), rt->origin());
+    this->setProjectionMatrix(*args.fViewMatrix, size, args.fProxy->origin());
+    gpu->flushScissor(*args.fScissor, rt->getViewport(), args.fProxy->origin());
     gpu->flushHWAAState(rt, args.fUseHWAA, true);
-    gpu->flushRenderTarget(rt, nullptr);
+    gpu->flushRenderTarget(rt);
 
     const GrGLPath* glPath = static_cast<const GrGLPath*>(path);
 

@@ -6,7 +6,7 @@
  */
 
 #include "Sk4fGradientBase.h"
-
+#include "SkPaint.h"
 #include <functional>
 
 namespace {
@@ -38,7 +38,6 @@ public:
         }
 
         const int end = fBegin + fAdvance * (fShader.fColorCount - 1);
-        const SkScalar lastPos = 1 - fFirstPos;
         int prev = fBegin;
         SkScalar prevPos = fFirstPos;
 
@@ -46,11 +45,7 @@ public:
             const int curr = prev + fAdvance;
             SkASSERT(curr >= 0 && curr < fShader.fColorCount);
 
-            // TODO: this sanitization should be done in SkGradientShaderBase
-            const SkScalar currPos = (fAdvance > 0)
-                ? SkTPin(fShader.fOrigPos[curr], prevPos, lastPos)
-                : SkTPin(fShader.fOrigPos[curr], lastPos, prevPos);
-
+            const SkScalar currPos = fShader.fOrigPos[curr];
             if (currPos != prevPos) {
                 SkASSERT((currPos - prevPos > 0) == (fAdvance > 0));
                 func(fShader.getXformedColor(prev, fDstCS), fShader.getXformedColor(curr, fDstCS),
@@ -288,13 +283,12 @@ GradientShaderBase4fContext::GradientShaderBase4fContext(const SkGradientShaderB
                                                          const ContextRec& rec)
     : INHERITED(shader, rec)
     , fFlags(this->INHERITED::getFlags())
+    , fDither(rec.fPaint->isDither())
 {
-    SkASSERT(rec.fPreferredDstType == ContextRec::kPM4f_DstType);
-
     const SkMatrix& inverse = this->getTotalInverse();
     fDstToPos.setConcat(shader.fPtsToUnit, inverse);
     SkASSERT(!fDstToPos.hasPerspective());
-    fDstToPosProc = fDstToPos.getMapXYProc();
+    fDstToPosProc = SkMatrixPriv::GetMapXYProc(fDstToPos);
 
     if (shader.fColorsAreOpaque && this->getPaintAlpha() == SK_AlphaOPAQUE) {
         fFlags |= kOpaqueAlpha_Flag;
@@ -308,10 +302,4 @@ GradientShaderBase4fContext::GradientShaderBase4fContext(const SkGradientShaderB
 bool SkGradientShaderBase::
 GradientShaderBase4fContext::isValid() const {
     return fDstToPos.isFinite();
-}
-
-void SkGradientShaderBase::
-GradientShaderBase4fContext::shadeSpan(int x, int y, SkPMColor dst[], int count) {
-    // This impl only shades to 4f.
-    SkASSERT(false);
 }

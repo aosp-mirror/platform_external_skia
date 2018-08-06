@@ -6,8 +6,7 @@
  */
 
 #include "SkCanvas.h"
-#include "SkColorPriv.h"
-#include "SkColorSpace_Base.h"
+#include "SkColorData.h"
 #include "SkHalf.h"
 #include "SkImageInfoPriv.h"
 #include "SkMathPriv.h"
@@ -18,6 +17,7 @@
 #include "GrContext.h"
 #include "GrContextFactory.h"
 #include "GrContextPriv.h"
+#include "GrProxyProvider.h"
 #include "SkGr.h"
 #endif
 
@@ -359,7 +359,7 @@ static void test_readpixels(skiatest::Reporter* reporter, const sk_sp<SkSurface>
                     fill_dst_bmp_with_init_data(&bmp);
                 }
                 uint32_t idBefore = surface->generationID();
-                bool success = canvas->readPixels(bmp, srcRect.fLeft, srcRect.fTop);
+                bool success = surface->readPixels(bmp, srcRect.fLeft, srcRect.fTop);
                 uint32_t idAfter = surface->generationID();
 
                 // we expect to succeed when the read isn't fully clipped
@@ -449,6 +449,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Texture, reporter, ctxInfo) {
     }
 
     GrContext* context = ctxInfo.grContext();
+    GrProxyProvider* proxyProvider = context->contextPriv().proxyProvider();
 
     SkBitmap bmp = make_src_bitmap();
 
@@ -462,13 +463,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Texture, reporter, ctxInfo) {
             desc.fConfig = kSkia8888_GrPixelConfig;
             desc.fOrigin = origin;
 
-            sk_sp<GrTextureProxy> proxy = GrSurfaceProxy::MakeDeferred(context->resourceProvider(),
-                                                                       desc, SkBudgeted::kNo,
-                                                                       bmp.getPixels(),
-                                                                       bmp.rowBytes());
+            sk_sp<GrTextureProxy> proxy = proxyProvider->createTextureProxy(desc, SkBudgeted::kNo,
+                                                                            bmp.getPixels(),
+                                                                            bmp.rowBytes());
 
             sk_sp<GrSurfaceContext> sContext = context->contextPriv().makeWrappedSurfaceContext(
-                                                                        std::move(proxy), nullptr);
+                                                                                std::move(proxy));
 
             test_readpixels_texture(reporter, std::move(sContext));
         }
@@ -595,11 +595,11 @@ DEF_TEST(ReadPixels_ValidConversion, reporter) {
                     for (SkAlphaType srcAT: kAlphaTypes) {
                         for (sk_sp<SkColorSpace> srcCS : kColorSpaces) {
                             if (kRGBA_F16_SkColorType == dstCT && dstCS) {
-                                dstCS = as_CSB(dstCS)->makeLinearGamma();
+                                dstCS = dstCS->makeLinearGamma();
                             }
 
                             if (kRGBA_F16_SkColorType == srcCT && srcCS) {
-                                srcCS = as_CSB(srcCS)->makeLinearGamma();
+                                srcCS = srcCS->makeLinearGamma();
                             }
 
                             test_conversion(reporter,

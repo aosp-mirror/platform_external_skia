@@ -18,6 +18,10 @@
 #include "GrResourceProvider.h"
 #include "GrSimpleMeshDrawOpHelper.h"
 #include "SkGeometry.h"
+#include "SkMatrixPriv.h"
+#include "SkPoint3.h"
+#include "SkPointPriv.h"
+#include "SkRectPriv.h"
 #include "SkStroke.h"
 #include "SkTemplates.h"
 #include "effects/GrBezierEffect.h"
@@ -62,7 +66,7 @@ static const int kQuadNumVertices = 5;
 static const int kQuadsNumInIdxBuffer = 256;
 GR_DECLARE_STATIC_UNIQUE_KEY(gQuadsIndexBufferKey);
 
-static const GrBuffer* ref_quads_index_buffer(GrResourceProvider* resourceProvider) {
+static sk_sp<const GrBuffer> get_quads_index_buffer(GrResourceProvider* resourceProvider) {
     GR_DEFINE_STATIC_UNIQUE_KEY(gQuadsIndexBufferKey);
     return resourceProvider->findOrCreatePatternedIndexBuffer(
         kQuadIdxBufPattern, kIdxsPerQuad, kQuadsNumInIdxBuffer, kQuadNumVertices,
@@ -96,7 +100,7 @@ static const int kLineSegsNumInIdxBuffer = 256;
 
 GR_DECLARE_STATIC_UNIQUE_KEY(gLinesIndexBufferKey);
 
-static const GrBuffer* ref_lines_index_buffer(GrResourceProvider* resourceProvider) {
+static sk_sp<const GrBuffer> get_lines_index_buffer(GrResourceProvider* resourceProvider) {
     GR_DEFINE_STATIC_UNIQUE_KEY(gLinesIndexBufferKey);
     return resourceProvider->findOrCreatePatternedIndexBuffer(
         kLineSegIdxBufPattern, kIdxsPerLineSeg,  kLineSegsNumInIdxBuffer, kLineSegNumVertices,
@@ -175,17 +179,17 @@ static int is_degen_quad_or_conic(const SkPoint p[3], SkScalar* dsqd) {
     static const SkScalar gDegenerateToLineTolSqd =
         gDegenerateToLineTol * gDegenerateToLineTol;
 
-    if (p[0].distanceToSqd(p[1]) < gDegenerateToLineTolSqd ||
-        p[1].distanceToSqd(p[2]) < gDegenerateToLineTolSqd) {
+    if (SkPointPriv::DistanceToSqd(p[0], p[1]) < gDegenerateToLineTolSqd ||
+        SkPointPriv::DistanceToSqd(p[1], p[2]) < gDegenerateToLineTolSqd) {
         return 1;
     }
 
-    *dsqd = p[1].distanceToLineBetweenSqd(p[0], p[2]);
+    *dsqd = SkPointPriv::DistanceToLineBetweenSqd(p[1], p[0], p[2]);
     if (*dsqd < gDegenerateToLineTolSqd) {
         return 1;
     }
 
-    if (p[2].distanceToLineBetweenSqd(p[1], p[0]) < gDegenerateToLineTolSqd) {
+    if (SkPointPriv::DistanceToLineBetweenSqd(p[2], p[1], p[0]) < gDegenerateToLineTolSqd) {
         return 1;
     }
     return 0;
@@ -554,14 +558,14 @@ static void bloat_quad(const SkPoint qpts[3], const SkMatrix* toDevice,
 
     ab.normalize();
     SkVector abN;
-    abN.setOrthog(ab, SkVector::kLeft_Side);
+    SkPointPriv::SetOrthog(&abN, ab, SkPointPriv::kLeft_Side);
     if (abN.dot(ac) > 0) {
         abN.negate();
     }
 
     cb.normalize();
     SkVector cbN;
-    cbN.setOrthog(cb, SkVector::kLeft_Side);
+    SkPointPriv::SetOrthog(&cbN, cb, SkPointPriv::kLeft_Side);
     if (cbN.dot(ac) < 0) {
         cbN.negate();
     }
@@ -579,7 +583,8 @@ static void bloat_quad(const SkPoint qpts[3], const SkMatrix* toDevice,
     intersect_lines(a0.fPos, abN, c0.fPos, cbN, &b0.fPos);
 
     if (toSrc) {
-        toSrc->mapPointsWithStride(&verts[0].fPos, sizeof(BezierVertex), kQuadNumVertices);
+        SkMatrixPriv::MapPointsWithStride(*toSrc, &verts[0].fPos, sizeof(BezierVertex),
+                                          kQuadNumVertices);
     }
 }
 
@@ -597,8 +602,8 @@ static void set_conic_coeffs(const SkPoint p[3], BezierVertex verts[kQuadNumVert
     GrPathUtils::getConicKLM(p, weight, &klm);
 
     for (int i = 0; i < kQuadNumVertices; ++i) {
-        const SkScalar pt3[3] = {verts[i].fPos.x(), verts[i].fPos.y(), 1.f};
-        klm.mapHomogeneousPoints(verts[i].fConic.fKLM, pt3, 1);
+        const SkPoint3 pt3 = {verts[i].fPos.x(), verts[i].fPos.y(), 1.f};
+        klm.mapHomogeneousPoints((SkPoint3* ) verts[i].fConic.fKLM, &pt3, 1);
     }
 }
 
@@ -640,6 +645,8 @@ static void add_line(const SkPoint p[2],
     SkVector ortho, vec = b;
     vec -= a;
 
+    SkScalar lengthSqd = SkPointPriv::LengthSqd(vec);
+
     if (vec.setLength(SK_ScalarHalf)) {
         // Create a vector orthogonal to 'vec' and of unit length
         ortho.fX = 2.0f * vec.fY;
@@ -647,10 +654,28 @@ static void add_line(const SkPoint p[2],
 
         float floatCoverage = GrNormalizeByteToFloat(coverage);
 
-        (*vert)[0].fPos = a;
-        (*vert)[0].fCoverage = floatCoverage;
-        (*vert)[1].fPos = b;
-        (*vert)[1].fCoverage = floatCoverage;
+        if (lengthSqd >= 1.0f) {
+            // Relative to points a and b:
+            // The inner vertices are inset half a pixel along the line a,b
+            (*vert)[0].fPos = a + vec;
+            (*vert)[0].fCoverage = floatCoverage;
+            (*vert)[1].fPos = b - vec;
+            (*vert)[1].fCoverage = floatCoverage;
+        } else {
+            // The inner vertices are inset a distance of length(a,b) from the outer edge of
+            // geometry. For the "a" inset this is the same as insetting from b by half a pixel.
+            // The coverage is then modulated by the length. This gives us the correct
+            // coverage for rects shorter than a pixel as they get translated subpixel amounts
+            // inside of a pixel.
+            SkScalar length = SkScalarSqrt(lengthSqd);
+            (*vert)[0].fPos = b - vec;
+            (*vert)[0].fCoverage = floatCoverage * length;
+            (*vert)[1].fPos = a + vec;
+            (*vert)[1].fCoverage = floatCoverage * length;
+        }
+        // Relative to points a and b:
+        // The outer vertices are outset half a pixel along the line a,b and then a whole pixel
+        // orthogonally.
         (*vert)[2].fPos = a - vec + ortho;
         (*vert)[2].fCoverage = 0;
         (*vert)[3].fPos = b + vec + ortho;
@@ -661,9 +686,8 @@ static void add_line(const SkPoint p[2],
         (*vert)[5].fCoverage = 0;
 
         if (toSrc) {
-            toSrc->mapPointsWithStride(&(*vert)->fPos,
-                                       sizeof(LineVertex),
-                                       kLineSegNumVertices);
+            SkMatrixPriv::MapPointsWithStride(*toSrc, &(*vert)->fPos, sizeof(LineVertex),
+                                              kLineSegNumVertices);
         }
     } else {
         // just make it degenerate and likely offscreen
@@ -677,26 +701,27 @@ static void add_line(const SkPoint p[2],
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool GrAAHairLinePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+GrPathRenderer::CanDrawPath
+GrAAHairLinePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     if (GrAAType::kCoverage != args.fAAType) {
-        return false;
+        return CanDrawPath::kNo;
     }
 
     if (!IsStrokeHairlineOrEquivalent(args.fShape->style(), *args.fViewMatrix, nullptr)) {
-        return false;
+        return CanDrawPath::kNo;
     }
 
     // We don't currently handle dashing in this class though perhaps we should.
     if (args.fShape->style().pathEffect()) {
-        return false;
+        return CanDrawPath::kNo;
     }
 
     if (SkPath::kLine_SegmentMask == args.fShape->segmentMask() ||
         args.fCaps->shaderCaps()->shaderDerivativeSupport()) {
-        return true;
+        return CanDrawPath::kYes;
     }
 
-    return false;
+    return CanDrawPath::kNo;
 }
 
 template <class VertexType>
@@ -726,7 +751,7 @@ bool check_bounds(const SkMatrix& viewMatrix, const SkRect& devBounds, void* ver
             actualBounds.set(pos.fX, pos.fY, pos.fX, pos.fY);
             first = false;
         } else {
-            actualBounds.growToInclude(pos.fX, pos.fY);
+            SkRectPriv::GrowToInclude(&actualBounds, pos);
         }
     }
     if (!first) {
@@ -784,6 +809,10 @@ public:
 
     const char* name() const override { return "AAHairlineOp"; }
 
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fHelper.visitProxies(func);
+    }
+
     SkString dumpInfo() const override {
         SkString string;
         string.appendf("Color: 0x%08x Coverage: 0x%02x, Count: %d\n", fColor, fCoverage,
@@ -795,13 +824,14 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
-        return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
-                                            &fColor);
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override {
+        return fHelper.xpRequiresDstTexture(caps, clip, dstIsClamped,
+                                            GrProcessorAnalysisCoverage::kSingleChannel, &fColor);
     }
 
 private:
-    void onPrepareDraws(Target*) const override;
+    void onPrepareDraws(Target*) override;
 
     typedef SkTArray<SkPoint, true> PtArray;
     typedef SkTArray<int, true> IntArray;
@@ -865,7 +895,7 @@ private:
 
 }  // anonymous namespace
 
-void AAHairlineOp::onPrepareDraws(Target* target) const {
+void AAHairlineOp::onPrepareDraws(Target* target) {
     // Setup the viewmatrix and localmatrix for the GrGeometryProcessor.
     SkMatrix invert;
     if (!this->viewMatrix().invert(&invert)) {
@@ -919,8 +949,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) const {
                                                    *geometryProcessorViewM);
         }
 
-        sk_sp<const GrBuffer> linesIndexBuffer(
-            ref_lines_index_buffer(target->resourceProvider()));
+        sk_sp<const GrBuffer> linesIndexBuffer = get_lines_index_buffer(target->resourceProvider());
 
         const GrBuffer* vertexBuffer;
         int firstVertex;
@@ -951,7 +980,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) const {
     if (quadCount || conicCount) {
         sk_sp<GrGeometryProcessor> quadGP(GrQuadEffect::Make(this->color(),
                                                              *geometryProcessorViewM,
-                                                             kHairlineAA_GrProcessorEdgeType,
+                                                             GrClipEdgeType::kHairlineAA,
                                                              target->caps(),
                                                              *geometryProcessorLocalM,
                                                              fHelper.usesLocalCoords(),
@@ -959,7 +988,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) const {
 
         sk_sp<GrGeometryProcessor> conicGP(GrConicEffect::Make(this->color(),
                                                                *geometryProcessorViewM,
-                                                               kHairlineAA_GrProcessorEdgeType,
+                                                               GrClipEdgeType::kHairlineAA,
                                                                target->caps(),
                                                                *geometryProcessorLocalM,
                                                                fHelper.usesLocalCoords(),
@@ -968,8 +997,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) const {
         const GrBuffer* vertexBuffer;
         int firstVertex;
 
-        sk_sp<const GrBuffer> quadsIndexBuffer(
-            ref_quads_index_buffer(target->resourceProvider()));
+        sk_sp<const GrBuffer> quadsIndexBuffer = get_quads_index_buffer(target->resourceProvider());
 
         size_t vertexStride = sizeof(BezierVertex);
         int vertexCount = kQuadNumVertices * quadCount + kQuadNumVertices * conicCount;
