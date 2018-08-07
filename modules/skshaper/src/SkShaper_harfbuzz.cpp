@@ -5,27 +5,43 @@
  * found in the LICENSE file.
  */
 
-#include <hb-ot.h>
-#include <unicode/brkiter.h>
-#include <unicode/locid.h>
-#include <unicode/stringpiece.h>
-#include <unicode/ubidi.h>
-#include <unicode/uchriter.h>
-#include <unicode/unistr.h>
-#include <unicode/uscript.h>
-
+#include "SkFontArguments.h"
 #include "SkFontMgr.h"
 #include "SkLoadICU.h"
+#include "SkMalloc.h"
 #include "SkOnce.h"
+#include "SkPaint.h"
+#include "SkPoint.h"
+#include "SkRefCnt.h"
+#include "SkScalar.h"
 #include "SkShaper.h"
 #include "SkStream.h"
+#include "SkString.h"
+#include "SkTArray.h"
 #include "SkTDPQueue.h"
+#include "SkTFitsIn.h"
 #include "SkTLazy.h"
 #include "SkTemplates.h"
 #include "SkTextBlob.h"
 #include "SkTo.h"
 #include "SkTypeface.h"
-#include "SkUtils.h"
+#include "SkTypes.h"
+#include "SkUTF.h"
+
+#include <hb.h>
+#include <hb-ot.h>
+#include <unicode/brkiter.h>
+#include <unicode/locid.h>
+#include <unicode/stringpiece.h>
+#include <unicode/ubidi.h>
+#include <unicode/unistr.h>
+#include <unicode/urename.h>
+#include <unicode/utext.h>
+#include <unicode/utypes.h>
+
+#include <memory>
+#include <utility>
+#include <cstring>
 
 namespace {
 template <class T, void(*P)(T*)> using resource = std::unique_ptr<T, SkFunctionWrapper<void, T, P>>;
@@ -559,6 +575,9 @@ SkPoint SkShaper::shape(SkTextBlobBuilder* builder,
         hb_buffer_set_content_type(buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
         hb_buffer_set_cluster_level(buffer, HB_BUFFER_CLUSTER_LEVEL_MONOTONE_CHARACTERS);
 
+        // Add precontext.
+        hb_buffer_add_utf8(buffer, utf8, utf8Start - utf8, utf8Start - utf8, 0);
+
         // Populate the hb_buffer directly with utf8 cluster indexes.
         const char* utf8Current = utf8Start;
         while (utf8Current < utf8End) {
@@ -566,6 +585,9 @@ SkPoint SkShaper::shape(SkTextBlobBuilder* builder,
             hb_codepoint_t u = utf8_next(&utf8Current, utf8End);
             hb_buffer_add(buffer, u, cluster);
         }
+
+        // Add postcontext.
+        hb_buffer_add_utf8(buffer, utf8Current, utf8 + utf8Bytes - utf8Current, 0, 0);
 
         size_t utf8runLength = utf8End - utf8Start;
         if (!SkTFitsIn<int>(utf8runLength)) {
