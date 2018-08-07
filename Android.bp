@@ -1896,6 +1896,7 @@ cc_test {
         "bench/ColorCanvasDrawBitmapBench.cpp",
         "bench/ColorFilterBench.cpp",
         "bench/ColorPrivBench.cpp",
+        "bench/ColorSpaceXformBench.cpp",
         "bench/CompositingImagesBench.cpp",
         "bench/ControlBench.cpp",
         "bench/CoverageBench.cpp",
