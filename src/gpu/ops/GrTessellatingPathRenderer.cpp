@@ -24,6 +24,10 @@
 
 #include <stdio.h>
 
+#ifndef GR_AA_TESSELLATOR_MAX_VERB_COUNT
+#define GR_AA_TESSELLATOR_MAX_VERB_COUNT 10
+#endif
+
 /*
  * This path renderer tessellates the path into triangles using GrTessellator, uploads the
  * triangles to a vertex buffer, and renders them with a single draw call. It can do screenspace
@@ -132,27 +136,28 @@ private:
 GrTessellatingPathRenderer::GrTessellatingPathRenderer() {
 }
 
-bool GrTessellatingPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+GrPathRenderer::CanDrawPath
+GrTessellatingPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     // This path renderer can draw fill styles, and can do screenspace antialiasing via a
     // one-pixel coverage ramp. It can do convex and concave paths, but we'll leave the convex
     // ones to simpler algorithms. We pass on paths that have styles, though they may come back
     // around after applying the styling information to the geometry to create a filled path. In
-    // the non-AA case, We skip paths thta don't have a key since the real advantage of this path
+    // the non-AA case, We skip paths that don't have a key since the real advantage of this path
     // renderer comes from caching the tessellated geometry. In the AA case, we do not cache, so we
     // accept paths without keys.
     if (!args.fShape->style().isSimpleFill() || args.fShape->knownToBeConvex()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     if (GrAAType::kCoverage == args.fAAType) {
         SkPath path;
         args.fShape->asPath(&path);
-        if (path.countVerbs() > 10) {
-            return false;
+        if (path.countVerbs() > GR_AA_TESSELLATOR_MAX_VERB_COUNT) {
+            return CanDrawPath::kNo;
         }
     } else if (!args.fShape->hasUnstyledKey()) {
-        return false;
+        return CanDrawPath::kNo;
     }
-    return true;
+    return CanDrawPath::kYes;
 }
 
 namespace {
@@ -175,6 +180,10 @@ public:
     }
 
     const char* name() const override { return "TessellatingPathOp"; }
+
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fHelper.visitProxies(func);
+    }
 
     SkString dumpInfo() const override {
         SkString string;
@@ -210,11 +219,12 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override {
         GrProcessorAnalysisCoverage coverage = fAntiAlias
                                                        ? GrProcessorAnalysisCoverage::kSingleChannel
                                                        : GrProcessorAnalysisCoverage::kNone;
-        return fHelper.xpRequiresDstTexture(caps, clip, coverage, &fColor);
+        return fHelper.xpRequiresDstTexture(caps, clip, dstIsClamped, coverage, &fColor);
     }
 
 private:
@@ -225,7 +235,7 @@ private:
         return path;
     }
 
-    void draw(Target* target, const GrGeometryProcessor* gp) const {
+    void draw(Target* target, const GrGeometryProcessor* gp) {
         SkASSERT(!fAntiAlias);
         GrResourceProvider* rp = target->resourceProvider();
         bool inverseFill = fShape.inverseFilled();
@@ -235,7 +245,7 @@ private:
         static constexpr int kClipBoundsCnt = sizeof(fDevClipBounds) / sizeof(uint32_t);
         int shapeKeyDataCnt = fShape.unstyledKeySize();
         SkASSERT(shapeKeyDataCnt >= 0);
-        GrUniqueKey::Builder builder(&key, kDomain, shapeKeyDataCnt + kClipBoundsCnt);
+        GrUniqueKey::Builder builder(&key, kDomain, shapeKeyDataCnt + kClipBoundsCnt, "Path");
         fShape.writeUnstyledKey(&builder[0]);
         // For inverse fills, the tessellation is dependent on clip bounds.
         if (inverseFill) {
@@ -244,7 +254,7 @@ private:
             memset(&builder[shapeKeyDataCnt], 0, sizeof(fDevClipBounds));
         }
         builder.finish();
-        sk_sp<GrBuffer> cachedVertexBuffer(rp->findAndRefTByUniqueKey<GrBuffer>(key));
+        sk_sp<GrBuffer> cachedVertexBuffer(rp->findByUniqueKey<GrBuffer>(key));
         int actualCount;
         SkScalar tol = GrPathUtils::kDefaultTolerance;
         tol = GrPathUtils::scaleToleranceToSrc(tol, fViewMatrix, fShape.bounds());
@@ -274,9 +284,10 @@ private:
         info.fCount = count;
         key.setCustomData(SkData::MakeWithCopy(&info, sizeof(info)));
         rp->assignUniqueKeyToResource(key, allocator.vertexBuffer());
+        fShape.addGenIDChangeListener(new PathInvalidator(key));
     }
 
-    void drawAA(Target* target, const GrGeometryProcessor* gp) const {
+    void drawAA(Target* target, const GrGeometryProcessor* gp) {
         SkASSERT(fAntiAlias);
         SkPath path = getPath();
         if (path.isEmpty()) {
@@ -293,10 +304,10 @@ private:
         if (count == 0) {
             return;
         }
-        drawVertices(target, gp, allocator.vertexBuffer(), allocator.firstVertex(), count);
+        this->drawVertices(target, gp, allocator.vertexBuffer(), allocator.firstVertex(), count);
     }
 
-    void onPrepareDraws(Target* target) const override {
+    void onPrepareDraws(Target* target) override {
         sk_sp<GrGeometryProcessor> gp;
         {
             using namespace GrDefaultGeoProcFactory;
@@ -335,7 +346,7 @@ private:
     }
 
     void drawVertices(Target* target, const GrGeometryProcessor* gp, const GrBuffer* vb,
-                      int firstVertex, int count) const {
+                      int firstVertex, int count) {
         GrMesh mesh(TESSELLATOR_WIREFRAME ? GrPrimitiveType::kLines : GrPrimitiveType::kTriangles);
         mesh.setNonIndexedNonInstanced(count);
         mesh.setVertexData(vb, firstVertex);

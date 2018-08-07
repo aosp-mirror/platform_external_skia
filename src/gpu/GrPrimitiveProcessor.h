@@ -45,13 +45,22 @@ public:
             kPerVertex,
             kPerInstance
         };
-
-        const char*          fName;
+        GrShaderVar asShaderVar() const {
+            return GrShaderVar(fName, GrVertexAttribTypeToSLType(fType),
+                               GrShaderVar::kIn_TypeModifier);
+        }
+        bool isInitialized() const { return SkToBool(fName); }
+        Attribute() = default;
+        Attribute(const char* name, GrVertexAttribType type, int offset, InputRate rate)
+                : fName(name), fType(type), fOffsetInRecord(offset), fInputRate(rate) {}
+        const char*          fName = nullptr;
         GrVertexAttribType   fType;
         int                  fOffsetInRecord;
-        GrSLPrecision        fPrecision;
         InputRate            fInputRate;
     };
+
+    GrPrimitiveProcessor(ClassID classID)
+    : GrResourceIOProcessor(classID) {}
 
     int numAttribs() const { return fAttribs.count(); }
     const Attribute& getAttrib(int index) const { return fAttribs[index]; }
@@ -79,6 +88,8 @@ public:
     // Only the GrGeometryProcessor subclass actually has a geo shader or vertex attributes, but
     // we put these calls on the base class to prevent having to cast
     virtual bool willUseGeoShader() const = 0;
+
+    bool willUsePrimitiveRestart() const { return fWillUsePrimitiveRestart; }
 
     /**
      * Computes a transformKey from an array of coord transforms. Will only look at the first
@@ -118,22 +129,18 @@ protected:
     /**
      * Subclasses call these from their constructor to register vertex and instance attributes.
      */
-    const Attribute& addVertexAttrib(const char* name, GrVertexAttribType type,
-                                     GrSLPrecision precision = kDefault_GrSLPrecision) {
-        precision = (kDefault_GrSLPrecision == precision) ? kMedium_GrSLPrecision : precision;
-        fAttribs.push_back() = {name, type, fVertexStride, precision,
-                                Attribute::InputRate::kPerVertex};
+    const Attribute& addVertexAttrib(const char* name, GrVertexAttribType type) {
+        fAttribs.push_back() = {name, type, fVertexStride, Attribute::InputRate::kPerVertex};
         fVertexStride += static_cast<int>(SkAlign4(GrVertexAttribTypeSize(type)));
         return fAttribs.back();
     }
-    const Attribute& addInstanceAttrib(const char* name, GrVertexAttribType type,
-                                       GrSLPrecision precision = kDefault_GrSLPrecision) {
-        precision = (kDefault_GrSLPrecision == precision) ? kMedium_GrSLPrecision : precision;
-        fAttribs.push_back() = {name, type, fInstanceStride, precision,
-                                Attribute::InputRate::kPerInstance};
+    const Attribute& addInstanceAttrib(const char* name, GrVertexAttribType type) {
+        fAttribs.push_back() = {name, type, fInstanceStride, Attribute::InputRate::kPerInstance};
         fInstanceStride += static_cast<int>(SkAlign4(GrVertexAttribTypeSize(type)));
         return fAttribs.back();
     }
+
+    void setWillUsePrimitiveRestart() { fWillUsePrimitiveRestart = true; }
 
 private:
     void addPendingIOs() const override { GrResourceIOProcessor::addPendingIOs(); }
@@ -142,9 +149,10 @@ private:
     void notifyRefCntIsZero() const final {}
     virtual bool hasExplicitLocalCoords() const = 0;
 
-    SkSTArray<8, Attribute>   fAttribs;
-    int                       fVertexStride = 0;
-    int                       fInstanceStride = 0;
+    SkSTArray<8, Attribute> fAttribs;
+    int fVertexStride = 0;
+    int fInstanceStride = 0;
+    bool fWillUsePrimitiveRestart = false;
 
     typedef GrProcessor INHERITED;
 };

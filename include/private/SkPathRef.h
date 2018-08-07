@@ -16,7 +16,7 @@
 #include "SkRRect.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
-#include <stddef.h> // ptrdiff_t
+#include "SkTemplates.h"
 
 class SkRBuffer;
 class SkWBuffer;
@@ -83,7 +83,7 @@ public:
          */
         SkPoint* growForRepeatedVerb(int /*SkPath::Verb*/ verb,
                                      int numVbs,
-                                     SkScalar** weights = NULL) {
+                                     SkScalar** weights = nullptr) {
             return fPathRef->growForRepeatedVerb(verb, numVbs, weights);
         }
 
@@ -123,6 +123,8 @@ public:
 
         /** Return the next verb in this iteration of the path. When all
             segments have been visited, return kDone_Verb.
+
+            If any point in the path is non-finite, return kDone_Verb immediately.
 
             @param  pts The points representing the current verb and/or segment
                         This must not be NULL.
@@ -244,14 +246,14 @@ public:
     static void Rewind(sk_sp<SkPathRef>* pathRef);
 
     ~SkPathRef();
-    int countPoints() const { SkDEBUGCODE(this->validate();) return fPointCnt; }
-    int countVerbs() const { SkDEBUGCODE(this->validate();) return fVerbCnt; }
-    int countWeights() const { SkDEBUGCODE(this->validate();) return fConicWeights.count(); }
+    int countPoints() const { return fPointCnt; }
+    int countVerbs() const { return fVerbCnt; }
+    int countWeights() const { return fConicWeights.count(); }
 
     /**
      * Returns a pointer one beyond the first logical verb (last verb in memory order).
      */
-    const uint8_t* verbs() const { SkDEBUGCODE(this->validate();) return fVerbs; }
+    const uint8_t* verbs() const { return fVerbs; }
 
     /**
      * Returns a const pointer to the first verb in memory (which is the last logical verb).
@@ -261,15 +263,15 @@ public:
     /**
      * Returns a const pointer to the first point.
      */
-    const SkPoint* points() const { SkDEBUGCODE(this->validate();) return fPoints; }
+    const SkPoint* points() const { return fPoints; }
 
     /**
      * Shortcut for this->points() + this->countPoints()
      */
     const SkPoint* pointsEnd() const { return this->points() + this->countPoints(); }
 
-    const SkScalar* conicWeights() const { SkDEBUGCODE(this->validate();) return fConicWeights.begin(); }
-    const SkScalar* conicWeightsEnd() const { SkDEBUGCODE(this->validate();) return fConicWeights.end(); }
+    const SkScalar* conicWeights() const { return fConicWeights.begin(); }
+    const SkScalar* conicWeightsEnd() const { return fConicWeights.end(); }
 
     /**
      * Convenience methods for getting to a verb or point by index.
@@ -311,24 +313,25 @@ public:
 
     void addGenIDChangeListener(GenIDChangeListener* listener);
 
-    SkDEBUGCODE(void validate() const;)
+    bool isValid() const;
+    SkDEBUGCODE(void validate() const { SkASSERT(this->isValid()); } )
 
 private:
     enum SerializationOffsets {
-        kRRectOrOvalStartIdx_SerializationShift = 28,  // requires 3 bits
-        kRRectOrOvalIsCCW_SerializationShift = 27,     // requires 1 bit
-        kIsRRect_SerializationShift = 26,              // requires 1 bit
-        kIsFinite_SerializationShift = 25,             // requires 1 bit
-        kIsOval_SerializationShift = 24,               // requires 1 bit
-        kSegmentMask_SerializationShift = 0            // requires 4 bits
+        kLegacyRRectOrOvalStartIdx_SerializationShift = 28, // requires 3 bits, ignored.
+        kLegacyRRectOrOvalIsCCW_SerializationShift = 27,    // requires 1 bit, ignored.
+        kLegacyIsRRect_SerializationShift = 26,             // requires 1 bit, ignored.
+        kIsFinite_SerializationShift = 25,                  // requires 1 bit
+        kLegacyIsOval_SerializationShift = 24,              // requires 1 bit, ignored.
+        kSegmentMask_SerializationShift = 0                 // requires 4 bits (deprecated)
     };
 
     SkPathRef() {
         fBoundsIsDirty = true;    // this also invalidates fIsFinite
         fPointCnt = 0;
         fVerbCnt = 0;
-        fVerbs = NULL;
-        fPoints = NULL;
+        fVerbs = nullptr;
+        fPoints = nullptr;
         fFreeSpace = 0;
         fGenerationID = kEmptyGenID;
         fSegmentMask = 0;
@@ -342,6 +345,9 @@ private:
     }
 
     void copy(const SkPathRef& ref, int additionalReserveVerbs, int additionalReservePoints);
+
+    // Doesn't read fSegmentMask, but (re)computes it from the verbs array
+    unsigned computeSegmentMask() const;
 
     // Return true if the computed bounds are finite.
     static bool ComputePtBounds(SkRect* bounds, const SkPathRef& ref) {
@@ -394,8 +400,8 @@ private:
 
         if (sizeDelta < 0 || static_cast<size_t>(sizeDelta) >= 3 * minSize) {
             sk_free(fPoints);
-            fPoints = NULL;
-            fVerbs = NULL;
+            fPoints = nullptr;
+            fVerbs = nullptr;
             fFreeSpace = 0;
             fVerbCnt = 0;
             fPointCnt = 0;
@@ -433,31 +439,35 @@ private:
      */
     void makeSpace(size_t size) {
         SkDEBUGCODE(this->validate();)
-        ptrdiff_t growSize = size - fFreeSpace;
-        if (growSize <= 0) {
+        if (size <= fFreeSpace) {
             return;
         }
+        size_t growSize = size - fFreeSpace;
         size_t oldSize = this->currSize();
         // round to next multiple of 8 bytes
         growSize = (growSize + 7) & ~static_cast<size_t>(7);
         // we always at least double the allocation
-        if (static_cast<size_t>(growSize) < oldSize) {
+        if (growSize < oldSize) {
             growSize = oldSize;
         }
         if (growSize < kMinSize) {
             growSize = kMinSize;
         }
-        size_t newSize = oldSize + growSize;
+        constexpr size_t maxSize = std::numeric_limits<size_t>::max();
+        size_t newSize;
+        if (growSize <= maxSize - oldSize) {
+            newSize = oldSize + growSize;
+        } else {
+            SK_ABORT("Path too big.");
+        }
         // Note that realloc could memcpy more than we need. It seems to be a win anyway. TODO:
         // encapsulate this.
         fPoints = reinterpret_cast<SkPoint*>(sk_realloc_throw(fPoints, newSize));
         size_t oldVerbSize = fVerbCnt * sizeof(uint8_t);
-        void* newVerbsDst = reinterpret_cast<void*>(
-                                reinterpret_cast<intptr_t>(fPoints) + newSize - oldVerbSize);
-        void* oldVerbsSrc = reinterpret_cast<void*>(
-                                reinterpret_cast<intptr_t>(fPoints) + oldSize - oldVerbSize);
+        void* newVerbsDst = SkTAddOffset<void>(fPoints, newSize - oldVerbSize);
+        void* oldVerbsSrc = SkTAddOffset<void>(fPoints, oldSize - oldVerbSize);
         memmove(newVerbsDst, oldVerbsSrc, oldVerbSize);
-        fVerbs = reinterpret_cast<uint8_t*>(reinterpret_cast<intptr_t>(fPoints) + newSize);
+        fVerbs = SkTAddOffset<uint8_t>(fPoints, newSize);
         fFreeSpace += growSize;
         SkDEBUGCODE(this->validate();)
     }

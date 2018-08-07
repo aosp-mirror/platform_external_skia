@@ -9,6 +9,7 @@
 #include "SkColorSpaceXformer.h"
 #include "SkCanvas.h"
 #include "SkImage.h"
+#include "SkImageFilterPriv.h"
 #include "SkMatrix.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPaint.h"
@@ -74,9 +75,6 @@ sk_sp<SkSpecialImage> SkTileImageFilter::onFilterImage(SkSpecialImage* source,
     sk_sp<SkImage> subset;
     if (inputBounds.contains(srcIRect)) {
         subset = input->asImage(&srcIRect);
-        if (!subset) {
-            return nullptr;
-        }
     } else {
         sk_sp<SkSurface> surf(input->makeTightSurface(ctx.outputProperties(), srcIRect.size()));
         if (!surf) {
@@ -89,11 +87,14 @@ sk_sp<SkSpecialImage> SkTileImageFilter::onFilterImage(SkSpecialImage* source,
         SkPaint paint;
         paint.setBlendMode(SkBlendMode::kSrc);
 
-        input->draw(canvas, 
+        input->draw(canvas,
                     SkIntToScalar(inputOffset.x()), SkIntToScalar(inputOffset.y()),
                     &paint);
 
         subset = surf->makeImageSnapshot();
+    }
+    if (!subset) {
+        return nullptr;
     }
     SkASSERT(subset->width() == srcIRect.width());
     SkASSERT(subset->height() == srcIRect.height());

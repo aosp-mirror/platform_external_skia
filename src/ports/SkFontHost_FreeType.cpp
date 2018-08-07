@@ -8,7 +8,7 @@
 #include "SkAdvancedTypefaceMetrics.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
-#include "SkColorPriv.h"
+#include "SkColorData.h"
 #include "SkDescriptor.h"
 #include "SkFDot6.h"
 #include "SkFontDescriptor.h"
@@ -46,7 +46,7 @@
 // Flag SK_FREETYPE_DLOPEN: also try dlopen to get newer features.
 #define SK_FREETYPE_DLOPEN (0x1)
 #ifndef SK_FREETYPE_MINIMUM_RUNTIME_VERSION
-#  if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) || defined (GOOGLE3)
+#  if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) || defined (SK_BUILD_FOR_GOOGLE3)
 #    define SK_FREETYPE_MINIMUM_RUNTIME_VERSION (((FREETYPE_MAJOR) << 24) | ((FREETYPE_MINOR) << 16) | ((FREETYPE_PATCH) << 8))
 #  else
 #    define SK_FREETYPE_MINIMUM_RUNTIME_VERSION ((2 << 24) | (3 << 16) | (11 << 8) | (SK_FREETYPE_DLOPEN))
@@ -75,7 +75,7 @@
 //#define SK_FONTHOST_FREETYPE_RUNTIME_VERSION
 //#define SK_GAMMA_APPLY_TO_A8
 
-static bool isLCD(const SkScalerContext::Rec& rec) {
+static bool isLCD(const SkScalerContextRec& rec) {
     return SkMask::kLCD16_Format == rec.fMaskFormat;
 }
 
@@ -364,7 +364,7 @@ static SkFaceRec* ref_ft_face(const SkTypeface* typeface) {
         FT_Face rawFace;
         FT_Error err = FT_Open_Face(gFTLibrary->library(), &args, data->getIndex(), &rawFace);
         if (err) {
-            SkDEBUGF(("ERROR: unable to open font '%x'\n", fontID));
+            SK_TRACEFTR(err, "unable to open font '%x'", fontID);
             return nullptr;
         }
         rec->fFace.reset(rawFace);
@@ -418,9 +418,7 @@ class AutoFTAccess {
 public:
     AutoFTAccess(const SkTypeface* tf) : fFaceRec(nullptr) {
         gFTMutex.acquire();
-        if (!ref_ft_library()) {
-            sk_throw();
-        }
+        SkASSERT_RELEASE(ref_ft_library());
         fFaceRec = ref_ft_face(tf);
     }
 
@@ -576,7 +574,7 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface_FreeType::onGetAdvancedMet
     if (FT_Get_PS_Font_Info(face, &psFontInfo) == 0) {
         info->fItalicAngle = psFontInfo.italic_angle;
     } else if ((postTable = (TT_Postscript*)FT_Get_Sfnt_Table(face, ft_sfnt_post)) != nullptr) {
-        info->fItalicAngle = SkFixedToScalar(postTable->italicAngle);
+        info->fItalicAngle = SkFixedFloorToInt(postTable->italicAngle);
     } else {
         info->fItalicAngle = 0;
     }
@@ -635,7 +633,7 @@ static bool bothZero(SkScalar a, SkScalar b) {
 }
 
 // returns false if there is any non-90-rotation or skew
-static bool isAxisAligned(const SkScalerContext::Rec& rec) {
+static bool isAxisAligned(const SkScalerContextRec& rec) {
     return 0 == rec.fPreSkewX &&
            (bothZero(rec.fPost2x2[0][1], rec.fPost2x2[1][0]) ||
             bothZero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
@@ -676,11 +674,6 @@ void SkTypeface_FreeType::onFilterRec(SkScalerContextRec* rec) const {
     if (SkPaint::kFull_Hinting == h && !isLCD(*rec)) {
         // collapse full->normal hinting if we're not doing LCD
         h = SkPaint::kNormal_Hinting;
-    }
-    if ((rec->fFlags & SkScalerContext::kSubpixelPositioning_Flag)) {
-        if (SkPaint::kNo_Hinting != h) {
-            h = SkPaint::kSlight_Hinting;
-        }
     }
 
     // rotated text looks bad with hinting, so we disable it as needed
@@ -764,10 +757,7 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface> typeface,
     , fStrikeIndex(-1)
 {
     SkAutoMutexAcquire  ac(gFTMutex);
-
-    if (!ref_ft_library()) {
-        sk_throw();
-    }
+    SkASSERT_RELEASE(ref_ft_library());
 
     fFaceRec.reset(ref_ft_face(this->getTypeface()));
 
@@ -862,7 +852,7 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface> typeface,
         FT_Size size;
         FT_Error err = FT_New_Size(fFaceRec->fFace.get(), &size);
         if (err != 0) {
-            SkDEBUGF(("FT_New_Size(%s) returned 0x%x.\n", fFaceRec->fFace->family_name, err));
+            SK_TRACEFTR(err, "FT_New_Size(%s) failed.", fFaceRec->fFace->family_name);
             return nullptr;
         }
         return size;
@@ -874,15 +864,15 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface> typeface,
 
     FT_Error err = FT_Activate_Size(ftSize.get());
     if (err != 0) {
-        SkDEBUGF(("FT_Activate_Size(%s) returned 0x%x.\n", fFaceRec->fFace->family_name, err));
+        SK_TRACEFTR(err, "FT_Activate_Size(%s) failed.", fFaceRec->fFace->family_name);
         return;
     }
 
     if (FT_IS_SCALABLE(fFaceRec->fFace)) {
         err = FT_Set_Char_Size(fFaceRec->fFace.get(), scaleX, scaleY, 72, 72);
         if (err != 0) {
-            SkDEBUGF(("FT_Set_CharSize(%s, %f, %f) returned 0x%x.\n",
-                      fFaceRec->fFace->family_name, fScale.fX, fScale.fY, err));
+            SK_TRACEFTR(err, "FT_Set_CharSize(%s, %f, %f) failed.",
+                         fFaceRec->fFace->family_name, fScale.fX, fScale.fY);
             return;
         }
     } else if (FT_HAS_FIXED_SIZES(fFaceRec->fFace)) {
@@ -895,8 +885,8 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface> typeface,
 
         err = FT_Select_Size(fFaceRec->fFace.get(), fStrikeIndex);
         if (err != 0) {
-            SkDEBUGF(("FT_Select_Size(%s, %d) returned 0x%x.\n",
-                      fFaceRec->fFace->family_name, fStrikeIndex, err));
+            SK_TRACEFTR(err, "FT_Select_Size(%s, %d) failed.",
+                         fFaceRec->fFace->family_name, fStrikeIndex);
             fStrikeIndex = -1;
             return;
         }
@@ -1220,8 +1210,10 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
 
     FT_Error err = FT_Load_Glyph(fFace, glyph.getGlyphID(), fLoadGlyphFlags);
     if (err != 0) {
-        SkDEBUGF(("SkScalerContext_FreeType::generateImage: FT_Load_Glyph(glyph:%d width:%d height:%d rb:%d flags:%d) returned 0x%x\n",
-                  glyph.getGlyphID(), glyph.fWidth, glyph.fHeight, glyph.rowBytes(), fLoadGlyphFlags, err));
+        SK_TRACEFTR(err, "SkScalerContext_FreeType::generateImage: FT_Load_Glyph(glyph:%d "
+                     "width:%d height:%d rb:%d flags:%d) failed.",
+                     glyph.getGlyphID(), glyph.fWidth, glyph.fHeight, glyph.rowBytes(),
+                     fLoadGlyphFlags);
         clear_glyph_image(glyph);
         return;
     }
@@ -1256,8 +1248,8 @@ void SkScalerContext_FreeType::generatePath(SkGlyphID glyphID, SkPath* path) {
     FT_Error err = FT_Load_Glyph(fFace, glyphID, flags);
 
     if (err != 0) {
-        SkDEBUGF(("SkScalerContext_FreeType::generatePath: FT_Load_Glyph(glyph:%d flags:%d) returned 0x%x\n",
-                  glyphID, flags, err));
+        SK_TRACEFTR(err, "SkScalerContext_FreeType::generatePath: FT_Load_Glyph(glyph:%d "
+                     "flags:%d) failed.", glyphID, flags);
         path->reset();
         return;
     }
@@ -1289,6 +1281,7 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics
     }
 
     FT_Face face = fFace;
+    metrics->fFlags = 0;
 
     // fetch units/EM from "head" table if needed (ie for bitmap fonts)
     SkScalar upem = SkIntToScalar(face->units_per_EM);
@@ -1303,10 +1296,15 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics
     SkScalar x_height = 0.0f;
     SkScalar avgCharWidth = 0.0f;
     SkScalar cap_height = 0.0f;
+    SkScalar strikeoutThickness = 0.0f, strikeoutPosition = 0.0f;
     TT_OS2* os2 = (TT_OS2*) FT_Get_Sfnt_Table(face, ft_sfnt_os2);
     if (os2) {
         x_height = SkIntToScalar(os2->sxHeight) / upem * fScale.y();
         avgCharWidth = SkIntToScalar(os2->xAvgCharWidth) / upem;
+        strikeoutThickness = SkIntToScalar(os2->yStrikeoutSize) / upem;
+        strikeoutPosition = -SkIntToScalar(os2->yStrikeoutPosition) / upem;
+        metrics->fFlags |= SkPaint::FontMetrics::kStrikeoutThicknessIsValid_Flag;
+        metrics->fFlags |= SkPaint::FontMetrics::kStrikeoutPositionIsValid_Flag;
         if (os2->version != 0xFFFF && os2->version >= 2) {
             cap_height = SkIntToScalar(os2->sCapHeight) / upem * fScale.y();
         }
@@ -1362,13 +1360,20 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics
         leading = (SkIntToScalar(face->size->metrics.height) / (yppem * 64.0f)) + ascent - descent;
         xmin = 0.0f;
         xmax = SkIntToScalar(face->available_sizes[fStrikeIndex].width) / xppem;
-        ymin = descent + leading;
-        ymax = ascent - descent;
+        ymin = descent;
+        ymax = ascent;
         underlineThickness = 0;
         underlinePosition = 0;
-
         metrics->fFlags &= ~SkPaint::FontMetrics::kUnderlineThicknessIsValid_Flag;
         metrics->fFlags &= ~SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
+
+        TT_Postscript* post = (TT_Postscript*) FT_Get_Sfnt_Table(face, ft_sfnt_post);
+        if (post) {
+            underlineThickness = SkIntToScalar(post->underlineThickness) / upem;
+            underlinePosition = -SkIntToScalar(post->underlinePosition) / upem;
+            metrics->fFlags |= SkPaint::FontMetrics::kUnderlineThicknessIsValid_Flag;
+            metrics->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
+        }
     } else {
         sk_bzero(metrics, sizeof(*metrics));
         return;
@@ -1398,10 +1403,13 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics
     metrics->fAvgCharWidth = avgCharWidth * fScale.y();
     metrics->fXMin = xmin * fScale.y();
     metrics->fXMax = xmax * fScale.y();
+    metrics->fMaxCharWidth = metrics->fXMax - metrics->fXMin;
     metrics->fXHeight = x_height;
     metrics->fCapHeight = cap_height;
     metrics->fUnderlineThickness = underlineThickness * fScale.y();
     metrics->fUnderlinePosition = underlinePosition * fScale.y();
+    metrics->fStrikeoutThickness = strikeoutThickness * fScale.y();
+    metrics->fStrikeoutPosition = strikeoutPosition * fScale.y();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

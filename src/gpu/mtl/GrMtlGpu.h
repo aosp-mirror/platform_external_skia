@@ -13,6 +13,8 @@
 #include "GrSemaphore.h"
 #include "GrTexture.h"
 
+#include "GrMtlCaps.h"
+
 #import <Metal/Metal.h>
 
 class GrSemaphore;
@@ -20,29 +22,40 @@ struct GrMtlBackendContext;
 
 class GrMtlGpu : public GrGpu {
 public:
-    static GrGpu* Create(GrContext* context, const GrContextOptions& options,
-                         id<MTLDevice> device, id<MTLCommandQueue> queue);
+    static sk_sp<GrGpu> Make(GrContext* context, const GrContextOptions& options,
+                             id<MTLDevice> device, id<MTLCommandQueue> queue);
 
     ~GrMtlGpu() override {}
 
-    bool onGetReadPixelsInfo(GrSurface* srcSurface, int readWidth, int readHeight, size_t rowBytes,
-                             GrPixelConfig readConfig, DrawPreference*,
-                             ReadPixelTempDrawInfo*) override { return false; }
+    const GrMtlCaps& mtlCaps() const { return *fMtlCaps.get(); }
 
-    bool onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height,
-                              GrPixelConfig srcConfig, DrawPreference*,
-                              WritePixelTempDrawInfo*) override { return false; }
+    id<MTLDevice> device() const { return fDevice; }
 
-    bool onCopySurface(GrSurface* dst,
-                       GrSurface* src,
+    bool onGetReadPixelsInfo(GrSurface* srcSurface, GrSurfaceOrigin origin, int readWidth,
+                             int readHeight, size_t rowBytes, GrColorType readConfig,
+                             DrawPreference*, ReadPixelTempDrawInfo*) override {
+        return false;
+    }
+
+    bool onGetWritePixelsInfo(GrSurface* dstSurface, GrSurfaceOrigin dstOrigin, int width,
+                              int height, GrColorType srcColorType, DrawPreference*,
+                              WritePixelTempDrawInfo*) override {
+        return false;
+    }
+
+    bool onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin,
+                       GrSurface* src, GrSurfaceOrigin srcOrigin,
                        const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override { return false; }
 
-    void onQueryMultisampleSpecs(GrRenderTarget* rt, const GrStencilSettings&,
-                                 int* effectiveSampleCnt, SamplePattern*) override {}
+    GrGpuRTCommandBuffer* createCommandBuffer(
+                                    GrRenderTarget*, GrSurfaceOrigin,
+                                    const GrGpuRTCommandBuffer::LoadAndStoreInfo&,
+                                    const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo&) override {
+        return nullptr;
+    }
 
-    GrGpuCommandBuffer* createCommandBuffer(const GrGpuCommandBuffer::LoadAndStoreInfo&,
-                                            const GrGpuCommandBuffer::LoadAndStoreInfo&) override {
+    GrGpuTextureCommandBuffer* createCommandBuffer(GrTexture*, GrSurfaceOrigin) override {
         return nullptr;
     }
 
@@ -54,6 +67,7 @@ public:
         return nullptr;
     }
     sk_sp<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
+                                            GrResourceProvider::SemaphoreWrapType wrapType,
                                             GrWrapOwnership ownership) override { return nullptr; }
     void insertSemaphore(sk_sp<GrSemaphore> semaphore, bool flush) override {}
     void waitSemaphore(sk_sp<GrSemaphore> semaphore) override {}
@@ -61,32 +75,30 @@ public:
 
 private:
     GrMtlGpu(GrContext* context, const GrContextOptions& options,
-             id<MTLDevice> device, id<MTLCommandQueue> queue);
+             id<MTLDevice> device, id<MTLCommandQueue> queue, MTLFeatureSet featureSet);
 
     void onResetContext(uint32_t resetBits) override {}
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
     sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
-                                     const GrMipLevel texels[], int mipLevelCount) override {
+                                     const GrMipLevel texels[], int mipLevelCount) override;
+
+    sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrWrapOwnership) override {
         return nullptr;
     }
 
-    sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&,
-                                          GrSurfaceOrigin,
-                                          GrBackendTextureFlags,
-                                          int sampleCnt,
-                                          GrWrapOwnership) override {
+    sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&,
+                                                    int sampleCnt,
+                                                    GrWrapOwnership) override {
         return nullptr;
     }
 
-    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&,
-                                                    GrSurfaceOrigin) override {
+    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&) override {
         return nullptr;
     }
 
     sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
-                                                             GrSurfaceOrigin,
                                                              int sampleCnt) override {
         return nullptr;
     }
@@ -95,31 +107,27 @@ private:
         return nullptr;
     }
 
-    gr_instanced::InstancedRendering* onCreateInstancedRendering() override { return nullptr; }
-
-    bool onReadPixels(GrSurface* surface,
-                      int left, int top, int width, int height,
-                      GrPixelConfig,
-                      void* buffer,
-                      size_t rowBytes) override {
+    bool onReadPixels(GrSurface* surface, GrSurfaceOrigin, int left, int top, int width, int height,
+                      GrColorType, void* buffer, size_t rowBytes) override {
         return false;
     }
 
-    bool onWritePixels(GrSurface* surface,
-                       int left, int top, int width, int height,
-                       GrPixelConfig config,
-                       const GrMipLevel texels[], int mipLevelCount) override {
+    bool onWritePixels(GrSurface*, GrSurfaceOrigin, int left, int top, int width,
+                       int height, GrColorType, const GrMipLevel[],
+                       int) override {
         return false;
     }
 
-    bool onTransferPixels(GrTexture* texture,
+    bool onTransferPixels(GrTexture*,
                           int left, int top, int width, int height,
-                          GrPixelConfig config, GrBuffer* transferBuffer,
+                          GrColorType, GrBuffer*,
                           size_t offset, size_t rowBytes) override {
         return false;
     }
 
     void onResolveRenderTarget(GrRenderTarget* target) override { return; }
+
+    void onFinishFlush(bool insertedSemaphores) override {}
 
     GrStencilAttachment* createStencilAttachmentForRenderTarget(const GrRenderTarget*,
                                                                 int width,
@@ -127,14 +135,17 @@ private:
         return nullptr;
     }
 
-    void clearStencil(GrRenderTarget* target) override  {}
+    void clearStencil(GrRenderTarget* target, int clearValue) override  {}
 
-    GrBackendObject createTestingOnlyBackendTexture(void* pixels, int w, int h,
-                                                    GrPixelConfig config, bool isRT) override {
-        return 0;
+    GrBackendTexture createTestingOnlyBackendTexture(void* pixels, int w, int h,
+                                                     GrPixelConfig config, bool isRT,
+                                                     GrMipMapped) override {
+        return GrBackendTexture();
     }
-    bool isTestingOnlyBackendTexture(GrBackendObject ) const override { return false; }
-    void deleteTestingOnlyBackendTexture(GrBackendObject, bool abandonTexture) override {}
+    bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override { return false; }
+    void deleteTestingOnlyBackendTexture(GrBackendTexture*, bool abandon = false) override {}
+
+    sk_sp<GrMtlCaps> fMtlCaps;
 
     id<MTLDevice> fDevice;
     id<MTLCommandQueue> fQueue;

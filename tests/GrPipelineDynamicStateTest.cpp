@@ -19,7 +19,7 @@
 #include "GrRenderTargetContextPriv.h"
 #include "GrResourceProvider.h"
 #include "SkMakeUnique.h"
-#include "glsl/GrGLSLVertexShaderBuilder.h"
+#include "glsl/GrGLSLVertexGeoBuilder.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLVarying.h"
@@ -59,10 +59,9 @@ struct Vertex {
 class GrPipelineDynamicStateTestProcessor : public GrGeometryProcessor {
 public:
     GrPipelineDynamicStateTestProcessor()
-        : fVertex(this->addVertexAttrib("vertex", kVec2f_GrVertexAttribType))
-        , fColor(this->addVertexAttrib("color", kVec4ub_GrVertexAttribType)) {
-        this->initClassID<GrPipelineDynamicStateTestProcessor>();
-    }
+        : INHERITED(kGrPipelineDynamicStateTestProcessor_ClassID)
+        , fVertex(this->addVertexAttrib("vertex", kHalf2_GrVertexAttribType))
+        , fColor(this->addVertexAttrib("color", kUByte4_norm_GrVertexAttribType)) {}
 
     const char* name() const override { return "GrPipelineDynamicStateTest Processor"; }
 
@@ -91,11 +90,11 @@ class GLSLPipelineDynamicStateTestProcessor : public GrGLSLGeometryProcessor {
         varyingHandler->addPassThroughAttribute(&mp.fColor, args.fOutputColor);
 
         GrGLSLVertexBuilder* v = args.fVertBuilder;
-        v->codeAppendf("vec2 vertex = %s;", mp.fVertex.fName);
-        gpArgs->fPositionVar.set(kVec2f_GrSLType, "vertex");
+        v->codeAppendf("float2 vertex = %s;", mp.fVertex.fName);
+        gpArgs->fPositionVar.set(kFloat2_GrSLType, "vertex");
 
-        GrGLSLPPFragmentBuilder* f = args.fFragBuilder;
-        f->codeAppendf("%s = vec4(1);", args.fOutputCoverage);
+        GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
+        f->codeAppendf("%s = half4(1);", args.fOutputCoverage);
     }
 };
 
@@ -119,23 +118,24 @@ public:
 private:
     const char* name() const override { return "GrPipelineDynamicStateTestOp"; }
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
-    RequiresDstTexture finalize(const GrCaps&, const GrAppliedClip*) override {
+    RequiresDstTexture finalize(const GrCaps&, const GrAppliedClip*,
+                                GrPixelConfigIsClamped) override {
         return RequiresDstTexture::kNo;
     }
     bool onCombineIfPossible(GrOp* other, const GrCaps& caps) override { return false; }
     void onPrepare(GrOpFlushState*) override {}
     void onExecute(GrOpFlushState* state) override {
-        GrRenderTarget* rt = state->drawOpArgs().fRenderTarget;
-        GrPipeline pipeline(rt, fScissorState, SkBlendMode::kSrc);
+        GrRenderTargetProxy* proxy = state->drawOpArgs().fProxy;
+        GrPipeline pipeline(proxy, fScissorState, SkBlendMode::kSrc);
         SkSTArray<kNumMeshes, GrMesh> meshes;
         for (int i = 0; i < kNumMeshes; ++i) {
             GrMesh& mesh = meshes.emplace_back(GrPrimitiveType::kTriangleStrip);
             mesh.setNonIndexedNonInstanced(4);
             mesh.setVertexData(fVertexBuffer.get(), 4 * i);
         }
-        state->commandBuffer()->draw(pipeline, GrPipelineDynamicStateTestProcessor(),
-                                     meshes.begin(), kDynamicStates, 4,
-                                     SkRect::MakeIWH(kScreenSize, kScreenSize));
+        state->rtCommandBuffer()->draw(pipeline, GrPipelineDynamicStateTestProcessor(),
+                                       meshes.begin(), kDynamicStates, 4,
+                                       SkRect::MakeIWH(kScreenSize, kScreenSize));
     }
 
     ScissorState                fScissorState;
@@ -146,7 +146,7 @@ private:
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrPipelineDynamicStateTest, reporter, ctxInfo) {
     GrContext* const context = ctxInfo.grContext();
-    GrResourceProvider* rp = context->resourceProvider();
+    GrResourceProvider* rp = context->contextPriv().resourceProvider();
 
     sk_sp<GrRenderTargetContext> rtc(
         context->makeDeferredRenderTargetContext(SkBackingFit::kExact, kScreenSize, kScreenSize,
@@ -192,7 +192,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrPipelineDynamicStateTest, reporter, ctxInfo
     uint32_t resultPx[kScreenSize * kScreenSize];
 
     for (ScissorState scissorState : {ScissorState::kEnabled, ScissorState::kDisabled}) {
-        rtc->clear(nullptr, 0xbaaaaaad, true);
+        rtc->clear(nullptr, 0xbaaaaaad, GrRenderTargetContext::CanClearFullscreen::kYes);
         rtc->priv().testingOnly_addDrawOp(
             skstd::make_unique<GrPipelineDynamicStateTestOp>(scissorState, vbuff));
         rtc->readPixels(SkImageInfo::Make(kScreenSize, kScreenSize,

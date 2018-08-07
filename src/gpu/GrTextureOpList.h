@@ -29,17 +29,14 @@ public:
     /**
      * Empties the draw buffer of any queued ops.
      */
-    void reset() override;
-
-    void abandonGpuResources() override {}
-    void freeGpuResources() override {}
+    void endFlush() override;
 
     /**
      * Together these two functions flush all queued ops to GrGpuCommandBuffer. The return value
      * of executeOps() indicates whether any commands were actually issued to the GPU.
      */
-    void prepareOps(GrOpFlushState* flushState) override;
-    bool executeOps(GrOpFlushState* flushState) override;
+    void onPrepare(GrOpFlushState* flushState) override;
+    bool onExecute(GrOpFlushState* flushState) override;
 
     /**
      * Copies a pixel rectangle from one surface to another. This call may finalize
@@ -64,6 +61,10 @@ public:
     SkDEBUGCODE(int numOps() const override { return fRecordedOps.count(); })
 
 private:
+    void purgeOpsWithUninstantiatedProxies() override;
+
+    void gatherProxyIntervals(GrResourceAllocator*) const override;
+
     void recordOp(std::unique_ptr<GrOp>);
 
     SkSTArray<2, std::unique_ptr<GrOp>, true> fRecordedOps;

@@ -10,7 +10,6 @@
 #if SK_SUPPORT_GPU
 
 #include "GrContext.h"
-#include "GrTexture.h"
 #include "GrTexturePriv.h"
 #include "SkCanvas.h"
 #include "SkImage_Base.h"
@@ -20,7 +19,8 @@
 // Tests that MIP maps are created and invalidated as expected when drawing to and from GrTextures.
 DEF_GPUTEST_FOR_NULLGL_CONTEXT(GrTextureMipMapInvalidationTest, reporter, ctxInfo) {
     auto isMipped = [] (SkSurface* surf) {
-        return surf->makeImageSnapshot()->getTexture()->texturePriv().hasMipMaps();
+        const GrTexture* texture = surf->makeImageSnapshot()->getTexture();
+        return GrMipMapped::kYes == texture->texturePriv().mipMapped();
     };
 
     auto mipsAreDirty = [] (SkSurface* surf) {
