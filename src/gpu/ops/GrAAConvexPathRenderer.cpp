@@ -611,7 +611,7 @@ public:
             fragBuilder->codeAppendf("edgeAlpha = (%s.x*%s.x - %s.y);", v.fsIn(), v.fsIn(),
                                      v.fsIn());
             fragBuilder->codeAppendf("edgeAlpha = "
-                                     "clamp(0.5 - edgeAlpha / length(gF), 0.0, 1.0);}");
+                                     "saturate(0.5 - edgeAlpha / length(gF));}");
 
             fragBuilder->codeAppendf("%s = half4(edgeAlpha);", args.fOutputCoverage);
         }
@@ -847,7 +847,7 @@ private:
             mesh.setIndexed(indexBuffer, tess.numIndices(), firstIndex, 0, tess.numPts() - 1,
                             GrPrimitiveRestart::kNo);
             mesh.setVertexData(vertexBuffer, firstVertex);
-            target->draw(gp, pipe.fPipeline, pipe.fFixedDynamicState, mesh);
+            target->draw(gp.get(), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
         }
     }
 
@@ -935,7 +935,7 @@ private:
                 mesh.setIndexed(indexBuffer, draw.fIndexCnt, firstIndex, 0, draw.fVertexCnt - 1,
                                 GrPrimitiveRestart::kNo);
                 mesh.setVertexData(vertexBuffer, firstVertex);
-                target->draw(quadProcessor, pipe.fPipeline, pipe.fFixedDynamicState, mesh);
+                target->draw(quadProcessor.get(), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
                 firstIndex += draw.fIndexCnt;
                 firstVertex += draw.fVertexCnt;
             }

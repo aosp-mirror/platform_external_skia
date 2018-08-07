@@ -16,6 +16,7 @@
 #include <memory>
 
 class SkCanvas;
+class SkData;
 struct SkRect;
 class SkStream;
 
@@ -31,7 +32,7 @@ public:
     ResourceProvider(const ResourceProvider&) = delete;
     ResourceProvider& operator=(const ResourceProvider&) = delete;
 
-    virtual std::unique_ptr<SkStream> openStream(const char resource[]) const = 0;
+    virtual sk_sp<SkData> load(const char resource_path[], const char resource_name[]) const = 0;
 };
 
 class SK_API Animation : public SkRefCnt {
@@ -44,6 +45,8 @@ public:
                fAnimatorCount;
     };
 
+    static sk_sp<Animation> Make(const char* data, size_t length,
+                                 const ResourceProvider* = nullptr, Stats* = nullptr);
     static sk_sp<Animation> Make(SkStream*, const ResourceProvider* = nullptr, Stats* = nullptr);
     static sk_sp<Animation> MakeFromFile(const char path[], const ResourceProvider* = nullptr,
                                          Stats* = nullptr);
