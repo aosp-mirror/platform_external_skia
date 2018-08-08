@@ -1542,6 +1542,7 @@ cc_test {
         "tests/ImageIsOpaqueTest.cpp",
         "tests/ImageNewShaderTest.cpp",
         "tests/ImageTest.cpp",
+        "tests/IncrTopoSortTest.cpp",
         "tests/IndexedPngOverflowTest.cpp",
         "tests/InfRectTest.cpp",
         "tests/InsetConvexPolyTest.cpp",
