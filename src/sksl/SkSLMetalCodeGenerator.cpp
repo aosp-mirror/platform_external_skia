@@ -322,6 +322,11 @@ void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
         case SK_INSTANCEID_BUILTIN:
             this->write("sk_InstanceID");
             break;
+        case SK_CLOCKWISE_BUILTIN:
+            // We'd set the front facing winding in the MTLRenderCommandEncoder to be counter
+            // clockwise to match Skia convention. This is also the default in MoltenVK.
+            this->write(fProgram.fSettings.fFlipY ? "_frontFacing" : "(!_frontFacing)");
+            break;
         default:
             if (Variable::kGlobal_Storage == ref.fVariable.fStorage) {
                 if (ref.fVariable.fModifiers.fFlags & Modifiers::kIn_Flag) {
@@ -585,12 +590,17 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
                 this->write(")]]");
             }
         }
-        if (fInterfaceBlockNameMap.empty()) {
+        if (fProgram.fKind == Program::kFragment_Kind) {
+            if (fInterfaceBlockNameMap.empty()) {
             // FIXME - Possibly have a different way of passing in u_skRTHeight or flip y axis
             // in a different way altogether.
-            this->write(", constant sksl_synthetic_uniforms& _anonInterface0 [[buffer(0)]]");
-        }
-        if (fProgram.fKind == Program::kFragment_Kind) {
+#ifdef SK_MOLTENVK
+                this->write(", constant sksl_synthetic_uniforms& _anonInterface0 [[buffer(0)]]");
+#else
+                this->write(", constant sksl_synthetic_uniforms& _anonInterface0 [[buffer(1)]]");
+#endif
+            }
+            this->write(", bool _frontFacing [[front_facing]]");
             this->write(", float4 _fragCoord [[position]]");
         } else if (fProgram.fKind == Program::kVertex_Kind) {
             this->write(", uint sk_VertexID [[vertex_id]], uint sk_InstanceID [[instance_id]]");

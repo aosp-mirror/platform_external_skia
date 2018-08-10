@@ -422,7 +422,7 @@ skia_gpu_sources = [
   "$_src/gpu/text/GrTextContext.cpp",
   "$_src/gpu/text/GrTextContext.h",
   "$_src/gpu/text/GrTextBlobVertexRegenerator.cpp",
-  "$_src/gpu/text/GrTextUtils.h",
+  "$_src/gpu/text/GrTextTarget.h",
 
   "$_src/gpu/gl/GrGLAssembleInterface.cpp",
   "$_src/gpu/gl/GrGLBuffer.cpp",
@@ -634,6 +634,7 @@ skia_metal_sources = [
   "$_src/gpu/mtl/GrMtlGpu.h",
   "$_src/gpu/mtl/GrMtlGpu.mm",
   "$_src/gpu/mtl/GrMtlGpuCommandBuffer.h",
+  "$_src/gpu/mtl/GrMtlGpuCommandBuffer.mm",
   "$_src/gpu/mtl/GrMtlPipelineState.h",
   "$_src/gpu/mtl/GrMtlPipelineState.mm",
   "$_src/gpu/mtl/GrMtlPipelineStateBuilder.h",
