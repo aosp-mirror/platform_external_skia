@@ -9,7 +9,7 @@
 #include "GrBlurUtils.h"
 #include "GrClip.h"
 #include "GrContext.h"
-#include "GrTextUtils.h"
+#include "GrTextTarget.h"
 #include "SkColorFilter.h"
 #include "SkGlyphCache.h"
 #include "SkMaskFilterBase.h"
@@ -135,14 +135,14 @@ void GrTextBlob::appendPathGlyph(int runIndex, const SkPath& path, SkScalar x, S
     run.fPathGlyphs.push_back(GrTextBlob::Run::PathGlyph(path, x, y, scale, preTransformed));
 }
 
-bool GrTextBlob::mustRegenerate(const GrTextUtils::Paint& paint,
+bool GrTextBlob::mustRegenerate(const SkPaint& paint,
                                      const SkMaskFilterBase::BlurRec& blurRec,
                                      const SkMatrix& viewMatrix, SkScalar x, SkScalar y) {
     // If we have LCD text then our canonical color will be set to transparent, in this case we have
     // to regenerate the blob on any color change
     // We use the grPaint to get any color filter effects
     if (fKey.fCanonicalColor == SK_ColorTRANSPARENT &&
-        fLuminanceColor != paint.luminanceColor()) {
+        fLuminanceColor != paint.computeLuminanceColor()) {
         return true;
     }
 
@@ -163,9 +163,9 @@ bool GrTextBlob::mustRegenerate(const GrTextUtils::Paint& paint,
 
     // Similarly, we only cache one version for each style
     if (fKey.fStyle != SkPaint::kFill_Style &&
-        (fStrokeInfo.fFrameWidth != paint.skPaint().getStrokeWidth() ||
-         fStrokeInfo.fMiterLimit != paint.skPaint().getStrokeMiter() ||
-         fStrokeInfo.fJoin != paint.skPaint().getStrokeJoin())) {
+        (fStrokeInfo.fFrameWidth != paint.getStrokeWidth() ||
+         fStrokeInfo.fMiterLimit != paint.getStrokeMiter() ||
+         fStrokeInfo.fJoin != paint.getStrokeJoin())) {
         return true;
     }
 
@@ -222,8 +222,8 @@ bool GrTextBlob::mustRegenerate(const GrTextUtils::Paint& paint,
 inline std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(
         const Run::SubRunInfo& info, int glyphCount, uint16_t run, uint16_t subRun,
         const SkMatrix& viewMatrix, SkScalar x, SkScalar y, const SkIRect& clipRect,
-        const GrTextUtils::Paint& paint, const SkSurfaceProps& props,
-        const GrDistanceFieldAdjustTable* distanceAdjustTable, GrTextUtils::Target* target) {
+        const SkPaint& paint, GrColor filteredColor, const SkSurfaceProps& props,
+        const GrDistanceFieldAdjustTable* distanceAdjustTable, GrTextTarget* target) {
     GrMaskFormat format = info.maskFormat();
 
     GrPaint grPaint;
@@ -233,7 +233,7 @@ inline std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(
         // TODO: Can we be even smarter based on the dest transfer function?
         op = GrAtlasTextOp::MakeDistanceField(
                 target->getContext(), std::move(grPaint), glyphCount, distanceAdjustTable,
-                target->colorSpaceInfo().isLinearlyBlended(), paint.luminanceColor(),
+                target->colorSpaceInfo().isLinearlyBlended(), paint.computeLuminanceColor(),
                 props, info.isAntiAliased(), info.hasUseLCDText());
     } else {
         op = GrAtlasTextOp::MakeBitmap(target->getContext(), std::move(grPaint), format, glyphCount,
@@ -246,7 +246,7 @@ inline std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(
     geometry.fRun = run;
     geometry.fSubRun = subRun;
     geometry.fColor =
-            info.maskFormat() == kARGB_GrMaskFormat ? GrColor_WHITE : paint.filteredPremulColor();
+            info.maskFormat() == kARGB_GrMaskFormat ? GrColor_WHITE : filteredColor;
     geometry.fX = x;
     geometry.fY = y;
     op->init();
@@ -273,16 +273,16 @@ static void calculate_translation(bool applyVM,
     }
 }
 
-void GrTextBlob::flush(GrTextUtils::Target* target, const SkSurfaceProps& props,
-                            const GrDistanceFieldAdjustTable* distanceAdjustTable,
-                            const GrTextUtils::Paint& paint, const GrClip& clip,
-                            const SkMatrix& viewMatrix, const SkIRect& clipBounds,
-                            SkScalar x, SkScalar y) {
+void GrTextBlob::flush(GrTextTarget* target, const SkSurfaceProps& props,
+                       const GrDistanceFieldAdjustTable* distanceAdjustTable,
+                       const SkPaint& paint, GrColor filteredColor, const GrClip& clip,
+                       const SkMatrix& viewMatrix, const SkIRect& clipBounds,
+                       SkScalar x, SkScalar y) {
 
     // GrTextBlob::makeOp only takes uint16_t values for run and subRun indices.
     // Encountering something larger than this is highly unlikely, so we'll just not draw it.
     int lastRun = SkTMin(fRunCount, (1 << 16)) - 1;
-    GrTextUtils::RunPaint runPaint(&paint);
+    SkPaint runPaint{paint};
     for (int runIndex = 0; runIndex <= lastRun; runIndex++) {
         Run& run = fRuns[runIndex];
 
@@ -290,12 +290,8 @@ void GrTextBlob::flush(GrTextUtils::Target* target, const SkSurfaceProps& props,
         if (run.fPathGlyphs.count()) {
             SkScalar transX, transY;
             uint16_t paintFlags = run.fPaintFlags;
-            if (!runPaint.modifyForRun(
-                [paintFlags](SkPaint* p) {
-                    p->setFlags((p->getFlags() & ~Run::kPaintFlagsMask) | paintFlags);
-                })) {
-                continue;
-            }
+            runPaint.setFlags((runPaint.getFlags() & ~Run::kPaintFlagsMask) | paintFlags);
+
             for (int i = 0; i < run.fPathGlyphs.count(); i++) {
                 GrTextBlob::Run::PathGlyph& pathGlyph = run.fPathGlyphs[i];
                 calculate_translation(pathGlyph.fPreTransformed, viewMatrix, x, y,
@@ -349,7 +345,7 @@ void GrTextBlob::flush(GrTextUtils::Target* target, const SkSurfaceProps& props,
 
             if (submitOp) {
                 auto op = this->makeOp(info, glyphCount, runIndex, subRun, viewMatrix, x, y,
-                                       clipRect, std::move(paint), props, distanceAdjustTable,
+                                       clipRect, paint, filteredColor, props, distanceAdjustTable,
                                        target);
                 if (op) {
                     if (skipClip) {
@@ -367,12 +363,13 @@ void GrTextBlob::flush(GrTextUtils::Target* target, const SkSurfaceProps& props,
 
 std::unique_ptr<GrDrawOp> GrTextBlob::test_makeOp(
         int glyphCount, uint16_t run, uint16_t subRun, const SkMatrix& viewMatrix,
-        SkScalar x, SkScalar y, const GrTextUtils::Paint& paint, const SkSurfaceProps& props,
-        const GrDistanceFieldAdjustTable* distanceAdjustTable, GrTextUtils::Target* target) {
+        SkScalar x, SkScalar y, const SkPaint& paint, GrColor filteredColor,
+        const SkSurfaceProps& props, const GrDistanceFieldAdjustTable* distanceAdjustTable,
+        GrTextTarget* target) {
     const GrTextBlob::Run::SubRunInfo& info = fRuns[run].fSubRunInfo[subRun];
     SkIRect emptyRect = SkIRect::MakeEmpty();
-    return this->makeOp(info, glyphCount, run, subRun, viewMatrix, x, y, emptyRect, paint, props,
-                        distanceAdjustTable, target);
+    return this->makeOp(info, glyphCount, run, subRun, viewMatrix, x, y, emptyRect,
+                        paint, filteredColor, props, distanceAdjustTable, target);
 }
 
 void GrTextBlob::AssertEqual(const GrTextBlob& l, const GrTextBlob& r) {

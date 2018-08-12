@@ -11,7 +11,7 @@
 #include "GrDistanceFieldAdjustTable.h"
 #include "GrGeometryProcessor.h"
 #include "GrTextBlob.h"
-#include "GrTextUtils.h"
+#include "GrTextTarget.h"
 #include "SkGlyphRun.h"
 
 #if GR_TEST_UTILS
@@ -44,7 +44,7 @@ public:
 
     static std::unique_ptr<GrTextContext> Make(const Options& options);
 
-    void drawGlyphRunList(GrContext*, GrTextUtils::Target*, const GrClip&,
+    void drawGlyphRunList(GrContext*, GrTextTarget*, const GrClip&,
                           const SkMatrix& viewMatrix, const SkSurfaceProps&, const SkGlyphRunList&,
                           const SkIRect& clipBounds);
 
@@ -87,7 +87,7 @@ public:
         void appendGlyph(const SkGlyph& glyph, SkGlyphID glyphID, SkPoint glyphPos);
         void drawGlyphs(
                 GrTextBlob* blob, int runIndex, GrGlyphCache* cache,
-                const SkSurfaceProps& props, const GrTextUtils::Paint& flags,
+                const SkSurfaceProps& props, const SkPaint& paint, GrColor filteredColor,
                 SkScalerContextFlags scalerContextFlags);
 
         void initializeForDraw(SkPaint* paint, SkScalar* textRatio, SkMatrix* matrix) const;
@@ -117,7 +117,8 @@ private:
     void regenerateGlyphRunList(GrTextBlob* bmp,
                             GrGlyphCache*,
                             const GrShaderCaps&,
-                            const GrTextUtils::Paint&,
+                            const SkPaint&,
+                            GrColor filteredColor,
                             SkScalerContextFlags scalerContextFlags,
                             const SkMatrix& viewMatrix,
                             const SkSurfaceProps&,

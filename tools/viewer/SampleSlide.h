@@ -9,21 +9,21 @@
 #define SampleSlide_DEFINED
 
 #include "Slide.h"
-#include "SampleCode.h"
+#include "Sample.h"
 
 class SampleSlide : public Slide {
 public:
-    SampleSlide(const SkViewFactory* factory);
+    SampleSlide(const SampleFactory factory);
     ~SampleSlide() override;
 
     void draw(SkCanvas* canvas) override;
     void load(SkScalar winWidth, SkScalar winHeight) override;
+    void resize(SkScalar winWidth, SkScalar winHeight) override {
+        fSample->setSize(winWidth, winHeight);
+    }
     void unload() override;
     bool animate(const SkAnimTimer& timer) override {
-        if (fView && SampleView::IsSampleView(fView.get())) {
-            return ((SampleView*)fView.get())->animate(timer);
-        }
-        return false;
+        return fSample->animate(timer);
     }
 
     bool onChar(SkUnichar c) override;
@@ -31,9 +31,9 @@ public:
                  uint32_t modifiers) override;
 
 private:
-    const SkViewFactory*   fViewFactory;
-    sk_sp<SkView>          fView;
-    SkView::Click*         fClick;
+    const SampleFactory fSampleFactory;
+    sk_sp<Sample> fSample;
+    Sample::Click* fClick;
 };
 
 #endif

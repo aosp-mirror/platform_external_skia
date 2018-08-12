@@ -233,13 +233,13 @@ void GrTextContext::FallbackGlyphRunHelper::appendGlyph(
 
 void GrTextContext::FallbackGlyphRunHelper::drawGlyphs(
         GrTextBlob* blob, int runIndex, GrGlyphCache* glyphCache, const SkSurfaceProps& props,
-        const GrTextUtils::Paint& paint, SkScalerContextFlags scalerContextFlags) {
+        const SkPaint& paint, GrColor filteredColor, SkScalerContextFlags scalerContextFlags) {
     if (!fFallbackTxt.empty()) {
         blob->initOverride(runIndex);
         blob->setHasBitmap();
         blob->setSubRunHasW(runIndex, fViewMatrix.hasPerspective());
-        const SkPaint& skPaint = paint.skPaint();
-        SkColor textColor = paint.filteredPremulColor();
+        const SkPaint& skPaint = paint;
+        SkColor textColor = filteredColor;
 
         SkScalar textRatio = SK_Scalar1;
         SkPaint fallbackPaint(skPaint);
@@ -282,44 +282,6 @@ void GrTextContext::FallbackGlyphRunHelper::initializeForDraw(
 
 #include "GrRenderTargetContext.h"
 
-std::unique_ptr<GrDrawOp> GrTextContext::createOp_TestingOnly(GrContext* context,
-                                                              GrTextContext* textContext,
-                                                              GrRenderTargetContext* rtc,
-                                                              const SkPaint& skPaint,
-                                                              const SkMatrix& viewMatrix,
-                                                              const char* text,
-                                                              int x,
-                                                              int y) {
-    auto glyphCache = context->contextPriv().getGlyphCache();
-
-    static SkSurfaceProps surfaceProps(SkSurfaceProps::kLegacyFontHost_InitType);
-
-    size_t textLen = (int)strlen(text);
-
-    GrTextUtils::Paint utilsPaint(&skPaint, &rtc->colorSpaceInfo());
-
-    auto origin = SkPoint::Make(x, y);
-    SkGlyphRunBuilder builder;
-    builder.drawText(skPaint, text, textLen, origin);
-
-
-    auto glyphRunList = builder.useGlyphRunList();
-    sk_sp<GrTextBlob> blob;
-    if (!glyphRunList.empty()) {
-        blob = context->contextPriv().getTextBlobCache()->makeBlob(glyphRunList);
-        // Use the text and textLen below, because we don't want to mess with the paint.
-        SkScalerContextFlags scalerContextFlags =
-                ComputeScalerContextFlags(rtc->colorSpaceInfo());
-        textContext->regenerateGlyphRunList(
-                blob.get(), glyphCache, *context->contextPriv().caps()->shaderCaps(), utilsPaint,
-                scalerContextFlags, viewMatrix, surfaceProps, glyphRunList,
-                rtc->textTarget()->glyphDrawer());
-    }
-
-    return blob->test_makeOp(textLen, 0, 0, viewMatrix, x, y, utilsPaint, surfaceProps,
-                             textContext->dfAdjustTable(), rtc->textTarget());
-}
-
 GR_DRAW_OP_TEST_DEFINE(GrAtlasTextOp) {
     static uint32_t gContextID = SK_InvalidGenID;
     static std::unique_ptr<GrTextContext> gTextContext;
@@ -336,8 +298,6 @@ GR_DRAW_OP_TEST_DEFINE(GrAtlasTextOp) {
 
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
 
-    // Because we the GrTextUtils::Paint requires an SkPaint for font info, we ignore the GrPaint
-    // param.
     SkPaint skPaint;
     skPaint.setColor(random->nextU());
     skPaint.setLCDRenderText(random->nextBool());

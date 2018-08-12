@@ -16,9 +16,9 @@
 #include "SkAnimTimer.h"
 #include "SkExecutor.h"
 #include "SkScan.h"
-#include "SkTouchGesture.h"
 #include "Slide.h"
 #include "StatsLayer.h"
+#include "TouchGesture.h"
 
 class SkCanvas;
 
@@ -31,6 +31,7 @@ public:
 
     void onBackendCreated() override;
     void onPaint(SkCanvas* canvas) override;
+    void onResize(int width, int height) override;
     bool onTouch(intptr_t owner, sk_app::Window::InputState state, float x, float y) override;
     bool onMouse(int x, int y, sk_app::Window::InputState state, uint32_t modifiers) override;
     void onUIStateChanged(const SkString& stateName, const SkString& stateValue) override;
@@ -153,7 +154,7 @@ private:
         kMouse,
     };
 
-    SkTouchGesture         fGesture;
+    TouchGesture           fGesture;
     GestureDevice          fGestureDevice;
 
     // identity unless the window initially scales the content to fit the screen.

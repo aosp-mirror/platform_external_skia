@@ -312,7 +312,7 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 		Dependencies: []string{BUNDLE_RECIPES_NAME},
 		Dimensions:   dimensions,
 		EnvPrefixes: map[string][]string{
-			"PATH":                    []string{"cipd_bin_packages", "cipd_bin_packages/bin"},
+			"PATH": []string{"cipd_bin_packages", "cipd_bin_packages/bin"},
 			"VPYTHON_VIRTUALENV_ROOT": []string{"${cache_dir}/vpython"},
 		},
 		ExtraTags: map[string]string{
@@ -397,6 +397,9 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 		}
 		if strings.Contains(jobName, "-CT_") {
 			ec = []string{"Static"}
+		}
+		if strings.Contains(jobName, "PathKit") {
+			ec = []string{"PathKit"}
 		}
 		if len(ec) > 0 {
 			jobNameMap["extra_config"] = strings.Join(ec, "_")
@@ -534,6 +537,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			if strings.Contains(parts["os"], "Win") {
 				gpu, ok := map[string]string{
 					"GT610":         "10de:104a-23.21.13.9101",
+					"GTX1050":       "10de:1c8d-24.21.13.9882",
 					"GTX1070":       "10de:1ba1-24.21.13.9882",
 					"GTX660":        "10de:11c0-24.21.13.9882",
 					"GTX960":        "10de:1401-24.21.13.9882",
@@ -1033,6 +1037,8 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		// TODO(dogben): Longer term we may not want this to be called a "Test" task, but until we start
 		// running hs_bench or kx, it will be easier to fit into the current job name schema.
 		recipe = "compute_test"
+	} else if strings.Contains(name, "PathKit") {
+		recipe = "test_pathkit"
 	}
 	extraProps := map[string]string{
 		"gold_hashes_url": CONFIG.GoldHashesURL,
@@ -1041,7 +1047,11 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	if iid != nil {
 		extraProps["internal_hardware_label"] = strconv.Itoa(*iid)
 	}
-	task := kitchenTask(name, recipe, "test_skia_bundled.isolate", "", swarmDimensions(parts), extraProps, OUTPUT_TEST)
+	isolate := "test_skia_bundled.isolate"
+	if strings.Contains(name, "PathKit") {
+		isolate = "swarm_recipe.isolate"
+	}
+	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), extraProps, OUTPUT_TEST)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
 	if strings.Contains(name, "Lottie") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
@@ -1349,6 +1359,9 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 	if strings.Contains(name, "ProcDump") {
 		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("procdump_win"))
+	}
+	if strings.Contains(name, "wasm") {
+		pkgs = []*specs.CipdPackage{}
 	}
 
 	// Test bots.

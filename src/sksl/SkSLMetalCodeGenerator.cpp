@@ -322,6 +322,11 @@ void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
         case SK_INSTANCEID_BUILTIN:
             this->write("sk_InstanceID");
             break;
+        case SK_CLOCKWISE_BUILTIN:
+            // We'd set the front facing winding in the MTLRenderCommandEncoder to be counter
+            // clockwise to match Skia convention. This is also the default in MoltenVK.
+            this->write(fProgram.fSettings.fFlipY ? "_frontFacing" : "(!_frontFacing)");
+            break;
         default:
             if (Variable::kGlobal_Storage == ref.fVariable.fStorage) {
                 if (ref.fVariable.fModifiers.fFlags & Modifiers::kIn_Flag) {
@@ -585,12 +590,17 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
                 this->write(")]]");
             }
         }
-        if (fInterfaceBlockNameMap.empty()) {
+        if (fProgram.fKind == Program::kFragment_Kind) {
+            if (fInterfaceBlockNameMap.empty()) {
             // FIXME - Possibly have a different way of passing in u_skRTHeight or flip y axis
             // in a different way altogether.
-            this->write(", constant sksl_synthetic_uniforms& _anonInterface0 [[buffer(0)]]");
-        }
-        if (fProgram.fKind == Program::kFragment_Kind) {
+#ifdef SK_MOLTENVK
+                this->write(", constant sksl_synthetic_uniforms& _anonInterface0 [[buffer(0)]]");
+#else
+                this->write(", constant sksl_synthetic_uniforms& _anonInterface0 [[buffer(1)]]");
+#endif
+            }
+            this->write(", bool _frontFacing [[front_facing]]");
             this->write(", float4 _fragCoord [[position]]");
         } else if (fProgram.fKind == Program::kVertex_Kind) {
             this->write(", uint sk_VertexID [[vertex_id]], uint sk_InstanceID [[instance_id]]");
@@ -761,7 +771,11 @@ void MetalCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
 
 void MetalCodeGenerator::writeFields(const std::vector<Type::Field>& fields, int parentOffset,
                                      const InterfaceBlock* parentIntf) {
+#ifdef SK_MOLTENVK
     MemoryLayout memoryLayout(MemoryLayout::k140_Standard);
+#else
+    MemoryLayout memoryLayout(MemoryLayout::kMetal_Standard);
+#endif
     int currentOffset = 0;
     for (const auto& field: fields) {
         int fieldOffset = field.fModifiers.fLayout.fOffset;
@@ -786,13 +800,21 @@ void MetalCodeGenerator::writeFields(const std::vector<Type::Field>& fields, int
                               to_string((int) alignment));
             }
         }
+#ifdef SK_MOLTENVK
         if (fieldType->kind() == Type::kVector_Kind &&
             fieldType->columns() == 3) {
+            SkASSERT(memoryLayout.size(*fieldType) == 3);
             // Pack all vec3 types so that their size in bytes will match what was expected in the
             // original SkSL code since MSL has vec3 sizes equal to 4 * component type, while SkSL
             // has vec3 equal to 3 * component type.
+
+            // FIXME - Packed vectors can't be accessed by swizzles, but can be indexed into. A
+            // combination of this being a problem which only occurs when using MoltenVK and the
+            // fact that we haven't swizzled a vec3 yet means that this problem hasn't been
+            // addressed.
             this->write(PACKED_PREFIX);
         }
+#endif
         currentOffset += memoryLayout.size(*fieldType);
         std::vector<int> sizes;
         while (fieldType->kind() == Type::kArray_Kind) {
@@ -1094,7 +1116,7 @@ void MetalCodeGenerator::writeOutputStruct() {
     if (fProgram.fKind == Program::kVertex_Kind) {
         this->write("    float4 sk_Position [[position]];\n");
     } else if (fProgram.fKind == Program::kFragment_Kind) {
-        this->write("    float4 sk_FragColor [[color(0), index(0)]];\n");
+        this->write("    float4 sk_FragColor [[color(0)]];\n");
     }
     for (const auto& e : fProgram) {
         if (ProgramElement::kVar_Kind == e.fKind) {
@@ -1116,9 +1138,12 @@ void MetalCodeGenerator::writeOutputStruct() {
                                     to_string(var.fVar->fModifiers.fLayout.fLocation) + ")]]");
                     } else if (fProgram.fKind == Program::kFragment_Kind) {
                         this->write(" [[color(" +
-                                    to_string(var.fVar->fModifiers.fLayout.fLocation) +
-                                    "), index(" +
-                                    to_string(var.fVar->fModifiers.fLayout.fIndex) + ")]]");
+                                    to_string(var.fVar->fModifiers.fLayout.fLocation) +")");
+                        int colorIndex = var.fVar->fModifiers.fLayout.fIndex;
+                        if (colorIndex) {
+                            this->write(", index(" + to_string(colorIndex) + ")");
+                        }
+                        this->write("]]");
                     }
                 }
                 this->write(";\n");

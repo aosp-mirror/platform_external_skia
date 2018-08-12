@@ -43,7 +43,8 @@ fi
 
 # Use -O0 for larger builds (but generally quicker)
 # Use -Oz for (much slower, but smaller/faster) production builds
-RELEASE_CONF="-Oz --closure 1 -s EVAL_CTORS=1"
+export EMCC_CLOSURE_ARGS="--externs $BASE_DIR/helper_externs.js "
+RELEASE_CONF="-Oz --closure 1 -s EVAL_CTORS=1 --llvm-lto 3"
 if [[ $@ == *test* ]]; then
   echo "Building a Testing/Profiling build"
   RELEASE_CONF="-O2 --profiling -DPATHKIT_TESTING -DSK_RELEASE"
@@ -72,6 +73,7 @@ mkdir -p $BUILD_DIR
 em++ $RELEASE_CONF -std=c++14 \
 -Iinclude/config \
 -Iinclude/core \
+-Iinclude/effects \
 -Iinclude/gpu \
 -Iinclude/pathops \
 -Iinclude/private \
@@ -80,7 +82,10 @@ em++ $RELEASE_CONF -std=c++14 \
 -Isrc/gpu \
 -Isrc/shaders \
 -Isrc/opts \
+-Isrc/utils \
 --bind \
+--pre-js $BASE_DIR/helper.js \
+-DWEB_ASSEMBLY=1 \
 -fno-rtti -fno-exceptions -DEMSCRIPTEN_HAS_UNBOUND_TYPE_NAMES=0 \
 $WASM_CONF \
 -s MODULARIZE=1 \
@@ -95,32 +100,38 @@ $OUTPUT \
 $BASE_DIR/pathkit_wasm_bindings.cpp \
 src/core/SkAnalyticEdge.cpp \
 src/core/SkArenaAlloc.cpp \
-src/core/SkBlitter.cpp \
-src/core/SkCoverageDelta.cpp \
 src/core/SkEdge.cpp \
 src/core/SkEdgeBuilder.cpp \
 src/core/SkEdgeClipper.cpp \
 src/core/SkFDot6Constants.cpp \
+src/core/SkFlattenable.cpp \
 src/core/SkGeometry.cpp \
 src/core/SkLineClipper.cpp \
 src/core/SkMallocPixelRef.cpp \
 src/core/SkMath.cpp \
 src/core/SkMatrix.cpp \
 src/core/SkOpts.cpp \
+src/core/SkPaint.cpp \
 src/core/SkPath.cpp \
+src/core/SkPathEffect.cpp \
+src/core/SkPathMeasure.cpp \
 src/core/SkPathRef.cpp \
 src/core/SkPoint.cpp \
+src/core/SkRRect.cpp \
 src/core/SkRect.cpp \
-src/core/SkRegion.cpp \
-src/core/SkRegion_path.cpp \
-src/core/SkScan_Path.cpp \
 src/core/SkStream.cpp \
 src/core/SkString.cpp \
 src/core/SkStringUtils.cpp \
+src/core/SkStroke.cpp \
+src/core/SkStrokeRec.cpp \
+src/core/SkStrokerPriv.cpp \
 src/core/SkUtils.cpp \
+src/effects/SkDashPathEffect.cpp \
+src/effects/SkTrimPathEffect.cpp \
 src/pathops/*.cpp \
 src/ports/SkDebug_stdio.cpp \
 src/ports/SkMemory_malloc.cpp \
+src/utils/SkDashPath.cpp \
 src/utils/SkParse.cpp \
 src/utils/SkParsePath.cpp \
 src/utils/SkUTF.cpp

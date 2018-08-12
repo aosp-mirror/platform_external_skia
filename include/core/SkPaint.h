@@ -25,6 +25,7 @@
 #include "SkMatrix.h"
 #include "SkRefCnt.h"
 
+class GrTextBlob;
 class SkAutoDescriptor;
 class SkColorFilter;
 class SkData;
@@ -1527,11 +1528,10 @@ private:
 
     static SkScalar MaxCacheSize2(SkScalar maxLimit);
 
-    friend class GrAtlasTextBlob;
+    friend class GrTextBlob;
     friend class GrTextContext;
     friend class GrGLPathRendering;
     friend class GrPathRendering;
-    friend class GrTextUtils;
     friend class SkAutoGlyphCacheNoGamma;
     friend class SkCanonicalizePaint;
     friend class SkCanvas;

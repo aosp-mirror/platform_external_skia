@@ -105,16 +105,20 @@ GrMtlGpu::GrMtlGpu(GrContext* context, const GrContextOptions& options,
     fCmdBuffer = [fQueue commandBuffer];
 }
 
-GrGpuRTCommandBuffer* GrMtlGpu::createCommandBuffer(
+GrGpuRTCommandBuffer* GrMtlGpu::getCommandBuffer(
             GrRenderTarget* renderTarget, GrSurfaceOrigin origin,
             const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
             const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
     return new GrMtlGpuRTCommandBuffer(this, renderTarget, origin, colorInfo, stencilInfo);
 }
 
-GrGpuTextureCommandBuffer* GrMtlGpu::createCommandBuffer(GrTexture* texture,
-                                                         GrSurfaceOrigin origin) {
+GrGpuTextureCommandBuffer* GrMtlGpu::getCommandBuffer(GrTexture* texture,
+                                                      GrSurfaceOrigin origin) {
     return new GrMtlGpuTextureCommandBuffer(this, texture, origin);
+}
+
+void GrMtlGpu::submit(GrGpuCommandBuffer* buffer) {
+    delete buffer;
 }
 
 void GrMtlGpu::submitCommandBuffer(SyncQueue sync) {
@@ -510,12 +514,11 @@ void GrMtlGpu::deleteTestingOnlyBackendTexture(const GrBackendTexture& tex) {
     }
 }
 
-GrBackendRenderTarget GrMtlGpu::createTestingOnlyBackendRenderTarget(int w, int h, GrColorType ct,
-                                                                     GrSRGBEncoded srgbEncoded) {
+GrBackendRenderTarget GrMtlGpu::createTestingOnlyBackendRenderTarget(int w, int h, GrColorType ct) {
     if (w > this->caps()->maxRenderTargetSize() || h > this->caps()->maxRenderTargetSize()) {
         return GrBackendRenderTarget();
     }
-    auto config = GrColorTypeToPixelConfig(ct, srgbEncoded);
+    auto config = GrColorTypeToPixelConfig(ct, GrSRGBEncoded::kNo);
     if (kUnknown_GrPixelConfig == config) {
         return {};
     }
@@ -769,3 +772,4 @@ bool GrMtlGpu::onReadPixels(GrSurface* surface, int left, int top, int width, in
     SkRectMemcpy(buffer, rowBytes, mappedMemory, transBufferRowBytes, transBufferRowBytes, height);
     return true;
 }
+
