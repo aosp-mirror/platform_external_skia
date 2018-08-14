@@ -9,7 +9,6 @@
 #define SkColor_DEFINED
 
 #include "SkScalar.h"
-#include "SkPoint3.h"
 #include "SkTypes.h"
 
 /** \file SkColor.h
@@ -29,29 +28,13 @@ typedef uint32_t SkColor;
 
 /** Return a SkColor value from 8 bit component values
 */
-static inline SkColor SkColorSetARGBInline(U8CPU a, U8CPU r, U8CPU g, U8CPU b)
-{
-    SkASSERT(a <= 255 && r <= 255 && g <= 255 && b <= 255);
-
-    return (a << 24) | (r << 16) | (g << 8) | (b << 0);
+static constexpr inline SkColor SkColorSetARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) {
+    return SkASSERT(a <= 255 && r <= 255 && g <= 255 && b <= 255),
+           (a << 24) | (r << 16) | (g << 8) | (b << 0);
 }
-
-#define SkColorSetARGBMacro(a, r, g, b) \
-    static_cast<SkColor>( \
-        (static_cast<U8CPU>(a) << 24) | \
-        (static_cast<U8CPU>(r) << 16) | \
-        (static_cast<U8CPU>(g) << 8) | \
-        (static_cast<U8CPU>(b) << 0))
-
-/** gcc will generate static initializers for code of this form:
- * static const SkColor kMyColor = SkColorSetARGB(0xFF, 0x01, 0x02, 0x03)
- * if SkColorSetARGB() is a static inline, but not if it's a macro.
- */
-#if defined(NDEBUG)
-#define SkColorSetARGB(a, r, g, b) SkColorSetARGBMacro(a, r, g, b)
-#else
-#define SkColorSetARGB(a, r, g, b) SkColorSetARGBInline(a, r, g, b)
-#endif
+// Legacy aliases.
+#define SkColorSetARGBInline SkColorSetARGB
+#define SkColorSetARGBMacro  SkColorSetARGB
 
 /** Return a SkColor value from 8 bit component values, with an implied value
     of 0xFF for alpha (fully opaque)
@@ -176,7 +159,7 @@ struct SkPM4f;
 /*
  *  The float values are 0...1 unpremultiplied
  */
-struct SkColor4f {
+struct SK_API SkColor4f {
     float fR;
     float fG;
     float fB;
@@ -195,7 +178,6 @@ struct SkColor4f {
     static SkColor4f Pin(float r, float g, float b, float a);
     /** Convert to SkColor4f, assuming SkColor is sRGB */
     static SkColor4f FromColor(SkColor);
-    static SkColor4f FromColor3f(SkColor3f, float a);
 
     SkColor toSkColor() const;
 

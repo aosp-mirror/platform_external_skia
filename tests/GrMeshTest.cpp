@@ -18,8 +18,9 @@
 #include "GrRenderTargetContextPriv.h"
 #include "GrResourceProvider.h"
 #include "GrResourceKey.h"
+#include "SkBitmap.h"
 #include "SkMakeUnique.h"
-#include "glsl/GrGLSLVertexShaderBuilder.h"
+#include "glsl/GrGLSLVertexGeoBuilder.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLVarying.h"
@@ -262,7 +263,8 @@ public:
 private:
     const char* name() const override { return "GrMeshTestOp"; }
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
-    RequiresDstTexture finalize(const GrCaps&, const GrAppliedClip*) override {
+    RequiresDstTexture finalize(const GrCaps&, const GrAppliedClip*,
+                                GrPixelConfigIsClamped) override {
         return RequiresDstTexture::kNo;
     }
     bool onCombineIfPossible(GrOp* other, const GrCaps& caps) override { return false; }
@@ -280,20 +282,20 @@ private:
 class GrMeshTestProcessor : public GrGeometryProcessor {
 public:
     GrMeshTestProcessor(bool instanced, bool hasVertexBuffer)
-        : fInstanceLocation(nullptr)
+        : INHERITED(kGrMeshTestProcessor_ClassID)
+        , fInstanceLocation(nullptr)
         , fVertex(nullptr)
         , fColor(nullptr) {
         if (instanced) {
-            fInstanceLocation = &this->addInstanceAttrib("location", kVec2f_GrVertexAttribType);
+            fInstanceLocation = &this->addInstanceAttrib("location", kHalf2_GrVertexAttribType);
             if (hasVertexBuffer) {
-                fVertex = &this->addVertexAttrib("vertex", kVec2f_GrVertexAttribType);
+                fVertex = &this->addVertexAttrib("vertex", kHalf2_GrVertexAttribType);
             }
-            fColor = &this->addInstanceAttrib("color", kVec4ub_GrVertexAttribType);
+            fColor = &this->addInstanceAttrib("color", kUByte4_norm_GrVertexAttribType);
         } else {
-            fVertex = &this->addVertexAttrib("vertex", kVec2f_GrVertexAttribType);
-            fColor = &this->addVertexAttrib("color", kVec4ub_GrVertexAttribType);
+            fVertex = &this->addVertexAttrib("vertex", kHalf2_GrVertexAttribType);
+            fColor = &this->addVertexAttrib("color", kUByte4_norm_GrVertexAttribType);
         }
-        this->initClassID<GrMeshTestProcessor>();
     }
 
     const char* name() const override { return "GrMeshTest Processor"; }
@@ -327,20 +329,20 @@ class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
 
         GrGLSLVertexBuilder* v = args.fVertBuilder;
         if (!mp.fInstanceLocation) {
-            v->codeAppendf("vec2 vertex = %s;", mp.fVertex->fName);
+            v->codeAppendf("float2 vertex = %s;", mp.fVertex->fName);
         } else {
             if (mp.fVertex) {
-                v->codeAppendf("vec2 offset = %s;", mp.fVertex->fName);
+                v->codeAppendf("float2 offset = %s;", mp.fVertex->fName);
             } else {
-                v->codeAppend ("vec2 offset = vec2(sk_VertexID / 2, sk_VertexID % 2);");
+                v->codeAppend ("float2 offset = float2(sk_VertexID / 2, sk_VertexID % 2);");
             }
-            v->codeAppendf("vec2 vertex = %s + offset * %i;",
+            v->codeAppendf("float2 vertex = %s + offset * %i;",
                            mp.fInstanceLocation->fName, kBoxSize);
         }
-        gpArgs->fPositionVar.set(kVec2f_GrSLType, "vertex");
+        gpArgs->fPositionVar.set(kFloat2_GrSLType, "vertex");
 
-        GrGLSLPPFragmentBuilder* f = args.fFragBuilder;
-        f->codeAppendf("%s = vec4(1);", args.fOutputCoverage);
+        GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
+        f->codeAppendf("%s = half4(1);", args.fOutputCoverage);
     }
 };
 
@@ -361,17 +363,16 @@ sk_sp<const GrBuffer> DrawMeshHelper::makeVertexBuffer(const T* data, int count)
 
 sk_sp<const GrBuffer> DrawMeshHelper::getIndexBuffer() {
     GR_DEFINE_STATIC_UNIQUE_KEY(gIndexBufferKey);
-    return sk_sp<const GrBuffer>(
-        fState->resourceProvider()->findOrCreatePatternedIndexBuffer(
-            kIndexPattern, 6, kIndexPatternRepeatCount, 4, gIndexBufferKey));
+    return fState->resourceProvider()->findOrCreatePatternedIndexBuffer(
+            kIndexPattern, 6, kIndexPatternRepeatCount, 4, gIndexBufferKey);
 }
 
 void DrawMeshHelper::drawMesh(const GrMesh& mesh) {
-    GrRenderTarget* rt = fState->drawOpArgs().fRenderTarget;
-    GrPipeline pipeline(rt, GrPipeline::ScissorState::kDisabled, SkBlendMode::kSrc);
+    GrRenderTargetProxy* proxy = fState->drawOpArgs().fProxy;
+    GrPipeline pipeline(proxy, GrPipeline::ScissorState::kDisabled, SkBlendMode::kSrc);
     GrMeshTestProcessor mtp(mesh.isInstanced(), mesh.hasVertexData());
-    fState->commandBuffer()->draw(pipeline, mtp, &mesh, nullptr, 1,
-                                  SkRect::MakeIWH(kImageWidth, kImageHeight));
+    fState->rtCommandBuffer()->draw(pipeline, mtp, &mesh, nullptr, 1,
+                                    SkRect::MakeIWH(kImageWidth, kImageHeight));
 }
 
 static void run_test(const char* testName, skiatest::Reporter* reporter,
@@ -389,7 +390,7 @@ static void run_test(const char* testName, skiatest::Reporter* reporter,
     }
 
     SkAutoSTMalloc<kImageHeight * kImageWidth, uint32_t> resultPx(h * rowBytes);
-    rtc->clear(nullptr, 0xbaaaaaad, true);
+    rtc->clear(nullptr, 0xbaaaaaad, GrRenderTargetContext::CanClearFullscreen::kYes);
     rtc->priv().testingOnly_addDrawOp(skstd::make_unique<GrMeshTestOp>(testFn));
     rtc->readPixels(gold.info(), resultPx, rowBytes, 0, 0, 0);
     for (int y = 0; y < h; ++y) {

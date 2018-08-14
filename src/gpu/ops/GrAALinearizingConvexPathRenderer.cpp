@@ -34,39 +34,46 @@ GrAALinearizingConvexPathRenderer::GrAALinearizingConvexPathRenderer() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool GrAALinearizingConvexPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+GrPathRenderer::CanDrawPath
+GrAALinearizingConvexPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     if (GrAAType::kCoverage != args.fAAType) {
-        return false;
+        return CanDrawPath::kNo;
     }
     if (!args.fShape->knownToBeConvex()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     if (args.fShape->style().pathEffect()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     if (args.fShape->inverseFilled()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     if (args.fShape->bounds().width() <= 0 && args.fShape->bounds().height() <= 0) {
         // Stroked zero length lines should draw, but this PR doesn't handle that case
-        return false;
+        return CanDrawPath::kNo;
     }
     const SkStrokeRec& stroke = args.fShape->style().strokeRec();
 
     if (stroke.getStyle() == SkStrokeRec::kStroke_Style ||
         stroke.getStyle() == SkStrokeRec::kStrokeAndFill_Style) {
         if (!args.fViewMatrix->isSimilarity()) {
-            return false;
+            return CanDrawPath::kNo;
         }
         SkScalar strokeWidth = args.fViewMatrix->getMaxScale() * stroke.getWidth();
         if (strokeWidth < 1.0f && stroke.getStyle() == SkStrokeRec::kStroke_Style) {
-            return false;
+            return CanDrawPath::kNo;
         }
-        return strokeWidth <= kMaxStrokeWidth &&
-               args.fShape->knownToBeClosed() &&
-               stroke.getJoin() != SkPaint::Join::kRound_Join;
+        if (strokeWidth > kMaxStrokeWidth ||
+            !args.fShape->knownToBeClosed() ||
+            stroke.getJoin() == SkPaint::Join::kRound_Join) {
+            return CanDrawPath::kNo;
+        }
+        return CanDrawPath::kYes;
     }
-    return stroke.getStyle() == SkStrokeRec::kFill_Style;
+    if (stroke.getStyle() != SkStrokeRec::kFill_Style) {
+        return CanDrawPath::kNo;
+    }
+    return CanDrawPath::kYes;
 }
 
 // extract the result vertices and indices from the GrAAConvexTessellator
@@ -170,6 +177,10 @@ public:
 
     const char* name() const override { return "AAFlatteningConvexPathOp"; }
 
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fHelper.visitProxies(func);
+    }
+
     SkString dumpInfo() const override {
         SkString string;
         for (const auto& path : fPaths) {
@@ -185,8 +196,10 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
-        return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override {
+        return fHelper.xpRequiresDstTexture(caps, clip, dstIsClamped,
+                                            GrProcessorAnalysisCoverage::kSingleChannel,
                                             &fPaths.back().fColor);
     }
 
@@ -221,7 +234,7 @@ private:
         target->draw(gp, pipeline, mesh);
     }
 
-    void onPrepareDraws(Target* target) const override {
+    void onPrepareDraws(Target* target) override {
         const GrPipeline* pipeline = fHelper.makePipeline(target);
 
         // Setup GrGeometryProcessor
@@ -258,7 +271,6 @@ private:
             }
 
             int currentIndices = tess.numIndices();
-            SkASSERT(currentIndices <= UINT16_MAX);
             if (indexCount + currentIndices > UINT16_MAX) {
                 // if we added the current instance, we would overflow the indices we can store in a
                 // uint16_t. Draw what we've got so far and reset.

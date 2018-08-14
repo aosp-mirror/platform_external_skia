@@ -8,7 +8,6 @@
 #include "SkImageFilter.h"
 
 #include "SkCanvas.h"
-#include "SkColorSpace_Base.h"
 #include "SkFuzzLogging.h"
 #include "SkImageFilterCache.h"
 #include "SkLocalMatrixImageFilter.h"
@@ -20,6 +19,7 @@
 #include "SkValidationUtils.h"
 #include "SkWriteBuffer.h"
 #if SK_SUPPORT_GPU
+#include "GrColorSpaceXform.h"
 #include "GrContext.h"
 #include "GrFixedClip.h"
 #include "GrRenderTargetContext.h"
@@ -122,7 +122,6 @@ bool SkImageFilter::Common::unflatten(SkReadBuffer& buffer, int expectedCount) {
         return false;
     }
 
-    SkFUZZF(("allocInputs: %d\n", count));
     this->allocInputs(count);
     for (int i = 0; i < count; i++) {
         if (buffer.readBool()) {
@@ -198,6 +197,9 @@ void SkImageFilter::flatten(SkWriteBuffer& buffer) const {
 sk_sp<SkSpecialImage> SkImageFilter::filterImage(SkSpecialImage* src, const Context& context,
                                                  SkIPoint* offset) const {
     SkASSERT(src && offset);
+    if (!context.isValid()) {
+        return nullptr;
+    }
 
     uint32_t srcGenID = fUsesSrcInput ? src->uniqueID() : 0;
     const SkIRect srcSubset = fUsesSrcInput ? src->subset() : SkIRect::MakeWH(0, 0);
@@ -291,7 +293,7 @@ bool SkImageFilter::canComputeFastBounds() const {
 
 #if SK_SUPPORT_GPU
 sk_sp<SkSpecialImage> SkImageFilter::DrawWithFP(GrContext* context,
-                                                sk_sp<GrFragmentProcessor> fp,
+                                                std::unique_ptr<GrFragmentProcessor> fp,
                                                 const SkIRect& bounds,
                                                 const OutputProperties& outputProperties) {
     GrPaint paint;
@@ -305,7 +307,7 @@ sk_sp<SkSpecialImage> SkImageFilter::DrawWithFP(GrContext* context,
     if (!renderTargetContext) {
         return nullptr;
     }
-    paint.setGammaCorrect(renderTargetContext->isGammaCorrect());
+    paint.setGammaCorrect(renderTargetContext->colorSpaceInfo().isGammaCorrect());
 
     SkIRect dstIRect = SkIRect::MakeWH(bounds.width(), bounds.height());
     SkRect srcRect = SkRect::Make(bounds);
@@ -314,10 +316,10 @@ sk_sp<SkSpecialImage> SkImageFilter::DrawWithFP(GrContext* context,
     renderTargetContext->fillRectToRect(clip, std::move(paint), GrAA::kNo, SkMatrix::I(), dstRect,
                                         srcRect);
 
-    return SkSpecialImage::MakeDeferredFromGpu(context, dstIRect,
-                                               kNeedNewImageUniqueID_SpecialImage,
-                                               renderTargetContext->asTextureProxyRef(),
-                                               renderTargetContext->refColorSpace());
+    return SkSpecialImage::MakeDeferredFromGpu(
+            context, dstIRect, kNeedNewImageUniqueID_SpecialImage,
+            renderTargetContext->asTextureProxyRef(),
+            renderTargetContext->colorSpaceInfo().refColorSpace());
 }
 #endif
 
@@ -367,8 +369,11 @@ sk_sp<SkSpecialImage> SkImageFilter::ImageToColorSpace(SkSpecialImage* src,
     // object. If that produces something, then both are tagged, and the source is in a different
     // gamut than the dest. There is some overhead to making the xform, but those are cached, and
     // if we get one back, that means we're about to use it during the conversion anyway.
-    sk_sp<GrColorSpaceXform> colorSpaceXform = GrColorSpaceXform::Make(src->getColorSpace(),
-                                                                       outProps.colorSpace());
+    //
+    // TODO: Fix this check, to handle wider support of transfer functions, config mismatch, etc.
+    // For now, continue to just check if gamut is different, which may not be sufficient.
+    auto colorSpaceXform = GrColorSpaceXform::MakeGamutXform(src->getColorSpace(),
+                                                             outProps.colorSpace());
 
     if (!colorSpaceXform) {
         // No xform needed, just return the original image

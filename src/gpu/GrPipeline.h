@@ -15,7 +15,7 @@
 #include "GrProcessorSet.h"
 #include "GrProgramDesc.h"
 #include "GrRect.h"
-#include "GrRenderTarget.h"
+#include "GrRenderTargetProxy.h"
 #include "GrScissorState.h"
 #include "GrUserStencilSettings.h"
 #include "GrWindowRectsState.h"
@@ -36,7 +36,7 @@ class GrRenderTargetContext;
  * state for a draw. It is used along with a GrPrimitiveProcessor and a source of geometric
  * data (GrMesh or GrPath) to draw.
  */
-class GrPipeline : public GrNonAtomicRef<GrPipeline> {
+class GrPipeline {
 public:
     ///////////////////////////////////////////////////////////////////////////
     /// @name Creation
@@ -76,10 +76,8 @@ public:
 
     struct InitArgs {
         uint32_t fFlags = 0;
-        const GrProcessorSet* fProcessors = nullptr;  // Must be finalized
         const GrUserStencilSettings* fUserStencil = &GrUserStencilSettings::kUnused;
-        const GrAppliedClip* fAppliedClip = nullptr;
-        GrRenderTarget* fRenderTarget = nullptr;
+        GrRenderTargetProxy* fProxy = nullptr;
         const GrCaps* fCaps = nullptr;
         GrResourceProvider* fResourceProvider = nullptr;
         GrXferProcessor::DstProxy fDstProxy;
@@ -96,54 +94,16 @@ public:
     };
 
     /**
-     * A Default constructed pipeline is unusable until init() is called.
-     **/
-    GrPipeline() = default;
-
-    /**
      * Creates a simple pipeline with default settings and no processors. The provided blend mode
      * must be "Porter Duff" (<= kLastCoeffMode). If using ScissorState::kEnabled, the caller must
      * specify a scissor rectangle through the DynamicState struct.
      **/
-    GrPipeline(GrRenderTarget*, ScissorState, SkBlendMode);
+    GrPipeline(GrRenderTargetProxy*, ScissorState, SkBlendMode);
 
-    GrPipeline(const InitArgs& args) { this->init(args); }
+    GrPipeline(const InitArgs&, GrProcessorSet&&, GrAppliedClip&&);
 
-    /** (Re)initializes a pipeline. After initialization the pipeline can be used. */
-    void init(const InitArgs&);
-
-    /** True if the pipeline has been initialized. */
-    bool isInitialized() const { return SkToBool(fRenderTarget.get()); }
-
-    /// @}
-
-    ///////////////////////////////////////////////////////////////////////////
-    /// @name Comparisons
-
-    /**
-     * Returns true if these pipelines are equivalent.  Coord transforms may be applied either on
-     * the GPU or the CPU. When we apply them on the CPU then the matrices need not agree in order
-     * to combine draws. Therefore we take a param that indicates whether coord transforms should be
-     * compared."
-     */
-    static bool AreEqual(const GrPipeline& a, const GrPipeline& b);
-
-    /**
-     * Allows a GrOp subclass to determine whether two GrOp instances can combine. This is a
-     * stricter test than isEqual because it also considers blend barriers when the two ops'
-     * bounds overlap
-     */
-    static bool CanCombine(const GrPipeline& a, const SkRect& aBounds,
-                           const GrPipeline& b, const SkRect& bBounds,
-                           const GrCaps& caps)  {
-        if (!AreEqual(a, b)) {
-            return false;
-        }
-        if (a.xferBarrierType(caps)) {
-            return !GrRectsTouchOrOverlap(aBounds, bBounds);
-        }
-        return true;
-    }
+    GrPipeline(const GrPipeline&) = delete;
+    GrPipeline& operator=(const GrPipeline&) = delete;
 
     /// @}
 
@@ -209,7 +169,8 @@ public:
      *
      * @return    The currently set render target.
      */
-    GrRenderTarget* getRenderTarget() const { return fRenderTarget.get(); }
+    GrRenderTargetProxy* proxy() const { return fProxy.get(); }
+    GrRenderTarget* renderTarget() const { return fProxy.get()->priv().peekRenderTarget(); }
 
     const GrUserStencilSettings* getUserStencil() const { return fUserStencilSettings; }
 
@@ -267,14 +228,14 @@ private:
         kIsBad_Flag = 0x40,
     };
 
-    using RenderTarget = GrPendingIOResource<GrRenderTarget, kWrite_GrIOType>;
+    using RenderTargetProxy = GrPendingIOResource<GrRenderTargetProxy, kWrite_GrIOType>;
     using DstTextureProxy = GrPendingIOResource<GrTextureProxy, kRead_GrIOType>;
-    using PendingFragmentProcessor = GrPendingProgramElement<const GrFragmentProcessor>;
-    using FragmentProcessorArray = SkAutoSTArray<8, PendingFragmentProcessor>;
+    using FragmentProcessorArray = SkAutoSTArray<8, std::unique_ptr<const GrFragmentProcessor>>;
 
     DstTextureProxy fDstTextureProxy;
     SkIPoint fDstTextureOffset;
-    RenderTarget fRenderTarget;
+    // MDB TODO: do we still need the destination proxy here?
+    RenderTargetProxy fProxy;
     GrScissorState fScissorState;
     GrWindowRectsState fWindowRectsState;
     const GrUserStencilSettings* fUserStencilSettings;

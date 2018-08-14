@@ -18,25 +18,13 @@ class GrTextureMaker : public GrTextureProducer {
 public:
     enum class AllowedTexGenType : bool { kCheap, kAny };
 
-    /**
-     *  Returns a texture that is safe for use with the params. If the size of the returned texture
-     *  does not match width()/height() then the contents of the original must be scaled to fit
-     *  the texture. Additionally, the 'scaleAdjust' must be applied to the texture matrix
-     *  in order to correct the absolute texture coordinates.
-     *  Places the color space of the texture in (*texColorSpace).
-     */
-    sk_sp<GrTextureProxy> refTextureProxyForParams(const GrSamplerParams&,
-                                                   SkColorSpace* dstColorSpace,
-                                                   sk_sp<SkColorSpace>* texColorSpace,
-                                                   SkScalar scaleAdjust[2]);
-
-    sk_sp<GrFragmentProcessor> createFragmentProcessor(
-                                const SkMatrix& textureMatrix,
-                                const SkRect& constraintRect,
-                                FilterConstraint filterConstraint,
-                                bool coordsLimitedToConstraintRect,
-                                const GrSamplerParams::FilterMode* filterOrNullForBicubic,
-                                SkColorSpace* dstColorSpace) override;
+    std::unique_ptr<GrFragmentProcessor> createFragmentProcessor(
+            const SkMatrix& textureMatrix,
+            const SkRect& constraintRect,
+            FilterConstraint filterConstraint,
+            bool coordsLimitedToConstraintRect,
+            const GrSamplerState::Filter* filterOrNullForBicubic,
+            SkColorSpace* dstColorSpace) override;
 
 protected:
     GrTextureMaker(GrContext* context, int width, int height, bool isAlphaOnly)
@@ -77,6 +65,11 @@ protected:
     GrContext* context() const { return fContext; }
 
 private:
+    sk_sp<GrTextureProxy> onRefTextureProxyForParams(const GrSamplerState&,
+                                                     SkColorSpace* dstColorSpace,
+                                                     sk_sp<SkColorSpace>* proxyColorSpace,
+                                                     SkScalar scaleAdjust[2]) override;
+
     GrContext*  fContext;
 
     typedef GrTextureProducer INHERITED;
