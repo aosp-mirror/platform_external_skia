@@ -33,6 +33,7 @@
 #include "ir/SkSLProgramElement.h"
 #include "ir/SkSLReturnStatement.h"
 #include "ir/SkSLStatement.h"
+#include "ir/SkSLSwitchStatement.h"
 #include "ir/SkSLSwizzle.h"
 #include "ir/SkSLTernaryExpression.h"
 #include "ir/SkSLVarDeclarations.h"
@@ -89,6 +90,11 @@ private:
 
     enum SpecialIntrinsic {
         kAtan_SpecialIntrinsic,
+        kClamp_SpecialIntrinsic,
+        kMax_SpecialIntrinsic,
+        kMin_SpecialIntrinsic,
+        kMix_SpecialIntrinsic,
+        kMod_SpecialIntrinsic,
         kSubpassLoad_SpecialIntrinsic,
         kTexelFetch_SpecialIntrinsic,
         kTexture_SpecialIntrinsic,
@@ -97,6 +103,8 @@ private:
     void setupIntrinsics();
 
     SpvId nextId();
+
+    Type getActualType(const Type& type);
 
     SpvId getType(const Type& type);
 
@@ -145,6 +153,20 @@ private:
 
     SpvId writeFunctionCall(const FunctionCall& c, OutputStream& out);
 
+
+    void writeGLSLExtendedInstruction(const Type& type, SpvId id, SpvId floatInst,
+                                      SpvId signedInst, SpvId unsignedInst,
+                                      const std::vector<SpvId>& args, OutputStream& out);
+
+    /**
+     * Given a list of potentially mixed scalars and vectors, promotes the scalars to match the
+     * size of the vectors and returns the ids of the written expressions. e.g. given (float, vec2),
+     * returns (vec2(float), vec2). It is an error to use mismatched vector sizes, e.g. (float,
+     * vec2, vec3).
+     */
+    std::vector<SpvId> vectorize(const std::vector<std::unique_ptr<Expression>>& args,
+                                 OutputStream& out);
+
     SpvId writeSpecialIntrinsic(const FunctionCall& c, SpecialIntrinsic kind, OutputStream& out);
 
     SpvId writeConstantVector(const Constructor& c);
@@ -172,6 +194,8 @@ private:
     SpvId writeMatrixConstructor(const Constructor& c, OutputStream& out);
 
     SpvId writeVectorConstructor(const Constructor& c, OutputStream& out);
+
+    SpvId writeArrayConstructor(const Constructor& c, OutputStream& out);
 
     SpvId writeConstructor(const Constructor& c, OutputStream& out);
 
@@ -229,6 +253,8 @@ private:
 
     void writeDoStatement(const DoStatement& d, OutputStream& out);
 
+    void writeSwitchStatement(const SwitchStatement& s, OutputStream& out);
+
     void writeReturnStatement(const ReturnStatement& r, OutputStream& out);
 
     void writeCapabilities(OutputStream& out);
@@ -239,19 +265,19 @@ private:
 
     void writeWord(int32_t word, OutputStream& out);
 
-    void writeString(const char* string, OutputStream& out);
+    void writeString(const char* string, size_t length, OutputStream& out);
 
     void writeLabel(SpvId id, OutputStream& out);
 
     void writeInstruction(SpvOp_ opCode, OutputStream& out);
 
-    void writeInstruction(SpvOp_ opCode, const char* string, OutputStream& out);
+    void writeInstruction(SpvOp_ opCode, StringFragment string, OutputStream& out);
 
     void writeInstruction(SpvOp_ opCode, int32_t word1, OutputStream& out);
 
-    void writeInstruction(SpvOp_ opCode, int32_t word1, const char* string, OutputStream& out);
+    void writeInstruction(SpvOp_ opCode, int32_t word1, StringFragment string, OutputStream& out);
 
-    void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, const char* string,
+    void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, StringFragment string,
                           OutputStream& out);
 
     void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, OutputStream& out);
@@ -274,6 +300,8 @@ private:
     void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, int32_t word3, int32_t word4,
                           int32_t word5, int32_t word6, int32_t word7, int32_t word8,
                           OutputStream& out);
+
+    void writeGeometryShaderExecutionMode(SpvId entryPoint, OutputStream& out);
 
     const Context& fContext;
     const MemoryLayout fDefaultLayout;

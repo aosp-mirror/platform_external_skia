@@ -6,11 +6,12 @@
  */
 
 #include "SkCoreBlitters.h"
+#include "SkColorData.h"
 #include "SkShader.h"
 #include "SkUtils.h"
 #include "SkXfermodePriv.h"
 #include "SkBlitMask.h"
-#include "SkColorPriv.h"
+#include "SkColorData.h"
 
 #include "SkNx.h"
 

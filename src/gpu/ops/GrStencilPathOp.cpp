@@ -9,12 +9,18 @@
 
 #include "GrGpu.h"
 #include "GrOpFlushState.h"
+#include "GrRenderTargetPriv.h"
 
 void GrStencilPathOp::onExecute(GrOpFlushState* state) {
-    SkASSERT(state->drawOpArgs().fRenderTarget);
+    GrRenderTarget* rt = state->drawOpArgs().renderTarget();
+    SkASSERT(rt);
 
-    GrPathRendering::StencilPathArgs args(fUseHWAA, state->drawOpArgs().fRenderTarget,
-                                          &fViewMatrix, &fScissor, &fStencil);
+    int numStencilBits = rt->renderTargetPriv().numStencilBits();
+    GrStencilSettings stencil(GrPathRendering::GetStencilPassSettings(fFillType),
+                              fHasStencilClip, numStencilBits);
+
+    GrPathRendering::StencilPathArgs args(fUseHWAA, state->drawOpArgs().fProxy,
+                                          &fViewMatrix, &fScissor, &stencil);
     state->gpu()->pathRendering()->stencilPath(args, fPath.get());
 }
 

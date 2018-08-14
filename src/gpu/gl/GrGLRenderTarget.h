@@ -9,6 +9,7 @@
 #ifndef GrGLRenderTarget_DEFINED
 #define GrGLRenderTarget_DEFINED
 
+#include "GrBackendSurface.h"
 #include "GrGLIRect.h"
 #include "GrRenderTarget.h"
 #include "SkScalar.h"
@@ -19,6 +20,8 @@ class GrGLStencilAttachment;
 
 class GrGLRenderTarget : public GrRenderTarget {
 public:
+    bool alwaysClearStencil() const override { return 0 == fRTFBOID; }
+
     // set fTexFBOID to this value to indicate that it is multisampled but
     // Gr doesn't know how to resolve it.
     enum { kUnresolvableFBOID = 0 };
@@ -59,6 +62,8 @@ public:
     }
 
     GrBackendObject getRenderTargetHandle() const override { return fRTFBOID; }
+
+    GrBackendRenderTarget getBackendRenderTarget() const override;
 
     bool canAttemptStencilAttachment() const override;
 

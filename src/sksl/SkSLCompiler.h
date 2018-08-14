@@ -16,7 +16,7 @@
 #include "SkSLCFGGenerator.h"
 #include "SkSLContext.h"
 #include "SkSLErrorReporter.h"
-#include "SkSLIRGenerator.h"
+#include "SkSLLexer.h"
 
 #define SK_FRAGCOLOR_BUILTIN           10001
 #define SK_IN_BUILTIN                  10002
@@ -26,8 +26,10 @@
 #define SK_TEXTURESAMPLERS_BUILTIN     10006
 #define SK_FRAGCOORD_BUILTIN              15
 #define SK_VERTEXID_BUILTIN                5
+#define SK_INSTANCEID_BUILTIN              6
 #define SK_CLIPDISTANCE_BUILTIN            3
 #define SK_INVOCATIONID_BUILTIN            8
+#define SK_POSITION_BUILTIN                0
 
 namespace SkSL {
 
@@ -43,6 +45,9 @@ class IRGenerator;
  */
 class Compiler : public ErrorReporter {
 public:
+    static constexpr const char* RTADJUST_NAME  = "sk_RTAdjust";
+    static constexpr const char* PERVERTEX_NAME = "sk_PerVertex";
+
     enum Flags {
         kNone_Flags = 0,
         // permits static if/switch statements to be used with non-constant tests. This is used when
@@ -66,11 +71,13 @@ public:
 
     bool toGLSL(const Program& program, String* out);
 
+    bool toMetal(const Program& program, OutputStream& out);
+
     bool toCPP(const Program& program, String name, OutputStream& out);
 
     bool toH(const Program& program, String name, OutputStream& out);
 
-    void error(Position position, String msg) override;
+    void error(int offset, String msg) override;
 
     String errorText();
 
@@ -79,6 +86,10 @@ public:
     int errorCount() override {
         return fErrorCount;
     }
+
+    static const char* OperatorName(Token::Kind token);
+
+    static bool IsAssignment(Token::Kind token);
 
 private:
     void addDefinition(const Expression* lvalue, std::unique_ptr<Expression>* expr,
@@ -114,11 +125,14 @@ private:
 
     void scanCFG(FunctionDefinition& f);
 
+    Position position(int offset);
+
     std::shared_ptr<SymbolTable> fTypes;
     IRGenerator* fIRGenerator;
     String fSkiaVertText; // FIXME store parsed version instead
     int fFlags;
 
+    const String* fSource;
     Context fContext;
     int fErrorCount;
     String fErrorText;
