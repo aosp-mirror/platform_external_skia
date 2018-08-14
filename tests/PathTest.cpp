@@ -1051,7 +1051,8 @@ static void test_strokerec(skiatest::Reporter* reporter) {
 
 // Set this for paths that don't have a consistent direction such as a bowtie.
 // (cheapComputeDirection is not expected to catch these.)
-const SkPathPriv::FirstDirection kDontCheckDir = static_cast<SkPathPriv::FirstDirection>(-1);
+// Legal values are CW (0), CCW (1) and Unknown (2), leaving 3 as a convenient sentinel.
+const SkPathPriv::FirstDirection kDontCheckDir = static_cast<SkPathPriv::FirstDirection>(3);
 
 static void check_direction(skiatest::Reporter* reporter, const SkPath& path,
                             SkPathPriv::FirstDirection expected) {
@@ -2069,13 +2070,16 @@ static void test_isRect(skiatest::Reporter* reporter) {
         } else {
             SkRect computed;
             computed.set(123, 456, 789, 1011);
-            bool isClosed = (bool)-1;
-            SkPath::Direction direction = (SkPath::Direction) - 1;
-            REPORTER_ASSERT(reporter, !path.isRect(&computed, &isClosed, &direction));
-            REPORTER_ASSERT(reporter, computed.fLeft == 123 && computed.fTop == 456);
-            REPORTER_ASSERT(reporter, computed.fRight == 789 && computed.fBottom == 1011);
-            REPORTER_ASSERT(reporter, isClosed == (bool) -1);
-            REPORTER_ASSERT(reporter, direction == (SkPath::Direction) -1);
+            for (auto c : {true, false})
+            for (auto d : {SkPath::kCW_Direction, SkPath::kCCW_Direction}) {
+              bool isClosed = c;
+              SkPath::Direction direction = d;
+              REPORTER_ASSERT(reporter, !path.isRect(&computed, &isClosed, &direction));
+              REPORTER_ASSERT(reporter, computed.fLeft == 123 && computed.fTop == 456);
+              REPORTER_ASSERT(reporter, computed.fRight == 789 && computed.fBottom == 1011);
+              REPORTER_ASSERT(reporter, isClosed == c);
+              REPORTER_ASSERT(reporter, direction == d);
+            }
         }
     }
 
