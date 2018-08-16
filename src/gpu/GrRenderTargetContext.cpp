@@ -69,11 +69,9 @@ public:
     }
 
     void drawPath(const GrClip& clip, const SkPath& path, const SkPaint& paint,
-                  const SkMatrix& viewMatrix, const SkMatrix* pathMatrix,
-                  const SkIRect& clipBounds) override {
+                  const SkMatrix& viewMatrix, bool pathIsMutable) override {
         GrBlurUtils::drawPathWithMaskFilter(fRenderTargetContext->fContext, fRenderTargetContext,
-                                            clip, path, paint, viewMatrix, pathMatrix, clipBounds,
-                                            false);
+                                            clip, path, paint, viewMatrix, pathIsMutable);
     }
 
     void makeGrPaint(GrMaskFormat maskFormat, const SkPaint& skPaint, const SkMatrix& viewMatrix,
@@ -235,7 +233,7 @@ GrOpList* GrRenderTargetContext::getOpList() {
 
 void GrRenderTargetContext::drawGlyphRunList(
         const GrClip& clip, const SkMatrix& viewMatrix,
-        const SkGlyphRunList& blob, const SkIRect& clipBounds) {
+        const SkGlyphRunList& blob) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
@@ -243,7 +241,7 @@ void GrRenderTargetContext::drawGlyphRunList(
 
     GrTextContext* atlasTextContext = this->drawingManager()->getTextContext();
     atlasTextContext->drawGlyphRunList(fContext, fTextTarget.get(), clip, viewMatrix,
-                                       fSurfaceProps, blob, clipBounds);
+                                       fSurfaceProps, blob);
 }
 
 void GrRenderTargetContext::discard() {
@@ -841,7 +839,7 @@ void GrRenderTargetContext::drawVertices(const GrClip& clip,
                                          GrPaint&& paint,
                                          const SkMatrix& viewMatrix,
                                          sk_sp<SkVertices> vertices,
-                                         const SkMatrix bones[],
+                                         const SkVertices::Bone bones[],
                                          int boneCount,
                                          GrPrimitiveType* overridePrimType) {
     ASSERT_SINGLE_OWNER

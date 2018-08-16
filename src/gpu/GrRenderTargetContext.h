@@ -59,9 +59,7 @@ class SK_API GrRenderTargetContext : public GrSurfaceContext {
 public:
     ~GrRenderTargetContext() override;
 
-    virtual void drawGlyphRunList(const GrClip&,
-                                  const SkMatrix& viewMatrix, const SkGlyphRunList&,
-                                  const SkIRect& clipBounds);
+    virtual void drawGlyphRunList(const GrClip&, const SkMatrix& viewMatrix, const SkGlyphRunList&);
 
     /**
      * Provides a perfomance hint that the render target's contents are allowed
@@ -217,7 +215,7 @@ public:
                       GrPaint&& paint,
                       const SkMatrix& viewMatrix,
                       sk_sp<SkVertices> vertices,
-                      const SkMatrix bones[],
+                      const SkVertices::Bone bones[],
                       int boneCount,
                       GrPrimitiveType* overridePrimType = nullptr);
 

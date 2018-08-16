@@ -1156,7 +1156,7 @@ void SkXPSDevice::drawPoints(SkCanvas::PointMode mode,
     draw(this, &SkDraw::drawPoints, mode, count, points, paint, this);
 }
 
-void SkXPSDevice::drawVertices(const SkVertices* v, const SkMatrix* bones, int boneCount,
+void SkXPSDevice::drawVertices(const SkVertices* v, const SkVertices::Bone bones[], int boneCount,
                                SkBlendMode blendMode, const SkPaint& paint) {
     draw(this, &SkDraw::drawVertices, v->mode(), v->vertexCount(), v->positions(), v->texCoords(),
          v->colors(), v->boneIndices(), v->boneWeights(), blendMode, v->indices(), v->indexCount(),
@@ -1185,7 +1185,7 @@ void SkXPSDevice::drawRRect(const SkRRect& rr,
                             const SkPaint& paint) {
     SkPath path;
     path.addRRect(rr);
-    this->drawPath(path, paint, nullptr, true);
+    this->drawPath(path, paint, true);
 }
 
 static SkIRect size(const SkBaseDevice& dev) { return {0, 0, dev.width(), dev.height()}; }
@@ -1204,7 +1204,7 @@ void SkXPSDevice::internalDrawRect(const SkRect& r,
         SkPath tmp;
         tmp.addRect(r);
         tmp.setFillType(SkPath::kWinding_FillType);
-        this->drawPath(tmp, paint, nullptr, true);
+        this->drawPath(tmp, paint, true);
         return;
     }
 
@@ -1502,7 +1502,6 @@ HRESULT SkXPSDevice::shadePath(IXpsOMPath* shadedPath,
 
 void SkXPSDevice::drawPath(const SkPath& platonicPath,
                            const SkPaint& origPaint,
-                           const SkMatrix* prePathMatrix,
                            bool pathIsMutable) {
     SkTCopyOnFirstWrite<SkPaint> paint(origPaint);
 
@@ -1519,17 +1518,6 @@ void SkXPSDevice::drawPath(const SkPath& platonicPath,
     //Apply pre-path matrix [Platonic-path -> Skeletal-path].
     SkMatrix matrix = this->ctm();
     SkPath* skeletalPath = const_cast<SkPath*>(&platonicPath);
-    if (prePathMatrix) {
-        if (paintHasPathEffect) {
-            if (!pathIsMutable) {
-                skeletalPath = &modifiedPath;
-                pathIsMutable = true;
-            }
-            platonicPath.transform(*prePathMatrix, skeletalPath);
-        } else {
-            matrix.preConcat(*prePathMatrix);
-        }
-    }
 
     //Apply path effect [Skeletal-path -> Fillable-path].
     SkPath* fillablePath = skeletalPath;
@@ -2147,7 +2135,7 @@ SkBaseDevice* SkXPSDevice::onCreateDevice(const CreateInfo& info, const SkPaint*
 void SkXPSDevice::drawOval( const SkRect& o, const SkPaint& p) {
     SkPath path;
     path.addOval(o);
-    this->drawPath(path, p, nullptr, true);
+    this->drawPath(path, p, true);
 }
 
 void SkXPSDevice::drawBitmapRect(const SkBitmap& bitmap,

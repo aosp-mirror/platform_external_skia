@@ -78,9 +78,7 @@ public:
     void drawRect(const SkRect& r, const SkPaint& paint) override;
     void drawOval(const SkRect& oval, const SkPaint& paint) override;
     void drawRRect(const SkRRect& rr, const SkPaint& paint) override;
-    void drawPath(const SkPath& origpath,
-                  const SkPaint& paint, const SkMatrix* prePathMatrix,
-                  bool pathIsMutable) override;
+    void drawPath(const SkPath& origpath, const SkPaint& paint, bool pathIsMutable) override;
     void drawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
                         const SkRect& dst, const SkPaint&, SkCanvas::SrcRectConstraint) override;
     void drawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y, const SkPaint&) override;
@@ -99,7 +97,7 @@ public:
                      const SkScalar pos[], int scalarsPerPos,
                      const SkPoint& offset, const SkPaint&) override { SkASSERT(false); }
     void drawGlyphRunList(const SkGlyphRunList& glyphRunList) override;
-    void drawVertices(const SkVertices*, const SkMatrix* bones, int boneCount, SkBlendMode,
+    void drawVertices(const SkVertices*, const SkVertices::Bone bones[], int boneCount, SkBlendMode,
                       const SkPaint&) override;
     void drawDevice(SkBaseDevice*, int x, int y,
                     const SkPaint&) override;
@@ -255,18 +253,14 @@ private:
                           const SkMatrix&,
                           const SkPath&,
                           const SkPaint&,
-                          const SkMatrix* prePathMatrix,
                           bool pathIsMutable);
 
     void internalDrawPathWithFilter(const SkClipStack& clipStack,
                                     const SkMatrix& ctm,
                                     const SkPath& origPath,
-                                    const SkPaint& paint,
-                                    const SkMatrix* prePathMatrix);
+                                    const SkPaint& paint);
 
-    bool handleInversePath(const SkPath& origPath,
-                           const SkPaint& paint, bool pathIsMutable,
-                           const SkMatrix* prePathMatrix = nullptr);
+    bool handleInversePath(const SkPath& origPath, const SkPaint& paint, bool pathIsMutable);
 
     void addSMaskGraphicState(sk_sp<SkPDFDevice> maskDevice, SkDynamicMemoryWStream*);
     void clearMaskOnGraphicState(SkDynamicMemoryWStream*);

@@ -85,7 +85,6 @@ protected:
                    const SkPaint& paint) override;
     void drawPath(const SkPath& path,
                   const SkPaint& paint,
-                  const SkMatrix* prePathMatrix = NULL,
                   bool pathIsMutable = false) override;
     void drawBitmap(const SkBitmap& bitmap,
                     SkScalar x,
@@ -100,7 +99,7 @@ protected:
     void drawPosText(const void* text, size_t len,
                      const SkScalar pos[], int scalarsPerPos,
                      const SkPoint& offset, const SkPaint& paint) override;
-    void drawVertices(const SkVertices*, const SkMatrix* bones, int boneCount, SkBlendMode,
+    void drawVertices(const SkVertices*, const SkVertices::Bone bones[], int boneCount, SkBlendMode,
                       const SkPaint&) override;
     void drawDevice(SkBaseDevice*, int x, int y,
                     const SkPaint&) override;
