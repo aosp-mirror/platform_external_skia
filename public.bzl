@@ -669,6 +669,7 @@ DEFINES_ALL = [
     "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
     # Temporarily Disable analytic AA for Google3
     "SK_NO_ANALYTIC_AA",
+    "SK_SUPPORT_LEGACY_MALLOC_PORTING_LAYER",
 ]
 
 ################################################################################
