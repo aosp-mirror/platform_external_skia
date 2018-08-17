@@ -198,6 +198,18 @@ static void draw_path_with_mask_filter(GrContext* context,
         pathIsMutable = true;
     }
 
+    if (maskFilter->directFilterMaskGPU(context,
+                                        renderTargetContext,
+                                        std::move(paint),
+                                        clip,
+                                        viewMatrix,
+                                        SkStrokeRec(fillOrHairline),
+                                        *path)) {
+        // the mask filter was able to draw itself directly, so there's nothing
+        // left to do.
+        return;
+    }
+
     SkRect maskRect;
     if (maskFilter->canFilterMaskGPU(SkRRect::MakeRect(path->getBounds()),
                                      clipBounds,
@@ -213,37 +225,32 @@ static void draw_path_with_mask_filter(GrContext* context,
             return;
         }
 
-        if (maskFilter->directFilterMaskGPU(context,
-                                            renderTargetContext,
-                                            std::move(paint),
-                                            clip,
-                                            viewMatrix,
-                                            SkStrokeRec(fillOrHairline),
-                                            *path)) {
-            // the mask filter was able to draw itself directly, so there's nothing
-            // left to do.
-            return;
-        }
+        sk_sp<GrTextureProxy> filteredMask;
 
-        sk_sp<GrTextureProxy> maskProxy(create_mask_GPU(context,
+        if (!filteredMask) {
+            sk_sp<GrTextureProxy> maskProxy(create_mask_GPU(
+                                                        context,
                                                         finalIRect,
                                                         *path,
                                                         fillOrHairline,
                                                         aa,
                                                         renderTargetContext->numColorSamples()));
-        if (maskProxy) {
-            sk_sp<GrTextureProxy> filtered = maskFilter->filterMaskGPU(context,
-                                                                       std::move(maskProxy),
-                                                                       viewMatrix,
-                                                                       finalIRect);
-            if (filtered) {
-                if (draw_mask(renderTargetContext, clip, viewMatrix,
-                              finalIRect, std::move(paint), std::move(filtered))) {
-                    // This path is completely drawn
-                    return;
-                }
+            if (maskProxy) {
+                filteredMask = maskFilter->filterMaskGPU(context,
+                                                         std::move(maskProxy),
+                                                         viewMatrix,
+                                                         finalIRect);
             }
         }
+
+        if (filteredMask) {
+            if (draw_mask(renderTargetContext, clip, viewMatrix,
+                            finalIRect, std::move(paint), std::move(filteredMask))) {
+                // This path is completely drawn
+                return;
+            }
+        }
+
     }
 
     sw_draw_with_mask_filter(context, renderTargetContext, clip, viewMatrix, *path, maskFilter,

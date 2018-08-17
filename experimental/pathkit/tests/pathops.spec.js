@@ -125,12 +125,12 @@ describe('PathKit\'s PathOps Behavior', function() {
     it('combines two paths with .op() and matches what we see from C++', function(done) {
         LoadPathKit.then(() => {
             // Test JSON created with:
-            // ./out/Clang/pathops_unittest -J ./pathkit/experimental/tests/PathOpsOp.json -m PathOpsOp$
+            // ./out/Clang/pathops_unittest -J ./experimental/pathkit/tests/PathOpsOp.json -m PathOpsOp$
             fetch('/base/tests/PathOpsOp.json').then((r) => {
                 r.json().then((json)=>{
                     expect(json).toBeTruthy();
                     let testNames = Object.keys(json);
-                    expect(testNames.length).toBe(351);  // Remove if test data changes a lot.
+                    expect(testNames.length).toBe(362);  // Remove if test data changes a lot.
                     testNames.sort();
                     for (testName of testNames) {
                         let test = json[testName];
@@ -169,7 +169,7 @@ describe('PathKit\'s PathOps Behavior', function() {
                             }
                             expected.delete();
                         }
-                        combined.delete();
+                        // combined === path1, so we only have to delete one.
                         path1.delete();
                         path2.delete();
                     }
@@ -182,12 +182,12 @@ describe('PathKit\'s PathOps Behavior', function() {
     it('simplifies a path with .simplify() and matches what we see from C++', function(done) {
         LoadPathKit.then(() => {
             // Test JSON created with:
-            // ./out/Clang/pathops_unittest -J ./pathkit/experimental/tests/PathOpsSimplify.json -m PathOpsSimplify$
+            // ./out/Clang/pathops_unittest -J ./experimental/pathkit/tests/PathOpsSimplify.json -m PathOpsSimplify$
             fetch('/base/tests/PathOpsSimplify.json').then((r) => {
                 r.json().then((json)=>{
                     expect(json).toBeTruthy();
                     let testNames = Object.keys(json);
-                    expect(testNames.length).toBe(457);  // Remove if test data changes a lot.
+                    expect(testNames.length).toBe(461);  // Remove if test data changes a lot.
                     testNames.sort();
                     for (testName of testNames) {
                         let test = json[testName];
@@ -222,7 +222,7 @@ describe('PathKit\'s PathOps Behavior', function() {
                             }
                             expected.delete();
                         }
-                        simplified.delete();
+                        // simplified === path, so we only have to delete one.
                         path.delete();
                     }
                     done();

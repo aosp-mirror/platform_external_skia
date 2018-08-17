@@ -423,14 +423,11 @@ void SkGpuDevice::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
         SkRRect devRRect;
         if (rrect.transform(this->ctm(), &devRRect)) {
             if (SkRRectPriv::AllCornersCircular(devRRect)) {
-                if (mf->canFilterMaskGPU(devRRect, this->devClipBounds(), this->ctm(), nullptr)) {
-                    if (mf->directFilterRRectMaskGPU(this->context(), fRenderTargetContext.get(),
-                                                     std::move(grPaint), this->clip(), this->ctm(),
-                                                     style.strokeRec(), rrect, devRRect)) {
-                        return;
-                    }
+                if (mf->directFilterRRectMaskGPU(this->context(), fRenderTargetContext.get(),
+                                                 std::move(grPaint), this->clip(), this->ctm(),
+                                                 style.strokeRec(), rrect, devRRect)) {
+                    return;
                 }
-
             }
         }
     }
@@ -454,8 +451,7 @@ void SkGpuDevice::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
 }
 
 
-void SkGpuDevice::drawDRRect(const SkRRect& outer,
-                             const SkRRect& inner, const SkPaint& paint) {
+void SkGpuDevice::drawDRRect(const SkRRect& outer, const SkRRect& inner, const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawDRRect", fContext.get());
     if (outer.isEmpty()) {
@@ -605,9 +601,7 @@ void SkGpuDevice::drawStrokedLine(const SkPoint points[2],
             this->clip(), std::move(grPaint), GrAA(newPaint.isAntiAlias()), m, rect, local);
 }
 
-void SkGpuDevice::drawPath(const SkPath& origSrcPath,
-                           const SkPaint& paint,
-                           bool pathIsMutable) {
+void SkGpuDevice::drawPath(const SkPath& origSrcPath, const SkPaint& paint, bool pathIsMutable) {
     ASSERT_SINGLE_OWNER
     if (!origSrcPath.isInverseFillType() && !paint.getPathEffect()) {
         SkPoint points[2];
