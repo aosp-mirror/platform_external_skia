@@ -9,6 +9,7 @@
 #include "GrBlurUtils.h"
 #include "GrClip.h"
 #include "GrContext.h"
+#include "GrStyle.h"
 #include "GrTextTarget.h"
 #include "SkColorFilter.h"
 #include "SkGlyphCache.h"
@@ -276,8 +277,7 @@ static void calculate_translation(bool applyVM,
 void GrTextBlob::flush(GrTextTarget* target, const SkSurfaceProps& props,
                        const GrDistanceFieldAdjustTable* distanceAdjustTable,
                        const SkPaint& paint, GrColor filteredColor, const GrClip& clip,
-                       const SkMatrix& viewMatrix, const SkIRect& clipBounds,
-                       SkScalar x, SkScalar y) {
+                       const SkMatrix& viewMatrix, SkScalar x, SkScalar y) {
 
     // GrTextBlob::makeOp only takes uint16_t values for run and subRun indices.
     // Encountering something larger than this is highly unlikely, so we'll just not draw it.
@@ -296,11 +296,31 @@ void GrTextBlob::flush(GrTextTarget* target, const SkSurfaceProps& props,
                 GrTextBlob::Run::PathGlyph& pathGlyph = run.fPathGlyphs[i];
                 calculate_translation(pathGlyph.fPreTransformed, viewMatrix, x, y,
                                       fInitialViewMatrix, fInitialX, fInitialY, &transX, &transY);
-                const SkMatrix& ctm = pathGlyph.fPreTransformed ? SkMatrix::I() : viewMatrix;
+
+                const SkMatrix* ctm = pathGlyph.fPreTransformed ? &SkMatrix::I() : &viewMatrix;
                 SkMatrix pathMatrix;
                 pathMatrix.setScale(pathGlyph.fScale, pathGlyph.fScale);
                 pathMatrix.postTranslate(pathGlyph.fX + transX, pathGlyph.fY + transY);
-                target->drawPath(clip, pathGlyph.fPath, runPaint, ctm, &pathMatrix, clipBounds);
+
+                const SkPath* path = &pathGlyph.fPath;
+                bool pathIsMutable = false;
+                SkTLazy<SkPath> tmpPath;
+
+                GrStyle style(runPaint);
+
+                // Styling, blurs, and shading are supposed to be applied *after* the pathMatrix.
+                if (!runPaint.getMaskFilter() && !runPaint.getShader() && !style.applies()) {
+                    pathMatrix.postConcat(*ctm);
+                    ctm = &pathMatrix;
+                } else {
+                    SkPath* result = tmpPath.init();
+                    path->transform(pathMatrix, result);
+                    result->setIsVolatile(true);
+                    path = result;
+                    pathIsMutable = true;
+                }
+
+                target->drawPath(clip, *path, runPaint, *ctm, pathIsMutable);
             }
         }
 

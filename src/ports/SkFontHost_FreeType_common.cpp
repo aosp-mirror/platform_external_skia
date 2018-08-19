@@ -382,7 +382,7 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
             FT_Outline* outline = &face->glyph->outline;
 
             int dx = 0, dy = 0;
-            if (fRec.fFlags & SkScalerContext::kSubpixelPositioning_Flag) {
+            if (this->isSubpixel()) {
                 dx = SkFixedToFDot6(glyph.getSubXFixed());
                 dy = SkFixedToFDot6(glyph.getSubYFixed());
                 // negate dy since freetype-y-goes-up and skia-y-goes-down
@@ -409,6 +409,11 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
                 canvas.clear(SK_ColorTRANSPARENT);
 #endif
                 canvas.translate(-glyph.fLeft, -glyph.fTop);
+
+                if (this->isSubpixel()) {
+                    canvas.translate(SkFixedToScalar(glyph.getSubXFixed()),
+                                     SkFixedToScalar(glyph.getSubYFixed()));
+                }
 
                 SkPaint paint;
                 paint.setAntiAlias(true);

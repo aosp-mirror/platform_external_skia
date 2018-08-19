@@ -46,6 +46,7 @@ tests_sources = [
   "$_tests/ColorTest.cpp",
   "$_tests/CopySurfaceTest.cpp",
   "$_tests/CTest.cpp",
+  "$_tests/CubicMapTest.cpp",
   "$_tests/DashPathEffectTest.cpp",
   "$_tests/DataRefTest.cpp",
   "$_tests/DefaultPathRendererTest.cpp",
@@ -292,6 +293,7 @@ tests_sources = [
 pathops_tests_sources = [
   "$_tests/PathOpsAngleIdeas.cpp",
   "$_tests/PathOpsAngleTest.cpp",
+  "$_tests/PathOpsAsWindingTest.cpp",
   "$_tests/PathOpsBattles.cpp",
   "$_tests/PathOpsBoundsTest.cpp",
   "$_tests/PathOpsBuilderConicTest.cpp",

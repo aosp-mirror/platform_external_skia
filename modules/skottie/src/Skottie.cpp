@@ -9,6 +9,7 @@
 
 #include "SkCanvas.h"
 #include "SkData.h"
+#include "SkFontMgr.h"
 #include "SkImage.h"
 #include "SkMakeUnique.h"
 #include "SkOSPath.h"
@@ -42,6 +43,7 @@
 #include "SkottieAdapter.h"
 #include "SkottieAnimator.h"
 #include "SkottieJson.h"
+#include "SkottiePriv.h"
 #include "SkottieValue.h"
 
 #include <cmath>
@@ -51,31 +53,20 @@
 
 namespace skottie {
 
-#define LOG SkDebugf
+using internal::AttachContext;
+
+namespace internal {
+
+void LogJSON(const skjson::Value& json, const char msg[]) {
+    const auto dump = json.toString();
+    LOG("%s: %s\n", msg, dump.c_str());
+}
+
+} // namespace internal
 
 namespace {
 
-struct AssetInfo {
-    const skjson::ObjectValue* fAsset;
-    mutable bool               fIsAttaching; // Used for cycle detection
-};
-
-using AssetMap   = SkTHashMap<SkString, AssetInfo>;
-using AssetCache = SkTHashMap<SkString, sk_sp<sksg::RenderNode>>;
-
-struct AttachContext {
-    AttachContext makeScoped(sksg::AnimatorList& animators) const {
-        return { fResources, fAssets, fDuration, fFrameRate, fAssetCache, animators };
-    }
-
-    const ResourceProvider& fResources;
-    const AssetMap&         fAssets;
-    const float             fDuration,
-                            fFrameRate;
-    AssetCache&             fAssetCache;
-    sksg::AnimatorList&     fAnimators;
-};
-
+// DEPRECATED: replace w/ LogJSON.
 bool LogFail(const skjson::Value& json, const char* msg) {
     const auto dump = json.toString();
     LOG("!! %s: %s\n", msg, dump.c_str());
@@ -527,11 +518,12 @@ const ShapeInfo* FindShapeInfo(const skjson::ObjectValue& jshape) {
         { "tr", ShapeType::kTransform     , 0 }, // transform -> Inline handler
     };
 
-    SkString type;
-    if (!Parse<SkString>(jshape["ty"], &type) || type.isEmpty())
+    const skjson::StringValue* type = jshape["ty"];
+    if (!type) {
         return nullptr;
+    }
 
-    const auto* info = bsearch(type.c_str(),
+    const auto* info = bsearch(type->begin(),
                                gShapeInfo,
                                SK_ARRAY_COUNT(gShapeInfo),
                                sizeof(ShapeInfo),
@@ -860,11 +852,11 @@ sk_sp<sksg::RenderNode> AttachCompLayer(const skjson::ObjectValue& jlayer, Attac
 sk_sp<sksg::RenderNode> AttachSolidLayer(const skjson::ObjectValue& jlayer, AttachContext*) {
     const auto size = SkSize::Make(ParseDefault<float>(jlayer["sw"], 0.0f),
                                    ParseDefault<float>(jlayer["sh"], 0.0f));
-    const auto hex = ParseDefault<SkString>(jlayer["sc"], SkString());
+    const skjson::StringValue* hex_str = jlayer["sc"];
     uint32_t c;
     if (size.isEmpty() ||
-        !hex.startsWith("#") ||
-        !SkParse::FindHex(hex.c_str() + 1, &c)) {
+        *hex_str->begin() != '#' ||
+        !SkParse::FindHex(hex_str->begin() + 1, &c)) {
         LogFail(jlayer, "Could not parse solid layer");
         return nullptr;
     }
@@ -876,19 +868,22 @@ sk_sp<sksg::RenderNode> AttachSolidLayer(const skjson::ObjectValue& jlayer, Atta
 }
 
 sk_sp<sksg::RenderNode> AttachImageAsset(const skjson::ObjectValue& jimage, AttachContext* ctx) {
-    const auto name = ParseDefault<SkString>(jimage["p"], SkString()),
-               path = ParseDefault<SkString>(jimage["u"], SkString());
-    if (name.isEmpty())
+    const skjson::StringValue* name = jimage["p"];
+    const skjson::StringValue* path = jimage["u"];
+    if (!name) {
         return nullptr;
+    }
 
-    const auto res_id = SkStringPrintf("%s|%s", path.c_str(), name.c_str());
+    const auto name_cstr = name->begin(),
+               path_cstr = path ? path->begin() : "";
+    const auto res_id = SkStringPrintf("%s|%s", path_cstr, name_cstr);
     if (auto* attached_image = ctx->fAssetCache.find(res_id)) {
         return *attached_image;
     }
 
-    const auto data = ctx->fResources.load(path.c_str(), name.c_str());
+    const auto data = ctx->fResources.load(path_cstr, name_cstr);
     if (!data) {
-        LOG("!! Could not load image resource: %s/%s\n", path.c_str(), name.c_str());
+        LOG("!! Could not load image resource: %s/%s\n", path_cstr, name_cstr);
         return nullptr;
     }
 
@@ -920,11 +915,6 @@ sk_sp<sksg::RenderNode> AttachShapeLayer(const skjson::ObjectValue& layer, Attac
     ctx->fAnimators.resize(shapeCtx.fCommittedAnimators);
 
     return shapeNode;
-}
-
-sk_sp<sksg::RenderNode> AttachTextLayer(const skjson::ObjectValue& layer, AttachContext*) {
-    LOG("?? Text layer stub\n");
-    return nullptr;
 }
 
 struct AttachLayerContext {
@@ -1032,20 +1022,21 @@ sk_sp<sksg::RenderNode> AttachMask(const skjson::ArrayValue* jmask,
     for (const skjson::ObjectValue* m : *jmask) {
         if (!m) continue;
 
-        SkString mode;
-        if (!Parse<SkString>((*m)["mode"], &mode) || mode.size() != 1) {
+        const skjson::StringValue* jmode = (*m)["mode"];
+        if (!jmode || jmode->size() != 1) {
             LogFail((*m)["mode"], "Invalid mask mode");
             continue;
         }
 
-        if (mode[0] == 'n') {
+        const auto mode = *jmode->begin();
+        if (mode == 'n') {
             // "None" masks have no effect.
             continue;
         }
 
-        const auto* mask_info = GetMaskInfo(mode[0]);
+        const auto* mask_info = GetMaskInfo(mode);
         if (!mask_info) {
-            LOG("?? Unsupported mask mode: '%c'\n", mode[0]);
+            LOG("?? Unsupported mask mode: '%c'\n", mode);
             continue;
         }
 
@@ -1159,6 +1150,7 @@ sk_sp<sksg::RenderNode> AttachLayer(const skjson::ObjectValue* jlayer,
                                     AttachLayerContext* layerCtx) {
     if (!jlayer) return nullptr;
 
+    using internal::AttachTextLayer;
     using LayerAttacher = sk_sp<sksg::RenderNode> (*)(const skjson::ObjectValue&, AttachContext*);
     static constexpr LayerAttacher gLayerAttachers[] = {
         AttachCompLayer,  // 'ty': 0
@@ -1399,7 +1391,7 @@ Animation::Animation(const ResourceProvider& resources,
     , fInPoint(ParseDefault<float>(json["ip"], 0.0f))
     , fOutPoint(SkTMax(ParseDefault<float>(json["op"], SK_ScalarMax), fInPoint)) {
 
-    AssetMap assets;
+    internal::AssetMap assets;
     if (const skjson::ArrayValue* jassets = json["assets"]) {
         for (const skjson::ObjectValue* asset : *jassets) {
             if (asset) {
@@ -1408,9 +1400,19 @@ Animation::Animation(const ResourceProvider& resources,
         }
     }
 
-    AssetCache asset_cache;
+    // TODO: plumb external font mgr.
+    const auto fontmgr = SkFontMgr::RefDefault();
+    const auto fonts = internal::ParseFonts(json["fonts"], json["chars"], fontmgr.get());
+
+    internal::AssetCache asset_cache;
     sksg::AnimatorList animators;
-    AttachContext ctx = { resources, assets, this->duration(), fFrameRate, asset_cache, animators };
+    AttachContext ctx = { resources,
+                          assets,
+                          fonts,
+                          this->duration(),
+                          fFrameRate,
+                          asset_cache,
+                          animators };
     auto root = AttachComposition(json, &ctx);
 
     stats->fAnimatorCount = animators.size();

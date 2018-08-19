@@ -52,12 +52,12 @@ test-continuous:
 # test-docker-continuous is better, although if you make changes to the C++/WASM code,
 # you will need to manually call make npm-test to re-build.
 test-docker: npm-test
-	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v1 \
+	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v3 \
 karma start /SRC/experimental/pathkit/karma-docker.conf.js --single-run
 
 test-docker-continuous:
 	echo "Assuming make npm-test has also been run by a user (if needed)"
-	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v1 \
+	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v3 \
 karma start /SRC/experimental/pathkit/karma-docker.conf.js --no-single-run
 
 npm-test:
@@ -84,21 +84,21 @@ example:
 	python serve.py
 
 local-example:
-	rm -rf node_modules
+	rm -rf node_modules/experimental-pathkit-wasm
 	mkdir -p node_modules
 	ln -s -T ../npm-wasm node_modules/experimental-pathkit-wasm
 	echo "Go check out localhost:8000/npm-wasm/example.html"
 	python serve.py
 
 local-example-test:
-	rm -rf node_modules
+	rm -rf node_modules/experimental-pathkit-wasm
 	mkdir -p node_modules/experimental-pathkit-wasm
 	ln -s -T ../../npm-wasm/bin/test node_modules/experimental-pathkit-wasm/bin
 	echo "Go check out localhost:8000/npm-wasm/example.html"
 	python serve.py
 
 local-example-debug:
-	rm -rf node_modules
+	rm -rf node_modules/experimental-pathkit-wasm
 	mkdir -p node_modules/experimental-pathkit-wasm
 	ln -s -T ../../npm-wasm/bin/debug node_modules/experimental-pathkit-wasm/bin
 	echo "Go check out localhost:8000/npm-wasm/example.html"
