@@ -322,7 +322,6 @@ cc_library_static {
         "src/core/SkRegion_path.cpp",
         "src/core/SkRemoteGlyphCache.cpp",
         "src/core/SkResourceCache.cpp",
-        "src/core/SkSRGB.cpp",
         "src/core/SkScalar.cpp",
         "src/core/SkScalerContext.cpp",
         "src/core/SkScan.cpp",
