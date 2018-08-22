@@ -6,12 +6,16 @@
 // DO NOT EDIT!
 
 #define GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)              \
+  GPU_OP(ADD_AND_TRUE_TO_LOOP_CONDITION,                \
+         add_and_true_to_loop_condition)                \
   GPU_OP(DISABLE_BLEND_EQUATION_ADVANCED,               \
          disable_blend_equation_advanced)               \
   GPU_OP(DISABLE_DISCARD_FRAMEBUFFER,                   \
          disable_discard_framebuffer)                   \
   GPU_OP(DISALLOW_LARGE_INSTANCED_DRAW,                 \
          disallow_large_instanced_draw)                 \
+  GPU_OP(FLUSH_ON_FRAMEBUFFER_CHANGE,                   \
+         flush_on_framebuffer_change)                   \
   GPU_OP(GL_CLEAR_BROKEN,                               \
          gl_clear_broken)                               \
   GPU_OP(MAX_FRAGMENT_UNIFORM_VECTORS_32,               \

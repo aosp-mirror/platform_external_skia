@@ -475,7 +475,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
 				"NexusPlayer":     {"fugu", "OPR2.170623.027"},
-				"Pixel":           {"sailfish", "OPM4.171019.016.B1"},
+				"Pixel":           {"sailfish", "PPR1.180610.009"},
 				"Pixel2XL":        {"taimen", "OPM4.171019.016.B1"},
 			}[parts["model"]]
 			if !ok {
@@ -624,10 +624,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		} else if d["os"] == DEFAULT_OS_MAC {
 			// Mac CPU bots.
 			d["cpu"] = "x86-64-E5-2697_v2"
-			if strings.Contains(parts["extra_config"], "iOS") {
-				// iOS builds held back due to issue 'ERROR: Install failed. Got error "APIInternalError".'
-				d["os"] = "Mac-10.13.3"
-			}
 		}
 	}
 

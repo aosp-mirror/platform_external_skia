@@ -1571,6 +1571,7 @@ cc_test {
         "tests/OffsetSimplePolyTest.cpp",
         "tests/OnFlushCallbackTest.cpp",
         "tests/OnceTest.cpp",
+        "tests/OpChainTest.cpp",
         "tests/OverAlignedTest.cpp",
         "tests/PDFDeflateWStreamTest.cpp",
         "tests/PDFDocumentTest.cpp",

@@ -106,15 +106,15 @@ private:
     SkPaint fRunPaint;
 };
 
-class SkGlyphRunListDrawer {
+class SkGlyphRunListPainter {
 public:
     // Constructor for SkBitmpapDevice.
-    SkGlyphRunListDrawer(
+    SkGlyphRunListPainter(
             const SkSurfaceProps& props, SkColorType colorType, SkScalerContextFlags flags);
 
     #if SK_SUPPORT_GPU
-    SkGlyphRunListDrawer(const SkSurfaceProps&, const GrColorSpaceInfo&);
-    explicit SkGlyphRunListDrawer(const GrRenderTargetContext& renderTargetContext);
+    SkGlyphRunListPainter(const SkSurfaceProps&, const GrColorSpaceInfo&);
+    explicit SkGlyphRunListPainter(const GrRenderTargetContext& renderTargetContext);
     #endif
 
     using PerMask = std::function<void(const SkMask&, const SkGlyph&, SkPoint)>;
@@ -133,10 +133,16 @@ public:
 
     //using PerGlyph = std::function<void(const SkGlyph&, SkPoint)>;
     template <typename PerGlyphT, typename PerPathT>
-    void drawGlyphRunAsGlyphWithPathFallback(
+    void drawGlyphRunAsBMPWithPathFallback(
             SkGlyphCache* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkMatrix& deviceMatrix,
             PerGlyphT perGlyph, PerPathT perPath);
+
+    template <typename PerSDFT, typename PerPathT, typename PerFallbackT>
+    void drawGlyphRunAsSDFWithFallback(
+            SkGlyphCache* cache, const SkGlyphRun& glyphRun,
+            SkPoint origin, SkScalar textRatio,
+            PerSDFT perSDF, PerPathT perPath, PerFallbackT perFallback);
 
 private:
     static bool ShouldDrawAsPath(const SkPaint& paint, const SkMatrix& matrix);
@@ -217,33 +223,6 @@ public:
             run.temporaryShuntToDrawPosText(device, origin);
         }
     }
-};
-
-class SkGlyphRunListIterator {
-public:
-    explicit SkGlyphRunListIterator(const SkGlyphRunList& list) : fList{list} {}
-
-    bool done() const { return fIndex == fList.size(); }
-    void next() { fIndex += 1;}
-    uint32_t glyphCount() const { return fList[fIndex].runSize(); }
-    const uint16_t* glyphs() const { return fList[fIndex].shuntGlyphsIDs().data(); }
-    const SkScalar* pos() const { return (const SkScalar*)fList[fIndex].positions().data(); }
-    const SkPoint& offset() const { return fZero; }
-    void applyFontToPaint(SkPaint* paint) const { *paint = fList[fIndex].paint(); }
-    SkTextBlobRunIterator::GlyphPositioning positioning() const {
-        return SkTextBlobRunIterator::kFull_Positioning;
-    }
-    const uint32_t* clusters() const { return fList[fIndex].clusters().data(); }
-    uint32_t textSize() const { return fList[fIndex].text().size(); }
-    const char* text() const { return fList[fIndex].text().data(); }
-    const SkGlyphRun& glyphRun() const { return fList[fIndex]; }
-
-    bool isLCD() const { return fList[fIndex].paint().isLCDRenderText(); }
-
-private:
-    static constexpr SkPoint fZero{0, 0};
-    size_t fIndex{0};
-    const SkGlyphRunList& fList;
 };
 
 class SkGlyphIDSet {
