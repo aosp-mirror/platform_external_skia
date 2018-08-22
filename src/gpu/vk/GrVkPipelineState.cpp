@@ -181,10 +181,12 @@ void GrVkPipelineState::setData(GrVkGpu* gpu,
 
     fGeometryProcessor->setData(fDataManager, primProc,
                                 GrFragmentProcessor::CoordTransformIter(pipeline));
-    for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
-        const auto& sampler = primProc.textureSampler(i);
-        auto texture = static_cast<GrVkTexture*>(primProcTextures[i]->peekTexture());
-        samplerBindings[currTextureBinding++] = {sampler.samplerState(), texture};
+    if (primProcTextures) {
+        for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
+            const auto& sampler = primProc.textureSampler(i);
+            auto texture = static_cast<GrVkTexture*>(primProcTextures[i]->peekTexture());
+            samplerBindings[currTextureBinding++] = {sampler.samplerState(), texture};
+        }
     }
 
     GrFragmentProcessor::Iter iter(pipeline);
@@ -350,11 +352,9 @@ void GrVkPipelineState::setRenderTargetState(const GrRenderTargetProxy* proxy) {
     GrRenderTarget* rt = proxy->peekRenderTarget();
 
     // Load the RT height uniform if it is needed to y-flip gl_FragCoord.
-    if (fBuiltinUniformHandles.fRTDimensionsUni.isValid() &&
-        (fRenderTargetState.fRenderTargetSize.fWidth != rt->width() ||
-        fRenderTargetState.fRenderTargetSize.fHeight != rt->height())) {
-        fDataManager.set2f(fBuiltinUniformHandles.fRTDimensionsUni, SkIntToScalar(rt->height()),
-                           SkIntToScalar(rt->width()));
+    if (fBuiltinUniformHandles.fRTHeightUni.isValid() &&
+        fRenderTargetState.fRenderTargetSize.fHeight != rt->height()) {
+        fDataManager.set1f(fBuiltinUniformHandles.fRTHeightUni, SkIntToScalar(rt->height()));
     }
 
     // set RT adjustment
