@@ -140,42 +140,16 @@ SkGlyphRunListPainter::SkGlyphRunListPainter(
 SkGlyphRunListPainter::SkGlyphRunListPainter(const GrRenderTargetContext& rtc)
         : SkGlyphRunListPainter{rtc.surfaceProps(), rtc.colorSpaceInfo()} {}
 
-// TODO: all this logic should move to the glyph cache.
-static const SkGlyph& lookup_glyph_by_subpixel(
-        SkAxisAlignment axisAlignment, SkPoint position, SkGlyphID glyphID, SkGlyphCache* cache) {
-    SkFixed lookupX = SkScalarToFixed(SkScalarFraction(position.x())),
-            lookupY = SkScalarToFixed(SkScalarFraction(position.y()));
-
-    // Snap to a given axis if alignment is requested.
-    if (axisAlignment == kX_SkAxisAlignment) {
-        lookupY = 0;
-    } else if (axisAlignment == kY_SkAxisAlignment) {
-        lookupX = 0;
-    }
-
-    return cache->getGlyphIDMetrics(glyphID, lookupX, lookupY);
-}
-
-
 // forEachMappedDrawableGlyph handles positioning for mask type glyph handling for both sub-pixel
 // and full pixel positioning.
 template <typename EachGlyph>
 void SkGlyphRunListPainter::forEachMappedDrawableGlyph(
         const SkGlyphRun& glyphRun, SkPoint origin, const SkMatrix& deviceMatrix,
-        SkGlyphCache* cache, EachGlyph eachGlyph) {
-    bool isSubpixel = cache->isSubpixel();
-
-    SkAxisAlignment axisAlignment = kNone_SkAxisAlignment;
+        SkGlyphCacheInterface* cache, EachGlyph eachGlyph) {
     SkMatrix mapping = deviceMatrix;
     mapping.preTranslate(origin.x(), origin.y());
-    // TODO: all this logic should move to the glyph cache.
-    if (isSubpixel) {
-        axisAlignment = cache->getScalerContext()->computeAxisAlignmentForHText();
-        SkPoint rounding = SkFindAndPlaceGlyph::SubpixelPositionRounding(axisAlignment);
-        mapping.postTranslate(rounding.x(), rounding.y());
-    } else {
-        mapping.postTranslate(SK_ScalarHalf, SK_ScalarHalf);
-    }
+    SkVector rounding = cache->rounding();
+    mapping.postTranslate(rounding.x(), rounding.y());
 
     auto runSize = glyphRun.runSize();
     if (this->ensureBitmapBuffers(runSize)) {
@@ -186,10 +160,7 @@ void SkGlyphRunListPainter::forEachMappedDrawableGlyph(
             auto mappedPt = *mappedPtCursor++;
             auto pt = origin + *ptCursor++;
             if (SkScalarsAreFinite(mappedPt.x(), mappedPt.y())) {
-                // TODO: all this logic should move to the glyph cache.
-                const SkGlyph& glyph =
-                    isSubpixel ? lookup_glyph_by_subpixel(axisAlignment, mappedPt, glyphID, cache)
-                               : cache->getGlyphIDMetrics(glyphID);
+                const SkGlyph& glyph = cache->getGlyphMetrics(glyphID, mappedPt);
                 if (!glyph.isEmpty()) {
                     // Prevent glyphs from being drawn outside of or straddling the edge
                     // of device space. Comparisons written a little weirdly so that NaN
@@ -356,7 +327,6 @@ void SkGlyphRunListPainter::drawGlyphRunAsFullpixelMask(
         }
     }
 }
-
 
 void SkGlyphRunListPainter::drawForBitmapDevice(
         const SkGlyphRunList& glyphRunList, const SkMatrix& deviceMatrix,
@@ -850,11 +820,11 @@ static SkRect rect_to_draw(
 
 template <typename PerGlyphT, typename PerPathT>
 void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
-        SkGlyphCache* cache, const SkGlyphRun& glyphRun,
+        SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
         SkPoint origin, const SkMatrix& deviceMatrix,
         PerGlyphT perGlyph, PerPathT perPath) {
     auto eachGlyph =
-        [cache, perGlyph{std::move(perGlyph)}, perPath{std::move(perPath)}]
+        [perGlyph{std::move(perGlyph)}, perPath{std::move(perPath)}]
         (const SkGlyph& glyph, SkPoint pt, SkPoint mappedPt) {
             if (glyph_too_big_for_atlas(glyph)) {
                 SkScalar sx = SkScalarFloorToScalar(mappedPt.fX),
@@ -864,16 +834,10 @@ void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
                         rect_to_draw(glyph, {sx, sy}, SK_Scalar1, GrGlyph::kCoverage_MaskStyle);
 
                 if (!glyphRect.isEmpty()) {
-                    const SkPath* glyphPath = cache->findPath(glyph);
-                    if (glyphPath != nullptr) {
-                        perPath(glyphPath, glyph, mappedPt);
-                    }
+                    perPath(glyph, mappedPt);
                 }
             } else {
-                const void* glyphImage = cache->findImage(glyph);
-                if (glyphImage != nullptr) {
-                    perGlyph(glyph, mappedPt);
-                }
+                perGlyph(glyph, mappedPt);
             }
         };
 
@@ -1172,24 +1136,29 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
                     runIndex, props, scalerContextFlags, runPaint, &viewMatrix);
 
             auto perGlyph =
-                    [cacheBlob, runIndex, glyphCache, &currStrike,
-                     filteredColor, cache{cache.get()}]
-                            (const SkGlyph& glyph, SkPoint mappedPt) {
+                [cacheBlob, runIndex, glyphCache, &currStrike, filteredColor, cache{cache.get()}]
+                (const SkGlyph& glyph, SkPoint mappedPt) {
+                    const void* glyphImage = cache->findImage(glyph);
+                    if (glyphImage != nullptr) {
                         SkScalar sx = SkScalarFloorToScalar(mappedPt.fX),
-                                 sy = SkScalarFloorToScalar(mappedPt.fY);
+                                sy = SkScalarFloorToScalar(mappedPt.fY);
                         AppendGlyph(cacheBlob, runIndex, glyphCache, &currStrike,
                                     glyph, GrGlyph::kCoverage_MaskStyle, sx, sy,
                                     filteredColor, cache, SK_Scalar1, false);
-                    };
+                    }
+                };
 
             auto perPath =
-                    [cacheBlob, runIndex]
-                            (const SkPath* path, const SkGlyph& glyph, SkPoint position) {
+                [cacheBlob, runIndex, cache{cache.get()}]
+                (const SkGlyph& glyph, SkPoint position) {
+                    const SkPath* glyphPath = cache->findPath(glyph);
+                    if (glyphPath != nullptr) {
                         SkScalar sx = SkScalarFloorToScalar(position.fX),
-                                 sy = SkScalarFloorToScalar(position.fY);
+                                sy = SkScalarFloorToScalar(position.fY);
                         cacheBlob->appendPathGlyph(
-                                runIndex, *path, sx, sy, SK_Scalar1, true);
-                    };
+                                runIndex, *glyphPath, sx, sy, SK_Scalar1, true);
+                    }
+                };
 
             glyphPainter->drawGlyphRunAsBMPWithPathFallback(
                     cache.get(), glyphRun, origin, viewMatrix, perGlyph, perPath);
