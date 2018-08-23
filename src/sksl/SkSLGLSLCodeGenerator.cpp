@@ -461,6 +461,7 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     once([] {
 #endif
         fFunctionClasses = new std::unordered_map<StringFragment, FunctionClass>();
+        (*fFunctionClasses)["abs"]         = FunctionClass::kAbs;
         (*fFunctionClasses)["atan"]        = FunctionClass::kAtan;
         (*fFunctionClasses)["determinant"] = FunctionClass::kDeterminant;
         (*fFunctionClasses)["dFdx"]        = FunctionClass::kDerivative;
@@ -482,6 +483,26 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     bool nameWritten = false;
     if (found != fFunctionClasses->end()) {
         switch (found->second) {
+            case FunctionClass::kAbs: {
+                if (!fProgram.fSettings.fCaps->emulateAbsIntFunction())
+                    break;
+                SkASSERT(c.fArguments.size() == 1);
+                if (c.fArguments[0]->fType != *fContext.fInt_Type)
+                  break;
+                // abs(int) on Intel OSX is incorrect, so emulate it:
+                String name = "_absemulation";
+                this->write(name);
+                nameWritten = true;
+                if (fWrittenIntrinsics.find(name) == fWrittenIntrinsics.end()) {
+                    fWrittenIntrinsics.insert(name);
+                    fExtraFunctions.writeText((
+                        "int " + name + "(int x) {\n"
+                        "    return x * sign(x);\n"
+                        "}\n"
+                    ).c_str());
+                }
+                break;
+            }
             case FunctionClass::kAtan:
                 if (fProgram.fSettings.fCaps->mustForceNegatedAtanParamToFloat() &&
                     c.fArguments.size() == 2 &&
@@ -693,7 +714,7 @@ void GLSLCodeGenerator::writeFragCoord() {
     if (!fProgram.fSettings.fFlipY) {
         this->write("gl_FragCoord");
     } else if (const char* extension =
-                                  fProgram.fSettings.fCaps->fragCoordConventionsExtensionString()) {
+               fProgram.fSettings.fCaps->fragCoordConventionsExtensionString()) {
         if (!fSetupFragPositionGlobal) {
             if (fProgram.fSettings.fCaps->generation() < k150_GrGLSLGeneration) {
                 this->writeExtension(extension);
@@ -703,18 +724,25 @@ void GLSLCodeGenerator::writeFragCoord() {
         }
         this->write("gl_FragCoord");
     } else {
-        if (!fSetupFragPositionLocal) {
+        if (!fSetupFragPositionGlobal) {
             // The Adreno compiler seems to be very touchy about access to "gl_FragCoord".
             // Accessing glFragCoord.zw can cause a program to fail to link. Additionally,
             // depending on the surrounding code, accessing .xy with a uniform involved can
             // do the same thing. Copying gl_FragCoord.xy into a temp float2 beforehand
             // (and only accessing .xy) seems to "fix" things.
             const char* precision = usesPrecisionModifiers() ? "highp " : "";
+            fGlobals.writeText("uniform ");
+            fGlobals.writeText(precision);
+            fGlobals.writeText("float " SKSL_RTHEIGHT_NAME ";\n");
+            fSetupFragPositionGlobal = true;
+        }
+        if (!fSetupFragPositionLocal) {
+            const char* precision = usesPrecisionModifiers() ? "highp " : "";
             fFunctionHeader += precision;
             fFunctionHeader += "    vec2 _sktmpCoord = gl_FragCoord.xy;\n";
             fFunctionHeader += precision;
-            fFunctionHeader += "    vec4 sk_FragCoord = vec4(_sktmpCoord.x, " SKSL_RTDIMENSIONS_NAME
-                               ".y - _sktmpCoord.y, 1.0, 1.0);\n";
+            fFunctionHeader += "    vec4 sk_FragCoord = vec4(_sktmpCoord.x, " SKSL_RTHEIGHT_NAME
+                               " - _sktmpCoord.y, 1.0, 1.0);\n";
             fSetupFragPositionLocal = true;
         }
         this->write("sk_FragCoord");
@@ -732,9 +760,6 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             break;
         case SK_FRAGCOORD_BUILTIN:
             this->writeFragCoord();
-            break;
-        case SK_DIMENSIONS_BUILTIN:
-            this->write("u_skRTDimensions");
             break;
         case SK_CLOCKWISE_BUILTIN:
             this->write(fProgram.fSettings.fFlipY ? "(!gl_FrontFacing)" : "gl_FrontFacing");
@@ -844,6 +869,12 @@ GLSLCodeGenerator::Precedence GLSLCodeGenerator::GetBinaryPrecedence(Token::Kind
 
 void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                                               Precedence parentPrecedence) {
+    if (fProgram.fSettings.fCaps->unfoldShortCircuitAsTernary() &&
+            (b.fOperator == Token::LOGICALAND || b.fOperator == Token::LOGICALOR)) {
+        this->writeShortCircuitWorkaroundExpression(b, parentPrecedence);
+        return;
+    }
+
     Precedence precedence = GetBinaryPrecedence(b.fOperator);
     if (precedence >= parentPrecedence) {
         this->write("(");
@@ -866,6 +897,35 @@ void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
         this->write(")");
     }
     if (precedence >= parentPrecedence) {
+        this->write(")");
+    }
+}
+
+void GLSLCodeGenerator::writeShortCircuitWorkaroundExpression(const BinaryExpression& b,
+                                                              Precedence parentPrecedence) {
+    if (kTernary_Precedence >= parentPrecedence) {
+        this->write("(");
+    }
+
+    // Transform:
+    // a && b  =>   a ? b : false
+    // a || b  =>   a ? true : b
+    this->writeExpression(*b.fLeft, kTernary_Precedence);
+    this->write(" ? ");
+    if (b.fOperator == Token::LOGICALAND) {
+        this->writeExpression(*b.fRight, kTernary_Precedence);
+    } else {
+        BoolLiteral boolTrue(fContext, -1, true);
+        this->writeBoolLiteral(boolTrue);
+    }
+    this->write(" : ");
+    if (b.fOperator == Token::LOGICALAND) {
+        BoolLiteral boolFalse(fContext, -1, false);
+        this->writeBoolLiteral(boolFalse);
+    } else {
+        this->writeExpression(*b.fRight, kTernary_Precedence);
+    }
+    if (kTernary_Precedence >= parentPrecedence) {
         this->write(")");
     }
 }
@@ -1373,15 +1433,6 @@ void GLSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
     }
 }
 
-void GLSLCodeGenerator::writeInputVars() {
-    if (fProgram.fInputs.fRTDimensions) {
-        const char* precision = usesPrecisionModifiers() ? "highp " : "";
-        fGlobals.writeText("uniform ");
-        fGlobals.writeText(precision);
-        fGlobals.writeText("vec2 " SKSL_RTDIMENSIONS_NAME ";\n");
-    }
-}
-
 bool GLSLCodeGenerator::generateCode() {
     fProgramKind = fProgram.fKind;
     if (fProgramKind != Program::kPipelineStage_Kind) {
@@ -1400,7 +1451,6 @@ bool GLSLCodeGenerator::generateCode() {
     fOut = rawOut;
 
     write_stringstream(fExtensions, *rawOut);
-    this->writeInputVars();
     write_stringstream(fGlobals, *rawOut);
 
     if (!fProgram.fSettings.fCaps->canUseFragCoord()) {

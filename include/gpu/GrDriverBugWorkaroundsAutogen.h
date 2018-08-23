@@ -14,6 +14,8 @@
          disable_discard_framebuffer)                   \
   GPU_OP(DISALLOW_LARGE_INSTANCED_DRAW,                 \
          disallow_large_instanced_draw)                 \
+  GPU_OP(EMULATE_ABS_INT_FUNCTION,                      \
+         emulate_abs_int_function)                      \
   GPU_OP(FLUSH_ON_FRAMEBUFFER_CHANGE,                   \
          flush_on_framebuffer_change)                   \
   GPU_OP(GL_CLEAR_BROKEN,                               \
@@ -30,4 +32,6 @@
          restore_scissor_on_fbo_change)                 \
   GPU_OP(UNBIND_ATTACHMENTS_ON_BOUND_RENDER_FBO_DELETE, \
          unbind_attachments_on_bound_render_fbo_delete) \
+  GPU_OP(UNFOLD_SHORT_CIRCUIT_AS_TERNARY_OPERATION,     \
+         unfold_short_circuit_as_ternary_operation)     \
 // The End

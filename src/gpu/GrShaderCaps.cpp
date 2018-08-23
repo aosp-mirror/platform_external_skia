@@ -39,6 +39,8 @@ GrShaderCaps::GrShaderCaps(const GrContextOptions& options) {
     fCanUseFragCoord = true;
     fIncompleteShortIntPrecision = false;
     fAddAndTrueToLoopCondition = false;
+    fUnfoldShortCircuitAsTernary = false;
+    fEmulateAbsIntFunction = false;
     fFlatInterpolationSupport = false;
     fPreferFlatInterpolation = false;
     fNoPerspectiveInterpolationSupport = false;
@@ -106,6 +108,8 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Can use gl_FragCoord", fCanUseFragCoord);
     writer->appendBool("Incomplete short int precision", fIncompleteShortIntPrecision);
     writer->appendBool("Add and true to loops workaround", fAddAndTrueToLoopCondition);
+    writer->appendBool("Unfold short circuit as ternary", fUnfoldShortCircuitAsTernary);
+    writer->appendBool("Emulate abs(int) function", fEmulateAbsIntFunction);
     writer->appendBool("Flat interpolation support", fFlatInterpolationSupport);
     writer->appendBool("Prefer flat interpolation", fPreferFlatInterpolation);
     writer->appendBool("No perspective interpolation support", fNoPerspectiveInterpolationSupport);
@@ -139,6 +143,8 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(fCanUseFragCoord);
         SkASSERT(!fIncompleteShortIntPrecision);
         SkASSERT(!fAddAndTrueToLoopCondition);
+        SkASSERT(!fUnfoldShortCircuitAsTernary);
+        SkASSERT(!fEmulateAbsIntFunction);
     }
 #if GR_TEST_UTILS
     fDualSourceBlendingSupport = fDualSourceBlendingSupport && !options.fSuppressDualSourceBlending;

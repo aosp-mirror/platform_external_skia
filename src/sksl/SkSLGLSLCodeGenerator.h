@@ -118,7 +118,7 @@ protected:
 
     void writeModifiers(const Modifiers& modifiers, bool globalContext);
 
-    virtual void writeInputVars();
+    void writeGlobalVars(const VarDeclaration& vs);
 
     virtual void writeVarInitializer(const Variable& var, const Expression& value);
 
@@ -157,6 +157,8 @@ protected:
     static Precedence GetBinaryPrecedence(Token::Kind op);
 
     virtual void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
+    void writeShortCircuitWorkaroundExpression(const BinaryExpression& b,
+                                               Precedence parentPrecedence);
 
     void writeTernaryExpression(const TernaryExpression& t, Precedence parentPrecedence);
 
@@ -221,6 +223,7 @@ protected:
     // We map function names to function class so we can quickly deal with function calls that need
     // extra processing
     enum class FunctionClass {
+        kAbs,
         kAtan,
         kDeterminant,
         kDerivative,

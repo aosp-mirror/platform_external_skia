@@ -623,37 +623,6 @@ def dm_flags(api, bot):
       match.extend(['~WritePixelsNonTextureMSAA_Gpu'])
       match.extend(['~WritePixelsMSAA_Gpu'])
 
-  if 'Vulkan' in bot and 'NexusPlayer' in bot:
-    # skia:6132
-    match.append('~^tilemodes$')
-    match.append('~tilemodes_npot$')
-    match.append('~scaled_tilemodes$')
-    match.append('~emboss')
-    match.append('~^bitmapfilters$')
-    match.append('~^shadertext$')
-    match.append('~^FullScreenClearWithLayers$') #skia:7191
-    match.append('~^GrDefaultPathRendererTest$') #skia:7244
-    match.append('~^GrMSAAPathRendererTest$') #skia:7244
-    # skia:7018
-    match.extend(['~^ClearOp$',
-                  '~^ComposedImageFilterBounds_Gpu$',
-                  '~^ImageEncode_Gpu$',
-                  '~^ImageFilterFailAffectsTransparentBlack_Gpu$',
-                  '~^ImageFilterZeroBlurSigma_Gpu$',
-                  '~^ImageNewShader_GPU$',
-                  '~^ImageReadPixels_Gpu$',
-                  '~^ImageScalePixels_Gpu$',
-                  '~^ReadWriteAlpha$',
-                  '~^SpecialImage_DeferredGpu$',
-                  '~^SpecialImage_Gpu$',
-                  '~^SurfaceSemaphores$'])
-    # skia:7837
-    match.append('~BlurMaskBiggerThanDest')
-    # skia:8166
-    match.extend(['~SkRemoteGlyphCache_DrawTextXY',
-                  '~SkRemoteGlyphCache_DrawTextAsPath',
-                  '~SkRemoteGlyphCache_StrikeSerialization'])
-
   if 'Vulkan' in bot and 'GalaxyS7_G930FD' in bot:
     # skia:8064
     match.append('~^WritePixelsNonTexture_Gpu$')
@@ -1018,7 +987,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
   'Test-Android-Clang-Nexus7-CPU-Tegra3-arm-Release-All-Android',
-  'Test-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android_Vulkan',
+  'Test-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android',
   'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_Vulkan',
   'Test-Android-Clang-Pixel-GPU-Adreno530-arm-Debug-All-Android_ASAN',
   ('Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-'
@@ -1038,13 +1007,13 @@ TEST_BUILDERS = [
   'Test-Debian9-Clang-GCE-GPU-SwiftShader-x86_64-Release-All-SwiftShader',
   'Test-Debian9-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan',
   'Test-Debian9-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-Vulkan',
-  'Test-Mac-Clang-MacBookAir7.2-GPU-IntelHD6000-x86_64-Debug-All',
-  'Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release-All',
-  'Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-All-CommandBuffer',
   'Test-Mac-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Release-All-NativeFonts',
+  'Test-Mac-Clang-MacBookAir7.2-GPU-IntelHD6000-x86_64-Debug-All',
+  'Test-Mac-Clang-MacBookPro11.5-CPU-AVX2-x86_64-Release-All',
   'Test-Mac-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Debug-All-Metal',
   ('Test-Mac-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Release-All-'
    'MoltenVK_Vulkan'),
+  'Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-All-CommandBuffer',
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Coverage',
   ('Test-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release-All'
    '-Valgrind_AbandonGpuContext_SK_CPU_LIMIT_SSE41'),

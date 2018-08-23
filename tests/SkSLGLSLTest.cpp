@@ -1070,7 +1070,7 @@ DEF_TEST(SkSLFragCoord, r) {
          "    gl_FragColor.xy = gl_FragCoord.xy;\n"
          "}\n",
          &inputs);
-    REPORTER_ASSERT(r, !inputs.fRTDimensions);
+    REPORTER_ASSERT(r, !inputs.fRTHeight);
 
     caps = SkSL::ShaderCapsFactory::FragCoordsNew();
     settings.fCaps = caps.get();
@@ -1084,7 +1084,7 @@ DEF_TEST(SkSLFragCoord, r) {
          "    sk_FragColor.xy = gl_FragCoord.xy;\n"
          "}\n",
          &inputs);
-    REPORTER_ASSERT(r, !inputs.fRTDimensions);
+    REPORTER_ASSERT(r, !inputs.fRTHeight);
 
     caps = SkSL::ShaderCapsFactory::Default();
     settings.fCaps = caps.get();
@@ -1092,16 +1092,15 @@ DEF_TEST(SkSLFragCoord, r) {
          "void main() { sk_FragColor.xy = sk_FragCoord.xy; }",
          settings,
          "#version 400\n"
-         "uniform vec2 u_skRTDimensions;\n"
+         "uniform float u_skRTHeight;\n"
          "out vec4 sk_FragColor;\n"
          "void main() {\n"
          "    vec2 _sktmpCoord = gl_FragCoord.xy;\n"
-         "    vec4 sk_FragCoord = vec4(_sktmpCoord.x, u_skRTDimensions.y - _sktmpCoord.y, 1.0,"
-                                     " 1.0);\n"
+         "    vec4 sk_FragCoord = vec4(_sktmpCoord.x, u_skRTHeight - _sktmpCoord.y, 1.0, 1.0);\n"
          "    sk_FragColor.xy = sk_FragCoord.xy;\n"
          "}\n",
          &inputs);
-    REPORTER_ASSERT(r, inputs.fRTDimensions);
+    REPORTER_ASSERT(r, inputs.fRTHeight);
 
     settings.fFlipY = false;
     test(r,
@@ -1113,7 +1112,7 @@ DEF_TEST(SkSLFragCoord, r) {
          "    sk_FragColor.xy = gl_FragCoord.xy;\n"
          "}\n",
          &inputs);
-    REPORTER_ASSERT(r, !inputs.fRTDimensions);
+    REPORTER_ASSERT(r, !inputs.fRTHeight);
 
     test(r,
          "in float4 pos; void main() { sk_Position = pos; }",
@@ -1153,24 +1152,6 @@ DEF_TEST(SkSLFragCoord, r) {
          "    sk_FragCoord_Resolved.xy = floor(sk_FragCoord_Resolved.xy) + vec2(.5);\n"
          "    sk_FragColor.xy = sk_FragCoord_Resolved.xy;\n"
          "}\n");
-}
-
-DEF_TEST(SkSLDimensions, r) {
-    SkSL::Program::Settings settings;
-    sk_sp<GrShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
-    settings.fCaps = caps.get();
-    SkSL::Program::Inputs inputs;
-    test(r,
-         "void main() { sk_FragColor.r = sk_FragCoord.x / sk_Dimensions.x; }",
-         settings,
-         "#version 400\n"
-         "uniform vec2 u_skRTDimensions;\n"
-         "out vec4 sk_FragColor;\n"
-         "void main() {\n"
-         "    sk_FragColor.x = gl_FragCoord.x / u_skRTDimensions.x;\n"
-         "}\n",
-         &inputs);
-    REPORTER_ASSERT(r, inputs.fRTDimensions);
 }
 
 DEF_TEST(SkSLClockwise, r) {
@@ -2001,6 +1982,67 @@ DEF_TEST(SkSLWorkaroundAddAndTrueToLoopCondition, r) {
          "    for (int i = 0;(i < 4 || c < 10) && true; ++i) {\n"
          "        c += 1;\n"
          "    }\n"
+         "}\n",
+         SkSL::Program::kFragment_Kind
+         );
+}
+
+DEF_TEST(SkSLWorkaroundUnfoldShortCircuitAsTernary, r) {
+    test(r,
+         "uniform bool x;"
+         "uniform bool y;"
+         "uniform int i;"
+         "uniform int j;"
+         "void main() {"
+         "    bool andXY = x && y;"
+         "    bool orXY = x || y;"
+         "    bool combo = (x && y) || (x || y);"
+         "    bool prec = (i + j == 3) && y;"
+         "    while (andXY && orXY && combo && prec) {"
+         "        sk_FragColor = float4(0);"
+         "        break;"
+         "    }"
+         "}",
+         *SkSL::ShaderCapsFactory::UnfoldShortCircuitAsTernary(),
+         "#version 400\n"
+         "out vec4 sk_FragColor;\n"
+         "uniform bool x;\n"
+         "uniform bool y;\n"
+         "uniform int i;\n"
+         "uniform int j;\n"
+         "void main() {\n"
+         "    bool andXY = x ? y : false;\n"
+         "    bool orXY = x ? true : y;\n"
+         "    bool combo = (x ? y : false) ? true : (x ? true : y);\n"
+         "    bool prec = i + j == 3 ? y : false;\n"
+         "    while (((andXY ? orXY : false) ? combo : false) ? prec : false) {\n"
+         "        sk_FragColor = vec4(0.0);\n"
+         "        break;\n"
+         "    }\n"
+         "}\n",
+         SkSL::Program::kFragment_Kind
+         );
+}
+
+DEF_TEST(SkSLWorkaroundEmulateAbsIntFunction, r) {
+    test(r,
+         "uniform int i;"
+         "uniform float f;"
+         "void main() {"
+         "    float output = abs(f) + abs(i);"
+         "    sk_FragColor = float4(output);"
+         "}",
+         *SkSL::ShaderCapsFactory::EmulateAbsIntFunction(),
+         "#version 400\n"
+         "int _absemulation(int x) {\n"
+         "    return x * sign(x);\n"
+         "}\n"
+         "out vec4 sk_FragColor;\n"
+         "uniform int i;\n"
+         "uniform float f;\n"
+         "void main() {\n"
+         "    float output = abs(f) + float(_absemulation(i));\n"
+         "    sk_FragColor = vec4(output);\n"
          "}\n",
          SkSL::Program::kFragment_Kind
          );

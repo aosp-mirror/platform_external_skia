@@ -571,6 +571,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     // Safely moving textures between contexts requires fences.
     fCrossContextTextureSupport = fFenceSyncSupport;
 
+    fDynamicStateArrayGeometryProcessorTextureSupport = true;
+
     if (kGL_GrGLStandard == standard) {
         if (version >= GR_GL_VER(4, 1)) {
             fProgramBinarySupport = true;
@@ -2569,6 +2571,14 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     if (fDriverBugWorkarounds.add_and_true_to_loop_condition) {
         shaderCaps->fAddAndTrueToLoopCondition = true;
+    }
+
+    if (fDriverBugWorkarounds.unfold_short_circuit_as_ternary_operation) {
+        shaderCaps->fUnfoldShortCircuitAsTernary = true;
+    }
+
+    if (fDriverBugWorkarounds.emulate_abs_int_function) {
+        shaderCaps->fEmulateAbsIntFunction = true;
     }
 
     // Disabling advanced blend on various platforms with major known issues. We also block Chrome

@@ -16,7 +16,9 @@ look for /pathkit.wasm, so if this is not the case, use `locateFile` to configur
 this properly.
 The `PathKit` object returned through the .then() callback is fully loaded and ready to use.
 
-See example.html for a fuller example of how to use the library.
+See the [API page](https://skia.org/user/modules/pathkit) and
+[example.html](https://github.com/google/skia/blob/master/experimental/pathkit/npm-wasm/example.html)
+for details on how to use the library.
 
 Using PathKit and WebPack
 -------------------------

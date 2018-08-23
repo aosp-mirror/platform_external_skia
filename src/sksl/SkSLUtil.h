@@ -181,6 +181,14 @@ public:
         return false;
     }
 
+    bool unfoldShortCircuitAsTernary() const {
+        return false;
+    }
+
+    bool emulateAbsIntFunction() const {
+        return false;
+    }
+
     const char* fbFetchColorName() const {
         return nullptr;
     }
@@ -329,6 +337,20 @@ public:
         sk_sp<GrShaderCaps> result = sk_make_sp<GrShaderCaps>(GrContextOptions());
         result->fVersionDeclString = "#version 400";
         result->fAddAndTrueToLoopCondition = true;
+        return result;
+    }
+
+    static sk_sp<GrShaderCaps> UnfoldShortCircuitAsTernary() {
+        sk_sp<GrShaderCaps> result = sk_make_sp<GrShaderCaps>(GrContextOptions());
+        result->fVersionDeclString = "#version 400";
+        result->fUnfoldShortCircuitAsTernary = true;
+        return result;
+    }
+
+    static sk_sp<GrShaderCaps> EmulateAbsIntFunction() {
+        sk_sp<GrShaderCaps> result = sk_make_sp<GrShaderCaps>(GrContextOptions());
+        result->fVersionDeclString = "#version 400";
+        result->fEmulateAbsIntFunction = true;
         return result;
     }
 };
