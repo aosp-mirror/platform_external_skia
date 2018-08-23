@@ -12,6 +12,8 @@
          disable_blend_equation_advanced)               \
   GPU_OP(DISABLE_DISCARD_FRAMEBUFFER,                   \
          disable_discard_framebuffer)                   \
+  GPU_OP(DISABLE_TEXTURE_STORAGE,                       \
+         disable_texture_storage)                       \
   GPU_OP(DISALLOW_LARGE_INSTANCED_DRAW,                 \
          disallow_large_instanced_draw)                 \
   GPU_OP(EMULATE_ABS_INT_FUNCTION,                      \
@@ -28,8 +30,12 @@
          max_texture_size_limit_4096)                   \
   GPU_OP(PACK_PARAMETERS_WORKAROUND_WITH_PACK_BUFFER,   \
          pack_parameters_workaround_with_pack_buffer)   \
+  GPU_OP(REMOVE_POW_WITH_CONSTANT_EXPONENT,             \
+         remove_pow_with_constant_exponent)             \
   GPU_OP(RESTORE_SCISSOR_ON_FBO_CHANGE,                 \
          restore_scissor_on_fbo_change)                 \
+  GPU_OP(REWRITE_DO_WHILE_LOOPS,                        \
+         rewrite_do_while_loops)                        \
   GPU_OP(UNBIND_ATTACHMENTS_ON_BOUND_RENDER_FBO_DELETE, \
          unbind_attachments_on_bound_render_fbo_delete) \
   GPU_OP(UNFOLD_SHORT_CIRCUIT_AS_TERNARY_OPERATION,     \

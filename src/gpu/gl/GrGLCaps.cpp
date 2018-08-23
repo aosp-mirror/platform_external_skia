@@ -1355,6 +1355,9 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         texStorageSupported = version >= GR_GL_VER(3,0) ||
                               ctxInfo.hasExtension("GL_EXT_texture_storage");
     }
+    if (fDriverBugWorkarounds.disable_texture_storage) {
+        texStorageSupported = false;
+    }
 
     bool textureRedSupport = false;
 
@@ -2579,6 +2582,14 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     if (fDriverBugWorkarounds.emulate_abs_int_function) {
         shaderCaps->fEmulateAbsIntFunction = true;
+    }
+
+    if (fDriverBugWorkarounds.rewrite_do_while_loops) {
+        shaderCaps->fRewriteDoWhileLoops = true;
+    }
+
+    if (fDriverBugWorkarounds.remove_pow_with_constant_exponent) {
+        shaderCaps->fRemovePowWithConstantExponent = true;
     }
 
     // Disabling advanced blend on various platforms with major known issues. We also block Chrome
