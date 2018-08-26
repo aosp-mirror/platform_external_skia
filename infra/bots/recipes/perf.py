@@ -199,6 +199,8 @@ def nanobench_flags(api, bot):
     match.append('~desk_carsvg.skp_1')
     match.append('~desk_tiger8svg.skp_1')
     match.append('~desk_wowwiki.skp')
+    match.append('~keymobi_booking_com.skp_1')
+    match.append('~keymobi_booking_com.skp_1_mpd')
     match.append('~keymobi_sfgate.skp_1')
     match.append('~keymobi_techcrunch_com.skp_1.1')
     match.append('~keymobi_techcrunch.skp_1.1')
@@ -380,7 +382,7 @@ TEST_BUILDERS = [
   'Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-ANGLE',
   'Perf-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Release-All-ANGLE',
   'Perf-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Release-All-Vulkan',
-  'Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-All',
+  'Perf-iOS-Clang-iPadPro-GPU-PowerVRGT7800-arm64-Release-All',
 ]
 
 

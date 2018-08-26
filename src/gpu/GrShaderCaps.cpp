@@ -41,6 +41,8 @@ GrShaderCaps::GrShaderCaps(const GrContextOptions& options) {
     fAddAndTrueToLoopCondition = false;
     fUnfoldShortCircuitAsTernary = false;
     fEmulateAbsIntFunction = false;
+    fRewriteDoWhileLoops = false;
+    fRemovePowWithConstantExponent = false;
     fFlatInterpolationSupport = false;
     fPreferFlatInterpolation = false;
     fNoPerspectiveInterpolationSupport = false;
@@ -110,6 +112,8 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Add and true to loops workaround", fAddAndTrueToLoopCondition);
     writer->appendBool("Unfold short circuit as ternary", fUnfoldShortCircuitAsTernary);
     writer->appendBool("Emulate abs(int) function", fEmulateAbsIntFunction);
+    writer->appendBool("Rewrite do while loops", fRewriteDoWhileLoops);
+    writer->appendBool("Rewrite pow with constant exponent", fRemovePowWithConstantExponent);
     writer->appendBool("Flat interpolation support", fFlatInterpolationSupport);
     writer->appendBool("Prefer flat interpolation", fPreferFlatInterpolation);
     writer->appendBool("No perspective interpolation support", fNoPerspectiveInterpolationSupport);
@@ -145,6 +149,8 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fAddAndTrueToLoopCondition);
         SkASSERT(!fUnfoldShortCircuitAsTernary);
         SkASSERT(!fEmulateAbsIntFunction);
+        SkASSERT(!fRewriteDoWhileLoops);
+        SkASSERT(!fRemovePowWithConstantExponent);
     }
 #if GR_TEST_UTILS
     fDualSourceBlendingSupport = fDualSourceBlendingSupport && !options.fSuppressDualSourceBlending;

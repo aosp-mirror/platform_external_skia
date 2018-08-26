@@ -189,6 +189,14 @@ public:
         return false;
     }
 
+    bool rewriteDoWhileLoops() const {
+        return false;
+    }
+
+    bool removePowWithConstantExponent() const {
+        return false;
+    }
+
     const char* fbFetchColorName() const {
         return nullptr;
     }
@@ -351,6 +359,20 @@ public:
         sk_sp<GrShaderCaps> result = sk_make_sp<GrShaderCaps>(GrContextOptions());
         result->fVersionDeclString = "#version 400";
         result->fEmulateAbsIntFunction = true;
+        return result;
+    }
+
+    static sk_sp<GrShaderCaps> RewriteDoWhileLoops() {
+        sk_sp<GrShaderCaps> result = sk_make_sp<GrShaderCaps>(GrContextOptions());
+        result->fVersionDeclString = "#version 400";
+        result->fRewriteDoWhileLoops = true;
+        return result;
+    }
+
+    static sk_sp<GrShaderCaps> RemovePowWithConstantExponent() {
+        sk_sp<GrShaderCaps> result = sk_make_sp<GrShaderCaps>(GrContextOptions());
+        result->fVersionDeclString = "#version 400";
+        result->fRemovePowWithConstantExponent = true;
         return result;
     }
 };

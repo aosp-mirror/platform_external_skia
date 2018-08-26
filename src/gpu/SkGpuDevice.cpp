@@ -406,12 +406,6 @@ void SkGpuDevice::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawRRect", fContext.get());
 
-    GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), fRenderTargetContext->colorSpaceInfo(), paint,
-                          this->ctm(), &grPaint)) {
-        return;
-    }
-
     SkMaskFilterBase* mf = as_MFB(paint.getMaskFilter());
     if (mf) {
         if (mf->hasFragmentProcessor()) {
@@ -420,34 +414,23 @@ void SkGpuDevice::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
     }
 
     GrStyle style(paint);
-    if (mf) {
-        // try to hit the fast path for drawing filtered round rects
-
-        SkRRect devRRect;
-        if (rrect.transform(this->ctm(), &devRRect)) {
-            if (SkRRectPriv::AllCornersCircular(devRRect)) {
-                if (mf->directFilterRRectMaskGPU(this->context(), fRenderTargetContext.get(),
-                                                 std::move(grPaint), this->clip(), this->ctm(),
-                                                 style.strokeRec(), rrect, devRRect)) {
-                    return;
-                }
-            }
-        }
-    }
 
     if (mf || style.pathEffect()) {
-        // The only mask filter the native rrect drawing code could've handle was taken
-        // care of above.
         // A path effect will presumably transform this rrect into something else.
         GrShape shape(rrect, style);
 
-        // TODO: this is throwing away to work we did to create the GrPaint
         GrBlurUtils::drawShapeWithMaskFilter(fContext.get(), fRenderTargetContext.get(),
                                              this->clip(), paint, this->ctm(), shape);
         return;
     }
 
     SkASSERT(!style.pathEffect());
+
+    GrPaint grPaint;
+    if (!SkPaintToGrPaint(this->context(), fRenderTargetContext->colorSpaceInfo(), paint,
+                          this->ctm(), &grPaint)) {
+        return;
+    }
 
     fRenderTargetContext->drawRRect(this->clip(), std::move(grPaint), GrAA(paint.isAntiAlias()),
                                     this->ctm(), rrect, style);
@@ -1027,7 +1010,7 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
         fp = GrSimpleTextureEffect::Make(std::move(proxy), texMatrix, samplerState);
     }
 
-    fp = GrColorSpaceXformEffect::Make(std::move(fp), bitmap.colorSpace(), bitmap.alphaType(),
+    fp = GrColorSpaceXformEffect::Make(std::move(fp), bitmap.colorSpace(),
                                        fRenderTargetContext->colorSpaceInfo().colorSpace());
     GrPaint grPaint;
     if (!SkPaintToGrPaintWithTexture(this->context(), fRenderTargetContext->colorSpaceInfo(), paint,
@@ -1100,7 +1083,7 @@ void SkGpuDevice::drawSpecial(SkSpecialImage* special, int left, int top, const 
     tmpUnfiltered.setImageFilter(nullptr);
 
     auto fp = GrSimpleTextureEffect::Make(std::move(proxy), SkMatrix::I());
-    fp = GrColorSpaceXformEffect::Make(std::move(fp), result->getColorSpace(), result->alphaType(),
+    fp = GrColorSpaceXformEffect::Make(std::move(fp), result->getColorSpace(),
                                        fRenderTargetContext->colorSpaceInfo().colorSpace());
     if (GrPixelConfigIsAlphaOnly(config)) {
         fp = GrFragmentProcessor::MakeInputPremulAndMulByOutput(std::move(fp));
@@ -1423,7 +1406,7 @@ void SkGpuDevice::drawProducerLattice(GrTextureProducer* producer,
     if (!proxy) {
         return;
     }
-    auto csxf = GrColorSpaceXform::Make(proxyColorSpace.get(), producer->alphaType(),
+    auto csxf = GrColorSpaceXform::Make(proxyColorSpace.get(), kPremul_SkAlphaType,
                                         dstColorSpace,         kPremul_SkAlphaType);
 
     fRenderTargetContext->drawImageLattice(this->clip(), std::move(grPaint), this->ctm(),

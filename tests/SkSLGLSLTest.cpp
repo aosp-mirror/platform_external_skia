@@ -2047,3 +2047,71 @@ DEF_TEST(SkSLWorkaroundEmulateAbsIntFunction, r) {
          SkSL::Program::kFragment_Kind
          );
 }
+
+DEF_TEST(SkSLWorkaroundRewriteDoWhileLoops, r) {
+    test(r,
+         "void main() {"
+         "    int i = 0;"
+         "    do {"
+         "      ++i;"
+         "      do {"
+         "        i++;"
+         "      } while (true);"
+         "    } while (i < 10);"
+         "    sk_FragColor = float4(i);"
+         "}",
+         *SkSL::ShaderCapsFactory::RewriteDoWhileLoops(),
+         "#version 400\n"
+         "out vec4 sk_FragColor;\n"
+         "void main() {\n"
+         "    int i = 0;\n"
+         "    bool _tmpLoopSeenOnce0 = false;\n"
+         "    while (true) {\n"
+         "        if (_tmpLoopSeenOnce0) {\n"
+         "            if (!(i < 10)) {\n"
+         "                break;\n"
+         "            }\n"
+         "        }\n"
+         "        _tmpLoopSeenOnce0 = true;\n"
+         "        {\n"
+         "            ++i;\n"
+         "            bool _tmpLoopSeenOnce1 = false;\n"
+         "            while (true) {\n"
+         "                if (_tmpLoopSeenOnce1) {\n"
+         "                    if (!true) {\n"
+         "                        break;\n"
+         "                    }\n"
+         "                }\n"
+         "                _tmpLoopSeenOnce1 = true;\n"
+         "                {\n"
+         "                    i++;\n"
+         "                }\n"
+         "            }\n"
+         "        }\n"
+         "    }\n"
+         "    sk_FragColor = vec4(float(i));\n"
+         "}\n",
+         SkSL::Program::kFragment_Kind
+         );
+}
+
+DEF_TEST(SkSLWorkaroundRemovePowWithConstantExponent, r) {
+    test(r,
+         "uniform float x;"
+         "uniform float y;"
+         "void main() {"
+         "    float z = pow(x + 1.0, y + 2.0);"
+         "    sk_FragColor = float4(z);"
+         "}",
+         *SkSL::ShaderCapsFactory::RemovePowWithConstantExponent(),
+         "#version 400\n"
+         "out vec4 sk_FragColor;\n"
+         "uniform float x;\n"
+         "uniform float y;\n"
+         "void main() {\n"
+         "    float z = exp2((y + 2.0) * log2(x + 1.0));\n"
+         "    sk_FragColor = vec4(z);\n"
+         "}\n",
+         SkSL::Program::kFragment_Kind
+         );
+}

@@ -470,6 +470,7 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         (*fFunctionClasses)["inverse"]     = FunctionClass::kInverse;
         (*fFunctionClasses)["inverseSqrt"] = FunctionClass::kInverseSqrt;
         (*fFunctionClasses)["min"]         = FunctionClass::kMin;
+        (*fFunctionClasses)["pow"]         = FunctionClass::kPow;
         (*fFunctionClasses)["saturate"]    = FunctionClass::kSaturate;
         (*fFunctionClasses)["texture"]     = FunctionClass::kTexture;
         (*fFunctionClasses)["transpose"]   = FunctionClass::kTranspose;
@@ -573,6 +574,21 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                     }
                 }
                 break;
+            case FunctionClass::kPow:
+                if (!fProgram.fSettings.fCaps->removePowWithConstantExponent()) {
+                    break;
+                }
+                // pow(x, y) on some NVIDIA drivers causes crashes if y is a
+                // constant.  It's hard to tell what constitutes "constant" here
+                // so just replace in all cases.
+
+                // Change pow(x, y) into exp2(y * log2(x))
+                this->write("exp2(");
+                this->writeExpression(*c.fArguments[1], kMultiplicative_Precedence);
+                this->write(" * log2(");
+                this->writeExpression(*c.fArguments[0], kSequence_Precedence);
+                this->write("))");
+                return;
             case FunctionClass::kSaturate:
                 SkASSERT(c.fArguments.size() == 1);
                 this->write("clamp(");
@@ -1334,11 +1350,56 @@ void GLSLCodeGenerator::writeWhileStatement(const WhileStatement& w) {
 }
 
 void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
-    this->write("do ");
+    if (!fProgram.fSettings.fCaps->rewriteDoWhileLoops()) {
+        this->write("do ");
+        this->writeStatement(*d.fStatement);
+        this->write(" while (");
+        this->writeExpression(*d.fTest, kTopLevel_Precedence);
+        this->write(");");
+        return;
+    }
+
+    // Otherwise, do the do while loop workaround, to rewrite loops of the form:
+    //     do {
+    //         CODE;
+    //     } while (CONDITION)
+    //
+    // to loops of the form
+    //     bool temp = false;
+    //     while (true) {
+    //         if (temp) {
+    //             if (!CONDITION) {
+    //                 break;
+    //             }
+    //         }
+    //         temp = true;
+    //         CODE;
+    //     }
+    String tmpVar = "_tmpLoopSeenOnce" + to_string(fVarCount++);
+    this->write("bool ");
+    this->write(tmpVar);
+    this->writeLine(" = false;");
+    this->writeLine("while (true) {");
+    fIndentation++;
+    this->write("if (");
+    this->write(tmpVar);
+    this->writeLine(") {");
+    fIndentation++;
+    this->write("if (!");
+    this->writeExpression(*d.fTest, kPrefix_Precedence);
+    this->writeLine(") {");
+    fIndentation++;
+    this->writeLine("break;");
+    fIndentation--;
+    this->writeLine("}");
+    fIndentation--;
+    this->writeLine("}");
+    this->write(tmpVar);
+    this->writeLine(" = true;");
     this->writeStatement(*d.fStatement);
-    this->write(" while (");
-    this->writeExpression(*d.fTest, kTopLevel_Precedence);
-    this->write(");");
+    this->writeLine();
+    fIndentation--;
+    this->write("}");
 }
 
 void GLSLCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
