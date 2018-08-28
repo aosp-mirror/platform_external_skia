@@ -8,11 +8,19 @@
 #include "SkottieValue.h"
 
 #include "SkColor.h"
+#include "SkottieJson.h"
+#include "SkottiePriv.h"
 #include "SkNx.h"
 #include "SkPoint.h"
 #include "SkSize.h"
 
 namespace  skottie {
+
+template <>
+bool ValueTraits<ScalarValue>::FromJSON(const skjson::Value& jv, const internal::AnimationBuilder*,
+                                        ScalarValue* v) {
+    return Parse(jv, v);
+}
 
 template <>
 bool ValueTraits<ScalarValue>::CanLerp(const ScalarValue&, const ScalarValue&) {
@@ -30,6 +38,12 @@ template <>
 template <>
 SkScalar ValueTraits<ScalarValue>::As<SkScalar>(const ScalarValue& v) {
     return v;
+}
+
+template <>
+bool ValueTraits<VectorValue>::FromJSON(const skjson::Value& jv, const internal::AnimationBuilder*,
+                                        VectorValue* v) {
+    return Parse(jv, v);
 }
 
 template <>
@@ -78,6 +92,67 @@ template <>
 SkSize ValueTraits<VectorValue>::As<SkSize>(const VectorValue& vec) {
     const auto pt = ValueTraits::As<SkPoint>(vec);
     return SkSize::Make(pt.x(), pt.y());
+}
+
+namespace {
+
+bool ParsePointVec(const skjson::Value& jv, std::vector<SkPoint>* pts) {
+    if (!jv.is<skjson::ArrayValue>())
+        return false;
+    const auto& av = jv.as<skjson::ArrayValue>();
+
+    pts->clear();
+    pts->reserve(av.size());
+
+    std::vector<float> vec;
+    for (size_t i = 0; i < av.size(); ++i) {
+        if (!Parse(av[i], &vec) || vec.size() != 2)
+            return false;
+        pts->push_back(SkPoint::Make(vec[0], vec[1]));
+    }
+
+    return true;
+}
+
+} // namespace
+
+template <>
+bool ValueTraits<ShapeValue>::FromJSON(const skjson::Value& jv,
+                                       const internal::AnimationBuilder* abuilder,
+                                       ShapeValue* v) {
+    SkASSERT(v->fVertices.empty());
+
+    // Some versions wrap values as single-element arrays.
+    if (const skjson::ArrayValue* av = jv) {
+        if (av->size() == 1) {
+            return FromJSON((*av)[0], abuilder, v);
+        }
+    }
+
+    if (!jv.is<skjson::ObjectValue>())
+        return false;
+    const auto& ov = jv.as<skjson::ObjectValue>();
+
+    std::vector<SkPoint> inPts,  // Cubic Bezier "in" control points, relative to vertices.
+                         outPts, // Cubic Bezier "out" control points, relative to vertices.
+                         verts;  // Cubic Bezier vertices.
+
+    if (!ParsePointVec(ov["i"], &inPts) ||
+        !ParsePointVec(ov["o"], &outPts) ||
+        !ParsePointVec(ov["v"], &verts) ||
+        inPts.size() != outPts.size() ||
+        inPts.size() != verts.size()) {
+
+        return false;
+    }
+
+    v->fVertices.reserve(inPts.size());
+    for (size_t i = 0; i < inPts.size(); ++i) {
+        v->fVertices.push_back(BezierVertex({inPts[i], outPts[i], verts[i]}));
+    }
+    v->fClosed = ParseDefault<bool>(ov["c"], false);
+
+    return true;
 }
 
 template <>
@@ -157,6 +232,71 @@ SkPath ValueTraits<ShapeValue>::As<SkPath>(const ShapeValue& shape) {
     path.setIsVolatile(shape.fVolatile);
 
     return path;
+}
+
+template <>
+bool ValueTraits<TextValue>::FromJSON(const skjson::Value& jv,
+                                       const internal::AnimationBuilder* abuilder,
+                                       TextValue* v) {
+    const skjson::ObjectValue* jtxt = jv;
+    if (!jtxt) {
+        return false;
+    }
+
+    const skjson::StringValue* font_name = (*jtxt)["f"];
+    const skjson::StringValue* text      = (*jtxt)["t"];
+    const skjson::NumberValue* text_size = (*jtxt)["s"];
+    if (!font_name || !text || !text_size ||
+        !(v->fTypeface = abuilder->findFont(SkString(font_name->begin(), font_name->size())))) {
+        return false;
+    }
+    v->fText.set(text->begin(), text->size());
+    v->fTextSize = **text_size;
+
+    static constexpr SkPaint::Align gAlignMap[] = {
+        SkPaint::kLeft_Align,  // 'j': 0
+        SkPaint::kRight_Align, // 'j': 1
+        SkPaint::kCenter_Align // 'j': 2
+    };
+    v->fAlign = gAlignMap[SkTMin<size_t>(ParseDefault<size_t>((*jtxt)["j"], 0),
+                                         SK_ARRAY_COUNT(gAlignMap))];
+
+    const auto& parse_color = [] (const skjson::ArrayValue* jcolor,
+                                  const internal::AnimationBuilder* abuilder,
+                                  SkColor* c) {
+        if (!jcolor) {
+            return false;
+        }
+
+        VectorValue color_vec;
+        if (!ValueTraits<VectorValue>::FromJSON(*jcolor, abuilder, &color_vec)) {
+            return false;
+        }
+
+        *c = ValueTraits<VectorValue>::As<SkColor>(color_vec);
+        return true;
+    };
+
+    v->fHasFill   = parse_color((*jtxt)["fc"], abuilder, &v->fFillColor);
+    v->fHasStroke = parse_color((*jtxt)["sc"], abuilder, &v->fStrokeColor);
+
+    if (v->fHasStroke) {
+        v->fStrokeWidth = ParseDefault((*jtxt)["s"], 0.0f);
+    }
+
+    return true;
+}
+
+template <>
+bool ValueTraits<TextValue>::CanLerp(const TextValue&, const TextValue&) {
+    // Text values are never interpolated, but we pretend that they could be.
+    return true;
+}
+
+template <>
+void ValueTraits<TextValue>::Lerp(const TextValue& v0, const TextValue&, float, TextValue* result) {
+    // Text value keyframes are treated as selectors, not as interpolated values.
+    *result = v0;
 }
 
 } // namespace skottie

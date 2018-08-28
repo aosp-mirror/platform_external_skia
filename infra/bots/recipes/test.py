@@ -763,14 +763,12 @@ def dm_flags(api, bot):
     match.append('~^GrContext_maxSurfaceSamplesForColorType$')
     match.append('~^GrContextFactory_sharedContexts$')
     match.append('~^GrPipelineDynamicStateTest$')
-    match.append('~^GrSurfaceRenderability$')
     match.append('~^InitialTextureClear$')
     match.append('~^PromiseImageTest$')
     match.append('~^ResourceAllocatorTest$')
     match.append('~^RGB565TextureTest$')
     match.append('~^RGBA4444TextureTest$')
     match.append('~^TransferPixelsTest$')
-    match.append('~^skbug6653$')
     match.append('~^SurfaceCreationWithColorSpace_Gpu$')
     match.append('~^SurfaceSemaphores$')
     match.append('~^VertexAttributeCount$')
@@ -821,6 +819,7 @@ def key_params(api):
     if k not in blacklist:
       flat.append(k)
       flat.append(api.vars.builder_cfg[k])
+
   return flat
 
 
@@ -928,7 +927,12 @@ def test_steps(api):
       args.extend(['--lotties', api.flavor.device_dirs.lotties_dir])
 
   args.append('--key')
-  args.extend(key_params(api))
+  keys = key_params(api)
+
+  if 'Lottie' in api.vars.builder_cfg.get('extra_config', ''):
+    keys.extend(['renderer', 'skottie'])
+
+  args.extend(keys)
 
   if use_hash_file:
     args.extend(['--uninterestingHashesFile', hashes_file])

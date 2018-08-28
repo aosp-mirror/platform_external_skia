@@ -8,7 +8,6 @@
 #include "SkottiePriv.h"
 
 #include "SkJSON.h"
-#include "SkottieAnimator.h"
 #include "SkottieJson.h"
 #include "SkottieValue.h"
 #include "SkMakeUnique.h"
@@ -20,10 +19,11 @@ namespace skottie {
 namespace internal {
 
 sk_sp<sksg::RenderNode> AnimationBuilder::attachPrecompLayer(const skjson::ObjectValue& jlayer,
-                                                             AnimatorScope* ascope) {
+                                                             AnimatorScope* ascope) const {
     const skjson::ObjectValue* time_remap = jlayer["tm"];
-    const auto start_time = ParseDefault<float>(jlayer["st"], 0.0f),
-             stretch_time = ParseDefault<float>(jlayer["sr"], 1.0f);
+    // Empirically, a time mapper supersedes start/stretch.
+    const auto start_time = time_remap ? 0.0f : ParseDefault<float>(jlayer["st"], 0.0f),
+             stretch_time = time_remap ? 1.0f : ParseDefault<float>(jlayer["sr"], 1.0f);
     const auto requires_time_mapping = !SkScalarNearlyEqual(start_time  , 0) ||
                                        !SkScalarNearlyEqual(stretch_time, 1) ||
                                        time_remap;
@@ -70,7 +70,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachPrecompLayer(const skjson::Objec
             // because both the lambda and the mapper are scoped/owned by ctx->fAnimators.
             auto* raw_mapper = time_mapper.get();
             auto  frame_rate = fFrameRate;
-            BindProperty<ScalarValue>(*time_remap, ascope,
+            this->bindProperty<ScalarValue>(*time_remap, ascope,
                     [raw_mapper, frame_rate](const ScalarValue& t) {
                         raw_mapper->remapTime(t * frame_rate);
                     });
