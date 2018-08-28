@@ -210,8 +210,6 @@ cc_library_static {
         "src/core/SkColorSpaceXformCanvas.cpp",
         "src/core/SkColorSpaceXformSteps.cpp",
         "src/core/SkColorSpaceXformer.cpp",
-        "src/core/SkColorSpace_A2B.cpp",
-        "src/core/SkColorSpace_ICC.cpp",
         "src/core/SkColorSpace_XYZ.cpp",
         "src/core/SkConvertPixels.cpp",
         "src/core/SkCoverageDelta.cpp",
