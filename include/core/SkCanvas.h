@@ -1946,16 +1946,6 @@ public:
     void drawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[], SkScalar constY,
                       const SkPaint& paint);
 
-    /** Deprecated.
-    */
-    void drawTextOnPathHV(const void* text, size_t byteLength, const SkPath& path, SkScalar hOffset,
-                          SkScalar vOffset, const SkPaint& paint);
-
-    /** Deprecated.
-    */
-    void drawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
-                        const SkMatrix* matrix, const SkPaint& paint);
-
     /** Draws text, transforming each glyph by the corresponding SkRSXform,
         using clip, SkMatrix, and SkPaint paint.
 
@@ -2431,11 +2421,6 @@ protected:
     virtual void onDrawPosTextH(const void* text, size_t byteLength,
                                 const SkScalar xpos[], SkScalar constY,
                                 const SkPaint& paint);
-#ifdef SK_SUPPORT_LEGACY_ONDRAWTEXTONPATH
-    // DEPRECATED -- do not override
-    virtual void onDrawTextOnPath(const void*, size_t, const SkPath&, const SkMatrix*,
-                                  const SkPaint&) {}
-#endif
     virtual void onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
                                    const SkRect* cullRect, const SkPaint& paint);
     virtual void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,

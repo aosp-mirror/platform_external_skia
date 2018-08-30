@@ -168,6 +168,20 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface, report
         if (backendTex.isValid()) {
             gpu->deleteTestingOnlyBackendTexture(backendTex);
         }
+
+        GrBackendRenderTarget backendRenderTarget = gpu->createTestingOnlyBackendRenderTarget(
+                16, 16, SkColorTypeToGrColorType(colorType));
+        can = ctxInfo.grContext()->colorTypeSupportedAsSurface(colorType);
+        surf = SkSurface::MakeFromBackendRenderTarget(ctxInfo.grContext(), backendRenderTarget,
+                                                      kTopLeft_GrSurfaceOrigin, colorType, nullptr,
+                                                      nullptr);
+        REPORTER_ASSERT(reporter, can == SkToBool(surf), "ct: %d, can: %d, surf: %d", colorType,
+                        can, SkToBool(surf));
+        surf.reset();
+        ctxInfo.grContext()->flush();
+        if (backendRenderTarget.isValid()) {
+            gpu->deleteTestingOnlyBackendRenderTarget(backendRenderTarget);
+        }
     }
 }
 
@@ -431,8 +445,6 @@ static void test_copy_on_write(skiatest::Reporter* reporter, SkSurface* surface)
     EXPECT_COPY_ON_WRITE(drawBitmapNine(testBitmap, testIRect, testRect, nullptr))
     EXPECT_COPY_ON_WRITE(drawString(testText, 0, 1, testPaint))
     EXPECT_COPY_ON_WRITE(drawPosText(testText.c_str(), testText.size(), testPoints2, \
-        testPaint))
-    EXPECT_COPY_ON_WRITE(drawTextOnPath(testText.c_str(), testText.size(), testPath, nullptr, \
         testPaint))
 }
 DEF_TEST(SurfaceCopyOnWrite, reporter) {

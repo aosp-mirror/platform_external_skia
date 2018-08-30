@@ -93,7 +93,6 @@ public:
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
-    bool onCanLazyGenerateOnGPU() const override;
     sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>, SkColorType) const override;
 
     bool onIsValid(GrContext*) const override;
@@ -127,8 +126,6 @@ public:
     // TODO: Need to pass in dstColorSpace to fold into key here?
     void makeCacheKeyFromOrigKey(const GrUniqueKey& origKey, GrUniqueKey* cacheKey) override;
 #endif
-
-    SkImageInfo buildCacheInfo() const override;
 
 private:
     class ScopedGenerator;
@@ -230,16 +227,6 @@ SkImage_Lazy::SkImage_Lazy(Validator* validator)
         , fOrigin(validator->fOrigin) {
     SkASSERT(fSharedGenerator);
     fUniqueID = validator->fUniqueID;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
-SkImageInfo SkImage_Lazy::buildCacheInfo() const {
-    if (kGray_8_SkColorType == fInfo.colorType()) {
-        return fInfo.makeColorSpace(nullptr);
-    } else {
-        return fInfo;
-    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -385,22 +372,12 @@ sk_sp<SkData> SkImage_Lazy::onRefEncoded() const {
 
 bool SkImage_Lazy::getROPixels(SkBitmap* bitmap, SkColorSpace* dstColorSpace,
                                CachingHint chint) const {
-    const SkImageInfo cacheInfo = this->buildCacheInfo();
-    return this->lockAsBitmap(bitmap, chint, cacheInfo);
+    return this->lockAsBitmap(bitmap, chint, fInfo);
 }
 
 bool SkImage_Lazy::onIsValid(GrContext* context) const {
     ScopedGenerator generator(fSharedGenerator);
     return generator->isValid(context);
-}
-
-bool SkImage_Lazy::onCanLazyGenerateOnGPU() const {
-#if SK_SUPPORT_GPU
-    ScopedGenerator generator(fSharedGenerator);
-    return SkImageGenerator::TexGenType::kNone != generator->onCanGenerateTexture();
-#else
-    return false;
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -507,16 +484,11 @@ static void set_key_on_proxy(GrProxyProvider* proxyProvider,
 sk_sp<SkColorSpace> SkImage_Lazy::getColorSpace(GrContext* ctx, SkColorSpace* dstColorSpace) {
     // TODO: Is this ever needed? Is the output of this function going to be:
     // return dstColorSpace ? fInfo.refColorSpace() : dstColorSpace;
-    // Yes, except for gray?
-    if (!dstColorSpace) {
-        // In legacy mode, we do no modification to the image's color space or encoding.
-        // Subsequent legacy drawing is likely to ignore the color space, but some clients
-        // may want to know what space the image data is in, so return it.
-        return fInfo.refColorSpace();
-    } else {
-        SkImageInfo cacheInfo = this->buildCacheInfo();
-        return cacheInfo.refColorSpace();
-    }
+
+    // In legacy mode, we do no modification to the image's color space or encoding.
+    // Subsequent legacy drawing is likely to ignore the color space, but some clients
+    // may want to know what space the image data is in, so return it.
+    return fInfo.refColorSpace();
 }
 
 /*
@@ -568,7 +540,7 @@ sk_sp<GrTextureProxy> SkImage_Lazy::lockTextureProxy(GrContext* ctx,
 
     // What format are we going to ask the generator to create?
     // TODO: Based on the dstColorSpace?
-    const SkImageInfo cacheInfo = this->buildCacheInfo();
+    const SkImageInfo cacheInfo = fInfo;
 
     // 2. Ask the generator to natively create one
     if (!proxy) {
