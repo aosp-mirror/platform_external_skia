@@ -470,7 +470,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"GalaxyS6":        {"zerofltetmo", "NRD90M_G920TUVU5FQK1"},
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXU2EREM"}, // This is Oreo.
 				"MotoG4":          {"athene", "NPJS25.93-14.7-8"},
-				"NVIDIA_Shield":   {"foster", "NRD90M_1915764_848"},
+				"NVIDIA_Shield":   {"foster", "OPR6.170623.010"},
 				"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
@@ -545,8 +545,8 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
 					"IntelIris540":  "8086:1926-24.20.100.6229",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
-					"RadeonHD7770":  "1002:683d-23.20.15033.5003",
-					"RadeonR9M470X": "1002:6646-23.20.15033.5003",
+					"RadeonHD7770":  "1002:683d-24.20.13001.1010",
+					"RadeonR9M470X": "1002:6646-24.20.13001.1010",
 					"QuadroP400":    "10de:1cb3-23.21.13.9103",
 				}[parts["cpu_or_gpu_value"]]
 				if !ok {
