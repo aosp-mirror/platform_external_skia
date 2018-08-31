@@ -76,6 +76,12 @@ public:
 
         return {lookupX, lookupY};
     }
+
+    static constexpr uint16_t kSkSideTooBigForAtlas = 256;
+
+    inline static bool GlyphTooBigForAtlas(const SkGlyph& glyph) {
+        return glyph.fWidth > kSkSideTooBigForAtlas || glyph.fHeight > kSkSideTooBigForAtlas;
+    }
 };
 
 class SkGlyphRun {
@@ -98,11 +104,6 @@ public:
     template <typename PerGlyphPos>
     void forEachGlyphAndPosition(PerGlyphPos perGlyph) const;
 
-    // The temporaryShunt calls are to allow inter-operating with existing code while glyph runs
-    // are developed.
-    void temporaryShuntToDrawPosText(SkBaseDevice* device, SkPoint origin);
-    using TemporaryShuntCallback = std::function<void(size_t, const char*, const SkScalar*)>;
-    void temporaryShuntToCallback(TemporaryShuntCallback callback);
     void filloutGlyphsAndPositions(SkGlyphID* glyphIDs, SkPoint* positions);
 
     size_t runSize() const { return fGlyphIDs.size(); }
@@ -242,11 +243,6 @@ public:
     auto size()  const -> decltype(fGlyphRuns.size())          { return fGlyphRuns.size();   }
     auto empty() const -> decltype(fGlyphRuns.empty())         { return fGlyphRuns.empty();  }
     auto operator [] (size_t i) const -> decltype(fGlyphRuns[i]) { return fGlyphRuns[i];     }
-    void temporaryShuntToDrawPosText(SkBaseDevice* device, SkPoint origin) const {
-        for (auto& run : fGlyphRuns) {
-            run.temporaryShuntToDrawPosText(device, origin);
-        }
-    }
 };
 
 class SkGlyphIDSet {
@@ -343,10 +339,6 @@ inline void SkGlyphRun::forEachGlyphAndPosition(PerGlyphPos perGlyph) const {
     }
 }
 
-inline static bool glyph_too_big_for_atlas(const SkGlyph& glyph) {
-    return glyph.fWidth > 256 || glyph.fHeight > 256;
-}
-
 inline static SkRect rect_to_draw(
         const SkGlyph& glyph, SkPoint origin, SkScalar textScale, bool isDFT) {
 
@@ -406,7 +398,7 @@ void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
     auto eachGlyph =
             [perGlyph{std::move(perGlyph)}, perPath{std::move(perPath)}]
                     (const SkGlyph& glyph, SkPoint pt, SkPoint mappedPt) {
-                if (glyph_too_big_for_atlas(glyph)) {
+                if (SkGlyphCacheCommon::GlyphTooBigForAtlas(glyph)) {
                     SkScalar sx = SkScalarFloorToScalar(mappedPt.fX),
                             sy = SkScalarFloorToScalar(mappedPt.fY);
 

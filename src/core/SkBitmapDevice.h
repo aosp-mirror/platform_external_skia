@@ -142,17 +142,9 @@ private:
     friend class SkDraw;
     friend class SkDrawIter;
     friend class SkDrawTiler;
-    friend class SkDeviceFilteredPaint;
     friend class SkSurface_Raster;
 
     class BDDraw;
-
-    /**
-     *  Does not handle text decoration.
-     *  Decorations (underline and stike-thru) will be handled by SkCanvas.
-     */
-    void drawPosText(const void* text, size_t len, const SkScalar pos[],
-                     int scalarsPerPos, const SkPoint& offset, const SkPaint& paint) override;
 
     // used to change the backend's pixels (and possibly config/rowbytes)
     // but cannot change the width/height, so there should be no change to
