@@ -53,19 +53,19 @@ test-continuous-asmjs:
 # you will need to manually call make npm-test to re-build.
 test-docker: npm-test
 	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v4 \
-karma start /SRC/experimental/pathkit/karma.conf.js --single-run
+karma start /SRC/modules/pathkit/karma.conf.js --single-run
 	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC -e ASM_JS=1 gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v4 \
-karma start /SRC/experimental/pathkit/karma.conf.js --single-run
+karma start /SRC/modules/pathkit/karma.conf.js --single-run
 
 test-docker-continuous:
 	echo "Assuming make npm-test has also been run by a user (if needed)"
 	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v4 \
-karma start /SRC/experimental/pathkit/karma.conf.js --no-single-run
+karma start /SRC/modules/pathkit/karma.conf.js --no-single-run
 
 test-docker-continuous-asmjs:
 	echo "Assuming make npm-test has also been run by a user (if needed)"
 	docker run --shm-size=2gb -v $$SKIA_ROOT:/SRC -e ASM_JS=1 gcr.io/skia-public/karma-chrome-tests:68.0.3440.106_v4 \
-karma start /SRC/experimental/pathkit/karma.conf.js --no-single-run
+karma start /SRC/modules/pathkit/karma.conf.js --no-single-run
 
 npm-test:
 	# This compile time is typically faster than release and good for use with
@@ -93,38 +93,38 @@ npm-debug:
 	cp ../../out/pathkit/pathkit.js.map ./npm-asmjs/bin/debug/pathkit.js.map
 
 example:
-	npm install experimental-pathkit-wasm
+	npm install pathkit-asmjs pathkit-wasm
 	echo "Go check out localhost:8000/npm-wasm/example.html"
 	python serve.py
 
 local-example:
-	rm -rf node_modules/experimental-pathkit-wasm
-	rm -rf node_modules/experimental-pathkit-asmjs
+	rm -rf node_modules/pathkit-wasm
+	rm -rf node_modules/pathkit-asmjs
 	mkdir -p node_modules
-	ln -s -T ../npm-wasm  node_modules/experimental-pathkit-wasm
-	ln -s -T ../npm-asmjs node_modules/experimental-pathkit-asmjs
+	ln -s -T ../npm-wasm  node_modules/pathkit-wasm
+	ln -s -T ../npm-asmjs node_modules/pathkit-asmjs
 	echo "Go check out http://localhost:8000/npm-wasm/example.html"
 	echo "or http://localhost:8000/npm-asmjs/example.html"
 	python serve.py
 
 local-example-test:
-	rm -rf node_modules/experimental-pathkit-wasm
-	rm -rf node_modules/experimental-pathkit-asmjs
-	mkdir -p node_modules/experimental-pathkit-wasm
-	mkdir -p node_modules/experimental-pathkit-asmjs
-	ln -s -T ../../npm-wasm/bin/test node_modules/experimental-pathkit-wasm/bin
-	ln -s -T ../../npm-asmjs/bin/test node_modules/experimental-pathkit-asmjs/bin
+	rm -rf node_modules/pathkit-wasm
+	rm -rf node_modules/pathkit-asmjs
+	mkdir -p node_modules/pathkit-wasm
+	mkdir -p node_modules/pathkit-asmjs
+	ln -s -T ../../npm-wasm/bin/test node_modules/pathkit-wasm/bin
+	ln -s -T ../../npm-asmjs/bin/test node_modules/pathkit-asmjs/bin
 	echo "Go check out localhost:8000/npm-wasm/example.html"
 	echo "or http://localhost:8000/npm-asmjs/example.html"
 	python serve.py
 
 local-example-debug:
-	rm -rf node_modules/experimental-pathkit-wasm
-	rm -rf node_modules/experimental-pathkit-asmjs
-	mkdir -p node_modules/experimental-pathkit-wasm
-	mkdir -p node_modules/experimental-pathkit-asmjs
-	ln -s -T ../../npm-wasm/bin/debug node_modules/experimental-pathkit-wasm/bin
-	ln -s -T ../../npm-asmjs/bin/debug node_modules/experimental-pathkit-asmjs/bin
+	rm -rf node_modules/pathkit-wasm
+	rm -rf node_modules/pathkit-asmjs
+	mkdir -p node_modules/pathkit-wasm
+	mkdir -p node_modules/pathkit-asmjs
+	ln -s -T ../../npm-wasm/bin/debug node_modules/pathkit-wasm/bin
+	ln -s -T ../../npm-asmjs/bin/debug node_modules/pathkit-asmjs/bin
 	echo "Go check out localhost:8000/npm-wasm/example.html"
 	echo "or http://localhost:8000/npm-asmjs/example.html"
 	python serve.py

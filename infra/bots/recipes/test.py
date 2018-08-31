@@ -185,10 +185,6 @@ def dm_flags(api, bot):
       # skbug.com/7523 - Flaky on various GPUs
       blacklist('gltestthreading gm _ orientation')
 
-    # Test SkColorSpaceXformCanvas on a few bots
-    if 'GTX1070' in bot:
-      configs.append('gbr-gl')
-
     # CommandBuffer bot *only* runs the command_buffer config.
     if 'CommandBuffer' in bot:
       configs = ['commandbuffer']
@@ -235,6 +231,11 @@ def dm_flags(api, bot):
         blacklist('gltestpersistentcache gm _ atlastext')
         blacklist('gltestpersistentcache gm _ dftext')
         blacklist('gltestpersistentcache gm _ glyph_pos_h_b')
+
+    # Test SkColorSpaceXformCanvas and rendering to wrapped dsts on a few bots
+    if 'BonusConfigs' in api.vars.extra_tokens:
+      configs = ['gbr-gl', 'glbetex', 'glbert']
+
 
     if 'ChromeOS' in bot:
       # Just run GLES for now - maybe add gles_msaa4 in the future
@@ -657,6 +658,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'aaxfermodes'])
     blacklist(['vk', 'gm', '_', 'dont_clip_to_layer'])
     blacklist(['vk', 'gm', '_', 'dftext'])
+    blacklist(['vk', 'gm', '_', 'dftext_blob_persp'])
     blacklist(['vk', 'gm', '_', 'drawregionmodes'])
     blacklist(['vk', 'gm', '_', 'filterfastbounds'])
     blacklist(['vk', 'gm', '_', 'fontmgr_iter'])
@@ -707,26 +709,11 @@ def dm_flags(api, bot):
     match.append('~^RGBA4444TextureTest$')
     match.append('~^WritePixelsNonTextureMSAA_Gpu$')
 
-  if (('RadeonR9M470X' in bot or 'RadeonHD7770' in bot) and 'ANGLE' in bot):
-    # skia:7096
-    match.append('~PinnedImageTest')
-
   if 'ANGLE' in bot:
     # skia:7835
     match.append('~BlurMaskBiggerThanDest')
 
-  if 'IntelIris540' in bot and 'ANGLE' in bot:
-    for config in ['angle_d3d9_es2', 'angle_d3d11_es2', 'angle_gl_es2']:
-      # skia:6103
-      blacklist([config, 'gm', '_', 'multipicturedraw_invpathclip_simple'])
-      blacklist([config, 'gm', '_', 'multipicturedraw_noclip_simple'])
-      blacklist([config, 'gm', '_', 'multipicturedraw_pathclip_simple'])
-      blacklist([config, 'gm', '_', 'multipicturedraw_rectclip_simple'])
-      blacklist([config, 'gm', '_', 'multipicturedraw_rrectclip_simple'])
-      # skia:6141
-      blacklist([config, 'gm', '_', 'discard'])
-
-  if 'IntelIris6100' in bot and 'ANGLE' in bot:
+  if 'IntelIris6100' in bot and 'ANGLE' in bot and 'Release' in bot:
     # skia:7376
     match.append('~^ProcessorOptimizationValidationTest$')
 
@@ -1025,17 +1012,16 @@ TEST_BUILDERS = [
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1',
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3',
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Lottie',
-  'Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All-ANGLE',
+  'Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-BonusConfigs',
   ('Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All'
    '-ReleaseAndAbandonGpuContext'),
   'Test-Win10-Clang-NUC5i7RYH-CPU-AVX2-x86_64-Debug-All-NativeFonts_GDI',
-  'Test-Win10-Clang-NUC5i7RYH-GPU-IntelIris6100-x86_64-Debug-All-ANGLE',
+  'Test-Win10-Clang-NUC5i7RYH-GPU-IntelIris6100-x86_64-Release-All-ANGLE',
   'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-ANGLE',
   'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-Vulkan',
   'Test-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-All-ANGLE',
   'Test-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Release-All-Vulkan',
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
-  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
