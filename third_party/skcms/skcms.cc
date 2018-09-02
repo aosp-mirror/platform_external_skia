@@ -1873,17 +1873,27 @@ namespace baseline {
     using  U8 = Vec<N,uint8_t>;
 #endif
 
-    #define ATTR
     #include "src/Transform_inl.h"
     #undef N
-    #undef ATTR
 }
 
 // Now, instantiate any other versions of run_program() we may want for runtime detection.
-#if !defined(SKCMS_PORTABLE) && (defined(__clang__) || defined(__GNUC__)) \
-        && defined(__x86_64__) && !defined(__AVX2__)
+#if !defined(SKCMS_PORTABLE) &&                           \
+        (( defined(__clang__) && __clang_major__ >= 5) || \
+         (!defined(__clang__) && defined(__GNUC__)))      \
+     && defined(__x86_64__) && !defined(__AVX2__)
+
+    #if defined(__clang__)
+        #pragma clang attribute push(__attribute__((target("avx2,f16c"))), apply_to=function)
+    #elif defined(__GNUC__)
+        #pragma GCC push_options
+        #pragma GCC target("avx2,f16c")
+    #endif
 
     namespace hsw {
+        #define USING_AVX
+        #define USING_AVX_F16C
+        #define USING_AVX2
         #define N 8
         using   F = Vec<N,float>;
         using I32 = Vec<N,int32_t>;
@@ -1892,41 +1902,17 @@ namespace baseline {
         using U16 = Vec<N,uint16_t>;
         using  U8 = Vec<N,uint8_t>;
 
-        #define ATTR __attribute__((target("avx2,f16c")))
-
-        // We check these guards to see if we have support for these features.
-        // They're likely _not_ defined here in our baseline build config.
-        #ifndef __AVX__
-            #define __AVX__ 1
-            #define UNDEF_AVX
-        #endif
-        #ifndef __F16C__
-            #define __F16C__ 1
-            #define UNDEF_F16C
-        #endif
-        #ifndef __AVX2__
-            #define __AVX2__ 1
-            #define UNDEF_AVX2
-        #endif
-
         #include "src/Transform_inl.h"
 
+        // src/Transform_inl.h will undefine USING_* for us.
         #undef N
-        #undef ATTR
-
-        #ifdef UNDEF_AVX
-            #undef __AVX__
-            #undef UNDEF_AVX
-        #endif
-        #ifdef UNDEF_F16C
-            #undef __F16C__
-            #undef UNDEF_F16C
-        #endif
-        #ifdef UNDEF_AVX2
-            #undef __AVX2__
-            #undef UNDEF_AVX2
-        #endif
     }
+
+    #if defined(__clang__)
+        #pragma clang attribute pop
+    #elif defined(__GNUC__)
+        #pragma GCC pop_options
+    #endif
 
     #define TEST_FOR_HSW
 
@@ -2068,10 +2054,9 @@ bool skcms_Transform(const void*             src,
     }
 
     // We can't transform in place unless the PixelFormats are the same size.
-    if (dst == src && (dstFmt >> 1) != (srcFmt >> 1)) {
+    if (dst == src && dst_bpp != src_bpp) {
         return false;
     }
-    // TODO: this check lazilly disallows U16 <-> F16, but that would actually be fine.
     // TODO: more careful alias rejection (like, dst == src + 1)?
 
     Op          program  [32];
@@ -2125,11 +2110,7 @@ bool skcms_Transform(const void*             src,
         *ops++ = Op_unpremul;
     }
 
-    // TODO: We can skip this work if both srcAlpha and dstAlpha are PremulLinear, and the profiles
-    // are the same. Also, if dstAlpha is PremulLinear, and SrcAlpha is Opaque.
-    if (dstProfile != srcProfile ||
-        srcAlpha == skcms_AlphaFormat_PremulLinear ||
-        dstAlpha == skcms_AlphaFormat_PremulLinear) {
+    if (dstProfile != srcProfile) {
 
         if (!prep_for_destination(dstProfile,
                                   &from_xyz, &inv_dst_tf_r, &inv_dst_tf_b, &inv_dst_tf_g)) {
@@ -2201,13 +2182,6 @@ bool skcms_Transform(const void*             src,
             return false;
         }
 
-        // At this point our source colors are linear, either RGB (XYZ-type profiles)
-        // or XYZ (A2B-type profiles). Unpremul is a linear operation (multiply by a
-        // constant 1/a), so either way we can do it now if needed.
-        if (srcAlpha == skcms_AlphaFormat_PremulLinear) {
-            *ops++ = Op_unpremul;
-        }
-
         // A2B sources should already be in XYZD50 at this point.
         // Others still need to be transformed using their toXYZD50 matrix.
         // N.B. There are profiles that contain both A2B tags and toXYZD50 matrices.
@@ -2228,10 +2202,6 @@ bool skcms_Transform(const void*             src,
             from_xyz = skcms_Matrix3x3_concat(&from_xyz, to_xyz);
             *ops++  = Op_matrix_3x3;
             *args++ = &from_xyz;
-        }
-
-        if (dstAlpha == skcms_AlphaFormat_PremulLinear) {
-            *ops++ = Op_premul;
         }
 
         // Encode back to dst RGB using its parametric transfer functions.

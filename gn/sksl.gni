@@ -10,6 +10,7 @@ skia_sksl_sources = [
   "$_src/sksl/SkSLCFGGenerator.cpp",
   "$_src/sksl/SkSLCompiler.cpp",
   "$_src/sksl/SkSLCPPCodeGenerator.cpp",
+  "$_src/sksl/SkSLCPPUniformCTypes.cpp",
   "$_src/sksl/SkSLGLSLCodeGenerator.cpp",
   "$_src/sksl/SkSLHCodeGenerator.cpp",
   "$_src/sksl/SkSLInterpreter.cpp",
@@ -31,7 +32,6 @@ skia_sksl_sources = [
 skia_gpu_processor_sources = [
   "$_src/gpu/effects/GrAARectEffect.fp",
   "$_src/gpu/effects/GrAlphaThresholdFragmentProcessor.fp",
-  "$_src/gpu/effects/GrArithmeticFP.fp",
   "$_src/gpu/effects/GrBlurredEdgeFragmentProcessor.fp",
   "$_src/gpu/effects/GrCircleBlurFragmentProcessor.fp",
   "$_src/gpu/effects/GrCircleEffect.fp",

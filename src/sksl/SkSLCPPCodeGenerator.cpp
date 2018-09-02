@@ -8,7 +8,10 @@
 #include "SkSLCPPCodeGenerator.h"
 
 #include "SkSLCompiler.h"
+#include "SkSLCPPUniformCTypes.h"
 #include "SkSLHCodeGenerator.h"
+
+#include <algorithm>
 
 namespace SkSL {
 
@@ -142,6 +145,12 @@ static bool is_private(const Variable& var) {
            var.fModifiers.fLayout.fBuiltin == -1;
 }
 
+static bool is_uniform_in(const Variable& var) {
+    return (var.fModifiers.fFlags & Modifiers::kUniform_Flag) &&
+           (var.fModifiers.fFlags & Modifiers::kIn_Flag) &&
+           var.fType.kind() != Type::kSampler_Kind;
+}
+
 void CPPCodeGenerator::writeRuntimeValue(const Type& type, const Layout& layout,
                                          const String& cppCode) {
     if (type.isFloat()) {
@@ -240,7 +249,9 @@ void CPPCodeGenerator::writeVariableReference(const VariableReference& ref) {
     switch (ref.fVariable.fModifiers.fLayout.fBuiltin) {
         case SK_INCOLOR_BUILTIN:
             this->write("%s");
-            fFormatArgs.push_back(String("args.fInputColor ? args.fInputColor : \"half4(1)\""));
+            // EmitArgs.fInputColor is automatically set to half4(1) if
+            // no input was specified
+            fFormatArgs.push_back(String("args.fInputColor"));
             break;
         case SK_OUTCOLOR_BUILTIN:
             this->write("%s");
@@ -307,8 +318,22 @@ void CPPCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
 
 void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     if (c.fFunction.fBuiltin && c.fFunction.fName == "process") {
-        SkASSERT(c.fArguments.size() == 1);
-        SkASSERT(Expression::kVariableReference_Kind == c.fArguments[0]->fKind);
+        // Sanity checks that are detected by function definition in sksl_fp.inc
+        SkASSERT(c.fArguments.size() == 1 || c.fArguments.size() == 2);
+        SkASSERT("fragmentProcessor" == c.fArguments[0]->fType.name());
+
+        // Actually fail during compilation if arguments with valid types are
+        // provided that are not variable references, since process() is a
+        // special function that impacts code emission.
+        if (c.fArguments[0]->fKind != Expression::kVariableReference_Kind) {
+            fErrors.error(c.fArguments[0]->fOffset,
+                    "process()'s fragmentProcessor argument must be a variable reference\n");
+            return;
+        }
+        if (c.fArguments.size() > 1) {
+            // Second argument must also be a half4 expression
+            SkASSERT("half4" == c.fArguments[1]->fType.name());
+        }
         int index = 0;
         bool found = false;
         for (const auto& p : fProgram) {
@@ -328,10 +353,35 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
             }
         }
         SkASSERT(found);
+
+        // Flush all previous statements so that this emitted child can
+        // depend upon any declared variables within that section
+        this->flushEmittedCode();
+
+        // Set to the empty string when no input color parameter should be emitted,
+        // which means this must be properly formatted with a prefixed comma
+        // when the parameter should be inserted into the emitChild() parameter list.
+        String inputArg;
+        if (c.fArguments.size() > 1) {
+            SkASSERT(c.fArguments.size() == 2);
+            // Use the emitChild() variant that accepts an input color, so convert
+            // the 2nd argument's expression into C++ code that produces sksl
+            // stored in an SkString.
+
+            String inputName = "_input" + to_string(index);
+            fExtraEmitCodeCode += "        " + convertSKSLExpressionToCPP(
+                    *c.fArguments[1], inputName);
+
+            // emitChild() needs a char*
+            inputArg = ", " + inputName + ".c_str()";
+        }
+
+        // Write the output handling after the possible input handling
         String childName = "_child" + to_string(index);
-        fExtraEmitCodeCode += "        SkString " + childName + "(\"" + childName + "\");\n" +
-                              "        this->emitChild(" + to_string(index) + ", &" + childName +
-                              ", args);\n";
+        fExtraEmitCodeCode += "        SkString " + childName + "(\"" + childName + "\");\n";
+        fExtraEmitCodeCode += "        this->emitChild(" + to_string(index) + inputArg +
+                              ", &" + childName + ", args);\n";
+
         this->write("%s");
         fFormatArgs.push_back(childName + ".c_str()");
         return;
@@ -472,6 +522,23 @@ void CPPCodeGenerator::writePrivateVars() {
                                                            decl.fVar->fModifiers.fLayout).c_str(),
                                  String(decl.fVar->fName).c_str(),
                                  default_value(*decl.fVar).c_str());
+                } else if (decl.fVar->fModifiers.fLayout.fFlags & Layout::kTracked_Flag) {
+                    // An auto-tracked uniform in variable, so add a field to hold onto the prior
+                    // state. Note that tracked variables must be uniform in's and that is validated
+                    // before writePrivateVars() is called.
+                    const UniformCTypeMapper* mapper = UniformCTypeMapper::Get(fContext, *decl.fVar);
+                    SkASSERT(mapper && mapper->supportsTracking());
+
+                    String name = HCodeGenerator::FieldName(String(decl.fVar->fName).c_str());
+                    // The member statement is different if the mapper reports a default value
+                    if (mapper->defaultValue().size() > 0) {
+                        this->writef("%s %sPrev = %s;\n",
+                                     mapper->ctype().c_str(), name.c_str(),
+                                     mapper->defaultValue().c_str());
+                    } else {
+                        this->writef("%s %sPrev;\n",
+                                     mapper->ctype().c_str(), name.c_str());
+                    }
                 }
             }
         }
@@ -499,6 +566,52 @@ void CPPCodeGenerator::writePrivateVarValues() {
 static bool is_accessible(const Variable& var) {
     return Type::kSampler_Kind != var.fType.kind() &&
            Type::kOther_Kind != var.fType.kind();
+}
+
+void CPPCodeGenerator::flushEmittedCode(bool flushAll) {
+    if (fCPPBuffer == nullptr) {
+        // Not actually within writeEmitCode() so nothing to flush
+        return;
+    }
+
+    StringStream* skslBuffer = static_cast<StringStream*>(fOut);
+
+    String sksl = skslBuffer->str();
+    // Empty the accumulation buffer; if there are any partial statements in
+    // the extracted sksl string they will be re-added later
+    skslBuffer->reset();
+
+    if (!flushAll) {
+        // Find the last ';', '{', or '}' and leave everything after that in the buffer
+        int lastStatementEnd = sksl.findLastOf(';');
+        int lastBlockOpen = sksl.findLastOf('{');
+        int lastBlockEnd = sksl.findLastOf('}');
+
+        int flushPoint = std::max(lastStatementEnd, std::max(lastBlockEnd, lastBlockOpen));
+
+        // NOTE: this does the right thing when flushPoint = -1
+        if (flushPoint < (int) sksl.size() - 1) {
+            // There is partial sksl content that can't be flushed yet so put
+            // that back into the sksl buffer and remove it from the string
+            skslBuffer->writeText(sksl.c_str() + flushPoint + 1);
+            sksl = String(sksl.c_str(), flushPoint + 1);
+        }
+    }
+
+    // Switch back to the CPP buffer for the actual code appending statements
+    fOut = fCPPBuffer;
+    if (fExtraEmitCodeCode.size() > 0) {
+        this->writef("%s", fExtraEmitCodeCode.c_str());
+        fExtraEmitCodeCode.reset();
+    }
+    // writeCodeAppend automatically removes the format args that it consumed,
+    // so fFormatArgs will be in a valid state for any partial statements left
+    // in the sksl buffer.
+    this->writeCodeAppend(sksl);
+
+    // After appending, switch back to an sksl buffer that contains any
+    // remaining partial statements that couldn't be appended
+    fOut = skslBuffer;
 }
 
 void CPPCodeGenerator::writeCodeAppend(const String& code) {
@@ -537,6 +650,51 @@ void CPPCodeGenerator::writeCodeAppend(const String& code) {
         argStart += argCount;
         start = index;
     }
+
+    // argStart is equal to the number of fFormatArgs that were consumed
+    // so they should be removed from the list
+    if (argStart > 0) {
+        fFormatArgs.erase(fFormatArgs.begin(), fFormatArgs.begin() + argStart);
+    }
+}
+
+String CPPCodeGenerator::convertSKSLExpressionToCPP(const Expression& e,
+                                                    const String& cppVar) {
+    // To do this conversion, we temporarily switch the sksl output stream
+    // to an empty stringstream and reset the format args to empty.
+    OutputStream* oldSKSL = fOut;
+    StringStream exprBuffer;
+    fOut = &exprBuffer;
+
+    std::vector<String> oldArgs(fFormatArgs);
+    fFormatArgs.clear();
+
+    // Convert the argument expression into a format string and args
+    this->writeExpression(e, Precedence::kTopLevel_Precedence);
+    std::vector<String> newArgs(fFormatArgs);
+    String exprFormat = exprBuffer.str();
+
+    // After generating, restore the original output stream and format args
+    fFormatArgs = oldArgs;
+    fOut = oldSKSL;
+
+    // Now build the final C++ code snippet from the format string and args
+    String cppExpr;
+    if (newArgs.size() == 0) {
+        // This was a static expression, so we can simplify the input
+        // color declaration in the emitted code to just a static string
+        cppExpr = "SkString " + cppVar + "(\"" + exprFormat + "\");\n";
+    } else {
+        // String formatting must occur dynamically, so have the C++ declaration
+        // use SkStringPrintf with the format args that were accumulated
+        // when the expression was written.
+        cppExpr = "SkString " + cppVar + " = SkStringPrintf(\"" + exprFormat + "\"";
+        for (size_t i = 0; i < newArgs.size(); i++) {
+            cppExpr += ", " + newArgs[i];
+        }
+        cppExpr += ");\n";
+    }
+    return cppExpr;
 }
 
 bool CPPCodeGenerator::writeEmitCode(std::vector<const Variable*>& uniforms) {
@@ -566,13 +724,19 @@ bool CPPCodeGenerator::writeEmitCode(std::vector<const Variable*>& uniforms) {
         this->addUniform(*u);
     }
     this->writeSection(EMIT_CODE_SECTION);
-    OutputStream* old = fOut;
-    StringStream mainBuffer;
-    fOut = &mainBuffer;
+
+    // Save original buffer as the CPP buffer for flushEmittedCode()
+    fCPPBuffer = fOut;
+    StringStream skslBuffer;
+    fOut = &skslBuffer;
+
     bool result = INHERITED::generateCode();
-    fOut = old;
-    this->writef("%s", fExtraEmitCodeCode.c_str());
-    this->writeCodeAppend(mainBuffer.str());
+    // Final flush in case there is anything extra, forcing it to emit everything
+    this->flushEmittedCode(true);
+
+    // Then restore the original CPP buffer and close the function
+    fOut = fCPPBuffer;
+    fCPPBuffer = nullptr;
     this->write("    }\n");
     return result;
 }
@@ -586,30 +750,67 @@ void CPPCodeGenerator::writeSetData(std::vector<const Variable*>& uniforms) {
                  pdman);
     bool wroteProcessor = false;
     for (const auto u : uniforms) {
-        if (u->fModifiers.fFlags & Modifiers::kIn_Flag) {
+        if (is_uniform_in(*u)) {
             if (!wroteProcessor) {
                 this->writef("        const %s& _outer = _proc.cast<%s>();\n", fullName, fullName);
                 wroteProcessor = true;
                 this->writef("        {\n");
             }
+
+            const UniformCTypeMapper* mapper = UniformCTypeMapper::Get(fContext, *u);
+            SkASSERT(mapper);
+
             String nameString(u->fName);
             const char* name = nameString.c_str();
-            if (u->fType == *fContext.fFloat4_Type || u->fType == *fContext.fHalf4_Type) {
-                this->writef("        const SkRect %sValue = _outer.%s();\n"
-                             "        %s.set4fv(%sVar, 1, (float*) &%sValue);\n",
-                             name, name, pdman, HCodeGenerator::FieldName(name).c_str(), name);
-            } else if (u->fType == *fContext.fFloat4x4_Type ||
-                       u->fType == *fContext.fHalf4x4_Type) {
-                this->writef("        float %sValue[16];\n"
-                             "        _outer.%s().asColMajorf(%sValue);\n"
-                             "        %s.setMatrix4f(%sVar, %sValue);\n",
-                             name, name, name, pdman, HCodeGenerator::FieldName(name).c_str(),
-                             name);
-            } else if (u->fType == *fContext.fFragmentProcessor_Type) {
-                // do nothing
+
+            // Switches for setData behavior in the generated code
+            bool conditionalUniform = u->fModifiers.fLayout.fWhen != "";
+            bool isTracked = u->fModifiers.fLayout.fFlags & Layout::kTracked_Flag;
+            bool needsValueDeclaration = isTracked || !mapper->canInlineUniformValue();
+
+            String uniformName = HCodeGenerator::FieldName(name) + "Var";
+
+            String indent = "        "; // 8 by default, 12 when nested for conditional uniforms
+            if (conditionalUniform) {
+                // Add a pre-check to make sure the uniform was emitted
+                // before trying to send any data to the GPU
+                this->writef("        if (%s.isValid()) {\n", uniformName.c_str());
+                indent += "    ";
+            }
+
+            String valueVar = "";
+            if (needsValueDeclaration) {
+                valueVar.appendf("%sValue", name);
+                // Use AccessType since that will match the return type of _outer's public API.
+                String valueType = HCodeGenerator::AccessType(fContext, u->fType,
+                                                              u->fModifiers.fLayout);
+                this->writef("%s%s %s = _outer.%s();\n",
+                             indent.c_str(), valueType.c_str(), valueVar.c_str(), name);
             } else {
-                this->writef("        %s.set1f(%sVar, _outer.%s());\n",
-                             pdman, HCodeGenerator::FieldName(name).c_str(), name);
+                // Not tracked and the mapper only needs to use the value once
+                // so send it a safe expression instead of the variable name
+                valueVar.appendf("(_outer.%s())", name);
+            }
+
+            if (isTracked) {
+                SkASSERT(mapper->supportsTracking());
+
+                String prevVar = HCodeGenerator::FieldName(name) + "Prev";
+                this->writef("%sif (%s) {\n"
+                             "%s    %s;\n"
+                             "%s    %s;\n"
+                             "%s}\n", indent.c_str(),
+                        mapper->dirtyExpression(valueVar, prevVar).c_str(), indent.c_str(),
+                        mapper->saveState(valueVar, prevVar).c_str(), indent.c_str(),
+                        mapper->setUniform(pdman, uniformName, valueVar).c_str(), indent.c_str());
+            } else {
+                this->writef("%s%s;\n", indent.c_str(),
+                        mapper->setUniform(pdman, uniformName, valueVar).c_str());
+            }
+
+            if (conditionalUniform) {
+                // Close the earlier precheck block
+                this->writef("        }\n");
             }
         }
     }
@@ -807,6 +1008,32 @@ bool CPPCodeGenerator::generateCode() {
                 if ((decl.fVar->fModifiers.fFlags & Modifiers::kUniform_Flag) &&
                            decl.fVar->fType.kind() != Type::kSampler_Kind) {
                     uniforms.push_back(decl.fVar);
+                }
+
+                if (is_uniform_in(*decl.fVar)) {
+                    // Validate the "uniform in" declarations to make sure they are fully supported,
+                    // instead of generating surprising C++
+                    const UniformCTypeMapper* mapper =
+                            UniformCTypeMapper::Get(fContext, *decl.fVar);
+                    if (mapper == nullptr) {
+                        fErrors.error(decl.fOffset, String(decl.fVar->fName)
+                                + "'s type is not supported for use as a 'uniform in'");
+                        return false;
+                    }
+                    if (decl.fVar->fModifiers.fLayout.fFlags & Layout::kTracked_Flag) {
+                        if (!mapper->supportsTracking()) {
+                            fErrors.error(decl.fOffset, String(decl.fVar->fName)
+                                    + "'s type does not support state tracking");
+                            return false;
+                        }
+                    }
+
+                } else {
+                    // If it's not a uniform_in, it's an error to be tracked
+                    if (decl.fVar->fModifiers.fLayout.fFlags & Layout::kTracked_Flag) {
+                        fErrors.error(decl.fOffset, "Non-'in uniforms' cannot be tracked");
+                        return false;
+                    }
                 }
             }
         }
