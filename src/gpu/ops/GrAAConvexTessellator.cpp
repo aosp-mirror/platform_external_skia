@@ -584,6 +584,10 @@ void GrAAConvexTessellator::createOuterRing(const Ring& previousRing, SkScalar o
                             // The two triangles for the corner
                             this->addTri(originalIdx, perp1Idx, miterIdx);
                             this->addTri(originalIdx, miterIdx, perp2Idx);
+                        } else {
+                            // ignore the miter point as it's so close to perp1/perp2 and simply
+                            // bevel.
+                            this->addTri(originalIdx, perp1Idx, perp2Idx);
                         }
                         break;
                     }
@@ -663,7 +667,9 @@ bool GrAAConvexTessellator::createInsetRing(const Ring& lastRing, Ring* nextRing
         bool result = intersect(this->point(lastRing.index(cur)),  lastRing.bisector(cur),
                                 this->point(lastRing.index(next)), lastRing.bisector(next),
                                 &t);
-        if (!result) {
+        // The bisectors may be parallel (!result) or the previous ring may have become slightly
+        // concave due to accumulated error (t <= 0).
+        if (!result || t <= 0) {
             continue;
         }
         SkScalar dist = -t * lastRing.norm(cur).dot(lastRing.bisector(cur));
