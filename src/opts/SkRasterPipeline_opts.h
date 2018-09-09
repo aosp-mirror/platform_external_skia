@@ -1276,6 +1276,13 @@ STAGE(clamp_a_dst, Ctx::None) {
     db = min(db, da);
 }
 
+STAGE(clamp_gamut, Ctx::None) {
+    // If you're using this stage, a should already be in [0,1].
+    r = min(max(r, 0), a);
+    g = min(max(g, 0), a);
+    b = min(max(b, 0), a);
+}
+
 STAGE(set_rgb, const float* rgb) {
     r = rgb[0];
     g = rgb[1];
@@ -1446,26 +1453,15 @@ STAGE(byte_tables, const void* ctx) {  // TODO: rename Tables SkJumper_ByteTable
     a = from_byte(gather(tables->a, to_unorm(a, 255)));
 }
 
-#if defined(SK_LEGACY_EXTENDED_TRANSFER_FUNCTIONS)
-    SI F strip_sign(F x, U32* sign) {
-        (void)sign;
-        return x;
-    }
-    SI F apply_sign(F x, U32 sign) {
-        (void)sign;
-        return x;
-    }
-#else
-    SI F strip_sign(F x, U32* sign) {
-        U32 bits = bit_cast<U32>(x);
-        *sign = bits & 0x80000000;
-        return bit_cast<F>(bits ^ *sign);
-    }
+SI F strip_sign(F x, U32* sign) {
+    U32 bits = bit_cast<U32>(x);
+    *sign = bits & 0x80000000;
+    return bit_cast<F>(bits ^ *sign);
+}
 
-    SI F apply_sign(F x, U32 sign) {
-        return bit_cast<F>(sign | bit_cast<U32>(x));
-    }
-#endif
+SI F apply_sign(F x, U32 sign) {
+    return bit_cast<F>(sign | bit_cast<U32>(x));
+}
 
 STAGE(parametric, const SkJumper_ParametricTransferFunction* ctx) {
     auto fn = [&](F v) {
@@ -1474,9 +1470,7 @@ STAGE(parametric, const SkJumper_ParametricTransferFunction* ctx) {
 
         F r = if_then_else(v <= ctx->D, mad(ctx->C, v, ctx->F)
                                       , approx_powf(mad(ctx->A, v, ctx->B), ctx->G) + ctx->E);
-        // Clamp to [0,1], with argument order mattering to handle NaN.
-        // TODO: should we really be clamping here?
-        return apply_sign(min(max(r, 0), 1.0f), sign);
+        return apply_sign(r, sign);
     };
     r = fn(r);
     g = fn(g);
@@ -2586,6 +2580,11 @@ STAGE_PP(clamp_a_dst, Ctx::None) {
     db = min(db, da);
 }
 
+STAGE_PP(clamp_gamut, Ctx::None) {
+    // It shouldn't be possible to get out-of-gamut
+    // colors when working in lowp.
+}
+
 STAGE_PP(premul, Ctx::None) {
     r = div255(r * a);
     g = div255(g * a);
@@ -3111,8 +3110,17 @@ STAGE_PP(check_decal_mask, SkJumper_DecalTileCtx* ctx) {
     a = a & mask;
 }
 
+SI void round_F_to_U16(F    R, F    G, F    B, F    A, bool interpolatedInPremul,
+                       U16* r, U16* g, U16* b, U16* a) {
+    auto round = [](F x) { return cast<U16>(x * 255.0f + 0.5f); };
 
-SI U16 round_F_to_U16(F x) { return cast<U16>(x * 255.0f + 0.5f); }
+    F limit = interpolatedInPremul ? A
+                                   : 1;
+    *r = round(min(max(0,R), limit));
+    *g = round(min(max(0,G), limit));
+    *b = round(min(max(0,B), limit));
+    *a = round(A);  // we assume alpha is already in [0,1].
+}
 
 SI void gradient_lookup(const SkJumper_GradientCtx* c, U32 idx, F t,
                         U16* r, U16* g, U16* b, U16* a) {
@@ -3151,10 +3159,12 @@ SI void gradient_lookup(const SkJumper_GradientCtx* c, U32 idx, F t,
         bb = gather<F>(c->bs[2], idx);
         ba = gather<F>(c->bs[3], idx);
     }
-    *r = round_F_to_U16(mad(t, fr, br));
-    *g = round_F_to_U16(mad(t, fg, bg));
-    *b = round_F_to_U16(mad(t, fb, bb));
-    *a = round_F_to_U16(mad(t, fa, ba));
+    round_F_to_U16(mad(t, fr, br),
+                   mad(t, fg, bg),
+                   mad(t, fb, bb),
+                   mad(t, fa, ba),
+                   c->interpolatedInPremul,
+                   r,g,b,a);
 }
 
 STAGE_GP(gradient, const SkJumper_GradientCtx* c) {
@@ -3175,16 +3185,14 @@ STAGE_GP(evenly_spaced_gradient, const SkJumper_GradientCtx* c) {
     gradient_lookup(c, idx, t, &r, &g, &b, &a);
 }
 
-STAGE_GP(evenly_spaced_2_stop_gradient, const void* ctx) {
-    // TODO: Rename Ctx SkJumper_EvenlySpaced2StopGradientCtx.
-    struct Ctx { float f[4], b[4]; };
-    auto c = (const Ctx*)ctx;
-
+STAGE_GP(evenly_spaced_2_stop_gradient, const SkJumper_EvenlySpaced2StopGradientCtx* c) {
     auto t = x;
-    r = round_F_to_U16(mad(t, c->f[0], c->b[0]));
-    g = round_F_to_U16(mad(t, c->f[1], c->b[1]));
-    b = round_F_to_U16(mad(t, c->f[2], c->b[2]));
-    a = round_F_to_U16(mad(t, c->f[3], c->b[3]));
+    round_F_to_U16(mad(t, c->f[0], c->b[0]),
+                   mad(t, c->f[1], c->b[1]),
+                   mad(t, c->f[2], c->b[2]),
+                   mad(t, c->f[3], c->b[3]),
+                   c->interpolatedInPremul,
+                   &r,&g,&b,&a);
 }
 
 STAGE_GG(xy_to_unit_angle, Ctx::None) {

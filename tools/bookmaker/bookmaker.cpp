@@ -34,18 +34,7 @@ DEFINE_bool2(skip, z, false, "Skip degenerate missed in legacy preprocessor.");
 
 /* todos:
 
-add new markup to associate enum SaveLayerFlagsSet with typedef SaveLayerFlags, if needed.
-
-should Return be on same line as 'Return Value'?
-#Member lost all formatting
 #List needs '# content ##', formatting
-consts like enum members need fully qualfied refs to make a valid link
-enum comments should be disallowed unless after #Enum and before first #Const
-    ... or, should look for enum comments in other places
-trouble with aliases, plurals
-    need to keep first letter of includeWriter @param / @return lowercase
-    Quad -> quad, Quads -> quads
-deprecated methods should be sorted down in md out, and show include "Deprecated." text body.
 rewrap text to fit in some number of columns
 #Literal is inflexible, making the entire #Code block link-less (see $Literal in SkImageInfo)
      would rather keep links for body above #Literal, and/or make it a block and not a one-liner
@@ -73,20 +62,11 @@ there is special case code to skip phrase def when looking for additional substi
 phrase def. Could put it in the token list instead I guess, or make a definition subclass used
 by phrase def with an additional slot...
 
-#Deprecated soon
-##
-should emit the text "To be deprecated soon." (right now you get just "soon")
-
-SkCanvas_ColorBehavior_kLegacy missing </table> in md out
-
 rearrange const out for md so that const / value / short description comes first in a table,
 followed by more elaborate descriptions, examples, seealso. In md.cpp, look to see if #Subtopic
 has #Const children. If so, generate a summary table first.
 Or, only allow #Line and moderate text description in #Const. Put more verbose text, example,
 seealso, in subsequent #SubTopic. Alpha_Type does this and it looks good.
-
-picture reference subclass AbortCallback has empty subtopics, and fails to show the full
-prototype for ~AbortCallback in the md out generation.
 
 see head of selfCheck.cpp for additional todos
 see head of spellCheck.cpp for additional todos

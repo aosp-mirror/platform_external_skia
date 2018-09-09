@@ -45,35 +45,36 @@ The primary features are:
   <canvas class=patheffect id=canvasTransform title="Transform: A drawn star moved and rotated by an Affine Matrix"></canvas>
 </div>
 
-<script type="text/javascript" charset="utf-8">
-  //Tries to load the WASM version if supported, then falls back to asmjs
+<script type="text/javascript">
+(function() {
+  // Tries to load the WASM version if supported, then falls back to asmjs
   let s = document.createElement('script');
-  if (window.WebAssembly && typeof window.WebAssembly.compile === "function") {
+  if (window.WebAssembly && typeof window.WebAssembly.compile === 'function') {
     console.log('WebAssembly is supported! Using the wasm version of PathKit');
-    window.__pathkit_locate_file = 'https://storage.googleapis.com/skia-cdn/pathkit-wasm/0.3.1/bin/';
+    window.__pathkit_locate_file = 'https://unpkg.com/experimental-pathkit-wasm@0.3.1/bin/';
   } else {
     console.log('WebAssembly is not supported (yet) on this browser. Using the asmjs version of PathKit');
-    window.__pathkit_locate_file = 'https://storage.googleapis.com/skia-cdn/pathkit-asmjs/0.3.1/bin/';
+    window.__pathkit_locate_file = 'https://unpkg.com/experimental-pathkit-asmjs@0.3.1/bin/';
   }
   s.src = window.__pathkit_locate_file+'pathkit.js';
-  document.write(s.outerHTML);
-</script>
+  s.onload = () => {
+    try {
+      PathKitInit({
+        locateFile: (file) => window.__pathkit_locate_file+file,
+      }).then((PathKit) => {
+        // Code goes here using PathKit
+        PathEffectsExample(PathKit);
+        MatrixTransformExample(PathKit);
+      });
 
-<script>
-  try {
-    PathKitInit({
-      locateFile: (file) => window.__pathkit_locate_file+file,
-    }).then((PathKit) => {
-      // Code goes here using PathKit
-      PathEffectsExample(PathKit);
-      MatrixTransformExample(PathKit);
-    });
+    }
+    catch(error) {
+      console.warn(error, 'falling back to image');
+      document.getElementById('effects').innerHTML = '<img width=800 src="./PathKit_effects.png"/>'
+    }
+  }
 
-  }
-  catch(error) {
-    console.warn(error, 'falling back to image');
-    docment.getElementById('effects').innerHTML = '<img width=800 src="./PathKit_effects.png"/>'
-  }
+  document.head.appendChild(s);
 
   function setCanvasSize(ctx, width, height) {
     ctx.canvas.width = width;
@@ -144,7 +145,12 @@ The primary features are:
         // The transforms apply directly to the path.
         effects[i](path, counter);
 
-        let ctx = document.getElementById(`canvas${i+1}`).getContext('2d');
+        let ctx = document.getElementById(`canvas${i+1}`);
+        if (!ctx) {
+          return;
+        } else {
+          ctx = ctx.getContext('2d');
+        }
         setCanvasSize(ctx, 300, 300);
         ctx.strokeStyle = '#3c597a';
         ctx.fillStyle = '#3c597a';
@@ -204,6 +210,7 @@ The primary features are:
     }
     window.requestAnimationFrame(frame);
   }
+})();
 </script>
 
 
@@ -319,6 +326,33 @@ Example:
     // don't forget to do mountains.delete() when it goes out of scope.
     // Users can also do pathOne.op(pathTwo, PathKit.PathOp.UNION);
     // to have the resulting path be stored to pathOne and avoid allocating another object.
+
+#### `cubicYFromX(cpx1, cpy1, cpx2, cpy2, X)` ####
+**cpx1, cpy1, cpx2, cpy2** - `Number`, coordinates for control points. <br>
+**X** - `Number`, The X coordinate for which to find the corresponding Y coordinate.
+
+Fast evaluation of a cubic ease-in / ease-out curve. This is defined as a parametric cubic
+curve inside the unit square. Makes the following assumptions:
+
+  - pt[0] is implicitly { 0, 0 }
+  - pt[3] is implicitly { 1, 1 }
+  - pts[1, 2] are inside the unit square
+
+This returns the Y coordinate for the given X coordinate.
+
+#### `cubicPtFromT(cpx1, cpy1, cpx2, cpy2, T)` ####
+**cpx1, cpy1, cpx2, cpy2** - `Number`, coordinates for control points. <br>
+**T** - `Number`, The T param for which to find the corresponding (X, Y) coordinates.
+
+Fast evaluation of a cubic ease-in / ease-out curve. This is defined as a parametric cubic
+curve inside the unit square. Makes the following assumptions:
+
+  - pt[0] is implicitly { 0, 0 }
+  - pt[3] is implicitly { 1, 1 }
+  - pts[1, 2] are inside the unit square
+
+This returns the (X, Y) coordinate for the given T value as a length 2 array.
+
 
 ### SkPath (object) ###
 
