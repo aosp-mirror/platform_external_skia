@@ -2117,6 +2117,7 @@ bool GrGLGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
 
     bool reattachStencil = false;
     if (this->glCaps().detachStencilFromMSAABuffersBeforeReadPixels() &&
+        renderTarget &&
         renderTarget->renderTargetPriv().getStencilAttachment() &&
         renderTarget->numColorSamples() > 1) {
         // Fix Adreno devices that won't read from MSAA framebuffers with stencil attached
