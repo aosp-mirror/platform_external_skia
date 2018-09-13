@@ -297,28 +297,24 @@ sk_sp<GrTextureProxy> GrProxyProvider::createMipMapProxyFromBitmap(const SkBitma
                                         SkBackingFit::kExact);
     }
 
-    if (!SkMipMap::CanBuild(bitmap.info(), nullptr)) {
+    sk_sp<SkMipMap> mipmaps(SkMipMap::Build(bitmap, nullptr));
+    if (!mipmaps) {
         return nullptr;
     }
 
     GrSurfaceDesc desc = GrImageInfoToSurfaceDesc(bitmap.info());
 
     sk_sp<GrTextureProxy> proxy = this->createLazyProxy(
-            [desc, baseLevel](GrResourceProvider* resourceProvider) {
+            [desc, baseLevel, mipmaps](GrResourceProvider* resourceProvider) {
                 if (!resourceProvider) {
                     return sk_sp<GrTexture>();
                 }
 
+                const int mipLevelCount = mipmaps->countLevels() + 1;
+                std::unique_ptr<GrMipLevel[]> texels(new GrMipLevel[mipLevelCount]);
+
                 SkPixmap pixmap;
                 SkAssertResult(baseLevel->peekPixels(&pixmap));
-
-                int mipLevelCount = 1;
-                sk_sp<SkMipMap> mipmaps(SkMipMap::Build(pixmap, nullptr));
-                if (mipmaps) {
-                    mipLevelCount += mipmaps->countLevels();
-                }
-
-                std::unique_ptr<GrMipLevel[]> texels(new GrMipLevel[mipLevelCount]);
 
                 // DDL TODO: Instead of copying all this info into GrMipLevels we should just plumb
                 // the use of SkMipMap down through Ganesh.

@@ -1242,9 +1242,11 @@ created <a href='#Image'>Image</a>, or nullptr
 ## MakeFromAHardwareBuffer
 
 <pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
-static <a href='undocumented#sk_sp'>sk sp</a>&lt;<a href='#SkImage'>SkImage</a>&gt; <a href='#SkImage_MakeFromAHardwareBuffer'>MakeFromAHardwareBuffer</a>(AHardwareBuffer* hardwareBuffer,
-                                            <a href='SkImageInfo_Reference#SkAlphaType'>SkAlphaType</a> <a href='#SkImage_alphaType'>alphaType</a> = <a href='SkImageInfo_Reference#kPremul_SkAlphaType'>kPremul_SkAlphaType</a>,
-                                            <a href='undocumented#sk_sp'>sk sp</a>&lt;<a href='undocumented#SkColorSpace'>SkColorSpace</a>&gt; <a href='#SkImage_colorSpace'>colorSpace</a> = nullptr)
+static <a href='undocumented#sk_sp'>sk sp</a>&lt;<a href='#SkImage'>SkImage</a>&gt; <a href='#SkImage_MakeFromAHardwareBuffer'>MakeFromAHardwareBuffer</a>(
+        AHardwareBuffer* hardwareBuffer,
+                                   <a href='SkImageInfo_Reference#SkAlphaType'>SkAlphaType</a> <a href='#SkImage_alphaType'>alphaType</a> = <a href='SkImageInfo_Reference#kPremul_SkAlphaType'>kPremul_SkAlphaType</a>,
+                                   <a href='undocumented#sk_sp'>sk sp</a>&lt;<a href='undocumented#SkColorSpace'>SkColorSpace</a>&gt; <a href='#SkImage_colorSpace'>colorSpace</a> = nullptr,
+                                   <a href='undocumented#GrSurfaceOrigin'>GrSurfaceOrigin</a> surfaceOrigin = <a href='undocumented#kTopLeft_GrSurfaceOrigin'>kTopLeft GrSurfaceOrigin</a>)
 </pre>
 
 Creates <a href='#Image'>Image</a> from Android hardware buffer.
@@ -1263,6 +1265,9 @@ Only available on Android, when __ANDROID_API__ is defined to be 26 or greater.
   </tr>
   <tr>    <td><a name='SkImage_MakeFromAHardwareBuffer_colorSpace'><code><strong>colorSpace</strong></code></a></td>
     <td>range of colors; may be nullptr</td>
+  </tr>
+  <tr>    <td><a name='SkImage_MakeFromAHardwareBuffer_surfaceOrigin'><code><strong>surfaceOrigin</strong></code></a></td>
+    <td>one of: <a href='undocumented#kBottomLeft_GrSurfaceOrigin'>kBottomLeft GrSurfaceOrigin</a>, <a href='undocumented#kTopLeft_GrSurfaceOrigin'>kTopLeft GrSurfaceOrigin</a></td>
   </tr>
 </table>
 
@@ -1981,8 +1986,7 @@ false if pixel conversion is not possible.
 
 <a href='#SkImage_readPixels_srcX'>srcX</a> and <a href='#SkImage_readPixels_srcY'>srcY</a> may be negative to copy only top or left of source. Returns
 false if <a href='#SkImage_width'>width</a> or <a href='#SkImage_height'>height</a> is zero or negative.
-Returns false ifabs(srcX) >= <a href='#Image'>Image</a> <a href='#SkImage_width'>width</a>,
-or ifabs(srcY) >= <a href='#Image'>Image</a> <a href='#SkImage_height'>height</a>.
+Returns false if <code>abs(srcX)&nbsp;>=&nbsp;<a href='#Image'>Image</a> <a href='#SkImage_width'>width</a></code>, or if <code>abs(srcY)&nbsp;>=&nbsp;<a href='#Image'>Image</a> <a href='#SkImage_height'>height</a></code>.
 
 If <a href='#SkImage_readPixels_cachingHint'>cachingHint</a> is <a href='#SkImage_kAllow_CachingHint'>kAllow CachingHint</a>, pixels may be retained locally.
 If <a href='#SkImage_readPixels_cachingHint'>cachingHint</a> is <a href='#SkImage_kDisallow_CachingHint'>kDisallow CachingHint</a>, pixels are not added to the local cache.
@@ -2054,8 +2058,7 @@ false if pixel conversion is not possible.
 
 <a href='#SkImage_readPixels_2_srcX'>srcX</a> and <a href='#SkImage_readPixels_2_srcY'>srcY</a> may be negative to copy only top or left of source. Returns
 false if <a href='#SkImage_width'>width</a> or <a href='#SkImage_height'>height</a> is zero or negative.
-Returns false ifabs(srcX) >= <a href='#Image'>Image</a> <a href='#SkImage_width'>width</a>,
-or ifabs(srcY) >= <a href='#Image'>Image</a> <a href='#SkImage_height'>height</a>.
+Returns false if <code>abs(srcX)&nbsp;>=&nbsp;<a href='#Image'>Image</a> <a href='#SkImage_width'>width</a></code>, or if <code>abs(srcY)&nbsp;>=&nbsp;<a href='#Image'>Image</a> <a href='#SkImage_height'>height</a></code>.
 
 If <a href='#SkImage_readPixels_2_cachingHint'>cachingHint</a> is <a href='#SkImage_kAllow_CachingHint'>kAllow CachingHint</a>, pixels may be retained locally.
 If <a href='#SkImage_readPixels_2_cachingHint'>cachingHint</a> is <a href='#SkImage_kDisallow_CachingHint'>kDisallow CachingHint</a>, pixels are not added to the local cache.
