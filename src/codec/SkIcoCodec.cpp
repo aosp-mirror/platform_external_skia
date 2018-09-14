@@ -129,7 +129,7 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
         bytesRead = offset;
 
         // Create a new stream for the embedded codec
-        SkAutoFree buffer(sk_malloc_flags(size, 0));
+        SkAutoFree buffer(sk_malloc_canfail(size));
         if (!buffer.get()) {
             SkCodecPrintf("Warning: OOM trying to create embedded stream.\n");
             break;
