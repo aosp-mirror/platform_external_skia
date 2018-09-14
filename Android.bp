@@ -528,6 +528,7 @@ cc_library_static {
         "src/gpu/glsl/GrGLSLVertexGeoBuilder.cpp",
         "src/gpu/glsl/GrGLSLXferProcessor.cpp",
         "src/gpu/gradients/GrClampedGradientEffect.cpp",
+        "src/gpu/gradients/GrDualIntervalGradientColorizer.cpp",
         "src/gpu/gradients/GrGradientShader.cpp",
         "src/gpu/gradients/GrLinearGradientLayout.cpp",
         "src/gpu/gradients/GrRadialGradientLayout.cpp",
