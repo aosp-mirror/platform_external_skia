@@ -13,6 +13,7 @@
 #include "SkTypes.h"
 
 #include "SkTwoPointConicalGradient.h"
+#include "GrGradientShader.h"
 #include "GrFragmentProcessor.h"
 #include "GrCoordTransform.h"
 class GrTwoPointConicalGradientLayout : public GrFragmentProcessor {
@@ -34,15 +35,11 @@ public:
     const char* name() const override { return "TwoPointConicalGradientLayout"; }
 
 private:
-    GrTwoPointConicalGradientLayout(SkMatrix44 gradientMatrix,
-                                    Type type,
-                                    bool isRadiusIncreasing,
-                                    bool isFocalOnCircle,
-                                    bool isWellBehaved,
-                                    bool isSwapped,
-                                    bool isNativelyFocal,
-                                    SkPoint focalParams)
-            : INHERITED(kGrTwoPointConicalGradientLayout_ClassID, kNone_OptimizationFlags)
+    GrTwoPointConicalGradientLayout(SkMatrix44 gradientMatrix, Type type, bool isRadiusIncreasing,
+                                    bool isFocalOnCircle, bool isWellBehaved, bool isSwapped,
+                                    bool isNativelyFocal, SkPoint focalParams)
+            : INHERITED(kGrTwoPointConicalGradientLayout_ClassID,
+                        (OptimizationFlags)kNone_OptimizationFlags)
             , fGradientMatrix(gradientMatrix)
             , fType(type)
             , fIsRadiusIncreasing(isRadiusIncreasing)

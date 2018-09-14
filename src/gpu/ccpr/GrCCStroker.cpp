@@ -87,8 +87,8 @@ private:
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
 
     static constexpr Attribute kInstanceAttribs[2] = {
-            {"endpts", kFloat4_GrVertexAttribType},
-            {"stroke_radius", kFloat_GrVertexAttribType}
+            {"endpts", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
+            {"stroke_radius", kFloat_GrVertexAttribType, kFloat_GrSLType}
     };
 
     const Attribute& onInstanceAttribute(int i) const override { return kInstanceAttribs[i]; }
@@ -186,9 +186,9 @@ private:
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
 
     static constexpr Attribute kInstanceAttribs[3] = {
-            {"X", kFloat4_GrVertexAttribType},
-            {"Y", kFloat4_GrVertexAttribType},
-            {"stroke_info", kFloat2_GrVertexAttribType}
+            {"X", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
+            {"Y", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
+            {"stroke_info", kFloat2_GrVertexAttribType, kFloat2_GrSLType}
     };
 
     const Attribute& onInstanceAttribute(int i) const override { return kInstanceAttribs[i]; }
@@ -476,7 +476,7 @@ public:
 
         // For miter and round joins, we place an additional triangle cap on top of the bevel. This
         // triangle is literal for miters and is conic control points for round joins.
-        SkASSERT(miterCapHeightOverWidth >= 0);
+        SkASSERT(miterCapHeightOverWidth >= 0 || SkScalarIsNaN(miterCapHeightOverWidth));
         Sk2f base = n1 - n0;
         Sk2f baseNorm = Sk2f(base[1], -base[0]);
         Sk2f c = (n0 + n1) * .5f + baseNorm * miterCapHeightOverWidth;

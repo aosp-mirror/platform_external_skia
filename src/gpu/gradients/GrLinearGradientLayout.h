@@ -13,6 +13,7 @@
 #include "SkTypes.h"
 
 #include "SkLinearGradient.h"
+#include "GrGradientShader.h"
 #include "GrFragmentProcessor.h"
 #include "GrCoordTransform.h"
 class GrLinearGradientLayout : public GrFragmentProcessor {
@@ -27,7 +28,8 @@ public:
 
 private:
     GrLinearGradientLayout(SkMatrix44 gradientMatrix)
-            : INHERITED(kGrLinearGradientLayout_ClassID, kNone_OptimizationFlags)
+            : INHERITED(kGrLinearGradientLayout_ClassID,
+                        (OptimizationFlags)kPreservesOpaqueInput_OptimizationFlag)
             , fGradientMatrix(gradientMatrix)
             , fCoordTransform0(gradientMatrix) {
         this->addCoordTransform(&fCoordTransform0);
