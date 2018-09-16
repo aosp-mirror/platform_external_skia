@@ -25,8 +25,8 @@ public:
         auto gradientMatrix = _outer.gradientMatrix();
         (void)gradientMatrix;
         SkString sk_TransformedCoords2D_0 = fragBuilder->ensureCoords2D(args.fTransformedCoords[0]);
-        fragBuilder->codeAppendf("%s = half4(half(%s.x));\n", args.fOutputColor,
-                                 sk_TransformedCoords2D_0.c_str());
+        fragBuilder->codeAppendf("half t = half(%s.x);\n%s = half4(t, 1.0, 0.0, 0.0);\n",
+                                 sk_TransformedCoords2D_0.c_str(), args.fOutputColor);
     }
 
 private:
@@ -53,6 +53,25 @@ GrLinearGradientLayout::GrLinearGradientLayout(const GrLinearGradientLayout& src
 std::unique_ptr<GrFragmentProcessor> GrLinearGradientLayout::clone() const {
     return std::unique_ptr<GrFragmentProcessor>(new GrLinearGradientLayout(*this));
 }
+GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrLinearGradientLayout);
+#if GR_TEST_UTILS
+std::unique_ptr<GrFragmentProcessor> GrLinearGradientLayout::TestCreate(GrProcessorTestData* d) {
+    SkPoint points[] = {{d->fRandom->nextUScalar1(), d->fRandom->nextUScalar1()},
+                        {d->fRandom->nextUScalar1(), d->fRandom->nextUScalar1()}};
+
+    GrGradientShader::RandomParams params(d->fRandom);
+    auto shader = params.fUseColors4f
+                          ? SkGradientShader::MakeLinear(points, params.fColors4f,
+                                                         params.fColorSpace, params.fStops,
+                                                         params.fColorCount, params.fTileMode)
+                          : SkGradientShader::MakeLinear(points, params.fColors, params.fStops,
+                                                         params.fColorCount, params.fTileMode);
+    GrTest::TestAsFPArgs asFPArgs(d);
+    std::unique_ptr<GrFragmentProcessor> fp = as_SB(shader)->asFragmentProcessor(asFPArgs.args());
+    GrAlwaysAssert(fp);
+    return fp;
+}
+#endif
 
 std::unique_ptr<GrFragmentProcessor> GrLinearGradientLayout::Make(const SkLinearGradient& grad,
                                                                   const GrFPArgs& args) {

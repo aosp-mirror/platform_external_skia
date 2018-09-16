@@ -224,10 +224,6 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
             SkPaint pathPaint(glyphRun.paint());
             SkScalar matrixScale = pathPaint.setupForAsPaths();
 
-            // Temporarily jam in kFill, so we only ever ask for the raw outline from the cache.
-            pathPaint.setStyle(SkPaint::kFill_Style);
-            pathPaint.setPathEffect(nullptr);
-
             auto pathCache = SkStrikeCache::FindOrCreateStrikeExclusive(
                     pathPaint, &props, fScalerContextFlags, nullptr);
 
@@ -459,8 +455,7 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
             cacheBlob->setSubRunHasDistanceFields(runIndex, runPaint.isLCDRenderText(),
                                                   runPaint.isAntiAlias(), hasWCoord);
 
-            FallbackGlyphRunHelper fallbackTextHelper(
-                    viewMatrix, runPaint, glyphCache->getGlyphSizeLimit(), textRatio);
+            FallbackGlyphRunHelper fallbackTextHelper(viewMatrix, runPaint, textRatio);
 
             sk_sp<GrTextStrike> currStrike;
 
@@ -512,8 +507,7 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
             SkPaint pathPaint(runPaint);
             SkScalar matrixScale = pathPaint.setupForAsPaths();
 
-            FallbackGlyphRunHelper fallbackTextHelper(
-                    viewMatrix, runPaint, glyphCache->getGlyphSizeLimit(), matrixScale);
+            FallbackGlyphRunHelper fallbackTextHelper(viewMatrix, runPaint, matrixScale);
 
             // Temporarily jam in kFill, so we only ever ask for the raw outline from the cache.
             pathPaint.setStyle(SkPaint::kFill_Style);
@@ -522,20 +516,28 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
             auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(
                     pathPaint, &props, SkScalerContextFlags::kFakeGammaAndBoostContrast, nullptr);
 
-            auto drawOnePath =
-                    [&fallbackTextHelper, matrixScale, runIndex, cacheBlob]
-                            (const SkPath* path, const SkGlyph& glyph, SkPoint position) {
-                        if (glyph.fMaskFormat == SkMask::kARGB32_Format) {
-                            fallbackTextHelper.appendGlyph(glyph, glyph.getGlyphID(), position);
-                        } else {
-                            if (path != nullptr) {
-                                cacheBlob->appendPathGlyph(
-                                        runIndex, *path, position.fX, position.fY, matrixScale, false);
-                            }
-                        }
-                    };
+            auto perPath = [matrixScale, runIndex, cacheBlob, &cache]
+                           (const SkGlyph& glyph, SkPoint position) {
+                const SkPath* path = cache->findPath(glyph);
+                if (path != nullptr) {
+                    cacheBlob->appendPathGlyph(
+                            runIndex, *path, position.fX, position.fY, matrixScale, false);
+                }
+            };
 
-            glyphPainter->drawUsingPaths(glyphRun, origin, cache.get(), drawOnePath);
+            auto fallbackARGB = [cache{cache.get()}, &fallbackTextHelper]
+                                (SkSpan<const SkGlyphID> glyphIDs,
+                                 SkSpan<const SkPoint>positions) {
+                const SkPoint* pos = positions.data();
+                for (auto glyphID : glyphIDs) {
+                    SkPoint position = *pos++;
+                    const SkGlyph& glyph = cache->getGlyphMetrics(glyphID, {0, 0});
+                    fallbackTextHelper.appendGlyph(glyph, glyph.getGlyphID(), position);
+                }
+            };
+
+            glyphPainter->drawGlyphRunAsPathWithARGBFallback(
+                    cache.get(), glyphRun, origin, perPath, fallbackARGB);
 
             fallbackTextHelper.drawGlyphs(
                     cacheBlob, runIndex, glyphCache, props,

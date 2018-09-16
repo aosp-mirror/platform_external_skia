@@ -82,7 +82,10 @@ static bool check_read(skiatest::Reporter* reporter, const SkBitmap& expectedBit
                 ERRORF(reporter, "Expected readback pixel (%d, %d) value 0x%08x, got 0x%08x.",
                        x, y,  srcPixel, dstPixel);
                 result = false;
-            }
+            }/* else {
+                SkDebugf("Got good pixel (%d, %d) value 0x%08x, got 0x%08x.\n",
+                       x, y,  srcPixel, dstPixel);
+            }*/
         }
     }
     return result;
@@ -94,11 +97,11 @@ static void cleanup_resources(AHardwareBuffer* buffer) {
     }
 }
 
-// Basic test to make sure we can import an AHardwareBuffer into an SkImage and draw it into a
-// surface.
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAHardwareBuffer_BasicDrawTest,
-                                   reporter, context_info) {
-    GrContext* context = context_info.grContext();
+static void basic_draw_test_helper(skiatest::Reporter* reporter,
+                                   const sk_gpu_test::ContextInfo& info,
+                                   GrSurfaceOrigin surfaceOrigin) {
+
+    GrContext* context = info.grContext();
     if (!context->contextPriv().caps()->supportsAHardwareBufferImages()) {
         return;
     }
@@ -147,10 +150,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAHardwareBuffer_BasicDrawTest,
 
     int bbp = srcBitmap.bytesPerPixel();
     uint32_t* src = (uint32_t*)srcBitmap.getPixels();
+    int nextLineStep = DEV_W;
+    if (surfaceOrigin == kBottomLeft_GrSurfaceOrigin) {
+        nextLineStep = -nextLineStep;
+        src += (DEV_H-1)*DEV_W;
+    }
     uint32_t* dst = bufferAddr;
     for (int y = 0; y < DEV_H; ++y) {
         memcpy(dst, src, DEV_W * bbp);
-        src += DEV_W;
+        src += nextLineStep;
         dst += hwbDesc.stride;
     }
     AHardwareBuffer_unlock(buffer, nullptr);
@@ -159,7 +167,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAHardwareBuffer_BasicDrawTest,
     // Wrap AHardwareBuffer in SkImage
     ///////////////////////////////////////////////////////////////////////////
 
-    sk_sp<SkImage> image = SkImage::MakeFromAHardwareBuffer(buffer);
+    sk_sp<SkImage> image = SkImage::MakeFromAHardwareBuffer(buffer, kPremul_SkAlphaType,
+                                                            nullptr, surfaceOrigin);
     REPORTER_ASSERT(reporter, image);
 
     ///////////////////////////////////////////////////////////////////////////
@@ -187,6 +196,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAHardwareBuffer_BasicDrawTest,
     image.reset();
 
     cleanup_resources(buffer);
+
+}
+
+// Basic test to make sure we can import an AHardwareBuffer into an SkImage and draw it into a
+// surface.
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAHardwareBuffer_BasicDrawTest,
+                                   reporter, context_info) {
+    basic_draw_test_helper(reporter, context_info, kTopLeft_GrSurfaceOrigin);
+    basic_draw_test_helper(reporter, context_info, kBottomLeft_GrSurfaceOrigin);
 }
 
 #endif

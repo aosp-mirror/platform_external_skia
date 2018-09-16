@@ -31,7 +31,7 @@ extern "C" {
 class GrAHardwareBufferImageGenerator : public SkImageGenerator {
 public:
     static std::unique_ptr<SkImageGenerator> Make(AHardwareBuffer*, SkAlphaType,
-                                                  sk_sp<SkColorSpace>);
+                                                  sk_sp<SkColorSpace>, GrSurfaceOrigin);
 
     ~GrAHardwareBufferImageGenerator() override;
 
@@ -39,6 +39,10 @@ public:
     typedef void (*DeleteImageProc)(DeleteImageCtx);
 
     static void DeleteGLTexture(void* ctx);
+
+#ifdef SK_VULKAN
+    static void DeleteVkImage(void* ctx);
+#endif
 
 protected:
 
@@ -50,7 +54,8 @@ protected:
 
 private:
     GrAHardwareBufferImageGenerator(const SkImageInfo&, AHardwareBuffer*, SkAlphaType,
-                                    bool isProtectedContent, uint32_t bufferFormat);
+                                    bool isProtectedContent, uint32_t bufferFormat,
+                                    GrSurfaceOrigin surfaceOrigin);
     sk_sp<GrTextureProxy> makeProxy(GrContext* context);
 
     void releaseTextureRef();
@@ -60,6 +65,7 @@ private:
     AHardwareBuffer* fHardwareBuffer;
     uint32_t         fBufferFormat;
     const bool       fIsProtectedContent;
+    GrSurfaceOrigin  fSurfaceOrigin;
 
     typedef SkImageGenerator INHERITED;
 };
