@@ -553,11 +553,9 @@ SkPoint* SkPathRef::growForRepeatedVerb(int /*SkPath::Verb*/ verb,
 
     SkDEBUGCODE(this->validate();)
     int pCnt;
-    bool dirtyAfterEdit = true;
     switch (verb) {
         case SkPath::kMove_Verb:
             pCnt = numVbs;
-            dirtyAfterEdit = false;
             break;
         case SkPath::kLine_Verb:
             fSegmentMask |= SkPath::kLine_SegmentMask;
@@ -578,7 +576,6 @@ SkPoint* SkPathRef::growForRepeatedVerb(int /*SkPath::Verb*/ verb,
         case SkPath::kClose_Verb:
             SkDEBUGFAIL("growForRepeatedVerb called for kClose_Verb");
             pCnt = 0;
-            dirtyAfterEdit = false;
             break;
         case SkPath::kDone_Verb:
             SkDEBUGFAIL("growForRepeatedVerb called for kDone");
@@ -586,7 +583,6 @@ SkPoint* SkPathRef::growForRepeatedVerb(int /*SkPath::Verb*/ verb,
         default:
             SkDEBUGFAIL("default should not be reached");
             pCnt = 0;
-            dirtyAfterEdit = false;
     }
 
     size_t space = numVbs * sizeof(uint8_t) + pCnt * sizeof (SkPoint);
@@ -613,10 +609,8 @@ SkPoint* SkPathRef::growForRepeatedVerb(int /*SkPath::Verb*/ verb,
     }
     fFreeSpace -= space;
     fBoundsIsDirty = true;  // this also invalidates fIsFinite
-    if (dirtyAfterEdit) {
-        fIsOval = false;
-        fIsRRect = false;
-    }
+    fIsOval = false;
+    fIsRRect = false;
 
     if (SkPath::kConic_Verb == verb) {
         SkASSERT(weights);
@@ -630,12 +624,10 @@ SkPoint* SkPathRef::growForRepeatedVerb(int /*SkPath::Verb*/ verb,
 SkPoint* SkPathRef::growForVerb(int /* SkPath::Verb*/ verb, SkScalar weight) {
     SkDEBUGCODE(this->validate();)
     int pCnt;
-    bool dirtyAfterEdit = true;
     unsigned mask = 0;
     switch (verb) {
         case SkPath::kMove_Verb:
             pCnt = 1;
-            dirtyAfterEdit = false;
             break;
         case SkPath::kLine_Verb:
             mask = SkPath::kLine_SegmentMask;
@@ -655,14 +647,12 @@ SkPoint* SkPathRef::growForVerb(int /* SkPath::Verb*/ verb, SkScalar weight) {
             break;
         case SkPath::kClose_Verb:
             pCnt = 0;
-            dirtyAfterEdit = false;
             break;
         case SkPath::kDone_Verb:
             SkDEBUGFAIL("growForVerb called for kDone");
             // fall through
         default:
             SkDEBUGFAIL("default is not reached");
-            dirtyAfterEdit = false;
             pCnt = 0;
     }
     SkSafeMath safe;
@@ -680,10 +670,8 @@ SkPoint* SkPathRef::growForVerb(int /* SkPath::Verb*/ verb, SkScalar weight) {
     fSegmentMask |= mask;
     fFreeSpace -= space;
     fBoundsIsDirty = true;  // this also invalidates fIsFinite
-    if (dirtyAfterEdit) {
-        fIsOval = false;
-        fIsRRect = false;
-    }
+    fIsOval = false;
+    fIsRRect = false;
 
     if (SkPath::kConic_Verb == verb) {
         *fConicWeights.append() = weight;
@@ -712,20 +700,28 @@ uint32_t SkPathRef::genID() const {
 }
 
 void SkPathRef::addGenIDChangeListener(sk_sp<GenIDChangeListener> listener) {
+
     if (nullptr == listener || this == gEmpty) {
         return;
     }
-    *fGenIDChangeListeners.append() = listener.release();
+
+    SkPathRef::GenIDChangeListener* ptr = listener.release();
+    ptr->next = fGenIDChangeListeners;
+    while (!fGenIDChangeListeners.compare_exchange_weak(ptr->next, ptr)) {}
 }
 
 // we need to be called *before* the genID gets changed or zerod
 void SkPathRef::callGenIDChangeListeners() {
-    for (int i = 0; i < fGenIDChangeListeners.count(); i++) {
-        fGenIDChangeListeners[i]->onChange();
-    }
 
-    // Listeners get at most one shot, so whether these triggered or not, blow them away.
-    fGenIDChangeListeners.unrefAll();
+    SkPathRef::GenIDChangeListener* ptr = fGenIDChangeListeners.exchange(nullptr);
+
+    while (ptr != nullptr) {
+        ptr->onChange();
+        auto next = ptr->next;
+        // Listeners get at most one shot, so whether these triggered or not, blow them away.
+        ptr->unref();
+        ptr = next;
+    }
 }
 
 SkRRect SkPathRef::getRRect() const {
