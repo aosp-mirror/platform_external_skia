@@ -93,6 +93,7 @@ skia_public_includes = [
   "include/codec",
   "include/config",
   "include/core",
+  "include/docs",
   "include/effects",
   "include/encode",
   "include/gpu",
@@ -1397,6 +1398,7 @@ if (skia_enable_tools) {
       ":skia",
       ":tool_utils",
       "modules/skottie",
+      "modules/skottie:gm",
       "modules/sksg",
     ]
     public_deps = [
