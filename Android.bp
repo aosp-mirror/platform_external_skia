@@ -353,7 +353,6 @@ cc_library_static {
         "src/gpu/GrBackendSurface.cpp",
         "src/gpu/GrBackendTextureImageGenerator.cpp",
         "src/gpu/GrBitmapTextureMaker.cpp",
-        "src/gpu/GrBlend.cpp",
         "src/gpu/GrBlurUtils.cpp",
         "src/gpu/GrBuffer.cpp",
         "src/gpu/GrBufferAllocPool.cpp",
