@@ -10,7 +10,9 @@
 #include "SkArenaAlloc.h"
 #include "SkColorData.h"
 #include "SkColorSpacePriv.h"
+#include "SkConvertPixels.h"
 #include "SkGeometry.h"
+#include "SkPM4f.h"
 #include "SkTo.h"
 
 namespace {
@@ -215,31 +217,20 @@ void SkPatchUtils::GetRightCubic(const SkPoint cubics[12], SkPoint points[4]) {
     points[3] = cubics[kRightP3_CubicCtrlPts];
 }
 
-#include "SkColorSpaceXform.h"
-
-static void skcolor_to_float(SkColor4f dst[], const SkColor src[], int count, SkColorSpace* dstCS,
-                             bool doPremul) {
-    // Source is always sRGB SkColor.
-    auto srcCS = sk_srgb_singleton();
-
-    auto op = doPremul ? SkColorSpaceXform::kPremul_AlphaOp : SkColorSpaceXform::kPreserve_AlphaOp;
-    SkAssertResult(SkColorSpaceXform::Apply(dstCS, SkColorSpaceXform::kRGBA_F32_ColorFormat,  dst,
-                                            srcCS, SkColorSpaceXform::kBGRA_8888_ColorFormat, src,
-                                            count, op));
+static void skcolor_to_float(SkPMColor4f* dst, const SkColor* src, int count, SkColorSpace* dstCS) {
+    SkImageInfo srcInfo = SkImageInfo::Make(count, 1, kBGRA_8888_SkColorType,
+                                            kUnpremul_SkAlphaType, SkColorSpace::MakeSRGB());
+    SkImageInfo dstInfo = SkImageInfo::Make(count, 1, kRGBA_F32_SkColorType,
+                                            kPremul_SkAlphaType, sk_ref_sp(dstCS));
+    SkConvertPixels(dstInfo, dst, 0, srcInfo, src, 0);
 }
 
-static void float_to_skcolor(SkColor dst[], const SkColor4f src[], int count, SkColorSpace* srcCS) {
-    // Destination is always sRGB SkColor.
-    auto dstCS = sk_srgb_singleton();
-    SkAssertResult(SkColorSpaceXform::Apply(dstCS, SkColorSpaceXform::kBGRA_8888_ColorFormat, dst,
-                                            srcCS, SkColorSpaceXform::kRGBA_F32_ColorFormat,  src,
-                                            count, SkColorSpaceXform::kPreserve_AlphaOp));
-}
-
-static void unpremul(SkColor4f array[], int count) {
-    for (int i = 0; i < count; ++i) {
-        array[i] = array[i].unpremul();
-    }
+static void float_to_skcolor(SkColor* dst, const SkPMColor4f* src, int count, SkColorSpace* srcCS) {
+    SkImageInfo srcInfo = SkImageInfo::Make(count, 1, kRGBA_F32_SkColorType,
+                                            kPremul_SkAlphaType, sk_ref_sp(srcCS));
+    SkImageInfo dstInfo = SkImageInfo::Make(count, 1, kBGRA_8888_SkColorType,
+                                            kUnpremul_SkAlphaType, SkColorSpace::MakeSRGB());
+    SkConvertPixels(dstInfo, dst, 0, srcInfo, src, 0);
 }
 
 sk_sp<SkVertices> SkPatchUtils::MakeVertices(const SkPoint cubics[12], const SkColor srcColors[4],
@@ -286,32 +277,16 @@ sk_sp<SkVertices> SkPatchUtils::MakeVertices(const SkPoint cubics[12], const SkC
     }
 
     SkSTArenaAlloc<2048> alloc;
-    SkColor4f* cornerColors = srcColors ? alloc.makeArray<SkColor4f>(4) : nullptr;
-    SkColor4f* tmpColors = srcColors ? alloc.makeArray<SkColor4f>(vertexCount) : nullptr;
+    SkPMColor4f* cornerColors = srcColors ? alloc.makeArray<SkPMColor4f>(4) : nullptr;
+    SkPMColor4f* tmpColors = srcColors ? alloc.makeArray<SkPMColor4f>(vertexCount) : nullptr;
 
     SkVertices::Builder builder(SkVertices::kTriangles_VertexMode, vertexCount, indexCount, flags);
     SkPoint* pos = builder.positions();
     SkPoint* texs = builder.texCoords();
     uint16_t* indices = builder.indices();
-    bool is_opaque = false;
 
-    /*
-     *  1. Should we offer this as a runtime choice, as we do in gradients?
-     *  2. Since drawing the vertices wants premul, shoudl we extend SkVertices to store
-     *     premul colors (as floats, w/ a colorspace)?
-     */
-    bool doPremul = true;
     if (cornerColors) {
-        SkColor c = ~0;
-        for (int i = 0; i < kNumCorners; i++) {
-            c &= srcColors[i];
-        }
-        is_opaque = (SkColorGetA(c) == 0xFF);
-        if (is_opaque) {
-            doPremul = false;   // no need
-        }
-
-        skcolor_to_float(cornerColors, srcColors, kNumCorners, colorSpace, doPremul);
+        skcolor_to_float(cornerColors, srcColors, kNumCorners, colorSpace);
     }
 
     SkPoint pts[kNumPtsCubic];
@@ -360,9 +335,6 @@ sk_sp<SkVertices> SkPatchUtils::MakeVertices(const SkPoint cubics[12], const SkC
                              Sk4f::Load(cornerColors[kBottomLeft_Corner].vec()),
                              Sk4f::Load(cornerColors[kBottomRight_Corner].vec()))
                     .store(tmpColors[dataIndex].vec());
-                if (is_opaque) {
-                    tmpColors[dataIndex].fA = 1;
-                }
             }
 
             if (texs) {
@@ -392,9 +364,6 @@ sk_sp<SkVertices> SkPatchUtils::MakeVertices(const SkPoint cubics[12], const SkC
     }
 
     if (tmpColors) {
-        if (doPremul) {
-            unpremul(tmpColors, vertexCount);
-        }
         float_to_skcolor(builder.colors(), tmpColors, vertexCount, colorSpace);
     }
     return builder.detach();
