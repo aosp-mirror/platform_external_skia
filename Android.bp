@@ -171,7 +171,6 @@ cc_library_static {
         "src/core/SkDeque.cpp",
         "src/core/SkDevice.cpp",
         "src/core/SkDistanceFieldGen.cpp",
-        "src/core/SkDither.cpp",
         "src/core/SkDocument.cpp",
         "src/core/SkDraw.cpp",
         "src/core/SkDrawLooper.cpp",
