@@ -686,8 +686,6 @@ cc_library_static {
         "src/pdf/SkPDFShader.cpp",
         "src/pdf/SkPDFTypes.cpp",
         "src/pdf/SkPDFUtils.cpp",
-        "src/pipe/SkPipeCanvas.cpp",
-        "src/pipe/SkPipeReader.cpp",
         "src/ports/SkDebug_android.cpp",
         "src/ports/SkDiscardableMemory_none.cpp",
         "src/ports/SkFontHost_FreeType.cpp",
@@ -961,6 +959,7 @@ cc_test {
     ],
 
     local_include_dirs: [
+        "experimental/pipe/",
         "experimental/svg/model/",
         "gm/",
         "include/android/",
@@ -1019,6 +1018,8 @@ cc_test {
         "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
+        "experimental/pipe/SkPipeCanvas.cpp",
+        "experimental/pipe/SkPipeReader.cpp",
         "experimental/svg/model/SkSVGAttribute.cpp",
         "experimental/svg/model/SkSVGAttributeParser.cpp",
         "experimental/svg/model/SkSVGCircle.cpp",
