@@ -93,6 +93,7 @@ skia_public_includes = [
   "include/codec",
   "include/config",
   "include/core",
+  "include/docs",
   "include/effects",
   "include/encode",
   "include/gpu",
@@ -398,7 +399,8 @@ optional("fontmgr_android") {
 }
 
 optional("fontmgr_custom") {
-  enabled = is_linux && skia_use_freetype && !skia_use_fontconfig
+  enabled = (is_linux || target_cpu == "wasm") && skia_use_freetype &&
+            !skia_use_fontconfig
 
   deps = [
     ":typeface_freetype",
@@ -928,7 +930,7 @@ component("skia") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || target_cpu == "wasm") {
     sources += [ "src/ports/SkDebug_stdio.cpp" ]
     if (skia_use_egl) {
       libs += [ "GLESv2" ]
@@ -1397,6 +1399,7 @@ if (skia_enable_tools) {
       ":skia",
       ":tool_utils",
       "modules/skottie",
+      "modules/skottie:gm",
       "modules/sksg",
     ]
     public_deps = [
@@ -1415,6 +1418,7 @@ if (skia_enable_tools) {
       sources -= [ "//tests/FontMgrFontConfigTest.cpp" ]
     }
     deps = [
+      ":experimental_pipe",
       ":experimental_svg_model",
       ":flags",
       ":skia",
@@ -1439,6 +1443,18 @@ if (skia_enable_tools) {
       ":gpu_tool_utils",
       ":skia",
       ":tool_utils",
+    ]
+  }
+
+  test_lib("experimental_pipe") {
+    public_include_dirs = [ "experimental/pipe" ]
+    sources = [
+      "experimental/pipe/SkPipe.h",
+      "experimental/pipe/SkPipeCanvas.cpp",
+      "experimental/pipe/SkPipeCanvas.h",
+      "experimental/pipe/SkPipeFormat.h",
+      "experimental/pipe/SkPipeReader.cpp",
+      "experimental/pipe/SkRefSet.h",
     ]
   }
 
@@ -1593,6 +1609,7 @@ if (skia_enable_tools) {
       include_dirs = [ "tests" ]
       deps = [
         ":common_flags",
+        ":experimental_pipe",
         ":experimental_svg_model",
         ":flags",
         ":gm",

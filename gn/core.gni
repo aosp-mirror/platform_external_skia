@@ -102,8 +102,6 @@ skia_core_sources = [
   "$_src/lazy/SkDiscardableMemoryPool.cpp",
   "$_src/core/SkDistanceFieldGen.cpp",
   "$_src/core/SkDistanceFieldGen.h",
-  "$_src/core/SkDither.cpp",
-  "$_src/core/SkDither.h",
   "$_src/core/SkDocument.cpp",
   "$_src/core/SkDraw.cpp",
   "$_src/core/SkDraw_vertices.cpp",
@@ -356,10 +354,6 @@ skia_core_sources = [
 
   #        "$_src/image/SkSurface_Gpu.cpp",
   "$_src/image/SkSurface_Raster.cpp",
-
-  "$_src/pipe/SkPipeCanvas.cpp",
-  "$_src/pipe/SkPipeReader.cpp",
-  "$_src/pipe/SkRefSet.h",
 
   "$_src/shaders/SkBitmapProcShader.cpp",
   "$_src/shaders/SkBitmapProcShader.h",

@@ -133,44 +133,29 @@ uint64_t SkPM4f::toF16() const {
     return value;
 }
 
-SkPM4f SkPM4f::FromF16(const uint16_t half[4]) {
-    return {{
-        SkHalfToFloat(half[0]),
-        SkHalfToFloat(half[1]),
-        SkHalfToFloat(half[2]),
-        SkHalfToFloat(half[3])
-    }};
-}
-
-#ifdef SK_DEBUG
-void SkPM4f::assertIsUnit() const {
-    auto c4 = Sk4f::Load(fVec);
-    SkASSERT((c4 >= Sk4f(0)).allTrue() && (c4 <= Sk4f(1)).allTrue());
-}
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+template <>
 SkColor4f SkColor4f::FromColor(SkColor bgra) {
     SkColor4f rgba;
     swizzle_rb(Sk4f_fromL32(bgra)).store(rgba.vec());
     return rgba;
 }
 
+template <>
 SkColor SkColor4f::toSkColor() const {
     return Sk4f_toL32(swizzle_rb(Sk4f::Load(this->vec())));
 }
 
+template <>
 SkColor4f SkColor4f::Pin(float r, float g, float b, float a) {
     SkColor4f c4;
     Sk4f::Min(Sk4f::Max(Sk4f(r, g, b, a), Sk4f(0)), Sk4f(1)).store(c4.vec());
     return c4;
 }
 
-SkPM4f SkColor4f::premul() const {
-    auto src = Sk4f::Load(this->pin().vec());
-    float srcAlpha = src[3];  // need the pinned version of our alpha
-    src = src * Sk4f(srcAlpha, srcAlpha, srcAlpha, 1);
-
-    return SkPM4f::From4f(src);
+template <>
+SkPM4f SkColor4f::toPM4f() const {
+    auto rgba = Sk4f::Load(this->vec());
+    return SkPM4f::From4f(rgba * Sk4f(rgba[3], rgba[3], rgba[3], 1));
 }

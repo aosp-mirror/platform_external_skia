@@ -288,9 +288,8 @@ void SkGlyphRunListPainter::drawGlyphRunAsSDFWithFallback(
 GrColor generate_filtered_color(const SkPaint& paint, const GrColorSpaceInfo& colorSpaceInfo) {
     GrColor4f filteredColor = SkColor4fToUnpremulGrColor4f(paint.getColor4f(), colorSpaceInfo);
     if (paint.getColorFilter() != nullptr) {
-        filteredColor = GrColor4f::FromSkColor4f(
-                paint.getColorFilter()->filterColor4f(filteredColor.toSkColor4f(),
-                                                      colorSpaceInfo.colorSpace()));
+        filteredColor = GrColor4f::FromRGBA4f(paint.getColorFilter()->filterColor4f(
+                filteredColor.asRGBA4f<kUnpremul_SkAlphaType>(),colorSpaceInfo.colorSpace()));
     }
     return filteredColor.premul().toGrColor();
 }
@@ -455,7 +454,7 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
             {
 
                 auto cache = cacheBlob->setupCache(
-                        runIndex, props, flags, distanceFieldPaint, nullptr);
+                        runIndex, props, flags, distanceFieldPaint, &SkMatrix::I());
 
                 sk_sp<GrTextStrike> currStrike = glyphCache->getStrike(cache.get());
 
@@ -508,7 +507,7 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
             pathPaint.setPathEffect(nullptr);
 
             auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(
-                    pathPaint, &props, SkScalerContextFlags::kFakeGammaAndBoostContrast, nullptr);
+                    pathPaint, &props, scalerContextFlags, &SkMatrix::I());
 
             auto perPath = [matrixScale, runIndex, cacheBlob, &cache]
                            (const SkGlyph& glyph, SkPoint position) {

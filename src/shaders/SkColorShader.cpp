@@ -56,7 +56,7 @@ SkColorShader::ColorShaderContext::ColorShaderContext(const SkColorShader& shade
 
     SkColor4f c4 = SkColor4f::FromColor(shader.fColor);
     c4.fA *= rec.fPaint->getAlpha() / 255.0f;
-    fPM4f = c4.premul();
+    fPM4f = c4.toPM4f();
 
     fFlags = kConstInY32_Flag;
     if (255 == a) {
@@ -171,7 +171,7 @@ SkColor4Shader::Color4Context::Color4Context(const SkColor4Shader& shader,
 
     SkColor4f c4 = shader.fColor4;
     c4.fA *= rec.fPaint->getAlpha() * (1 / 255.0f);
-    fPM4f = c4.premul();
+    fPM4f = c4.toPM4f();
 
     fFlags = kConstInY32_Flag;
     if (255 == a) {
@@ -214,7 +214,7 @@ std::unique_ptr<GrFragmentProcessor> SkColor4Shader::asFragmentProcessor(
             fColorSpace.get(),                     kUnpremul_SkAlphaType,
             args.fDstColorSpaceInfo->colorSpace(), kUnpremul_SkAlphaType);
 
-    GrColor4f color = GrColor4f::FromSkColor4f(fColor4);
+    GrColor4f color = GrColor4f::FromRGBA4f(fColor4);
     if (xform) {
         color = xform->apply(color);
     }
