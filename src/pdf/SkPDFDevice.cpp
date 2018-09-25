@@ -184,26 +184,6 @@ void remove_color_filter(SkPaint* paint) {
     }
 }
 
-SkPDFDevice::GraphicStateEntry::GraphicStateEntry()
-    : fColor(SK_ColorBLACK)
-    , fTextScaleX(SK_Scalar1)
-    , fTextFill(SkPaint::kFill_Style)
-    , fShaderIndex(-1)
-    , fGraphicStateIndex(-1) {
-    fMatrix.reset();
-}
-
-bool SkPDFDevice::GraphicStateEntry::compareInitialState(
-        const GraphicStateEntry& cur) {
-    return fColor == cur.fColor &&
-           fShaderIndex == cur.fShaderIndex &&
-           fGraphicStateIndex == cur.fGraphicStateIndex &&
-           fMatrix == cur.fMatrix &&
-           fClipStack == cur.fClipStack &&
-           (fTextScaleX == 0 ||
-               (fTextScaleX == cur.fTextScaleX && fTextFill == cur.fTextFill));
-}
-
 class GraphicStackState {
 public:
     GraphicStackState(const SkClipStack& existingClipStack,
@@ -613,40 +593,19 @@ void SkPDFDevice::drawAnnotation(const SkRect& rect, const char key[], SkData* v
 }
 
 void SkPDFDevice::drawPaint(const SkPaint& srcPaint) {
+    SkMatrix inverse;
+    if (!this->ctm().invert(&inverse)) {
+        return;
+    }
+    SkRect bbox = this->cs().bounds(this->bounds());
+    inverse.mapRect(&bbox);
+    bbox.roundOut(&bbox);
     if (this->hasEmptyClip()) {
         return;
     }
     SkPaint newPaint = srcPaint;
-    remove_color_filter(&newPaint);
-    replace_srcmode_on_opaque_paint(&newPaint);
     newPaint.setStyle(SkPaint::kFill_Style);
-
-    SkMatrix ctm = this->ctm();
-    if (ctm.getType() & SkMatrix::kPerspective_Mask) {
-        if (newPaint.getShader()) {
-            transform_shader(&newPaint, ctm);
-        }
-        ctm = SkMatrix::I();
-    }
-    ScopedContentEntry content(this, this->cs(), ctm, newPaint);
-    this->internalDrawPaint(newPaint, content.entry());
-}
-
-void SkPDFDevice::internalDrawPaint(const SkPaint& paint,
-                                    SkPDFDevice::ContentEntry* contentEntry) {
-    if (!contentEntry) {
-        return;
-    }
-    SkRect bbox = SkRect::Make(this->imageInfo().dimensions());
-    SkMatrix inverse;
-    if (!contentEntry->fState.fMatrix.invert(&inverse)) {
-        return;
-    }
-    inverse.mapRect(&bbox);
-
-    SkPDFUtils::AppendRectangle(bbox, &contentEntry->fContent);
-    SkPDFUtils::PaintPath(paint.getStyle(), SkPath::kWinding_FillType,
-                          &contentEntry->fContent);
+    this->drawRect(bbox, newPaint);
 }
 
 void SkPDFDevice::drawPoints(SkCanvas::PointMode mode,
