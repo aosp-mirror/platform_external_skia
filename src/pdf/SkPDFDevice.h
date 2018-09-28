@@ -131,6 +131,8 @@ public:
         int fGraphicStateIndex = -1;
     };
 
+    void DrawGlyphRunAsPath(SkPDFDevice* dev, const SkGlyphRun& glyphRun, SkPoint offset);
+
 protected:
     sk_sp<SkSurface> makeSurface(const SkImageInfo&, const SkSurfaceProps&) override;
 
@@ -196,7 +198,7 @@ private:
     // Set alpha to true if making a transparency group form x-objects.
     sk_sp<SkPDFObject> makeFormXObjectFromDevice(bool alpha = false);
 
-    void drawFormXObjectWithMask(int xObjectIndex,
+    void drawFormXObjectWithMask(sk_sp<SkPDFObject> xObject,
                                  sk_sp<SkPDFObject> mask,
                                  SkBlendMode,
                                  bool invertClip);
@@ -220,6 +222,7 @@ private:
                                             GraphicStateEntry* entry);
 
     void internalDrawGlyphRun(const SkGlyphRun& glyphRun, SkPoint offset);
+    void drawGlyphRunAsPath(const SkGlyphRun& glyphRun, SkPoint offset);
 
     void internalDrawImageRect(SkKeyedImage,
                                const SkRect* src,
