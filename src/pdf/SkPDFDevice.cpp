@@ -188,7 +188,7 @@ void remove_color_filter(SkPaint* paint) {
 void SkPDFDevice::GraphicStackState::drainStack() {
     if (fContentStream) {
         while (fStackDepth) {
-            pop();
+            this->pop();
         }
     }
     SkASSERT(fStackDepth == 0);
@@ -220,28 +220,6 @@ static bool calculate_inverse_path(const SkRect& bounds, const SkPath& invPath,
     clipPath.addRect(bounds);
 
     return Op(clipPath, invPath, kIntersect_SkPathOp, outPath);
-}
-
-bool apply_clip(SkClipOp op, const SkPath& u, const SkPath& v, SkPath* r)  {
-    switch (op) {
-        case SkClipOp::kDifference:
-            return Op(u, v, kDifference_SkPathOp, r);
-        case SkClipOp::kIntersect:
-            return Op(u, v, kIntersect_SkPathOp, r);
-#ifdef SK_SUPPORT_DEPRECATED_CLIPOPS
-        case SkClipOp::kUnion_deprecated:
-            return Op(u, v, kUnion_SkPathOp, r);
-        case SkClipOp::kXOR_deprecated:
-            return Op(u, v, kXOR_SkPathOp, r);
-        case SkClipOp::kReverseDifference_deprecated:
-            return Op(u, v, kReverseDifference_SkPathOp, r);
-        case SkClipOp::kReplace_deprecated:
-            *r = v;
-            return true;
-#endif
-        default:
-            return false;
-    }
 }
 
 static SkRect rect_intersect(SkRect u, SkRect v) {
@@ -328,14 +306,15 @@ void SkPDFDevice::GraphicStackState::updateClip(const SkClipStack* clipStack,
     }
 
     while (fStackDepth > 0) {
-        pop();
+        this->pop();
         if (clipStackGenID == currentEntry()->fClipStackGenID) {
             return;
         }
     }
+    SkASSERT(currentEntry()->fClipStackGenID == SkClipStack::kWideOpenGenID);
     if (clipStackGenID != SkClipStack::kWideOpenGenID) {
         SkASSERT(clipStack);
-        push();
+        this->push();
 
         currentEntry()->fClipStackGenID = clipStackGenID;
         append_clip(*clipStack, bounds, fContentStream);
@@ -363,7 +342,7 @@ void SkPDFDevice::GraphicStackState::updateMatrix(const SkMatrix& matrix) {
         SkASSERT(fStackDepth > 0);
         SkASSERT(fEntries[fStackDepth].fClipStackGenID ==
                  fEntries[fStackDepth -1].fClipStackGenID);
-        pop();
+        this->pop();
 
         SkASSERT(currentEntry()->fMatrix.getType() == SkMatrix::kIdentity_Mask);
     }
@@ -371,7 +350,7 @@ void SkPDFDevice::GraphicStackState::updateMatrix(const SkMatrix& matrix) {
         return;
     }
 
-    push();
+    this->push();
     append_transform(matrix, fContentStream);
     currentEntry()->fMatrix = matrix;
 }
