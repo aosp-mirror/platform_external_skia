@@ -26,8 +26,6 @@ public:
     ~SkImage_Gpu() override;
 
     SkImageInfo onImageInfo() const override;
-    SkColorType onColorType() const override;
-    SkAlphaType onAlphaType() const override { return fAlphaType; }
 
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
@@ -58,7 +56,7 @@ public:
 
     sk_sp<SkColorSpace> refColorSpace() { return fColorSpace; }
 
-    sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>, SkColorType) const override;
+    sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>) const override;
 
     typedef ReleaseContext TextureContext;
     typedef void (*TextureFulfillProc)(TextureContext textureContext, GrBackendTexture* outTexture);

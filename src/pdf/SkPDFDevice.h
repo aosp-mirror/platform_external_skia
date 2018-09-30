@@ -58,7 +58,7 @@ public:
                 const SkMatrix& initialTransform = SkMatrix::I());
 
     sk_sp<SkPDFDevice> makeCongruentDevice() {
-        return sk_make_sp<SkPDFDevice>(this->imageInfo().dimensions(), fDocument);
+        return sk_make_sp<SkPDFDevice>(this->size(), fDocument);
     }
 
     ~SkPDFDevice() override;
@@ -112,23 +112,26 @@ public:
 
     /** Returns a SkStream with the page contents.
      */
-    std::unique_ptr<SkStreamAsset> content() const;
+    std::unique_ptr<SkStreamAsset> content();
 
     SkPDFCanon* getCanon() const;
 
+    SkISize size() const { return this->imageInfo().dimensions(); }
     SkIRect bounds() const { return this->imageInfo().bounds(); }
 
     // It is important to not confuse GraphicStateEntry with SkPDFGraphicState, the
     // later being our representation of an object in the PDF file.
     struct GraphicStateEntry {
         SkMatrix fMatrix = SkMatrix::I();
-        SkClipStack fClipStack;
+        uint32_t fClipStackGenID = SkClipStack::kWideOpenGenID;
         SkColor fColor = SK_ColorBLACK;
         SkScalar fTextScaleX = 1;  // Zero means we don't care what the value is.
         SkPaint::Style fTextFill = SkPaint::kFill_Style;  // Only if TextScaleX is non-zero.
         int fShaderIndex = -1;
         int fGraphicStateIndex = -1;
     };
+
+    void DrawGlyphRunAsPath(SkPDFDevice* dev, const SkGlyphRun& glyphRun, SkPoint offset);
 
 protected:
     sk_sp<SkSurface> makeSurface(const SkImageInfo&, const SkSurfaceProps&) override;
@@ -167,13 +170,25 @@ private:
     std::vector<sk_sp<SkPDFObject>> fXObjectResources;
     std::vector<sk_sp<SkPDFObject>> fShaderResources;
     std::vector<sk_sp<SkPDFFont>> fFontResources;
+    int fNodeId;
 
-    struct ContentEntry {
-        GraphicStateEntry fState;
-        SkDynamicMemoryWStream fContent;
+    SkSinglyLinkedList<SkDynamicMemoryWStream> fContentEntries;
+    struct GraphicStackState {
+        GraphicStackState(SkDynamicMemoryWStream* s = nullptr) : fContentStream(s) {}
+        void updateClip(const SkClipStack* clipStack, const SkIRect& bounds);
+        void updateMatrix(const SkMatrix& matrix);
+        void updateDrawingState(const SkPDFDevice::GraphicStateEntry& state);
+        void push();
+        void pop();
+        void drainStack();
+        SkPDFDevice::GraphicStateEntry* currentEntry() { return &fEntries[fStackDepth]; }
+        // Must use stack for matrix, and for clip, plus one for no matrix or clip.
+        static constexpr int kMaxStackDepth = 2;
+        SkPDFDevice::GraphicStateEntry fEntries[kMaxStackDepth + 1];
+        int fStackDepth = 0;
+        SkDynamicMemoryWStream* fContentStream;
     };
-    SkSinglyLinkedList<ContentEntry> fContentEntries;
-
+    GraphicStackState fActiveStackState;
     SkPDFDocument* fDocument;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -183,7 +198,7 @@ private:
     // Set alpha to true if making a transparency group form x-objects.
     sk_sp<SkPDFObject> makeFormXObjectFromDevice(bool alpha = false);
 
-    void drawFormXObjectWithMask(int xObjectIndex,
+    void drawFormXObjectWithMask(sk_sp<SkPDFObject> xObject,
                                  sk_sp<SkPDFObject> mask,
                                  SkBlendMode,
                                  bool invertClip);
@@ -192,12 +207,12 @@ private:
     // returns nullptr and does not create a content entry.
     // setUpContentEntry and finishContentEntry can be used directly, but
     // the preferred method is to use the ScopedContentEntry helper class.
-    ContentEntry* setUpContentEntry(const SkClipStack* clipStack,
+    SkDynamicMemoryWStream* setUpContentEntry(const SkClipStack* clipStack,
                                     const SkMatrix& matrix,
                                     const SkPaint& paint,
                                     bool hasText,
                                     sk_sp<SkPDFObject>* dst);
-    void finishContentEntry(SkBlendMode, sk_sp<SkPDFObject> dst, SkPath* shape);
+    void finishContentEntry(const SkClipStack*, SkBlendMode, sk_sp<SkPDFObject> dst, SkPath* shape);
     bool isContentEmpty();
 
     void populateGraphicStateEntryFromPaint(const SkMatrix& matrix,
@@ -207,6 +222,7 @@ private:
                                             GraphicStateEntry* entry);
 
     void internalDrawGlyphRun(const SkGlyphRun& glyphRun, SkPoint offset);
+    void drawGlyphRunAsPath(const SkGlyphRun& glyphRun, SkPoint offset);
 
     void internalDrawImageRect(SkKeyedImage,
                                const SkRect* src,

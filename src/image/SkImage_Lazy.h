@@ -37,12 +37,6 @@ public:
     SkImageInfo onImageInfo() const override {
         return fInfo;
     }
-    SkColorType onColorType() const override {
-        return fInfo.colorType();
-    }
-    SkAlphaType onAlphaType() const override {
-        return fInfo.alphaType();
-    }
 
     SkIRect onGetSubset() const override {
         return SkIRect::MakeXYWH(fOrigin.fX, fOrigin.fY, fInfo.width(), fInfo.height());
@@ -61,7 +55,7 @@ public:
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
-    sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>, SkColorType) const override;
+    sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>) const override;
 
     bool onIsValid(GrContext*) const override;
 
