@@ -483,7 +483,6 @@ cc_library_static {
         "src/gpu/effects/GrSimpleTextureEffect.cpp",
         "src/gpu/effects/GrSkSLFP.cpp",
         "src/gpu/effects/GrTextureDomain.cpp",
-        "src/gpu/effects/GrUnpremulInputFragmentProcessor.cpp",
         "src/gpu/effects/GrXfermodeFragmentProcessor.cpp",
         "src/gpu/effects/GrYUVtoRGBEffect.cpp",
         "src/gpu/gl/GrGLAssembleInterface.cpp",
