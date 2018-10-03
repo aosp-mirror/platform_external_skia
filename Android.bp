@@ -154,7 +154,6 @@ cc_library_static {
         "src/core/SkColorFilter.cpp",
         "src/core/SkColorMatrixFilterRowMajor255.cpp",
         "src/core/SkColorSpace.cpp",
-        "src/core/SkColorSpaceXform.cpp",
         "src/core/SkColorSpaceXformCanvas.cpp",
         "src/core/SkColorSpaceXformSteps.cpp",
         "src/core/SkColorSpaceXformer.cpp",
