@@ -620,7 +620,7 @@ cc_library_static {
         "src/gpu/vk/GrVkVertexBuffer.cpp",
         "src/image/SkImage.cpp",
         "src/image/SkImage_Gpu.cpp",
-        "src/image/SkImage_GpuShared.cpp",
+        "src/image/SkImage_GpuBase.cpp",
         "src/image/SkImage_GpuYUVA.cpp",
         "src/image/SkImage_Lazy.cpp",
         "src/image/SkImage_Raster.cpp",
