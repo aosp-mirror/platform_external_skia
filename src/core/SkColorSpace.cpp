@@ -49,7 +49,7 @@ SkColorSpace::SkColorSpace(SkGammaNamed gammaNamed,
         fToXYZD50_3x3[3*r+c] = toXYZD50.get(r,c);
     }
     SkASSERT(xyz_almost_equal(toXYZD50, fToXYZD50_3x3));
-    fToXYZD50Hash = SkOpts::hash_fn(fToXYZD50_3x3, sizeof(fToXYZD50_3x3), 0);
+    fToXYZD50Hash = SkOpts::hash_fn(fToXYZD50_3x3, 9*sizeof(float), 0);
 
     switch (fGammaNamed) {
         case kSRGB_SkGammaNamed:        transferFn = &  gSRGB_TransferFn.fG; break;
@@ -58,6 +58,7 @@ SkColorSpace::SkColorSpace(SkGammaNamed gammaNamed,
         case kNonStandard_SkGammaNamed:                                      break;
     }
     memcpy(fTransferFn, transferFn, 7*sizeof(float));
+    fTransferFnHash = SkOpts::hash_fn(fTransferFn, 7*sizeof(float), 0);
 }
 
 
@@ -498,81 +499,23 @@ sk_sp<SkColorSpace> SkColorSpace::Deserialize(const void* data, size_t length) {
     }
 }
 
-bool SkColorSpace::Equals(const SkColorSpace* src, const SkColorSpace* dst) {
-    if (src == dst) {
+bool SkColorSpace::Equals(const SkColorSpace* x, const SkColorSpace* y) {
+    if (x == y) {
         return true;
     }
 
-    if (!src || !dst) {
+    if (!x || !y) {
         return false;
     }
 
-    if (src->gammaNamed() != dst->gammaNamed()) {
-        return false;
+    if (x->hash() == y->hash()) {
+        for (int i = 0; i < 7; i++) {
+            SkASSERT(x->  fTransferFn[i] == y->  fTransferFn[i] && "Hash collsion");
+        }
+        for (int i = 0; i < 9; i++) {
+            SkASSERT(x->fToXYZD50_3x3[i] == y->fToXYZD50_3x3[i] && "Hash collsion");
+        }
+        return true;
     }
-
-    switch (src->gammaNamed()) {
-        case kSRGB_SkGammaNamed:
-        case k2Dot2Curve_SkGammaNamed:
-        case kLinear_SkGammaNamed:
-            if (src->toXYZD50Hash() == dst->toXYZD50Hash()) {
-                for (int i = 0; i < 9; i++) {
-                    SkASSERT(src->fToXYZD50_3x3[i] == dst->fToXYZD50_3x3[i] && "Hash collsion");
-                }
-                return true;
-            }
-            return false;
-        default:
-            // It is unlikely that we will reach this case.
-            // TODO: Simplify this case now that color spaces have one representation.
-            sk_sp<SkData> serializedSrcData = src->serialize();
-            sk_sp<SkData> serializedDstData = dst->serialize();
-            return serializedSrcData->size() == serializedDstData->size() &&
-                   0 == memcmp(serializedSrcData->data(), serializedDstData->data(),
-                               serializedSrcData->size());
-    }
-}
-
-SkColorSpaceTransferFn SkColorSpaceTransferFn::invert() const {
-    // Original equation is:       y = (ax + b)^g + e   for x >= d
-    //                             y = cx + f           otherwise
-    //
-    // so 1st inverse is:          (y - e)^(1/g) = ax + b
-    //                             x = ((y - e)^(1/g) - b) / a
-    //
-    // which can be re-written as: x = (1/a)(y - e)^(1/g) - b/a
-    //                             x = ((1/a)^g)^(1/g) * (y - e)^(1/g) - b/a
-    //                             x = ([(1/a)^g]y + [-((1/a)^g)e]) ^ [1/g] + [-b/a]
-    //
-    // and 2nd inverse is:         x = (y - f) / c
-    // which can be re-written as: x = [1/c]y + [-f/c]
-    //
-    // and now both can be expressed in terms of the same parametric form as the
-    // original - parameters are enclosed in square brackets.
-    SkColorSpaceTransferFn inv = { 0, 0, 0, 0, 0, 0, 0 };
-
-    // find inverse for linear segment (if possible)
-    if (!transfer_fn_almost_equal(0.f, fC)) {
-        inv.fC = 1.f / fC;
-        inv.fF = -fF / fC;
-    } else {
-        // otherwise assume it should be 0 as it is the lower segment
-        // as y = f is a constant function
-    }
-
-    // find inverse for the other segment (if possible)
-    if (transfer_fn_almost_equal(0.f, fA) || transfer_fn_almost_equal(0.f, fG)) {
-        // otherwise assume it should be 1 as it is the top segment
-        // as you can't invert the constant functions y = b^g + e, or y = 1 + e
-        inv.fG = 1.f;
-        inv.fE = 1.f;
-    } else {
-        inv.fG = 1.f / fG;
-        inv.fA = powf(1.f / fA, fG);
-        inv.fB = -inv.fA * fE;
-        inv.fE = -fB / fA;
-    }
-    inv.fD = fC * fD + fF;
-
-    return inv;
+    return false;
 }
