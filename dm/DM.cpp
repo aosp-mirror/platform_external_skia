@@ -832,20 +832,8 @@ static bool gather_srcs() {
 }
 
 static sk_sp<SkColorSpace> rec2020() {
-    // See https://en.wikipedia.org/wiki/Rec._2020
-    float alpha = 1.09929682680944f,
-          beta  = 0.018053968510807f,
-          gamma = 0.45f;
-    SkColorSpaceTransferFn rec2020_TF = SkColorSpaceTransferFn{
-        gamma,
-        powf(alpha, 1/gamma),
-        0.0f,
-        4.5f,
-        beta,
-        1 - alpha,
-        0.0f,
-    }.invert();
-    return SkColorSpace::MakeRGB(rec2020_TF, SkColorSpace::kRec2020_Gamut);
+    return SkColorSpace::MakeRGB({2.22222f, 0.909672f, 0.0903276f, 0.222222f, 0.0812429f, 0, 0},
+                                 SkColorSpace::kRec2020_Gamut);
 }
 
 static void push_sink(const SkCommandLineConfig& config, Sink* s) {
@@ -938,7 +926,7 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         // Configs relevant to color management testing (and 8888 for reference).
 
         // 'narrow' has a gamut narrower than sRGB, and different transfer function.
-        SkMatrix44 narrow_gamut(SkMatrix44::kUninitialized_Constructor);
+        SkMatrix44 narrow_gamut;
         narrow_gamut.set3x3RowMajorf(gNarrow_toXYZD50);
 
         auto narrow = SkColorSpace::MakeRGB(k2Dot2Curve_SkGammaNamed, narrow_gamut),

@@ -254,21 +254,20 @@ sk_sp<GrTextureProxy> GrMakeCachedImageProxy(GrProxyProvider* proxyProvider,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrColor4f SkColorToPremulGrColor4f(SkColor c, const GrColorSpaceInfo& colorSpaceInfo) {
-    // We want to premultiply after color space conversion, so this is easy:
-    return SkColor4fToUnpremulGrColor4f(SkColor4f::FromColor(c), colorSpaceInfo).premul();
-}
-
-GrColor4f SkColor4fToPremulGrColor4fLegacy(SkColor4f c) {
-    return GrColor4f::FromRGBA4f(c.premul());
-}
-
 GrColor4f SkColor4fToUnpremulGrColor4f(SkColor4f c, const GrColorSpaceInfo& colorSpaceInfo) {
     GrColor4f color = GrColor4f::FromRGBA4f(c);
     if (auto* xform = colorSpaceInfo.colorSpaceXformFromSRGB()) {
         color = xform->apply(color);
     }
     return color;
+}
+
+SkPMColor4f SkColorToPMColor4f(SkColor c, const GrColorSpaceInfo& colorSpaceInfo) {
+    SkColor4f color = SkColor4f::FromColor(c);
+    if (auto* xform = colorSpaceInfo.colorSpaceXformFromSRGB()) {
+        color = xform->apply(color);
+    }
+    return color.premul();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -397,7 +396,7 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
             // The geometry processor will insert the primitive color to start the color chain, so
             // the GrPaint color will be ignored.
 
-            GrColor4f shaderInput = origColor.opaque();
+            SkPMColor4f shaderInput = origColor.opaque().asRGBA4f<kPremul_SkAlphaType>();
             shaderFP = GrFragmentProcessor::OverrideInput(std::move(shaderFP), shaderInput);
             shaderFP = GrXfermodeFragmentProcessor::MakeFromSrcProcessor(std::move(shaderFP),
                                                                          *primColorMode);
@@ -413,7 +412,7 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
                 // No gamut conversion - paintAlpha is a (linear) alpha value, splatted to all
                 // color channels. It's value should be treated as the same in ANY color space.
                 grPaint->addColorFragmentProcessor(GrConstColorProcessor::Make(
-                    GrColor4f::FromGrColor(paintAlpha),
+                    GrColorToPMColor4f(paintAlpha),
                     GrConstColorProcessor::InputMode::kModulateRGBA));
             }
         } else {
@@ -425,8 +424,9 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
         if (primColorMode) {
             // There is a blend between the primitive color and the paint color. The blend considers
             // the opaque paint color. The paint's alpha is applied to the post-blended color.
-            auto processor = GrConstColorProcessor::Make(origColor.opaque(),
-                                                         GrConstColorProcessor::InputMode::kIgnore);
+            auto processor = GrConstColorProcessor::Make(
+                    origColor.opaque().asRGBA4f<kPremul_SkAlphaType>(),
+                    GrConstColorProcessor::InputMode::kIgnore);
             processor = GrXfermodeFragmentProcessor::MakeFromSrcProcessor(std::move(processor),
                                                                           *primColorMode);
             if (processor) {
@@ -441,7 +441,7 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
                 // No gamut conversion - paintAlpha is a (linear) alpha value, splatted to all
                 // color channels. It's value should be treated as the same in ANY color space.
                 grPaint->addColorFragmentProcessor(GrConstColorProcessor::Make(
-                    GrColor4f::FromGrColor(paintAlpha),
+                    GrColorToPMColor4f(paintAlpha),
                     GrConstColorProcessor::InputMode::kModulateRGBA));
             }
         } else {

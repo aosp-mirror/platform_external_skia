@@ -37,25 +37,20 @@
 #include "SkGr.h"
 #include "SkImageInfoPriv.h"
 #include "SkImage_Gpu.h"
-#include "SkImage_GpuShared.h"
 #include "SkMipMap.h"
 #include "SkPixelRef.h"
 #include "SkReadPixelsRec.h"
 #include "SkTraceEvent.h"
+#include "SkYUVAIndex.h"
 #include "effects/GrYUVtoRGBEffect.h"
 #include "gl/GrGLTexture.h"
-
-using namespace SkImage_GpuShared;
 
 SkImage_Gpu::SkImage_Gpu(sk_sp<GrContext> context, uint32_t uniqueID, SkAlphaType at,
                          sk_sp<GrTextureProxy> proxy, sk_sp<SkColorSpace> colorSpace,
                          SkBudgeted budgeted)
-        : INHERITED(proxy->worstCaseWidth(), proxy->worstCaseHeight(), uniqueID)
-        , fContext(std::move(context))
-        , fProxy(std::move(proxy))
-        , fAlphaType(at)
-        , fBudgeted(budgeted)
-        , fColorSpace(std::move(colorSpace)) {}
+        : INHERITED(std::move(context), proxy->worstCaseWidth(), proxy->worstCaseHeight(), uniqueID,
+                    at, budgeted, colorSpace)
+        , fProxy(std::move(proxy)) {}
 
 SkImage_Gpu::~SkImage_Gpu() {}
 
@@ -66,66 +61,6 @@ SkImageInfo SkImage_Gpu::onImageInfo() const {
     }
 
     return SkImageInfo::Make(fProxy->width(), fProxy->height(), colorType, fAlphaType, fColorSpace);
-}
-
-bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkColorSpace*, CachingHint chint) const {
-    if (!fContext->contextPriv().resourceProvider()) {
-        // DDL TODO: buffer up the readback so it occurs when the DDL is drawn?
-        return false;
-    }
-
-    // The SkColorSpace parameter "dstColorSpace" is really just a hint about how/where the bitmap
-    // will be used. The client doesn't expect that we convert to that color space, it's intended
-    // for codec-backed images, to drive our decoding heuristic. In theory we *could* read directly
-    // into that color space (to save the client some effort in whatever they're about to do), but
-    // that would make our use of the bitmap cache incorrect (or much less efficient, assuming we
-    // rolled the dstColorSpace into the key).
-    const auto desc = SkBitmapCacheDesc::Make(this);
-    if (SkBitmapCache::Find(desc, dst)) {
-        SkASSERT(dst->getGenerationID() == this->uniqueID());
-        SkASSERT(dst->isImmutable());
-        SkASSERT(dst->getPixels());
-        return true;
-    }
-
-    SkBitmapCache::RecPtr rec = nullptr;
-    SkPixmap pmap;
-    if (kAllow_CachingHint == chint) {
-        rec = SkBitmapCache::Alloc(desc, this->onImageInfo(), &pmap);
-        if (!rec) {
-            return false;
-        }
-    } else {
-        if (!dst->tryAllocPixels(this->onImageInfo()) || !dst->peekPixels(&pmap)) {
-            return false;
-        }
-    }
-
-    sk_sp<GrSurfaceContext> sContext = fContext->contextPriv().makeWrappedSurfaceContext(
-                                                                                    fProxy,
-                                                                                    fColorSpace);
-    if (!sContext) {
-        return false;
-    }
-
-    if (!sContext->readPixels(pmap.info(), pmap.writable_addr(), pmap.rowBytes(), 0, 0)) {
-        return false;
-    }
-
-    if (rec) {
-        SkBitmapCache::Add(std::move(rec), dst);
-        this->notifyAddedToRasterCache();
-    }
-    return true;
-}
-
-sk_sp<GrTextureProxy> SkImage_Gpu::asTextureProxyRef(GrContext* context,
-                                                     const GrSamplerState& params,
-                                                     SkColorSpace* dstColorSpace,
-                                                     sk_sp<SkColorSpace>* texColorSpace,
-                                                     SkScalar scaleAdjust[2]) const {
-    return AsTextureProxyRef(context, params, dstColorSpace, texColorSpace, scaleAdjust,
-                             fContext.get(), this, fAlphaType, fColorSpace.get());
 }
 
 static void apply_premul(const SkImageInfo& info, void* pixels, size_t rowBytes) {
@@ -148,51 +83,6 @@ static void apply_premul(const SkImageInfo& info, void* pixels, size_t rowBytes)
         }
         row = (SkColor*)((char*)(row) + rowBytes);
     }
-}
-
-GrBackendTexture SkImage_Gpu::onGetBackendTexture(bool flushPendingGrContextIO,
-                                                  GrSurfaceOrigin* origin) const {
-    SkASSERT(fProxy);
-
-    if (!fContext->contextPriv().resourceProvider() && !fProxy->isInstantiated()) {
-        // This image was created with a DDL context and cannot be instantiated.
-        return GrBackendTexture();
-    }
-
-    if (!fProxy->instantiate(fContext->contextPriv().resourceProvider())) {
-        return GrBackendTexture(); // invalid
-    }
-
-    GrTexture* texture = fProxy->peekTexture();
-
-    if (texture) {
-        if (flushPendingGrContextIO) {
-            fContext->contextPriv().prepareSurfaceForExternalIO(fProxy.get());
-        }
-        if (origin) {
-            *origin = fProxy->origin();
-        }
-        return texture->getBackendTexture();
-    }
-    return GrBackendTexture(); // invalid
-}
-
-GrTexture* SkImage_Gpu::onGetTexture() const {
-    GrTextureProxy* proxy = this->peekProxy();
-    if (!proxy) {
-        return nullptr;
-    }
-
-    if (!fContext->contextPriv().resourceProvider() && !fProxy->isInstantiated()) {
-        // This image was created with a DDL context and cannot be instantiated.
-        return nullptr;
-    }
-
-    if (!proxy->instantiate(fContext->contextPriv().resourceProvider())) {
-        return nullptr;
-    }
-
-    return proxy->peekTexture();
 }
 
 bool SkImage_Gpu::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
@@ -274,7 +164,7 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
         return nullptr;
     }
     GrBackendTexture texCopy = tex;
-    if (!ValidateBackendTexture(ctx, texCopy, &texCopy.fConfig, ct, at, cs)) {
+    if (!SkImage_GpuBase::ValidateBackendTexture(ctx, texCopy, &texCopy.fConfig, ct, at, cs)) {
         return nullptr;
     }
     return new_wrapped_texture_common(ctx, texCopy, origin, at, std::move(cs),
@@ -290,7 +180,7 @@ sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext* ctx,
         return nullptr;
     }
     GrBackendTexture texCopy = tex;
-    if (!ValidateBackendTexture(ctx, texCopy, &texCopy.fConfig, ct, at, cs)) {
+    if (!SkImage_GpuBase::ValidateBackendTexture(ctx, texCopy, &texCopy.fConfig, ct, at, cs)) {
         return nullptr;
     }
     return new_wrapped_texture_common(ctx, texCopy, origin, at, std::move(cs),
@@ -308,7 +198,6 @@ sk_sp<SkImage> SkImage_Gpu::ConvertYUVATexturesToRGB(
     // Right now this still only deals with YUV and NV12 formats. Assuming that YUV has different
     // textures for U and V planes, while NV12 uses same texture for U and V planes.
     bool nv12 = (yuvaIndices[1].fIndex == yuvaIndices[2].fIndex);
-    auto ct = nv12 ? kRGBA_8888_SkColorType : kAlpha_8_SkColorType;
 
     // We need to make a copy of the input backend textures because we need to preserve the result
     // of validate_backend_texture.
@@ -326,11 +215,21 @@ sk_sp<SkImage> SkImage_Gpu::ConvertYUVATexturesToRGB(
             // at most 4 images sources being passed in, could not have a index more than 3.
             return nullptr;
         }
+        SkColorType ct = kUnknown_SkColorType;
+        if (SkYUVAIndex::kY_Index == i || SkYUVAIndex::kA_Index == i) {
+            // The Y and A planes are always kAlpha8 (for now)
+            ct = kAlpha_8_SkColorType;
+        } else {
+            // The UV planes can either be interleaved or planar
+            ct = nv12 ? kRGBA_8888_SkColorType : kAlpha_8_SkColorType;
+        }
+
         if (!yuvaTexturesCopy[yuvaIndex.fIndex].isValid()) {
             yuvaTexturesCopy[yuvaIndex.fIndex] = yuvaTextures[yuvaIndex.fIndex];
             // TODO: Instead of using assumption about whether it is NV12 format to guess colorType,
             // actually use channel information here.
-            if (!ValidateBackendTexture(ctx, yuvaTexturesCopy[i], &yuvaTexturesCopy[i].fConfig,
+            if (!ValidateBackendTexture(ctx, yuvaTexturesCopy[yuvaIndex.fIndex],
+                                        &yuvaTexturesCopy[yuvaIndex.fIndex].fConfig,
                                         ct, kPremul_SkAlphaType, nullptr)) {
                 return nullptr;
             }
@@ -347,7 +246,7 @@ sk_sp<SkImage> SkImage_Gpu::ConvertYUVATexturesToRGB(
 
         // Safely ignore since this means we are missing the A plane.
         if (textureIndex == -1) {
-            SkASSERT(3 == i);
+            SkASSERT(SkYUVAIndex::kA_Index == i);
             continue;
         }
 
@@ -393,121 +292,122 @@ sk_sp<SkImage> SkImage_Gpu::ConvertYUVATexturesToRGB(
                                    isBudgeted);
 }
 
-sk_sp<SkImage> SkImage_Gpu::MakeFromYUVATexturesCopyImpl(GrContext* ctx,
-                                                         SkYUVColorSpace colorSpace,
-                                                         const GrBackendTexture yuvaTextures[],
-                                                         const SkYUVAIndex yuvaIndices[4],
-                                                         SkISize size,
-                                                         GrSurfaceOrigin origin,
-                                                         sk_sp<SkColorSpace> imageColorSpace) {
-    const int width = size.width();
-    const int height = size.height();
+sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopy(GrContext* ctx,
+                                                 SkYUVColorSpace yuvColorSpace,
+                                                 const GrBackendTexture yuvaTextures[],
+                                                 const SkYUVAIndex yuvaIndices[4],
+                                                 SkISize imageSize,
+                                                 GrSurfaceOrigin imageOrigin,
+                                                 sk_sp<SkColorSpace> imageColorSpace) {
+    const int width = imageSize.width();
+    const int height = imageSize.height();
 
     // Needs to create a render target in order to draw to it for the yuv->rgb conversion.
     sk_sp<GrRenderTargetContext> renderTargetContext(
             ctx->contextPriv().makeDeferredRenderTargetContext(
                     SkBackingFit::kExact, width, height, kRGBA_8888_GrPixelConfig,
-                    std::move(imageColorSpace), 1, GrMipMapped::kNo, origin));
+                    std::move(imageColorSpace), 1, GrMipMapped::kNo, imageOrigin));
     if (!renderTargetContext) {
         return nullptr;
     }
 
-    return SkImage_Gpu::ConvertYUVATexturesToRGB(ctx, colorSpace, yuvaTextures, yuvaIndices, size,
-                                                 origin, SkBudgeted::kYes,
+    return SkImage_Gpu::ConvertYUVATexturesToRGB(ctx, yuvColorSpace, yuvaTextures, yuvaIndices,
+                                                 imageSize, imageOrigin, SkBudgeted::kYes,
                                                  renderTargetContext.get());
 }
 
-sk_sp<SkImage> SkImage_Gpu::MakeFromYUVATexturesCopyWithExternalBackendImpl(
+sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopyWithExternalBackend(
         GrContext* ctx,
-        SkYUVColorSpace colorSpace,
+        SkYUVColorSpace yuvColorSpace,
         const GrBackendTexture yuvaTextures[],
-        SkYUVAIndex yuvaIndices[4],
-        SkISize size,
-        GrSurfaceOrigin origin,
-        const GrBackendTexture backendTexture,
+        const SkYUVAIndex yuvaIndices[4],
+        SkISize imageSize,
+        GrSurfaceOrigin imageOrigin,
+        const GrBackendTexture& backendTexture,
         sk_sp<SkColorSpace> imageColorSpace) {
     GrBackendTexture backendTextureCopy = backendTexture;
 
-    if (!ValidateBackendTexture(ctx, backendTextureCopy, &backendTextureCopy.fConfig,
-                                kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr)) {
+    if (!SkImage_Gpu::ValidateBackendTexture(ctx, backendTextureCopy, &backendTextureCopy.fConfig,
+                                             kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr)) {
         return nullptr;
     }
 
     // Needs to create a render target with external texture
     // in order to draw to it for the yuv->rgb conversion.
     sk_sp<GrRenderTargetContext> renderTargetContext(
-            ctx->contextPriv().makeBackendTextureRenderTargetContext(backendTextureCopy, origin, 1,
+            ctx->contextPriv().makeBackendTextureRenderTargetContext(backendTextureCopy,
+                                                                     imageOrigin, 1,
                                                                      std::move(imageColorSpace)));
 
     if (!renderTargetContext) {
         return nullptr;
     }
 
-    return SkImage_Gpu::ConvertYUVATexturesToRGB(ctx, colorSpace, yuvaTextures, yuvaIndices, size,
-                                                 origin, SkBudgeted::kNo,
+    return SkImage_Gpu::ConvertYUVATexturesToRGB(ctx, yuvColorSpace, yuvaTextures, yuvaIndices,
+                                                 imageSize, imageOrigin, SkBudgeted::kNo,
                                                  renderTargetContext.get());
 }
 
-sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace colorSpace,
+sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace yuvColorSpace,
                                                 const GrBackendTexture yuvTextures[3],
-                                                GrSurfaceOrigin origin,
+                                                GrSurfaceOrigin imageOrigin,
                                                 sk_sp<SkColorSpace> imageColorSpace) {
     // TODO: SkImageSourceChannel input is being ingored right now. Setup correctly in the future.
     SkYUVAIndex yuvaIndices[4] = {
-            SkYUVAIndex{0, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{1, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{2, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{-1, SkImageSourceChannel::kA_SkImageSourceChannel}};
+            SkYUVAIndex{0, SkColorChannel::kA},
+            SkYUVAIndex{1, SkColorChannel::kA},
+            SkYUVAIndex{2, SkColorChannel::kA},
+            SkYUVAIndex{-1, SkColorChannel::kA}};
     SkISize size{yuvTextures[0].width(), yuvTextures[0].height()};
-    return SkImage_Gpu::MakeFromYUVATexturesCopyImpl(ctx, colorSpace, yuvTextures, yuvaIndices,
-                                                     size, origin, std::move(imageColorSpace));
+    return SkImage_Gpu::MakeFromYUVATexturesCopy(ctx, yuvColorSpace, yuvTextures, yuvaIndices,
+                                                 size, imageOrigin, std::move(imageColorSpace));
 }
 
 sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopyWithExternalBackend(
-        GrContext* ctx, SkYUVColorSpace colorSpace, const GrBackendTexture yuvTextures[3],
-        GrSurfaceOrigin origin, const GrBackendTexture backendTexture,
+        GrContext* ctx, SkYUVColorSpace yuvColorSpace, const GrBackendTexture yuvTextures[3],
+        GrSurfaceOrigin imageOrigin, const GrBackendTexture& backendTexture,
         sk_sp<SkColorSpace> imageColorSpace) {
     SkYUVAIndex yuvaIndices[4] = {
-            SkYUVAIndex{0, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{1, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{2, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{-1, SkImageSourceChannel::kA_SkImageSourceChannel}};
+            SkYUVAIndex{0, SkColorChannel::kA},
+            SkYUVAIndex{1, SkColorChannel::kA},
+            SkYUVAIndex{2, SkColorChannel::kA},
+            SkYUVAIndex{-1, SkColorChannel::kA}};
     SkISize size{yuvTextures[0].width(), yuvTextures[0].height()};
-    return SkImage_Gpu::MakeFromYUVATexturesCopyWithExternalBackendImpl(
-            ctx, colorSpace, yuvTextures, yuvaIndices, size, origin, backendTexture,
+    return SkImage_Gpu::MakeFromYUVATexturesCopyWithExternalBackend(
+            ctx, yuvColorSpace, yuvTextures, yuvaIndices, size, imageOrigin, backendTexture,
             std::move(imageColorSpace));
 }
 
-sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopy(GrContext* ctx, SkYUVColorSpace colorSpace,
+sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopy(GrContext* ctx, SkYUVColorSpace yuvColorSpace,
                                                  const GrBackendTexture nv12Textures[2],
-                                                 GrSurfaceOrigin origin,
+                                                 GrSurfaceOrigin imageOrigin,
                                                  sk_sp<SkColorSpace> imageColorSpace) {
     // TODO: SkImageSourceChannel input is being ingored right now. Setup correctly in the future.
     SkYUVAIndex yuvaIndices[4] = {
-            SkYUVAIndex{0, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{1, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{1, SkImageSourceChannel::kA_SkImageSourceChannel},
-            SkYUVAIndex{-1, SkImageSourceChannel::kA_SkImageSourceChannel}};
+            SkYUVAIndex{0, SkColorChannel::kA},
+            SkYUVAIndex{1, SkColorChannel::kA},
+            SkYUVAIndex{1, SkColorChannel::kA},
+            SkYUVAIndex{-1, SkColorChannel::kA}};
     SkISize size{nv12Textures[0].width(), nv12Textures[0].height()};
-    return SkImage_Gpu::MakeFromYUVATexturesCopyImpl(ctx, colorSpace, nv12Textures, yuvaIndices,
-                                                     size, origin, std::move(imageColorSpace));
+    return SkImage_Gpu::MakeFromYUVATexturesCopy(ctx, yuvColorSpace, nv12Textures, yuvaIndices,
+                                                 size, imageOrigin, std::move(imageColorSpace));
 }
 
 sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
         GrContext* ctx,
-        SkYUVColorSpace colorSpace,
+        SkYUVColorSpace yuvColorSpace,
         const GrBackendTexture nv12Textures[2],
-        GrSurfaceOrigin origin,
-        const GrBackendTexture backendTexture,
+        GrSurfaceOrigin imageOrigin,
+        const GrBackendTexture& backendTexture,
         sk_sp<SkColorSpace> imageColorSpace) {
     SkYUVAIndex yuvaIndices[4] = {
-            SkYUVAIndex{0, SkImageSourceChannel::kLastEnum_SkImageSourceChannel},
-            SkYUVAIndex{1, SkImageSourceChannel::kLastEnum_SkImageSourceChannel},
-            SkYUVAIndex{1, SkImageSourceChannel::kLastEnum_SkImageSourceChannel},
-            SkYUVAIndex{-1, SkImageSourceChannel::kLastEnum_SkImageSourceChannel}};
+            SkYUVAIndex{0, SkColorChannel::kA},
+            SkYUVAIndex{1, SkColorChannel::kA},
+            SkYUVAIndex{1, SkColorChannel::kA},
+            SkYUVAIndex{-1, SkColorChannel::kA}};
     SkISize size{nv12Textures[0].width(), nv12Textures[0].height()};
-    return SkImage_Gpu::MakeFromYUVATexturesCopyWithExternalBackendImpl(
-            ctx, colorSpace, nv12Textures, yuvaIndices, size, origin, backendTexture,
+    return SkImage_Gpu::MakeFromYUVATexturesCopyWithExternalBackend(
+            ctx, yuvColorSpace, nv12Textures, yuvaIndices, size, imageOrigin, backendTexture,
             std::move(imageColorSpace));
 }
 
@@ -1128,57 +1028,3 @@ bool SkImage::MakeBackendTextureFromSkImage(GrContext* ctx,
     return GrTexture::StealBackendTexture(std::move(textureRef), backendTexture, releaseProc);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> target) const {
-    SkAlphaType newAlphaType = fAlphaType;
-#if defined(SK_LEGACY_MAKE_COLOR_SPACE_IMPL)
-    if (kUnpremul_SkAlphaType == fAlphaType) {
-        newAlphaType = kPremul_SkAlphaType;
-    }
-#endif
-    auto xform = GrColorSpaceXformEffect::Make(fColorSpace.get(), this->alphaType(),
-                                               target.get(),      newAlphaType);
-    if (!xform) {
-        return sk_ref_sp(const_cast<SkImage_Gpu*>(this));
-    }
-
-    sk_sp<GrRenderTargetContext> renderTargetContext(
-            fContext->contextPriv().makeDeferredRenderTargetContext(
-                                            SkBackingFit::kExact, this->width(), this->height(),
-                                            kRGBA_8888_GrPixelConfig, nullptr));
-    if (!renderTargetContext) {
-        return nullptr;
-    }
-
-    GrPaint paint;
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    paint.addColorTextureProcessor(fProxy, SkMatrix::I());
-    paint.addColorFragmentProcessor(std::move(xform));
-
-    const SkRect rect = SkRect::MakeIWH(this->width(), this->height());
-
-    renderTargetContext->drawRect(GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(), rect);
-
-    if (!renderTargetContext->asTextureProxy()) {
-        return nullptr;
-    }
-
-    // MDB: this call is okay bc we know 'renderTargetContext' was exact
-    return sk_make_sp<SkImage_Gpu>(fContext, kNeedNewImageUniqueID,
-                                   newAlphaType, renderTargetContext->asTextureProxyRef(),
-                                   std::move(target), fBudgeted);
-}
-
-bool SkImage_Gpu::onIsValid(GrContext* context) const {
-    // The base class has already checked that context isn't abandoned (if it's not nullptr)
-    if (fContext->abandoned()) {
-        return false;
-    }
-
-    if (context && context != fContext.get()) {
-        return false;
-    }
-
-    return true;
-}

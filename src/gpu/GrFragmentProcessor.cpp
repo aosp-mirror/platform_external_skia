@@ -265,7 +265,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::MakeInputPremulAndMulB
 
         SkPMColor4f constantOutputForConstantInput(const SkPMColor4f& input) const override {
             SkPMColor4f childColor = ConstantOutputForConstantInput(this->childProcessor(0),
-                                                                    { 1, 1, 1, 1 });
+                                                                    SK_PMColor4fWHITE);
             SkPMColor4f premulInput = SkColor4f{ input.fR, input.fG, input.fB, input.fA }.premul();
             return premulInput * childColor;
         }
@@ -281,11 +281,11 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::MakeInputPremulAndMulB
 //////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::OverrideInput(
-        std::unique_ptr<GrFragmentProcessor> fp, GrColor4f color) {
+        std::unique_ptr<GrFragmentProcessor> fp, const SkPMColor4f& color) {
     class ReplaceInputFragmentProcessor : public GrFragmentProcessor {
     public:
         static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> child,
-                                                         GrColor4f color) {
+                                                         const SkPMColor4f& color) {
             return std::unique_ptr<GrFragmentProcessor>(
                     new ReplaceInputFragmentProcessor(std::move(child), color));
         }
@@ -312,29 +312,31 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::OverrideInput(
             private:
                 void onSetData(const GrGLSLProgramDataManager& pdman,
                                const GrFragmentProcessor& fp) override {
-                    GrColor4f color = fp.cast<ReplaceInputFragmentProcessor>().fColor;
+                    SkPMColor4f color = fp.cast<ReplaceInputFragmentProcessor>().fColor;
                     if (!fHaveSetColor || color != fPreviousColor) {
-                        pdman.set4fv(fColorUni, 1, color.fRGBA);
+                        pdman.set4fv(fColorUni, 1, color.vec());
                         fPreviousColor = color;
                         fHaveSetColor = true;
                     }
                 }
 
                 GrGLSLProgramDataManager::UniformHandle fColorUni;
-                bool      fHaveSetColor;
-                GrColor4f fPreviousColor;
+                bool        fHaveSetColor;
+                SkPMColor4f fPreviousColor;
             };
 
             return new GLFP;
         }
 
-        ReplaceInputFragmentProcessor(std::unique_ptr<GrFragmentProcessor> child, GrColor4f color)
+        ReplaceInputFragmentProcessor(std::unique_ptr<GrFragmentProcessor> child,
+                                      const SkPMColor4f& color)
                 : INHERITED(kReplaceInputFragmentProcessor_ClassID, OptFlags(child.get(), color))
                 , fColor(color) {
             this->registerChildProcessor(std::move(child));
         }
 
-        static OptimizationFlags OptFlags(const GrFragmentProcessor* child, GrColor4f color) {
+        static OptimizationFlags OptFlags(const GrFragmentProcessor* child,
+                                          const SkPMColor4f& color) {
             OptimizationFlags childFlags = child->optimizationFlags();
             OptimizationFlags flags = kNone_OptimizationFlags;
             if (childFlags & kConstantOutputForConstantInput_OptimizationFlag) {
@@ -354,11 +356,10 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::OverrideInput(
         }
 
         SkPMColor4f constantOutputForConstantInput(const SkPMColor4f&) const override {
-            return ConstantOutputForConstantInput(this->childProcessor(0),
-                                                  fColor.asRGBA4f<kPremul_SkAlphaType>());
+            return ConstantOutputForConstantInput(this->childProcessor(0), fColor);
         }
 
-        GrColor4f fColor;
+        SkPMColor4f fColor;
 
         typedef GrFragmentProcessor INHERITED;
     };
@@ -454,7 +455,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::RunInSeries(
     GrColorFragmentProcessorAnalysis info(inputColor, unique_ptr_address_as_pointer_address(series),
                                           cnt);
     SkTArray<std::unique_ptr<GrFragmentProcessor>> replacementSeries;
-    GrColor4f knownColor;
+    SkPMColor4f knownColor;
     int leadingFPsToEliminate = info.initialProcessorsToEliminate(&knownColor);
     if (leadingFPsToEliminate) {
         std::unique_ptr<GrFragmentProcessor> colorFP(

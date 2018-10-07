@@ -145,7 +145,7 @@ public:
         kIdentity_Constructor
     };
 
-    SkMatrix44(Uninitialized_Constructor) {}
+    SkMatrix44(Uninitialized_Constructor) {}  // ironically, cannot be constexpr
 
     constexpr SkMatrix44(Identity_Constructor)
         : fMat{{ 1, 0, 0, 0, },
@@ -155,8 +155,7 @@ public:
         , fTypeMask(kIdentity_Mask)
     {}
 
-    SK_ATTR_DEPRECATED("use the constructors that take an enum")
-    SkMatrix44() { this->setIdentity(); }
+    constexpr SkMatrix44() : SkMatrix44{kIdentity_Constructor} {}
 
     SkMatrix44(const SkMatrix44& src) {
         memcpy(fMat, src.fMat, sizeof(fMat));
@@ -398,16 +397,6 @@ public:
      */
     void mapScalars(const SkScalar src[4], SkScalar dst[4]) const;
     inline void mapScalars(SkScalar vec[4]) const {
-        this->mapScalars(vec, vec);
-    }
-
-    SK_ATTR_DEPRECATED("use mapScalars")
-    void map(const SkScalar src[4], SkScalar dst[4]) const {
-        this->mapScalars(src, dst);
-    }
-
-    SK_ATTR_DEPRECATED("use mapScalars")
-    void map(SkScalar vec[4]) const {
         this->mapScalars(vec, vec);
     }
 

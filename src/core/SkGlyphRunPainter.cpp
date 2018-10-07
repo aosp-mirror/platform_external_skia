@@ -19,7 +19,6 @@
 #include "SkDevice.h"
 #include "SkDistanceFieldGen.h"
 #include "SkDraw.h"
-#include "SkFindAndPlaceGlyph.h"
 #include "SkGlyphCache.h"
 #include "SkMaskFilter.h"
 #include "SkPaintPriv.h"
@@ -148,8 +147,7 @@ void SkGlyphRunListPainter::drawGlyphRunAsSubpixelMask(
     if (this->ensureBitmapBuffers(runSize)) {
         // Add rounding and origin.
         SkMatrix matrix = deviceMatrix;
-        SkAxisAlignment axisAlignment = cache->getScalerContext()->computeAxisAlignmentForHText();
-        SkPoint rounding = SkFindAndPlaceGlyph::SubpixelPositionRounding(axisAlignment);
+        SkPoint rounding = cache->rounding();
         matrix.preTranslate(origin.x(), origin.y());
         matrix.postTranslate(rounding.x(), rounding.y());
         matrix.mapPoints(fPositions, glyphRun.positions().data(), runSize);
@@ -158,17 +156,8 @@ void SkGlyphRunListPainter::drawGlyphRunAsSubpixelMask(
         for (auto glyphID : glyphRun.shuntGlyphsIDs()) {
             auto position = *positionCursor++;
             if (SkScalarsAreFinite(position.fX, position.fY)) {
-                SkFixed lookupX = SkScalarToFixed(SkScalarFraction(position.fX)),
-                        lookupY = SkScalarToFixed(SkScalarFraction(position.fY));
+                const SkGlyph& glyph = cache->getGlyphMetrics(glyphID, position);
 
-                // Snap to a given axis if alignment is requested.
-                if (axisAlignment == kX_SkAxisAlignment ) {
-                    lookupY = 0;
-                } else if (axisAlignment == kY_SkAxisAlignment) {
-                    lookupX = 0;
-                }
-
-                const SkGlyph& glyph = cache->getGlyphIDMetrics(glyphID, lookupX, lookupY);
                 SkMask mask;
                 if (prepare_mask(cache, glyph, position, &mask)) {
                     perMask(mask, glyph, position);

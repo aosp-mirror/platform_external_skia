@@ -8,6 +8,7 @@
 #include "SkColorSpaceXformSteps.h"
 #include "SkColorSpacePriv.h"
 #include "SkRasterPipeline.h"
+#include "../../third_party/skcms/skcms.h"
 
 // TODO: explain
 
@@ -24,7 +25,8 @@ SkColorSpaceXformSteps::SkColorSpaceXformSteps(SkColorSpace* src, SkAlphaType sr
     if (!src) { src = sk_srgb_singleton(); }
     if (!dst) { dst = src; }
 
-    if (src == dst && srcAT == dstAT) {
+    if (src->hash() == dst->hash() && srcAT == dstAT) {
+        SkASSERT(SkColorSpace::Equals(src,dst));
         return;
     }
 
@@ -49,14 +51,18 @@ SkColorSpaceXformSteps::SkColorSpaceXformSteps(SkColorSpace* src, SkAlphaType sr
         this->src_to_dst_matrix[6] = row_major[2];
         this->src_to_dst_matrix[7] = row_major[5];
         this->src_to_dst_matrix[8] = row_major[8];
+    } else {
+    #ifdef SK_DEBUG
+        SkMatrix44 srcM, dstM;
+        src->toXYZD50(&srcM);
+        dst->toXYZD50(&dstM);
+        SkASSERT(srcM == dstM && "Hash collision");
+    #endif
     }
 
     // Fill out all the transfer functions we'll use.
     src->   transferFn(&this->srcTF   .fG);
     dst->invTransferFn(&this->dstTFInv.fG);
-
-    SkColorSpaceTransferFn dstTF;
-    dst->transferFn(&dstTF.fG);
 
     this->srcTF_is_sRGB = src->gammaCloseToSRGB();
     this->dstTF_is_sRGB = dst->gammaCloseToSRGB();
@@ -65,8 +71,15 @@ SkColorSpaceXformSteps::SkColorSpaceXformSteps(SkColorSpace* src, SkAlphaType sr
     if ( this->flags.linearize       &&
         !this->flags.gamut_transform &&
          this->flags.encode          &&
-        0 == memcmp(&srcTF, &dstTF, sizeof(SkColorSpaceTransferFn)))
+         src->transferFnHash() == dst->transferFnHash())
     {
+    #ifdef SK_DEBUG
+        float dstTF[7];
+        dst->transferFn(dstTF);
+        for (int i = 0; i < 7; i++) {
+            SkASSERT( (&srcTF.fG)[i] == dstTF[i] && "Hash collision" );
+        }
+    #endif
         this->flags.linearize  = false;
         this->flags.encode     = false;
     }
@@ -93,9 +106,12 @@ void SkColorSpaceXformSteps::apply(float* rgba) const {
         rgba[2] *= invA;
     }
     if (flags.linearize) {
-        rgba[0] = srcTF(rgba[0]);
-        rgba[1] = srcTF(rgba[1]);
-        rgba[2] = srcTF(rgba[2]);
+        skcms_TransferFunction tf;
+        memcpy(&tf, &srcTF, 7*sizeof(float));
+
+        rgba[0] = skcms_TransferFunction_eval(&tf, rgba[0]);
+        rgba[1] = skcms_TransferFunction_eval(&tf, rgba[1]);
+        rgba[2] = skcms_TransferFunction_eval(&tf, rgba[2]);
     }
     if (flags.gamut_transform) {
         float temp[3] = { rgba[0], rgba[1], rgba[2] };
@@ -106,9 +122,12 @@ void SkColorSpaceXformSteps::apply(float* rgba) const {
         }
     }
     if (flags.encode) {
-        rgba[0] = dstTFInv(rgba[0]);
-        rgba[1] = dstTFInv(rgba[1]);
-        rgba[2] = dstTFInv(rgba[2]);
+        skcms_TransferFunction tf;
+        memcpy(&tf, &dstTFInv, 7*sizeof(float));
+
+        rgba[0] = skcms_TransferFunction_eval(&tf, rgba[0]);
+        rgba[1] = skcms_TransferFunction_eval(&tf, rgba[1]);
+        rgba[2] = skcms_TransferFunction_eval(&tf, rgba[2]);
     }
     if (flags.premul) {
         rgba[0] *= rgba[3];
