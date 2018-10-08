@@ -1857,6 +1857,7 @@ cc_test {
         "bench/ChartBench.cpp",
         "bench/ChecksumBench.cpp",
         "bench/ChromeBench.cpp",
+        "bench/ClearBench.cpp",
         "bench/ClipMaskBench.cpp",
         "bench/ClipStrategyBench.cpp",
         "bench/CmapBench.cpp",
