@@ -210,7 +210,7 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrContext* context)
     SkASSERT(fGLContext);
     fCaps = sk_ref_sp(fGLContext->caps());
 
-    fHWBoundTextureUniqueIDs.reset(this->caps()->shaderCaps()->maxCombinedSamplers());
+    fHWBoundTextureUniqueIDs.reset(this->caps()->shaderCaps()->maxFragmentSamplers());
 
     fHWBufferState[kVertex_GrBufferType].fGLTarget = GR_GL_ARRAY_BUFFER;
     fHWBufferState[kIndex_GrBufferType].fGLTarget = GR_GL_ELEMENT_ARRAY_BUFFER;
@@ -2175,6 +2175,7 @@ bool GrGLGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
 
 GrGpuRTCommandBuffer* GrGLGpu::getCommandBuffer(
         GrRenderTarget* rt, GrSurfaceOrigin origin,
+        const SkRect& bounds,
         const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
         const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
     if (!fCachedRTCommandBuffer) {
