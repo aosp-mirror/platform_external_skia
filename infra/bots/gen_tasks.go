@@ -70,7 +70,6 @@ const (
 
 	SERVICE_ACCOUNT_BOOKMAKER          = "skia-bookmaker@skia-swarming-bots.iam.gserviceaccount.com"
 	SERVICE_ACCOUNT_COMPILE            = "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
-	SERVICE_ACCOUNT_CT_SKPS            = "skia-external-ct-skps@skia-swarming-bots.iam.gserviceaccount.com"
 	SERVICE_ACCOUNT_HOUSEKEEPER        = "skia-external-housekeeper@skia-swarming-bots.iam.gserviceaccount.com"
 	SERVICE_ACCOUNT_RECREATE_SKPS      = "skia-recreate-skps@skia-swarming-bots.iam.gserviceaccount.com"
 	SERVICE_ACCOUNT_UPDATE_GO_DEPS     = "skia-recreate-skps@skia-swarming-bots.iam.gserviceaccount.com"
@@ -312,7 +311,7 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 		Dependencies: []string{BUNDLE_RECIPES_NAME},
 		Dimensions:   dimensions,
 		EnvPrefixes: map[string][]string{
-			"PATH":                    []string{"cipd_bin_packages", "cipd_bin_packages/bin"},
+			"PATH": []string{"cipd_bin_packages", "cipd_bin_packages/bin"},
 			"VPYTHON_VIRTUALENV_ROOT": []string{"cache/vpython"},
 		},
 		ExtraTags: map[string]string{
@@ -395,11 +394,11 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 			"target_arch":   parts["arch"],
 			"configuration": parts["configuration"],
 		}
-		if strings.Contains(jobName, "-CT_") {
-			ec = []string{"Static"}
-		}
 		if strings.Contains(jobName, "PathKit") {
 			ec = []string{"PathKit"}
+		}
+		if strings.Contains(jobName, "CanvasKit") {
+			ec = []string{"CanvasKit"}
 		}
 		if len(ec) > 0 {
 			jobNameMap["extra_config"] = strings.Join(ec, "_")
@@ -608,7 +607,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 	} else {
 		d["gpu"] = "none"
 		if d["os"] == DEFAULT_OS_DEBIAN {
-			if strings.Contains(parts["extra_config"], "PathKit") {
+			if strings.Contains(parts["extra_config"], "PathKit") || strings.Contains(parts["extra_config"], "CanvasKit") {
 				// The build isn't really parallelized for pathkit, so
 				// the bulky machines don't buy us much. All we really need is
 				// docker, which was manually installed on the MEDIUM and LARGE
@@ -917,23 +916,6 @@ func updateGoDEPS(b *specs.TasksCfgBuilder, name string) string {
 	return name
 }
 
-// ctSKPs generates a CT SKPs task. Returns the name of the last task in the
-// generated chain of tasks, which the Job should add as a dependency.
-func ctSKPs(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
-	dims := []string{
-		"pool:SkiaCT",
-		fmt.Sprintf("os:%s", DEFAULT_OS_LINUX_GCE),
-	}
-	task := kitchenTask(name, "ct_skps", "swarm_recipe.isolate", SERVICE_ACCOUNT_CT_SKPS, dims, nil, OUTPUT_NONE)
-	usesGit(task, name)
-	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
-	task.Dependencies = append(task.Dependencies, compileTaskName)
-	timeout(task, 24*time.Hour)
-	task.MaxAttempts = 1
-	b.MustAddTask(name, task)
-	return name
-}
-
 // checkGeneratedFiles verifies that no generated SKSL files have been edited
 // by hand.
 func checkGeneratedFiles(b *specs.TasksCfgBuilder, name string) string {
@@ -992,6 +974,7 @@ func infra(b *specs.TasksCfgBuilder, name string) string {
 func buildstats(b *specs.TasksCfgBuilder, name string, parts map[string]string, compileTaskName string) string {
 	task := kitchenTask(name, "compute_buildstats", "swarm_recipe.isolate", "", swarmDimensions(parts), nil, OUTPUT_PERF)
 	task.Dependencies = append(task.Dependencies, compileTaskName)
+	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("bloaty"))
 	b.MustAddTask(name, task)
 
 	// Always upload the results (just don't run the task otherwise.)
@@ -1077,6 +1060,8 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		recipe = "compute_test"
 	} else if strings.Contains(name, "PathKit") {
 		recipe = "test_pathkit"
+	} else if strings.Contains(name, "CanvasKit") {
+		recipe = "test_canvaskit"
 	} else if strings.Contains(name, "LottieWeb") {
 		recipe = "test_lottie_web"
 	}
@@ -1088,7 +1073,7 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		extraProps["internal_hardware_label"] = strconv.Itoa(*iid)
 	}
 	isolate := "test_skia_bundled.isolate"
-	if strings.Contains(name, "PathKit") || strings.Contains(name, "LottieWeb") || strings.Contains(name, "Emulator") {
+	if strings.Contains(name, "CanvasKit") || strings.Contains(name, "Emulator") || strings.Contains(name, "LottieWeb") || strings.Contains(name, "PathKit") {
 		isolate = "swarm_recipe.isolate"
 	}
 	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), extraProps, OUTPUT_TEST)
@@ -1302,18 +1287,12 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		name != "Housekeeper-OnDemand-Presubmit" &&
 		!strings.Contains(name, "Android_Framework") &&
 		!strings.Contains(name, "RecreateSKPs") &&
-		!strings.Contains(name, "-CT_") &&
 		!strings.Contains(name, "Housekeeper-PerCommit-Isolate") &&
 		!strings.Contains(name, "LottieWeb") {
 		compile(b, compileTaskName, compileTaskParts)
 		if parts["role"] == "Calmbench" {
 			compile(b, compileParentName, compileParentParts)
 		}
-	}
-
-	// CT bots.
-	if strings.Contains(name, "-CT_") {
-		deps = append(deps, ctSKPs(b, name, compileTaskName))
 	}
 
 	// Housekeepers.
@@ -1363,20 +1342,18 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	if strings.Contains(name, "ProcDump") {
 		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("procdump_win"))
 	}
-	if strings.Contains(name, "PathKit") || strings.Contains(name, "LottieWeb") {
+	if strings.Contains(name, "CanvasKit") || strings.Contains(name, "LottieWeb") || strings.Contains(name, "PathKit") {
 		// Docker-based tests that don't need the standard CIPD assets
 		pkgs = []*specs.CipdPackage{}
 	}
 
 	// Test bots.
 	if parts["role"] == "Test" {
-		if !strings.Contains(name, "-CT_") {
-			deps = append(deps, test(b, name, parts, compileTaskName, pkgs))
-		}
+		deps = append(deps, test(b, name, parts, compileTaskName, pkgs))
 	}
 
 	// Perf bots.
-	if parts["role"] == "Perf" && !strings.Contains(name, "-CT_") {
+	if parts["role"] == "Perf" {
 		deps = append(deps, perf(b, name, parts, compileTaskName, pkgs))
 	}
 
@@ -1398,7 +1375,7 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 	if strings.Contains(name, "-Nightly-") {
 		j.Trigger = specs.TRIGGER_NIGHTLY
-	} else if strings.Contains(name, "-Weekly-") || strings.Contains(name, "CT_DM_1m_SKPs") {
+	} else if strings.Contains(name, "-Weekly-") {
 		j.Trigger = specs.TRIGGER_WEEKLY
 	} else if strings.Contains(name, "Flutter") || strings.Contains(name, "CommandBuffer") {
 		j.Trigger = specs.TRIGGER_MASTER_ONLY

@@ -12,6 +12,7 @@
 #include "GrMtlTexture.h"
 #include "GrMtlTextureRenderTarget.h"
 #include "GrMtlUtil.h"
+#include "GrRenderTargetPriv.h"
 #include "GrTexturePriv.h"
 #include "SkConvertPixels.h"
 #include "SkSLCompiler.h"
@@ -107,7 +108,6 @@ GrMtlGpu::GrMtlGpu(GrContext* context, const GrContextOptions& options,
 
 GrGpuRTCommandBuffer* GrMtlGpu::getCommandBuffer(
             GrRenderTarget* renderTarget, GrSurfaceOrigin origin,
-            const SkRect& bounds,
             const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
             const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
     return new GrMtlGpuRTCommandBuffer(this, renderTarget, origin, colorInfo, stencilInfo);
@@ -214,6 +214,25 @@ bool GrMtlGpu::uploadToTexture(GrMtlTexture* tex, int left, int top, int width, 
         tex->texturePriv().markMipMapsDirty();
     }
     return true;
+}
+
+GrStencilAttachment* GrMtlGpu::createStencilAttachmentForRenderTarget(const GrRenderTarget* rt,
+                                                                      int width,
+                                                                      int height) {
+    SkASSERT(width >= rt->width());
+    SkASSERT(height >= rt->height());
+
+    int samples = rt->numStencilSamples();
+
+    const GrMtlCaps::StencilFormat& sFmt = this->mtlCaps().preferredStencilFormat();
+
+    GrMtlStencilAttachment* stencil(GrMtlStencilAttachment::Create(this,
+                                                                   width,
+                                                                   height,
+                                                                   samples,
+                                                                   sFmt));
+    fStats.incStencilAttachmentCreates();
+    return stencil;
 }
 
 sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,

@@ -105,7 +105,7 @@ void GrVkGpuRTCommandBuffer::init() {
     cbInfo.fColorClearValue.color.float32[3] = fClearColor.fRGBA[3];
 
     if (VK_ATTACHMENT_LOAD_OP_CLEAR == fVkColorLoadOp) {
-        cbInfo.fBounds = fRTBounds;
+        cbInfo.fBounds = SkRect::MakeWH(vkRT->width(), vkRT->height());
     } else {
         cbInfo.fBounds.setEmpty();
     }
@@ -176,30 +176,38 @@ void GrVkGpuRTCommandBuffer::submit() {
         // TODO: Once we improve our tracking of discards so that we never end up flushing a discard
         // call with no actually ops, remove this.
         if (cbInfo.fIsEmpty && cbInfo.fLoadStoreState == LoadStoreState::kStartsWithDiscard) {
-            cbInfo.fBounds = fRTBounds;;
+            cbInfo.fBounds = SkRect::MakeWH(vkRT->width(), vkRT->height());
         }
 
-        if (cbInfo.fBounds.intersect(0, 0, fRTBounds.width(), fRTBounds.height())) {
+        if (cbInfo.fBounds.intersect(0, 0,
+                                     SkIntToScalar(fRenderTarget->width()),
+                                     SkIntToScalar(fRenderTarget->height()))) {
             // Make sure we do the following layout changes after all copies, uploads, or any other
             // pre-work is done since we may change the layouts in the pre-work. Also since the
             // draws will be submitted in different render passes, we need to guard againts write
             // and write issues.
 
             // Change layout of our render target so it can be used as the color attachment.
+            // TODO: If we know that we will never be blending or loading the attachment we could
+            // drop the VK_ACCESS_COLOR_ATTACHMENT_READ_BIT.
             targetImage->setImageLayout(fGpu,
                                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                                        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                                         false);
 
             // If we are using a stencil attachment we also need to update its layout
             if (stencil) {
                 GrVkStencilAttachment* vkStencil = (GrVkStencilAttachment*)stencil;
+                // We need the write and read access bits since we may load and store the stencil.
+                // The initial load happens in the VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT so we
+                // wait there.
                 vkStencil->setImageLayout(fGpu,
                                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                                          VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                                          VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
                                           false);
             }
 
@@ -208,7 +216,7 @@ void GrVkGpuRTCommandBuffer::submit() {
                 cbInfo.fSampledImages[j]->setImageLayout(fGpu,
                                                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                                          VK_ACCESS_SHADER_READ_BIT,
-                                                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                                                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                                                          false);
             }
 
@@ -222,7 +230,6 @@ void GrVkGpuRTCommandBuffer::submit() {
 }
 
 void GrVkGpuRTCommandBuffer::set(GrRenderTarget* rt, GrSurfaceOrigin origin,
-                                 const SkRect& bounds,
                                  const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
                                  const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
     SkASSERT(!fRenderTarget);
@@ -232,8 +239,6 @@ void GrVkGpuRTCommandBuffer::set(GrRenderTarget* rt, GrSurfaceOrigin origin,
     SkASSERT(!fLastPipelineState);
 
     this->INHERITED::set(rt, origin);
-
-    fRTBounds = bounds;
 
     fClearColor = GrColor4f::FromGrColor(colorInfo.fClearColor);
 
@@ -327,7 +332,7 @@ void GrVkGpuRTCommandBuffer::onClearStencilClip(const GrFixedClip& clip, bool in
     // Flip rect if necessary
     SkIRect vkRect;
     if (!clip.scissorEnabled()) {
-        vkRect.setXYWH(0, 0, fRTBounds.width(), fRTBounds.height());
+        vkRect.setXYWH(0, 0, fRenderTarget->width(), fRenderTarget->height());
     } else if (kBottomLeft_GrSurfaceOrigin != fOrigin) {
         vkRect = clip.scissorRect();
     } else {
@@ -412,7 +417,7 @@ void GrVkGpuRTCommandBuffer::onClear(const GrFixedClip& clip, GrColor color) {
     // Flip rect if necessary
     SkIRect vkRect;
     if (!clip.scissorEnabled()) {
-        vkRect.setXYWH(0, 0, fRTBounds.width(), fRTBounds.height());
+        vkRect.setXYWH(0, 0, fRenderTarget->width(), fRenderTarget->height());
     } else if (kBottomLeft_GrSurfaceOrigin != fOrigin) {
         vkRect = clip.scissorRect();
     } else {
@@ -628,8 +633,7 @@ GrVkPipelineState* GrVkGpuRTCommandBuffer::prepareDrawState(
     if (!pipeline.isScissorEnabled()) {
         GrVkPipeline::SetDynamicScissorRectState(fGpu, cbInfo.currentCmdBuf(),
                                                  rt, pipeline.proxy()->origin(),
-                                                 SkIRect::MakeWH(fRTBounds.width(),
-                                                                 fRTBounds.height()));
+                                                 SkIRect::MakeWH(rt->width(), rt->height()));
     } else if (!dynamicStateArrays || !dynamicStateArrays->fScissorRects) {
         SkASSERT(fixedDynamicState);
         GrVkPipeline::SetDynamicScissorRectState(fGpu, cbInfo.currentCmdBuf(), rt,
