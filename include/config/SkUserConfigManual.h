@@ -20,7 +20,6 @@
 
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
-  #define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
@@ -29,9 +28,7 @@
   #define SK_SUPPORT_LEGACY_SHADER_ISABITMAP
   #define SK_SUPPORT_LEGACY_TILED_BITMAPS
   #define SK_SUPPORT_LEGACY_AA_CHOICE
-  #define SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
   #define SK_SUPPORT_LEGACY_A8_MASKBLITTER
-  #define SK_LEGACY_SRGB_GAMUT
 
   // While working on updating skias vulkan interface
   #define SK_SUPPORT_LEGACY_VULKAN_INTERFACE
