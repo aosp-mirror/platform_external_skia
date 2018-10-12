@@ -453,7 +453,6 @@ cc_library_static {
         "src/gpu/ccpr/GrCCStrokeGeometry.cpp",
         "src/gpu/ccpr/GrCCStroker.cpp",
         "src/gpu/ccpr/GrCoverageCountingPathRenderer.cpp",
-        "src/gpu/effects/GrAARectEffect.cpp",
         "src/gpu/effects/GrAlphaThresholdFragmentProcessor.cpp",
         "src/gpu/effects/GrBezierEffect.cpp",
         "src/gpu/effects/GrBicubicEffect.cpp",
