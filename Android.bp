@@ -963,7 +963,6 @@ cc_test {
     ],
 
     local_include_dirs: [
-        "experimental/pipe/",
         "experimental/svg/model/",
         "gm/",
         "include/android/",
@@ -1022,8 +1021,6 @@ cc_test {
         "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
-        "experimental/pipe/SkPipeCanvas.cpp",
-        "experimental/pipe/SkPipeReader.cpp",
         "experimental/svg/model/SkSVGAttribute.cpp",
         "experimental/svg/model/SkSVGAttributeParser.cpp",
         "experimental/svg/model/SkSVGCircle.cpp",
@@ -1616,7 +1613,6 @@ cc_test {
         "tests/PictureShaderTest.cpp",
         "tests/PictureTest.cpp",
         "tests/PinnedImageTest.cpp",
-        "tests/PipeTest.cpp",
         "tests/PixelRefTest.cpp",
         "tests/Point3Test.cpp",
         "tests/PointTest.cpp",
