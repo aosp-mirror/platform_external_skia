@@ -5,33 +5,36 @@
 package main
 
 // This server runs along side the karma tests and listens for POST requests
-// when any test case reports it has output for Gold. See testReporter.js
+// when any test case reports it has output for Perf. See perfReporter.js
 // for the browser side part.
 
+// Unlike the gold ingester, the perf ingester allows multiple reports
+// of the same benchmark and will output the average of these results
+// on a call to dump
+
 import (
-	"bytes"
-	"crypto/md5"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"image"
-	"image/png"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path"
-	"strings"
+	"strconv"
 
-	"go.skia.org/infra/golden/go/goldingestion"
+	"github.com/google/uuid"
+	"go.skia.org/infra/perf/go/ingestcommon"
 )
 
-// This allows us to use upload_dm_results.py out of the box
-const JSON_FILENAME = "dm.json"
+// upload_nano_results looks for anything*.json
+// We add the random UUID to avoid name clashes when uploading to
+// the perf bucket (which uploads to folders based on Month/Day/Hour, which can
+// easily have duplication if multiple perf tasks run in an hour.)
+var JSON_FILENAME = fmt.Sprintf("%s_browser_bench.json", uuid.New().String())
 
 var (
-	outDir = flag.String("out_dir", "/OUT/", "location to dump the Gold JSON and pngs")
+	outDir = flag.String("out_dir", "/OUT/", "location to dump the Perf JSON")
 	port   = flag.String("port", "8081", "Port to listen on.")
 
 	botId            = flag.String("bot_id", "", "swarming bot id")
@@ -50,19 +53,30 @@ var (
 
 // Received from the JS side.
 type reportBody struct {
-	// e.g. "canvas" or "svg"
-	OutputType string `json:"output_type"`
-	// a base64 encoded PNG image.
-	Data string `json:"data"`
-	// a name describing the test. Should be unique enough to allow use of grep.
-	TestName string `json:"test_name"`
+	// a name describing the benchmark. Should be unique enough to allow use of grep.
+	BenchName string `json:"bench_name"`
+	// The number of microseconds of the task.
+	TimeMicroSeconds float64 `json:"time_us"`
 }
 
 // The keys to be used at the top level for all Results.
 var defaultKeys map[string]string
 
-// contains all the results reported in through report_gold_data
-var results []*goldingestion.Result
+// contains all the results reported in through report_perf_data
+var results map[string][]reportBody
+
+type BenchData struct {
+	Hash         string                               `json:"gitHash"`
+	Issue        string                               `json:"issue"`
+	PatchSet     string                               `json:"patchset"`
+	Key          map[string]string                    `json:"key"`
+	Options      map[string]string                    `json:"options,omitempty"`
+	Results      map[string]ingestcommon.BenchResults `json:"results"`
+	PatchStorage string                               `json:"patch_storage,omitempty"`
+
+	SwarmingTaskID string `json:"swarming_task_id,omitempty"`
+	SwarmingBotID  string `json:"swarming_bot_id,omitempty"`
+}
 
 func main() {
 	flag.Parse()
@@ -79,19 +93,17 @@ func main() {
 		"source_type":       "pathkit",
 	}
 
-	results = []*goldingestion.Result{}
+	results = make(map[string][]reportBody)
 
-	http.HandleFunc("/report_gold_data", reporter)
+	http.HandleFunc("/report_perf_data", reporter)
 	http.HandleFunc("/dump_json", dumpJSON)
 
-	fmt.Printf("Waiting for gold ingestion on port %s\n", *port)
+	fmt.Printf("Waiting for perf ingestion on port %s\n", *port)
 
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }
 
-// reporter handles when the client reports a test has Gold output.
-// It writes the corresponding PNG to disk and appends a Result, assuming
-// no errors.
+// reporter handles when the client reports a test has a benchmark.
 func reporter(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST accepted", 400)
@@ -105,17 +117,10 @@ func reporter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	testOutput := reportBody{}
-	if err := json.Unmarshal(body, &testOutput); err != nil {
+	benchOutput := reportBody{}
+	if err := json.Unmarshal(body, &benchOutput); err != nil {
 		fmt.Println(err)
 		http.Error(w, "Could not unmarshal JSON", 400)
-		return
-	}
-
-	hash := ""
-	if hash, err = writeBase64EncodedPNG(testOutput.Data); err != nil {
-		fmt.Println(err)
-		http.Error(w, "Could not write image to disk", 500)
 		return
 	}
 
@@ -124,16 +129,7 @@ func reporter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results = append(results, &goldingestion.Result{
-		Digest: hash,
-		Key: map[string]string{
-			"name":   testOutput.TestName,
-			"config": testOutput.OutputType,
-		},
-		Options: map[string]string{
-			"ext": "png",
-		},
-	})
+	results[benchOutput.BenchName] = append(results[benchOutput.BenchName], benchOutput)
 }
 
 // createOutputFile creates a file and set permissions correctly.
@@ -150,7 +146,7 @@ func createOutputFile(p string) (*os.File, error) {
 }
 
 // dumpJSON writes out a JSON file with all the results, typically at the end of
-// all the tests.
+// all the tests. If there is more than one result per benchmark, we report the average.
 func dumpJSON(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST accepted", 400)
@@ -166,72 +162,39 @@ func dumpJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := goldingestion.DMResults{
-		BuildBucketID:  *buildBucketID,
-		Builder:        *builder,
-		GitHash:        *gitHash,
-		Issue:          *issue,
-		Key:            defaultKeys,
+	benchData := BenchData{
+		Hash:           *gitHash,
+		Issue:          strconv.FormatInt(*issue, 10),
 		PatchStorage:   *patch_storage,
-		Patchset:       *patchset,
-		Results:        results,
+		PatchSet:       strconv.FormatInt(*patchset, 10),
+		Key:            defaultKeys,
 		SwarmingBotID:  *botId,
 		SwarmingTaskID: *taskId,
 	}
 
+	allResults := make(map[string]ingestcommon.BenchResults)
+	for name, benches := range results {
+		samples := []float64{}
+		total := float64(0)
+		for _, t := range benches {
+			samples = append(samples, t.TimeMicroSeconds)
+			total += t.TimeMicroSeconds
+		}
+		allResults[name] = map[string]ingestcommon.BenchResult{
+			"default": map[string]interface{}{
+				"average_us": total / float64(len(benches)),
+				"samples":    samples,
+			},
+		}
+	}
+	benchData.Results = allResults
+
 	enc := json.NewEncoder(outputFile)
 	enc.SetIndent("", "  ") // Make it human readable.
-	if err := enc.Encode(&results); err != nil {
+	if err := enc.Encode(&benchData); err != nil {
 		fmt.Println(err)
 		http.Error(w, "Could not write json to disk", 500)
 		return
 	}
 	fmt.Println("JSON Written")
-}
-
-// writeBase64EncodedPNG writes a PNG to disk and returns the md5 of the
-// decoded PNG bytes and any error. This hash is what will be used as
-// the gold digest and the file name.
-func writeBase64EncodedPNG(data string) (string, error) {
-	// data starts with something like data:image/png;base64,[data]
-	// https://en.wikipedia.org/wiki/Data_URI_scheme
-	start := strings.Index(data, ",")
-	b := bytes.NewBufferString(data[start+1:])
-	pngReader := base64.NewDecoder(base64.StdEncoding, b)
-
-	pngBytes, err := ioutil.ReadAll(pngReader)
-	if err != nil {
-		return "", fmt.Errorf("Could not decode base 64 encoding %s", err)
-	}
-
-	// compute the hash of the pixel values, like DM does
-	img, err := png.Decode(bytes.NewBuffer(pngBytes))
-	if err != nil {
-		return "", fmt.Errorf("Not a valid png: %s", err)
-	}
-	hash := ""
-	switch img.(type) {
-	case *image.NRGBA:
-		i := img.(*image.NRGBA)
-		hash = fmt.Sprintf("%x", md5.Sum(i.Pix))
-	case *image.RGBA:
-		i := img.(*image.RGBA)
-		hash = fmt.Sprintf("%x", md5.Sum(i.Pix))
-	case *image.RGBA64:
-		i := img.(*image.RGBA64)
-		hash = fmt.Sprintf("%x", md5.Sum(i.Pix))
-	default:
-		return "", fmt.Errorf("Unknown type of image")
-	}
-
-	p := path.Join(*outDir, hash+".png")
-	outputFile, err := createOutputFile(p)
-	defer outputFile.Close()
-	if err != nil {
-		return "", fmt.Errorf("Could not create png file %s: %s", p, err)
-	}
-	if _, err = outputFile.Write(pngBytes); err != nil {
-		return "", fmt.Errorf("Could not write to file %s: %s", p, err)
-	}
-	return hash, nil
 }

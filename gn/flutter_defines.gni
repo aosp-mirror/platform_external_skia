@@ -7,4 +7,11 @@ flutter_defines = [
   "SK_DISABLE_RENDER_TARGET_SORTING",
   "SK_SUPPORT_LEGACY_VULKAN_INTERFACE",
   "SK_LEGACY_SKCODEC_NONE_ENUM",
+
+  # Remove software rasterizers to save some code size.
+  "SK_DISABLE_AAA",
+  "SK_DISABLE_DAA",
+
+  # Fast low-precision software rendering isn't a priority for Flutter.
+  "SK_DISABLE_LOWP_RASTER_PIPELINE",
 ]

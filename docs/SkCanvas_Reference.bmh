@@ -4957,6 +4957,96 @@ void draw(SkCanvas* canvas) {
 
 #Subtopic Lattice ##
 
+# ------------------------------------------------------------------------------
+
+#Enum QuadAAFlags
+#Line # don't use this ##
+#Code
+#Populate
+##
+
+#Private
+##
+
+#Const kLeft_QuadAAFlag 1
+#Line # antialias the left edge ##
+##
+
+#Const kTop_QuadAAFlag 2
+#Line # antialias the top edge ##
+##
+
+#Const kRight_QuadAAFlag 4
+#Line # antialias the right edge ##
+##
+
+#Const kBottom_QuadAAFlag 8
+#Line # antialias the bottom edge ##
+##
+
+#Const kNone_QuadAAFlags 0
+#Line # antialias none of the edges ##
+##
+
+#Const kAll_QuadAAFlags 15
+#Line # antialias all of the edges ##
+##
+
+#NoExample
+##
+##
+
+# ------------------------------------------------------------------------------
+
+#Struct ImageSetEntry
+#Line # don't use this ##
+#Private
+##
+
+#Member SkImage* fImage
+#Line # image to draw ##
+##
+
+#Member SkRect   fSrcRect
+#Line # image src rectangle ##
+##
+
+#Member SkRect   fDstRect
+#Line # local space rectangle ##
+##
+
+#Member unsigned fAAFlags
+#Line # antialiasing flags ##
+##
+
+#NoExample
+##
+
+##
+
+# ------------------------------------------------------------------------------
+
+#Method void experimental_DrawImageSetV0(const ImageSetEntry imageSet[], int cnt, float alpha,
+                                         SkFilterQuality quality, SkBlendMode mode);
+#Private
+##
+#In Draw_Image
+#In Draw
+#Line # draws a set a of images (don't call this) ##
+
+Draws a set of images. Do not use this method.
+
+#Param  imageSet   images ##
+#Param  cnt        number of images ##
+#Param  alpha      alpha ##
+#Param  quality    filter quality ##
+#Param  mode       blend mode ##
+
+#NoExample
+##
+
+##
+
 #Subtopic Draw_Image ##
 
 # ------------------------------------------------------------------------------

@@ -613,6 +613,10 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				// machines (after Aug 2018).
 				return linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 			}
+			if parts["role"] == "BuildStats" {
+				// Doesn't require a lot of resources
+				return linuxGceDimensions(MACHINE_TYPE_MEDIUM)
+			}
 			// Use many-core machines for Build tasks.
 			return linuxGceDimensions(MACHINE_TYPE_LARGE)
 		} else if d["os"] == DEFAULT_OS_WIN {
@@ -812,7 +816,7 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 		if strings.Contains(name, "Clang") {
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
 		}
-		if strings.Contains(name, "Vulkan") {
+		if strings.Contains(name, "Vulkan") || parts["extra_config"] == "Mini" {
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("linux_vulkan_sdk"))
 		}
 		if parts["target_arch"] == "mips64el" || parts["target_arch"] == "loongson3a" {
@@ -1135,6 +1139,8 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	if strings.Contains(parts["extra_config"], "Skpbench") {
 		recipe = "skpbench"
 		isolate = relpath("skpbench_skia_bundled.isolate")
+	} else if strings.Contains(name, "PathKit") {
+		recipe = "perf_pathkit"
 	}
 	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), nil, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)

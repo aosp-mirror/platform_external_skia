@@ -2220,10 +2220,6 @@ rect is equal to copy
 
 ##
 
-#Method static SkRect MakeLargest()
-#Deprecated
-##
-
 #Struct SkRect ##
 
 #Topic Rect ##

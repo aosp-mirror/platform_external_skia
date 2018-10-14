@@ -752,7 +752,6 @@ def dm_flags(api, bot):
     match.append('~^RGB565TextureTest$')
     match.append('~^RGBA4444TextureTest$')
     match.append('~^TransferPixelsTest$')
-    match.append('~^SurfaceCreationWithColorSpace_Gpu$')
     match.append('~^SurfaceSemaphores$')
     match.append('~^VertexAttributeCount$')
     match.append('~^WrappedProxyTest$')
@@ -783,7 +782,17 @@ def dm_flags(api, bot):
   if 'GDI' in bot:
     args.append('--gdi')
 
-  if 'QuadroP400' in bot or 'Adreno540' in bot:
+  if ('QuadroP400' in bot or
+      'Adreno540' in bot or
+      'IntelHD2000' in bot or   # gen 6 - sandy bridge
+      'IntelHD4400' in bot or   # gen 7 - haswell
+      'IntelHD405' in bot or    # gen 8 - cherryview braswell
+      'IntelIris6100' in bot or # gen 8 - broadwell
+      'IntelIris540' in bot or  # gen 9 - skylake
+      'IntelIris640' in bot or  # gen 9 - kaby lake
+      'MaliT760' in bot or
+      'MaliT860' in bot or
+      'MaliT880' in bot):
     args.extend(['--reduceOpListSplitting'])
 
   # Let's make all bots produce verbose output by default.

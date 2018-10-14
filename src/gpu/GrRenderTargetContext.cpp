@@ -798,6 +798,21 @@ void GrRenderTargetContext::drawTexture(const GrClip& clip, sk_sp<GrTextureProxy
     this->addDrawOp(clip, std::move(op));
 }
 
+void GrRenderTargetContext::drawTextureSet(const GrClip& clip, const TextureSetEntry set[], int cnt,
+                                           GrSamplerState::Filter filter, GrColor color,
+                                           const SkMatrix& viewMatrix,
+                                           sk_sp<GrColorSpaceXform> texXform,
+                                           sk_sp<GrColorSpaceXform> colorXform) {
+    ASSERT_SINGLE_OWNER
+    RETURN_IF_ABANDONED
+    SkDEBUGCODE(this->validate();)
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "drawTextureSet", fContext);
+    GrAAType aaType = this->chooseAAType(GrAA::kYes, GrAllowMixedSamples::kNo);
+    auto op = GrTextureOp::Make(fContext, set, cnt, filter, color, aaType, viewMatrix,
+                                std::move(texXform), std::move(colorXform));
+    this->addDrawOp(clip, std::move(op));
+}
+
 void GrRenderTargetContext::fillRectWithLocalMatrix(const GrClip& clip,
                                                     GrPaint&& paint,
                                                     GrAA aa,
@@ -1209,14 +1224,13 @@ bool GrRenderTargetContext::drawFilledDRRect(const GrClip& clip,
         inverseVM.reset();
     }
 
-    const auto& caps = *this->caps()->shaderCaps();
     // TODO these need to be a geometry processors
-    auto innerEffect = GrRRectEffect::Make(innerEdgeType, *inner, caps);
+    auto innerEffect = GrRRectEffect::Make(innerEdgeType, *inner, fContext);
     if (!innerEffect) {
         return false;
     }
 
-    auto outerEffect = GrRRectEffect::Make(outerEdgeType, *outer, caps);
+    auto outerEffect = GrRRectEffect::Make(outerEdgeType, *outer, fContext);
     if (!outerEffect) {
         return false;
     }
