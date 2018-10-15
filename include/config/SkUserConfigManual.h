@@ -30,7 +30,5 @@
   #define SK_SUPPORT_LEGACY_AA_CHOICE
   #define SK_SUPPORT_LEGACY_A8_MASKBLITTER
 
-  // While working on updating skias vulkan interface
-  #define SK_SUPPORT_LEGACY_VULKAN_INTERFACE
   #define SK_SUPPORT_LEGACY_AAA_CHOICE
 #endif // SkUserConfigManual_DEFINED
