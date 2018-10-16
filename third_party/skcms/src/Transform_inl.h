@@ -538,27 +538,38 @@ template <> void sample_clut<16>(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b)
 #endif
 }
 
-template <int kBitDepth>
-static void clut(const skcms_A2B* a2b, int dim, I32 ix, I32 stride, F* r, F* g, F* b, F a) {
-    if (dim == 0) {
-        sample_clut<kBitDepth>(a2b,ix, r,g,b);
-        return;
-    }
+// GCC 7.2.0 hits an internal compiler error with -finline-functions (or -O3)
+// when targeting MIPS 64,  I think attempting to inline clut() into exec_ops().
+#if 1 && defined(__GNUC__) && !defined(__clang__) && defined(__mips64)
+    #define MAYBE_NOINLINE __attribute__((noinline))
+#else
+    #define MAYBE_NOINLINE
+#endif
 
-    I32 limit = cast<I32>(F0);
-    limit += a2b->grid_points[dim-1];
+template <int kBitDepth>
+MAYBE_NOINLINE
+static void clut(const skcms_A2B* a2b, int dim, I32 ix, int stride, F* r, F* g, F* b, F a) {
+    assert (0 < dim && dim <= 4);
+
+    int limit = a2b->grid_points[dim-1];
 
     const F* srcs[] = { r,g,b,&a };
     F src = *srcs[dim-1];
 
-    F x = max_(F0, min_(src, F1)) * cast<F>(limit - 1);
+    F x = src * (float)(limit - 1);
 
     I32 lo = cast<I32>(            x      ),
         hi = cast<I32>(minus_1_ulp(x+1.0f));
     F lr = *r, lg = *g, lb = *b,
       hr = *r, hg = *g, hb = *b;
-    clut<kBitDepth>(a2b, dim-1, stride*lo + ix, stride*limit, &lr,&lg,&lb,a);
-    clut<kBitDepth>(a2b, dim-1, stride*hi + ix, stride*limit, &hr,&hg,&hb,a);
+
+    if (dim == 1) {
+        sample_clut<kBitDepth>(a2b, stride*lo + ix, &lr,&lg,&lb);
+        sample_clut<kBitDepth>(a2b, stride*hi + ix, &hr,&hg,&hb);
+    } else {
+        clut<kBitDepth>(a2b, dim-1, stride*lo + ix, stride*limit, &lr,&lg,&lb,a);
+        clut<kBitDepth>(a2b, dim-1, stride*hi + ix, stride*limit, &hr,&hg,&hb,a);
+    }
 
     F t = x - cast<F>(lo);
     *r = lr + (hr-lr)*t;
@@ -892,44 +903,44 @@ static void exec_ops(const Op* ops, const void** args,
 
             case Op_clut_1D_8:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 1, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<8>(a2b, 1, cast<I32>(F0), 1, &r,&g,&b,a);
             } break;
 
             case Op_clut_1D_16:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 1, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<16>(a2b, 1, cast<I32>(F0), 1, &r,&g,&b,a);
             } break;
 
             case Op_clut_2D_8:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 2, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<8>(a2b, 2, cast<I32>(F0), 1, &r,&g,&b,a);
             } break;
 
             case Op_clut_2D_16:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 2, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<16>(a2b, 2, cast<I32>(F0), 1, &r,&g,&b,a);
             } break;
 
             case Op_clut_3D_8:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 3, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<8>(a2b, 3, cast<I32>(F0), 1, &r,&g,&b,a);
             } break;
 
             case Op_clut_3D_16:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 3, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<16>(a2b, 3, cast<I32>(F0), 1, &r,&g,&b,a);
             } break;
 
             case Op_clut_4D_8:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 4, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<8>(a2b, 4, cast<I32>(F0), 1, &r,&g,&b,a);
                 // 'a' was really a CMYK K, so our output is actually opaque.
                 a = F1;
             } break;
 
             case Op_clut_4D_16:{
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 4, cast<I32>(F0), cast<I32>(F1), &r,&g,&b,a);
+                clut<16>(a2b, 4, cast<I32>(F0), 1, &r,&g,&b,a);
                 // 'a' was really a CMYK K, so our output is actually opaque.
                 a = F1;
             } break;
