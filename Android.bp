@@ -1871,7 +1871,7 @@ cc_test {
         "bench/DisplacementBench.cpp",
         "bench/DrawBitmapAABench.cpp",
         "bench/DrawLatticeBench.cpp",
-        "bench/EncoderBench.cpp",
+        "bench/EncodeBench.cpp",
         "bench/FSRectBench.cpp",
         "bench/FontCacheBench.cpp",
         "bench/FontScalerBench.cpp",
