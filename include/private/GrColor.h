@@ -112,14 +112,6 @@ static inline void GrColorToRGBAFloat(GrColor color, float rgba[4]) {
     rgba[3] = GrColorUnpackA(color) * ONE_OVER_255;
 }
 
-/** Converts a GrColor to an SkPMColor4f */
-static inline SkRGBA4f<kPremul_SkAlphaType> GrColorToPMColor4f(GrColor color) {
-    GrColorIsPMAssert(color);
-    SkRGBA4f<kPremul_SkAlphaType> result;
-    GrColorToRGBAFloat(color, result.vec());
-    return result;
-}
-
 /** Normalizes and coverts an uint8_t to a float. [0, 255] -> [0.0, 1.0] */
 static inline float GrNormalizeByteToFloat(uint8_t value) {
     static const float ONE_OVER_255 = 1.f / 255.f;
@@ -159,97 +151,5 @@ static inline GrColor GrUnpremulColor(GrColor color) {
 
     return GrColorPackRGBA(r, g, b, a);
 }
-
-
-/**
-* Similarly, GrColor4f is 4 floats for R, G, B, A, in that order. And like GrColor, whether
-* the color is premultiplied or not depends on the context.
-*/
-struct GrColor4f {
-    float fRGBA[4];
-
-    GrColor4f() {}
-    GrColor4f(float r, float g, float b, float a) {
-        fRGBA[0] = r;
-        fRGBA[1] = g;
-        fRGBA[2] = b;
-        fRGBA[3] = a;
-    }
-
-    enum Illegal_Constructor {
-        kIllegalConstructor
-    };
-    GrColor4f(Illegal_Constructor) {
-        fRGBA[0] = SK_FloatNaN;
-        fRGBA[1] = SK_FloatNaN;
-        fRGBA[2] = SK_FloatNaN;
-        fRGBA[3] = SK_FloatNaN;
-    }
-
-    static GrColor4f OpaqueWhite() {
-        return GrColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    }
-
-    static GrColor4f TransparentBlack() {
-        return GrColor4f(0.0f, 0.0f, 0.0f, 0.0f);
-    }
-
-    static GrColor4f FromGrColor(GrColor color) {
-        GrColor4f result;
-        GrColorToRGBAFloat(color, result.fRGBA);
-        return result;
-    }
-
-    template <SkAlphaType kAT>
-    static GrColor4f FromRGBA4f(const SkRGBA4f<kAT>& color) {
-        return GrColor4f(color.fR, color.fG, color.fB, color.fA);
-    }
-
-    bool operator==(const GrColor4f& other) const {
-        return
-            fRGBA[0] == other.fRGBA[0] &&
-            fRGBA[1] == other.fRGBA[1] &&
-            fRGBA[2] == other.fRGBA[2] &&
-            fRGBA[3] == other.fRGBA[3];
-    }
-    bool operator!=(const GrColor4f& other) const {
-        return !(*this == other);
-    }
-
-    GrColor toGrColor() const {
-        return GrColorPackRGBA(
-                static_cast<unsigned>(SkTPin(fRGBA[0], 0.0f,1.0f) * 255 + 0.5f),
-                static_cast<unsigned>(SkTPin(fRGBA[1], 0.0f,1.0f) * 255 + 0.5f),
-                static_cast<unsigned>(SkTPin(fRGBA[2], 0.0f,1.0f) * 255 + 0.5f),
-                static_cast<unsigned>(SkTPin(fRGBA[3], 0.0f,1.0f) * 255 + 0.5f));
-    }
-
-    template <SkAlphaType kAT>
-    SkRGBA4f<kAT> asRGBA4f() const {
-        return SkRGBA4f<kAT> { fRGBA[0], fRGBA[1], fRGBA[2], fRGBA[3] };
-    }
-
-    GrColor4f opaque() const {
-        return GrColor4f(fRGBA[0], fRGBA[1], fRGBA[2], 1.0f);
-    }
-
-    bool isOpaque() const {
-        return fRGBA[3] >= 1.f;  // just in case precision causes a superopaque value.
-    }
-
-    GrColor4f premul() const {
-        float a = fRGBA[3];
-        return GrColor4f(fRGBA[0] * a, fRGBA[1] * a, fRGBA[2] * a, a);
-    }
-
-    GrColor4f unpremul() const {
-        float a = fRGBA[3];
-        if (a <= 0.0f) {
-            return GrColor4f(0.0f, 0.0f, 0.0f, 0.0f);
-        }
-        float invAlpha = 1.0f / a;
-        return GrColor4f(fRGBA[0] * invAlpha, fRGBA[1] * invAlpha, fRGBA[2] * invAlpha, a);
-    }
-};
 
 #endif

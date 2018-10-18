@@ -39,7 +39,7 @@ declare_args() {
 
   skia_android_serial = ""
   skia_enable_ccpr = true
-  skia_enable_nvpr = true  # TODO: !skia_enable_flutter_defines
+  skia_enable_nvpr = !skia_enable_flutter_defines
   skia_enable_discrete_gpu = true
   skia_enable_effects = true
   skia_enable_effects_imagefilters = true
@@ -1850,9 +1850,11 @@ if (skia_enable_tools) {
       "fuzz/FuzzPathop.cpp",
       "fuzz/FuzzPolyUtils.cpp",
       "fuzz/FuzzRegionOp.cpp",
+      "fuzz/oss_fuzz/FuzzAndroidCodec.cpp",
       "fuzz/oss_fuzz/FuzzAnimatedImage.cpp",
       "fuzz/oss_fuzz/FuzzImage.cpp",
       "fuzz/oss_fuzz/FuzzImageFilterDeserialize.cpp",
+      "fuzz/oss_fuzz/FuzzIncrementalImage.cpp",
       "fuzz/oss_fuzz/FuzzJSON.cpp",
       "fuzz/oss_fuzz/FuzzPathDeserialize.cpp",
       "fuzz/oss_fuzz/FuzzRegionDeserialize.cpp",

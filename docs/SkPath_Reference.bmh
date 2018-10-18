@@ -1128,7 +1128,8 @@ after reset path is empty
 #Line # returns if final Contour forms a loop ##
 Returns if Contour is closed.
 Contour is closed if Path Verb array was last modified by close(). When stroked,
-closed Contour draws Paint_Stroke_Join instead of Paint_Stroke_Cap at first and last Point.
+closed Contour draws Paint_Stroke_Join instead of Paint_Stroke_Cap at first and
+last Point.
 
 #Return  true if the last Contour ends with a kClose_Verb ##
 
@@ -1884,7 +1885,7 @@ void draw(SkCanvas* canvas) {
 
 # ------------------------------------------------------------------------------
 
-#Method void incReserve(unsigned extraPtCount)
+#Method void incReserve(int extraPtCount)
 #In Utility
 #Line # reserves space for additional data ##
 Grows Path Verb_Array and Point_Array to contain extraPtCount additional Points.

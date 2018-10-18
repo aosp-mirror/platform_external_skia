@@ -476,7 +476,7 @@ SI F minus_1_ulp(F v) {
     return bit_pun<F>( bit_pun<I32>(v) - 1 );
 }
 
-SI F table_8(const skcms_Curve* curve, F v) {
+SI F table(const skcms_Curve* curve, F v) {
     // Clamp the input to [0,1], then scale to a table index.
     F ix = max_(F0, min_(v, F1)) * (float)(curve->table_entries - 1);
 
@@ -489,30 +489,18 @@ SI F table_8(const skcms_Curve* curve, F v) {
     // the same as in 'l' or adjacent.  We have a rough idea that's it'd always be safe
     // to read adjacent entries and perhaps underflow the table by a byte or two
     // (it'd be junk, but always safe to read).  Not sure how to lerp yet.
-    F l = F_from_U8(gather_8(curve->table_8, lo)),
-      h = F_from_U8(gather_8(curve->table_8, hi));
+    F l,h;
+    if (curve->table_8) {
+        l = F_from_U8(gather_8(curve->table_8, lo));
+        h = F_from_U8(gather_8(curve->table_8, hi));
+    } else {
+        l = F_from_U16_BE(gather_16(curve->table_16, lo));
+        h = F_from_U16_BE(gather_16(curve->table_16, hi));
+    }
     return l + (h-l)*t;
 }
 
-SI F table_16(const skcms_Curve* curve, F v) {
-    // All just as in table_8() until the gathers.
-    F ix = max_(F0, min_(v, F1)) * (float)(curve->table_entries - 1);
-
-    I32 lo = cast<I32>(            ix      ),
-        hi = cast<I32>(minus_1_ulp(ix+1.0f));
-    F t = ix - cast<F>(lo);
-
-    // TODO: as above, load l and h simultaneously?
-    // Here we could even use AVX2-style 32-bit gathers.
-    F l = F_from_U16_BE(gather_16(curve->table_16, lo)),
-      h = F_from_U16_BE(gather_16(curve->table_16, hi));
-    return l + (h-l)*t;
-}
-
-template <int>
-static void sample_clut(const skcms_A2B*, I32 ix, F* r, F* g, F* b);
-
-template <> void sample_clut<8>(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b) {
+SI void sample_clut_8(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b) {
     U32 rgb = gather_24(a2b->grid_8, ix);
 
     *r = cast<F>((rgb >>  0) & 0xff) * (1/255.0f);
@@ -520,7 +508,7 @@ template <> void sample_clut<8>(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b) 
     *b = cast<F>((rgb >> 16) & 0xff) * (1/255.0f);
 }
 
-template <> void sample_clut<16>(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b) {
+SI void sample_clut_16(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b) {
 #if defined(__arm__)
     // This is up to 2x faster on 32-bit ARM than the #else-case fast path.
     *r = F_from_U16_BE(gather_16(a2b->grid_16, 3*ix+0));
@@ -546,35 +534,63 @@ template <> void sample_clut<16>(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b)
     #define MAYBE_NOINLINE
 #endif
 
-template <int kBitDepth>
 MAYBE_NOINLINE
-static void clut(const skcms_A2B* a2b, int dim, I32 ix, int stride, F* r, F* g, F* b, F a) {
+static void clut(const skcms_A2B* a2b, F* r, F* g, F* b, F a) {
+    const int dim = (int)a2b->input_channels;
     assert (0 < dim && dim <= 4);
 
-    int limit = a2b->grid_points[dim-1];
+    // Each of these arrays is really foo[dim], but we use foo[4] since we know dim <= 4.
+    I32 lo[4],   // Lower bound index contribution for each dimension.
+        hi[4];   // Upper bound index contribution for each dimension.
+    F    t[4];   // Weight for upper bound pixel; lower gets 1-t.
 
-    const F* srcs[] = { r,g,b,&a };
-    F src = *srcs[dim-1];
+    // O(dim) work first: calculate lo,hi,t, from r,g,b,a.
+    const F inputs[] = { *r,*g,*b,a };
+    for (int i = dim-1, stride = 1; i >= 0; i--) {
+        {  // This block could be done in any order...
+            F x = inputs[i] * (float)(a2b->grid_points[i] - 1);
 
-    F x = src * (float)(limit - 1);
+            lo[i] = cast<I32>(            x      );   // i.e. trunc(x) == floor(x) here.
+            hi[i] = cast<I32>(minus_1_ulp(x+1.0f));
+            t [i] = x - cast<F>(lo[i]);               // i.e. fract(x)
+        }
 
-    I32 lo = cast<I32>(            x      ),
-        hi = cast<I32>(minus_1_ulp(x+1.0f));
-    F lr = *r, lg = *g, lb = *b,
-      hr = *r, hg = *g, hb = *b;
-
-    if (dim == 1) {
-        sample_clut<kBitDepth>(a2b, stride*lo + ix, &lr,&lg,&lb);
-        sample_clut<kBitDepth>(a2b, stride*hi + ix, &hr,&hg,&hb);
-    } else {
-        clut<kBitDepth>(a2b, dim-1, stride*lo + ix, stride*limit, &lr,&lg,&lb,a);
-        clut<kBitDepth>(a2b, dim-1, stride*hi + ix, stride*limit, &hr,&hg,&hb,a);
+        {  // ... but this block must go back to front to get stride right.
+            lo[i] *= stride;
+            hi[i] *= stride;
+            stride *= a2b->grid_points[i];
+        }
     }
 
-    F t = x - cast<F>(lo);
-    *r = lr + (hr-lr)*t;
-    *g = lg + (hg-lg)*t;
-    *b = lb + (hb-lb)*t;
+    *r = *g = *b = F0;
+
+    // We'll sample 2^dim == 1<<dim table entries per pixel,
+    // in all combinations of low and high in each dimension.
+    for (int combo = 0; combo < (1<<dim); combo++) {  // This loop can be done in any order.
+        I32 ix = cast<I32>(F0);
+        F    w = F1;
+
+        for (int i = 0; i < dim; i++) {   // This loop can be done in any order.
+            if (combo & (1<<i)) {  // It's arbitrary whether lo=0,hi=1 or lo=1,hi=0.
+                ix += hi[i];
+                w *= t[i];
+            } else {
+                ix += lo[i];
+                w *= 1-t[i];
+            }
+        }
+
+        F R,G,B;
+        if (a2b->grid_8) {
+            sample_clut_8 (a2b,ix, &R,&G,&B);
+        } else {
+            sample_clut_16(a2b,ix, &R,&G,&B);
+        }
+
+        *r += w*R;
+        *g += w*G;
+        *b += w*B;
+    }
 }
 
 static void exec_ops(const Op* ops, const void** args,
@@ -891,58 +907,19 @@ static void exec_ops(const Op* ops, const void** args,
             case Op_tf_b:{ b = apply_tf((const skcms_TransferFunction*)*args++, b); } break;
             case Op_tf_a:{ a = apply_tf((const skcms_TransferFunction*)*args++, a); } break;
 
-            case Op_table_8_r: { r = table_8((const skcms_Curve*)*args++, r); } break;
-            case Op_table_8_g: { g = table_8((const skcms_Curve*)*args++, g); } break;
-            case Op_table_8_b: { b = table_8((const skcms_Curve*)*args++, b); } break;
-            case Op_table_8_a: { a = table_8((const skcms_Curve*)*args++, a); } break;
+            case Op_table_r: { r = table((const skcms_Curve*)*args++, r); } break;
+            case Op_table_g: { g = table((const skcms_Curve*)*args++, g); } break;
+            case Op_table_b: { b = table((const skcms_Curve*)*args++, b); } break;
+            case Op_table_a: { a = table((const skcms_Curve*)*args++, a); } break;
 
-            case Op_table_16_r:{ r = table_16((const skcms_Curve*)*args++, r); } break;
-            case Op_table_16_g:{ g = table_16((const skcms_Curve*)*args++, g); } break;
-            case Op_table_16_b:{ b = table_16((const skcms_Curve*)*args++, b); } break;
-            case Op_table_16_a:{ a = table_16((const skcms_Curve*)*args++, a); } break;
-
-            case Op_clut_1D_8:{
+            case Op_clut: {
                 const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 1, cast<I32>(F0), 1, &r,&g,&b,a);
-            } break;
+                clut(a2b, &r,&g,&b,a);
 
-            case Op_clut_1D_16:{
-                const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 1, cast<I32>(F0), 1, &r,&g,&b,a);
-            } break;
-
-            case Op_clut_2D_8:{
-                const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 2, cast<I32>(F0), 1, &r,&g,&b,a);
-            } break;
-
-            case Op_clut_2D_16:{
-                const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 2, cast<I32>(F0), 1, &r,&g,&b,a);
-            } break;
-
-            case Op_clut_3D_8:{
-                const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 3, cast<I32>(F0), 1, &r,&g,&b,a);
-            } break;
-
-            case Op_clut_3D_16:{
-                const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 3, cast<I32>(F0), 1, &r,&g,&b,a);
-            } break;
-
-            case Op_clut_4D_8:{
-                const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<8>(a2b, 4, cast<I32>(F0), 1, &r,&g,&b,a);
-                // 'a' was really a CMYK K, so our output is actually opaque.
-                a = F1;
-            } break;
-
-            case Op_clut_4D_16:{
-                const skcms_A2B* a2b = (const skcms_A2B*) *args++;
-                clut<16>(a2b, 4, cast<I32>(F0), 1, &r,&g,&b,a);
-                // 'a' was really a CMYK K, so our output is actually opaque.
-                a = F1;
+                if (a2b->input_channels == 4) {
+                    // CMYK is opaque.
+                    a = F1;
+                }
             } break;
 
     // Notice, from here on down the store_ ops all return, ending the loop.
