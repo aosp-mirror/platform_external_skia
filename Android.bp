@@ -312,7 +312,6 @@ cc_library_static {
         "src/core/SkXfermode.cpp",
         "src/core/SkXfermodeInterpretation.cpp",
         "src/core/SkYUVPlanesCache.cpp",
-        "src/core/SkYUVSizeInfo.cpp",
         "src/effects/Sk1DPathEffect.cpp",
         "src/effects/Sk2DPathEffect.cpp",
         "src/effects/SkColorMatrix.cpp",
