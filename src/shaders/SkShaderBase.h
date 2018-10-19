@@ -9,7 +9,6 @@
 #define SkShaderBase_DEFINED
 
 #include "SkFilterQuality.h"
-#include "SkFlattenablePriv.h"
 #include "SkMask.h"
 #include "SkMatrix.h"
 #include "SkNoncopyable.h"
@@ -197,8 +196,15 @@ public:
         return nullptr;
     }
 
-    SK_DEFINE_FLATTENABLE_TYPE(SkShaderBase)
-    SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
+    static Type GetFlattenableType() { return kSkShaderBase_Type; }
+    Type getFlattenableType() const override { return GetFlattenableType(); }
+
+    static sk_sp<SkShaderBase> Deserialize(const void* data, size_t size,
+                                             const SkDeserialProcs* procs = nullptr) {
+        return sk_sp<SkShaderBase>(static_cast<SkShaderBase*>(
+                SkFlattenable::Deserialize(GetFlattenableType(), data, size, procs).release()));
+    }
+    static void InitializeFlattenables();
 
 protected:
     SkShaderBase(const SkMatrix* localMatrix = nullptr);

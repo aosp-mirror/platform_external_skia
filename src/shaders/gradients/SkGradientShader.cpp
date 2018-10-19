@@ -10,7 +10,6 @@
 #include "SkColorSpacePriv.h"
 #include "SkColorSpaceXformer.h"
 #include "SkConvertPixels.h"
-#include "SkFlattenablePriv.h"
 #include "SkFloatBits.h"
 #include "SkGradientShaderPriv.h"
 #include "SkHalf.h"
@@ -776,9 +775,9 @@ sk_sp<SkShader> SkGradientShader::MakeSweep(SkScalar cx, SkScalar cy,
     return sk_make_sp<SkSweepGradient>(SkPoint::Make(cx, cy), t0, t1, desc);
 }
 
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkGradientShader)
+void SkGradientShader::InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLinearGradient)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkRadialGradient)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkSweepGradient)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkTwoPointConicalGradient)
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
+}

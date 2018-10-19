@@ -248,7 +248,6 @@ bool SkImage_Lazy::lockAsBitmap(SkBitmap* bitmap, SkImage::CachingHint chint,
 
 bool SkImage_Lazy::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
                                 int srcX, int srcY, CachingHint chint) const {
-    SkColorSpace* dstColorSpace = dstInfo.colorSpace();
     SkBitmap bm;
     if (kDisallow_CachingHint == chint) {
         if (this->lockAsBitmapOnlyIfAlreadyCached(&bm, dstInfo)) {
@@ -264,7 +263,7 @@ bool SkImage_Lazy::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, siz
         }
     }
 
-    if (this->getROPixels(&bm, dstColorSpace, chint)) {
+    if (this->getROPixels(&bm, chint)) {
         return bm.readPixels(dstInfo, dstPixels, dstRB, srcX, srcY);
     }
     return false;
@@ -275,8 +274,7 @@ sk_sp<SkData> SkImage_Lazy::onRefEncoded() const {
     return generator->refEncodedData();
 }
 
-bool SkImage_Lazy::getROPixels(SkBitmap* bitmap, SkColorSpace* dstColorSpace,
-                               CachingHint chint) const {
+bool SkImage_Lazy::getROPixels(SkBitmap* bitmap, CachingHint chint) const {
     return this->lockAsBitmap(bitmap, chint, fInfo);
 }
 
@@ -290,7 +288,6 @@ bool SkImage_Lazy::onIsValid(GrContext* context) const {
 #if SK_SUPPORT_GPU
 sk_sp<GrTextureProxy> SkImage_Lazy::asTextureProxyRef(GrContext* context,
                                                       const GrSamplerState& params,
-                                                      SkColorSpace* dstColorSpace,
                                                       sk_sp<SkColorSpace>* texColorSpace,
                                                       SkScalar scaleAdjust[2]) const {
     if (!context) {
@@ -298,7 +295,7 @@ sk_sp<GrTextureProxy> SkImage_Lazy::asTextureProxyRef(GrContext* context,
     }
 
     GrImageTextureMaker textureMaker(context, this, kAllow_CachingHint);
-    return textureMaker.refTextureProxyForParams(params, dstColorSpace, texColorSpace, scaleAdjust);
+    return textureMaker.refTextureProxyForParams(params, texColorSpace, scaleAdjust);
 }
 #endif
 
@@ -417,7 +414,6 @@ sk_sp<GrTextureProxy> SkImage_Lazy::lockTextureProxy(
         const GrUniqueKey& origKey,
         SkImage::CachingHint chint,
         bool willBeMipped,
-        SkColorSpace* dstColorSpace,
         GrTextureMaker::AllowedTexGenType genType) const {
     // Values representing the various texture lock paths we can take. Used for logging the path
     // taken to a histogram.
@@ -437,7 +433,6 @@ sk_sp<GrTextureProxy> SkImage_Lazy::lockTextureProxy(
     // not include that in the key. Since SkImages are meant to be immutable, a given SkImage will
     // always have an associated proxy that is always one origin or the other. It never can change
     // origins. Thus we don't need to include that info in the key iteself.
-    // TODO: This needs to include the dstColorSpace.
     GrUniqueKey key;
     this->makeCacheKeyFromOrigKey(origKey, &key);
 

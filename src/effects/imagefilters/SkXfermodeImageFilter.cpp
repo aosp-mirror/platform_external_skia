@@ -10,7 +10,6 @@
 #include "SkCanvas.h"
 #include "SkColorData.h"
 #include "SkColorSpaceXformer.h"
-#include "SkFlattenablePriv.h"
 #include "SkImageFilterPriv.h"
 #include "SkReadBuffer.h"
 #include "SkSpecialImage.h"
@@ -34,8 +33,6 @@ class SkXfermodeImageFilter_Base : public SkImageFilter {
 public:
     SkXfermodeImageFilter_Base(SkBlendMode mode, sk_sp<SkImageFilter> inputs[2],
                                const CropRect* cropRect);
-
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkXfermodeImageFilter_Base)
 
 protected:
     sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* source, const Context&,
@@ -64,6 +61,8 @@ protected:
 #endif
 
 private:
+    SK_FLATTENABLE_HOOKS(SkXfermodeImageFilter_Base)
+
     static sk_sp<SkFlattenable> LegacyArithmeticCreateProc(SkReadBuffer& buffer);
 
     SkBlendMode fMode;
@@ -370,7 +369,7 @@ sk_sp<SkFlattenable> SkXfermodeImageFilter_Base::LegacyArithmeticCreateProc(SkRe
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkXfermodeImageFilter)
+void SkXfermodeImageFilter::InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkXfermodeImageFilter_Base)
     // manually register the legacy serialized name "SkXfermodeImageFilter"
     SkFlattenable::Register("SkXfermodeImageFilter", SkXfermodeImageFilter_Base::CreateProc,
@@ -380,4 +379,4 @@ SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkXfermodeImageFilter)
     SkFlattenable::Register("SkArithmeticImageFilter",
                             SkXfermodeImageFilter_Base::LegacyArithmeticCreateProc,
                             SkFlattenable::kSkImageFilter_Type);
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
+}

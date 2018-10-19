@@ -47,18 +47,12 @@ bool SkImage_GpuBase::ValidateBackendTexture(GrContext* ctx, const GrBackendText
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool SkImage_GpuBase::getROPixels(SkBitmap* dst, SkColorSpace*, CachingHint chint) const {
+bool SkImage_GpuBase::getROPixels(SkBitmap* dst, CachingHint chint) const {
     if (!fContext->contextPriv().resourceProvider()) {
         // DDL TODO: buffer up the readback so it occurs when the DDL is drawn?
         return false;
     }
 
-    // The SkColorSpace parameter "dstColorSpace" is really just a hint about how/where the bitmap
-    // will be used. The client doesn't expect that we convert to that color space, it's intended
-    // for codec-backed images, to drive our decoding heuristic. In theory we *could* read directly
-    // into that color space (to save the client some effort in whatever they're about to do), but
-    // that would make our use of the bitmap cache incorrect (or much less efficient, assuming we
-    // rolled the dstColorSpace into the key).
     const auto desc = SkBitmapCacheDesc::Make(this);
     if (SkBitmapCache::Find(desc, dst)) {
         SkASSERT(dst->isImmutable());
@@ -193,7 +187,6 @@ bool SkImage_GpuBase::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, 
 
 sk_sp<GrTextureProxy> SkImage_GpuBase::asTextureProxyRef(GrContext* context,
                                                          const GrSamplerState& params,
-                                                         SkColorSpace* dstColorSpace,
                                                          sk_sp<SkColorSpace>* texColorSpace,
                                                          SkScalar scaleAdjust[2]) const {
     if (context->uniqueID() != fContext->uniqueID()) {
@@ -203,7 +196,7 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::asTextureProxyRef(GrContext* context,
 
     GrTextureAdjuster adjuster(fContext.get(), this->asTextureProxyRef(), fAlphaType,
                                this->uniqueID(), fColorSpace.get());
-    return adjuster.refTextureProxyForParams(params, dstColorSpace, texColorSpace, scaleAdjust);
+    return adjuster.refTextureProxyForParams(params, texColorSpace, scaleAdjust);
 }
 
 GrBackendTexture SkImage_GpuBase::onGetBackendTexture(bool flushPendingGrContextIO,

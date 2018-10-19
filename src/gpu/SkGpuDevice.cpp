@@ -1285,7 +1285,7 @@ void SkGpuDevice::drawImage(const SkImage* image, SkScalar x, SkScalar y, const 
     if (this->shouldTileImage(image, nullptr, SkCanvas::kFast_SrcRectConstraint,
                               paint.getFilterQuality(), viewMatrix, SkMatrix::I())) {
         // only support tiling as bitmap at the moment, so force raster-version
-        if (!as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        if (!as_IB(image)->getROPixels(&bm)) {
             return;
         }
         this->drawBitmap(bm, x, y, paint);
@@ -1297,7 +1297,7 @@ void SkGpuDevice::drawImage(const SkImage* image, SkScalar x, SkScalar y, const 
                                SkCanvas::kFast_SrcRectConstraint, viewMatrix, paint);
         return;
     }
-    if (as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+    if (as_IB(image)->getROPixels(&bm)) {
         GrBitmapTextureMaker maker(fContext.get(), bm);
         this->drawTextureMaker(&maker, image->width(), image->height(), nullptr, nullptr,
                                SkCanvas::kFast_SrcRectConstraint, viewMatrix, paint);
@@ -1323,7 +1323,7 @@ void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
     if (this->shouldTileImage(image, src, constraint, paint.getFilterQuality(), this->ctm(),
                               srcToDstRect)) {
         // only support tiling as bitmap at the moment, so force raster-version
-        if (!as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        if (!as_IB(image)->getROPixels(&bm)) {
             return;
         }
         this->drawBitmapRect(bm, src, dst, paint, constraint);
@@ -1335,7 +1335,7 @@ void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
                                this->ctm(), paint);
         return;
     }
-    if (as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+    if (as_IB(image)->getROPixels(&bm)) {
         GrBitmapTextureMaker maker(fContext.get(), bm);
         this->drawTextureMaker(&maker, image->width(), image->height(), src, &dst, constraint,
                                this->ctm(), paint);
@@ -1366,8 +1366,7 @@ void SkGpuDevice::drawImageNine(const SkImage* image,
         if (image->isLazyGenerated()) {
             GrImageTextureMaker maker(fContext.get(), image, SkImage::kAllow_CachingHint);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
-        } else if (as_IB(image)->getROPixels(&bm,
-                                             fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        } else if (as_IB(image)->getROPixels(&bm)) {
             GrBitmapTextureMaker maker(fContext.get(), bm);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
         }
@@ -1401,7 +1400,7 @@ void SkGpuDevice::drawProducerLattice(GrTextureProducer* producer,
     const GrSamplerState::Filter filter = compute_lattice_filter_mode(*paint);
     sk_sp<SkColorSpace> proxyColorSpace;
     auto proxy =
-            producer->refTextureProxyForParams(filter, dstColorSpace, &proxyColorSpace, nullptr);
+            producer->refTextureProxyForParams(filter, &proxyColorSpace, nullptr);
     if (!proxy) {
         return;
     }
@@ -1429,8 +1428,7 @@ void SkGpuDevice::drawImageLattice(const SkImage* image,
         if (image->isLazyGenerated()) {
             GrImageTextureMaker maker(fContext.get(), image, SkImage::kAllow_CachingHint);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
-        } else if (as_IB(image)->getROPixels(&bm,
-                                             fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        } else if (as_IB(image)->getROPixels(&bm)) {
             GrBitmapTextureMaker maker(fContext.get(), bm);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
         }
@@ -1484,7 +1482,7 @@ void SkGpuDevice::drawImageSet(const SkCanvas::ImageSetEntry set[], int count, f
         textures[i].fProxy =
                 as_IB(set[i].fImage.get())
                         ->asTextureProxyRef(fContext.get(), GrSamplerState::ClampBilerp(), nullptr,
-                                            nullptr, nullptr);
+                                            nullptr);
         textures[i].fSrcRect = set[i].fSrcRect;
         textures[i].fDstRect = set[i].fDstRect;
         textures[i].fAAFlags = SkToGrQuadAAFlags(set[i].fAAFlags);

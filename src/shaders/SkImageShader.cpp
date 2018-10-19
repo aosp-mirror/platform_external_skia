@@ -97,12 +97,7 @@ static bool legacy_shader_can_handle(const SkMatrix& inv) {
 #ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
 SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
                                                     SkArenaAlloc* alloc) const {
-    const auto info = as_IB(fImage)->onImageInfo();
-
-    if (info.colorType() != kN32_SkColorType) {
-        return nullptr;
-    }
-    if (info.alphaType() == kUnpremul_SkAlphaType) {
+    if (fImage->alphaType() == kUnpremul_SkAlphaType) {
         return nullptr;
     }
     if (fTileModeX != fTileModeY) {
@@ -118,8 +113,12 @@ SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
         return nullptr;
     }
 
+    SkBitmapProvider provider(fImage.get());
+    if (kN32_SkColorType != provider.makeCacheDesc().fColorType) {
+        return nullptr;
+    }
     return SkBitmapProcLegacyShader::MakeContext(*this, fTileModeX, fTileModeY,
-                                                 SkBitmapProvider(fImage.get()), rec, alloc);
+                                                 provider, rec, alloc);
 }
 #endif
 
@@ -203,9 +202,8 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
     GrSamplerState samplerState(wrapModes, textureFilterMode);
     sk_sp<SkColorSpace> texColorSpace;
     SkScalar scaleAdjust[2] = { 1.0f, 1.0f };
-    sk_sp<GrTextureProxy> proxy(as_IB(fImage)->asTextureProxyRef(
-            args.fContext, samplerState, args.fDstColorSpaceInfo->colorSpace(), &texColorSpace,
-            scaleAdjust));
+    sk_sp<GrTextureProxy> proxy(as_IB(fImage)->asTextureProxyRef(args.fContext, samplerState,
+                                                                 &texColorSpace, scaleAdjust));
     if (!proxy) {
         return nullptr;
     }
@@ -242,9 +240,9 @@ sk_sp<SkShader> SkMakeBitmapShader(const SkBitmap& src, SkShader::TileMode tmx,
                                tmx, tmy, localMatrix);
 }
 
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkShaderBase)
-SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkImageShader)
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
+void SkShaderBase::InitializeFlattenables() {
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkImageShader)
+}
 
 bool SkImageShader::onAppendStages(const StageRec& rec) const {
     SkRasterPipeline* p = rec.fPipeline;
