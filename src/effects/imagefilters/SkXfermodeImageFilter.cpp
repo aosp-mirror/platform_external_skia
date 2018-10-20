@@ -63,8 +63,6 @@ protected:
 private:
     SK_FLATTENABLE_HOOKS(SkXfermodeImageFilter_Base)
 
-    static sk_sp<SkFlattenable> LegacyArithmeticCreateProc(SkReadBuffer& buffer);
-
     SkBlendMode fMode;
 
     friend class SkXfermodeImageFilter;
@@ -347,36 +345,6 @@ std::unique_ptr<GrFragmentProcessor> SkXfermodeImageFilter_Base::makeFGFrag(
 #endif
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-sk_sp<SkFlattenable> SkXfermodeImageFilter_Base::LegacyArithmeticCreateProc(SkReadBuffer& buffer) {
-    SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 2);
-    // skip the unused mode (srcover) field
-    SkDEBUGCODE(unsigned mode =) unflatten_blendmode(buffer);
-    if (!buffer.isValid()) {
-        return nullptr;
-    }
-    SkASSERT(SkBlendMode::kSrcOver == (SkBlendMode)mode);
-    float k[4];
-    for (int i = 0; i < 4; ++i) {
-        k[i] = buffer.readScalar();
-    }
-    const bool enforcePMColor = buffer.readBool();
-    if (!buffer.isValid()) {
-        return nullptr;
-    }
-    return SkArithmeticImageFilter::Make(k[0], k[1], k[2], k[3], enforcePMColor, common.getInput(0),
-                                         common.getInput(1), &common.cropRect());
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
 void SkXfermodeImageFilter::InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkXfermodeImageFilter_Base)
-    // manually register the legacy serialized name "SkXfermodeImageFilter"
-    SkFlattenable::Register("SkXfermodeImageFilter", SkXfermodeImageFilter_Base::CreateProc,
-                            SkFlattenable::kSkImageFilter_Type);
-    // manually register the legacy serialized name "SkArithmeticImageFilter" from when that filter
-    // was implemented as a xfermode image filter.
-    SkFlattenable::Register("SkArithmeticImageFilter",
-                            SkXfermodeImageFilter_Base::LegacyArithmeticCreateProc,
-                            SkFlattenable::kSkImageFilter_Type);
 }
