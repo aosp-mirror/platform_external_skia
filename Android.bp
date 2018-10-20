@@ -1456,7 +1456,6 @@ cc_test {
         "tests/FillPathTest.cpp",
         "tests/FitsInTest.cpp",
         "tests/FlattenDrawableTest.cpp",
-        "tests/FlattenableCustomFactory.cpp",
         "tests/FlattenableFactoryToName.cpp",
         "tests/FlattenableNameToFactory.cpp",
         "tests/Float16Test.cpp",
