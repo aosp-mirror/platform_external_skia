@@ -26,6 +26,7 @@
 #include "GrStencilAttachment.h"
 #include "GrStyle.h"
 #include "GrTracing.h"
+#include "SkDrawable.h"
 #include "SkDrawShadowInfo.h"
 #include "SkGlyphRunPainter.h"
 #include "SkGr.h"
@@ -39,6 +40,7 @@
 #include "ops/GrClearOp.h"
 #include "ops/GrClearStencilClipOp.h"
 #include "ops/GrDebugMarkerOp.h"
+#include "ops/GrDrawableOp.h"
 #include "ops/GrDrawAtlasOp.h"
 #include "ops/GrDrawOp.h"
 #include "ops/GrDrawVerticesOp.h"
@@ -1442,6 +1444,13 @@ void GrRenderTargetContext::drawImageLattice(const GrClip& clip,
     this->addDrawOp(clip, std::move(op));
 }
 
+void GrRenderTargetContext::drawDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler> drawable,
+                                         const SkRect& bounds) {
+    std::unique_ptr<GrOp> op(GrDrawableOp::Make(fContext, std::move(drawable), bounds));
+    SkASSERT(op);
+    this->getRTOpList()->addOp(std::move(op), *this->caps());
+}
+
 GrSemaphoresSubmitted GrRenderTargetContext::prepareForExternalIO(
         int numSemaphores, GrBackendSemaphore backendSemaphores[]) {
     ASSERT_SINGLE_OWNER
@@ -1756,6 +1765,7 @@ uint32_t GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<Gr
         return SK_InvalidUniqueID;
     }
     SkDEBUGCODE(this->validate();)
+    SkDEBUGCODE(op->fAddDrawOpCalled = true;)
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "addDrawOp", fContext);
 
     // Setup clip

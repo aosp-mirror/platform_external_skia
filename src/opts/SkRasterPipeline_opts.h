@@ -1223,31 +1223,6 @@ STAGE(srcover_rgba_8888, const SkJumper_MemoryCtx* ctx) {
     store(ptr, dst, tail);
 }
 
-STAGE(srcover_bgra_8888, const SkJumper_MemoryCtx* ctx) {
-    auto ptr = ptr_at_xy<uint32_t>(ctx, dx,dy);
-
-    U32 dst = load<U32>(ptr, tail);
-    db = cast((dst      ) & 0xff);
-    dg = cast((dst >>  8) & 0xff);
-    dr = cast((dst >> 16) & 0xff);
-    da = cast((dst >> 24)       );
-    // {dr,dg,db,da} are in [0,255]
-    // { r, g, b, a} are in [0,  1] (but may be out of gamut)
-
-    r = mad(dr, inv(a), r*255.0f);
-    g = mad(dg, inv(a), g*255.0f);
-    b = mad(db, inv(a), b*255.0f);
-    a = mad(da, inv(a), a*255.0f);
-    // { r, g, b, a} are now in [0,255]  (but may be out of gamut)
-
-    // to_unorm() clamps back to gamut.  Scaling by 1 since we're already 255-biased.
-    dst = to_unorm(b, 1, 255)
-        | to_unorm(g, 1, 255) <<  8
-        | to_unorm(r, 1, 255) << 16
-        | to_unorm(a, 1, 255) << 24;
-    store(ptr, dst, tail);
-}
-
 STAGE(clamp_0, Ctx::None) {
     r = max(r, 0);
     g = max(g, 0);
@@ -1293,10 +1268,16 @@ STAGE(unbounded_set_rgb, const float* rgb) {
     g = rgb[1];
     b = rgb[2];
 }
+
 STAGE(swap_rb, Ctx::None) {
     auto tmp = r;
     r = b;
     b = tmp;
+}
+STAGE(swap_rb_dst, Ctx::None) {
+    auto tmp = dr;
+    dr = db;
+    db = tmp;
 }
 
 STAGE(move_src_dst, Ctx::None) {
@@ -1560,25 +1541,6 @@ STAGE(store_a8, const SkJumper_MemoryCtx* ctx) {
     store(ptr, packed, tail);
 }
 
-STAGE(load_g8, const SkJumper_MemoryCtx* ctx) {
-    auto ptr = ptr_at_xy<const uint8_t>(ctx, dx,dy);
-
-    r = g = b = from_byte(load<U8>(ptr, tail));
-    a = 1.0f;
-}
-STAGE(load_g8_dst, const SkJumper_MemoryCtx* ctx) {
-    auto ptr = ptr_at_xy<const uint8_t>(ctx, dx,dy);
-
-    dr = dg = db = from_byte(load<U8>(ptr, tail));
-    da = 1.0f;
-}
-STAGE(gather_g8, const SkJumper_GatherCtx* ctx) {
-    const uint8_t* ptr;
-    U32 ix = ix_and_ptr(&ptr, ctx, r,g);
-    r = g = b = from_byte(gather(ptr, ix));
-    a = 1.0f;
-}
-
 STAGE(load_565, const SkJumper_MemoryCtx* ctx) {
     auto ptr = ptr_at_xy<const uint16_t>(ctx, dx,dy);
 
@@ -1647,29 +1609,6 @@ STAGE(store_8888, const SkJumper_MemoryCtx* ctx) {
     U32 px = to_unorm(r, 255)
            | to_unorm(g, 255) <<  8
            | to_unorm(b, 255) << 16
-           | to_unorm(a, 255) << 24;
-    store(ptr, px, tail);
-}
-
-STAGE(load_bgra, const SkJumper_MemoryCtx* ctx) {
-    auto ptr = ptr_at_xy<const uint32_t>(ctx, dx,dy);
-    from_8888(load<U32>(ptr, tail), &b,&g,&r,&a);
-}
-STAGE(load_bgra_dst, const SkJumper_MemoryCtx* ctx) {
-    auto ptr = ptr_at_xy<const uint32_t>(ctx, dx,dy);
-    from_8888(load<U32>(ptr, tail), &db,&dg,&dr,&da);
-}
-STAGE(gather_bgra, const SkJumper_GatherCtx* ctx) {
-    const uint32_t* ptr;
-    U32 ix = ix_and_ptr(&ptr, ctx, r,g);
-    from_8888(gather(ptr, ix), &b,&g,&r,&a);
-}
-STAGE(store_bgra, const SkJumper_MemoryCtx* ctx) {
-    auto ptr = ptr_at_xy<uint32_t>(ctx, dx,dy);
-
-    U32 px = to_unorm(b, 255)
-           | to_unorm(g, 255) <<  8
-           | to_unorm(r, 255) << 16
            | to_unorm(a, 255) << 24;
     store(ptr, px, tail);
 }
@@ -1821,6 +1760,14 @@ STAGE(check_decal_mask, SkJumper_DecalTileCtx* ctx) {
     a = bit_cast<F>( bit_cast<U32>(a) & mask );
 }
 
+STAGE(alpha_to_gray, Ctx::None) {
+    r = g = b = a;
+    a = 1;
+}
+STAGE(alpha_to_gray_dst, Ctx::None) {
+    dr = dg = db = da;
+    da = 1;
+}
 STAGE(luminance_to_alpha, Ctx::None) {
     a = r*0.2126f + g*0.7152f + b*0.0722f;
     r = g = b = 0;
@@ -2609,6 +2556,11 @@ STAGE_PP(swap_rb, Ctx::None) {
     r = b;
     b = tmp;
 }
+STAGE_PP(swap_rb_dst, Ctx::None) {
+    auto tmp = dr;
+    dr = db;
+    db = tmp;
+}
 
 STAGE_PP(move_src_dst, Ctx::None) {
     dr = r;
@@ -2864,26 +2816,10 @@ STAGE_PP(load_8888_dst, const SkJumper_MemoryCtx* ctx) {
 STAGE_PP(store_8888, const SkJumper_MemoryCtx* ctx) {
     store_8888_(ptr_at_xy<uint32_t>(ctx, dx,dy), tail, r,g,b,a);
 }
-
-STAGE_PP(load_bgra, const SkJumper_MemoryCtx* ctx) {
-    load_8888_(ptr_at_xy<const uint32_t>(ctx, dx,dy), tail, &b,&g,&r,&a);
-}
-STAGE_PP(load_bgra_dst, const SkJumper_MemoryCtx* ctx) {
-    load_8888_(ptr_at_xy<const uint32_t>(ctx, dx,dy), tail, &db,&dg,&dr,&da);
-}
-STAGE_PP(store_bgra, const SkJumper_MemoryCtx* ctx) {
-    store_8888_(ptr_at_xy<uint32_t>(ctx, dx,dy), tail, b,g,r,a);
-}
-
 STAGE_GP(gather_8888, const SkJumper_GatherCtx* ctx) {
     const uint32_t* ptr;
     U32 ix = ix_and_ptr(&ptr, ctx, x,y);
     from_8888(gather<U32>(ptr, ix), &r, &g, &b, &a);
-}
-STAGE_GP(gather_bgra, const SkJumper_GatherCtx* ctx) {
-    const uint32_t* ptr;
-    U32 ix = ix_and_ptr(&ptr, ctx, x,y);
-    from_8888(gather<U32>(ptr, ix), &b, &g, &r, &a);
 }
 
 // ~~~~~~ 16-bit memory loads and stores ~~~~~~ //
@@ -3002,23 +2938,17 @@ STAGE_GP(gather_a8, const SkJumper_GatherCtx* ctx) {
     a = cast<U16>(gather<U8>(ptr, ix));
 }
 
-STAGE_PP(load_g8, const SkJumper_MemoryCtx* ctx) {
-    r = g = b = load_8(ptr_at_xy<const uint8_t>(ctx, dx,dy), tail);
+STAGE_PP(alpha_to_gray, Ctx::None) {
+    r = g = b = a;
     a = 255;
 }
-STAGE_PP(load_g8_dst, const SkJumper_MemoryCtx* ctx) {
-    dr = dg = db = load_8(ptr_at_xy<const uint8_t>(ctx, dx,dy), tail);
+STAGE_PP(alpha_to_gray_dst, Ctx::None) {
+    dr = dg = db = da;
     da = 255;
 }
 STAGE_PP(luminance_to_alpha, Ctx::None) {
     a = (r*54 + g*183 + b*19)/256;  // 0.2126, 0.7152, 0.0722 with 256 denominator.
     r = g = b = 0;
-}
-STAGE_GP(gather_g8, const SkJumper_GatherCtx* ctx) {
-    const uint8_t* ptr;
-    U32 ix = ix_and_ptr(&ptr, ctx, x,y);
-    r = g = b = cast<U16>(gather<U8>(ptr, ix));
-    a = 255;
 }
 
 // ~~~~~~ Coverage scales / lerps ~~~~~~ //
@@ -3239,17 +3169,6 @@ STAGE_PP(srcover_rgba_8888, const SkJumper_MemoryCtx* ctx) {
     a = a + div255( da*inv(a) );
     store_8888_(ptr, tail, r,g,b,a);
 }
-STAGE_PP(srcover_bgra_8888, const SkJumper_MemoryCtx* ctx) {
-    auto ptr = ptr_at_xy<uint32_t>(ctx, dx,dy);
-
-    load_8888_(ptr, tail, &db,&dg,&dr,&da);
-    r = r + div255( dr*inv(a) );
-    g = g + div255( dg*inv(a) );
-    b = b + div255( db*inv(a) );
-    a = a + div255( da*inv(a) );
-    store_8888_(ptr, tail, b,g,r,a);
-}
-
 // Now we'll add null stand-ins for stages we haven't implemented in lowp.
 // If a pipeline uses these stages, it'll boot it out of lowp into highp.
 

@@ -31,8 +31,7 @@ public:
                                SkScalar outerThreshold, sk_sp<SkImageFilter> input,
                                const CropRect* cropRect = nullptr);
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkAlphaThresholdFilterImpl)
-    friend void SkAlphaThresholdFilter::InitializeFlattenables();
+    friend void SkAlphaThresholdFilter::RegisterFlattenables();
 
 protected:
     void flatten(SkWriteBuffer&) const override;
@@ -49,15 +48,17 @@ protected:
 #endif
 
 private:
+    SK_FLATTENABLE_HOOKS(SkAlphaThresholdFilterImpl)
+
     SkRegion fRegion;
     SkScalar fInnerThreshold;
     SkScalar fOuterThreshold;
     typedef SkImageFilter INHERITED;
 };
 
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkAlphaThresholdFilter)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkAlphaThresholdFilterImpl)
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
+void SkAlphaThresholdFilter::RegisterFlattenables() {
+    SK_REGISTER_FLATTENABLE(SkAlphaThresholdFilterImpl)
+}
 
 static SkScalar pin_0_1(SkScalar x) {
     return SkMinScalar(SkMaxScalar(x, 0), 1);

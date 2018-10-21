@@ -82,12 +82,11 @@ public:
     const SkBitmap* onPeekBitmap() const override { return &fBitmap; }
 
 #if SK_SUPPORT_GPU
-    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerState&, SkColorSpace*,
-                                            sk_sp<SkColorSpace>*,
+    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerState&,
                                             SkScalar scaleAdjust[2]) const override;
 #endif
 
-    bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
+    bool getROPixels(SkBitmap*, CachingHint) const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
 
     SkPixelRef* getPixelRef() const { return fBitmap.pixelRef(); }
@@ -165,7 +164,7 @@ bool SkImage_Raster::onPeekPixels(SkPixmap* pm) const {
     return fBitmap.peekPixels(pm);
 }
 
-bool SkImage_Raster::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace, CachingHint) const {
+bool SkImage_Raster::getROPixels(SkBitmap* dst, CachingHint) const {
     *dst = fBitmap;
     return true;
 }
@@ -173,8 +172,6 @@ bool SkImage_Raster::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace, Cac
 #if SK_SUPPORT_GPU
 sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrContext* context,
                                                         const GrSamplerState& params,
-                                                        SkColorSpace* dstColorSpace,
-                                                        sk_sp<SkColorSpace>* texColorSpace,
                                                         SkScalar scaleAdjust[2]) const {
     if (!context) {
         return nullptr;
@@ -185,7 +182,7 @@ sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrContext* context,
     if (tex) {
         GrTextureAdjuster adjuster(context, fPinnedProxy, fBitmap.alphaType(), fPinnedUniqueID,
                                    fBitmap.colorSpace());
-        return adjuster.refTextureProxyForParams(params, dstColorSpace, texColorSpace, scaleAdjust);
+        return adjuster.refTextureProxyForParams(params, scaleAdjust);
     }
 
     return GrRefCachedBitmapTextureProxy(context, fBitmap, params, scaleAdjust);
@@ -344,11 +341,6 @@ bool SkImage_Raster::onAsLegacyBitmap(SkBitmap* bitmap) const {
 sk_sp<SkImage> SkImage_Raster::onMakeColorSpace(sk_sp<SkColorSpace> target) const {
     SkPixmap src;
     SkAssertResult(fBitmap.peekPixels(&src));
-
-    // Treat nullptr srcs as sRGB.
-    if (!src.colorSpace() && target->isSRGB()) {
-        return sk_ref_sp(const_cast<SkImage*>((SkImage*)this));
-    }
 
     SkBitmap dst;
     dst.allocPixels(fBitmap.info().makeColorSpace(target));

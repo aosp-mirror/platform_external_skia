@@ -10,12 +10,10 @@
 #include "SkGlyphRun.h"
 #include "SkImageFilter.h"
 #include "SkImageFilterCache.h"
-#include "SkMallocPixelRef.h"
 #include "SkMakeUnique.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
 #include "SkPath.h"
-#include "SkPixelRef.h"
 #include "SkPixmap.h"
 #include "SkRasterClip.h"
 #include "SkRasterHandleAllocator.h"
@@ -192,14 +190,6 @@ static bool valid_for_bitmap_device(const SkImageInfo& info,
                                     SkAlphaType* newAlphaType) {
     if (info.width() < 0 || info.height() < 0) {
         return false;
-    }
-
-    // TODO: can we stop supporting kUnknown in SkBitmkapDevice?
-    if (kUnknown_SkColorType == info.colorType()) {
-        if (newAlphaType) {
-            *newAlphaType = kUnknown_SkAlphaType;
-        }
-        return true;
     }
 
     SkAlphaType canonicalAlphaType = info.alphaType();

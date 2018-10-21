@@ -182,7 +182,8 @@ def dm_flags(api, bot):
       blacklist('gltestthreading gm _ savelayer_with_backdrop')
       blacklist('gltestthreading gm _ persp_shaders_bw')
       blacklist('gltestthreading gm _ dftext_blob_persp')
-      # skbug.com/7523 - Flaky on various GPUs
+      blacklist('gltestthreading gm _ dftext')
+    # skbug.com/7523 - Flaky on various GPUs
       blacklist('gltestthreading gm _ orientation')
 
     # CommandBuffer bot *only* runs the command_buffer config.
@@ -407,6 +408,11 @@ def dm_flags(api, bot):
     # More questionable bmps that fail on Mac, too. skbug.com/6984
     blacklist('_ image gen_platf rle8-height-negative.bmp')
     blacklist('_ image gen_platf rle4-height-negative.bmp')
+
+  # These PNGs have CRC errors. The platform generators seem to draw
+  # uninitialized memory without reporting an error, so skip them to
+  # avoid lots of images on Gold.
+  blacklist('_ image gen_platf error')
 
   if 'Android' in bot or 'iOS' in bot or 'Chromecast' in bot:
     # This test crashes the N9 (perhaps because of large malloc/frees). It also

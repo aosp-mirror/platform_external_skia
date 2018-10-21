@@ -1285,7 +1285,7 @@ void SkGpuDevice::drawImage(const SkImage* image, SkScalar x, SkScalar y, const 
     if (this->shouldTileImage(image, nullptr, SkCanvas::kFast_SrcRectConstraint,
                               paint.getFilterQuality(), viewMatrix, SkMatrix::I())) {
         // only support tiling as bitmap at the moment, so force raster-version
-        if (!as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        if (!as_IB(image)->getROPixels(&bm)) {
             return;
         }
         this->drawBitmap(bm, x, y, paint);
@@ -1297,7 +1297,7 @@ void SkGpuDevice::drawImage(const SkImage* image, SkScalar x, SkScalar y, const 
                                SkCanvas::kFast_SrcRectConstraint, viewMatrix, paint);
         return;
     }
-    if (as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+    if (as_IB(image)->getROPixels(&bm)) {
         GrBitmapTextureMaker maker(fContext.get(), bm);
         this->drawTextureMaker(&maker, image->width(), image->height(), nullptr, nullptr,
                                SkCanvas::kFast_SrcRectConstraint, viewMatrix, paint);
@@ -1323,7 +1323,7 @@ void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
     if (this->shouldTileImage(image, src, constraint, paint.getFilterQuality(), this->ctm(),
                               srcToDstRect)) {
         // only support tiling as bitmap at the moment, so force raster-version
-        if (!as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        if (!as_IB(image)->getROPixels(&bm)) {
             return;
         }
         this->drawBitmapRect(bm, src, dst, paint, constraint);
@@ -1335,7 +1335,7 @@ void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
                                this->ctm(), paint);
         return;
     }
-    if (as_IB(image)->getROPixels(&bm, fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+    if (as_IB(image)->getROPixels(&bm)) {
         GrBitmapTextureMaker maker(fContext.get(), bm);
         this->drawTextureMaker(&maker, image->width(), image->height(), src, &dst, constraint,
                                this->ctm(), paint);
@@ -1366,8 +1366,7 @@ void SkGpuDevice::drawImageNine(const SkImage* image,
         if (image->isLazyGenerated()) {
             GrImageTextureMaker maker(fContext.get(), image, SkImage::kAllow_CachingHint);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
-        } else if (as_IB(image)->getROPixels(&bm,
-                                             fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        } else if (as_IB(image)->getROPixels(&bm)) {
             GrBitmapTextureMaker maker(fContext.get(), bm);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
         }
@@ -1399,14 +1398,12 @@ void SkGpuDevice::drawProducerLattice(GrTextureProducer* producer,
 
     auto dstColorSpace = fRenderTargetContext->colorSpaceInfo().colorSpace();
     const GrSamplerState::Filter filter = compute_lattice_filter_mode(*paint);
-    sk_sp<SkColorSpace> proxyColorSpace;
-    auto proxy =
-            producer->refTextureProxyForParams(filter, dstColorSpace, &proxyColorSpace, nullptr);
+    auto proxy = producer->refTextureProxyForParams(filter, nullptr);
     if (!proxy) {
         return;
     }
-    auto csxf = GrColorSpaceXform::Make(proxyColorSpace.get(), producer->alphaType(),
-                                        dstColorSpace,         kPremul_SkAlphaType);
+    auto csxf = GrColorSpaceXform::Make(producer->colorSpace(), producer->alphaType(),
+                                        dstColorSpace,          kPremul_SkAlphaType);
 
     fRenderTargetContext->drawImageLattice(this->clip(), std::move(grPaint), this->ctm(),
                                            std::move(proxy), std::move(csxf), filter,
@@ -1429,8 +1426,7 @@ void SkGpuDevice::drawImageLattice(const SkImage* image,
         if (image->isLazyGenerated()) {
             GrImageTextureMaker maker(fContext.get(), image, SkImage::kAllow_CachingHint);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
-        } else if (as_IB(image)->getROPixels(&bm,
-                                             fRenderTargetContext->colorSpaceInfo().colorSpace())) {
+        } else if (as_IB(image)->getROPixels(&bm)) {
             GrBitmapTextureMaker maker(fContext.get(), bm);
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
         }
@@ -1483,8 +1479,7 @@ void SkGpuDevice::drawImageSet(const SkCanvas::ImageSetEntry set[], int count, f
         }
         textures[i].fProxy =
                 as_IB(set[i].fImage.get())
-                        ->asTextureProxyRef(fContext.get(), GrSamplerState::ClampBilerp(), nullptr,
-                                            nullptr, nullptr);
+                        ->asTextureProxyRef(fContext.get(), GrSamplerState::ClampBilerp(), nullptr);
         textures[i].fSrcRect = set[i].fSrcRect;
         textures[i].fDstRect = set[i].fDstRect;
         textures[i].fAAFlags = SkToGrQuadAAFlags(set[i].fAAFlags);
@@ -1690,6 +1685,24 @@ void SkGpuDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList) {
 
     fRenderTargetContext->drawGlyphRunList(this->clip(), ctm, glyphRunList);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+void SkGpuDevice::drawDrawable(SkDrawable* drawable, const SkMatrix* matrix, SkCanvas* canvas) {
+    GrBackendApi api = this->context()->contextPriv().getBackend();
+    if (GrBackendApi::kVulkan == api) {
+        const SkMatrix& ctm = canvas->getTotalMatrix();
+        const SkMatrix& combinedMatrix = matrix ? SkMatrix::Concat(ctm, *matrix) : ctm;
+        std::unique_ptr<SkDrawable::GpuDrawHandler> gpuDraw =
+                drawable->snapGpuDrawHandler(api, combinedMatrix);
+        if (gpuDraw) {
+            fRenderTargetContext->drawDrawable(std::move(gpuDraw), drawable->getBounds());
+            return;
+        }
+    }
+    this->INHERITED::drawDrawable(drawable, matrix, canvas);
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 

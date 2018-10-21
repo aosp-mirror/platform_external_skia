@@ -673,6 +673,9 @@ void SkTSect::coincidentForce(SkTSect* sect2,
     SkTSpan* last = this->tail();
     SkTSpan* oppFirst = sect2->fHead;
     SkTSpan* oppLast = sect2->tail();
+    if (!last || !oppLast) {
+        return;
+    }
     bool deleteEmptySpans = this->updateBounded(first, last, oppFirst);
     deleteEmptySpans |= sect2->updateBounded(oppFirst, oppLast, first);
     this->removeSpanRange(first, last);
@@ -725,6 +728,9 @@ int SkTSect::collapsed() const {
 
 void SkTSect::computePerpendiculars(SkTSect* sect2,
         SkTSpan* first, SkTSpan* last) {
+    if (!last) {
+        return;
+    }
     const SkTCurve& opp = sect2->fCurve;
     SkTSpan* work = first;
     SkTSpan* prior = nullptr;
@@ -1461,7 +1467,11 @@ SkTSpan* SkTSect::spanAtT(double t,
 SkTSpan* SkTSect::tail() {
     SkTSpan* result = fHead;
     SkTSpan* next = fHead;
+    int safetyNet = 100000;
     while ((next = next->fNext)) {
+        if (!--safetyNet) {
+            return nullptr;
+        }
         if (next->fEndT > result->fEndT) {
             result = next;
         }

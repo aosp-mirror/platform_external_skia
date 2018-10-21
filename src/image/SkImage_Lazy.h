@@ -46,14 +46,14 @@ public:
                       CachingHint) const override;
 #if SK_SUPPORT_GPU
     sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*,
-                                            const GrSamplerState&, SkColorSpace*,
-                                            sk_sp<SkColorSpace>*,
+                                            const GrSamplerState&,
                                             SkScalar scaleAdjust[2]) const override;
-    sk_sp<SkCachedData> getPlanes(SkYUVSizeInfo*, SkYUVColorSpace*, const void* planes[3]) override;
+    sk_sp<SkCachedData> getPlanes(SkYUVSizeInfo*, SkYUVAIndex[4],
+                                  SkYUVColorSpace*, const void* planes[4]) override;
 #endif
     sk_sp<SkData> onRefEncoded() const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
-    bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
+    bool getROPixels(SkBitmap*, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
     sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>) const override;
 
@@ -73,7 +73,6 @@ public:
                                            const GrUniqueKey& key,
                                            SkImage::CachingHint,
                                            bool willBeMipped,
-                                           SkColorSpace* dstColorSpace,
                                            GrTextureMaker::AllowedTexGenType genType) const;
 
     // TODO: Need to pass in dstColorSpace to fold into key here?

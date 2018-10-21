@@ -38,7 +38,6 @@
 #include "SkImageInfoPriv.h"
 #include "SkImage_Gpu.h"
 #include "SkMipMap.h"
-#include "SkPixelRef.h"
 #include "SkTraceEvent.h"
 #include "SkYUVAIndex.h"
 #include "effects/GrYUVtoRGBEffect.h"
@@ -149,8 +148,8 @@ sk_sp<SkImage> SkImage_Gpu::ConvertYUVATexturesToRGB(
             ct = kAlpha_8_SkColorType;
         } else {
             // The UV planes can either be interleaved or planar. If interleaved the Y plane
-            // will have RBGA color type.
-            ct = nv12 ? kRGBA_8888_SkColorType : kAlpha_8_SkColorType;
+            // should have A8 color type but may be RGBA. We fall back in the latter case below.
+            ct = nv12 && SkYUVAIndex::kY_Index != i ? kRGBA_8888_SkColorType : kAlpha_8_SkColorType;
         }
 
         if (!yuvaTexturesCopy[yuvaIndex.fIndex].isValid()) {
@@ -158,10 +157,16 @@ sk_sp<SkImage> SkImage_Gpu::ConvertYUVATexturesToRGB(
 
             // TODO: Instead of using assumption about whether it is NV12 format to guess colorType,
             // actually use channel information here.
+            // Alternate TODO: Don't bother validating.
             if (!ValidateBackendTexture(ctx, yuvaTexturesCopy[yuvaIndex.fIndex],
                                         &yuvaTexturesCopy[yuvaIndex.fIndex].fConfig,
                                         ct, kPremul_SkAlphaType, nullptr)) {
-                return nullptr;
+                // Try RGBA in case the assumed colortype is wrong
+                if (!ValidateBackendTexture(ctx, yuvaTexturesCopy[yuvaIndex.fIndex],
+                                            &yuvaTexturesCopy[yuvaIndex.fIndex].fConfig,
+                                            kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr)) {
+                    return nullptr;
+                }
             }
         }
 
@@ -339,16 +344,13 @@ sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
 
 static sk_sp<SkImage> create_image_from_producer(GrContext* context, GrTextureProducer* producer,
                                                  SkAlphaType at, uint32_t id,
-                                                 SkColorSpace* dstColorSpace,
                                                  GrMipMapped mipMapped) {
-    sk_sp<SkColorSpace> texColorSpace;
-    sk_sp<GrTextureProxy> proxy(producer->refTextureProxy(mipMapped, dstColorSpace,
-                                                          &texColorSpace));
+    sk_sp<GrTextureProxy> proxy(producer->refTextureProxy(mipMapped));
     if (!proxy) {
         return nullptr;
     }
     return sk_make_sp<SkImage_Gpu>(sk_ref_sp(context), id, at, std::move(proxy),
-                                   std::move(texColorSpace), SkBudgeted::kNo);
+                                   sk_ref_sp(producer->colorSpace()), SkBudgeted::kNo);
 }
 
 sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstColorSpace,
@@ -368,19 +370,19 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
         GrTextureAdjuster adjuster(context, std::move(proxy), this->alphaType(),
                                    this->uniqueID(), this->colorSpace());
         return create_image_from_producer(context, &adjuster, this->alphaType(),
-                                          this->uniqueID(), dstColorSpace, mipMapped);
+                                          this->uniqueID(), mipMapped);
     }
 
     if (this->isLazyGenerated()) {
         GrImageTextureMaker maker(context, this, kDisallow_CachingHint);
         return create_image_from_producer(context, &maker, this->alphaType(),
-                                          this->uniqueID(), dstColorSpace, mipMapped);
+                                          this->uniqueID(), mipMapped);
     }
 
     if (const SkBitmap* bmp = as_IB(this)->onPeekBitmap()) {
         GrBitmapTextureMaker maker(context, *bmp);
         return create_image_from_producer(context, &maker, this->alphaType(),
-                                          this->uniqueID(), dstColorSpace, mipMapped);
+                                          this->uniqueID(), mipMapped);
     }
     return nullptr;
 }
@@ -655,12 +657,10 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
 
     // Turn the codec image into a GrTextureProxy
     GrImageTextureMaker maker(context, codecImage.get(), kDisallow_CachingHint);
-    sk_sp<SkColorSpace> texColorSpace;
     GrSamplerState samplerState(
             GrSamplerState::WrapMode::kClamp,
             buildMips ? GrSamplerState::Filter::kMipMap : GrSamplerState::Filter::kBilerp);
-    sk_sp<GrTextureProxy> proxy(
-            maker.refTextureProxyForParams(samplerState, dstColorSpace, &texColorSpace, nullptr));
+    sk_sp<GrTextureProxy> proxy(maker.refTextureProxyForParams(samplerState, nullptr));
     if (!proxy) {
         return codecImage;
     }
@@ -680,7 +680,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
                                                     std::move(sema),
                                                     as_IB(codecImage)->onImageInfo().colorType(),
                                                     codecImage->alphaType(),
-                                                    std::move(texColorSpace));
+                                                    codecImage->refColorSpace());
     return SkImage::MakeFromGenerator(std::move(gen));
 }
 

@@ -70,7 +70,7 @@ except OSError as e:
     raise
 
 # Copy binaries (pathkit.js and pathkit.wasm) to where the karma tests
-# expect them ($SKIA_ROOT/modules/pathkit/npm-wasm/)
+# expect them ($SKIA_ROOT/modules/pathkit/npm-wasm/bin/)
 dest = os.path.join(copy_dest, 'pathkit.js')
 shutil.copyfile(os.path.join(base_dir, 'pathkit.js'), dest)
 os.chmod(dest, 0o644) # important, otherwise non-privileged docker can't read.
@@ -87,26 +87,25 @@ os.chmod(out_dir, 0o777) # important, otherwise non-privileged docker can't writ
       args=[copy_dest, base_dir, bundle_name, out_dir],
       infra_step=True)
 
-
-
   cmd = ['docker', 'run', '--shm-size=2gb', '--rm',
-         '-v', '%s:/SRC' % checkout_root, '-v', '%s:/OUT' % out_dir]
+         '--volume', '%s:/SRC' % checkout_root,
+         '--volume', '%s:/OUT' % out_dir]
 
   if 'asmjs' in api.vars.builder_name:
-    cmd.extend(['-e', 'ASM_JS=1'])  # -e sets environment variables
+    cmd.extend(['--env', 'ASM_JS=1'])
 
   cmd.extend([
-         DOCKER_IMAGE,             INNER_KARMA_SCRIPT,
-         '--builder',              api.vars.builder_name,
-         '--git_hash',             api.properties['revision'],
-         '--buildbucket_build_id', api.properties.get('buildbucket_build_id',
-                                                      ''),
-         '--bot_id',               api.vars.swarming_bot_id,
-         '--task_id',              api.vars.swarming_task_id,
-         '--browser',              'Chrome',
-         '--config',               api.vars.configuration,
-         '--source_type',          'pathkit',
-         ])
+      DOCKER_IMAGE,             INNER_KARMA_SCRIPT,
+      '--builder',              api.vars.builder_name,
+      '--git_hash',             api.properties['revision'],
+      '--buildbucket_build_id', api.properties.get('buildbucket_build_id',
+                                                  ''),
+      '--bot_id',               api.vars.swarming_bot_id,
+      '--task_id',              api.vars.swarming_task_id,
+      '--browser',              'Chrome',
+      '--config',               api.vars.configuration,
+      '--source_type',          'pathkit',
+      ])
 
   if 'asmjs' in api.vars.builder_name:
     cmd.extend(['--compiled_language', 'asmjs']) # the default is wasm

@@ -45,12 +45,12 @@ public:
                         SkArenaAlloc* scratch,
                         bool shaderIsOpaque) const override;
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkHighContrast_Filter)
-
 protected:
     void flatten(SkWriteBuffer&) const override;
 
 private:
+    SK_FLATTENABLE_HOOKS(SkHighContrast_Filter)
+
     SkHighContrastConfig fConfig;
 
     friend class SkHighContrastFilter;
@@ -151,9 +151,9 @@ sk_sp<SkColorFilter> SkHighContrastFilter::Make(
     return sk_make_sp<SkHighContrast_Filter>(config);
 }
 
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkHighContrastFilter)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkHighContrast_Filter)
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
+void SkHighContrastFilter::RegisterFlattenables() {
+    SK_REGISTER_FLATTENABLE(SkHighContrast_Filter)
+}
 
 #if SK_SUPPORT_GPU
 class HighContrastFilterEffect : public GrFragmentProcessor {

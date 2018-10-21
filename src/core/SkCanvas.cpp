@@ -15,7 +15,6 @@
 #include "SkColorFilter.h"
 #include "SkDraw.h"
 #include "SkDrawLooper.h"
-#include "SkDrawable.h"
 #include "SkGlyphCache.h"
 #include "SkGlyphRun.h"
 #include "SkImage.h"
@@ -2643,7 +2642,7 @@ void SkCanvas::drawDrawable(SkDrawable* dr, const SkMatrix* matrix) {
 void SkCanvas::onDrawDrawable(SkDrawable* dr, const SkMatrix* matrix) {
     // drawable bounds are no longer reliable (e.g. android displaylist)
     // so don't use them for quick-reject
-    dr->draw(this, matrix);
+    this->getDevice()->drawDrawable(dr, matrix, this);
 }
 
 void SkCanvas::onDrawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],
@@ -2732,7 +2731,13 @@ void SkCanvas::drawArc(const SkRect& oval, SkScalar startAngle,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+#ifdef SK_DISABLE_SKPICTURE
+void SkCanvas::drawPicture(const SkPicture* picture, const SkMatrix* matrix, const SkPaint* paint) {}
 
+
+void SkCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
+                             const SkPaint* paint) {}
+#else
 /**
  *  This constant is trying to balance the speed of ref'ing a subpicture into a parent picture,
  *  against the playback cost of recursing into the subpicture to get at its actual ops.
@@ -2775,6 +2780,7 @@ void SkCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
     SkAutoCanvasMatrixPaint acmp(this, matrix, paint, picture->cullRect());
     picture->playback(this);
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////

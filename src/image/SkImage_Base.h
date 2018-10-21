@@ -54,7 +54,6 @@ public:
     virtual GrTextureProxy* peekProxy() const { return nullptr; }
     virtual sk_sp<GrTextureProxy> asTextureProxyRef() const { return nullptr; }
     virtual sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerState&,
-                                                    SkColorSpace*, sk_sp<SkColorSpace>*,
                                                     SkScalar scaleAdjust[2]) const = 0;
     virtual sk_sp<GrTextureProxy> refPinnedTextureProxy(uint32_t* uniqueID) const {
         return nullptr;
@@ -67,12 +66,12 @@ public:
 
     // return a read-only copy of the pixels. We promise to not modify them,
     // but only inspect them (or encode them).
-    virtual bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace,
-                             CachingHint = kAllow_CachingHint) const = 0;
+    virtual bool getROPixels(SkBitmap*, CachingHint = kAllow_CachingHint) const = 0;
 
     virtual sk_sp<SkImage> onMakeSubset(const SkIRect&) const = 0;
 
-    virtual sk_sp<SkCachedData> getPlanes(SkYUVSizeInfo*, SkYUVColorSpace*, const void* planes[3]);
+    virtual sk_sp<SkCachedData> getPlanes(SkYUVSizeInfo*, SkYUVAIndex[4],
+                                          SkYUVColorSpace*, const void* planes[4]);
     virtual sk_sp<SkData> onRefEncoded() const { return nullptr; }
 
     virtual bool onAsLegacyBitmap(SkBitmap*) const;

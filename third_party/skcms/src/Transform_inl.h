@@ -66,6 +66,12 @@
     #pragma GCC diagnostic ignored "-Wpsabi"
 #endif
 
+#if defined(__clang__)
+    #define FALLTHROUGH [[clang::fallthrough]]
+#else
+    #define FALLTHROUGH
+#endif
+
 // We tag most helper functions as SI, to enforce good code generation
 // but also work around what we think is a bug in GCC: when targeting 32-bit
 // x86, GCC tends to pass U16 (4x uint16_t vector) function arguments in the
@@ -342,52 +348,69 @@ SI U8 gather_8(const uint8_t* p, I32 ix) {
     return v;
 }
 
-// Helper for gather_16(), loading the ix'th 16-bit value from p.
-SI uint16_t load_16(const uint8_t* p, int ix) {
-    return load<uint16_t>(p + 2*ix);
-}
-
 SI U16 gather_16(const uint8_t* p, I32 ix) {
+    // Load the i'th 16-bit value from p.
+    auto load_16 = [p](int i) {
+        return load<uint16_t>(p + 2*i);
+    };
 #if N == 1
-    U16 v = load_16(p,ix);
+    U16 v = load_16(ix);
 #elif N == 4
-    U16 v = { load_16(p,ix[0]), load_16(p,ix[1]), load_16(p,ix[2]), load_16(p,ix[3]) };
+    U16 v = { load_16(ix[0]), load_16(ix[1]), load_16(ix[2]), load_16(ix[3]) };
 #elif N == 8
-    U16 v = { load_16(p,ix[0]), load_16(p,ix[1]), load_16(p,ix[2]), load_16(p,ix[3]),
-              load_16(p,ix[4]), load_16(p,ix[5]), load_16(p,ix[6]), load_16(p,ix[7]) };
+    U16 v = { load_16(ix[0]), load_16(ix[1]), load_16(ix[2]), load_16(ix[3]),
+              load_16(ix[4]), load_16(ix[5]), load_16(ix[6]), load_16(ix[7]) };
 #elif N == 16
-    U16 v = { load_16(p,ix[ 0]), load_16(p,ix[ 1]), load_16(p,ix[ 2]), load_16(p,ix[ 3]),
-              load_16(p,ix[ 4]), load_16(p,ix[ 5]), load_16(p,ix[ 6]), load_16(p,ix[ 7]),
-              load_16(p,ix[ 8]), load_16(p,ix[ 9]), load_16(p,ix[10]), load_16(p,ix[11]),
-              load_16(p,ix[12]), load_16(p,ix[13]), load_16(p,ix[14]), load_16(p,ix[15]) };
+    U16 v = { load_16(ix[ 0]), load_16(ix[ 1]), load_16(ix[ 2]), load_16(ix[ 3]),
+              load_16(ix[ 4]), load_16(ix[ 5]), load_16(ix[ 6]), load_16(ix[ 7]),
+              load_16(ix[ 8]), load_16(ix[ 9]), load_16(ix[10]), load_16(ix[11]),
+              load_16(ix[12]), load_16(ix[13]), load_16(ix[14]), load_16(ix[15]) };
 #endif
     return v;
 }
 
-#if !defined(USING_AVX2)
-    // Helpers for gather_24/48(), loading the ix'th 24/48-bit value from p, and 1/2 extra bytes.
-    SI uint32_t load_24_32(const uint8_t* p, int ix) {
-        return load<uint32_t>(p + 3*ix);
-    }
-    SI uint64_t load_48_64(const uint8_t* p, int ix) {
-        return load<uint64_t>(p + 6*ix);
-    }
+SI U32 gather_32(const uint8_t* p, I32 ix) {
+    // Load the i'th 32-bit value from p.
+    auto load_32 = [p](int i) {
+        return load<uint32_t>(p + 4*i);
+    };
+#if N == 1
+    U32 v = load_32(ix);
+#elif N == 4
+    U32 v = { load_32(ix[0]), load_32(ix[1]), load_32(ix[2]), load_32(ix[3]) };
+#elif N == 8
+    U32 v = { load_32(ix[0]), load_32(ix[1]), load_32(ix[2]), load_32(ix[3]),
+              load_32(ix[4]), load_32(ix[5]), load_32(ix[6]), load_32(ix[7]) };
+#elif N == 16
+    U32 v = { load_32(ix[ 0]), load_32(ix[ 1]), load_32(ix[ 2]), load_32(ix[ 3]),
+              load_32(ix[ 4]), load_32(ix[ 5]), load_32(ix[ 6]), load_32(ix[ 7]),
+              load_32(ix[ 8]), load_32(ix[ 9]), load_32(ix[10]), load_32(ix[11]),
+              load_32(ix[12]), load_32(ix[13]), load_32(ix[14]), load_32(ix[15]) };
 #endif
+    // TODO: AVX2 and AVX-512 gathers (c.f. gather_24).
+    return v;
+}
 
 SI U32 gather_24(const uint8_t* p, I32 ix) {
     // First, back up a byte.  Any place we're gathering from has a safe junk byte to read
     // in front of it, either a previous table value, or some tag metadata.
     p -= 1;
 
+    // Load the i'th 24-bit value from p, and 1 extra byte.
+    auto load_24_32 = [p](int i) {
+        return load<uint32_t>(p + 3*i);
+    };
+
     // Now load multiples of 4 bytes (a junk byte, then r,g,b).
 #if N == 1
-    U32 v = load_24_32(p,ix);
+    U32 v = load_24_32(ix);
 #elif N == 4
-    U32 v = { load_24_32(p,ix[0]), load_24_32(p,ix[1]), load_24_32(p,ix[2]), load_24_32(p,ix[3]) };
+    U32 v = { load_24_32(ix[0]), load_24_32(ix[1]), load_24_32(ix[2]), load_24_32(ix[3]) };
 #elif N == 8 && !defined(USING_AVX2)
-    U32 v = { load_24_32(p,ix[0]), load_24_32(p,ix[1]), load_24_32(p,ix[2]), load_24_32(p,ix[3]),
-              load_24_32(p,ix[4]), load_24_32(p,ix[5]), load_24_32(p,ix[6]), load_24_32(p,ix[7]) };
+    U32 v = { load_24_32(ix[0]), load_24_32(ix[1]), load_24_32(ix[2]), load_24_32(ix[3]),
+              load_24_32(ix[4]), load_24_32(ix[5]), load_24_32(ix[6]), load_24_32(ix[7]) };
 #elif N == 8
+    (void)load_24_32;
     // The gather instruction here doesn't need any particular alignment,
     // but the intrinsic takes a const int*.
     const int* p4 = bit_pun<const int*>(p);
@@ -399,6 +422,7 @@ SI U32 gather_24(const uint8_t* p, I32 ix) {
         U32 v = (U32)__builtin_ia32_gathersiv8si(zero, p4, 3*ix, mask, 1);
     #endif
 #elif N == 16
+    (void)load_24_32;
     // The intrinsic is supposed to take const void* now, but it takes const int*, just like AVX2.
     // And AVX-512 swapped the order of arguments.  :/
     const int* p4 = bit_pun<const int*>(p);
@@ -414,18 +438,24 @@ SI U32 gather_24(const uint8_t* p, I32 ix) {
         // As in gather_24(), with everything doubled.
         p -= 2;
 
+        // Load the i'th 48-bit value from p, and 2 extra bytes.
+        auto load_48_64 = [p](int i) {
+            return load<uint64_t>(p + 6*i);
+        };
+
     #if N == 1
-        *v = load_48_64(p,ix);
+        *v = load_48_64(ix);
     #elif N == 4
         *v = U64{
-            load_48_64(p,ix[0]), load_48_64(p,ix[1]), load_48_64(p,ix[2]), load_48_64(p,ix[3]),
+            load_48_64(ix[0]), load_48_64(ix[1]), load_48_64(ix[2]), load_48_64(ix[3]),
         };
     #elif N == 8 && !defined(USING_AVX2)
         *v = U64{
-            load_48_64(p,ix[0]), load_48_64(p,ix[1]), load_48_64(p,ix[2]), load_48_64(p,ix[3]),
-            load_48_64(p,ix[4]), load_48_64(p,ix[5]), load_48_64(p,ix[6]), load_48_64(p,ix[7]),
+            load_48_64(ix[0]), load_48_64(ix[1]), load_48_64(ix[2]), load_48_64(ix[3]),
+            load_48_64(ix[4]), load_48_64(ix[5]), load_48_64(ix[6]), load_48_64(ix[7]),
         };
     #elif N == 8
+        (void)load_48_64;
         typedef int32_t   __attribute__((vector_size(16))) Half_I32;
         typedef long long __attribute__((vector_size(32))) Half_I64;
 
@@ -450,6 +480,7 @@ SI U32 gather_24(const uint8_t* p, I32 ix) {
         store((char*)v +  0, lo);
         store((char*)v + 32, hi);
     #elif N == 16
+        (void)load_48_64;
         const long long int* p8 = bit_pun<const long long int*>(p);
         __m512i lo = _mm512_i32gather_epi64(_mm512_extracti32x8_epi32((__m512i)(6*ix), 0), p8, 1),
                 hi = _mm512_i32gather_epi64(_mm512_extracti32x8_epi32((__m512i)(6*ix), 1), p8, 1);
@@ -539,27 +570,28 @@ static void clut(const skcms_A2B* a2b, F* r, F* g, F* b, F a) {
     const int dim = (int)a2b->input_channels;
     assert (0 < dim && dim <= 4);
 
-    // Each of these arrays is really foo[dim], but we use foo[4] since we know dim <= 4.
-    I32 lo[4],   // Lower bound index contribution for each dimension.
-        hi[4];   // Upper bound index contribution for each dimension.
-    F    t[4];   // Weight for upper bound pixel; lower gets 1-t.
+    // For each of these arrays, think foo[2*dim], but we use foo[8] since we know dim <= 4.
+    I32 index [8];  // Index contribution by dimension, first low from 0, then high from 4.
+    F   weight[8];  // Weight for each contribution, again first low, then high.
 
-    // O(dim) work first: calculate lo,hi,t, from r,g,b,a.
+    // O(dim) work first: calculate index,weight from r,g,b,a.
     const F inputs[] = { *r,*g,*b,a };
     for (int i = dim-1, stride = 1; i >= 0; i--) {
-        {  // This block could be done in any order...
-            F x = inputs[i] * (float)(a2b->grid_points[i] - 1);
+        // x is where we logically want to sample the grid in the i-th dimension.
+        F x = inputs[i] * (float)(a2b->grid_points[i] - 1);
 
-            lo[i] = cast<I32>(            x      );   // i.e. trunc(x) == floor(x) here.
-            hi[i] = cast<I32>(minus_1_ulp(x+1.0f));
-            t [i] = x - cast<F>(lo[i]);               // i.e. fract(x)
-        }
+        // But we can't index at floats.  lo and hi are the two integer grid points surrounding x.
+        I32 lo = cast<I32>(            x      ),   // i.e. trunc(x) == floor(x) here.
+            hi = cast<I32>(minus_1_ulp(x+1.0f));
+        // Notice how we fold in the accumulated stride across previous dimensions here.
+        index[i+0] = lo * stride;
+        index[i+4] = hi * stride;
+        stride *= a2b->grid_points[i];
 
-        {  // ... but this block must go back to front to get stride right.
-            lo[i] *= stride;
-            hi[i] *= stride;
-            stride *= a2b->grid_points[i];
-        }
+        // We'll interpolate between those two integer grid points by t.
+        F t = x - cast<F>(lo);  // i.e. fract(x)
+        weight[i+0] = 1-t;
+        weight[i+4] = t;
     }
 
     *r = *g = *b = F0;
@@ -567,17 +599,29 @@ static void clut(const skcms_A2B* a2b, F* r, F* g, F* b, F a) {
     // We'll sample 2^dim == 1<<dim table entries per pixel,
     // in all combinations of low and high in each dimension.
     for (int combo = 0; combo < (1<<dim); combo++) {  // This loop can be done in any order.
-        I32 ix = cast<I32>(F0);
-        F    w = F1;
 
-        for (int i = 0; i < dim; i++) {   // This loop can be done in any order.
-            if (combo & (1<<i)) {  // It's arbitrary whether lo=0,hi=1 or lo=1,hi=0.
-                ix += hi[i];
-                w *= t[i];
-            } else {
-                ix += lo[i];
-                w *= 1-t[i];
-            }
+        // Each of these upcoming (combo&N)*K expressions here evaluates to 0 or 4,
+        // where 0 selects the low index contribution and its weight 1-t,
+        // or 4 the high index contribution and its weight t.
+
+        // Since 0<dim≤4, we can always just start off with the 0-th channel,
+        // then handle the others conditionally.
+        I32 ix = index [0 + (combo&1)*4];
+        F    w = weight[0 + (combo&1)*4];
+
+        switch ((dim-1)&3) {  // This lets the compiler know there are no other cases to handle.
+            case 3: ix += index [3 + (combo&8)/2];
+                    w  *= weight[3 + (combo&8)/2];
+                    FALLTHROUGH;
+                    // fall through
+
+            case 2: ix += index [2 + (combo&4)*1];
+                    w  *= weight[2 + (combo&4)*1];
+                    FALLTHROUGH;
+                    // fall through
+
+            case 1: ix += index [1 + (combo&2)*2];
+                    w  *= weight[1 + (combo&2)*2];
         }
 
         F R,G,B;
@@ -650,6 +694,17 @@ static void exec_ops(const Op* ops, const void** args,
 
             case Op_load_8888:{
                 U32 rgba = load<U32>(src + 4*i);
+
+                r = cast<F>((rgba >>  0) & 0xff) * (1/255.0f);
+                g = cast<F>((rgba >>  8) & 0xff) * (1/255.0f);
+                b = cast<F>((rgba >> 16) & 0xff) * (1/255.0f);
+                a = cast<F>((rgba >> 24) & 0xff) * (1/255.0f);
+            } break;
+
+            case Op_load_8888_palette8:{
+                const uint8_t* palette = (const uint8_t*) *args++;
+                I32 ix = cast<I32>(load<U8>(src + 1*i));
+                U32 rgba = gather_32(palette, ix);
 
                 r = cast<F>((rgba >>  0) & 0xff) * (1/255.0f);
                 g = cast<F>((rgba >>  8) & 0xff) * (1/255.0f);
@@ -1191,3 +1246,5 @@ static void run_program(const Op* program, const void** arguments,
 #if defined(USING_NEON_F16C)
     #undef  USING_NEON_F16C
 #endif
+
+#undef FALLTHROUGH

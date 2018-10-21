@@ -98,6 +98,7 @@ SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap& dst,
 #else
     SkColorSpace* dstCS = dst.colorSpace();
 #endif
+    SkColorType dstCT = dst.colorType();
     SkColor4f paintColor = premul_in_dst_colorspace(paint.getColor4f(), sk_srgb_singleton(), dstCS);
 
     auto shader = as_SB(paint.getShader());
@@ -118,13 +119,13 @@ SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap& dst,
 
     // Check whether the shader prefers to run in burst mode.
     if (auto* burstCtx = shader->makeBurstPipelineContext(
-        SkShaderBase::ContextRec(paint, ctm, nullptr, dstCS), alloc)) {
+        SkShaderBase::ContextRec(paint, ctm, nullptr, dstCT, dstCS), alloc)) {
         return SkRasterPipelineBlitter::Create(dst, paint, alloc,
                                                shaderPipeline, burstCtx,
                                                is_opaque, is_constant);
     }
 
-    if (shader->appendStages({&shaderPipeline, alloc, dstCS, paint, nullptr, ctm})) {
+    if (shader->appendStages({&shaderPipeline, alloc, dstCT, dstCS, paint, nullptr, ctm})) {
         if (paintColor.fA != 1.0f) {
             shaderPipeline.append(SkRasterPipeline::scale_1_float,
                                   alloc->make<float>(paintColor.fA));
@@ -297,10 +298,10 @@ void SkRasterPipelineBlitter::blitRect(int x, int y, int w, int h) {
                 && !fDst.colorSpace()
                 && fDst.info().alphaType() != kUnpremul_SkAlphaType
                 && fDitherRate == 0.0f) {
-            auto stage = fDst.info().colorType() == kRGBA_8888_SkColorType
-                       ? SkRasterPipeline::srcover_rgba_8888
-                       : SkRasterPipeline::srcover_bgra_8888;
-            p.append(stage, &fDstPtr);
+            if (fDst.info().colorType() == kBGRA_8888_SkColorType) {
+                p.append(SkRasterPipeline::swap_rb);
+            }
+            p.append(SkRasterPipeline::srcover_rgba_8888, &fDstPtr);
         } else {
             if (fBlend != SkBlendMode::kSrc) {
                 this->append_load_dst(&p);

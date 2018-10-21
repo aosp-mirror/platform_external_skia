@@ -70,7 +70,6 @@ public:
     void computeFastBounds(const SkRect&, SkRect*) const override;
     bool asABlur(BlurRec*) const override;
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBlurMaskFilterImpl)
 
 protected:
     FilterReturn filterRectsToNine(const SkRect[], int count, const SkMatrix&,
@@ -89,6 +88,7 @@ protected:
     bool ignoreXform() const { return !fRespectCTM; }
 
 private:
+    SK_FLATTENABLE_HOOKS(SkBlurMaskFilterImpl)
     // To avoid unseemly allocation requests (esp. for finite platforms like
     // handset) we limit the radius so something manageable. (as opposed to
     // a request like 10,000)
@@ -930,7 +930,7 @@ sk_sp<GrTextureProxy> SkBlurMaskFilterImpl::filterMaskGPU(GrContext* context,
 #endif // SK_SUPPORT_GPU
 
 void sk_register_blur_maskfilter_createproc() {
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurMaskFilterImpl)
+    SK_REGISTER_FLATTENABLE(SkBlurMaskFilterImpl)
 }
 
 sk_sp<SkMaskFilter> SkMaskFilter::MakeBlur(SkBlurStyle style, SkScalar sigma, bool respectCTM) {

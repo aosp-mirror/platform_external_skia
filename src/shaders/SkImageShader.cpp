@@ -70,6 +70,7 @@ bool SkImageShader::isOpaque() const {
     return fImage->isOpaque() && fTileModeX != kDecal_TileMode && fTileModeY != kDecal_TileMode;
 }
 
+#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
 static bool legacy_shader_can_handle(const SkMatrix& inv) {
     if (!inv.isScaleTranslate()) {
         return false;
@@ -91,22 +92,17 @@ static bool legacy_shader_can_handle(const SkMatrix& inv) {
     // legacy shader impl should be able to handle these matrices
     return true;
 }
+#endif
 
+#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
 SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
                                                     SkArenaAlloc* alloc) const {
-    const auto info = as_IB(fImage)->onImageInfo();
-
-    if (info.colorType() != kN32_SkColorType) {
+    if (fImage->alphaType() == kUnpremul_SkAlphaType) {
         return nullptr;
     }
-    if (info.alphaType() == kUnpremul_SkAlphaType) {
-        return nullptr;
-    }
-#ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
     if (fTileModeX != fTileModeY) {
         return nullptr;
     }
-#endif
     if (fTileModeX == kDecal_TileMode || fTileModeY == kDecal_TileMode) {
         return nullptr;
     }
@@ -117,9 +113,14 @@ SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
         return nullptr;
     }
 
+    SkBitmapProvider provider(fImage.get());
+    if (kN32_SkColorType != provider.makeCacheDesc().fColorType) {
+        return nullptr;
+    }
     return SkBitmapProcLegacyShader::MakeContext(*this, fTileModeX, fTileModeY,
-                                                 SkBitmapProvider(fImage.get()), rec, alloc);
+                                                 provider, rec, alloc);
 }
+#endif
 
 SkImage* SkImageShader::onIsAImage(SkMatrix* texM, TileMode xy[]) const {
     if (texM) {
@@ -199,11 +200,9 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
             args.fFilterQuality, *args.fViewMatrix, *lm,
             args.fContext->contextPriv().sharpenMipmappedTextures(), &doBicubic);
     GrSamplerState samplerState(wrapModes, textureFilterMode);
-    sk_sp<SkColorSpace> texColorSpace;
     SkScalar scaleAdjust[2] = { 1.0f, 1.0f };
-    sk_sp<GrTextureProxy> proxy(as_IB(fImage)->asTextureProxyRef(
-            args.fContext, samplerState, args.fDstColorSpaceInfo->colorSpace(), &texColorSpace,
-            scaleAdjust));
+    sk_sp<GrTextureProxy> proxy(as_IB(fImage)->asTextureProxyRef(args.fContext, samplerState,
+                                                                 scaleAdjust));
     if (!proxy) {
         return nullptr;
     }
@@ -219,7 +218,7 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
     } else {
         inner = GrSimpleTextureEffect::Make(std::move(proxy), lmInverse, samplerState);
     }
-    inner = GrColorSpaceXformEffect::Make(std::move(inner), texColorSpace.get(),
+    inner = GrColorSpaceXformEffect::Make(std::move(inner), fImage->colorSpace(),
                                           fImage->alphaType(),
                                           args.fDstColorSpaceInfo->colorSpace());
     if (isAlphaOnly) {
@@ -240,9 +239,9 @@ sk_sp<SkShader> SkMakeBitmapShader(const SkBitmap& src, SkShader::TileMode tmx,
                                tmx, tmy, localMatrix);
 }
 
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkShaderBase)
-SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkImageShader)
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
+void SkShaderBase::RegisterFlattenables() {
+    SK_REGISTER_FLATTENABLE(SkImageShader)
+}
 
 bool SkImageShader::onAppendStages(const StageRec& rec) const {
     SkRasterPipeline* p = rec.fPipeline;
@@ -330,19 +329,24 @@ bool SkImageShader::onAppendStages(const StageRec& rec) const {
         void* ctx = gather;
         switch (info.colorType()) {
             case kAlpha_8_SkColorType:      p->append(SkRasterPipeline::gather_a8,      ctx); break;
-            case kGray_8_SkColorType:       p->append(SkRasterPipeline::gather_g8,      ctx); break;
             case kRGB_565_SkColorType:      p->append(SkRasterPipeline::gather_565,     ctx); break;
             case kARGB_4444_SkColorType:    p->append(SkRasterPipeline::gather_4444,    ctx); break;
-            case kBGRA_8888_SkColorType:    p->append(SkRasterPipeline::gather_bgra,    ctx); break;
             case kRGBA_8888_SkColorType:    p->append(SkRasterPipeline::gather_8888,    ctx); break;
             case kRGBA_1010102_SkColorType: p->append(SkRasterPipeline::gather_1010102, ctx); break;
             case kRGBA_F16_SkColorType:     p->append(SkRasterPipeline::gather_f16,     ctx); break;
             case kRGBA_F32_SkColorType:     p->append(SkRasterPipeline::gather_f32,     ctx); break;
 
+            case kGray_8_SkColorType:       p->append(SkRasterPipeline::gather_a8,      ctx);
+                                            p->append(SkRasterPipeline::alpha_to_gray      ); break;
+
             case kRGB_888x_SkColorType:     p->append(SkRasterPipeline::gather_8888,    ctx);
                                             p->append(SkRasterPipeline::force_opaque       ); break;
+
             case kRGB_101010x_SkColorType:  p->append(SkRasterPipeline::gather_1010102, ctx);
                                             p->append(SkRasterPipeline::force_opaque       ); break;
+
+            case kBGRA_8888_SkColorType:    p->append(SkRasterPipeline::gather_8888,    ctx);
+                                            p->append(SkRasterPipeline::swap_rb            ); break;
 
             default: SkASSERT(false);
         }

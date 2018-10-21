@@ -8,6 +8,7 @@ _src = get_path_info("../src", "abspath")
 _include = get_path_info("../include", "abspath")
 
 skia_gpu_sources = [
+  "$_include/gpu/GrBackendDrawableInfo.h",
   "$_include/gpu/GrBackendSemaphore.h",
   "$_include/gpu/GrBackendSurface.h",
   "$_include/gpu/GrBlend.h",
@@ -248,10 +249,13 @@ skia_gpu_sources = [
   "$_src/gpu/ops/GrDashLinePathRenderer.h",
   "$_src/gpu/ops/GrDashOp.cpp",
   "$_src/gpu/ops/GrDashOp.h",
+  "$_src/gpu/ops/GrDebugMarkerOp.h",
   "$_src/gpu/ops/GrDefaultPathRenderer.cpp",
   "$_src/gpu/ops/GrDefaultPathRenderer.h",
   "$_src/gpu/ops/GrDebugMarkerOp.cpp",
   "$_src/gpu/ops/GrDebugMarkerOp.h",
+  "$_src/gpu/ops/GrDrawableOp.cpp",
+  "$_src/gpu/ops/GrDrawableOp.h",
   "$_src/gpu/ops/GrDrawAtlasOp.cpp",
   "$_src/gpu/ops/GrDrawAtlasOp.h",
   "$_src/gpu/ops/GrDrawOp.h",

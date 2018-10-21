@@ -38,12 +38,12 @@ public:
         return fProxyShader;
     }
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkLocalMatrixShader)
-
 protected:
     void flatten(SkWriteBuffer&) const override;
 
+#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
     Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override;
+#endif
 
     SkImage* onIsAImage(SkMatrix* matrix, TileMode* mode) const override;
 
@@ -55,6 +55,8 @@ protected:
     }
 
 private:
+    SK_FLATTENABLE_HOOKS(SkLocalMatrixShader)
+
     sk_sp<SkShader> fProxyShader;
 
     typedef SkShaderBase INHERITED;

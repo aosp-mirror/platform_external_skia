@@ -50,12 +50,12 @@ public:
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
 #endif
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkColorShader)
-
 protected:
     SkColorShader(SkReadBuffer&);
     void flatten(SkWriteBuffer&) const override;
+#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
     Context* onMakeContext(const ContextRec&, SkArenaAlloc* storage) const override;
+#endif
 
     bool onAsLuminanceColor(SkColor* lum) const override {
         *lum = fColor;
@@ -69,6 +69,8 @@ protected:
     }
 
 private:
+    SK_FLATTENABLE_HOOKS(SkColorShader)
+
     SkColor fColor;
 
     typedef SkShaderBase INHERITED;
@@ -105,12 +107,12 @@ public:
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
 #endif
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkColorShader)
-
 protected:
     SkColor4Shader(SkReadBuffer&);
     void flatten(SkWriteBuffer&) const override;
+#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
     Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override;
+#endif
     bool onAsLuminanceColor(SkColor* lum) const override {
         *lum = fCachedByteColor;
         return true;
@@ -120,6 +122,8 @@ protected:
     sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override;
 
 private:
+    SK_FLATTENABLE_HOOKS(SkColor4Shader)
+
     sk_sp<SkColorSpace> fColorSpace;
     const SkColor4f     fColor4;
     const SkColor       fCachedByteColor;

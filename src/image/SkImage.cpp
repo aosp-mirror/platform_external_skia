@@ -8,6 +8,7 @@
 #include "SkBitmap.h"
 #include "SkBitmapCache.h"
 #include "SkCanvas.h"
+#include "SkColorSpacePriv.h"
 #include "SkData.h"
 #include "SkImageEncoder.h"
 #include "SkImageFilter.h"
@@ -18,7 +19,6 @@
 #include "SkImage_Base.h"
 #include "SkNextID.h"
 #include "SkPicture.h"
-#include "SkPixelRef.h"
 #include "SkReadPixelsRec.h"
 #include "SkSpecialImage.h"
 #include "SkString.h"
@@ -62,7 +62,7 @@ bool SkImage::scalePixels(const SkPixmap& dst, SkFilterQuality quality, CachingH
     //       can scale more efficiently) we should take advantage of it here.
     //
     SkBitmap bm;
-    if (as_IB(this)->getROPixels(&bm, dst.info().colorSpace(), chint)) {
+    if (as_IB(this)->getROPixels(&bm, chint)) {
         SkPixmap pmap;
         // Note: By calling the pixmap scaler, we never cache the final result, so the chint
         //       is (currently) only being applied to the getROPixels. If we get a request to
@@ -98,8 +98,7 @@ sk_sp<SkShader> SkImage::makeShader(SkShader::TileMode tileX, SkShader::TileMode
 
 sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) const {
     SkBitmap bm;
-    SkColorSpace* legacyColorSpace = nullptr;
-    if (as_IB(this)->getROPixels(&bm, legacyColorSpace)) {
+    if (as_IB(this)->getROPixels(&bm)) {
         return SkEncodeBitmap(bm, type, quality);
     }
     return nullptr;
@@ -110,13 +109,7 @@ sk_sp<SkData> SkImage::encodeToData() const {
         return encoded;
     }
 
-    SkBitmap bm;
-    SkPixmap pmap;
-    SkColorSpace* legacyColorSpace = nullptr;
-    if (as_IB(this)->getROPixels(&bm, legacyColorSpace) && bm.peekPixels(&pmap)) {
-        return SkEncodePixmap(pmap, SkEncodedImageFormat::kPNG, 100);
-    }
-    return nullptr;
+    return this->encodeToData(SkEncodedImageFormat::kPNG, 100);
 }
 
 sk_sp<SkData> SkImage::refEncodedData() const {
@@ -215,8 +208,7 @@ bool SkImage::readPixels(const SkPixmap& pmap, int srcX, int srcY, CachingHint c
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 sk_sp<SkImage> SkImage::MakeFromBitmap(const SkBitmap& bm) {
-    SkPixelRef* pr = bm.pixelRef();
-    if (nullptr == pr) {
+    if (!bm.pixelRef()) {
         return nullptr;
     }
 
@@ -227,7 +219,8 @@ bool SkImage::asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode ) const {
     return as_IB(this)->onAsLegacyBitmap(bitmap);
 }
 
-sk_sp<SkCachedData> SkImage_Base::getPlanes(SkYUVSizeInfo*, SkYUVColorSpace*,const void*[3]) {
+sk_sp<SkCachedData> SkImage_Base::getPlanes(SkYUVSizeInfo*, SkYUVAIndex[4],
+                                            SkYUVColorSpace*, const void*[4]) {
     return nullptr;
 }
 
@@ -306,12 +299,15 @@ sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target) const {
     // No need to create a new image if:
     // (1) The color spaces are equal.
     // (2) The color type is kAlpha8.
-    if (SkColorSpace::Equals(this->colorSpace(), target.get()) ||
+    SkColorSpace* colorSpace = this->colorSpace();
+    if (!colorSpace) {
+        colorSpace = sk_srgb_singleton();
+    }
+    if (SkColorSpace::Equals(colorSpace, target.get()) ||
             kAlpha_8_SkColorType == as_IB(this)->onImageInfo().colorType()) {
         return sk_ref_sp(const_cast<SkImage*>(this));
     }
 
-    // TODO: We might consider making this a deferred conversion?
     return as_IB(this)->onMakeColorSpace(std::move(target));
 }
 

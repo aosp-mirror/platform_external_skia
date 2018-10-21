@@ -210,8 +210,7 @@ static SkGlyphID first_nonzero_glyph_for_single_byte_encoding(SkGlyphID gid) {
 
 static bool has_outline_glyph(SkGlyphID gid, SkGlyphCache* cache) {
     const SkGlyph& glyph = cache->getGlyphIDMetrics(gid);
-    const SkPath* path = cache->findPath(glyph);
-    return (path && !path->isEmpty()) || (glyph.fWidth == 0 && glyph.fHeight == 0);
+    return glyph.isEmpty() || cache->findPath(glyph);
 }
 
 sk_sp<SkPDFFont> SkPDFFont::GetFontResource(SkPDFCanon* canon,
@@ -359,7 +358,7 @@ static sk_sp<SkPDFStream> get_subset_font_stream(
     if (!glyphUsage.has(0)) {
         subset.push_back(0);  // Always include glyph 0.
     }
-    glyphUsage.exportTo(&subset);
+    glyphUsage.getSetValues([&subset](unsigned v) { subset.push_back(v); });
 
     unsigned char* subsetFont{nullptr};
     sk_sp<SkData> fontData(stream_to_data(std::move(fontAsset)));

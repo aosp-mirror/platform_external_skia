@@ -754,6 +754,7 @@ class Sk3DShader : public SkShaderBase {
 public:
     Sk3DShader(sk_sp<SkShader> proxy) : fProxy(std::move(proxy)) {}
 
+#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
     Context* onMakeContext(const ContextRec& rec, SkArenaAlloc* alloc) const override {
         SkShaderBase::Context* proxyContext = nullptr;
         if (fProxy) {
@@ -764,6 +765,7 @@ public:
         }
         return alloc->make<Sk3DShaderContext>(*this, rec, proxyContext);
     }
+#endif
 
     class Sk3DShaderContext : public Context {
     public:
@@ -857,14 +859,14 @@ public:
         typedef Context INHERITED;
     };
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(Sk3DShader)
-
 protected:
     void flatten(SkWriteBuffer& buffer) const override {
         buffer.writeFlattenable(fProxy.get());
     }
 
 private:
+    SK_FLATTENABLE_HOOKS(Sk3DShader)
+
     sk_sp<SkShader> fProxy;
 
     typedef SkShaderBase INHERITED;
@@ -946,9 +948,15 @@ bool SkBlitter::UseRasterPipelineBlitter(const SkPixmap& device, const SkPaint& 
         return true;
     }
     // ... unless the blend mode is complicated enough.
+#if defined(SK_LEGACY_COMPLEX_XFERMODES)
     if (paint.getBlendMode() > SkBlendMode::kLastSeparableMode) {
         return true;
     }
+#else
+    if (paint.getBlendMode() > SkBlendMode::kLastCoeffMode) {
+        return true;
+    }
+#endif
     if (matrix.hasPerspective()) {
         return true;
     }
@@ -1068,12 +1076,13 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
         // if there is one, the shader will take care of it.
     }
 
+    SkShaderBase::Context* shaderContext = nullptr;
     /*
      *  We create a SkShader::Context object, and store it on the blitter.
      */
-    SkShaderBase::Context* shaderContext = nullptr;
     if (shader) {
-        const SkShaderBase::ContextRec rec(*legacyPaint, matrix, nullptr, device.colorSpace());
+        const SkShaderBase::ContextRec rec(*legacyPaint, matrix, nullptr,
+                                           device.colorType(), device.colorSpace());
         // Try to create the ShaderContext
         shaderContext = shader->makeContext(rec, alloc);
         if (!shaderContext) {

@@ -9,6 +9,7 @@
 
 #include "SkColorFilter.h"
 #include "SkDraw.h"
+#include "SkDrawable.h"
 #include "SkGlyphRun.h"
 #include "SkImageFilter.h"
 #include "SkImageFilterCache.h"
@@ -141,7 +142,7 @@ void SkBaseDevice::drawPatch(const SkPoint cubics[12], const SkColor colors[4],
 void SkBaseDevice::drawImage(const SkImage* image, SkScalar x, SkScalar y,
                              const SkPaint& paint) {
     SkBitmap bm;
-    if (as_IB(image)->getROPixels(&bm, this->imageInfo().colorSpace())) {
+    if (as_IB(image)->getROPixels(&bm)) {
         this->drawBitmap(bm, x, y, paint);
     }
 }
@@ -150,7 +151,7 @@ void SkBaseDevice::drawImageRect(const SkImage* image, const SkRect* src,
                                  const SkRect& dst, const SkPaint& paint,
                                  SkCanvas::SrcRectConstraint constraint) {
     SkBitmap bm;
-    if (as_IB(image)->getROPixels(&bm, this->imageInfo().colorSpace())) {
+    if (as_IB(image)->getROPixels(&bm)) {
         this->drawBitmapRect(bm, src, dst, paint, constraint);
     }
 }
@@ -271,6 +272,12 @@ void SkBaseDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
     SkPaint p(paint);
     p.setShader(atlas->makeShader());
     this->drawVertices(builder.detach().get(), nullptr, 0, mode, p);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void SkBaseDevice::drawDrawable(SkDrawable* drawable, const SkMatrix* matrix, SkCanvas* canvas) {
+    drawable->draw(canvas, matrix);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

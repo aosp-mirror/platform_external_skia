@@ -13,7 +13,6 @@
 #include "SkImage_Base.h"
 #include "SkSpecialSurface.h"
 #include "SkSurfacePriv.h"
-#include "SkPixelRef.h"
 #include <atomic>
 
 #if SK_SUPPORT_GPU
@@ -200,7 +199,7 @@ sk_sp<SkSpecialImage> SkSpecialImage::MakeFromImage(const SkIRect& subset,
 #endif
     {
         SkBitmap bm;
-        if (as_IB(image)->getROPixels(&bm, nullptr)) {
+        if (as_IB(image)->getROPixels(&bm)) {
             return MakeFromRaster(subset, bm, props);
         }
     }

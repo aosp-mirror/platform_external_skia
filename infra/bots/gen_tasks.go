@@ -988,16 +988,19 @@ func buildstats(b *specs.TasksCfgBuilder, name string, parts map[string]string, 
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("bloaty"))
 	b.MustAddTask(name, task)
 
-	// Always upload the results (just don't run the task otherwise.)
-	uploadName := fmt.Sprintf("%s%s%s", PREFIX_UPLOAD, jobNameSchema.Sep, name)
-	extraProps := map[string]string{
-		"gs_bucket": CONFIG.GsBucketNano,
+	// Upload release results (for tracking in perf)
+	// We have some jobs that are FYI (e.g. Debug-CanvasKit)
+	if strings.Contains(name, "Release") {
+		uploadName := fmt.Sprintf("%s%s%s", PREFIX_UPLOAD, jobNameSchema.Sep, name)
+		extraProps := map[string]string{
+			"gs_bucket": CONFIG.GsBucketNano,
+		}
+		uploadTask := kitchenTask(name, "upload_buildstats_results", "swarm_recipe.isolate", SERVICE_ACCOUNT_UPLOAD_NANO, linuxGceDimensions(MACHINE_TYPE_SMALL), extraProps, OUTPUT_NONE)
+		uploadTask.CipdPackages = append(uploadTask.CipdPackages, CIPD_PKGS_GSUTIL...)
+		uploadTask.Dependencies = append(uploadTask.Dependencies, name)
+		b.MustAddTask(uploadName, uploadTask)
+		return uploadName
 	}
-	uploadTask := kitchenTask(name, "upload_buildstats_results", "swarm_recipe.isolate", SERVICE_ACCOUNT_UPLOAD_NANO, linuxGceDimensions(MACHINE_TYPE_SMALL), extraProps, OUTPUT_NONE)
-	uploadTask.CipdPackages = append(uploadTask.CipdPackages, CIPD_PKGS_GSUTIL...)
-	uploadTask.Dependencies = append(uploadTask.Dependencies, name)
-	b.MustAddTask(uploadName, uploadTask)
-	return uploadName
 
 	return name
 }
@@ -1151,6 +1154,8 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		isolate = relpath("skpbench_skia_bundled.isolate")
 	} else if strings.Contains(name, "PathKit") {
 		recipe = "perf_pathkit"
+	} else if strings.Contains(name, "CanvasKit") {
+		recipe = "perf_canvaskit"
 	}
 	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), nil, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
