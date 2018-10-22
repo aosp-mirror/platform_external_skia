@@ -181,7 +181,6 @@ cc_library_static {
         "src/core/SkEdgeBuilder.cpp",
         "src/core/SkEdgeClipper.cpp",
         "src/core/SkExecutor.cpp",
-        "src/core/SkFDot6Constants.cpp",
         "src/core/SkFlattenable.cpp",
         "src/core/SkFont.cpp",
         "src/core/SkFontDescriptor.cpp",
