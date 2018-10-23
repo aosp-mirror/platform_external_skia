@@ -59,12 +59,6 @@ public:
 
     bool onIsValid(GrContext*) const override;
 
-    // Only return true if the generate has already been cached, in a format that matches the info.
-    bool lockAsBitmapOnlyIfAlreadyCached(SkBitmap*, const SkImageInfo&) const;
-    // Call the underlying generator directly
-    bool directGeneratePixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
-                              int srcX, int srcY) const;
-
 #if SK_SUPPORT_GPU
     // Returns the texture proxy. If we're going to generate and cache the texture, we should use
     // the passed in key (if the key is valid). If genType is AllowedTexGenType::kCheap and the
@@ -75,19 +69,11 @@ public:
                                            bool willBeMipped,
                                            GrTextureMaker::AllowedTexGenType genType) const;
 
-    // TODO: Need to pass in dstColorSpace to fold into key here?
     void makeCacheKeyFromOrigKey(const GrUniqueKey& origKey, GrUniqueKey* cacheKey) const;
 #endif
 
 private:
     class ScopedGenerator;
-
-    /**
-     *  On success (true), bitmap will point to the pixels for this generator. If this returns
-     *  false, the bitmap will be reset to empty.
-     *  TODO: Pass in dstColorSpace to ensure bitmap is compatible?
-     */
-    bool lockAsBitmap(SkBitmap*, SkImage::CachingHint, const SkImageInfo&) const;
 
     sk_sp<SharedGenerator> fSharedGenerator;
     // Note that fInfo is not necessarily the info from the generator. It may be cropped by

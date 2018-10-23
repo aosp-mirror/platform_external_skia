@@ -855,13 +855,6 @@ cc_library_static {
                 "src/opts/SkOpts_ssse3.cpp",
                 "src/opts/opts_check_x86.cpp",
             ],
-            cflags: [
-                // Clang seems to think new/malloc will only be 4-byte aligned
-                // on x86 Android. We're pretty sure it's actually 8-byte
-                // alignment. tests/OverAlignedTest.cpp has more information,
-                // and should fail if we're wrong.
-                "-Wno-over-aligned"
-            ],
         },
 
         x86_64: {
@@ -1377,8 +1370,6 @@ cc_test {
         "gm/typeface.cpp",
         "gm/variedtext.cpp",
         "gm/vertices.cpp",
-        "gm/verttext.cpp",
-        "gm/verttext2.cpp",
         "gm/verylargebitmap.cpp",
         "gm/wacky_yuv_formats.cpp",
         "gm/windowrectangles.cpp",
@@ -2311,8 +2302,6 @@ cc_test {
         "gm/typeface.cpp",
         "gm/variedtext.cpp",
         "gm/vertices.cpp",
-        "gm/verttext.cpp",
-        "gm/verttext2.cpp",
         "gm/verylargebitmap.cpp",
         "gm/wacky_yuv_formats.cpp",
         "gm/windowrectangles.cpp",
