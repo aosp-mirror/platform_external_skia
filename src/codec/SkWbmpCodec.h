@@ -29,11 +29,6 @@ protected:
                        const Options&, SkPMColor[], int*, int*) override;
     bool onRewind() override;
 private:
-    /*
-     * Returns a swizzler on success, nullptr on failure
-     */
-    SkSwizzler* initializeSwizzler(const SkImageInfo& info, const SkPMColor* ctable,
-                                   const Options& opts);
     SkSampler* getSampler(bool createIfNecessary) override {
         SkASSERT(fSwizzler || !createIfNecessary);
         return fSwizzler.get();
