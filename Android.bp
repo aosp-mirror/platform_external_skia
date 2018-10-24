@@ -635,7 +635,6 @@ cc_library_static {
         "src/images/SkJpegEncoder.cpp",
         "src/images/SkPngEncoder.cpp",
         "src/images/SkWebpEncoder.cpp",
-        "src/jumper/SkJumper.cpp",
         "src/lazy/SkDiscardableMemoryPool.cpp",
         "src/pathops/SkAddIntersections.cpp",
         "src/pathops/SkDConicLineIntersection.cpp",
