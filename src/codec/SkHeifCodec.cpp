@@ -317,16 +317,18 @@ void SkHeifCodec::allocateStorage(const SkImageInfo& dstInfo) {
 
 void SkHeifCodec::initializeSwizzler(
         const SkImageInfo& dstInfo, const Options& options) {
-    SkEncodedInfo swizzlerInfo = this->getEncodedInfo();
-
     SkImageInfo swizzlerDstInfo = dstInfo;
     if (this->colorXform()) {
         // The color xform will be expecting RGBA 8888 input.
         swizzlerDstInfo = swizzlerDstInfo.makeColorType(kRGBA_8888_SkColorType);
     }
 
-    fSwizzler.reset(SkSwizzler::CreateSwizzler(swizzlerInfo, nullptr,
-            swizzlerDstInfo, options, nullptr, true));
+    int srcBPP = 4;
+    if (dstInfo.colorType() == kRGB_565_SkColorType && !this->colorXform()) {
+        srcBPP = 2;
+    }
+
+    fSwizzler = SkSwizzler::MakeSimple(srcBPP, swizzlerDstInfo, options);
     SkASSERT(fSwizzler);
 }
 
