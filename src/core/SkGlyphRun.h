@@ -98,16 +98,11 @@ public:
     using PerGlyph = std::function<void (SkGlyphRun*, SkPaint*)>;
     void eachGlyphToGlyphRun(PerGlyph perGlyph);
 
-    // The following made a ~5% speed improvement over not using a template.
-    //using PerGlyphPos = std::function<void (SkGlyphID glyphID, SkPoint positions)>;
-    template <typename PerGlyphPos>
-    void forEachGlyphAndPosition(PerGlyphPos perGlyph) const;
-
     void filloutGlyphsAndPositions(SkGlyphID* glyphIDs, SkPoint* positions);
 
     size_t runSize() const { return fGlyphIDs.size(); }
     SkSpan<const SkPoint> positions() const { return fPositions.toConst(); }
-    SkSpan<const SkGlyphID> shuntGlyphsIDs() const { return fGlyphIDs; }
+    SkSpan<const SkGlyphID> glyphsIDs() const { return fGlyphIDs; }
     const SkPaint& paint() const { return fRunPaint; }
     SkPaint* mutablePaint() { return &fRunPaint; }
     SkSpan<const uint32_t> clusters() const { return fClusters; }
@@ -208,13 +203,6 @@ private:
     SkSpan<const SkGlyphID> textToGlyphIDs(
             const SkPaint& paint, const void* bytes, size_t byteLength);
 
-    // Returns the span of unique glyph IDs.
-    SkSpan<const SkGlyphID> addDenseAndUnique(
-            const SkPaint& paint,
-            SkSpan<const SkGlyphID> glyphIDs,
-            uint16_t* uniqueGlyphIDIndices,
-            SkGlyphID* uniqueGlyphIDs);
-
     void makeGlyphRun(
             const SkPaint& basePaint,
             const SkRunFont& runFont,
@@ -227,21 +215,19 @@ private:
 
     void makeGlyphRunList(const SkPaint& paint, const SkTextBlob* blob, SkPoint origin);
 
-    size_t simplifyDrawText(
+    void simplifyDrawText(
             const SkPaint& paint, const SkRunFont& runFont, SkSpan<const SkGlyphID> glyphIDs,
-            SkPoint origin,uint16_t* uniqueGlyphIDIndices, SkGlyphID* uniqueGlyphIDs,
-            SkPoint* positions,
+            SkPoint origin, SkPoint* positions,
             SkSpan<const char> text = SkSpan<const char>{},
             SkSpan<const uint32_t> clusters = SkSpan<const uint32_t>{});
-    size_t simplifyDrawPosTextH(
+    void simplifyDrawPosTextH(
             const SkPaint& paint, const SkRunFont& runFont, SkSpan<const SkGlyphID> glyphIDs,
-            const SkScalar* xpos, SkScalar constY,
-            uint16_t* uniqueGlyphIDIndices, SkGlyphID* uniqueGlyphIDs, SkPoint* positions,
+            const SkScalar* xpos, SkScalar constY, SkPoint* positions,
             SkSpan<const char> text = SkSpan<const char>{},
             SkSpan<const uint32_t> clusters = SkSpan<const uint32_t>{});
-    size_t simplifyDrawPosText(
+    void simplifyDrawPosText(
             const SkPaint& paint, const SkRunFont& runFont, SkSpan<const SkGlyphID> glyphIDs,
-            const SkPoint* pos, uint16_t* uniqueGlyphIDIndices, SkGlyphID* uniqueGlyphIDs,
+            const SkPoint* pos,
             SkSpan<const char> text = SkSpan<const char>{},
             SkSpan<const uint32_t> clusters = SkSpan<const uint32_t>{});
 
@@ -264,13 +250,5 @@ private:
     // Used for collecting the set of unique glyphs.
     SkGlyphIDSet fGlyphIDSet;
 };
-
-template <typename PerGlyphPos>
-inline void SkGlyphRun::forEachGlyphAndPosition(PerGlyphPos perGlyph) const {
-    const SkPoint* ptCursor = fPositions.data();
-    for (auto glyphID : fGlyphIDs) {
-        perGlyph(glyphID, *ptCursor++);
-    }
-}
 
 #endif  // SkGlyphRun_DEFINED

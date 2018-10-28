@@ -34,17 +34,12 @@ public:
     void drawForBitmapDevice(
             const SkGlyphRunList& glyphRunList, const SkMatrix& deviceMatrix,
             PerMaskCreator perMaskCreator, PerPathCreator perPathCreator);
-    void drawUsingMasks(
-            SkGlyphCache* cache, const SkGlyphRun& glyphRun, SkPoint origin,
-            const SkMatrix& deviceMatrix, PerMask perMask);
-    void drawUsingPaths(
-            const SkGlyphRun& glyphRun, SkPoint origin, SkGlyphCache* cache, PerPath perPath) const;
 
     template <typename PerGlyphT, typename PerPathT>
     void drawGlyphRunAsBMPWithPathFallback(
             SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkMatrix& deviceMatrix,
-            PerGlyphT perGlyph, PerPathT perPath);
+            PerGlyphT&& perGlyph, PerPathT&& perPath);
 
     enum NeedsTransform : bool { kTransformDone = false, kDoTransform = true };
 
@@ -66,13 +61,13 @@ public:
     void drawGlyphRunAsPathWithARGBFallback(
             SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkMatrix& viewMatrix, SkScalar textScale,
-            PerPath perPath, ARGBFallback fallbackARGB);
+            PerPath&& perPath, ARGBFallback&& fallbackARGB);
 
     template <typename PerSDFT, typename PerPathT>
     void drawGlyphRunAsSDFWithARGBFallback(
             SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkMatrix& viewMatrix, SkScalar textRatio,
-            PerSDFT perSDF, PerPathT perPath, ARGBFallback perFallback);
+            PerSDFT&& perSDF, PerPathT&& perPath, ARGBFallback&& perFallback);
 
 private:
     static bool ShouldDrawAsPath(const SkPaint& paint, const SkMatrix& matrix);
@@ -81,21 +76,6 @@ private:
     void processARGBFallback(
             SkScalar maxGlyphDimension, const SkPaint& runPaint, SkPoint origin,
             const SkMatrix& viewMatrix, SkScalar textScale, ARGBFallback argbFallback);
-
-    template <typename EachGlyph>
-    void forEachMappedDrawableGlyph(
-            const SkGlyphRun& glyphRun, SkPoint origin, const SkMatrix& deviceMatrix,
-            SkGlyphCacheInterface* cache, EachGlyph eachGlyph);
-
-    void drawGlyphRunAsSubpixelMask(
-            SkGlyphCache* cache, const SkGlyphRun& glyphRun,
-            SkPoint origin, const SkMatrix& deviceMatrix,
-            PerMask perMask);
-
-    void drawGlyphRunAsFullpixelMask(
-            SkGlyphCache* cache, const SkGlyphRun& glyphRun,
-            SkPoint origin, const SkMatrix& deviceMatrix,
-            PerMask perMask);
 
     // The props as on the actual device.
     const SkSurfaceProps fDeviceProps;
@@ -134,12 +114,47 @@ inline static SkRect rect_to_draw(
     return SkRect::MakeXYWH(origin.x() + dx, origin.y() + dy, width, height);
 }
 
-// forEachMappedDrawableGlyph handles positioning for mask type glyph handling for both sub-pixel
-// and full pixel positioning.
-template <typename EachGlyph>
-void SkGlyphRunListPainter::forEachMappedDrawableGlyph(
-        const SkGlyphRun& glyphRun, SkPoint origin, const SkMatrix& deviceMatrix,
-        SkGlyphCacheInterface* cache, EachGlyph eachGlyph) {
+// Beware! The following code will end up holding two glyph caches at the same time, but they
+// will not be the same cache (which would cause two separate caches to be created).
+template <typename PerPathT>
+void SkGlyphRunListPainter::drawGlyphRunAsPathWithARGBFallback(
+        SkGlyphCacheInterface* pathCache, const SkGlyphRun& glyphRun,
+        SkPoint origin, const SkMatrix& viewMatrix, SkScalar textScale,
+        PerPathT&& perPath, ARGBFallback&& argbFallback) {
+    fARGBGlyphsIDs.clear();
+    fARGBPositions.clear();
+    SkScalar maxFallbackDimension{-SK_ScalarInfinity};
+
+    const SkPoint* positionCursor = glyphRun.positions().data();
+    for (auto glyphID : glyphRun.glyphsIDs()) {
+        SkPoint position = *positionCursor++;
+        if (SkScalarsAreFinite(position.x(), position.y())) {
+            const SkGlyph& glyph = pathCache->getGlyphMetrics(glyphID, {0, 0});
+            if (glyph.fMaskFormat != SkMask::kARGB32_Format) {
+                perPath(glyph, origin + position);
+            } else {
+                SkScalar largestDimension = std::max(glyph.fWidth, glyph.fHeight);
+                maxFallbackDimension = std::max(maxFallbackDimension, largestDimension);
+                fARGBGlyphsIDs.push_back(glyphID);
+                fARGBPositions.push_back(position);
+            }
+        }
+    }
+
+    if (!fARGBGlyphsIDs.empty()) {
+        this->processARGBFallback(
+            maxFallbackDimension, glyphRun.paint(), origin, viewMatrix, textScale,
+            std::move(argbFallback));
+
+    }
+}
+
+template <typename PerGlyphT, typename PerPathT>
+void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
+        SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
+        SkPoint origin, const SkMatrix& deviceMatrix,
+        PerGlyphT&& perGlyph, PerPathT&& perPath) {
+
     SkMatrix mapping = deviceMatrix;
     mapping.preTranslate(origin.x(), origin.y());
     SkVector rounding = cache->rounding();
@@ -149,63 +164,10 @@ void SkGlyphRunListPainter::forEachMappedDrawableGlyph(
     if (this->ensureBitmapBuffers(runSize)) {
         mapping.mapPoints(fPositions, glyphRun.positions().data(), runSize);
         const SkPoint* mappedPtCursor = fPositions;
-        const SkPoint* ptCursor = glyphRun.positions().data();
-        for (auto glyphID : glyphRun.shuntGlyphsIDs()) {
+        for (auto glyphID : glyphRun.glyphsIDs()) {
             auto mappedPt = *mappedPtCursor++;
-            auto pt = origin + *ptCursor++;
             if (SkScalarsAreFinite(mappedPt.x(), mappedPt.y())) {
                 const SkGlyph& glyph = cache->getGlyphMetrics(glyphID, mappedPt);
-                eachGlyph(glyph, pt, mappedPt);
-            }
-        }
-    }
-}
-
-// Beware! The following code will end up holding two glyph caches at the same time, but they
-// will not be the same cache (which would cause two separate caches to be created).
-template <typename PerPathT>
-void SkGlyphRunListPainter::drawGlyphRunAsPathWithARGBFallback(
-        SkGlyphCacheInterface* pathCache, const SkGlyphRun& glyphRun,
-        SkPoint origin, const SkMatrix& viewMatrix, SkScalar textScale,
-        PerPathT perPath, ARGBFallback argbFallback) {
-    fARGBGlyphsIDs.clear();
-    fARGBPositions.clear();
-    SkScalar maxFallbackDimension{-SK_ScalarInfinity};
-
-    auto eachGlyph =
-            [this, pathCache, origin, perPath{std::move(perPath)}, &maxFallbackDimension]
-            (SkGlyphID glyphID, SkPoint position) {
-                if (SkScalarsAreFinite(position.x(), position.y())) {
-                    const SkGlyph& glyph = pathCache->getGlyphMetrics(glyphID, {0, 0});
-                    if (glyph.fMaskFormat != SkMask::kARGB32_Format) {
-                        perPath(glyph, origin + position);
-                    } else {
-                        SkScalar largestDimension = std::max(glyph.fWidth, glyph.fHeight);
-                        maxFallbackDimension = std::max(maxFallbackDimension, largestDimension);
-                        fARGBGlyphsIDs.push_back(glyphID);
-                        fARGBPositions.push_back(position);
-                    }
-                }
-            };
-
-    glyphRun.forEachGlyphAndPosition(eachGlyph);
-
-    if (!fARGBGlyphsIDs.empty()) {
-        this->processARGBFallback(
-            maxFallbackDimension, glyphRun.paint(), origin, viewMatrix, textScale, argbFallback);
-
-    }
-}
-
-template <typename PerGlyphT, typename PerPathT>
-void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
-        SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
-        SkPoint origin, const SkMatrix& deviceMatrix,
-        PerGlyphT perGlyph, PerPathT perPath) {
-
-    auto eachGlyph =
-            [perGlyph{std::move(perGlyph)}, perPath{std::move(perPath)}]
-                    (const SkGlyph& glyph, SkPoint pt, SkPoint mappedPt) {
                 if (SkGlyphCacheCommon::GlyphTooBigForAtlas(glyph)) {
                     SkScalar sx = SkScalarFloorToScalar(mappedPt.fX),
                              sy = SkScalarFloorToScalar(mappedPt.fY);
@@ -219,22 +181,22 @@ void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
                 } else {
                     perGlyph(glyph, mappedPt);
                 }
-            };
-
-    this->forEachMappedDrawableGlyph(glyphRun, origin, deviceMatrix, cache, eachGlyph);
+            }
+        }
+    }
 }
 
 template <typename PerSDFT, typename PerPathT>
 void SkGlyphRunListPainter::drawGlyphRunAsSDFWithARGBFallback(
         SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
         SkPoint origin, const SkMatrix& viewMatrix, SkScalar textScale,
-        PerSDFT perSDF, PerPathT perPath, ARGBFallback argbFallback) {
+        PerSDFT&& perSDF, PerPathT&& perPath, ARGBFallback&& argbFallback) {
     fARGBGlyphsIDs.clear();
     fARGBPositions.clear();
     SkScalar maxFallbackDimension{-SK_ScalarInfinity};
 
     const SkPoint* positionCursor = glyphRun.positions().data();
-    for (auto glyphID : glyphRun.shuntGlyphsIDs()) {
+    for (auto glyphID : glyphRun.glyphsIDs()) {
         const SkGlyph& glyph = cache->getGlyphMetrics(glyphID, {0, 0});
         SkPoint glyphPos = origin + *positionCursor++;
         if (glyph.fMaskFormat == SkMask::kSDF_Format || glyph.isEmpty()) {
@@ -253,7 +215,8 @@ void SkGlyphRunListPainter::drawGlyphRunAsSDFWithARGBFallback(
 
     if (!fARGBGlyphsIDs.empty()) {
         this->processARGBFallback(
-            maxFallbackDimension, glyphRun.paint(), origin, viewMatrix, textScale, argbFallback);
+            maxFallbackDimension, glyphRun.paint(), origin, viewMatrix, textScale,
+            std::move(argbFallback));
     }
 }
 
