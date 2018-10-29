@@ -251,7 +251,7 @@ static bool filter_has_effect_for_rect_stays_rect(const GrPerspQuad& quad, const
 
 static SkRect compute_domain(Domain domain, GrSamplerState::Filter filter,
                              GrSurfaceOrigin origin, const SkRect& srcRect, float iw, float ih) {
-    static constexpr SkRect kLargeRect = {-2, -2, -2, -2};
+    static constexpr SkRect kLargeRect = {-2, -2, 2, 2};
     if (domain == Domain::kNo) {
         // Either the quad has no domain constraint and is batched with a domain constrained op
         // (in which case we want a domain that doesn't restrict normalized tex coords), or the

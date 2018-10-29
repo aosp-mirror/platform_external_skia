@@ -891,7 +891,9 @@ static void fuzz_paint_text(Fuzz* fuzz, SkPaint* paint) {
     paint->setDevKernText(       make_fuzz_t<bool>(fuzz));
     paint->setHinting(           make_fuzz_t_range<SkPaint::Hinting>(fuzz, 0,
                                                                      SkPaint::kFull_Hinting));
+#ifdef SK_SUPPORT_LEGACY_SETTEXTALIGN
     paint->setTextAlign(         make_fuzz_t_range<SkPaint::Align>(fuzz, 0, 2));
+#endif
 }
 
 static void fuzz_paint_text_encoding(Fuzz* fuzz, SkPaint* paint) {
@@ -1294,10 +1296,7 @@ static void fuzz_canvas(Fuzz* fuzz, SkCanvas* canvas, int depth = 9) {
                 if (usePaint) {
                     fuzz_paint(fuzz, &paint, depth - 1);
                 }
-                SkCanvas::SrcRectConstraint constraint =
-                        make_fuzz_t<bool>(fuzz) ? SkCanvas::kStrict_SrcRectConstraint
-                                                : SkCanvas::kFast_SrcRectConstraint;
-                canvas->drawImageRect(img, src, dst, usePaint ? &paint : nullptr, constraint);
+                canvas->drawImageRect(img, src, dst, usePaint ? &paint : nullptr);
                 break;
             }
             case 35: {
@@ -1323,10 +1322,7 @@ static void fuzz_canvas(Fuzz* fuzz, SkCanvas* canvas, int depth = 9) {
                 if (usePaint) {
                     fuzz_paint(fuzz, &paint, depth - 1);
                 }
-                SkCanvas::SrcRectConstraint constraint =
-                        make_fuzz_t<bool>(fuzz) ? SkCanvas::kStrict_SrcRectConstraint
-                                                : SkCanvas::kFast_SrcRectConstraint;
-                canvas->drawImageRect(img, dst, usePaint ? &paint : nullptr, constraint);
+                canvas->drawImageRect(img, dst, usePaint ? &paint : nullptr);
                 break;
             }
             case 37: {
