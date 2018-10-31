@@ -42,7 +42,7 @@ public:
     }
     void onPrepare(GrOpFlushState*) override {}
 
-    void wasRecorded(sk_sp<GrCCPerOpListPaths> owningPerOpListPaths);
+    void addToOwningPerOpListPaths(sk_sp<GrCCPerOpListPaths> owningPerOpListPaths);
 
     // Makes decisions about how to draw each path (cached, copied, rendered, etc.), and
     // increments/fills out the corresponding GrCCPerFlushResourceSpecs. 'stashedAtlasKey', if
@@ -93,7 +93,7 @@ private:
     struct SingleDraw {
         SingleDraw(const SkMatrix&, const GrShape&, float strokeDevWidth,
                    const SkIRect& shapeConservativeIBounds, const SkIRect& maskDevIBounds,
-                   Visibility maskVisibility, const GrColor4h&);
+                   Visibility maskVisibility, const SkPMColor4f&);
         ~SingleDraw();
 
         SkMatrix fMatrix;
@@ -102,7 +102,7 @@ private:
         const SkIRect fShapeConservativeIBounds;
         SkIRect fMaskDevIBounds;
         Visibility fMaskVisibility;
-        GrColor4h fColor;
+        SkPMColor4f fColor;
 
         sk_sp<GrCCPathCacheEntry> fCacheEntry;
         sk_sp<GrTextureProxy> fCachedAtlasProxy;
