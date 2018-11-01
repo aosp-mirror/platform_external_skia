@@ -25,6 +25,7 @@
 #include "SkPathEffect.h"
 #include "SkRasterClip.h"
 #include "SkStrikeCache.h"
+#include "SkTDArray.h"
 
 // -- SkGlyphRunListPainter ------------------------------------------------------------------------
 SkGlyphRunListPainter::SkGlyphRunListPainter(
@@ -115,12 +116,10 @@ static SkMask create_mask(const SkGlyph& glyph, SkPoint position, const void* im
 
 void SkGlyphRunListPainter::drawForBitmapDevice(
         const SkGlyphRunList& glyphRunList, const SkMatrix& deviceMatrix,
-        PerMaskCreator perMaskCreator, PerPathCreator perPathCreator) {
+        PaintMasksCreator paintMasksCreator, PaintPathsCreator paintPathsCreator) {
 
     SkPoint origin = glyphRunList.origin();
     for (auto& glyphRun : glyphRunList) {
-        SkSTArenaAlloc<3332> alloc;
-
         // The bitmap blitters can only draw lcd text to a N32 bitmap in srcOver. Otherwise,
         // convert the lcd text into A8 text. The props communicates this to the scaler.
         auto& props = (kN32_SkColorType == fColorType && glyphRun.paint().isSrcOver())
@@ -128,9 +127,12 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
                       : fBitmapFallbackProps;
 
         const SkPaint& paint = glyphRun.paint();
+        auto runSize = glyphRun.runSize();
+        this->ensureBitmapBuffers(runSize);
 
         if (ShouldDrawAsPath(paint, deviceMatrix)) {
-
+            SkMatrix::MakeTrans(origin.x(), origin.y()).mapPoints(
+                    fPositions, glyphRun.positions().data(), runSize);
             // setup our std pathPaint, in hopes of getting hits in the cache
             SkPaint pathPaint(paint);
             SkScalar textScale = pathPaint.setupForAsPaths();
@@ -138,9 +140,9 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
             auto pathCache = SkStrikeCache::FindOrCreateStrikeExclusive(
                     pathPaint, &props, fScalerContextFlags, nullptr);
 
-            auto perPath = perPathCreator();
-
-            const SkPoint* positionCursor = glyphRun.positions().data();
+            SkTDArray<PathAndPos> pathsAndPositions;
+            pathsAndPositions.setReserve(runSize);
+            SkPoint* positionCursor = fPositions;
             for (auto glyphID : glyphRun.glyphsIDs()) {
                 SkPoint position = *positionCursor++;
                 if (check_glyph_position(position)) {
@@ -148,19 +150,20 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
                     if (!glyph.isEmpty()) {
                         const SkPath* path = pathCache->findPath(glyph);
                         if (path != nullptr) {
-                            SkPoint loc = position + origin;
-                            perPath(*path, textScale, loc, paint);
+                            pathsAndPositions.push_back(PathAndPos{path, position});
                         }
                     }
                 }
             }
+
+            auto paintAllPaths = paintPathsCreator();
+            paintAllPaths(
+                    SkSpan<const PathAndPos>{pathsAndPositions.begin(), pathsAndPositions.size()},
+                    textScale,
+                    paint);
         } else {
             auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(
                     paint, &props, fScalerContextFlags, &deviceMatrix);
-            auto perMask = perMaskCreator(paint, &alloc);
-            auto runSize = glyphRun.runSize();
-
-            this->ensureBitmapBuffers(runSize);
 
             // Add rounding and origin.
             SkMatrix matrix = deviceMatrix;
@@ -169,6 +172,8 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
             matrix.postTranslate(rounding.x(), rounding.y());
             matrix.mapPoints(fPositions, glyphRun.positions().data(), runSize);
 
+            SkTDArray<SkMask> masks;
+            masks.setReserve(runSize);
             const SkPoint* positionCursor = fPositions;
             for (auto glyphID : glyphRun.glyphsIDs()) {
                 auto position = *positionCursor++;
@@ -176,10 +181,13 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
                     const SkGlyph& glyph = cache->getGlyphMetrics(glyphID, position);
                     const void* image;
                     if (!glyph.isEmpty() && (image = cache->findImage(glyph))) {
-                        perMask(create_mask(glyph, position, image), paint);
+                        masks.push_back(create_mask(glyph, position, image));
                     }
                 }
             }
+            auto paintAllMasks = paintMasksCreator();
+            paintAllMasks(SkSpan<const SkMask>{masks.begin(), masks.size()},
+                          paint);
         }
     }
 }
@@ -272,7 +280,7 @@ void SkGlyphRunListPainter::processARGBFallback(
 
 #if SK_SUPPORT_GPU
 // -- GrTextContext --------------------------------------------------------------------------------
-GrColor4h generate_filtered_color(const SkPaint& paint, const GrColorSpaceInfo& colorSpaceInfo) {
+SkPMColor4f generate_filtered_color(const SkPaint& paint, const GrColorSpaceInfo& colorSpaceInfo) {
     SkColor4f filteredColor = paint.getColor4f();
     if (auto* xform = colorSpaceInfo.colorSpaceXformFromSRGB()) {
         filteredColor = xform->apply(filteredColor);
@@ -281,7 +289,7 @@ GrColor4h generate_filtered_color(const SkPaint& paint, const GrColorSpaceInfo& 
         filteredColor = paint.getColorFilter()->filterColor4f(filteredColor,
                                                               colorSpaceInfo.colorSpace());
     }
-    return GrColor4h::FromFloats(filteredColor.premul().vec());
+    return filteredColor.premul();
 }
 
 void GrTextContext::drawGlyphRunList(
@@ -292,7 +300,7 @@ void GrTextContext::drawGlyphRunList(
 
     // Get the first paint to use as the key paint.
     const SkPaint& listPaint = glyphRunList.paint();
-    GrColor4h filteredColor = generate_filtered_color(listPaint, target->colorSpaceInfo());
+    SkPMColor4f filteredColor = generate_filtered_color(listPaint, target->colorSpaceInfo());
 
     // If we have been abandoned, then don't draw
     if (context->abandoned()) {
@@ -381,7 +389,7 @@ void GrTextContext::AppendGlyph(GrTextBlob* blob, int runIndex,
                                 const sk_sp<GrTextStrike>& strike,
                                 const SkGlyph& skGlyph, GrGlyph::MaskStyle maskStyle,
                                 SkScalar sx, SkScalar sy,
-                                const GrColor4h& color, SkGlyphCache* skGlyphCache,
+                                const SkPMColor4f& color, SkGlyphCache* skGlyphCache,
                                 SkScalar textRatio, bool needsTransform) {
     GrGlyph::PackedID id = GrGlyph::Pack(skGlyph.getGlyphID(),
                                          skGlyph.getSubXFixed(),
@@ -409,7 +417,7 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
                                            GrGlyphCache* glyphCache,
                                            const GrShaderCaps& shaderCaps,
                                            const SkPaint& paint,
-                                           const GrColor4h& filteredColor,
+                                           const SkPMColor4f& filteredColor,
                                            SkScalerContextFlags scalerContextFlags,
                                            const SkMatrix& viewMatrix,
                                            const SkSurfaceProps& props,
@@ -443,7 +451,7 @@ void GrTextContext::regenerateGlyphRunList(GrTextBlob* cacheBlob,
         const SkSurfaceProps& fProps;
         const SkScalerContextFlags fScalerContextFlags;
         GrGlyphCache* const fGlyphCache;
-        GrColor4h fFilteredColor;
+        SkPMColor4f fFilteredColor;
     };
 
     SkPoint origin = glyphRunList.origin();
@@ -605,7 +613,7 @@ std::unique_ptr<GrDrawOp> GrTextContext::createOp_TestingOnly(GrContext* context
 
     size_t textLen = (int)strlen(text);
 
-    GrColor4h filteredColor = generate_filtered_color(skPaint, rtc->colorSpaceInfo());
+    SkPMColor4f filteredColor = generate_filtered_color(skPaint, rtc->colorSpaceInfo());
 
     auto origin = SkPoint::Make(x, y);
     SkGlyphRunBuilder builder;
