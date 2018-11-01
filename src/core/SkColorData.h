@@ -8,11 +8,6 @@
 #ifndef SkColorData_DEFINED
 #define SkColorData_DEFINED
 
-// turn this own for extra debug checking when blending onto 565
-#ifdef SK_DEBUG
-    #define CHECK_FOR_565_OVERFLOW
-#endif
-
 #include "SkColor.h"
 #include "SkColorPriv.h"
 #include "SkTo.h"
@@ -20,78 +15,6 @@
 //////////////////////////////////////////////////////////////////////////////
 
 #define SkASSERT_IS_BYTE(x)     SkASSERT(0 == ((x) & ~0xFF))
-
-/*
- *  Skia's 32bit backend only supports 1 sizzle order at a time (compile-time).
- *  This is specified by 4 defines SK_A32_SHIFT, SK_R32_SHIFT, ... for G and B.
- *
- *  For easier compatibility with Skia's GPU backend, we further restrict these
- *  to either (in memory-byte-order) RGBA or BGRA. Note that this "order" does
- *  not directly correspond to the same shift-order, since we have to take endianess
- *  into account.
- *
- *  Here we enforce this constraint.
- */
-
-#ifdef SK_CPU_BENDIAN
-    #define SK_BGRA_B32_SHIFT   24
-    #define SK_BGRA_G32_SHIFT   16
-    #define SK_BGRA_R32_SHIFT   8
-    #define SK_BGRA_A32_SHIFT   0
-#else
-    #define SK_BGRA_B32_SHIFT   0
-    #define SK_BGRA_G32_SHIFT   8
-    #define SK_BGRA_R32_SHIFT   16
-    #define SK_BGRA_A32_SHIFT   24
-#endif
-
-#if defined(SK_PMCOLOR_IS_RGBA) && defined(SK_PMCOLOR_IS_BGRA)
-    #error "can't define PMCOLOR to be RGBA and BGRA"
-#endif
-
-#define LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_RGBA  \
-    (SK_A32_SHIFT == SK_RGBA_A32_SHIFT &&    \
-     SK_R32_SHIFT == SK_RGBA_R32_SHIFT &&    \
-     SK_G32_SHIFT == SK_RGBA_G32_SHIFT &&    \
-     SK_B32_SHIFT == SK_RGBA_B32_SHIFT)
-
-#define LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_BGRA  \
-    (SK_A32_SHIFT == SK_BGRA_A32_SHIFT &&    \
-     SK_R32_SHIFT == SK_BGRA_R32_SHIFT &&    \
-     SK_G32_SHIFT == SK_BGRA_G32_SHIFT &&    \
-     SK_B32_SHIFT == SK_BGRA_B32_SHIFT)
-
-
-#define SK_A_INDEX  (SK_A32_SHIFT/8)
-#define SK_R_INDEX  (SK_R32_SHIFT/8)
-#define SK_G_INDEX  (SK_G32_SHIFT/8)
-#define SK_B_INDEX  (SK_B32_SHIFT/8)
-
-#if defined(SK_PMCOLOR_IS_RGBA) && !LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_RGBA
-    #error "SK_PMCOLOR_IS_RGBA does not match SK_*32_SHIFT values"
-#endif
-
-#if defined(SK_PMCOLOR_IS_BGRA) && !LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_BGRA
-    #error "SK_PMCOLOR_IS_BGRA does not match SK_*32_SHIFT values"
-#endif
-
-#if !defined(SK_PMCOLOR_IS_RGBA) && !defined(SK_PMCOLOR_IS_BGRA)
-    // deduce which to define from the _SHIFT defines
-
-    #if LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_RGBA
-        #define SK_PMCOLOR_IS_RGBA
-    #elif LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_BGRA
-        #define SK_PMCOLOR_IS_BGRA
-    #else
-        #error "need 32bit packing to be either RGBA or BGRA"
-    #endif
-#endif
-
-// hide these now that we're done
-#undef LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_RGBA
-#undef LOCAL_PMCOLOR_SHIFTS_EQUIVALENT_TO_BGRA
-
-//////////////////////////////////////////////////////////////////////////////
 
 // Reverse the bytes coorsponding to RED and BLUE in a packed pixels. Note the
 // pair of them are in the same 2 slots in both RGBA and BGRA, thus there is
@@ -164,15 +87,6 @@ static inline U8CPU SkComputeLuminance(U8CPU r, U8CPU g, U8CPU b) {
     return (r * 54 + g * 183 + b * 19) >> 8;
 }
 
-/**
- *  Turn a 0..255 value into a 0..256 value, rounding up if the value is >= 0x80.
- *  This is slightly more accurate than SkAlpha255To256.
- */
-static inline unsigned Sk255To256(U8CPU value) {
-    SkASSERT(SkToU8(value) == value);
-    return value + (value >> 7);
-}
-
 /** Calculates 256 - (value * alpha256) / 255 in range [0,256],
  *  for [0,255] value and [0,256] alpha256.
  */
@@ -205,89 +119,6 @@ static inline uint16_t SkPackRGB16(unsigned r, unsigned g, unsigned b) {
 #define SK_G16_MASK_IN_PLACE        (SK_G16_MASK << SK_G16_SHIFT)
 #define SK_B16_MASK_IN_PLACE        (SK_B16_MASK << SK_B16_SHIFT)
 
-/** Expand the 16bit color into a 32bit value that can be scaled all at once
-    by a value up to 32. Used in conjunction with SkCompact_rgb_16.
-*/
-static inline uint32_t SkExpand_rgb_16(U16CPU c) {
-    SkASSERT(c == (uint16_t)c);
-
-    return ((c & SK_G16_MASK_IN_PLACE) << 16) | (c & ~SK_G16_MASK_IN_PLACE);
-}
-
-/** Compress an expanded value (from SkExpand_rgb_16) back down to a 16bit
-    color value. The computation yields only 16bits of valid data, but we claim
-    to return 32bits, so that the compiler won't generate extra instructions to
-    "clean" the top 16bits. However, the top 16 can contain garbage, so it is
-    up to the caller to safely ignore them.
-*/
-static inline U16CPU SkCompact_rgb_16(uint32_t c) {
-    return ((c >> 16) & SK_G16_MASK_IN_PLACE) | (c & ~SK_G16_MASK_IN_PLACE);
-}
-
-/** Scale the 16bit color value by the 0..256 scale parameter.
-    The computation yields only 16bits of valid data, but we claim
-    to return 32bits, so that the compiler won't generate extra instructions to
-    "clean" the top 16bits.
-*/
-static inline U16CPU SkAlphaMulRGB16(U16CPU c, unsigned scale) {
-    return SkCompact_rgb_16(SkExpand_rgb_16(c) * (scale >> 3) >> 5);
-}
-
-// this helper explicitly returns a clean 16bit value (but slower)
-#define SkAlphaMulRGB16_ToU16(c, s)  (uint16_t)SkAlphaMulRGB16(c, s)
-
-/** Blend pre-expanded RGB32 with 16bit color value by the 0..32 scale parameter.
-    The computation yields only 16bits of valid data, but we claim to return
-    32bits, so that the compiler won't generate extra instructions to "clean"
-    the top 16bits.
-*/
-static inline U16CPU SkBlend32_RGB16(uint32_t src_expand, uint16_t dst, unsigned scale) {
-    uint32_t dst_expand = SkExpand_rgb_16(dst) * scale;
-    return SkCompact_rgb_16((src_expand + dst_expand) >> 5);
-}
-
-/** Blend src and dst 16bit colors by the 0..256 scale parameter.
-    The computation yields only 16bits of valid data, but we claim
-    to return 32bits, so that the compiler won't generate extra instructions to
-    "clean" the top 16bits.
-*/
-static inline U16CPU SkBlendRGB16(U16CPU src, U16CPU dst, int srcScale) {
-    SkASSERT((unsigned)srcScale <= 256);
-
-    srcScale >>= 3;
-
-    uint32_t src32 = SkExpand_rgb_16(src);
-    uint32_t dst32 = SkExpand_rgb_16(dst);
-    return SkCompact_rgb_16(dst32 + ((src32 - dst32) * srcScale >> 5));
-}
-
-static inline void SkBlendRGB16(const uint16_t src[], uint16_t dst[],
-                                int srcScale, int count) {
-    SkASSERT(count > 0);
-    SkASSERT((unsigned)srcScale <= 256);
-
-    srcScale >>= 3;
-
-    do {
-        uint32_t src32 = SkExpand_rgb_16(*src++);
-        uint32_t dst32 = SkExpand_rgb_16(*dst);
-        *dst++ = static_cast<uint16_t>(
-            SkCompact_rgb_16(dst32 + ((src32 - dst32) * srcScale >> 5)));
-    } while (--count > 0);
-}
-
-#ifdef SK_DEBUG
-    static inline U16CPU SkRGB16Add(U16CPU a, U16CPU b) {
-        SkASSERT(SkGetPackedR16(a) + SkGetPackedR16(b) <= SK_R16_MASK);
-        SkASSERT(SkGetPackedG16(a) + SkGetPackedG16(b) <= SK_G16_MASK);
-        SkASSERT(SkGetPackedB16(a) + SkGetPackedB16(b) <= SK_B16_MASK);
-
-        return a + b;
-    }
-#else
-    #define SkRGB16Add(a, b)  ((a) + (b))
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_DEBUG
@@ -303,28 +134,6 @@ static inline void SkBlendRGB16(const uint16_t src[], uint16_t dst[],
 #else
     #define SkPMColorAssert(c)
 #endif
-
-static inline bool SkPMColorValid(SkPMColor c) {
-    auto a = SkGetPackedA32(c);
-    bool valid = a <= SK_A32_MASK
-              && SkGetPackedR32(c) <= a
-              && SkGetPackedG32(c) <= a
-              && SkGetPackedB32(c) <= a;
-    if (valid) {
-        SkPMColorAssert(c);  // Make sure we're consistent when it counts.
-    }
-    return valid;
-}
-
-static inline uint32_t SkPackPMColor_as_RGBA(SkPMColor c) {
-    return SkPackARGB_as_RGBA(SkGetPackedA32(c), SkGetPackedR32(c),
-                              SkGetPackedG32(c), SkGetPackedB32(c));
-}
-
-static inline uint32_t SkPackPMColor_as_BGRA(SkPMColor c) {
-    return SkPackARGB_as_BGRA(SkGetPackedA32(c), SkGetPackedR32(c),
-                              SkGetPackedG32(c), SkGetPackedB32(c));
-}
 
 /**
  * Abstract 4-byte interpolation, implemented on top of SkPMColor
