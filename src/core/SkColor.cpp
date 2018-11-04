@@ -105,8 +105,6 @@ SkColor SkHSVToColor(U8CPU a, const SkScalar hsv[3]) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "SkPM4f.h"
-
 template <>
 SkColor4f SkColor4f::FromColor(SkColor bgra) {
     SkColor4f rgba;
@@ -148,11 +146,4 @@ SkPMColor4f SkPMColor4f::FromBytes_RGBA(uint32_t c) {
     SkPMColor4f color;
     Sk4f_fromL32(c).store(&color);
     return color;
-}
-
-template <>
-SkColor4f SkColor4f::Pin(float r, float g, float b, float a) {
-    SkColor4f c4;
-    Sk4f::Min(Sk4f::Max(Sk4f(r, g, b, a), Sk4f(0)), Sk4f(1)).store(c4.vec());
-    return c4;
 }

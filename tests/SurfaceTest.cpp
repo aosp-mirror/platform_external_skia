@@ -584,7 +584,6 @@ static void test_no_canvas1(skiatest::Reporter* reporter,
                             SkSurface::ContentChangeMode mode) {
     // Test passes by not asserting
     surface->notifyContentWillChange(mode);
-    SkDEBUGCODE(surface->validate();)
 }
 static void test_no_canvas2(skiatest::Reporter* reporter,
                             SkSurface* surface,
@@ -593,15 +592,9 @@ static void test_no_canvas2(skiatest::Reporter* reporter,
     // are made before a canvas is created.
     sk_sp<SkImage> image1 = surface->makeImageSnapshot();
     sk_sp<SkImage> aur_image1(image1);
-    SkDEBUGCODE(image1->validate();)
-    SkDEBUGCODE(surface->validate();)
     surface->notifyContentWillChange(mode);
-    SkDEBUGCODE(image1->validate();)
-    SkDEBUGCODE(surface->validate();)
     sk_sp<SkImage> image2 = surface->makeImageSnapshot();
     sk_sp<SkImage> aur_image2(image2);
-    SkDEBUGCODE(image2->validate();)
-    SkDEBUGCODE(surface->validate();)
     REPORTER_ASSERT(reporter, image1 != image2);
 }
 DEF_TEST(SurfaceNoCanvas, reporter) {
@@ -965,16 +958,12 @@ DEF_TEST(surface_image_unity, reporter) {
         }
     };
 
-    const int32_t sizes[] = { 0, 1, 1 << 15, 1 << 16, 1 << 18, 1 << 28, 1 << 29, 1 << 30, -1 };
+    const int32_t sizes[] = { -1, 0, 1, 1 << 18 };
     for (int cti = 0; cti <= kLastEnum_SkColorType; ++cti) {
         SkColorType ct = static_cast<SkColorType>(cti);
         for (int ati = 0; ati <= kLastEnum_SkAlphaType; ++ati) {
             SkAlphaType at = static_cast<SkAlphaType>(ati);
             for (int32_t size : sizes) {
-                // Large allocations tend to make the 32-bit bots run out of virtual address space.
-                if (sizeof(size_t) == 4 && size > (1<<20)) {
-                    continue;
-                }
                 do_test(SkImageInfo::Make(1, size, ct, at));
                 do_test(SkImageInfo::Make(size, 1, ct, at));
             }

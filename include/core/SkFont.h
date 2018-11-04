@@ -52,8 +52,7 @@ public:
 
     SkFont();
     SkFont(sk_sp<SkTypeface>, SkScalar size, uint32_t flags);
-    SkFont(sk_sp<SkTypeface>, SkScalar size, SkScalar scaleX, SkScalar skewX, uint32_t flags,
-           int align = 0);
+    SkFont(sk_sp<SkTypeface>, SkScalar size, SkScalar scaleX, SkScalar skewX, uint32_t flags);
 
     bool isForceAutoHinting() const { return SkToBool(fFlags & kForceAutoHinting_Flag); }
     bool isEmbeddedBitmaps() const { return SkToBool(fFlags & kEmbeddedBitmaps_Flag); }
@@ -101,6 +100,28 @@ public:
     void setSkewX(SkScalar);
     void setFlags(uint32_t);
 
+    /** Converts text into glyph indices.
+        Returns the number of glyph indices represented by text.
+        SkTextEncoding specifies how text represents characters or glyphs.
+        glyphs may be nullptr, to compute the glyph count.
+
+        Does not check text for valid character codes or valid glyph indices.
+
+        If byteLength equals zero, returns zero.
+        If byteLength includes a partial character, the partial character is ignored.
+
+        If SkTextEncoding is kUTF8_TextEncoding and text contains an invalid UTF-8 sequence,
+        zero is returned.
+
+        If maxGlyphCount is not sufficient to store all the glyphs, no glyphs are copied
+        (but the total glyph count is returned for subsequent buffer reallocation).
+
+        @param text          character storage encoded with SkPaint::TextEncoding
+        @param byteLength    length of character storage in bytes
+        @param glyphs        storage for glyph indices; may be nullptr
+        @param maxGlyphCount storage capacity
+        @return              number of glyphs represented by text of length byteLength
+    */
     int textToGlyphs(const void* text, size_t byteLength, SkTextEncoding,
                      SkGlyphID glyphs[], int maxGlyphCount) const;
 
@@ -125,7 +146,6 @@ private:
     SkScalar    fScaleX;
     SkScalar    fSkewX;
     uint8_t     fFlags;
-    uint8_t     fAlign;
     uint8_t     fHinting;
 };
 

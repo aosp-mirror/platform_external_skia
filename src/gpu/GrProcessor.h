@@ -17,7 +17,6 @@
 #include "GrSurfaceProxyPriv.h"
 #include "GrTextureProxy.h"
 #include "SkMath.h"
-#include "SkPM4f.h"
 #include "SkString.h"
 
 class GrContext;
@@ -102,7 +101,6 @@ public:
         kGrConicEffect_ClassID,
         kGrConstColorProcessor_ClassID,
         kGrConvexPolyEffect_ClassID,
-        kGrCubicEffect_ClassID,
         kGrDeviceSpaceTextureDecalFragmentProcessor_ClassID,
         kGrDiffuseLightingEffect_ClassID,
         kGrDisplacementMapEffect_ClassID,
