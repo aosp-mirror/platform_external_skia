@@ -672,7 +672,7 @@ sk_sp<const GrXferProcessor> PDLCDXferProcessor::Make(SkBlendMode mode,
     }
     SkColor4f blendConstantUPM = blendConstantPM.unpremul();
     float alpha = blendConstantUPM.fA;
-    blendConstantPM = { blendConstantUPM.fR, blendConstantUPM.fG, blendConstantUPM.fG, 1 };
+    blendConstantPM = { blendConstantUPM.fR, blendConstantUPM.fG, blendConstantUPM.fB, 1 };
     return sk_sp<GrXferProcessor>(new PDLCDXferProcessor(blendConstantPM, alpha));
 }
 
