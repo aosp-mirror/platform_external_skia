@@ -545,7 +545,7 @@ DM_INCLUDES = [
 ################################################################################
 
 def DM_ARGS(asan):
-    source = ["tests", "gm", "image", "lottie"]
+    source = ["gm", "image", "lottie"]
 
     # TODO(benjaminwagner): f16, pic-8888, serialize-8888, and tiles_rt-8888 fail.
     config = ["565", "8888", "pdf"]
@@ -658,3 +658,18 @@ def base_linkopts(os_conditions):
             ],
         ],
     )
+
+################################################################################
+## skottie_tool
+################################################################################
+
+SKOTTIE_TOOL_INCLUDES = [
+    "tools/flags",
+]
+
+SKOTTIE_TOOL_SRCS = [
+    "modules/skottie/src/SkottieTool.cpp",
+    # TODO(benjaminwagner): Add "flags" target.
+    "tools/flags/SkCommandLineFlags.cpp",
+    "tools/flags/SkCommandLineFlags.h",
+]
