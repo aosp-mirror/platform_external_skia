@@ -215,10 +215,6 @@ BASE_SRCS_ALL = struct(
         "src/**/*.h",
         "src/**/*.cpp",
         "src/**/*.inc",
-
-        # Third Party
-        "third_party/gif/*.cpp",
-        "third_party/gif/*.h",
     ],
     exclude = [
         # Exclude platform-dependent files.
@@ -281,7 +277,7 @@ def codec_srcs(limited):
             "src/codec/*Png*",
             "src/codec/*Raw*.cpp",
         ]
-    return native.glob(["src/codec/*.cpp"], exclude = exclude)
+    return native.glob(["src/codec/*.cpp", "third_party/gif/*.cpp"], exclude = exclude)
 
 # Platform-dependent SRCS for google3-default platform.
 BASE_SRCS_UNIX = struct(
@@ -622,14 +618,12 @@ def base_defines(os_conditions):
                 "SK_BUILD_FOR_UNIX",
                 "SK_SAMPLES_FOR_X",
                 "SK_PDF_USE_SFNTLY",
-                "SK_CODEC_DECODES_RAW",
                 "SK_HAS_PNG_LIBRARY",
                 "SK_HAS_WEBP_LIBRARY",
             ],
             # ANDROID
             [
                 "SK_BUILD_FOR_ANDROID",
-                "SK_CODEC_DECODES_RAW",
                 "SK_HAS_PNG_LIBRARY",
                 "SK_HAS_WEBP_LIBRARY",
             ],
