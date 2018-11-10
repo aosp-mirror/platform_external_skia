@@ -959,6 +959,7 @@ cc_test {
         "include/utils/",
         "include/utils/mac/",
         "modules/skottie/include/",
+        "modules/skottie/utils/",
         "modules/sksg/include/",
         "src/c/",
         "src/codec/",
