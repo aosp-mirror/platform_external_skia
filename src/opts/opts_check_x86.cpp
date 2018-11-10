@@ -7,9 +7,6 @@
 
 #include "SkBitmapProcState_opts_SSE2.h"
 #include "SkBitmapProcState_opts_SSSE3.h"
-#include "SkBlitMask.h"
-#include "SkBlitRow.h"
-#include "SkBlitRow_opts_SSE2.h"
 #include "SkCpu.h"
 
 
@@ -61,36 +58,4 @@ void SkBitmapProcState::platformProcs() {
     } else if (fMatrixProc == ClampX_ClampY_nofilter_scale) {
         fMatrixProc = ClampX_ClampY_nofilter_scale_SSE2;
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-static const SkBlitRow::Proc32 platform_32_procs_SSE2[] = {
-    nullptr,                               // S32_Opaque,
-    S32_Blend_BlitRow32_SSE2,           // S32_Blend,
-    nullptr,                            // Ported to SkOpts
-    S32A_Blend_BlitRow32_SSE2,          // S32A_Blend,
-};
-
-SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
-    if (SkCpu::Supports(SkCpu::SSE2)) {
-        return platform_32_procs_SSE2[flags];
-    } else {
-        return nullptr;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-SkBlitMask::BlitLCD16RowProc SkBlitMask::PlatformBlitRowProcs16(bool isOpaque) {
-    if (SkCpu::Supports(SkCpu::SSE2)) {
-        if (isOpaque) {
-            return SkBlitLCD16OpaqueRow_SSE2;
-        } else {
-            return SkBlitLCD16Row_SSE2;
-        }
-    } else {
-        return nullptr;
-    }
-
 }

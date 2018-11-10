@@ -12,6 +12,7 @@
 #include "GrRenderTargetContext.h"
 #include "GrTexture.h"
 #include "GrTextureAdjuster.h"
+#include "effects/GrYUVtoRGBEffect.h"
 #include "SkBitmapCache.h"
 #include "SkImage_Gpu.h"
 #include "SkImage_GpuBase.h"
@@ -99,13 +100,8 @@ sk_sp<SkImage> SkImage_GpuBase::onMakeSubset(const SkIRect& subset) const {
     desc.fHeight = subset.height();
     desc.fConfig = proxy->config();
 
-    GrBackendFormat format = proxy->backendFormat().makeTexture2D();
-    if (!format.isValid()) {
-        return nullptr;
-    }
-
     sk_sp<GrSurfaceContext> sContext(fContext->contextPriv().makeDeferredSurfaceContext(
-        format, desc, proxy->origin(), GrMipMapped::kNo, SkBackingFit::kExact, fBudgeted));
+        desc, proxy->origin(), GrMipMapped::kNo, SkBackingFit::kExact, fBudgeted));
     if (!sContext) {
         return nullptr;
     }
@@ -257,15 +253,9 @@ sk_sp<SkImage> SkImage_GpuBase::onMakeColorSpace(sk_sp<SkColorSpace> target) con
 
     sk_sp<GrTextureProxy> proxy = this->asTextureProxyRef();
 
-    GrBackendFormat format = proxy->backendFormat().makeTexture2D();
-    if (!format.isValid()) {
-        return nullptr;
-    }
-
     sk_sp<GrRenderTargetContext> renderTargetContext(
         fContext->contextPriv().makeDeferredRenderTargetContextWithFallback(
-            format, SkBackingFit::kExact, this->width(), this->height(),
-            proxy->config(), nullptr));
+            SkBackingFit::kExact, this->width(), this->height(), proxy->config(), nullptr));
     if (!renderTargetContext) {
         return nullptr;
     }
@@ -296,6 +286,85 @@ bool SkImage_GpuBase::onIsValid(GrContext* context) const {
     if (context && context != fContext.get()) {
         return false;
     }
+
+    return true;
+}
+
+bool SkImage_GpuBase::MakeTempTextureProxies(GrContext* ctx, const GrBackendTexture yuvaTextures[],
+                                             int numTextures, const SkYUVAIndex yuvaIndices[4],
+                                             GrSurfaceOrigin imageOrigin,
+                                             sk_sp<GrTextureProxy> tempTextureProxies[4]) {
+    GrProxyProvider* proxyProvider = ctx->contextPriv().proxyProvider();
+
+    // We need to make a copy of the input backend textures because we need to preserve the result
+    // of validate_backend_texture.
+    GrBackendTexture yuvaTexturesCopy[4];
+    for (int textureIndex = 0; textureIndex < numTextures; ++textureIndex) {
+        yuvaTexturesCopy[textureIndex] = yuvaTextures[textureIndex];
+        if (!ctx->contextPriv().caps()->getYUVAConfigFromBackendTexture(
+            yuvaTexturesCopy[textureIndex],
+            &yuvaTexturesCopy[textureIndex].fConfig)) {
+            return false;
+        }
+        SkASSERT(yuvaTexturesCopy[textureIndex].isValid());
+
+        tempTextureProxies[textureIndex] =
+            proxyProvider->wrapBackendTexture(yuvaTexturesCopy[textureIndex], imageOrigin);
+        if (!tempTextureProxies[textureIndex]) {
+            return false;
+        }
+
+        // Check that each texture contains the channel data for the corresponding YUVA index
+        GrPixelConfig config = yuvaTexturesCopy[textureIndex].fConfig;
+        for (int yuvaIndex = 0; yuvaIndex < SkYUVAIndex::kIndexCount; ++yuvaIndex) {
+            if (yuvaIndices[yuvaIndex].fIndex == textureIndex) {
+                switch (yuvaIndices[yuvaIndex].fChannel) {
+                    case SkColorChannel::kR:
+                        if (kAlpha_8_as_Alpha_GrPixelConfig == config) {
+                            return false;
+                        }
+                        break;
+                    case SkColorChannel::kG:
+                    case SkColorChannel::kB:
+                        if (kAlpha_8_as_Alpha_GrPixelConfig == config ||
+                            kAlpha_8_as_Red_GrPixelConfig == config) {
+                            return false;
+                        }
+                        break;
+                    case SkColorChannel::kA:
+                    default:
+                        if (kRGB_888_GrPixelConfig == config) {
+                            return false;
+                        }
+                        break;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+bool SkImage_GpuBase::RenderYUVAToRGBA(GrContext* ctx, GrRenderTargetContext* renderTargetContext,
+                                       const SkRect& rect, SkYUVColorSpace yuvColorSpace,
+                                       const sk_sp<GrTextureProxy> proxies[4],
+                                       const SkYUVAIndex yuvaIndices[4]) {
+    SkASSERT(renderTargetContext);
+    if (!renderTargetContext->asSurfaceProxy()) {
+        return false;
+    }
+
+    GrPaint paint;
+    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
+
+    paint.addColorFragmentProcessor(GrYUVtoRGBEffect::Make(proxies, yuvaIndices,
+                                                           yuvColorSpace,
+                                                           GrSamplerState::Filter::kNearest));
+
+    renderTargetContext->drawRect(GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(), rect);
+
+    // DDL TODO: in the promise image version we must not flush here
+    ctx->contextPriv().flushSurfaceWrites(renderTargetContext->asSurfaceProxy());
 
     return true;
 }

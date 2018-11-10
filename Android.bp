@@ -134,7 +134,6 @@ cc_library_static {
         "src/core/SkBitmapProcState_matrixProcs.cpp",
         "src/core/SkBitmapProvider.cpp",
         "src/core/SkBlendMode.cpp",
-        "src/core/SkBlitMask_D32.cpp",
         "src/core/SkBlitRow_D32.cpp",
         "src/core/SkBlitter.cpp",
         "src/core/SkBlitter_A8.cpp",
@@ -798,16 +797,12 @@ cc_library_static {
         arm: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_arm.cpp",
-                "src/opts/SkBlitRow_opts_arm.cpp",
             ],
 
             neon: {
                 srcs: [
                     "src/opts/SkBitmapProcState_arm_neon.cpp",
                     "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
-                    "src/opts/SkBlitMask_opts_arm_neon.cpp",
-                    "src/opts/SkBlitRow_opts_arm_neon.cpp",
                 ],
             },
         },
@@ -817,10 +812,6 @@ cc_library_static {
                 "src/opts/SkBitmapProcState_arm_neon.cpp",
                 "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_arm.cpp",
-                "src/opts/SkBlitMask_opts_arm_neon.cpp",
-                "src/opts/SkBlitRow_opts_arm.cpp",
-                "src/opts/SkBlitRow_opts_arm_neon.cpp",
                 "src/opts/SkOpts_crc32.cpp",
             ],
         },
@@ -828,16 +819,12 @@ cc_library_static {
         mips: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_none.cpp",
-                "src/opts/SkBlitRow_opts_none.cpp",
             ],
         },
 
         mips64: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_none.cpp",
-                "src/opts/SkBlitRow_opts_none.cpp",
             ],
         },
 
@@ -845,7 +832,6 @@ cc_library_static {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_SSE2.cpp",
                 "src/opts/SkBitmapProcState_opts_SSSE3.cpp",
-                "src/opts/SkBlitRow_opts_SSE2.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
@@ -859,7 +845,6 @@ cc_library_static {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_SSE2.cpp",
                 "src/opts/SkBitmapProcState_opts_SSSE3.cpp",
-                "src/opts/SkBlitRow_opts_SSE2.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
@@ -1396,7 +1381,6 @@ cc_test {
         "tests/BitmapTest.cpp",
         "tests/BlendTest.cpp",
         "tests/BlitMaskClip.cpp",
-        "tests/BlitMaskTest.cpp",
         "tests/BlurTest.cpp",
         "tests/CTest.cpp",
         "tests/CachedDataTest.cpp",
