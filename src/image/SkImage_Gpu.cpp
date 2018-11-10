@@ -39,7 +39,6 @@
 #include "SkImage_Gpu.h"
 #include "SkMipMap.h"
 #include "SkTraceEvent.h"
-#include "SkYUVAIndex.h"
 #include "effects/GrYUVtoRGBEffect.h"
 #include "gl/GrGLTexture.h"
 
@@ -121,84 +120,26 @@ sk_sp<SkImage> SkImage_Gpu::ConvertYUVATexturesToRGB(
         SkBudgeted isBudgeted, GrRenderTargetContext* renderTargetContext) {
     SkASSERT(renderTargetContext);
 
-    GrProxyProvider* proxyProvider = ctx->contextPriv().proxyProvider();
-
-    // We need to make a copy of the input backend textures because we need to preserve the result
-    // of validate_backend_texture.
-    GrBackendTexture yuvaTexturesCopy[4];
-
-    for (int i = 0; i < 4; ++i) {
-        // Validate that the yuvaIndices refer to valid backend textures.
-        const SkYUVAIndex& yuvaIndex = yuvaIndices[i];
-        if (i == 3 && yuvaIndex.fIndex == -1) {
-            // Meaning the A plane isn't passed in.
-            continue;
-        }
-        if (yuvaIndex.fIndex == -1 || yuvaIndex.fIndex > 3) {
-            // Y plane, U plane, and V plane must refer to image sources being passed in. There are
-            // at most 4 images sources being passed in, could not have a index more than 3.
-            return nullptr;
-        }
-
-        if (!yuvaTexturesCopy[yuvaIndex.fIndex].isValid()) {
-            yuvaTexturesCopy[yuvaIndex.fIndex] = yuvaTextures[yuvaIndex.fIndex];
-
-            if (!ctx->contextPriv().caps()->getYUVAConfigFromBackendTexture(
-                                                yuvaTexturesCopy[yuvaIndex.fIndex],
-                                                &yuvaTexturesCopy[yuvaIndex.fIndex].fConfig)) {
-                return nullptr;
-            }
-        }
-
-        // TODO: Check that for each plane, the channel actually exist in the image source we are
-        // reading from.
-    }
-
-    sk_sp<GrTextureProxy> tempTextureProxies[4];
-    for (int i = 0; i < 4; ++i) {
-        // Fill in tempTextureProxies to avoid duplicate texture proxies.
-        int textureIndex = yuvaIndices[i].fIndex;
-
-        // Safely ignore since this means we are missing the A plane.
-        if (textureIndex == -1) {
-            SkASSERT(SkYUVAIndex::kA_Index == i);
-            continue;
-        }
-
-        if (!tempTextureProxies[textureIndex]) {
-            SkASSERT(yuvaTexturesCopy[textureIndex].isValid());
-            tempTextureProxies[textureIndex] =
-                    proxyProvider->wrapBackendTexture(yuvaTexturesCopy[textureIndex], origin);
-            if (!tempTextureProxies[textureIndex]) {
-                return nullptr;
-            }
-        }
-    }
-
-    const int width = size.width();
-    const int height = size.height();
-
-    GrPaint paint;
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    // TODO: Modify the fragment processor to sample from different channel instead of taking nv12
-    // bool.
-    paint.addColorFragmentProcessor(GrYUVtoRGBEffect::Make(tempTextureProxies, yuvaIndices,
-                                                           yuvColorSpace,
-                                                           GrSamplerState::Filter::kNearest));
-
-    const SkRect rect = SkRect::MakeIWH(width, height);
-
-    renderTargetContext->drawRect(GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(), rect);
-
-    if (!renderTargetContext->asSurfaceProxy()) {
+    int numTextures;
+    if (!SkYUVAIndex::AreValidIndices(yuvaIndices, &numTextures)) {
         return nullptr;
     }
 
-    // DDL TODO: in the promise image version we must not flush here
-    ctx->contextPriv().flushSurfaceWrites(renderTargetContext->asSurfaceProxy());
+    sk_sp<GrTextureProxy> tempTextureProxies[4];
+    if (!SkImage_GpuBase::MakeTempTextureProxies(ctx, yuvaTextures, numTextures, yuvaIndices,
+                                                 origin, tempTextureProxies)) {
+        return nullptr;
+    }
 
+    const SkRect rect = SkRect::MakeIWH(size.width(), size.height());
+    if (!RenderYUVAToRGBA(ctx, renderTargetContext, rect, yuvColorSpace,
+                          tempTextureProxies, yuvaIndices)) {
+        return nullptr;
+    }
+
+    SkAlphaType at = GetAlphaTypeFromYUVAIndices(yuvaIndices);
     // MDB: this call is okay bc we know 'renderTargetContext' was exact
-    return sk_make_sp<SkImage_Gpu>(sk_ref_sp(ctx), kNeedNewImageUniqueID, kOpaque_SkAlphaType,
+    return sk_make_sp<SkImage_Gpu>(sk_ref_sp(ctx), kNeedNewImageUniqueID, at,
                                    renderTargetContext->asTextureProxyRef(),
                                    renderTargetContext->colorSpaceInfo().refColorSpace(),
                                    isBudgeted);
@@ -214,13 +155,10 @@ sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopy(GrContext* ctx,
     const int width = imageSize.width();
     const int height = imageSize.height();
 
-    const GrBackendFormat format =
-            ctx->contextPriv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
-
     // Needs to create a render target in order to draw to it for the yuv->rgb conversion.
     sk_sp<GrRenderTargetContext> renderTargetContext(
             ctx->contextPriv().makeDeferredRenderTargetContext(
-                    format, SkBackingFit::kExact, width, height, kRGBA_8888_GrPixelConfig,
+                    SkBackingFit::kExact, width, height, kRGBA_8888_GrPixelConfig,
                     std::move(imageColorSpace), 1, GrMipMapped::kNo, imageOrigin));
     if (!renderTargetContext) {
         return nullptr;
@@ -242,8 +180,9 @@ sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopyWithExternalBackend(
         sk_sp<SkColorSpace> imageColorSpace) {
     GrBackendTexture backendTextureCopy = backendTexture;
 
+    SkAlphaType at = SkImage_GpuBase::GetAlphaTypeFromYUVAIndices(yuvaIndices);
     if (!SkImage_Gpu::ValidateBackendTexture(ctx, backendTextureCopy, &backendTextureCopy.fConfig,
-                                             kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr)) {
+                                             kRGBA_8888_SkColorType, at, nullptr)) {
         return nullptr;
     }
 
@@ -373,6 +312,13 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+static GrTextureType TextureTypeFromBackendFormat(const GrBackendFormat& backendFormat) {
+    if (const GrGLenum* target = backendFormat.getGLTarget()) {
+        return GrGLTexture::TextureTypeFromTarget(*target);
+    }
+    return GrTextureType::k2D;
+}
+
 sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
                                                const GrBackendFormat& backendFormat,
                                                int width,
@@ -417,8 +363,9 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
         return nullptr;
     }
 
-    if (mipMapped == GrMipMapped::kYes &&
-        GrTextureTypeHasRestrictedSampling(backendFormat.textureType())) {
+    GrTextureType textureType = TextureTypeFromBackendFormat(backendFormat);
+
+    if (mipMapped == GrMipMapped::kYes && GrTextureTypeHasRestrictedSampling(textureType)) {
         // It is invalid to have a GL_TEXTURE_EXTERNAL or GL_TEXTURE_RECTANGLE and have mips as
         // well.
         return nullptr;
@@ -440,7 +387,7 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
 
                 return promiseHelper.getTexture(resourceProvider, config);
             },
-            backendFormat, desc, origin, mipMapped, GrInternalSurfaceFlags::kNone,
+            desc, origin, mipMapped, textureType, GrInternalSurfaceFlags::kNone,
             SkBackingFit::kExact, SkBudgeted::kNo,
             GrSurfaceProxy::LazyInstantiationType::kUninstantiate);
 
@@ -590,8 +537,7 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseYUVATexture(GrContext* context,
                 return sk_ref_sp<GrTexture>(tmp->getTexture());
 #endif
             },
-            yuvaFormats[yuvaIndices[SkYUVAIndex::kY_Index].fIndex],
-            desc, imageOrigin, GrMipMapped::kNo,
+            desc, imageOrigin, GrMipMapped::kNo, GrTextureType::k2D,
             GrInternalSurfaceFlags::kNone, SkBackingFit::kExact, SkBudgeted::kNo,
             GrSurfaceProxy::LazyInstantiationType::kUninstantiate);
 
