@@ -266,16 +266,15 @@ BASE_SRCS_ALL = struct(
 )
 
 def codec_srcs(limited):
-    """Sources for the codecs. Excludes Ico, Webp, Png, and Raw if limited."""
+    """Sources for the codecs. Excludes Raw, and Ico, Webp, and Png if limited."""
 
     # TODO: Enable wuffs in Google3
-    exclude = ["src/codec/SkWuffsCodec.cpp"]
+    exclude = ["src/codec/SkWuffsCodec.cpp", "src/codec/*Raw*.cpp"]
     if limited:
         exclude += [
             "src/codec/*Ico*.cpp",
             "src/codec/*Webp*.cpp",
             "src/codec/*Png*",
-            "src/codec/*Raw*.cpp",
         ]
     return native.glob(["src/codec/*.cpp", "third_party/gif/*.cpp"], exclude = exclude)
 
@@ -301,8 +300,6 @@ BASE_SRCS_UNIX = struct(
         "src/ports/SkFontMgr_empty_factory.cpp",
         "src/ports/SkFontMgr_fontconfig.cpp",
         "src/ports/SkFontMgr_fontconfig_factory.cpp",
-        "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -330,8 +327,6 @@ BASE_SRCS_ANDROID = struct(
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
-        "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -363,8 +358,6 @@ BASE_SRCS_IOS = struct(
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
-        "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -552,7 +545,7 @@ DM_INCLUDES = [
 ################################################################################
 
 def DM_ARGS(asan):
-    source = ["tests", "gm", "image", "lottie"]
+    source = ["gm", "image", "lottie"]
 
     # TODO(benjaminwagner): f16, pic-8888, serialize-8888, and tiles_rt-8888 fail.
     config = ["565", "8888", "pdf"]
@@ -663,3 +656,21 @@ def base_linkopts(os_conditions):
             ],
         ],
     )
+
+################################################################################
+## skottie_tool
+################################################################################
+
+SKOTTIE_TOOL_INCLUDES = [
+    "modules/skottie/utils",
+    "tools/flags",
+]
+
+SKOTTIE_TOOL_SRCS = [
+    "modules/skottie/src/SkottieTool.cpp",
+    "modules/skottie/utils/SkottieUtils.cpp",
+    "modules/skottie/utils/SkottieUtils.h",
+    # TODO(benjaminwagner): Add "flags" target.
+    "tools/flags/SkCommandLineFlags.cpp",
+    "tools/flags/SkCommandLineFlags.h",
+]

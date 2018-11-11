@@ -647,3 +647,4 @@ int GrDrawOpAtlasConfig::PlotsPerLongDimensionForARGB(int maxDimension) {
 
 constexpr int GrDrawOpAtlasConfig::kMaxDistanceFieldDim;
 constexpr int GrDrawOpAtlasConfig::kPlotSize;
+

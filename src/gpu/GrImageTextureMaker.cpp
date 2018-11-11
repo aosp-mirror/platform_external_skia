@@ -90,6 +90,9 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProc
     const GrSamplerState::Filter* filterOrNullForBicubic) {
 
     // Check simple cases to see if we need to fall back to flattening the image
+    // TODO: See if we can relax this -- for example, if filterConstraint
+    //       is kYes_FilterConstraint we still may not need a TextureDomain
+    //       in some cases.
     if (!textureMatrix.isIdentity() || kNo_FilterConstraint != filterConstraint ||
         !coordsLimitedToConstraintRect || !filterOrNullForBicubic) {
         return this->INHERITED::createFragmentProcessor(textureMatrix, constraintRect,
@@ -98,11 +101,10 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProc
                                                         filterOrNullForBicubic);
     }
 
-    // Check to see if the client has given us pre-mipped textures
+    // Check to see if the client has given us pre-mipped textures or we can generate them
     // If not, fall back to bilerp
-    // TODO: investigate flattening the image and generating miplevels
     GrSamplerState::Filter filter = *filterOrNullForBicubic;
-    if (GrSamplerState::Filter::kMipMap == filter && !fImage->canBeMipmapped(fContext)) {
+    if (GrSamplerState::Filter::kMipMap == filter && !fImage->setupMipmapsForPlanes()) {
         filter = GrSamplerState::Filter::kBilerp;
     }
 
@@ -110,4 +112,3 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProc
                                   fImage->fYUVColorSpace, filter);
 
 }
-

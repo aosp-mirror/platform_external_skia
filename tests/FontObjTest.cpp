@@ -34,6 +34,23 @@ static void test_cachedfont(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, paint.getHinting() == p.getHinting());
 }
 
+static void test_fontmetrics(skiatest::Reporter* reporter,
+                             const SkPaint& paint, const SkFont& font) {
+    SkFontMetrics fm0, fm1;
+    SkScalar h0 = paint.getFontMetrics(&fm0);
+    SkScalar h1 = font.getMetrics(&fm1);
+
+    REPORTER_ASSERT(reporter, h0 == h1);
+#define CMP(field) REPORTER_ASSERT(reporter, fm0.field == fm1.field)
+    CMP(fFlags);
+    CMP(fTop);
+    CMP(fAscent);
+    CMP(fDescent);
+    CMP(fBottom);
+    CMP(fLeading);
+#undef CMP
+}
+
 static void test_cachedfont(skiatest::Reporter* reporter) {
     static const char* const faces[] = {
         nullptr,   // default font
@@ -42,18 +59,18 @@ static void test_cachedfont(skiatest::Reporter* reporter) {
     };
 
     static const struct {
-        SkPaint::Hinting    hinting;
-        unsigned            flags;
+        SkFontHinting   hinting;
+        unsigned        flags;
     } settings[] = {
-        { SkPaint::kNo_Hinting,     0                               },
-        { SkPaint::kNo_Hinting,     SkPaint::kLinearText_Flag       },
-        { SkPaint::kNo_Hinting,     SkPaint::kSubpixelText_Flag     },
-        { SkPaint::kSlight_Hinting, 0                               },
-        { SkPaint::kSlight_Hinting, SkPaint::kLinearText_Flag       },
-        { SkPaint::kSlight_Hinting, SkPaint::kSubpixelText_Flag     },
-        { SkPaint::kNormal_Hinting, 0                               },
-        { SkPaint::kNormal_Hinting, SkPaint::kLinearText_Flag       },
-        { SkPaint::kNormal_Hinting, SkPaint::kSubpixelText_Flag     },
+        { kNo_SkFontHinting,     0                               },
+        { kNo_SkFontHinting,     SkPaint::kLinearText_Flag       },
+        { kNo_SkFontHinting,     SkPaint::kSubpixelText_Flag     },
+        { kSlight_SkFontHinting, 0                               },
+        { kSlight_SkFontHinting, SkPaint::kLinearText_Flag       },
+        { kSlight_SkFontHinting, SkPaint::kSubpixelText_Flag     },
+        { kNormal_SkFontHinting, 0                               },
+        { kNormal_SkFontHinting, SkPaint::kLinearText_Flag       },
+        { kNormal_SkFontHinting, SkPaint::kSubpixelText_Flag     },
     };
 
     static const struct {
@@ -85,6 +102,7 @@ static void test_cachedfont(skiatest::Reporter* reporter) {
                 const SkFont font(SkFont::LEGACY_ExtractFromPaint(paint));
 
                 test_cachedfont(reporter, paint, font);
+                test_fontmetrics(reporter, paint, font);
 
                 SkRect bounds;
 
@@ -112,7 +130,7 @@ static void test_aa_hinting(skiatest::Reporter* reporter) {
     for (bool aa : {false, true}) {
         paint.setAntiAlias(aa);
         for (int hint = 0; hint <= 3; ++hint) {
-            paint.setHinting((SkPaint::Hinting)hint);
+            paint.setHinting((SkFontHinting)hint);
             SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
 
             SkPaint p2;

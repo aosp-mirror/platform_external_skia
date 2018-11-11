@@ -34,7 +34,7 @@
 
 SkExclusiveStrikePtr SkPDFFont::MakeVectorCache(SkTypeface* face, int* size) {
     SkPaint tmpPaint;
-    tmpPaint.setHinting(SkPaint::kNo_Hinting);
+    tmpPaint.setHinting(kNo_SkFontHinting);
     tmpPaint.setTypeface(sk_ref_sp(face));
     int unitsPerEm = face->getUnitsPerEm();
     if (unitsPerEm <= 0) {
@@ -46,7 +46,7 @@ SkExclusiveStrikePtr SkPDFFont::MakeVectorCache(SkTypeface* face, int* size) {
     tmpPaint.setTextSize((SkScalar)unitsPerEm);
     const SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
     return SkStrikeCache::FindOrCreateStrikeExclusive(
-            tmpPaint, &props, SkScalerContextFlags::kFakeGammaAndBoostContrast, nullptr);
+            tmpPaint, props, SkScalerContextFlags::kFakeGammaAndBoostContrast, SkMatrix::I());
 }
 
 namespace {
@@ -154,7 +154,7 @@ const SkAdvancedTypefaceMetrics* SkPDFFont::GetMetrics(SkTypeface* typeface,
 
     if (0 == metrics->fStemV || 0 == metrics->fCapHeight) {
         SkPaint tmpPaint;
-        tmpPaint.setHinting(SkPaint::kNo_Hinting);
+        tmpPaint.setHinting(kNo_SkFontHinting);
         tmpPaint.setTypeface(sk_ref_sp(typeface));
         tmpPaint.setTextSize(1000);  // glyph coordinate system
         if (0 == metrics->fStemV) {

@@ -76,13 +76,13 @@ public:
     static ExclusiveStrikePtr CreateStrikeExclusive(
             const SkDescriptor& desc,
             std::unique_ptr<SkScalerContext> scaler,
-            SkPaint::FontMetrics* maybeMetrics = nullptr,
+            SkFontMetrics* maybeMetrics = nullptr,
             std::unique_ptr<SkStrikePinner> = nullptr);
 
     ExclusiveStrikePtr createStrikeExclusive(
             const SkDescriptor& desc,
             std::unique_ptr<SkScalerContext> scaler,
-            SkPaint::FontMetrics* maybeMetrics = nullptr,
+            SkFontMetrics* maybeMetrics = nullptr,
             std::unique_ptr<SkStrikePinner> = nullptr);
 
     static ExclusiveStrikePtr FindOrCreateStrikeExclusive(
@@ -104,11 +104,11 @@ public:
 
     static ExclusiveStrikePtr FindOrCreateStrikeExclusive(
             const SkPaint& paint,
-            const SkSurfaceProps* surfaceProps,
+            const SkSurfaceProps& surfaceProps,
             SkScalerContextFlags scalerContextFlags,
-            const SkMatrix* deviceMatrix);
+            const SkMatrix& deviceMatrix);
 
-    static ExclusiveStrikePtr FindOrCreateStrikeExclusive(const SkPaint& paint);
+    static ExclusiveStrikePtr FindOrCreateStrikeWithNoDeviceExclusive(const SkPaint& paint);
 
     static std::unique_ptr<SkScalerContext> CreateScalerContext(
             const SkDescriptor&, const SkScalerContextEffects&, const SkTypeface&);

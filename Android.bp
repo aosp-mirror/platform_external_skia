@@ -91,6 +91,7 @@ cc_library_static {
         "src/c/sk_paint.cpp",
         "src/c/sk_surface.cpp",
         "src/codec/SkAndroidCodec.cpp",
+        "src/codec/SkAndroidCodecAdapter.cpp",
         "src/codec/SkBmpBaseCodec.cpp",
         "src/codec/SkBmpCodec.cpp",
         "src/codec/SkBmpMaskCodec.cpp",
@@ -109,14 +110,12 @@ cc_library_static {
         "src/codec/SkMaskSwizzler.cpp",
         "src/codec/SkMasks.cpp",
         "src/codec/SkPngCodec.cpp",
-        "src/codec/SkRawAdapterCodec.cpp",
         "src/codec/SkRawCodec.cpp",
         "src/codec/SkSampledCodec.cpp",
         "src/codec/SkSampler.cpp",
         "src/codec/SkStreamBuffer.cpp",
         "src/codec/SkSwizzler.cpp",
         "src/codec/SkWbmpCodec.cpp",
-        "src/codec/SkWebpAdapterCodec.cpp",
         "src/codec/SkWebpCodec.cpp",
         "src/core/SkAAClip.cpp",
         "src/core/SkATrace.cpp",
@@ -135,7 +134,6 @@ cc_library_static {
         "src/core/SkBitmapProcState_matrixProcs.cpp",
         "src/core/SkBitmapProvider.cpp",
         "src/core/SkBlendMode.cpp",
-        "src/core/SkBlitMask_D32.cpp",
         "src/core/SkBlitRow_D32.cpp",
         "src/core/SkBlitter.cpp",
         "src/core/SkBlitter_A8.cpp",
@@ -698,7 +696,6 @@ cc_library_static {
         "src/ports/SkFontMgr_android_factory.cpp",
         "src/ports/SkFontMgr_android_parser.cpp",
         "src/ports/SkGlobalInitialization_default.cpp",
-        "src/ports/SkGlobalInitialization_default_imagefilters.cpp",
         "src/ports/SkImageGenerator_skia.cpp",
         "src/ports/SkMemory_malloc.cpp",
         "src/ports/SkOSFile_posix.cpp",
@@ -800,16 +797,12 @@ cc_library_static {
         arm: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_arm.cpp",
-                "src/opts/SkBlitRow_opts_arm.cpp",
             ],
 
             neon: {
                 srcs: [
                     "src/opts/SkBitmapProcState_arm_neon.cpp",
                     "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
-                    "src/opts/SkBlitMask_opts_arm_neon.cpp",
-                    "src/opts/SkBlitRow_opts_arm_neon.cpp",
                 ],
             },
         },
@@ -819,10 +812,6 @@ cc_library_static {
                 "src/opts/SkBitmapProcState_arm_neon.cpp",
                 "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_arm.cpp",
-                "src/opts/SkBlitMask_opts_arm_neon.cpp",
-                "src/opts/SkBlitRow_opts_arm.cpp",
-                "src/opts/SkBlitRow_opts_arm_neon.cpp",
                 "src/opts/SkOpts_crc32.cpp",
             ],
         },
@@ -830,16 +819,12 @@ cc_library_static {
         mips: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_none.cpp",
-                "src/opts/SkBlitRow_opts_none.cpp",
             ],
         },
 
         mips64: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_none.cpp",
-                "src/opts/SkBlitMask_opts_none.cpp",
-                "src/opts/SkBlitRow_opts_none.cpp",
             ],
         },
 
@@ -847,7 +832,6 @@ cc_library_static {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_SSE2.cpp",
                 "src/opts/SkBitmapProcState_opts_SSSE3.cpp",
-                "src/opts/SkBlitRow_opts_SSE2.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
@@ -861,7 +845,6 @@ cc_library_static {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_SSE2.cpp",
                 "src/opts/SkBitmapProcState_opts_SSSE3.cpp",
-                "src/opts/SkBlitRow_opts_SSE2.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
@@ -976,6 +959,7 @@ cc_test {
         "include/utils/",
         "include/utils/mac/",
         "modules/skottie/include/",
+        "modules/skottie/utils/",
         "modules/sksg/include/",
         "src/c/",
         "src/codec/",
@@ -1398,7 +1382,6 @@ cc_test {
         "tests/BitmapTest.cpp",
         "tests/BlendTest.cpp",
         "tests/BlitMaskClip.cpp",
-        "tests/BlitMaskTest.cpp",
         "tests/BlurTest.cpp",
         "tests/CTest.cpp",
         "tests/CachedDataTest.cpp",

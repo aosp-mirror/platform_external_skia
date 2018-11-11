@@ -198,30 +198,37 @@ public:
         kFull_Hinting   = 3, //!< modifies glyph outlines for maximum constrast
     };
 
-    /** Returns level of glyph outline adjustment.
-
-        @return  one of: kNo_Hinting, kSlight_Hinting, kNormal_Hinting, kFull_Hinting
-    */
-    Hinting getHinting() const {
-        return static_cast<Hinting>(fBitfields.fHinting);
-    }
-
     /** Sets level of glyph outline adjustment.
         Does not check for valid values of hintingLevel.
 
-        @param hintingLevel  one of: kNo_SkFontHinting, kSlight_SkFontHinting,
-                                     kNormal_SkFontHinting, kFull_SkFontHinting
+        @param hintingLevel  one of: SkFontHinting::kNone, SkFontHinting::kSlight,
+                                     SkFontHinting::kNormal, SkFontHinting::kFull
     */
     void setHinting(SkFontHinting hintingLevel);
 
-     /** Sets level of glyph outline adjustment.
-        Does not check for valid values of hintingLevel.
+#ifdef SK_SUPPORT_LEGACY_NESTED_HINTINGENUM
+    /** Returns level of glyph outline adjustment.
 
-        @param hintingLevel  one of: kNo_Hinting, kSlight_Hinting, kNormal_Hinting, kFull_Hinting
+        @return  one of: kNo_Hinting, kSlight_Hinting, kNormal_Hinting, kFull_Hinting
+     */
+    Hinting getHinting() const { return (Hinting)fBitfields.fHinting; }
+
+    /** Sets level of glyph outline adjustment.
+        Does not check for valid values of h.
+
+        @param h  one of: kNo_Hinting, kSlight_Hinting, kNormal_Hinting, kFull_Hinting
     */
-   void setHinting(Hinting hintingLevel) {
-        this->setHinting((SkFontHinting)hintingLevel);
+    void setHinting(Hinting h) {
+        this->setHinting((SkFontHinting)h);
     }
+#else
+    /** Returns level of glyph outline adjustment.
+
+        @return  one of: SkFontHinting::kNone, SkFontHinting::kSlight, SkFontHinting::kNormal,
+                         SkFontHinting::kFull
+     */
+    SkFontHinting getHinting() const { return (SkFontHinting)fBitfields.fHinting; }
+#endif
 
     /** \enum SkPaint::Flags
         The bit values stored in Flags.
@@ -380,9 +387,9 @@ public:
     */
     void setEmbeddedBitmapText(bool useEmbeddedBitmapText);
 
-    /** Returns true if SkPaint::Hinting is set to kNormal_Hinting or kFull_Hinting, and if
-        platform uses FreeType as the font manager. If true, instructs
-        the font manager to always hint glyphs.
+    /** Returns true if SkPaint::Hinting is set to SkFontHinting::kNormal or
+        SkFontHinting::kFull, and if platform uses FreeType as the font manager.
+        If true, instructs the font manager to always hint glyphs.
 
         Equivalent to getFlags() masked with kAutoHinting_Flag.
 
@@ -393,10 +400,10 @@ public:
     }
 
     /** Sets whether to always hint glyphs.
-        If SkPaint::Hinting is set to kNormal_Hinting or kFull_Hinting and useAutohinter is set,
-        instructs the font manager to always hint glyphs.
-        auto-hinting has no effect if SkPaint::Hinting is set to kNo_Hinting or
-        kSlight_Hinting.
+        If SkPaint::Hinting is set to SkFontHinting::kNormal or SkFontHinting::kFull
+        and useAutohinter is set, instructs the font manager to always hint glyphs.
+        auto-hinting has no effect if SkPaint::Hinting is set to SkFontHinting::kNone or
+        SkFontHinting::kSlight.
 
         Only affects platforms that use FreeType as the font manager.
 
@@ -1223,11 +1230,10 @@ public:
 
     /** Returns the union of bounds of all glyphs.
         Returned dimensions are computed by font manager from font data,
-        ignoring SkPaint::Hinting. Includes text size, text scale x,
-        and text skew x, but not fake bold or SkPathEffect.
+        ignoring SkPaint::Hinting. Includes font metrics, but not fake bold or SkPathEffect.
 
-        If text size is large, text scale x is one, and text skew x is zero,
-        returns the same bounds as:
+        If text size is large, text scale is one, and text skew is zero,
+        returns the bounds as:
         { SkFontMetrics::fXMin, SkFontMetrics::fTop, SkFontMetrics::fXMax, SkFontMetrics::fBottom }.
 
         @return  union of bounds of all glyphs
@@ -1323,7 +1329,6 @@ private:
     friend class SkGlyphRun;
     friend class SkGlyphRunBuilder;
     SkPaint(const SkPaint&, const SkRunFont&);
-    typedef const SkGlyph& (*GlyphCacheProc)(SkGlyphCache*, const char**, const char*);
 
     sk_sp<SkTypeface>     fTypeface;
     sk_sp<SkPathEffect>   fPathEffect;
@@ -1354,9 +1359,6 @@ private:
         } fBitfields;
         uint32_t fBitfieldsUInt;
     };
-
-    static GlyphCacheProc GetGlyphCacheProc(TextEncoding encoding,
-                                            bool needFullMetrics);
 
     SkScalar measure_text(SkGlyphCache*, const char* text, size_t length,
                           int* count, SkRect* bounds) const;
@@ -1401,6 +1403,7 @@ private:
     friend class SkCanonicalizePaint;
     friend class SkCanvas;
     friend class SkDraw;
+    friend class SkFont;
     friend class SkGlyphRunListPainter;
     friend class SkPaintPriv;
     friend class SkPDFDevice;
