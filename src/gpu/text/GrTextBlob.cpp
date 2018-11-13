@@ -125,7 +125,7 @@ void GrTextBlob::Run::appendGlyph(GrTextBlob* blob,
 
         GrMaskFormat format = glyph->fMaskFormat;
 
-        Run::SubRunInfo* subRun = &fSubRunInfo.back();
+        SubRun* subRun = &fSubRunInfo.back();
         if (fInitialized && subRun->maskFormat() != format) {
             subRun = &pushBackSubRun();
             subRun->setStrike(strike);
@@ -134,47 +134,11 @@ void GrTextBlob::Run::appendGlyph(GrTextBlob* blob,
         }
 
         fInitialized = true;
-
-        bool hasW = subRun->hasWCoord();
-        // glyphs drawn in perspective must always have a w coord.
-        SkASSERT(hasW || !blob->fInitialViewMatrix.hasPerspective());
-
-        size_t vertexStride = GetVertexStride(format, hasW);
-
         subRun->setMaskFormat(format);
-
-        subRun->joinGlyphBounds(glyphRect);
         subRun->setColor(color);
-
-        intptr_t vertex = reinterpret_cast<intptr_t>(blob->fVertices + subRun->vertexEndIndex());
-
-        // We always write the third position component used by SDFs. If it is unused it gets
-        // overwritten. Similarly, we always write the color and the blob will later overwrite it
-        // with texture coords if it is unused.
-        size_t colorOffset = hasW ? sizeof(SkPoint3) : sizeof(SkPoint);
-        // V0
-        *reinterpret_cast<SkPoint3*>(vertex) = {glyphRect.fLeft, glyphRect.fTop, 1.f};
-        *reinterpret_cast<GrColor*>(vertex + colorOffset) = color;
-        vertex += vertexStride;
-
-        // V1
-        *reinterpret_cast<SkPoint3*>(vertex) = {glyphRect.fLeft, glyphRect.fBottom, 1.f};
-        *reinterpret_cast<GrColor*>(vertex + colorOffset) = color;
-        vertex += vertexStride;
-
-        // V2
-        *reinterpret_cast<SkPoint3*>(vertex) = {glyphRect.fRight, glyphRect.fTop, 1.f};
-        *reinterpret_cast<GrColor*>(vertex + colorOffset) = color;
-        vertex += vertexStride;
-
-        // V3
-        *reinterpret_cast<SkPoint3*>(vertex) = {glyphRect.fRight, glyphRect.fBottom, 1.f};
-        *reinterpret_cast<GrColor*>(vertex + colorOffset) = color;
-
-        subRun->appendVertices(vertexStride);
-        blob->fGlyphs[subRun->glyphEndIndex()] = glyph;
-        subRun->glyphAppended();
         subRun->setNeedsTransform(needsTransform);
+
+        subRun->appendGlyph(blob, glyph, glyphRect);
     }
 }
 
@@ -272,7 +236,7 @@ bool GrTextBlob::mustRegenerate(const SkPaint& paint, bool anyRunHasSubpixelPosi
 }
 
 inline std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(
-        const Run::SubRunInfo& info, int glyphCount, uint16_t run, uint16_t subRun,
+        const SubRun& info, int glyphCount, uint16_t run, uint16_t subRun,
         const SkMatrix& viewMatrix, SkScalar x, SkScalar y, const SkIRect& clipRect,
         const SkPaint& paint, const SkPMColor4f& filteredColor, const SkSurfaceProps& props,
         const GrDistanceFieldAdjustTable* distanceAdjustTable, GrTextTarget* target) {
@@ -424,7 +388,7 @@ void GrTextBlob::flush(GrTextTarget* target, const SkSurfaceProps& props,
 
         int lastSubRun = SkTMin(run.fSubRunInfo.count(), 1 << 16) - 1;
         for (int subRun = 0; subRun <= lastSubRun; subRun++) {
-            const Run::SubRunInfo& info = run.fSubRunInfo[subRun];
+            const SubRun& info = run.fSubRunInfo[subRun];
             int glyphCount = info.glyphCount();
             if (0 == glyphCount) {
                 continue;
@@ -480,7 +444,7 @@ std::unique_ptr<GrDrawOp> GrTextBlob::test_makeOp(
         SkScalar x, SkScalar y, const SkPaint& paint, const SkPMColor4f& filteredColor,
         const SkSurfaceProps& props, const GrDistanceFieldAdjustTable* distanceAdjustTable,
         GrTextTarget* target) {
-    const GrTextBlob::Run::SubRunInfo& info = fRuns[run].fSubRunInfo[subRun];
+    const GrTextBlob::SubRun& info = fRuns[run].fSubRunInfo[subRun];
     SkIRect emptyRect = SkIRect::MakeEmpty();
     return this->makeOp(info, glyphCount, run, subRun, viewMatrix, x, y, emptyRect,
                         paint, filteredColor, props, distanceAdjustTable, target);
@@ -534,8 +498,8 @@ void GrTextBlob::AssertEqual(const GrTextBlob& l, const GrTextBlob& r) {
 
         SkASSERT_RELEASE(lRun.fSubRunInfo.count() == rRun.fSubRunInfo.count());
         for(int j = 0; j < lRun.fSubRunInfo.count(); j++) {
-            const Run::SubRunInfo& lSubRun = lRun.fSubRunInfo[j];
-            const Run::SubRunInfo& rSubRun = rRun.fSubRunInfo[j];
+            const SubRun& lSubRun = lRun.fSubRunInfo[j];
+            const SubRun& rSubRun = rRun.fSubRunInfo[j];
 
             // TODO we can do this check, but we have to apply the VM to the old vertex bounds
             //SkASSERT_RELEASE(lSubRun.vertexBounds() == rSubRun.vertexBounds());
@@ -569,9 +533,9 @@ void GrTextBlob::AssertEqual(const GrTextBlob& l, const GrTextBlob& r) {
     }
 }
 
-void GrTextBlob::Run::SubRunInfo::computeTranslation(const SkMatrix& viewMatrix,
-                                                          SkScalar x, SkScalar y, SkScalar* transX,
-                                                          SkScalar* transY) {
+void GrTextBlob::SubRun::computeTranslation(const SkMatrix& viewMatrix,
+                                                SkScalar x, SkScalar y, SkScalar* transX,
+                                                SkScalar* transY) {
     calculate_translation(!this->drawAsDistanceFields(), viewMatrix, x, y,
                           fCurrentViewMatrix, fX, fY, transX, transY);
     fCurrentViewMatrix = viewMatrix;
