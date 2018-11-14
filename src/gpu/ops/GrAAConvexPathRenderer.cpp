@@ -18,6 +18,7 @@
 #include "GrRenderTargetContext.h"
 #include "GrShape.h"
 #include "GrSimpleMeshDrawOpHelper.h"
+#include "GrVertexWriter.h"
 #include "SkGeometry.h"
 #include "SkPathPriv.h"
 #include "SkPointPriv.h"
@@ -577,21 +578,21 @@ public:
 
             GrGLSLVarying v(kHalf4_GrSLType);
             varyingHandler->addVarying("QuadEdge", &v);
-            vertBuilder->codeAppendf("%s = %s;", v.vsOut(), qe.kInQuadEdge.name());
+            vertBuilder->codeAppendf("%s = %s;", v.vsOut(), qe.fInQuadEdge.name());
 
             // Setup pass through color
-            varyingHandler->addPassThroughAttribute(qe.kInColor, args.fOutputColor);
+            varyingHandler->addPassThroughAttribute(qe.fInColor, args.fOutputColor);
 
             GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
 
             // Setup position
-            this->writeOutputPosition(vertBuilder, gpArgs, qe.kInPosition.name());
+            this->writeOutputPosition(vertBuilder, gpArgs, qe.fInPosition.name());
 
             // emit transforms
             this->emitTransforms(vertBuilder,
                                  varyingHandler,
                                  uniformHandler,
-                                 qe.kInPosition.asShaderVar(),
+                                 qe.fInPosition.asShaderVar(),
                                  qe.fLocalMatrix,
                                  args.fFPCoordTransformHandler);
 
@@ -647,18 +648,16 @@ private:
             : INHERITED(kQuadEdgeEffect_ClassID)
             , fLocalMatrix(localMatrix)
             , fUsesLocalCoords(usesLocalCoords) {
-        this->setVertexAttributeCnt(3);
+        fInPosition = {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
+        fInColor = {"inColor", kUByte4_norm_GrVertexAttribType, kHalf4_GrSLType};
+        fInQuadEdge = {"inQuadEdge", kFloat4_GrVertexAttribType, kHalf4_GrSLType};
+        this->setVertexAttributes(&fInPosition, 3);
     }
 
-    const Attribute& onVertexAttribute(int i) const override {
-        return IthAttribute(i, kInPosition, kInColor, kInQuadEdge);
-    }
-    static constexpr Attribute kInPosition =
-            {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
-    static constexpr Attribute kInColor =
-            {"inColor", kUByte4_norm_GrVertexAttribType, kHalf4_GrSLType};
-    static constexpr Attribute kInQuadEdge =
-            {"inQuadEdge", kFloat4_GrVertexAttribType, kHalf4_GrSLType};
+    Attribute fInPosition;
+    Attribute fInColor;
+    Attribute fInQuadEdge;
+
     SkMatrix fLocalMatrix;
     bool fUsesLocalCoords;
 
@@ -666,9 +665,6 @@ private:
 
     typedef GrGeometryProcessor INHERITED;
 };
-constexpr GrPrimitiveProcessor::Attribute QuadEdgeEffect::kInPosition;
-constexpr GrPrimitiveProcessor::Attribute QuadEdgeEffect::kInColor;
-constexpr GrPrimitiveProcessor::Attribute QuadEdgeEffect::kInQuadEdge;
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(QuadEdgeEffect);
 
@@ -695,19 +691,20 @@ GrAAConvexPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
 
 // extract the result vertices and indices from the GrAAConvexTessellator
 static void extract_lines_only_verts(const GrAAConvexTessellator& tess,
-                                     void* vertices,
+                                     void* vertData,
                                      GrColor color,
                                      uint16_t* idxs,
                                      bool tweakAlphaForCoverage) {
+    GrVertexWriter verts{vertData};
     for (int i = 0; i < tess.numPts(); ++i) {
-        vertices = GrMeshDrawOp::WriteVertexData(vertices, tess.point(i));
+        verts.write(tess.point(i));
         if (tweakAlphaForCoverage) {
             SkASSERT(SkScalarRoundToInt(255.0f * tess.coverage(i)) <= 255);
             unsigned scale = SkScalarRoundToInt(255.0f * tess.coverage(i));
             GrColor scaledColor = (0xff == scale) ? color : SkAlphaMulQ(color, scale);
-            vertices = GrMeshDrawOp::WriteVertexData(vertices, scaledColor);
+            verts.write(scaledColor);
         } else {
-            vertices = GrMeshDrawOp::WriteVertexData(vertices, color, tess.coverage(i));
+            verts.write(color, tess.coverage(i));
         }
     }
 
@@ -799,11 +796,7 @@ private:
             return;
         }
 
-        size_t vertexStride = fHelper.compatibleWithAlphaAsCoverage()
-                                      ? sizeof(GrDefaultGeoProcFactory::PositionColorAttr)
-                                      : sizeof(GrDefaultGeoProcFactory::PositionColorCoverageAttr);
-        SkASSERT(vertexStride == gp->debugOnly_vertexStride());
-
+        size_t vertexStride = gp->vertexStride();
         GrAAConvexTessellator tess;
 
         int instanceCount = fPaths.count();
@@ -904,7 +897,7 @@ private:
             const GrBuffer* vertexBuffer;
             int firstVertex;
 
-            SkASSERT(sizeof(QuadVertex) == quadProcessor->debugOnly_vertexStride());
+            SkASSERT(sizeof(QuadVertex) == quadProcessor->vertexStride());
             QuadVertex* verts = reinterpret_cast<QuadVertex*>(target->makeVertexSpace(
                     sizeof(QuadVertex), vertexCount, &vertexBuffer, &firstVertex));
 

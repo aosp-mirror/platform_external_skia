@@ -274,11 +274,7 @@ void AAStrokeRectOp::onPrepareDraws(Target* target) {
         return;
     }
 
-    size_t vertexStride = fHelper.compatibleWithAlphaAsCoverage()
-                                  ? sizeof(GrDefaultGeoProcFactory::PositionColorAttr)
-                                  : sizeof(GrDefaultGeoProcFactory::PositionColorCoverageAttr);
-
-    SkASSERT(vertexStride == gp->debugOnly_vertexStride());
+    size_t vertexStride = gp->vertexStride();
     int innerVertexNum = 4;
     int outerVertexNum = this->miterStroke() ? 4 : 8;
     int verticesPerInstance = (outerVertexNum + innerVertexNum) * 2;
@@ -462,7 +458,6 @@ void AAStrokeRectOp::generateAAStrokeRectGeometry(void* vertices,
     SkPoint* fan3Pos = reinterpret_cast<SkPoint*>(
             verts + (2 * outerVertexNum + innerVertexNum) * vertexStride);
 
-#ifndef SK_IGNORE_THIN_STROKED_RECT_FIX
     // TODO: this only really works if the X & Y margins are the same all around
     // the rect (or if they are all >= 1.0).
     SkScalar inset;
@@ -483,17 +478,6 @@ void AAStrokeRectOp::generateAAStrokeRectGeometry(void* vertices,
         inset = SK_ScalarHalf *
                 SkMinScalar(inset, SkTMax(devOutside.height(), devOutsideAssist.height()));
     }
-#else
-    SkScalar inset;
-    if (!degenerate) {
-        inset = SK_ScalarHalf;
-    } else {
-        // TODO use real devRect here
-        inset = SkMinScalar(devOutside.width(), SK_Scalar1);
-        inset = SK_ScalarHalf *
-                SkMinScalar(inset, SkTMax(devOutside.height(), devOutsideAssist.height()));
-    }
-#endif
 
     if (miterStroke) {
         // outermost
