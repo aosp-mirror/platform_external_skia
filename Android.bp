@@ -802,7 +802,6 @@ cc_library_static {
 
             neon: {
                 srcs: [
-                    "src/opts/SkBitmapProcState_arm_neon.cpp",
                     "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
                 ],
             },
@@ -810,7 +809,6 @@ cc_library_static {
 
         arm64: {
             srcs: [
-                "src/opts/SkBitmapProcState_arm_neon.cpp",
                 "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
                 "src/opts/SkBitmapProcState_opts_none.cpp",
                 "src/opts/SkOpts_crc32.cpp",
@@ -832,7 +830,6 @@ cc_library_static {
         x86: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_SSE2.cpp",
-                "src/opts/SkBitmapProcState_opts_SSSE3.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
@@ -845,7 +842,6 @@ cc_library_static {
         x86_64: {
             srcs: [
                 "src/opts/SkBitmapProcState_opts_SSE2.cpp",
-                "src/opts/SkBitmapProcState_opts_SSSE3.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
@@ -1117,6 +1113,7 @@ cc_test {
         "gm/crbug_847759.cpp",
         "gm/crbug_884166.cpp",
         "gm/crbug_887103.cpp",
+        "gm/crbug_892988.cpp",
         "gm/croppedrects.cpp",
         "gm/crosscontextimage.cpp",
         "gm/cubicpaths.cpp",
@@ -2050,6 +2047,7 @@ cc_test {
         "gm/crbug_847759.cpp",
         "gm/crbug_884166.cpp",
         "gm/crbug_887103.cpp",
+        "gm/crbug_892988.cpp",
         "gm/croppedrects.cpp",
         "gm/crosscontextimage.cpp",
         "gm/cubicpaths.cpp",
