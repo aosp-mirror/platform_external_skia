@@ -685,6 +685,7 @@ cc_library_static {
         "src/pdf/SkPDFMetadata.cpp",
         "src/pdf/SkPDFResourceDict.cpp",
         "src/pdf/SkPDFShader.cpp",
+        "src/pdf/SkPDFSubsetFont.cpp",
         "src/pdf/SkPDFTag.cpp",
         "src/pdf/SkPDFTypes.cpp",
         "src/pdf/SkPDFUtils.cpp",
