@@ -10,6 +10,7 @@
 #include "SkBitmapProcState.h"
 #include "SkColorData.h"
 #include "SkMacros.h"
+#include "SkOpts.h"
 #include "SkPaint.h"
 #include "SkShader.h"   // for tilemodes
 #include "SkUtilsArm.h"
@@ -22,10 +23,64 @@
 extern const SkBitmapProcState::SampleProc32 gSkBitmapProcStateSample32_neon[];
 #endif
 
-extern void Clamp_S32_opaque_D32_nofilter_DX_shaderproc(const void*, int, int, uint32_t*, int);
+// One-stop-shop shader for,
+//   - nearest-neighbor sampling (_nofilter_),
+//   - clamp tiling in X and Y both (Clamp_),
+//   - with at most a scale and translate matrix (_DX_),
+//   - and no extra alpha applied (_opaque_),
+//   - sampling from 8888 (_S32_) and drawing to 8888 (_S32_).
+static void Clamp_S32_opaque_D32_nofilter_DX_shaderproc(const void* sIn, int x, int y,
+                                                        SkPMColor* SK_RESTRICT dst, int count) {
+    const SkBitmapProcState& s = *static_cast<const SkBitmapProcState*>(sIn);
+    SkASSERT((s.fInvType & ~(SkMatrix::kTranslate_Mask |
+                             SkMatrix::kScale_Mask)) == 0);
+    SkASSERT(s.fAlphaScale == 256);
+
+    const unsigned maxX = s.fPixmap.width() - 1;
+    SkFractionalInt fx;
+    int dstY;
+    {
+        const SkBitmapProcStateAutoMapper mapper(s, x, y);
+        const unsigned maxY = s.fPixmap.height() - 1;
+        dstY = SkClampMax(mapper.intY(), maxY);
+        fx = mapper.fractionalIntX();
+    }
+
+    const SkPMColor* SK_RESTRICT src = s.fPixmap.addr32(0, dstY);
+    const SkFractionalInt dx = s.fInvSxFractionalInt;
+
+    // Check if we're safely inside [0...maxX] so no need to clamp each computed index.
+    //
+    if ((uint64_t)SkFractionalIntToInt(fx) <= maxX &&
+        (uint64_t)SkFractionalIntToInt(fx + dx * (count - 1)) <= maxX)
+    {
+        int count4 = count >> 2;
+        for (int i = 0; i < count4; ++i) {
+            SkPMColor src0 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            SkPMColor src1 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            SkPMColor src2 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            SkPMColor src3 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            dst[0] = src0;
+            dst[1] = src1;
+            dst[2] = src2;
+            dst[3] = src3;
+            dst += 4;
+        }
+        for (int i = (count4 << 2); i < count; ++i) {
+            unsigned index = SkFractionalIntToInt(fx);
+            SkASSERT(index <= maxX);
+            *dst++ = src[index];
+            fx += dx;
+        }
+    } else {
+        for (int i = 0; i < count; ++i) {
+            dst[i] = src[SkClampMax(SkFractionalIntToInt(fx), maxX)];
+            fx += dx;
+        }
+    }
+}
 
 #define   NAME_WRAP(x)  x
-#include "SkBitmapProcState_filter.h"
 #include "SkBitmapProcState_procs.h"
 
 SkBitmapProcInfo::SkBitmapProcInfo(const SkBitmapProvider& provider,
@@ -161,7 +216,6 @@ bool SkBitmapProcState::chooseProcs() {
     fAlphaScale = SkAlpha255To256(SkColorGetA(fPaintColor));
 
     fShaderProc32 = nullptr;
-    fShaderProc16 = nullptr;
     fSampleProc32 = nullptr;
 
     const bool trivialMatrix = (fInvMatrix.getType() & ~SkMatrix::kTranslate_Mask) == 0;
@@ -173,6 +227,7 @@ bool SkBitmapProcState::chooseProcs() {
 
 bool SkBitmapProcState::chooseScanlineProcs(bool trivialMatrix, bool clampClamp) {
     SkASSERT(fPixmap.colorType() == kN32_SkColorType);
+    SkASSERT(fInvType <= (SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask));
 
     fMatrixProc = this->chooseMatrixProc(trivialMatrix);
     // TODO(dominikg): SkASSERT(fMatrixProc) instead? chooseMatrixProc never returns nullptr.
@@ -190,38 +245,20 @@ bool SkBitmapProcState::chooseScanlineProcs(bool trivialMatrix, bool clampClamp)
     // the shader procs above and can skip all this.
 
     if (fFilterQuality < kHigh_SkFilterQuality) {
-        int index = 0;
-        if (fAlphaScale < 256) {  // note: this distinction is not used for D16
-            index |= 1;
-        }
-        if (fInvType <= (SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask)) {
-            index |= 2;
-        }
+
         if (fFilterQuality > kNone_SkFilterQuality) {
-            index |= 4;
+            fSampleProc32 = SkOpts::S32_alpha_D32_filter_DX;
+        } else {
+            fSampleProc32 = S32_alpha_D32_nofilter_DX;
         }
-
-#if !defined(SK_ARM_HAS_NEON)
-        static const SampleProc32 gSkBitmapProcStateSample32[] = {
-            S32_opaque_D32_nofilter_DXDY,
-            S32_alpha_D32_nofilter_DXDY,
-            S32_opaque_D32_nofilter_DX,
-            S32_alpha_D32_nofilter_DX,
-            S32_opaque_D32_filter_DXDY,
-            S32_alpha_D32_filter_DXDY,
-            S32_opaque_D32_filter_DX,
-            S32_alpha_D32_filter_DX,
-        };
-#endif
-
-        fSampleProc32 = SK_ARM_NEON_WRAP(gSkBitmapProcStateSample32)[index];
 
         // our special-case shaderprocs
-        if (S32_opaque_D32_nofilter_DX == fSampleProc32 && clampClamp) {
+        // TODO: move this one into chooseShaderProc32() or pull all that in here.
+        if (fAlphaScale == 256
+                && fFilterQuality == kNone_SkFilterQuality
+                && clampClamp) {
             fShaderProc32 = Clamp_S32_opaque_D32_nofilter_DX_shaderproc;
-        }
-
-        if (nullptr == fShaderProc32) {
+        } else {
             fShaderProc32 = this->chooseShaderProc32();
         }
     }
@@ -324,6 +361,31 @@ static void Repeat_S32_D32_nofilter_trans_shaderproc(const void* sIn,
     }
 }
 
+static inline void filter_32_alpha(unsigned t,
+                                   SkPMColor color0,
+                                   SkPMColor color1,
+                                   SkPMColor* dstColor,
+                                   unsigned alphaScale) {
+    SkASSERT((unsigned)t <= 0xF);
+    SkASSERT(alphaScale <= 256);
+
+    const uint32_t mask = 0xFF00FF;
+
+    int scale = 256 - 16*t;
+    uint32_t lo = (color0 & mask) * scale;
+    uint32_t hi = ((color0 >> 8) & mask) * scale;
+
+    scale = 16*t;
+    lo += (color1 & mask) * scale;
+    hi += ((color1 >> 8) & mask) * scale;
+
+    // TODO: if (alphaScale < 256) ...
+    lo = ((lo >> 8) & mask) * alphaScale;
+    hi = ((hi >> 8) & mask) * alphaScale;
+
+    *dstColor = ((lo >> 8) & mask) | (hi & ~mask);
+}
+
 static void S32_D32_constX_shaderproc(const void* sIn,
                                       int x, int y,
                                       SkPMColor* SK_RESTRICT colors,
@@ -417,12 +479,7 @@ static void S32_D32_constX_shaderproc(const void* sIn,
 
     if (kNone_SkFilterQuality != s.fFilterQuality) {
         const SkPMColor* row1 = s.fPixmap.addr32(0, iY1);
-
-        if (s.fAlphaScale < 256) {
-            Filter_32_alpha(iSubY, *row0, *row1, &color, s.fAlphaScale);
-        } else {
-            Filter_32_opaque(iSubY, *row0, *row1, &color);
-        }
+        filter_32_alpha(iSubY, *row0, *row1, &color, s.fAlphaScale);
     } else {
         if (s.fAlphaScale < 256) {
             color = SkAlphaMulQ(*row0, s.fAlphaScale);
@@ -597,52 +654,3 @@ int SkBitmapProcState::maxCountForBufferSize(size_t bufferSize) const {
 
 ///////////////////////
 
-void  Clamp_S32_opaque_D32_nofilter_DX_shaderproc(const void* sIn, int x, int y,
-                                                  SkPMColor* SK_RESTRICT dst, int count) {
-    const SkBitmapProcState& s = *static_cast<const SkBitmapProcState*>(sIn);
-    SkASSERT((s.fInvType & ~(SkMatrix::kTranslate_Mask |
-                             SkMatrix::kScale_Mask)) == 0);
-
-    const unsigned maxX = s.fPixmap.width() - 1;
-    SkFractionalInt fx;
-    int dstY;
-    {
-        const SkBitmapProcStateAutoMapper mapper(s, x, y);
-        const unsigned maxY = s.fPixmap.height() - 1;
-        dstY = SkClampMax(mapper.intY(), maxY);
-        fx = mapper.fractionalIntX();
-    }
-
-    const SkPMColor* SK_RESTRICT src = s.fPixmap.addr32(0, dstY);
-    const SkFractionalInt dx = s.fInvSxFractionalInt;
-
-    // Check if we're safely inside [0...maxX] so no need to clamp each computed index.
-    //
-    if ((uint64_t)SkFractionalIntToInt(fx) <= maxX &&
-        (uint64_t)SkFractionalIntToInt(fx + dx * (count - 1)) <= maxX)
-    {
-        int count4 = count >> 2;
-        for (int i = 0; i < count4; ++i) {
-            SkPMColor src0 = src[SkFractionalIntToInt(fx)]; fx += dx;
-            SkPMColor src1 = src[SkFractionalIntToInt(fx)]; fx += dx;
-            SkPMColor src2 = src[SkFractionalIntToInt(fx)]; fx += dx;
-            SkPMColor src3 = src[SkFractionalIntToInt(fx)]; fx += dx;
-            dst[0] = src0;
-            dst[1] = src1;
-            dst[2] = src2;
-            dst[3] = src3;
-            dst += 4;
-        }
-        for (int i = (count4 << 2); i < count; ++i) {
-            unsigned index = SkFractionalIntToInt(fx);
-            SkASSERT(index <= maxX);
-            *dst++ = src[index];
-            fx += dx;
-        }
-    } else {
-        for (int i = 0; i < count; ++i) {
-            dst[i] = src[SkClampMax(SkFractionalIntToInt(fx), maxX)];
-            fx += dx;
-        }
-    }
-}

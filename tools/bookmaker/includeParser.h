@@ -36,6 +36,11 @@ public:
         kYes,
     };
 
+    enum class Suggest {
+        kMethodMissing,
+        kMethodDiffers,
+    };
+
     struct CheckCode {
         enum class State {
             kNone,
@@ -107,6 +112,8 @@ public:
     void checkForMissingParams(const vector<string>& methodParams,
                                const vector<string>& foundParams);
     bool checkForWord();
+    void checkTokens(list<Definition>& tokens, string key, string className,
+            RootDefinition* root, BmhParser& bmhParser);
     string className() const;
 
     string codeBlock(const Definition& def, bool inProgress) const {
@@ -163,6 +170,7 @@ public:
 
     string elidedCodeBlock(const Definition& );
     string filteredBlock(string inContents, string filterContents);
+    bool findCommentAfter(const Definition& includeDef, Definition* markupDef);
     bool findComments(const Definition& includeDef, Definition* markupDef);
     Definition* findIncludeObject(const Definition& includeDef, MarkType markType,
                                   string typeName);
@@ -175,14 +183,17 @@ public:
     bool isInternalName(const Definition& token);
     bool isMember(const Definition& token) const;
     bool isOperator(const Definition& token);
+    bool isUndocumentable(string filename, const char* start, const char* end, int lineCount);
     Definition* parentBracket(Definition* parent) const;
     bool parseChar();
     bool parseComment(string filename, const char* start, const char* end, int lineCount,
-            Definition* markupDef);
+            Definition* markupDef, bool* undocumentedPtr);
     bool parseClass(Definition* def, IsStruct);
     bool parseConst(Definition* child, Definition* markupDef);
     bool parseDefine(Definition* child, Definition* markupDef);
     bool parseEnum(Definition* child, Definition* markupDef);
+    bool parseEnumConst(list<Definition>::iterator& tokenIter,
+            const list<Definition>::iterator& tokenEnd, Definition* markupChild);
 
     bool parseFromFile(const char* path) override {
         this->reset();
@@ -198,6 +209,7 @@ public:
     bool parseMethod(Definition* child, Definition* markupDef);
     bool parseObject(Definition* child, Definition* markupDef);
     bool parseObjects(Definition* parent, Definition* markupDef);
+    bool parseOneEnumConst(list<Definition>& constList, Definition* markupChild, bool skipWord);
     bool parseTemplate(Definition* child, Definition* markupDef);
     bool parseTypedef(Definition* child, Definition* markupDef);
     bool parseUsing();
@@ -215,6 +227,9 @@ public:
     }
 
     void pushBracket(Bracket bracket) {
+        if ("#else" == string(fChar, 5)) {
+            SkDebugf("");
+        }
         this->setBracketShortCuts(bracket);
         fParent->fTokens.emplace_back(bracket, fChar, fLineCount, fParent, '\0');
         Definition* container = &fParent->fTokens.back();
@@ -253,6 +268,8 @@ public:
         fInCharCommentString = fInChar || fInComment || fInString;
     }
 
+    void suggestFix(Suggest suggest, const Definition& iDef, const RootDefinition* root,
+            const Definition* bDef);
     Bracket topBracket() const;
 
     template <typename T>

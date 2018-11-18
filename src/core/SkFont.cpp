@@ -40,18 +40,6 @@ SkFont::SkFont(sk_sp<SkTypeface> face, SkScalar size) : SkFont(std::move(face), 
 
 SkFont::SkFont() : SkFont(nullptr, kDefault_Size) {}
 
-#ifdef SK_SUPPORT_LEGACY_FONT_FLAGS
-SkFont::SkFont(sk_sp<SkTypeface> face, SkScalar size, SkScalar scaleX, SkScalar skewX,
-               uint32_t legacy_flags) : SkFont(std::move(face), size, scaleX, skewX) {
-    this->setFlags(legacy_flags);
-}
-
-SkFont::SkFont(sk_sp<SkTypeface> face, SkScalar size, uint32_t legacy_flags)
-    : SkFont(std::move(face), size) {
-    this->setFlags(legacy_flags);
-}
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 static inline uint32_t set_clear_mask(uint32_t bits, bool cond, uint32_t mask) {
@@ -73,42 +61,6 @@ void SkFont::setLinearMetrics(bool predicate) {
 void SkFont::setEmbolden(bool predicate) {
     fFlags = set_clear_mask(fFlags, predicate, kEmbolden_PrivFlag);
 }
-
-#ifdef SK_SUPPORT_LEGACY_FONT_FLAGS
-void SkFont::DEPRECATED_setAntiAlias(bool doAA) {
-    if (!doAA) {
-        this->setEdging(Edging::kAlias);
-    } else {
-        if (this->getEdging() == Edging::kAlias) {
-            this->setEdging(Edging::kAntiAlias);
-        }
-        // else leave the current fEdging as is
-    }
-}
-
-void SkFont::DEPRECATED_setLCDRender(bool doLCD) {
-    if (doLCD) {
-        this->setEdging(Edging::kSubpixelAntiAlias);
-    } else {
-        if (this->getEdging() == Edging::kSubpixelAntiAlias) {
-            this->setEdging(Edging::kAntiAlias);
-        }
-        // else leave the current fEdging as is
-    }
-}
-
-void SkFont::setFlags(uint32_t legacy_flags) {
-    fFlags = legacy_flags & 0x1F;   // the first 5 flags are fine
-    this->DEPRECATED_setAntiAlias(SkToBool(legacy_flags & kDEPRECATED_Antialias_Flag));
-    this->DEPRECATED_setLCDRender(SkToBool(legacy_flags & kDEPRECATED_LCDRender_Flag));
-}
-
-SkFont SkFont::makeWithFlags(uint32_t newFlags) const {
-    SkFont font = *this;
-    font.setFlags(newFlags);
-    return font;
-}
-#endif
 
 void SkFont::setEdging(Edging e) {
     fEdging = SkToU8(e);
@@ -143,6 +95,10 @@ SkScalar SkFont::setupForAsPaths(SkPaint* paint) {
 
     fFlags = (fFlags & ~flagsToIgnore) | kSubpixel_PrivFlag;
     this->setHinting(kNo_SkFontHinting);
+
+    if (this->getEdging() == Edging::kSubpixelAntiAlias) {
+        this->setEdging(Edging::kAntiAlias);
+    }
 
     if (paint) {
         paint->setStyle(SkPaint::kFill_Style);
@@ -253,13 +209,7 @@ SkScalar SkFont::measureText(const void* textD, size_t length, SkTextEncoding en
     const SkFont& font = canon.getFont();
     SkScalar scale = canon.getScale();
 
-    SkAutoDescriptor ad;
-    SkScalerContextEffects effects;
-    auto desc = SkScalerContext::CreateDescriptorAndEffectsUsingDefaultPaint(font,
-                         SkSurfaceProps(0, kUnknown_SkPixelGeometry), SkScalerContextFlags::kNone,
-                         SkMatrix::I(), &ad, &effects);
-    auto typeface = SkFontPriv::GetTypefaceOrDefault(font);
-    auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(*desc, effects, *typeface);
+    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font);
 
     const char* text = static_cast<const char*>(textD);
     const char* stop = text + length;
@@ -312,14 +262,7 @@ void SkFont::getWidths(const uint16_t glyphs[], int count, SkScalar widths[], Sk
         scale = 1;
     }
 
-    SkAutoDescriptor ad;
-    SkScalerContextEffects effects;
-    auto desc = SkScalerContext::CreateDescriptorAndEffectsUsingDefaultPaint(font,
-                         SkSurfaceProps(0, kUnknown_SkPixelGeometry), SkScalerContextFlags::kNone,
-                                                                     SkMatrix::I(), &ad, &effects);
-    auto typeface = SkFontPriv::GetTypefaceOrDefault(font);
-    auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(*desc, effects, *typeface);
-
+    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font);
     auto glyphCacheProc = SkFontPriv::GetGlyphCacheProc(kGlyphID_SkTextEncoding, nullptr != bounds);
 
     const char* text = reinterpret_cast<const char*>(glyphs);
@@ -340,13 +283,7 @@ void SkFont::getPaths(const uint16_t glyphs[], int count,
     SkFont font(*this);
     SkScalar scale = font.setupForAsPaths(nullptr);
 
-    SkAutoDescriptor ad;
-    SkScalerContextEffects effects;
-    auto desc = SkScalerContext::CreateDescriptorAndEffectsUsingDefaultPaint(font,
-                         SkSurfaceProps(0, kUnknown_SkPixelGeometry), SkScalerContextFlags::kNone,
-                         SkMatrix::I(), &ad, &effects);
-    auto typeface = SkFontPriv::GetTypefaceOrDefault(font);
-    auto exclusive = SkStrikeCache::FindOrCreateStrikeExclusive(*desc, effects, *typeface);
+    auto exclusive = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font);
     auto cache = exclusive.get();
 
     for (int i = 0; i < count; ++i) {
@@ -387,18 +324,9 @@ SkScalar SkFont::getMetrics(SkFontMetrics* metrics) const {
         metrics = &storage;
     }
 
-    SkAutoDescriptor ad;
-    SkScalerContextEffects effects;
+    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font);
+    *metrics = cache->getFontMetrics();
 
-    auto desc = SkScalerContext::CreateDescriptorAndEffectsUsingDefaultPaint(font,
-             SkSurfaceProps(0, kUnknown_SkPixelGeometry), SkScalerContextFlags::kNone,
-             SkMatrix::I(), &ad, &effects);
-
-    {
-        auto typeface = SkFontPriv::GetTypefaceOrDefault(font);
-        auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(*desc, effects, *typeface);
-        *metrics = cache->getFontMetrics();
-    }
     if (scale) {
         SkPaintPriv::ScaleFontMetrics(metrics, scale);
     }
@@ -455,9 +383,9 @@ SkFont SkFont::LEGACY_ExtractFromPaint(const SkPaint& paint) {
     Edging edging = Edging::kAlias;
     if (paint.isAntiAlias()) {
         edging = Edging::kAntiAlias;
-    }
-    if (paint.isLCDRenderText()) {
-        edging = Edging::kSubpixelAntiAlias;
+        if (paint.isLCDRenderText()) {
+            edging = Edging::kSubpixelAntiAlias;
+        }
     }
 
     SkFont font(sk_ref_sp(paint.getTypeface()), paint.getTextSize(), paint.getTextScaleX(),

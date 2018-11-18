@@ -269,7 +269,7 @@ rect={1,2,3,4}
 #Line # iterator returning IRect within clip ##
 
 #Code
-    class SK_API Cliperator {
+    class Cliperator {
     public:
         Cliperator(const SkRegion& region, const SkIRect& clip);
         bool done();
@@ -1525,18 +1525,6 @@ May be used to verify that Op is a legal value.
 ##
 
 #SeeAlso setRects Op
-
-#Method ##
-
-# ------------------------------------------------------------------------------
-
-#Method char* toString()
-#In Utility
-#Line # exists for Android framework only ##
-#Private
-Android framework only.
-##
-#Return string representation of Region ##
 
 #Method ##
 

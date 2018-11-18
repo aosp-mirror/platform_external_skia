@@ -148,7 +148,6 @@ public:
     const Definition* hasChild(MarkType markType) const;
     bool hasMatch(string name) const;
     Definition* hasParam(string ref);
-    string incompleteMessage(DetailsType ) const;
     bool isClone() const { return fClone; }
 
     const Definition* iRootParent() const {
@@ -197,6 +196,8 @@ public:
     void setParentIndex() {
         fParentIndex = fParent ? (int) fParent->fTokens.size() : -1;
     }
+
+    static bool SkipImplementationWords(TextParser& inc);
 
     string simpleName() {
         size_t doubleColon = fName.rfind("::");
@@ -253,12 +254,12 @@ public:
     char fMC = '#';
     bool fClone = false;
     bool fCloned = false;
-    bool fDeprecated = false;
     bool fOperatorConst = false;
     bool fPrivate = false;
     Details fDetails = Details::kNone;
     bool fMemberStart = false;
     bool fAnonymous = false;
+    bool fUndocumented = false;  // include symbol comment has deprecated, private, experimental
     mutable bool fVisited = false;
 };
 

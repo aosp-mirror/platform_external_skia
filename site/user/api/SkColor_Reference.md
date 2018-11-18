@@ -569,7 +569,7 @@ Converts RGB to its HSV components.
 ---
 
 <pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
-void <a href='SkColor_Reference#SkColorToHSV'>SkColorToHSV</a>(<a href='SkColor_Reference#SkColor'>SkColor</a> <a href='SkColor_Reference#Color'>color</a>, <a href='undocumented#SkScalar'>SkScalar</a> hsv[3])
+static void <a href='SkColor_Reference#SkColorToHSV'>SkColorToHSV</a>(<a href='SkColor_Reference#SkColor'>SkColor</a> <a href='SkColor_Reference#Color'>color</a>, <a href='undocumented#SkScalar'>SkScalar</a> hsv[3])
 </pre>
 
 Converts ARGB to its HSV components. <a href='SkColor_Reference#Alpha'>Alpha</a> in ARGB is ignored.
@@ -641,7 +641,7 @@ ARGB equivalent to HSV
 ---
 
 <pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
-<a href='SkColor_Reference#SkColor'>SkColor</a> <a href='SkColor_Reference#SkHSVToColor'>SkHSVToColor</a>(const <a href='undocumented#SkScalar'>SkScalar</a> hsv[3])
+static <a href='SkColor_Reference#SkColor'>SkColor</a> <a href='SkColor_Reference#SkHSVToColor'>SkHSVToColor</a>(const <a href='undocumented#SkScalar'>SkScalar</a> hsv[3])
 </pre>
 
 Converts HSV components to an ARGB <a href='SkColor_Reference#Color'>color</a>. <a href='SkColor_Reference#Alpha'>Alpha</a> is set to 255.
