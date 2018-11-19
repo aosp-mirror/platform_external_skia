@@ -17,6 +17,7 @@
 #include "GrTextureProxyCacheAccess.h"
 #include "GrTextureRenderTargetProxy.h"
 #include "../private/GrSingleOwner.h"
+#include "SkAutoPixmapStorage.h"
 #include "SkBitmap.h"
 #include "SkGr.h"
 #include "SkImage.h"
@@ -211,11 +212,22 @@ sk_sp<GrTextureProxy> GrProxyProvider::createTextureProxy(sk_sp<SkImage> srcImag
         return nullptr;
     }
 
-    GrPixelConfig config = SkImageInfo2GrPixelConfig(as_IB(srcImage)->onImageInfo(),
-                                                     *this->caps());
+    SkImageInfo info = as_IB(srcImage)->onImageInfo();
+    GrPixelConfig config = SkImageInfo2GrPixelConfig(info, *this->caps());
 
     if (kUnknown_GrPixelConfig == config) {
         return nullptr;
+    }
+
+    if (!this->caps()->isConfigTexturable(config)) {
+        SkBitmap copy8888;
+        if (!copy8888.tryAllocPixels(info.makeColorType(kRGBA_8888_SkColorType)) ||
+            !srcImage->readPixels(copy8888.pixmap(), 0, 0)) {
+            return nullptr;
+        }
+        copy8888.setImmutable();
+        srcImage = SkMakeImageFromRasterBitmap(copy8888, kNever_SkCopyPixelsMode);
+        config = kRGBA_8888_GrPixelConfig;
     }
 
     if (SkToBool(flags & kRenderTarget_GrSurfaceFlag)) {
@@ -289,20 +301,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createMipMapProxyFromBitmap(const SkBitma
         return nullptr;
     }
 
-    SkPixmap pixmap;
-    if (!bitmap.peekPixels(&pixmap)) {
-        return nullptr;
-    }
-
-    ATRACE_ANDROID_FRAMEWORK("Upload MipMap Texture [%ux%u]", pixmap.width(), pixmap.height());
-    sk_sp<SkMipMap> mipmaps(SkMipMap::Build(pixmap, mipColorMode, nullptr));
-    if (!mipmaps) {
-        return nullptr;
-    }
-
-    if (mipmaps->countLevels() < 0) {
-        return nullptr;
-    }
+    ATRACE_ANDROID_FRAMEWORK("Upload MipMap Texture [%ux%u]", bitmap.width(), bitmap.height());
 
     // In non-ddl we will always instantiate right away. Thus we never want to copy the SkBitmap
     // even if its mutable. In ddl, if the bitmap is mutable then we must make a copy since the
@@ -310,17 +309,33 @@ sk_sp<GrTextureProxy> GrProxyProvider::createMipMapProxyFromBitmap(const SkBitma
     SkCopyPixelsMode copyMode = this->mutableBitmapsNeedCopy() ? kIfMutable_SkCopyPixelsMode
                                                                : kNever_SkCopyPixelsMode;
     sk_sp<SkImage> baseLevel = SkMakeImageFromRasterBitmap(bitmap, copyMode);
-
     if (!baseLevel) {
         return nullptr;
     }
 
-    GrSurfaceDesc desc = GrImageInfoToSurfaceDesc(pixmap.info(), *this->caps());
-
-    if (0 == mipmaps->countLevels()) {
+    // This was never going to have mips anyway
+    if (0 == SkMipMap::ComputeLevelCount(baseLevel->width(), baseLevel->height())) {
         return this->createTextureProxy(baseLevel, kNone_GrSurfaceFlags, kTopLeft_GrSurfaceOrigin,
                                         1, SkBudgeted::kYes, SkBackingFit::kExact);
+    }
 
+    GrSurfaceDesc desc = GrImageInfoToSurfaceDesc(bitmap.info(), *this->caps());
+    if (!this->caps()->isConfigTexturable(desc.fConfig)) {
+        SkBitmap copy8888;
+        if (!copy8888.tryAllocPixels(bitmap.info().makeColorType(kRGBA_8888_SkColorType)) ||
+            !bitmap.readPixels(copy8888.pixmap())) {
+            return nullptr;
+        }
+        copy8888.setImmutable();
+        baseLevel = SkMakeImageFromRasterBitmap(copy8888, kNever_SkCopyPixelsMode);
+        desc.fConfig = kRGBA_8888_GrPixelConfig;
+    }
+
+    SkPixmap pixmap;
+    SkAssertResult(baseLevel->peekPixels(&pixmap));
+    sk_sp<SkMipMap> mipmaps(SkMipMap::Build(pixmap, mipColorMode, nullptr));
+    if (!mipmaps) {
+        return nullptr;
     }
 
     sk_sp<GrTextureProxy> proxy = this->createLazyProxy(
