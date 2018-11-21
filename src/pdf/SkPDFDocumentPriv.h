@@ -43,6 +43,8 @@ struct SkPDFObjectSerializer {
     SkPDFObjectSerializer(const SkPDFObjectSerializer&) = delete;
     SkPDFObjectSerializer& operator=(const SkPDFObjectSerializer&) = delete;
 
+    SkWStream* beginObject(SkPDFIndirectReference, SkWStream*);
+    void endObject(SkWStream*);
     void serializeHeader(SkWStream*, const SkPDF::Metadata&);
     void serializeObject(const sk_sp<SkPDFObject>&, SkWStream*);
     void serializeFooter(SkWStream*, const sk_sp<SkPDFObject>, sk_sp<SkPDFObject>);
@@ -70,14 +72,18 @@ public:
        It might go without saying that objects should not be changed
        after calling serialize, since those changes will be too late.
      */
-    void serialize(const sk_sp<SkPDFObject>&);
+    SkPDFIndirectReference serialize(const sk_sp<SkPDFObject>&);
+    SkPDFIndirectReference emit(const SkPDFObject&);
     SkPDFCanon* canon() { return &fCanon; }
-    void registerFont(SkPDFFont* f) { fFonts.add(f); }
     const SkPDF::Metadata& metadata() const { return fMetadata; }
 
     sk_sp<SkPDFDict> getPage(int pageIndex) const;
     // Returns -1 if no mark ID.
     int getMarkIdForNodeId(int nodeId);
+
+    SkPDFIndirectReference reserve();
+    SkWStream* beginObject(SkPDFIndirectReference);
+    void endObject();
 
 private:
     sk_sp<SkPDFTag> recursiveBuildTagTree(const SkPDF::StructureElementNode& node,
@@ -87,7 +93,6 @@ private:
     SkPDFCanon fCanon;
     SkCanvas fCanvas;
     std::vector<sk_sp<SkPDFDict>> fPages;
-    SkTHashSet<SkPDFFont*> fFonts;
     sk_sp<SkPDFDict> fDests;
     sk_sp<SkPDFDevice> fPageDevice;
     sk_sp<SkPDFObject> fID;
@@ -104,6 +109,8 @@ private:
     SkTArray<SkTArray<sk_sp<SkPDFTag>>> fMarksPerPage;
     // A mapping from node ID to tag for fast lookup.
     SkTHashMap<int, sk_sp<SkPDFTag>> fNodeIdToTag;
+
+    int fOutstandingRefs = 0;
 
     void reset();
 };

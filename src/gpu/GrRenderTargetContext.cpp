@@ -44,6 +44,7 @@
 #include "ops/GrDrawAtlasOp.h"
 #include "ops/GrDrawOp.h"
 #include "ops/GrDrawVerticesOp.h"
+#include "ops/GrAAFillRRectOp.h"
 #include "ops/GrLatticeOp.h"
 #include "ops/GrOp.h"
 #include "ops/GrOvalOpFactory.h"
@@ -800,13 +801,12 @@ void GrRenderTargetContext::fillRectToRect(const GrClip& clip,
 }
 
 void GrRenderTargetContext::drawTexture(const GrClip& clip, sk_sp<GrTextureProxy> proxy,
-                                        GrSamplerState::Filter filter, GrColor color,
+                                        GrSamplerState::Filter filter, const SkPMColor4f& color,
                                         const SkRect& srcRect, const SkRect& dstRect,
                                         GrQuadAAFlags aaFlags,
                                         SkCanvas::SrcRectConstraint constraint,
                                         const SkMatrix& viewMatrix,
-                                        sk_sp<GrColorSpaceXform> textureColorSpaceXform,
-                                        sk_sp<GrColorSpaceXform> paintColorSpaceXform) {
+                                        sk_sp<GrColorSpaceXform> textureColorSpaceXform) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
@@ -825,22 +825,21 @@ void GrRenderTargetContext::drawTexture(const GrClip& clip, sk_sp<GrTextureProxy
     }
     auto op = GrTextureOp::Make(fContext, std::move(proxy), filter, color, clippedSrcRect,
                                 clippedDstRect, aaType, aaFlags, constraint, viewMatrix,
-                                std::move(textureColorSpaceXform), std::move(paintColorSpaceXform));
+                                std::move(textureColorSpaceXform));
     this->addDrawOp(clip, std::move(op));
 }
 
 void GrRenderTargetContext::drawTextureSet(const GrClip& clip, const TextureSetEntry set[], int cnt,
-                                           GrSamplerState::Filter filter, GrColor color,
+                                           GrSamplerState::Filter filter, float alpha,
                                            const SkMatrix& viewMatrix,
-                                           sk_sp<GrColorSpaceXform> texXform,
-                                           sk_sp<GrColorSpaceXform> colorXform) {
+                                           sk_sp<GrColorSpaceXform> texXform) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "drawTextureSet", fContext);
     GrAAType aaType = this->chooseAAType(GrAA::kYes, GrAllowMixedSamples::kNo);
-    auto op = GrTextureOp::Make(fContext, set, cnt, filter, color, aaType, viewMatrix,
-                                std::move(texXform), std::move(colorXform));
+    auto op = GrTextureOp::Make(fContext, set, cnt, filter, alpha, aaType, viewMatrix,
+                                std::move(texXform));
     this->addDrawOp(clip, std::move(op));
 }
 
@@ -973,13 +972,16 @@ void GrRenderTargetContext::drawRRect(const GrClip& origClip,
 
     GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage == aaType) {
-        const GrShaderCaps* shaderCaps = this->caps()->shaderCaps();
-        std::unique_ptr<GrDrawOp> op = GrOvalOpFactory::MakeRRectOp(fContext,
-                                                                    std::move(paint),
-                                                                    viewMatrix,
-                                                                    rrect,
-                                                                    stroke,
-                                                                    shaderCaps);
+        std::unique_ptr<GrDrawOp> op;
+        if (style.isSimpleFill()) {
+            op = GrAAFillRRectOp::Make(fContext, viewMatrix, rrect, *this->caps(),
+                                       std::move(paint));
+        }
+        if (!op) {
+            op = GrOvalOpFactory::MakeRRectOp(fContext, std::move(paint), viewMatrix, rrect, stroke,
+                                              this->caps()->shaderCaps());
+        }
+
         if (op) {
             this->addDrawOp(*clip, std::move(op));
             return;
@@ -1874,8 +1876,10 @@ bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const Gr
         fit = SkBackingFit::kApprox;
     }
 
+    SkASSERT(rtProxy->backendFormat().textureType() == GrTextureType::k2D);
+    const GrBackendFormat& format = rtProxy->backendFormat();
     sk_sp<GrSurfaceContext> sContext = fContext->contextPriv().makeDeferredSurfaceContext(
-            desc, origin, GrMipMapped::kNo, fit, SkBudgeted::kYes,
+            format, desc, origin, GrMipMapped::kNo, fit, SkBudgeted::kYes,
             sk_ref_sp(this->colorSpaceInfo().colorSpace()));
     if (!sContext) {
         SkDebugf("setupDstTexture: surfaceContext creation failed.\n");

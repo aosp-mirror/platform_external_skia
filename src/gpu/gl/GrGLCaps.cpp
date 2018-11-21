@@ -15,6 +15,7 @@
 #include "GrSurfaceProxyPriv.h"
 #include "GrTextureProxyPriv.h"
 #include "SkJSONWriter.h"
+#include "SkGr.h"
 #include "SkTSearch.h"
 #include "SkTSort.h"
 
@@ -2729,6 +2730,13 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
          kIntelBayTrail_GrGLRenderer == ctxInfo.renderer())) {
         fBlacklistCoverageCounting = true;
     }
+
+#ifdef SK_BUILD_FOR_MAC
+    // Expirment to see if this resolves crbug.com/906453.
+    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
+        fDynamicStateArrayGeometryProcessorTextureSupport = false;
+    }
+#endif
 }
 
 void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
@@ -2999,12 +3007,19 @@ bool GrGLCaps::getYUVAConfigFromBackendFormat(const GrBackendFormat& format,
     return get_yuva_config(*glFormat, config);
 }
 
-
-#ifdef GR_TEST_UTILS
 GrBackendFormat GrGLCaps::onCreateFormatFromBackendTexture(
         const GrBackendTexture& backendTex) const {
     GrGLTextureInfo glInfo;
     SkAssertResult(backendTex.getGLTextureInfo(&glInfo));
     return GrBackendFormat::MakeGL(glInfo.fFormat, glInfo.fTarget);
 }
-#endif
+
+GrBackendFormat GrGLCaps::getBackendFormatFromGrColorType(GrColorType ct,
+                                                          GrSRGBEncoded srgbEncoded) const {
+    GrPixelConfig config = GrColorTypeToPixelConfig(ct, srgbEncoded);
+    if (config == kUnknown_GrPixelConfig) {
+        return GrBackendFormat();
+    }
+    return GrBackendFormat::MakeGL(this->configSizedInternalFormat(config), GR_GL_TEXTURE_2D);
+}
+

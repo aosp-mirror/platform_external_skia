@@ -286,7 +286,7 @@ public:
         return SkToBool(this->getFlags() & kAntiAlias_Flag);
     }
 
-    /** Requests, but does not require, that SkPath edge pixels draw opaque or with
+    /** Requests, but does not require, that edge pixels draw opaque or with
         partial transparency.
 
         Sets kAntiAlias_Flag if aa is true.
@@ -325,7 +325,8 @@ public:
         return SkToBool(this->getFlags() & kLinearText_Flag);
     }
 
-    /** Returns true if text is converted to SkPath before drawing and measuring.
+    /** Requests, but does not require, that glyphs are converted to SkPath
+        before drawing and measuring.
         By default, kLinearText_Flag is clear.
 
         Sets kLinearText_Flag if linearText is true.
@@ -1145,6 +1146,11 @@ public:
     void getPosTextPath(const void* text, size_t length,
                         const SkPoint pos[], SkPath* path) const;
 
+#ifdef SK_SUPPORT_LEGACY_TEXTINTERCEPTS
+public:
+#else
+private:
+#endif
     /** Returns the number of intervals that intersect bounds.
         bounds describes a pair of lines parallel to the text advance.
         The return count is zero or a multiple of two, and is at most twice the number of glyphs in
@@ -1212,6 +1218,7 @@ public:
     */
     int getPosTextHIntercepts(const void* text, size_t length, const SkScalar xpos[],
                               SkScalar constY, const SkScalar bounds[2], SkScalar* intervals) const;
+public:
 
     /** Returns the number of intervals that intersect bounds.
         bounds describes a pair of lines parallel to the text advance.

@@ -20,10 +20,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 SkPDFUnion::SkPDFUnion(Type t) : fType(t) {}
-SkPDFUnion::SkPDFUnion(Type t, int32_t v)         : fIntValue    (v), fType(t) {}
-SkPDFUnion::SkPDFUnion(Type t, bool v)            : fBoolValue   (v), fType(t) {}
-SkPDFUnion::SkPDFUnion(Type t, SkScalar v)        : fScalarValue (v), fType(t) {}
-SkPDFUnion::SkPDFUnion(Type t, const SkString& v) : fType(t) { fSkString.init(v); }
+SkPDFUnion::SkPDFUnion(Type t, int32_t v)  : fIntValue    (v), fType(t) {}
+SkPDFUnion::SkPDFUnion(Type t, bool v)     : fBoolValue   (v), fType(t) {}
+SkPDFUnion::SkPDFUnion(Type t, SkScalar v) : fScalarValue (v), fType(t) {}
+SkPDFUnion::SkPDFUnion(Type t, SkString v) : fType(t) { fSkString.init(std::move(v)); }
 
 SkPDFUnion::~SkPDFUnion() {
     switch (fType) {
@@ -202,6 +202,10 @@ void SkPDFUnion::emitObject(SkWStream* stream) const {
         case Type::kObject:
             fObject->emitObject(stream);
             return;
+        case Type::kRef:
+            stream->writeDecAsText(fIntValue);
+            stream->writeText(" 0 R");  // Generation number is always 0.
+            return;
         default:
             SkDEBUGFAIL("SkPDFUnion::emitObject with bad type");
     }
@@ -218,6 +222,7 @@ void SkPDFUnion::addResources(SkPDFObjNumMap* objNumMap) const {
         case Type::kString:
         case Type::kNameSkS:
         case Type::kStringSkS:
+        case Type::kRef:
             return;  // These have no resources.
         case Type::kObjRef:
             objNumMap->addObjectRecursively(fObject);
@@ -263,9 +268,9 @@ SkPDFUnion SkPDFUnion::String(const char* value) {
     return u;
 }
 
-SkPDFUnion SkPDFUnion::Name(const SkString& s) { return SkPDFUnion(Type::kNameSkS, s); }
+SkPDFUnion SkPDFUnion::Name(SkString s) { return SkPDFUnion(Type::kNameSkS, std::move(s)); }
 
-SkPDFUnion SkPDFUnion::String(const SkString& s) { return SkPDFUnion(Type::kStringSkS, s); }
+SkPDFUnion SkPDFUnion::String(SkString s) { return SkPDFUnion(Type::kStringSkS, std::move(s)); }
 
 SkPDFUnion SkPDFUnion::ObjRef(sk_sp<SkPDFObject> objSp) {
     SkPDFUnion u(Type::kObjRef);
@@ -279,6 +284,10 @@ SkPDFUnion SkPDFUnion::Object(sk_sp<SkPDFObject> objSp) {
     SkASSERT(objSp.get());
     u.fObject = objSp.release();  // take ownership into union{}
     return u;
+}
+
+SkPDFUnion SkPDFUnion::Ref(SkPDFIndirectReference ref) {
+    return SkASSERT(ref.fValue > 0), SkPDFUnion(Type::kRef, (int32_t)ref.fValue);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -352,12 +361,12 @@ void SkPDFArray::appendName(const char name[]) {
     this->append(SkPDFUnion::Name(SkString(name)));
 }
 
-void SkPDFArray::appendName(const SkString& name) {
-    this->append(SkPDFUnion::Name(name));
+void SkPDFArray::appendName(SkString name) {
+    this->append(SkPDFUnion::Name(std::move(name)));
 }
 
-void SkPDFArray::appendString(const SkString& value) {
-    this->append(SkPDFUnion::String(value));
+void SkPDFArray::appendString(SkString value) {
+    this->append(SkPDFUnion::String(std::move(value)));
 }
 
 void SkPDFArray::appendString(const char value[]) {
@@ -370,6 +379,10 @@ void SkPDFArray::appendObject(sk_sp<SkPDFObject> objSp) {
 
 void SkPDFArray::appendObjRef(sk_sp<SkPDFObject> objSp) {
     this->append(SkPDFUnion::ObjRef(std::move(objSp)));
+}
+
+void SkPDFArray::appendRef(SkPDFIndirectReference ref) {
+    this->append(SkPDFUnion::Ref(ref));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -420,19 +433,29 @@ void SkPDFDict::reserve(int n) {
     fRecords.reserve(n);
 }
 
+void SkPDFDict::insertRef(const char key[], SkPDFIndirectReference ref) {
+    fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::Ref(ref)});
+}
+
+void SkPDFDict::insertRef(SkString key, SkPDFIndirectReference ref) {
+    fRecords.emplace_back(Record{SkPDFUnion::Name(std::move(key)), SkPDFUnion::Ref(ref)});
+}
+
 void SkPDFDict::insertObjRef(const char key[], sk_sp<SkPDFObject> objSp) {
     fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::ObjRef(std::move(objSp))});
 }
 
-void SkPDFDict::insertObjRef(const SkString& key, sk_sp<SkPDFObject> objSp) {
-    fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::ObjRef(std::move(objSp))});
+void SkPDFDict::insertObjRef(SkString key, sk_sp<SkPDFObject> objSp) {
+    fRecords.emplace_back(Record{SkPDFUnion::Name(std::move(key)),
+                                 SkPDFUnion::ObjRef(std::move(objSp))});
 }
 
 void SkPDFDict::insertObject(const char key[], sk_sp<SkPDFObject> objSp) {
     fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::Object(std::move(objSp))});
 }
-void SkPDFDict::insertObject(const SkString& key, sk_sp<SkPDFObject> objSp) {
-    fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::Object(std::move(objSp))});
+void SkPDFDict::insertObject(SkString key, sk_sp<SkPDFObject> objSp) {
+    fRecords.emplace_back(Record{SkPDFUnion::Name(std::move(key)),
+                                 SkPDFUnion::Object(std::move(objSp))});
 }
 
 void SkPDFDict::insertBool(const char key[], bool value) {
@@ -459,16 +482,16 @@ void SkPDFDict::insertName(const char key[], const char name[]) {
     fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::Name(name)});
 }
 
-void SkPDFDict::insertName(const char key[], const SkString& name) {
-    fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::Name(name)});
+void SkPDFDict::insertName(const char key[], SkString name) {
+    fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::Name(std::move(name))});
 }
 
 void SkPDFDict::insertString(const char key[], const char value[]) {
     fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::String(value)});
 }
 
-void SkPDFDict::insertString(const char key[], const SkString& value) {
-    fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::String(value)});
+void SkPDFDict::insertString(const char key[], SkString value) {
+    fRecords.emplace_back(Record{SkPDFUnion::Name(key), SkPDFUnion::String(std::move(value))});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -538,7 +561,7 @@ void SkPDFSharedStream::addResources(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-SkPDFStream:: SkPDFStream(sk_sp<SkData> data) {
+SkPDFStream::SkPDFStream(sk_sp<SkData> data) {
     this->setData(skstd::make_unique<SkMemoryStream>(std::move(data)));
 }
 
