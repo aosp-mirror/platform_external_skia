@@ -503,14 +503,13 @@ cc_library_static {
 
             neon: {
                 srcs: [
-                    "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
+                    
                 ],
             },
         },
 
         arm64: {
             srcs: [
-                "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
                 "src/opts/SkBitmapProcState_opts_none.cpp",
                 "src/opts/SkOpts_crc32.cpp",
             ],
