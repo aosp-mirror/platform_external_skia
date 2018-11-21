@@ -29,6 +29,8 @@ var CanvasKit = {
 	LTRBRect: function() {},
 	MakeCanvas: function() {},
 	MakeCanvasSurface: function() {},
+	MakeSWCanvasSurface: function() {},
+	MakeWebGLCanvasSurface: function() {},
 	MakeImageShader: function() {},
 	MakeLinearGradientShader: function() {},
 	MakeRadialGradientShader: function() {},
@@ -51,6 +53,10 @@ var CanvasKit = {
 	_MakeSkVertices: function() {},
 	_getRasterN32PremulSurface: function() {},
 	_getWebGLSurface: function() {},
+
+	// The testing object is meant to expose internal functions
+	// for more fine-grained testing, e.g. parseColor
+	_testing: {},
 
 	// Objects and properties on CanvasKit
 
@@ -90,11 +96,17 @@ var CanvasKit = {
 		_encodeToDataWithFormat: function() {},
 	},
 
+	SkMatrix: {
+		rotated: function() {},
+	},
+
 	SkPath: {
 		// public API (from C++ bindings)
 
 		// private API
+		_addArc: function() {},
 		_addPath: function() {},
+		_addRect: function() {},
 		_arc: function() {},
 		_arcTo: function() {},
 		_close: function() {},
@@ -165,16 +177,16 @@ var CanvasKit = {
 	gpu: {},
 	skottie: {},
 	PaintStyle: {
-		FILL: {},
-		STROKE: {},
-		STROKE_AND_FILL: {},
+		Fill: {},
+		Stroke: {},
+		StrokeAndFill: {},
 	},
 
 	FillType: {
-		WINDING: {},
-		EVENODD: {},
-		INVERSE_WINDING: {},
-		INVERSE_EVENODD: {},
+		Winding: {},
+		EvenOdd: {},
+		InverseWinding: {},
+		InverseEvenOdd: {},
 	},
 
 	ImageFormat: {
@@ -213,7 +225,9 @@ var CanvasKit = {
 // Public API things that are newly declared in the JS should go here.
 // It's not enough to declare them above, because closure can still erase them
 // unless they go on the prototype.
+CanvasKit.SkPath.prototype.addArc = function() {};
 CanvasKit.SkPath.prototype.addPath = function() {};
+CanvasKit.SkPath.prototype.addRect = function() {};
 CanvasKit.SkPath.prototype.arc = function() {};
 CanvasKit.SkPath.prototype.arcTo = function() {};
 CanvasKit.SkPath.prototype.close = function() {};
@@ -245,4 +259,4 @@ StrokeOpts.prototype.cap;
 StrokeOpts.prototype.join;
 
 // Not sure why this is needed - might be a bug in emsdk that this isn't properly declared.
-function loadWebAssemblyModule() {}
+function loadWebAssemblyModule() {};
