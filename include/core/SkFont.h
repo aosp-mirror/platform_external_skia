@@ -291,6 +291,23 @@ public:
         return this->textToGlyphs(text, byteLength, encoding, nullptr, 0);
     }
 
+    /** Returns true if all text corresponds to a non-zero glyph index.
+        Returns false if any characters in text are not supported in
+        SkTypeface.
+
+        If SkTextEncoding is kGlyphID_SkTextEncoding,
+        returns true if all glyph indices in text are non-zero;
+        does not check to see if text contains valid glyph indices for SkTypeface.
+
+        Returns true if byteLength is zero.
+
+        @param text        array of characters or glyphs
+        @param byteLength  number of bytes in text array
+        @param encoding    text encoding
+        @return            true if all text corresponds to a non-zero glyph index
+     */
+    bool containsText(const void* text, size_t byteLength, SkTextEncoding encoding) const;
+
     /** Returns the advance width of text.
         The advance is the normal distance to move before drawing additional text.
         Returns the bounding box of text if bounds is not nullptr.
@@ -318,6 +335,28 @@ public:
     void getWidths(const uint16_t glyphs[], int count, SkScalar widths[],
                    SkRect bounds[] = nullptr) const;
 
+    /** Experimental
+        Retrieves the positions for each glyph, beginning at the specified origin. The caller
+        must allocated at least count number of elements in the pos[] array.
+
+        @param glyphs   array of glyph indices to be positioned
+        @param count    number of glyphs
+        @param pos      returns glyphs positions
+        @param origin   location of the first glyph. Defaults to {0, 0}.
+     */
+    void getPos(const uint16_t glyphs[], int count, SkPoint pos[], SkPoint origin = {0, 0}) const;
+
+    /** Experimental
+        Retrieves the x-positions for each glyph, beginning at the specified origin. The caller
+        must allocated at least count number of elements in the xpos[] array.
+
+        @param glyphs   array of glyph indices to be positioned
+        @param count    number of glyphs
+        @param pos      returns glyphs x-positions
+        @param origin   x-position of the first glyph. Defaults to 0.
+     */
+    void getXPos(const uint16_t glyphs[], int count, SkScalar xpos[], SkScalar origin = 0) const;
+
     /** Returns path corresponding to glyph outline.
         If glyph has an outline, copies outline to path and returns true.
         path returned may be empty.
@@ -328,7 +367,6 @@ public:
         @return         true if glyphID is described by path
      */
     bool getPath(uint16_t glyphID, SkPath* path) const;
-
 
     /** Returns path corresponding to glyph array.
 
