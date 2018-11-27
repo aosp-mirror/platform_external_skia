@@ -68,6 +68,7 @@ cc_library {
     ],
 
     srcs: [
+        "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkBitmapRegionCodec.cpp",
         "src/android/SkBitmapRegionDecoder.cpp",
         "src/c/sk_effects.cpp",
