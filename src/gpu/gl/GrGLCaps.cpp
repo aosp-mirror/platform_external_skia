@@ -2468,15 +2468,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = true;
     }
 
-    // Intel Skylake instanced draws get corrupted if we mix them with normal ones. Adding a flush
-    // in between seems to resolve this, but it also tends to cause perf regressions. So we just
-    // disable instancing altogether on Skylake.
-    if (kIntelSkylake_GrGLRenderer == ctxInfo.renderer() ||
-        (kANGLE_GrGLRenderer == ctxInfo.renderer() &&
-         GrGLANGLERenderer::kSkylake == ctxInfo.angleRenderer())) {
-        fInstanceAttribSupport = false;
-    }
-
     // This was reproduced on a Pixel 1, but the unit test + config + options that exercise it are
     // only tested on very specific bots. The driver claims that ReadPixels is an invalid operation
     // when reading from an auto-resolving MSAA framebuffer that has stencil attached.

@@ -765,6 +765,7 @@ cc_library_static {
           "src/gpu/ops/GrDrawPathOp.cpp",
           "src/gpu/ops/GrDrawVerticesOp.cpp",
           "src/gpu/ops/GrDrawableOp.cpp",
+          "src/gpu/ops/GrFillRectOp.cpp",
           "src/gpu/ops/GrLatticeOp.cpp",
           "src/gpu/ops/GrMeshDrawOp.cpp",
           "src/gpu/ops/GrNonAAFillRectOp.cpp",
@@ -878,6 +879,22 @@ cc_library_static {
           "include/config/linux",
         ],
       },
+      darwin: {
+        cflags: [
+          "-mssse3",
+        ],
+        srcs: [
+          "src/ports/SkDebug_stdio.cpp",
+          "src/ports/SkImageEncoder_CG.cpp",
+          "src/ports/SkImageGeneratorCG.cpp",
+        ],
+        local_include_dirs: [
+          "include/config/mac",
+        ],
+        export_include_dirs: [
+          "include/config/mac",
+        ],
+      },
     },
 
     defaults: ["skia_deps",
@@ -941,6 +958,11 @@ cc_defaults {
             "libheif",
             "libvulkan",
             "libnativewindow",
+        ],
+      },
+      darwin: {
+        host_ldlibs: [
+            "-framework AppKit",
         ],
       },
     },
@@ -1170,6 +1192,7 @@ cc_test {
         "gm/drawimageset.cpp",
         "gm/drawlooper.cpp",
         "gm/drawminibitmaprect.cpp",
+        "gm/drawquadset.cpp",
         "gm/drawregion.cpp",
         "gm/drawregionmodes.cpp",
         "gm/dropshadowimagefilter.cpp",
@@ -2103,6 +2126,7 @@ cc_test {
         "gm/drawimageset.cpp",
         "gm/drawlooper.cpp",
         "gm/drawminibitmaprect.cpp",
+        "gm/drawquadset.cpp",
         "gm/drawregion.cpp",
         "gm/drawregionmodes.cpp",
         "gm/dropshadowimagefilter.cpp",
