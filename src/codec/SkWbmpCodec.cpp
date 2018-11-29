@@ -97,11 +97,6 @@ bool SkWbmpCodec::onRewind() {
     return read_header(this->stream(), nullptr);
 }
 
-SkSwizzler* SkWbmpCodec::initializeSwizzler(const SkImageInfo& info, const SkPMColor* ctable,
-        const Options& opts) {
-    return SkSwizzler::CreateSwizzler(this->getEncodedInfo(), ctable, info, opts);
-}
-
 bool SkWbmpCodec::readRow(uint8_t* row) {
     return this->stream()->read(row, fSrcRowBytes) == fSrcRowBytes;
 }
@@ -139,7 +134,8 @@ SkCodec::Result SkWbmpCodec::onGetPixels(const SkImageInfo& info,
     setup_color_table(info.colorType(), ctable, ctableCount);
 
     // Initialize the swizzler
-    std::unique_ptr<SkSwizzler> swizzler(this->initializeSwizzler(info, ctable, options));
+    std::unique_ptr<SkSwizzler> swizzler = SkSwizzler::Make(this->getEncodedInfo(), nullptr, info,
+                                                            options);
     SkASSERT(swizzler);
 
     // Perform the decode
@@ -212,7 +208,8 @@ SkCodec::Result SkWbmpCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
     }
 
     // Initialize the swizzler
-    fSwizzler.reset(this->initializeSwizzler(dstInfo, get_color_ptr(fColorTable.get()), options));
+    fSwizzler = SkSwizzler::Make(this->getEncodedInfo(), get_color_ptr(fColorTable.get()),
+                                 dstInfo, options);
     SkASSERT(fSwizzler);
 
     fSrcBuffer.reset(fSrcRowBytes);

@@ -637,13 +637,6 @@ void SkJpegCodec::allocateStorage(const SkImageInfo& dstInfo) {
 
 void SkJpegCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& options,
         bool needsCMYKToRGB) {
-    SkEncodedInfo swizzlerInfo = this->getEncodedInfo();
-    if (needsCMYKToRGB) {
-        swizzlerInfo = SkEncodedInfo::Make(SkEncodedInfo::kInvertedCMYK_Color,
-                                           swizzlerInfo.alpha(),
-                                           swizzlerInfo.bitsPerComponent());
-    }
-
     Options swizzlerOptions = options;
     if (options.fSubset) {
         // Use fSwizzlerSubset if this is a subset decode.  This is necessary in the case
@@ -660,8 +653,31 @@ void SkJpegCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& 
         swizzlerDstInfo = swizzlerDstInfo.makeColorType(kRGBA_8888_SkColorType);
     }
 
-    fSwizzler.reset(SkSwizzler::CreateSwizzler(swizzlerInfo, nullptr, swizzlerDstInfo,
-                                               swizzlerOptions, nullptr, !needsCMYKToRGB));
+    if (needsCMYKToRGB) {
+        // The swizzler is used to convert to from CMYK.
+        auto swizzlerInfo = SkEncodedInfo::Make(SkEncodedInfo::kInvertedCMYK_Color,
+                                                SkEncodedInfo::kOpaque_Alpha, 8);
+        fSwizzler = SkSwizzler::Make(swizzlerInfo, nullptr, swizzlerDstInfo, swizzlerOptions);
+    } else {
+        int srcBPP = 0;
+        switch (fDecoderMgr->dinfo()->out_color_space) {
+            case JCS_EXT_RGBA:
+            case JCS_EXT_BGRA:
+            case JCS_CMYK:
+                srcBPP = 4;
+                break;
+            case JCS_RGB565:
+                srcBPP = 2;
+                break;
+            case JCS_GRAYSCALE:
+                srcBPP = 1;
+                break;
+            default:
+                SkASSERT(false);
+                break;
+        }
+        fSwizzler = SkSwizzler::MakeSimple(srcBPP, swizzlerDstInfo, swizzlerOptions);
+    }
     SkASSERT(fSwizzler);
 }
 
