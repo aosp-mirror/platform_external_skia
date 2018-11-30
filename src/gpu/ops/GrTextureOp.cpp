@@ -507,7 +507,7 @@ private:
 #if defined(__clang__) && (__clang_major__ * 1000 + __clang_minor__) >= 3007
 __attribute__((no_sanitize("float-cast-overflow")))
 #endif
-    size_t RectSizeAsSizeT(const SkRect& rect) {;
+    size_t RectSizeAsSizeT(const SkRect& rect) {
         return static_cast<size_t>(SkTMax(rect.width(), 1.f) * SkTMax(rect.height(), 1.f));
     }
 

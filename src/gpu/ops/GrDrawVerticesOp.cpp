@@ -134,7 +134,7 @@ sk_sp<GrGeometryProcessor> GrDrawVerticesOp::makeGP(bool* hasColorAttribute,
         *hasColorAttribute = true;
     } else {
         *hasColorAttribute = false;
-    };
+    }
     const SkMatrix& vm = this->hasMultipleViewMatrices() ? SkMatrix::I() : fMeshes[0].fViewMatrix;
     return GrDefaultGeoProcFactory::Make(color, Coverage::kSolid_Type, localCoordsType, vm);
 }

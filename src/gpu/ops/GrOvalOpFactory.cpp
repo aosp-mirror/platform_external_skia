@@ -2701,7 +2701,7 @@ static sk_sp<const GrBuffer> get_rrect_index_buffer(RRectType type,
         default:
             SkASSERT(false);
             return nullptr;
-    };
+    }
 }
 
 class EllipticalRRectOp : public GrMeshDrawOp {

@@ -9,8 +9,8 @@
 #include "vk/GrVkBackendContext.h"
 #include "vk/GrVkUtil.h"
 
-#define ACQUIRE_PROC(name, instance, device) fFunctions.f##name = \
-    reinterpret_cast<PFN_vk##name>(getProc("vk"#name, instance, device));
+#define ACQUIRE_PROC(name, instance, device) \
+    fFunctions.f##name = reinterpret_cast<PFN_vk##name>(getProc("vk" #name, instance, device))
 
 GrVkInterface::GetProc make_unified_getter(const GrVkInterface::GetInstanceProc& iproc,
                                            const GrVkInterface::GetDeviceProc& dproc) {
