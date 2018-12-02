@@ -62,7 +62,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fUseDrawInsteadOfAllRenderTargetWrites = false;
     fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = false;
     fDetachStencilFromMSAABuffersBeforeReadPixels = false;
-    fClampMaxTextureLevelToOne = false;
+    fDontSetBaseOrMaxLevelForExternalTextures = false;
     fProgramBinarySupport = false;
     fSamplerObjectSupport = false;
 
@@ -1735,13 +1735,13 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
 
     // Leaving Gray8 as non-renderable, to keep things simple and match raster. However, we do
     // enable the FBOColorAttachment_Flag so that we can bind it to an FBO for copies.
-    grayRedInfo.fFlags |= ConfigInfo::kFBOColorAttachment_Flag;;
+    grayRedInfo.fFlags |= ConfigInfo::kFBOColorAttachment_Flag;
     if (kStandard_MSFBOType == this->msFBOType() && kGL_GrGLStandard == standard &&
         !disableGrayLumFBOForMesa) {
         // desktop ARB extension/3.0+ supports LUMINANCE8 as renderable.
         // However, osmesa fails if it used even when GL_ARB_framebuffer_object is present.
         // Core profile removes LUMINANCE8 support, but we should have chosen R8 in that case.
-        grayLumInfo.fFlags |= ConfigInfo::kFBOColorAttachment_Flag;;
+        grayLumInfo.fFlags |= ConfigInfo::kFBOColorAttachment_Flag;
     }
     if (texStorageSupported && !isCommandBufferES2) {
         if (!disableR8TexStorageForANGLEGL) {
@@ -2725,20 +2725,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fBlacklistCoverageCounting = true;
     }
 
-#ifdef SK_BUILD_FOR_MAC
-    // Expirment to see if this resolves crbug.com/906453.
-    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
-        fDynamicStateArrayGeometryProcessorTextureSupport = false;
-    }
-#endif
-
 #ifdef SK_BUILD_FOR_ANDROID
-    // Older versions of Android have problems with setting GL_TEXTURE_MAX_LEVEL to 0 for
-    // EGL images (or possibly just GL_TEXTURE_EXTERNAL_OES).
-    // If the texture is not MIP mapped (only has level 0) then it should be harmless to use a
-    // GL_TEXTURE_MAX_LEVEL of 1. Such textures are never used with GL_*_MIPMAP_* set for
-    // GL_TEXTURE_MIN_FILTER.
-    fClampMaxTextureLevelToOne = true;
+    // Older versions of Android have problems with setting GL_TEXTURE_BASE_LEVEL or
+    // GL_TEXTURE_MAX_LEVEL on GL_TEXTURE_EXTERTNAL_OES textures. We just leave them as is and hope
+    // the client never changes them either.
+    fDontSetBaseOrMaxLevelForExternalTextures = true;
 #endif
 }
 

@@ -13,6 +13,7 @@
 #endif
 
 #include "SkBlendMode.h"
+#include "SkBlurTypes.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
 #include "SkCornerPathEffect.h"
@@ -21,10 +22,11 @@
 #include "SkDiscretePathEffect.h"
 #include "SkEncodedImageFormat.h"
 #include "SkFontMgr.h"
-#include "SkBlurTypes.h"
 #include "SkFontMgrPriv.h"
 #include "SkGradientShader.h"
+#include "SkImageInfo.h"
 #include "SkImageShader.h"
+#include "SkMakeUnique.h"
 #include "SkMaskFilter.h"
 #include "SkPaint.h"
 #include "SkParsePath.h"
@@ -44,7 +46,11 @@
 
 #if SK_INCLUDE_SKOTTIE
 #include "Skottie.h"
-#endif
+#if SK_INCLUDE_MANAGED_SKOTTIE
+#include "SkottieProperty.h"
+#include "SkottieUtils.h"
+#endif // SK_INCLUDE_MANAGED_SKOTTIE
+#endif // SK_INCLUDE_SKOTTIE
 #if SK_INCLUDE_NIMA
 #include "nima/NimaActor.h"
 #endif
@@ -64,6 +70,7 @@ using namespace emscripten;
 // Self-documenting types
 using JSArray = emscripten::val;
 using JSColor = int32_t;
+using JSObject = emscripten::val;
 using JSString = emscripten::val;
 using SkPathOrNull = emscripten::val;
 using Uint8Array = emscripten::val;
@@ -142,6 +149,90 @@ SkMatrix toSkMatrix(const SimpleMatrix& sm) {
                              sm.skewY , sm.scaleY, sm.transY,
                              sm.pers0 , sm.pers1 , sm.pers2);
 }
+
+struct SimpleImageInfo {
+    int width;
+    int height;
+    SkColorType colorType;
+    SkAlphaType alphaType;
+    // TODO color spaces?
+};
+
+SkImageInfo toSkImageInfo(const SimpleImageInfo& sii) {
+    return SkImageInfo::Make(sii.width, sii.height, sii.colorType, sii.alphaType);
+}
+
+#if SK_INCLUDE_SKOTTIE && SK_INCLUDE_MANAGED_SKOTTIE
+namespace {
+
+class ManagedAnimation final : public SkRefCnt {
+public:
+    static sk_sp<ManagedAnimation> Make(const std::string& json) {
+        auto mgr = skstd::make_unique<skottie_utils::CustomPropertyManager>();
+        auto animation = skottie::Animation::Builder()
+                            .setPropertyObserver(mgr->getPropertyObserver())
+                            .make(json.c_str(), json.size());
+
+        return animation
+            ? sk_sp<ManagedAnimation>(new ManagedAnimation(std::move(animation), std::move(mgr)))
+            : nullptr;
+    }
+
+    // skottie::Animation API
+    void render(SkCanvas* canvas) const { fAnimation->render(canvas, nullptr); }
+    void render(SkCanvas* canvas, const SkRect& dst) const { fAnimation->render(canvas, &dst); }
+    void seek(SkScalar t) { fAnimation->seek(t); }
+    SkScalar duration() const { return fAnimation->duration(); }
+    const SkSize&      size() const { return fAnimation->size(); }
+    std::string version() const { return std::string(fAnimation->version().c_str()); }
+
+    // CustomPropertyManager API
+    JSArray getColorProps() const {
+        JSArray props = emscripten::val::array();
+
+        for (const auto& cp : fPropMgr->getColorProps()) {
+            JSObject prop = emscripten::val::object();
+            prop.set("key", cp);
+            prop.set("value", fPropMgr->getColor(cp));
+            props.call<void>("push", prop);
+        }
+
+        return props;
+    }
+
+    JSArray getOpacityProps() const {
+        JSArray props = emscripten::val::array();
+
+        for (const auto& op : fPropMgr->getOpacityProps()) {
+            JSObject prop = emscripten::val::object();
+            prop.set("key", op);
+            prop.set("value", fPropMgr->getOpacity(op));
+            props.call<void>("push", prop);
+        }
+
+        return props;
+    }
+
+    bool setColor(const std::string& key, JSColor c) {
+        return fPropMgr->setColor(key, static_cast<SkColor>(c));
+    }
+
+    bool setOpacity(const std::string& key, float o) {
+        return fPropMgr->setOpacity(key, o);
+    }
+
+private:
+    ManagedAnimation(sk_sp<skottie::Animation> animation,
+                     std::unique_ptr<skottie_utils::CustomPropertyManager> propMgr)
+        : fAnimation(std::move(animation))
+        , fPropMgr(std::move(propMgr)) {}
+
+    sk_sp<skottie::Animation>                             fAnimation;
+    std::unique_ptr<skottie_utils::CustomPropertyManager> fPropMgr;
+};
+
+} // anonymous ns
+#endif // SK_INCLUDE_SKOTTIE
 
 //========================================================================================
 // Path things
@@ -344,6 +435,13 @@ EMSCRIPTEN_BINDINGS(Skia) {
     function("setCurrentContext", &emscripten_webgl_make_context_current);
     constant("gpu", true);
 #endif
+    function("_getRasterDirectSurface", optional_override([](const SimpleImageInfo ii,
+                                                             uintptr_t /* uint8_t*  */ pptr,
+                                                             size_t rowBytes)->sk_sp<SkSurface> {
+        uint8_t* pixels = reinterpret_cast<uint8_t*>(pptr);
+        SkImageInfo imageInfo = toSkImageInfo(ii);
+        return SkSurface::MakeRasterDirect(imageInfo, pixels, rowBytes, nullptr);
+    }), allow_raw_pointers());
     function("_getRasterN32PremulSurface", optional_override([](int width, int height)->sk_sp<SkSurface> {
         return SkSurface::MakeRasterN32Premul(width, height, nullptr);
     }), allow_raw_pointers());
@@ -377,6 +475,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
         return SkImageShader::Make(img, tx, ty, nullptr);
     }), allow_raw_pointers());
+    // Allow localMatrix to be optional, so we have 2 declarations of these gradients
     function("_MakeLinearGradientShader", optional_override([](SkPoint start, SkPoint end,
                                 uintptr_t /* SkColor*  */ cPtr, uintptr_t /* SkScalar*  */ pPtr,
                                 int count, SkShader::TileMode mode, uint32_t flags)->sk_sp<SkShader> {
@@ -424,6 +523,35 @@ EMSCRIPTEN_BINDINGS(Skia) {
         return SkGradientShader::MakeRadial(center, radius, colors, positions, count,
                                             mode, flags, &localMatrix);
     }), allow_raw_pointers());
+    function("_MakeTwoPointConicalGradientShader", optional_override([](
+                SkPoint start, SkScalar startRadius,
+                SkPoint end, SkScalar endRadius,
+                uintptr_t /* SkColor*  */ cPtr, uintptr_t /* SkScalar*  */ pPtr,
+                int count, SkShader::TileMode mode, uint32_t flags)->sk_sp<SkShader> {
+        // See comment above for uintptr_t explanation
+        const SkColor*  colors    = reinterpret_cast<const SkColor*> (cPtr);
+        const SkScalar* positions = reinterpret_cast<const SkScalar*>(pPtr);
+
+        return SkGradientShader::MakeTwoPointConical(start, startRadius, end, endRadius,
+                                                     colors, positions, count, mode,
+                                                     flags, nullptr);
+    }), allow_raw_pointers());
+    function("_MakeTwoPointConicalGradientShader", optional_override([](
+                SkPoint start, SkScalar startRadius,
+                SkPoint end, SkScalar endRadius,
+                uintptr_t /* SkColor*  */ cPtr, uintptr_t /* SkScalar*  */ pPtr,
+                int count, SkShader::TileMode mode, uint32_t flags,
+                const SimpleMatrix& lm)->sk_sp<SkShader> {
+        // See comment above for uintptr_t explanation
+        const SkColor*  colors    = reinterpret_cast<const SkColor*> (cPtr);
+        const SkScalar* positions = reinterpret_cast<const SkScalar*>(pPtr);
+
+        SkMatrix localMatrix = toSkMatrix(lm);
+        return SkGradientShader::MakeTwoPointConical(start, startRadius, end, endRadius,
+                                                     colors, positions, count, mode,
+                                                     flags, &localMatrix);
+    }), allow_raw_pointers());
+
     function("_MakeSkVertices", optional_override([](SkVertices::VertexMode mode, int vertexCount,
                                 uintptr_t /* SkPoint*     */ pPtr,  uintptr_t /* SkPoint*     */ tPtr,
                                 uintptr_t /* SkColor*     */ cPtr,
@@ -448,6 +576,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
             // Add a optional_override to change it out.
             self.clear(SkColor(color));
         }))
+        .function("clipPath", select_overload<void (const SkPath&, SkClipOp, bool)>(&SkCanvas::clipPath))
         .function("drawPaint", &SkCanvas::drawPaint)
         .function("drawPath", &SkCanvas::drawPath)
         .function("drawRect", &SkCanvas::drawRect)
@@ -468,6 +597,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         .function("drawVertices", select_overload<void (const sk_sp<SkVertices>&, SkBlendMode, const SkPaint&)>(&SkCanvas::drawVertices))
         .function("flush", &SkCanvas::flush)
+        .function("restore", &SkCanvas::restore)
         .function("rotate", select_overload<void (SkScalar, SkScalar, SkScalar)>(&SkCanvas::rotate))
         .function("save", &SkCanvas::save)
         .function("scale", &SkCanvas::scale)
@@ -612,6 +742,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
 #endif
         .function("vertexCount", &SkVertices::vertexCount);
 
+    enum_<SkAlphaType>("AlphaType")
+        .value("Opaque",   SkAlphaType::kOpaque_SkAlphaType)
+        .value("Premul",   SkAlphaType::kPremul_SkAlphaType)
+        .value("Unpremul", SkAlphaType::kUnpremul_SkAlphaType);
 
     enum_<SkBlendMode>("BlendMode")
         .value("Clear",      SkBlendMode::kClear)
@@ -649,6 +783,23 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("Solid",  SkBlurStyle::kSolid_SkBlurStyle)
         .value("Outer",  SkBlurStyle::kOuter_SkBlurStyle)
         .value("Inner",  SkBlurStyle::kInner_SkBlurStyle);
+
+    enum_<SkClipOp>("ClipOp")
+        .value("Difference", SkClipOp::kDifference)
+        .value("Intersect",  SkClipOp::kIntersect);
+
+    enum_<SkColorType>("ColorType")
+        .value("Alpha_8", SkColorType::kAlpha_8_SkColorType)
+        .value("RGB_565", SkColorType::kRGB_565_SkColorType)
+        .value("ARGB_4444", SkColorType::kARGB_4444_SkColorType)
+        .value("RGBA_8888", SkColorType::kRGBA_8888_SkColorType)
+        .value("RGB_888x", SkColorType::kRGB_888x_SkColorType)
+        .value("BGRA_8888", SkColorType::kBGRA_8888_SkColorType)
+        .value("RGBA_1010102", SkColorType::kRGBA_1010102_SkColorType)
+        .value("RGB_101010x", SkColorType::kRGB_101010x_SkColorType)
+        .value("Gray_8", SkColorType::kGray_8_SkColorType)
+        .value("RGBA_F16", SkColorType::kRGBA_F16_SkColorType)
+        .value("RGBA_F32", SkColorType::kRGBA_F32_SkColorType);
 
     enum_<SkPath::FillType>("FillType")
         .value("Winding",           SkPath::FillType::kWinding_FillType)
@@ -714,6 +865,12 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .field("fRight",  &SkIRect::fRight)
         .field("fBottom", &SkIRect::fBottom);
 
+    value_object<SimpleImageInfo>("SkImageInfo")
+        .field("width",     &SimpleImageInfo::width)
+        .field("height",    &SimpleImageInfo::height)
+        .field("colorType", &SimpleImageInfo::colorType)
+        .field("alphaType", &SimpleImageInfo::alphaType);
+
     // SkPoints can be represented by [x, y]
     value_array<SkPoint>("SkPoint")
         .element(&SkPoint::fX)
@@ -758,6 +915,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("YELLOW",      (JSColor) SK_ColorYELLOW);
     constant("CYAN",        (JSColor) SK_ColorCYAN);
     constant("BLACK",       (JSColor) SK_ColorBLACK);
+    constant("WHITE",       (JSColor) SK_ColorWHITE);
     // TODO(?)
 
 #if SK_INCLUDE_SKOTTIE
@@ -773,7 +931,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("render", optional_override([](skottie::Animation& self, SkCanvas* canvas)->void {
             self.render(canvas, nullptr);
         }), allow_raw_pointers())
-        .function("render", optional_override([](skottie::Animation& self, SkCanvas* canvas, const SkRect r)->void {
+        .function("render", optional_override([](skottie::Animation& self, SkCanvas* canvas,
+                                                 const SkRect r)->void {
             self.render(canvas, &r);
         }), allow_raw_pointers());
 
@@ -781,7 +940,27 @@ EMSCRIPTEN_BINDINGS(Skia) {
         return skottie::Animation::Make(json.c_str(), json.length());
     }));
     constant("skottie", true);
-#endif
+
+#if SK_INCLUDE_MANAGED_SKOTTIE
+    class_<ManagedAnimation>("ManagedAnimation")
+        .smart_ptr<sk_sp<ManagedAnimation>>("sk_sp<ManagedAnimation>")
+        .function("version"   , &ManagedAnimation::version)
+        .function("size"      , &ManagedAnimation::size)
+        .function("duration"  , &ManagedAnimation::duration)
+        .function("seek"      , &ManagedAnimation::seek)
+        .function("render"    , select_overload<void(SkCanvas*) const>
+                                    (&ManagedAnimation::render), allow_raw_pointers())
+        .function("render"    , select_overload<void(SkCanvas*, const SkRect&) const>
+                                    (&ManagedAnimation::render), allow_raw_pointers())
+        .function("setColor"  , &ManagedAnimation::setColor)
+        .function("setOpacity", &ManagedAnimation::setOpacity)
+        .function("getColorProps"  , &ManagedAnimation::getColorProps)
+        .function("getOpacityProps", &ManagedAnimation::getOpacityProps);
+
+    function("MakeManagedAnimation", &ManagedAnimation::Make);
+    constant("managed_skottie", true);
+#endif // SK_INCLUDE_MANAGED_SKOTTIE
+#endif // SK_INCLUDE_SKOTTIE
 
 #if SK_INCLUDE_NIMA
     class_<NimaActor>("NimaActor")

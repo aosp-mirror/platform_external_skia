@@ -61,13 +61,16 @@ int SkGetPolygonWinding(const SkPoint* polygonVerts, int polygonSize) {
 }
 
 // Compute difference vector to offset p0-p1 'offset' units in direction specified by 'side'
-void compute_offset_vector(const SkPoint& p0, const SkPoint& p1, SkScalar offset, int side,
+bool compute_offset_vector(const SkPoint& p0, const SkPoint& p1, SkScalar offset, int side,
                            SkPoint* vector) {
     SkASSERT(side == -1 || side == 1);
     // if distances are equal, can just outset by the perpendicular
     SkVector perp = SkVector::Make(p0.fY - p1.fY, p1.fX - p0.fX);
-    perp.setLength(offset*side);
+    if (!perp.setLength(offset*side)) {
+        return false;
+    }
     *vector = perp;
+    return true;
 }
 
 // check interval to see if intersection is in segment
@@ -1160,8 +1163,10 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
             return false;
         }
         int nextIndex = (currIndex + 1) % inputPolygonSize;
-        compute_offset_vector(inputPolygonVerts[currIndex], inputPolygonVerts[nextIndex],
-                              offset, winding, &normals[currIndex]);
+        if (!compute_offset_vector(inputPolygonVerts[currIndex], inputPolygonVerts[nextIndex],
+                                   offset, winding, &normals[currIndex])) {
+            return false;
+        }
         if (currIndex > 0) {
             // if reflex point, we need to add extra edges
             if (is_reflex_vertex(inputPolygonVerts, winding, offset,
@@ -1686,3 +1691,116 @@ bool SkTriangulateSimplePolygon(const SkPoint* polygonVerts, uint16_t* indexMap,
 
     return true;
 }
+
+///////////
+
+static double crs(SkVector a, SkVector b) {
+    return a.fX * b.fY - a.fY * b.fX;
+}
+
+static int sign(SkScalar v) {
+    return v < 0 ? -1 : (v > 0);
+}
+
+struct SignTracker {
+    int fSign;
+    int fSignChanges;
+
+    void reset() {
+        fSign = 0;
+        fSignChanges = 0;
+    }
+
+    void init(int s) {
+        SkASSERT(fSignChanges == 0);
+        SkASSERT(s == 1 || s == -1 || s == 0);
+        fSign = s;
+        fSignChanges = 1;
+    }
+
+    void update(int s) {
+        if (s) {
+            if (fSign != s) {
+                fSignChanges += 1;
+                fSign = s;
+            }
+        }
+    }
+};
+
+struct ConvexTracker {
+    SkVector    fFirst, fPrev;
+    SignTracker fDSign, fCSign;
+    int         fVecCounter;
+    bool        fIsConcave;
+
+    ConvexTracker() { this->reset(); }
+
+    void reset() {
+        fPrev = {0, 0};
+        fDSign.reset();
+        fCSign.reset();
+        fVecCounter = 0;
+        fIsConcave = false;
+    }
+
+    void addVec(SkPoint p1, SkPoint p0) {
+        this->addVec(p1 - p0);
+    }
+    void addVec(SkVector v) {
+        if (v.fX == 0 && v.fY == 0) {
+            return;
+        }
+
+        fVecCounter += 1;
+        if (fVecCounter == 1) {
+            fFirst = fPrev = v;
+            fDSign.update(sign(v.fX));
+            return;
+        }
+
+        SkScalar d = v.fX;
+        SkScalar c = crs(fPrev, v);
+        int sign_c;
+        if (c) {
+            sign_c = sign(c);
+        } else {
+            if (d >= 0) {
+                sign_c = fCSign.fSign;
+            } else {
+                sign_c = -fCSign.fSign;
+            }
+        }
+
+        fDSign.update(sign(d));
+        fCSign.update(sign_c);
+        fPrev = v;
+
+        if (fDSign.fSignChanges > 3 || fCSign.fSignChanges > 1) {
+            fIsConcave = true;
+        }
+    }
+
+    void finalCross() {
+        this->addVec(fFirst);
+    }
+};
+
+bool SkIsPolyConvex_experimental(const SkPoint pts[], int count) {
+    if (count <= 3) {
+        return true;
+    }
+
+    ConvexTracker tracker;
+
+    for (int i = 0; i < count - 1; ++i) {
+        tracker.addVec(pts[i + 1], pts[i]);
+        if (tracker.fIsConcave) {
+            return false;
+        }
+    }
+    tracker.addVec(pts[0], pts[count - 1]);
+    tracker.finalCross();
+    return !tracker.fIsConcave;
+}
+

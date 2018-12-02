@@ -207,7 +207,7 @@ static inline GrGLenum wrap_mode_to_gl_wrap(GrSamplerState::WrapMode wrapMode) {
         case GrSamplerState::WrapMode::kClamp:        return GR_GL_CLAMP_TO_EDGE;
         case GrSamplerState::WrapMode::kRepeat:       return GR_GL_REPEAT;
         case GrSamplerState::WrapMode::kMirrorRepeat: return GR_GL_MIRRORED_REPEAT;
-    };
+    }
     SK_ABORT("Unknown wrap mode");
     return 0;
 }
@@ -2902,9 +2902,6 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, GrGLTexture*
     GrGLTexture::NonSamplerParams newNonSamplerParams;
     newNonSamplerParams.fBaseMipMapLevel = 0;
     newNonSamplerParams.fMaxMipMapLevel = texture->texturePriv().maxMipMapLevel();
-    if (this->glCaps().clampMaxTextureLevelToOne()) {
-        newNonSamplerParams.fMaxMipMapLevel = SkTMax(newNonSamplerParams.fMaxMipMapLevel, 1);
-    }
 
     const GrGLTexture::NonSamplerParams& oldNonSamplerParams = texture->getCachedNonSamplerParams();
     if (this->glCaps().textureSwizzleSupport()) {
@@ -2928,7 +2925,9 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, GrGLTexture*
         }
     }
     // These are not supported in ES2 contexts
-    if (this->glCaps().mipMapLevelAndLodControlSupport()) {
+    if (this->glCaps().mipMapLevelAndLodControlSupport() &&
+        (texture->texturePriv().textureType() != GrTextureType::kExternal ||
+         !this->glCaps().dontSetBaseOrMaxLevelForExternalTextures())) {
         if (newNonSamplerParams.fBaseMipMapLevel != oldNonSamplerParams.fBaseMipMapLevel) {
             this->setTextureUnit(unitIdx);
             GL_CALL(TexParameteri(target, GR_GL_TEXTURE_BASE_LEVEL,
