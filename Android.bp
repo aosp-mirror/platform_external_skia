@@ -980,6 +980,7 @@ cc_defaults {
     ],
     cflags: [
         "-Wno-implicit-fallthrough",
+        "-Wno-self-assign-overloaded",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
     ],
