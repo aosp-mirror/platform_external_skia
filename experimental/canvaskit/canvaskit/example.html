@@ -48,9 +48,6 @@
 <!-- Doesn't work yet. -->
 <button id=lego_btn>Take a picture of the legos</button>
 
-<h2> Nima </h2>
-
-<canvas id=nima_example width=300 height=300></canvas>
 
 <script type="text/javascript" src="/node_modules/canvaskit/bin/canvaskit.js"></script>
 
@@ -89,8 +86,6 @@
       SkottieExample(CanvasKit, 'sk_drinks', drinksJSON, fullBounds);
       SkottieExample(CanvasKit, 'sk_party', confettiJSON, fullBounds);
       SkottieExample(CanvasKit, 'sk_onboarding', onboardingJSON, fullBounds);
-
-      NimaExample(CanvasKit, nimaFile, nimaTexture);
 
       CanvasAPI1(CanvasKit);
       CanvasAPI2(CanvasKit);
@@ -135,36 +130,10 @@
     });
   });
 
-  fetch('https://storage.googleapis.com/skia-cdn/misc/robot.nima').then((resp) => {
-    resp.blob().then((blob) => {
-      let reader = new FileReader();
-      reader.addEventListener("loadend", function() {
-          nimaFile = reader.result;
-          NimaExample(CanvasKit, nimaFile, nimaTexture);
-      });
-      reader.readAsArrayBuffer(blob);
-    });
-  });
-
-  fetch('https://storage.googleapis.com/skia-cdn/misc/robot.nima.png').then((resp) => {
-    resp.blob().then((blob) => {
-      let reader = new FileReader();
-      reader.addEventListener("loadend", function() {
-          nimaTexture = reader.result;
-          NimaExample(CanvasKit, nimaFile, nimaTexture);
-      });
-      reader.readAsArrayBuffer(blob);
-    });
-  });
-
   fetch('https://storage.googleapis.com/skia-cdn/misc/bones.jpg').then((resp) => {
-    resp.blob().then((blob) => {
-      let reader = new FileReader();
-      reader.addEventListener("loadend", function() {
-          bonesImage = reader.result;
-          VertexAPI2(CanvasKit, bonesImage);
-      });
-      reader.readAsArrayBuffer(blob);
+    resp.arrayBuffer().then((buffer) => {
+      bonesImage = buffer;
+      VertexAPI2(CanvasKit, bonesImage);
     });
   });
 
@@ -448,25 +417,55 @@
     let skcanvas = CanvasKit.MakeCanvas(300, 300);
     let realCanvas = document.getElementById('api1_c');
 
-    for (let canvas of [skcanvas, realCanvas]) {
-      let ctx = canvas.getContext('2d');
-      ctx.font = '30px Impact'
-      ctx.rotate(.1);
-      let text = ctx.measureText('Awesome');
-      ctx.fillText('Awesome ', 50, 100);
-      ctx.strokeText('Groovy!', 60+text.width, 100);
+    let skPromise   = fetch('./test.png')
+                        // if clients want to use a Blob, they are responsible
+                        // for reading it themselves.
+                        .then((response) => response.arrayBuffer())
+                        .then((buffer) => {
+                          skcanvas._img = skcanvas.decodeImage(buffer);
+                        });
+    let realPromise = fetch('./test.png')
+                        .then((response) => response.blob())
+                        .then((blob) => createImageBitmap(blob))
+                        .then((bitmap) => {
+                          realCanvas._img = bitmap;
+                        });
 
-      // Draw line under Awesome
-      ctx.strokeStyle = 'rgba(125,0,0,0.5)';
-      ctx.beginPath();
-      ctx.lineWidth=6;
-      ctx.lineTo(50, 105);
-      ctx.lineTo(50 + text.width, 105);
-      ctx.stroke();
-    }
 
-    // TODO load image
-    document.getElementById('api1').src = skcanvas.toDataURL();
+    Promise.all([realPromise, skPromise]).then(() => {
+      for (let canvas of [skcanvas, realCanvas]) {
+        let ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#EEE';
+        ctx.fillRect(0, 0, 300, 300);
+        ctx.fillStyle = 'black';
+        ctx.font = '30px Impact'
+        ctx.rotate(.1);
+        let text = ctx.measureText('Awesome');
+        ctx.fillText('Awesome ', 50, 100);
+        ctx.strokeText('Groovy!', 60+text.width, 100);
+
+        // Draw line under Awesome
+        ctx.strokeStyle = 'rgba(125,0,0,0.5)';
+        ctx.beginPath();
+        ctx.lineWidth=6;
+        ctx.lineTo(50, 105);
+        ctx.lineTo(50 + text.width, 105);
+        ctx.stroke();
+
+        // squished vertically
+        ctx.globalAlpha = 0.7
+        ctx.imageSmoothingQuality = 'medium';
+        ctx.drawImage(canvas._img, 150, 150, 150, 100);
+        ctx.rotate(-.2);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(canvas._img, 100, 150, 400, 350, 10, 200, 150, 100);
+      }
+
+
+      document.getElementById('api1').src = skcanvas.toDataURL();
+      skcanvas.dispose();
+    });
+
   }
 
   function CanvasAPI2(CanvasKit) {
@@ -722,42 +721,6 @@
 
     }
     document.getElementById('api6').src = skcanvas.toDataURL();
-  }
-
-  function NimaExample(CanvasKit, nimaFile, nimaTexture) {
-    if (!CanvasKit || !nimaFile || !nimaTexture) {
-      return;
-    }
-    const animation = CanvasKit.MakeNimaActor(nimaFile, nimaTexture);
-    if (!animation) {
-      console.error('could not make animation');
-      return;
-    }
-
-    const surface = CanvasKit.MakeCanvasSurface('nima_example');
-    if (!surface) {
-      console.error('Could not make surface');
-      return;
-    }
-
-    const context = CanvasKit.currentContext();
-    const canvas = surface.getCanvas();
-    canvas.translate(125, 275);
-    canvas.scale(0.4, -0.4);
-
-    let firstFrame = Date.now();
-    animation.setAnimationByName('attack');
-
-    function drawFrame() {
-      let seek = ((Date.now() - firstFrame) / 1000.0);
-      CanvasKit.setCurrentContext(context);
-      canvas.clear(CanvasKit.TRANSPARENT);
-      animation.seek(seek);
-      animation.render(canvas);
-      surface.flush();
-      window.requestAnimationFrame(drawFrame);
-    }
-    window.requestAnimationFrame(drawFrame);
   }
 
   function VertexAPI1(CanvasKit) {
