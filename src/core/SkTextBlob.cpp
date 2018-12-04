@@ -6,7 +6,7 @@
  */
 
 #include "SkTextBlob.h"
-
+#include "SkFontPriv.h"
 #include "SkGlyphRun.h"
 #include "SkPaintPriv.h"
 #include "SkReadBuffer.h"
@@ -15,6 +15,7 @@
 #include "SkTypeface.h"
 #include "SkWriteBuffer.h"
 
+#include <atomic>
 #include <limits>
 #include <new>
 
@@ -156,11 +157,11 @@ void SkTextBlob::RunRecord::grow(uint32_t count) {
     memmove(posBuffer(), initialPosBuffer, copySize);
 }
 
-static int32_t gNextID = 1;
 static int32_t next_id() {
+    static std::atomic<int32_t> nextID{1};
     int32_t id;
     do {
-        id = sk_atomic_inc(&gNextID);
+        id = nextID++;
     } while (id == SK_InvalidGenID);
     return id;
 }
@@ -327,7 +328,8 @@ SkRect SkTextBlobBuilder::ConservativeRunBounds(const SkTextBlob::RunRecord& run
 
     SkPaint paint;
     run.font().applyToPaint(&paint);
-    const SkRect fontBounds = paint.getFontBounds();
+    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
+    const SkRect fontBounds = SkFontPriv::GetFontBounds(font);
     if (fontBounds.isEmpty()) {
         // Empty font bounds are likely a font bug.  TightBounds has a better chance of
         // producing useful results in this case.
