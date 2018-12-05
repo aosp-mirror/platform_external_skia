@@ -227,11 +227,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     if (kGL_GrGLStandard == standard) {
         if (version >= GR_GL_VER(3, 1) || ctxInfo.hasExtension("GL_ARB_texture_rectangle") ||
             ctxInfo.hasExtension("GL_ANGLE_texture_rectangle")) {
-            // We also require textureSize() support for rectangle 2D samplers which was added in
-            // GLSL 1.40.
-            if (ctxInfo.glslGeneration() >= k140_GrGLSLGeneration) {
-                fRectangleTextureSupport = true;
-            }
+            fRectangleTextureSupport = true;
         }
     } else {
         // Command buffer exposes this in GL ES context for Chromium reasons,
@@ -2176,8 +2172,8 @@ static bool has_msaa_render_buffer(const GrSurfaceProxy* surf, const GrGLCaps& g
            !rt->rtPriv().glRTFBOIDIs0();
 }
 
-bool GrGLCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                              const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+bool GrGLCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                                const SkIRect& srcRect, const SkIPoint& dstPoint) const {
     GrSurfaceOrigin dstOrigin = dst->origin();
     GrSurfaceOrigin srcOrigin = src->origin();
 
@@ -2760,7 +2756,7 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
     }
 }
 
-bool GrGLCaps::surfaceSupportsWritePixels(const GrSurface* surface) const {
+bool GrGLCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     if (fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO) {
         if (auto tex = static_cast<const GrGLTexture*>(surface->asTexture())) {
             if (tex->hasBaseLevelBeenBoundToFBO()) {
