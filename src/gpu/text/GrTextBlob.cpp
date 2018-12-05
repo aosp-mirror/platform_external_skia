@@ -58,17 +58,17 @@ sk_sp<GrTextBlob> GrTextBlob::Make(int glyphCount, int runCount) {
     return blob;
 }
 
-SkExclusiveStrikePtr GrTextBlob::Run::setupCache(const SkPaint& skPaint,
+SkExclusiveStrikePtr GrTextBlob::Run::setupCache(const SkPaint& paint,
                                                  const SkSurfaceProps& props,
                                                  SkScalerContextFlags scalerContextFlags,
                                                  const SkMatrix& viewMatrix) {
-
+    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
     // if we have an override descriptor for the run, then we should use that
-    SkAutoDescriptor* desc = fOverrideDescriptor.get() ? fOverrideDescriptor.get() : &fDescriptor;
+    SkAutoDescriptor* desc = fARGBFallbackDescriptor.get() ? fARGBFallbackDescriptor.get() : &fDescriptor;
     SkScalerContextEffects effects;
     SkScalerContext::CreateDescriptorAndEffectsUsingPaint(
-        skPaint, props, scalerContextFlags, viewMatrix, desc, &effects);
-    fTypeface = SkPaintPriv::RefTypefaceOrDefault(skPaint);
+        font, paint, props, scalerContextFlags, viewMatrix, desc, &effects);
+    fTypeface = SkFontPriv::RefTypefaceOrDefault(font);
     fPathEffect = sk_ref_sp(effects.fPathEffect);
     fMaskFilter = sk_ref_sp(effects.fMaskFilter);
     return SkStrikeCache::FindOrCreateStrikeExclusive(*desc->getDesc(), effects, *fTypeface);
@@ -237,7 +237,7 @@ void GrTextBlob::flush(GrTextTarget* target, const SkSurfaceProps& props,
         // first flush any path glyphs
         if (run.fPathGlyphs.count()) {
             SkPaint runPaint{paint};
-            runPaint.setFlags((runPaint.getFlags() & ~Run::kPaintFlagsMask) | run.fPaintFlags);
+            runPaint.setAntiAlias(run.fAntiAlias);
 
             for (int i = 0; i < run.fPathGlyphs.count(); i++) {
                 GrTextBlob::Run::PathGlyph& pathGlyph = run.fPathGlyphs[i];
@@ -415,13 +415,13 @@ void GrTextBlob::AssertEqual(const GrTextBlob& l, const GrTextBlob& r) {
         SkASSERT_RELEASE(rRun.fDescriptor.getDesc());
         SkASSERT_RELEASE(*lRun.fDescriptor.getDesc() == *rRun.fDescriptor.getDesc());
 
-        if (lRun.fOverrideDescriptor.get()) {
-            SkASSERT_RELEASE(lRun.fOverrideDescriptor->getDesc());
-            SkASSERT_RELEASE(rRun.fOverrideDescriptor.get() && rRun.fOverrideDescriptor->getDesc());
-            SkASSERT_RELEASE(*lRun.fOverrideDescriptor->getDesc() ==
-                             *rRun.fOverrideDescriptor->getDesc());
+        if (lRun.fARGBFallbackDescriptor.get()) {
+            SkASSERT_RELEASE(lRun.fARGBFallbackDescriptor->getDesc());
+            SkASSERT_RELEASE(rRun.fARGBFallbackDescriptor.get() && rRun.fARGBFallbackDescriptor->getDesc());
+            SkASSERT_RELEASE(*lRun.fARGBFallbackDescriptor->getDesc() ==
+                             *rRun.fARGBFallbackDescriptor->getDesc());
         } else {
-            SkASSERT_RELEASE(!rRun.fOverrideDescriptor.get());
+            SkASSERT_RELEASE(!rRun.fARGBFallbackDescriptor.get());
         }
 
         // color can be changed

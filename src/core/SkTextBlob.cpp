@@ -6,7 +6,7 @@
  */
 
 #include "SkTextBlob.h"
-
+#include "SkFontPriv.h"
 #include "SkGlyphRun.h"
 #include "SkPaintPriv.h"
 #include "SkReadBuffer.h"
@@ -15,6 +15,7 @@
 #include "SkTypeface.h"
 #include "SkWriteBuffer.h"
 
+#include <atomic>
 #include <limits>
 #include <new>
 
@@ -31,7 +32,7 @@ SkRunFont::SkRunFont(const SkPaint& paint)
         , fFlags(paint.getFlags() & kFlagsMask) { }
 
 void SkRunFont::applyToPaint(SkPaint* paint) const {
-    paint->setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    paint->setTextEncoding(kGlyphID_SkTextEncoding);
     paint->setTypeface(fTypeface);
     paint->setTextSize(fSize);
     paint->setTextScaleX(fScaleX);
@@ -156,11 +157,11 @@ void SkTextBlob::RunRecord::grow(uint32_t count) {
     memmove(posBuffer(), initialPosBuffer, copySize);
 }
 
-static int32_t gNextID = 1;
 static int32_t next_id() {
+    static std::atomic<int32_t> nextID{1};
     int32_t id;
     do {
-        id = sk_atomic_inc(&gNextID);
+        id = nextID++;
     } while (id == SK_InvalidGenID);
     return id;
 }
@@ -327,7 +328,8 @@ SkRect SkTextBlobBuilder::ConservativeRunBounds(const SkTextBlob::RunRecord& run
 
     SkPaint paint;
     run.font().applyToPaint(&paint);
-    const SkRect fontBounds = paint.getFontBounds();
+    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
+    const SkRect fontBounds = SkFontPriv::GetFontBounds(font);
     if (fontBounds.isEmpty()) {
         // Empty font bounds are likely a font bug.  TightBounds has a better chance of
         // producing useful results in this case.
@@ -478,7 +480,9 @@ void SkTextBlobBuilder::allocInternal(const SkPaint &font,
                                       SkTextBlob::GlyphPositioning positioning,
                                       int count, int textSize, SkPoint offset,
                                       const SkRect* bounds) {
-    if (count <= 0 || textSize < 0 || font.getTextEncoding() != SkPaint::kGlyphID_TextEncoding) {
+    if (count <= 0 || textSize < 0 ||
+        (SkTextEncoding)font.getTextEncoding() != kGlyphID_SkTextEncoding)
+    {
         fCurrentRunBuffer = { nullptr, nullptr, nullptr, nullptr };
         return;
     }
@@ -530,7 +534,7 @@ const SkTextBlobBuilder::RunBuffer& SkTextBlobBuilder::allocRun(const SkFont& fo
                                                                 const SkRect* bounds) {
     SkPaint legacyPaint;
     font.LEGACY_applyToPaint(&legacyPaint);
-    legacyPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    legacyPaint.setTextEncoding(kGlyphID_SkTextEncoding);
 
     return this->allocRunText(legacyPaint, count, x, y, 0, SkString(), bounds);
 }
@@ -540,7 +544,7 @@ const SkTextBlobBuilder::RunBuffer& SkTextBlobBuilder::allocRunPosH(const SkFont
                                                                     const SkRect* bounds) {
     SkPaint legacyPaint;
     font.LEGACY_applyToPaint(&legacyPaint);
-    legacyPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    legacyPaint.setTextEncoding(kGlyphID_SkTextEncoding);
 
     return this->allocRunTextPosH(legacyPaint, count, y, 0, SkString(), bounds);
 }
@@ -549,7 +553,7 @@ const SkTextBlobBuilder::RunBuffer& SkTextBlobBuilder::allocRunPos(const SkFont&
                                                                    const SkRect* bounds) {
     SkPaint legacyPaint;
     font.LEGACY_applyToPaint(&legacyPaint);
-    legacyPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    legacyPaint.setTextEncoding(kGlyphID_SkTextEncoding);
 
     return this->allocRunTextPos(legacyPaint, count, 0, SkString(), bounds);
 }
@@ -756,7 +760,7 @@ sk_sp<SkTextBlob> SkTextBlobPriv::MakeFromBuffer(SkReadBuffer& reader) {
 }
 
 sk_sp<SkTextBlob> SkTextBlob::MakeFromText(const void* text, size_t byteLength, const SkFont& font,
-                                           SkPaint::TextEncoding encoding) {
+                                           SkTextEncoding encoding) {
     SkPaint legacyPaint;
     font.LEGACY_applyToPaint(&legacyPaint);
     legacyPaint.setTextEncoding(encoding);

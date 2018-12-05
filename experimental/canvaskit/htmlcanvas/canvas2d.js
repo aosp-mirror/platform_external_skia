@@ -40,6 +40,17 @@
   function HTMLCanvas(skSurface) {
     this._surface = skSurface;
     this._context = new CanvasRenderingContext2D(skSurface.getCanvas());
+    this._imgs = [];
+
+    // Data is either an ArrayBuffer, a TypedArray, or a Node Buffer
+    this.decodeImage = function(data) {
+      var img = CanvasKit.MakeImageFromEncoded(data);
+      if (!img) {
+        throw 'Invalid input';
+      }
+      this._imgs.push(img);
+      return img;
+    }
 
     // A normal <canvas> requires that clients call getContext
     this.getContext = function(type) {
@@ -76,7 +87,63 @@
 
     this.dispose = function() {
       this._context._dispose();
+      this._imgs.forEach(function(i) {
+        i.delete();
+      });
       this._surface.dispose();
+    }
+  }
+
+  function ImageData(arr, width, height) {
+    if (!width || height === 0) {
+      throw 'invalid dimensions, width and height must be non-zero';
+    }
+    if (arr.length % 4) {
+      throw 'arr must be a multiple of 4';
+    }
+    height = height || arr.length/(4*width);
+
+    Object.defineProperty(this, 'data', {
+      value: arr,
+      writable: false
+    });
+    Object.defineProperty(this, 'height', {
+      value: height,
+      writable: false
+    });
+    Object.defineProperty(this, 'width', {
+      value: width,
+      writable: false
+    });
+  }
+
+  CanvasKit.ImageData = function() {
+    if (arguments.length === 2) {
+      var width = arguments[0];
+      var height = arguments[1];
+      var byteLength = 4 * width * height;
+      return new ImageData(new Uint8ClampedArray(byteLength),
+                           width, height);
+    } else if (arguments.length === 3) {
+      var arr = arguments[0];
+      if (arr.prototype.constructor !== Uint8ClampedArray ) {
+        throw 'bytes must be given as a Uint8ClampedArray';
+      }
+      var width = arguments[1];
+      var height = arguments[2];
+      if (arr % 4) {
+        throw 'bytes must be given in a multiple of 4';
+      }
+      if (arr % width) {
+        throw 'bytes must divide evenly by width';
+      }
+      if (height && (height !== (arr / (width * 4)))) {
+        throw 'invalid height given';
+      }
+      height = arr / (width * 4);
+      return new ImageData(arr, width, height);
+    } else {
+      throw 'invalid number of arguments - takes 2 or 3, saw ' + arguments.length;
     }
   }
 
@@ -251,6 +318,8 @@
     this._lineDashList   = [];
     // aka SkBlendMode
     this._globalCompositeOperation = CanvasKit.BlendMode.SrcOver;
+    this._imageFilterQuality = CanvasKit.FilterQuality.Low;
+    this._imageSmoothingEnabled = true;
 
     this._paint.setStrokeWidth(this._strokeWidth);
     this._paint.setBlendMode(this._globalCompositeOperation);
@@ -524,6 +593,43 @@
       }
     });
 
+    Object.defineProperty(this, 'imageSmoothingEnabled', {
+      enumerable: true,
+      get: function() {
+        return this._imageSmoothingEnabled;
+      },
+      set: function(newVal) {
+        this._imageSmoothingEnabled = !!newVal;
+      }
+    });
+
+    Object.defineProperty(this, 'imageSmoothingQuality', {
+      enumerable: true,
+      get: function() {
+        switch (this._imageFilterQuality) {
+          case CanvasKit.FilterQuality.Low:
+            return 'low';
+          case CanvasKit.FilterQuality.Medium:
+            return 'medium';
+          case CanvasKit.FilterQuality.High:
+            return 'high';
+        }
+      },
+      set: function(newQuality) {
+        switch (newQuality) {
+          case 'low':
+            this._imageFilterQuality = CanvasKit.FilterQuality.Low;
+            return;
+          case 'medium':
+            this._imageFilterQuality = CanvasKit.FilterQuality.Medium;
+            return;
+          case 'high':
+            this._imageFilterQuality = CanvasKit.FilterQuality.High;
+            return;
+        }
+      }
+    });
+
     Object.defineProperty(this, 'lineCap', {
       enumerable: true,
       get: function() {
@@ -739,11 +845,12 @@
     }
 
     this.clearRect = function(x, y, width, height) {
-      this._canvas.setMatrix(this._currentTransform);
+      this._canvas.save();
+      this._canvas.concat(this._currentTransform);
       this._paint.setStyle(CanvasKit.PaintStyle.Fill);
       this._paint.setBlendMode(CanvasKit.BlendMode.Clear);
-      this._canvas.drawRect(CanvasKit.LTRBRect(x, y, x+width, y+height), this._paint);
-      this._canvas.setMatrix(CanvasKit.SkMatrix.identity());
+      this._canvas.drawRect(CanvasKit.XYWHRect(x, y, width, height), this._paint);
+      this._canvas.restore();
       this._paint.setBlendMode(this._globalCompositeOperation);
     }
 
@@ -766,6 +873,26 @@
       }
     }
 
+    this.createImageData = function() {
+      // either takes in 1 or 2 arguments:
+      //  - imagedata on which to copy *width* and *height* only
+      //  - width, height
+      if (arguments.length === 1) {
+        var oldData = arguments[0];
+        var byteLength = 4 * oldData.width * oldData.height;
+        return new ImageData(new Uint8ClampedArray(byteLength),
+                             oldData.width, oldData.height);
+      } else if (arguments.length === 2) {
+        var width = arguments[0];
+        var height = arguments[1];
+        var byteLength = 4 * width * height;
+        return new ImageData(new Uint8ClampedArray(byteLength),
+                             width, height);
+      } else {
+        throw 'createImageData expects 1 or 2 arguments, got '+arguments.length;
+      }
+    }
+
     this.createLinearGradient = function(x1, y1, x2, y2) {
       if (!allAreFinite(arguments)) {
         return;
@@ -784,12 +911,50 @@
       return rcg;
     }
 
-    this._commitSubpath = function () {
+    this._commitSubpath = function() {
       if (this._currentSubpath) {
         this._currentPath.addPath(this._currentSubpath, false);
         this._currentSubpath.delete();
         this._currentSubpath = null;
       }
+    }
+
+    this._imagePaint = function() {
+      var iPaint = this._fillPaint();
+      if (!this._imageSmoothingEnabled) {
+        iPaint.setFilterQuality(CanvasKit.FilterQuality.None);
+      } else {
+        iPaint.setFilterQuality(this._imageFilterQuality);
+      }
+      return iPaint;
+    }
+
+    this.drawImage = function(img) {
+      // 3 potential sets of arguments
+      // - image, dx, dy
+      // - image, dx, dy, dWidth, dHeight
+      // - image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight
+      this._canvas.save();
+      this._canvas.concat(this._currentTransform);
+      // use the fillPaint, which has the globalAlpha in it
+      // which drawImageRect will use.
+      var iPaint = this._imagePaint();
+      if (arguments.length === 3 || arguments.length === 5) {
+        var destRect = CanvasKit.XYWHRect(arguments[1], arguments[2],
+                          arguments[3] || img.width(), arguments[4] || img.height());
+        var srcRect = CanvasKit.XYWHRect(0, 0, img.width(), img.height());
+      } else if (arguments.length === 9){
+        var destRect = CanvasKit.XYWHRect(arguments[5], arguments[6],
+                                          arguments[7], arguments[8]);
+        var srcRect = CanvasKit.XYWHRect(arguments[1], arguments[2],
+                                         arguments[3], arguments[4]);
+      } else {
+        throw 'invalid number of args for drawImage, need 3, 5, or 9; got '+ arguments.length;
+      }
+      this._canvas.drawImageRect(img, srcRect, destRect, iPaint, false);
+
+      this._canvas.restore();
+      iPaint.dispose();
     }
 
     this.ellipse = function(x, y, radiusX, radiusY, rotation,
@@ -853,9 +1018,10 @@
           this._currentTransform,
           CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
         );
-        this._canvas.setMatrix(offsetMatrix);
+        this._canvas.save();
+        this._canvas.concat(offsetMatrix);
         this._canvas.drawPath(this._currentPath, shadowPaint);
-        this._canvas.setMatrix(CanvasKit.SkMatrix.identity());
+        this._canvas.restore();
         shadowPaint.dispose();
       }
 
@@ -865,9 +1031,10 @@
 
     this.fillRect = function(x, y, width, height) {
       var fillPaint = this._fillPaint();
-      this._canvas.setMatrix(this._currentTransform);
-      this._canvas.drawRect(CanvasKit.LTRBRect(x, y, x+width, y+height), fillPaint);
-      this._canvas.setMatrix(CanvasKit.SkMatrix.identity());
+      this._canvas.save();
+      this._canvas.concat(this._currentTransform);
+      this._canvas.drawRect(CanvasKit.XYWHRect(x, y, width, height), fillPaint);
+      this._canvas.restore();
       fillPaint.dispose();
     }
 
@@ -880,15 +1047,29 @@
           this._currentTransform,
           CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
         );
-        this._canvas.setMatrix(offsetMatrix);
+        this._canvas.save();
+        this._canvas.concat(offsetMatrix);
         this._canvas.drawText(text, x, y, shadowPaint);
+        this._canvas.restore();
         shadowPaint.dispose();
-        // Don't need to setMatrix back, it will be handled by the next few lines.
       }
-      this._canvas.setMatrix(this._currentTransform);
+      this._canvas.save();
+      this._canvas.concat(this._currentTransform);
       this._canvas.drawText(text, x, y, fillPaint);
-      this._canvas.setMatrix(CanvasKit.SkMatrix.identity());
+      this._canvas.restore();
       fillPaint.dispose();
+    }
+
+    this.getImageData = function(x, y, w, h) {
+      var pixels = this._canvas.readPixels(x, y, w, h);
+      if (!pixels) {
+        return null;
+      }
+      // This essentially re-wraps the pixels from a Uint8Array to
+      // a Uint8ClampedArray (without making a copy of pixels).
+      return new ImageData(
+        new Uint8ClampedArray(pixels.buffer),
+        w, h);
     }
 
     this.getLineDash = function() {
@@ -935,6 +1116,49 @@
       this._currentSubpath.moveTo(x, y);
     }
 
+    this.putImageData = function(imageData, x, y, dirtyX, dirtyY, dirtyWidth, dirtyHeight) {
+      if (!allAreFinite([x, y, dirtyX, dirtyY, dirtyWidth, dirtyHeight])) {
+        return;
+      }
+      if (dirtyX === undefined) {
+        // fast, simple path for basic call
+        this._canvas.writePixels(imageData.data, imageData.width, imageData.height, x, y);
+        return;
+      }
+      dirtyX = dirtyX || 0;
+      dirtyY = dirtyY || 0;
+      dirtyWidth = dirtyWidth || imageData.width;
+      dirtyHeight = dirtyHeight || imageData.height;
+
+      // as per https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-putimagedata
+      if (dirtyWidth < 0) {
+        dirtyX = dirtyX+dirtyWidth;
+        dirtyWidth = Math.abs(dirtyWidth);
+      }
+      if (dirtyHeight < 0) {
+        dirtyY = dirtyY+dirtyHeight;
+        dirtyHeight = Math.abs(dirtyHeight);
+      }
+      if (dirtyX < 0) {
+        dirtyWidth = dirtyWidth + dirtyX;
+        dirtyX = 0;
+      }
+      if (dirtyY < 0) {
+        dirtyHeight = dirtyHeight + dirtyY;
+        dirtyY = 0;
+      }
+      if (dirtyWidth <= 0 || dirtyHeight <= 0) {
+        return;
+      }
+      var img = CanvasKit.MakeImage(imageData.data, imageData.width, imageData.height,
+                                    CanvasKit.AlphaType.Unpremul,
+                                    CanvasKit.ColorType.RGBA_8888);
+      var src = CanvasKit.XYWHRect(dirtyX, dirtyY, dirtyWidth, dirtyHeight);
+      var dst = CanvasKit.XYWHRect(x+dirtyX, y+dirtyY, dirtyWidth, dirtyHeight);
+      this._canvas.drawImageRect(img, src, dst, null, false);
+      img.delete();
+    }
+
     this.quadraticCurveTo = function(cpx, cpy, x, y) {
       if (!allAreFinite(arguments)) {
         return;
@@ -959,7 +1183,6 @@
       CanvasKit.SkMatrix.mapPoints(this._currentTransform, pts);
       // https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-rect
       this._newSubpath(x, y);
-      var scale = this._scalefactor();
       this._currentSubpath.addRect(x, y, x+width, y+height);
       this._currentSubpath.transform(this._currentTransform);
       this._newSubpath(pts[0], pts[1]);
@@ -991,7 +1214,9 @@
       this._globalCompositeOperation = newState.gco;
       this._paint.setBlendMode(this._globalCompositeOperation);
       this._lineDashOffset = newState.ldo;
-      //TODO: font, textAlign, textBaseline, direction, imageSmoothingEnabled, imageSmoothingQuality.
+      this._imageSmoothingEnabled = newState.ise;
+      this._imageFilterQuality = newState.isq;
+      //TODO: font, textAlign, textBaseline, direction
 
       // restores the clip
       this._canvas.restore();
@@ -1034,7 +1259,9 @@
         ga:  this._globalAlpha,
         ldo: this._lineDashOffset,
         gco: this._globalCompositeOperation,
-        //TODO: font, textAlign, textBaseline, direction, imageSmoothingEnabled, imageSmoothingQuality.
+        ise: this._imageSmoothingEnabled,
+        isq: this._imageFilterQuality,
+        //TODO: font, textAlign, textBaseline, direction
       });
       // Saves the clip
       this._canvas.save();
@@ -1148,9 +1375,10 @@
           this._currentTransform,
           CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
         );
-        this._canvas.setMatrix(offsetMatrix);
+        this._canvas.save();
+        this._canvas.concat(offsetMatrix);
         this._canvas.drawPath(this._currentPath, shadowPaint);
-        this._canvas.setMatrix(CanvasKit.SkMatrix.identity());
+        this._canvas.restore();
         shadowPaint.dispose();
       }
 
@@ -1160,9 +1388,10 @@
 
     this.strokeRect = function(x, y, width, height) {
       var strokePaint = this._strokePaint();
-      this._canvas.setMatrix(this._currentTransform);
-      this._canvas.drawRect(CanvasKit.LTRBRect(x, y, x+width, y+height), strokePaint);
-      this._canvas.setMatrix(CanvasKit.SkMatrix.identity());
+      this._canvas.save();
+      this._canvas.concat(this._currentTransform);
+      this._canvas.drawRect(CanvasKit.XYWHRect(x, y, width, height), strokePaint);
+      this._canvas.restore();
       strokePaint.dispose();
     }
 
@@ -1176,14 +1405,16 @@
           this._currentTransform,
           CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
         );
-        this._canvas.setMatrix(offsetMatrix);
+        this._canvas.save();
+        this._canvas.concat(offsetMatrix);
         this._canvas.drawText(text, x, y, shadowPaint);
+        this._canvas.restore();
         shadowPaint.dispose();
-        // Don't need to setMatrix back, it will be handled by the next few lines.
       }
-      this._canvas.setMatrix(this._currentTransform);
+      this._canvas.save();
+      this._canvas.concat(this._currentTransform);
       this._canvas.drawText(text, x, y, strokePaint);
-      this._canvas.setMatrix(CanvasKit.SkMatrix.identity());
+      this._canvas.restore();
       strokePaint.dispose();
     }
 

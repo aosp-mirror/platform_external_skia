@@ -21,9 +21,11 @@
 #include "SkData.h"
 #include "SkDiscretePathEffect.h"
 #include "SkEncodedImageFormat.h"
+#include "SkFilterQuality.h"
 #include "SkFontMgr.h"
 #include "SkFontMgrPriv.h"
 #include "SkGradientShader.h"
+#include "SkImage.h"
 #include "SkImageInfo.h"
 #include "SkImageShader.h"
 #include "SkMakeUnique.h"
@@ -51,9 +53,6 @@
 #include "SkottieUtils.h"
 #endif // SK_INCLUDE_MANAGED_SKOTTIE
 #endif // SK_INCLUDE_SKOTTIE
-#if SK_INCLUDE_NIMA
-#include "nima/NimaActor.h"
-#endif
 
 #include <iostream>
 #include <string>
@@ -170,6 +169,7 @@ public:
     static sk_sp<ManagedAnimation> Make(const std::string& json) {
         auto mgr = skstd::make_unique<skottie_utils::CustomPropertyManager>();
         auto animation = skottie::Animation::Builder()
+                            .setMarkerObserver(mgr->getMarkerObserver())
                             .setPropertyObserver(mgr->getPropertyObserver())
                             .make(json.c_str(), json.size());
 
@@ -219,6 +219,18 @@ public:
 
     bool setOpacity(const std::string& key, float o) {
         return fPropMgr->setOpacity(key, o);
+    }
+
+    JSArray getMarkers() const {
+        JSArray markers = emscripten::val::array();
+        for (const auto& m : fPropMgr->markers()) {
+            JSObject marker = emscripten::val::object();
+            marker.set("name", m.name);
+            marker.set("t0"  , m.t0);
+            marker.set("t1"  , m.t1);
+            markers.call<void>("push", marker);
+        }
+        return markers;
     }
 
 private:
@@ -435,10 +447,16 @@ EMSCRIPTEN_BINDINGS(Skia) {
     function("setCurrentContext", &emscripten_webgl_make_context_current);
     constant("gpu", true);
 #endif
+    function("_decodeImage", optional_override([](uintptr_t /* uint8_t*  */ iptr,
+                                                  size_t length)->sk_sp<SkImage> {
+        uint8_t* imgData = reinterpret_cast<uint8_t*>(iptr);
+        sk_sp<SkData> bytes = SkData::MakeWithoutCopy(imgData, length);
+        return SkImage::MakeFromEncoded(bytes);
+    }), allow_raw_pointers());
     function("_getRasterDirectSurface", optional_override([](const SimpleImageInfo ii,
-                                                             uintptr_t /* uint8_t*  */ pptr,
+                                                             uintptr_t /* uint8_t*  */ pPtr,
                                                              size_t rowBytes)->sk_sp<SkSurface> {
-        uint8_t* pixels = reinterpret_cast<uint8_t*>(pptr);
+        uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
         SkImageInfo imageInfo = toSkImageInfo(ii);
         return SkSurface::MakeRasterDirect(imageInfo, pixels, rowBytes, nullptr);
     }), allow_raw_pointers());
@@ -460,6 +478,16 @@ EMSCRIPTEN_BINDINGS(Skia) {
         // See comment above for uintptr_t explanation
         const float* intervals = reinterpret_cast<const float*>(cptr);
         return SkDashPathEffect::Make(intervals, count, phase);
+    }), allow_raw_pointers());
+    function("_MakeImage", optional_override([](SimpleImageInfo ii,
+                                                uintptr_t /* uint8_t*  */ pPtr, int plen,
+                                                size_t rowBytes)->sk_sp<SkImage> {
+        // See comment above for uintptr_t explanation
+        uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
+        SkImageInfo info = toSkImageInfo(ii);
+        sk_sp<SkData> pixelData = SkData::MakeFromMalloc(pixels, plen);
+
+        return SkImage::MakeRasterData(info, pixelData, rowBytes);
     }), allow_raw_pointers());
     function("_MakeImageShader", optional_override([](uintptr_t /* uint8_t*  */ iPtr, int ilen,
                                 SkShader::TileMode tx, SkShader::TileMode ty)->sk_sp<SkShader> {
@@ -577,6 +605,18 @@ EMSCRIPTEN_BINDINGS(Skia) {
             self.clear(SkColor(color));
         }))
         .function("clipPath", select_overload<void (const SkPath&, SkClipOp, bool)>(&SkCanvas::clipPath))
+        .function("clipRect", select_overload<void (const SkRect&, SkClipOp, bool)>(&SkCanvas::clipRect))
+        .function("concat", optional_override([](SkCanvas& self, const SimpleMatrix& m) {
+            self.concat(toSkMatrix(m));
+        }))
+        .function("drawImage", select_overload<void (const sk_sp<SkImage>&, SkScalar, SkScalar, const SkPaint*)>(&SkCanvas::drawImage), allow_raw_pointers())
+        .function("drawImageRect", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
+                                                        SkRect src, SkRect dst,
+                                                        const SkPaint* paint, bool fastSample)->void {
+            self.drawImageRect(image, src, dst, paint,
+                               fastSample ? SkCanvas::kFast_SrcRectConstraint :
+                                            SkCanvas::kStrict_SrcRectConstraint);
+        }), allow_raw_pointers())
         .function("drawPaint", &SkCanvas::drawPaint)
         .function("drawPath", &SkCanvas::drawPath)
         .function("drawRect", &SkCanvas::drawRect)
@@ -597,15 +637,29 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         .function("drawVertices", select_overload<void (const sk_sp<SkVertices>&, SkBlendMode, const SkPaint&)>(&SkCanvas::drawVertices))
         .function("flush", &SkCanvas::flush)
+        .function("_readPixels", optional_override([](SkCanvas& self, SimpleImageInfo di,
+                                                      uintptr_t /* uint8_t* */ pPtr,
+                                                      size_t dstRowBytes, int srcX, int srcY) {
+            uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
+            SkImageInfo dstInfo = toSkImageInfo(di);
+
+            return self.readPixels(dstInfo, pixels, dstRowBytes, srcX, srcY);
+        }))
         .function("restore", &SkCanvas::restore)
         .function("rotate", select_overload<void (SkScalar, SkScalar, SkScalar)>(&SkCanvas::rotate))
         .function("save", &SkCanvas::save)
         .function("scale", &SkCanvas::scale)
-        .function("setMatrix", optional_override([](SkCanvas& self, const SimpleMatrix& m) {
-            self.setMatrix(toSkMatrix(m));
-        }))
         .function("skew", &SkCanvas::skew)
-        .function("translate", &SkCanvas::translate);
+        .function("translate", &SkCanvas::translate)
+        .function("_writePixels", optional_override([](SkCanvas& self, SimpleImageInfo di,
+                                                       uintptr_t /* uint8_t* */ pPtr,
+                                                       size_t srcRowBytes, int dstX, int dstY) {
+            uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
+            SkImageInfo dstInfo = toSkImageInfo(di);
+
+            return self.writePixels(dstInfo, pixels, srcRowBytes, dstX, dstY);
+        }))
+        ;
 
     class_<SkData>("SkData")
         .smart_ptr<sk_sp<SkData>>("sk_sp<SkData>>")
@@ -613,6 +667,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<SkImage>("SkImage")
         .smart_ptr<sk_sp<SkImage>>("sk_sp<SkImage>")
+        .function("height", &SkImage::height)
+        .function("width", &SkImage::width)
         .function("_encodeToData", select_overload<sk_sp<SkData>()const>(&SkImage::encodeToData))
         .function("_encodeToDataWithFormat", select_overload<sk_sp<SkData>(SkEncodedImageFormat encodedImageFormat, int quality)const>(&SkImage::encodeToData));
 
@@ -631,10 +687,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
             // Add a optional_override to change it out.
             return JSColor(self.getColor());
         }))
-        .function("getStrokeWidth", &SkPaint::getStrokeWidth)
-        .function("getStrokeMiter", &SkPaint::getStrokeMiter)
+        .function("getFilterQuality", &SkPaint::getFilterQuality)
         .function("getStrokeCap", &SkPaint::getStrokeCap)
         .function("getStrokeJoin", &SkPaint::getStrokeJoin)
+        .function("getStrokeMiter", &SkPaint::getStrokeMiter)
+        .function("getStrokeWidth", &SkPaint::getStrokeWidth)
         .function("getTextSize", &SkPaint::getTextSize)
         .function("measureText", optional_override([](SkPaint& self, std::string text) {
             // TODO(kjlubick): This does not work well for non-ascii
@@ -649,13 +706,14 @@ EMSCRIPTEN_BINDINGS(Skia) {
             // Add a optional_override to change it out.
             self.setColor(SkColor(color));
         }))
+        .function("setFilterQuality", &SkPaint::setFilterQuality)
         .function("setMaskFilter", &SkPaint::setMaskFilter)
         .function("setPathEffect", &SkPaint::setPathEffect)
         .function("setShader", &SkPaint::setShader)
-        .function("setStrokeWidth", &SkPaint::setStrokeWidth)
-        .function("setStrokeMiter", &SkPaint::setStrokeMiter)
         .function("setStrokeCap", &SkPaint::setStrokeCap)
         .function("setStrokeJoin", &SkPaint::setStrokeJoin)
+        .function("setStrokeMiter", &SkPaint::setStrokeMiter)
+        .function("setStrokeWidth", &SkPaint::setStrokeWidth)
         .function("setStyle", &SkPaint::setStyle)
         .function("setTextSize", &SkPaint::setTextSize);
 
@@ -715,11 +773,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("_flush", &SkSurface::flush)
         .function("makeImageSnapshot", select_overload<sk_sp<SkImage>()>(&SkSurface::makeImageSnapshot))
         .function("makeImageSnapshot", select_overload<sk_sp<SkImage>(const SkIRect& bounds)>(&SkSurface::makeImageSnapshot))
-        .function("_readPixels", optional_override([](SkSurface& self, int width, int height, uintptr_t /* uint8_t* */ cptr)->bool {
-            uint8_t* dst = reinterpret_cast<uint8_t*>(cptr);
-            auto dstInfo = SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
-            return self.readPixels(dstInfo, dst, width*4, 0, 0);
-        }))
         .function("getCanvas", &SkSurface::getCanvas, allow_raw_pointers());
 
     class_<SkVertices>("SkVertices")
@@ -806,6 +859,12 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("EvenOdd",           SkPath::FillType::kEvenOdd_FillType)
         .value("InverseWinding",    SkPath::FillType::kInverseWinding_FillType)
         .value("InverseEvenOdd",    SkPath::FillType::kInverseEvenOdd_FillType);
+
+    enum_<SkFilterQuality>("FilterQuality")
+        .value("None",   SkFilterQuality::kNone_SkFilterQuality)
+        .value("Low",    SkFilterQuality::kLow_SkFilterQuality)
+        .value("Medium", SkFilterQuality::kMedium_SkFilterQuality)
+        .value("High",   SkFilterQuality::kHigh_SkFilterQuality);
 
     enum_<SkEncodedImageFormat>("ImageFormat")
         .value("PNG",  SkEncodedImageFormat::kPNG)
@@ -954,6 +1013,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                     (&ManagedAnimation::render), allow_raw_pointers())
         .function("setColor"  , &ManagedAnimation::setColor)
         .function("setOpacity", &ManagedAnimation::setOpacity)
+        .function("getMarkers", &ManagedAnimation::getMarkers)
         .function("getColorProps"  , &ManagedAnimation::getColorProps)
         .function("getOpacityProps", &ManagedAnimation::getOpacityProps);
 
@@ -962,34 +1022,4 @@ EMSCRIPTEN_BINDINGS(Skia) {
 #endif // SK_INCLUDE_MANAGED_SKOTTIE
 #endif // SK_INCLUDE_SKOTTIE
 
-#if SK_INCLUDE_NIMA
-    class_<NimaActor>("NimaActor")
-        .function("duration", &NimaActor::duration)
-        .function("getAnimationNames",  optional_override([](NimaActor& self)->JSArray {
-            JSArray names = emscripten::val::array();
-            auto vNames = self.getAnimationNames();
-            for (size_t i = 0; i < vNames.size(); i++) {
-                names.call<void>("push", vNames[i]);
-            }
-            return names;
-        }), allow_raw_pointers())
-        .function("render",  optional_override([](NimaActor& self, SkCanvas* canvas)->void {
-            self.render(canvas, 0);
-        }), allow_raw_pointers())
-        .function("seek", &NimaActor::seek)
-        .function("setAnimationByIndex", select_overload<void(uint8_t    )>(&NimaActor::setAnimation))
-        .function("setAnimationByName" , select_overload<void(std::string)>(&NimaActor::setAnimation));
-
-    function("_MakeNimaActor", optional_override([](uintptr_t /* uint8_t* */ nptr, int nlen,
-                                                    uintptr_t /* uint8_t* */ tptr, int tlen)->NimaActor* {
-        // See comment above for uintptr_t explanation
-        const uint8_t* nimaBytes = reinterpret_cast<const uint8_t*>(nptr);
-        const uint8_t* textureBytes = reinterpret_cast<const uint8_t*>(tptr);
-
-        auto nima = SkData::MakeFromMalloc(nimaBytes, nlen);
-        auto texture = SkData::MakeFromMalloc(textureBytes, tlen);
-        return new NimaActor(nima, texture);
-    }), allow_raw_pointers());
-    constant("nima", true);
-#endif
 }

@@ -735,9 +735,11 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
         shaderCaps->fFlatInterpolationSupport =
             ctxInfo.glslGeneration() >= k330_GrGLSLGeneration; // This is the value for GLSL ES 3.0.
     }
-    // Flat interpolation appears to be slow on Qualcomm GPUs (tested Adreno 405 and 530).
+    // Flat interpolation appears to be slow on Qualcomm GPUs (tested Adreno 405 and 530). ANGLE
+    // Avoid on ANGLE too, it inserts a geometry shader into the pipeline to implement flat interp.
     shaderCaps->fPreferFlatInterpolation = shaderCaps->fFlatInterpolationSupport &&
-                                           kQualcomm_GrGLVendor != ctxInfo.vendor();
+                                           kQualcomm_GrGLVendor != ctxInfo.vendor() &&
+                                           kANGLE_GrGLDriver != ctxInfo.driver();
     if (kGL_GrGLStandard == standard) {
         shaderCaps->fNoPerspectiveInterpolationSupport =
             ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
@@ -2604,7 +2606,9 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 #endif
 
     // We've seen Adreno 3xx devices produce incorrect (flipped) values for gl_FragCoord, in some
-    // (rare) situations. It's sporadic, and mostly on older drivers.
+    // (rare) situations. It's sporadic, and mostly on older drivers. Additionally, old Adreno
+    // compilers (see crbug.com/skia/4078) crash when accessing .zw of gl_FragCoord, so just bypass
+    // using gl_FragCoord at all to get around it.
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer()) {
         shaderCaps->fCanUseFragCoord = false;
     }

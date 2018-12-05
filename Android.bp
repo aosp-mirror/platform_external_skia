@@ -498,7 +498,7 @@ cc_library_static {
     arch: {
         arm: {
             srcs: [
-                "src/opts/SkBitmapProcState_opts_none.cpp",
+                
             ],
 
             neon: {
@@ -510,44 +510,39 @@ cc_library_static {
 
         arm64: {
             srcs: [
-                "src/opts/SkBitmapProcState_opts_none.cpp",
                 "src/opts/SkOpts_crc32.cpp",
             ],
         },
 
         mips: {
             srcs: [
-                "src/opts/SkBitmapProcState_opts_none.cpp",
+                
             ],
         },
 
         mips64: {
             srcs: [
-                "src/opts/SkBitmapProcState_opts_none.cpp",
+                
             ],
         },
 
         x86: {
             srcs: [
-                "src/opts/SkBitmapProcState_opts_SSE2.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
                 "src/opts/SkOpts_sse42.cpp",
                 "src/opts/SkOpts_ssse3.cpp",
-                "src/opts/opts_check_x86.cpp",
             ],
         },
 
         x86_64: {
             srcs: [
-                "src/opts/SkBitmapProcState_opts_SSE2.cpp",
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_sse41.cpp",
                 "src/opts/SkOpts_sse42.cpp",
                 "src/opts/SkOpts_ssse3.cpp",
-                "src/opts/opts_check_x86.cpp",
             ],
         },
     },
@@ -819,6 +814,7 @@ cc_library_static {
           "src/gpu/vk/GrVkRenderTarget.cpp",
           "src/gpu/vk/GrVkResourceProvider.cpp",
           "src/gpu/vk/GrVkSampler.cpp",
+          "src/gpu/vk/GrVkSamplerYcbcrConversion.cpp",
           "src/gpu/vk/GrVkSemaphore.cpp",
           "src/gpu/vk/GrVkStencilAttachment.cpp",
           "src/gpu/vk/GrVkTexture.cpp",
@@ -980,7 +976,6 @@ cc_defaults {
     ],
     cflags: [
         "-Wno-implicit-fallthrough",
-        "-Wno-self-assign-overloaded",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
     ],
@@ -1172,6 +1167,7 @@ cc_test {
         "gm/crbug_887103.cpp",
         "gm/crbug_892988.cpp",
         "gm/crbug_899512.cpp",
+        "gm/crbug_905548.cpp",
         "gm/croppedrects.cpp",
         "gm/crosscontextimage.cpp",
         "gm/cubicpaths.cpp",
@@ -2106,6 +2102,7 @@ cc_test {
         "gm/crbug_887103.cpp",
         "gm/crbug_892988.cpp",
         "gm/crbug_899512.cpp",
+        "gm/crbug_905548.cpp",
         "gm/croppedrects.cpp",
         "gm/crosscontextimage.cpp",
         "gm/cubicpaths.cpp",

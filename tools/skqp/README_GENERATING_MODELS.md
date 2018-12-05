@@ -6,17 +6,18 @@ Skia][1].  Here is how that process works:
 
 1.  Get the positively triaged results from Gold:
 
-    Go to [Skia Gold's search][2] and search for results that are
+        cd SKIA_SOURCE_DIRECTORY
+        git fetch origin
+        git checkout origin/master
+        tools/skqp/get_gold_export_url.py HEAD~10 HEAD
 
-      * Positive
-      * config=gles OR config=vk
-      * Span as many commits in the past as possible.
+    Open the resulting URL in a browser and download the resulting `meta.json` file.
 
-    Then go to "Actions" → "Export" and save the resulting `meta.json` file.
+        tools/skqp/sysopen.py $(tools/skqp/get_gold_export_url.py HEAD~10 HEAD)
 
 2.  From a checkout of Skia's master branch, execute:
 
-        origin	https://skia.googlesource.com/skia.git
+        cd SKIA_SOURCE_DIRECTORY
         git checkout origin/master
         tools/skqp/cut_release META_JSON_FILE
 
@@ -30,16 +31,11 @@ Skia][1].  Here is how that process works:
     `origin/skqp/dev` a parent of this commit (without merging it in), and
     push this new commit to `origin/skqp/dev`:
 
-        git merge -s ours origin/skqp/dev -m "Cut SkQP $(date +%Y-%m-%d)"
-        git add \
-          platform_tools/android/apps/skqp/src/main/assets/files.checksum \
-          platform_tools/android/apps/skqp/src/main/assets/skqp/rendertests.txt \
-          platform_tools/android/apps/skqp/src/main/assets/skqp/unittests.txt
-        git commit --amend --reuse-message=HEAD
-        git push origin HEAD:refs/for/skqp/dev
+        tools/skqp/branch_skqp_dev.sh
 
     Review and submit the change:
 
+        git push origin HEAD:refs/for/skqp/dev
         NUM=$(experimental/tools/gerrit-change-id-to-number HEAD)
         tools/skqp/sysopen.py https://review.skia.org/$NUM
 

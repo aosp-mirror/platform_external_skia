@@ -68,8 +68,9 @@ void GrGLGpu::ProgramCache::abandon() {
     fMap.reset();
 }
 
-GrGLProgram* GrGLGpu::ProgramCache::refProgram(const GrGLGpu* gpu,
+GrGLProgram* GrGLGpu::ProgramCache::refProgram(GrGLGpu* gpu,
                                                const GrPrimitiveProcessor& primProc,
+                                               const GrTextureProxy* const primProcProxies[],
                                                const GrPipeline& pipeline,
                                                bool isPoints) {
 #ifdef PROGRAM_CACHE_STATS
@@ -78,7 +79,7 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(const GrGLGpu* gpu,
 
     // Get GrGLProgramDesc
     GrProgramDesc desc;
-    if (!GrProgramDesc::Build(&desc, primProc, isPoints, pipeline, *gpu->caps()->shaderCaps())) {
+    if (!GrProgramDesc::Build(&desc, primProc, isPoints, pipeline, gpu)) {
         GrCapsDebugf(gpu->caps(), "Failed to gl program descriptor!\n");
         return nullptr;
     }
@@ -96,7 +97,8 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(const GrGLGpu* gpu,
 #ifdef PROGRAM_CACHE_STATS
         ++fCacheMisses;
 #endif
-        GrGLProgram* program = GrGLProgramBuilder::CreateProgram(primProc, pipeline, &desc, fGpu);
+        GrGLProgram* program = GrGLProgramBuilder::CreateProgram(primProc, primProcProxies,
+                                                                 pipeline, &desc, fGpu);
         if (nullptr == program) {
             return nullptr;
         }

@@ -194,6 +194,27 @@ bool GrVkCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* s
                                srcConfig, SkToBool(src->asTextureProxy()));
 }
 
+template<typename T> T* get_extension_feature_struct(const VkPhysicalDeviceFeatures2& features,
+                                                     VkStructureType type) {
+    // All Vulkan structs that could be part of the features chain will start with the
+    // structure type followed by the pNext pointer. We cast to the CommonVulkanHeader
+    // so we can get access to the pNext for the next struct.
+    struct CommonVulkanHeader {
+        VkStructureType sType;
+        void*           pNext;
+    };
+
+    void* pNext = features.pNext;
+    while (pNext) {
+        CommonVulkanHeader* header = static_cast<CommonVulkanHeader*>(pNext);
+        if (header->sType == type) {
+            return static_cast<T*>(pNext);
+        }
+        pNext = header->pNext;
+    }
+    return nullptr;
+}
+
 void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
                     VkPhysicalDevice physDev, const VkPhysicalDeviceFeatures2& features,
                     const GrVkExtensions& extensions) {
@@ -262,6 +283,24 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         fSupportsAHardwareBufferImages = true;
     }
 #endif
+
+    auto ycbcrFeatures =
+            get_extension_feature_struct<VkPhysicalDeviceSamplerYcbcrConversionFeatures>(
+                    features,
+                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES);
+    if (ycbcrFeatures && ycbcrFeatures->samplerYcbcrConversion &&
+        fSupportsAndroidHWBExternalMemory &&
+        (physicalDeviceVersion >= VK_MAKE_VERSION(1, 1, 0) ||
+         (extensions.hasExtension(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME, 1) &&
+          this->supportsMaintenance1() &&
+          this->supportsBindMemory2() &&
+          this->supportsMemoryRequirements2() &&
+          this->supportsPhysicalDeviceProperties2()))) {
+        fSupportsYcbcrConversion = true;
+    }
+    // We always push back the default GrVkYcbcrConversionInfo so that the case of no conversion
+    // will return a key of 0.
+    fYcbcrInfos.push_back(GrVkYcbcrConversionInfo());
 
     this->initGrCaps(vkInterface, physDev, properties, memoryProperties, features, extensions);
     this->initShaderCaps(properties, features);
@@ -374,27 +413,6 @@ int get_max_sample_count(VkSampleCountFlags flags) {
         return 32;
     }
     return 64;
-}
-
-template<typename T> T* get_extension_feature_struct(const VkPhysicalDeviceFeatures2& features,
-                                                     VkStructureType type) {
-    // All Vulkan structs that could be part of the features chain will start with the
-    // structure type followed by the pNext pointer. We cast to the CommonVulkanHeader
-    // so we can get access to the pNext for the next struct.
-    struct CommonVulkanHeader {
-        VkStructureType sType;
-        void*           pNext;
-    };
-
-    void* pNext = features.pNext;
-    while (pNext) {
-        CommonVulkanHeader* header = static_cast<CommonVulkanHeader*>(pNext);
-        if (header->sType == type) {
-            return static_cast<T*>(pNext);
-        }
-        pNext = header->pNext;
-    }
-    return nullptr;
 }
 
 void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
@@ -687,8 +705,28 @@ bool GrVkCaps::surfaceSupportsWritePixels(const GrSurface* surface) const {
     return true;
 }
 
-bool validate_image_info(VkFormat format, SkColorType ct, GrPixelConfig* config) {
+bool validate_image_info(VkFormat format, SkColorType ct, GrPixelConfig* config,
+                         bool hasYcbcrConversion) {
     *config = kUnknown_GrPixelConfig;
+
+    if (format == VK_FORMAT_UNDEFINED) {
+        // If the format is undefined then it is only valid as an external image which requires that
+        // we have a valid VkYcbcrConversion.
+        if (hasYcbcrConversion) {
+            // We don't actually care what the color type or config are since we won't use those
+            // values for external textures, but since our code requires setting a config here
+            // just default it to RGBA.
+            *config = kRGBA_8888_GrPixelConfig;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    if (hasYcbcrConversion) {
+        // We only support having a ycbcr conversion for external images.
+        return false;
+    }
 
     switch (ct) {
         case kUnknown_SkColorType:
@@ -761,7 +799,8 @@ bool GrVkCaps::validateBackendTexture(const GrBackendTexture& tex, SkColorType c
         return false;
     }
 
-    return validate_image_info(imageInfo.fFormat, ct, config);
+    return validate_image_info(imageInfo.fFormat, ct, config,
+                               imageInfo.fYcbcrConversionInfo.isValid());
 }
 
 bool GrVkCaps::validateBackendRenderTarget(const GrBackendRenderTarget& rt, SkColorType ct,
@@ -771,16 +810,18 @@ bool GrVkCaps::validateBackendRenderTarget(const GrBackendRenderTarget& rt, SkCo
         return false;
     }
 
-    return validate_image_info(imageInfo.fFormat, ct, config);
+    return validate_image_info(imageInfo.fFormat, ct, config,
+                               imageInfo.fYcbcrConversionInfo.isValid());
 }
 
 bool GrVkCaps::getConfigFromBackendFormat(const GrBackendFormat& format, SkColorType ct,
                                           GrPixelConfig* config) const {
     const VkFormat* vkFormat = format.getVkFormat();
-    if (!vkFormat) {
+    const GrVkYcbcrConversionInfo* ycbcrInfo = format.getVkYcbcrConversionInfo();
+    if (!vkFormat || !ycbcrInfo) {
         return false;
     }
-    return validate_image_info(*vkFormat, ct, config);
+    return validate_image_info(*vkFormat, ct, config, ycbcrInfo->isValid());
 }
 
 static bool get_yuva_config(VkFormat vkFormat, GrPixelConfig* config) {
@@ -828,6 +869,10 @@ GrBackendFormat GrVkCaps::onCreateFormatFromBackendTexture(
         const GrBackendTexture& backendTex) const {
     GrVkImageInfo vkInfo;
     SkAssertResult(backendTex.getVkImageInfo(&vkInfo));
+    if (vkInfo.fYcbcrConversionInfo.isValid()) {
+        SkASSERT(vkInfo.fFormat == VK_FORMAT_UNDEFINED);
+        return GrBackendFormat::MakeVk(vkInfo.fYcbcrConversionInfo);
+    }
     return GrBackendFormat::MakeVk(vkInfo.fFormat);
 }
 
