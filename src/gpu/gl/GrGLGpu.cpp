@@ -652,7 +652,8 @@ static bool check_backend_texture(const GrBackendTexture& backendTex, const GrGL
 }
 
 sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTex,
-                                               GrWrapOwnership ownership, bool purgeImmediately) {
+                                               GrWrapOwnership ownership, GrIOType ioType,
+                                               bool purgeImmediately) {
     GrGLTexture::IDDesc idDesc;
     if (!check_backend_texture(backendTex, this->glCaps(), &idDesc)) {
         return nullptr;
@@ -676,7 +677,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     GrMipMapsStatus mipMapsStatus = backendTex.hasMipMaps() ? GrMipMapsStatus::kValid
                                                             : GrMipMapsStatus::kNotAllocated;
 
-    auto texture = GrGLTexture::MakeWrapped(this, surfDesc, mipMapsStatus, idDesc,
+    auto texture = GrGLTexture::MakeWrapped(this, surfDesc, mipMapsStatus, idDesc, ioType,
                                             purgeImmediately);
     // We don't know what parameters are already set on wrapped textures.
     texture->textureParamsModified();
@@ -833,6 +834,7 @@ static inline GrGLint config_alignment(GrPixelConfig config) {
             return 1;
         case kRGB_565_GrPixelConfig:
         case kRGBA_4444_GrPixelConfig:
+        case kRG_88_GrPixelConfig:
         case kAlpha_half_GrPixelConfig:
         case kAlpha_half_as_Red_GrPixelConfig:
         case kRGBA_half_GrPixelConfig:
@@ -3739,13 +3741,11 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst, GrSurfaceOrigin dstOrigin,
         sy0 = sh - sy0;
         sy1 = sh - sy1;
     }
-    if (srcTex->texturePriv().textureType() != GrTextureType::kRectangle) {
-        // src rect edges in normalized texture space (0 to 1)
-        sx0 /= sw;
-        sx1 /= sw;
-        sy0 /= sh;
-        sy1 /= sh;
-    }
+    // src rect edges in normalized texture space (0 to 1)
+    sx0 /= sw;
+    sx1 /= sw;
+    sy0 /= sh;
+    sy1 /= sh;
 
     GL_CALL(Uniform4f(fCopyPrograms[progIdx].fPosXformUniform, dx1 - dx0, dy1 - dy0, dx0, dy0));
     GL_CALL(Uniform4f(fCopyPrograms[progIdx].fTexCoordXformUniform,

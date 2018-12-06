@@ -181,7 +181,8 @@ sk_sp<SkImage> SkImage::MakeFromYUVAPixmaps(
             SkBitmap bmp;
             bmp.installPixels(*pixmap);
             tempTextureProxies[i] = proxyProvider->createMipMapProxyFromBitmap(bmp);
-        } else {
+        }
+        if (!tempTextureProxies[i]) {
             if (SkImageInfoIsValid(pixmap->info())) {
                 ATRACE_ANDROID_FRAMEWORK("Upload Texture [%ux%u]",
                                          pixmap->width(), pixmap->height());
@@ -309,7 +310,7 @@ sk_sp<SkImage> SkImage_GpuYUVA::MakePromiseYUVATexture(GrContext* context,
         desc.fSampleCnt = 1;
         proxies[texIdx] = proxyProvider->createLazyProxy(
                             std::move(lazyInstCallback), yuvaFormats[texIdx], desc, imageOrigin,
-                            GrMipMapped::kNo, GrInternalSurfaceFlags::kNone,
+                            GrMipMapped::kNo, GrInternalSurfaceFlags::kReadOnly,
                             SkBackingFit::kExact, SkBudgeted::kNo,
                             GrSurfaceProxy::LazyInstantiationType::kUninstantiate);
         if (!proxies[texIdx]) {

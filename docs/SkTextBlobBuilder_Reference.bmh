@@ -25,9 +25,9 @@ Helper class for constructing SkTextBlob.
 
 RunBuffer supplies storage for Glyphs and positions within a run.
 
-A run is a sequence of Glyphs sharing Paint_Font_Metrics and positioning.
+A run is a sequence of Glyphs sharing Font_Metrics and positioning.
 Each run may position its Glyphs in one of three ways:
-by specifying where the first Glyph is drawn, and allowing Paint_Font_Metrics to
+by specifying where the first Glyph is drawn, and allowing Font_Metrics to
 determine the advance to subsequent Glyphs; by specifying a baseline, and
 the position on that baseline for each Glyph in run; or by providing Point
 array, one per Glyph.
@@ -105,7 +105,7 @@ blob equals nullptr
     sk_sp<SkTextBlob> blob = builder.make();
     SkDebugf("blob " "%s" " nullptr\n", blob == nullptr ? "equals" : "does not equal");
     SkPaint paint;
-    paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    paint.setTextEncoding(kGlyphID_SkTextEncoding);
     SkFont font;
     paint.textToGlyphs("x", 1, builder.allocRun(font, 1, 20, 20).glyphs);
     blob = builder.make();

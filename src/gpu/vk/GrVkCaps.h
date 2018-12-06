@@ -43,7 +43,6 @@ public:
     int getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const override;
     int maxRenderTargetSampleCount(GrPixelConfig config) const override;
 
-    bool surfaceSupportsWritePixels(const GrSurface*) const override;
     bool surfaceSupportsReadPixels(const GrSurface*) const override { return true; }
 
     bool isConfigTexturableLinearly(GrPixelConfig config) const {
@@ -71,13 +70,6 @@ public:
     // copyImageToBuffer. This flag says that we must do the copy starting from the origin always.
     bool mustDoCopiesFromOrigin() const {
         return fMustDoCopiesFromOrigin;
-    }
-
-    // On Nvidia there is a current bug where we must the current command buffer before copy
-    // operations or else the copy will not happen. This includes copies, blits, resolves, and copy
-    // as draws.
-    bool mustSubmitCommandsBeforeCopyOp() const {
-        return fMustSubmitCommandsBeforeCopyOp;
     }
 
     // Sometimes calls to QueueWaitIdle return before actually signalling the fences
@@ -151,9 +143,6 @@ public:
     bool canCopyAsDraw(GrPixelConfig dstConfig, bool dstIsRenderable,
                        GrPixelConfig srcConfig, bool srcIsTextureable) const;
 
-    bool canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                        const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
-
     bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc, GrSurfaceOrigin*,
                             bool* rectsMustMatch, bool* disallowSubrect) const override;
 
@@ -201,6 +190,10 @@ private:
 
     void applyDriverCorrectnessWorkarounds(const VkPhysicalDeviceProperties&);
 
+    bool onSurfaceSupportsWritePixels(const GrSurface*) const override;
+    bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                          const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
+
     struct ConfigInfo {
         ConfigInfo() : fOptimalFlags(0), fLinearFlags(0) {}
 
@@ -229,7 +222,6 @@ private:
     SkSTArray<1, GrVkYcbcrConversionInfo> fYcbcrInfos;
 
     bool fMustDoCopiesFromOrigin = false;
-    bool fMustSubmitCommandsBeforeCopyOp = false;
     bool fMustSleepOnTearDown = false;
     bool fNewCBOnPipelineChange = false;
     bool fShouldAlwaysUseDedicatedImageMemory = false;

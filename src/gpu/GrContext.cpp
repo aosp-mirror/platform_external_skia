@@ -404,6 +404,7 @@ static bool valid_premul_config(GrPixelConfig config) {
         case kRGBA_4444_GrPixelConfig:          return true;
         case kRGBA_8888_GrPixelConfig:          return true;
         case kRGB_888_GrPixelConfig:            return false;
+        case kRG_88_GrPixelConfig:              return false;
         case kBGRA_8888_GrPixelConfig:          return true;
         case kSRGBA_8888_GrPixelConfig:         return true;
         case kSBGRA_8888_GrPixelConfig:         return true;
@@ -430,6 +431,7 @@ static bool valid_premul_color_type(GrColorType ct) {
         case GrColorType::kABGR_4444:    return true;
         case GrColorType::kRGBA_8888:    return true;
         case GrColorType::kRGB_888x:     return false;
+        case GrColorType::kRG_88:        return false;
         case GrColorType::kBGRA_8888:    return true;
         case GrColorType::kRGBA_1010102: return true;
         case GrColorType::kGray_8:       return false;
@@ -928,7 +930,8 @@ sk_sp<GrTextureContext> GrContextPriv::makeBackendTextureContext(const GrBackend
                                                                  sk_sp<SkColorSpace> colorSpace) {
     ASSERT_SINGLE_OWNER_PRIV
 
-    sk_sp<GrSurfaceProxy> proxy = this->proxyProvider()->wrapBackendTexture(tex, origin);
+    sk_sp<GrSurfaceProxy> proxy = this->proxyProvider()->wrapBackendTexture(
+            tex, origin, kBorrow_GrWrapOwnership, kRW_GrIOType);
     if (!proxy) {
         return nullptr;
     }

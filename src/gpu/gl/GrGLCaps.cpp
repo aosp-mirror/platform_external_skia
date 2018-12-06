@@ -227,7 +227,11 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     if (kGL_GrGLStandard == standard) {
         if (version >= GR_GL_VER(3, 1) || ctxInfo.hasExtension("GL_ARB_texture_rectangle") ||
             ctxInfo.hasExtension("GL_ANGLE_texture_rectangle")) {
-            fRectangleTextureSupport = true;
+            // We also require textureSize() support for rectangle 2D samplers which was added in
+            // GLSL 1.40.
+            if (ctxInfo.glslGeneration() >= k140_GrGLSLGeneration) {
+                fRectangleTextureSupport = true;
+            }
         }
     } else {
         // Command buffer exposes this in GL ES context for Chromium reasons,
@@ -1299,7 +1303,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
 
           ES 2.0
             color renderable: RGBA4, RGB5_A1, RGB565
-            GL_EXT_texture_rg adds support for R8, RG5 as a color render target
+            GL_EXT_texture_rg adds support for R8, RG8 as a color render target
             GL_OES_rgb8_rgba8 adds support for RGB8 and RGBA8
             GL_ARM_rgba8 adds support for RGBA8 (but not RGB8)
             GL_EXT_texture_format_BGRA8888 does not add renderbuffer support
@@ -1463,6 +1467,27 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         fConfigTable[kRGB_888_GrPixelConfig].fFlags = 0;
     }
 
+    // ES2 Command Buffer has several TexStorage restrictions. It appears to fail for any format
+    // not explicitly allowed by GL_EXT_texture_storage, particularly those from other extensions.
+    bool isCommandBufferES2 = kChromium_GrGLDriver == ctxInfo.driver() && version < GR_GL_VER(3, 0);
+
+    fConfigTable[kRG_88_GrPixelConfig].fFormats.fBaseInternalFormat = GR_GL_RG;
+    fConfigTable[kRG_88_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_RG8;
+    fConfigTable[kRG_88_GrPixelConfig].fFormats.fExternalFormat[kReadPixels_ExternalFormatUsage] =
+        GR_GL_RG;
+    fConfigTable[kRG_88_GrPixelConfig].fFormats.fExternalType = GR_GL_UNSIGNED_BYTE;
+    fConfigTable[kRG_88_GrPixelConfig].fFormatType = kNormalizedFixedPoint_FormatType;
+    if (textureRedSupport) {
+        fConfigTable[kRG_88_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag | allRenderFlags;
+        // ES2 Command Buffer does not allow TexStorage with RG8_EXT
+        if (texStorageSupported && !isCommandBufferES2) {
+            fConfigTable[kRG_88_GrPixelConfig].fFlags |= ConfigInfo::kCanUseTexStorage_Flag;
+        }
+    } else {
+        fConfigTable[kRG_88_GrPixelConfig].fFlags = 0;
+    }
+    fConfigTable[kRG_88_GrPixelConfig].fSwizzle = GrSwizzle::RGRG();
+
     fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fExternalFormat[kReadPixels_ExternalFormatUsage] =
         GR_GL_BGRA;
     fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fExternalType  = GR_GL_UNSIGNED_BYTE;
@@ -1555,10 +1580,6 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     if (kSkia8888_GrPixelConfig == kBGRA_8888_GrPixelConfig && kGLES_GrGLStandard == standard) {
         fSRGBSupport = false;
     }
-
-    // ES2 Command Buffer has several TexStorage restrictions. It appears to fail for any format
-    // not explicitly allowed by GL_EXT_texture_storage, particularly those from other extensions.
-    bool isCommandBufferES2 = kChromium_GrGLDriver == ctxInfo.driver() && version < GR_GL_VER(3, 0);
 
     uint32_t srgbRenderFlags = allRenderFlags;
     if (disableSRGBRenderWithMSAAForMacAMD) {
@@ -2172,8 +2193,8 @@ static bool has_msaa_render_buffer(const GrSurfaceProxy* surf, const GrGLCaps& g
            !rt->rtPriv().glRTFBOIDIs0();
 }
 
-bool GrGLCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                              const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+bool GrGLCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                                const SkIRect& srcRect, const SkIPoint& dstPoint) const {
     GrSurfaceOrigin dstOrigin = dst->origin();
     GrSurfaceOrigin srcOrigin = src->origin();
 
@@ -2756,7 +2777,7 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
     }
 }
 
-bool GrGLCaps::surfaceSupportsWritePixels(const GrSurface* surface) const {
+bool GrGLCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     if (fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO) {
         if (auto tex = static_cast<const GrGLTexture*>(surface->asTexture())) {
             if (tex->hasBaseLevelBeenBoundToFBO()) {
@@ -2965,6 +2986,9 @@ static bool get_yuva_config(GrGLenum format, GrPixelConfig* config) {
         break;
     case GR_GL_R8:
         *config = kAlpha_8_as_Red_GrPixelConfig;
+        break;
+    case GR_GL_RG8:
+        *config = kRG_88_GrPixelConfig;
         break;
     case GR_GL_RGBA8:
         *config = kRGBA_8888_GrPixelConfig;
