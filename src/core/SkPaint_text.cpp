@@ -62,19 +62,18 @@ SkScalar SkPaint::MaxCacheSize2(SkScalar maxLimit) {
 #include "SkUtils.h"
 
 int SkPaint::countText(const void* text, size_t length) const {
-    return SkFont::LEGACY_ExtractFromPaint(*this).countText(text, length,
-                                                        (SkTextEncoding)this->getTextEncoding());
+    return SkFont::LEGACY_ExtractFromPaint(*this).countText(text, length, this->getTextEncoding());
 }
 
 int SkPaint::textToGlyphs(const void* text, size_t length, uint16_t glyphs[]) const {
     return SkFont::LEGACY_ExtractFromPaint(*this).textToGlyphs(text, length,
-                                                           (SkTextEncoding)this->getTextEncoding(),
+                                                               this->getTextEncoding(),
                                                                glyphs, length);
 }
 
 bool SkPaint::containsText(const void* text, size_t length) const {
     return SkFont::LEGACY_ExtractFromPaint(*this).containsText(text, length,
-                                                           (SkTextEncoding)this->getTextEncoding());
+                                                               this->getTextEncoding());
 }
 
 void SkPaint::glyphsToUnichars(const uint16_t glyphs[], int count, SkUnichar textData[]) const {
@@ -286,7 +285,7 @@ SkScalar SkPaint::measure_text(SkGlyphCache* cache,
     }
 
     SkFontPriv::GlyphCacheProc glyphCacheProc = SkFontPriv::GetGlyphCacheProc(
-                    static_cast<SkTextEncoding>(this->getTextEncoding()), nullptr != bounds);
+                                                    this->getTextEncoding(), nullptr != bounds);
 
     int         n = 1;
     const char* stop = (const char*)text + byteLength;
@@ -347,59 +346,8 @@ SkScalar SkPaint::measureText(const void* textData, size_t length, SkRect* bound
 
 size_t SkPaint::breakText(const void* textD, size_t length, SkScalar maxWidth,
                           SkScalar* measuredWidth) const {
-    if (0 == length || 0 >= maxWidth) {
-        if (measuredWidth) {
-            *measuredWidth = 0;
-        }
-        return 0;
-    }
-
-    if (0 == fTextSize) {
-        if (measuredWidth) {
-            *measuredWidth = 0;
-        }
-        return length;
-    }
-
-    SkASSERT(textD != nullptr);
-    const char* text = (const char*)textD;
-    const char* stop = text + length;
-
-    SkCanonicalizePaint canon(*this);
-    const SkPaint& paint = canon.getPaint();
-    SkScalar scale = canon.getScale();
-
-    // adjust max in case we changed the textSize in paint
-    if (scale) {
-        maxWidth /= scale;
-    }
-
-    const SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
-    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font, paint);
-
-    SkFontPriv::GlyphCacheProc glyphCacheProc = SkFontPriv::GetGlyphCacheProc(
-                                  static_cast<SkTextEncoding>(paint.getTextEncoding()), false);
-    SkScalar width = 0;
-
-    while (text < stop) {
-        const char* curr = text;
-        SkScalar x = advance(glyphCacheProc(cache.get(), &text, stop));
-        if ((width += x) > maxWidth) {
-            width -= x;
-            text = curr;
-            break;
-        }
-    }
-
-    if (measuredWidth) {
-        if (scale) {
-            width *= scale;
-        }
-        *measuredWidth = width;
-    }
-
-    // return the number of bytes measured
-    return text - stop + length;
+    return SkFont::LEGACY_ExtractFromPaint(*this).breakText(textD, length,
+                                                this->getTextEncoding(), maxWidth, measuredWidth);
 }
 
 SkScalar SkPaint::getFontMetrics(SkFontMetrics* metrics) const {
@@ -410,7 +358,7 @@ SkScalar SkPaint::getFontMetrics(SkFontMetrics* metrics) const {
 
 int SkPaint::getTextWidths(const void* text, size_t len, SkScalar widths[], SkRect bounds[]) const {
     const SkFont font = SkFont::LEGACY_ExtractFromPaint(*this);
-    SkAutoToGlyphs gly(font, text, len, (SkTextEncoding)this->getTextEncoding());
+    SkAutoToGlyphs gly(font, text, len, this->getTextEncoding());
     font.getWidthsBounds(gly.glyphs(), gly.count(), widths, bounds, this);
     return gly.count();
 }
@@ -436,7 +384,7 @@ static void PathPosProc(const SkPath* src, const SkMatrix& mx, void* ctx) {
 void SkPaint::getTextPath(const void* text, size_t length,
                           SkScalar x, SkScalar y, SkPath* path) const {
     SkFont font = SkFont::LEGACY_ExtractFromPaint(*this);
-    SkAutoToGlyphs gly(font, text, length, (SkTextEncoding)this->getTextEncoding());
+    SkAutoToGlyphs gly(font, text, length, this->getTextEncoding());
     SkAutoSTArray<32, SkPoint> fPos(gly.count());
     font.getPos(gly.glyphs(), gly.count(), fPos.get(), {x, y});
 
@@ -448,7 +396,7 @@ void SkPaint::getTextPath(const void* text, size_t length,
 void SkPaint::getPosTextPath(const void* text, size_t length,
                              const SkPoint pos[], SkPath* path) const {
     SkFont font = SkFont::LEGACY_ExtractFromPaint(*this);
-    SkAutoToGlyphs gly(font, text, length, (SkTextEncoding)this->getTextEncoding());
+    SkAutoToGlyphs gly(font, text, length, this->getTextEncoding());
 
     path->reset();
     PathPosRec rec = { path, pos };
@@ -578,8 +526,7 @@ SkTextBaseIter::SkTextBaseIter(const char text[], size_t length,
                                    const SkPaint& paint,
                                    bool applyStrokeAndPathEffects)
     : fPaint(paint) {
-    fGlyphCacheProc = SkFontPriv::GetGlyphCacheProc(
-                                    static_cast<SkTextEncoding>(paint.getTextEncoding()), true);
+    fGlyphCacheProc = SkFontPriv::GetGlyphCacheProc(paint.getTextEncoding(), true);
 
     fPaint.setLinearText(true);
     fPaint.setMaskFilter(nullptr);   // don't want this affecting our path-cache lookup

@@ -318,6 +318,7 @@ void MdOut::DefinedState::setLink() {
         parser.skipToEndBracket('(');
         const char* parenStart = parser.fChar;
         parser.skipToBalancedEndBracket('(', ')');
+        (void) parser.skipExact(" const");
         string methodName = fPriorWord + fSeparator
                 + string(parenStart + 1, parser.fChar - parenStart - 1);
         string testLink;
@@ -446,7 +447,8 @@ void MdOut::DefinedState::setLink() {
     }
     // look in parent fNames and above for match
     if (fNames) {
-        if (this->findLink(fWord, &fLink, Resolvable::kClone == fResolvable && fAddParens)) {
+        if (this->findLink(fWord, &fLink, (Resolvable::kClone == fResolvable && fAddParens)
+                || (Resolvable::kCode == fResolvable && '(' == fEnd[0]))) {
             return;
         }
     }
