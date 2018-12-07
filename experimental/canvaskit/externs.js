@@ -77,9 +77,9 @@ var CanvasKit = {
 	SkCanvas: {
 		// public API (from C++ bindings)
 		clear: function() {},
-		concat: function() {},
-		clipRect: function() {},
 		clipPath: function() {},
+		clipRect: function() {},
+		concat: function() {},
 		drawImage: function() {},
 		drawImageRect: function() {},
 		drawPaint: function() {},
@@ -89,6 +89,7 @@ var CanvasKit = {
 		drawText: function() {},
 		drawVertices: function() {},
 		flush: function() {},
+		getTotalMatrix: function() {},
 		restore: function() {},
 		rotate: function() {},
 		save: function() {},
@@ -155,6 +156,7 @@ var CanvasKit = {
 	SkPath: {
 		// public API (from C++ bindings)
 		computeTightBounds: function() {},
+		contains: function() {},
 		/** @return {CanvasKit.SkPath} */
 		copy: function() {},
 		countPoints: function() {},
@@ -162,6 +164,7 @@ var CanvasKit = {
 		getBounds: function() {},
 		getFillType: function() {},
 		getPoint: function() {},
+		isEmpty: function() {},
 		setFillType: function() {},
 		toSVGString: function() {},
 
@@ -423,6 +426,7 @@ StrokeOpts.prototype.width;
 StrokeOpts.prototype.miter_limit;
 StrokeOpts.prototype.cap;
 StrokeOpts.prototype.join;
+StrokeOpts.prototype.precision;
 
 // Define everything created in the canvas2d spec here
 var HTMLCanvas = {};
@@ -453,6 +457,8 @@ CanvasRenderingContext2D.prototype.fillRect = function() {};
 CanvasRenderingContext2D.prototype.fillText = function() {};
 CanvasRenderingContext2D.prototype.getImageData = function() {};
 CanvasRenderingContext2D.prototype.getLineDash = function() {};
+CanvasRenderingContext2D.prototype.isPointInPath = function() {};
+CanvasRenderingContext2D.prototype.isPointInStroke = function() {};
 CanvasRenderingContext2D.prototype.lineTo = function() {};
 CanvasRenderingContext2D.prototype.measureText = function() {};
 CanvasRenderingContext2D.prototype.moveTo = function() {};
