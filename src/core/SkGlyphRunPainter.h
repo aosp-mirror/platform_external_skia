@@ -97,17 +97,17 @@ public:
     template <typename PerEmptyT, typename PerPath>
     void drawGlyphRunAsPathWithARGBFallback(
             SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
-            SkPoint origin, const SkMatrix& viewMatrix, SkScalar textScale,
+            SkPoint origin, const SkPaint& paint, const SkMatrix& viewMatrix, SkScalar textScale,
             PerEmptyT&& perEmpty, PerPath&& perPath, ARGBFallback&& fallbackARGB);
 
     template <typename PerEmptyT, typename PerSDFT, typename PerPathT>
     void drawGlyphRunAsSDFWithARGBFallback(
             SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
-            SkPoint origin, const SkMatrix& viewMatrix, SkScalar textRatio,
+            SkPoint origin, const SkPaint& paint, const SkMatrix& viewMatrix, SkScalar textRatio,
             PerEmptyT&& perEmpty, PerSDFT&& perSDF, PerPathT&& perPath, ARGBFallback&& perFallback);
 
 private:
-    static bool ShouldDrawAsPath(const SkPaint& paint, const SkMatrix& matrix);
+    static bool ShouldDrawAsPath(const SkPaint& paint, const SkFont& font, const SkMatrix& matrix);
     void ensureBitmapBuffers(size_t runSize);
 
     void processARGBFallback(
