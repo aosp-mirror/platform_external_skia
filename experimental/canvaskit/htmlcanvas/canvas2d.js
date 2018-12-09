@@ -196,7 +196,7 @@
       }
     }
 
-    this._getShader = function(currentTransform, globalAlpha) {
+    this._getShader = function(currentTransform) {
       // From the spec: "The points in the linear gradient must be transformed
       // as described by the current transformation matrix when rendering."
       var pts = [x1, y1, x2, y2];
@@ -207,11 +207,8 @@
       var sy2 = pts[3];
 
       this._dispose();
-      var colors = this._colors.map(function(c) {
-        return CanvasKit.multiplyByAlpha(c, globalAlpha);
-      });
       this._shader = CanvasKit.MakeLinearGradientShader([sx1, sy1], [sx2, sy2],
-        colors, this._pos, CanvasKit.TileMode.Clamp);
+        this._colors, this._pos, CanvasKit.TileMode.Clamp);
       return this._shader;
     }
   }
@@ -268,7 +265,7 @@
       }
     }
 
-    this._getShader = function(currentTransform, globalAlpha) {
+    this._getShader = function(currentTransform) {
       // From the spec: "The points in the linear gradient must be transformed
       // as described by the current transformation matrix when rendering."
       var pts = [x1, y1, x2, y2];
@@ -278,7 +275,6 @@
       var sx2 = pts[2];
       var sy2 = pts[3];
 
-      // Maybe refactor _scalefactor() on which this is taken?
       var sx = currentTransform[0];
       var sy = currentTransform[4];
       var scaleFactor = (Math.abs(sx) + Math.abs(sy))/2;
@@ -287,14 +283,77 @@
       var sr2 = r2 * scaleFactor;
 
       this._dispose();
-      var colors = this._colors.map(function(c) {
-        return CanvasKit.multiplyByAlpha(c, globalAlpha);
-      });
       this._shader = CanvasKit.MakeTwoPointConicalGradientShader(
-          [sx1, sy1], sr1, [sx2, sy2], sr2, colors, this._pos,
+          [sx1, sy1], sr1, [sx2, sy2], sr2, this._colors, this._pos,
           CanvasKit.TileMode.Clamp);
       return this._shader;
     }
+  }
+
+  function CanvasPattern(image, repetition) {
+    this._shader = null;
+    // image should be an SkImage returned from HTMLCanvas.decodeImage()
+    this._image = image;
+    this._transform = CanvasKit.SkMatrix.identity();
+
+    if (repetition === '') {
+      repetition = 'repeat';
+    }
+    switch(repetition) {
+      case 'repeat-x':
+        this._tileX = CanvasKit.TileMode.Repeat;
+        this._tileY = CanvasKit.TileMode.Decal;
+        break;
+      case 'repeat-y':
+        this._tileX = CanvasKit.TileMode.Decal;
+        this._tileY = CanvasKit.TileMode.Repeat;
+        break;
+      case 'repeat':
+        this._tileX = CanvasKit.TileMode.Repeat;
+        this._tileY = CanvasKit.TileMode.Repeat;
+        break;
+      case 'no-repeat':
+        this._tileX = CanvasKit.TileMode.Decal;
+        this._tileY = CanvasKit.TileMode.Decal;
+        break;
+      default:
+        throw 'invalid repetition mode ' + repetition;
+    }
+
+    // Takes a DOMMatrix like object. e.g. the identity would be:
+    // {a:1, b: 0, c: 0, d: 1, e: 0, f: 0}
+    // @param {DOMMatrix} m
+    this.setTransform = function(m) {
+      var t = [m.a, m.c, m.e,
+               m.b, m.d, m.f,
+                 0,   0,   1];
+      if (allAreFinite(t)) {
+        this._transform = t;
+      }
+    }
+
+    this._copy = function() {
+      var cp = new CanvasPattern()
+      cp._tileX = this._tileX;
+      cp._tileY = this._tileY;
+      return cp;
+    }
+
+    this._dispose = function() {
+      if (this._shader) {
+        this._shader.delete();
+        this._shader = null;
+      }
+    }
+
+    this._getShader = function(currentTransform) {
+      // Ignore currentTransform since it will be applied later
+      this._dispose();
+      this._shader = CanvasKit.MakeImageShader(this._image, this._tileX, this._tileY,
+                                               false, this._transform);
+      return this._shader;
+    }
+
   }
 
   function CanvasRenderingContext2D(skcanvas) {
@@ -325,21 +384,19 @@
     this._paint.setBlendMode(this._globalCompositeOperation);
 
     this._currentPath = new CanvasKit.SkPath();
-    this._currentSubpath = null;
     this._currentTransform = CanvasKit.SkMatrix.identity();
 
     // Use this for save/restore
     this._canvasStateStack = [];
-    // Keep a reference to all the gradients that were allocated
-    // for cleanup in _dispose;
-    this._gradients = [];
+    // Keep a reference to all the effects (e.g. gradients, patterns)
+    // that were allocated for cleanup in _dispose.
+    this._toCleanUp = [];
 
     this._dispose = function() {
       this._currentPath.delete();
-      this._currentSubpath && this._currentSubpath.delete();
       this._paint.delete();
-      this._gradients.forEach(function(gradient) {
-        gradient._dispose();
+      this._toCleanUp.forEach(function(c) {
+        c._dispose();
       });
       // Don't delete this._canvas as it will be disposed
       // by the surface of which it is based.
@@ -347,38 +404,26 @@
 
     // This always accepts DOMMatrix/SVGMatrix or any other
     // object that has properties a,b,c,d,e,f defined.
-    // It will return DOMMatrix if the constructor is defined
-    // (e.g. we are in a browser), otherwise it will return a
-    // flattened 9-element matrix. That 9 element matrix
-    // can also be accepted on all platforms (somewhat
-    //  contrary to the specification, but at least keeps it usable
-    // on Node)
+    // Returns a DOM-Matrix like dictionary
     Object.defineProperty(this, 'currentTransform', {
       enumerable: true,
       get: function() {
-        if (isNode) {
-          return this._currentTransform.slice();
-        } else {
-          // a-f aren't in the order as we have them. a-f are in "SVG order".
-          var m = new DOMMatrix();
-          m.a = this._currentTransform[0];
-          m.c = this._currentTransform[1];
-          m.e = this._currentTransform[2];
-          m.b = this._currentTransform[3];
-          m.d = this._currentTransform[4];
-          m.f = this._currentTransform[5];
-          return m;
-        }
+        return {
+          'a' : this._currentTransform[0],
+          'c' : this._currentTransform[1],
+          'e' : this._currentTransform[2],
+          'b' : this._currentTransform[3],
+          'd' : this._currentTransform[4],
+          'f' : this._currentTransform[5],
+        };
       },
+      // @param {DOMMatrix} matrix
       set: function(matrix) {
         if (matrix.a) {
           // if we see a property named 'a', guess that b-f will
           // also be there.
-          this._currentTransform = [matrix.a, matrix.c, matrix.e,
-                                    matrix.b, matrix.d, matrix.f,
-                                           0,        0,        1];
-        } else if (matrix.length === 9) {
-          this._currentTransform = matrix;
+          this.setTransform(matrix.a, matrix.b, matrix.c,
+                            matrix.d, matrix.e, matrix.f);
         }
       }
     });
@@ -394,8 +439,8 @@
       set: function(newStyle) {
         if (typeof newStyle === 'string') {
           this._fillStyle = parseColor(newStyle);
-        } else if (newStyle.addColorStop) {
-          // It's probably a gradient.
+        } else if (newStyle._getShader) {
+          // It's an effect that has a shader.
           this._fillStyle = newStyle
         }
       }
@@ -784,11 +829,10 @@
       set: function(newStyle) {
         if (typeof newStyle === 'string') {
           this._strokeStyle = parseColor(newStyle);
-        } else if (newStyle.addColorStop) {
-          // It's probably a gradient.
+        } else if (newStyle._getShader) {
+          // It's probably an effect.
           this._strokeStyle = newStyle
         }
-
       }
     });
 
@@ -805,57 +849,37 @@
       if (radius < 0) {
         throw 'radii cannot be negative';
       }
-      var pts = [x1, y1, x2, y2];
-      CanvasKit.SkMatrix.mapPoints(this._currentTransform, pts);
-      x1 = pts[0];
-      y1 = pts[1];
-      x2 = pts[2];
-      y2 = pts[3];
-      if (!this._currentSubpath) {
-        this._newSubpath(x1, y1);
+      if (this._currentPath.isEmpty()) {
+        this.moveTo(x1, y1);
       }
-      this._currentSubpath.arcTo(x1, y1, x2, y2, radius * this._scalefactor());
+      this._currentPath.arcTo(x1, y1, x2, y2, radius);
     }
 
     // As per the spec this doesn't begin any paths, it only
-    // clears out any previous subpaths.
+    // clears out any previous paths.
     this.beginPath = function() {
       this._currentPath.delete();
       this._currentPath = new CanvasKit.SkPath();
-      this._currentSubpath && this._currentSubpath.delete();
-      this._currentSubpath = null;
     }
 
     this.bezierCurveTo = function(cp1x, cp1y, cp2x, cp2y, x, y) {
       if (!allAreFinite(arguments)) {
         return;
       }
-      var pts = [cp1x, cp1y, cp2x, cp2y, x, y];
-      CanvasKit.SkMatrix.mapPoints(this._currentTransform, pts);
-      cp1x = pts[0];
-      cp1y = pts[1];
-      cp2x = pts[2];
-      cp2y = pts[3];
-      x    = pts[4];
-      y    = pts[5];
-      if (!this._currentSubpath) {
-        this._newSubpath(cp1x, cp1y);
+      if (this._currentPath.isEmpty()) {
+        this.moveTo(cp1x, cp1y);
       }
-      this._currentSubpath.cubicTo(cp1x, cp1y, cp2x, cp2y, x, y);
+      this._currentPath.cubicTo(cp1x, cp1y, cp2x, cp2y, x, y);
     }
 
     this.clearRect = function(x, y, width, height) {
-      this._canvas.save();
-      this._canvas.concat(this._currentTransform);
       this._paint.setStyle(CanvasKit.PaintStyle.Fill);
       this._paint.setBlendMode(CanvasKit.BlendMode.Clear);
       this._canvas.drawRect(CanvasKit.XYWHRect(x, y, width, height), this._paint);
-      this._canvas.restore();
       this._paint.setBlendMode(this._globalCompositeOperation);
     }
 
     this.clip = function(fillRule) {
-      this._commitSubpath();
       var clip = this._currentPath.copy();
       if (fillRule && fillRule.toLowerCase() === 'evenodd') {
         clip.setFillType(CanvasKit.FillType.EvenOdd);
@@ -866,10 +890,13 @@
     }
 
     this.closePath = function() {
-      if (this._currentSubpath) {
-        this._currentSubpath.close();
-        var lastPt = this._currentSubpath.getPoint(0);
-        this._newSubpath(lastPt[0], lastPt[1]);
+      if (this._currentPath.isEmpty()) {
+        return;
+      }
+      // Check to see if we are not just a single point
+      var bounds = this._currentPath.getBounds();
+      if ((bounds.fBottom - bounds.fTop) || (bounds.fRight - bounds.fLeft)) {
+        this._currentPath.close();
       }
     }
 
@@ -898,8 +925,14 @@
         return;
       }
       var lcg = new LinearCanvasGradient(x1, y1, x2, y2);
-      this._gradients.push(lcg);
+      this._toCleanUp.push(lcg);
       return lcg;
+    }
+
+    this.createPattern = function(image, repetition) {
+      var cp = new CanvasPattern(image, repetition);
+      this._toCleanUp.push(cp);
+      return cp;
     }
 
     this.createRadialGradient = function(x1, y1, r1, x2, y2, r2) {
@@ -907,16 +940,8 @@
         return;
       }
       var rcg = new RadialCanvasGradient(x1, y1, r1, x2, y2, r2);
-      this._gradients.push(rcg);
+      this._toCleanUp.push(rcg);
       return rcg;
-    }
-
-    this._commitSubpath = function() {
-      if (this._currentSubpath) {
-        this._currentPath.addPath(this._currentSubpath, false);
-        this._currentSubpath.delete();
-        this._currentSubpath = null;
-      }
     }
 
     this._imagePaint = function() {
@@ -934,8 +959,6 @@
       // - image, dx, dy
       // - image, dx, dy, dWidth, dHeight
       // - image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight
-      this._canvas.save();
-      this._canvas.concat(this._currentTransform);
       // use the fillPaint, which has the globalAlpha in it
       // which drawImageRect will use.
       var iPaint = this._imagePaint();
@@ -953,36 +976,72 @@
       }
       this._canvas.drawImageRect(img, srcRect, destRect, iPaint, false);
 
-      this._canvas.restore();
       iPaint.dispose();
+    }
+
+    this._ellipseHelper = function(x, y, radiusX, radiusY, startAngle, endAngle) {
+      var sweepDegrees = radiansToDegrees(endAngle - startAngle);
+      var startDegrees = radiansToDegrees(startAngle);
+
+      var oval = CanvasKit.LTRBRect(x - radiusX, y - radiusY, x + radiusX, y + radiusY);
+
+      // draw in 2 180 degree segments because trying to draw all 360 degrees at once
+      // draws nothing.
+      if (almostEqual(Math.abs(sweepDegrees), 360)) {
+        var halfSweep = sweepDegrees/2;
+        this._currentPath.arcTo(oval, startDegrees, halfSweep, false);
+        this._currentPath.arcTo(oval, startDegrees + halfSweep, halfSweep, false);
+        return;
+      }
+      this._currentPath.arcTo(oval, startDegrees, sweepDegrees, false);
     }
 
     this.ellipse = function(x, y, radiusX, radiusY, rotation,
                             startAngle, endAngle, ccw) {
-      if (!allAreFinite(arguments)) {
+      if (!allAreFinite([x, y, radiusX, radiusY, rotation, startAngle, endAngle])) {
         return;
       }
       if (radiusX < 0 || radiusY < 0) {
         throw 'radii cannot be negative';
       }
 
-      if (!this._currentSubpath) {
-        // Don't use newSubpath here because calculating the starting
-        // point in the arc is non-trivial. Just make a new, empty
-        // subpath to append to.
-        this._currentSubpath = new CanvasKit.SkPath();
+      // based off of CanonicalizeAngle in Chrome
+      var tao = 2 * Math.PI;
+      var newStartAngle = startAngle % tao;
+      if (newStartAngle < 0) {
+        newStartAngle += tao;
       }
-      var bounds = CanvasKit.LTRBRect(x-radiusX, y-radiusY, x+radiusX, y+radiusY);
-      var sweep = radiansToDegrees(endAngle - startAngle) - (360 * !!ccw);
-      var temp = new CanvasKit.SkPath();
-      // Skia takes degrees. JS tends to be radians.
-      temp.addArc(bounds, radiansToDegrees(startAngle), sweep);
-      var m = CanvasKit.SkMatrix.multiply(
-                  this._currentTransform,
-                  CanvasKit.SkMatrix.rotated(rotation, x, y));
+      var delta = newStartAngle - startAngle;
+      startAngle = newStartAngle;
+      endAngle += delta;
 
-      this._currentSubpath.addPath(temp, m, true);
-      temp.delete();
+      // Based off of AdjustEndAngle in Chrome.
+      if (!ccw && (endAngle - startAngle) >= tao) {
+        // Draw complete ellipse
+        endAngle = startAngle + tao;
+      } else if (ccw && (startAngle - endAngle) >= tao) {
+        // Draw complete ellipse
+        endAngle = startAngle - tao;
+      } else if (!ccw && startAngle > endAngle) {
+        endAngle = startAngle + (tao - (startAngle - endAngle) % tao);
+      } else if (ccw && startAngle < endAngle) {
+        endAngle = startAngle - (tao - (endAngle - startAngle) % tao);
+      }
+
+
+      // Based off of Chrome's implementation in
+      // https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/graphics/path.cc
+      // of note, can't use addArc or addOval because they close the arc, which
+      // the spec says not to do (unless the user explicitly calls closePath).
+      // This throws off points being in/out of the arc.
+      if (!rotation) {
+        this._ellipseHelper(x, y, radiusX, radiusY, startAngle, endAngle);
+        return;
+      }
+      var rotated = CanvasKit.SkMatrix.rotated(rotation, x, y);
+      this._currentPath.transform(CanvasKit.SkMatrix.invert(rotated));
+      this._ellipseHelper(x, y, radiusX, radiusY, startAngle, endAngle);
+      this._currentPath.transform(rotated);
     }
 
     // A helper to copy the current paint, ready for filling
@@ -995,8 +1054,9 @@
         var alphaColor = CanvasKit.multiplyByAlpha(this._fillStyle, this._globalAlpha);
         paint.setColor(alphaColor);
       } else {
-        var gradient = this._fillStyle._getShader(this._currentTransform, this._globalAlpha);
-        paint.setShader(gradient);
+        var shader = this._fillStyle._getShader(this._currentTransform);
+        paint.setColor(CanvasKit.Color(0,0,0, this._globalAlpha));
+        paint.setShader(shader);
       }
 
       paint.dispose = function() {
@@ -1008,33 +1068,31 @@
       return paint;
     }
 
-    this.fill = function() {
-      this._commitSubpath();
+    this.fill = function(fillRule) {
+      if (fillRule === 'evenodd') {
+        this._currentPath.setFillType(CanvasKit.FillType.EvenOdd);
+      } else if (fillRule === 'nonzero' || !fillRule) {
+        this._currentPath.setFillType(CanvasKit.FillType.Winding);
+      } else {
+        throw 'invalid fill rule';
+      }
       var fillPaint = this._fillPaint();
 
       var shadowPaint = this._shadowPaint(fillPaint);
       if (shadowPaint) {
-        var offsetMatrix = CanvasKit.SkMatrix.multiply(
-          this._currentTransform,
-          CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
-        );
         this._canvas.save();
-        this._canvas.concat(offsetMatrix);
+        this._canvas.concat(this._shadowOffsetMatrix());
         this._canvas.drawPath(this._currentPath, shadowPaint);
         this._canvas.restore();
         shadowPaint.dispose();
       }
-
       this._canvas.drawPath(this._currentPath, fillPaint);
       fillPaint.dispose();
     }
 
     this.fillRect = function(x, y, width, height) {
       var fillPaint = this._fillPaint();
-      this._canvas.save();
-      this._canvas.concat(this._currentTransform);
       this._canvas.drawRect(CanvasKit.XYWHRect(x, y, width, height), fillPaint);
-      this._canvas.restore();
       fillPaint.dispose();
     }
 
@@ -1043,20 +1101,13 @@
       var fillPaint = this._fillPaint()
       var shadowPaint = this._shadowPaint(fillPaint);
       if (shadowPaint) {
-        var offsetMatrix = CanvasKit.SkMatrix.multiply(
-          this._currentTransform,
-          CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
-        );
         this._canvas.save();
-        this._canvas.concat(offsetMatrix);
+        this._canvas.concat(this._shadowOffsetMatrix());
         this._canvas.drawText(text, x, y, shadowPaint);
         this._canvas.restore();
         shadowPaint.dispose();
       }
-      this._canvas.save();
-      this._canvas.concat(this._currentTransform);
       this._canvas.drawText(text, x, y, fillPaint);
-      this._canvas.restore();
       fillPaint.dispose();
     }
 
@@ -1076,20 +1127,58 @@
       return this._lineDashList.slice();
     }
 
+    this._mapToLocalCoordinates = function(pts) {
+      var inverted = CanvasKit.SkMatrix.invert(this._currentTransform);
+      CanvasKit.SkMatrix.mapPoints(inverted, pts);
+      return pts;
+    }
+
+    this.isPointInPath = function(x, y, fillmode) {
+      if (!isFinite(x) || !isFinite(y)) {
+        return false;
+      }
+      fillmode = fillmode || 'nonzero';
+      if (!(fillmode === 'nonzero' || fillmode === 'evenodd')) {
+        return false;
+      }
+      // x and y are in canvas coordinates (i.e. unaffected by CTM)
+      var pts = this._mapToLocalCoordinates([x, y]);
+      x = pts[0];
+      y = pts[1];
+      this._currentPath.setFillType(fillmode === 'nonzero' ?
+                                    CanvasKit.FillType.Winding :
+                                    CanvasKit.FillType.EvenOdd);
+      return this._currentPath.contains(x, y);
+    }
+
+    this.isPointInStroke = function(x, y) {
+      if (!isFinite(x) || !isFinite(y)) {
+        return false;
+      }
+      var pts = this._mapToLocalCoordinates([x, y]);
+      x = pts[0];
+      y = pts[1];
+      var temp = this._currentPath.copy();
+      // fillmode is always nonzero
+      temp.setFillType(CanvasKit.FillType.Winding);
+      temp.stroke({'width': this.lineWidth, 'miter_limit': this.miterLimit,
+                   'cap': this._paint.getStrokeCap(), 'join': this._paint.getStrokeJoin(),
+                   'precision': 0.3, // this is what Chrome uses to compute this
+                  });
+      var retVal = temp.contains(x, y);
+      temp.delete();
+      return retVal;
+    }
+
     this.lineTo = function(x, y) {
       if (!allAreFinite(arguments)) {
         return;
       }
-      var pts = [x, y];
-      CanvasKit.SkMatrix.mapPoints(this._currentTransform, pts);
-      x = pts[0];
-      y = pts[1];
-      // A lineTo without a previous subpath is turned into a moveTo
-      if (!this._currentSubpath) {
-        this._newSubpath(x, y);
-      } else {
-        this._currentSubpath.lineTo(x, y);
+      // A lineTo without a previous point has a moveTo inserted before it
+      if (this._currentPath.isEmpty()) {
+        this._currentPath.moveTo(x, y);
       }
+      this._currentPath.lineTo(x, y);
     }
 
     this.measureText = function(text) {
@@ -1103,17 +1192,7 @@
       if (!allAreFinite(arguments)) {
         return;
       }
-      var pts = [x, y];
-      CanvasKit.SkMatrix.mapPoints(this._currentTransform, pts);
-      x = pts[0];
-      y = pts[1];
-      this._newSubpath(x, y);
-    }
-
-    this._newSubpath = function(x, y) {
-      this._commitSubpath();
-      this._currentSubpath = new CanvasKit.SkPath();
-      this._currentSubpath.moveTo(x, y);
+      this._currentPath.moveTo(x, y);
     }
 
     this.putImageData = function(imageData, x, y, dirtyX, dirtyY, dirtyWidth, dirtyHeight) {
@@ -1155,7 +1234,12 @@
                                     CanvasKit.ColorType.RGBA_8888);
       var src = CanvasKit.XYWHRect(dirtyX, dirtyY, dirtyWidth, dirtyHeight);
       var dst = CanvasKit.XYWHRect(x+dirtyX, y+dirtyY, dirtyWidth, dirtyHeight);
+      var inverted = CanvasKit.SkMatrix.invert(this._currentTransform);
+      this._canvas.save();
+      // putImageData() operates in device space.
+      this._canvas.concat(inverted);
       this._canvas.drawImageRect(img, src, dst, null, false);
+      this._canvas.restore();
       img.delete();
     }
 
@@ -1163,33 +1247,28 @@
       if (!allAreFinite(arguments)) {
         return;
       }
-      var pts = [cpx, cpy, x, y];
-      CanvasKit.SkMatrix.mapPoints(this._currentTransform, pts);
-      cpx = pts[0];
-      cpy = pts[1];
-      x   = pts[2];
-      y   = pts[3];
-      if (!this._currentSubpath) {
-        this._newSubpath(cpx, cpy);
+      if (this._currentPath.isEmpty()) {
+        this._currentPath.moveTo(cpx, cpy);
       }
-      this._currentSubpath.quadTo(cpx, cpy, x, y);
+      this._currentPath.quadTo(cpx, cpy, x, y);
     }
 
     this.rect = function(x, y, width, height) {
       if (!allAreFinite(arguments)) {
         return;
       }
-      var pts = [x, y];
-      CanvasKit.SkMatrix.mapPoints(this._currentTransform, pts);
       // https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-rect
-      this._newSubpath(x, y);
-      this._currentSubpath.addRect(x, y, x+width, y+height);
-      this._currentSubpath.transform(this._currentTransform);
-      this._newSubpath(pts[0], pts[1]);
+      this._currentPath.addRect(x, y, x+width, y+height);
     }
 
     this.resetTransform = function() {
-      this._currentTransform = CanvasKit.SkMatrix.identity();
+      // Apply the current transform to the path and then reset
+      // to the identity. Essentially "commit" the transform.
+      this._currentPath.transform(this._currentTransform);
+      var inverted = CanvasKit.SkMatrix.invert(this._currentTransform);
+      this._canvas.concat(inverted);
+      // This should be identity, modulo floating point drift.
+      this._currentTransform = this._canvas.getTotalMatrix();
     }
 
     this.restore = function() {
@@ -1197,7 +1276,15 @@
       if (!newState) {
         return;
       }
-      this._currentTransform = newState.ctm;
+      // "commit" the current transform. We pop, then apply the inverse of the
+      // popped state, which has the effect of applying just the delta of
+      // transforms between old and new.
+      var combined = CanvasKit.SkMatrix.multiply(
+        this._currentTransform,
+        CanvasKit.SkMatrix.invert(newState.ctm)
+      );
+      this._currentPath.transform(combined);
+
       this._lineDashList = newState.ldl;
       this._strokeWidth = newState.sw;
       this._paint.setStrokeWidth(this._strokeWidth);
@@ -1218,27 +1305,34 @@
       this._imageFilterQuality = newState.isq;
       //TODO: font, textAlign, textBaseline, direction
 
-      // restores the clip
+      // restores the clip and ctm
       this._canvas.restore();
+      this._currentTransform = this._canvas.getTotalMatrix();
     }
 
-    this.rotate = function(radians, px, py) {
-      this._currentTransform = CanvasKit.SkMatrix.multiply(
-                                  this._currentTransform,
-                                  CanvasKit.SkMatrix.rotated(radians, px, py));
+    this.rotate = function(radians) {
+      if (!isFinite(radians)) {
+        return;
+      }
+      // retroactively apply the inverse of this transform to the previous
+      // path so it cancels out when we apply the transform at draw time.
+      var inverted = CanvasKit.SkMatrix.rotated(-radians);
+      this._currentPath.transform(inverted);
+      this._canvas.rotate(radiansToDegrees(radians), 0, 0);
+      this._currentTransform = this._canvas.getTotalMatrix();
     }
 
     this.save = function() {
       if (this._fillStyle._copy) {
         var fs = this._fillStyle._copy();
-        this._gradients.push(fs);
+        this._toCleanUp.push(fs);
       } else {
         var fs = this._fillStyle;
       }
 
       if (this._strokeStyle._copy) {
         var ss = this._strokeStyle._copy();
-        this._gradients.push(ss);
+        this._toCleanUp.push(ss);
       } else {
         var ss = this._strokeStyle;
       }
@@ -1268,23 +1362,20 @@
     }
 
     this.scale = function(sx, sy) {
-      this._currentTransform = CanvasKit.SkMatrix.multiply(
-                                  this._currentTransform,
-                                  CanvasKit.SkMatrix.scaled(sx, sy));
-    }
-
-    this._scalefactor = function() {
-      // This is an approximation of what Chrome does when scaling up
-      // line width.
-      var m = this._currentTransform;
-      var sx = m[0];
-      var sy = m[4];
-      return (Math.abs(sx) + Math.abs(sy))/2;
+      if (!allAreFinite(arguments)) {
+        return;
+      }
+      // retroactively apply the inverse of this transform to the previous
+      // path so it cancels out when we apply the transform at draw time.
+      var inverted = CanvasKit.SkMatrix.scaled(1/sx, 1/sy);
+      this._currentPath.transform(inverted);
+      this._canvas.scale(sx, sy);
+      this._currentTransform = this._canvas.getTotalMatrix();
     }
 
     this.setLineDash = function(dashes) {
       for (var i = 0; i < dashes.length; i++) {
-        if (!Number.isFinite(dashes[i]) || dashes[i] < 0) {
+        if (!isFinite(dashes[i]) || dashes[i] < 0) {
           SkDebug('dash list must have positive, finite values');
           return;
         }
@@ -1298,9 +1389,19 @@
     }
 
     this.setTransform = function(a, b, c, d, e, f) {
-      this._currentTransform = [a, c, e,
-                                b, d, f,
-                                0, 0, 1];
+      if (!(allAreFinite(arguments))) {
+        return;
+      }
+      this.resetTransform();
+      this.transform(a, b, c, d, e, f);
+    }
+
+    // Returns the matrix representing the offset of the shadows. This unapplies
+    // the effects of the scale, which should not affect the shadow offsets.
+    this._shadowOffsetMatrix = function() {
+      var sx = this._currentTransform[0];
+      var sy = this._currentTransform[4];
+      return CanvasKit.SkMatrix.translated(this._shadowOffsetX/sx, this._shadowOffsetY/sy);
     }
 
     // Returns the shadow paint for the current settings or null if there
@@ -1344,14 +1445,12 @@
         var alphaColor = CanvasKit.multiplyByAlpha(this._strokeStyle, this._globalAlpha);
         paint.setColor(alphaColor);
       } else {
-          var gradient = this._strokeStyle._getShader(this._currentTransform, this._globalAlpha);
-          paint.setShader(gradient);
+        var shader = this._strokeStyle._getShader(this._currentTransform);
+        paint.setColor(CanvasKit.Color(0,0,0, this._globalAlpha));
+        paint.setShader(shader);
       }
 
-      // This is not in the spec, but it appears Chrome scales up
-      // the line width by some amount when stroking (and filling?).
-      var scaledWidth = this._strokeWidth * this._scalefactor();
-      paint.setStrokeWidth(scaledWidth);
+      paint.setStrokeWidth(this._strokeWidth);
 
       if (this._lineDashList.length) {
         var dashedEffect = CanvasKit.MakeSkDashPathEffect(this._lineDashList, this._lineDashOffset);
@@ -1366,17 +1465,12 @@
     }
 
     this.stroke = function() {
-      this._commitSubpath();
       var strokePaint = this._strokePaint();
 
       var shadowPaint = this._shadowPaint(strokePaint);
       if (shadowPaint) {
-        var offsetMatrix = CanvasKit.SkMatrix.multiply(
-          this._currentTransform,
-          CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
-        );
         this._canvas.save();
-        this._canvas.concat(offsetMatrix);
+        this._canvas.concat(this._shadowOffsetMatrix());
         this._canvas.drawPath(this._currentPath, shadowPaint);
         this._canvas.restore();
         shadowPaint.dispose();
@@ -1388,10 +1482,7 @@
 
     this.strokeRect = function(x, y, width, height) {
       var strokePaint = this._strokePaint();
-      this._canvas.save();
-      this._canvas.concat(this._currentTransform);
       this._canvas.drawRect(CanvasKit.XYWHRect(x, y, width, height), strokePaint);
-      this._canvas.restore();
       strokePaint.dispose();
     }
 
@@ -1401,35 +1492,38 @@
 
       var shadowPaint = this._shadowPaint(strokePaint);
       if (shadowPaint) {
-        var offsetMatrix = CanvasKit.SkMatrix.multiply(
-          this._currentTransform,
-          CanvasKit.SkMatrix.translated(this._shadowOffsetX, this._shadowOffsetY)
-        );
         this._canvas.save();
-        this._canvas.concat(offsetMatrix);
+        this._canvas.concat(this._shadowOffsetMatrix());
         this._canvas.drawText(text, x, y, shadowPaint);
         this._canvas.restore();
         shadowPaint.dispose();
       }
-      this._canvas.save();
-      this._canvas.concat(this._currentTransform);
       this._canvas.drawText(text, x, y, strokePaint);
-      this._canvas.restore();
       strokePaint.dispose();
     }
 
     this.translate = function(dx, dy) {
-      this._currentTransform = CanvasKit.SkMatrix.multiply(
-                                  this._currentTransform,
-                                  CanvasKit.SkMatrix.translated(dx, dy));
+      if (!allAreFinite(arguments)) {
+        return;
+      }
+      // retroactively apply the inverse of this transform to the previous
+      // path so it cancels out when we apply the transform at draw time.
+      var inverted = CanvasKit.SkMatrix.translated(-dx, -dy);
+      this._currentPath.transform(inverted);
+      this._canvas.translate(dx, dy);
+      this._currentTransform = this._canvas.getTotalMatrix();
     }
 
     this.transform = function(a, b, c, d, e, f) {
-      this._currentTransform = CanvasKit.SkMatrix.multiply(
-                                  this._currentTransform,
-                                  [a, c, e,
-                                   b, d, f,
-                                   0, 0, 1]);
+      var newTransform = [a, c, e,
+                          b, d, f,
+                          0, 0, 1];
+      // retroactively apply the inverse of this transform to the previous
+      // path so it cancels out when we apply the transform at draw time.
+      var inverted = CanvasKit.SkMatrix.invert(newTransform);
+      this._currentPath.transform(inverted);
+      this._canvas.concat(newTransform);
+      this._currentTransform = this._canvas.getTotalMatrix();
     }
 
     // Not supported operations (e.g. for Web only)

@@ -77,9 +77,9 @@ var CanvasKit = {
 	SkCanvas: {
 		// public API (from C++ bindings)
 		clear: function() {},
-		concat: function() {},
-		clipRect: function() {},
 		clipPath: function() {},
+		clipRect: function() {},
+		concat: function() {},
 		drawImage: function() {},
 		drawImageRect: function() {},
 		drawPaint: function() {},
@@ -89,6 +89,7 @@ var CanvasKit = {
 		drawText: function() {},
 		drawVertices: function() {},
 		flush: function() {},
+		getTotalMatrix: function() {},
 		restore: function() {},
 		rotate: function() {},
 		save: function() {},
@@ -155,6 +156,7 @@ var CanvasKit = {
 	SkPath: {
 		// public API (from C++ bindings)
 		computeTightBounds: function() {},
+		contains: function() {},
 		/** @return {CanvasKit.SkPath} */
 		copy: function() {},
 		countPoints: function() {},
@@ -162,6 +164,7 @@ var CanvasKit = {
 		getBounds: function() {},
 		getFillType: function() {},
 		getPoint: function() {},
+		isEmpty: function() {},
 		setFillType: function() {},
 		toSVGString: function() {},
 
@@ -346,6 +349,7 @@ var CanvasKit = {
 		Clamp: {},
 		Repeat: {},
 		Mirror: {},
+		Decal: {},
 	},
 
 	VertexMode: {
@@ -422,6 +426,7 @@ StrokeOpts.prototype.width;
 StrokeOpts.prototype.miter_limit;
 StrokeOpts.prototype.cap;
 StrokeOpts.prototype.join;
+StrokeOpts.prototype.precision;
 
 // Define everything created in the canvas2d spec here
 var HTMLCanvas = {};
@@ -442,6 +447,7 @@ CanvasRenderingContext2D.prototype.clip = function() {};
 CanvasRenderingContext2D.prototype.closePath = function() {};
 CanvasRenderingContext2D.prototype.createImageData = function() {};
 CanvasRenderingContext2D.prototype.createLinearGradient = function() {};
+CanvasRenderingContext2D.prototype.createPattern = function() {};
 CanvasRenderingContext2D.prototype.createRadialGradient = function() {};
 CanvasRenderingContext2D.prototype.drawFocusIfNeeded = function() {};
 CanvasRenderingContext2D.prototype.drawImage = function() {};
@@ -451,6 +457,8 @@ CanvasRenderingContext2D.prototype.fillRect = function() {};
 CanvasRenderingContext2D.prototype.fillText = function() {};
 CanvasRenderingContext2D.prototype.getImageData = function() {};
 CanvasRenderingContext2D.prototype.getLineDash = function() {};
+CanvasRenderingContext2D.prototype.isPointInPath = function() {};
+CanvasRenderingContext2D.prototype.isPointInStroke = function() {};
 CanvasRenderingContext2D.prototype.lineTo = function() {};
 CanvasRenderingContext2D.prototype.measureText = function() {};
 CanvasRenderingContext2D.prototype.moveTo = function() {};
@@ -476,6 +484,8 @@ var LinearCanvasGradient = {};
 LinearCanvasGradient.prototype.addColorStop = function() {};
 var RadialCanvasGradient = {};
 RadialCanvasGradient.prototype.addColorStop = function() {};
+var CanvasPattern = {};
+CanvasPattern.prototype.setTransform = function() {};
 
 var ImageData = {
 	/**
@@ -484,6 +494,15 @@ var ImageData = {
 	data: {},
 	height: {},
 	width: {},
+};
+
+var DOMMatrix = {
+	a: {},
+	b: {},
+	c: {},
+	d: {},
+	e: {},
+	f: {},
 };
 
 // Not sure why this is needed - might be a bug in emsdk that this isn't properly declared.

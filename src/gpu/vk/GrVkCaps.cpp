@@ -158,8 +158,8 @@ bool GrVkCaps::canCopyAsDraw(GrPixelConfig dstConfig, bool dstIsRenderable,
     return true;
 }
 
-bool GrVkCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                              const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                                const SkIRect& srcRect, const SkIPoint& dstPoint) const {
     GrSurfaceOrigin dstOrigin = dst->origin();
     GrSurfaceOrigin srcOrigin = src->origin();
 
@@ -344,10 +344,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
         fMustDoCopiesFromOrigin = true;
     }
 
-    if (kNvidia_VkVendor == properties.vendorID) {
-        fMustSubmitCommandsBeforeCopyOp = true;
-    }
-
 #if defined(SK_BUILD_FOR_WIN)
     if (kNvidia_VkVendor == properties.vendorID || kIntel_VkVendor == properties.vendorID) {
         fMustSleepOnTearDown = true;
@@ -449,7 +445,6 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     fMapBufferFlags = kCanMap_MapFlag | kSubset_MapFlag;
 
     fOversizedStencilSupport = true;
-    fSampleShadingSupport = features.features.sampleRateShading;
 
     if (extensions.hasExtension(VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME, 2) &&
         this->supportsPhysicalDeviceProperties2()) {
@@ -698,7 +693,7 @@ int GrVkCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
     return table[table.count() - 1];
 }
 
-bool GrVkCaps::surfaceSupportsWritePixels(const GrSurface* surface) const {
+bool GrVkCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     if (auto rt = surface->asRenderTarget()) {
         return rt->numColorSamples() <= 1 && SkToBool(surface->asTexture());
     }
@@ -836,6 +831,9 @@ static bool get_yuva_config(VkFormat vkFormat, GrPixelConfig* config) {
         break;
     case VK_FORMAT_R8G8B8_UNORM:
         *config = kRGB_888_GrPixelConfig;
+        break;
+    case VK_FORMAT_R8G8_UNORM:
+        *config = kRG_88_GrPixelConfig;
         break;
     case VK_FORMAT_B8G8R8A8_UNORM:
         *config = kBGRA_8888_GrPixelConfig;

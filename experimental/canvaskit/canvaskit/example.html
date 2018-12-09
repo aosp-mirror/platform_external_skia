@@ -30,6 +30,10 @@
 <canvas id=api5_c width=300 height=300></canvas>
 <img id=api6 width=300 height=300>
 <canvas id=api6_c width=300 height=300></canvas>
+<img id=api7 width=300 height=300>
+<canvas id=api7_c width=300 height=300></canvas>
+<img id=api8 width=300 height=300>
+<canvas id=api8_c width=300 height=300></canvas>
 
 <h2> CanvasKit draws Paths to the browser</h2>
 <canvas id=vertex1 width=300 height=300></canvas>
@@ -56,7 +60,7 @@
   var onboardingJSON = null;
   var fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
 
-  var bonesImage = null;
+  var bonesImageData = null;
   CanvasKitInit({
     locateFile: (file) => '/node_modules/canvaskit/bin/'+file,
   }).then((CK) => {
@@ -86,9 +90,11 @@
       CanvasAPI4(CanvasKit);
       CanvasAPI5(CanvasKit);
       CanvasAPI6(CanvasKit);
+      CanvasAPI7(CanvasKit);
+      CanvasAPI8(CanvasKit)
 
       VertexAPI1(CanvasKit);
-      VertexAPI2(CanvasKit, bonesImage);
+      VertexAPI2(CanvasKit, bonesImageData);
 
       GradiantAPI1(CanvasKit);
     }, 0);
@@ -125,8 +131,8 @@
 
   fetch('https://storage.googleapis.com/skia-cdn/misc/bones.jpg').then((resp) => {
     resp.arrayBuffer().then((buffer) => {
-      bonesImage = buffer;
-      VertexAPI2(CanvasKit, bonesImage);
+      bonesImageData = buffer;
+      VertexAPI2(CanvasKit, bonesImageData);
     });
   });
 
@@ -487,8 +493,29 @@
 
       ctx.lineWidth = 4/3;
       ctx.stroke();
+
+      // Test edgecases and draw direction
+      ctx.beginPath();
+      ctx.arc(50, 100, 10, Math.PI, -Math.PI/2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(75, 100, 10, Math.PI, -Math.PI/2, true);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(100, 100, 10, Math.PI, 100.1 * Math.PI, true);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(125, 100, 10, Math.PI, 100.1 * Math.PI, false);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(155, 100, 10, 15, Math.PI/8, 100.1 * Math.PI, Math.PI, true);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(180, 100, 10, 15, Math.PI/8, Math.PI, 100.1 * Math.PI, true);
+      ctx.stroke();
     }
     document.getElementById('api2').src = skcanvas.toDataURL();
+    skcanvas.dispose();
   }
 
   function CanvasAPI3(CanvasKit) {
@@ -519,10 +546,11 @@
       ctx.rect(90, 10, 20, 20);
       ctx.resetTransform();
 
+      ctx.save();
       ctx.setTransform(2, 0, -.5, 2.5, -40, 120);
       ctx.rect(110, 10, 20, 20);
       ctx.lineTo(110, 0);
-      ctx.resetTransform();
+      ctx.restore();
       ctx.lineTo(220, 120);
 
       ctx.scale(3.0, 3.0);
@@ -546,6 +574,7 @@
 
     }
     document.getElementById('api3').src = skcanvas.toDataURL();
+    skcanvas.dispose();
   }
 
   function CanvasAPI4(CanvasKit) {
@@ -596,8 +625,21 @@
       ctx.fillStyle = 'green';
       ctx.font = '16pt Arial';
       ctx.fillText('This should be shadowed', 20, 80);
+
+      ctx.beginPath();
+      ctx.lineWidth = 6;
+      ctx.ellipse(10, 290, 30, 30, 0, 0, Math.PI * 2);
+      ctx.scale(2, 1);
+      ctx.moveTo(10, 290)
+      ctx.ellipse(10, 290, 30, 60, 0, 0, Math.PI * 2);
+      ctx.resetTransform();
+      ctx.scale(3, 1);
+      ctx.moveTo(10, 290)
+      ctx.ellipse(10, 290, 30, 90, 0, 0, Math.PI * 2);
+      ctx.stroke();
     }
     document.getElementById('api4').src = skcanvas.toDataURL();
+    skcanvas.dispose();
   }
 
   function CanvasAPI5(CanvasKit) {
@@ -654,6 +696,7 @@
 
     }
     document.getElementById('api5').src = skcanvas.toDataURL();
+    skcanvas.dispose();
   }
 
   function CanvasAPI6(CanvasKit) {
@@ -702,6 +745,152 @@
 
     }
     document.getElementById('api6').src = skcanvas.toDataURL();
+    skcanvas.dispose();
+  }
+
+  function CanvasAPI7(CanvasKit) {
+    let skcanvas = CanvasKit.MakeCanvas(300, 300);
+    let realCanvas = document.getElementById('api7_c');
+
+    let skPromise   = fetch('./test.png')
+                        // if clients want to use a Blob, they are responsible
+                        // for reading it themselves.
+                        .then((response) => response.arrayBuffer())
+                        .then((buffer) => {
+                          skcanvas._img = skcanvas.decodeImage(buffer);
+                        });
+    let realPromise = fetch('./test.png')
+                        .then((response) => response.blob())
+                        .then((blob) => createImageBitmap(blob))
+                        .then((bitmap) => {
+                          realCanvas._img = bitmap;
+                        });
+
+
+    Promise.all([realPromise, skPromise]).then(() => {
+      for (let canvas of [skcanvas, realCanvas]) {
+        let ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#EEE';
+        ctx.fillRect(0, 0, 300, 300);
+        ctx.lineWidth = 20;
+        ctx.scale(0.1, 0.2);
+
+        let pattern = ctx.createPattern(canvas._img, 'repeat');
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, 1500, 750);
+
+        pattern = ctx.createPattern(canvas._img, 'repeat-x');
+        ctx.fillStyle = pattern;
+        ctx.fillRect(1500, 0, 3000, 750);
+
+        ctx.globalAlpha = 0.7
+        pattern = ctx.createPattern(canvas._img, 'repeat-y');
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 750, 1500, 1500);
+        ctx.strokeRect(0, 750, 1500, 1500);
+
+        pattern = ctx.createPattern(canvas._img, 'no-repeat');
+        ctx.fillStyle = pattern;
+        pattern.setTransform({a: 1, b: -.1, c:.1, d: 0.5, e: 1800, f:800});
+        ctx.fillRect(0, 0, 3000, 1500);
+      }
+
+      document.getElementById('api7').src = skcanvas.toDataURL();
+      skcanvas.dispose();
+    });
+  }
+
+  function CanvasAPI8(CanvasKit) {
+    let skcanvas = CanvasKit.MakeCanvas(300, 300);
+    let realCanvas = document.getElementById('api8_c');
+
+    function drawPoint(ctx, x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, 1, 1);
+    }
+    const IN = 'purple';
+    const OUT = 'orange';
+    const SCALE = 4;
+
+    const pts = [[3, 3], [4, 4], [5, 5], [10, 10], [8, 10], [6, 10],
+                 [6.5, 9], [15, 10], [17, 10], [17, 11], [24, 24],
+                 [25, 25], [26, 26], [27, 27]];
+
+    const tests = [
+      {
+        xOffset: 0,
+        yOffset: 0,
+        fillType: 'nonzero',
+        strokeWidth: 0,
+        testFn: (ctx, x, y) => ctx.isPointInPath(x * SCALE, y * SCALE, 'nonzero'),
+      },
+      {
+        xOffset: 30,
+        yOffset: 0,
+        fillType: 'evenodd',
+        strokeWidth: 0,
+        testFn: (ctx, x, y) => ctx.isPointInPath(x * SCALE, y * SCALE, 'evenodd'),
+      },
+      {
+        xOffset: 0,
+        yOffset: 30,
+        fillType: null,
+        strokeWidth: 1,
+        testFn: (ctx, x, y) => ctx.isPointInStroke(x * SCALE, y * SCALE),
+      },
+      {
+        xOffset: 30,
+        yOffset: 30,
+        fillType: null,
+        strokeWidth: 2,
+        testFn: (ctx, x, y) => ctx.isPointInStroke(x * SCALE, y * SCALE),
+      },
+    ];
+
+    for (let canvas of [skcanvas, realCanvas]) {
+      let ctx = canvas.getContext('2d');
+      ctx.font = '11px Arial';
+      // Draw some visual aids
+      ctx.fillText('path-nonzero', 30, 15);
+      ctx.fillText('path-evenodd', 150, 15);
+      ctx.fillText('stroke-1px-wide', 30, 130);
+      ctx.fillText('stroke-2px-wide', 150, 130);
+      ctx.fillText('purple is IN, orange is OUT', 10, 280);
+
+      // Scale up to make single pixels easier to see
+      ctx.scale(SCALE, SCALE);
+      for (let test of tests) {
+        ctx.beginPath();
+        let xOffset = test.xOffset;
+        let yOffset = test.yOffset;
+
+        ctx.fillStyle = '#AAA';
+        ctx.lineWidth = test.strokeWidth;
+        ctx.rect(5+xOffset, 5+yOffset, 20, 20);
+        ctx.arc(15+xOffset, 15+yOffset, 8, 0, Math.PI*2, false);
+        if (test.fillType) {
+          ctx.fill(test.fillType);
+        } else {
+          ctx.stroke();
+        }
+
+        for (let pt of pts) {
+          let [x, y] = pt;
+          x += xOffset;
+          y += yOffset;
+          // naively apply transform when querying because the points queried
+          // ignore the CTM.
+          if (test.testFn(ctx, x, y)) {
+            drawPoint(ctx, x, y, IN);
+          } else {
+            drawPoint(ctx, x, y, OUT);
+          }
+        }
+      }
+    }
+
+    document.getElementById('api8').src = skcanvas.toDataURL();
+    skcanvas.dispose();
   }
 
   function VertexAPI1(CanvasKit) {
@@ -746,8 +935,9 @@
     surface.delete();
   }
 
-  function VertexAPI2(CanvasKit, bonesImage) {
-    if (!CanvasKit || !bonesImage) {
+  // bonesImageDatae is passed in as raw, encoded bytes.
+  function VertexAPI2(CanvasKit, bonesImageData) {
+    if (!CanvasKit || !bonesImageData) {
       return;
     }
     const surface = CanvasKit.MakeCanvasSurface('vertex2');
@@ -758,6 +948,7 @@
     const context = CanvasKit.currentContext();
     const canvas = surface.getCanvas();
     let paint = new CanvasKit.SkPaint();
+    let bonesImage = CanvasKit.MakeImageFromEncoded(bonesImageData);
 
     let shader = CanvasKit.MakeImageShader(bonesImage,
                     CanvasKit.TileMode.Clamp, CanvasKit.TileMode.Clamp);
@@ -805,6 +996,7 @@
     //tVerts.delete();
     //vertices.delete();
 
+    // bonesImage && bonesImage.delete();
     //shader && shader.delete();
     //paint.delete();
     //surface.delete();

@@ -192,7 +192,7 @@ public:
      * If this returns false then the caller should implement a fallback where a temporary texture
      * is created, pixels are written to it, and then that is copied or drawn into the the surface.
      */
-    virtual bool surfaceSupportsWritePixels(const GrSurface*) const = 0;
+    bool surfaceSupportsWritePixels(const GrSurface*) const;
 
     /**
      * Backends may have restrictions on what types of surfaces support GrGpu::readPixels().
@@ -239,15 +239,13 @@ public:
 
     bool wireframeMode() const { return fWireframeMode; }
 
-    bool sampleShadingSupport() const { return fSampleShadingSupport; }
-
     bool fenceSyncSupport() const { return fFenceSyncSupport; }
     bool crossContextTextureSupport() const { return fCrossContextTextureSupport; }
     /**
      * Returns whether or not we will be able to do a copy given the passed in params
      */
-    virtual bool canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                                const SkIRect& srcRect, const SkIPoint& dstPoint) const = 0;
+    bool canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                        const SkIRect& srcRect, const SkIPoint& dstPoint) const;
 
     bool dynamicStateArrayGeometryProcessorTextureSupport() const {
         return fDynamicStateArrayGeometryProcessorTextureSupport;
@@ -358,7 +356,6 @@ protected:
     // ANGLE performance workaround
     bool fPreferVRAMUseOverFlushes                   : 1;
 
-    bool fSampleShadingSupport                       : 1;
     // TODO: this may need to be an enum to support different fence types
     bool fFenceSyncSupport                           : 1;
 
@@ -389,6 +386,9 @@ protected:
 private:
     virtual void onApplyOptionsOverrides(const GrContextOptions&) {}
     virtual void onDumpJSON(SkJSONWriter*) const {}
+    virtual bool onSurfaceSupportsWritePixels(const GrSurface*) const = 0;
+    virtual bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                                  const SkIRect& srcRect, const SkIPoint& dstPoint) const = 0;
 
     // Backends should implement this if they have any extra requirements for use of window
     // rectangles for a specific GrBackendRenderTarget outside of basic support.

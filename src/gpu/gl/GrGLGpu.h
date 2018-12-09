@@ -189,7 +189,7 @@ private:
     GrBuffer* onCreateBuffer(size_t size, GrBufferType intendedType, GrAccessPattern,
                              const void* data) override;
 
-    sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrWrapOwnership,
+    sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrWrapOwnership, GrIOType,
                                           bool purgeImmediately) override;
     sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&,
                                                     int sampleCnt,
@@ -374,8 +374,6 @@ private:
 
     // rt is used only if useHWAA is true.
     void flushHWAAState(GrRenderTarget* rt, bool useHWAA, bool stencilEnabled);
-
-    void flushMinSampleShading(float minSampleShading);
 
     void flushFramebufferSRGB(bool enable);
 
@@ -629,7 +627,6 @@ private:
         return (wide ? 0x2 : 0x0) | (tall ? 0x1 : 0x0);
     }
 
-    float fHWMinSampleShading;
     GrPrimitiveType fLastPrimitiveType;
 
     class SamplerObjectCache;

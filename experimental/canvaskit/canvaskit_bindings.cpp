@@ -149,6 +149,13 @@ SkMatrix toSkMatrix(const SimpleMatrix& sm) {
                              sm.pers0 , sm.pers1 , sm.pers2);
 }
 
+SimpleMatrix toSimpleSkMatrix(const SkMatrix& sm) {
+    SimpleMatrix m {sm[0], sm[1], sm[2],
+                    sm[3], sm[4], sm[5],
+                    sm[6], sm[7], sm[8]};
+    return m;
+}
+
 struct SimpleImageInfo {
     int width;
     int height;
@@ -275,13 +282,17 @@ void ApplyAddPath(SkPath& orig, const SkPath& newPath,
 void ApplyAddRect(SkPath& path, SkScalar left, SkScalar top,
                   SkScalar right, SkScalar bottom, bool ccw) {
     path.addRect(left, top, right, bottom,
-                 ccw ? SkPath::Direction::kCW_Direction :
-                 SkPath::Direction::kCCW_Direction);
+                 ccw ? SkPath::Direction::kCCW_Direction :
+                 SkPath::Direction::kCW_Direction);
 }
 
 void ApplyArcTo(SkPath& p, SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                 SkScalar radius) {
     p.arcTo(x1, y1, x2, y2, radius);
+}
+
+void ApplyArcToAngle(SkPath& p, SkRect& oval, SkScalar startAngle, SkScalar sweepAngle, bool forceMoveTo) {
+    p.arcTo(oval, startAngle, sweepAngle, forceMoveTo);
 }
 
 void ApplyClose(SkPath& p) {
@@ -393,6 +404,7 @@ struct StrokeOpts {
     SkScalar miter_limit;
     SkPaint::Join join;
     SkPaint::Cap cap;
+    float precision;
 };
 
 bool ApplyStroke(SkPath& path, StrokeOpts opts) {
@@ -403,7 +415,7 @@ bool ApplyStroke(SkPath& path, StrokeOpts opts) {
     p.setStrokeWidth(opts.width);
     p.setStrokeMiter(opts.miter_limit);
 
-    return p.getFillPath(path, &path);
+    return p.getFillPath(path, &path, nullptr, opts.precision);
 }
 
 // to map from raw memory to a uint8array
@@ -489,21 +501,19 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
         return SkImage::MakeRasterData(info, pixelData, rowBytes);
     }), allow_raw_pointers());
-    function("_MakeImageShader", optional_override([](uintptr_t /* uint8_t*  */ iPtr, int ilen,
-                                SkShader::TileMode tx, SkShader::TileMode ty)->sk_sp<SkShader> {
-        // See comment above for uintptr_t explanation
-        const uint8_t* imgBytes = reinterpret_cast<const uint8_t*>(iPtr);
-
-        auto imgData = SkData::MakeFromMalloc(imgBytes, ilen);
-        auto img = SkImage::MakeFromEncoded(imgData);
-        if (!img) {
-            SkDebugf("Could not decode image\n");
-            return nullptr;
-        }
-
-        return SkImageShader::Make(img, tx, ty, nullptr);
+    // Allow localMatrix to be optional, so we have 2 declarations of these shaders
+    function("_MakeImageShader", optional_override([](sk_sp<SkImage> img,
+                                SkShader::TileMode tx, SkShader::TileMode ty,
+                                bool clampAsIfUnpremul)->sk_sp<SkShader> {
+        return SkImageShader::Make(img, tx, ty, nullptr, clampAsIfUnpremul);
     }), allow_raw_pointers());
-    // Allow localMatrix to be optional, so we have 2 declarations of these gradients
+    function("_MakeImageShader", optional_override([](sk_sp<SkImage> img,
+                                SkShader::TileMode tx, SkShader::TileMode ty,
+                                bool clampAsIfUnpremul, const SimpleMatrix& lm)->sk_sp<SkShader> {
+        SkMatrix localMatrix = toSkMatrix(lm);
+
+        return SkImageShader::Make(img, tx, ty, &localMatrix, clampAsIfUnpremul);
+    }), allow_raw_pointers());
     function("_MakeLinearGradientShader", optional_override([](SkPoint start, SkPoint end,
                                 uintptr_t /* SkColor*  */ cPtr, uintptr_t /* SkScalar*  */ pPtr,
                                 int count, SkShader::TileMode mode, uint32_t flags)->sk_sp<SkShader> {
@@ -637,6 +647,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         .function("drawVertices", select_overload<void (const sk_sp<SkVertices>&, SkBlendMode, const SkPaint&)>(&SkCanvas::drawVertices))
         .function("flush", &SkCanvas::flush)
+        .function("getTotalMatrix", optional_override([](const SkCanvas& self)->SimpleMatrix {
+            SkMatrix m = self.getTotalMatrix();
+            return toSimpleSkMatrix(m);
+        }))
         .function("_readPixels", optional_override([](SkCanvas& self, SimpleImageInfo di,
                                                       uintptr_t /* uint8_t* */ pPtr,
                                                       size_t dstRowBytes, int srcX, int srcY) {
@@ -729,11 +743,14 @@ EMSCRIPTEN_BINDINGS(Skia) {
         // interface.js has 4 overloads of addRect
         .function("_addRect", &ApplyAddRect)
         .function("_arcTo", &ApplyArcTo)
+        .function("_arcTo", &ApplyArcToAngle)
         .function("_close", &ApplyClose)
         .function("_conicTo", &ApplyConicTo)
         .function("countPoints", &SkPath::countPoints)
+        .function("contains", &SkPath::contains)
         .function("_cubicTo", &ApplyCubicTo)
         .function("getPoint", &SkPath::getPoint)
+        .function("isEmpty",  &SkPath::isEmpty)
         .function("_lineTo", &ApplyLineTo)
         .function("_moveTo", &ApplyMoveTo)
         .function("_quadTo", &ApplyQuadTo)
@@ -896,12 +913,15 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .field("width",       &StrokeOpts::width)
         .field("miter_limit", &StrokeOpts::miter_limit)
         .field("join",        &StrokeOpts::join)
-        .field("cap",         &StrokeOpts::cap);
+        .field("cap",         &StrokeOpts::cap)
+        .field("precision",   &StrokeOpts::precision);
 
     enum_<SkShader::TileMode>("TileMode")
         .value("Clamp",    SkShader::TileMode::kClamp_TileMode)
         .value("Repeat",   SkShader::TileMode::kRepeat_TileMode)
-        .value("Mirror",   SkShader::TileMode::kMirror_TileMode);
+        .value("Mirror",   SkShader::TileMode::kMirror_TileMode)
+        // Decal mode only works in the SW backend, not WebGl (yet).
+        .value("Decal",    SkShader::TileMode::kDecal_TileMode);
 
     enum_<SkVertices::VertexMode>("VertexMode")
         .value("Triangles",       SkVertices::VertexMode::kTriangles_VertexMode)

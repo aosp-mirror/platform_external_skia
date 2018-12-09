@@ -187,6 +187,26 @@ describe('CanvasKit\'s Canvas 2d Behavior', function() {
 
                     ctx.lineWidth = 2;
                     ctx.stroke();
+
+                    // Test edgecases and draw direction
+                    ctx.beginPath();
+                    ctx.arc(50, 100, 10, Math.PI, -Math.PI/2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(75, 100, 10, Math.PI, -Math.PI/2, true);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(100, 100, 10, Math.PI, 100.1 * Math.PI, true);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(125, 100, 10, Math.PI, 100.1 * Math.PI, false);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.ellipse(155, 100, 10, 15, Math.PI/8, 100.1 * Math.PI, Math.PI, true);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.ellipse(180, 100, 10, 15, Math.PI/8, Math.PI, 100.1 * Math.PI, true);
+                    ctx.stroke();
                 });
             }));
         });
@@ -215,10 +235,11 @@ describe('CanvasKit\'s Canvas 2d Behavior', function() {
                     ctx.rect(90, 10, 20, 20);
                     ctx.resetTransform();
 
+                    ctx.save();
                     ctx.setTransform(2, 0, -.5, 2.5, -40, 120);
                     ctx.rect(110, 10, 20, 20);
                     ctx.lineTo(110, 0);
-                    ctx.resetTransform();
+                    ctx.restore();
                     ctx.lineTo(220, 120);
 
                     ctx.scale(3.0, 3.0);
@@ -246,46 +267,59 @@ describe('CanvasKit\'s Canvas 2d Behavior', function() {
         it('properly saves and restores states, even when drawing shadows', function(done) {
             LoadCanvasKit.then(catchException(done, () => {
                 multipleCanvasTest('shadows_and_save_restore', done, (canvas) => {
-                  let ctx = canvas.getContext('2d');
-                  ctx.strokeStyle = '#000';
-                  ctx.fillStyle = '#CCC';
-                  ctx.shadowColor = 'rebeccapurple';
-                  ctx.shadowBlur = 1;
-                  ctx.shadowOffsetX = 3;
-                  ctx.shadowOffsetY = -8;
-                  ctx.rect(10, 10, 30, 30);
+                    let ctx = canvas.getContext('2d');
+                    ctx.strokeStyle = '#000';
+                    ctx.fillStyle = '#CCC';
+                    ctx.shadowColor = 'rebeccapurple';
+                    ctx.shadowBlur = 1;
+                    ctx.shadowOffsetX = 3;
+                    ctx.shadowOffsetY = -8;
+                    ctx.rect(10, 10, 30, 30);
 
-                  ctx.save();
-                  ctx.strokeStyle = '#C00';
-                  ctx.fillStyle = '#00C';
-                  ctx.shadowBlur = 0;
-                  ctx.shadowColor = 'transparent';
+                    ctx.save();
+                    ctx.strokeStyle = '#C00';
+                    ctx.fillStyle = '#00C';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowColor = 'transparent';
 
-                  ctx.stroke();
+                    ctx.stroke();
 
-                  ctx.restore();
-                  ctx.fill();
+                    ctx.restore();
+                    ctx.fill();
 
-                  ctx.beginPath();
-                  ctx.moveTo(36, 148);
-                  ctx.quadraticCurveTo(66, 188, 120, 136);
-                  ctx.closePath();
-                  ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(36, 148);
+                    ctx.quadraticCurveTo(66, 188, 120, 136);
+                    ctx.closePath();
+                    ctx.stroke();
 
-                  ctx.beginPath();
-                  ctx.shadowColor = '#993366AA';
-                  ctx.shadowOffsetX = 8;
-                  ctx.shadowBlur = 5;
-                  ctx.setTransform(2, 0, -.5, 2.5, -40, 120);
-                  ctx.rect(110, 10, 20, 20);
-                  ctx.lineTo(110, 0);
-                  ctx.resetTransform();
-                  ctx.lineTo(220, 120);
-                  ctx.stroke();
+                    ctx.beginPath();
+                    ctx.shadowColor = '#993366AA';
+                    ctx.shadowOffsetX = 8;
+                    ctx.shadowBlur = 5;
+                    ctx.setTransform(2, 0, -.5, 2.5, -40, 120);
+                    ctx.rect(110, 10, 20, 20);
+                    ctx.lineTo(110, 0);
+                    ctx.resetTransform();
+                    ctx.lineTo(220, 120);
+                    ctx.stroke();
 
-                  ctx.fillStyle = 'green';
-                  ctx.font = '16pt Arial';
-                  ctx.fillText('This should be shadowed', 20, 80);
+                    ctx.fillStyle = 'green';
+                    ctx.font = '16pt Arial';
+                    ctx.fillText('This should be shadowed', 20, 80);
+
+                    ctx.beginPath();
+                    ctx.lineWidth = 6;
+                    ctx.ellipse(10, 290, 30, 30, 0, 0, Math.PI * 2);
+                    ctx.scale(2, 1);
+                    ctx.moveTo(10, 290)
+                    ctx.ellipse(10, 290, 30, 60, 0, 0, Math.PI * 2);
+                    ctx.resetTransform();
+                    ctx.shadowColor = '#993366AA';
+                    ctx.scale(3, 1);
+                    ctx.moveTo(10, 290)
+                    ctx.ellipse(10, 290, 30, 90, 0, 0, Math.PI * 2);
+                    ctx.stroke();
                 });
             }));
         });
@@ -444,6 +478,146 @@ describe('CanvasKit\'s Canvas 2d Behavior', function() {
                     ctx.putImageData(biggerBox, 10, 350);
                     expect(biggerBox.width).toBe(iData.width);
                     expect(biggerBox.height).toBe(iData.height);
+                });
+            }));
+        });
+
+        it('can make patterns', function(done) {
+            let skImageData = null;
+            let htmlImage = null;
+            let skPromise = fetch('/assets/mandrill_512.png')
+                .then((response) => response.arrayBuffer())
+                .then((buffer) => {
+                    skImageData = buffer;
+
+                });
+            let realPromise = fetch('/assets/mandrill_512.png')
+                .then((response) => response.blob())
+                .then((blob) => createImageBitmap(blob))
+                .then((bitmap) => {
+                    htmlImage = bitmap;
+                });
+            LoadCanvasKit.then(catchException(done, () => {
+                Promise.all([realPromise, skPromise]).then(() => {
+                    multipleCanvasTest('draw_patterns', done, (canvas) => {
+                        let ctx = canvas.getContext('2d');
+                        let img = htmlImage;
+                        if (canvas._config == 'software_canvas') {
+                            img = canvas.decodeImage(skImageData);
+                        }
+                        ctx.fillStyle = '#EEE';
+                        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                        ctx.lineWidth = 20;
+                        ctx.scale(0.2, 0.4);
+
+                        let pattern = ctx.createPattern(img, 'repeat');
+                        ctx.fillStyle = pattern;
+                        ctx.fillRect(0, 0, 1500, 750);
+
+                        pattern = ctx.createPattern(img, 'repeat-x');
+                        ctx.fillStyle = pattern;
+                        ctx.fillRect(1500, 0, 3000, 750);
+
+                        ctx.globalAlpha = 0.7
+                        pattern = ctx.createPattern(img, 'repeat-y');
+                        ctx.fillStyle = pattern;
+                        ctx.fillRect(0, 750, 1500, 1500);
+                        ctx.strokeRect(0, 750, 1500, 1500);
+
+                        pattern = ctx.createPattern(img, 'no-repeat');
+                        ctx.fillStyle = pattern;
+                        pattern.setTransform({a: 1, b: -.1, c:.1, d: 0.5, e: 1800, f:800});
+                        ctx.fillRect(0, 0, 3000, 1500);
+                    });
+                });
+            }));
+        });
+
+        it('can get and put pixels', function(done) {
+            LoadCanvasKit.then(catchException(done, () => {
+                function drawPoint(ctx, x, y, color) {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x, y, 1, 1);
+                }
+                const IN = 'purple';
+                const OUT = 'orange';
+                const SCALE = 8;
+
+                // Check to see if these points are in or out on each of the
+                // test configurations.
+                const pts = [[3, 3], [4, 4], [5, 5], [10, 10], [8, 10], [6, 10],
+                             [6.5, 9], [15, 10], [17, 10], [17, 11], [24, 24],
+                             [25, 25], [26, 26], [27, 27]];
+                const tests = [
+                    {
+                        xOffset: 0,
+                        yOffset: 0,
+                        fillType: 'nonzero',
+                        strokeWidth: 0,
+                        testFn: (ctx, x, y) => ctx.isPointInPath(x * SCALE, y * SCALE, 'nonzero'),
+                    },
+                    {
+                        xOffset: 30,
+                        yOffset: 0,
+                        fillType: 'evenodd',
+                        strokeWidth: 0,
+                        testFn: (ctx, x, y) => ctx.isPointInPath(x * SCALE, y * SCALE, 'evenodd'),
+                    },
+                    {
+                        xOffset: 0,
+                        yOffset: 30,
+                        fillType: null,
+                        strokeWidth: 1,
+                        testFn: (ctx, x, y) => ctx.isPointInStroke(x * SCALE, y * SCALE),
+                    },
+                    {
+                        xOffset: 30,
+                        yOffset: 30,
+                        fillType: null,
+                        strokeWidth: 2,
+                        testFn: (ctx, x, y) => ctx.isPointInStroke(x * SCALE, y * SCALE),
+                    },
+                ];
+                multipleCanvasTest('points_in_path_stroke', done, (canvas) => {
+                    let ctx = canvas.getContext('2d');
+                    ctx.font = '20px Arial';
+                    // Draw some visual aids
+                    ctx.fillText('path-nonzero', 60, 30);
+                    ctx.fillText('path-evenodd', 300, 30);
+                    ctx.fillText('stroke-1px-wide', 60, 260);
+                    ctx.fillText('stroke-2px-wide', 300, 260);
+                    ctx.fillText('purple is IN, orange is OUT', 20, 560);
+
+                    // Scale up to make single pixels easier to see
+                    ctx.scale(SCALE, SCALE);
+                    for (let test of tests) {
+                        ctx.beginPath();
+                        let xOffset = test.xOffset;
+                        let yOffset = test.yOffset;
+
+                        ctx.fillStyle = '#AAA';
+                        ctx.lineWidth = test.strokeWidth;
+                        ctx.rect(5+xOffset, 5+yOffset, 20, 20);
+                        ctx.arc(15+xOffset, 15+yOffset, 8, 0, Math.PI*2, false);
+                        if (test.fillType) {
+                            ctx.fill(test.fillType);
+                        } else {
+                            ctx.stroke();
+                        }
+
+                        for (let pt of pts) {
+                            let [x, y] = pt;
+                            x += xOffset;
+                            y += yOffset;
+                            // naively apply transform when querying because the points queried
+                            // ignore the CTM.
+                            if (test.testFn(ctx, x, y)) {
+                              drawPoint(ctx, x, y, IN);
+                            } else {
+                              drawPoint(ctx, x, y, OUT);
+                            }
+                        }
+                    }
                 });
             }));
         });

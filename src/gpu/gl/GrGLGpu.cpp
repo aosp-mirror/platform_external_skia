@@ -331,8 +331,7 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrContext* context)
         , fHWProgramID(0)
         , fTempSrcFBOID(0)
         , fTempDstFBOID(0)
-        , fStencilClearFBOID(0)
-        , fHWMinSampleShading(0.0) {
+        , fStencilClearFBOID(0) {
     SkASSERT(fGLContext);
     GrGLClearErr(this->glInterface());
     fCaps = sk_ref_sp(fGLContext->caps());
@@ -652,7 +651,8 @@ static bool check_backend_texture(const GrBackendTexture& backendTex, const GrGL
 }
 
 sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTex,
-                                               GrWrapOwnership ownership, bool purgeImmediately) {
+                                               GrWrapOwnership ownership, GrIOType ioType,
+                                               bool purgeImmediately) {
     GrGLTexture::IDDesc idDesc;
     if (!check_backend_texture(backendTex, this->glCaps(), &idDesc)) {
         return nullptr;
@@ -676,7 +676,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     GrMipMapsStatus mipMapsStatus = backendTex.hasMipMaps() ? GrMipMapsStatus::kValid
                                                             : GrMipMapsStatus::kNotAllocated;
 
-    auto texture = GrGLTexture::MakeWrapped(this, surfDesc, mipMapsStatus, idDesc,
+    auto texture = GrGLTexture::MakeWrapped(this, surfDesc, mipMapsStatus, idDesc, ioType,
                                             purgeImmediately);
     // We don't know what parameters are already set on wrapped textures.
     texture->textureParamsModified();
@@ -833,6 +833,7 @@ static inline GrGLint config_alignment(GrPixelConfig config) {
             return 1;
         case kRGB_565_GrPixelConfig:
         case kRGBA_4444_GrPixelConfig:
+        case kRG_88_GrPixelConfig:
         case kAlpha_half_GrPixelConfig:
         case kAlpha_half_as_Red_GrPixelConfig:
         case kRGBA_half_GrPixelConfig:
@@ -1788,19 +1789,6 @@ void GrGLGpu::disableWindowRectangles() {
 #endif
 }
 
-void GrGLGpu::flushMinSampleShading(float minSampleShading) {
-    if (fHWMinSampleShading != minSampleShading) {
-        if (minSampleShading > 0.0) {
-            GL_CALL(Enable(GR_GL_SAMPLE_SHADING));
-            GL_CALL(MinSampleShading(minSampleShading));
-        }
-        else {
-            GL_CALL(Disable(GR_GL_SAMPLE_SHADING));
-        }
-        fHWMinSampleShading = minSampleShading;
-    }
-}
-
 void GrGLGpu::resolveAndGenerateMipMapsForProcessorTextures(
         const GrPrimitiveProcessor& primProc,
         const GrPipeline& pipeline,
@@ -1869,7 +1857,6 @@ bool GrGLGpu::flushGLState(const GrPrimitiveProcessor& primProc,
     pipeline.getXferProcessor().getBlendInfo(&blendInfo);
 
     this->flushColorWrite(blendInfo.fWriteColor);
-    this->flushMinSampleShading(primProc.getSampleShading());
 
     this->flushProgram(std::move(program));
 
@@ -3739,11 +3726,13 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst, GrSurfaceOrigin dstOrigin,
         sy0 = sh - sy0;
         sy1 = sh - sy1;
     }
-    // src rect edges in normalized texture space (0 to 1)
-    sx0 /= sw;
-    sx1 /= sw;
-    sy0 /= sh;
-    sy1 /= sh;
+    if (srcTex->texturePriv().textureType() != GrTextureType::kRectangle) {
+        // src rect edges in normalized texture space (0 to 1)
+        sx0 /= sw;
+        sx1 /= sw;
+        sy0 /= sh;
+        sy1 /= sh;
+    }
 
     GL_CALL(Uniform4f(fCopyPrograms[progIdx].fPosXformUniform, dx1 - dx0, dy1 - dy0, dx0, dy0));
     GL_CALL(Uniform4f(fCopyPrograms[progIdx].fTexCoordXformUniform,

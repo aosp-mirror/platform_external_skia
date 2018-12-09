@@ -205,10 +205,10 @@ private:
 class GrSurfaceProxy : public GrIORefProxy {
 public:
     enum class LazyInstantiationType {
-        kSingleUse,         // Instantiation callback is allowed to be called only once
-        kMultipleUse,       // Instantiation callback can be called multiple times.
-        kUninstantiate,     // Instantiation callback can be called multiple times,
-                            // but we will uninstantiate the proxy after every flush
+        kSingleUse,      // Instantiation callback is allowed to be called only once.
+        kMultipleUse,    // Instantiation callback can be called multiple times.
+        kDeinstantiate,  // Instantiation callback can be called multiple times,
+                         // but we will deinstantiate the proxy after every flush.
     };
 
     enum class LazyState {
@@ -325,7 +325,7 @@ public:
 
     virtual bool instantiate(GrResourceProvider* resourceProvider) = 0;
 
-    void deInstantiate();
+    void deinstantiate();
 
     /**
      * Proxies that are already instantiated and whose backing surface cannot be recycled to
@@ -364,6 +364,13 @@ public:
      * Does the resource count against the resource budget?
      */
     SkBudgeted isBudgeted() const { return fBudgeted; }
+
+    /**
+     * The pixel values of this proxy's surface cannot be modified (e.g. doesn't support write
+     * pixels or MIP map level regen). Read-only proxies also bypass interval tracking and
+     * assignment in GrResourceAllocator.
+     */
+    bool readOnly() const { return fSurfaceFlags & GrInternalSurfaceFlags::kReadOnly; }
 
     void setLastOpList(GrOpList* opList);
     GrOpList* getLastOpList() { return fLastOpList; }
@@ -432,7 +439,7 @@ protected:
                    const GrBackendFormat& format, const GrSurfaceDesc&, GrSurfaceOrigin,
                    SkBackingFit, SkBudgeted, GrInternalSurfaceFlags);
 
-    // Wrapped version
+    // Wrapped version.
     GrSurfaceProxy(sk_sp<GrSurface>, GrSurfaceOrigin, SkBackingFit);
 
     virtual ~GrSurfaceProxy();

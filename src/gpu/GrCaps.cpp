@@ -6,9 +6,10 @@
  */
 
 #include "GrCaps.h"
-
 #include "GrBackendSurface.h"
 #include "GrContextOptions.h"
+#include "GrSurface.h"
+#include "GrSurfaceProxy.h"
 #include "GrTypesPriv.h"
 #include "GrWindowRectangles.h"
 #include "SkJSONWriter.h"
@@ -33,7 +34,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fPreferFullscreenClears = false;
     fMustClearUploadedBufferData = false;
     fSupportsAHardwareBufferImages = false;
-    fSampleShadingSupport = false;
     fFenceSyncSupport = false;
     fCrossContextTextureSupport = false;
     fHalfFloatVertexAttributeSupport = false;
@@ -121,6 +121,7 @@ static const char* pixel_config_name(GrPixelConfig config) {
         case kRGBA_4444_GrPixelConfig: return "RGBA444";
         case kRGBA_8888_GrPixelConfig: return "RGBA8888";
         case kRGB_888_GrPixelConfig: return "RGB888";
+        case kRG_88_GrPixelConfig: return "RG88";
         case kBGRA_8888_GrPixelConfig: return "BGRA8888";
         case kSRGBA_8888_GrPixelConfig: return "SRGBA8888";
         case kSBGRA_8888_GrPixelConfig: return "SBGRA8888";
@@ -177,7 +178,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Prefer fullscreen clears", fPreferFullscreenClears);
     writer->appendBool("Must clear buffer memory", fMustClearUploadedBufferData);
     writer->appendBool("Supports importing AHardwareBuffers", fSupportsAHardwareBufferImages);
-    writer->appendBool("Sample shading support", fSampleShadingSupport);
     writer->appendBool("Fence sync support", fFenceSyncSupport);
     writer->appendBool("Cross context texture support", fCrossContextTextureSupport);
     writer->appendBool("Half float vertex attribute support", fHalfFloatVertexAttributeSupport);
@@ -241,6 +241,15 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
 #else
 void GrCaps::dumpJSON(SkJSONWriter* writer) const { }
 #endif
+
+bool GrCaps::surfaceSupportsWritePixels(const GrSurface* surface) const {
+    return surface->readOnly() ? false : this->onSurfaceSupportsWritePixels(surface);
+}
+
+bool GrCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                            const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+    return dst->readOnly() ? false : this->onCanCopySurface(dst, src, srcRect, dstPoint);
+}
 
 bool GrCaps::validateSurfaceDesc(const GrSurfaceDesc& desc, GrMipMapped mipped) const {
     if (!this->isConfigTexturable(desc.fConfig)) {

@@ -44,6 +44,7 @@ How to build and run the SkQP tests
 
 3.  Build the APK:
 
+        tools/git-sync-deps
         tools/skqp/make_universal_apk
 
 4.  Build, install, and run.
@@ -65,7 +66,7 @@ How to build and run the SkQP tests
 
         OUTPUT_LOCATION="/storage/emulated/0/Android/data/org.skia.skqp/files/output"
         adb pull $OUTPUT_LOCATION /tmp/
-        tools/skqp/sysopen.py /tmp/output/skqp_report/report.html
+        bin/sysopen /tmp/output/skqp_report/report.html
 
 Running a single test
 ---------------------

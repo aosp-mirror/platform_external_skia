@@ -150,22 +150,7 @@ int SkFont::textToGlyphs(const void* text, size_t byteLength, SkTextEncoding enc
 
     SkASSERT(text);
 
-    int count = 0;  // fix uninitialized warning (even though the switch is complete!)
-
-    switch (encoding) {
-        case kUTF8_SkTextEncoding:
-            count = SkUTF::CountUTF8((const char*)text, byteLength);
-            break;
-        case kUTF16_SkTextEncoding:
-            count = SkUTF::CountUTF16((const uint16_t*)text, byteLength);
-            break;
-        case kUTF32_SkTextEncoding:
-            count = SkToInt(byteLength >> 2);
-            break;
-        case kGlyphID_SkTextEncoding:
-            count = SkToInt(byteLength >> 1);
-            break;
-    }
+    int count = SkFontPriv::CountTextElements(text, byteLength, encoding);
     if (!glyphs || count > maxGlyphCount) {
         return count;
     }
@@ -192,6 +177,22 @@ int SkFont::textToGlyphs(const void* text, size_t byteLength, SkTextEncoding enc
     (void)SkFontPriv::GetTypefaceOrDefault(*this)->charsToGlyphs(text, typefaceEncoding, glyphs,
                                                                  count);
     return count;
+}
+
+void SkFont::glyphsToUnichars(const SkGlyphID glyphs[], int count, SkUnichar text[]) const {
+    if (count <= 0) {
+        return;
+    }
+
+    auto typeface = SkFontPriv::GetTypefaceOrDefault(*this);
+    const unsigned numGlyphsInTypeface = typeface->countGlyphs();
+    SkAutoTArray<SkUnichar> unichars(count);
+    typeface->getGlyphToUnicodeMap(unichars.get());
+
+    for (int i = 0; i < count; ++i) {
+        unsigned id = glyphs[i];
+        text[i] = (id < numGlyphsInTypeface) ? unichars[id] : 0xFFFD;
+    }
 }
 
 static SkTypeface::Encoding to_encoding(SkTextEncoding e) {
@@ -540,5 +541,20 @@ SkRect SkFontPriv::GetFontBounds(const SkFont& font) {
     SkRect bounds;
     m.mapRect(&bounds, typeface->getBounds());
     return bounds;
+}
+
+int SkFontPriv::CountTextElements(const void* text, size_t byteLength, SkTextEncoding encoding) {
+    switch (encoding) {
+        case kUTF8_SkTextEncoding:
+            return SkUTF::CountUTF8(reinterpret_cast<const char*>(text), byteLength);
+        case kUTF16_SkTextEncoding:
+            return SkUTF::CountUTF16(reinterpret_cast<const uint16_t*>(text), byteLength);
+        case kUTF32_SkTextEncoding:
+            return byteLength >> 2;
+        case kGlyphID_SkTextEncoding:
+            return byteLength >> 1;
+    }
+    SkASSERT(false);
+    return 0;
 }
 

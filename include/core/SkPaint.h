@@ -47,7 +47,7 @@ class SkMaskFilter;
 class SkPath;
 class SkPathEffect;
 struct SkPoint;
-class SkRunFont;
+class SkFont;
 class SkShader;
 class SkSurfaceProps;
 class SkTextBlob;
@@ -219,7 +219,7 @@ public:
         kSubpixelText_Flag       = 0x80,   //!< mask for setting subpixel text
         kLCDRenderText_Flag      = 0x200,  //!< mask for setting LCD text
         kEmbeddedBitmapText_Flag = 0x400,  //!< mask for setting font embedded bitmaps
-        kAutoHinting_Flag        = 0x800,  //!< mask for setting auto-hinting
+        kAutoHinting_Flag        = 0x800,  //!< mask for setting force hinting
                                            // 0x1000 used to be kVertical
         kAllFlags                = 0xFFFF, //!< mask of all Flags
     };
@@ -379,7 +379,7 @@ public:
     /** Sets whether to always hint glyphs.
         If SkPaint::Hinting is set to SkFontHinting::kNormal or SkFontHinting::kFull
         and useAutohinter is set, instructs the font manager to always hint glyphs.
-        auto-hinting has no effect if SkPaint::Hinting is set to SkFontHinting::kNone or
+        useAutohinter has no effect if SkPaint::Hinting is set to SkFontHinting::kNone or
         SkFontHinting::kSlight.
 
         Only affects platforms that use FreeType as the font manager.
@@ -875,12 +875,20 @@ public:
     */
     void setTextSkewX(SkScalar skewX);
 
-    // Experimental
+    /**
+     *  Returns the text encoding. Text encoding describes how to interpret the text bytes pass
+     *  to methods like measureText() and SkCanvas::drawText().
+     *  @return the text encoding
+     */
     SkTextEncoding getTextEncoding() const {
         return (SkTextEncoding)fBitfields.fTextEncoding;
     }
 
-    // Experimental
+    /**
+     *  Sets the text encoding. Text encoding describes how to interpret the text bytes pass
+     *  to methods like measureText() and SkCanvas::drawText().
+     *  @param encoding  the new text encoding
+     */
     void setTextEncoding(SkTextEncoding encoding);
 
 #ifdef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
@@ -1019,6 +1027,7 @@ public:
     }
 #endif
 
+#ifdef SK_SUPPORT_LEGACY_PAINT_BREAKTEXT
     /** Returns the bytes of text that fit within maxWidth.
         The text fragment fits if its advance width is less than or equal to maxWidth.
         Measures only while the advance is less than or equal to maxWidth.
@@ -1035,6 +1044,7 @@ public:
     */
     size_t  breakText(const void* text, size_t length, SkScalar maxWidth,
                       SkScalar* measuredWidth = nullptr) const;
+#endif
 
 #ifdef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
     /** Retrieves the advance and bounds for each glyph in text, and returns
@@ -1087,80 +1097,6 @@ public:
                         const SkPoint pos[], SkPath* path) const;
 #endif
 
-#ifdef SK_SUPPORT_LEGACY_TEXTINTERCEPTS
-public:
-#else
-private:
-#endif
-    /** Returns the number of intervals that intersect bounds.
-        bounds describes a pair of lines parallel to the text advance.
-        The return count is zero or a multiple of two, and is at most twice the number of glyphs in
-        the string.
-        Uses SkTextEncoding to decode text, SkTypeface to get the glyph paths,
-        and text size, fake bold, and SkPathEffect to scale and modify the glyph paths.
-        Uses x, y to position intervals.
-
-        Pass nullptr for intervals to determine the size of the interval array.
-
-        intervals are cached to improve performance for multiple calls.
-
-        @param text       character codes or glyph indices
-        @param length     number of bytes of text
-        @param x          x-axis value of the origin of the text
-        @param y          y-axis value of the origin of the text
-        @param bounds     lower and upper line parallel to the advance
-        @param intervals  returned intersections; may be nullptr
-        @return           number of intersections; may be zero
-    */
-    int getTextIntercepts(const void* text, size_t length, SkScalar x, SkScalar y,
-                          const SkScalar bounds[2], SkScalar* intervals) const;
-
-    /** Returns the number of intervals that intersect bounds.
-        bounds describes a pair of lines parallel to the text advance.
-        The return count is zero or a multiple of two, and is at most twice the number of glyphs in
-        the string.
-        Uses SkTextEncoding to decode text, SkTypeface to get the glyph paths,
-        and text size, fake bold, and SkPathEffect to scale and modify the glyph paths.
-        Uses pos array to position intervals.
-
-        Pass nullptr for intervals to determine the size of the interval array.
-
-        intervals are cached to improve performance for multiple calls.
-
-        @param text       character codes or glyph indices
-        @param length     number of bytes of text
-        @param pos        positions of each glyph
-        @param bounds     lower and upper line parallel to the advance
-        @param intervals  returned intersections; may be nullptr
-        @return           number of intersections; may be zero
-    */
-    int getPosTextIntercepts(const void* text, size_t length, const SkPoint pos[],
-                             const SkScalar bounds[2], SkScalar* intervals) const;
-
-    /** Returns the number of intervals that intersect bounds.
-        bounds describes a pair of lines parallel to the text advance.
-        The return count is zero or a multiple of two, and is at most twice the number of glyphs in
-        the string.
-        Uses SkTextEncoding to decode text, SkTypeface to get the glyph paths,
-        and text size, fake bold, and SkPathEffect to scale and modify the glyph paths.
-        Uses xpos array, constY to position intervals.
-
-        Pass nullptr for intervals to determine the size of the interval array.
-
-        intervals are cached to improve performance for multiple calls.
-
-        @param text       character codes or glyph indices
-        @param length     number of bytes of text
-        @param xpos       positions of each glyph on x-axis
-        @param constY     position of each glyph on y-axis
-        @param bounds     lower and upper line parallel to the advance
-        @param intervals  returned intersections; may be nullptr
-        @return           number of intersections; may be zero
-    */
-    int getPosTextHIntercepts(const void* text, size_t length, const SkScalar xpos[],
-                              SkScalar constY, const SkScalar bounds[2], SkScalar* intervals) const;
-public:
-
     /** Returns the number of intervals that intersect bounds.
         bounds describes a pair of lines parallel to the text advance.
         The return count is zero or a multiple of two, and is at most twice the number of glyphs in
@@ -1169,7 +1105,7 @@ public:
         and text size, fake bold, and SkPathEffect to scale and modify the glyph paths.
         Uses run array to position intervals.
 
-        SkTextEncoding must be set to SkPaint::kGlyphID_TextEncoding.
+        SkTextEncoding must be set to kGlyphID_SkTextEncoding.
 
         Pass nullptr for intervals to determine the size of the interval array.
 
@@ -1269,10 +1205,6 @@ public:
                                       Style style) const;
 
 private:
-    friend class SkGlyphRun;
-    friend class SkGlyphRunBuilder;
-    SkPaint(const SkPaint&, const SkRunFont&);
-
     sk_sp<SkTypeface>     fTypeface;
     sk_sp<SkPathEffect>   fPathEffect;
     sk_sp<SkShader>       fShader;
@@ -1305,6 +1237,13 @@ private:
 
     SkScalar measure_text(SkGlyphCache*, const char* text, size_t length,
                           int* count, SkRect* bounds) const;
+
+    int getTextIntercepts(const void* text, size_t length, SkScalar x, SkScalar y,
+                          const SkScalar bounds[2], SkScalar* intervals) const;
+    int getPosTextIntercepts(const void* text, size_t length, const SkPoint pos[],
+                             const SkScalar bounds[2], SkScalar* intervals) const;
+    int getPosTextHIntercepts(const void* text, size_t length, const SkScalar xpos[],
+                              SkScalar constY, const SkScalar bounds[2], SkScalar* intervals) const;
 
     /*
      * The luminance color is used to determine which Gamma Canonical color to map to.  This is

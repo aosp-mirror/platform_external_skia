@@ -166,8 +166,8 @@ bool GrMtlCaps::canCopyAsDrawThenBlit(GrPixelConfig dstConfig, GrPixelConfig src
     return true;
 }
 
-bool GrMtlCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                               const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+                                 const SkIRect& srcRect, const SkIPoint& dstPoint) const {
     GrSurfaceOrigin dstOrigin = dst->origin();
     GrSurfaceOrigin srcOrigin = src->origin();
 
@@ -228,10 +228,6 @@ void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
     fMapBufferFlags = kCanMap_MapFlag;
 
     fOversizedStencilSupport = true;
-
-    // Looks like there is a field called rasterSampleCount labeled as beta in the Metal docs. This
-    // may be what we eventually need here, but it has no description.
-    fSampleShadingSupport = false;
 
     fSRGBSupport = true;   // always available in Metal
     fSRGBWriteControl = false;

@@ -104,7 +104,7 @@ public:
     /**
      * Implements GrResourceProvider::wrapBackendTexture
      */
-    sk_sp<GrTexture> wrapBackendTexture(const GrBackendTexture&, GrWrapOwnership,
+    sk_sp<GrTexture> wrapBackendTexture(const GrBackendTexture&, GrWrapOwnership, GrIOType,
                                         bool purgeImmediately);
 
     /**
@@ -294,6 +294,7 @@ public:
             fStencilAttachmentCreates = 0;
             fNumDraws = 0;
             fNumFailedDraws = 0;
+            fNumFinishFlushes = 0;
         }
 
         int renderTargetBinds() const { return fRenderTargetBinds; }
@@ -309,10 +310,12 @@ public:
         void incStencilAttachmentCreates() { fStencilAttachmentCreates++; }
         void incNumDraws() { fNumDraws++; }
         void incNumFailedDraws() { ++fNumFailedDraws; }
+        void incNumFinishFlushes() { ++fNumFinishFlushes; }
         void dump(SkString*);
         void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
         int numDraws() const { return fNumDraws; }
         int numFailedDraws() const { return fNumFailedDraws; }
+        int numFinishFlushes() const { return fNumFinishFlushes; }
     private:
         int fRenderTargetBinds;
         int fShaderCompilations;
@@ -322,6 +325,7 @@ public:
         int fStencilAttachmentCreates;
         int fNumDraws;
         int fNumFailedDraws;
+        int fNumFinishFlushes;
 #else
         void dump(SkString*) {}
         void dumpKeyValuePairs(SkTArray<SkString>*, SkTArray<double>*) {}
@@ -333,6 +337,7 @@ public:
         void incStencilAttachmentCreates() {}
         void incNumDraws() {}
         void incNumFailedDraws() {}
+        void incNumFinishFlushes() {}
 #endif
     };
 
@@ -445,7 +450,7 @@ private:
                                              const GrMipLevel texels[], int mipLevelCount) = 0;
 
     virtual sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrWrapOwnership,
-                                                  bool purgeImmediately) = 0;
+                                                  GrIOType, bool purgeImmediately) = 0;
     virtual sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&,
                                                             int sampleCnt,
                                                             GrWrapOwnership) = 0;

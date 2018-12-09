@@ -12,6 +12,10 @@
     // Add some helpers for matrices. This is ported from SkMatrix.cpp
     // to save complexity and overhead of going back and forth between
     // C++ and JS layers.
+    // I would have liked to use something like DOMMatrix, except it
+    // isn't widely supported (would need polyfills) and it doesn't
+    // have a mapPoints() function (which could maybe be tacked on here).
+    // If DOMMatrix catches on, it would be worth re-considering this usage.
     CanvasKit.SkMatrix = {};
     function sdot(a, b, c, d, e, f) {
       e = e || 0;
@@ -24,6 +28,22 @@
         1, 0, 0,
         0, 1, 0,
         0, 0, 1,
+      ];
+    };
+
+    // Return the inverse (if it exists) of this matrix.
+    // Otherwise, return the identity.
+    CanvasKit.SkMatrix.invert = function(m) {
+      var det = m[0]*m[4]*m[8] + m[1]*m[5]*m[6] + m[2]*m[3]*m[7]
+              - m[2]*m[4]*m[6] - m[1]*m[3]*m[8] - m[0]*m[5]*m[7];
+      if (!det) {
+        SkDebug('Warning, uninvertible matrix');
+        return CanvasKit.SkMatrix.identity();
+      }
+      return [
+        (m[4]*m[8] - m[5]*m[7])/det, (m[2]*m[7] - m[1]*m[8])/det, (m[1]*m[5] - m[2]*m[4])/det,
+        (m[5]*m[6] - m[3]*m[8])/det, (m[0]*m[8] - m[2]*m[6])/det, (m[2]*m[3] - m[0]*m[5])/det,
+        (m[3]*m[7] - m[4]*m[6])/det, (m[1]*m[6] - m[0]*m[7])/det, (m[0]*m[4] - m[1]*m[3])/det,
       ];
     };
 
@@ -185,8 +205,23 @@
       return this;
     };
 
-    CanvasKit.SkPath.prototype.arcTo = function(x1, y1, x2, y2, radius) {
-      this._arcTo(x1, y1, x2, y2, radius);
+    CanvasKit.SkPath.prototype.arcTo = function() {
+      // takes 4, 5 or 7 args
+      // - 5 x1, y1, x2, y2, radius
+      // - 4 oval (as Rect), startAngle, sweepAngle, forceMoveTo
+      // - 7 x1, y1, x2, y2, startAngle, sweepAngle, forceMoveTo
+      var args = arguments;
+      if (args.length === 5) {
+        this._arcTo(args[0], args[1], args[2], args[3], args[4]);
+      } else if (args.length === 4) {
+        this._arcTo(args[0], args[1], args[2], args[3]);
+      } else if (args.length === 7) {
+        this._arcTo(CanvasKit.LTRBRect(args[0], args[1], args[2], args[3]),
+                    args[4], args[5], args[6]);
+      } else {
+        throw 'Invalid args for arcTo. Expected 4, 5, or 7, got '+ args.length;
+      }
+
       return this;
     };
 
@@ -252,6 +287,7 @@
       opts.miter_limit = opts.miter_limit || 4;
       opts.cap = opts.cap || CanvasKit.StrokeCap.Butt;
       opts.join = opts.join || CanvasKit.StrokeJoin.Miter;
+      opts.precision = opts.precision || 1;
       if (this._stroke(opts)) {
         return this;
       }
@@ -467,7 +503,7 @@
     return dpe;
   }
 
-  // data is a TypedArray or ArrayBuffer
+  // data is a TypedArray or ArrayBuffer e.g. from fetch().then(resp.arrayBuffer())
   CanvasKit.MakeImageFromEncoded = function(data) {
     data = new Uint8Array(data);
 
@@ -487,13 +523,21 @@
     return img;
   }
 
-  // imgData is an ArrayBuffer of data, e.g. from fetch().then(resp.arrayBuffer())
-  CanvasKit.MakeImageShader = function(imgData, xTileMode, yTileMode) {
-    var iptr = CanvasKit._malloc(imgData.byteLength);
-    CanvasKit.HEAPU8.set(new Uint8Array(imgData), iptr);
-    // No need to _free iptr, ImageShader takes it with SkData::MakeFromMalloc
-
-    return CanvasKit._MakeImageShader(iptr, imgData.byteLength, xTileMode, yTileMode);
+  // imgData is an Encoded SkImage, e.g. from MakeImageFromEncoded
+  CanvasKit.MakeImageShader = function(img, xTileMode, yTileMode, clampUnpremul, localMatrix) {
+    if (!img) {
+      return null;
+    }
+    clampUnpremul = clampUnpremul || false;
+    if (localMatrix) {
+      // Add perspective args if not provided.
+      if (localMatrix.length === 6) {
+        localMatrix.push(0, 0, 1);
+      }
+      return CanvasKit._MakeImageShader(img, xTileMode, yTileMode, clampUnpremul, localMatrix);
+    } else {
+      return CanvasKit._MakeImageShader(img, xTileMode, yTileMode, clampUnpremul);
+    }
   }
 
   // pixels is a Uint8Array
