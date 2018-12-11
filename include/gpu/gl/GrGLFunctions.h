@@ -158,6 +158,8 @@ using GrGLStencilOpSeparateFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum face, GrGL
 using GrGLTexBufferFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLenum internalformat, GrGLuint buffer);
 using GrGLTexBufferRangeFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLenum internalformat, GrGLuint buffer, GrGLintptr offset, GrGLsizeiptr size);
 using GrGLTexImage2DFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLint level, GrGLint internalformat, GrGLsizei width, GrGLsizei height, GrGLint border, GrGLenum format, GrGLenum type, const GrGLvoid* pixels);
+using GrGLTexParameterfFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLenum pname, GrGLfloat param);
+using GrGLTexParameterfvFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLenum pname, const GrGLfloat* params);
 using GrGLTexParameteriFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLenum pname, GrGLint param);
 using GrGLTexParameterivFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLenum pname, const GrGLint* params);
 using GrGLTexStorage2DFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLsizei levels, GrGLenum internalformat, GrGLsizei width, GrGLsizei height);
@@ -233,9 +235,6 @@ using GrGLCoverageModulationFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum component
 /* EXT_multi_draw_indirect */
 using GrGLMultiDrawArraysIndirectFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum mode, const GrGLvoid* indirect, GrGLsizei drawcount, GrGLsizei stride);
 using GrGLMultiDrawElementsIndirectFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum mode, GrGLenum type, const GrGLvoid* indirect, GrGLsizei drawcount, GrGLsizei stride);
-
-/* ARB_sample_shading */
-using GrGLMinSampleShadingFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLfloat value);
 
 /* ARB_sync */
 using GrGLFenceSyncFn = GrGLsync GR_GL_FUNCTION_TYPE(GrGLenum condition, GrGLbitfield flags);

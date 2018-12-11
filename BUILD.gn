@@ -79,6 +79,8 @@ declare_args() {
     skia_use_vulkan = defined(ndk_api) && ndk_api >= 24
   } else if (is_fuchsia) {
     skia_use_vulkan = fuchsia_use_vulkan
+  } else if (is_win && target_cpu == "arm64") {
+    skia_use_vulkan = false
   } else {
     skia_use_vulkan = (defined(skia_vulkan_sdk) && skia_vulkan_sdk != "") ||
                       (defined(skia_moltenvk_path) && skia_moltenvk_path != "")
@@ -625,7 +627,9 @@ optional("gpu_for_real") {
     sources += [ "src/gpu/gl/iOS/GrGLMakeNativeInterface_iOS.cpp" ]
   } else if (is_win) {
     sources += [ "src/gpu/gl/win/GrGLMakeNativeInterface_win.cpp" ]
-    libs += [ "OpenGL32.lib" ]
+    if (target_cpu != "arm64") {
+      libs += [ "OpenGL32.lib" ]
+    }
   } else {
     sources += [ "src/gpu/gl/GrGLMakeNativeInterface_none.cpp" ]
   }
@@ -1416,10 +1420,10 @@ if (skia_enable_tools) {
       sources += [ "tools/gpu/gl/mac/CreatePlatformGLTestContext_mac.cpp" ]
     } else if (is_win) {
       sources += [ "tools/gpu/gl/win/CreatePlatformGLTestContext_win.cpp" ]
-      libs += [
-        "Gdi32.lib",
-        "OpenGL32.lib",
-      ]
+      libs += [ "Gdi32.lib" ]
+      if (target_cpu != "arm64") {
+        libs += [ "OpenGL32.lib" ]
+      }
     }
 
     cflags_objcc = [ "-fobjc-arc" ]
@@ -1849,7 +1853,7 @@ if (skia_enable_tools) {
     ]
   }
 
-  if (!is_ios && target_cpu != "wasm") {
+  if (!is_ios && target_cpu != "wasm" && !(is_win && target_cpu == "arm64")) {
     test_app("skiaserve") {
       sources = [
         "tools/skiaserve/Request.cpp",

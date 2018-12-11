@@ -1826,7 +1826,7 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
             case GrVkRenderTarget::kAutoResolves_ResolveType:
                 break;
             case GrVkRenderTarget::kCanResolve_ResolveType:
-                this->internalResolveRenderTarget(rt, false);
+                this->resolveRenderTargetNoFlush(rt);
                 break;
             default:
                 SK_ABORT("Unknown resolve type");
@@ -2112,17 +2112,13 @@ sk_sp<GrSemaphore> GrVkGpu::wrapBackendSemaphore(const GrBackendSemaphore& semap
     return GrVkSemaphore::MakeWrapped(this, semaphore.vkSemaphore(), wrapType, ownership);
 }
 
-void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore, bool flush) {
+void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore) {
     GrVkSemaphore* vkSem = static_cast<GrVkSemaphore*>(semaphore.get());
 
     GrVkSemaphore::Resource* resource = vkSem->getResource();
     if (resource->shouldSignal()) {
         resource->ref();
         fSemaphoresToSignal.push_back(resource);
-    }
-
-    if (flush) {
-        this->submitCommandBuffer(kSkip_SyncQueue);
     }
 }
 
