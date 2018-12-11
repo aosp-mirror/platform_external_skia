@@ -254,21 +254,17 @@ SkTextBlobBuilder::~SkTextBlobBuilder() {
 }
 
 SkRect SkTextBlobBuilder::TightRunBounds(const SkTextBlob::RunRecord& run) {
+    const SkFont& font = run.font();
     SkRect bounds;
-    SkPaint paint;
-    run.font().LEGACY_applyToPaint(&paint);
-    paint.setTextEncoding(kGlyphID_SkTextEncoding);
 
     if (SkTextBlob::kDefault_Positioning == run.positioning()) {
-        paint.measureText(run.glyphBuffer(), run.glyphCount() * sizeof(uint16_t), &bounds);
+        font.measureText(run.glyphBuffer(), run.glyphCount() * sizeof(uint16_t),
+                         kGlyphID_SkTextEncoding, &bounds);
         return bounds.makeOffset(run.offset().x(), run.offset().y());
     }
 
     SkAutoSTArray<16, SkRect> glyphBounds(run.glyphCount());
-    paint.getTextWidths(run.glyphBuffer(),
-                        run.glyphCount() * sizeof(uint16_t),
-                        nullptr,
-                        glyphBounds.get());
+    font.getBounds(run.glyphBuffer(), run.glyphCount(), glyphBounds.get(), nullptr);
 
     SkASSERT(SkTextBlob::kFull_Positioning == run.positioning() ||
              SkTextBlob::kHorizontal_Positioning == run.positioning());
@@ -590,6 +586,15 @@ sk_sp<SkTextBlob> SkTextBlobBuilder::make() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+int SkTextBlob::getIntercepts(const SkScalar bounds[2], SkScalar intervals[],
+                              const SkPaint* paint) const {
+    SkPaint defaultPaint;
+    if (!paint) {
+        paint = &defaultPaint;
+    }
+    return paint->getTextBlobIntercepts(this, bounds, intervals);
+}
 
 void SkTextBlobPriv::Flatten(const SkTextBlob& blob, SkWriteBuffer& buffer) {
     buffer.writeRect(blob.fBounds);
