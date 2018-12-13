@@ -491,11 +491,13 @@ private:
     uint8_t     fHinting;
 
     SkScalar setupForAsPaths(SkPaint*);
+    bool hasSomeAntiAliasing() const;
 
     void glyphsToUnichars(const SkGlyphID glyphs[], int count, SkUnichar text[]) const;
 
     friend class SkCanonicalizeFont;
     friend class SkFontPriv;
+    friend class SkGlyphRunListPainter;
     friend class SkPaint;
     friend class SVGTextBuilder;
 };
