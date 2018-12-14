@@ -787,6 +787,7 @@ cc_library_static {
           "src/gpu/vk/GrVkBufferView.cpp",
           "src/gpu/vk/GrVkCaps.cpp",
           "src/gpu/vk/GrVkCommandBuffer.cpp",
+          "src/gpu/vk/GrVkCommandPool.cpp",
           "src/gpu/vk/GrVkCopyManager.cpp",
           "src/gpu/vk/GrVkCopyPipeline.cpp",
           "src/gpu/vk/GrVkDescriptorPool.cpp",
