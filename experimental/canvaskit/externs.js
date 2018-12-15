@@ -174,7 +174,9 @@ var CanvasKit = {
 		getFillType: function() {},
 		getPoint: function() {},
 		isEmpty: function() {},
+		isVolatile: function() {},
 		setFillType: function() {},
+		setIsVolatile: function() {},
 		toSVGString: function() {},
 
 		// private API
@@ -444,6 +446,7 @@ var HTMLCanvas = {};
 HTMLCanvas.prototype.decodeImage = function() {};
 HTMLCanvas.prototype.dispose = function() {};
 HTMLCanvas.prototype.getContext = function() {};
+HTMLCanvas.prototype.loadFont = function() {};
 HTMLCanvas.prototype.toDataURL = function() {};
 
 var CanvasRenderingContext2D = {};
