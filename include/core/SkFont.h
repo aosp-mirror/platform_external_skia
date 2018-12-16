@@ -44,6 +44,9 @@ public:
     */
     SkFont(sk_sp<SkTypeface> typeface, SkScalar size);
 
+    // Experimental
+    explicit SkFont(sk_sp<SkTypeface> typeface);
+
 
     /** Constructs SkFont with default values with SkTypeface and size in points,
         horizontal scale, and horizontal skew. Horizontal scale emulates condensed
@@ -495,6 +498,7 @@ private:
 
     void glyphsToUnichars(const SkGlyphID glyphs[], int count, SkUnichar text[]) const;
 
+    friend class GrTextBlob;
     friend class SkCanonicalizeFont;
     friend class SkFontPriv;
     friend class SkGlyphRunListPainter;

@@ -34,6 +34,7 @@ static void test_cachedfont(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, paint.getHinting() == p.getHinting());
 }
 
+#ifdef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
 static void test_fontmetrics(skiatest::Reporter* reporter,
                              const SkPaint& paint, const SkFont& font) {
     SkFontMetrics fm0, fm1;
@@ -50,6 +51,7 @@ static void test_fontmetrics(skiatest::Reporter* reporter,
     CMP(fLeading);
 #undef CMP
 }
+#endif
 
 static void test_cachedfont(skiatest::Reporter* reporter) {
     static const char* const faces[] = {
@@ -67,7 +69,9 @@ static void test_cachedfont(skiatest::Reporter* reporter) {
     };
 
     SkPaint paint;
+#ifdef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
     char txt[] = "long .text .with .lots .of.dots.";
+#endif
 
     unsigned mask = SkPaint::kAntiAlias_Flag            |
                     SkPaint::kFakeBoldText_Flag         |
@@ -93,6 +97,7 @@ static void test_cachedfont(skiatest::Reporter* reporter) {
                     const SkFont font(SkFont::LEGACY_ExtractFromPaint(paint));
 
                     test_cachedfont(reporter, paint, font);
+#ifdef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
                     test_fontmetrics(reporter, paint, font);
 
                     SkRect pbounds, fbounds;
@@ -103,6 +108,7 @@ static void test_cachedfont(skiatest::Reporter* reporter) {
                                                       &fbounds);
                     REPORTER_ASSERT(reporter, pwidth == fwidth);
                     REPORTER_ASSERT(reporter, pbounds == fbounds);
+#endif
                 }
             }
         }
