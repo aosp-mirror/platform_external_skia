@@ -53,6 +53,16 @@ bool SkFont::operator==(const SkFont& b) const {
             fHinting        == b.fHinting;
 }
 
+void SkFont::dump() const {
+    SkDebugf("typeface %p\n", fTypeface.get());
+    SkDebugf("size %g\n", fSize);
+    SkDebugf("skewx %g\n", fSkewX);
+    SkDebugf("scalex %g\n", fScaleX);
+    SkDebugf("flags 0x%X\n", fFlags);
+    SkDebugf("edging %d\n", (unsigned)fEdging);
+    SkDebugf("hinting %d\n", (unsigned)fHinting);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 static inline uint32_t set_clear_mask(uint32_t bits, bool cond, uint32_t mask) {
@@ -130,23 +140,29 @@ bool SkFont::hasSomeAntiAliasing() const {
 
 class SkCanonicalizeFont {
 public:
-    SkCanonicalizeFont(const SkFont& font) : fFont(&font), fScale(0) {
+    SkCanonicalizeFont(const SkFont& font, const SkPaint* paint) : fFont(&font) {
+        if (paint) {
+            fPaint = *paint;
+        }
         if (font.isLinearMetrics() ||
-            SkDraw::ShouldDrawTextAsPaths(font, SkPaint(), SkMatrix::I()))
+            SkDraw::ShouldDrawTextAsPaths(font, fPaint, SkMatrix::I()))
         {
-            SkFont* f = fLazy.set(font);
+            SkFont* f = fLazyFont.set(font);
             fScale = f->setupForAsPaths(nullptr);
             fFont = f;
+            fPaint.reset();
         }
     }
 
     const SkFont& getFont() const { return *fFont; }
+    const SkPaint& getPaint() const { return fPaint; }
     SkScalar getScale() const { return fScale; }
 
 private:
-    const SkFont*   fFont;
-    SkTLazy<SkFont> fLazy;
-    SkScalar        fScale;
+    const SkFont*    fFont;
+    SkTLazy<SkFont>  fLazyFont;
+    SkPaint          fPaint;
+    SkScalar         fScale = 0;
 };
 
 
@@ -255,7 +271,7 @@ size_t SkFont::breakText(const void* textD, size_t length, SkTextEncoding encodi
         return length;
     }
 
-    SkCanonicalizeFont canon(*this);
+    SkCanonicalizeFont canon(*this, nullptr);
     const SkFont& font = canon.getFont();
     SkScalar scale = canon.getScale();
 
@@ -304,7 +320,7 @@ static void join_bounds_x(const SkGlyph& g, SkRect* bounds, SkScalar dx) {
 }
 
 SkScalar SkFont::measureText(const void* textD, size_t length, SkTextEncoding encoding,
-                             SkRect* bounds) const {
+                             SkRect* bounds, const SkPaint* paint) const {
     if (length == 0) {
         if (bounds) {
             bounds->setEmpty();
@@ -312,11 +328,11 @@ SkScalar SkFont::measureText(const void* textD, size_t length, SkTextEncoding en
         return 0;
     }
 
-    SkCanonicalizeFont canon(*this);
+    SkCanonicalizeFont canon(*this, paint);
     const SkFont& font = canon.getFont();
     SkScalar scale = canon.getScale();
 
-    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font);
+    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font, canon.getPaint());
 
     const char* text = static_cast<const char*>(textD);
     const char* stop = text + length;
@@ -366,15 +382,14 @@ void VisitGlyphs(const SkFont& origFont, const SkPaint* paint, const uint16_t gl
         return;
     }
 
-    SkCanonicalizeFont canon(origFont);
+    SkCanonicalizeFont canon(origFont, paint);
     const SkFont& font = canon.getFont();
     SkScalar scale = canon.getScale();
     if (!scale) {
         scale = 1;
     }
 
-    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font,
-                                                                        paint ? *paint : SkPaint());
+    auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(font, canon.getPaint());
     handler(cache.get(), glyphs, count, scale);
 }
 
@@ -453,7 +468,7 @@ bool SkFont::getPath(uint16_t glyphID, SkPath* path) const {
 }
 
 SkScalar SkFont::getMetrics(SkFontMetrics* metrics) const {
-    SkCanonicalizeFont canon(*this);
+    SkCanonicalizeFont canon(*this, nullptr);
     const SkFont& font = canon.getFont();
     SkScalar scale = canon.getScale();
 
