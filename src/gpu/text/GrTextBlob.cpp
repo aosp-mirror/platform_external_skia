@@ -59,10 +59,10 @@ sk_sp<GrTextBlob> GrTextBlob::Make(int glyphCount, int runCount, GrColor color) 
 }
 
 SkExclusiveStrikePtr GrTextBlob::Run::setupCache(const SkPaint& paint,
+                                                 const SkFont& font,
                                                  const SkSurfaceProps& props,
                                                  SkScalerContextFlags scalerContextFlags,
                                                  const SkMatrix& viewMatrix) {
-    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
     // if we have an override descriptor for the run, then we should use that
     SkAutoDescriptor* desc = fARGBFallbackDescriptor.get() ? fARGBFallbackDescriptor.get() : &fDescriptor;
     SkScalerContextEffects effects;
@@ -468,8 +468,9 @@ void GrTextBlob::AssertEqual(const GrTextBlob& l, const GrTextBlob& r) {
 void GrTextBlob::SubRun::computeTranslation(const SkMatrix& viewMatrix,
                                                 SkScalar x, SkScalar y, SkScalar* transX,
                                                 SkScalar* transY) {
-    calculate_translation(!this->drawAsDistanceFields(), viewMatrix, x, y,
-                          fCurrentViewMatrix, fX, fY, transX, transY);
+    // Don't use the matrix to translate on distance field for fallback subruns.
+    calculate_translation(!this->drawAsDistanceFields() && !this->isFallback(), viewMatrix,
+            x, y, fCurrentViewMatrix, fX, fY, transX, transY);
     fCurrentViewMatrix = viewMatrix;
     fX = x;
     fY = y;

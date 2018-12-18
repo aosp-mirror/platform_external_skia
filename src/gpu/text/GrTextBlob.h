@@ -345,7 +345,8 @@ private:
         bool hasWCoord() const { return fFlags.hasWCoord; }
         void setNeedsTransform(bool needsTransform) { fFlags.needsTransform = needsTransform; }
         bool needsTransform() const { return fFlags.needsTransform; }
-        void setFallback() {fFlags.argbFallback = true;}
+        void setFallback() { fFlags.argbFallback = true; }
+        bool isFallback() { return fFlags.argbFallback; }
 
         const SkDescriptor* desc() const { return fDesc.getDesc(); }
 
@@ -435,6 +436,7 @@ private:
                          SkPoint origin, SkScalar textRatio, bool needsTransform);
 
         SkExclusiveStrikePtr setupCache(const SkPaint& skPaint,
+                                        const SkFont& skFont,
                                         const SkSurfaceProps& props,
                                         SkScalerContextFlags scalerContextFlags,
                                         const SkMatrix& viewMatrix);
