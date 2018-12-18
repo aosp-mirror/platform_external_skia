@@ -7,7 +7,6 @@
 
 #ifndef SkUserConfigManual_DEFINED
 #define SkUserConfigManual_DEFINED
-  #define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
   #define GR_TEST_UTILS 1
   #define SK_BUILD_FOR_ANDROID_FRAMEWORK
   #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
@@ -17,6 +16,8 @@
   // Disable these Ganesh features
   #define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
   #define SK_DISABLE_RENDER_TARGET_SORTING
+  // Check error is expensive. HWUI historically also doesn't check its allocations
+  #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR 0
 
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
