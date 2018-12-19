@@ -132,10 +132,6 @@ bool SkDeferredDisplayListRecorder::init() {
         // In GL, FBO 0 never supports mixed samples
         surfaceFlags |= GrInternalSurfaceFlags::kMixedSampled;
     }
-    if (fContext->contextPriv().caps()->maxWindowRectangles() > 0 && !usesGLFBO0) {
-        // In GL, FBO 0 never supports window rectangles
-        surfaceFlags |= GrInternalSurfaceFlags::kWindowRectsSupport;
-    }
     if (usesGLFBO0) {
         surfaceFlags |= GrInternalSurfaceFlags::kGLRTFBOIDIs0;
     }
@@ -190,13 +186,15 @@ SkCanvas* SkDeferredDisplayListRecorder::getCanvas() {
 }
 
 std::unique_ptr<SkDeferredDisplayList> SkDeferredDisplayListRecorder::detach() {
-    if (!fContext || !fSurface) {
+    if (!fContext) {
         return nullptr;
     }
 
-    SkCanvas* canvas = fSurface->getCanvas();
+    if (fSurface) {
+        SkCanvas* canvas = fSurface->getCanvas();
 
-    canvas->restoreToCount(0);
+        canvas->restoreToCount(0);
+    }
 
     auto ddl = std::unique_ptr<SkDeferredDisplayList>(
                            new SkDeferredDisplayList(fCharacterization, std::move(fLazyProxyData)));

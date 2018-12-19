@@ -304,18 +304,18 @@ void SkGlyphRunListPainter::processARGBFallback(
         // Subtract 2 to account for the bilerp pad around the glyph
         SkScalar maxAtlasDimension = SkGlyphCacheCommon::kSkSideTooBigForAtlas - 2;
 
-        SkScalar runPaintTextSize = runPaint.getTextSize();
+        SkScalar runFontTextSize = runFont.getSize();
 
         // Scale the text size down so the long side of all the glyphs will fit in the atlas.
         SkScalar reducedTextSize =
-                (maxAtlasDimension / conservativeMaxGlyphDimension) * runPaintTextSize;
+                (maxAtlasDimension / conservativeMaxGlyphDimension) * runFontTextSize;
 
         // If there's a glyph in the font that's particularly large, it's possible
         // that fScaledFallbackTextSize may end up minimizing too much. We'd rather skip
         // that glyph than make the others blurry, so we set a minimum size of half the
         // maximum text size to avoid this case.
         SkScalar fallbackTextSize =
-                SkScalarFloorToScalar(std::max(reducedTextSize, 0.5f * runPaintTextSize));
+                SkScalarFloorToScalar(std::max(reducedTextSize, 0.5f * runFontTextSize));
 
         // Don't allow the text size to get too big. This will also improve glyph cache hit rate
         // for larger text sizes.
@@ -323,7 +323,7 @@ void SkGlyphRunListPainter::processARGBFallback(
 
         SkFont fallbackFont{runFont};
         fallbackFont.setSize(fallbackTextSize);
-        SkScalar fallbackTextScale = runPaintTextSize / fallbackTextSize;
+        SkScalar fallbackTextScale = runFontTextSize / fallbackTextSize;
         auto positions = SkSpan<const SkPoint>{fARGBPositions};
         argbFallback(runPaint,
                      fallbackFont,
@@ -731,10 +731,16 @@ void GrTextBlob::generateFromGlyphRunList(GrGlyphCache* glyphCache,
             // Setup distance field runPaint and text ratio
             SkScalar textScale;
             SkPaint distanceFieldPaint{runPaint};
-            runFont.LEGACY_applyToPaint(&distanceFieldPaint);
+            SkFont distanceFieldFont{runFont};
             SkScalerContextFlags flags;
-            GrTextContext::InitDistanceFieldPaint(this, &distanceFieldPaint, viewMatrix,
-                                                  options, &textScale, &flags);
+            GrTextContext::InitDistanceFieldPaint(runFont.getSize(),
+                                                  viewMatrix,
+                                                  options,
+                                                  this,
+                                                  &distanceFieldPaint,
+                                                  &distanceFieldFont,
+                                                  &textScale,
+                                                  &flags);
             this->setHasDistanceField();
             run->setSubRunHasDistanceFields(
                     runFont.getEdging() == SkFont::Edging::kSubpixelAntiAlias,
@@ -742,8 +748,8 @@ void GrTextBlob::generateFromGlyphRunList(GrGlyphCache* glyphCache,
                     hasWCoord);
 
             {
-                SkFont font = SkFont::LEGACY_ExtractFromPaint(distanceFieldPaint);
-                auto cache = run->setupCache(distanceFieldPaint, font, props, flags, SkMatrix::I());
+                auto cache = run->setupCache(
+                        distanceFieldPaint, distanceFieldFont, props, flags, SkMatrix::I());
 
                 sk_sp<GrTextStrike> currStrike = glyphCache->getStrike(cache.get());
 
@@ -1022,13 +1028,18 @@ bool SkTextBlobCacheDiffCanvas::TrackLayerDevice::maybeProcessGlyphRunForDFT(
     }
 
     SkScalar textRatio;
-    SkPaint dfPaint(runPaint);
-    runFont.LEGACY_applyToPaint(&dfPaint);
+    SkPaint dfPaint{runPaint};
+    SkFont dfFont{runFont};
     SkScalerContextFlags flags;
-    GrTextContext::InitDistanceFieldPaint(nullptr, &dfPaint, runMatrix, options, &textRatio,
+    GrTextContext::InitDistanceFieldPaint(runFont.getSize(),
+                                          runMatrix,
+                                          options,
+                                          nullptr,
+                                          &dfPaint,
+                                          &dfFont,
+                                          &textRatio,
                                           &flags);
     SkScalerContextEffects effects;
-    SkFont dfFont = SkFont::LEGACY_ExtractFromPaint(dfPaint);
     auto* sdfCache = fStrikeServer->getOrCreateCache(dfPaint, dfFont, this->surfaceProps(),
                                                      SkMatrix::I(), flags, &effects);
 

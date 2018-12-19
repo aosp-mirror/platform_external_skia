@@ -59,18 +59,6 @@ static SkString resource(SkPDFResourceType type, int index) {
     return SkString(buffer, (size_t)(end - buffer));
 }
 
-static void add_subdict(std::vector<sk_sp<SkPDFObject>> resourceList,
-                        SkPDFResourceType type,
-                        SkPDFDict* dst) {
-    if (!resourceList.empty()) {
-        auto resources = sk_make_sp<SkPDFDict>();
-        for (size_t i = 0; i < resourceList.size(); i++) {
-            resources->insertObjRef(resource(type, SkToInt(i)), std::move(resourceList[i]));
-        }
-        dst->insertObject(resource_name(type), std::move(resources));
-    }
-}
-
 static void add_subdict(const std::vector<SkPDFIndirectReference>& resourceList,
                         SkPDFResourceType type,
                         SkPDFDict* dst) {
@@ -83,14 +71,25 @@ static void add_subdict(const std::vector<SkPDFIndirectReference>& resourceList,
     }
 }
 
-sk_sp<SkPDFDict> SkPDFMakeResourceDict(std::vector<sk_sp<SkPDFObject>> graphicStateResources,
-                                       std::vector<sk_sp<SkPDFObject>> shaderResources,
-                                       std::vector<sk_sp<SkPDFObject>> xObjectResources,
+static sk_sp<SkPDFArray> make_proc_set() {
+    auto procSets = sk_make_sp<SkPDFArray>();
+    static const char kProcs[][7] = { "PDF", "Text", "ImageB", "ImageC", "ImageI"};
+    procSets->reserve(SK_ARRAY_COUNT(kProcs));
+    for (const char* proc : kProcs) {
+        procSets->appendName(proc);
+    }
+    return procSets;
+}
+
+sk_sp<SkPDFDict> SkPDFMakeResourceDict(std::vector<SkPDFIndirectReference> graphicStateResources,
+                                       std::vector<SkPDFIndirectReference> shaderResources,
+                                       std::vector<SkPDFIndirectReference> xObjectResources,
                                        std::vector<SkPDFIndirectReference> fontResources) {
     auto dict = sk_make_sp<SkPDFDict>();
-    add_subdict(std::move(graphicStateResources), SkPDFResourceType::kExtGState, dict.get());
-    add_subdict(std::move(shaderResources),       SkPDFResourceType::kPattern,   dict.get());
-    add_subdict(std::move(xObjectResources),      SkPDFResourceType::kXObject,   dict.get());
-    add_subdict(fontResources,                    SkPDFResourceType::kFont,      dict.get());
+    dict->insertObject("ProcSets", make_proc_set());
+    add_subdict(graphicStateResources, SkPDFResourceType::kExtGState, dict.get());
+    add_subdict(shaderResources,       SkPDFResourceType::kPattern,   dict.get());
+    add_subdict(xObjectResources,      SkPDFResourceType::kXObject,   dict.get());
+    add_subdict(fontResources,         SkPDFResourceType::kFont,      dict.get());
     return dict;
 }
