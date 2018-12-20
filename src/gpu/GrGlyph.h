@@ -30,25 +30,34 @@ struct GrGlyph {
 
     typedef uint32_t PackedID;
 
-    GrDrawOpAtlas::AtlasID fID;
-    PackedID              fPackedID;
-    GrMaskFormat          fMaskFormat;
-    GrIRect16             fBounds;
-    SkIPoint16            fAtlasLocation;
-
-    void init(GrGlyph::PackedID packed, const SkIRect& bounds, GrMaskFormat format) {
-        fID = GrDrawOpAtlas::kInvalidAtlasID;
-        fPackedID = packed;
-        fBounds.set(bounds);
-        fMaskFormat = format;
-        fAtlasLocation.set(0, 0);
+    static GrIRect16 SkIRectToGrIRect16(const SkIRect& rect) {
+        return GrIRect16::MakeXYWH(SkTo<int16_t>(rect.x()),
+                                   SkTo<int16_t>(rect.y()),
+                                   SkTo<uint16_t>(rect.width()),
+                                   SkTo<uint16_t>(rect.height()));
     }
+
+    GrGlyph(
+            GrGlyph::PackedID packed, const SkIRect& bounds, GrMaskFormat format, MaskStyle style)
+        : fPackedID{packed}
+        , fMaskFormat{format}
+        , fMaskStyle{style}
+        , fBounds{SkIRectToGrIRect16(bounds)} {}
+
+    const PackedID         fPackedID;
+    const GrMaskFormat     fMaskFormat;
+    const MaskStyle        fMaskStyle;
+    const GrIRect16        fBounds;
+    SkIPoint16             fAtlasLocation{0, 0};
+    GrDrawOpAtlas::AtlasID fID{GrDrawOpAtlas::kInvalidAtlasID};
+
 
     int width() const { return fBounds.width(); }
     int height() const { return fBounds.height(); }
     bool isEmpty() const { return fBounds.isEmpty(); }
     uint16_t glyphID() const { return UnpackID(fPackedID); }
     uint32_t pageIndex() const { return GrDrawOpAtlas::GetPageIndexFromID(fID); }
+    MaskStyle maskStyle() const { return fMaskStyle; }
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -70,10 +79,6 @@ struct GrGlyph {
 
     static inline SkFixed UnpackFixedY(PackedID packed) {
         return ((packed >> 16) & 3) << 14;
-    }
-
-    static inline MaskStyle UnpackMaskStyle(PackedID packed) {
-        return ((packed >> 20) & 1) ? kDistance_MaskStyle : kCoverage_MaskStyle;
     }
 
     static inline uint16_t UnpackID(PackedID packed) {
