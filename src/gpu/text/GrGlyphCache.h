@@ -30,10 +30,10 @@ class GrTextStrike : public SkNVRefCnt<GrTextStrike> {
 public:
     GrTextStrike(const SkDescriptor& fontScalerKey);
 
-    GrGlyph* getGlyph(const SkGlyph& skGlyph, GrGlyph::PackedID packed) {
-        GrGlyph* glyph = fCache.find(packed);
+    GrGlyph* getGlyph(const SkGlyph& skGlyph) {
+        GrGlyph* glyph = fCache.find(skGlyph.getPackedID());
         if (!glyph) {
-            glyph = this->generateGlyph(skGlyph, packed);
+            glyph = this->generateGlyph(skGlyph);
         }
         return glyph;
     }
@@ -42,8 +42,7 @@ public:
     // that the maskformat of the glyph differs from what we expect.  In these cases we will just
     // draw a clear square.
     // skbug:4143 crbug:510931
-    GrGlyph* getGlyph(GrGlyph::PackedID packed,
-                      GrMaskFormat expectedMaskFormat,
+    GrGlyph* getGlyph(SkPackedGlyphID packed,
                       SkGlyphCache* cache) {
         GrGlyph* glyph = fCache.find(packed);
         if (!glyph) {
@@ -51,7 +50,7 @@ public:
             // potentially little benefit(ie, if the glyph is not in our font cache, then its not
             // in the atlas and we're going to be doing a texture upload anyways).
             const SkGlyph& skGlyph = GrToSkGlyph(cache, packed);
-            glyph = this->generateGlyph(skGlyph, packed);
+            glyph = this->generateGlyph(skGlyph);
         }
         return glyph;
     }
@@ -82,20 +81,18 @@ public:
     static uint32_t Hash(const SkDescriptor& desc) { return desc.getChecksum(); }
 
 private:
-    SkTDynamicHash<GrGlyph, GrGlyph::PackedID> fCache;
+    SkTDynamicHash<GrGlyph, SkPackedGlyphID> fCache;
     SkAutoDescriptor fFontScalerKey;
     SkArenaAlloc fAlloc{512};
 
     int fAtlasedGlyphs{0};
     bool fIsAbandoned{false};
 
-    static const SkGlyph& GrToSkGlyph(SkGlyphCache* cache, GrGlyph::PackedID id) {
-        return cache->getGlyphIDMetrics(GrGlyph::UnpackID(id),
-                                        GrGlyph::UnpackFixedX(id),
-                                        GrGlyph::UnpackFixedY(id));
+    static const SkGlyph& GrToSkGlyph(SkGlyphCache* cache, SkPackedGlyphID id) {
+        return cache->getGlyphIDMetrics(id.code(), id.getSubXFixed(), id.getSubYFixed());
     }
 
-    GrGlyph* generateGlyph(const SkGlyph&, GrGlyph::PackedID);
+    GrGlyph* generateGlyph(const SkGlyph&);
 
     friend class GrGlyphCache;
 };
