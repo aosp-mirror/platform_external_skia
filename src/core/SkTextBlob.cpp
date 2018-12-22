@@ -696,6 +696,10 @@ int SkTextBlob::getIntercepts(const SkScalar bounds[2], SkScalar intervals[],
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 void SkTextBlobPriv::Flatten(const SkTextBlob& blob, SkWriteBuffer& buffer) {
+    // seems like we could skip this, and just recompute bounds in unflatten, but
+    // some cc_unittests fail if we remove this...
+    buffer.writeRect(blob.bounds());
+
     SkTextBlobRunIterator it(&blob);
     while (!it.done()) {
         SkASSERT(it.glyphCount() > 0);
@@ -734,11 +738,8 @@ void SkTextBlobPriv::Flatten(const SkTextBlob& blob, SkWriteBuffer& buffer) {
 }
 
 sk_sp<SkTextBlob> SkTextBlobPriv::MakeFromBuffer(SkReadBuffer& reader) {
-    if (reader.isVersionLT(SkReadBuffer::kSerializeFonts_Version)) {
-        SkRect bounds;
-        reader.readRect(&bounds);
-        // ignored
-    }
+    SkRect bounds;
+    reader.readRect(&bounds);
 
     SkTextBlobBuilder blobBuilder;
     SkSafeMath safe;
@@ -789,17 +790,17 @@ sk_sp<SkTextBlob> SkTextBlobPriv::MakeFromBuffer(SkReadBuffer& reader) {
         switch (pos) {
             case SkTextBlob::kDefault_Positioning:
                 buf = &blobBuilder.allocRunText(font, glyphCount, offset.x(), offset.y(),
-                                                textSize, SkString(), nullptr);
+                                                textSize, SkString(), &bounds);
                 break;
             case SkTextBlob::kHorizontal_Positioning:
                 buf = &blobBuilder.allocRunTextPosH(font, glyphCount, offset.y(),
-                                                    textSize, SkString(), nullptr);
+                                                    textSize, SkString(), &bounds);
                 break;
             case SkTextBlob::kFull_Positioning:
-                buf = &blobBuilder.allocRunTextPos(font, glyphCount, textSize, SkString(), nullptr);
+                buf = &blobBuilder.allocRunTextPos(font, glyphCount, textSize, SkString(), &bounds);
                 break;
             case SkTextBlob::kRSXform_Positioning:
-                buf = &blobBuilder.allocRunRSXform(font, glyphCount, textSize, SkString(), nullptr);
+                buf = &blobBuilder.allocRunRSXform(font, glyphCount, textSize, SkString(), &bounds);
                 break;
         }
 
