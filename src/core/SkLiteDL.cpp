@@ -8,6 +8,7 @@
 #include "SkLiteDL.h"
 #include <algorithm>
 #include "SkCanvas.h"
+#include "SkCanvasPriv.h"
 #include "SkData.h"
 #include "SkDrawShadowInfo.h"
 #include "SkImage.h"
@@ -48,13 +49,13 @@ static const D* pod(const T* op, size_t offset = 0) {
 
 namespace {
 #define TYPES(M)                                                                       \
-    M(Flush) M(Save) M(Restore) M(SaveLayer)                                           \
+    M(Flush) M(Save) M(Restore) M(SaveLayer) M(SaveBehind)                             \
     M(Concat) M(SetMatrix) M(Translate)                                                \
     M(ClipPath) M(ClipRect) M(ClipRRect) M(ClipRegion)                                 \
     M(DrawPaint) M(DrawPath) M(DrawRect) M(DrawRegion) M(DrawOval) M(DrawArc)          \
     M(DrawRRect) M(DrawDRRect) M(DrawAnnotation) M(DrawDrawable) M(DrawPicture)        \
     M(DrawImage) M(DrawImageNine) M(DrawImageRect) M(DrawImageLattice) M(DrawImageSet) \
-    M(DrawTextRSXform) M(DrawTextBlob)                                                 \
+    M(DrawTextBlob)                                                                    \
     M(DrawPatch) M(DrawPoints) M(DrawVertices) M(DrawAtlas) M(DrawShadowRec)
 
 #define M(T) T,
@@ -103,7 +104,16 @@ namespace {
                            clipMatrix.isIdentity() ? nullptr : &clipMatrix, flags });
         }
     };
-
+    struct SaveBehind final : Op {
+        static const auto kType = Type::SaveBehind;
+        SaveBehind(const SkRect* subset) {
+            if (subset) { this->subset = *subset; }
+        }
+        SkRect  subset = kUnset;
+        void draw(SkCanvas* c, const SkMatrix&) const {
+            SkCanvasPriv::SaveBehind(c, maybe_unset(subset));
+        }
+    };
     struct Concat final : Op {
         static const auto kType = Type::Concat;
         Concat(const SkMatrix& matrix) : matrix(matrix) {}
@@ -340,25 +350,6 @@ namespace {
             c->experimental_DrawImageSetV1(set.get(), count, quality, xfermode);
         }
     };
-    struct DrawTextRSXform final : Op {
-        static const auto kType = Type::DrawTextRSXform;
-        DrawTextRSXform(size_t bytes, int xforms, const SkRect* cull, const SkPaint& paint)
-            : bytes(bytes), xforms(xforms), paint(paint) {
-            if (cull) { this->cull = *cull; }
-        }
-        size_t  bytes;
-        int     xforms;
-        SkRect  cull = kUnset;
-        SkPaint paint;
-        void draw(SkCanvas* c, const SkMatrix&) const {
-            // For alignment, the SkRSXforms are first in the pod section, followed by the text.
-            c->drawTextRSXform(pod<void>(this,xforms*sizeof(SkRSXform)),
-                               bytes,
-                               pod<SkRSXform>(this),
-                               maybe_unset(cull),
-                               paint);
-        }
-    };
     struct DrawTextBlob final : Op {
         static const auto kType = Type::DrawTextBlob;
         DrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y, const SkPaint& paint)
@@ -498,6 +489,9 @@ void SkLiteDL::saveLayer(const SkRect* bounds, const SkPaint* paint,
                          const SkMatrix* clipMatrix, SkCanvas::SaveLayerFlags flags) {
     this->push<SaveLayer>(0, bounds, paint, backdrop, clipMask, clipMatrix, flags);
 }
+void SkLiteDL::saveBehind(const SkRect* subset) {
+    this->push<SaveBehind>(0, subset);
+}
 
 void SkLiteDL::   concat(const SkMatrix& matrix)   { this->push   <Concat>(0, matrix); }
 void SkLiteDL::setMatrix(const SkMatrix& matrix)   { this->push<SetMatrix>(0, matrix); }
@@ -585,12 +579,6 @@ void SkLiteDL::drawImageSet(const SkCanvas::ImageSetEntry set[], int count,
     this->push<DrawImageSet>(0, set, count, filterQuality, mode);
 }
 
-void SkLiteDL::drawTextRSXform(const void* text, size_t bytes,
-                               const SkRSXform xforms[], const SkRect* cull, const SkPaint& paint) {
-    int n = SkFont::LEGACY_ExtractFromPaint(paint).countText(text, bytes, paint.getTextEncoding());
-    void* pod = this->push<DrawTextRSXform>(bytes+n*sizeof(SkRSXform), bytes, n, cull, paint);
-    copy_v(pod, xforms,n, (const char*)text,bytes);
-}
 void SkLiteDL::drawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y, const SkPaint& paint) {
     this->push<DrawTextBlob>(0, blob, x,y, paint);
 }

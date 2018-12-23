@@ -18749,11 +18749,6 @@
           "name": "infra/tools/luci/git-credential-luci/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:e1abc57be62d198b5c2f487bfb2fa2d2eb0e867c"
-        },
-        {
-          "name": "skia/bots/go",
-          "path": "go",
-          "version": "version:6"
         }
       ],
       "command": [
@@ -18880,11 +18875,6 @@
           "name": "infra/tools/luci/git-credential-luci/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:e1abc57be62d198b5c2f487bfb2fa2d2eb0e867c"
-        },
-        {
-          "name": "skia/bots/go",
-          "path": "go",
-          "version": "version:6"
         }
       ],
       "command": [
@@ -19003,11 +18993,6 @@
           "name": "infra/tools/luci/git-credential-luci/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:e1abc57be62d198b5c2f487bfb2fa2d2eb0e867c"
-        },
-        {
-          "name": "skia/bots/go",
-          "path": "go",
-          "version": "version:6"
         }
       ],
       "command": [
@@ -19054,7 +19039,8 @@
       ],
       "dependencies": [
         "Housekeeper-PerCommit-BundleRecipes",
-        "Build-Debian9-GCC-x86_64-Release"
+        "Build-Debian9-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-IsolateGoDeps"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -19086,6 +19072,10 @@
         {
           "name": "vpython",
           "path": "cache/vpython"
+        },
+        {
+          "name": "go_cache",
+          "path": "cache/go_cache"
         }
       ],
       "cipd_packages": [
@@ -19198,6 +19188,10 @@
         {
           "name": "vpython",
           "path": "cache/vpython"
+        },
+        {
+          "name": "go_cache",
+          "path": "cache/go_cache"
         }
       ],
       "cipd_packages": [
@@ -19479,11 +19473,6 @@
           "name": "infra/tools/luci/git-credential-luci/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:e1abc57be62d198b5c2f487bfb2fa2d2eb0e867c"
-        },
-        {
-          "name": "skia/bots/go",
-          "path": "go",
-          "version": "version:6"
         }
       ],
       "command": [
@@ -19597,11 +19586,6 @@
           "name": "infra/tools/luci/git-credential-luci/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:e1abc57be62d198b5c2f487bfb2fa2d2eb0e867c"
-        },
-        {
-          "name": "skia/bots/go",
-          "path": "go",
-          "version": "version:6"
         }
       ],
       "command": [
@@ -19648,7 +19632,8 @@
       ],
       "dependencies": [
         "Housekeeper-PerCommit-BundleRecipes",
-        "Build-Debian9-GCC-x86_64-Release"
+        "Build-Debian9-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-IsolateGoDeps"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -19833,6 +19818,10 @@
         {
           "name": "work",
           "path": "cache/work"
+        },
+        {
+          "name": "go_cache",
+          "path": "cache/go_cache"
         }
       ],
       "cipd_packages": [
@@ -19971,7 +19960,7 @@
         {
           "name": "skia/bots/go_deps",
           "path": "go_deps",
-          "version": "version:96"
+          "version": "version:101"
         }
       ],
       "command": [
@@ -20109,6 +20098,10 @@
         {
           "name": "vpython",
           "path": "cache/vpython"
+        },
+        {
+          "name": "go_cache",
+          "path": "cache/go_cache"
         }
       ],
       "cipd_packages": [

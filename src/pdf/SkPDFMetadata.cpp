@@ -126,9 +126,9 @@ static const struct {
 };
 }  // namespace
 
-sk_sp<SkPDFObject> SkPDFMetadata::MakeDocumentInformationDict(
+std::unique_ptr<SkPDFObject> SkPDFMetadata::MakeDocumentInformationDict(
         const SkPDF::Metadata& metadata) {
-    auto dict = sk_make_sp<SkPDFDict>();
+    auto dict = SkPDFMakeDict();
     for (const auto keyValuePtr : gMetadataKeys) {
         const SkString& value = metadata.*(keyValuePtr.valuePtr);
         if (value.size() > 0) {
@@ -182,11 +182,11 @@ SkUUID SkPDFMetadata::CreateUUID(const SkPDF::Metadata& metadata) {
     return uuid;
 }
 
-sk_sp<SkPDFObject> SkPDFMetadata::MakePdfId(const SkUUID& doc,
+std::unique_ptr<SkPDFObject> SkPDFMetadata::MakePdfId(const SkUUID& doc,
                                             const SkUUID& instance) {
     // /ID [ <81b14aafa313db63dbd6f981e49f94f4>
     //       <81b14aafa313db63dbd6f981e49f94f4> ]
-    auto array = sk_make_sp<SkPDFArray>();
+    auto array = SkPDFMakeArray();
     static_assert(sizeof(SkUUID) == 16, "uuid_size");
     array->appendString(
             SkString(reinterpret_cast<const char*>(&doc), sizeof(SkUUID)));
@@ -303,10 +303,11 @@ const SkString escape_xml(const SkString& input,
     return output;
 }
 
-sk_sp<SkPDFObject> SkPDFMetadata::MakeXMPObject(
+SkPDFIndirectReference SkPDFMetadata::MakeXMPObject(
         const SkPDF::Metadata& metadata,
         const SkUUID& doc,
-        const SkUUID& instance) {
+        const SkUUID& instance,
+        SkPDFDocument* docPtr) {
     static const char templateString[] =
             "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
             "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"\n"
@@ -391,11 +392,19 @@ sk_sp<SkPDFObject> SkPDFMetadata::MakeXMPObject(
     SkASSERT(0 == count_xml_escape_size(documentID));
     SkString instanceID = uuid_to_string(instance);
     SkASSERT(0 == count_xml_escape_size(instanceID));
-    return sk_make_sp<PDFXMLObject>(SkStringPrintf(
+
+
+    auto value = SkStringPrintf(
             templateString, modificationDate.c_str(), creationDate.c_str(),
             creator.c_str(), title.c_str(), subject.c_str(), author.c_str(),
             keywords1.c_str(), documentID.c_str(), instanceID.c_str(),
-            producer.c_str(), keywords2.c_str()));
+            producer.c_str(), keywords2.c_str());
+
+    std::unique_ptr<SkPDFDict> dict = SkPDFMakeDict("Metadata");
+    dict->insertName("Subtype", "XML");
+    return SkPDFStreamOut(std::move(dict),
+                          SkMemoryStream::MakeCopy(value.c_str(), value.size()),
+                          docPtr, false);
 }
 
 #undef SKPDF_CUSTOM_PRODUCER_KEY

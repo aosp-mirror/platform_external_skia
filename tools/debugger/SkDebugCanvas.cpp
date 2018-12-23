@@ -411,11 +411,6 @@ void SkDebugCanvas::onDrawDRRect(const SkRRect& outer, const SkRRect& inner,
     this->addDrawCommand(new SkDrawDRRectCommand(outer, inner, paint));
 }
 
-void SkDebugCanvas::onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
-                                      const SkRect* cull, const SkPaint& paint) {
-    this->addDrawCommand(new SkDrawTextRSXformCommand(text, byteLength, xform, cull, paint));
-}
-
 void SkDebugCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                    const SkPaint& paint) {
     this->addDrawCommand(new SkDrawTextBlobCommand(sk_ref_sp(const_cast<SkTextBlob*>(blob)),
@@ -465,6 +460,11 @@ SkCanvas::SaveLayerStrategy SkDebugCanvas::getSaveLayerStrategy(const SaveLayerR
     (void)this->INHERITED::getSaveLayerStrategy(rec);
     // No need for a full layer.
     return kNoLayer_SaveLayerStrategy;
+}
+
+bool SkDebugCanvas::onDoSaveBehind(const SkRect* subset) {
+    // TODO
+    return false;
 }
 
 void SkDebugCanvas::didSetMatrix(const SkMatrix& matrix) {

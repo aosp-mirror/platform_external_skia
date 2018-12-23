@@ -10,6 +10,7 @@
 #include "SkCanvas.h"
 #include "SkColorData.h"
 #include "SkColorPriv.h"
+#include "SkFontPriv.h"
 #include "SkFloatingPoint.h"
 #include "SkImage.h"
 #include "SkMatrix.h"
@@ -136,21 +137,41 @@ SkBitmap create_string_bitmap(int w, int h, SkColor c, int x, int y,
 }
 
 void add_to_text_blob_w_len(SkTextBlobBuilder* builder, const char* text, size_t len,
-                            const SkPaint& paint, SkScalar x, SkScalar y) {
-    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
-    SkTDArray<uint16_t> glyphs;
-
-    glyphs.append(font.countText(text, len, paint.getTextEncoding()));
-    font.textToGlyphs(text, len, paint.getTextEncoding(), glyphs.begin(), glyphs.count());
-
-    const SkTextBlobBuilder::RunBuffer& run = builder->allocRun(font, glyphs.count(), x, y,
-                                                                nullptr);
-    memcpy(run.glyphs, glyphs.begin(), glyphs.count() * sizeof(uint16_t));
+                            SkTextEncoding encoding, const SkFont& font, SkScalar x, SkScalar y) {
+    int count = font.countText(text, len, encoding);
+    auto run = builder->allocRun(font, count, x, y);
+    font.textToGlyphs(text, len, encoding, run.glyphs, count);
 }
 
-void add_to_text_blob(SkTextBlobBuilder* builder, const char* text,
-                      const SkPaint& origPaint, SkScalar x, SkScalar y) {
-    add_to_text_blob_w_len(builder, text, strlen(text), origPaint, x, y);
+void add_to_text_blob(SkTextBlobBuilder* builder, const char* text, const SkFont& font,
+                      SkScalar x, SkScalar y) {
+    add_to_text_blob_w_len(builder, text, strlen(text), kUTF8_SkTextEncoding, font, x, y);
+}
+
+void get_text_path(const SkFont& font, const void* text, size_t length, SkTextEncoding encoding,
+                   SkPath* dst, const SkPoint pos[]) {
+    SkAutoToGlyphs atg(font, text, length, encoding);
+    const int count = atg.count();
+    SkAutoTArray<SkPoint> computedPos;
+    if (pos == nullptr) {
+        computedPos.reset(count);
+        font.getPos(atg.glyphs(), count, &computedPos[0]);
+        pos = computedPos.get();
+    }
+
+    struct Rec {
+        SkPath* fDst;
+        const SkPoint* fPos;
+    } rec = { dst, pos };
+    font.getPaths(atg.glyphs(), atg.count(), [](const SkPath* src, const SkMatrix& mx, void* ctx) {
+        Rec* rec = (Rec*)ctx;
+        if (src) {
+            SkMatrix tmp(mx);
+            tmp.postTranslate(rec->fPos->fX, rec->fPos->fY);
+            rec->fDst->addPath(*src, tmp);
+        }
+        rec->fPos += 1;
+    }, &rec);
 }
 
 SkPath make_star(const SkRect& bounds, int numPts, int step) {

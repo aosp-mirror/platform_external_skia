@@ -326,18 +326,32 @@ bool SkBaseDevice::peekPixels(SkPixmap* pmap) {
 
 #include "SkUtils.h"
 
-void SkBaseDevice::drawGlyphRunRSXform(
-        SkGlyphRun* run, const SkRSXform* xform, const SkPaint& paint) {
+void SkBaseDevice::drawGlyphRunRSXform(const SkFont& font, const SkGlyphID glyphs[],
+                                       const SkRSXform xform[], int count, SkPoint origin,
+                                       const SkPaint& paint) {
     const SkMatrix originalCTM = this->ctm();
-    if (!originalCTM.isFinite() || !SkScalarIsFinite(run->font().getSize()) ||
-        !SkScalarIsFinite(run->font().getScaleX()) ||
-        !SkScalarIsFinite(run->font().getSkewX())) {
+    if (!originalCTM.isFinite() || !SkScalarIsFinite(font.getSize()) ||
+        !SkScalarIsFinite(font.getScaleX()) ||
+        !SkScalarIsFinite(font.getSkewX())) {
         return;
     }
 
-    auto perGlyph = [this, &xform, &originalCTM, &paint] (const SkGlyphRun& glyphRun) {
+    SkPoint sharedPos{0, 0};    // we're at the origin
+    SkGlyphID glyphID;
+    SkGlyphRun glyphRun{
+        font,
+        SkSpan<const SkPoint>{&sharedPos, 1},
+        SkSpan<const SkGlyphID>{&glyphID, 1},
+        SkSpan<const char>{},
+        SkSpan<const uint32_t>{}
+    };
+
+    for (int i = 0; i < count; i++) {
+        glyphID = glyphs[i];
+        // now "glyphRun" is pointing at the current glyphID
+
         SkMatrix ctm;
-        ctm.setRSXform(*xform++);
+        ctm.setRSXform(xform[i]).postTranslate(origin.fX, origin.fY);
 
         // We want to rotate each glyph by the rsxform, but we don't want to rotate "space"
         // (i.e. the shader that cares about the ctm) so we have to undo our little ctm trick
@@ -357,14 +371,17 @@ void SkBaseDevice::drawGlyphRunRSXform(
         this->setCTM(ctm);
 
         this->drawGlyphRunList(SkGlyphRunList{glyphRun, transformingPaint});
-    };
-    run->eachGlyphToGlyphRun(perGlyph);
+    }
     this->setCTM(originalCTM);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
 sk_sp<SkSurface> SkBaseDevice::makeSurface(SkImageInfo const&, SkSurfaceProps const&) {
+    return nullptr;
+}
+
+sk_sp<SkSpecialImage> SkBaseDevice::snapBackImage(const SkIRect&) {
     return nullptr;
 }
 

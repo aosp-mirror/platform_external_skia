@@ -100,6 +100,11 @@ SkCanvas::SaveLayerStrategy SkLuaCanvas::getSaveLayerStrategy(const SaveLayerRec
     return kNoLayer_SaveLayerStrategy;
 }
 
+bool SkLuaCanvas::onDoSaveBehind(const SkRect*) {
+    // TODO
+    return false;
+}
+
 void SkLuaCanvas::willRestore() {
     AUTO_LUA("restore");
     this->INHERITED::willRestore();
@@ -252,14 +257,6 @@ void SkLuaCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const
     if (paint) {
         lua.pushPaint(*paint, "paint");
     }
-}
-
-void SkLuaCanvas::onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
-                                    const SkRect* cull, const SkPaint& paint) {
-    AUTO_LUA("drawTextRSXform");
-    lua.pushEncodedText(paint.getTextEncoding(), text, byteLength);
-    // TODO: export other params
-    lua.pushPaint(paint, "paint");
 }
 
 void SkLuaCanvas::onDrawTextBlob(const SkTextBlob *blob, SkScalar x, SkScalar y,

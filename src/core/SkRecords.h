@@ -43,6 +43,7 @@ namespace SkRecords {
     M(Restore)                                                      \
     M(Save)                                                         \
     M(SaveLayer)                                                    \
+    M(SaveBehind)                                                   \
     M(SetMatrix)                                                    \
     M(Translate)                                                    \
     M(Concat)                                                       \
@@ -64,7 +65,6 @@ namespace SkRecords {
     M(DrawPatch)                                                    \
     M(DrawPicture)                                                  \
     M(DrawPoints)                                                   \
-    M(DrawTextRSXform)                                              \
     M(DrawRRect)                                                    \
     M(DrawRect)                                                     \
     M(DrawRegion)                                                   \
@@ -176,6 +176,9 @@ RECORD(SaveLayer, kHasPaint_Tag,
        sk_sp<const SkImage> clipMask;
        Optional<SkMatrix> clipMatrix;
        SkCanvas::SaveLayerFlags saveLayerFlags);
+
+RECORD(SaveBehind, 0,
+       Optional<SkRect> subset);
 
 RECORD(SetMatrix, 0,
         TypedMatrix matrix);
@@ -291,12 +294,6 @@ RECORD(DrawTextBlob, kDraw_Tag|kHasText_Tag|kHasPaint_Tag,
         sk_sp<const SkTextBlob> blob;
         SkScalar x;
         SkScalar y);
-RECORD(DrawTextRSXform, kDraw_Tag|kHasText_Tag|kHasPaint_Tag,
-        SkPaint paint;
-        PODArray<char> text;
-        size_t byteLength;
-        PODArray<SkRSXform> xforms;
-        Optional<SkRect> cull);
 RECORD(DrawPatch, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint;
         PODArray<SkPoint> cubics;

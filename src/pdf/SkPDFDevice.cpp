@@ -646,8 +646,8 @@ void SkPDFDevice::drawPoints(SkCanvas::PointMode mode,
     }
 }
 
-static sk_sp<SkPDFDict> create_link_annotation(const SkRect& translatedRect) {
-    auto annotation = sk_make_sp<SkPDFDict>("Annot");
+static std::unique_ptr<SkPDFDict> create_link_annotation(const SkRect& translatedRect) {
+    auto annotation = SkPDFMakeDict("Annot");
     annotation->insertName("Subtype", "Link");
     annotation->insertInt("F", 4);  // required by ISO 19005
     // Border: 0 = Horizontal corner radius.
@@ -662,20 +662,20 @@ static sk_sp<SkPDFDict> create_link_annotation(const SkRect& translatedRect) {
     return annotation;
 }
 
-static sk_sp<SkPDFDict> create_link_to_url(const SkData* urlData, const SkRect& r) {
-    sk_sp<SkPDFDict> annotation = create_link_annotation(r);
+static std::unique_ptr<SkPDFDict> create_link_to_url(const SkData* urlData, const SkRect& r) {
+    std::unique_ptr<SkPDFDict> annotation = create_link_annotation(r);
     SkString url(static_cast<const char *>(urlData->data()),
                  urlData->size() - 1);
-    auto action = sk_make_sp<SkPDFDict>("Action");
+    auto action = SkPDFMakeDict("Action");
     action->insertName("S", "URI");
     action->insertString("URI", url);
     annotation->insertObject("A", std::move(action));
     return annotation;
 }
 
-static sk_sp<SkPDFDict> create_link_named_dest(const SkData* nameData,
-                                               const SkRect& r) {
-    sk_sp<SkPDFDict> annotation = create_link_annotation(r);
+static std::unique_ptr<SkPDFDict> create_link_named_dest(const SkData* nameData,
+                                                         const SkRect& r) {
+    std::unique_ptr<SkPDFDict> annotation = create_link_annotation(r);
     SkString name(static_cast<const char *>(nameData->data()),
                   nameData->size() - 1);
     annotation->insertName("Dest", name);
@@ -784,22 +784,6 @@ void SkPDFDevice::internalDrawPathWithFilter(const SkClipStack& clipStack,
     SkPDFUtils::AppendRectangle(SkRect::Make(dstMaskBounds), content.stream());
     SkPDFUtils::PaintPath(SkPaint::kFill_Style, path.getFillType(), content.stream());
     this->clearMaskOnGraphicState(content.stream());
-}
-
-template <typename T,
-          typename U,
-          typename = typename std::enable_if<std::is_convertible<U*, T*>::value>::type>
-static int find_or_add(std::vector<sk_sp<T>>* vec, sk_sp<U> object) {
-    SkASSERT(vec);
-    SkASSERT(object);
-    for (size_t i = 0; i < vec->size(); ++i) {
-        if ((*vec)[i].get() == object.get()) {
-            return SkToInt(i);
-        }
-    }
-    int index = SkToInt(vec->size());
-    vec->push_back(sk_sp<T>(std::move(object)));
-    return index;
 }
 
 void SkPDFDevice::setGraphicState(SkPDFIndirectReference gs, SkDynamicMemoryWStream* content) {
@@ -1349,7 +1333,7 @@ static std::vector<SkPDFIndirectReference> sort(const SkTHashSet<SkPDFIndirectRe
     return dst;
 }
 
-sk_sp<SkPDFDict> SkPDFDevice::makeResourceDict() {
+std::unique_ptr<SkPDFDict> SkPDFDevice::makeResourceDict() {
     return SkPDFMakeResourceDict(sort(fGraphicStateResources),
                                  sort(fShaderResources),
                                  sort(fXObjectResources),
@@ -1442,13 +1426,13 @@ bool SkPDFDevice::handleInversePath(const SkPath& origPath,
     return true;
 }
 
-sk_sp<SkPDFArray> SkPDFDevice::getAnnotations() {
-    sk_sp<SkPDFArray> array;
+std::unique_ptr<SkPDFArray> SkPDFDevice::getAnnotations() {
+    std::unique_ptr<SkPDFArray> array;
     size_t count = fLinkToURLs.size() + fLinkToDestinations.size();
     if (0 == count) {
         return array;
     }
-    array = sk_make_sp<SkPDFArray>();
+    array = SkPDFMakeArray();
     array->reserve(count);
     for (const RectWithData& rectWithURL : fLinkToURLs) {
         SkRect r;
@@ -1467,7 +1451,7 @@ sk_sp<SkPDFArray> SkPDFDevice::getAnnotations() {
 void SkPDFDevice::appendDestinations(SkPDFDict* dict, SkPDFIndirectReference page) const {
     for (const NamedDestination& dest : fNamedDestinations) {
         SkPoint p = fInitialTransform.mapXY(dest.point.x(), dest.point.y());
-        auto pdfDest = sk_make_sp<SkPDFArray>();
+        auto pdfDest = SkPDFMakeArray();
         pdfDest->reserve(5);
         pdfDest->appendRef(page);
         pdfDest->appendName("XYZ");

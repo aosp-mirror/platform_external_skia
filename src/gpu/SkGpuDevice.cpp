@@ -1238,6 +1238,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial() {
         proxy = GrSurfaceProxy::Copy(fContext.get(),
                                      this->accessRenderTargetContext()->asSurfaceProxy(),
                                      GrMipMapped::kNo,
+                                     SkBackingFit::kApprox,
                                      SkBudgeted::kYes);
         if (!proxy) {
             return nullptr;
@@ -1252,6 +1253,33 @@ sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial() {
                                                kNeedNewImageUniqueID_SpecialImage,
                                                std::move(proxy),
                                                ii.refColorSpace(),
+                                               &this->surfaceProps());
+}
+
+sk_sp<SkSpecialImage> SkGpuDevice::snapBackImage(const SkIRect& subset) {
+    GrRenderTargetContext* rtc = this->accessRenderTargetContext();
+    if (!rtc) {
+        return nullptr;
+    }
+
+    GrContext* ctx = this->context();
+    if (!rtc->asSurfaceProxy()) {
+        return nullptr;
+    }
+
+    auto srcProxy =
+            GrSurfaceProxy::Copy(ctx, rtc->asSurfaceProxy(), rtc->mipMapped(), subset,
+                                 SkBackingFit::kApprox, rtc->asSurfaceProxy()->isBudgeted());
+    if (!srcProxy) {
+        return nullptr;
+    }
+
+    // Note, can't move srcProxy since we also refer to this in the 2nd parameter
+    return SkSpecialImage::MakeDeferredFromGpu(fContext.get(),
+                                               SkIRect::MakeSize(srcProxy->isize()),
+                                               kNeedNewImageUniqueID_SpecialImage,
+                                               srcProxy,
+                                               this->imageInfo().refColorSpace(),
                                                &this->surfaceProps());
 }
 

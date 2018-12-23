@@ -4,7 +4,9 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SkNWayCanvas.h"
+#include "SkCanvasPriv.h"
 
 SkNWayCanvas::SkNWayCanvas(int width, int height) : INHERITED(width, height) {}
 
@@ -45,6 +47,7 @@ public:
         return false;
     }
     SkCanvas* operator->() { return fCanvas; }
+    SkCanvas* get() const { return fCanvas; }
 
 private:
     const SkTDArray<SkCanvas*>& fList;
@@ -70,6 +73,15 @@ SkCanvas::SaveLayerStrategy SkNWayCanvas::getSaveLayerStrategy(const SaveLayerRe
     this->INHERITED::getSaveLayerStrategy(rec);
     // No need for a layer.
     return kNoLayer_SaveLayerStrategy;
+}
+
+bool SkNWayCanvas::onDoSaveBehind(const SkRect* bounds) {
+    Iter iter(fList);
+    while (iter.next()) {
+        SkCanvasPriv::SaveBehind(iter.get(), bounds);
+    }
+    this->INHERITED::onDoSaveBehind(bounds);
+    return false;
 }
 
 void SkNWayCanvas::willRestore() {
@@ -262,14 +274,6 @@ void SkNWayCanvas::onDrawImageSet(const SkCanvas::ImageSetEntry set[], int count
     Iter iter(fList);
     while (iter.next()) {
         iter->experimental_DrawImageSetV1(set, count, filterQuality, mode);
-    }
-}
-
-void SkNWayCanvas::onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
-                                     const SkRect* cull, const SkPaint& paint) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->drawTextRSXform(text, byteLength, xform, cull, paint);
     }
 }
 

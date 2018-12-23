@@ -113,9 +113,8 @@ public:
 
 protected:
     void willSave() override;
-
     SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec &) override;
-
+    bool onDoSaveBehind(const SkRect*) override;
     void willRestore() override;
 
     void didConcat(const SkMatrix &) override;
@@ -124,8 +123,6 @@ protected:
 
     void onDrawAnnotation(const SkRect&, const char[], SkData*) override;
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override;
-    void onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform[], const SkRect*,
-                           const SkPaint&) override;
     void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                         const SkPaint& paint) override;
 

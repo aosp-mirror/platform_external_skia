@@ -75,6 +75,26 @@ SkCanvas::SaveLayerStrategy SkPictureRecord::getSaveLayerStrategy(const SaveLaye
     return kNoLayer_SaveLayerStrategy;
 }
 
+bool SkPictureRecord::onDoSaveBehind(const SkRect* subset) {
+    fRestoreOffsetStack.push_back(-(int32_t)fWriter.bytesWritten());
+
+    size_t size = sizeof(kUInt32Size) + sizeof(uint32_t); // op + flags
+    uint32_t flags = 0;
+    if (subset) {
+        flags |= SAVEBEHIND_HAS_SUBSET;
+        size += sizeof(*subset);
+    }
+
+    size_t initialOffset = this->addDraw(SAVE_BEHIND, &size);
+    this->addInt(flags);
+    if (subset) {
+        this->addRect(*subset);
+    }
+
+    this->validate(initialOffset, size);
+    return false;
+}
+
 void SkPictureRecord::recordSaveLayer(const SaveLayerRec& rec) {
     // op + flatflags
     size_t size = 2 * kUInt32Size;
@@ -557,30 +577,6 @@ void SkPictureRecord::onDrawImageSet(const SkCanvas::ImageSetEntry set[], int co
         this->addRect(set[i].fDstRect);
         this->addScalar(set[i].fAlpha);
         this->addInt((int)set[i].fAAFlags);
-    }
-    this->validate(initialOffset, size);
-}
-
-void SkPictureRecord::onDrawTextRSXform(const void* text, size_t byteLength,
-                                        const SkRSXform xform[], const SkRect* cull,
-                                        const SkPaint& paint) {
-    const int count = SkFont::LEGACY_ExtractFromPaint(paint).countText(text, byteLength, paint.getTextEncoding());
-    // [op + paint-index + count + flags + length] + [text] + [xform] + cull
-    size_t size = 5 * kUInt32Size + SkAlign4(byteLength) + count * sizeof(SkRSXform);
-    uint32_t flags = 0;
-    if (cull) {
-        flags |= DRAW_TEXT_RSXFORM_HAS_CULL;
-        size += sizeof(SkRect);
-    }
-
-    size_t initialOffset = this->addDraw(DRAW_TEXT_RSXFORM, &size);
-    this->addPaint(paint);
-    this->addInt(count);
-    this->addInt(flags);
-    this->addText(text, byteLength);
-    fWriter.write(xform, count * sizeof(SkRSXform));
-    if (cull) {
-        fWriter.write(cull, sizeof(SkRect));
     }
     this->validate(initialOffset, size);
 }

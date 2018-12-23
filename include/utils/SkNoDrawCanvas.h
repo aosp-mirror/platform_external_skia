@@ -38,13 +38,12 @@ public:
 
 protected:
     SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec& rec) override;
+    bool onDoSaveBehind(const SkRect*) override;
 
     // No-op overrides for aborting rasterization earlier than SkNullBlitter.
     void onDrawAnnotation(const SkRect&, const char[], SkData*) override {}
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override {}
     void onDrawDrawable(SkDrawable*, const SkMatrix*) override {}
-    void onDrawTextRSXform(const void*, size_t, const SkRSXform[], const SkRect*,
-                           const SkPaint&) override {}
     void onDrawTextBlob(const SkTextBlob*, SkScalar, SkScalar, const SkPaint&) override {}
     void onDrawPatch(const SkPoint[12], const SkColor[4], const SkPoint[4], SkBlendMode,
                      const SkPaint&) override {}

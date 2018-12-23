@@ -1638,7 +1638,7 @@ Error PDFSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const 
     metadata.fCreator = "Skia/DM";
     metadata.fRasterDPI = fRasterDpi;
     metadata.fPDFA = fPDFA;
-#if 0
+#if SK_PDF_TEST_EXECUTOR
     std::unique_ptr<SkExecutor> executor = SkExecutor::MakeFIFOThreadPool();
     metadata.fExecutor = executor.get();
 #endif
@@ -1976,7 +1976,7 @@ Error ViaDDL::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString
         for (int replay = 0; replay < fNumReplays; ++replay) {
             if (replay > 0) {
                 // Clear the drawing of the previous replay
-                canvas->clear(SK_ColorWHITE);
+                canvas->clear(SK_ColorTRANSPARENT);
             }
             // First, create all the tiles (including their individual dest surfaces)
             DDLTileHelper tiles(canvas, viewport, fNumDivisions);
