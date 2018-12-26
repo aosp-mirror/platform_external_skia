@@ -1973,7 +1973,6 @@ cc_test {
         "bench/StrokeBench.cpp",
         "bench/SwizzleBench.cpp",
         "bench/TableBench.cpp",
-        "bench/TextBench.cpp",
         "bench/TextBlobBench.cpp",
         "bench/TileBench.cpp",
         "bench/TileImageFilterBench.cpp",
