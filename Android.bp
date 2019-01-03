@@ -813,6 +813,7 @@ cc_library_static {
           "src/gpu/vk/GrVkResourceProvider.cpp",
           "src/gpu/vk/GrVkSampler.cpp",
           "src/gpu/vk/GrVkSamplerYcbcrConversion.cpp",
+          "src/gpu/vk/GrVkSecondaryCBDrawContext.cpp",
           "src/gpu/vk/GrVkSemaphore.cpp",
           "src/gpu/vk/GrVkStencilAttachment.cpp",
           "src/gpu/vk/GrVkTexture.cpp",
