@@ -9,6 +9,7 @@
 
 #include "SkFont.h"
 #include "SkMatrix.h"
+#include "SkMatrix44.h"
 #include "SkPath.h"
 #include "SkRRect.h"
 #include "SkSGColor.h"
@@ -34,6 +35,8 @@ namespace skottie {
 RRectAdapter::RRectAdapter(sk_sp<sksg::RRect> wrapped_node)
     : fRRectNode(std::move(wrapped_node)) {}
 
+RRectAdapter::~RRectAdapter() = default;
+
 void RRectAdapter::apply() {
     // BM "position" == "center position"
     auto rr = SkRRect::MakeRectXY(SkRect::MakeXYWH(fPosition.x() - fSize.width() / 2,
@@ -44,10 +47,12 @@ void RRectAdapter::apply() {
    fRRectNode->setRRect(rr);
 }
 
-TransformAdapter::TransformAdapter(sk_sp<sksg::Matrix> matrix)
+TransformAdapter2D::TransformAdapter2D(sk_sp<sksg::Matrix> matrix)
     : fMatrixNode(std::move(matrix)) {}
 
-SkMatrix TransformAdapter::totalMatrix() const {
+TransformAdapter2D::~TransformAdapter2D() = default;
+
+SkMatrix TransformAdapter2D::totalMatrix() const {
     SkMatrix t = SkMatrix::MakeTrans(-fAnchorPoint.x(), -fAnchorPoint.y());
 
     t.postScale(fScale.x() / 100, fScale.y() / 100); // 100% based
@@ -58,13 +63,50 @@ SkMatrix TransformAdapter::totalMatrix() const {
     return t;
 }
 
-void TransformAdapter::apply() {
+void TransformAdapter2D::apply() {
+    fMatrixNode->setMatrix(this->totalMatrix());
+}
+
+TransformAdapter3D::Vec3::Vec3(const VectorValue& v) {
+    fX = v.size() > 0 ? v[0] : 0;
+    fY = v.size() > 1 ? v[1] : 0;
+    fZ = v.size() > 2 ? v[2] : 0;
+}
+
+TransformAdapter3D::TransformAdapter3D(sk_sp<sksg::Matrix> matrix)
+    : fMatrixNode(std::move(matrix)) {}
+
+TransformAdapter3D::~TransformAdapter3D() = default;
+
+SkMatrix TransformAdapter3D::totalMatrix() const {
+    SkMatrix44 t;
+
+    t.setTranslate(-fAnchorPoint.fX, -fAnchorPoint.fY, -fAnchorPoint.fZ);
+    t.postScale(fScale.fX / 100, fScale.fY / 100, fScale.fZ / 100);
+
+    // TODO: SkMatrix44:postRotate()?
+    SkMatrix44 r;
+    r.setRotateDegreesAbout(1, 0, 0, fRotation.fX);
+    t.postConcat(r);
+    r.setRotateDegreesAbout(0, 1, 0, fRotation.fY);
+    t.postConcat(r);
+    r.setRotateDegreesAbout(0, 0, 1, fRotation.fZ);
+    t.postConcat(r);
+
+    t.postTranslate(fPosition.fX, fPosition.fY, fPosition.fZ);
+
+    return t;
+}
+
+void TransformAdapter3D::apply() {
     fMatrixNode->setMatrix(this->totalMatrix());
 }
 
 PolyStarAdapter::PolyStarAdapter(sk_sp<sksg::Path> wrapped_node, Type t)
     : fPathNode(std::move(wrapped_node))
     , fType(t) {}
+
+PolyStarAdapter::~PolyStarAdapter() = default;
 
 void PolyStarAdapter::apply() {
     static constexpr int kMaxPointCount = 100000;
@@ -152,6 +194,8 @@ TrimEffectAdapter::TrimEffectAdapter(sk_sp<sksg::TrimEffect> trimEffect)
     SkASSERT(fTrimEffect);
 }
 
+TrimEffectAdapter::~TrimEffectAdapter() = default;
+
 void TrimEffectAdapter::apply() {
     // BM semantics: start/end are percentages, offset is "degrees" (?!).
     const auto  start = fStart  / 100,
@@ -206,6 +250,8 @@ TextAdapter::TextAdapter(sk_sp<sksg::Group> root)
     fStrokeColor->setAntiAlias(true);
     fStrokeColor->setStyle(SkPaint::kStroke_Style);
 }
+
+TextAdapter::~TextAdapter() = default;
 
 sk_sp<SkTextBlob> TextAdapter::makeBlob() const {
     SkFont font(fText.fTypeface, fText.fTextSize);

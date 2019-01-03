@@ -44,9 +44,10 @@ namespace skottie {
     p_type f##p_name = p_default;                   \
   public:
 
-class RRectAdapter final : public SkRefCnt {
+class RRectAdapter final : public SkNVRefCnt<RRectAdapter> {
 public:
     explicit RRectAdapter(sk_sp<sksg::RRect>);
+    ~RRectAdapter();
 
     ADAPTER_PROPERTY(Position, SkPoint , SkPoint::Make(0, 0))
     ADAPTER_PROPERTY(Size    , SkSize  ,  SkSize::Make(0, 0))
@@ -56,17 +57,16 @@ private:
     void apply();
 
     sk_sp<sksg::RRect> fRRectNode;
-
-    using INHERITED = SkRefCnt;
 };
 
-class PolyStarAdapter final : public SkRefCnt {
+class PolyStarAdapter final : public SkNVRefCnt<PolyStarAdapter> {
 public:
     enum class Type {
         kStar, kPoly,
     };
 
     PolyStarAdapter(sk_sp<sksg::Path>, Type);
+    ~PolyStarAdapter();
 
     ADAPTER_PROPERTY(Position      , SkPoint , SkPoint::Make(0, 0))
     ADAPTER_PROPERTY(PointCount    , SkScalar, 0)
@@ -81,13 +81,12 @@ private:
 
     sk_sp<sksg::Path> fPathNode;
     Type              fType;
-
-    using INHERITED = SkRefCnt;
 };
 
-class TransformAdapter final : public SkRefCnt {
+class TransformAdapter2D final : public SkNVRefCnt<TransformAdapter2D> {
 public:
-    explicit TransformAdapter(sk_sp<sksg::Matrix>);
+    explicit TransformAdapter2D(sk_sp<sksg::Matrix>);
+    ~TransformAdapter2D();
 
     ADAPTER_PROPERTY(AnchorPoint, SkPoint , SkPoint::Make(0, 0))
     ADAPTER_PROPERTY(Position   , SkPoint , SkPoint::Make(0, 0))
@@ -102,8 +101,35 @@ private:
     void apply();
 
     sk_sp<sksg::Matrix> fMatrixNode;
+};
 
-    using INHERITED = SkRefCnt;
+class TransformAdapter3D final : public SkNVRefCnt<TransformAdapter3D> {
+public:
+    explicit TransformAdapter3D(sk_sp<sksg::Matrix>);
+    ~TransformAdapter3D();
+
+    struct Vec3 {
+        float fX, fY, fZ;
+
+        explicit Vec3(const VectorValue&);
+
+        bool operator==(const Vec3& other) const {
+            return fX == other.fX && fY == other.fY && fZ == other.fZ;
+        }
+        bool operator!=(const Vec3& other) const { return !(*this == other); }
+    };
+
+    ADAPTER_PROPERTY(AnchorPoint, Vec3, Vec3({  0,   0,   0}))
+    ADAPTER_PROPERTY(Position   , Vec3, Vec3({  0,   0,   0}))
+    ADAPTER_PROPERTY(Rotation   , Vec3, Vec3({  0,   0,   0}))
+    ADAPTER_PROPERTY(Scale      , Vec3, Vec3({100, 100, 100}))
+
+    SkMatrix totalMatrix() const;
+
+private:
+    void apply();
+
+    sk_sp<sksg::Matrix> fMatrixNode;
 };
 
 class GradientAdapter : public SkRefCnt {
@@ -125,8 +151,6 @@ protected:
 
 private:
     void apply();
-
-    using INHERITED = SkRefCnt;
 };
 
 class LinearGradientAdapter final : public GradientAdapter {
@@ -149,9 +173,10 @@ private:
     using INHERITED = GradientAdapter;
 };
 
-class TrimEffectAdapter final : public SkRefCnt {
+class TrimEffectAdapter final : public SkNVRefCnt<TrimEffectAdapter> {
 public:
     explicit TrimEffectAdapter(sk_sp<sksg::TrimEffect>);
+    ~TrimEffectAdapter();
 
     ADAPTER_PROPERTY(Start , SkScalar,   0)
     ADAPTER_PROPERTY(End   , SkScalar, 100)
@@ -161,13 +186,12 @@ private:
     void apply();
 
     sk_sp<sksg::TrimEffect> fTrimEffect;
-
-    using INHERITED = SkRefCnt;
 };
 
-class TextAdapter final : public SkRefCnt {
+class TextAdapter final : public SkNVRefCnt<TextAdapter> {
 public:
     explicit TextAdapter(sk_sp<sksg::Group> root);
+    ~TextAdapter();
 
     ADAPTER_PROPERTY(Text, TextValue, TextValue())
 
@@ -186,8 +210,6 @@ private:
 
     bool                   fHadFill   : 1, //  - state cached from the prev apply()
                            fHadStroke : 1; //  /
-
-    using INHERITED = SkRefCnt;
 };
 
 #undef ADAPTER_PROPERTY
