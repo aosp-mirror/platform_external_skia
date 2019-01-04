@@ -1514,7 +1514,6 @@ cc_test {
         "tests/GrOpListFlushTest.cpp",
         "tests/GrPipelineDynamicStateTest.cpp",
         "tests/GrPorterDuffTest.cpp",
-        "tests/GrQuadListTest.cpp",
         "tests/GrSKSLPrettyPrintTest.cpp",
         "tests/GrShapeTest.cpp",
         "tests/GrSurfaceTest.cpp",
