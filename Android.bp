@@ -165,6 +165,7 @@ cc_library_static {
         "src/core/SkDeferredDisplayList.cpp",
         "src/core/SkDeferredDisplayListRecorder.cpp",
         "src/core/SkDeque.cpp",
+        "src/core/SkDescriptor.cpp",
         "src/core/SkDevice.cpp",
         "src/core/SkDistanceFieldGen.cpp",
         "src/core/SkDocument.cpp",
