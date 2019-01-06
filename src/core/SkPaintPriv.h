@@ -79,6 +79,10 @@ public:
         return paint.getTypeface() ? paint.refTypeface() : SkTypeface::MakeDefault();
     }
 
+    static SkTextEncoding GetEncoding(const SkPaint& paint) {
+        return paint.getTextEncoding();
+    }
+
     /** Serializes SkPaint into a buffer. A companion unflatten() call
     can reconstitute the paint at a later time.
 
@@ -97,6 +101,8 @@ public:
     */
     static bool Unflatten(SkPaint* paint, SkReadBuffer& buffer);
 
+private:
+    static bool Unflatten_PreV68(SkPaint* paint, SkReadBuffer& buffer);
 };
 
 #endif

@@ -1,3 +1,4 @@
+jasmine.DEFAULT_TIMEOUT_INTERVAL = 20000;
 
 describe('PathKit\'s Path Behavior', function() {
     // Note, don't try to print the PathKit object - it can cause Karma/Jasmine to lock up.
@@ -8,7 +9,7 @@ describe('PathKit\'s Path Behavior', function() {
         } else {
             PathKitInit({
                 locateFile: (file) => '/pathkit/'+file,
-            }).then((_PathKit) => {
+            }).ready().then((_PathKit) => {
                 PathKit = _PathKit;
                 resolve();
             });

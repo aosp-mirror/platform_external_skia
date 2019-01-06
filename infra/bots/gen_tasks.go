@@ -30,16 +30,15 @@ import (
 )
 
 const (
-	BUNDLE_RECIPES_NAME         = "Housekeeper-PerCommit-BundleRecipes"
-	ISOLATE_GCLOUD_LINUX_NAME   = "Housekeeper-PerCommit-IsolateGCloudLinux"
-	ISOLATE_GO_DEPS_NAME        = "Housekeeper-PerCommit-IsolateGoDeps"
-	ISOLATE_SKIMAGE_NAME        = "Housekeeper-PerCommit-IsolateSkImage"
-	ISOLATE_SKP_NAME            = "Housekeeper-PerCommit-IsolateSKP"
-	ISOLATE_SVG_NAME            = "Housekeeper-PerCommit-IsolateSVG"
-	ISOLATE_NDK_LINUX_NAME      = "Housekeeper-PerCommit-IsolateAndroidNDKLinux"
-	ISOLATE_SDK_LINUX_NAME      = "Housekeeper-PerCommit-IsolateAndroidSDKLinux"
-	ISOLATE_WIN_TOOLCHAIN_NAME  = "Housekeeper-PerCommit-IsolateWinToolchain"
-	ISOLATE_WIN_VULKAN_SDK_NAME = "Housekeeper-PerCommit-IsolateWinVulkanSDK"
+	BUNDLE_RECIPES_NAME        = "Housekeeper-PerCommit-BundleRecipes"
+	ISOLATE_GCLOUD_LINUX_NAME  = "Housekeeper-PerCommit-IsolateGCloudLinux"
+	ISOLATE_GO_DEPS_NAME       = "Housekeeper-PerCommit-IsolateGoDeps"
+	ISOLATE_SKIMAGE_NAME       = "Housekeeper-PerCommit-IsolateSkImage"
+	ISOLATE_SKP_NAME           = "Housekeeper-PerCommit-IsolateSKP"
+	ISOLATE_SVG_NAME           = "Housekeeper-PerCommit-IsolateSVG"
+	ISOLATE_NDK_LINUX_NAME     = "Housekeeper-PerCommit-IsolateAndroidNDKLinux"
+	ISOLATE_SDK_LINUX_NAME     = "Housekeeper-PerCommit-IsolateAndroidSDKLinux"
+	ISOLATE_WIN_TOOLCHAIN_NAME = "Housekeeper-PerCommit-IsolateWinToolchain"
 
 	DEFAULT_OS_DEBIAN    = "Debian-9.4"
 	DEFAULT_OS_LINUX_GCE = DEFAULT_OS_DEBIAN
@@ -454,7 +453,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			"Ubuntu17":   "Ubuntu-17.04",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
-			"Win10":      "Windows-10-17134.441",
+			"Win10":      "Windows-10-17763.195",
 			"Win2k8":     "Windows-2008ServerR2-SP1",
 			"Win2016":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
@@ -570,6 +569,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
 					"IntelIris540":  "8086:1926-25.20.100.6444",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
+					"IntelIris655":  "8086:3ea5-25.20.100.6444",
 					"RadeonHD7770":  "1002:683d-24.20.13001.1010",
 					"RadeonR9M470X": "1002:6646-24.20.13001.1010",
 					"QuadroP400":    "10de:1cb3-25.21.14.1678",
@@ -731,10 +731,6 @@ var ISOLATE_ASSET_MAPPING = map[string]isolateAssetCfg{
 		cipdPkg: "win_toolchain",
 		path:    "win_toolchain",
 	},
-	ISOLATE_WIN_VULKAN_SDK_NAME: {
-		cipdPkg: "win_vulkan_sdk",
-		path:    "win_vulkan_sdk",
-	},
 }
 
 // isolateCIPDAsset generates a task to isolate the given CIPD asset.
@@ -882,9 +878,6 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 		task.Dependencies = append(task.Dependencies, isolateCIPDAsset(b, ISOLATE_WIN_TOOLCHAIN_NAME))
 		if strings.Contains(name, "Clang") {
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_win"))
-		}
-		if strings.Contains(name, "Vulkan") {
-			task.Dependencies = append(task.Dependencies, isolateCIPDAsset(b, ISOLATE_WIN_VULKAN_SDK_NAME))
 		}
 		if strings.Contains(name, "OpenCL") {
 			task.CipdPackages = append(task.CipdPackages,

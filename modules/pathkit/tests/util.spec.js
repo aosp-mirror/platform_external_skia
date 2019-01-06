@@ -1,5 +1,5 @@
 // Tests for util-related things
-
+jasmine.DEFAULT_TIMEOUT_INTERVAL = 20000;
 describe('PathKit\'s CubicMap Behavior', function() {
     // Note, don't try to print the PathKit object - it can cause Karma/Jasmine to lock up.
     var PathKit = null;
@@ -9,7 +9,7 @@ describe('PathKit\'s CubicMap Behavior', function() {
         } else {
             PathKitInit({
                 locateFile: (file) => '/pathkit/'+file,
-            }).then((_PathKit) => {
+            }).ready().then((_PathKit) => {
                 PathKit = _PathKit;
                 resolve();
             });

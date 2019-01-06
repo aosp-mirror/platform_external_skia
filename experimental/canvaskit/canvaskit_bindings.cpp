@@ -22,8 +22,10 @@
 #include "SkDiscretePathEffect.h"
 #include "SkEncodedImageFormat.h"
 #include "SkFilterQuality.h"
+#include "SkFont.h"
 #include "SkFontMgr.h"
 #include "SkFontMgrPriv.h"
+#include "SkFontTypes.h"
 #include "SkGradientShader.h"
 #include "SkImage.h"
 #include "SkImageInfo.h"
@@ -42,67 +44,36 @@
 #include "SkStrokeRec.h"
 #include "SkSurface.h"
 #include "SkSurfaceProps.h"
+#include "SkTrimPathEffect.h"
 #include "SkTypeface.h"
 #include "SkTypes.h"
-
-#include "SkTrimPathEffect.h"
 #include "SkVertices.h"
-
-#if SK_INCLUDE_SKOTTIE
-#include "Skottie.h"
-#if SK_INCLUDE_MANAGED_SKOTTIE
-#include "SkottieProperty.h"
-#include "SkottieUtils.h"
-#endif // SK_INCLUDE_MANAGED_SKOTTIE
-#endif // SK_INCLUDE_SKOTTIE
 
 #include <iostream>
 #include <string>
 
+#include "WasmAliases.h"
 #include <emscripten.h>
 #include <emscripten/bind.h>
+
 #if SK_SUPPORT_GPU
 #include <GL/gl.h>
 #include <emscripten/html5.h>
 #endif
-
-using namespace emscripten;
-
-// Self-documenting types
-using JSArray = emscripten::val;
-using JSColor = int32_t;
-using JSObject = emscripten::val;
-using JSString = emscripten::val;
-using SkPathOrNull = emscripten::val;
-using Uint8Array = emscripten::val;
 
 // Aliases for less typing
 using BoneIndices = SkVertices::BoneIndices;
 using BoneWeights = SkVertices::BoneWeights;
 using Bone        = SkVertices::Bone;
 
-
 #if SK_SUPPORT_GPU
 // Wraps the WebGL context in an SkSurface and returns it.
 // This function based on the work of
 // https://github.com/Zubnix/skia-wasm-port/, used under the terms of the MIT license.
-sk_sp<SkSurface> getWebGLSurface(std::string id, int width, int height) {
-    // Context configurations
-    EmscriptenWebGLContextAttributes attrs;
-    emscripten_webgl_init_context_attributes(&attrs);
-    attrs.alpha = true;
-    attrs.premultipliedAlpha = true;
-    attrs.majorVersion = 1;
-    attrs.enableExtensionsByDefault = true;
-
-    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context = emscripten_webgl_create_context(id.c_str(), &attrs);
-    if (context < 0) {
-        printf("failed to create webgl context %d\n", context);
-        return nullptr;
-    }
+sk_sp<SkSurface> getWebGLSurface(EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context, int width, int height) {
     EMSCRIPTEN_RESULT r = emscripten_webgl_make_context_current(context);
     if (r < 0) {
-        printf("failed to make webgl current %d\n", r);
+        printf("failed to make webgl context current %d\n", r);
         return nullptr;
     }
 
@@ -166,91 +137,6 @@ struct SimpleImageInfo {
 SkImageInfo toSkImageInfo(const SimpleImageInfo& sii) {
     return SkImageInfo::Make(sii.width, sii.height, sii.colorType, sii.alphaType);
 }
-
-#if SK_INCLUDE_SKOTTIE && SK_INCLUDE_MANAGED_SKOTTIE
-namespace {
-
-class ManagedAnimation final : public SkRefCnt {
-public:
-    static sk_sp<ManagedAnimation> Make(const std::string& json) {
-        auto mgr = skstd::make_unique<skottie_utils::CustomPropertyManager>();
-        auto animation = skottie::Animation::Builder()
-                            .setMarkerObserver(mgr->getMarkerObserver())
-                            .setPropertyObserver(mgr->getPropertyObserver())
-                            .make(json.c_str(), json.size());
-
-        return animation
-            ? sk_sp<ManagedAnimation>(new ManagedAnimation(std::move(animation), std::move(mgr)))
-            : nullptr;
-    }
-
-    // skottie::Animation API
-    void render(SkCanvas* canvas) const { fAnimation->render(canvas, nullptr); }
-    void render(SkCanvas* canvas, const SkRect& dst) const { fAnimation->render(canvas, &dst); }
-    void seek(SkScalar t) { fAnimation->seek(t); }
-    SkScalar duration() const { return fAnimation->duration(); }
-    const SkSize&      size() const { return fAnimation->size(); }
-    std::string version() const { return std::string(fAnimation->version().c_str()); }
-
-    // CustomPropertyManager API
-    JSArray getColorProps() const {
-        JSArray props = emscripten::val::array();
-
-        for (const auto& cp : fPropMgr->getColorProps()) {
-            JSObject prop = emscripten::val::object();
-            prop.set("key", cp);
-            prop.set("value", fPropMgr->getColor(cp));
-            props.call<void>("push", prop);
-        }
-
-        return props;
-    }
-
-    JSArray getOpacityProps() const {
-        JSArray props = emscripten::val::array();
-
-        for (const auto& op : fPropMgr->getOpacityProps()) {
-            JSObject prop = emscripten::val::object();
-            prop.set("key", op);
-            prop.set("value", fPropMgr->getOpacity(op));
-            props.call<void>("push", prop);
-        }
-
-        return props;
-    }
-
-    bool setColor(const std::string& key, JSColor c) {
-        return fPropMgr->setColor(key, static_cast<SkColor>(c));
-    }
-
-    bool setOpacity(const std::string& key, float o) {
-        return fPropMgr->setOpacity(key, o);
-    }
-
-    JSArray getMarkers() const {
-        JSArray markers = emscripten::val::array();
-        for (const auto& m : fPropMgr->markers()) {
-            JSObject marker = emscripten::val::object();
-            marker.set("name", m.name);
-            marker.set("t0"  , m.t0);
-            marker.set("t1"  , m.t1);
-            markers.call<void>("push", marker);
-        }
-        return markers;
-    }
-
-private:
-    ManagedAnimation(sk_sp<skottie::Animation> animation,
-                     std::unique_ptr<skottie_utils::CustomPropertyManager> propMgr)
-        : fAnimation(std::move(animation))
-        , fPropMgr(std::move(propMgr)) {}
-
-    sk_sp<skottie::Animation>                             fAnimation;
-    std::unique_ptr<skottie_utils::CustomPropertyManager> fPropMgr;
-};
-
-} // anonymous ns
-#endif // SK_INCLUDE_SKOTTIE
 
 //========================================================================================
 // Path things
@@ -690,6 +576,26 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .smart_ptr<sk_sp<SkData>>("sk_sp<SkData>>")
         .function("size", &SkData::size);
 
+    class_<SkFont>("SkFont")
+        .constructor<>()
+        .constructor<sk_sp<SkTypeface>>()
+        .constructor<sk_sp<SkTypeface>, SkScalar>()
+        .constructor<sk_sp<SkTypeface>, SkScalar, SkScalar, SkScalar>()
+        .function("getScaleX", &SkFont::getScaleX)
+        .function("getSize", &SkFont::getSize)
+        .function("getSkewX", &SkFont::getSkewX)
+        .function("getTypeface", &SkFont::getTypeface, allow_raw_pointers())
+        .function("measureText", optional_override([](SkFont& self, std::string text) {
+            // TODO(kjlubick): This does not work well for non-ascii
+            // Need to maybe add a helper in interface.js that supports UTF-8
+            // Otherwise, go with std::wstring and set UTF-32 encoding.
+            return self.measureText(text.c_str(), text.length(), SkTextEncoding::kUTF8);
+        }))
+        .function("setScaleX", &SkFont::setScaleX)
+        .function("setSize", &SkFont::setSize)
+        .function("setSkewX", &SkFont::setSkewX)
+        .function("setTypeface", &SkFont::setTypeface, allow_raw_pointers());
+
     class_<SkFontMgr>("SkFontMgr")
         .smart_ptr<sk_sp<SkFontMgr>>("sk_sp<SkFontMgr>")
         .class_function("RefDefault", &SkFontMgr::RefDefault)
@@ -743,12 +649,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("getStrokeMiter", &SkPaint::getStrokeMiter)
         .function("getStrokeWidth", &SkPaint::getStrokeWidth)
         .function("getTextSize", &SkPaint::getTextSize)
-        .function("measureText", optional_override([](SkPaint& self, std::string text) {
-            // TODO(kjlubick): This does not work well for non-ascii
-            // Need to maybe add a helper in interface.js that supports UTF-8
-            // Otherwise, go with std::wstring and set UTF-32 encoding.
-            return self.measureText(text.c_str(), text.length());
-        }))
         .function("setAntiAlias", &SkPaint::setAntiAlias)
         .function("setBlendMode", &SkPaint::setBlendMode)
         .function("setColor", optional_override([](SkPaint& self, JSColor color)->void {
@@ -1038,50 +938,5 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("BLACK",       (JSColor) SK_ColorBLACK);
     constant("WHITE",       (JSColor) SK_ColorWHITE);
     // TODO(?)
-
-#if SK_INCLUDE_SKOTTIE
-    // Animation things (may eventually go in own library)
-    class_<skottie::Animation>("Animation")
-        .smart_ptr<sk_sp<skottie::Animation>>("sk_sp<Animation>")
-        .function("version", optional_override([](skottie::Animation& self)->std::string {
-            return std::string(self.version().c_str());
-        }))
-        .function("size", &skottie::Animation::size)
-        .function("duration", &skottie::Animation::duration)
-        .function("seek", &skottie::Animation::seek)
-        .function("render", optional_override([](skottie::Animation& self, SkCanvas* canvas)->void {
-            self.render(canvas, nullptr);
-        }), allow_raw_pointers())
-        .function("render", optional_override([](skottie::Animation& self, SkCanvas* canvas,
-                                                 const SkRect r)->void {
-            self.render(canvas, &r);
-        }), allow_raw_pointers());
-
-    function("MakeAnimation", optional_override([](std::string json)->sk_sp<skottie::Animation> {
-        return skottie::Animation::Make(json.c_str(), json.length());
-    }));
-    constant("skottie", true);
-
-#if SK_INCLUDE_MANAGED_SKOTTIE
-    class_<ManagedAnimation>("ManagedAnimation")
-        .smart_ptr<sk_sp<ManagedAnimation>>("sk_sp<ManagedAnimation>")
-        .function("version"   , &ManagedAnimation::version)
-        .function("size"      , &ManagedAnimation::size)
-        .function("duration"  , &ManagedAnimation::duration)
-        .function("seek"      , &ManagedAnimation::seek)
-        .function("render"    , select_overload<void(SkCanvas*) const>
-                                    (&ManagedAnimation::render), allow_raw_pointers())
-        .function("render"    , select_overload<void(SkCanvas*, const SkRect&) const>
-                                    (&ManagedAnimation::render), allow_raw_pointers())
-        .function("setColor"  , &ManagedAnimation::setColor)
-        .function("setOpacity", &ManagedAnimation::setOpacity)
-        .function("getMarkers", &ManagedAnimation::getMarkers)
-        .function("getColorProps"  , &ManagedAnimation::getColorProps)
-        .function("getOpacityProps", &ManagedAnimation::getOpacityProps);
-
-    function("MakeManagedAnimation", &ManagedAnimation::Make);
-    constant("managed_skottie", true);
-#endif // SK_INCLUDE_MANAGED_SKOTTIE
-#endif // SK_INCLUDE_SKOTTIE
 
 }

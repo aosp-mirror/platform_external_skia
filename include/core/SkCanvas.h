@@ -27,6 +27,10 @@
 #include "SkSurfaceProps.h"
 #include "SkVertices.h"
 
+#ifndef SK_SUPPORT_LEGACY_DRAWSTRING
+#define SK_SUPPORT_LEGACY_DRAWSTRING
+#endif
+
 class GrContext;
 class GrRenderTargetContext;
 class SkAndroidFrameworkUtils;
@@ -1870,6 +1874,7 @@ public:
     void drawSimpleText(const void* text, size_t byteLength, SkTextEncoding encoding,
                         SkScalar x, SkScalar y, const SkFont& font, const SkPaint& paint);
 
+#ifdef SK_SUPPORT_LEGACY_DRAWSTRING
     /** Draws null terminated string, with origin at (x, y), using clip, SkMatrix, and
         SkPaint paint.
 
@@ -1920,79 +1925,18 @@ public:
         @param paint   text size, blend, color, and so on, used to draw
     */
     void drawString(const SkString& string, SkScalar x, SkScalar y, const SkPaint& paint);
+#endif
 
-    /** Draws each glyph in text with the origin in pos array, using clip, SkMatrix, and
-        SkPaint paint. The number of entries in pos array must match the number of glyphs
-        described by byteLength of text.
-
-        text meaning depends on SkTextEncoding; by default, text is encoded as
-        UTF-8. pos elements meaning depends on SkPaint vertical text; by default
-        glyph left side bearing and baseline are relative to SkPoint in pos array.
-        Text size is affected by SkMatrix and SkPaint text size.
-
-        All elements of paint: SkPathEffect, SkMaskFilter, SkShader,
-        SkColorFilter, SkImageFilter, and SkDrawLooper; apply to text. By default, draws
-        filled 12 point black glyphs.
-
-        Layout engines such as Harfbuzz typically position each glyph
-        rather than using the font advance widths.
-
-        @param text        character code points or glyphs drawn
-        @param byteLength  byte length of text array
-        @param pos         array of glyph origins
-        @param paint       text size, blend, color, and so on, used to draw
-    */
-    void drawPosText(const void* text, size_t byteLength, const SkPoint pos[],
-                     const SkPaint& paint);
-
-    /** Draws each glyph in text with its origin composed from xpos array and
-        constY, using clip, SkMatrix, and SkPaint paint. The number of entries in xpos array
-        must match the number of glyphs described by byteLength of text.
-
-        text meaning depends on SkTextEncoding; by default, text is encoded as
-        UTF-8. xpos elements meaning depends on SkPaint vertical text;
-        by default each glyph left side bearing is positioned at an xpos element and
-        its baseline is positioned at constY. Text size is affected by SkMatrix and
-        SkPaint text size.
-
-        All elements of paint: SkPathEffect, SkMaskFilter, SkShader,
-        SkColorFilter, SkImageFilter, and SkDrawLooper; apply to text. By default, draws
-        filled 12 point black glyphs.
-
-        Layout engines such as Harfbuzz typically position each glyph
-        rather than using the font advance widths if all glyphs share the same
-        baseline.
-
-        @param text        character code points or glyphs drawn
-        @param byteLength  byte length of text array
-        @param xpos        array of x-axis positions, used to position each glyph
-        @param constY      shared y-axis value for all of x-axis positions
-        @param paint       text size, blend, color, and so on, used to draw
-    */
-    void drawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[], SkScalar constY,
-                      const SkPaint& paint);
-
-    /** Draws text, transforming each glyph by the corresponding SkRSXform,
-        using clip, SkMatrix, and SkPaint paint.
-
-        SkRSXform xform array specifies a separate square scale, rotation, and translation
-        for each glyph. xform does not affect paint SkShader.
-
-        Optional SkRect cullRect is a conservative bounds of text, taking into account
-        SkRSXform and paint. If cullRect is outside of clip, canvas can skip drawing.
-
-        All elements of paint: SkPathEffect, SkMaskFilter, SkShader,
-        SkColorFilter, SkImageFilter, and SkDrawLooper; apply to text. By default, draws
-        filled 12 point black glyphs.
-
-        @param text        character code points or glyphs drawn
-        @param byteLength  byte length of text array
-        @param xform       SkRSXform rotates, scales, and translates each glyph individually
-        @param cullRect    SkRect bounds of text for efficient clipping; or nullptr
-        @param paint       text size, blend, color, and so on, used to draw
-    */
-    void drawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
-                         const SkRect* cullRect, const SkPaint& paint);
+    // Experimental
+    void drawString(const char str[], SkScalar x, SkScalar y, const SkFont& font,
+                    const SkPaint& paint) {
+        this->drawSimpleText(str, strlen(str), kUTF8_SkTextEncoding, x, y, font, paint);
+    }
+    // Experimental
+    void drawString(const SkString& str, SkScalar x, SkScalar y, const SkFont& font,
+                    const SkPaint& paint) {
+        this->drawSimpleText(str.c_str(), str.size(), kUTF8_SkTextEncoding, x, y, font, paint);
+    }
 
     /** Draws SkTextBlob blob at (x, y), using clip, SkMatrix, and SkPaint paint.
 

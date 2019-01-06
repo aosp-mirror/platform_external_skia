@@ -27,6 +27,10 @@
 #include "SkMatrix.h"
 #include "SkRefCnt.h"
 
+#ifndef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
+#define SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
+#endif
+
 class GrTextBlob;
 class SkAutoDescriptor;
 class SkColorFilter;
@@ -51,10 +55,6 @@ class SkSurfaceProps;
 class SkTextBlob;
 class SkTextBlobRunIterator;
 class SkTypeface;
-
-#ifndef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
-#define SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
-#endif
 
 /** \class SkPaint
     SkPaint controls options applied when drawing and measuring. SkPaint collects all
@@ -753,6 +753,9 @@ public:
     */
     void setMaskFilter(sk_sp<SkMaskFilter> maskFilter);
 
+#ifndef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
+private:
+#endif
     /** Returns SkTypeface if set, or nullptr.
         Does not alter SkTypeface SkRefCnt.
 
@@ -773,6 +776,9 @@ public:
         @param typeface  font and style used to draw text
     */
     void setTypeface(sk_sp<SkTypeface> typeface);
+#ifndef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
+public:
+#endif
 
     /** Returns SkImageFilter if set, or nullptr.
         Does not alter SkImageFilter SkRefCnt.
@@ -832,6 +838,9 @@ public:
     */
     void setLooper(sk_sp<SkDrawLooper> drawLooper);
 
+#ifndef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
+private:
+#endif
     /** Returns text size in points.
 
         @return  typographic height of text
@@ -888,27 +897,11 @@ public:
      *  @param encoding  the new text encoding
      */
     void setTextEncoding(SkTextEncoding encoding);
+#ifndef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
+public:
+#endif
 
 #ifdef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
-
-#ifdef SK_SUPPORT_LEGACY_FONTMETRICS_IN_PAINT
-    /**
-        SkFontMetrics is filled out by getFontMetrics(). SkFontMetrics contents reflect the values
-        computed by font manager using SkTypeface. Values are set to zero if they are
-        not available.
-
-        All vertical values are relative to the baseline, on a y-axis pointing down.
-        Zero is on the baseline, negative values are above the baseline, and positive
-        values are below the baseline.
-
-        fUnderlineThickness and fUnderlinePosition have a bit set in fFlags if their values
-        are valid, since their value may be zero.
-
-        fStrikeoutThickness and fStrikeoutPosition have a bit set in fFlags if their values
-        are valid, since their value may be zero.
-    */
-    typedef SkFontMetrics FontMetrics;
-#endif
 
     /** Returns SkFontMetrics associated with SkTypeface.
         The return value is the recommended spacing between lines: the sum of metrics
