@@ -6,6 +6,7 @@
  */
 
 #include "gm.h"
+#include "SkFont.h"
 #include "SkGradientShader.h"
 
 // NOTE: The positions define hardstops for the red and green borders. For the repeating degenerate
@@ -33,13 +34,8 @@ typedef sk_sp<SkShader> (*GradientFactory)(SkShader::TileMode tm);
 static void draw_tile_header(SkCanvas* canvas) {
     canvas->save();
 
-    SkPaint paint;
-    paint.setColor(SK_ColorBLACK);
-    paint.setTextSize(12.0f);
-    paint.setAntiAlias(true);
-
     for (int i = 0; i < TILE_MODE_CT; ++i) {
-        canvas->drawString(TILE_NAMES[i], 0, 0, paint);
+        canvas->drawString(TILE_NAMES[i], 0, 0, SkFont(), SkPaint());
         canvas->translate(TILE_SIZE + TILE_GAP, 0);
     }
 
@@ -53,12 +49,10 @@ static void draw_row(SkCanvas* canvas, const char* desc, GradientFactory factory
     canvas->save();
 
     SkPaint text;
-    text.setColor(SK_ColorBLACK);
-    text.setTextSize(12.0f);
     text.setAntiAlias(true);
 
     canvas->translate(0, TILE_GAP);
-    canvas->drawString(desc, 0, 0, text);
+    canvas->drawString(desc, 0, 0, SkFont(), text);
     canvas->translate(0, TILE_GAP);
 
     SkPaint paint;
