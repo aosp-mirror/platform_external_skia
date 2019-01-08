@@ -2539,9 +2539,11 @@ void SkCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
     LOOPER_END
 }
 
+#ifdef SK_SUPPORT_LEGACY_DRAWSTRING
 void SkCanvas::drawString(const SkString& string, SkScalar x, SkScalar y, const SkPaint& paint) {
     this->drawText(string.c_str(), string.size(), x, y, paint);
 }
+#endif
 
 // These call the (virtual) onDraw... method
 void SkCanvas::drawSimpleText(const void* text, size_t byteLength, SkTextEncoding encoding,
@@ -2558,7 +2560,7 @@ void SkCanvas::drawText(const void* text, size_t byteLength, SkScalar x, SkScala
     if (byteLength) {
         sk_msan_assert_initialized(text, SkTAddOffset<const void>(text, byteLength));
         const SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
-        const SkTextEncoding encoding = paint.getTextEncoding();
+        const SkTextEncoding encoding = paint.private_internal_getTextEncoding();
         this->drawTextBlob(SkTextBlob::MakeFromText(text, byteLength, font, encoding), x, y, paint);
     }
 }

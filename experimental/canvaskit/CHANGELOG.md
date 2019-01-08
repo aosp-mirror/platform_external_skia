@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+ - `SkPath.addRoundRect`, `SkPath.reset`, `SkPath.rewind` exposed.
+ - `SkCanvas.drawArc`, `SkCanvas.drawLine`, `SkCanvas.drawOval`, `SkCanvas.drawRoundRect` exposed.
+ - Can import/export a SkPath to an array of commands. See `CanvasKit.MakePathFromCmds` and
+   `SkPath.toCmds`.
+
+### Fixed
+ - Potential bug in `ready()` if already loaded.
 
 ## [0.3.1] - 2019-01-04
 ### Added
