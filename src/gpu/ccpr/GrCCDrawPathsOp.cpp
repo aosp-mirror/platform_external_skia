@@ -287,12 +287,15 @@ bool GrCCDrawPathsOp::SingleDraw::shouldCachePathMask(int maxRenderTargetSize) c
         return true;
     }
 
+    // The hitRect should already be contained within the shape's bounds, but we still intersect it
+    // because it's possible for edges very near pixel boundaries (e.g., 0.999999), to round out
+    // inconsistently, depending on the integer translation values and fp32 precision.
+    SkIRect hitRect = fCacheEntry->hitRect().makeOffset(fCachedMaskShift.x(), fCachedMaskShift.y());
+    hitRect.intersect(fShapeConservativeIBounds);
+
     // Render and cache the entire path mask if we see enough of it to justify rendering all the
     // pixels. Our criteria for "enough" is that we must have seen at least 50% of the path in the
     // past, and in this particular draw we must see at least 10% of it.
-    const SkIRect& hitRect = fCacheEntry->hitRect();
-    SkASSERT(fShapeConservativeIBounds.makeOffset(-fCachedMaskShift.x(),
-                                                  -fCachedMaskShift.y()).contains(hitRect));
     int64_t hitArea = sk_64_mul(hitRect.height(), hitRect.width());
     int64_t drawArea = sk_64_mul(fMaskDevIBounds.height(), fMaskDevIBounds.width());
     return hitArea*2 >= shapeArea && drawArea*10 >= shapeArea;

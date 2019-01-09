@@ -1403,6 +1403,9 @@ float skcms_TransferFunction_eval(const skcms_TransferFunction* tf, float x) {
                              : powf_(tf->a * x + tf->b, tf->g) + tf->e);
 }
 
+#if defined(__clang__)
+    [[clang::no_sanitize("float-divide-by-zero")]]  // Checked for by tf_is_valid() on the way out.
+#endif
 bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_TransferFunction* dst) {
     if (!tf_is_valid(src)) {
         return false;
@@ -1446,7 +1449,11 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
     //   (1/a)( y -  e)^1/g - b/a = x
     //        (ky - ke)^1/g - b/a = x
 
-    float k = powf_(1.0f / src->a, src->g);  // TODO(mtklein): evaluate as 1 / powf(src->a, src->g)?
+#ifndef SKCMS_LEGACY_TF_INVERT
+    float k = powf_(src->a, -src->g);  // (1/a)^g == a^-g
+#else
+    float k = powf_(1.0f / src->a, src->g);
+#endif
     inv.g = 1.0f / src->g;
     inv.a = k;
     inv.b = -k * src->e;
