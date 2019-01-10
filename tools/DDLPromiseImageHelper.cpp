@@ -113,7 +113,7 @@ void DDLPromiseImageHelper::uploadAllToGPU(GrContext* context) {
     GrGpu* gpu = context->contextPriv().getGpu();
     SkASSERT(gpu);
 
-    for (int i = 0; i < fImageInfo.count(); i += 2) {
+    for (int i = 0; i < fImageInfo.count(); ++i) {
         const PromiseImageInfo& info = fImageInfo[i];
 
         // DDL TODO: how can we tell if we need mipmapping!
@@ -157,7 +157,7 @@ void DDLPromiseImageHelper::replaceEveryOtherPromiseTexture(GrContext* context) 
     GrGpu* gpu = context->contextPriv().getGpu();
     SkASSERT(gpu);
 
-    for (int i = 0; i < fImageInfo.count(); ++i) {
+    for (int i = 0; i < fImageInfo.count(); i += 2) {
         PromiseImageInfo& info = fImageInfo[i];
 
         // DDL TODO: how can we tell if we need mipmapping!
