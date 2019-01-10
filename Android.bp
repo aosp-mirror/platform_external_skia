@@ -246,6 +246,7 @@ cc_library_static {
         "src/core/SkPixmap.cpp",
         "src/core/SkPoint.cpp",
         "src/core/SkPoint3.cpp",
+        "src/core/SkPromiseImageTexture.cpp",
         "src/core/SkPtrRecorder.cpp",
         "src/core/SkQuadClipper.cpp",
         "src/core/SkRRect.cpp",
