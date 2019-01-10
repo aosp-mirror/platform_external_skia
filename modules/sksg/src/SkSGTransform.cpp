@@ -14,9 +14,11 @@ namespace sksg {
 
 namespace {
 
-// Always compose in 4x4 for now.
+template <typename T>
 class Concat final : public Transform {
 public:
+    template <typename = std::enable_if<std::is_same<T, SkMatrix  >::value ||
+                                        std::is_same<T, SkMatrix44>::value >>
     Concat(sk_sp<Transform> a, sk_sp<Transform> b)
         : fA(std::move(a)), fB(std::move(b)) {
         SkASSERT(fA);
@@ -36,10 +38,12 @@ protected:
         fA->revalidate(ic, ctm);
         fB->revalidate(ic, ctm);
 
-        fComposed.setConcat(TransformPriv::AsMatrix44(fA),
-                            TransformPriv::AsMatrix44(fB));
+        fComposed.setConcat(TransformPriv::As<T>(fA),
+                            TransformPriv::As<T>(fB));
         return SkRect::MakeEmpty();
     }
+
+    bool is44() const override { return std::is_same<T, SkMatrix44>::value; }
 
     SkMatrix asMatrix() const override {
         return fComposed;
@@ -51,7 +55,7 @@ protected:
 
 private:
     const sk_sp<Transform> fA, fB;
-    SkMatrix44             fComposed;
+    T                      fComposed;
 
     using INHERITED = Transform;
 };
@@ -66,44 +70,13 @@ sk_sp<Transform> Transform::MakeConcat(sk_sp<Transform> a, sk_sp<Transform> b) {
         return b;
     }
 
-    return b ? sk_make_sp<Concat>(std::move(a), std::move(b))
-             : a;
-}
+    if (!b) {
+        return a;
+    }
 
-sk_sp<Matrix> Matrix::Make(const SkMatrix& m) {
-    return sk_sp<Matrix>(new Matrix(m));
-}
-
-Matrix::Matrix(const SkMatrix& m) : fMatrix(m) {}
-
-SkMatrix Matrix::asMatrix() const {
-    return fMatrix;
-}
-
-SkMatrix44 Matrix::asMatrix44() const {
-    return fMatrix;
-}
-
-SkRect Matrix::onRevalidate(InvalidationController*, const SkMatrix&) {
-    return SkRect::MakeEmpty();
-}
-
-sk_sp<Matrix44> Matrix44::Make(const SkMatrix44& m) {
-    return sk_sp<Matrix44>(new Matrix44(m));
-}
-
-Matrix44::Matrix44(const SkMatrix44& m) : fMatrix(m) {}
-
-SkMatrix Matrix44::asMatrix() const {
-    return fMatrix;
-}
-
-SkMatrix44 Matrix44::asMatrix44() const {
-    return fMatrix;
-}
-
-SkRect Matrix44::onRevalidate(InvalidationController*, const SkMatrix&) {
-    return SkRect::MakeEmpty();
+    return TransformPriv::Is44(a) || TransformPriv::Is44(b)
+        ? sk_sp<Transform>(new Concat<SkMatrix44>(std::move(a), std::move(b)))
+        : sk_sp<Transform>(new Concat<SkMatrix  >(std::move(a), std::move(b)));
 }
 
 TransformEffect::TransformEffect(sk_sp<RenderNode> child, sk_sp<Transform> transform)
@@ -117,7 +90,7 @@ TransformEffect::~TransformEffect() {
 }
 
 void TransformEffect::onRender(SkCanvas* canvas, const RenderContext* ctx) const {
-    const auto m = TransformPriv::AsMatrix(fTransform);
+    const auto m = TransformPriv::As<SkMatrix>(fTransform);
     SkAutoCanvasRestore acr(canvas, !m.isIdentity());
     canvas->concat(m);
     this->INHERITED::onRender(canvas, ctx);
@@ -129,7 +102,7 @@ SkRect TransformEffect::onRevalidate(InvalidationController* ic, const SkMatrix&
     // We don't care about matrix reval results.
     fTransform->revalidate(ic, ctm);
 
-    const auto m = TransformPriv::AsMatrix(fTransform);
+    const auto m = TransformPriv::As<SkMatrix>(fTransform);
     auto bounds = this->INHERITED::onRevalidate(ic, SkMatrix::Concat(ctm, m));
     m.mapRect(&bounds);
 
