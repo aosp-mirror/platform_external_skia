@@ -611,10 +611,9 @@ struct UniControl {
         canvas->drawLine(fBounds.fLeft - 5, fYLo, fBounds.fRight + 5, fYLo, paints.fIndicator);
         SkString label;
         label.printf("%0.3g", fValLo);
-        canvas->drawSimpleText(label.c_str(), label.size(), kUTF8_SkTextEncoding,
-                               fBounds.fLeft + 5, fYLo - 5, paints.fValueFont, paints.fValue);
-        canvas->drawSimpleText(fName.c_str(), fName.size(), kUTF8_SkTextEncoding,
-                               fBounds.fLeft, fBounds.bottom() + 11, paints.fLabelFont, paints.fLabel);
+        canvas->drawString(label, fBounds.fLeft + 5, fYLo - 5, paints.fValueFont, paints.fValue);
+        canvas->drawString(fName, fBounds.fLeft, fBounds.bottom() + 11, paints.fLabelFont,
+                           paints.fLabel);
     }
 };
 
@@ -640,7 +639,7 @@ struct BiControl : public UniControl {
         if (yPos < fYLo + 10) {
             yPos = fYLo + 10;
         }
-        canvas->drawString(label, fBounds.fLeft + 5, yPos - 5, paints.fValue);
+        canvas->drawString(label, fBounds.fLeft + 5, yPos - 5, paints.fValueFont, paints.fValue);
         SkRect fill = { fBounds.fLeft, fYLo, fBounds.fRight, yPos };
         canvas->drawRect(fill, paints.fFill);
     }
