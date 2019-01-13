@@ -132,14 +132,14 @@ public:
         : config(conf), document(doc), pageCanvas(nullptr) {
         white_paint.setColor(SK_ColorWHITE);
         glyph_paint.setColor(SK_ColorBLACK);
-        glyph_paint.setFlags(SkPaint::kAntiAlias_Flag |
-                             SkPaint::kSubpixelText_Flag);
+        glyph_paint.setAntiAlias(true);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
+        font.setSubpixel(true);
         font.setSize(SkDoubleToScalar(config->font_size.value));
     }
 
     void WriteLine(const SkShaper& shaper, const char *text, size_t textBytes) {
-        SkTextBlobBuilderLineHandler textBlobBuilder;
+        SkTextBlobBuilderRunHandler textBlobBuilder;
         SkPoint endPoint = shaper.shape(&textBlobBuilder, font, text, textBytes, true,
                                         SkPoint{0, 0},
                                         config->page_width.value - 2*config->left_margin.value);

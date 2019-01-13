@@ -27,10 +27,6 @@
 #include "SkMatrix.h"
 #include "SkRefCnt.h"
 
-#ifndef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
-#define SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
-#endif
-
 class GrTextBlob;
 class SkAutoDescriptor;
 class SkColorFilter;
@@ -284,6 +280,7 @@ public:
     */
     void setDither(bool dither);
 
+#ifdef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
     /** Returns true if text is converted to SkPath before drawing and measuring.
 
         Equivalent to getFlags() masked with kLinearText_Flag.
@@ -408,6 +405,7 @@ public:
         @param fakeBoldText  setting for kFakeBoldText_Flag
     */
     void setFakeBoldText(bool fakeBoldText);
+#endif
 
     /** Returns SkFilterQuality, the image filtering level. A lower setting
         draws faster; a higher setting looks better when the image is scaled.
@@ -923,6 +921,7 @@ public:
     bool containsText(const void* text, size_t byteLength) const;
 #endif
 
+#ifdef SK_SUPPORT_LEGACY_PAINT_FONT_FIELDS
     /** Converts glyphs into text if possible.
         Glyph values without direct Unicode equivalents are mapped to zero.
         Uses the SkTypeface, but is unaffected
@@ -935,6 +934,7 @@ public:
         @param text    storage for character codes, one per glyph
     */
     void glyphsToUnichars(const SkGlyphID glyphs[], int count, SkUnichar text[]) const;
+#endif
 
 #ifdef SK_SUPPORT_LEGACY_PAINT_TEXTMEASURE
     /** Deprecated; use SkFont::countText instead

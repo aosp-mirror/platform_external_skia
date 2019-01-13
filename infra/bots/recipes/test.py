@@ -706,6 +706,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'textblobrandomfont'])
     blacklist(['vk', 'gm', '_', 'textfilter_color'])
     blacklist(['vk', 'gm', '_', 'textfilter_image'])
+    blacklist(['vk', 'gm', '_', 'tilemodes'])
     blacklist(['vk', 'gm', '_', 'varied_text_clipped_lcd'])
     blacklist(['vk', 'gm', '_', 'varied_text_ignorable_clip_lcd'])
     if 'Debug' in bot:
@@ -765,6 +766,7 @@ def dm_flags(api, bot):
     match.append('~^GrPipelineDynamicStateTest$')
     match.append('~^InitialTextureClear$')
     match.append('~^PromiseImageTest$')
+    match.append('~^PromiseImageTextureReuse$')
     match.append('~^ResourceAllocatorTest$')
     match.append('~^RGB565TextureTest$')
     match.append('~^RGBA4444TextureTest$')

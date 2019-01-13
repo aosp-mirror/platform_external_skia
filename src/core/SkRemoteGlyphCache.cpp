@@ -19,6 +19,7 @@
 #include "SkGlyphCache.h"
 #include "SkRemoteGlyphCacheImpl.h"
 #include "SkStrikeCache.h"
+#include "SkTLazy.h"
 #include "SkTraceEvent.h"
 #include "SkTypeface_remote.h"
 
@@ -471,8 +472,7 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
     // Write glyphs images.
     serializer->emplace<uint64_t>(fPendingGlyphImages.size());
     for (const auto& glyphID : fPendingGlyphImages) {
-        SkGlyph glyph;
-        glyph.initWithGlyphID(glyphID);
+        SkGlyph glyph{glyphID};
         fContext->getMetrics(&glyph);
         writeGlyph(&glyph, serializer);
 
@@ -489,8 +489,7 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
     // Write glyphs paths.
     serializer->emplace<uint64_t>(fPendingGlyphPaths.size());
     for (const auto& glyphID : fPendingGlyphPaths) {
-        SkGlyph glyph;
-        glyph.initWithGlyphID(glyphID);
+        SkGlyph glyph{glyphID};
         fContext->getMetrics(&glyph);
         writeGlyph(&glyph, serializer);
         writeGlyphPath(glyphID, serializer);
@@ -500,15 +499,15 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
 }
 
 const SkGlyph& SkStrikeServer::SkGlyphCacheState::findGlyph(SkPackedGlyphID glyphID) {
-    auto* glyph = fGlyphMap.find(glyphID);
-    if (glyph == nullptr) {
+    SkGlyph* glyphPtr = fGlyphMap.findOrNull(glyphID);
+    if (glyphPtr == nullptr) {
+        glyphPtr = fAlloc.make<SkGlyph>(glyphID);
+        fGlyphMap.set(glyphPtr);
         this->ensureScalerContext();
-        glyph = fGlyphMap.set(glyphID, SkGlyph());
-        glyph->initWithGlyphID(glyphID);
-        fContext->getMetrics(glyph);
+        fContext->getMetrics(glyphPtr);
     }
 
-    return *glyph;
+    return *glyphPtr;
 }
 
 void SkStrikeServer::SkGlyphCacheState::ensureScalerContext() {
@@ -594,10 +593,10 @@ SkStrikeClient::~SkStrikeClient() = default;
         return false;                     \
     }
 
-static bool readGlyph(SkGlyph* glyph, Deserializer* deserializer) {
+static bool readGlyph(SkTLazy<SkGlyph>& glyph, Deserializer* deserializer) {
     SkPackedGlyphID glyphID;
     if (!deserializer->read<SkPackedGlyphID>(&glyphID)) return false;
-    glyph->initWithGlyphID(glyphID);
+    glyph.init(glyphID);
     if (!deserializer->read<float>(&glyph->fAdvanceX)) return false;
     if (!deserializer->read<float>(&glyph->fAdvanceY)) return false;
     if (!deserializer->read<uint16_t>(&glyph->fWidth)) return false;
@@ -673,20 +672,20 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
         uint64_t glyphImagesCount = 0u;
         if (!deserializer.read<uint64_t>(&glyphImagesCount)) READ_FAILURE
         for (size_t j = 0; j < glyphImagesCount; j++) {
-            SkGlyph glyph;
-            if (!readGlyph(&glyph, &deserializer)) READ_FAILURE
+            SkTLazy<SkGlyph> glyph;
+            if (!readGlyph(glyph, &deserializer)) READ_FAILURE
 
-            SkGlyph* allocatedGlyph = strike->getRawGlyphByID(glyph.getPackedID());
+            SkGlyph* allocatedGlyph = strike->getRawGlyphByID(glyph->getPackedID());
 
             // Update the glyph unless it's already got an image (from fallback),
             // preserving any path that might be present.
             if (allocatedGlyph->fImage == nullptr) {
                 auto* glyphPath = allocatedGlyph->fPathData;
-                *allocatedGlyph = glyph;
+                *allocatedGlyph = *glyph;
                 allocatedGlyph->fPathData = glyphPath;
             }
 
-            auto imageSize = glyph.computeImageSize();
+            auto imageSize = glyph->computeImageSize();
             if (imageSize == 0u) continue;
 
             auto* image = deserializer.read(imageSize, allocatedGlyph->formatAlignment());
@@ -697,16 +696,16 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
         uint64_t glyphPathsCount = 0u;
         if (!deserializer.read<uint64_t>(&glyphPathsCount)) READ_FAILURE
         for (size_t j = 0; j < glyphPathsCount; j++) {
-            SkGlyph glyph;
-            if (!readGlyph(&glyph, &deserializer)) READ_FAILURE
+            SkTLazy<SkGlyph> glyph;
+            if (!readGlyph(glyph, &deserializer)) READ_FAILURE
 
-            SkGlyph* allocatedGlyph = strike->getRawGlyphByID(glyph.getPackedID());
+            SkGlyph* allocatedGlyph = strike->getRawGlyphByID(glyph->getPackedID());
 
             // Update the glyph unless it's already got a path (from fallback),
             // preserving any image that might be present.
             if (allocatedGlyph->fPathData == nullptr) {
                 auto* glyphImage = allocatedGlyph->fImage;
-                *allocatedGlyph = glyph;
+                *allocatedGlyph = *glyph;
                 allocatedGlyph->fImage = glyphImage;
             }
 
