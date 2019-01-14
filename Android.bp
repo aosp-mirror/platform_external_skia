@@ -397,7 +397,6 @@ cc_library_static {
         "src/pdf/SkJpegInfo.cpp",
         "src/pdf/SkKeyedImage.cpp",
         "src/pdf/SkPDFBitmap.cpp",
-        "src/pdf/SkPDFCanon.cpp",
         "src/pdf/SkPDFConvertType1FontStream.cpp",
         "src/pdf/SkPDFDevice.cpp",
         "src/pdf/SkPDFDocument.cpp",

@@ -23,7 +23,7 @@
 
 class SkData;
 class SkPDFArray;
-class SkPDFCanon;
+
 class SkPDFDict;
 class SkPDFDocument;
 class SkPDFObject;
@@ -32,10 +32,6 @@ class SkStreamAsset;
 class SkString;
 class SkWStream;
 struct SkPDFObjectSerializer;
-
-#ifdef SK_PDF_IMAGE_STATS
-    #include <atomic>
-#endif
 
 struct SkPDFIndirectReference {
     int fValue = -1;
@@ -187,10 +183,6 @@ public:
     void insertString(const char key[], const char value[]);
     void insertString(const char key[], SkString value);
 
-    /** Emit the dictionary, without the "<<" and ">>".
-     */
-    void emitAll(SkWStream* stream) const;
-
 private:
     std::vector<std::pair<SkPDFUnion, SkPDFUnion>> fRecords;
 };
@@ -209,14 +201,4 @@ SkPDFIndirectReference SkPDFStreamOut(std::unique_ptr<SkPDFDict> dict,
                                       std::unique_ptr<SkStreamAsset> stream,
                                       SkPDFDocument* doc,
                                       bool deflate = kSkPDFDefaultDoDeflate);
-
-////////////////////////////////////////////////////////////////////////////////
-
-#ifdef SK_PDF_IMAGE_STATS
-extern std::atomic<int> gDrawImageCalls;
-extern std::atomic<int> gJpegImageObjects;
-extern std::atomic<int> gRegularImageObjects;
-extern void SkPDFImageDumpStats();
-#endif // SK_PDF_IMAGE_STATS
-
 #endif
