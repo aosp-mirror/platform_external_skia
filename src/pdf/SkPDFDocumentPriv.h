@@ -8,22 +8,34 @@
 #define SkPDFDocumentPriv_DEFINED
 
 #include "SkCanvas.h"
-#include "SkPDFCanon.h"
+#include "SkMutex.h"
 #include "SkPDFDocument.h"
-#include "SkPDFFont.h"
 #include "SkPDFMetadata.h"
 #include "SkPDFTag.h"
-#include "SkUUID.h"
+#include "SkStream.h"
+#include "SkTHash.h"
 
 #include <atomic>
+#include <vector>
+#include <memory>
 
-class SkPDFDevice;
 class SkExecutor;
+class SkPDFDevice;
+class SkPDFFont;
+struct SkAdvancedTypefaceMetrics;
+struct SkBitmapKey;
+struct SkPDFFillGraphicState;
+struct SkPDFImageShaderKey;
+struct SkPDFStrokeGraphicState;
+
+namespace SkPDFGradientShader {
+struct Key;
+struct KeyHash;
+}
 
 const char* SkPDFGetNodeIdKey();
 
-// Logically part of SkPDFDocument (like SkPDFCanon), but separate to
-// keep similar functionality together.
+// Logically part of SkPDFDocument, but separate to keep similar functionality together.
 class SkPDFOffsetMap {
 public:
     void markStartOfDocument(const SkWStream*);
@@ -58,7 +70,17 @@ public:
      */
     SkPDFIndirectReference emit(const SkPDFObject&, SkPDFIndirectReference);
     SkPDFIndirectReference emit(const SkPDFObject& o) { return this->emit(o, this->reserveRef()); }
-    SkPDFCanon* canon() { return &fCanon; }
+
+    template <typename T>
+    void emitStream(const SkPDFDict& dict, T writeStream, SkPDFIndirectReference ref) {
+        SkWStream* stream = this->beginObject(ref);
+        dict.emitObject(stream);
+        stream->writeText(" stream\n");
+        writeStream(stream);
+        stream->writeText("\nendstream");
+        this->endObject();
+    }
+
     const SkPDF::Metadata& metadata() const { return fMetadata; }
 
     SkPDFIndirectReference getPage(size_t pageIndex) const;
@@ -66,8 +88,6 @@ public:
     int getMarkIdForNodeId(int nodeId);
 
     SkPDFIndirectReference reserveRef() { return SkPDFIndirectReference{fNextObjectNumber++}; }
-    SkWStream* beginObject(SkPDFIndirectReference);
-    void endObject();
 
     SkExecutor* executor() const { return fExecutor; }
     void incrementJobCount();
@@ -75,9 +95,24 @@ public:
     size_t currentPageIndex() { return fPages.size(); }
     size_t pageCount() { return fPageRefs.size(); }
 
+    // Canonicalized objects
+    SkTHashMap<SkPDFImageShaderKey, SkPDFIndirectReference> fImageShaderMap;
+    SkTHashMap<SkPDFGradientShader::Key, SkPDFIndirectReference, SkPDFGradientShader::KeyHash>
+        fGradientPatternMap;
+    SkTHashMap<SkBitmapKey, SkPDFIndirectReference> fPDFBitmapMap;
+    SkTHashMap<uint32_t, std::unique_ptr<SkAdvancedTypefaceMetrics>> fTypefaceMetrics;
+    SkTHashMap<uint32_t, std::vector<SkString>> fType1GlyphNames;
+    SkTHashMap<uint32_t, std::vector<SkUnichar>> fToUnicodeMap;
+    SkTHashMap<uint32_t, SkPDFIndirectReference> fFontDescriptors;
+    SkTHashMap<uint32_t, SkPDFIndirectReference> fType3FontDescriptors;
+    SkTHashMap<uint64_t, SkPDFFont> fFontMap;
+    SkTHashMap<SkPDFStrokeGraphicState, SkPDFIndirectReference> fStrokeGSMap;
+    SkTHashMap<SkPDFFillGraphicState, SkPDFIndirectReference> fFillGSMap;
+    SkPDFIndirectReference fInvertFunction;
+    SkPDFIndirectReference fNoSmaskGraphicState;
+
 private:
     SkPDFOffsetMap fOffsetMap;
-    SkPDFCanon fCanon;
     SkCanvas fCanvas;
     std::vector<std::unique_ptr<SkPDFDict>> fPages;
     std::vector<SkPDFIndirectReference> fPageRefs;
@@ -99,8 +134,9 @@ private:
     SkMutex fMutex;
     SkSemaphore fSemaphore;
 
-    void reset();
     void waitForJobs();
+    SkWStream* beginObject(SkPDFIndirectReference);
+    void endObject();
 };
 
 #endif  // SkPDFDocumentPriv_DEFINED
