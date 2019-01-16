@@ -11,7 +11,6 @@
 #include "ops/GrMeshDrawOp.h"
 #include "text/GrTextBlob.h"
 #include "text/GrDistanceFieldAdjustTable.h"
-#include "text/GrGlyphCache.h"
 
 class SkAtlasTextTarget;
 class GrContext;
@@ -76,7 +75,7 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override;
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override;
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip) override;
 
     enum MaskType {
         kGrayscaleCoverageMask_MaskType,

@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@ab2bfa814ceefdcbe24483b3a12ba525345d486c",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@dd34b3b9b707c93b3323ac857793ddeae5f7a777",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@96443b262250c390b0caefbf3eed8463ba35ecae",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
   "third_party/externals/expat"           : "https://android.googlesource.com/platform/external/expat.git@android-6.0.1_r55",
@@ -37,7 +37,7 @@ deps = {
   "third_party/externals/Nima-Math-Cpp" : "https://github.com/2d-inc/Nima-Math-Cpp.git@e0c12772093fa8860f55358274515b86885f0108",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@df35166fd2ae545e9d31701a2d9b9cb286dc5ad6",
+    "url": "https://chromium.googlesource.com/chromium/src.git@a9f87d1e43bbd275754eea2c55b3f3905d5a2a72",
     "condition": "checkout_chromium",
   },
 }
