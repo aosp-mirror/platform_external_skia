@@ -5,26 +5,26 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrAtlasGlyphCache_DEFINED
-#define GrAtlasGlyphCache_DEFINED
+#ifndef GrStrikeCache_DEFINED
+#define GrStrikeCache_DEFINED
 
 #include "GrDrawOpAtlas.h"
 #include "GrGlyph.h"
 #include "SkArenaAlloc.h"
-#include "SkGlyphCache.h"
 #include "SkMasks.h"
+#include "SkStrike.h"
 #include "SkTDynamicHash.h"
 
-class GrGlyphCache;
 class GrAtlasManager;
 class GrGpu;
+class GrStrikeCache;
 
 /**
  *  The GrTextStrike manages a pool of CPU backing memory for GrGlyphs. This backing memory
- *  is indexed by a PackedID and SkGlyphCache. The SkGlyphCache is what actually creates the mask.
- *  The GrTextStrike may outlive the generating SkGlyphCache. However, it retains a copy
- *  of it's SkDescriptor as a key to access (or regenerate) the SkGlyphCache. GrTextStrikes are
- *  created by and owned by a GrGlyphCache.
+ *  is indexed by a PackedID and SkStrike. The SkStrike is what actually creates the mask.
+ *  The GrTextStrike may outlive the generating SkStrike. However, it retains a copy
+ *  of it's SkDescriptor as a key to access (or regenerate) the SkStrike. GrTextStrikes are
+ *  created by and owned by a GrStrikeCache.
  */
 class GrTextStrike : public SkNVRefCnt<GrTextStrike> {
 public:
@@ -43,7 +43,7 @@ public:
     // draw a clear square.
     // skbug:4143 crbug:510931
     GrGlyph* getGlyph(SkPackedGlyphID packed,
-                      SkGlyphCache* cache) {
+                      SkStrike* cache) {
         GrGlyph* glyph = fCache.find(packed);
         if (!glyph) {
             // We could return this to the caller, but in practice it adds code complexity for
@@ -61,8 +61,8 @@ public:
     // TODO we can handle some of these cases if we really want to, but the long term solution is to
     // get the actual glyph image itself when we get the glyph metrics.
     GrDrawOpAtlas::ErrorCode addGlyphToAtlas(GrResourceProvider*, GrDeferredUploadTarget*,
-                                             GrGlyphCache*, GrAtlasManager*, GrGlyph*,
-                                             SkGlyphCache*, GrMaskFormat expectedMaskFormat,
+                                             GrStrikeCache*, GrAtlasManager*, GrGlyph*,
+                                             SkStrike*, GrMaskFormat expectedMaskFormat,
                                              bool isScaledGlyph);
 
     // testing
@@ -88,23 +88,23 @@ private:
     int fAtlasedGlyphs{0};
     bool fIsAbandoned{false};
 
-    static const SkGlyph& GrToSkGlyph(SkGlyphCache* cache, SkPackedGlyphID id) {
+    static const SkGlyph& GrToSkGlyph(SkStrike* cache, SkPackedGlyphID id) {
         return cache->getGlyphIDMetrics(id.code(), id.getSubXFixed(), id.getSubYFixed());
     }
 
     GrGlyph* generateGlyph(const SkGlyph&);
 
-    friend class GrGlyphCache;
+    friend class GrStrikeCache;
 };
 
 /**
- * GrGlyphCache manages strikes which are indexed by a SkGlyphCache. These strikes can then be
+ * GrStrikeCache manages strikes which are indexed by a SkStrike. These strikes can then be
  * used to generate individual Glyph Masks.
  */
-class GrGlyphCache {
+class GrStrikeCache {
 public:
-    GrGlyphCache(const GrCaps* caps, size_t maxTextureBytes);
-    ~GrGlyphCache();
+    GrStrikeCache(const GrCaps* caps, size_t maxTextureBytes);
+    ~GrStrikeCache();
 
     void setStrikeToPreserve(GrTextStrike* strike) { fPreserveStrike = strike; }
 
@@ -112,7 +112,7 @@ public:
     // another client of the cache may cause the strike to be purged while it is still reffed.
     // Therefore, the caller must check GrTextStrike::isAbandoned() if there are other
     // interactions with the cache since the strike was received.
-    sk_sp<GrTextStrike> getStrike(const SkGlyphCache* cache) {
+    sk_sp<GrTextStrike> getStrike(const SkStrike* cache) {
         sk_sp<GrTextStrike> strike = sk_ref_sp(fCache.find(cache->getDescriptor()));
         if (!strike) {
             strike = this->generateStrike(cache);
@@ -127,7 +127,7 @@ public:
     static void HandleEviction(GrDrawOpAtlas::AtlasID, void*);
 
 private:
-    sk_sp<GrTextStrike> generateStrike(const SkGlyphCache* cache) {
+    sk_sp<GrTextStrike> generateStrike(const SkStrike* cache) {
         // 'fCache' get the construction ref
         sk_sp<GrTextStrike> strike = sk_ref_sp(new GrTextStrike(cache->getDescriptor()));
         fCache.add(strike.get());
@@ -141,4 +141,4 @@ private:
     std::unique_ptr<const SkMasks> f565Masks;
 };
 
-#endif
+#endif  // GrStrikeCache_DEFINED

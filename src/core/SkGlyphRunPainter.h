@@ -19,16 +19,16 @@ class GrColorSpaceInfo;
 class GrRenderTargetContext;
 #endif
 
-class SkGlyphCacheInterface {
+class SkStrikeInterface {
 public:
-    virtual ~SkGlyphCacheInterface() = default;
+    virtual ~SkStrikeInterface() = default;
     virtual SkVector rounding() const = 0;
     virtual const SkGlyph& getGlyphMetrics(SkGlyphID glyphID, SkPoint position) = 0;
     virtual bool hasImage(const SkGlyph& glyph) = 0;
     virtual bool hasPath(const SkGlyph& glyph) = 0;
 };
 
-class SkGlyphCacheCommon {
+class SkStrikeCommon {
 public:
     static SkVector PixelRounding(bool isSubpixel, SkAxisAlignment axisAlignment);
 
@@ -57,6 +57,12 @@ public:
         const SkPath* path;
         SkPoint position;
     };
+
+    struct GlyphAndPos {
+        const SkGlyph* glyph;
+        SkPoint position;
+    };
+
     class BitmapDevicePainter {
     public:
         virtual ~BitmapDevicePainter() = default;
@@ -72,11 +78,11 @@ public:
             const SkGlyphRunList& glyphRunList, const SkMatrix& deviceMatrix,
             const BitmapDevicePainter* bitmapDevice);
 
-    template <typename PerEmptyT, typename PerGlyphT, typename PerPathT>
+    template <typename EmptiesT, typename MasksT, typename PathsT>
     void drawGlyphRunAsBMPWithPathFallback(
-            SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
+            SkStrikeInterface* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkMatrix& deviceMatrix,
-            PerEmptyT&& perEmpty, PerGlyphT&& perGlyph, PerPathT&& perPath);
+            EmptiesT&& processEmpties, MasksT&& processMasks, PathsT&& processPaths);
 
     enum NeedsTransform : bool { kTransformDone = false, kDoTransform = true };
 
@@ -97,13 +103,13 @@ public:
     // fallback glyphIDs and positions to fallbackARGB.
     template <typename PerEmptyT, typename PerPath>
     void drawGlyphRunAsPathWithARGBFallback(
-            SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
+            SkStrikeInterface* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkPaint& paint, const SkMatrix& viewMatrix, SkScalar textScale,
             PerEmptyT&& perEmpty, PerPath&& perPath, ARGBFallback&& fallbackARGB);
 
     template <typename PerEmptyT, typename PerSDFT, typename PerPathT>
     void drawGlyphRunAsSDFWithARGBFallback(
-            SkGlyphCacheInterface* cache, const SkGlyphRun& glyphRun,
+            SkStrikeInterface* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkPaint& runPaint, const SkMatrix& viewMatrix, SkScalar textRatio,
             PerEmptyT&& perEmpty, PerSDFT&& perSDF, PerPathT&& perPath, ARGBFallback&& perFallback);
 
@@ -135,11 +141,9 @@ private:
 
     int fMaxRunSize{0};
     SkAutoTMalloc<SkPoint> fPositions;
-    SkAutoTMalloc<const SkGlyph*> fMaskGlyphs;
-    SkAutoTMalloc<SkPoint> fMaskPositions;
+    SkAutoTMalloc<GlyphAndPos> fMasks;
 
-    std::vector<const SkGlyph*> fPathGlyphs;
-    std::vector<SkPoint> fPathPositions;
+    std::vector<GlyphAndPos> fPaths;
 
     // Vectors for tracking ARGB fallback information.
     std::vector<SkGlyphID> fARGBGlyphsIDs;

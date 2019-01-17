@@ -109,8 +109,6 @@ public:
     // Thus this is the implementation of the clear call for the corresponding passthrough function
     // on GrGLGpuRTCommandBuffer.
     void clear(const GrFixedClip&, const SkPMColor4f&, GrRenderTarget*, GrSurfaceOrigin);
-    void clearColorAsDraw(const GrFixedClip&, const SkPMColor4f& color, GrRenderTarget*,
-                          GrSurfaceOrigin);
 
     // The GrGLGpuRTCommandBuffer does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clearStencil call for the corresponding passthrough
@@ -118,6 +116,8 @@ public:
     void clearStencilClip(const GrFixedClip&, bool insideStencilMask,
                           GrRenderTarget*, GrSurfaceOrigin);
 
+    // FIXME (michaelludwig): Can this go away and just use clearStencilClip() + marking the
+    // stencil buffer as not dirty?
     void clearStencil(GrRenderTarget*, int clearValue);
 
     GrGpuRTCommandBuffer* getCommandBuffer(
@@ -298,8 +298,6 @@ private:
     bool copySurfaceAsBlitFramebuffer(GrSurface* dst, GrSurfaceOrigin dstOrigin,
                                       GrSurface* src, GrSurfaceOrigin srcOrigin,
                                       const SkIRect& srcRect, const SkIPoint& dstPoint);
-    void clearStencilClipAsDraw(const GrFixedClip&, bool insideStencilMask,
-                                GrRenderTarget*, GrSurfaceOrigin);
 
     static bool BlendCoeffReferencesConstant(GrBlendCoeff coeff);
 
@@ -387,6 +385,13 @@ private:
                        GrPixelConfig dataConfig, const GrMipLevel texels[], int mipLevelCount,
                        GrMipMapsStatus* mipMapsStatus = nullptr);
 
+    // helper for onCreateCompressedTexture. Compressed textures are read-only so we
+    // only use this to populate a new texture.
+    bool uploadCompressedTexData(GrPixelConfig texConfig, int texWidth, int texHeight,
+                                 GrGLenum target, GrPixelConfig dataConfig,
+                                 const GrMipLevel texels[], int mipLevelCount,
+                                 GrMipMapsStatus* mipMapsStatus = nullptr);
+
     bool createRenderTargetObjects(const GrSurfaceDesc&, const GrGLTextureInfo& texInfo,
                                    GrGLRenderTarget::IDDesc*);
 
@@ -410,8 +415,6 @@ private:
 
     bool createCopyProgram(GrTexture* srcTexture);
     bool createMipmapProgram(int progIdx);
-    bool createStencilClipClearProgram();
-    bool createClearColorProgram();
 
     std::unique_ptr<GrGLContext> fGLContext;
 

@@ -453,6 +453,7 @@ private:
                              sk_sp<GrTextureProxy>);
 
     void internalClear(const GrFixedClip&, const SkPMColor4f&, CanClearFullscreen);
+    void internalStencilClear(const GrFixedClip&, bool insideStencilMask);
 
     // Only consumes the GrPaint if successful.
     bool drawFilledDRRect(const GrClip& clip,
@@ -462,13 +463,19 @@ private:
                           const SkRRect& origOuter,
                           const SkRRect& origInner);
 
-    // Only consumes the GrPaint if successful.
-    bool drawFilledRect(const GrClip& clip,
+    void drawFilledRect(const GrClip& clip,
                         GrPaint&& paint,
                         GrAA,
                         const SkMatrix& viewMatrix,
                         const SkRect& rect,
-                        const GrUserStencilSettings* ss);
+                        const GrUserStencilSettings* ss = nullptr);
+
+    // Only consumes the GrPaint if successful.
+    bool drawFilledRectAsClear(const GrClip& clip,
+                               GrPaint&& paint,
+                               GrAA aa,
+                               const SkMatrix& viewMatrix,
+                               const SkRect& rect);
 
     void drawShapeUsingPathRenderer(const GrClip&, GrPaint&&, GrAA, const SkMatrix&,
                                     const GrShape&);

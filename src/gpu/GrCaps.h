@@ -52,6 +52,7 @@ public:
     bool srgbWriteControl() const { return fSRGBWriteControl; }
     bool discardRenderTargetSupport() const { return fDiscardRenderTargetSupport; }
     bool gpuTracingSupport() const { return fGpuTracingSupport; }
+    bool compressedTexSubImageSupport() const { return fCompressedTexSubImageSupport; }
     bool oversizedStencilSupport() const { return fOversizedStencilSupport; }
     bool textureBarrierSupport() const { return fTextureBarrierSupport; }
     bool sampleLocationsSupport() const { return fSampleLocationsSupport; }
@@ -251,11 +252,10 @@ public:
         return fDynamicStateArrayGeometryProcessorTextureSupport;
     }
 
-    // Not all backends support clearing with a scissor test (e.g. Metal).
-    // FIXME(michaelludwig): This should always return true if performColorClearsAsDraws() returns
-    // true, but the current partial-clear code doesn't handle transparent clear colors correctly
+    // Not all backends support clearing with a scissor test (e.g. Metal), this will always
+    // return true if performColorClearsAsDraws() returns true.
     bool performPartialClearsAsDraws() const {
-        return fPerformPartialClearsAsDraws;
+        return fPerformColorClearsAsDraws || fPerformPartialClearsAsDraws;
     }
 
     // Many drivers have issues with color clears.
@@ -333,6 +333,7 @@ protected:
     bool fReuseScratchTextures                       : 1;
     bool fReuseScratchBuffers                        : 1;
     bool fGpuTracingSupport                          : 1;
+    bool fCompressedTexSubImageSupport               : 1;
     bool fOversizedStencilSupport                    : 1;
     bool fTextureBarrierSupport                      : 1;
     bool fSampleLocationsSupport                     : 1;
