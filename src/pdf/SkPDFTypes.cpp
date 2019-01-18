@@ -445,7 +445,7 @@ SkPDFSharedStream::SkPDFSharedStream(std::unique_ptr<SkStreamAsset> data)
 SkPDFSharedStream::~SkPDFSharedStream() { this->drop(); }
 
 void SkPDFSharedStream::drop() {
-    fAsset = nullptr;;
+    fAsset = nullptr;
     fDict.drop();
 }
 
