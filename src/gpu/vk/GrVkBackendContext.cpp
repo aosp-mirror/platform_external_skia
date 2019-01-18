@@ -124,21 +124,21 @@ const GrVkBackendContext* GrVkBackendContext::Create(uint32_t* presentQueueIndex
         instanceExtensionNames.begin(),            // ppEnabledExtensionNames
     };
 
-    ACQUIRE_VK_PROC(CreateInstance, VK_NULL_HANDLE, VK_NULL_HANDLE);
+    ACQUIRE_VK_PROC(CreateInstance, VK_NULL_HANDLE, VK_NULL_HANDLE)
     err = grVkCreateInstance(&instance_create, nullptr, &inst);
     if (err < 0) {
         SkDebugf("vkCreateInstance failed: %d\n", err);
         return nullptr;
     }
 
-    ACQUIRE_VK_PROC(DestroyInstance, inst, VK_NULL_HANDLE);
-    ACQUIRE_VK_PROC(EnumeratePhysicalDevices, inst, VK_NULL_HANDLE);
-    ACQUIRE_VK_PROC(GetPhysicalDeviceQueueFamilyProperties, inst, VK_NULL_HANDLE);
-    ACQUIRE_VK_PROC(GetPhysicalDeviceFeatures, inst, VK_NULL_HANDLE);
-    ACQUIRE_VK_PROC(CreateDevice, inst, VK_NULL_HANDLE);
-    ACQUIRE_VK_PROC(GetDeviceQueue, inst, VK_NULL_HANDLE);
-    ACQUIRE_VK_PROC(DeviceWaitIdle, inst, VK_NULL_HANDLE);
-    ACQUIRE_VK_PROC(DestroyDevice, inst, VK_NULL_HANDLE);
+    ACQUIRE_VK_PROC(DestroyInstance, inst, VK_NULL_HANDLE)
+    ACQUIRE_VK_PROC(EnumeratePhysicalDevices, inst, VK_NULL_HANDLE)
+    ACQUIRE_VK_PROC(GetPhysicalDeviceQueueFamilyProperties, inst, VK_NULL_HANDLE)
+    ACQUIRE_VK_PROC(GetPhysicalDeviceFeatures, inst, VK_NULL_HANDLE)
+    ACQUIRE_VK_PROC(CreateDevice, inst, VK_NULL_HANDLE)
+    ACQUIRE_VK_PROC(GetDeviceQueue, inst, VK_NULL_HANDLE)
+    ACQUIRE_VK_PROC(DeviceWaitIdle, inst, VK_NULL_HANDLE)
+    ACQUIRE_VK_PROC(DestroyDevice, inst, VK_NULL_HANDLE)
 
     uint32_t gpuCount;
     err = grVkEnumeratePhysicalDevices(inst, &gpuCount, nullptr);

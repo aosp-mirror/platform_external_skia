@@ -45,7 +45,7 @@ void SCALE_FILTER_NAME(const SkBitmapProcState& s,
                              SkMatrix::kScale_Mask)) == 0);
     SkASSERT(s.fInvKy == 0);
 
-    PREAMBLE(s);
+    PREAMBLE(s)
 
     const unsigned maxX = s.fPixmap.width() - 1;
     const SkFixed one = s.fFilterOneX;

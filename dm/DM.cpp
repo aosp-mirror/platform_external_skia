@@ -904,7 +904,7 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         return new SVGSink(pageIndex);
     }
 
-#define SINK(t, sink, ...) if (config->getBackend().equals(t)) { return new sink(__VA_ARGS__); }
+#define SINK(t, sink, ...) if (config->getBackend().equals(t)) return new sink(__VA_ARGS__)
 
     if (FLAGS_cpu) {
         auto srgbColorSpace = SkColorSpace::MakeSRGB();
@@ -946,7 +946,7 @@ static sk_sp<SkColorSpace> rgb_to_gbr() {
 }
 
 static Sink* create_via(const SkString& tag, Sink* wrapped) {
-#define VIA(t, via, ...) if (tag.equals(t)) { return new via(__VA_ARGS__); }
+#define VIA(t, via, ...) if (tag.equals(t)) return new via(__VA_ARGS__)
     VIA("adobe",     ViaCSXform,           wrapped, adobe_rgb(), false);
     VIA("gbr",       ViaCSXform,           wrapped, rgb_to_gbr(), true);
     VIA("lite",      ViaLite,              wrapped);

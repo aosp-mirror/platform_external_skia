@@ -194,7 +194,6 @@ SkUnichar SkUTF8_PrevUnichar(const char** ptr) {
 
     if (*--p & 0x80) {
         while (*--p & 0x40) {
-            ;
         }
     }
 

@@ -108,17 +108,17 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
             int rgb[3] = {-(c & 1) & 0xff, -((c >> 1) & 1) & 0xff, -((c >> 2) & 1) & 0xff};
 
             const Box box = boxes.push_back() = {
-                float(x * kBoxSize),
-                float(y * kBoxSize),
-                GrColorPackRGBA(rgb[0], rgb[1], rgb[2], 255)
+                    float(x * kBoxSize),
+                    float(y * kBoxSize),
+                    GrColorPackRGBA(rgb[0], rgb[1], rgb[2], 255)
             };
 
             std::array<Box, 4>& boxVertices = vertexData.push_back();
             for (int i = 0; i < 4; ++i) {
                 boxVertices[i] = {
-                    box.fX + (i/2) * kBoxSize,
-                    box.fY + (i%2) * kBoxSize,
-                    box.fColor
+                        box.fX + (i / 2) * kBoxSize,
+                        box.fY + (i % 2) * kBoxSize,
+                        box.fColor
                 };
             }
 
@@ -131,11 +131,13 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
 
     // ---- tests ----------
 
-#define VALIDATE(buff) \
-    if (!buff) { \
-        ERRORF(reporter, #buff " is null."); \
-        return; \
-    }
+#define VALIDATE(buff)                           \
+    do {                                         \
+        if (!buff) {                             \
+            ERRORF(reporter, #buff " is null."); \
+            return;                              \
+        }                                        \
+    } while (0)
 
     run_test("setNonIndexedNonInstanced", reporter, rtc, gold, [&](DrawMeshHelper* helper) {
         SkTArray<Box> expandedVertexData;

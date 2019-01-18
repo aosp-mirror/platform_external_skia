@@ -693,12 +693,9 @@ GR_MAKE_BITFIELD_CLASS_OPS(GrRenderTargetFlags)
 
 #ifdef SK_DEBUG
 // Takes a pointer to a GrCaps, and will suppress prints if required
-#define GrCapsDebugf(caps, ...)      \
-    if (!(caps)->suppressPrints()) { \
-        SkDebugf(__VA_ARGS__);       \
-    }
+#define GrCapsDebugf(caps, ...)  if (!(caps)->suppressPrints()) SkDebugf(__VA_ARGS__)
 #else
-#define GrCapsDebugf(caps, ...)
+#define GrCapsDebugf(caps, ...) do {} while (0)
 #endif
 
 /**
