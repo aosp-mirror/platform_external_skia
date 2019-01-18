@@ -98,7 +98,7 @@ static const char* equation_string(GrBlendEquation eq) {
             return "hsl_color";
         case kHSLLuminosity_GrBlendEquation:
             return "hsl_luminosity";
-    };
+    }
     return "";
 }
 
