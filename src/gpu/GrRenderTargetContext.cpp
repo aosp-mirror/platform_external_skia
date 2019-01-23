@@ -909,6 +909,37 @@ void GrRenderTargetContext::fillRectToRect(const GrClip& clip,
             viewMatrix, croppedRect, croppedLocalRect));
 }
 
+void GrRenderTargetContext::fillRectWithEdgeAA(const GrClip& clip, GrPaint&& paint,
+                                               GrQuadAAFlags edgeAA, const SkMatrix& viewMatrix,
+                                               const SkRect& rect) {
+    ASSERT_SINGLE_OWNER
+    RETURN_IF_ABANDONED
+    SkDEBUGCODE(this->validate();)
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "fillRectWithEdgeAA", fContext);
+
+    // If aaType turns into MSAA, make sure to keep quads with no AA edges as MSAA. Sending those
+    // to drawFilledRect() would have it turn off MSAA in that case, which breaks seaming with
+    // any partial AA edges that kept MSAA.
+    GrAAType aaType = this->chooseAAType(GrAA::kYes, GrAllowMixedSamples::kNo);
+    if (aaType != GrAAType::kMSAA &&
+        (edgeAA == GrQuadAAFlags::kNone || edgeAA == GrQuadAAFlags::kAll)) {
+        // This is equivalent to a regular filled rect draw, so route through there to take
+        // advantage of draw->clear optimizations
+        this->drawFilledRect(clip, std::move(paint), GrAA(edgeAA == GrQuadAAFlags::kAll),
+                             viewMatrix, rect);
+        return;
+    }
+
+    SkRect croppedRect = rect;
+    if (!crop_filled_rect(this->width(), this->height(), clip, viewMatrix, &croppedRect)) {
+        return;
+    }
+
+    AutoCheckFlush acf(this->drawingManager());
+    this->addDrawOp(clip, GrFillRectOp::MakePerEdge(fContext, std::move(paint), aaType, edgeAA,
+                                                    viewMatrix, croppedRect));
+}
+
 void GrRenderTargetContext::drawTexture(const GrClip& clip, sk_sp<GrTextureProxy> proxy,
                                         GrSamplerState::Filter filter, const SkPMColor4f& color,
                                         const SkRect& srcRect, const SkRect& dstRect,
@@ -1942,8 +1973,8 @@ void GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<GrDraw
     }
 
     GrXferProcessor::DstProxy dstProxy;
-    GrProcessorSet::Analysis processorAnalysis = op->finalize(*this->caps(), &appliedClip);
-    if (processorAnalysis.requiresDstTexture()) {
+    GrProcessorSet::Analysis analysis = op->finalize(*this->caps(), &appliedClip);
+    if (analysis.requiresDstTexture()) {
         if (!this->setupDstProxy(this->asRenderTargetProxy(), clip, *op, &dstProxy)) {
             fContext->contextPriv().opMemoryPool()->release(std::move(op));
             return;
@@ -1955,7 +1986,7 @@ void GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<GrDraw
     if (willAddFn) {
         willAddFn(op.get(), opList->uniqueID());
     }
-    opList->addOp(std::move(op), *this->caps(), std::move(appliedClip), dstProxy);
+    opList->addDrawOp(std::move(op), analysis, std::move(appliedClip), dstProxy, *this->caps());
 }
 
 bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const GrClip& clip,
