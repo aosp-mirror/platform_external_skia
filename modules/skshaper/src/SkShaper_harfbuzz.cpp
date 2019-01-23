@@ -11,6 +11,7 @@
 #include "SkMalloc.h"
 #include "SkOnce.h"
 #include "SkFont.h"
+#include "SkFontMetrics.h"
 #include "SkPoint.h"
 #include "SkRefCnt.h"
 #include "SkScalar.h"
@@ -504,7 +505,9 @@ SkShaper::SkShaper(sk_sp<SkTypeface> tf) : fImpl(new Impl) {
 
     fImpl->fTypeface = tf ? std::move(tf) : SkTypeface::MakeDefault();
     fImpl->fHarfBuzzFont = create_hb_font(fImpl->fTypeface.get());
-    SkASSERT(fImpl->fHarfBuzzFont);
+    if (!fImpl->fHarfBuzzFont) {
+        SkDebugf("create_hb_font failed!\n");
+    }
     fImpl->fBuffer.reset(hb_buffer_create());
     SkASSERT(fImpl->fBuffer);
 
