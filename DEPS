@@ -7,14 +7,14 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@c81e7bfeb5580726f995776ed04fc4517d6d9c27",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@47ca1b2fa3990e51a2ced20f7a7d3589a5477ad1",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@96443b262250c390b0caefbf3eed8463ba35ecae",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
   "third_party/externals/expat"           : "https://android.googlesource.com/platform/external/expat.git@android-6.0.1_r55",
   "third_party/externals/freetype"        : "https://skia.googlesource.com/third_party/freetype2.git@7edc937fe679d14d66f55cf6f7fa607925d38f3c",
   "third_party/externals/harfbuzz"        : "https://skia.googlesource.com/third_party/harfbuzz.git@8be74d85534534dbdd39a0a6f496e26e9f3e661d",
   "third_party/externals/icu"             : "https://chromium.googlesource.com/chromium/deps/icu.git@407b39301e71006b68bd38e770f35d32398a7b14",
-  "third_party/externals/imgui"           : "https://skia.googlesource.com/external/github.com/ocornut/imgui.git@bc6ac8b2aee0614debd940e45bc9cd0d9b355c86",
+  "third_party/externals/imgui"           : "https://skia.googlesource.com/external/github.com/ocornut/imgui.git@d38d7c6628bebd02692cfdd6fa76b4d992a35b75",
   # TODO: remove jsoncpp after migrating clients to SkJSON
   "third_party/externals/jsoncpp"         : "https://chromium.googlesource.com/external/github.com/open-source-parsers/jsoncpp.git@1.0.0",
   "third_party/externals/libjpeg-turbo"   : "https://skia.googlesource.com/external/github.com/libjpeg-turbo/libjpeg-turbo.git@2.0.0",
@@ -29,7 +29,7 @@ deps = {
   "third_party/externals/sfntly"          : "https://chromium.googlesource.com/external/github.com/googlei18n/sfntly.git@b55ff303ea2f9e26702b514cf6a3196a2e3e2974",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@661ad91124e6af2272afd00f804d8aa276e17107",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@e9e4393b1c5aad7553c05782acefbe32b42644bd",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@878d4b04e1c0c0061d15330f3e4d6df99a6628a0",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@4806a9be530f1dff5a58bf9e9cb79b2b9202fa69",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://github.com/google/wuffs.git@fda3c4c9863d9f9fcec58ae66508c4621fc71ea5",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
@@ -37,7 +37,7 @@ deps = {
   "third_party/externals/Nima-Math-Cpp" : "https://github.com/2d-inc/Nima-Math-Cpp.git@e0c12772093fa8860f55358274515b86885f0108",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@9eca44242f7b0f42a4af33e1dbda178785ca91af",
+    "url": "https://chromium.googlesource.com/chromium/src.git@2d4f839f26f70675ec872789dbe3a10a829d5737",
     "condition": "checkout_chromium",
   },
 }

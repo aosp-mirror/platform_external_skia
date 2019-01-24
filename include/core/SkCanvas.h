@@ -22,6 +22,7 @@
 #include "SkBlendMode.h"
 #include "SkClipOp.h"
 #include "SkDeque.h"
+#include "SkFontTypes.h"
 #include "SkPaint.h"
 #include "SkRasterHandleAllocator.h"
 #include "SkSurfaceProps.h"
@@ -1817,30 +1818,15 @@ public:
     void experimental_DrawImageSetV1(const ImageSetEntry imageSet[], int cnt,
                                      SkFilterQuality quality, SkBlendMode mode);
 
-#ifdef SK_SUPPORT_LEGACY_CANVAS_DRAW_TEXT
-    /** DEPRECATED. Use drawSimpleText or drawTextBlob.
-        Draws text, with origin at (x, y), using clip, SkMatrix, and SkPaint paint.
-
-        text meaning depends on SkTextEncoding; by default, text is encoded as
-        UTF-8.
-
-        x and y meaning depends on SkPaint::Align and SkPaint vertical text; by default
-        text draws left to right, positioning the first glyph left side bearing at x
-        and its baseline at y. Text size is affected by SkMatrix and SkPaint text size.
-
-        All elements of paint: SkPathEffect, SkMaskFilter, SkShader,
-        SkColorFilter, SkImageFilter, and SkDrawLooper; apply to text. By default, draws
-        filled 12 point black glyphs.
-
-        @param text        character code points or glyphs drawn
-        @param byteLength  byte length of text array
-        @param x           start of text on x-axis
-        @param y           start of text on y-axis
-        @param paint       text size, blend, color, and so on, used to draw
-    */
-    void drawText(const void* text, size_t byteLength, SkScalar x, SkScalar y,
-                  const SkPaint& paint);
-#endif  // SK_SUPPORT_LEGACY_CANVAS_DRAW_TEXT
+    /**
+     * This is an experimental API for the SkiaRenderer Chromium project. The signature will
+     * surely evolve if this is not removed. The antialiasing flags are intended to allow control
+     * over each edge's AA status, to allow perfect seaming for tile sets.
+     *
+     * When not fully supported, the implementation only antialiases if all edges are flagged.
+     */
+    void experimental_DrawEdgeAARectV1(const SkRect& r, QuadAAFlags edgeAA, SkColor color,
+                                       SkBlendMode mode);
 
     /** Draws text, with origin at (x, y), using clip, SkMatrix, SkFont font,
         and SkPaint paint.
@@ -2375,6 +2361,8 @@ protected:
     // that mechanism  will be required to implement the new function.
     virtual void onDrawPaint(const SkPaint& paint);
     virtual void onDrawRect(const SkRect& rect, const SkPaint& paint);
+    virtual void onDrawEdgeAARect(const SkRect& rect, QuadAAFlags edgeAA, SkColor color,
+                                  SkBlendMode mode);
     virtual void onDrawRRect(const SkRRect& rrect, const SkPaint& paint);
     virtual void onDrawDRRect(const SkRRect& outer, const SkRRect& inner, const SkPaint& paint);
     virtual void onDrawOval(const SkRect& rect, const SkPaint& paint);
