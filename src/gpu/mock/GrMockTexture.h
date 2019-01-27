@@ -22,14 +22,13 @@ public:
         this->registerWithCache(budgeted);
     }
 
-    enum Wrapped { kWrapped };
-    GrMockTexture(GrMockGpu* gpu, Wrapped, const GrSurfaceDesc& desc, GrMipMapsStatus mipMapsStatus,
-                  const GrMockTextureInfo& info, GrIOType ioType, bool purgeImmediately)
+    GrMockTexture(GrMockGpu* gpu, const GrSurfaceDesc& desc, GrMipMapsStatus mipMapsStatus,
+                  const GrMockTextureInfo& info, GrWrapCacheable cacheable, GrIOType ioType)
             : GrMockTexture(gpu, desc, mipMapsStatus, info) {
         if (ioType == kRead_GrIOType) {
             this->setReadOnly();
         }
-        this->registerWithCacheWrapped(purgeImmediately);
+        this->registerWithCacheWrapped(cacheable);
     }
 
     ~GrMockTexture() override {}
@@ -78,7 +77,7 @@ protected:
 
     // protected so that GrMockTextureRenderTarget can call this to avoid "inheritance via
     // dominance" warning.
-    void becamePurgeable() override {
+    void removedLastRefOrPendingIO() override {
         if (fIdleProc) {
             fIdleProc(fIdleProcContext);
             fIdleProc = nullptr;
@@ -113,7 +112,7 @@ public:
     GrMockRenderTarget(GrMockGpu* gpu, Wrapped, const GrSurfaceDesc& desc,
                        const GrMockRenderTargetInfo& info)
             : GrSurface(gpu, desc), INHERITED(gpu, desc), fInfo(info) {
-        this->registerWithCacheWrapped();
+        this->registerWithCacheWrapped(GrWrapCacheable::kNo);
     }
 
     ResolveType getResolveType() const override { return kCanResolve_ResolveType; }
@@ -169,11 +168,11 @@ public:
     // Renderable wrapped backend texture.
     GrMockTextureRenderTarget(GrMockGpu* gpu, const GrSurfaceDesc& desc,
                               GrMipMapsStatus mipMapsStatus, const GrMockTextureInfo& texInfo,
-                              const GrMockRenderTargetInfo& rtInfo)
+                              const GrMockRenderTargetInfo& rtInfo, GrWrapCacheable cacheble)
             : GrSurface(gpu, desc)
             , GrMockTexture(gpu, desc, mipMapsStatus, texInfo)
             , GrMockRenderTarget(gpu, desc, rtInfo) {
-        this->registerWithCacheWrapped();
+        this->registerWithCacheWrapped(cacheble);
     }
 
     GrTexture* asTexture() override { return this; }
@@ -197,7 +196,7 @@ private:
     }
 
     // We implement this to avoid the inheritance via dominance warning.
-    void becamePurgeable() override { GrMockTexture::becamePurgeable(); }
+    void removedLastRefOrPendingIO() override { GrMockTexture::removedLastRefOrPendingIO(); }
 
     size_t onGpuMemorySize() const override {
         int numColorSamples = this->numColorSamples();

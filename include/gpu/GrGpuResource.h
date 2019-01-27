@@ -37,7 +37,7 @@ class SkTraceMemoryDump;
  * morphism using CRTP). Similarly when the ref (but not necessarily pending read/write) count
  * reaches 0 DERIVED::notifyRefCountIsZero() will be called. In the case when an unref() causes both
  * the ref cnt to reach zero and the other counts are zero, notifyRefCountIsZero() will be called
- * before notifyIsPurgeable(). Moreover, if notifyRefCountIsZero() returns false then
+ * before notifyAllCntsAreZero(). Moreover, if notifyRefCountIsZero() returns false then
  * notifyAllRefCntsAreZero() won't be called at all. notifyRefCountIsZero() must return false if the
  * object may be deleted after notifyRefCntIsZero() returns.
  *
@@ -141,7 +141,6 @@ private:
  */
 class SK_API GrGpuResource : public GrIORef<GrGpuResource> {
 public:
-
     /**
      * Tests whether a object has been abandoned or released. All objects will
      * be in this state after their creating GrContext is destroyed or has
@@ -230,16 +229,6 @@ public:
     inline const ResourcePriv resourcePriv() const;
 
     /**
-     * Removes references to objects in the underlying 3D API without freeing them.
-     * Called by CacheAccess.
-     * In general this method should not be called outside of skia. It was
-     * made by public for a special case where it needs to be called in Blink
-     * when a texture becomes unsafe to use after having been shared through
-     * a texture mailbox.
-     */
-    void abandon();
-
-    /**
      * Dumps memory usage information for this GrGpuResource to traceMemoryDump.
      * Typically, subclasses should not need to override this, and should only
      * need to override setMemoryBacking.
@@ -265,7 +254,7 @@ protected:
     // This must be called by every GrGpuObject that references any wrapped backend objects. It
     // should be called once the object is fully initialized (i.e. only from the constructors of the
     // final class).
-    void registerWithCacheWrapped(bool purgeImmediately = false);
+    void registerWithCacheWrapped(GrWrapCacheable);
 
     GrGpuResource(GrGpu*);
     virtual ~GrGpuResource();
@@ -299,7 +288,8 @@ protected:
 
 
 private:
-    bool isPurgeable() const { return !this->internalHasRef() && !this->internalHasPendingIO(); }
+    bool isPurgeable() const;
+    bool hasRefOrPendingIO() const;
 
     /**
      * Called by the registerWithCache if the resource is available to be used as scratch.
@@ -307,7 +297,13 @@ private:
      * resources and populate the scratchKey with the key.
      * By default resources are not recycled as scratch.
      **/
-    virtual void computeScratchKey(GrScratchKey*) const { }
+    virtual void computeScratchKey(GrScratchKey*) const {}
+
+    /**
+     * Removes references to objects in the underlying 3D API without freeing them.
+     * Called by CacheAccess.
+     */
+    void abandon();
 
     /**
      * Frees the object in the underlying 3D API. Called by CacheAccess.
@@ -317,9 +313,9 @@ private:
     virtual size_t onGpuMemorySize() const = 0;
 
     /**
-     * Called by GrResourceCache when a resource transitions from being unpurgeable to purgeable.
+     * Called by GrResourceCache when a resource loses its last ref or pending IO.
      */
-    virtual void becamePurgeable() {}
+    virtual void removedLastRefOrPendingIO() {}
 
     // See comments in CacheAccess and ResourcePriv.
     void setUniqueKey(const GrUniqueKey&);
@@ -349,11 +345,10 @@ private:
     // This is not ref'ed but abandon() or release() will be called before the GrGpu object
     // is destroyed. Those calls set will this to NULL.
     GrGpu* fGpu;
-    mutable size_t fGpuMemorySize;
+    mutable size_t fGpuMemorySize = kInvalidGpuMemorySize;
 
-    SkBudgeted fBudgeted;
-    bool fShouldPurgeImmediately;
-    bool fRefsWrappedObjects;
+    GrBudgetedType fBudgetedType = GrBudgetedType::kUnbudgetedUncacheable;
+    bool fRefsWrappedObjects = false;
     const UniqueID fUniqueID;
 
     typedef GrIORef<GrGpuResource> INHERITED;

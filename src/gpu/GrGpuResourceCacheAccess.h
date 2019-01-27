@@ -26,26 +26,15 @@ private:
      */
     bool isScratch() const {
         return !fResource->getUniqueKey().isValid() && fResource->fScratchKey.isValid() &&
-                SkBudgeted::kYes == fResource->resourcePriv().isBudgeted();
+               GrBudgetedType::kBudgeted == fResource->resourcePriv().budgetedType();
     }
-
-    /**
-     * Even if the resource has a unique key should we still try to purge it as soon as possible.
-     */
-    bool shouldPurgeImmediately() const { return fResource->fShouldPurgeImmediately; }
-
-    /**
-     * Called by GrResourceCache when a resource becomes purgeable regardless of whether the cache
-     * has decided to keep the resource ot purge it immediately.
-     */
-    void becamePurgeable() { fResource->becamePurgeable(); }
 
     /**
      * Called by the cache to delete the resource under normal circumstances.
      */
     void release() {
         fResource->release();
-        if (fResource->isPurgeable()) {
+        if (!fResource->hasRefOrPendingIO()) {
             delete fResource;
         }
     }
@@ -55,7 +44,7 @@ private:
      */
     void abandon() {
         fResource->abandon();
-        if (fResource->isPurgeable()) {
+        if (!fResource->hasRefOrPendingIO()) {
             delete fResource;
         }
     }

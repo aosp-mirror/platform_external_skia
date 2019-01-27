@@ -113,16 +113,15 @@ public:
      * kRead or kRW.
      */
     sk_sp<GrTextureProxy> wrapBackendTexture(const GrBackendTexture&, GrSurfaceOrigin,
-                                             GrWrapOwnership, GrIOType, ReleaseProc = nullptr,
-                                             ReleaseContext = nullptr);
+                                             GrWrapOwnership, GrWrapCacheable, GrIOType,
+                                             ReleaseProc = nullptr, ReleaseContext = nullptr);
 
     /*
      * Create a texture proxy that wraps a backend texture and is both texture-able and renderable
      */
-    sk_sp<GrTextureProxy> wrapRenderableBackendTexture(const GrBackendTexture&,
-                                                       GrSurfaceOrigin,
-                                                       int sampleCnt,
-                                                       GrWrapOwnership = kBorrow_GrWrapOwnership);
+    sk_sp<GrTextureProxy> wrapRenderableBackendTexture(const GrBackendTexture&, GrSurfaceOrigin,
+                                                       int sampleCnt, GrWrapOwnership,
+                                                       GrWrapCacheable);
 
     /*
      * Create a render target proxy that wraps a backend render target
@@ -252,6 +251,7 @@ public:
      */
     sk_sp<GrTextureProxy> testingOnly_createInstantiatedProxy(const GrSurfaceDesc&, GrSurfaceOrigin,
                                                               SkBackingFit, SkBudgeted);
+    sk_sp<GrTextureProxy> testingOnly_createWrapped(sk_sp<GrTexture>, GrSurfaceOrigin);
 
 private:
     friend class GrAHardwareBufferImageGenerator; // for createWrapped

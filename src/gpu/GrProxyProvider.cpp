@@ -451,6 +451,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxy(sk_sp<SkData> data, const GrS
 sk_sp<GrTextureProxy> GrProxyProvider::wrapBackendTexture(const GrBackendTexture& backendTex,
                                                           GrSurfaceOrigin origin,
                                                           GrWrapOwnership ownership,
+                                                          GrWrapCacheable cacheable,
                                                           GrIOType ioType,
                                                           ReleaseProc releaseProc,
                                                           ReleaseContext releaseCtx) {
@@ -464,7 +465,8 @@ sk_sp<GrTextureProxy> GrProxyProvider::wrapBackendTexture(const GrBackendTexture
         return nullptr;
     }
 
-    sk_sp<GrTexture> tex = fResourceProvider->wrapBackendTexture(backendTex, ownership, ioType);
+    sk_sp<GrTexture> tex =
+            fResourceProvider->wrapBackendTexture(backendTex, ownership, cacheable, ioType);
     if (!tex) {
         return nullptr;
     }
@@ -478,14 +480,14 @@ sk_sp<GrTextureProxy> GrProxyProvider::wrapBackendTexture(const GrBackendTexture
 
     SkASSERT(!tex->asRenderTarget());  // Strictly a GrTexture
     // Make sure we match how we created the proxy with SkBudgeted::kNo
-    SkASSERT(SkBudgeted::kNo == tex->resourcePriv().isBudgeted());
+    SkASSERT(GrBudgetedType::kBudgeted != tex->resourcePriv().budgetedType());
 
     return sk_sp<GrTextureProxy>(new GrTextureProxy(std::move(tex), origin));
 }
 
 sk_sp<GrTextureProxy> GrProxyProvider::wrapRenderableBackendTexture(
         const GrBackendTexture& backendTex, GrSurfaceOrigin origin, int sampleCnt,
-        GrWrapOwnership ownership) {
+        GrWrapOwnership ownership, GrWrapCacheable cacheable) {
     if (this->isAbandoned()) {
         return nullptr;
     }
@@ -500,15 +502,15 @@ sk_sp<GrTextureProxy> GrProxyProvider::wrapRenderableBackendTexture(
         return nullptr;
     }
 
-    sk_sp<GrTexture> tex =
-            fResourceProvider->wrapRenderableBackendTexture(backendTex, sampleCnt, ownership);
+    sk_sp<GrTexture> tex = fResourceProvider->wrapRenderableBackendTexture(backendTex, sampleCnt,
+                                                                           ownership, cacheable);
     if (!tex) {
         return nullptr;
     }
 
     SkASSERT(tex->asRenderTarget());  // A GrTextureRenderTarget
     // Make sure we match how we created the proxy with SkBudgeted::kNo
-    SkASSERT(SkBudgeted::kNo == tex->resourcePriv().isBudgeted());
+    SkASSERT(GrBudgetedType::kBudgeted != tex->resourcePriv().budgetedType());
 
     return sk_sp<GrTextureProxy>(new GrTextureRenderTargetProxy(std::move(tex), origin));
 }
@@ -531,7 +533,7 @@ sk_sp<GrSurfaceProxy> GrProxyProvider::wrapBackendRenderTarget(
     SkASSERT(!rt->asTexture());  // A GrRenderTarget that's not textureable
     SkASSERT(!rt->getUniqueKey().isValid());
     // Make sure we match how we created the proxy with SkBudgeted::kNo
-    SkASSERT(SkBudgeted::kNo == rt->resourcePriv().isBudgeted());
+    SkASSERT(GrBudgetedType::kBudgeted != rt->resourcePriv().budgetedType());
 
     return sk_sp<GrRenderTargetProxy>(new GrRenderTargetProxy(std::move(rt), origin));
 }
@@ -555,7 +557,7 @@ sk_sp<GrSurfaceProxy> GrProxyProvider::wrapBackendTextureAsRenderTarget(
     SkASSERT(!rt->asTexture());  // A GrRenderTarget that's not textureable
     SkASSERT(!rt->getUniqueKey().isValid());
     // This proxy should be unbudgeted because we're just wrapping an external resource
-    SkASSERT(SkBudgeted::kNo == rt->resourcePriv().isBudgeted());
+    SkASSERT(GrBudgetedType::kBudgeted != rt->resourcePriv().budgetedType());
 
     return sk_sp<GrSurfaceProxy>(new GrRenderTargetProxy(std::move(rt), origin));
 }
@@ -580,7 +582,7 @@ sk_sp<GrRenderTargetProxy> GrProxyProvider::wrapVulkanSecondaryCBAsRenderTarget(
     SkASSERT(!rt->asTexture());  // A GrRenderTarget that's not textureable
     SkASSERT(!rt->getUniqueKey().isValid());
     // This proxy should be unbudgeted because we're just wrapping an external resource
-    SkASSERT(SkBudgeted::kNo == rt->resourcePriv().isBudgeted());
+    SkASSERT(GrBudgetedType::kBudgeted != rt->resourcePriv().budgetedType());
 
     // All Vulkan surfaces uses top left origins.
     return sk_sp<GrRenderTargetProxy>(

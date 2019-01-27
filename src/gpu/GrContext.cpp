@@ -261,7 +261,8 @@ void GrContext::abandonContext() {
 
 bool GrContext::abandoned() const {
     ASSERT_SINGLE_OWNER
-    return fDrawingManager->wasAbandoned();
+    // If called from ~GrContext(), the drawing manager may already be gone.
+    return !fDrawingManager || fDrawingManager->wasAbandoned();
 }
 
 void GrContext::releaseResourcesAndAbandonContext() {
@@ -947,7 +948,7 @@ sk_sp<GrTextureContext> GrContextPriv::makeBackendTextureContext(const GrBackend
     ASSERT_SINGLE_OWNER_PRIV
 
     sk_sp<GrSurfaceProxy> proxy = this->proxyProvider()->wrapBackendTexture(
-            tex, origin, kBorrow_GrWrapOwnership, kRW_GrIOType);
+            tex, origin, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, kRW_GrIOType);
     if (!proxy) {
         return nullptr;
     }
@@ -964,8 +965,8 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureRenderTargetContex
     ASSERT_SINGLE_OWNER_PRIV
     SkASSERT(sampleCnt > 0);
 
-    sk_sp<GrTextureProxy> proxy(
-            this->proxyProvider()->wrapRenderableBackendTexture(tex, origin, sampleCnt));
+    sk_sp<GrTextureProxy> proxy(this->proxyProvider()->wrapRenderableBackendTexture(
+            tex, origin, sampleCnt, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo));
     if (!proxy) {
         return nullptr;
     }

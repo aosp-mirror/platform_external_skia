@@ -22,7 +22,7 @@ public:
                                                 GrMipMapsStatus);
 
     static sk_sp<GrMtlTexture> MakeWrappedTexture(GrMtlGpu*, const GrSurfaceDesc&, id<MTLTexture>,
-                                                  GrIOType, bool purgeImmediately);
+                                                  GrWrapCacheable, GrIOType);
 
     ~GrMtlTexture() override;
 
@@ -76,7 +76,7 @@ private:
         fReleaseHelper.reset();
     }
 
-    void becamePurgeable() override {
+    void removedLastRefOrPendingIO() override {
         if (fIdleProc) {
             fIdleProc(fIdleProcContext);
             fIdleProc = nullptr;
@@ -88,7 +88,7 @@ private:
                  GrMipMapsStatus);
 
     GrMtlTexture(GrMtlGpu*, Wrapped, const GrSurfaceDesc&, id<MTLTexture>, GrMipMapsStatus,
-                 GrIOType, bool purgeImmediately);
+                 GrWrapCacheable, GrIOType);
 
     id<MTLTexture> fTexture;
     sk_sp<GrReleaseProcHelper> fReleaseHelper;

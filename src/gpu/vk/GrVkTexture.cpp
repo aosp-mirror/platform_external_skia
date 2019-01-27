@@ -36,16 +36,10 @@ GrVkTexture::GrVkTexture(GrVkGpu* gpu,
     }
 }
 
-GrVkTexture::GrVkTexture(GrVkGpu* gpu,
-                         Wrapped,
-                         const GrSurfaceDesc& desc,
-                         const GrVkImageInfo& info,
-                         sk_sp<GrVkImageLayout> layout,
-                         const GrVkImageView* view,
-                         GrMipMapsStatus mipMapsStatus,
-                         GrBackendObjectOwnership ownership,
-                         GrIOType ioType,
-                         bool purgeImmediately)
+GrVkTexture::GrVkTexture(GrVkGpu* gpu, const GrSurfaceDesc& desc, const GrVkImageInfo& info,
+                         sk_sp<GrVkImageLayout> layout, const GrVkImageView* view,
+                         GrMipMapsStatus mipMapsStatus, GrBackendObjectOwnership ownership,
+                         GrWrapCacheable cacheable, GrIOType ioType)
         : GrSurface(gpu, desc)
         , GrVkImage(info, std::move(layout), ownership)
         , INHERITED(gpu, desc, GrTextureType::k2D, mipMapsStatus)
@@ -54,7 +48,7 @@ GrVkTexture::GrVkTexture(GrVkGpu* gpu,
     if (ioType == kRead_GrIOType) {
         this->setReadOnly();
     }
-    this->registerWithCacheWrapped(purgeImmediately);
+    this->registerWithCacheWrapped(cacheable);
 }
 
 // Because this class is virtually derived from GrSurface we must explicitly call its constructor.
@@ -96,11 +90,9 @@ sk_sp<GrVkTexture> GrVkTexture::MakeNewTexture(GrVkGpu* gpu, SkBudgeted budgeted
                                               imageView, mipMapsStatus));
 }
 
-sk_sp<GrVkTexture> GrVkTexture::MakeWrappedTexture(GrVkGpu* gpu,
-                                                   const GrSurfaceDesc& desc,
+sk_sp<GrVkTexture> GrVkTexture::MakeWrappedTexture(GrVkGpu* gpu, const GrSurfaceDesc& desc,
                                                    GrWrapOwnership wrapOwnership,
-                                                   GrIOType ioType,
-                                                   bool purgeImmediately,
+                                                   GrWrapCacheable cacheable, GrIOType ioType,
                                                    const GrVkImageInfo& info,
                                                    sk_sp<GrVkImageLayout> layout) {
     // Wrapped textures require both image and allocation (because they can be mapped)
@@ -118,9 +110,8 @@ sk_sp<GrVkTexture> GrVkTexture::MakeWrappedTexture(GrVkGpu* gpu,
 
     GrBackendObjectOwnership ownership = kBorrow_GrWrapOwnership == wrapOwnership
             ? GrBackendObjectOwnership::kBorrowed : GrBackendObjectOwnership::kOwned;
-    return sk_sp<GrVkTexture>(new GrVkTexture(gpu, kWrapped, desc, info, std::move(layout),
-                                              imageView, mipMapsStatus, ownership, ioType,
-                                              purgeImmediately));
+    return sk_sp<GrVkTexture>(new GrVkTexture(gpu, desc, info, std::move(layout), imageView,
+                                              mipMapsStatus, ownership, cacheable, ioType));
 }
 
 GrVkTexture::~GrVkTexture() {
@@ -129,10 +120,13 @@ GrVkTexture::~GrVkTexture() {
 }
 
 void GrVkTexture::onRelease() {
-    // When there is an idle proc, the Resource will call the proc in releaseImage() so
-    // we clear it here.
-    fIdleProc = nullptr;
-    fIdleProcContext = nullptr;
+    // We're about to be severed from our GrVkResource. If there is an idle proc we have to decide
+    // who will handle it. If the resource is still tied to a command buffer we let it handle it.
+    // Otherwise, we handle it.
+    if (this->hasResource() && this->resource()->isOwnedByCommandBuffer()) {
+        fIdleProc = nullptr;
+        fIdleProcContext = nullptr;
+    }
 
     // we create this and don't hand it off, so we should always destroy it
     if (fTextureView) {
@@ -146,10 +140,14 @@ void GrVkTexture::onRelease() {
 }
 
 void GrVkTexture::onAbandon() {
-    // When there is an idle proc, the Resource will call the proc in abandonImage() so
-    // we clear it here.
-    fIdleProc = nullptr;
-    fIdleProcContext = nullptr;
+    // We're about to be severed from our GrVkResource. If there is an idle proc we have to decide
+    // who will handle it. If the resource is still tied to a command buffer we let it handle it.
+    // Otherwise, we handle it.
+    if (this->hasResource() && this->resource()->isOwnedByCommandBuffer()) {
+        fIdleProc = nullptr;
+        fIdleProcContext = nullptr;
+    }
+
     // we create this and don't hand it off, so we should always destroy it
     if (fTextureView) {
         fTextureView->unrefAndAbandon();
@@ -181,19 +179,20 @@ void GrVkTexture::setIdleProc(IdleProc proc, void* context) {
     }
 }
 
-void GrVkTexture::becamePurgeable() {
+void GrVkTexture::removedLastRefOrPendingIO() {
     if (!fIdleProc) {
         return;
     }
     // This is called when the GrTexture is purgeable. However, we need to check whether the
     // Resource is still owned by any command buffers. If it is then it will call the proc.
-    auto* resource = this->resource();
-    SkASSERT(resource);
-    if (resource->isOwnedByCommandBuffer()) {
+    auto* resource = this->hasResource() ? this->resource() : nullptr;
+    if (resource && resource->isOwnedByCommandBuffer()) {
         return;
     }
     fIdleProc(fIdleProcContext);
     fIdleProc = nullptr;
     fIdleProcContext = nullptr;
-    resource->setIdleProc(nullptr, nullptr, nullptr);
+    if (resource) {
+        resource->setIdleProc(nullptr, nullptr, nullptr);
+    }
 }
