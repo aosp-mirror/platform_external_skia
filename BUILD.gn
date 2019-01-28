@@ -1539,7 +1539,6 @@ if (skia_enable_tools) {
     ]
     public_deps = [
       ":common_flags",
-      "//third_party/jsoncpp",
     ]
   }
 
@@ -1762,7 +1761,6 @@ if (skia_enable_tools) {
         "modules/skottie",
         "modules/skottie:utils",
         "modules/sksg",
-        "//third_party/jsoncpp",
         "//third_party/libpng",
       ]
 
@@ -1798,7 +1796,6 @@ if (skia_enable_tools) {
       ":skia",
       ":tool_utils",
       "modules/sksg",
-      "//third_party/jsoncpp",
     ]
   }
 
@@ -1897,7 +1894,6 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":tool_utils",
-        "//third_party/jsoncpp",
         "//third_party/libmicrohttpd",
         "//third_party/libpng",
       ]
@@ -1943,7 +1939,6 @@ if (skia_enable_tools) {
       ":gpu_tool_utils",
       ":skia",
       "modules/skottie:fuzz",
-      "//third_party/jsoncpp",
       "//third_party/libpng",
     ]
   }
@@ -1992,7 +1987,6 @@ if (skia_enable_tools) {
     deps = [
       ":skia",
       ":tool_utils",
-      "//third_party/jsoncpp",
     ]
   }
 
@@ -2130,10 +2124,10 @@ if (skia_enable_tools) {
       }
     } else if (is_mac) {
       sources += [
-        "tools/sk_app/mac/GLWindowContext_mac.cpp",
-        "tools/sk_app/mac/RasterWindowContext_mac.cpp",
-        "tools/sk_app/mac/Window_mac.cpp",
-        "tools/sk_app/mac/main_mac.cpp",
+        "tools/sk_app/mac/GLWindowContext_mac.mm",
+        "tools/sk_app/mac/RasterWindowContext_mac.mm",
+        "tools/sk_app/mac/Window_mac.mm",
+        "tools/sk_app/mac/main_mac.mm",
       ]
       libs += [
         "QuartzCore.framework",
@@ -2168,7 +2162,7 @@ if (skia_enable_tools) {
     ]
     if (is_android) {
       deps += [ "//third_party/native_app_glue" ]
-    } else if (is_mac || is_ios) {
+    } else if (is_ios) {
       deps += [ "//third_party/libsdl" ]
     }
     if (skia_use_angle) {
@@ -2376,7 +2370,6 @@ if (skia_enable_tools) {
         ":generate_mocs",
         ":generate_resources",
         ":skia",
-        "//third_party/jsoncpp",
         "//third_party/libpng",
       ]
     }
