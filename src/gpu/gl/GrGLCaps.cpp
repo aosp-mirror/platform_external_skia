@@ -717,8 +717,15 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
             shaderCaps->fFBFetchColorName = "gl_LastFragData[0]";
             shaderCaps->fFBFetchExtensionString = "GL_EXT_shader_framebuffer_fetch";
             fFBFetchRequiresEnablePerSample = false;
+        } else if (ctxInfo.hasExtension("GL_NV_shader_framebuffer_fetch")) {
+            // Actually, we haven't seen an ES3.0 device with this extension yet, so we don't know.
+            shaderCaps->fFBFetchNeedsCustomOutput = false;
+            shaderCaps->fFBFetchSupport = true;
+            shaderCaps->fFBFetchColorName = "gl_LastFragData[0]";
+            shaderCaps->fFBFetchExtensionString = "GL_NV_shader_framebuffer_fetch";
+            fFBFetchRequiresEnablePerSample = false;
         } else if (ctxInfo.hasExtension("GL_ARM_shader_framebuffer_fetch")) {
-            // The arm extension also requires an additional flag which we will set onResetContext
+            // The arm extension also requires an additional flag which we will set onResetContext.
             shaderCaps->fFBFetchNeedsCustomOutput = false;
             shaderCaps->fFBFetchSupport = true;
             shaderCaps->fFBFetchColorName = "gl_LastFragColorARM";

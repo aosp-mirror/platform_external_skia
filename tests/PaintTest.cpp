@@ -147,6 +147,7 @@ DEF_TEST(Paint_copy, reporter) {
 
     // copy the paint using the copy constructor and check they are the same
     SkPaint copiedPaint = paint;
+    REPORTER_ASSERT(reporter, paint.getHash() == copiedPaint.getHash());
     REPORTER_ASSERT(reporter, paint == copiedPaint);
 
     // copy the paint using the equal operator and check they are the same

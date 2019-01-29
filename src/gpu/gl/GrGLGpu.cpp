@@ -376,7 +376,6 @@ GrGLGpu::~GrGLGpu() {
     fPathRendering.reset();
     fCopyProgramArrayBuffer.reset();
     fMipmapProgramArrayBuffer.reset();
-    fStencilClipClearArrayBuffer.reset();
 
     fHWProgram.reset();
     if (fHWProgramID) {
@@ -405,14 +404,6 @@ GrGLGpu::~GrGLGpu() {
         if (0 != fMipmapPrograms[i].fProgram) {
             GL_CALL(DeleteProgram(fMipmapPrograms[i].fProgram));
         }
-    }
-
-    if (fStencilClipClearProgram) {
-        GL_CALL(DeleteProgram(fStencilClipClearProgram));
-    }
-
-    if (fClearColorProgram.fProgram) {
-        GL_CALL(DeleteProgram(fClearColorProgram.fProgram));
     }
 
     delete fProgramCache;
@@ -444,13 +435,7 @@ void GrGLGpu::disconnect(DisconnectType type) {
                 GL_CALL(DeleteProgram(fMipmapPrograms[i].fProgram));
             }
         }
-        if (fStencilClipClearProgram) {
-            GL_CALL(DeleteProgram(fStencilClipClearProgram));
-        }
 
-        if (fClearColorProgram.fProgram) {
-            GL_CALL(DeleteProgram(fClearColorProgram.fProgram));
-        }
         if (fSamplerObjectCache) {
             fSamplerObjectCache->release();
         }
@@ -479,9 +464,6 @@ void GrGLGpu::disconnect(DisconnectType type) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(fMipmapPrograms); ++i) {
         fMipmapPrograms[i].fProgram = 0;
     }
-    fStencilClipClearProgram = 0;
-    fStencilClipClearArrayBuffer.reset();
-    fClearColorProgram.fProgram = 0;
 
     if (this->glCaps().shaderCaps()->pathRenderingSupport()) {
         this->glPathRendering()->disconnect(type);
@@ -548,6 +530,8 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
         // we only ever use lines in hairline mode
         GL_CALL(LineWidth(1));
         GL_CALL(Disable(GR_GL_DITHER));
+
+        fHWClearColor[0] = fHWClearColor[1] = fHWClearColor[2] = fHWClearColor[3] = SK_FloatNaN;
     }
 
     if (resetBits & kMSAAEnable_GrGLBackendState) {
@@ -1623,9 +1607,8 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
                                             kDst_TempFBOTarget);
             this->disableScissor();
             this->disableWindowRectangles();
-            GL_CALL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
-            fHWWriteToColor = kYes_TriState;
-            GL_CALL(ClearColor(0, 0, 0, 0));
+            this->flushColorWrite(true);
+            this->flushClearColor(0, 0, 0, 0);
             GL_CALL(Clear(GR_GL_COLOR_BUFFER_BIT));
             this->unbindTextureFBOForPixelOps(GR_GL_FRAMEBUFFER, tex.get());
             fHWBoundRenderTargetUniqueID.makeInvalid();
@@ -2172,19 +2155,17 @@ void GrGLGpu::clear(const GrFixedClip& clip, const SkPMColor4f& color,
     }
     this->flushScissor(clip.scissorState(), glRT->getViewport(), origin);
     this->flushWindowRectangles(clip.windowRectsState(), glRT, origin);
-
-    GL_CALL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
-    fHWWriteToColor = kYes_TriState;
+    this->flushColorWrite(true);
 
     GrGLfloat r = color.fR, g = color.fG, b = color.fB, a = color.fA;
-
     if (this->glCaps().clearToBoundaryValuesIsBroken() &&
         (1 == r || 0 == r) && (1 == g || 0 == g) && (1 == b || 0 == b) && (1 == a || 0 == a)) {
         static const GrGLfloat safeAlpha1 = nextafter(1.f, 2.f);
         static const GrGLfloat safeAlpha0 = nextafter(0.f, -1.f);
         a = (1 == a) ? safeAlpha1 : safeAlpha0;
     }
-    GL_CALL(ClearColor(r, g, b, a));
+    this->flushClearColor(r, g, b, a);
+
     GL_CALL(Clear(GR_GL_COLOR_BUFFER_BIT));
 }
 
@@ -3100,6 +3081,17 @@ void GrGLGpu::flushColorWrite(bool writeColor) {
             GL_CALL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
             fHWWriteToColor = kYes_TriState;
         }
+    }
+}
+
+void GrGLGpu::flushClearColor(GrGLfloat r, GrGLfloat g, GrGLfloat b, GrGLfloat a) {
+    if (r != fHWClearColor[0] || g != fHWClearColor[1] ||
+        b != fHWClearColor[2] || a != fHWClearColor[3]) {
+        GL_CALL(ClearColor(r, g, b, a));
+        fHWClearColor[0] = r;
+        fHWClearColor[1] = g;
+        fHWClearColor[2] = b;
+        fHWClearColor[3] = a;
     }
 }
 

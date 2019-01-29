@@ -44,6 +44,11 @@ SkPaint::SkPaint() {
     fWidth      = 0;
     fMiterLimit = SkPaintDefaults_MiterLimit;
 
+    // we init (to 0) and copy using fBitfieldsUInt rather than fBitfields, so we need it
+    // to be large enough to cover all of the bits.
+    static_assert(sizeof(fBitfields) <= sizeof(fBitfieldsUInt),
+                  "need union uint to be large enough");
+
     // Zero all bitfields, then set some non-zero defaults.
     fBitfieldsUInt           = 0;
     fBitfields.fCapType      = kDefault_Cap;
@@ -63,7 +68,7 @@ SkPaint::SkPaint(const SkPaint& src)
     , COPY(fColor4f)
     , COPY(fWidth)
     , COPY(fMiterLimit)
-    , COPY(fBitfields)
+    , COPY(fBitfieldsUInt)
 #undef COPY
 {}
 
@@ -78,7 +83,7 @@ SkPaint::SkPaint(SkPaint&& src) {
     MOVE(fColor4f);
     MOVE(fWidth);
     MOVE(fMiterLimit);
-    MOVE(fBitfields);
+    MOVE(fBitfieldsUInt);
 #undef MOVE
 }
 
@@ -99,7 +104,7 @@ SkPaint& SkPaint::operator=(const SkPaint& src) {
     ASSIGN(fColor4f);
     ASSIGN(fWidth);
     ASSIGN(fMiterLimit);
-    ASSIGN(fBitfields);
+    ASSIGN(fBitfieldsUInt);
 #undef ASSIGN
 
     return *this;
@@ -120,7 +125,7 @@ SkPaint& SkPaint::operator=(SkPaint&& src) {
     MOVE(fColor4f);
     MOVE(fWidth);
     MOVE(fMiterLimit);
-    MOVE(fBitfields);
+    MOVE(fBitfieldsUInt);
 #undef MOVE
 
     return *this;
@@ -619,10 +624,10 @@ bool SkPaint::nothingToDraw() const {
 }
 
 uint32_t SkPaint::getHash() const {
-    // We're going to hash 6 pointers and 6 32-bit values, finishing up with fBitfields,
-    // so fBitfields should be 6 pointers and 6 32-bit values from the start.
-    static_assert(offsetof(SkPaint, fBitfields) == 6 * sizeof(void*) + 6 * sizeof(uint32_t),
+    // We're going to hash 6 pointers and 6 floats, finishing up with fBitfields,
+    // so fBitfields should be 6 pointers and 6 floats from the start.
+    static_assert(offsetof(SkPaint, fBitfieldsUInt) == 6 * sizeof(void*) + 6 * sizeof(float),
                   "SkPaint_notPackedTightly");
     return SkOpts::hash(reinterpret_cast<const uint32_t*>(this),
-                        offsetof(SkPaint, fBitfields) + sizeof(fBitfields));
+                        offsetof(SkPaint, fBitfieldsUInt) + sizeof(fBitfieldsUInt));
 }
