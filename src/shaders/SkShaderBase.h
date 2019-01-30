@@ -99,8 +99,6 @@ public:
          */
         virtual void shadeSpan(int x, int y, SkPMColor[], int count) = 0;
 
-        virtual void shadeSpan4f(int x, int y, SkPMColor4f[], int count);
-
     protected:
         // Reference to shader, so we don't have to dupe information.
         const SkShaderBase& fShader;
@@ -123,15 +121,6 @@ public:
      * @return pointer to context or nullptr if can't be created
      */
     Context* makeContext(const ContextRec&, SkArenaAlloc*) const;
-
-    /**
-     * Shaders may opt-in for burst mode, if they can operate
-     * significantly more efficiently in that mode.
-     *
-     * Burst mode is prioritized in SkRasterPipelineBlitter over
-     * regular (appendStages) pipeline operation.
-     */
-    Context* makeBurstPipelineContext(const ContextRec&, SkArenaAlloc*) const;
 
 #if SK_SUPPORT_GPU
     /**
