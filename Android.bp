@@ -567,6 +567,7 @@ cc_library_static {
           "src/gpu/GrColorSpaceInfo.cpp",
           "src/gpu/GrColorSpaceXform.cpp",
           "src/gpu/GrContext.cpp",
+          "src/gpu/GrContextThreadSafeProxy.cpp",
           "src/gpu/GrDDLContext.cpp",
           "src/gpu/GrDefaultGeoProcFactory.cpp",
           "src/gpu/GrDeinstantiateProxyTracker.cpp",

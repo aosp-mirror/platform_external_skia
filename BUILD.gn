@@ -681,6 +681,14 @@ optional("gpu_for_real") {
   }
 }
 
+optional("gif") {
+  enabled = !skia_use_wuffs
+  sources = [
+    "src/codec/SkGifCodec.cpp",
+    "third_party/gif/SkGifImageReader.cpp",
+  ]
+}
+
 optional("heif") {
   enabled = skia_use_libheif
   public_defines = [ "SK_HAS_HEIF_LIBRARY" ]
@@ -888,6 +896,7 @@ component("skia") {
     ":fontmgr_fontconfig",
     ":fontmgr_fuchsia",
     ":fontmgr_wasm",
+    ":gif",
     ":heif",
     ":hsw",
     ":jpeg",
@@ -934,7 +943,6 @@ component("skia") {
     "src/codec/SkCodecImageGenerator.cpp",
     "src/codec/SkColorTable.cpp",
     "src/codec/SkEncodedInfo.cpp",
-    "src/codec/SkGifCodec.cpp",
     "src/codec/SkMaskSwizzler.cpp",
     "src/codec/SkMasks.cpp",
     "src/codec/SkSampledCodec.cpp",
@@ -952,7 +960,6 @@ component("skia") {
     "src/sfnt/SkOTUtils.cpp",
     "src/utils/mac/SkStream_mac.cpp",
     "third_party/etc1/etc1.cpp",
-    "third_party/gif/SkGifImageReader.cpp",
   ]
 
   defines = []
@@ -1539,7 +1546,6 @@ if (skia_enable_tools) {
     ]
     public_deps = [
       ":common_flags",
-      "//third_party/jsoncpp",
     ]
   }
 
@@ -1762,7 +1768,6 @@ if (skia_enable_tools) {
         "modules/skottie",
         "modules/skottie:utils",
         "modules/sksg",
-        "//third_party/jsoncpp",
         "//third_party/libpng",
       ]
 
@@ -1798,7 +1803,6 @@ if (skia_enable_tools) {
       ":skia",
       ":tool_utils",
       "modules/sksg",
-      "//third_party/jsoncpp",
     ]
   }
 
@@ -1897,7 +1901,6 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":tool_utils",
-        "//third_party/jsoncpp",
         "//third_party/libmicrohttpd",
         "//third_party/libpng",
       ]
@@ -1943,7 +1946,6 @@ if (skia_enable_tools) {
       ":gpu_tool_utils",
       ":skia",
       "modules/skottie:fuzz",
-      "//third_party/jsoncpp",
       "//third_party/libpng",
     ]
   }
@@ -1992,7 +1994,6 @@ if (skia_enable_tools) {
     deps = [
       ":skia",
       ":tool_utils",
-      "//third_party/jsoncpp",
     ]
   }
 
@@ -2130,10 +2131,10 @@ if (skia_enable_tools) {
       }
     } else if (is_mac) {
       sources += [
-        "tools/sk_app/mac/GLWindowContext_mac.cpp",
-        "tools/sk_app/mac/RasterWindowContext_mac.cpp",
-        "tools/sk_app/mac/Window_mac.cpp",
-        "tools/sk_app/mac/main_mac.cpp",
+        "tools/sk_app/mac/GLWindowContext_mac.mm",
+        "tools/sk_app/mac/RasterWindowContext_mac.mm",
+        "tools/sk_app/mac/Window_mac.mm",
+        "tools/sk_app/mac/main_mac.mm",
       ]
       libs += [
         "QuartzCore.framework",
@@ -2168,7 +2169,7 @@ if (skia_enable_tools) {
     ]
     if (is_android) {
       deps += [ "//third_party/native_app_glue" ]
-    } else if (is_mac || is_ios) {
+    } else if (is_ios) {
       deps += [ "//third_party/libsdl" ]
     }
     if (skia_use_angle) {
@@ -2376,7 +2377,6 @@ if (skia_enable_tools) {
         ":generate_mocs",
         ":generate_resources",
         ":skia",
-        "//third_party/jsoncpp",
         "//third_party/libpng",
       ]
     }

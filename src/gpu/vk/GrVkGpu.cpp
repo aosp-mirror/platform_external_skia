@@ -68,6 +68,21 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
         return nullptr;
     }
 
+    PFN_vkEnumerateInstanceVersion localEnumerateInstanceVersion =
+            reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+                    backendContext.fGetProc("vkEnumerateInstanceVersion",
+                                            VK_NULL_HANDLE, VK_NULL_HANDLE));
+    uint32_t instanceVersion = 0;
+    if (!localEnumerateInstanceVersion) {
+        instanceVersion = VK_MAKE_VERSION(1, 0, 0);
+    } else {
+        VkResult err = localEnumerateInstanceVersion(&instanceVersion);
+        if (err) {
+            SkDebugf("Failed to enumerate instance version. Err: %d\n", err);
+            return nullptr;
+        }
+    }
+
     PFN_vkGetPhysicalDeviceProperties localGetPhysicalDeviceProperties =
             reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
                     backendContext.fGetProc("vkGetPhysicalDeviceProperties",
@@ -81,17 +96,22 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
     localGetPhysicalDeviceProperties(backendContext.fPhysicalDevice, &physDeviceProperties);
     uint32_t physDevVersion = physDeviceProperties.apiVersion;
 
+    uint32_t apiVersion = backendContext.fMaxAPIVersion ? backendContext.fMaxAPIVersion
+                                                        : instanceVersion;
+
+    instanceVersion = SkTMin(instanceVersion, apiVersion);
+    physDevVersion = SkTMin(physDevVersion, apiVersion);
+
     sk_sp<const GrVkInterface> interface;
 
     if (backendContext.fVkExtensions) {
         interface.reset(new GrVkInterface(backendContext.fGetProc,
                                           backendContext.fInstance,
                                           backendContext.fDevice,
-                                          backendContext.fInstanceVersion,
+                                          instanceVersion,
                                           physDevVersion,
                                           backendContext.fVkExtensions));
-        if (!interface->validate(backendContext.fInstanceVersion, physDevVersion,
-                                 backendContext.fVkExtensions)) {
+        if (!interface->validate(instanceVersion, physDevVersion, backendContext.fVkExtensions)) {
             return nullptr;
         }
     } else {
@@ -101,21 +121,23 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
         interface.reset(new GrVkInterface(backendContext.fGetProc,
                                           backendContext.fInstance,
                                           backendContext.fDevice,
-                                          backendContext.fInstanceVersion,
+                                          instanceVersion,
                                           physDevVersion,
                                           &extensions));
-        if (!interface->validate(backendContext.fInstanceVersion, physDevVersion, &extensions)) {
+        if (!interface->validate(instanceVersion, physDevVersion, &extensions)) {
             return nullptr;
         }
     }
 
-    return sk_sp<GrGpu>(new GrVkGpu(context, options, backendContext, interface));
+    return sk_sp<GrGpu>(new GrVkGpu(context, options, backendContext, interface, instanceVersion,
+                                    physDevVersion));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
-                 const GrVkBackendContext& backendContext, sk_sp<const GrVkInterface> interface)
+                 const GrVkBackendContext& backendContext, sk_sp<const GrVkInterface> interface,
+                 uint32_t instanceVersion, uint32_t physicalDeviceVersion)
         : INHERITED(context)
         , fInterface(std::move(interface))
         , fMemoryAllocator(backendContext.fMemoryAllocator)
@@ -136,19 +158,18 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
 
     fCompiler = new SkSL::Compiler();
 
-    uint32_t instanceVersion = backendContext.fInstanceVersion ? backendContext.fInstanceVersion
-                                                               : backendContext.fMinAPIVersion;
-
     if (backendContext.fDeviceFeatures2) {
         fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
                                    *backendContext.fDeviceFeatures2, instanceVersion,
+                                   physicalDeviceVersion,
                                    *backendContext.fVkExtensions));
     } else if (backendContext.fDeviceFeatures) {
         VkPhysicalDeviceFeatures2 features2;
         features2.pNext = nullptr;
         features2.features = *backendContext.fDeviceFeatures;
         fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
-                                   features2, instanceVersion, *backendContext.fVkExtensions));
+                                   features2, instanceVersion, physicalDeviceVersion,
+                                   *backendContext.fVkExtensions));
     } else {
         VkPhysicalDeviceFeatures2 features;
         memset(&features, 0, sizeof(VkPhysicalDeviceFeatures2));
@@ -163,7 +184,8 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
             features.features.sampleRateShading = true;
         }
         fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
-                                   features, instanceVersion, GrVkExtensions()));
+                                   features, instanceVersion, physicalDeviceVersion,
+                                   GrVkExtensions()));
     }
     fCaps.reset(SkRef(fVkCaps.get()));
 
@@ -321,29 +343,29 @@ void GrVkGpu::submitCommandBuffer(SyncQueue sync) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-GrBuffer* GrVkGpu::onCreateBuffer(size_t size, GrBufferType type, GrAccessPattern accessPattern,
-                                  const void* data) {
-    GrBuffer* buff;
+sk_sp<GrBuffer> GrVkGpu::onCreateBuffer(size_t size, GrBufferType type,
+                                        GrAccessPattern accessPattern, const void* data) {
+    sk_sp<GrBuffer> buff;
     switch (type) {
         case kVertex_GrBufferType:
             SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
                      kStatic_GrAccessPattern == accessPattern);
-            buff = GrVkVertexBuffer::Create(this, size, kDynamic_GrAccessPattern == accessPattern);
+            buff = GrVkVertexBuffer::Make(this, size, kDynamic_GrAccessPattern == accessPattern);
             break;
         case kIndex_GrBufferType:
             SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
                      kStatic_GrAccessPattern == accessPattern);
-            buff = GrVkIndexBuffer::Create(this, size, kDynamic_GrAccessPattern == accessPattern);
+            buff = GrVkIndexBuffer::Make(this, size, kDynamic_GrAccessPattern == accessPattern);
             break;
         case kXferCpuToGpu_GrBufferType:
             SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
                      kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Create(this, size, GrVkBuffer::kCopyRead_Type);
+            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyRead_Type);
             break;
         case kXferGpuToCpu_GrBufferType:
             SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
                      kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Create(this, size, GrVkBuffer::kCopyWrite_Type);
+            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyWrite_Type);
             break;
         case kDrawIndirect_GrBufferType:
             SK_ABORT("DrawIndirect Buffers not supported  in vulkan backend.");
@@ -650,8 +672,8 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int widt
     }
 
     // allocate buffer to hold our mip data
-    GrVkTransferBuffer* transferBuffer =
-                   GrVkTransferBuffer::Create(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
+    sk_sp<GrVkTransferBuffer> transferBuffer =
+            GrVkTransferBuffer::Make(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
     if (!transferBuffer) {
         return false;
     }
@@ -740,12 +762,11 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int widt
 
     // Copy the buffer to the image
     fCurrentCmdBuffer->copyBufferToImage(this,
-                                         transferBuffer,
+                                         transferBuffer.get(),
                                          uploadTexture,
                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                          regions.count(),
                                          regions.begin());
-    transferBuffer->unref();
 
     // If we copied the data into a temporary image first, copy that image into our main texture
     // now.
@@ -820,8 +841,8 @@ bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int w
     }
 
     // allocate buffer to hold our mip data
-    GrVkTransferBuffer* transferBuffer =
-        GrVkTransferBuffer::Create(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
+    sk_sp<GrVkTransferBuffer> transferBuffer =
+            GrVkTransferBuffer::Make(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
     if (!transferBuffer) {
         return false;
     }
@@ -876,12 +897,11 @@ bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int w
 
     // Copy the buffer to the image
     fCurrentCmdBuffer->copyBufferToImage(this,
-                                         transferBuffer,
+                                         transferBuffer.get(),
                                          uploadTexture,
                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                          regions.count(),
                                          regions.begin());
-    transferBuffer->unref();
 
     if (1 == mipLevelCount) {
         tex->texturePriv().markMipMapsDirty();
@@ -2130,10 +2150,11 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
 
     size_t transBufferRowBytes = bpp * region.imageExtent.width;
     size_t imageRows = region.imageExtent.height;
-    GrVkTransferBuffer* transferBuffer =
+    auto transferBuffer = sk_sp<GrVkTransferBuffer>(
             static_cast<GrVkTransferBuffer*>(this->createBuffer(transBufferRowBytes * imageRows,
                                                                 kXferGpuToCpu_GrBufferType,
-                                                                kStream_GrAccessPattern));
+                                                                kStream_GrAccessPattern)
+                                                     .release()));
 
     // Copy the image to a buffer so we can map it to cpu memory
     region.bufferOffset = transferBuffer->offset();
@@ -2144,7 +2165,7 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
     fCurrentCmdBuffer->copyImageToBuffer(this,
                                          image,
                                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                         transferBuffer,
+                                         transferBuffer.get(),
                                          1,
                                          &region);
 
@@ -2171,7 +2192,6 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
     SkRectMemcpy(buffer, rowBytes, mappedMemory, transBufferRowBytes, tightRowBytes, height);
 
     transferBuffer->unmap();
-    transferBuffer->unref();
     return true;
 }
 
