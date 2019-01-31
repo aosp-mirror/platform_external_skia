@@ -1759,6 +1759,7 @@ cc_test {
         "tests/VerticesTest.cpp",
         "tests/VkBackendSurfaceTest.cpp",
         "tests/VkDrawableTest.cpp",
+        "tests/VkHardwareBufferTest.cpp",
         "tests/VkMakeCopyPipelineTest.cpp",
         "tests/VkWrapTests.cpp",
         "tests/VptrTest.cpp",
