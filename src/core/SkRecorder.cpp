@@ -72,8 +72,8 @@ void SkRecorder::forgetRecord() {
     }                              \
     new (fRecord->append<SkRecords::T>()) SkRecords::T{__VA_ARGS__}
 
-#define TRY_MINIRECORDER(method, ...)                       \
-    if (fMiniRecorder && fMiniRecorder->method(__VA_ARGS__)) { return; }
+#define TRY_MINIRECORDER(method, ...) \
+    if (fMiniRecorder && fMiniRecorder->method(__VA_ARGS__)) return
 
 // For methods which must call back into SkNoDrawCanvas.
 #define INHERITED(method, ...) this->SkNoDrawCanvas::method(__VA_ARGS__)

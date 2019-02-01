@@ -2945,7 +2945,7 @@ static inline GrGLenum wrap_mode_to_gl_wrap(GrSamplerState::WrapMode wrapMode) {
             return GR_GL_REPEAT;
         case GrSamplerState::WrapMode::kMirrorRepeat:
             return GR_GL_MIRRORED_REPEAT;
-    };
+    }
     SK_ABORT("Unknown wrap mode");
     return 0;
 }
