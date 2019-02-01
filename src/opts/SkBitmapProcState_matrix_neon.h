@@ -93,7 +93,7 @@ static void SCALE_NOFILTER_NAME(const SkBitmapProcState& s,
             dst16 += 8;
             count -= 8;
             fx += dx8;
-        };
+        }
         xy = (uint32_t *) dst16;
     }
 

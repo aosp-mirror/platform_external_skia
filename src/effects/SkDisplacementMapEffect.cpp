@@ -33,7 +33,7 @@
 
 namespace {
 
-#define kChannelSelectorKeyBits 3; // Max value is 4, so 3 bits are required at most
+#define kChannelSelectorKeyBits 3 // Max value is 4, so 3 bits are required at most
 
 const uint8_t gChannelTypeToShift[] = {
      0,  // unknown
