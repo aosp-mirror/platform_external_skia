@@ -24,7 +24,7 @@ public:
     ~SkImage_GpuBase() override;
 
     GrContext* context() const final { return fContext.get(); }
-    uint32_t contextID() const final { return fContext->uniqueID(); }
+    uint32_t contextID() const final;
 
     bool getROPixels(SkBitmap*, CachingHint) const final;
     sk_sp<SkImage> onMakeSubset(const SkIRect& subset) const final;
@@ -53,10 +53,7 @@ public:
     bool onIsValid(GrContext*) const final;
 
 #if GR_TEST_UTILS
-    void resetContext(sk_sp<GrContext> newContext) {
-        SkASSERT(fContext->uniqueID() == newContext->uniqueID());
-        fContext = newContext;
-    }
+    void resetContext(sk_sp<GrContext> newContext);
 #endif
 
     static bool ValidateBackendTexture(GrContext* ctx, const GrBackendTexture& tex,
@@ -78,6 +75,7 @@ public:
     using PromiseImageTextureReleaseProc =
             SkDeferredDisplayListRecorder::PromiseImageTextureReleaseProc;
     using PromiseImageTextureDoneProc = SkDeferredDisplayListRecorder::PromiseImageTextureDoneProc;
+    using DelayReleaseCallback = SkDeferredDisplayListRecorder::DelayReleaseCallback;
 
 protected:
     // Helper for making a lazy proxy for a promise image. The PromiseDoneProc we be called,
@@ -87,7 +85,7 @@ protected:
     static sk_sp<GrTextureProxy> MakePromiseImageLazyProxy(
             GrContext*, int width, int height, GrSurfaceOrigin, GrPixelConfig, GrBackendFormat,
             GrMipMapped, PromiseImageTextureFulfillProc, PromiseImageTextureReleaseProc,
-            PromiseImageTextureDoneProc, PromiseImageTextureContext);
+            PromiseImageTextureDoneProc, PromiseImageTextureContext, DelayReleaseCallback);
 
     static bool RenderYUVAToRGBA(GrContext* ctx, GrRenderTargetContext* renderTargetContext,
                                  const SkRect& rect, SkYUVColorSpace yuvColorSpace,

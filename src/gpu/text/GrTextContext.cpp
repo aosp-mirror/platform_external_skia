@@ -9,7 +9,7 @@
 
 #include "GrCaps.h"
 #include "GrContext.h"
-#include "GrContextPriv.h"
+#include "GrRecordingContextPriv.h"
 #include "GrSDFMaskFilter.h"
 #include "GrTextBlobCache.h"
 #include "SkDistanceFieldGen.h"
@@ -50,7 +50,7 @@ std::unique_ptr<GrTextContext> GrTextContext::Make(const Options& options) {
 }
 
 SkColor GrTextContext::ComputeCanonicalColor(const SkPaint& paint, bool lcd) {
-    SkColor canonicalColor = paint.computeLuminanceColor();
+    SkColor canonicalColor = SkPaintPriv::ComputeLuminanceColor(paint);
     if (lcd) {
         // This is the correct computation, but there are tons of cases where LCD can be overridden.
         // For now we just regenerate if any run in a textblob has LCD.
@@ -210,8 +210,8 @@ GR_DRAW_OP_TEST_DEFINE(GrAtlasTextOp) {
     static std::unique_ptr<GrTextContext> gTextContext;
     static SkSurfaceProps gSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType);
 
-    if (context->uniqueID() != gContextID) {
-        gContextID = context->uniqueID();
+    if (context->priv().contextID() != gContextID) {
+        gContextID = context->priv().contextID();
         gTextContext = GrTextContext::Make(GrTextContext::Options());
     }
 
