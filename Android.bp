@@ -1991,6 +1991,7 @@ cc_test {
         "bench/TileBench.cpp",
         "bench/TileImageFilterBench.cpp",
         "bench/TopoSortBench.cpp",
+        "bench/TypefaceBench.cpp",
         "bench/VertBench.cpp",
         "bench/VertexColorSpaceBench.cpp",
         "bench/WritePixelsBench.cpp",
