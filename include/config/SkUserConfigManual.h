@@ -29,4 +29,7 @@
   #define SK_SUPPORT_LEGACY_AA_CHOICE
   #define SK_SUPPORT_LEGACY_A8_MASKBLITTER
   #define SK_SUPPORT_LEGACY_AAA_CHOICE
+
+  #define SK_DISABLE_DAA  // skbug.com/6886
+
 #endif // SkUserConfigManual_DEFINED
