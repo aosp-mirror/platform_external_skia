@@ -215,9 +215,10 @@ private:
         return fLumBits;
     }
 
-
+    // setLuminanceColor forces the alpha to be 0xFF because the blitter that draws the glyph
+    // will apply the alpha from the paint. Don't apply the alpha twice.
     void setLuminanceColor(SkColor c) {
-        fLumBits = c;
+        fLumBits = SkColorSetRGB(SkColorGetR(c), SkColorGetG(c), SkColorGetB(c));
     }
 };
 SK_END_REQUIRE_DENSE
@@ -410,6 +411,8 @@ protected:
 private:
     friend class SkRandomScalerContext; // For debug purposes
 
+    static SkScalerContextRec PreprocessRec(const SkDescriptor& desc);
+
     // never null
     sk_sp<SkTypeface> fTypeface;
 
@@ -428,10 +431,6 @@ private:
 protected:
     // Visible to subclasses so that generateImage can apply the pre-blend directly.
     const SkMaskGamma::PreBlend fPreBlend;
-private:
-    // When there is a filter, previous steps must create a linear mask
-    // and the pre-blend applied as a final step.
-    const SkMaskGamma::PreBlend fPreBlendForFilter;
 };
 
 #define kRec_SkDescriptorTag            SkSetFourByteTag('s', 'r', 'e', 'c')
