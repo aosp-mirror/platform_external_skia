@@ -24,7 +24,6 @@
 #include "SkMSAN.h"
 #include "SkMakeUnique.h"
 #include "SkMatrixUtils.h"
-#include "SkMetaData.h"
 #include "SkNoDrawCanvas.h"
 #include "SkNx.h"
 #include "SkPaintPriv.h"
@@ -551,7 +550,6 @@ void SkCanvas::resetForNextPicture(const SkIRect& bounds) {
 void SkCanvas::init(sk_sp<SkBaseDevice> device) {
     fAllowSimplifyClip = false;
     fSaveCount = 1;
-    fMetaData = nullptr;
 
     fMCRec = (MCRec*)fMCStack.push_back();
     new (fMCRec) MCRec;
@@ -660,18 +658,7 @@ SkCanvas::~SkCanvas() {
 
     this->internalRestore();    // restore the last, since we're going away
 
-    delete fMetaData;
-
     dec_canvas();
-}
-
-SkMetaData& SkCanvas::getMetaData() {
-    // metadata users are rare, so we lazily allocate it. If that changes we
-    // can decide to just make it a field in the device (rather than a ptr)
-    if (nullptr == fMetaData) {
-        fMetaData = new SkMetaData;
-    }
-    return *fMetaData;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

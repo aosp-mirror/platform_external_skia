@@ -21,18 +21,6 @@
 
 DEFINE_string(animatedGif, "images/test640x479.gif", "Animated gif in resources folder");
 
-namespace {
-    void error(SkCanvas* canvas, const SkString& errorText) {
-        constexpr SkScalar kOffset = 5.0f;
-        canvas->drawColor(SK_ColorRED);
-        SkPaint paint;
-        SkFont font;
-        SkRect bounds;
-        font.measureText(errorText.c_str(), errorText.size(), kUTF8_SkTextEncoding, &bounds);
-        canvas->drawString(errorText, kOffset, bounds.height() + kOffset, font, paint);
-    }
-}
-
 class AnimatedGifGM : public skiagm::GM {
 private:
     std::unique_ptr<SkCodec>        fCodec;
@@ -99,17 +87,6 @@ private:
         return SkISize::Make(640, 480);
     }
 
-    void onDrawBackground(SkCanvas* canvas) override {
-        canvas->clear(SK_ColorWHITE);
-        if (this->initCodec()) {
-            SkAutoCanvasRestore acr(canvas, true);
-            for (int frameIndex = 0; frameIndex < fTotalFrames; frameIndex++) {
-                this->drawFrame(canvas, frameIndex);
-                canvas->translate(SkIntToScalar(fCodec->getInfo().width()), 0);
-            }
-        }
-    }
-
     bool initCodec() {
         if (fCodec) {
             return true;
@@ -126,7 +103,6 @@ private:
 
         fCodec = SkCodec::MakeFromStream(std::move(stream));
         if (!fCodec) {
-            SkDebugf("Could create codec from %s", FLAGS_animatedGif[0]);
             return false;
         }
 
@@ -137,11 +113,17 @@ private:
     }
 
     void onDraw(SkCanvas* canvas) override {
-        if (!fCodec) {
-            SkString errorText = SkStringPrintf("Nothing to draw; %s", FLAGS_animatedGif[0]);
-            error(canvas, errorText);
+        if (!this->initCodec()) {
+            DrawFailureMessage(canvas, "Could not create codec from %s", FLAGS_animatedGif[0]);
             return;
         }
+
+        canvas->save();
+        for (int frameIndex = 0; frameIndex < fTotalFrames; frameIndex++) {
+            this->drawFrame(canvas, frameIndex);
+            canvas->translate(SkIntToScalar(fCodec->getInfo().width()), 0);
+        }
+        canvas->restore();
 
         SkAutoCanvasRestore acr(canvas, true);
         canvas->translate(0, SkIntToScalar(fCodec->getInfo().height()));

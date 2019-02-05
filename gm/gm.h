@@ -99,10 +99,11 @@ namespace skiagm {
         /** draws a standard message that the GM is only intended to be used with the GPU.*/
         static void DrawGpuOnlyMessage(SkCanvas*);
 
+        static void DrawFailureMessage(SkCanvas*, const char[], ...) SK_PRINTF_LIKE(2, 3);
+
     protected:
         virtual void onOnceBeforeDraw() {}
         virtual void onDraw(SkCanvas*) = 0;
-        virtual void onDrawBackground(SkCanvas*);
         virtual SkISize onISize() = 0;
         virtual SkString onShortName() = 0;
 
