@@ -92,7 +92,7 @@ public:
     DEFINE_OP_CLASS_ID
 
     static std::unique_ptr<GrDrawOp> Make(GrContext* context, bool readSkFragCoord, int y = 0) {
-        GrOpMemoryPool* pool = context->contextPriv().opMemoryPool();
+        GrOpMemoryPool* pool = context->priv().opMemoryPool();
         return pool->allocate<ClockwiseTestOp>(readSkFragCoord, y);
     }
 
@@ -116,7 +116,7 @@ private:
             {100, fY+100},
         };
         sk_sp<const GrBuffer> vertexBuffer(flushState->resourceProvider()->createBuffer(
-                sizeof(vertices), kVertex_GrBufferType, kStatic_GrAccessPattern,
+                sizeof(vertices), GrGpuBufferType::kVertex, kStatic_GrAccessPattern,
                 GrResourceProvider::Flags::kNone, vertices));
         if (!vertexBuffer) {
             return;
@@ -153,7 +153,7 @@ void ClockwiseGM::onDraw(SkCanvas* canvas) {
     rtc->priv().testingOnly_addDrawOp(ClockwiseTestOp::Make(ctx, true, 100));
 
     // Draw the test to an off-screen, top-down render target.
-    if (auto topLeftRTC = ctx->contextPriv().makeDeferredRenderTargetContext(
+    if (auto topLeftRTC = ctx->priv().makeDeferredRenderTargetContext(
             rtc->asSurfaceProxy()->backendFormat(), SkBackingFit::kExact, 100, 200,
             rtc->asSurfaceProxy()->config(), nullptr, 1, GrMipMapped::kNo,
             kTopLeft_GrSurfaceOrigin, nullptr, SkBudgeted::kYes)) {
@@ -169,7 +169,7 @@ void ClockwiseGM::onDraw(SkCanvas* canvas) {
     }
 
     // Draw the test to an off-screen, bottom-up render target.
-    if (auto topLeftRTC = ctx->contextPriv().makeDeferredRenderTargetContext(
+    if (auto topLeftRTC = ctx->priv().makeDeferredRenderTargetContext(
             rtc->asSurfaceProxy()->backendFormat(), SkBackingFit::kExact, 100, 200,
             rtc->asSurfaceProxy()->config(), nullptr, 1, GrMipMapped::kNo,
             kBottomLeft_GrSurfaceOrigin, nullptr, SkBudgeted::kYes)) {

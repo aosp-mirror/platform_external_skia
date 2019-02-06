@@ -34,6 +34,11 @@ public:
 
     const GrContextOptions& options() const { return fContext->options(); }
 
+    const GrCaps* caps() const { return fContext->caps(); }
+    sk_sp<const GrCaps> refCaps() const { return fContext->refCaps(); }
+
+    sk_sp<GrSkSLFPFactoryCache> fpFactoryCache();
+
     // from GrImageContext
 
     // from GrRecordingContext
@@ -42,8 +47,6 @@ public:
      * Create a GrContext without a resource cache
      */
     static sk_sp<GrContext> MakeDDL(const sk_sp<GrContextThreadSafeProxy>&);
-
-    const GrCaps* caps() const { return fContext->fCaps.get(); }
 
     sk_sp<GrOpMemoryPool> refOpMemoryPool();
     GrOpMemoryPool* opMemoryPool();
@@ -67,18 +70,26 @@ public:
                                                       GrSurfaceOrigin origin,
                                                       sk_sp<SkColorSpace> colorSpace);
 
+    // These match the definitions in SkSurface & GrSurface.h, for whence they came
+    typedef void* ReleaseContext;
+    typedef void (*ReleaseProc)(ReleaseContext);
+
     sk_sp<GrRenderTargetContext> makeBackendTextureRenderTargetContext(
                                                          const GrBackendTexture& tex,
                                                          GrSurfaceOrigin origin,
                                                          int sampleCnt,
                                                          sk_sp<SkColorSpace> colorSpace,
-                                                         const SkSurfaceProps* = nullptr);
+                                                         const SkSurfaceProps* = nullptr,
+                                                         ReleaseProc = nullptr,
+                                                         ReleaseContext = nullptr);
 
     sk_sp<GrRenderTargetContext> makeBackendRenderTargetRenderTargetContext(
                                                               const GrBackendRenderTarget&,
                                                               GrSurfaceOrigin origin,
                                                               sk_sp<SkColorSpace> colorSpace,
-                                                              const SkSurfaceProps* = nullptr);
+                                                              const SkSurfaceProps* = nullptr,
+                                                              ReleaseProc = nullptr,
+                                                              ReleaseContext = nullptr);
 
     sk_sp<GrRenderTargetContext> makeBackendTextureAsRenderTargetRenderTargetContext(
                                                                  const GrBackendTexture& tex,
@@ -284,8 +295,6 @@ public:
 
     GrContextOptions::PersistentCache* getPersistentCache() { return fContext->fPersistentCache; }
 
-    sk_sp<GrSkSLFPFactoryCache> getFPFactoryCache();
-
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* debugSingleOwner() const { return &fContext->fSingleOwner; } )
 
@@ -303,9 +312,9 @@ private:
     friend class GrContext; // to construct/copy this type.
 };
 
-inline GrContextPriv GrContext::contextPriv() { return GrContextPriv(this); }
+inline GrContextPriv GrContext::priv() { return GrContextPriv(this); }
 
-inline const GrContextPriv GrContext::contextPriv () const {
+inline const GrContextPriv GrContext::priv() const {
     return GrContextPriv(const_cast<GrContext*>(this));
 }
 

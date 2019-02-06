@@ -79,7 +79,7 @@ public:
     static sk_sp<GrContext> MakeMock(const GrMockOptions*, const GrContextOptions&);
     static sk_sp<GrContext> MakeMock(const GrMockOptions*);
 
-    virtual ~GrContext();
+    ~GrContext() override;
 
     sk_sp<GrContextThreadSafeProxy> threadSafeProxy();
 
@@ -268,8 +268,8 @@ public:
                                                    GrBackendSemaphore signalSemaphores[]);
 
     // Provides access to functions that aren't part of the public API.
-    GrContextPriv contextPriv();
-    const GrContextPriv contextPriv() const;
+    GrContextPriv priv();
+    const GrContextPriv priv() const;
 
     /** Enumerates all cached GPU resources and dumps their memory to traceMemoryDump. */
     // Chrome is using this!
@@ -282,14 +282,11 @@ public:
 protected:
     GrContext(GrBackendApi, const GrContextOptions& options, int32_t id = SK_InvalidGenID);
 
-    bool initCommon();
-    virtual bool init() = 0; // must be called after the ctor!
+    bool init(sk_sp<const GrCaps>, sk_sp<GrSkSLFPFactoryCache>) override;
 
     virtual GrAtlasManager* onGetAtlasManager() = 0;
 
-    sk_sp<const GrCaps>                     fCaps;
     sk_sp<GrContextThreadSafeProxy>         fThreadSafeProxy;
-    sk_sp<GrSkSLFPFactoryCache>             fFPFactoryCache;
 
 private:
     // fTaskGroup must appear before anything that uses it (e.g. fGpu), so that it is destroyed

@@ -180,13 +180,13 @@ void CCPRGeometryView::onDrawContent(SkCanvas* canvas) {
         GrContext* ctx = canvas->getGrContext();
         SkASSERT(ctx);
 
-        GrOpMemoryPool* pool = ctx->contextPriv().opMemoryPool();
+        GrOpMemoryPool* pool = ctx->priv().opMemoryPool();
 
         const GrBackendFormat format =
-                ctx->contextPriv().caps()->getBackendFormatFromGrColorType(GrColorType::kAlpha_F16,
+                ctx->priv().caps()->getBackendFormatFromGrColorType(GrColorType::kAlpha_F16,
                                                                            GrSRGBEncoded::kNo);
         sk_sp<GrRenderTargetContext> ccbuff =
-                ctx->contextPriv().makeDeferredRenderTargetContext(format, SkBackingFit::kApprox,
+                ctx->priv().makeDeferredRenderTargetContext(format, SkBackingFit::kApprox,
                                                                    this->width(), this->height(),
                                                                    kAlpha_half_GrPixelConfig,
                                                                    nullptr);
@@ -342,19 +342,20 @@ void CCPRGeometryView::DrawCoverageCountOp::onExecute(GrOpFlushState* state,
         SkSTArray<1, GrMesh> mesh;
         if (PrimitiveType::kCubics == fView->fPrimitiveType ||
             PrimitiveType::kConics == fView->fPrimitiveType) {
-            sk_sp<GrBuffer> instBuff(rp->createBuffer(
-                    fView->fQuadPointInstances.count() * sizeof(QuadPointInstance),
-                    kVertex_GrBufferType, kDynamic_GrAccessPattern,
-                    GrResourceProvider::Flags::kRequireGpuMemory,
-                    fView->fQuadPointInstances.begin()));
+            sk_sp<GrBuffer> instBuff(
+                    rp->createBuffer(fView->fQuadPointInstances.count() * sizeof(QuadPointInstance),
+                                     GrGpuBufferType::kVertex, kDynamic_GrAccessPattern,
+                                     GrResourceProvider::Flags::kRequireGpuMemory,
+                                     fView->fQuadPointInstances.begin()));
             if (!fView->fQuadPointInstances.empty() && instBuff) {
                 proc.appendMesh(std::move(instBuff), fView->fQuadPointInstances.count(), 0, &mesh);
             }
         } else {
-            sk_sp<GrBuffer> instBuff(rp->createBuffer(
-                    fView->fTriPointInstances.count() * sizeof(TriPointInstance),
-                    kVertex_GrBufferType, kDynamic_GrAccessPattern,
-                    GrResourceProvider::Flags::kRequireGpuMemory, fView->fTriPointInstances.begin()));
+            sk_sp<GrBuffer> instBuff(
+                    rp->createBuffer(fView->fTriPointInstances.count() * sizeof(TriPointInstance),
+                                     GrGpuBufferType::kVertex, kDynamic_GrAccessPattern,
+                                     GrResourceProvider::Flags::kRequireGpuMemory,
+                                     fView->fTriPointInstances.begin()));
             if (!fView->fTriPointInstances.empty() && instBuff) {
                 proc.appendMesh(std::move(instBuff), fView->fTriPointInstances.count(), 0, &mesh);
             }
@@ -378,7 +379,7 @@ void CCPRGeometryView::DrawCoverageCountOp::onExecute(GrOpFlushState* state,
                                        SkIRect::MakeWH(fView->width(), fView->height()), {0, 0});
         GrCCStroker::BatchID batchID = stroker.closeCurrentBatch();
 
-        GrOnFlushResourceProvider onFlushRP(context->contextPriv().drawingManager());
+        GrOnFlushResourceProvider onFlushRP(context->priv().drawingManager());
         stroker.prepareToDraw(&onFlushRP);
 
         SkIRect ibounds;

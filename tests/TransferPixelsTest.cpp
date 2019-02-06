@@ -58,12 +58,12 @@ bool does_full_buffer_contain_correct_values(GrColor* srcBuffer,
 
 void basic_transfer_test(skiatest::Reporter* reporter, GrContext* context, GrColorType colorType,
                          bool renderTarget) {
-    if (GrCaps::kNone_MapFlags == context->contextPriv().caps()->mapBufferFlags()) {
+    if (GrCaps::kNone_MapFlags == context->priv().caps()->mapBufferFlags()) {
         return;
     }
 
-    auto resourceProvider = context->contextPriv().resourceProvider();
-    GrGpu* gpu = context->contextPriv().getGpu();
+    auto resourceProvider = context->priv().resourceProvider();
+    GrGpu* gpu = context->priv().getGpu();
 
     // set up the data
     const int kTextureWidth = 16;
@@ -84,10 +84,8 @@ void basic_transfer_test(skiatest::Reporter* reporter, GrContext* context, GrCol
     // create and fill transfer buffer
     size_t size = rowBytes*kBufferHeight;
     auto bufferFlags = GrResourceProvider::Flags::kNoPendingIO;
-    sk_sp<GrBuffer> buffer(resourceProvider->createBuffer(size,
-                                                          kXferCpuToGpu_GrBufferType,
-                                                          kDynamic_GrAccessPattern,
-                                                          bufferFlags));
+    sk_sp<GrBuffer> buffer(resourceProvider->createBuffer(size, GrGpuBufferType::kXferCpuToGpu,
+                                                          kDynamic_GrAccessPattern, bufferFlags));
     if (!buffer) {
         return;
     }
@@ -110,8 +108,8 @@ void basic_transfer_test(skiatest::Reporter* reporter, GrContext* context, GrCol
             continue;
         }
 
-        if (!context->contextPriv().caps()->isConfigTexturable(desc.fConfig) ||
-            (renderTarget && !context->contextPriv().caps()->isConfigRenderable(desc.fConfig))) {
+        if (!context->priv().caps()->isConfigTexturable(desc.fConfig) ||
+            (renderTarget && !context->priv().caps()->isConfigRenderable(desc.fConfig))) {
             continue;
         }
 

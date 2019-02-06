@@ -10,6 +10,7 @@
 
 #include "GrContextPriv.h"
 #include "GrContextThreadSafeProxy.h"
+#include "GrContextThreadSafeProxyPriv.h"
 #include "GrGpu.h"
 
 #include "effects/GrSkSLFP.h"
@@ -33,7 +34,7 @@ public:
     ~GrDirectContext() override {
         // this if-test protects against the case where the context is being destroyed
         // before having been fully created
-        if (this->contextPriv().getGpu()) {
+        if (this->priv().getGpu()) {
             this->flush();
         }
 
@@ -58,35 +59,39 @@ public:
     }
 
 protected:
-    bool init() override {
-        SkASSERT(fCaps);  // should've been set in ctor
+    bool init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFactoryCache) override {
+        SkASSERT(caps && !FPFactoryCache);
         SkASSERT(!fThreadSafeProxy);
-        SkASSERT(!fFPFactoryCache);
-        fFPFactoryCache.reset(new GrSkSLFPFactoryCache());
-        fThreadSafeProxy.reset(new GrContextThreadSafeProxy(fCaps, this->contextID(),
-                                                            this->backend(),
-                                                            this->options(), fFPFactoryCache));
 
-        if (!INHERITED::initCommon()) {
+        FPFactoryCache.reset(new GrSkSLFPFactoryCache());
+        fThreadSafeProxy = GrContextThreadSafeProxyPriv::Make(this->backend(),
+                                                              this->options(),
+                                                              this->contextID(),
+                                                              caps, FPFactoryCache);
+
+        if (!INHERITED::init(std::move(caps), std::move(FPFactoryCache))) {
             return false;
         }
+
+        SkASSERT(this->caps());
 
         GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
         if (GrContextOptions::Enable::kNo == this->options().fAllowMultipleGlyphCacheTextures ||
             // multitexturing supported only if range can represent the index + texcoords fully
-            !(fCaps->shaderCaps()->floatIs32Bits() || fCaps->shaderCaps()->integerSupport())) {
+            !(this->caps()->shaderCaps()->floatIs32Bits() ||
+              this->caps()->shaderCaps()->integerSupport())) {
             allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kNo;
         } else {
             allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kYes;
         }
 
-        GrStrikeCache* glyphCache = this->contextPriv().getGlyphCache();
-        GrProxyProvider* proxyProvider = this->contextPriv().proxyProvider();
+        GrStrikeCache* glyphCache = this->priv().getGlyphCache();
+        GrProxyProvider* proxyProvider = this->priv().proxyProvider();
 
         fAtlasManager = new GrAtlasManager(proxyProvider, glyphCache,
                                            this->options().fGlyphCacheTextureMaximumBytes,
                                            allowMultitexturing);
-        this->contextPriv().addOnFlushCallbackObject(fAtlasManager);
+        this->priv().addOnFlushCallbackObject(fAtlasManager);
 
         return true;
     }
@@ -122,8 +127,7 @@ sk_sp<GrContext> GrContext::MakeGL(sk_sp<const GrGLInterface> interface,
         return nullptr;
     }
 
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init()) {
+    if (!context->init(context->fGpu->refCaps(), nullptr)) {
         return nullptr;
     }
     return context;
@@ -143,8 +147,7 @@ sk_sp<GrContext> GrContext::MakeMock(const GrMockOptions* mockOptions,
         return nullptr;
     }
 
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init()) {
+    if (!context->init(context->fGpu->refCaps(), nullptr)) {
         return nullptr;
     }
     return context;
@@ -170,8 +173,7 @@ sk_sp<GrContext> GrContext::MakeVulkan(const GrVkBackendContext& backendContext,
         return nullptr;
     }
 
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init()) {
+    if (!context->init(context->fGpu->refCaps(), nullptr)) {
         return nullptr;
     }
     return context;
@@ -194,8 +196,7 @@ sk_sp<GrContext> GrContext::MakeMetal(void* device, void* queue, const GrContext
         return nullptr;
     }
 
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init()) {
+    if (!context->init(context->fGpu->refCaps(), nullptr)) {
         return nullptr;
     }
     return context;

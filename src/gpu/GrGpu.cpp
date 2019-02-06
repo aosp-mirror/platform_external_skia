@@ -217,7 +217,7 @@ sk_sp<GrRenderTarget> GrGpu::onWrapVulkanSecondaryCBAsRenderTarget(const SkImage
     return nullptr;
 }
 
-sk_sp<GrBuffer> GrGpu::createBuffer(size_t size, GrBufferType intendedType,
+sk_sp<GrBuffer> GrGpu::createBuffer(size_t size, GrGpuBufferType intendedType,
                                     GrAccessPattern accessPattern, const void* data) {
     this->handleDirtyContext();
     sk_sp<GrBuffer> buffer = this->onCreateBuffer(size, intendedType, accessPattern, data);
@@ -378,7 +378,7 @@ void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const 
 GrSemaphoresSubmitted GrGpu::finishFlush(int numSemaphores,
                                          GrBackendSemaphore backendSemaphores[]) {
     this->stats()->incNumFinishFlushes();
-    GrResourceProvider* resourceProvider = fContext->contextPriv().resourceProvider();
+    GrResourceProvider* resourceProvider = fContext->priv().resourceProvider();
 
     if (this->caps()->fenceSyncSupport()) {
         for (int i = 0; i < numSemaphores; ++i) {

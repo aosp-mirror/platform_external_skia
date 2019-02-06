@@ -319,8 +319,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(const GrPrimitiveProcess
     SkSL::Program::Settings settings;
     settings.fCaps = this->caps()->shaderCaps();
     settings.fFlipY = this->origin() != kTopLeft_GrSurfaceOrigin;
-    settings.fSharpenTextures =
-                        fGpu->getContext()->contextPriv().options().fSharpenMipmappedTextures;
+    settings.fSharpenTextures = fGpu->getContext()->priv().options().fSharpenMipmappedTextures;
     SkASSERT(!this->fragColorIsInOut());
 
     id<MTLLibrary> vertexLibrary = nil;
@@ -367,11 +366,11 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(const GrPrimitiveProcess
                                   fUniformHandler.fUniforms,
                                   GrMtlBuffer::Make(fGpu,
                                                     fUniformHandler.fCurrentGeometryUBOOffset,
-                                                    kVertex_GrBufferType,
+                                                    GrGpuBufferType::kVertex,
                                                     kStatic_GrAccessPattern),
                                   GrMtlBuffer::Make(fGpu,
                                                     fUniformHandler.fCurrentFragmentUBOOffset,
-                                                    kVertex_GrBufferType,
+                                                    GrGpuBufferType::kVertex,
                                                     kStatic_GrAccessPattern),
                                   (uint32_t)fUniformHandler.numSamplers(),
                                   std::move(fGeometryProcessor),

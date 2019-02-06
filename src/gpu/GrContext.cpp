@@ -67,20 +67,24 @@ GrContext::GrContext(GrBackendApi backend, const GrContextOptions& options, int3
     fGlyphCache = nullptr;
 }
 
-bool GrContext::initCommon() {
+bool GrContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFactoryCache) {
     ASSERT_SINGLE_OWNER
-    SkASSERT(fCaps);  // needs to have been initialized by derived classes
     SkASSERT(fThreadSafeProxy); // needs to have been initialized by derived classes
 
+    if (!INHERITED::init(std::move(caps), std::move(FPFactoryCache))) {
+        return false;
+    }
+
+    SkASSERT(this->caps());
+
     if (fGpu) {
-        fCaps = fGpu->refCaps();
-        fResourceCache = new GrResourceCache(fCaps.get(), &fSingleOwner, this->contextID());
+        fResourceCache = new GrResourceCache(this->caps(), &fSingleOwner, this->contextID());
         fResourceProvider = new GrResourceProvider(fGpu.get(), fResourceCache, &fSingleOwner,
                                                    this->options().fExplicitlyAllocateGPUResources);
-        fProxyProvider =
-                new GrProxyProvider(fResourceProvider, fResourceCache, fCaps, &fSingleOwner);
+        fProxyProvider = new GrProxyProvider(fResourceProvider, fResourceCache,
+                                             this->refCaps(), &fSingleOwner);
     } else {
-        fProxyProvider = new GrProxyProvider(this->contextID(), fCaps, &fSingleOwner);
+        fProxyProvider = new GrProxyProvider(this->contextID(), this->refCaps(), &fSingleOwner);
     }
 
     if (fResourceCache) {
@@ -127,7 +131,7 @@ bool GrContext::initCommon() {
                                                this->options().fSortRenderTargets,
                                                this->options().fReduceOpListSplitting));
 
-    fGlyphCache = new GrStrikeCache(fCaps.get(), this->options().fGlyphCacheTextureMaximumBytes);
+    fGlyphCache = new GrStrikeCache(this->caps(), this->options().fGlyphCacheTextureMaximumBytes);
 
     fTextBlobCache.reset(new GrTextBlobCache(TextBlobCacheOverBudgetCB, this, this->contextID()));
 
@@ -268,18 +272,18 @@ size_t GrContext::getResourceCachePurgeableBytes() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int GrContext::maxTextureSize() const { return fCaps->maxTextureSize(); }
+int GrContext::maxTextureSize() const { return this->caps()->maxTextureSize(); }
 
-int GrContext::maxRenderTargetSize() const { return fCaps->maxRenderTargetSize(); }
+int GrContext::maxRenderTargetSize() const { return this->caps()->maxRenderTargetSize(); }
 
 bool GrContext::colorTypeSupportedAsImage(SkColorType colorType) const {
     GrPixelConfig config = SkColorType2GrPixelConfig(colorType);
-    return fCaps->isConfigTexturable(config);
+    return this->caps()->isConfigTexturable(config);
 }
 
 int GrContext::maxSurfaceSampleCountForColorType(SkColorType colorType) const {
     GrPixelConfig config = SkColorType2GrPixelConfig(colorType);
-    return fCaps->maxRenderTargetSampleCount(config);
+    return this->caps()->maxRenderTargetSampleCount(config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -426,7 +430,7 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
     // For canvas2D putImageData performance we have a special code path for unpremul RGBA_8888 srcs
     // that are premultiplied on the GPU. This is kept as narrow as possible for now.
     bool canvas2DFastPath =
-            !fContext->contextPriv().caps()->avoidWritePixelsFastPath() &&
+            !fContext->priv().caps()->avoidWritePixelsFastPath() &&
             premul &&
             !dst->colorSpaceInfo().colorSpace() &&
             (srcColorType == GrColorType::kRGBA_8888 || srcColorType == GrColorType::kBGRA_8888) &&
@@ -434,7 +438,7 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
             (dstProxy->config() == kRGBA_8888_GrPixelConfig ||
              dstProxy->config() == kBGRA_8888_GrPixelConfig) &&
             !(pixelOpsFlags & kDontFlush_PixelOpsFlag) &&
-            fContext->contextPriv().caps()->isConfigTexturable(kRGBA_8888_GrPixelConfig) &&
+            fContext->priv().caps()->isConfigTexturable(kRGBA_8888_GrPixelConfig) &&
             fContext->validPMUPMConversionExists();
 
     const GrCaps* caps = this->caps();
@@ -455,7 +459,7 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
         if (canvas2DFastPath) {
             desc.fConfig = kRGBA_8888_GrPixelConfig;
             format =
-              fContext->contextPriv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
+              fContext->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
         } else {
             desc.fConfig =  dstProxy->config();
             format = dstProxy->backendFormat().makeTexture2D();
@@ -511,7 +515,7 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
         return false;
     }
 
-    GrColorType allowedColorType = fContext->contextPriv().caps()->supportedWritePixelsColorType(
+    GrColorType allowedColorType = fContext->priv().caps()->supportedWritePixelsColorType(
             dstProxy->config(), srcColorType);
     convert = convert || (srcColorType != allowedColorType);
 
@@ -627,10 +631,10 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
             SkToBool(srcProxy->asTextureProxy()) &&
             (srcProxy->config() == kRGBA_8888_GrPixelConfig ||
              srcProxy->config() == kBGRA_8888_GrPixelConfig) &&
-            fContext->contextPriv().caps()->isConfigRenderable(kRGBA_8888_GrPixelConfig) &&
+            fContext->priv().caps()->isConfigRenderable(kRGBA_8888_GrPixelConfig) &&
             fContext->validPMUPMConversionExists();
 
-    if (!fContext->contextPriv().caps()->surfaceSupportsReadPixels(srcSurface) ||
+    if (!fContext->priv().caps()->surfaceSupportsReadPixels(srcSurface) ||
         canvas2DFastPath) {
         GrSurfaceDesc desc;
         desc.fFlags = canvas2DFastPath ? kRenderTarget_GrSurfaceFlag : kNone_GrSurfaceFlags;
@@ -703,7 +707,7 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
         top = srcSurface->height() - top - height;
     }
 
-    GrColorType allowedColorType = fContext->contextPriv().caps()->supportedReadPixelsColorType(
+    GrColorType allowedColorType = fContext->priv().caps()->supportedReadPixelsColorType(
             srcProxy->config(), dstColorType);
     convert = convert || (dstColorType != allowedColorType);
 
@@ -882,12 +886,15 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureRenderTargetContex
                                                                    GrSurfaceOrigin origin,
                                                                    int sampleCnt,
                                                                    sk_sp<SkColorSpace> colorSpace,
-                                                                   const SkSurfaceProps* props) {
+                                                                   const SkSurfaceProps* props,
+                                                                   ReleaseProc releaseProc,
+                                                                   ReleaseContext releaseCtx) {
     ASSERT_SINGLE_OWNER_PRIV
     SkASSERT(sampleCnt > 0);
 
     sk_sp<GrTextureProxy> proxy(this->proxyProvider()->wrapRenderableBackendTexture(
-            tex, origin, sampleCnt, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo));
+            tex, origin, sampleCnt, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, releaseProc,
+            releaseCtx));
     if (!proxy) {
         return nullptr;
     }
@@ -900,10 +907,13 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendRenderTargetRenderTargetC
                                                 const GrBackendRenderTarget& backendRT,
                                                 GrSurfaceOrigin origin,
                                                 sk_sp<SkColorSpace> colorSpace,
-                                                const SkSurfaceProps* surfaceProps) {
+                                                const SkSurfaceProps* surfaceProps,
+                                                ReleaseProc releaseProc,
+                                                ReleaseContext releaseCtx) {
     ASSERT_SINGLE_OWNER_PRIV
 
-    sk_sp<GrSurfaceProxy> proxy = this->proxyProvider()->wrapBackendRenderTarget(backendRT, origin);
+    sk_sp<GrSurfaceProxy> proxy = this->proxyProvider()->wrapBackendRenderTarget(
+            backendRT, origin, releaseProc, releaseCtx);
     if (!proxy) {
         return nullptr;
     }
@@ -997,7 +1007,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetContextWithF
                                                                  SkBudgeted budgeted) {
     GrBackendFormat localFormat = format;
     SkASSERT(sampleCnt > 0);
-    if (0 == fContext->contextPriv().caps()->getRenderTargetSampleCount(sampleCnt, config)) {
+    if (0 == fContext->priv().caps()->getRenderTargetSampleCount(sampleCnt, config)) {
         config = GrPixelConfigFallback(config);
         // TODO: First we should be checking the getRenderTargetSampleCount from the GrBackendFormat
         // and not GrPixelConfig. Besides that, we should implement the fallback in the caps, but
@@ -1007,7 +1017,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetContextWithF
         if (!GrPixelConfigToColorType(config, &colorType)) {
             return nullptr;
         }
-        localFormat = fContext->fCaps->getBackendFormatFromColorType(colorType);
+        localFormat = fContext->caps()->getBackendFormatFromColorType(colorType);
     }
 
     return this->makeDeferredRenderTargetContext(localFormat, fit, width, height, config,
@@ -1061,7 +1071,9 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetContext(
     return renderTargetContext;
 }
 
-sk_sp<GrSkSLFPFactoryCache> GrContextPriv::getFPFactoryCache() { return fContext->fFPFactoryCache; }
+sk_sp<GrSkSLFPFactoryCache> GrContextPriv::fpFactoryCache() {
+    return fContext->fpFactoryCache();
+}
 
 std::unique_ptr<GrFragmentProcessor> GrContext::createPMToUPMEffect(
         std::unique_ptr<GrFragmentProcessor> fp) {
@@ -1097,7 +1109,7 @@ bool GrContext::validPMUPMConversionExists() {
 }
 
 bool GrContext::supportsDistanceFieldText() const {
-    return fCaps->shaderCaps()->supportsDistanceFieldText();
+    return this->caps()->shaderCaps()->supportsDistanceFieldText();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1147,7 +1159,7 @@ SkString GrContextPriv::dump() const {
     writer.appendString("backend", kBackendStr[(unsigned)fContext->backend()]);
 
     writer.appendName("caps");
-    fContext->fCaps->dumpJSON(&writer);
+    fContext->caps()->dumpJSON(&writer);
 
     writer.appendName("gpu");
     fContext->fGpu->dumpJSON(&writer);
