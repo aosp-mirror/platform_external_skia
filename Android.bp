@@ -1720,6 +1720,7 @@ cc_test {
         "tests/SkSLSPIRVTest.cpp",
         "tests/SkSharedMutexTest.cpp",
         "tests/SkUTFTest.cpp",
+        "tests/SkVxTest.cpp",
         "tests/SortTest.cpp",
         "tests/SpecialImageTest.cpp",
         "tests/SpecialSurfaceTest.cpp",
