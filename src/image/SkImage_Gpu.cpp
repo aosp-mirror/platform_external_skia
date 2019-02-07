@@ -350,10 +350,12 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
     if (!context) {
         return nullptr;
     }
-    if (uint32_t incumbentID = as_IB(this)->contextID()) {
-        if (incumbentID != context->priv().contextID()) {
+
+    if (this->isTextureBacked()) {
+        if (!as_IB(this)->context()->priv().matches(context)) {
             return nullptr;
         }
+
         sk_sp<GrTextureProxy> proxy = as_IB(this)->asTextureProxyRef();
         SkASSERT(proxy);
         if (GrMipMapped::kNo == mipMapped || proxy->mipMapped() == mipMapped) {
@@ -448,6 +450,11 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
         return codecImage;
     }
 
+    // If non-power-of-two mipmapping isn't supported, ignore the client's request
+    if (!context->priv().caps()->mipMapSupport()) {
+        buildMips = false;
+    }
+
     auto maxTextureSize = context->priv().caps()->maxTextureSize();
     if (limitToMaxTextureSize &&
         (codecImage->width() > maxTextureSize || codecImage->height() > maxTextureSize)) {
@@ -467,7 +474,11 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
     GrSamplerState samplerState(
             GrSamplerState::WrapMode::kClamp,
             buildMips ? GrSamplerState::Filter::kMipMap : GrSamplerState::Filter::kBilerp);
-    sk_sp<GrTextureProxy> proxy(maker.refTextureProxyForParams(samplerState, nullptr));
+    SkScalar scaleAdjust[2] = { 1.0f, 1.0f };
+    sk_sp<GrTextureProxy> proxy(maker.refTextureProxyForParams(samplerState, scaleAdjust));
+    // Given that we disable mipmaps if non-power-of-two mipmapping isn't supported, we always
+    // expect the created texture to be unscaled.
+    SkASSERT(scaleAdjust[0] == 1.0f && scaleAdjust[1] == 1.0f);
     if (!proxy) {
         return codecImage;
     }
@@ -505,6 +516,11 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrContext* context,
     // instead.
     if (!context->priv().resourceProvider()) {
         return SkImage::MakeRasterCopy(originalPixmap);
+    }
+
+    // If non-power-of-two mipmapping isn't supported, ignore the client's request
+    if (!context->priv().caps()->mipMapSupport()) {
+        buildMips = false;
     }
 
     const SkPixmap* pixmap = &originalPixmap;
