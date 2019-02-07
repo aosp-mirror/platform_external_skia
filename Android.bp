@@ -556,6 +556,7 @@ cc_library_static {
         srcs: [
           "src/codec/SkHeifCodec.cpp",
           "src/gpu/GrAHardwareBufferImageGenerator.cpp",
+          "src/gpu/GrAHardwareBufferUtils.cpp",
           "src/gpu/GrAuditTrail.cpp",
           "src/gpu/GrBackendSurface.cpp",
           "src/gpu/GrBackendTextureImageGenerator.cpp",
