@@ -22,6 +22,7 @@
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
+  #define SK_SUPPORT_LEGACY_DRAWLOOPER
 
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG

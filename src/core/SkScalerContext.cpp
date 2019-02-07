@@ -40,10 +40,41 @@
     #define DUMP_RECx
 #endif
 
+SkScalerContextRec SkScalerContext::PreprocessRec(const SkTypeface& typeface,
+                                                  const SkScalerContextEffects& effects,
+                                                  const SkDescriptor& desc) {
+    SkScalerContextRec rec =
+            *static_cast<const SkScalerContextRec*>(desc.findEntry(kRec_SkDescriptorTag, nullptr));
+
+    // Allow the typeface to adjust the rec.
+    typeface.onFilterRec(&rec);
+
+    if (effects.fMaskFilter) {
+        // Pre-blend is not currently applied to filtered text.
+        // The primary filter is blur, for which contrast makes no sense,
+        // and for which the destination guess error is more visible.
+        // Also, all existing users of blur have calibrated for linear.
+        rec.ignorePreBlend();
+    }
+
+    SkColor lumColor = rec.getLuminanceColor();
+
+    if (rec.fMaskFormat == SkMask::kA8_Format) {
+        U8CPU lum = SkComputeLuminance(SkColorGetR(lumColor),
+                                       SkColorGetG(lumColor),
+                                       SkColorGetB(lumColor));
+        lumColor = SkColorSetRGB(lum, lum, lum);
+    }
+
+    // TODO: remove CanonicalColor when we to fix up Chrome layout tests.
+    rec.setLuminanceColor(SkMaskGamma::CanonicalColor(lumColor));
+
+    return rec;
+}
+
 SkScalerContext::SkScalerContext(sk_sp<SkTypeface> typeface, const SkScalerContextEffects& effects,
                                  const SkDescriptor* desc)
-    : fRec(*static_cast<const SkScalerContextRec*>(desc->findEntry(kRec_SkDescriptorTag, nullptr)))
-
+    : fRec(PreprocessRec(*typeface, effects, *desc))
     , fTypeface(std::move(typeface))
     , fPathEffect(sk_ref_sp(effects.fPathEffect))
     , fMaskFilter(sk_ref_sp(effects.fMaskFilter))
@@ -51,8 +82,6 @@ SkScalerContext::SkScalerContext(sk_sp<SkTypeface> typeface, const SkScalerConte
     , fGenerateImageFromPath(fRec.fFrameWidth > 0 || fPathEffect != nullptr)
 
     , fPreBlend(fMaskFilter ? SkMaskGamma::PreBlend() : SkScalerContext::GetMaskPreBlend(fRec))
-    , fPreBlendForFilter(fMaskFilter ? SkScalerContext::GetMaskPreBlend(fRec)
-                                     : SkMaskGamma::PreBlend())
 {
 #ifdef DUMP_REC
     SkDebugf("SkScalerContext checksum %x count %d length %d\n",
@@ -105,9 +134,12 @@ static const SkMaskGamma& cached_mask_gamma(SkScalar contrast, SkScalar paintGam
  */
 SkMaskGamma::PreBlend SkScalerContext::GetMaskPreBlend(const SkScalerContextRec& rec) {
     SkAutoMutexAcquire ama(gMaskGammaCacheMutex);
+
     const SkMaskGamma& maskGamma = cached_mask_gamma(rec.getContrast(),
                                                      rec.getPaintGamma(),
                                                      rec.getDeviceGamma());
+
+    // TODO: remove CanonicalColor when we to fix up Chrome layout tests.
     return maskGamma.preBlend(rec.getLuminanceColor());
 }
 
@@ -537,10 +569,6 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
                 dst += dstRB;
             }
             SkMask::FreeImage(dstM.fImage);
-
-            if (SkMask::kA8_Format == dstM.fFormat && fPreBlendForFilter.isApplicable()) {
-                applyLUTToA8Mask(srcM, fPreBlendForFilter.fG);
-            }
         }
     }
 }
@@ -898,8 +926,7 @@ void SkScalerContext::MakeRecAndEffects(const SkFont& font, const SkPaint& paint
                                         SkScalerContextFlags scalerContextFlags,
                                         const SkMatrix& deviceMatrix,
                                         SkScalerContextRec* rec,
-                                        SkScalerContextEffects* effects,
-                                        bool enableTypefaceFiltering) {
+                                        SkScalerContextEffects* effects) {
     SkASSERT(!deviceMatrix.hasPerspective());
 
     sk_bzero(rec, sizeof(SkScalerContextRec));
@@ -1034,14 +1061,6 @@ void SkScalerContext::MakeRecAndEffects(const SkFont& font, const SkPaint& paint
     rec->setContrast(0.5f);
 #endif
 
-    // Allow the fonthost to modify our rec before we use it as a key into the
-    // cache. This way if we're asking for something that they will ignore,
-    // they can modify our rec up front, so we don't create duplicate cache
-    // entries.
-    if (enableTypefaceFiltering) {
-        typeface->onFilterRec(rec);
-    }
-
     if (!SkToBool(scalerContextFlags & SkScalerContextFlags::kFakeGamma)) {
         rec->ignoreGamma();
     }
@@ -1050,42 +1069,6 @@ void SkScalerContext::MakeRecAndEffects(const SkFont& font, const SkPaint& paint
     }
 
     new (effects) SkScalerContextEffects{paint};
-    if (effects->fMaskFilter) {
-        // Pre-blend is not currently applied to filtered text.
-        // The primary filter is blur, for which contrast makes no sense,
-        // and for which the destination guess error is more visible.
-        // Also, all existing users of blur have calibrated for linear.
-        // TODO: this means fPreBlendForFilter is never used?
-        rec->ignorePreBlend();
-    }
-
-    bool luminanceColorWillBeUsed = rec->getDeviceGamma() != SK_Scalar1 ||
-                                    rec->getPaintGamma()  != SK_Scalar1;
-    // If we're asking for A8, we force the colorlum to be gray, since that
-    // limits the number of unique entries, and the scaler will only look at
-    // the lum of one of them.
-    switch (rec->fMaskFormat) {
-        case SkMask::kLCD16_Format: if (luminanceColorWillBeUsed) {
-            // filter down the luminance color to a finite number of bits
-            SkColor color = rec->getLuminanceColor();
-            rec->setLuminanceColor(SkMaskGamma::CanonicalColor(color));
-        } break;
-        case SkMask::kA8_Format: if (luminanceColorWillBeUsed) {
-            // filter down the luminance to a single component, since A8 can't
-            // use per-component information
-            SkColor color = rec->getLuminanceColor();
-            U8CPU lum = SkComputeLuminance(SkColorGetR(color),
-                                           SkColorGetG(color),
-                                           SkColorGetB(color));
-            // reduce to our finite number of bits
-            color = SkColorSetRGB(lum, lum, lum);
-            rec->setLuminanceColor(SkMaskGamma::CanonicalColor(color));
-        } break;
-        case SkMask::kBW_Format:
-            // No need to differentiate gamma or apply contrast if we're BW
-            rec->ignorePreBlend();
-            break;
-    }
 }
 
 SkDescriptor* SkScalerContext::MakeDescriptorForPaths(SkFontID typefaceID,
