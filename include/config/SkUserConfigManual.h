@@ -33,4 +33,7 @@
 
   #define SK_DISABLE_DAA  // skbug.com/6886
 
+  // b/123377741
+  #define SK_SUPPORT_LEGACY_ANDROID_CODEC_COLORSPACE
+
 #endif // SkUserConfigManual_DEFINED
