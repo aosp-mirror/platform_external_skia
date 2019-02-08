@@ -29,7 +29,7 @@ namespace skiagm {
 /**
  * This GM directly exercises GrYUVtoRGBEffect.
  */
-class YUVtoRGBEffect : public GM {
+class YUVtoRGBEffect : public GpuGM {
 public:
     YUVtoRGBEffect() {
         this->setBGColor(0xFFFFFFFF);
@@ -72,19 +72,8 @@ protected:
         }
     }
 
-    void onDraw(SkCanvas* canvas) override {
-        GrRenderTargetContext* renderTargetContext =
-            canvas->internal_private_accessTopLayerRenderTargetContext();
-        if (!renderTargetContext) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
-            return;
-        }
-
-        GrContext* context = canvas->getGrContext();
-        if (!context) {
-            return;
-        }
-
+    DrawResult onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
+                      SkCanvas* canvas, SkString* errorMsg) override {
         GrProxyProvider* proxyProvider = context->priv().proxyProvider();
         sk_sp<GrTextureProxy> proxies[3];
 
@@ -92,8 +81,8 @@ protected:
             proxies[i] = proxyProvider->createTextureProxy(fImage[i], kNone_GrSurfaceFlags, 1,
                                                            SkBudgeted::kYes, SkBackingFit::kExact);
             if (!proxies[i]) {
-                DrawFailureMessage(canvas, "Failed to create proxy");
-                return;
+                *errorMsg = "Failed to create proxy";
+                return DrawResult::kFail;
             }
         }
 
@@ -137,6 +126,7 @@ protected:
                 x += renderRect.width() + kTestPad;
             }
         }
+        return DrawResult::kOk;
      }
 
 private:
@@ -149,7 +139,7 @@ DEF_GM(return new YUVtoRGBEffect;)
 
 //////////////////////////////////////////////////////////////////////////////
 
-class YUVNV12toRGBEffect : public GM {
+class YUVNV12toRGBEffect : public GpuGM {
 public:
     YUVNV12toRGBEffect() {
         this->setBGColor(0xFFFFFFFF);
@@ -200,19 +190,8 @@ protected:
         }
     }
 
-    void onDraw(SkCanvas* canvas) override {
-        GrRenderTargetContext* renderTargetContext =
-            canvas->internal_private_accessTopLayerRenderTargetContext();
-        if (!renderTargetContext) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
-            return;
-        }
-
-        GrContext* context = canvas->getGrContext();
-        if (!context) {
-            return;
-        }
-
+    DrawResult onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
+                      SkCanvas* canvas, SkString* errorMsg) override {
         GrProxyProvider* proxyProvider = context->priv().proxyProvider();
         sk_sp<GrTextureProxy> proxies[2];
 
@@ -220,8 +199,8 @@ protected:
             proxies[i] = proxyProvider->createTextureProxy(fImage[i], kNone_GrSurfaceFlags, 1,
                                                            SkBudgeted::kYes, SkBackingFit::kExact);
             if (!proxies[i]) {
-                DrawFailureMessage(canvas, "Failed to create proxy");
-                return;
+                *errorMsg = "Failed to create proxy";
+                return DrawResult::kFail;
             }
         }
 
@@ -258,6 +237,7 @@ protected:
                 renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
             }
         }
+        return DrawResult::kOk;
     }
 
 private:

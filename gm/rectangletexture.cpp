@@ -19,7 +19,7 @@
 #include "SkImage.h"
 
 namespace skiagm {
-class RectangleTexture : public GM {
+class RectangleTexture : public GpuGM {
 public:
     RectangleTexture() {
         this->setBGColor(0xFFFFFFFF);
@@ -54,12 +54,6 @@ protected:
 
     sk_sp<SkImage> createRectangleTextureImg(GrContext* context, GrSurfaceOrigin origin, int width,
                                              int height, const uint32_t* pixels) {
-        if (!context) {
-            return nullptr;
-        }
-        if (context->abandoned()) {
-            return nullptr;
-        }
         GrGpu* gpu = context->priv().getGpu();
         if (!gpu) {
             return nullptr;
@@ -123,13 +117,8 @@ protected:
         return nullptr;
     }
 
-    void onDraw(SkCanvas* canvas) override {
-        GrContext *context = canvas->getGrContext();
-        if (!context) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
-            return;
-        }
-
+    DrawResult onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas,
+                      SkString* errorMsg) override {
         constexpr int kWidth = 50;
         constexpr int kHeight = 50;
         constexpr SkScalar kPad = 5.f;
@@ -145,8 +134,8 @@ protected:
         };
         SkASSERT(SkToBool(rectImgs[0]) == SkToBool(rectImgs[1]));
         if (!rectImgs[0]) {
-            DrawFailureMessage(canvas, "Could not create rectangle texture image.");
-            return;
+            *errorMsg = "Could not create rectangle texture image.";
+            return DrawResult::kFail;
         }
 
         constexpr SkFilterQuality kQualities[] = {
@@ -201,6 +190,7 @@ protected:
                 canvas->translate(0, kPad + 1.5f * kHeight * s);
             }
         }
+        return DrawResult::kOk;
     }
 
 private:

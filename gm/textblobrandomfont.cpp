@@ -20,7 +20,7 @@
 #include "GrContext.h"
 
 namespace skiagm {
-class TextBlobRandomFont : public GM {
+class TextBlobRandomFont : public GpuGM {
 public:
     // This gm tests that textblobs can be translated and scaled with a font that returns random
     // but deterministic masks
@@ -93,15 +93,11 @@ protected:
         return SkISize::Make(kWidth, kHeight);
     }
 
-    void onDraw(SkCanvas* canvas) override {
+    DrawResult onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas,
+                      SkString* errorMsg) override {
         // This GM exists to test a specific feature of the GPU backend.
         // This GM uses sk_tool_utils::makeSurface which doesn't work well with vias.
         // This GM uses SkRandomTypeface which doesn't work well with serialization.
-        if (nullptr == canvas->getGrContext()) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
-            return;
-        }
-
         canvas->drawColor(SK_ColorWHITE);
 
         SkImageInfo info = SkImageInfo::Make(kWidth, kHeight, canvas->imageInfo().colorType(),
@@ -110,8 +106,8 @@ protected:
         SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
         auto surface(sk_tool_utils::makeSurface(canvas, info, &props));
         if (!surface) {
-            DrawFailureMessage(canvas, "This test requires a surface");
-            return;
+            *errorMsg = "This test requires a surface";
+            return DrawResult::kFail;
         }
 
         SkPaint paint;
@@ -132,24 +128,19 @@ protected:
         yOffset += stride;
         canvas->restore();
 
-        // this will test lcd masks when not requested
-        // on cpu this currently causes unspecified behavior, so avoid until it is fixed
-        if (canvas->getGrContext()) {
-            // Rotate in the surface canvas, not the final canvas, to avoid aliasing
-            surfaceCanvas->rotate(-0.05f);
-            surfaceCanvas->drawTextBlob(fBlob, 10, yOffset, paint);
-            surface->draw(canvas, 0, 0, nullptr);
-        }
+        // Rotate in the surface canvas, not the final canvas, to avoid aliasing
+        surfaceCanvas->rotate(-0.05f);
+        surfaceCanvas->drawTextBlob(fBlob, 10, yOffset, paint);
+        surface->draw(canvas, 0, 0, nullptr);
         yOffset += stride;
 
         // free gpu resources and verify
-        if (canvas->getGrContext()) {
-            canvas->getGrContext()->freeGpuResources();
-        }
+        context->freeGpuResources();
 
         canvas->rotate(-0.05f);
         canvas->drawTextBlob(fBlob, 10, yOffset, paint);
         yOffset += stride;
+        return DrawResult::kOk;
     }
 
 private:
