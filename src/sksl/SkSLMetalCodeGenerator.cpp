@@ -401,8 +401,12 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
 }
 
 void MetalCodeGenerator::writeFragCoord() {
-    this->write("float4(_fragCoord.x, _anonInterface0.u_skRTHeight - _fragCoord.y, 0.0, "
-                "_fragCoord.w)");
+    if (fProgram.fInputs.fRTHeight) {
+        this->write("float4(_fragCoord.x, _anonInterface0.u_skRTHeight - _fragCoord.y, 0.0, "
+                    "_fragCoord.w)");
+    } else {
+        this->write("float4(_fragCoord.x, _fragCoord.y, 0.0, _fragCoord.w)");
+    }
 }
 
 void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
@@ -688,9 +692,7 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
             }
         }
         if (fProgram.fKind == Program::kFragment_Kind) {
-            if (fInterfaceBlockNameMap.empty()) {
-            // FIXME - Possibly have a different way of passing in u_skRTHeight or flip y axis
-            // in a different way altogether.
+            if (fProgram.fInputs.fRTHeight && fInterfaceBlockNameMap.empty()) {
 #ifdef SK_MOLTENVK
                 this->write(", constant sksl_synthetic_uniforms& _anonInterface0 [[buffer(0)]]");
 #else
@@ -844,7 +846,7 @@ void MetalCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     }
     fIndentation++;
     writeFields(structType->fields(), structType->fOffset, &intf);
-    if (fProgram.fKind == Program::kFragment_Kind) {
+    if (fProgram.fInputs.fRTHeight) {
         this->writeLine("float u_skRTHeight;");
     }
     fIndentation--;
@@ -1261,9 +1263,7 @@ void MetalCodeGenerator::writeInterfaceBlocks() {
             wroteInterfaceBlock = true;
         }
     }
-    if (!wroteInterfaceBlock && (fProgram.fKind == Program::kFragment_Kind)) {
-        // FIXME - Possibly have a different way of passing in u_skRTHeight or flip y axis
-        // in a different way altogether.
+    if (!wroteInterfaceBlock && fProgram.fInputs.fRTHeight) {
         this->writeLine("struct sksl_synthetic_uniforms {");
         this->writeLine("    float u_skRTHeight;");
         this->writeLine("};");

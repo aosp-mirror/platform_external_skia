@@ -347,9 +347,11 @@ void SkGlyphRunListPainter::drawGlyphRunAsPathWithARGBFallback(
         if (glyph.isEmpty()) {
             perEmpty(glyph, glyphPos);
         } else if (glyph.fMaskFormat != SkMask::kARGB32_Format) {
-            if (pathCache->hasPath(glyph)) {
+            if (pathCache->decideCouldDrawFromPath(glyph)) {
                 perPath(glyph, glyphPos);
             } else {
+                // This happens when a bitmap-only font has a very large glyph compared to the
+                // rest of the glyphs. This doesn't happen in practice.
                 perEmpty(glyph, glyphPos);
             }
         } else {
@@ -399,7 +401,7 @@ void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
             if (glyph.isEmpty()) {
                 emptyGlyphs.push_back(&glyph);
             } else if (SkStrikeCommon::GlyphTooBigForAtlas(glyph)) {
-                if (cache->hasPath(glyph)) {
+                if (cache->decideCouldDrawFromPath(glyph)) {
                     fPaths.push_back({&glyph, mappedPt});
                 } else {
                     // This happens when a bitmap-only font is forced to scale very large. This
@@ -407,12 +409,8 @@ void SkGlyphRunListPainter::drawGlyphRunAsBMPWithPathFallback(
                     emptyGlyphs.push_back(&glyph);
                 }
             } else {
-                if (cache->hasImage(glyph)) {
-                    fMasks[glyphCount++] = {&glyph, mappedPt};
-                } else {
-                    // In practice, this never happens.
-                    emptyGlyphs.push_back(&glyph);
-                }
+                // If the glyph is not empty, then it will have a pointer to mask data.
+                fMasks[glyphCount++] = {&glyph, mappedPt};
             }
         }
     }
@@ -446,14 +444,10 @@ void SkGlyphRunListPainter::drawGlyphRunAsSDFWithARGBFallback(
             perEmpty(glyph, glyphPos);
         } else if (glyph.fMaskFormat == SkMask::kSDF_Format) {
             if (!SkStrikeCommon::GlyphTooBigForAtlas(glyph)) {
-                // TODO: this check is probably not needed. Remove when proven.
-                if (cache->hasImage(glyph)) {
-                    perSDF(glyph, glyphPos);
-                } else {
-                    perEmpty(glyph, glyphPos);
-                }
+                // If the glyph is not empty, then it will have a pointer to SDF data.
+                perSDF(glyph, glyphPos);
             } else {
-                if (cache->hasPath(glyph)) {
+                if (cache->decideCouldDrawFromPath(glyph)) {
                     perPath(glyph, glyphPos);
                 } else {
                     perEmpty(glyph, glyphPos);
@@ -947,30 +941,11 @@ void SkTextBlobCacheDiffCanvas::TrackLayerDevice::processGlyphRunForMask(
             SkScalerContextFlags::kFakeGammaAndBoostContrast, &effects);
     SkASSERT(glyphCacheState);
 
-    auto processEmpties = [glyphCacheState] (SkSpan<const SkGlyph*>glyphs) {
-        for (const SkGlyph* glyph : glyphs) {
-            glyphCacheState->addGlyph(glyph->getPackedID(), false);
-        }
-    };
+    auto processEmpties = [] (SkSpan<const SkGlyph*>glyphs) { };
 
-    auto processMasks = [glyphCacheState]
-                    (SkSpan<const SkGlyphRunListPainter::GlyphAndPos> masks) {
-        for (const auto& mask : masks) {
-            glyphCacheState->addGlyph(mask.glyph->getPackedID(), false);
-        }
-    };
+    auto processMasks = [] (SkSpan<const SkGlyphRunListPainter::GlyphAndPos> masks) { };
 
-    // Glyphs which are too large for the atlas still request images when computing the bounds
-    // for the glyph, which is why its necessary to send both. See related code in
-    // get_packed_glyph_bounds in GrStrikeCache.cpp and crbug.com/510931.
-    auto processPaths = [glyphCacheState]
-                   (SkSpan<const SkGlyphRunListPainter::GlyphAndPos> paths) {
-        for (const auto& path : paths) {
-            SkPackedGlyphID glyphID = path.glyph->getPackedID();
-            glyphCacheState->addGlyph(glyphID, true);
-            glyphCacheState->addGlyph(glyphID, false);
-        }
-    };
+    auto processPaths = [] (SkSpan<const SkGlyphRunListPainter::GlyphAndPos> paths) { };
 
     fPainter.drawGlyphRunAsBMPWithPathFallback(
             glyphCacheState, glyphRun, origin, runMatrix,

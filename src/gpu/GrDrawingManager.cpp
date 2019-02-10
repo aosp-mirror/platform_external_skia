@@ -229,14 +229,16 @@ GrSemaphoresSubmitted GrDrawingManager::flush(GrSurfaceProxy*,
     fActiveOpList = nullptr;
 
     fDAG.prepForFlush();
-    SkASSERT(SkToBool(fVertexBufferSpace) == SkToBool(fIndexBufferSpace));
-    if (!fVertexBufferSpace) {
-        fVertexBufferSpace.reset(new char[GrBufferAllocPool::kDefaultBufferSize]());
-        fIndexBufferSpace.reset(new char[GrBufferAllocPool::kDefaultBufferSize]());
+    if (!fCpuBufferCache) {
+        // We cache more buffers when the backend is using client side arrays. Otherwise, we
+        // expect each pool will use a CPU buffer as a staging buffer before uploading to a GPU
+        // buffer object. Each pool only requires one staging buffer at a time.
+        int maxCachedBuffers = fContext->priv().caps()->preferClientSideDynamicBuffers() ? 2 : 6;
+        fCpuBufferCache = GrBufferAllocPool::CpuBufferCache::Make(maxCachedBuffers);
     }
 
     GrOpFlushState flushState(gpu, fContext->priv().resourceProvider(), &fTokenTracker,
-                              fVertexBufferSpace.get(), fIndexBufferSpace.get());
+                              fCpuBufferCache);
 
     GrOnFlushResourceProvider onFlushProvider(this);
     // TODO: AFAICT the only reason fFlushState is on GrDrawingManager rather than on the
@@ -596,7 +598,7 @@ sk_sp<GrRenderTargetOpList> GrDrawingManager::newRTOpList(GrRenderTargetProxy* r
                                                         resourceProvider,
                                                         fContext->priv().refOpMemoryPool(),
                                                         rtp,
-                                                        fContext->priv().getAuditTrail()));
+                                                        fContext->priv().auditTrail()));
     SkASSERT(rtp->getLastOpList() == opList.get());
 
     if (managedOpList) {
@@ -636,7 +638,7 @@ sk_sp<GrTextureOpList> GrDrawingManager::newTextureOpList(GrTextureProxy* textur
     sk_sp<GrTextureOpList> opList(new GrTextureOpList(fContext->priv().resourceProvider(),
                                                       fContext->priv().refOpMemoryPool(),
                                                       textureProxy,
-                                                      fContext->priv().getAuditTrail()));
+                                                      fContext->priv().auditTrail()));
 
     SkASSERT(textureProxy->getLastOpList() == opList.get());
 
@@ -729,7 +731,7 @@ sk_sp<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext(
                                                         fContext, this, std::move(rtp),
                                                         std::move(colorSpace),
                                                         surfaceProps,
-                                                        fContext->priv().getAuditTrail(),
+                                                        fContext->priv().auditTrail(),
                                                         fSingleOwner, managedOpList));
 }
 
@@ -753,6 +755,6 @@ sk_sp<GrTextureContext> GrDrawingManager::makeTextureContext(sk_sp<GrSurfaceProx
 
     return sk_sp<GrTextureContext>(new GrTextureContext(fContext, this, std::move(textureProxy),
                                                         std::move(colorSpace),
-                                                        fContext->priv().getAuditTrail(),
+                                                        fContext->priv().auditTrail(),
                                                         fSingleOwner));
 }

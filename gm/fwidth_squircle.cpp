@@ -134,8 +134,7 @@ private:
             {+1, +1},
         };
         sk_sp<const GrBuffer> vertexBuffer(flushState->resourceProvider()->createBuffer(
-                sizeof(vertices), GrGpuBufferType::kVertex, kStatic_GrAccessPattern,
-                GrResourceProvider::Flags::kNone, vertices));
+                sizeof(vertices), GrGpuBufferType::kVertex, kStatic_GrAccessPattern, vertices));
         if (!vertexBuffer) {
             return;
         }
@@ -155,15 +154,16 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Test.
 
-DEF_SIMPLE_GPU_GM(fwidth_squircle, ctx, rtc, canvas, 200, 200) {
+DEF_SIMPLE_GPU_GM_CAN_FAIL(fwidth_squircle, ctx, rtc, canvas, errorMsg, 200, 200) {
     if (!ctx->priv().caps()->shaderCaps()->shaderDerivativeSupport()) {
-        skiagm::GM::DrawFailureMessage(canvas, "Shader derivatives not supported.");
-        return;
+        *errorMsg = "Shader derivatives not supported.";
+        return DrawResult::kSkip;
     }
 
     // Draw the test directly to the frame buffer.
     canvas->clear(SK_ColorWHITE);
     rtc->priv().testingOnly_addDrawOp(FwidthSquircleTestOp::Make(ctx, canvas->getTotalMatrix()));
+    return skiagm::DrawResult::kOk;
 }
 
 }

@@ -241,8 +241,8 @@ enum class GrScissorTest : bool {
 };
 
 struct GrMipLevel {
-    const void* fPixels;
-    size_t fRowBytes;
+    const void* fPixels = nullptr;
+    size_t fRowBytes = 0;
 };
 
 /**
@@ -828,19 +828,6 @@ enum class GrGpuBufferType {
     kXferGpuToCpu,
 };
 static const int kGrGpuBufferTypeCount = static_cast<int>(GrGpuBufferType::kXferGpuToCpu) + 1;
-
-static inline bool GrBufferTypeIsVertexOrIndex(GrGpuBufferType type) {
-    switch (type) {
-        case GrGpuBufferType::kVertex:
-        case GrGpuBufferType::kIndex:
-            return true;
-        case GrGpuBufferType::kXferCpuToGpu:
-        case GrGpuBufferType::kXferGpuToCpu:
-            return false;
-    }
-    SK_ABORT("Unexpected GrGpuBufferType.");
-    return false;
-}
 
 /**
  * Provides a performance hint regarding the frequency at which a data store will be accessed.

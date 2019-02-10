@@ -18,12 +18,18 @@ public:
     // from GrContext_Base
     uint32_t contextID() const { return fContext->contextID(); }
 
+    bool matches(GrContext_Base* candidate) const { return fContext->matches(candidate); }
+
     const GrContextOptions& options() const { return fContext->options(); }
 
     const GrCaps* caps() const { return fContext->caps(); }
-    sk_sp<const GrCaps> refCaps() const { return fContext->refCaps(); }
+    sk_sp<const GrCaps> refCaps() const;
 
-    sk_sp<GrSkSLFPFactoryCache> fpFactoryCache() { return fContext->fpFactoryCache(); }
+    sk_sp<GrSkSLFPFactoryCache> fpFactoryCache();
+
+    GrImageContext* asImageContext() { return fContext->asImageContext(); }
+    GrRecordingContext* asRecordingContext() { return fContext->asRecordingContext(); }
+    GrContext* asDirectContext() { return fContext->asDirectContext(); }
 
 private:
     explicit GrBaseContextPriv(GrContext_Base* context) : fContext(context) {}

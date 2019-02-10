@@ -429,7 +429,7 @@ optional("fontmgr_fuchsia") {
   enabled = skia_enable_fontmgr_fuchsia
 
   deps = [
-    "//garnet/public/fidl/fuchsia.fonts",
+    "//sdk/fidl/fuchsia.fonts",
   ]
   sources = [
     "src/ports/SkFontMgr_fuchsia.cpp",
@@ -2160,6 +2160,14 @@ if (skia_enable_tools) {
       } else if (is_win) {
         sources += [ "tools/sk_app/win/VulkanWindowContext_win.cpp" ]
       }
+    }
+
+    if (skia_use_metal) {
+      sources += [ "tools/sk_app/MetalWindowContext.mm" ]
+      if (is_mac) {
+        sources += [ "tools/sk_app/mac/MetalWindowContext_mac.mm" ]
+      }
+      libs += [ "MetalKit.framework" ]
     }
 
     deps = [

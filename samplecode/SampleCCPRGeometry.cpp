@@ -9,6 +9,7 @@
 
 #if SK_SUPPORT_GPU
 
+#include "GrClip.h"
 #include "GrContextPriv.h"
 #include "GrMemoryPool.h"
 #include "GrPathUtils.h"
@@ -17,13 +18,14 @@
 #include "GrResourceProvider.h"
 #include "Sample.h"
 #include "SkCanvas.h"
+#include "SkMakeUnique.h"
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkRectPriv.h"
 #include "ccpr/GrCCCoverageProcessor.h"
 #include "ccpr/GrCCFillGeometry.h"
 #include "ccpr/GrCCStroker.h"
-#include "gl/GrGLGpu.cpp"
+#include "gl/GrGLGpu.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "ops/GrDrawOp.h"
 
@@ -342,19 +344,17 @@ void CCPRGeometryView::DrawCoverageCountOp::onExecute(GrOpFlushState* state,
         SkSTArray<1, GrMesh> mesh;
         if (PrimitiveType::kCubics == fView->fPrimitiveType ||
             PrimitiveType::kConics == fView->fPrimitiveType) {
-            sk_sp<GrBuffer> instBuff(
+            sk_sp<GrGpuBuffer> instBuff(
                     rp->createBuffer(fView->fQuadPointInstances.count() * sizeof(QuadPointInstance),
                                      GrGpuBufferType::kVertex, kDynamic_GrAccessPattern,
-                                     GrResourceProvider::Flags::kRequireGpuMemory,
                                      fView->fQuadPointInstances.begin()));
             if (!fView->fQuadPointInstances.empty() && instBuff) {
                 proc.appendMesh(std::move(instBuff), fView->fQuadPointInstances.count(), 0, &mesh);
             }
         } else {
-            sk_sp<GrBuffer> instBuff(
+            sk_sp<GrGpuBuffer> instBuff(
                     rp->createBuffer(fView->fTriPointInstances.count() * sizeof(TriPointInstance),
                                      GrGpuBufferType::kVertex, kDynamic_GrAccessPattern,
-                                     GrResourceProvider::Flags::kRequireGpuMemory,
                                      fView->fTriPointInstances.begin()));
             if (!fView->fTriPointInstances.empty() && instBuff) {
                 proc.appendMesh(std::move(instBuff), fView->fTriPointInstances.count(), 0, &mesh);

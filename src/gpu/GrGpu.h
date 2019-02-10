@@ -22,7 +22,7 @@
 
 class GrBackendRenderTarget;
 class GrBackendSemaphore;
-class GrBuffer;
+class GrGpuBuffer;
 class GrContext;
 struct GrContextOptions;
 class GrGLContext;
@@ -140,8 +140,8 @@ public:
      *
      * @return the buffer if successful, otherwise nullptr.
      */
-    sk_sp<GrBuffer> createBuffer(size_t size, GrGpuBufferType intendedType,
-                                 GrAccessPattern accessPattern, const void* data = nullptr);
+    sk_sp<GrGpuBuffer> createBuffer(size_t size, GrGpuBufferType intendedType,
+                                    GrAccessPattern accessPattern, const void* data = nullptr);
 
     /**
      * Resolves MSAA.
@@ -152,6 +152,11 @@ public:
      * Uses the base of the texture to recompute the contents of the other levels.
      */
     bool regenerateMipMapLevels(GrTexture*);
+
+    /**
+     * If the backend API has stateful texture bindings, this resets them back to defaults.
+     */
+    void resetTextureBindings();
 
     /**
      * Reads a rectangle of pixels from a render target. No sRGB/linear conversions are performed.
@@ -217,7 +222,7 @@ public:
      *                         means rows are tightly packed.
      */
     bool transferPixels(GrTexture* texture, int left, int top, int width, int height,
-                        GrColorType bufferColorType, GrBuffer* transferBuffer, size_t offset,
+                        GrColorType bufferColorType, GrGpuBuffer* transferBuffer, size_t offset,
                         size_t rowBytes);
 
     // After the client interacts directly with the 3D context state the GrGpu
@@ -453,6 +458,9 @@ private:
     // assumed 3D context state and dirty any state cache.
     virtual void onResetContext(uint32_t resetBits) = 0;
 
+    // Implementation of resetTextureBindings.
+    virtual void onResetTextureBindings() {}
+
     // Called before certain draws in order to guarantee coherent results from dst reads.
     virtual void xferBarrier(GrRenderTarget*, GrXferBarrierType) = 0;
 
@@ -472,8 +480,8 @@ private:
     virtual sk_sp<GrRenderTarget> onWrapVulkanSecondaryCBAsRenderTarget(const SkImageInfo&,
                                                                         const GrVkDrawableInfo&);
 
-    virtual sk_sp<GrBuffer> onCreateBuffer(size_t size, GrGpuBufferType intendedType,
-                                           GrAccessPattern, const void* data) = 0;
+    virtual sk_sp<GrGpuBuffer> onCreateBuffer(size_t size, GrGpuBufferType intendedType,
+                                              GrAccessPattern, const void* data) = 0;
 
     // overridden by backend-specific derived class to perform the surface read
     virtual bool onReadPixels(GrSurface*, int left, int top, int width, int height, GrColorType,
@@ -485,7 +493,7 @@ private:
 
     // overridden by backend-specific derived class to perform the texture transfer
     virtual bool onTransferPixels(GrTexture*, int left, int top, int width, int height,
-                                  GrColorType colorType, GrBuffer* transferBuffer, size_t offset,
+                                  GrColorType colorType, GrGpuBuffer* transferBuffer, size_t offset,
                                   size_t rowBytes) = 0;
 
     // overridden by backend-specific derived class to perform the resolve

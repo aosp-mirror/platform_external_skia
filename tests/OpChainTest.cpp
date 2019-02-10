@@ -203,12 +203,11 @@ DEF_GPUTEST(OpChainTest, reporter, /*ctxInfo*/) {
                 init_combinable(g, &combinable, &random);
                 GrTokenTracker tracker;
                 GrOpFlushState flushState(context->priv().getGpu(),
-                                          context->priv().resourceProvider(), &tracker,
-                                          nullptr, nullptr);
+                                          context->priv().resourceProvider(), &tracker);
                 GrRenderTargetOpList opList(context->priv().resourceProvider(),
                                             sk_ref_sp(context->priv().opMemoryPool()),
                                             proxy->asRenderTargetProxy(),
-                                            context->priv().getAuditTrail());
+                                            context->priv().auditTrail());
                 // This assumes the particular values of kRanges.
                 std::fill_n(result, result_width(), -1);
                 std::fill_n(validResult, result_width(), -1);
