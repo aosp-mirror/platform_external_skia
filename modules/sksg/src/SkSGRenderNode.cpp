@@ -8,11 +8,12 @@
 #include "SkSGRenderNode.h"
 
 #include "SkCanvas.h"
+#include "SkImageFilter.h"
 #include "SkPaint.h"
 
 namespace sksg {
 
-RenderNode::RenderNode() : INHERITED(0) {}
+RenderNode::RenderNode(uint32_t inval_traits) : INHERITED(inval_traits) {}
 
 void RenderNode::render(SkCanvas* canvas, const RenderContext* ctx) const {
     SkASSERT(!this->hasInval());
@@ -67,6 +68,20 @@ RenderNode::ScopedRenderContext::setIsolation(const SkRect& bounds, bool isolati
             fCtx = RenderContext();
         }
     }
+    return std::move(*this);
+}
+
+RenderNode::ScopedRenderContext&&
+RenderNode::ScopedRenderContext::setFilterIsolation(const SkRect& bounds,
+                                                    sk_sp<SkImageFilter> filter) {
+    SkPaint layer_paint;
+    fCtx.modulatePaint(&layer_paint);
+
+    SkASSERT(!layer_paint.getImageFilter());
+    layer_paint.setImageFilter(std::move(filter));
+    fCanvas->saveLayer(bounds, &layer_paint);
+    fCtx = RenderContext();
+
     return std::move(*this);
 }
 
