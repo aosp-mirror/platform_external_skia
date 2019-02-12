@@ -23,9 +23,19 @@ class SkStrikeInterface {
 public:
     virtual ~SkStrikeInterface() = default;
     virtual SkVector rounding() const = 0;
+    virtual const SkDescriptor& getDescriptor() const = 0;
     virtual const SkGlyph& getGlyphMetrics(SkGlyphID glyphID, SkPoint position) = 0;
     virtual bool decideCouldDrawFromPath(const SkGlyph& glyph) = 0;
+    virtual void onAboutToExitScope() = 0;
+
+    struct Deleter {
+        void operator()(SkStrikeInterface* ptr) const {
+            ptr->onAboutToExitScope();
+        }
+    };
 };
+
+using SkScopedStrike = std::unique_ptr<SkStrikeInterface, SkStrikeInterface::Deleter>;
 
 class SkStrikeCommon {
 public:
@@ -77,10 +87,10 @@ public:
             const SkGlyphRunList& glyphRunList, const SkMatrix& deviceMatrix,
             const BitmapDevicePainter* bitmapDevice);
 
-    template <typename EmptiesT, typename MasksT, typename PathsT>
+    template <typename StrikeCreatorT, typename EmptiesT, typename MasksT, typename PathsT>
     void drawGlyphRunAsBMPWithPathFallback(
-            SkStrikeInterface* cache, const SkGlyphRun& glyphRun,
-            SkPoint origin, const SkMatrix& deviceMatrix,
+            const SkPaint& paint, const SkFont& font, StrikeCreatorT&& strikeCreator,
+            const SkGlyphRun& glyphRun, SkPoint origin, const SkMatrix& deviceMatrix,
             EmptiesT&& processEmpties, MasksT&& processMasks, PathsT&& processPaths);
 
     enum NeedsTransform : bool { kTransformDone = false, kDoTransform = true };

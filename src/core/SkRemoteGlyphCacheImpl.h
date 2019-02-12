@@ -29,7 +29,7 @@ public:
     bool isSubpixel() const { return fIsSubpixel; }
     SkAxisAlignment axisAlignmentForHText() const { return fAxisAlignmentForHText; }
 
-    const SkDescriptor& getDescriptor() {
+    const SkDescriptor& getDescriptor() const override {
         return *fDescriptor.getDesc();
     }
 
@@ -40,6 +40,8 @@ public:
     const SkGlyph& getGlyphMetrics(SkGlyphID glyphID, SkPoint position) override;
 
     bool decideCouldDrawFromPath(const SkGlyph& glyph) override;
+
+    void onAboutToExitScope() override {}
 
 private:
     bool hasPendingGlyphs() const {
