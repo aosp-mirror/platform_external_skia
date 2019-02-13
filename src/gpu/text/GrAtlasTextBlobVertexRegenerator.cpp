@@ -307,6 +307,11 @@ Regenerator::Result Regenerator::doRegen() {
         fSubRun->setAtlasGeneration(fBrokenRun
                                     ? GrDrawOpAtlas::kInvalidAtlasGeneration
                                     : fFullAtlasManager->atlasGeneration(fSubRun->maskFormat()));
+    } else {
+        // For the non-texCoords case we need to ensure that we update the associated use tokens
+        fFullAtlasManager->setUseTokenBulk(*fSubRun->bulkUseToken(),
+                                           fUploadTarget->tokenTracker()->nextDrawToken(),
+                                           fSubRun->maskFormat());
     }
     return result;
 }
