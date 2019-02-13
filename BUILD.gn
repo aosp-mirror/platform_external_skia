@@ -1723,6 +1723,7 @@ if (skia_enable_tools) {
         ":experimental_svg_model",
         ":flags",
         ":xml",
+        "modules/sksg",
         "modules/skshaper",
       ]
 
@@ -2195,6 +2196,7 @@ if (skia_enable_tools) {
       "tools/viewer/GMSlide.cpp",
       "tools/viewer/ImGuiLayer.cpp",
       "tools/viewer/ImageSlide.cpp",
+      "tools/viewer/ParticlesSlide.cpp",
       "tools/viewer/SKPSlide.cpp",
       "tools/viewer/SampleSlide.cpp",
       "tools/viewer/SkottieSlide.cpp",
@@ -2217,6 +2219,7 @@ if (skia_enable_tools) {
       ":sk_app",
       ":skia",
       ":tool_utils",
+      "modules/particles",
       "modules/skottie",
       "modules/skottie:utils",
       "modules/sksg",
