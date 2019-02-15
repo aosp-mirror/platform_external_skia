@@ -13,6 +13,7 @@
 #include "SkPath.h"
 #include "SkRandom.h"
 
+class SkAnimTimer;
 class SkParticleEffect;
 
 class ParticlesSlide : public Slide {
@@ -22,6 +23,7 @@ public:
     // TODO: We need a way for primarily interactive slides to always be as large as the window
     SkISize getDimensions() const override { return SkISize::MakeEmpty(); }
 
+    void load(SkScalar winWidth, SkScalar winHeight) override;
     void draw(SkCanvas* canvas) override;
     bool animate(const SkAnimTimer& timer) override;
 
@@ -30,6 +32,7 @@ public:
 
 private:
     SkRandom fRandom;
+    const SkAnimTimer* fTimer;
     sk_sp<SkParticleEffect>  fEffect;
 };
 

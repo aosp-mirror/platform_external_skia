@@ -152,9 +152,9 @@ public:
      * device space.
      */
     void drawTexture(const GrClip& clip, sk_sp<GrTextureProxy>, GrSamplerState::Filter,
-                     const SkPMColor4f&, const SkRect& srcRect, const SkRect& dstRect,
-                     GrQuadAAFlags, SkCanvas::SrcRectConstraint, const SkMatrix& viewMatrix,
-                     sk_sp<GrColorSpaceXform> texXform);
+                     SkBlendMode mode, const SkPMColor4f&, const SkRect& srcRect,
+                     const SkRect& dstRect, GrQuadAAFlags, SkCanvas::SrcRectConstraint,
+                     const SkMatrix& viewMatrix, sk_sp<GrColorSpaceXform> texXform);
 
     /** Used with drawTextureSet */
     struct TextureSetEntry {
@@ -373,7 +373,7 @@ public:
      *  The next time this GrRenderTargetContext is flushed, the gpu will wait on the passed in
      *  semaphores before executing any commands.
      */
-    bool waitOnSemaphores(int numSemaphores, const GrBackendSemaphore* waitSemaphores);
+    bool waitOnSemaphores(int numSemaphores, const GrBackendSemaphore waitSemaphores[]);
 
     void insertEventMarker(const SkString&);
 
