@@ -36,6 +36,10 @@ public:
 
     const GrContextOptions& options() const { return fContext->options(); }
 
+    bool explicitlyAllocateGPUResources() const {
+        return fContext->explicitlyAllocateGPUResources();
+    }
+
     const GrCaps* caps() const { return fContext->caps(); }
     sk_sp<const GrCaps> refCaps() const;
 
@@ -49,6 +53,8 @@ public:
     GrProxyProvider* proxyProvider() { return fContext->proxyProvider(); }
     const GrProxyProvider* proxyProvider() const { return fContext->proxyProvider(); }
 
+    bool abandoned() const { return fContext->abandoned(); }
+
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* singleOwner() const { return fContext->singleOwner(); } )
 
@@ -59,6 +65,14 @@ public:
 
     sk_sp<GrOpMemoryPool> refOpMemoryPool();
     GrOpMemoryPool* opMemoryPool() { return fContext->opMemoryPool(); }
+
+    /**
+     * Registers an object for flush-related callbacks. (See GrOnFlushCallbackObject.)
+     *
+     * NOTE: the drawing manager tracks this object as a raw pointer; it is up to the caller to
+     * ensure its lifetime is tied to that of the context.
+     */
+    void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
     sk_sp<GrSurfaceContext> makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy>,
                                                       sk_sp<SkColorSpace> = nullptr,
@@ -158,14 +172,6 @@ public:
      * provided then all current work will be flushed.
      */
     void flush(GrSurfaceProxy*);
-
-    /**
-     * Registers an object for flush-related callbacks. (See GrOnFlushCallbackObject.)
-     *
-     * NOTE: the drawing manager tracks this object as a raw pointer; it is up to the caller to
-     * ensure its lifetime is tied to that of the context.
-     */
-    void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
     /**
      * After this returns any pending writes to the surface will have been issued to the
