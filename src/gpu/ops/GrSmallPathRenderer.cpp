@@ -7,7 +7,9 @@
  */
 
 #include "GrSmallPathRenderer.h"
+
 #include "GrBuffer.h"
+#include "GrCaps.h"
 #include "GrDistanceFieldGenFromVector.h"
 #include "GrDrawOpTest.h"
 #include "GrQuad.h"
@@ -760,8 +762,7 @@ private:
         };
 
         if (fUsesDistanceField && !ctm.hasPerspective()) {
-            GrQuad quad(translatedBounds, ctm);
-            vertices.writeQuad(quad,
+            vertices.writeQuad(GrQuad::MakeFromRect(translatedBounds, ctm),
                                color,
                                texCoords);
         } else {

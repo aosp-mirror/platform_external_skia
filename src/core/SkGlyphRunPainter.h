@@ -19,11 +19,32 @@ class GrColorSpaceInfo;
 class GrRenderTargetContext;
 #endif
 
+class SkStrikeSpec {
+public:
+    SkStrikeSpec(const SkDescriptor& desc,
+                 const SkTypeface& typeface,
+                 const SkScalerContextEffects& effects)
+            : fDesc{desc}
+            , fTypeface{typeface}
+            , fEffects{effects} {}
+
+
+    const SkDescriptor& desc() const { return fDesc; }
+    const SkTypeface& typeface() const { return fTypeface; }
+    SkScalerContextEffects effects() const {return fEffects; }
+
+private:
+    const SkDescriptor& fDesc;
+    const SkTypeface& fTypeface;
+    const SkScalerContextEffects fEffects;
+};
+
 class SkStrikeInterface {
 public:
     virtual ~SkStrikeInterface() = default;
     virtual SkVector rounding() const = 0;
     virtual const SkDescriptor& getDescriptor() const = 0;
+    virtual SkStrikeSpec strikeSpec() const = 0;
     virtual const SkGlyph& getGlyphMetrics(SkGlyphID glyphID, SkPoint position) = 0;
     virtual bool decideCouldDrawFromPath(const SkGlyph& glyph) = 0;
     virtual void onAboutToExitScope() = 0;
@@ -87,11 +108,11 @@ public:
             const SkGlyphRunList& glyphRunList, const SkMatrix& deviceMatrix,
             const BitmapDevicePainter* bitmapDevice);
 
-    template <typename StrikeCreatorT, typename EmptiesT, typename MasksT, typename PathsT>
+    template <typename StrikeCreatorT, typename MasksT, typename PathsT>
     void drawGlyphRunAsBMPWithPathFallback(
             const SkPaint& paint, const SkFont& font, StrikeCreatorT&& strikeCreator,
             const SkGlyphRun& glyphRun, SkPoint origin, const SkMatrix& deviceMatrix,
-            EmptiesT&& processEmpties, MasksT&& processMasks, PathsT&& processPaths);
+            MasksT&& processMasks, PathsT&& processPaths);
 
     enum NeedsTransform : bool { kTransformDone = false, kDoTransform = true };
 
@@ -110,17 +131,17 @@ public:
     // For each glyph that is not ARGB call perPath. If the glyph is ARGB then store the glyphID
     // and the position in fallback vectors. After all the glyphs are processed, pass the
     // fallback glyphIDs and positions to fallbackARGB.
-    template <typename PerEmptyT, typename PerPath>
+    template <typename ProcessPathsT, typename CreatorT>
     void drawGlyphRunAsPathWithARGBFallback(
-            SkStrikeInterface* cache, const SkGlyphRun& glyphRun,
-            SkPoint origin, const SkPaint& paint, const SkMatrix& viewMatrix, SkScalar textScale,
-            PerEmptyT&& perEmpty, PerPath&& perPath, ARGBFallback&& fallbackARGB);
+            const SkPaint& runPaint, const SkFont& runFont, CreatorT&& strikeCreator,
+            const SkGlyphRun& glyphRun, SkPoint origin, const SkMatrix& viewMatrix,
+            ProcessPathsT&& processPaths, ARGBFallback&& fallbackARGB);
 
-    template <typename PerEmptyT, typename PerSDFT, typename PerPathT>
+    template <typename PerSDFT, typename PerPathT>
     void drawGlyphRunAsSDFWithARGBFallback(
             SkStrikeInterface* cache, const SkGlyphRun& glyphRun,
             SkPoint origin, const SkPaint& runPaint, const SkMatrix& viewMatrix, SkScalar textRatio,
-            PerEmptyT&& perEmpty, PerSDFT&& perSDF, PerPathT&& perPath, ARGBFallback&& perFallback);
+            PerSDFT&& perSDF, PerPathT&& perPath, ARGBFallback&& perFallback);
 
     // TODO: Make this the canonical check for Skia.
     static bool ShouldDrawAsPath(const SkPaint& paint, const SkFont& font, const SkMatrix& matrix);
@@ -150,7 +171,7 @@ private:
 
     int fMaxRunSize{0};
     SkAutoTMalloc<SkPoint> fPositions;
-    SkAutoTMalloc<GlyphAndPos> fMasks;
+    SkAutoTMalloc<GlyphAndPos> fGlyphPos;
 
     std::vector<GlyphAndPos> fPaths;
 

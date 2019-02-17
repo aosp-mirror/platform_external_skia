@@ -176,8 +176,10 @@ public:
     */
     static sk_sp<SkImage> MakeFromEncoded(sk_sp<SkData> encoded, const SkIRect* subset = nullptr);
 
+    // Experimental
     enum CompressionType {
-        kETC1_CompressionType, //!< compressed data uses ETC1 compression
+        kETC1_CompressionType,
+        kLast_CompressionType = kETC1_CompressionType,
     };
 
     /** Creates a GPU-backed SkImage from compressed data.

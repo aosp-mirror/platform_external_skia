@@ -19,7 +19,7 @@
 class SkExecutor;
 
 #if SK_SUPPORT_GPU
-struct GrContextOptions {
+struct SK_API GrContextOptions {
     enum class Enable {
         /** Forces an option to be disabled. */
         kNo,
@@ -36,7 +36,7 @@ struct GrContextOptions {
      * Skia stores compiled shader binaries (only when glProgramBinary / glGetProgramBinary are
      * supported) when provided a persistent cache, but this may extend to other data in the future.
      */
-    class PersistentCache {
+    class SK_API PersistentCache {
     public:
         virtual ~PersistentCache() {}
 
@@ -183,6 +183,14 @@ struct GrContextOptions {
      */
     PersistentCache* fPersistentCache = nullptr;
 
+    /**
+     * This affects the usage of the PersistentCache. If this is set to true GLSL shader strings
+     * rather than GL program binaries will be cached. It is intended to be used when the driver's
+     * binary loading/storing is believed to have bugs. Caching GLSL strings still saves a
+     * significant amount of CPU work when a GL program is created.
+     */
+     bool fDisallowGLSLBinaryCaching = false;
+
 #if GR_TEST_UTILS
     /**
      * Private options that are only meant for testing within Skia's tools.
@@ -218,12 +226,6 @@ struct GrContextOptions {
      * Include or exclude specific GPU path renderers.
      */
     GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kAll;
-
-    /**
-     * Disables using multiple texture units to batch multiple images into a single draw on
-     * supported GPUs.
-     */
-    bool fDisableImageMultitexturing = false;
 #endif
 
 #if SK_SUPPORT_ATLAS_TEXT

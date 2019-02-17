@@ -9,9 +9,12 @@
 
 #include "GrClip.h"
 #include "GrContext.h"
+#include "GrContextPriv.h"
 #include "GrGpuCommandBuffer.h"
 #include "GrMemoryPool.h"
 #include "GrOpFlushState.h"
+#include "GrRecordingContext.h"
+#include "GrRecordingContextPriv.h"
 #include "GrRenderTargetContext.h"
 #include "GrRenderTargetContextPriv.h"
 #include "GrRenderTarget.h"
@@ -91,7 +94,8 @@ class ClockwiseTestOp : public GrDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static std::unique_ptr<GrDrawOp> Make(GrContext* context, bool readSkFragCoord, int y = 0) {
+    static std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
+                                          bool readSkFragCoord, int y = 0) {
         GrOpMemoryPool* pool = context->priv().opMemoryPool();
         return pool->allocate<ClockwiseTestOp>(readSkFragCoord, y);
     }
@@ -154,7 +158,8 @@ void ClockwiseGM::onDraw(GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* c
         topLeftRTC->priv().testingOnly_addDrawOp(ClockwiseTestOp::Make(ctx, false, 0));
         topLeftRTC->priv().testingOnly_addDrawOp(ClockwiseTestOp::Make(ctx, true, 100));
         rtc->drawTexture(GrNoClip(), sk_ref_sp(topLeftRTC->asTextureProxy()),
-                         GrSamplerState::Filter::kNearest, SK_PMColor4fWHITE, {0, 0, 100, 200},
+                         GrSamplerState::Filter::kNearest, SkBlendMode::kSrcOver,
+                         SK_PMColor4fWHITE, {0, 0, 100, 200},
                          {100, 0, 200, 200}, GrQuadAAFlags::kNone,
                          SkCanvas::SrcRectConstraint::kStrict_SrcRectConstraint, SkMatrix::I(),
                          nullptr);
@@ -170,7 +175,8 @@ void ClockwiseGM::onDraw(GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* c
         topLeftRTC->priv().testingOnly_addDrawOp(ClockwiseTestOp::Make(ctx, false, 0));
         topLeftRTC->priv().testingOnly_addDrawOp(ClockwiseTestOp::Make(ctx, true, 100));
         rtc->drawTexture(GrNoClip(), sk_ref_sp(topLeftRTC->asTextureProxy()),
-                         GrSamplerState::Filter::kNearest, SK_PMColor4fWHITE, {0, 0, 100, 200},
+                         GrSamplerState::Filter::kNearest, SkBlendMode::kSrcOver,
+                         SK_PMColor4fWHITE, {0, 0, 100, 200},
                          {200, 0, 300, 200}, GrQuadAAFlags::kNone,
                          SkCanvas::SrcRectConstraint::kStrict_SrcRectConstraint, SkMatrix::I(),
                          nullptr);

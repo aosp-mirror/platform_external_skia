@@ -7,7 +7,9 @@
 
 #include "ParticlesSlide.h"
 
+#include "ImGuiLayer.h"
 #include "SkParticleAffector.h"
+#include "SkParticleDrawable.h"
 #include "SkParticleEffect.h"
 #include "SkParticleEmitter.h"
 #include "SkParticleSerialization.h"
@@ -38,53 +40,6 @@ static int InputTextCallback(ImGuiInputTextCallbackData* data) {
     return 0;
 }
 
-static ImVec2 map_point(float x, float y, ImVec2 pos, ImVec2 size, float yMin, float yMax) {
-    // Turn y into 0 - 1 value
-    float yNorm = 1.0f - ((y - yMin) / (yMax - yMin));
-    return ImVec2(pos.x + size.x * x, pos.y + size.y * yNorm);
-}
-
-static void ImGui_DrawCurve(SkScalar* pts) {
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    // Fit our image/canvas to the available width, and scale the height to maintain aspect ratio.
-    float canvasWidth = SkTMax(ImGui::GetContentRegionAvailWidth(), 50.0f);
-    ImVec2 size = ImVec2(canvasWidth, canvasWidth);
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-
-    // Background rectangle
-    drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(0, 0, 0, 128));
-
-    // Determine min/max extents
-    float yMin = pts[0], yMax = pts[0];
-    for (int i = 1; i < 4; ++i) {
-        yMin = SkTMin(yMin, pts[i]);
-        yMax = SkTMax(yMax, pts[i]);
-    }
-
-    // Grow the extents by 10%, at least 1.0f
-    float grow = SkTMax((yMax - yMin) * 0.1f, 1.0f);
-
-    yMin -= grow;
-    yMax += grow;
-
-    ImVec2 a = map_point(0.0f    , pts[0], pos, size, yMin, yMax),
-           b = map_point(1 / 3.0f, pts[1], pos, size, yMin, yMax),
-           c = map_point(2 / 3.0f, pts[2], pos, size, yMin, yMax),
-           d = map_point(1.0f    , pts[3], pos, size, yMin, yMax);
-
-    drawList->AddBezierCurve(a, b, c, d, IM_COL32(255, 255, 255, 255), 1.0f);
-
-    // Draw markers
-    drawList->AddCircle(a, 5.0f, 0xFFFFFFFF);
-    drawList->AddCircle(b, 5.0f, 0xFFFFFFFF);
-    drawList->AddCircle(c, 5.0f, 0xFFFFFFFF);
-    drawList->AddCircle(d, 5.0f, 0xFFFFFFFF);
-
-    ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + size.y));
-    ImGui::Spacing();
-}
-
 class SkGuiVisitor : public SkFieldVisitor {
 public:
     SkGuiVisitor() {
@@ -96,46 +51,87 @@ public:
     void visit(const char* name, float& f, SkField field) override {
         if (fTreeStack.back()) {
             if (field.fFlags & SkField::kAngle_Field) {
-                ImGui::SliderAngle(name, &f, 0.0f);
+                ImGui::SliderAngle(item(name), &f, 0.0f);
             } else {
-                ImGui::DragFloat(name, &f);
+                ImGui::DragFloat(item(name), &f);
             }
         }
     }
     void visit(const char* name, int& i, SkField) override {
-        IF_OPEN(ImGui::DragInt(name, &i))
+        IF_OPEN(ImGui::DragInt(item(name), &i))
     }
     void visit(const char* name, bool& b, SkField) override {
-        IF_OPEN(ImGui::Checkbox(name, &b))
+        IF_OPEN(ImGui::Checkbox(item(name), &b))
     }
     void visit(const char* name, SkString& s, SkField) override {
         if (fTreeStack.back()) {
             ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackResize;
-            ImGui::InputText(name, s.writable_str(), s.size() + 1, flags, InputTextCallback, &s);
+            ImGui::InputText(item(name), s.writable_str(), s.size() + 1, flags, InputTextCallback,
+                             &s);
         }
     }
 
     void visit(const char* name, SkPoint& p, SkField) override {
         if (fTreeStack.back()) {
-            ImGui::DragFloat2(name, &p.fX);
+            ImGui::DragFloat2(item(name), &p.fX);
             gDragPoints.push_back(&p);
         }
     }
     void visit(const char* name, SkColor4f& c, SkField) override {
-        IF_OPEN(ImGui::ColorEdit4(name, c.vec()))
+        IF_OPEN(ImGui::ColorEdit4(item(name), c.vec()))
     }
 
-    void visit(const char* name, SkCurve& c, SkField) override {
-        this->enterObject(name);
-        if (fTreeStack.back()) {
-            ImGui::Checkbox("Ranged", &c.fRanged);
-            ImGui::DragFloat4("Min", c.fMin);
-            ImGui_DrawCurve(c.fMin);
-            if (c.fRanged) {
-                ImGui::DragFloat4("Max", c.fMax);
-                ImGui_DrawCurve(c.fMax);
-            }
+#undef IF_OPEN
 
+    void visit(const char* name, SkCurve& c, SkField) override {
+        this->enterObject(item(name));
+        if (fTreeStack.back()) {
+            // Get vertical extents of the curve
+            SkScalar extents[2];
+            c.getExtents(extents);
+
+            // Grow the extents by 10%, at least 1.0f
+            SkScalar grow = SkTMax((extents[1] - extents[0]) * 0.1f, 1.0f);
+            extents[0] -= grow;
+            extents[1] += grow;
+
+            {
+                ImGui::DragCanvas dc(&c, { 0.0f, extents[1] }, { 1.0f, extents[0] }, 0.5f);
+                dc.fillColor(IM_COL32(0, 0, 0, 128));
+
+                for (int i = 0; i < c.fSegments.count(); ++i) {
+                    SkSTArray<8, ImVec2, true> pts;
+                    SkScalar rangeMin = (i == 0) ? 0.0f : c.fXValues[i - 1];
+                    SkScalar rangeMax = (i == c.fXValues.count()) ? 1.0f : c.fXValues[i];
+                    auto screenPoint = [&](int idx, bool useMax) {
+                        SkScalar xVal = rangeMin + (idx / 3.0f) * (rangeMax - rangeMin);
+                        SkScalar* yVals = useMax ? c.fSegments[i].fMax : c.fSegments[i].fMin;
+                        SkScalar yVal = yVals[c.fSegments[i].fConstant ? 0 : idx];
+                        SkPoint pt = dc.fLocalToScreen.mapXY(xVal, yVal);
+                        return ImVec2(pt.fX, pt.fY);
+                    };
+                    for (int i = 0; i < 4; ++i) {
+                        pts.push_back(screenPoint(i, false));
+                    }
+                    if (c.fSegments[i].fRanged) {
+                        for (int i = 3; i >= 0; --i) {
+                            pts.push_back(screenPoint(i, true));
+                        }
+                    }
+
+                    if (c.fSegments[i].fRanged) {
+                        dc.fDrawList->PathLineTo(pts[0]);
+                        dc.fDrawList->PathBezierCurveTo(pts[1], pts[2], pts[3]);
+                        dc.fDrawList->PathLineTo(pts[4]);
+                        dc.fDrawList->PathBezierCurveTo(pts[5], pts[6], pts[7]);
+                        dc.fDrawList->PathFillConvex(IM_COL32(255, 255, 255, 128));
+                    } else {
+                        dc.fDrawList->AddBezierCurve(pts[0], pts[1], pts[2], pts[3],
+                                                     IM_COL32(255, 255, 255, 255), 1.0f);
+                    }
+                }
+            }
+            c.visitFields(this);
         }
         this->exitObject();
     }
@@ -157,7 +153,8 @@ public:
 
     void enterObject(const char* name) override {
         if (fTreeStack.back()) {
-            fTreeStack.push_back(ImGui::TreeNode(name));
+            fTreeStack.push_back(ImGui::TreeNodeEx(item(name),
+                                                   ImGuiTreeNodeFlags_AllowItemOverlap));
         } else {
             fTreeStack.push_back(false);
         }
@@ -169,54 +166,66 @@ public:
         fTreeStack.pop_back();
     }
 
-#undef IF_OPEN
+    int enterArray(const char* name, int oldCount) override {
+        this->enterObject(item(name));
+        fArrayCounterStack.push_back(0);
+        fArrayEditStack.push_back();
 
-    void visit(const char* name, SkTArray<sk_sp<SkReflected>>& arr,
-               const SkReflected::Type* baseType) override {
-        this->enterObject(name);
+        int count = oldCount;
         if (fTreeStack.back()) {
-            for (int i = 0; i < arr.count(); ++i) {
-                ImGui::PushID(i);
-
-                if (ImGui::Button("X")) {
-                    for (int j = i; j < arr.count() - 1; ++j) {
-                        arr[j] = arr[j + 1];
-                    }
-                    arr.pop_back();
-                    ImGui::PopID();
-                    continue;
-                }
-
-                ImGui::SameLine();
-                if (ImGui::Button("^") && i > 0) {
-                    std::swap(arr[i], arr[i - 1]);
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("v") && i < arr.count() - 1) {
-                    std::swap(arr[i], arr[i + 1]);
-                }
-
-                const char* typeName = arr[i] ? arr[i]->getType()->fName : "Null";
-                ImGui::SameLine(); this->enterObject(typeName);
-
-                this->visit(arr[i], baseType);
-                if (arr[i]) {
-                    arr[i]->visitFields(this);
-                }
-
-                this->exitObject();
-                ImGui::PopID();
-            }
-
+            ImGui::SameLine();
             if (ImGui::Button("+")) {
-                arr.push_back(nullptr);
+                ++count;
             }
         }
+        return count;
+    }
+    ArrayEdit exitArray() override {
+        fArrayCounterStack.pop_back();
+        auto edit = fArrayEditStack.back();
+        fArrayEditStack.pop_back();
         this->exitObject();
+        return edit;
     }
 
 private:
+    const char* item(const char* name) {
+        if (name) {
+            return name;
+        }
+
+        // We're in an array. Add extra controls and a dynamic label.
+        int index = fArrayCounterStack.back()++;
+        ArrayEdit& edit(fArrayEditStack.back());
+        fScratchLabel = SkStringPrintf("[%d]", index);
+
+        ImGui::PushID(index);
+
+        if (ImGui::Button("X")) {
+            edit.fVerb = ArrayEdit::Verb::kRemove;
+            edit.fIndex = index;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("^")) {
+            edit.fVerb = ArrayEdit::Verb::kMoveForward;
+            edit.fIndex = index;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("v")) {
+            edit.fVerb = ArrayEdit::Verb::kMoveForward;
+            edit.fIndex = index + 1;
+        }
+        ImGui::SameLine();
+
+        ImGui::PopID();
+
+        return fScratchLabel.c_str();
+    }
+
     SkSTArray<16, bool, true> fTreeStack;
+    SkSTArray<16, int, true>  fArrayCounterStack;
+    SkSTArray<16, ArrayEdit, true> fArrayEditStack;
+    SkString fScratchLabel;
 };
 
 static sk_sp<SkParticleEffectParams> LoadEffectParams(const char* filename) {
@@ -233,10 +242,14 @@ ParticlesSlide::ParticlesSlide() {
     // Register types for serialization
     REGISTER_REFLECTED(SkReflected);
     SkParticleAffector::RegisterAffectorTypes();
+    SkParticleDrawable::RegisterDrawableTypes();
     SkParticleEmitter::RegisterEmitterTypes();
-
     fName = "Particles";
-    fEffect.reset(new SkParticleEffect(LoadEffectParams("resources/particles/default.json")));
+}
+
+void ParticlesSlide::load(SkScalar winWidth, SkScalar winHeight) {
+    fEffect.reset(new SkParticleEffect(LoadEffectParams("resources/particles/default.json"),
+                                       fRandom));
 }
 
 void ParticlesSlide::draw(SkCanvas* canvas) {
@@ -244,11 +257,16 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
 
     gDragPoints.reset();
     if (ImGui::Begin("Particles")) {
+        static bool looped = true;
+        ImGui::Checkbox("Looped", &looped);
+        if (fTimer && ImGui::Button("Play")) {
+            fEffect->start(*fTimer, looped);
+        }
         static char filename[64] = "resources/particles/default.json";
         ImGui::InputText("Filename", filename, sizeof(filename));
         if (ImGui::Button("Load")) {
             if (auto newParams = LoadEffectParams(filename)) {
-                fEffect.reset(new SkParticleEffect(std::move(newParams)));
+                fEffect.reset(new SkParticleEffect(std::move(newParams), fRandom));
             }
         }
         ImGui::SameLine();
@@ -291,7 +309,8 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
 }
 
 bool ParticlesSlide::animate(const SkAnimTimer& timer) {
-    fEffect->update(fRandom, timer);
+    fTimer = &timer;
+    fEffect->update(timer);
     return true;
 }
 

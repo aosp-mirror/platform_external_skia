@@ -12,6 +12,7 @@
 #include "GrImageContext.h"
 
 class GrDrawingManager;
+class GrOnFlushCallbackObject;
 class GrOpMemoryPool;
 class GrRecordingContextPriv;
 
@@ -27,6 +28,7 @@ protected:
     friend class GrRecordingContextPriv; // for hidden functions
 
     GrRecordingContext(GrBackendApi, const GrContextOptions&, uint32_t contextID);
+    bool init(sk_sp<const GrCaps>, sk_sp<GrSkSLFPFactoryCache>) override;
 
     void abandonContext() override;
 
@@ -35,6 +37,27 @@ protected:
 
     sk_sp<GrOpMemoryPool> refOpMemoryPool();
     GrOpMemoryPool* opMemoryPool();
+
+    /**
+     * Registers an object for flush-related callbacks. (See GrOnFlushCallbackObject.)
+     *
+     * NOTE: the drawing manager tracks this object as a raw pointer; it is up to the caller to
+     * ensure its lifetime is tied to that of the context.
+     */
+    void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
+
+    sk_sp<GrSurfaceContext> makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy>,
+                                                      sk_sp<SkColorSpace> = nullptr,
+                                                      const SkSurfaceProps* = nullptr);
+
+    sk_sp<GrSurfaceContext> makeDeferredSurfaceContext(const GrBackendFormat&,
+                                                       const GrSurfaceDesc&,
+                                                       GrSurfaceOrigin,
+                                                       GrMipMapped,
+                                                       SkBackingFit,
+                                                       SkBudgeted,
+                                                       sk_sp<SkColorSpace> colorSpace = nullptr,
+                                                       const SkSurfaceProps* = nullptr);
 
     /*
      * Create a new render target context backed by a deferred-style

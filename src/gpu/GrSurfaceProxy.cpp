@@ -14,6 +14,8 @@
 #include "GrGpuResourcePriv.h"
 #include "GrOpList.h"
 #include "GrProxyProvider.h"
+#include "GrRecordingContext.h"
+#include "GrRecordingContextPriv.h"
 #include "GrSurfaceContext.h"
 #include "GrSurfacePriv.h"
 #include "GrTexturePriv.h"
@@ -100,11 +102,6 @@ GrSurfaceProxy::GrSurfaceProxy(sk_sp<GrSurface> surface, GrSurfaceOrigin origin,
 }
 
 GrSurfaceProxy::~GrSurfaceProxy() {
-    if (fLazyInstantiateCallback) {
-        // We call the callback with a null GrResourceProvider to signal that the lambda should
-        // clean itself up if it is holding onto any captured objects.
-        this->fLazyInstantiateCallback(nullptr);
-    }
     // For this to be deleted the opList that held a ref on it (if there was one) must have been
     // deleted. Which would have cleared out this back pointer.
     SkASSERT(!fLastOpList);
@@ -323,7 +320,7 @@ int GrSurfaceProxy::worstCaseHeight() const {
 }
 
 #ifdef SK_DEBUG
-void GrSurfaceProxy::validate(GrContext* context) const {
+void GrSurfaceProxy::validate(GrContext_Base* context) const {
     if (fTarget) {
         SkASSERT(fTarget->getContext() == context);
     }
@@ -332,7 +329,7 @@ void GrSurfaceProxy::validate(GrContext* context) const {
 }
 #endif
 
-sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrContext* context,
+sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrRecordingContext* context,
                                            GrSurfaceProxy* src,
                                            GrMipMapped mipMapped,
                                            SkIRect srcRect,
@@ -366,7 +363,7 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrContext* context,
     return dstContext->asTextureProxyRef();
 }
 
-sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrContext* context, GrSurfaceProxy* src,
+sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrRecordingContext* context, GrSurfaceProxy* src,
                                            GrMipMapped mipMapped, SkBackingFit fit,
                                            SkBudgeted budgeted) {
     SkASSERT(LazyState::kFully != src->lazyInstantiationState());
@@ -374,7 +371,8 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrContext* context, GrSurfaceProxy* s
                 budgeted);
 }
 
-sk_sp<GrSurfaceContext> GrSurfaceProxy::TestCopy(GrContext* context, const GrSurfaceDesc& dstDesc,
+sk_sp<GrSurfaceContext> GrSurfaceProxy::TestCopy(GrRecordingContext* context,
+                                                 const GrSurfaceDesc& dstDesc,
                                                  GrSurfaceOrigin origin, GrSurfaceProxy* srcProxy) {
     SkASSERT(LazyState::kFully != srcProxy->lazyInstantiationState());
 
@@ -438,7 +436,6 @@ bool GrSurfaceProxyPriv::doLazyInstantiation(GrResourceProvider* resourceProvide
         surface = fProxy->fLazyInstantiateCallback(resourceProvider);
     }
     if (GrSurfaceProxy::LazyInstantiationType::kSingleUse == fProxy->fLazyInstantiationType) {
-        fProxy->fLazyInstantiateCallback(nullptr);
         fProxy->fLazyInstantiateCallback = nullptr;
     }
     if (!surface) {
