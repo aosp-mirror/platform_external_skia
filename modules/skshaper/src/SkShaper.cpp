@@ -9,6 +9,19 @@
 #include "SkSpan.h"
 #include "SkTextBlobPriv.h"
 
+std::unique_ptr<SkShaper> SkShaper::Make() {
+#ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
+    std::unique_ptr<SkShaper> shaper = SkShaper::MakeHarfBuzz();
+    if (shaper) {
+        return shaper;
+    }
+#endif
+    return SkShaper::MakePrimitive();
+}
+
+SkShaper::SkShaper() {}
+SkShaper::~SkShaper() {}
+
 SkShaper::RunHandler::Buffer SkTextBlobBuilderRunHandler::newRunBuffer(const RunInfo&,
                                                                        const SkFont& font,
                                                                        int glyphCount,
@@ -28,7 +41,9 @@ SkShaper::RunHandler::Buffer SkTextBlobBuilderRunHandler::newRunBuffer(const Run
 }
 
 void SkTextBlobBuilderRunHandler::commitRun() {
+    SkASSERT(0 <= fClusterOffset);
     for (int i = 0; i < fGlyphCount; ++i) {
+        SkASSERT(fClusters[i] >= (unsigned)fClusterOffset);
         fClusters[i] -= fClusterOffset;
     }
 }
