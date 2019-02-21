@@ -150,7 +150,7 @@ static void draw_texture(const SkPaint& paint, const SkMatrix& ctm, const SkRect
     }
     GrQuadAAFlags aaFlags = aa == GrAA::kYes ? GrQuadAAFlags::kAll : GrQuadAAFlags::kNone;
     rtc->drawTexture(clip, std::move(proxy), filter, paint.getBlendMode(), color, srcRect, dstRect,
-                     aaFlags, constraint, ctm, std::move(textureXform));
+                     aa, aaFlags, constraint, ctm, std::move(textureXform));
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -236,7 +236,7 @@ void SkGpuDevice::drawTextureProducer(GrTextureProducer* producer,
     }
 
     // Now that we have both the view and srcToDst matrices, log our scale factor.
-    LogDrawScaleFactor(SkMatrix::Concat(viewMatrix, srcToDstMatrix), paint.getFilterQuality());
+    LogDrawScaleFactor(viewMatrix, srcToDstMatrix, paint.getFilterQuality());
 
     this->drawTextureProducerImpl(producer, clippedSrcRect, clippedDstRect, constraint, viewMatrix,
                                   srcToDstMatrix, paint);
