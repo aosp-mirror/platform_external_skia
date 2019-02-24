@@ -15,27 +15,33 @@ class SkLinearVelocityAffector : public SkParticleAffector {
 public:
     SkLinearVelocityAffector(const SkCurve& angle = 0.0f,
                              const SkCurve& strength = 0.0f,
-                             bool force = true)
+                             bool force = true,
+                             bool local = false)
         : fAngle(angle)
         , fStrength(strength)
-        , fForce(force) {}
+        , fForce(force)
+        , fLocal(local) {}
 
     REFLECTED(SkLinearVelocityAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticlePoseAndVelocity& pv) override {
-        float angle = fAngle.eval(params.fParticleT, *params.fStableRandom);
-        SkScalar c, s = SkScalarSinCos(SkDegreesToRadians(angle), &c);
-        float strength = fStrength.eval(params.fParticleT, *params.fStableRandom);
+    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
+        float angle = fAngle.eval(ps.fAge, ps.fStableRandom);
+        SkScalar c_local, s_local = SkScalarSinCos(SkDegreesToRadians(angle), &c_local);
+        SkVector heading = fLocal ? ps.fPose.fHeading : SkVector{ 0, -1 };
+        SkScalar c = heading.fX * c_local - heading.fY * s_local;
+        SkScalar s = heading.fX * s_local + heading.fY * c_local;
+        float strength = fStrength.eval(ps.fAge, ps.fStableRandom);
         SkVector force = { c * strength, s * strength };
         if (fForce) {
-            pv.fVelocity.fLinear += force * params.fDeltaTime;
+            ps.fVelocity.fLinear += force * params.fDeltaTime;
         } else {
-            pv.fVelocity.fLinear = force;
+            ps.fVelocity.fLinear = force;
         }
     }
 
     void visitFields(SkFieldVisitor* v) override {
         v->visit("Force", fForce);
+        v->visit("Local", fLocal);
         v->visit("Angle", fAngle);
         v->visit("Strength", fStrength);
     }
@@ -44,6 +50,7 @@ private:
     SkCurve fAngle;
     SkCurve fStrength;
     bool fForce;
+    bool fLocal;
 };
 
 class SkPointForceAffector : public SkParticleAffector {
@@ -54,11 +61,11 @@ public:
 
     REFLECTED(SkPointForceAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticlePoseAndVelocity& pv) override {
-        SkVector toPoint = fPoint - pv.fPose.fPosition;
+    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
+        SkVector toPoint = fPoint - ps.fPose.fPosition;
         SkScalar lenSquare = toPoint.dot(toPoint);
         toPoint.normalize();
-        pv.fVelocity.fLinear += toPoint * (fConstant + (fInvSquare/lenSquare)) * params.fDeltaTime;
+        ps.fVelocity.fLinear += toPoint * (fConstant + (fInvSquare/lenSquare)) * params.fDeltaTime;
     }
 
     void visitFields(SkFieldVisitor* v) override {
@@ -79,12 +86,12 @@ public:
 
     REFLECTED(SkOrientAlongVelocityAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticlePoseAndVelocity& pv) override {
-        SkVector heading = pv.fVelocity.fLinear;
+    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
+        SkVector heading = ps.fVelocity.fLinear;
         if (!heading.normalize()) {
             heading.set(0, -1);
         }
-        pv.fPose.fHeading = heading;
+        ps.fPose.fHeading = heading;
     }
 
     void visitFields(SkFieldVisitor*) override {}
@@ -96,8 +103,8 @@ public:
 
     REFLECTED(SkSizeAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticlePoseAndVelocity& pv) override {
-        pv.fPose.fScale = fCurve.eval(params.fParticleT, *params.fStableRandom);
+    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
+        ps.fPose.fScale = fCurve.eval(ps.fAge, ps.fStableRandom);
     }
 
     void visitFields(SkFieldVisitor* v) override {
@@ -108,18 +115,58 @@ private:
     SkCurve fCurve;
 };
 
+class SkFrameAffector : public SkParticleAffector {
+public:
+    SkFrameAffector(const SkCurve& curve = 1.0f) : fCurve(curve) {}
+
+    REFLECTED(SkFrameAffector, SkParticleAffector)
+
+    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
+        ps.fFrame = fCurve.eval(ps.fAge, ps.fStableRandom);
+    }
+
+    void visitFields(SkFieldVisitor* v) override {
+        v->visit("Curve", fCurve);
+    }
+
+private:
+    SkCurve fCurve;
+};
+
+class SkColorAffector : public SkParticleAffector {
+public:
+    SkColorAffector(const SkColorCurve& curve = SkColor4f{ 1.0f, 1.0f, 1.0f, 1.0f })
+        : fCurve(curve) {}
+
+    REFLECTED(SkColorAffector, SkParticleAffector)
+
+    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
+        ps.fColor = fCurve.eval(ps.fAge, ps.fStableRandom);
+    }
+
+    void visitFields(SkFieldVisitor* v) override {
+        v->visit("Curve", fCurve);
+    }
+
+private:
+    SkColorCurve fCurve;
+};
+
 void SkParticleAffector::RegisterAffectorTypes() {
     REGISTER_REFLECTED(SkParticleAffector);
     REGISTER_REFLECTED(SkLinearVelocityAffector);
     REGISTER_REFLECTED(SkPointForceAffector);
     REGISTER_REFLECTED(SkOrientAlongVelocityAffector);
     REGISTER_REFLECTED(SkSizeAffector);
+    REGISTER_REFLECTED(SkFrameAffector);
+    REGISTER_REFLECTED(SkColorAffector);
 }
 
 sk_sp<SkParticleAffector> SkParticleAffector::MakeLinearVelocity(const SkCurve& angle,
                                                                  const SkCurve& strength,
-                                                                 bool force) {
-    return sk_sp<SkParticleAffector>(new SkLinearVelocityAffector(angle, strength, force));
+                                                                 bool force,
+                                                                 bool local) {
+    return sk_sp<SkParticleAffector>(new SkLinearVelocityAffector(angle, strength, force, local));
 }
 
 sk_sp<SkParticleAffector> SkParticleAffector::MakePointForce(SkPoint point, SkScalar constant,
@@ -131,6 +178,14 @@ sk_sp<SkParticleAffector> SkParticleAffector::MakeOrientAlongVelocity() {
     return sk_sp<SkParticleAffector>(new SkOrientAlongVelocityAffector());
 }
 
-sk_sp<SkParticleAffector> SkParticleAffector::MakeSizeAffector(const SkCurve& curve) {
+sk_sp<SkParticleAffector> SkParticleAffector::MakeSize(const SkCurve& curve) {
     return sk_sp<SkParticleAffector>(new SkSizeAffector(curve));
+}
+
+sk_sp<SkParticleAffector> SkParticleAffector::MakeFrame(const SkCurve& curve) {
+    return sk_sp<SkParticleAffector>(new SkFrameAffector(curve));
+}
+
+sk_sp<SkParticleAffector> SkParticleAffector::MakeColor(const SkColorCurve& curve) {
+    return sk_sp<SkParticleAffector>(new SkColorAffector(curve));
 }

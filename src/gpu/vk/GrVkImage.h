@@ -55,6 +55,11 @@ public:
     }
     VkFormat imageFormat() const { return fInfo.fFormat; }
     GrBackendFormat getBackendFormat() const {
+        if (fResource && this->ycbcrConversionInfo().isValid()) {
+            SkASSERT(this->imageFormat() == VK_FORMAT_UNDEFINED);
+            return GrBackendFormat::MakeVk(this->ycbcrConversionInfo());
+        }
+        SkASSERT(this->imageFormat() != VK_FORMAT_UNDEFINED);
         return GrBackendFormat::MakeVk(this->imageFormat());
     }
     uint32_t mipLevels() const { return fInfo.fLevelCount; }
@@ -136,6 +141,10 @@ public:
     static VkPipelineStageFlags LayoutToPipelineSrcStageFlags(const VkImageLayout layout);
     static VkAccessFlags LayoutToSrcAccessMask(const VkImageLayout layout);
 
+#if GR_TEST_UTILS
+    void setCurrentQueueFamilyToGraphicsQueue(GrVkGpu* gpu);
+#endif
+
 protected:
     void releaseImage(GrVkGpu* gpu);
     void abandonImage();
@@ -193,9 +202,18 @@ private:
     protected:
         mutable sk_sp<GrReleaseProcHelper> fReleaseHelper;
 
+        void invokeReleaseProc() const {
+            if (fReleaseHelper) {
+                // Depending on the ref count of fReleaseHelper this may or may not actually trigger
+                // the ReleaseProc to be called.
+                fReleaseHelper.reset();
+            }
+        }
+
     private:
         void freeGPUData(GrVkGpu* gpu) const override;
         void abandonGPUData() const override {
+            this->invokeReleaseProc();
             SkASSERT(!fReleaseHelper);
         }
 
@@ -217,14 +235,6 @@ private:
             : Resource(image, alloc, tiling) {
         }
     private:
-        void invokeReleaseProc() const {
-            if (fReleaseHelper) {
-                // Depending on the ref count of fReleaseHelper this may or may not actually trigger
-                // the ReleaseProc to be called.
-                fReleaseHelper.reset();
-            }
-        }
-
         void freeGPUData(GrVkGpu* gpu) const override;
         void abandonGPUData() const override;
     };

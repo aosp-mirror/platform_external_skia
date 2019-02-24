@@ -680,6 +680,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'filterfastbounds'])
     blacklist(['vk', 'gm', '_', 'fontmgr_iter'])
     blacklist(['vk', 'gm', '_', 'fontmgr_match'])
+    blacklist(['vk', 'gm', '_', 'fontscaler'])
     blacklist(['vk', 'gm', '_', 'fontscalerdistortable'])
     blacklist(['vk', 'gm', '_', 'gammagradienttext'])
     blacklist(['vk', 'gm', '_', 'gammatext'])
@@ -711,7 +712,6 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'varied_text_clipped_lcd'])
     blacklist(['vk', 'gm', '_', 'varied_text_ignorable_clip_lcd'])
     if 'Debug' in bot:
-      blacklist(['vk', 'gm', '_', 'fontscaler'])
       blacklist(['vk', 'gm', '_', 'mixedtextblobs'])
       blacklist(['vk', 'gm', '_', 'textblobmixedsizes'])
       blacklist(['vk', 'gm', '_', 'textblobmixedsizes_df'])
@@ -723,6 +723,7 @@ def dm_flags(api, bot):
     match.append('~^InitialTextureClear$')
     match.append('~^RGB565TextureTest$')
     match.append('~^RGBA4444TextureTest$')
+    match.append('~^TextureIdleProcFlushTest$')
     match.append('~^WritePixelsNonTextureMSAA_Gpu$')
 
   if 'ANGLE' in bot:
@@ -776,6 +777,7 @@ def dm_flags(api, bot):
     if 'Mac' in bot:
       match.append('~^RGB565TextureTest$')
       match.append('~^RGBA4444TextureTest$')
+      match.append('~^TextureIdleProcFlushTest$')
 
   if 'Wuffs' in api.vars.extra_tokens:
     # skia:8750
@@ -1040,13 +1042,15 @@ TEST_BUILDERS = [
   'Test-Debian9-Clang-GCE-GPU-SwiftShader-x86_64-Release-All-SwiftShader',
   'Test-Debian9-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan',
   'Test-Debian9-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-Vulkan',
-  'Test-Mac-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Release-All-NativeFonts',
-  'Test-Mac-Clang-MacBookAir7.2-GPU-IntelHD6000-x86_64-Debug-All',
-  'Test-Mac-Clang-MacBookPro11.5-CPU-AVX2-x86_64-Release-All',
-  'Test-Mac-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Debug-All-Metal',
-  ('Test-Mac-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Release-All-'
+  ('Test-Mac10.13-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Release-All'
+   '-NativeFonts'),
+  'Test-Mac10.13-Clang-MacBookPro11.5-CPU-AVX2-x86_64-Release-All',
+  'Test-Mac10.13-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Debug-All-Metal',
+  ('Test-Mac10.13-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Release-All-'
    'MoltenVK_Vulkan'),
-  'Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-All-CommandBuffer',
+  ('Test-Mac10.13-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-All'
+   '-CommandBuffer'),
+  'Test-Mac10.14-Clang-MacBookAir7.2-GPU-IntelHD6000-x86_64-Debug-All',
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Coverage',
   ('Test-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release-All'
    '-Valgrind_AbandonGpuContext_SK_CPU_LIMIT_SSE41'),
