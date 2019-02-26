@@ -11,6 +11,16 @@
 #include "SkParticleData.h"
 #include "SkRandom.h"
 
+void SkParticleAffector::apply(SkParticleUpdateParams& params, SkParticleState ps[], int count) {
+    if (fEnabled) {
+        this->onApply(params, ps, count);
+    }
+}
+
+void SkParticleAffector::visitFields(SkFieldVisitor* v) {
+    v->visit("Enabled", fEnabled);
+}
+
 class SkLinearVelocityAffector : public SkParticleAffector {
 public:
     SkLinearVelocityAffector(const SkCurve& angle = 0.0f,
@@ -24,22 +34,25 @@ public:
 
     REFLECTED(SkLinearVelocityAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
-        float angle = fAngle.eval(ps.fAge, ps.fStableRandom);
-        SkScalar c_local, s_local = SkScalarSinCos(SkDegreesToRadians(angle), &c_local);
-        SkVector heading = fLocal ? ps.fPose.fHeading : SkVector{ 0, -1 };
-        SkScalar c = heading.fX * c_local - heading.fY * s_local;
-        SkScalar s = heading.fX * s_local + heading.fY * c_local;
-        float strength = fStrength.eval(ps.fAge, ps.fStableRandom);
-        SkVector force = { c * strength, s * strength };
-        if (fForce) {
-            ps.fVelocity.fLinear += force * params.fDeltaTime;
-        } else {
-            ps.fVelocity.fLinear = force;
+    void onApply(SkParticleUpdateParams& params, SkParticleState ps[], int count) override {
+        for (int i = 0; i < count; ++i) {
+            float angle = fAngle.eval(ps[i].fAge, ps[i].fStableRandom);
+            SkScalar c_local, s_local = SkScalarSinCos(SkDegreesToRadians(angle), &c_local);
+            SkVector heading = fLocal ? ps[i].fPose.fHeading : SkVector{ 0, -1 };
+            SkScalar c = heading.fX * c_local - heading.fY * s_local;
+            SkScalar s = heading.fX * s_local + heading.fY * c_local;
+            float strength = fStrength.eval(ps[i].fAge, ps[i].fStableRandom);
+            SkVector force = { c * strength, s * strength };
+            if (fForce) {
+                ps[i].fVelocity.fLinear += force * params.fDeltaTime;
+            } else {
+                ps[i].fVelocity.fLinear = force;
+            }
         }
     }
 
     void visitFields(SkFieldVisitor* v) override {
+        SkParticleAffector::visitFields(v);
         v->visit("Force", fForce);
         v->visit("Local", fLocal);
         v->visit("Angle", fAngle);
@@ -61,14 +74,18 @@ public:
 
     REFLECTED(SkPointForceAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
-        SkVector toPoint = fPoint - ps.fPose.fPosition;
-        SkScalar lenSquare = toPoint.dot(toPoint);
-        toPoint.normalize();
-        ps.fVelocity.fLinear += toPoint * (fConstant + (fInvSquare/lenSquare)) * params.fDeltaTime;
+    void onApply(SkParticleUpdateParams& params, SkParticleState ps[], int count) override {
+        for (int i = 0; i < count; ++i) {
+            SkVector toPoint = fPoint - ps[i].fPose.fPosition;
+            SkScalar lenSquare = toPoint.dot(toPoint);
+            toPoint.normalize();
+            ps[i].fVelocity.fLinear +=
+                    toPoint * (fConstant + (fInvSquare / lenSquare)) * params.fDeltaTime;
+        }
     }
 
     void visitFields(SkFieldVisitor* v) override {
+        SkParticleAffector::visitFields(v);
         v->visit("Point", fPoint);
         v->visit("Constant", fConstant);
         v->visit("InvSquare", fInvSquare);
@@ -86,15 +103,19 @@ public:
 
     REFLECTED(SkOrientAlongVelocityAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
-        SkVector heading = ps.fVelocity.fLinear;
-        if (!heading.normalize()) {
-            heading.set(0, -1);
+    void onApply(SkParticleUpdateParams& params, SkParticleState ps[], int count) override {
+        for (int i = 0; i < count; ++i) {
+            SkVector heading = ps[i].fVelocity.fLinear;
+            if (!heading.normalize()) {
+                heading.set(0, -1);
+            }
+            ps[i].fPose.fHeading = heading;
         }
-        ps.fPose.fHeading = heading;
     }
 
-    void visitFields(SkFieldVisitor*) override {}
+    void visitFields(SkFieldVisitor *v) override {
+        SkParticleAffector::visitFields(v);
+    }
 };
 
 class SkSizeAffector : public SkParticleAffector {
@@ -103,11 +124,14 @@ public:
 
     REFLECTED(SkSizeAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
-        ps.fPose.fScale = fCurve.eval(ps.fAge, ps.fStableRandom);
+    void onApply(SkParticleUpdateParams& params, SkParticleState ps[], int count) override {
+        for (int i = 0; i < count; ++i) {
+            ps[i].fPose.fScale = fCurve.eval(ps[i].fAge, ps[i].fStableRandom);
+        }
     }
 
     void visitFields(SkFieldVisitor* v) override {
+        SkParticleAffector::visitFields(v);
         v->visit("Curve", fCurve);
     }
 
@@ -121,11 +145,14 @@ public:
 
     REFLECTED(SkFrameAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
-        ps.fFrame = fCurve.eval(ps.fAge, ps.fStableRandom);
+    void onApply(SkParticleUpdateParams& params, SkParticleState ps[], int count) override {
+        for (int i = 0; i < count; ++i) {
+            ps[i].fFrame = fCurve.eval(ps[i].fAge, ps[i].fStableRandom);
+        }
     }
 
     void visitFields(SkFieldVisitor* v) override {
+        SkParticleAffector::visitFields(v);
         v->visit("Curve", fCurve);
     }
 
@@ -140,11 +167,14 @@ public:
 
     REFLECTED(SkColorAffector, SkParticleAffector)
 
-    void apply(SkParticleUpdateParams& params, SkParticleState& ps) override {
-        ps.fColor = fCurve.eval(ps.fAge, ps.fStableRandom);
+    void onApply(SkParticleUpdateParams& params, SkParticleState ps[], int count) override {
+        for (int i = 0; i < count; ++i) {
+            ps[i].fColor = fCurve.eval(ps[i].fAge, ps[i].fStableRandom);
+        }
     }
 
     void visitFields(SkFieldVisitor* v) override {
+        SkParticleAffector::visitFields(v);
         v->visit("Curve", fCurve);
     }
 
