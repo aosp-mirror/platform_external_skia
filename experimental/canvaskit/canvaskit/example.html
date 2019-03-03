@@ -45,12 +45,17 @@
 
 <h2> CanvasKit can allow for text shaping (e.g. breaking, kerning)</h2>
 <canvas id=shape1 width=600 height=600></canvas>
+<canvas id=shape2 width=600 height=600></canvas>
 
 <h2> Skottie </h2>
 <canvas id=sk_legos width=300 height=300></canvas>
 <canvas id=sk_drinks width=500 height=500></canvas>
 <canvas id=sk_party width=500 height=500></canvas>
 <canvas id=sk_onboarding width=500 height=500></canvas>
+<canvas id=sk_animated_gif width=500 height=500
+        title='This is an animated gif being animated in Skottie'></canvas>
+<canvas id=sk_webfont width=500 height=500
+        title='This shows loading of a custom font (e.g. WebFon'></canvas>
 
 <script type="text/javascript" src="/node_modules/canvaskit/bin/canvaskit.js"></script>
 
@@ -61,12 +66,15 @@
   var drinksJSON = null;
   var confettiJSON = null;
   var onboardingJSON = null;
+  var multiFrameJSON = null;
+  var webfontJSON = null;
   var fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
 
   var robotoData = null;
   var notoserifData = null;
 
   var bonesImageData = null;
+  var flightAnimGif = null;
   CanvasKitInit({
     locateFile: (file) => '/node_modules/canvaskit/bin/'+file,
   }).ready().then((CK) => {
@@ -81,6 +89,12 @@
     SkottieExample(CanvasKit, 'sk_drinks', drinksJSON, fullBounds);
     SkottieExample(CanvasKit, 'sk_party', confettiJSON, fullBounds);
     SkottieExample(CanvasKit, 'sk_onboarding', onboardingJSON, fullBounds);
+    SkottieExample(CanvasKit, 'sk_animated_gif', multiFrameJSON, fullBounds, {
+      'image_0.png': flightAnimGif,
+    });
+    SkottieExample(CanvasKit, 'sk_webfont', webfontJSON, fullBounds, {
+      'Roboto-Regular': robotoData,
+    });
 
     CanvasAPI1(CanvasKit);
     CanvasAPI2(CanvasKit);
@@ -97,6 +111,7 @@
     GradiantAPI1(CanvasKit);
 
     TextShapingAPI1(CanvasKit, notoserifData);
+    TextShapingAPI2(CanvasKit, notoserifData);
   });
 
   fetch('https://storage.googleapis.com/skia-cdn/misc/lego_loader.json').then((resp) => {
@@ -128,6 +143,24 @@
     });
   });
 
+  fetch('https://storage.googleapis.com/skia-cdn/misc/skottie_sample_multiframe.json').then((resp) => {
+    resp.text().then((str) => {
+      multiFrameJSON = str;
+      SkottieExample(CanvasKit, 'sk_animated_gif', multiFrameJSON, fullBounds, {
+        'image_0.png': flightAnimGif,
+      });
+    });
+  });
+
+  fetch('https://storage.googleapis.com/skia-cdn/misc/skottie_sample_webfont.json').then((resp) => {
+    resp.text().then((str) => {
+      webfontJSON = str;
+      SkottieExample(CanvasKit, 'sk_webfont', webfontJSON, fullBounds, {
+        'Roboto-Regular': robotoData,
+      });
+    });
+  });
+
   fetch('https://storage.googleapis.com/skia-cdn/misc/bones.jpg').then((resp) => {
     resp.arrayBuffer().then((buffer) => {
       bonesImageData = buffer;
@@ -135,10 +168,22 @@
     });
   });
 
+  fetch('https://storage.googleapis.com/skia-cdn/misc/flightAnim.gif').then((resp) => {
+    resp.arrayBuffer().then((buffer) => {
+      flightAnimGif = buffer;
+      SkottieExample(CanvasKit, 'sk_animated_gif', multiFrameJSON, fullBounds, {
+        'image_0.png': flightAnimGif,
+      });
+    });
+  });
+
   fetch('./Roboto-Regular.woff').then((resp) => {
     resp.arrayBuffer().then((buffer) => {
       robotoData = buffer;
       DrawingExample(CanvasKit, robotoData);
+      SkottieExample(CanvasKit, 'sk_webfont', webfontJSON, fullBounds, {
+        'Roboto-Regular': robotoData,
+      });
     });
   });
 
@@ -146,6 +191,7 @@
     resp.arrayBuffer().then((buffer) => {
       notoserifData = buffer;
       TextShapingAPI1(CanvasKit, notoserifData);
+      TextShapingAPI2(CanvasKit, notoserifData);
     });
   });
 
@@ -382,11 +428,11 @@
     return frameTimes.length / total;
   }
 
-  function SkottieExample(CanvasKit, id, jsonStr, bounds) {
+  function SkottieExample(CanvasKit, id, jsonStr, bounds, assets) {
     if (!CanvasKit || !jsonStr) {
       return;
     }
-    const animation = CanvasKit.MakeManagedAnimation(jsonStr);
+    const animation = CanvasKit.MakeManagedAnimation(jsonStr, assets);
     const duration = animation.duration() * 1000;
     const size = animation.size();
     let c = document.getElementById(id);
@@ -1159,5 +1205,68 @@
     shapedText2.delete();
 
     surface.delete();
+  }
+
+  function TextShapingAPI2(CanvasKit, notoserifData) {
+    if (!notoserifData || !CanvasKit) {
+      return;
+    }
+    const surface = CanvasKit.MakeCanvasSurface('shape2');
+    if (!surface) {
+      console.error('Could not make surface');
+      return;
+    }
+    const context = CanvasKit.currentContext();
+    const canvas = surface.getCanvas();
+    const paint = new CanvasKit.SkPaint();
+    paint.setColor(CanvasKit.BLUE);
+    paint.setStyle(CanvasKit.PaintStyle.Stroke);
+
+    const fontMgr = CanvasKit.SkFontMgr.RefDefault();
+    const notoSerif = fontMgr.MakeTypefaceFromData(notoserifData);
+
+    const textPaint = new CanvasKit.SkPaint();
+    const bigFont = new CanvasKit.SkFont(notoSerif, 40);
+    const smallFont = new CanvasKit.SkFont(notoSerif, 25);
+
+    const TEXT = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ac leo vitae ipsum hendrerit euismod quis rutrum nibh. Quisque non suscipit urna. Donec enim urna, facilisis vitae volutpat in, mattis at elit. Sed quis augue et dolor dignissim fringilla. Sed non massa eu neque tristique malesuada. ';
+
+    let X = 240;
+    let Y = 190;
+
+    function drawFrame() {
+      CanvasKit.setCurrentContext(context);
+      canvas.clear(CanvasKit.TRANSPARENT);
+
+      const shapedText = new CanvasKit.ShapedText({
+        font: smallFont,
+        leftToRight: true,
+        text: TEXT,
+        width: (X * 2) - 10,
+      });
+
+      canvas.drawRect(CanvasKit.LTRBRect(10, 10, X*2, Y*2), paint);
+      canvas.drawText(shapedText, 10, 40, textPaint, smallFont);
+      canvas.drawText('Try Clicking!', 10, 480, textPaint, bigFont);
+
+      surface.flush();
+
+      shapedText.delete();
+
+      window.requestAnimationFrame(drawFrame);
+    }
+    window.requestAnimationFrame(drawFrame);
+
+    // Make animation interactive
+    let interact = (e) => {
+      if (!e.pressure) {
+        return;
+      }
+      X = e.offsetX;
+      Y = e.offsetY;
+    };
+    document.getElementById('shape2').addEventListener('pointermove', interact);
+    document.getElementById('shape2').addEventListener('pointerdown', interact);
+    preventScrolling(document.getElementById('shape2'));
   }
 </script>
