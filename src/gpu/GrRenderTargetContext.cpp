@@ -160,15 +160,11 @@ private:
 // stack. When this occurs with a closed GrOpList, a new one will be allocated
 // when the renderTargetContext attempts to use it (via getOpList).
 GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
-                                             GrDrawingManager* drawingMgr,
                                              sk_sp<GrRenderTargetProxy> rtp,
                                              sk_sp<SkColorSpace> colorSpace,
                                              const SkSurfaceProps* surfaceProps,
-                                             GrAuditTrail* auditTrail,
-                                             GrSingleOwner* singleOwner,
                                              bool managedOpList)
-        : GrSurfaceContext(context, drawingMgr, rtp->config(), std::move(colorSpace), auditTrail,
-                           singleOwner)
+        : GrSurfaceContext(context, rtp->config(), std::move(colorSpace))
         , fRenderTargetProxy(std::move(rtp))
         , fOpList(sk_ref_sp(fRenderTargetProxy->getLastRenderTargetOpList()))
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
@@ -1710,7 +1706,8 @@ void GrRenderTargetContext::drawDrawable(std::unique_ptr<SkDrawable::GpuDrawHand
 }
 
 GrSemaphoresSubmitted GrRenderTargetContext::prepareForExternalIO(
-        int numSemaphores, GrBackendSemaphore backendSemaphores[]) {
+        SkSurface::BackendSurfaceAccess access, SkSurface::FlushFlags flags, int numSemaphores,
+        GrBackendSemaphore backendSemaphores[]) {
     ASSERT_SINGLE_OWNER
     if (fContext->priv().abandoned()) {
         return GrSemaphoresSubmitted::kNo;
@@ -1719,6 +1716,7 @@ GrSemaphoresSubmitted GrRenderTargetContext::prepareForExternalIO(
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "prepareForExternalIO", fContext);
 
     return this->drawingManager()->prepareSurfaceForExternalIO(fRenderTargetProxy.get(),
+                                                               access, flags,
                                                                numSemaphores,
                                                                backendSemaphores);
 }

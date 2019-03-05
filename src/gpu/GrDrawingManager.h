@@ -13,6 +13,7 @@
 #include "GrPathRenderer.h"
 #include "GrPathRendererChain.h"
 #include "GrResourceCache.h"
+#include "SkSurface.h"
 #include "SkTArray.h"
 #include "text/GrTextContext.h"
 
@@ -22,7 +23,6 @@ class GrOpFlushState;
 class GrRecordingContext;
 class GrRenderTargetContext;
 class GrRenderTargetProxy;
-class GrSingleOWner;
 class GrRenderTargetOpList;
 class GrSoftwarePathRenderer;
 class GrTextureContext;
@@ -73,6 +73,8 @@ public:
     static bool ProgramUnitTest(GrContext* context, int maxStages, int maxLevels);
 
     GrSemaphoresSubmitted prepareSurfaceForExternalIO(GrSurfaceProxy*,
+                                                      SkSurface::BackendSurfaceAccess access,
+                                                      SkSurface::FlushFlags flags,
                                                       int numSemaphores,
                                                       GrBackendSemaphore backendSemaphores[]);
 
@@ -135,7 +137,7 @@ private:
     };
 
     GrDrawingManager(GrRecordingContext*, const GrPathRendererChain::Options&,
-                     const GrTextContext::Options&, GrSingleOwner*,
+                     const GrTextContext::Options&,
                      bool explicitlyAllocating, GrContextOptions::Enable sortRenderTargets,
                      GrContextOptions::Enable reduceOpListSplitting);
 
@@ -147,8 +149,10 @@ private:
     bool executeOpLists(int startIndex, int stopIndex, GrOpFlushState*, int* numOpListsExecuted);
 
     GrSemaphoresSubmitted flush(GrSurfaceProxy* proxy,
-                                int numSemaphores = 0,
-                                GrBackendSemaphore backendSemaphores[] = nullptr);
+                                SkSurface::BackendSurfaceAccess access,
+                                SkSurface::FlushFlags flags,
+                                int numSemaphores,
+                                GrBackendSemaphore backendSemaphores[]);
 
     SkDEBUGCODE(void validate() const);
 
@@ -156,6 +160,7 @@ private:
     friend class GrContextPriv; // access to: flush
     friend class GrOnFlushResourceProvider; // this is just a shallow wrapper around this class
     friend class GrRecordingContext;  // access to: ctor
+    friend class SkImage; // for access to: flush
 
     static const int kNumPixelGeometries = 5; // The different pixel geometries
     static const int kNumDFTOptions = 2;      // DFT or no DFT
@@ -166,8 +171,6 @@ private:
     // This cache is used by both the vertex and index pools. It reuses memory across multiple
     // flushes.
     sk_sp<GrBufferAllocPool::CpuBufferCache> fCpuBufferCache;
-    // In debug builds we guard against improper thread handling
-    GrSingleOwner*                    fSingleOwner;
 
     OpListDAG                         fDAG;
     GrOpList*                         fActiveOpList = nullptr;

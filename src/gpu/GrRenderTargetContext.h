@@ -9,7 +9,6 @@
 #define GrRenderTargetContext_DEFINED
 
 #include "../private/GrRenderTargetProxy.h"
-#include "GrContext.h"
 #include "GrPaint.h"
 #include "GrSurfaceContext.h"
 #include "GrTypesPriv.h"
@@ -17,6 +16,7 @@
 #include "SkCanvas.h"
 #include "SkDrawable.h"
 #include "SkRefCnt.h"
+#include "SkSurface.h"
 #include "SkSurfaceProps.h"
 #include "text/GrTextTarget.h"
 
@@ -27,6 +27,7 @@ class GrCoverageCountingPathRenderer;
 class GrDrawingManager;
 class GrDrawOp;
 class GrFixedClip;
+class GrOp;
 class GrRenderTarget;
 class GrRenderTargetContextPriv;
 class GrRenderTargetOpList;
@@ -404,7 +405,8 @@ public:
      * After this returns any pending surface IO will be issued to the backend 3D API and
      * if the surface has MSAA it will be resolved.
      */
-    GrSemaphoresSubmitted prepareForExternalIO(int numSemaphores,
+    GrSemaphoresSubmitted prepareForExternalIO(SkSurface::BackendSurfaceAccess access,
+                                               SkSurface::FlushFlags flags, int numSemaphores,
                                                GrBackendSemaphore backendSemaphores[]);
 
     /**
@@ -454,9 +456,9 @@ public:
     bool isWrapped_ForTesting() const;
 
 protected:
-    GrRenderTargetContext(GrRecordingContext*, GrDrawingManager*, sk_sp<GrRenderTargetProxy>,
-                          sk_sp<SkColorSpace>, const SkSurfaceProps*, GrAuditTrail*,
-                          GrSingleOwner*, bool managedOpList = true);
+    GrRenderTargetContext(GrRecordingContext*, sk_sp<GrRenderTargetProxy>,
+                          sk_sp<SkColorSpace>, const SkSurfaceProps*,
+                          bool managedOpList = true);
 
     SkDEBUGCODE(void validate() const override;)
 
