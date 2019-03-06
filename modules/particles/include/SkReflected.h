@@ -10,14 +10,14 @@
 
 #include "SkColor.h"
 #include "SkRefCnt.h"
-#include "SkString.h"
 #include "SkTArray.h"
 
 #include <string.h>
 
 struct SkCurve;
 class SkFieldVisitor;
-class SkRandom;
+struct SkPoint;
+class SkString;
 
 /**
  * Classes and macros for a lightweight reflection system.
@@ -49,6 +49,7 @@ public:
         const char* fName;
         const Type* fBase;
         Factory     fFactory;
+        bool        fRegistered = false;
 
         bool isDerivedFrom(const Type* t) const {
             const Type* base = fBase;
@@ -65,16 +66,13 @@ public:
     virtual const Type* getType() const = 0;
     static const Type* GetType() {
         static Type gType{ "SkReflected", nullptr, nullptr };
+        RegisterOnce(&gType);
         return &gType;
     }
 
     bool isOfType(const Type* t) const {
         const Type* thisType = this->getType();
         return thisType == t || thisType->isDerivedFrom(t);
-    }
-
-    static void Register(const Type* type) {
-        gTypes.push_back(type);
     }
 
     static sk_sp<SkReflected> CreateInstance(const char* name) {
@@ -90,6 +88,14 @@ public:
 
     static void VisitTypes(std::function<void(const Type*)> visitor);
 
+protected:
+    static void RegisterOnce(Type* type) {
+        if (!type->fRegistered) {
+            gTypes.push_back(type);
+            type->fRegistered = true;
+        }
+    }
+
 private:
     static SkSTArray<16, const Type*, true> gTypes;
 };
@@ -100,6 +106,7 @@ private:
     }                                                            \
     static const Type* GetType() {                               \
         static Type gType{ #TYPE, BASE::GetType(), CreateProc }; \
+        RegisterOnce(&gType);                                    \
         return &gType;                                           \
     }                                                            \
     const Type* getType() const override { return GetType(); }
@@ -107,15 +114,14 @@ private:
 #define REFLECTED_ABSTRACT(TYPE, BASE)                          \
     static const Type* GetType() {                              \
         static Type gType{ #TYPE, BASE::GetType(), nullptr };   \
+        RegisterOnce(&gType);                                   \
         return &gType;                                          \
     }                                                           \
     const Type* getType() const override { return GetType(); }
 
-#define REGISTER_REFLECTED(TYPE) SkReflected::Register(TYPE::GetType())
+#define REGISTER_REFLECTED(TYPE) TYPE::GetType()
 
 ///////////////////////////////////////////////////////////////////////////////
-
-struct SkPoint;
 
 /**
  * SkFieldVisitor is an interface that can be implemented by any class to visit all fields of

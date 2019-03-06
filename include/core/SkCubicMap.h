@@ -18,15 +18,9 @@
  *  pt[3] is implicitly { 1, 1 }
  *  pts[1,2] are inside the unit square
  */
-class SkCubicMap {
+class SK_API SkCubicMap {
 public:
-    SkCubicMap() {} // must call setPts() before using
-
-    SkCubicMap(SkPoint p1, SkPoint p2) {
-        this->setPts(p1, p2);
-    }
-
-    void setPts(SkPoint p1, SkPoint p2);
+    SkCubicMap(SkPoint p1, SkPoint p2);
 
     float computeYFromX(float x) const;
 
@@ -38,6 +32,7 @@ private:
         kCubeRoot_Type, // At^3 == x
         kSolver_Type,   // general monotonic cubic solver
     };
+
     SkPoint fCoeff[3];
     Type    fType;
 };
