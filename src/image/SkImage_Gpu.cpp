@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "GrAHardwareBufferImageGenerator.h"
+#include "GrAHardwareBufferUtils.h"
 #include "GrBackendSurface.h"
 #include "GrBackendTextureImageGenerator.h"
 #include "GrBitmapTextureMaker.h"
@@ -18,9 +19,12 @@
 #include "GrColorSpaceXform.h"
 #include "GrContext.h"
 #include "GrContextPriv.h"
+#include "GrDrawingManager.h"
 #include "GrGpu.h"
 #include "GrImageTextureMaker.h"
 #include "GrProxyProvider.h"
+#include "GrRecordingContext.h"
+#include "GrRecordingContextPriv.h"
 #include "GrRenderTargetContext.h"
 #include "GrResourceProvider.h"
 #include "GrResourceProviderPriv.h"
@@ -28,6 +32,7 @@
 #include "GrSurfacePriv.h"
 #include "GrTexture.h"
 #include "GrTextureAdjuster.h"
+#include "GrTextureContext.h"
 #include "GrTexturePriv.h"
 #include "GrTextureProxy.h"
 #include "GrTextureProxyPriv.h"
@@ -60,13 +65,18 @@ SkImageInfo SkImage_Gpu::onImageInfo() const {
     return SkImageInfo::Make(fProxy->width(), fProxy->height(), colorType, fAlphaType, fColorSpace);
 }
 
-sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(SkColorType targetCT,
+sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(GrRecordingContext* context,
+                                                         SkColorType targetCT,
                                                          sk_sp<SkColorSpace> targetCS) const {
+    if (!context || !fContext->priv().matches(context)) {
+        return nullptr;
+    }
+
     auto xform = GrColorSpaceXformEffect::Make(fColorSpace.get(), fAlphaType,
                                                targetCS.get(), fAlphaType);
     SkASSERT(xform || targetCT != this->colorType());
 
-    sk_sp<GrTextureProxy> proxy = this->asTextureProxyRef();
+    sk_sp<GrTextureProxy> proxy = this->asTextureProxyRef(context);
 
     GrBackendFormat format = proxy->backendFormat().makeTexture2D();
     if (!format.isValid()) {
@@ -74,7 +84,7 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(SkColorType targetCT,
     }
 
     sk_sp<GrRenderTargetContext> renderTargetContext(
-        fContext->priv().makeDeferredRenderTargetContextWithFallback(
+        context->priv().makeDeferredRenderTargetContextWithFallback(
             format, SkBackingFit::kExact, this->width(), this->height(),
             SkColorType2GrPixelConfig(targetCT), nullptr));
     if (!renderTargetContext) {
@@ -356,7 +366,7 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
             return nullptr;
         }
 
-        sk_sp<GrTextureProxy> proxy = as_IB(this)->asTextureProxyRef();
+        sk_sp<GrTextureProxy> proxy = as_IB(this)->asTextureProxyRef(context);
         SkASSERT(proxy);
         if (GrMipMapped::kNo == mipMapped || proxy->mipMapped() == mipMapped) {
             return sk_ref_sp(const_cast<SkImage*>(this));
@@ -581,6 +591,89 @@ sk_sp<SkImage> SkImage::MakeFromAHardwareBuffer(AHardwareBuffer* graphicBuffer, 
     auto gen = GrAHardwareBufferImageGenerator::Make(graphicBuffer, at, cs, surfaceOrigin);
     return SkImage::MakeFromGenerator(std::move(gen));
 }
+
+sk_sp<SkImage> SkImage::MakeFromAHardwareBufferWithData(GrContext* context,
+                                                        const SkPixmap& pixmap,
+                                                        AHardwareBuffer* hardwareBuffer,
+                                                        GrSurfaceOrigin surfaceOrigin) {
+    AHardwareBuffer_Desc bufferDesc;
+    AHardwareBuffer_describe(hardwareBuffer, &bufferDesc);
+
+    if (!SkToBool(bufferDesc.usage & AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE)) {
+        return nullptr;
+    }
+
+    GrBackendFormat backendFormat = GrAHardwareBufferUtils::GetBackendFormat(context,
+                                                                             hardwareBuffer,
+                                                                             bufferDesc.format,
+                                                                             true);
+
+    if (!backendFormat.isValid()) {
+        return nullptr;
+    }
+
+    GrAHardwareBufferUtils::DeleteImageProc deleteImageProc = nullptr;
+    GrAHardwareBufferUtils::DeleteImageCtx deleteImageCtx = nullptr;
+
+    GrBackendTexture backendTexture =
+            GrAHardwareBufferUtils::MakeBackendTexture(context, hardwareBuffer,
+                                                       bufferDesc.width, bufferDesc.height,
+                                                       &deleteImageProc, &deleteImageCtx,
+                                                       false, backendFormat, true);
+    if (!backendTexture.isValid()) {
+        return nullptr;
+    }
+    SkASSERT(deleteImageProc);
+
+    SkColorType colorType =
+            GrAHardwareBufferUtils::GetSkColorTypeFromBufferFormat(bufferDesc.format);
+
+    backendTexture.fConfig = context->priv().caps()->getConfigFromBackendFormat(backendFormat,
+                                                                                colorType);
+
+    GrProxyProvider* proxyProvider = context->priv().proxyProvider();
+    if (!proxyProvider) {
+        deleteImageProc(deleteImageCtx);
+        return nullptr;
+    }
+
+    sk_sp<GrTextureProxy> proxy =
+            proxyProvider->wrapBackendTexture(backendTexture, surfaceOrigin,
+                                              kBorrow_GrWrapOwnership, GrWrapCacheable::kNo,
+                                              kRW_GrIOType, deleteImageProc, deleteImageCtx);
+    if (!proxy) {
+        deleteImageProc(deleteImageCtx);
+        return nullptr;
+    }
+
+    sk_sp<SkColorSpace> cs = pixmap.refColorSpace();
+    SkAlphaType at =  pixmap.alphaType();
+
+    sk_sp<SkImage> image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(context), kNeedNewImageUniqueID, at,
+                                                   proxy, cs);
+    if (!image) {
+        return nullptr;
+    }
+
+    GrDrawingManager* drawingManager = context->priv().drawingManager();
+    if (!drawingManager) {
+        return nullptr;
+    }
+
+    sk_sp<GrTextureContext> texContext = drawingManager->makeTextureContext(proxy, cs);
+    if (!texContext) {
+        return nullptr;
+    }
+
+    SkImageInfo srcInfo = SkImageInfo::Make(bufferDesc.width, bufferDesc.height, colorType, at,
+                                            std::move(cs));
+    texContext->writePixels(srcInfo, pixmap.addr(0, 0), pixmap.rowBytes(), 0, 0);
+
+    drawingManager->flush(proxy.get(), SkSurface::BackendSurfaceAccess::kNoAccess,
+                          SkSurface::kSyncCpu_FlushFlag, 0, nullptr);
+
+    return image;
+}
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -620,7 +713,7 @@ bool SkImage::MakeBackendTextureFromSkImage(GrContext* ctx,
     if (!image->unique() || !texture->surfacePriv().hasUniqueRef() ||
         texture->resourcePriv().refsWrappedObjects()) {
         // onMakeSubset will always copy the image.
-        image = as_IB(image)->onMakeSubset(image->bounds());
+        image = as_IB(image)->onMakeSubset(ctx, image->bounds());
         if (!image) {
             return false;
         }

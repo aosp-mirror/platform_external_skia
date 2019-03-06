@@ -3,6 +3,12 @@
    "Duration": 1,
    "Rate": 8,
    "Life": {
+      "Input": {
+         "Source": "Age",
+         "TileMode": "Repeat",
+         "Left": 0,
+         "Right": 1
+      },
       "XValues": [],
       "Segments": [
          {
@@ -16,7 +22,7 @@
    },
    "Drawable": {
       "Type": "SkImageDrawable",
-      "Path": "images/explosion_sprites.png",
+      "Path": "resources/images/explosion_sprites.png",
       "Columns": 4,
       "Rows": 4
    },
@@ -26,6 +32,12 @@
          "Enabled": true,
          "SetHeading": true,
          "X": {
+            "Input": {
+               "Source": "Age",
+               "TileMode": "Repeat",
+               "Left": 0,
+               "Right": 1
+            },
             "XValues": [],
             "Segments": [
                {
@@ -37,6 +49,12 @@
             ]
          },
          "Y": {
+            "Input": {
+               "Source": "Age",
+               "TileMode": "Repeat",
+               "Left": 0,
+               "Right": 1
+            },
             "XValues": [],
             "Segments": [
                {
@@ -48,6 +66,12 @@
             ]
          },
          "Radius": {
+            "Input": {
+               "Source": "Age",
+               "TileMode": "Repeat",
+               "Left": 0,
+               "Right": 1
+            },
             "XValues": [],
             "Segments": [
                {
@@ -72,6 +96,12 @@
          "Type": "SkFrameAffector",
          "Enabled": true,
          "Curve": {
+            "Input": {
+               "Source": "Age",
+               "TileMode": "Repeat",
+               "Left": 0,
+               "Right": 1
+            },
             "XValues": [],
             "Segments": [
                {

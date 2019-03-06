@@ -997,11 +997,6 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
     if (kIntel_GrGLVendor == ctxInfo.vendor()) {
         fMSFBOType = kNone_MSFBOType;
     }
-
-    // We only have a use for raster multisample if there is coverage modulation from mixed samples.
-    if (fUsesMixedSamples && ctxInfo.hasExtension("GL_EXT_raster_multisample")) {
-        GR_GL_GetIntegerv(gli, GR_GL_MAX_RASTER_SAMPLES, &fMaxRasterSamples);
-    }
 }
 
 void GrGLCaps::initBlendEqationSupport(const GrGLContextInfo& ctxInfo) {
@@ -2992,6 +2987,11 @@ GrPixelConfig validate_sized_format(GrGLenum format, SkColorType ct, GrGLStandar
                 return kGray_8_as_Lum_GrPixelConfig;
             } else if (GR_GL_R8 == format) {
                 return kGray_8_as_Red_GrPixelConfig;
+            }
+            break;
+        case kRGBA_F16Norm_SkColorType:  // TODO(brianosman): anything here?
+            if (GR_GL_RGBA16F == format) {
+                return kRGBA_half_GrPixelConfig;
             }
             break;
         case kRGBA_F16_SkColorType:

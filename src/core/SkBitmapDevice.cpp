@@ -19,6 +19,7 @@
 #include "SkRasterHandleAllocator.h"
 #include "SkShader.h"
 #include "SkSpecialImage.h"
+#include "SkStrikeCache.h"
 #include "SkSurface.h"
 #include "SkTLazy.h"
 #include "SkVertices.h"
@@ -210,24 +211,14 @@ static bool valid_for_bitmap_device(const SkImageInfo& info,
     return true;
 }
 
-// TODO: unify this with the same functionality on SkDraw.
-static SkScalerContextFlags scaler_context_flags(const SkBitmap& bitmap)  {
-    // If we're doing linear blending, then we can disable the gamma hacks.
-    // Otherwise, leave them on. In either case, we still want the contrast boost:
-    // TODO: Can we be even smarter about mask gamma based on the dst transfer function?
-    if (bitmap.colorSpace() && bitmap.colorSpace()->gammaIsLinear()) {
-        return SkScalerContextFlags::kBoostContrast;
-    } else {
-        return SkScalerContextFlags::kFakeGammaAndBoostContrast;
-    }
-}
-
 SkBitmapDevice::SkBitmapDevice(const SkBitmap& bitmap)
-    : INHERITED(bitmap.info(), SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType))
-    , fBitmap(bitmap)
-    , fRCStack(bitmap.width(), bitmap.height())
-    , fGlyphPainter(this->surfaceProps(), bitmap.colorType(), scaler_context_flags(bitmap))
-{
+        : INHERITED(bitmap.info(), SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType))
+        , fBitmap(bitmap)
+        , fRCStack(bitmap.width(), bitmap.height())
+        , fGlyphPainter(this->surfaceProps(),
+                        bitmap.colorType(),
+                        bitmap.colorSpace(),
+                        SkStrikeCache::GlobalStrikeCache()) {
     SkASSERT(valid_for_bitmap_device(bitmap.info(), nullptr));
 }
 
@@ -237,12 +228,14 @@ SkBitmapDevice* SkBitmapDevice::Create(const SkImageInfo& info) {
 
 SkBitmapDevice::SkBitmapDevice(const SkBitmap& bitmap, const SkSurfaceProps& surfaceProps,
                                SkRasterHandleAllocator::Handle hndl, const SkBitmap* coverage)
-    : INHERITED(bitmap.info(), surfaceProps)
-    , fBitmap(bitmap)
-    , fRasterHandle(hndl)
-    , fRCStack(bitmap.width(), bitmap.height())
-    , fGlyphPainter(this->surfaceProps(), bitmap.colorType(), scaler_context_flags(bitmap))
-{
+        : INHERITED(bitmap.info(), surfaceProps)
+        , fBitmap(bitmap)
+        , fRasterHandle(hndl)
+        , fRCStack(bitmap.width(), bitmap.height())
+        , fGlyphPainter(this->surfaceProps(),
+                        bitmap.colorType(),
+                        bitmap.colorSpace(),
+                        SkStrikeCache::GlobalStrikeCache()) {
     SkASSERT(valid_for_bitmap_device(bitmap.info(), nullptr));
 
     if (coverage) {

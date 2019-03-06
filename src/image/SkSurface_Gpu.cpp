@@ -50,7 +50,8 @@ static GrRenderTarget* prepare_rt_for_external_access(SkSurface_Gpu* surface,
     }
 
     // Grab the render target *after* firing notifications, as it may get switched if CoW kicks in.
-    surface->getDevice()->flush();
+    surface->getDevice()->flushAndSignalSemaphores(SkSurface::BackendSurfaceAccess::kNoAccess,
+                                                   SkSurface::kNone_FlushFlags, 0, nullptr);
     GrRenderTargetContext* rtc = surface->getDevice()->accessRenderTargetContext();
     return rtc->accessRenderTarget();
 }
@@ -157,9 +158,10 @@ void SkSurface_Gpu::onDiscard() {
     fDevice->accessRenderTargetContext()->discard();
 }
 
-GrSemaphoresSubmitted SkSurface_Gpu::onFlush(int numSemaphores,
+GrSemaphoresSubmitted SkSurface_Gpu::onFlush(BackendSurfaceAccess access, FlushFlags flags,
+                                             int numSemaphores,
                                              GrBackendSemaphore signalSemaphores[]) {
-    return fDevice->flushAndSignalSemaphores(numSemaphores, signalSemaphores);
+    return fDevice->flushAndSignalSemaphores(access, flags, numSemaphores, signalSemaphores);
 }
 
 bool SkSurface_Gpu::onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {
@@ -623,9 +625,15 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrContext* context,
         SkColorType colorType =
                 GrAHardwareBufferUtils::GetSkColorTypeFromBufferFormat(bufferDesc.format);
 
-        return SkSurface::MakeFromBackendTexture(context, backendTexture, origin, 0,
-                                                 colorType, std::move(colorSpace),
-                                                 surfaceProps, deleteImageProc, deleteImageCtx);
+        sk_sp<SkSurface> surface = SkSurface::MakeFromBackendTexture(context, backendTexture,
+                origin, 0, colorType, std::move(colorSpace), surfaceProps, deleteImageProc,
+                deleteImageCtx);
+
+        if (!surface) {
+            SkASSERT(deleteImageProc);
+            deleteImageProc(deleteImageCtx);
+        }
+        return surface;
     } else {
         return nullptr;
     }

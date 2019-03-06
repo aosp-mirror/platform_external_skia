@@ -1344,6 +1344,7 @@ static inline GrColorType SkColorTypeToGrColorType(SkColorType ct) {
         case kRGB_888x_SkColorType:     return GrColorType::kRGB_888x;
         case kBGRA_8888_SkColorType:    return GrColorType::kBGRA_8888;
         case kGray_8_SkColorType:       return GrColorType::kGray_8;
+        case kRGBA_F16Norm_SkColorType: return GrColorType::kRGBA_F16;  // TODO(brianosman)
         case kRGBA_F16_SkColorType:     return GrColorType::kRGBA_F16;
         case kRGBA_1010102_SkColorType: return GrColorType::kRGBA_1010102;
         case kRGB_101010x_SkColorType:  return GrColorType::kUnknown;
@@ -1553,20 +1554,24 @@ static inline GrPixelConfig GrColorTypeToPixelConfig(GrColorType config,
     return kUnknown_GrPixelConfig;
 }
 
-class GrReleaseProcHelper : public SkRefCnt {
+/**
+ * Ref-counted object that calls a callback from its destructor.
+ */
+class GrRefCntedCallback : public SkRefCnt {
 public:
-    // These match the definitions in SkImage, from whence they came
-    typedef void* ReleaseCtx;
-    typedef void (*ReleaseProc)(ReleaseCtx);
+    using Context = void*;
+    using Callback = void (*)(Context);
 
-    GrReleaseProcHelper(ReleaseProc proc, ReleaseCtx ctx) : fReleaseProc(proc), fReleaseCtx(ctx) {
+    GrRefCntedCallback(Callback proc, Context ctx) : fReleaseProc(proc), fReleaseCtx(ctx) {
         SkASSERT(proc);
     }
-    ~GrReleaseProcHelper() override { fReleaseProc(fReleaseCtx); }
+    ~GrRefCntedCallback() override { fReleaseProc ? fReleaseProc(fReleaseCtx) : void(); }
+
+    Context context() const { return fReleaseCtx; }
 
 private:
-    ReleaseProc fReleaseProc;
-    ReleaseCtx  fReleaseCtx;
+    Callback fReleaseProc;
+    Context fReleaseCtx;
 };
 
 #endif

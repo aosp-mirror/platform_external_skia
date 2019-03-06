@@ -82,7 +82,7 @@ sk_sp<SkGpuDevice> SkGpuDevice::Make(GrContext* context,
                                      sk_sp<GrRenderTargetContext> renderTargetContext,
                                      int width, int height,
                                      InitContents init) {
-    if (!renderTargetContext || context->abandoned()) {
+    if (!renderTargetContext || context->priv().abandoned()) {
         return nullptr;
     }
     unsigned flags;
@@ -720,6 +720,10 @@ static void determine_clipped_src_rect(int width, int height,
     }
 }
 
+const GrCaps* SkGpuDevice::caps() const {
+    return fContext->priv().caps();
+}
+
 bool SkGpuDevice::shouldTileImageID(uint32_t imageID,
                                     const SkIRect& imageRect,
                                     const SkMatrix& viewMatrix,
@@ -1010,7 +1014,7 @@ void SkGpuDevice::drawSprite(const SkBitmap& bitmap,
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawSprite", fContext.get());
 
-    if (fContext->abandoned()) {
+    if (fContext->priv().abandoned()) {
         return;
     }
 
@@ -1188,7 +1192,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkBitmap& bitmap) {
 sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkImage* image) {
     SkPixmap pm;
     if (image->isTextureBacked()) {
-        sk_sp<GrTextureProxy> proxy = as_IB(image)->asTextureProxyRef();
+        sk_sp<GrTextureProxy> proxy = as_IB(image)->asTextureProxyRef(this->context());
 
         return SkSpecialImage::MakeDeferredFromGpu(fContext.get(),
                                                    SkIRect::MakeWH(image->width(), image->height()),
@@ -1294,8 +1298,8 @@ void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
                                 const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
     ASSERT_SINGLE_OWNER
     GrQuadAAFlags aaFlags = paint.isAntiAlias() ? GrQuadAAFlags::kAll : GrQuadAAFlags::kNone;
-    this->drawImageQuad(
-            image, src, &dst, nullptr, GrAA(paint.isAntiAlias()), aaFlags, paint, constraint);
+    this->drawImageQuad(image, src, &dst, nullptr, GrAA(paint.isAntiAlias()), aaFlags, nullptr,
+                        paint, constraint);
 }
 
 // When drawing nine-patches or n-patches, cap the filter quality at kBilerp.
@@ -1312,7 +1316,8 @@ void SkGpuDevice::drawImageNine(const SkImage* image,
     ASSERT_SINGLE_OWNER
     uint32_t pinnedUniqueID;
     auto iter = skstd::make_unique<SkLatticeIter>(image->width(), image->height(), center, dst);
-    if (sk_sp<GrTextureProxy> proxy = as_IB(image)->refPinnedTextureProxy(&pinnedUniqueID)) {
+    if (sk_sp<GrTextureProxy> proxy = as_IB(image)->refPinnedTextureProxy(this->context(),
+                                                                          &pinnedUniqueID)) {
         GrTextureAdjuster adjuster(this->context(), std::move(proxy),
                                    image->alphaType(), pinnedUniqueID,
                                    as_IB(image)->onImageInfo().colorSpace());
@@ -1372,7 +1377,8 @@ void SkGpuDevice::drawImageLattice(const SkImage* image,
     ASSERT_SINGLE_OWNER
     uint32_t pinnedUniqueID;
     auto iter = skstd::make_unique<SkLatticeIter>(lattice, dst);
-    if (sk_sp<GrTextureProxy> proxy = as_IB(image)->refPinnedTextureProxy(&pinnedUniqueID)) {
+    if (sk_sp<GrTextureProxy> proxy = as_IB(image)->refPinnedTextureProxy(this->context(),
+                                                                          &pinnedUniqueID)) {
         GrTextureAdjuster adjuster(this->context(), std::move(proxy),
                                    image->alphaType(), pinnedUniqueID,
                                    as_IB(image)->onImageInfo().colorSpace());
@@ -1404,7 +1410,7 @@ void SkGpuDevice::drawImageSet(const SkCanvas::ImageSetEntry set[], int count,
     paint.setBlendMode(mode);
     paint.setFilterQuality(filterQuality);
     paint.setAntiAlias(true);
-    this->tmp_drawImageSetV2(set, nullptr, count, nullptr, paint,
+    this->tmp_drawImageSetV3(set, nullptr, nullptr, count, nullptr, nullptr, paint,
                              SkCanvas::kFast_SrcRectConstraint);
 }
 
@@ -1606,14 +1612,18 @@ void SkGpuDevice::drawDrawable(SkDrawable* drawable, const SkMatrix* matrix, SkC
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkGpuDevice::flush() {
-    this->flushAndSignalSemaphores(0, nullptr);
+    this->flushAndSignalSemaphores(SkSurface::BackendSurfaceAccess::kNoAccess,
+                                   SkSurface::kNone_FlushFlags, 0, nullptr);
 }
 
-GrSemaphoresSubmitted SkGpuDevice::flushAndSignalSemaphores(int numSemaphores,
+GrSemaphoresSubmitted SkGpuDevice::flushAndSignalSemaphores(SkSurface::BackendSurfaceAccess access,
+                                                            SkSurface::FlushFlags flags,
+                                                            int numSemaphores,
                                                             GrBackendSemaphore signalSemaphores[]) {
     ASSERT_SINGLE_OWNER
 
-    return fRenderTargetContext->prepareForExternalIO(numSemaphores, signalSemaphores);
+    return fRenderTargetContext->prepareForExternalIO(access, flags, numSemaphores,
+                                                      signalSemaphores);
 }
 
 bool SkGpuDevice::wait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {

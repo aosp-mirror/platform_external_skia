@@ -15,7 +15,6 @@
 #define SK_SUPPORT_PDF
 #define SK_XML
 #define _CRT_SECURE_NO_WARNINGS
-#define _HAS_EXCEPTIONS 0
 
 // Correct SK_BUILD_FOR flags that may have been set by
 // SkPreConfig.h/Android.bp

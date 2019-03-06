@@ -8,6 +8,7 @@
 #include "ParticlesSlide.h"
 
 #include "ImGuiLayer.h"
+#include "Resources.h"
 #include "SkParticleAffector.h"
 #include "SkParticleDrawable.h"
 #include "SkParticleEffect.h"
@@ -183,7 +184,7 @@ private:
 
 static sk_sp<SkParticleEffectParams> LoadEffectParams(const char* filename) {
     sk_sp<SkParticleEffectParams> params(new SkParticleEffectParams());
-    if (auto fileData = SkData::MakeFromFileName(filename)) {
+    if (auto fileData = GetResourceAsData(filename)) {
         skjson::DOM dom(static_cast<const char*>(fileData->data()), fileData->size());
         SkFromJsonVisitor fromJson(dom.root());
         params->visitFields(&fromJson);
@@ -200,7 +201,7 @@ ParticlesSlide::ParticlesSlide() {
 }
 
 void ParticlesSlide::load(SkScalar winWidth, SkScalar winHeight) {
-    fEffect.reset(new SkParticleEffect(LoadEffectParams("resources/particles/default.json"),
+    fEffect.reset(new SkParticleEffect(LoadEffectParams("particles/default.json"),
                                        fRandom));
 }
 
@@ -214,7 +215,7 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
         if (fTimer && ImGui::Button("Play")) {
             fEffect->start(*fTimer, looped);
         }
-        static char filename[64] = "resources/particles/default.json";
+        static char filename[64] = "particles/default.json";
         ImGui::InputText("Filename", filename, sizeof(filename));
         if (ImGui::Button("Load")) {
             if (auto newParams = LoadEffectParams(filename)) {
@@ -224,7 +225,8 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
         ImGui::SameLine();
 
         if (ImGui::Button("Save")) {
-            SkFILEWStream fileStream(filename);
+            SkString fullPath = GetResourcePath(filename);
+            SkFILEWStream fileStream(fullPath.c_str());
             if (fileStream.isValid()) {
                 SkJSONWriter writer(&fileStream, SkJSONWriter::Mode::kPretty);
                 SkToJsonVisitor toJson(writer);

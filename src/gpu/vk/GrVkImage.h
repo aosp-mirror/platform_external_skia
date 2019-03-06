@@ -94,6 +94,10 @@ public:
                         bool byRegion,
                         bool releaseFamilyQueue = false);
 
+    // Returns the image to its original queue family and changes the layout to present if the queue
+    // family is not external or foreign.
+    void prepareForPresent(GrVkGpu* gpu);
+
     // This simply updates our tracking of the image layout and does not actually do any gpu work.
     // This is only used for mip map generation where we are manually changing the layouts as we
     // blit each layer, and then at the end need to update our tracking.
@@ -135,7 +139,7 @@ public:
     typedef void* ReleaseCtx;
     typedef void (*ReleaseProc)(ReleaseCtx);
 
-    void setResourceRelease(sk_sp<GrReleaseProcHelper> releaseHelper);
+    void setResourceRelease(sk_sp<GrRefCntedCallback> releaseHelper);
 
     // Helpers to use for setting the layout of the VkImage
     static VkPipelineStageFlags LayoutToPipelineSrcStageFlags(const VkImageLayout layout);
@@ -178,17 +182,20 @@ private:
             SkDebugf("GrVkImage: %d (%d refs)\n", fImage, this->getRefCnt());
         }
 #endif
-        void setRelease(sk_sp<GrReleaseProcHelper> releaseHelper) {
+        void setRelease(sk_sp<GrRefCntedCallback> releaseHelper) {
             fReleaseHelper = std::move(releaseHelper);
         }
 
         /**
-         * These are used to coordinate calling the idle proc between the GrVkTexture and the
-         * Resource. If the GrVkTexture becomes purgeable and if there are no command buffers
-         * referring to the Resource then it calls the proc. Otherwise, the Resource calls it
-         * when the last command buffer reference goes away and the GrVkTexture is purgeable.
+         * These are used to coordinate calling the "finished" idle procs between the GrVkTexture
+         * and the Resource. If the GrVkTexture becomes purgeable and if there are no command
+         * buffers referring to the Resource then it calls the procs. Otherwise, the Resource calls
+         * them when the last command buffer reference goes away and the GrVkTexture is purgeable.
          */
-        void setIdleProc(GrVkTexture* owner, GrTexture::IdleProc, void* context) const;
+        void addIdleProc(GrVkTexture*, sk_sp<GrRefCntedCallback>) const;
+        int idleProcCnt() const;
+        sk_sp<GrRefCntedCallback> idleProc(int) const;
+        void resetIdleProcs() const;
         void removeOwningTexture() const;
 
         /**
@@ -200,7 +207,7 @@ private:
         bool isOwnedByCommandBuffer() const { return fNumCommandBufferOwners > 0; }
 
     protected:
-        mutable sk_sp<GrReleaseProcHelper> fReleaseHelper;
+        mutable sk_sp<GrRefCntedCallback> fReleaseHelper;
 
         void invokeReleaseProc() const {
             if (fReleaseHelper) {
@@ -221,8 +228,7 @@ private:
         GrVkAlloc      fAlloc;
         VkImageTiling  fImageTiling;
         mutable int fNumCommandBufferOwners = 0;
-        mutable GrTexture::IdleProc* fIdleProc = nullptr;
-        mutable void* fIdleProcContext = nullptr;
+        mutable SkTArray<sk_sp<GrRefCntedCallback>> fIdleProcs;
         mutable GrVkTexture* fOwningTexture = nullptr;
 
         typedef GrVkResource INHERITED;

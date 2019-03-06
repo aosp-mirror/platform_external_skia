@@ -3273,6 +3273,73 @@ STAGE_PP(srcover_rgba_8888, const SkRasterPipeline_MemoryCtx* ctx) {
     store_8888_(ptr, tail, r,g,b,a);
 }
 
+#if defined(SK_DISABLE_LOWP_BILERP_CLAMP_CLAMP_STAGE)
+    static void(*bilerp_clamp_8888)(void) = nullptr;
+#else
+STAGE_GP(bilerp_clamp_8888, const SkRasterPipeline_GatherCtx* ctx) {
+    // (cx,cy) are the center of our sample.
+    F cx = x,
+      cy = y;
+
+    // All sample points are at the same fractional offset (fx,fy).
+    // They're the 4 corners of a logical 1x1 pixel surrounding (x,y) at (0.5,0.5) offsets.
+    F fx = fract(cx + 0.5f),
+      fy = fract(cy + 0.5f);
+
+    // We'll accumulate the color of all four samples into {r,g,b,a} directly.
+    r = g = b = a = 0;
+
+    // The first three sample points will calculate their area using math
+    // just like in the float code above, but the fourth will take up all the rest.
+    //
+    // Logically this is the same as doing the math for the fourth pixel too,
+    // but rounding error makes this a better strategy, keeping opaque opaque, etc.
+    //
+    // We can keep up to 8 bits of fractional precision without overflowing 16-bit,
+    // so our "1.0" area is 256.
+    const uint16_t bias = 256;
+    U16 remaining = bias;
+
+    for (float dy = -0.5f; dy <= +0.5f; dy += 1.0f)
+    for (float dx = -0.5f; dx <= +0.5f; dx += 1.0f) {
+        // (x,y) are the coordinates of this sample point.
+        F x = cx + dx,
+          y = cy + dy;
+
+        // ix_and_ptr() will clamp to the image's bounds for us.
+        const uint32_t* ptr;
+        U32 ix = ix_and_ptr(&ptr, ctx, x,y);
+
+        U16 sr,sg,sb,sa;
+        from_8888(gather<U32>(ptr, ix), &sr,&sg,&sb,&sa);
+
+        // In bilinear interpolation, the 4 pixels at +/- 0.5 offsets from the sample pixel center
+        // are combined in direct proportion to their area overlapping that logical query pixel.
+        // At positive offsets, the x-axis contribution to that rectangle is fx,
+        // or (1-fx) at negative x.  Same deal for y.
+        F sx = (dx > 0) ? fx : 1.0f - fx,
+          sy = (dy > 0) ? fy : 1.0f - fy;
+
+        U16 area = (dy == 0.5f && dx == 0.5f) ? remaining
+                                              : cast<U16>(sx * sy * bias);
+        for (size_t i = 0; i < N; i++) {
+            SkASSERT(remaining[i] >= area[i]);
+        }
+        remaining -= area;
+
+        r += sr * area;
+        g += sg * area;
+        b += sb * area;
+        a += sa * area;
+    }
+
+    r = (r + bias/2) / bias;
+    g = (g + bias/2) / bias;
+    b = (b + bias/2) / bias;
+    a = (a + bias/2) / bias;
+}
+#endif
+
 // Now we'll add null stand-ins for stages we haven't implemented in lowp.
 // If a pipeline uses these stages, it'll boot it out of lowp into highp.
 #define NOT_IMPLEMENTED(st) static void (*st)(void) = nullptr;
@@ -3282,7 +3349,7 @@ STAGE_PP(srcover_rgba_8888, const SkRasterPipeline_MemoryCtx* ctx) {
     NOT_IMPLEMENTED(unbounded_set_rgb)
     NOT_IMPLEMENTED(unbounded_uniform_color)
     NOT_IMPLEMENTED(unpremul)
-    NOT_IMPLEMENTED(dither)
+    NOT_IMPLEMENTED(dither)  // TODO
     NOT_IMPLEMENTED(from_srgb)
     NOT_IMPLEMENTED(to_srgb)
     NOT_IMPLEMENTED(load_f16)
@@ -3298,7 +3365,7 @@ STAGE_PP(srcover_rgba_8888, const SkRasterPipeline_MemoryCtx* ctx) {
     NOT_IMPLEMENTED(store_1010102)
     NOT_IMPLEMENTED(gather_1010102)
     NOT_IMPLEMENTED(store_u16_be)
-    NOT_IMPLEMENTED(byte_tables)
+    NOT_IMPLEMENTED(byte_tables)  // TODO
     NOT_IMPLEMENTED(colorburn)
     NOT_IMPLEMENTED(colordodge)
     NOT_IMPLEMENTED(softlight)
@@ -3308,33 +3375,32 @@ STAGE_PP(srcover_rgba_8888, const SkRasterPipeline_MemoryCtx* ctx) {
     NOT_IMPLEMENTED(luminosity)
     NOT_IMPLEMENTED(matrix_3x3)
     NOT_IMPLEMENTED(matrix_3x4)
-    NOT_IMPLEMENTED(matrix_4x5)
-    NOT_IMPLEMENTED(matrix_4x3)
+    NOT_IMPLEMENTED(matrix_4x5)  // TODO
+    NOT_IMPLEMENTED(matrix_4x3)  // TODO
     NOT_IMPLEMENTED(parametric)
     NOT_IMPLEMENTED(gamma)
     NOT_IMPLEMENTED(rgb_to_hsl)
     NOT_IMPLEMENTED(hsl_to_rgb)
-    NOT_IMPLEMENTED(gauss_a_to_rgba)
-    NOT_IMPLEMENTED(mirror_x)
-    NOT_IMPLEMENTED(repeat_x)
-    NOT_IMPLEMENTED(mirror_y)
-    NOT_IMPLEMENTED(repeat_y)
+    NOT_IMPLEMENTED(gauss_a_to_rgba)  // TODO
+    NOT_IMPLEMENTED(mirror_x)         // TODO
+    NOT_IMPLEMENTED(repeat_x)         // TODO
+    NOT_IMPLEMENTED(mirror_y)         // TODO
+    NOT_IMPLEMENTED(repeat_y)         // TODO
     NOT_IMPLEMENTED(negate_x)
-    NOT_IMPLEMENTED(bilerp_clamp_8888)
-    NOT_IMPLEMENTED(bilinear_nx)
-    NOT_IMPLEMENTED(bilinear_ny)
-    NOT_IMPLEMENTED(bilinear_px)
-    NOT_IMPLEMENTED(bilinear_py)
-    NOT_IMPLEMENTED(bicubic_n3x)
-    NOT_IMPLEMENTED(bicubic_n1x)
-    NOT_IMPLEMENTED(bicubic_p1x)
-    NOT_IMPLEMENTED(bicubic_p3x)
-    NOT_IMPLEMENTED(bicubic_n3y)
-    NOT_IMPLEMENTED(bicubic_n1y)
-    NOT_IMPLEMENTED(bicubic_p1y)
-    NOT_IMPLEMENTED(bicubic_p3y)
-    NOT_IMPLEMENTED(save_xy)
-    NOT_IMPLEMENTED(accumulate)
+    NOT_IMPLEMENTED(bilinear_nx)      // TODO
+    NOT_IMPLEMENTED(bilinear_ny)      // TODO
+    NOT_IMPLEMENTED(bilinear_px)      // TODO
+    NOT_IMPLEMENTED(bilinear_py)      // TODO
+    NOT_IMPLEMENTED(bicubic_n3x)      // TODO
+    NOT_IMPLEMENTED(bicubic_n1x)      // TODO
+    NOT_IMPLEMENTED(bicubic_p1x)      // TODO
+    NOT_IMPLEMENTED(bicubic_p3x)      // TODO
+    NOT_IMPLEMENTED(bicubic_n3y)      // TODO
+    NOT_IMPLEMENTED(bicubic_n1y)      // TODO
+    NOT_IMPLEMENTED(bicubic_p1y)      // TODO
+    NOT_IMPLEMENTED(bicubic_p3y)      // TODO
+    NOT_IMPLEMENTED(save_xy)          // TODO
+    NOT_IMPLEMENTED(accumulate)       // TODO
     NOT_IMPLEMENTED(xy_to_2pt_conical_well_behaved)
     NOT_IMPLEMENTED(xy_to_2pt_conical_strip)
     NOT_IMPLEMENTED(xy_to_2pt_conical_focal_on_circle)

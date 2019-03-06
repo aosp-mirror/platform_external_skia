@@ -160,15 +160,11 @@ private:
 // stack. When this occurs with a closed GrOpList, a new one will be allocated
 // when the renderTargetContext attempts to use it (via getOpList).
 GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
-                                             GrDrawingManager* drawingMgr,
                                              sk_sp<GrRenderTargetProxy> rtp,
                                              sk_sp<SkColorSpace> colorSpace,
                                              const SkSurfaceProps* surfaceProps,
-                                             GrAuditTrail* auditTrail,
-                                             GrSingleOwner* singleOwner,
                                              bool managedOpList)
-        : GrSurfaceContext(context, drawingMgr, rtp->config(), std::move(colorSpace), auditTrail,
-                           singleOwner)
+        : GrSurfaceContext(context, rtp->config(), std::move(colorSpace))
         , fRenderTargetProxy(std::move(rtp))
         , fOpList(sk_ref_sp(fRenderTargetProxy->getLastRenderTargetOpList()))
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
@@ -1072,14 +1068,20 @@ void GrRenderTargetContext::drawTextureSet(const GrClip& clip, const TextureSetE
     if (mode != SkBlendMode::kSrcOver ||
         !fContext->priv().caps()->dynamicStateArrayGeometryProcessorTextureSupport()) {
         // Draw one at a time with GrFillRectOp and a GrPaint that emulates what GrTextureOp does
+        SkMatrix ctm;
         for (int i = 0; i < cnt; ++i) {
             float alpha = set[i].fAlpha;
+            ctm = viewMatrix;
+            if (set[i].fPreViewMatrix) {
+                ctm.preConcat(*set[i].fPreViewMatrix);
+            }
+
             if (set[i].fDstClipQuad == nullptr) {
                 // Stick with original rectangles, which allows the ops to know more about what's
                 // being drawn.
                 this->drawTexture(clip, set[i].fProxy, filter, mode, {alpha, alpha, alpha, alpha},
                                   set[i].fSrcRect, set[i].fDstRect, aa, set[i].fAAFlags,
-                                  SkCanvas::kFast_SrcRectConstraint, viewMatrix, texXform);
+                                  SkCanvas::kFast_SrcRectConstraint, ctm, texXform);
             } else {
                 // Generate interpolated texture coordinates to match the dst clip
                 SkPoint srcQuad[4];
@@ -1089,7 +1091,7 @@ void GrRenderTargetContext::drawTextureSet(const GrClip& clip, const TextureSetE
                 // keep seams look more correct.
                 this->drawTextureQuad(clip, set[i].fProxy, filter, mode,
                                       {alpha, alpha, alpha, alpha}, srcQuad, set[i].fDstClipQuad,
-                                      aa, set[i].fAAFlags, nullptr, viewMatrix, texXform);
+                                      aa, set[i].fAAFlags, nullptr, ctm, texXform);
             }
         }
     } else {
@@ -1710,7 +1712,8 @@ void GrRenderTargetContext::drawDrawable(std::unique_ptr<SkDrawable::GpuDrawHand
 }
 
 GrSemaphoresSubmitted GrRenderTargetContext::prepareForExternalIO(
-        int numSemaphores, GrBackendSemaphore backendSemaphores[]) {
+        SkSurface::BackendSurfaceAccess access, SkSurface::FlushFlags flags, int numSemaphores,
+        GrBackendSemaphore backendSemaphores[]) {
     ASSERT_SINGLE_OWNER
     if (fContext->priv().abandoned()) {
         return GrSemaphoresSubmitted::kNo;
@@ -1719,6 +1722,7 @@ GrSemaphoresSubmitted GrRenderTargetContext::prepareForExternalIO(
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "prepareForExternalIO", fContext);
 
     return this->drawingManager()->prepareSurfaceForExternalIO(fRenderTargetProxy.get(),
+                                                               access, flags,
                                                                numSemaphores,
                                                                backendSemaphores);
 }
@@ -2073,7 +2077,7 @@ void GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<GrDraw
     }
 
     GrXferProcessor::DstProxy dstProxy;
-    GrProcessorSet::Analysis analysis = op->finalize(*this->caps(), &appliedClip);
+    GrProcessorSet::Analysis analysis = op->finalize(*this->caps(), &appliedClip, this->fsaaType());
     if (analysis.requiresDstTexture()) {
         if (!this->setupDstProxy(this->asRenderTargetProxy(), clip, *op, &dstProxy)) {
             fContext->priv().opMemoryPool()->release(std::move(op));

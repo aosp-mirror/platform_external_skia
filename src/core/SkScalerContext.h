@@ -19,6 +19,7 @@
 #include "SkMaskGamma.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
+#include "SkStrikeInterface.h"
 #include "SkSurfacePriv.h"
 #include "SkTypeface.h"
 #include "SkWriteBuffer.h"
@@ -35,18 +36,6 @@ enum SkScalerContextFlags : uint32_t {
     kFakeGamma                 = 1 << 0,
     kBoostContrast             = 1 << 1,
     kFakeGammaAndBoostContrast = kFakeGamma | kBoostContrast,
-};
-
-struct SkScalerContextEffects {
-    SkScalerContextEffects() : fPathEffect(nullptr), fMaskFilter(nullptr) {}
-    SkScalerContextEffects(SkPathEffect* pe, SkMaskFilter* mf)
-        : fPathEffect(pe), fMaskFilter(mf) {}
-    explicit SkScalerContextEffects(const SkPaint& paint)
-        : fPathEffect(paint.getPathEffect())
-        , fMaskFilter(paint.getMaskFilter()) {}
-
-    SkPathEffect*   fPathEffect;
-    SkMaskFilter*   fMaskFilter;
 };
 
 enum SkAxisAlignment : uint32_t {
@@ -96,6 +85,7 @@ public:
     }
 
     SkScalar getContrast() const {
+        sk_ignore_unused_variable(fReservedAlign);
         return SkIntToScalar(fContrast) / ((1 << 8) - 1);
     }
     void setContrast(SkScalar c) {
@@ -206,11 +196,6 @@ public:
         return static_cast<SkMask::Format>(fMaskFormat);
     }
 
-private:
-    // TODO: get rid of these bad friends.
-    friend class SkScalerContext;
-    friend class SkScalerContext_DW;
-
     SkColor getLuminanceColor() const {
         return fLumBits;
     }
@@ -220,6 +205,10 @@ private:
     void setLuminanceColor(SkColor c) {
         fLumBits = SkColorSetRGB(SkColorGetR(c), SkColorGetG(c), SkColorGetB(c));
     }
+
+private:
+    // TODO: remove
+    friend class SkScalerContext;
 };
 SK_END_REQUIRE_DENSE
 

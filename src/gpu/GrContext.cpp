@@ -72,7 +72,7 @@ bool GrContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFac
 
     SkASSERT(this->drawingManager());
     SkASSERT(this->caps());
-    SkASSERT(this->getGlyphCache());
+    SkASSERT(this->getGrStrikeCache());
     SkASSERT(this->getTextBlobCache());
 
     if (fGpu) {
@@ -160,7 +160,7 @@ void GrContext::freeGpuResources() {
 
     // TODO: the glyph cache doesn't hold any GpuResources so this call should not be needed here.
     // Some slack in the GrTextBlob's implementation requires it though. That could be fixed.
-    this->getGlyphCache()->freeAll();
+    this->getGrStrikeCache()->freeAll();
 
     this->drawingManager()->freeGpuResources();
 
@@ -237,7 +237,8 @@ void GrContext::flush() {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
 
-    this->drawingManager()->flush(nullptr);
+    this->drawingManager()->flush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess,
+                                  SkSurface::kNone_FlushFlags, 0, nullptr);
 }
 
 GrSemaphoresSubmitted GrContext::flushAndSignalSemaphores(int numSemaphores,
@@ -247,7 +248,9 @@ GrSemaphoresSubmitted GrContext::flushAndSignalSemaphores(int numSemaphores,
         return GrSemaphoresSubmitted::kNo;
     }
 
-    return this->drawingManager()->flush(nullptr, numSemaphores, signalSemaphores);
+    return this->drawingManager()->flush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess,
+                                         SkSurface::kNone_FlushFlags, numSemaphores,
+                                         signalSemaphores);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
