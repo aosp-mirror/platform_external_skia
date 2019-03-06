@@ -10,17 +10,15 @@ module.exports = function(config) {
 
     // list of files / patterns to load in the browser
     files: [
-      { pattern: 'canvaskit/bin/canvaskit.wasm', included:false, served:true},
-      { pattern: 'perf/assets/*', included:false, served:true},
-      '../../modules/pathkit/perf/perfReporter.js',
-      'canvaskit/bin/canvaskit.js',
-      'tests/canvaskitinit.js',
-      'perf/*.bench.js'
+      { pattern: 'debugger/bin/debugger.wasm', included:false, served:true},
+      { pattern: 'debugger/bin/debugger.data', included:false, served:true},
+      '../../modules/pathkit/tests/testReporter.js',
+      'debugger/bin/debugger.js',
+      'tests/*.spec.js'
     ],
 
     proxies: {
-      '/canvaskit/': '/base/canvaskit/bin/',
-      '/assets/': '/base/perf/assets/'
+      '/debugger/': '/base/debugger/bin/',
     },
 
     // test results reporter to use
@@ -69,22 +67,6 @@ module.exports = function(config) {
             ],
         },
     };
-  }
-
-  if (process.env.ASM_JS) {
-    console.log('asm.js is under test');
-    cfg.files = [
-      { pattern: 'npm-asmjs/bin/pathkit.js.mem', included:false, served:true},
-      'perf/perfReporter.js',
-      'npm-asmjs/bin/pathkit.js',
-      'perf/*.bench.js'
-    ];
-
-    cfg.proxies = {
-      '/pathkit/': '/base/npm-asmjs/bin/'
-    };
-  } else {
-    console.log('wasm is under test');
   }
 
   config.set(cfg);
