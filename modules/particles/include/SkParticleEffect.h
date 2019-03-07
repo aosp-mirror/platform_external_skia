@@ -9,18 +9,16 @@
 #define SkParticleEffect_DEFINED
 
 #include "SkAutoMalloc.h"
-#include "SkColor.h"
 #include "SkCurve.h"
-#include "SkParticleData.h"
 #include "SkRandom.h"
 #include "SkRefCnt.h"
 #include "SkTArray.h"
 
-class SkAnimTimer;
 class SkCanvas;
 class SkFieldVisitor;
 class SkParticleAffector;
 class SkParticleDrawable;
+struct SkParticleState;
 
 class SkParticleEffectParams : public SkRefCnt {
 public:
@@ -45,13 +43,12 @@ class SkParticleEffect : public SkRefCnt {
 public:
     SkParticleEffect(sk_sp<SkParticleEffectParams> params, const SkRandom& random);
 
-    void start(const SkAnimTimer& timer, bool looping = false);
-    void update(const SkAnimTimer& timer);
+    void start(double now, bool looping = false);
+    void update(double now);
     void draw(SkCanvas* canvas);
 
-    bool isAlive() { return fSpawnTime >= 0; }
-
-    SkParticleEffectParams* getParams() { return fParams.get(); }
+    bool isAlive() const { return fSpawnTime >= 0; }
+    int getCount() const { return fCount; }
 
 private:
     void setCapacity(int capacity);

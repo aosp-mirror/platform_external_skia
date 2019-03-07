@@ -808,19 +808,8 @@ static bool gather_srcs() {
     }
 
     for (auto colorImage : colorImages) {
-        ColorCodecSrc* src = new ColorCodecSrc(colorImage, ColorCodecSrc::kBaseline_Mode,
-                                               kN32_SkColorType);
-        push_src("colorImage", "color_codec_baseline", src);
-
-        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_HPZR30w_Mode, kN32_SkColorType);
-        push_src("colorImage", "color_codec_HPZR30w", src);
-        // TODO (msarett):
-        // Should we test this Dst in F16 mode (even though the Dst gamma is 2.2 instead of sRGB)?
-
-        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_sRGB_Mode, kN32_SkColorType);
-        push_src("colorImage", "color_codec_sRGB_kN32", src);
-        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_sRGB_Mode, kRGBA_F16_SkColorType);
-        push_src("colorImage", "color_codec_sRGB_kF16", src);
+        push_src("colorImage", "decode_native", new ColorCodecSrc(colorImage, false));
+        push_src("colorImage", "decode_to_dst", new ColorCodecSrc(colorImage,  true));
     }
 
     return true;
@@ -1053,7 +1042,8 @@ static bool dump_png(SkBitmap bitmap, const char* path, const char* md5) {
     // PNGs can't hold out-of-gamut values, so if we're likely to be holding them,
     // convert to a wide gamut, giving us the best chance to have the PNG look like our colors.
     SkBitmap wide;
-    if (pm.colorType() >= kRGBA_F16_SkColorType) {
+    if (pm.colorType() >= kRGBA_F16Norm_SkColorType) {
+        // TODO: F16Norm being encoded this way is temporary, to help hunt down diffs with esrgb.
         wide.allocPixels(pm.info().makeColorSpace(rec2020()));
         SkAssertResult(wide.writePixels(pm, 0,0));
         SkAssertResult(wide.peekPixels(&pm));
@@ -1251,7 +1241,6 @@ struct Task {
                             const char* ext,
                             SkStream* data, size_t len,
                             const SkBitmap* bitmap) {
-        SkColorSpace* cs = bitmap ? bitmap->info().colorSpace() : nullptr;
 
         JsonWriter::BitmapResult result;
         result.name          = task.src->name();
@@ -1259,9 +1248,13 @@ struct Task {
         result.sourceType    = task.src.tag;
         result.sourceOptions = task.src.options;
         result.ext           = ext;
-        result.gamut         = identify_gamut(cs);
-        result.transferFn    = identify_transfer_fn(cs);
         result.md5           = md5;
+        if (bitmap) {
+            result.gamut         = identify_gamut               (bitmap->colorSpace());
+            result.transferFn    = identify_transfer_fn         (bitmap->colorSpace());
+            result.colorType     = sk_tool_utils::colortype_name(bitmap->colorType ());
+            result.alphaType     = sk_tool_utils::alphatype_name(bitmap->alphaType ());
+        }
         JsonWriter::AddBitmapResult(result);
 
         // If an MD5 is uninteresting, we want it noted in the JSON file,

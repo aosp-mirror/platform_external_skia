@@ -7,7 +7,6 @@
 
 #include "SkParticleEffect.h"
 
-#include "SkAnimTimer.h"
 #include "SkCanvas.h"
 #include "SkColorData.h"
 #include "SkPaint.h"
@@ -39,21 +38,20 @@ SkParticleEffect::SkParticleEffect(sk_sp<SkParticleEffectParams> params, const S
     this->setCapacity(fParams->fMaxCount);
 }
 
-void SkParticleEffect::start(const SkAnimTimer& timer, bool looping) {
+void SkParticleEffect::start(double now, bool looping) {
     fCount = 0;
-    fLastTime = fSpawnTime = timer.secs();
+    fLastTime = fSpawnTime = now;
     fSpawnRemainder = 0.0f;
     fLooping = looping;
 }
 
-void SkParticleEffect::update(const SkAnimTimer& timer) {
-    if (!timer.isRunning() || !this->isAlive() || !fParams->fDrawable) {
+void SkParticleEffect::update(double now) {
+    if (!this->isAlive() || !fParams->fDrawable) {
         return;
     }
 
-    double now = timer.secs();
     float deltaTime = static_cast<float>(now - fLastTime);
-    if (deltaTime < 0.0f) {
+    if (deltaTime <= 0.0f) {
         return;
     }
     fLastTime = now;
