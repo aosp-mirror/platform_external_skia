@@ -753,6 +753,22 @@ void Viewer::updateTitle() {
 
     paintFlag(&SkPaintFields::fAntiAlias, &SkPaint::isAntiAlias, "Antialias", "Alias");
     paintFlag(&SkPaintFields::fDither, &SkPaint::isDither, "DITHER", "No Dither");
+    if (fPaintOverrides.fFilterQuality) {
+        switch (fPaint.getFilterQuality()) {
+            case kNone_SkFilterQuality:
+                paintTitle.append("NoFilter");
+                break;
+            case kLow_SkFilterQuality:
+                paintTitle.append("LowFilter");
+                break;
+            case kMedium_SkFilterQuality:
+                paintTitle.append("MediumFilter");
+                break;
+            case kHigh_SkFilterQuality:
+                paintTitle.append("HighFilter");
+                break;
+        }
+    }
 
     fontFlag(&SkFontFields::fForceAutoHinting, &SkFont::isForceAutoHinting,
              "Force Autohint", "No Force Autohint");
@@ -1063,10 +1079,10 @@ public:
             const SkTextBlobBuilder::RunBuffer& runBuffer
                 = it.positioning() == SkTextBlobRunIterator::kDefault_Positioning
                     ? SkTextBlobBuilderPriv::AllocRunText(&builder, font,
-                        it.offset().x(),it.offset().y(), it.glyphCount(), it.textSize(), SkString())
+                        it.glyphCount(), it.offset().x(),it.offset().y(), it.textSize(), SkString())
                 : it.positioning() == SkTextBlobRunIterator::kHorizontal_Positioning
                     ? SkTextBlobBuilderPriv::AllocRunTextPosH(&builder, font,
-                        it.offset().y(), it.glyphCount(), it.textSize(), SkString())
+                        it.glyphCount(), it.offset().y(), it.textSize(), SkString())
                 : it.positioning() == SkTextBlobRunIterator::kFull_Positioning
                     ? SkTextBlobBuilderPriv::AllocRunTextPos(&builder, font,
                         it.glyphCount(), it.textSize(), SkString())
@@ -1137,6 +1153,9 @@ public:
         }
         if (fPaintOverrides->fDither) {
             paint->writable()->setDither(fPaint->isDither());
+        }
+        if (fPaintOverrides->fFilterQuality) {
+            paint->writable()->setFilterQuality(fPaint->getFilterQuality());
         }
         return true;
     }
@@ -1552,6 +1571,13 @@ void Viewer::drawImGui() {
                 }
             }
 
+            if (ImGui::CollapsingHeader("Tiling")) {
+                ImGui::Checkbox("Enable", &fTiled);
+                ImGui::Checkbox("Draw Boundaries", &fDrawTileBoundaries);
+                ImGui::SliderFloat("Horizontal", &fTileScale.fWidth, 0.1f, 1.0f);
+                ImGui::SliderFloat("Vertical", &fTileScale.fHeight, 0.1f, 1.0f);
+            }
+
             if (ImGui::CollapsingHeader("Transform")) {
                 float zoom = fZoomLevel;
                 if (ImGui::SliderFloat("Zoom", &zoom, MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL)) {
@@ -1574,12 +1600,6 @@ void Viewer::drawImGui() {
                     this->preTouchMatrixChanged();
                     paramsChanged = true;
                     fOffset = {0.5f, 0.5f};
-                }
-                if (ImGui::CollapsingHeader("Tiling")) {
-                    ImGui::Checkbox("Enable", &fTiled);
-                    ImGui::Checkbox("Draw Boundaries", &fDrawTileBoundaries);
-                    ImGui::SliderFloat("Horizontal", &fTileScale.fWidth, 0.1f, 1.0f);
-                    ImGui::SliderFloat("Vertical", &fTileScale.fHeight, 0.1f, 1.0f);
                 }
                 int perspectiveMode = static_cast<int>(fPerspectiveMode);
                 if (ImGui::Combo("Perspective", &perspectiveMode, "Off\0Real\0Fake\0\0")) {
@@ -1665,6 +1685,23 @@ void Viewer::drawImGui() {
                           "Default\0No Dither\0Dither\0\0",
                           &SkPaintFields::fDither,
                           &SkPaint::isDither, &SkPaint::setDither);
+
+                int filterQualityIdx = 0;
+                if (fPaintOverrides.fFilterQuality) {
+                    filterQualityIdx = SkTo<int>(fPaint.getFilterQuality()) + 1;
+                }
+                if (ImGui::Combo("Filter Quality", &filterQualityIdx,
+                                 "Default\0None\0Low\0Medium\0High\0\0"))
+                {
+                    if (filterQualityIdx == 0) {
+                        fPaintOverrides.fFilterQuality = false;
+                        fPaint.setFilterQuality(kNone_SkFilterQuality);
+                    } else {
+                        fPaint.setFilterQuality(SkTo<SkFilterQuality>(filterQualityIdx - 1));
+                        fPaintOverrides.fFilterQuality = true;
+                    }
+                    paramsChanged = true;
+                }
             }
 
             if (ImGui::CollapsingHeader("Font")) {

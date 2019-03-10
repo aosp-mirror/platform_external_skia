@@ -29,6 +29,10 @@ namespace SkSL {
     class Compiler;
 }
 
+// Helper macros for autorelease pools
+#define SK_BEGIN_AUTORELEASE_BLOCK @autoreleasepool {
+#define SK_END_AUTORELEASE_BLOCK }
+
 class GrMtlGpu : public GrGpu {
 public:
     static sk_sp<GrGpu> Make(GrContext* context, const GrContextOptions& options,
@@ -126,6 +130,12 @@ private:
              id<MTLDevice> device, id<MTLCommandQueue> queue, MTLFeatureSet featureSet);
 
     void onResetContext(uint32_t resetBits) override {}
+
+    void querySampleLocations(
+            GrRenderTarget*, const GrStencilSettings&, SkTArray<SkPoint>*) override {
+        SkASSERT(!this->caps()->sampleLocationsSupport());
+        SK_ABORT("Sample locations not yet implemented for Metal.");
+    }
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 

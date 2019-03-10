@@ -29,7 +29,7 @@ VkPipelineStageFlags GrVkImage::LayoutToPipelineSrcStageFlags(const VkImageLayou
         return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     } else if (VK_IMAGE_LAYOUT_PREINITIALIZED == layout) {
         return VK_PIPELINE_STAGE_HOST_BIT;
-    } else if (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+    } else if (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR == layout) {
         return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
 
@@ -66,7 +66,7 @@ VkAccessFlags GrVkImage::LayoutToSrcAccessMask(const VkImageLayout layout) {
         flags = VK_ACCESS_TRANSFER_READ_BIT;
     } else if (VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL == layout) {
         flags = VK_ACCESS_SHADER_READ_BIT;
-    } else if (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+    } else if (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR == layout) {
         flags = 0;
     }
     return flags;
@@ -270,18 +270,11 @@ void GrVkImage::Resource::freeGPUData(GrVkGpu* gpu) const {
     GrVkMemory::FreeImageMemory(gpu, isLinear, fAlloc);
 }
 
-void GrVkImage::Resource::addIdleProc(GrVkTexture* owningTexture,
-                                      sk_sp<GrRefCntedCallback> idleProc) const {
-    SkASSERT(!fOwningTexture || fOwningTexture == owningTexture);
-    fOwningTexture = owningTexture;
-    fIdleProcs.push_back(std::move(idleProc));
+void GrVkImage::Resource::replaceIdleProc(
+        GrVkTexture* owner, sk_sp<GrRefCntedCallback> idleCallback) const {
+    fOwningTexture = owner;
+    fIdleCallback = std::move(idleCallback);
 }
-
-int GrVkImage::Resource::idleProcCnt() const { return fIdleProcs.count(); }
-
-sk_sp<GrRefCntedCallback> GrVkImage::Resource::idleProc(int i) const { return fIdleProcs[i]; }
-
-void GrVkImage::Resource::resetIdleProcs() const { fIdleProcs.reset(); }
 
 void GrVkImage::Resource::removeOwningTexture() const { fOwningTexture = nullptr; }
 
@@ -289,18 +282,16 @@ void GrVkImage::Resource::notifyAddedToCommandBuffer() const { ++fNumCommandBuff
 
 void GrVkImage::Resource::notifyRemovedFromCommandBuffer() const {
     SkASSERT(fNumCommandBufferOwners);
-    if (--fNumCommandBufferOwners || !fIdleProcs.count()) {
+    if (--fNumCommandBufferOwners || !fIdleCallback) {
         return;
     }
     if (fOwningTexture) {
         if (fOwningTexture->resourcePriv().hasRefOrPendingIO()) {
-            // Wait for the texture to become idle in the cache to call the procs.
             return;
         }
-        fOwningTexture->callIdleProcsOnBehalfOfResource();
-    } else {
-        fIdleProcs.reset();
+        fOwningTexture->removeIdleProc();
     }
+    fIdleCallback.reset();
 }
 
 void GrVkImage::BorrowedResource::freeGPUData(GrVkGpu* gpu) const {

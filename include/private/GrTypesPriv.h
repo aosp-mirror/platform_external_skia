@@ -640,110 +640,6 @@ static inline bool GrSLTypeIsCombinedSamplerType(GrSLType type) {
     return false;
 }
 
-static inline bool GrSLTypeAcceptsPrecision(GrSLType type) {
-    switch (type) {
-        case kTexture2DSampler_GrSLType:
-        case kTextureExternalSampler_GrSLType:
-        case kTexture2DRectSampler_GrSLType:
-            return true;
-
-        case kVoid_GrSLType:
-        case kBool_GrSLType:
-        case kByte_GrSLType:
-        case kByte2_GrSLType:
-        case kByte3_GrSLType:
-        case kByte4_GrSLType:
-        case kUByte_GrSLType:
-        case kUByte2_GrSLType:
-        case kUByte3_GrSLType:
-        case kUByte4_GrSLType:
-        case kShort_GrSLType:
-        case kShort2_GrSLType:
-        case kShort3_GrSLType:
-        case kShort4_GrSLType:
-        case kUShort_GrSLType:
-        case kUShort2_GrSLType:
-        case kUShort3_GrSLType:
-        case kUShort4_GrSLType:
-        case kFloat_GrSLType:
-        case kFloat2_GrSLType:
-        case kFloat3_GrSLType:
-        case kFloat4_GrSLType:
-        case kFloat2x2_GrSLType:
-        case kFloat3x3_GrSLType:
-        case kFloat4x4_GrSLType:
-        case kHalf_GrSLType:
-        case kHalf2_GrSLType:
-        case kHalf3_GrSLType:
-        case kHalf4_GrSLType:
-        case kHalf2x2_GrSLType:
-        case kHalf3x3_GrSLType:
-        case kHalf4x4_GrSLType:
-        case kInt_GrSLType:
-        case kInt2_GrSLType:
-        case kInt3_GrSLType:
-        case kInt4_GrSLType:
-        case kUint_GrSLType:
-        case kUint2_GrSLType:
-            return false;
-    }
-    SK_ABORT("Unexpected type");
-    return false;
-}
-
-// temporarily accepting (but ignoring) precision modifiers on the new types; this will be killed
-// in a future CL
-static inline bool GrSLTypeTemporarilyAcceptsPrecision(GrSLType type) {
-    switch (type) {
-        case kShort_GrSLType:
-        case kUShort_GrSLType:
-        case kFloat_GrSLType:
-        case kFloat2_GrSLType:
-        case kFloat3_GrSLType:
-        case kFloat4_GrSLType:
-        case kFloat2x2_GrSLType:
-        case kFloat3x3_GrSLType:
-        case kFloat4x4_GrSLType:
-        case kHalf_GrSLType:
-        case kHalf2_GrSLType:
-        case kHalf3_GrSLType:
-        case kHalf4_GrSLType:
-        case kHalf2x2_GrSLType:
-        case kHalf3x3_GrSLType:
-        case kHalf4x4_GrSLType:
-        case kInt_GrSLType:
-        case kInt2_GrSLType:
-        case kInt3_GrSLType:
-        case kInt4_GrSLType:
-        case kUint_GrSLType:
-        case kUint2_GrSLType:
-        case kTexture2DSampler_GrSLType:
-        case kTextureExternalSampler_GrSLType:
-        case kTexture2DRectSampler_GrSLType:
-            return true;
-
-        case kVoid_GrSLType:
-        case kBool_GrSLType:
-        case kByte_GrSLType:
-        case kByte2_GrSLType:
-        case kByte3_GrSLType:
-        case kByte4_GrSLType:
-        case kUByte_GrSLType:
-        case kUByte2_GrSLType:
-        case kUByte3_GrSLType:
-        case kUByte4_GrSLType:
-        case kShort2_GrSLType:
-        case kShort3_GrSLType:
-        case kShort4_GrSLType:
-        case kUShort2_GrSLType:
-        case kUShort3_GrSLType:
-        case kUShort4_GrSLType:
-            return false;
-    }
-    SK_ABORT("Unexpected type");
-    return false;
-}
-
 //////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -1555,7 +1451,8 @@ static inline GrPixelConfig GrColorTypeToPixelConfig(GrColorType config,
 }
 
 /**
- * Ref-counted object that calls a callback from its destructor.
+ * Ref-counted object that calls a callback from its destructor. These can be chained together. Any
+ * owner can cancel calling the callback via abandon().
  */
 class GrRefCntedCallback : public SkRefCnt {
 public:
@@ -1567,9 +1464,28 @@ public:
     }
     ~GrRefCntedCallback() override { fReleaseProc ? fReleaseProc(fReleaseCtx) : void(); }
 
+    /**
+     * After abandon is called the release proc will no longer be called in the destructor. This
+     * does not recurse on child release procs or unref them.
+     */
+    void abandon() {
+        fReleaseProc = nullptr;
+        fReleaseCtx = nullptr;
+    }
+
+    /** Adds another GrRefCntedCallback that this will unref in its destructor. */
+    void addChild(sk_sp<GrRefCntedCallback> next) {
+        if (!fNext) {
+            fNext = std::move(next);
+            return;
+        }
+        fNext->addChild(std::move(next));
+    }
+
     Context context() const { return fReleaseCtx; }
 
 private:
+    sk_sp<GrRefCntedCallback> fNext;
     Callback fReleaseProc;
     Context fReleaseCtx;
 };
