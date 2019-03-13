@@ -331,5 +331,5 @@ SkColorMatrixFilterRowMajor255::MakeSingleChannelOutput(const SkScalar row[5]) {
         memcpy(cf->fMatrix + 5 * i, row, sizeof(SkScalar) * 5);
     }
     cf->initState();
-    return cf;
+    return std::move(cf);
 }
