@@ -568,6 +568,7 @@ cc_library_static {
           "src/gpu/GrContext_Base.cpp",
           "src/gpu/GrDDLContext.cpp",
           "src/gpu/GrDefaultGeoProcFactory.cpp",
+          "src/gpu/GrDeinstantiateProxyTracker.cpp",
           "src/gpu/GrDistanceFieldGenFromVector.cpp",
           "src/gpu/GrDrawOpAtlas.cpp",
           "src/gpu/GrDrawOpTest.cpp",
@@ -997,6 +998,9 @@ cc_defaults {
             "libvulkan",
             "libnativewindow",
         ],
+        export_shared_lib_headers: [
+            "libvulkan",
+        ],
       },
       host: {
         static_libs: [
@@ -1230,6 +1234,7 @@ cc_test {
         "gm/crbug_899512.cpp",
         "gm/crbug_905548.cpp",
         "gm/crbug_918512.cpp",
+        "gm/crbug_938592.cpp",
         "gm/croppedrects.cpp",
         "gm/crosscontextimage.cpp",
         "gm/cubicpaths.cpp",
@@ -2182,6 +2187,7 @@ cc_test {
         "gm/crbug_899512.cpp",
         "gm/crbug_905548.cpp",
         "gm/crbug_918512.cpp",
+        "gm/crbug_938592.cpp",
         "gm/croppedrects.cpp",
         "gm/crosscontextimage.cpp",
         "gm/cubicpaths.cpp",
