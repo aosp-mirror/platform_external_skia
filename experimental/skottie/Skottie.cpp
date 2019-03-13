@@ -139,7 +139,7 @@ sk_sp<sksg::RenderNode> AttachOpacity(const Json::Value& jtransform, AttachConte
             opacityNode->setOpacity(o * 0.01f);
         });
 
-    return opacityNode;
+    return std::move(opacityNode);
 }
 
 sk_sp<sksg::RenderNode> AttachComposition(const Json::Value&, AttachContext* ctx);
@@ -181,7 +181,7 @@ sk_sp<sksg::GeometryNode> AttachRRectGeometry(const Json::Value& jrect, AttachCo
         return nullptr;
     }
 
-    return rect_node;
+    return std::move(rect_node);
 }
 
 sk_sp<sksg::GeometryNode> AttachEllipseGeometry(const Json::Value& jellipse, AttachContext* ctx) {
@@ -205,7 +205,7 @@ sk_sp<sksg::GeometryNode> AttachEllipseGeometry(const Json::Value& jellipse, Att
         return nullptr;
     }
 
-    return rect_node;
+    return std::move(rect_node);
 }
 
 sk_sp<sksg::GeometryNode> AttachPolystarGeometry(const Json::Value& jstar, AttachContext* ctx) {
@@ -254,7 +254,7 @@ sk_sp<sksg::GeometryNode> AttachPolystarGeometry(const Json::Value& jstar, Attac
             composite->setRotation(r);
         });
 
-    return path_node;
+    return std::move(path_node);
 }
 
 sk_sp<sksg::Color> AttachColor(const Json::Value& obj, AttachContext* ctx) {
@@ -1099,7 +1099,7 @@ sk_sp<sksg::RenderNode> AttachLayer(const Json::Value& jlayer,
                                       std::move(layerCtx->fCurrentMatte));
     }
 
-    return controller_node;
+    return std::move(controller_node);
 }
 
 sk_sp<sksg::RenderNode> AttachComposition(const Json::Value& comp, AttachContext* ctx) {
@@ -1132,7 +1132,7 @@ sk_sp<sksg::RenderNode> AttachComposition(const Json::Value& comp, AttachContext
     LOG("** Attached composition '%s': %d layers.\n",
         ParseDefault(comp["id"], SkString()).c_str(), layers.count());
 
-    return comp_group;
+    return std::move(comp_group);
 }
 
 } // namespace
