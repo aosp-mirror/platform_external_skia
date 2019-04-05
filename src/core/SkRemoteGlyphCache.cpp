@@ -124,15 +124,17 @@ public:
     }
 
     bool readDescriptor(SkAutoDescriptor* ad) {
-        uint32_t desc_length = 0u;
-        if (!read<uint32_t>(&desc_length)) return false;
+        uint32_t descLength = 0u;
+        if (!read<uint32_t>(&descLength)) return false;
 
-        auto* result = this->ensureAtLeast(desc_length, alignof(SkDescriptor));
+        auto* result = this->ensureAtLeast(descLength, alignof(SkDescriptor));
         if (!result) return false;
 
-        ad->reset(desc_length);
-        memcpy(ad->getDesc(), const_cast<const char*>(result), desc_length);
-        return true;
+        ad->reset(descLength);
+        memcpy(ad->getDesc(), const_cast<const char*>(result), descLength);
+
+        if (ad->getDesc()->getLength() > descLength) return false;
+        return ad->getDesc()->isValid();
     }
 
     const volatile void* read(size_t size, size_t alignment) {
@@ -619,10 +621,10 @@ SkStrikeClient::SkStrikeClient(sk_sp<DiscardableHandleManager> discardableManage
 
 SkStrikeClient::~SkStrikeClient() = default;
 
-#define READ_FAILURE                      \
-    {                                     \
-        SkDEBUGFAIL("Bad serialization"); \
-        return false;                     \
+#define READ_FAILURE                             \
+    {                                            \
+        SkDebugf("Bad font data serialization"); \
+        return false;                            \
     }
 
 static bool readGlyph(SkTLazy<SkGlyph>& glyph, Deserializer* deserializer) {
