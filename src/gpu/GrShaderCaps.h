@@ -86,8 +86,6 @@ public:
 
     bool halfIs32Bits() const { return fHalfIs32Bits; }
 
-    bool hasLowFragmentPrecision() const { return fHasLowFragmentPrecision; }
-
     bool unsignedSupport() const { return fUnsignedSupport; }
 
     // SkSL only.
@@ -265,7 +263,6 @@ private:
     bool fFPManipulationSupport             : 1;
     bool fFloatIs32Bits                     : 1;
     bool fHalfIs32Bits                      : 1;
-    bool fHasLowFragmentPrecision           : 1;
     bool fUnsignedSupport                   : 1;
 
     // Used by SkSL to know when to generate polyfills.

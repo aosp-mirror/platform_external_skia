@@ -51,11 +51,21 @@ public:
     explicit SkGlyphRunListPainter(const GrRenderTargetContext& renderTargetContext);
 #endif  // SK_SUPPORT_GPU
 
+    struct PathAndPos {
+        const SkPath* path;
+        SkPoint position;
+    };
+
+    struct GlyphAndPos {
+        const SkGlyph* glyph;
+        SkPoint position;
+    };
+
     class BitmapDevicePainter {
     public:
         virtual ~BitmapDevicePainter() = default;
 
-        virtual void paintPaths(SkSpan<const SkPathPos> pathsAndPositions,
+        virtual void paintPaths(SkSpan<const PathAndPos> pathsAndPositions,
                                 SkScalar scale,
                                 const SkPaint& paint) const = 0;
 
@@ -95,17 +105,11 @@ private:
     // TODO: Remove once I can hoist ensureBuffers above the list for loop in all cases.
     ScopedBuffers SK_WARN_UNUSED_RESULT ensureBuffers(const SkGlyphRun& glyphRun);
 
-    /**
-     *  @param fARGBPositions in source space
-     *  @param fARGBGlyphsIDs the glyphs to process
-     *  @param fGlyphPos used as scratch space
-     *  @param maxSourceGlyphDimension the longest dimension of any glyph as if all fARGBGlyphsIDs
-     *                                 were drawn in source space (as if viewMatrix were identity)
-     */
-    void processARGBFallback(SkScalar maxSourceGlyphDimension,
+    void processARGBFallback(SkScalar maxGlyphDimension,
                              const SkPaint& runPaint,
                              const SkFont& runFont,
                              const SkMatrix& viewMatrix,
+                             SkScalar cacheToSourceScale,
                              SkGlyphRunPainterInterface* process);
 
     // The props as on the actual device.
@@ -119,9 +123,9 @@ private:
 
     int fMaxRunSize{0};
     SkAutoTMalloc<SkPoint> fPositions;
-    SkAutoTMalloc<SkGlyphPos> fGlyphPos;
+    SkAutoTMalloc<GlyphAndPos> fGlyphPos;
 
-    std::vector<SkGlyphPos> fPaths;
+    std::vector<GlyphAndPos> fPaths;
 
     // Vectors for tracking ARGB fallback information.
     std::vector<SkGlyphID> fARGBGlyphsIDs;
@@ -146,15 +150,15 @@ public:
 
     virtual void startRun(const SkGlyphRun& glyphRun, bool useSDFT) = 0;
 
-    virtual void processDeviceMasks(SkSpan<const SkGlyphPos> masks,
+    virtual void processDeviceMasks(SkSpan<const SkGlyphRunListPainter::GlyphAndPos> masks,
                                     SkStrikeInterface* strike) = 0;
 
-    virtual void processSourcePaths(SkSpan<const SkGlyphPos> paths,
+    virtual void processSourcePaths(SkSpan<const SkGlyphRunListPainter::GlyphAndPos> paths,
                                     SkStrikeInterface* strike, SkScalar cacheToSourceScale) = 0;
 
-    virtual void processDevicePaths(SkSpan<const SkGlyphPos> paths) = 0;
+    virtual void processDevicePaths(SkSpan<const SkGlyphRunListPainter::GlyphAndPos> paths) = 0;
 
-    virtual void processSourceSDFT(SkSpan<const SkGlyphPos> masks,
+    virtual void processSourceSDFT(SkSpan<const SkGlyphRunListPainter::GlyphAndPos> masks,
                                    SkStrikeInterface* strike,
                                    const SkFont& runFont,
                                    SkScalar cacheToSourceScale,
@@ -162,12 +166,12 @@ public:
                                    SkScalar maxScale,
                                    bool hasWCoord) = 0;
 
-    virtual void processSourceFallback(SkSpan<const SkGlyphPos> masks,
+    virtual void processSourceFallback(SkSpan<const SkGlyphRunListPainter::GlyphAndPos> masks,
                                        SkStrikeInterface* strike,
                                        SkScalar cacheToSourceScale,
                                        bool hasW) = 0;
 
-    virtual void processDeviceFallback(SkSpan<const SkGlyphPos> masks,
+    virtual void processDeviceFallback(SkSpan<const SkGlyphRunListPainter::GlyphAndPos> masks,
                                        SkStrikeInterface* strike) = 0;
 
 };

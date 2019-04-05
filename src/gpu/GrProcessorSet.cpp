@@ -235,7 +235,6 @@ GrProcessorSet::Analysis GrProcessorSet::finalize(
     }
     fFragmentProcessorOffset = colorFPsToEliminate;
     fColorFragmentProcessorCnt -= colorFPsToEliminate;
-    analysis.fHasColorFragmentProcessor = (fColorFragmentProcessorCnt != 0);
 
     bool hasMixedSampledCoverage = (GrFSAAType::kMixedSamples == fsaaType)
             && !userStencil->testAlwaysPasses((clip) ? clip->hasStencilClip() : false);
