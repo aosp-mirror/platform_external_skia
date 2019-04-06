@@ -70,9 +70,10 @@ public:
      */
     GrProcessorSet::Analysis finalizeProcessors(
             const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType,
-            GrProcessorAnalysisCoverage geometryCoverage, GrProcessorAnalysisColor* geometryColor) {
+            GrClampType clampType, GrProcessorAnalysisCoverage geometryCoverage,
+            GrProcessorAnalysisColor* geometryColor) {
         return this->finalizeProcessors(caps, clip, &GrUserStencilSettings::kUnused, fsaaType,
-                                        geometryCoverage, geometryColor);
+                                        clampType, geometryCoverage, geometryColor);
     }
 
     /**
@@ -81,7 +82,7 @@ public:
      * changed the op must override its geometry processor color output with the new color.
      */
     GrProcessorSet::Analysis finalizeProcessors(
-            const GrCaps&, const GrAppliedClip*, GrFSAAType,
+            const GrCaps&, const GrAppliedClip*, GrFSAAType, GrClampType,
             GrProcessorAnalysisCoverage geometryCoverage, SkPMColor4f* geometryColor);
 
     bool isTrivial() const {
@@ -93,7 +94,7 @@ public:
         return fUsesLocalCoords;
     }
 
-    bool compatibleWithAlphaAsCoverage() const { return fCompatibleWithAlphaAsCoveage; }
+    bool compatibleWithCoverageAsAlpha() const { return fCompatibleWithCoverageAsAlpha; }
 
     struct MakeArgs {
     private:
@@ -126,13 +127,14 @@ protected:
 
     GrProcessorSet::Analysis finalizeProcessors(
             const GrCaps& caps, const GrAppliedClip*, const GrUserStencilSettings*, GrFSAAType,
-            GrProcessorAnalysisCoverage geometryCoverage, GrProcessorAnalysisColor* geometryColor);
+            GrClampType, GrProcessorAnalysisCoverage geometryCoverage,
+            GrProcessorAnalysisColor* geometryColor);
 
     GrProcessorSet* fProcessors;
     unsigned fPipelineFlags : 8;
     unsigned fAAType : 2;
     unsigned fUsesLocalCoords : 1;
-    unsigned fCompatibleWithAlphaAsCoveage : 1;
+    unsigned fCompatibleWithCoverageAsAlpha : 1;
     SkDEBUGCODE(unsigned fMadePipeline : 1;)
     SkDEBUGCODE(unsigned fDidAnalysis : 1;)
 };
@@ -164,20 +166,21 @@ public:
 
     GrProcessorSet::Analysis finalizeProcessors(
             const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType,
-            GrProcessorAnalysisCoverage geometryCoverage, GrProcessorAnalysisColor* geometryColor) {
+            GrClampType clampType, GrProcessorAnalysisCoverage geometryCoverage,
+            GrProcessorAnalysisColor* geometryColor) {
         return this->INHERITED::finalizeProcessors(
-                caps, clip, fStencilSettings, fsaaType, geometryCoverage, geometryColor);
+                caps, clip, fStencilSettings, fsaaType, clampType, geometryCoverage, geometryColor);
     }
 
     GrProcessorSet::Analysis finalizeProcessors(
-            const GrCaps&, const GrAppliedClip*, GrFSAAType,
+            const GrCaps&, const GrAppliedClip*, GrFSAAType, GrClampType,
             GrProcessorAnalysisCoverage geometryCoverage, SkPMColor4f* geometryColor);
 
     using GrSimpleMeshDrawOpHelper::aaType;
     using GrSimpleMeshDrawOpHelper::setAAType;
     using GrSimpleMeshDrawOpHelper::isTrivial;
     using GrSimpleMeshDrawOpHelper::usesLocalCoords;
-    using GrSimpleMeshDrawOpHelper::compatibleWithAlphaAsCoverage;
+    using GrSimpleMeshDrawOpHelper::compatibleWithCoverageAsAlpha;
 
     bool isCompatible(const GrSimpleMeshDrawOpHelperWithStencil& that, const GrCaps&,
                       const SkRect& thisBounds, const SkRect& thatBounds,

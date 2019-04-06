@@ -231,12 +231,12 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrFSAAType fsaaType, GrClampType clampType) override {
         GrProcessorAnalysisCoverage coverage = fAntiAlias
                                                        ? GrProcessorAnalysisCoverage::kSingleChannel
                                                        : GrProcessorAnalysisCoverage::kNone;
-        return fHelper.finalizeProcessors(caps, clip, fsaaType, coverage, &fColor);
+        return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType, coverage, &fColor);
     }
 
 private:
@@ -333,7 +333,7 @@ private:
                                                         : LocalCoords::kUnused_Type;
             Coverage::Type coverageType;
             if (fAntiAlias) {
-                if (fHelper.compatibleWithAlphaAsCoverage()) {
+                if (fHelper.compatibleWithCoverageAsAlpha()) {
                     coverageType = Coverage::kAttributeTweakAlpha_Type;
                 } else {
                     coverageType = Coverage::kAttribute_Type;

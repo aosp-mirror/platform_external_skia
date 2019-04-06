@@ -122,8 +122,8 @@ public:
     }
 #endif
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrFSAAType fsaaType, GrClampType clampType) override {
         // Initialize aggregate color analysis with the first quad's color (which always exists)
         SkASSERT(this->quadCount() > 0);
         GrProcessorAnalysisColor quadColors(fDeviceQuads.metadata(0).fColor);
@@ -143,7 +143,8 @@ public:
         GrProcessorAnalysisCoverage coverage = fHelper.aaType() == GrAAType::kCoverage ?
                 GrProcessorAnalysisCoverage::kSingleChannel :
                 GrProcessorAnalysisCoverage::kNone;
-        auto result = fHelper.finalizeProcessors(caps, clip, fsaaType, coverage, &quadColors);
+        auto result = fHelper.finalizeProcessors(
+                caps, clip, fsaaType, clampType, coverage, &quadColors);
         // If there is a constant color after analysis, that means all of the quads should be set
         // to the same color (even if they started out with different colors).
         SkPMColor4f colorOverride;
@@ -191,7 +192,7 @@ private:
 
         VertexSpec vertexSpec(fDeviceQuads.quadType(), fColorType, fLocalQuads.quadType(),
                               fHelper.usesLocalCoords(), Domain::kNo, fHelper.aaType(),
-                              fHelper.compatibleWithAlphaAsCoverage());
+                              fHelper.compatibleWithCoverageAsAlpha());
         // Make sure that if the op thought it was a solid color, the vertex spec does not use
         // local coords.
         SkASSERT(!fHelper.isTrivial() || !fHelper.usesLocalCoords());

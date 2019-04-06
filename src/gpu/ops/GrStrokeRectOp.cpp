@@ -163,10 +163,10 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrFSAAType fsaaType, GrClampType clampType) override {
         return fHelper.finalizeProcessors(
-                caps, clip, fsaaType, GrProcessorAnalysisCoverage::kNone, &fColor);
+                caps, clip, fsaaType, clampType, GrProcessorAnalysisCoverage::kNone, &fColor);
     }
 
 private:
@@ -410,10 +410,10 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrFSAAType fsaaType, GrClampType clampType) override {
         return fHelper.finalizeProcessors(
-                caps, clip, fsaaType, GrProcessorAnalysisCoverage::kSingleChannel,
+                caps, clip, fsaaType, clampType, GrProcessorAnalysisCoverage::kSingleChannel,
                 &fRects.back().fColor);
     }
 
@@ -466,7 +466,7 @@ private:
 
 void AAStrokeRectOp::onPrepareDraws(Target* target) {
     sk_sp<GrGeometryProcessor> gp(create_aa_stroke_rect_gp(target->caps().shaderCaps(),
-                                                           fHelper.compatibleWithAlphaAsCoverage(),
+                                                           fHelper.compatibleWithCoverageAsAlpha(),
                                                            this->viewMatrix(),
                                                            fHelper.usesLocalCoords(),
                                                            fWideColor));
@@ -506,7 +506,7 @@ void AAStrokeRectOp::onPrepareDraws(Target* target) {
                                            info.fDevInside,
                                            fMiterStroke,
                                            info.fDegenerate,
-                                           fHelper.compatibleWithAlphaAsCoverage());
+                                           fHelper.compatibleWithCoverageAsAlpha());
     }
     helper.recordDraw(target, std::move(gp));
 }
