@@ -16,7 +16,6 @@ DECLARE_int32(gpuThreads);
 DECLARE_bool(cachePathMasks);
 DECLARE_bool(noGS);
 DECLARE_string(pr);
-DECLARE_bool(disableExplicitAlloc);
 DECLARE_bool(reduceOpListSplitting);
 
 inline GpuPathRenderers get_named_pathrenderers_flags(const char* name) {
@@ -47,10 +46,10 @@ inline GpuPathRenderers get_named_pathrenderers_flags(const char* name) {
 
 inline GpuPathRenderers CollectGpuPathRenderersFromFlags() {
     if (FLAGS_pr.isEmpty()) {
-        return GpuPathRenderers::kAll;
+        return GpuPathRenderers::kDefault;
     }
-    GpuPathRenderers gpuPathRenderers = '~' == FLAGS_pr[0][0]
-            ? GpuPathRenderers::kAll : GpuPathRenderers::kNone;
+    GpuPathRenderers gpuPathRenderers = ('~' == FLAGS_pr[0][0])
+            ? GpuPathRenderers::kDefault : GpuPathRenderers::kNone;
     for (int i = 0; i < FLAGS_pr.count(); ++i) {
         const char* name = FLAGS_pr[i];
         if (name[0] == '~') {

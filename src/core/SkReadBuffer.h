@@ -14,6 +14,7 @@
 #include "SkFont.h"
 #include "SkImageFilter.h"
 #include "SkMaskFilterBase.h"
+#include "SkMixerBase.h"
 #include "SkPaintPriv.h"
 #include "SkPath.h"
 #include "SkPathEffect.h"
@@ -98,7 +99,6 @@ public:
     // peek
     uint8_t peekByte();
 
-    // strings -- the caller is responsible for freeing the string contents
     void readString(SkString* string);
 
     // common data structures
@@ -128,6 +128,7 @@ public:
     sk_sp<SkMaskFilter> readMaskFilter() { return this->readFlattenable<SkMaskFilterBase>(); }
     sk_sp<SkPathEffect> readPathEffect() { return this->readFlattenable<SkPathEffect>(); }
     sk_sp<SkShader> readShader() { return this->readFlattenable<SkShaderBase>(); }
+    sk_sp<SkMixer> readMixer() { return this->readFlattenable<SkMixerBase>(); }
 
     // Reads SkAlign4(bytes), but will only copy bytes into the buffer.
     bool readPad32(void* buffer, size_t bytes);
@@ -208,6 +209,8 @@ public:
     SkFilterQuality checkFilterQuality();
 
 private:
+    const char* readString(size_t* length);
+
     void setInvalid();
     bool readArray(void* value, size_t size, size_t elementSize);
     void setMemory(const void*, size_t);
@@ -311,6 +314,7 @@ public:
     sk_sp<SkMaskFilter>  readMaskFilter()  { return nullptr; }
     sk_sp<SkPathEffect>  readPathEffect()  { return nullptr; }
     sk_sp<SkShader>      readShader()      { return nullptr; }
+    sk_sp<SkMixer>       readMixer()       { return nullptr; }
 
     bool readPad32       (void*,      size_t) { return false; }
     bool readByteArray   (void*,      size_t) { return false; }

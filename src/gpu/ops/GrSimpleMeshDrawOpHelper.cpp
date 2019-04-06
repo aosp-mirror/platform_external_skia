@@ -10,6 +10,7 @@
 #include "GrProcessorSet.h"
 #include "GrRect.h"
 #include "GrUserStencilSettings.h"
+#include "SkGr.h"
 
 GrSimpleMeshDrawOpHelper::GrSimpleMeshDrawOpHelper(const MakeArgs& args, GrAAType aaType,
                                                    Flags flags)
@@ -17,7 +18,7 @@ GrSimpleMeshDrawOpHelper::GrSimpleMeshDrawOpHelper(const MakeArgs& args, GrAATyp
         , fPipelineFlags(0)
         , fAAType((int)aaType)
         , fUsesLocalCoords(false)
-        , fCompatibleWithAlphaAsCoveage(false) {
+        , fCompatibleWithCoverageAsAlpha(false) {
     SkDEBUGCODE(fDidAnalysis = false);
     SkDEBUGCODE(fMadePipeline = false);
     if (GrAATypeIsHW(aaType)) {
@@ -57,23 +58,27 @@ bool GrSimpleMeshDrawOpHelper::isCompatible(const GrSimpleMeshDrawOpHelper& that
     }
     bool result = fPipelineFlags == that.fPipelineFlags && (fAAType == that.fAAType ||
             (noneAsCoverageAA && none_as_coverage_aa_compatible(this->aaType(), that.aaType())));
-    SkASSERT(!result || fCompatibleWithAlphaAsCoveage == that.fCompatibleWithAlphaAsCoveage);
+    SkASSERT(!result || fCompatibleWithCoverageAsAlpha == that.fCompatibleWithCoverageAsAlpha);
     SkASSERT(!result || fUsesLocalCoords == that.fUsesLocalCoords);
     return result;
 }
 
 GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
-        const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType,
-        GrProcessorAnalysisCoverage geometryCoverage, SkPMColor4f* geometryColor) {
+        const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType, GrClampType clampType,
+        GrProcessorAnalysisCoverage geometryCoverage, SkPMColor4f* geometryColor, bool* wideColor) {
     GrProcessorAnalysisColor color = *geometryColor;
-    auto result = this->finalizeProcessors(caps, clip, fsaaType, geometryCoverage, &color);
+    auto result = this->finalizeProcessors(
+            caps, clip, fsaaType, clampType, geometryCoverage, &color);
     color.isConstant(geometryColor);
+    if (wideColor) {
+        *wideColor = SkPMColor4fNeedsWideColor(*geometryColor, clampType, caps);
+    }
     return result;
 }
 
 GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
         const GrCaps& caps, const GrAppliedClip* clip, const GrUserStencilSettings* userStencil,
-        GrFSAAType fsaaType, GrProcessorAnalysisCoverage geometryCoverage,
+        GrFSAAType fsaaType, GrClampType clampType, GrProcessorAnalysisCoverage geometryCoverage,
         GrProcessorAnalysisColor* geometryColor) {
     SkDEBUGCODE(fDidAnalysis = true);
     GrProcessorSet::Analysis analysis;
@@ -85,8 +90,8 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
                                : GrProcessorAnalysisCoverage::kNone;
         }
         SkPMColor4f overrideColor;
-        analysis = fProcessors->finalize(
-                *geometryColor, coverage, clip, userStencil, fsaaType, caps, &overrideColor);
+        analysis = fProcessors->finalize(*geometryColor, coverage, clip, userStencil, fsaaType,
+                                         caps, clampType, &overrideColor);
         if (analysis.inputColorIsOverridden()) {
             *geometryColor = overrideColor;
         }
@@ -94,7 +99,7 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
         analysis = GrProcessorSet::EmptySetAnalysis();
     }
     fUsesLocalCoords = analysis.usesLocalCoords();
-    fCompatibleWithAlphaAsCoveage = analysis.isCompatibleWithCoverageAsAlpha();
+    fCompatibleWithCoverageAsAlpha = analysis.isCompatibleWithCoverageAsAlpha();
     return analysis;
 }
 
@@ -148,11 +153,15 @@ GrDrawOp::FixedFunctionFlags GrSimpleMeshDrawOpHelperWithStencil::fixedFunctionF
 }
 
 GrProcessorSet::Analysis GrSimpleMeshDrawOpHelperWithStencil::finalizeProcessors(
-        const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType,
-        GrProcessorAnalysisCoverage geometryCoverage, SkPMColor4f* geometryColor) {
+        const GrCaps& caps, const GrAppliedClip* clip, GrFSAAType fsaaType, GrClampType clampType,
+        GrProcessorAnalysisCoverage geometryCoverage, SkPMColor4f* geometryColor, bool* wideColor) {
     GrProcessorAnalysisColor color = *geometryColor;
-    auto result = this->finalizeProcessors(caps, clip, fsaaType, geometryCoverage, &color);
+    auto result = this->finalizeProcessors(
+            caps, clip, fsaaType, clampType, geometryCoverage, &color);
     color.isConstant(geometryColor);
+    if (wideColor) {
+        *wideColor = SkPMColor4fNeedsWideColor(*geometryColor, clampType, caps);
+    }
     return result;
 }
 

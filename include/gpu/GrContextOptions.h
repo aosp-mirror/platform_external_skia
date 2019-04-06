@@ -82,7 +82,8 @@ struct SK_API GrContextOptions {
      * rendering artifacts along shared edges if care isn't taken to ensure both contours wind in
      * the same direction.
      */
-    bool fDisableCoverageCountingPaths = false;
+    // FIXME: Once this is removed from Chrome and Android, rename to fEnable"".
+    bool fDisableCoverageCountingPaths = true;
 
     /**
      * Disables distance field rendering for paths. Distance field computation can be expensive,
@@ -145,15 +146,8 @@ struct SK_API GrContextOptions {
     Enable fUseDrawInsteadOfClear = Enable::kDefault;
 
     /**
-     * Allow Ganesh to explicitly allocate resources at flush time rather than incrementally while
-     * drawing. This will eventually just be the way it is but, for now, it is optional.
-     */
-    Enable fExplicitlyAllocateGPUResources = Enable::kDefault;
-
-    /**
      * Allow Ganesh to sort the opLists prior to allocating resources. This is an optional
-     * behavior that is only relevant when 'fExplicitlyAllocateGPUResources' is enabled.
-     * Eventually this will just be what is done and will not be optional.
+     * behavior but, eventually, this will just be what is done and will not be optional.
      */
     Enable fSortRenderTargets = Enable::kDefault;
 
@@ -225,7 +219,7 @@ struct SK_API GrContextOptions {
     /**
      * Include or exclude specific GPU path renderers.
      */
-    GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kAll;
+    GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kDefault;
 #endif
 
 #if SK_SUPPORT_ATLAS_TEXT

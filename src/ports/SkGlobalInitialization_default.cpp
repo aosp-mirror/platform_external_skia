@@ -36,6 +36,8 @@
     #include "SkLightingShader.h"
     #include "SkLocalMatrixShader.h"
     #include "SkLumaColorFilter.h"
+    #include "SkMixerBase.h"
+    #include "SkMixerShader.h"
     #include "SkNormalSource.h"
     #include "SkOverdrawColorFilter.h"
     #include "SkPathEffect.h"
@@ -45,7 +47,6 @@
     #include "SkShaderBase.h"
     #include "SkShaderMaskFilter.h"
     #include "SkTableColorFilter.h"
-    #include "SkToSRGBColorFilter.h"
 
     #include "SkAlphaThresholdFilter.h"
     #include "SkBlurImageFilter.h"
@@ -83,6 +84,7 @@
         SK_REGISTER_FLATTENABLE(SkEmptyShader);
         SK_REGISTER_FLATTENABLE(SkLocalMatrixShader);
         SK_REGISTER_FLATTENABLE(SkPictureShader);
+        SK_REGISTER_FLATTENABLE(SkShader_Mixer);
         SkGradientShader::RegisterFlattenables();
         SkLightingShader::RegisterFlattenables();
         SkPerlinNoiseShader::RegisterFlattenables();
@@ -91,7 +93,6 @@
         // Color filters.
         SK_REGISTER_FLATTENABLE(SkColorMatrixFilterRowMajor255);
         SK_REGISTER_FLATTENABLE(SkLumaColorFilter);
-        SK_REGISTER_FLATTENABLE(SkToSRGBColorFilter);
         SkColorFilter::RegisterFlattenables();
         SkHighContrastFilter::RegisterFlattenables();
         SkOverdrawColorFilter::RegisterFlattenables();
@@ -119,6 +120,7 @@
         SK_REGISTER_FLATTENABLE(SkLayerDrawLooper);
         SK_REGISTER_FLATTENABLE(SkRecordedDrawable);
         SkNormalSource::RegisterFlattenables();
+        SkMixerBase::RegisterFlattenables();
     }
 
     /*

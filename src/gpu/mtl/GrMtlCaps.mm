@@ -9,6 +9,7 @@
 
 #include "GrBackendSurface.h"
 #include "GrMtlUtil.h"
+#include "GrRenderTarget.h"
 #include "GrRenderTargetProxy.h"
 #include "GrShaderCaps.h"
 #include "GrSurfaceProxy.h"
@@ -304,7 +305,7 @@ void GrMtlCaps::initShaderCaps() {
         } else {
             if (kGray_8_GrPixelConfig == config) {
                 shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RRRA();
-            } else if (kRGB_888X_GrPixelConfig == config) {
+            } else if (kRGB_888X_GrPixelConfig == config || kRGB_888_GrPixelConfig == config ) {
                 shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RGB1();
             } else {
                 shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RGBA();
@@ -360,8 +361,16 @@ void GrMtlCaps::initConfigTable() {
     info = &fConfigTable[kAlpha_8_GrPixelConfig];
     info->fFlags = ConfigInfo::kAllFlags;
 
+    // Alpha_8_as_Red uses R8Unorm
+    info = &fConfigTable[kAlpha_8_as_Red_GrPixelConfig];
+    info->fFlags = ConfigInfo::kAllFlags;
+
     // Gray_8 uses R8Unorm
     info = &fConfigTable[kGray_8_GrPixelConfig];
+    info->fFlags = ConfigInfo::kAllFlags;
+
+    // Gray_8_as_Red uses R8Unorm
+    info = &fConfigTable[kGray_8_as_Red_GrPixelConfig];
     info->fFlags = ConfigInfo::kAllFlags;
 
     // RGB_565 uses B5G6R5Unorm, even though written opposite this format packs how we want
@@ -386,6 +395,10 @@ void GrMtlCaps::initConfigTable() {
 
     // RGB_888X uses RGBA8Unorm and we will swizzle the 1
     info = &fConfigTable[kRGB_888X_GrPixelConfig];
+    info->fFlags = ConfigInfo::kTextureable_Flag;
+
+    // RGB_888 uses RGBA8Unorm and we will swizzle the 1
+    info = &fConfigTable[kRGB_888_GrPixelConfig];
     info->fFlags = ConfigInfo::kTextureable_Flag;
 
     // BGRA_8888 uses BGRA8Unorm
@@ -413,7 +426,7 @@ void GrMtlCaps::initConfigTable() {
     if (this->isMac()) {
         info->fFlags = ConfigInfo::kAllFlags;
     } else {
-        info->fFlags = ConfigInfo::kRenderable_Flag;
+        info->fFlags = ConfigInfo::kTextureable_Flag | ConfigInfo::kRenderable_Flag;
     }
 
     // Alpha_half uses R16Float
@@ -430,6 +443,13 @@ void GrMtlCaps::initConfigTable() {
 
 void GrMtlCaps::initStencilFormat(id<MTLDevice> physDev) {
     fPreferredStencilFormat = StencilFormat{ MTLPixelFormatStencil8, 8, 8, true };
+}
+
+bool GrMtlCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
+    if (auto rt = surface->asRenderTarget()) {
+        return rt->numColorSamples() <= 1 && SkToBool(surface->asTexture());
+    }
+    return true;
 }
 
 GrPixelConfig validate_sized_format(GrMTLPixelFormat grFormat, SkColorType ct) {
