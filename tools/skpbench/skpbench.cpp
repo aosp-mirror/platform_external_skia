@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "CommonFlags.h"
+#include "CommonFlagsGpu.h"
 #include "DDLPromiseImageHelper.h"
 #include "DDLTileHelper.h"
 #include "GpuTimer.h"
@@ -12,11 +14,9 @@
 #include "GrContextFactory.h"
 #include "GrContextPriv.h"
 #include "SkCanvas.h"
-#include "SkCommonFlags.h"
-#include "SkCommonFlagsGpu.h"
 #include "SkDeferredDisplayList.h"
-#include "SkGraphics.h"
 #include "SkGr.h"
+#include "SkGraphics.h"
 #include "SkOSFile.h"
 #include "SkOSPath.h"
 #include "SkPerlinNoiseShader.h"
@@ -26,9 +26,9 @@
 #include "SkSurface.h"
 #include "SkSurfaceProps.h"
 #include "SkTaskGroup.h"
-#include "flags/SkCommandLineFlags.h"
-#include "flags/SkCommonFlagsConfig.h"
-#include "sk_tool_utils.h"
+#include "ToolUtils.h"
+#include "flags/CommandLineFlags.h"
+#include "flags/CommonFlagsConfig.h"
 
 #ifdef SK_XML
 #include "SkDOM.h"
@@ -116,7 +116,7 @@ static void draw_skp_and_flush(SkSurface*, const SkPicture*);
 static sk_sp<SkPicture> create_warmup_skp();
 static sk_sp<SkPicture> create_skp_from_svg(SkStream*, const char* filename);
 static bool mkdir_p(const SkString& name);
-static SkString join(const SkCommandLineFlags::StringArray&);
+static SkString         join(const CommandLineFlags::StringArray&);
 static void exitf(ExitErr, const char* format, ...);
 
 static void ddl_sample(GrContext* context, DDLTileHelper* tiles, GpuSync* gpuSync, Sample* sample,
@@ -323,9 +323,10 @@ void print_result(const std::vector<Sample>& samples, const char* config, const 
 }
 
 int main(int argc, char** argv) {
-    SkCommandLineFlags::SetUsage("Use skpbench.py instead. "
-                                 "You usually don't want to use this program directly.");
-    SkCommandLineFlags::Parse(argc, argv);
+    CommandLineFlags::SetUsage(
+            "Use skpbench.py instead. "
+            "You usually don't want to use this program directly.");
+    CommandLineFlags::Parse(argc, argv);
 
     if (!FLAGS_suppressHeader) {
         printf("%s\n", header);
@@ -472,7 +473,7 @@ int main(int argc, char** argv) {
         if (!mkdir_p(SkOSPath::Dirname(FLAGS_png[0]))) {
             exitf(ExitErr::kIO, "failed to create directory for png \"%s\"", FLAGS_png[0]);
         }
-        if (!sk_tool_utils::EncodeImageToFile(FLAGS_png[0], bmp, SkEncodedImageFormat::kPNG, 100)) {
+        if (!ToolUtils::EncodeImageToFile(FLAGS_png[0], bmp, SkEncodedImageFormat::kPNG, 100)) {
             exitf(ExitErr::kIO, "failed to save png to \"%s\"", FLAGS_png[0]);
         }
     }
@@ -499,7 +500,7 @@ static sk_sp<SkPicture> create_warmup_skp() {
 
     // Use a big path to (theoretically) warmup the CPU.
     SkPath bigPath;
-    sk_tool_utils::make_big_path(bigPath);
+    ToolUtils::make_big_path(bigPath);
     recording->drawPath(bigPath, stroke);
 
     // Use a perlin shader to warmup the GPU.
@@ -541,7 +542,7 @@ bool mkdir_p(const SkString& dirname) {
     return mkdir_p(SkOSPath::Dirname(dirname.c_str())) && sk_mkdir(dirname.c_str());
 }
 
-static SkString join(const SkCommandLineFlags::StringArray& stringArray) {
+static SkString join(const CommandLineFlags::StringArray& stringArray) {
     SkString joined;
     for (int i = 0; i < stringArray.count(); ++i) {
         joined.appendf(i ? " %s" : "%s", stringArray[i]);

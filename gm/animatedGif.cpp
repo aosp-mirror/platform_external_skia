@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
+#include "CommandLineFlags.h"
+#include "Resources.h"
 #include "SkAnimTimer.h"
 #include "SkCanvas.h"
 #include "SkCodec.h"
 #include "SkColor.h"
-#include "SkCommandLineFlags.h"
 #include "SkFont.h"
 #include "SkPaint.h"
 #include "SkString.h"
-#include "Resources.h"
+#include "ToolUtils.h"
+#include "gm.h"
 
 #include <vector>
 
@@ -49,7 +49,7 @@ private:
                 SkBitmap& requiredBitmap = fFrames[requiredFrame];
                 // For simplicity, do not try to cache old frames
                 if (requiredBitmap.getPixels() &&
-                        sk_tool_utils::copy_to(&bm, requiredBitmap.colorType(), requiredBitmap)) {
+                    ToolUtils::copy_to(&bm, requiredBitmap.colorType(), requiredBitmap)) {
                     opts.fPriorFrame = requiredFrame;
                 }
             }

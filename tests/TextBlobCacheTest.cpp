@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "sk_tool_utils.h"
+#include "ToolUtils.h"
 
+#include "RandomScalerContext.h"
 #include "SkCanvas.h"
 #include "SkFontMgr.h"
 #include "SkGlyphRun.h"
 #include "SkGraphics.h"
 #include "SkPaint.h"
 #include "SkPoint.h"
-#include "SkRandomScalerContext.h"
 #include "SkSurface.h"
 #include "SkTextBlob.h"
 #include "SkTypeface.h"
