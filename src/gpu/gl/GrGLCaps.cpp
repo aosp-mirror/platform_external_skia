@@ -82,6 +82,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
                     const GrGLContextInfo& ctxInfo,
                     const GrGLInterface* gli) {
     GrGLStandard standard = ctxInfo.standard();
+    // standard can be unused (optimzed away) if SK_ASSUME_GL_ES is set
+    sk_ignore_unused_variable(standard);
     GrGLVersion version = ctxInfo.version();
 
     if (GR_IS_GR_GL(standard)) {
@@ -1383,6 +1385,8 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         allRenderFlags |= ConfigInfo::kRenderableWithMSAA_Flag;
     }
     GrGLStandard standard = ctxInfo.standard();
+    // standard can be unused (optimzed away) if SK_ASSUME_GL_ES is set
+    sk_ignore_unused_variable(standard);
     GrGLVersion version = ctxInfo.version();
 
     bool texStorageSupported = false;
@@ -3043,6 +3047,9 @@ static GrPixelConfig get_yuva_config(GrGLenum format) {
             break;
         case GR_GL_BGRA8:
             config = kBGRA_8888_GrPixelConfig;
+            break;
+        case GR_GL_RGB10_A2:
+            config = kRGBA_1010102_GrPixelConfig;
             break;
     }
 

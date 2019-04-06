@@ -296,7 +296,7 @@ public:
         Pixels are readable when SkBaseDevice is raster. Pixels are not readable when SkCanvas
         is returned from GPU surface, returned by SkDocument::beginPage, returned by
         SkPictureRecorder::beginRecording, or SkCanvas is the base of a utility class
-        like SkDebugCanvas.
+        like DebugCanvas.
 
         pixmap is valid only while SkCanvas is in scope and unchanged. Any
         SkCanvas or SkSurface call may invalidate the pixmap values.
@@ -317,7 +317,7 @@ public:
         Pixels are readable when SkBaseDevice is raster, or backed by a GPU.
         Pixels are not readable when SkCanvas is returned by SkDocument::beginPage,
         returned by SkPictureRecorder::beginRecording, or SkCanvas is the base of a utility
-        class like SkDebugCanvas.
+        class like DebugCanvas.
 
         The destination pixel storage must be allocated by the caller.
 
@@ -354,7 +354,7 @@ public:
         Pixels are readable when SkBaseDevice is raster, or backed by a GPU.
         Pixels are not readable when SkCanvas is returned by SkDocument::beginPage,
         returned by SkPictureRecorder::beginRecording, or SkCanvas is the base of a utility
-        class like SkDebugCanvas.
+        class like DebugCanvas.
 
         Caller must allocate pixel storage in pixmap if needed.
 
@@ -389,7 +389,7 @@ public:
         Pixels are readable when SkBaseDevice is raster, or backed by a GPU.
         Pixels are not readable when SkCanvas is returned by SkDocument::beginPage,
         returned by SkPictureRecorder::beginRecording, or SkCanvas is the base of a utility
-        class like SkDebugCanvas.
+        class like DebugCanvas.
 
         Caller must allocate pixel storage in bitmap if needed.
 
@@ -424,7 +424,7 @@ public:
         Pixels are writable when SkBaseDevice is raster, or backed by a GPU.
         Pixels are not writable when SkCanvas is returned by SkDocument::beginPage,
         returned by SkPictureRecorder::beginRecording, or SkCanvas is the base of a utility
-        class like SkDebugCanvas.
+        class like DebugCanvas.
 
         Pixel values are converted only if SkColorType and SkAlphaType
         do not match. Only pixels within both source and destination rectangles
@@ -461,7 +461,7 @@ public:
         Pixels are writable when SkBaseDevice is raster, or backed by a GPU.
         Pixels are not writable when SkCanvas is returned by SkDocument::beginPage,
         returned by SkPictureRecorder::beginRecording, or SkCanvas is the base of a utility
-        class like SkDebugCanvas.
+        class like DebugCanvas.
 
         Pixel values are converted only if SkColorType and SkAlphaType
         do not match. Only pixels within both source and destination rectangles
@@ -2627,7 +2627,7 @@ private:
     friend class SkCanvasPriv;      // needs kDontClipToLayer_PrivateSaveLayerFlag
     friend class SkDrawIter;        // needs setupDrawForLayerDevice()
     friend class AutoDrawLooper;
-    friend class SkDebugCanvas;     // needs experimental fAllowSimplifyClip
+    friend class DebugCanvas;       // needs experimental fAllowSimplifyClip
     friend class SkSurface_Raster;  // needs getDevice()
     friend class SkNoDrawCanvas;    // needs resetForNextPicture()
     friend class SkPictureRecord;   // predrawNotify (why does it need it? <reed>)
