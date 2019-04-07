@@ -9,7 +9,6 @@
 #include "BisectSlide.h"
 #include "CommandLineFlags.h"
 #include "CommonFlags.h"
-#include "CommonFlagsGpu.h"
 #include "EventTracingPriv.h"
 #include "GMSlide.h"
 #include "GrContext.h"
@@ -21,7 +20,6 @@
 #include "SampleSlide.h"
 #include "SkCanvas.h"
 #include "SkColorSpacePriv.h"
-#include "SkFontMgrPriv.h"
 #include "SkGraphics.h"
 #include "SkImagePriv.h"
 #include "SkJSONWriter.h"
@@ -37,7 +35,7 @@
 #include "SkTo.h"
 #include "SlideDir.h"
 #include "SvgSlide.h"
-#include "TestFontMgr.h"
+#include "ToolUtils.h"
 #include "ccpr/GrCoverageCountingPathRenderer.h"
 
 #include <stdlib.h>
@@ -246,9 +244,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     SetResourcePath("/data/local/tmp/resources");
 #endif
 
-    if (!FLAGS_nativeFonts) {
-        gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
-    }
+    ToolUtils::SetDefaultFontMgr();
 
     initializeEventTracingForTools();
     static SkTaskGroup::Enabler kTaskGroupEnabler(FLAGS_threads);

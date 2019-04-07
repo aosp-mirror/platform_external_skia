@@ -16,7 +16,6 @@
 #include "CodecBenchPriv.h"
 #include "CommonFlags.h"
 #include "CommonFlagsConfig.h"
-#include "CommonFlagsGpu.h"
 #include "CrashHandler.h"
 #include "EventTracingPriv.h"
 #include "GMBench.h"
@@ -40,7 +39,6 @@
 #include "SkOSFile.h"
 #include "SkOSPath.h"
 #include "SkPictureRecorder.h"
-#include "SkScan.h"
 #include "SkString.h"
 #include "SkSurface.h"
 #include "SkTaskGroup.h"
@@ -142,6 +140,16 @@ static DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitt
 
 static DEFINE_bool2(pre_log, p, false,
                     "Log before running each test. May be incomprehensible when threading");
+
+static DEFINE_bool(cpu, true, "master switch for running CPU-bound work.");
+static DEFINE_bool(gpu, true, "master switch for running GPU-bound work.");
+static DEFINE_bool(dryRun, false,
+                   "just print the tests that would be run, without actually running them.");
+static DEFINE_string(images, "",
+                     "List of images and/or directories to decode. A directory with no images"
+                     " is treated as a fatal error.");
+static DEFINE_bool(simpleCodec, false,
+                   "Runs of a subset of the codec tests, always N32, Premul or Opaque");
 
 static double now_ms() { return SkTime::GetNSecs() * 1e-6; }
 
@@ -1119,10 +1127,6 @@ int main(int argc, char** argv) {
 
     SetCtxOptionsFromCommonFlags(&grContextOpts);
 
-    if (FLAGS_veryVerbose) {
-        FLAGS_verbose = true;
-    }
-
     if (kAutoTuneLoops != FLAGS_loops) {
         FLAGS_samples     = 1;
         FLAGS_gpuFrameLag = 0;
@@ -1192,11 +1196,8 @@ int main(int argc, char** argv) {
         start_keepalive();
     }
 
-    gSkUseAnalyticAA = FLAGS_analyticAA;
+    SetAnalyticAAFromCommonFlags();
 
-    if (FLAGS_forceAnalyticAA) {
-        gSkForceAnalyticAA = true;
-    }
     if (FLAGS_forceRasterPipeline) {
         gSkForceRasterPipelineBlitter = true;
     }

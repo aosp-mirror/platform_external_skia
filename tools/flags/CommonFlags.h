@@ -12,24 +12,15 @@
 #include "CommandLineFlags.h"
 #include "SkString.h"
 
-DECLARE_bool(cpu);
-DECLARE_bool(dryRun);
-DECLARE_bool(gpu);
-DECLARE_string(images);
-DECLARE_bool(simpleCodec);
 DECLARE_string(match);
 DECLARE_bool(quiet);
 DECLARE_string(skps);
 DECLARE_string(lotties);
 DECLARE_string(svgs);
-DECLARE_bool(nativeFonts);
 DECLARE_int(threads);
 DECLARE_string(resourcePath);
 DECLARE_bool(verbose);
-DECLARE_bool(veryVerbose);
 DECLARE_string(writePath);
-DECLARE_bool(analyticAA);
-DECLARE_bool(forceAnalyticAA);
 DECLARE_string(key);
 DECLARE_string(properties);
 
@@ -46,5 +37,21 @@ DECLARE_string(properties);
  *    regardless of file type.
  */
 bool CollectImages(CommandLineFlags::StringArray dir, SkTArray<SkString>* output);
+
+/**
+ *  Helper to set GrContextOptions from common GPU flags, including
+ *     --gpuThreads
+ *     --cachePathMasks
+ *     --noGS
+ *     --pr
+ *     --disableDriverCorrectnessWorkarounds
+ *     --reduceOpListSplitting
+ */
+void SetCtxOptionsFromCommonFlags(struct GrContextOptions*);
+
+/**
+ *  Enable, disable, or force analytic anti-aliasing using --analyticAA and --forceAnalyticAA.
+ */
+void SetAnalyticAAFromCommonFlags();
 
 #endif

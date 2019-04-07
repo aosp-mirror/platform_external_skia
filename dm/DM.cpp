@@ -8,7 +8,6 @@
 #include "ChromeTracingTracer.h"
 #include "CommonFlags.h"
 #include "CommonFlagsConfig.h"
-#include "CommonFlagsGpu.h"
 #include "DMJsonWriter.h"
 #include "DMSrcSink.h"
 #include "EventTracingPriv.h"
@@ -24,7 +23,6 @@
 #include "SkDebugfTracer.h"
 #include "SkDocument.h"
 #include "SkFontMgr.h"
-#include "SkFontMgrPriv.h"
 #include "SkGraphics.h"
 #include "SkHalf.h"
 #include "SkICC.h"
@@ -33,13 +31,11 @@
 #include "SkMutex.h"
 #include "SkOSFile.h"
 #include "SkOSPath.h"
-#include "SkScan.h"
 #include "SkSpinlock.h"
 #include "SkTHash.h"
 #include "SkTaskGroup.h"
 #include "SkTypeface_win.h"
 #include "Test.h"
-#include "TestFontMgr.h"
 #include "ToolUtils.h"
 #include "ios_utils.h"
 
@@ -100,14 +96,27 @@ static DEFINE_bool(ignoreSigInt, false, "ignore SIGINT signals during test execu
 
 static DEFINE_string(dont_write, "", "File extensions to skip writing to --writePath.");  // See skia:6821
 
-static DEFINE_bool(gdi, false, "On Windows, use GDI instead of DirectWrite for font rendering.");
-
 static DEFINE_bool(checkF16, false, "Ensure that F16Norm pixels are clamped.");
 
 static DEFINE_string(colorImages, "",
               "List of images and/or directories to decode with color correction. "
               "A directory with no images is treated as a fatal error.");
 
+static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.");
+
+static DEFINE_bool(cpu, true, "master switch for running CPU-bound work.");
+static DEFINE_bool(gpu, true, "master switch for running GPU-bound work.");
+
+static DEFINE_bool(dryRun, false,
+                   "just print the tests that would be run, without actually running them.");
+
+static DEFINE_string(images, "",
+                     "List of images and/or directories to decode. A directory with no images"
+                     " is treated as a fatal error.");
+
+static DEFINE_bool(simpleCodec, false,
+                   "Runs of a subset of the codec tests, "
+                   "with no scaling or subsetting, always using the canvas color type.");
 
 using namespace DM;
 using sk_gpu_test::GrContextFactory;
@@ -1520,16 +1529,6 @@ int main(int argc, char** argv) {
 #endif
     CommandLineFlags::Parse(argc, argv);
 
-    if (!FLAGS_nativeFonts) {
-        gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
-    }
-
-#if defined(SK_BUILD_FOR_WIN)
-    if (FLAGS_gdi) {
-        gSkFontMgr_DefaultFactory = &SkFontMgr_New_GDI;
-    }
-#endif
-
     initializeEventTracingForTools();
 
 #if !defined(SK_BUILD_FOR_GOOGLE3) && defined(SK_BUILD_FOR_IOS)
@@ -1538,11 +1537,9 @@ int main(int argc, char** argv) {
     setbuf(stdout, nullptr);
     setup_crash_handler();
 
-    gSkUseAnalyticAA = FLAGS_analyticAA;
+    ToolUtils::SetDefaultFontMgr();
+    SetAnalyticAAFromCommonFlags();
 
-    if (FLAGS_forceAnalyticAA) {
-        gSkForceAnalyticAA = true;
-    }
     if (FLAGS_forceRasterPipeline) {
         gSkForceRasterPipelineBlitter = true;
     }
