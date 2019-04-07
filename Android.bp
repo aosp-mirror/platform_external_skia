@@ -1843,6 +1843,7 @@ cc_test {
         "tools/CrashHandler.cpp",
         "tools/DDLPromiseImageHelper.cpp",
         "tools/DDLTileHelper.cpp",
+        "tools/HashAndEncode.cpp",
         "tools/LsanSuppressions.cpp",
         "tools/ProcStats.cpp",
         "tools/Resources.cpp",
