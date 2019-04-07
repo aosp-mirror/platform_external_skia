@@ -27,8 +27,12 @@ static void test_color_opaque_no_coverage(skiatest::Reporter* reporter, const Gr
 static void test_lcd_coverage(skiatest::Reporter* reporter, const GrCaps& caps);
 static void test_lcd_coverage_fallback_case(skiatest::Reporter* reporter, const GrCaps& caps);
 
-DEF_GPUTEST_FOR_NULLGL_CONTEXT(GrPorterDuff, reporter, ctxInfo) {
-    const GrCaps& caps = *ctxInfo.grContext()->priv().getGpu()->caps();
+DEF_GPUTEST(GrPorterDuff, reporter, /*ctxInfo*/) {
+    GrMockOptions mockOptions;
+    mockOptions.fDualSourceBlendingSupport = true;
+    auto context = GrContext::MakeMock(&mockOptions, GrContextOptions());
+    const GrCaps& caps = *context->priv().getGpu()->caps();
+
     if (!caps.shaderCaps()->dualSourceBlendingSupport()) {
         SK_ABORT("Null context does not support dual source blending.");
         return;
@@ -975,16 +979,13 @@ static void test_lcd_coverage_fallback_case(skiatest::Reporter* reporter, const 
     TEST_ASSERT(blendInfo.fWriteColor);
 }
 
-// The NullGL context does not work correctly if the GL interface/validation
-// logic is disabled.
-#if !SK_DISABLE_GL_INTERFACE
 DEF_GPUTEST(PorterDuffNoDualSourceBlending, reporter, options) {
     GrContextOptions opts = options;
     opts.fSuppressDualSourceBlending = true;
     sk_gpu_test::GrContextFactory mockFactory(opts);
-    GrContext* ctx = mockFactory.get(sk_gpu_test::GrContextFactory::kNullGL_ContextType);
+    GrContext* ctx = mockFactory.get(sk_gpu_test::GrContextFactory::kMock_ContextType);
     if (!ctx) {
-        SK_ABORT("Failed to create null context without ARB_blend_func_extended.");
+        SK_ABORT("Failed to create mock context without ARB_blend_func_extended.");
         return;
     }
 
@@ -992,7 +993,7 @@ DEF_GPUTEST(PorterDuffNoDualSourceBlending, reporter, options) {
     GrProxyProvider* proxyProvider = ctx->priv().proxyProvider();
     const GrCaps& caps = *ctx->priv().caps();
     if (caps.shaderCaps()->dualSourceBlendingSupport()) {
-        SK_ABORT("Null context failed to honor request for no ARB_blend_func_extended.");
+        SK_ABORT("Mock context failed to honor request for no ARB_blend_func_extended.");
         return;
     }
 
@@ -1032,4 +1033,3 @@ DEF_GPUTEST(PorterDuffNoDualSourceBlending, reporter, options) {
     }
     gpu->deleteTestingOnlyBackendTexture(backendTex);
 }
-#endif
