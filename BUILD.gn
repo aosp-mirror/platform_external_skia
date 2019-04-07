@@ -1218,6 +1218,7 @@ if (skia_enable_tools) {
     # TODO: would be cool to not hard-code these here, but how?
     module_public_includes = [
       "modules/sksg/include",
+      "modules/skshaper/include",
       "modules/skottie/include",
     ]
     args =
@@ -1251,6 +1252,7 @@ if (skia_enable_tools) {
         ":skia",
         ":skia.h",
         "modules/skottie",
+        "modules/skshaper",
       ]
     }
   }
@@ -1264,6 +1266,7 @@ if (skia_enable_tools) {
       ":skia",
       ":skia.h",
       "modules/skottie",
+      "modules/skshaper",
     ]
 
     # We add this directory to simulate the client already have
@@ -1594,13 +1597,27 @@ if (skia_enable_tools) {
     ]
   }
 
+  test_lib("trace") {
+    public_include_dirs = [ "tools/trace" ]
+    deps = [
+      ":flags",
+    ]
+    sources = [
+      "tools/trace/ChromeTracingTracer.cpp",
+      "tools/trace/ChromeTracingTracer.h",
+      "tools/trace/EventTracingPriv.cpp",
+      "tools/trace/EventTracingPriv.h",
+      "tools/trace/SkDebugfTracer.cpp",
+      "tools/trace/SkDebugfTracer.h",
+    ]
+  }
+
   test_lib("tool_utils") {
     public_include_dirs = [
       "tools",
       "tools/debugger",
       "tools/fonts",
       "tools/timer",
-      "tools/trace",
     ]
     sources = [
       "tools/AndroidSkDebugToStdOut.cpp",
@@ -1627,12 +1644,6 @@ if (skia_enable_tools) {
       "tools/random_parse_path.cpp",
       "tools/timer/AnimTimer.h",
       "tools/timer/Timer.cpp",
-      "tools/trace/ChromeTracingTracer.cpp",
-      "tools/trace/ChromeTracingTracer.h",
-      "tools/trace/EventTracingPriv.cpp",
-      "tools/trace/EventTracingPriv.h",
-      "tools/trace/SkDebugfTracer.cpp",
-      "tools/trace/SkDebugfTracer.h",
     ]
     libs = []
     if (is_ios) {
@@ -1856,6 +1867,7 @@ if (skia_enable_tools) {
         ":skia",
         ":tests",
         ":tool_utils",
+        ":trace",
         "modules/skottie",
         "modules/skottie:utils",
         "modules/sksg",
@@ -1896,6 +1908,7 @@ if (skia_enable_tools) {
       ":gpu_tool_utils",
       ":skia",
       ":tool_utils",
+      ":trace",
       "modules/sksg",
     ]
   }
@@ -2303,6 +2316,7 @@ if (skia_enable_tools) {
         ":skia",
         ":skia.h",
         "modules/skottie",
+        "modules/skshaper",
       ]
     }
   }
@@ -2340,6 +2354,7 @@ if (skia_enable_tools) {
       ":sk_app",
       ":skia",
       ":tool_utils",
+      ":trace",
       "modules/particles",
       "modules/skottie",
       "modules/skottie:utils",
