@@ -9,9 +9,9 @@
 #include "FuzzCommon.h"
 
 // CORE
+#include "DebugCanvas.h"
 #include "SkCanvas.h"
 #include "SkColorFilter.h"
-#include "SkDebugCanvas.h"
 #include "SkFontMgr.h"
 #include "SkImageFilter.h"
 #include "SkMaskFilter.h"
@@ -63,7 +63,7 @@
 #include "SkXfermodeImageFilter.h"
 
 // SRC
-#include "SkCommandLineFlags.h"
+#include "CommandLineFlags.h"
 #include "SkUTF.h"
 
 #if SK_SUPPORT_GPU
@@ -79,7 +79,7 @@
 #include <iostream>
 #include <utility>
 
-DEFINE_bool2(gpuInfo, g, false, "Display GPU information on relevant targets.");
+static DEFINE_bool2(gpuInfo, g, false, "Display GPU information on relevant targets.");
 
 // TODO:
 //   SkTextBlob with Unicode
@@ -1018,20 +1018,11 @@ static sk_sp<SkTextBlob> make_fuzz_textblob(Fuzz* fuzz) {
     return textBlobBuilder.make();
 }
 
-extern std::atomic<bool> gSkUseDeltaAA;
-extern std::atomic<bool> gSkForceDeltaAA;
-
 static void fuzz_canvas(Fuzz* fuzz, SkCanvas* canvas, int depth = 9) {
     if (!fuzz || !canvas || depth <= 0) {
         return;
     }
     SkAutoCanvasRestore autoCanvasRestore(canvas, false);
-    bool useDAA;
-    fuzz->next(&useDAA);
-    if (useDAA) {
-        gSkForceDeltaAA = true;
-        gSkUseDeltaAA = true;
-    }
     unsigned N;
     fuzz->nextRange(&N, 0, 2000);
     for (unsigned i = 0; i < N; ++i) {
@@ -1707,13 +1698,6 @@ DEF_FUZZ(NativeGLCanvas, fuzz) {
     fuzz_ganesh(fuzz, context);
 }
 
-// This target is deprecated, NullGLContext is not well maintained.
-// Please use MockGPUCanvas instead.
-DEF_FUZZ(NullGLCanvas, fuzz) {
-    sk_gpu_test::GrContextFactory f;
-    fuzz_ganesh(fuzz, f.get(sk_gpu_test::GrContextFactory::kNullGL_ContextType));
-}
-
 DEF_FUZZ(MockGPUCanvas, fuzz) {
     sk_gpu_test::GrContextFactory f;
     fuzz_ganesh(fuzz, f.get(sk_gpu_test::GrContextFactory::kMock_ContextType));
@@ -1729,7 +1713,7 @@ DEF_FUZZ(PDFCanvas, fuzz) {
 
 // not a "real" thing to fuzz, used to debug errors found while fuzzing.
 DEF_FUZZ(_DumpCanvas, fuzz) {
-    SkDebugCanvas debugCanvas(kCanvasSize.width(), kCanvasSize.height());
+    DebugCanvas debugCanvas(kCanvasSize.width(), kCanvasSize.height());
     fuzz_canvas(fuzz, &debugCanvas);
     std::unique_ptr<SkCanvas> nullCanvas = SkMakeNullCanvas();
     UrlDataManager dataManager(SkString("data"));

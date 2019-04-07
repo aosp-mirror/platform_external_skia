@@ -78,11 +78,10 @@ def dm_flags(api, bot):
     thread_limit = 4
 
   # These bots run out of memory easily.
-  if ('Chromecast' in bot or
-      'MotoG4' in bot or
-      'Nexus7' in bot or
-      'NexusPlayer' in bot):
+  if 'Chromecast' in bot or 'MotoG4' in bot or 'Nexus7' in bot:
     thread_limit = MAIN_THREAD_ONLY
+  if 'NexusPlayer' in bot:
+    thread_limit = 2
 
   # Avoid issues with dynamically exceeding resource cache limits.
   if 'Test' in bot and 'DISCARDABLE' in bot:
@@ -117,7 +116,6 @@ def dm_flags(api, bot):
         'pdf',
         'g8', '565',
         'pic-8888', 'tiles_rt-8888', 'lite-8888', 'serialize-8888',
-        'gbr-8888',
         'f16', 'srgb', 'esrgb', 'narrow', 'enarrow',
         'p3', 'ep3', 'rec2020', 'erec2020'])
 
@@ -236,10 +234,10 @@ def dm_flags(api, bot):
         blacklist('gltestpersistentcache gm _ dftext')
         blacklist('gltestpersistentcache gm _ glyph_pos_h_b')
 
-    # Test SkColorSpaceXformCanvas and rendering to wrapped dsts on a few bots
+    # Test rendering to wrapped dsts on a few bots
     # Also test 'glenarrow', which hits F16 surfaces and F16 vertex colors.
     if 'BonusConfigs' in api.vars.extra_tokens:
-      configs = ['gbr-gl', 'glbetex', 'glbert', 'glenarrow']
+      configs = ['glbetex', 'glbert', 'glenarrow']
 
 
     if 'ChromeOS' in bot:
@@ -334,10 +332,6 @@ def dm_flags(api, bot):
   blacklist('f16 _ _ dstreadshuffle')
   blacklist('glsrgb image _ _')
   blacklist('glessrgb image _ _')
-
-  # Not any point to running these.
-  blacklist('gbr-8888 image _ _')
-  blacklist('gbr-8888 colorImage _ _')
 
   # --src image --config g8 means "decode into Gray8", which isn't supported.
   blacklist('g8 image _ _')
@@ -807,11 +801,9 @@ def dm_flags(api, bot):
     args.append('--noRAW_threading')
 
   if 'FSAA' in bot:
-    args.extend(['--analyticAA', 'false', '--deltaAA', 'false'])
+    args.extend(['--analyticAA', 'false'])
   if 'FAAA' in bot:
-    args.extend(['--deltaAA', 'false', '--forceAnalyticAA'])
-  if 'FDAA' in bot:
-    args.extend(['--deltaAA', '--forceDeltaAA'])
+    args.extend(['--forceAnalyticAA'])
 
   if 'NativeFonts' not in bot:
     args.append('--nonativeFonts')
@@ -1078,7 +1070,6 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Release-All-Vulkan',
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
-  'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
   'Test-Win2016-MSVC-GCE-CPU-AVX2-x86_64-Debug-All-MSRTC',
   'Test-iOS-Clang-iPadPro-GPU-PowerVRGT7800-arm64-Release-All',

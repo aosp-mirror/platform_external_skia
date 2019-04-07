@@ -8,12 +8,12 @@
 #ifndef DMSrcSink_DEFINED
 #define DMSrcSink_DEFINED
 
+#include "CommonFlagsConfig.h"
 #include "SkBBHFactory.h"
 #include "SkBBoxHierarchy.h"
 #include "SkBitmap.h"
 #include "SkBitmapRegionDecoder.h"
 #include "SkCanvas.h"
-#include "SkCommonFlagsConfig.h"
 #include "SkData.h"
 #include "SkMultiPictureDocument.h"
 #include "SkPicture.h"
@@ -546,15 +546,6 @@ class ViaLite : public Via {
 public:
     explicit ViaLite(Sink* sink) : Via(sink) {}
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
-};
-
-class ViaCSXform : public Via {
-public:
-    explicit ViaCSXform(Sink*, sk_sp<SkColorSpace>, bool colorSpin);
-    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
-private:
-    sk_sp<SkColorSpace> fCS;
-    bool                fColorSpin;
 };
 
 }  // namespace DM

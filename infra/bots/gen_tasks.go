@@ -43,7 +43,6 @@ const (
 	DEFAULT_OS_DEBIAN    = "Debian-9.4"
 	DEFAULT_OS_LINUX_GCE = "Debian-9.8"
 	DEFAULT_OS_MAC       = "Mac-10.13.6"
-	DEFAULT_OS_UBUNTU    = "Ubuntu-14.04"
 	DEFAULT_OS_WIN       = "Windows-2016Server-14393"
 
 	DEFAULT_PROJECT = "skia"
@@ -361,14 +360,12 @@ func dockerGceDimensions() []string {
 // deriveCompileTaskName returns the name of a compile task based on the given
 // job name.
 func deriveCompileTaskName(jobName string, parts map[string]string) string {
-	if strings.Contains(jobName, "Bookmaker") {
-		return "Build-Debian9-GCC-x86_64-Release"
-	} else if parts["role"] == "Test" || parts["role"] == "Perf" || parts["role"] == "Calmbench" {
+	if parts["role"] == "Test" || parts["role"] == "Perf" || parts["role"] == "Calmbench" {
 		task_os := parts["os"]
 		ec := []string{}
 		if val := parts["extra_config"]; val != "" {
 			ec = strings.Split(val, "_")
-			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9", "BonusConfigs"}
+			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !util.In(part, ignore) {
@@ -453,12 +450,9 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			"Mac":        DEFAULT_OS_MAC,
 			"Mac10.13":   DEFAULT_OS_MAC,
 			"Mac10.14":   "Mac-10.14.3",
-			"Ubuntu14":   DEFAULT_OS_UBUNTU,
-			"Ubuntu17":   "Ubuntu-17.04",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-17763.379",
-			"Win2k8":     "Windows-2008ServerR2-SP1",
 			"Win2016":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
 			"Win8":       "Windows-8.1-SP0",
@@ -472,7 +466,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			d["os"] = "Windows-10-16299.309"
 		}
 		if d["os"] == DEFAULT_OS_WIN {
-			// TODO(dogben): Temporarily add image dimension during upgrade.
+			// Upgrades result in a new image but not a new OS version.
 			d["image"] = "windows-server-2016-dc-v20190108"
 		}
 	} else {
@@ -1172,6 +1166,8 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		recipe = "perf_pathkit"
 	} else if strings.Contains(name, "CanvasKit") {
 		recipe = "perf_canvaskit"
+	} else if strings.Contains(name, "SkottieTracing") {
+		recipe = "perf_skottietrace"
 	}
 	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), nil, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
@@ -1194,6 +1190,8 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	} else if parts["arch"] == "x86" && parts["configuration"] == "Debug" {
 		// skia:6737
 		timeout(task, 6*time.Hour)
+	} else if strings.Contains(parts["extra_config"], "Skottie") {
+		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
 	}
 	iid := internalHardwareLabel(parts)
 	if iid != nil {

@@ -3,6 +3,7 @@
 #pragma once
 #include "SkUserConfigManual.h"
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
+#define SK_ASSUME_GL 1
 #define SK_CODEC_DECODES_RAW
 #define SK_ENABLE_DISCRETE_GPU
 #define SK_GAMMA_APPLY_TO_A8

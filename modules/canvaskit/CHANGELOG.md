@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+ - `SkSurface.grContext` now exposed. `GrContext` has new methods for monitoring/setting
+   the cache limits; tweaking these may lead to better performance in some cases.
+   `getResourceCacheLimitBytes`, `setResourceCacheLimitBytes`, `getResourceCacheUsageBytes`
+
+## [0.5.1] - 2019-03-21
+
+### Added
  - `SkPathMeasure`, `RSXFormBuilder`, `SkFont.getWidths`, `SkTextBlob.MakeFromRSXform`
    which were needed to add the helper function `SkTextBlob.MakeOnPath`.
+ - `SkSurface.requestAnimationFrame` - wrapper around window.requestAnimationFrame that
+   takes care of the setup/tear down required to use CanvasKit optimally. The callback
+   has an `SkCanvas` as the first parameter - callers should draw on that.
 
 ### Changed
  - Location in Skia Git repo now `modules/canvaskit` (was `experimental/canvaskit`)
@@ -18,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Fallback to CPU now properly refreshes the canvas to get access to the
    CanvasRenderingContext2D.
  - Compile flags for better WebGL1 support for some graphics cards.
+ - Antialias bug on large oval paths <https://crbug.com/skia/8873>
 
 ### Deprecated
  - `SkCanvas.flush` will be removed soon - client should only call `SkSurface.flush`

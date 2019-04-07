@@ -40,7 +40,7 @@ fi
 
 mkdir -p $BUILD_DIR
 
-GN_GPU="skia_enable_gpu=true"
+GN_GPU="skia_enable_gpu=true skia_gl_standard = \"gles\""
 GN_GPU_FLAGS="\"-DIS_WEBGL=1\", \"-DSK_DISABLE_LEGACY_SHADERCONTEXT\","
 WASM_GPU="-lEGL -lGLESv2 -DSK_SUPPORT_GPU=1 \
           -DSK_DISABLE_LEGACY_SHADERCONTEXT --pre-js $BASE_DIR/cpu.js --pre-js $BASE_DIR/gpu.js"
@@ -142,7 +142,7 @@ echo "Compiling bitcode"
   cxx=\"${EMCXX}\" \
   extra_cflags_cc=[\"-frtti\"] \
   extra_cflags=[\"-s\",\"USE_FREETYPE=1\",\"-s\",\"USE_LIBPNG=1\", \"-s\", \"WARN_UNALIGNED=1\",
-    \"-DSKNX_NO_SIMD\", \"-DSK_DISABLE_AAA\", \"-DSK_DISABLE_DAA\", \"-DSK_DISABLE_READBUFFER\",
+    \"-DSKNX_NO_SIMD\", \"-DSK_DISABLE_AAA\", \"-DSK_DISABLE_READBUFFER\",
     \"-DSK_DISABLE_EFFECT_DESERIALIZATION\",
     ${GN_GPU_FLAGS}
     ${EXTRA_CFLAGS}
@@ -224,7 +224,6 @@ ${EMCXX} \
     -Itools \
     -DSK_DISABLE_READBUFFER \
     -DSK_DISABLE_AAA \
-    -DSK_DISABLE_DAA \
     $WASM_GPU \
     -std=c++14 \
     --bind \

@@ -5,26 +5,24 @@
  * found in the LICENSE file.
  */
 
+#include "ChromeTracingTracer.h"
+#include "CommonFlags.h"
+#include "CommonFlagsConfig.h"
 #include "DMJsonWriter.h"
 #include "DMSrcSink.h"
+#include "EventTracingPriv.h"
 #include "ProcStats.h"
 #include "Resources.h"
 #include "SkBBHFactory.h"
 #include "SkChecksum.h"
-#include "SkChromeTracingTracer.h"
 #include "SkCodec.h"
 #include "SkColorPriv.h"
 #include "SkColorSpace.h"
 #include "SkColorSpacePriv.h"
-#include "SkCommonFlags.h"
-#include "SkCommonFlagsConfig.h"
-#include "SkCommonFlagsGpu.h"
 #include "SkData.h"
 #include "SkDebugfTracer.h"
 #include "SkDocument.h"
-#include "SkEventTracingPriv.h"
 #include "SkFontMgr.h"
-#include "SkFontMgrPriv.h"
 #include "SkGraphics.h"
 #include "SkHalf.h"
 #include "SkICC.h"
@@ -33,15 +31,13 @@
 #include "SkMutex.h"
 #include "SkOSFile.h"
 #include "SkOSPath.h"
-#include "SkScan.h"
 #include "SkSpinlock.h"
-#include "SkTestFontMgr.h"
 #include "SkTHash.h"
 #include "SkTaskGroup.h"
 #include "SkTypeface_win.h"
 #include "Test.h"
+#include "ToolUtils.h"
 #include "ios_utils.h"
-#include "sk_tool_utils.h"
 
 #include <vector>
 
@@ -59,17 +55,17 @@
 
 extern bool gSkForceRasterPipelineBlitter;
 
-DEFINE_string(src, "tests gm skp image", "Source types to test.");
-DEFINE_bool(nameByHash, false,
-            "If true, write to FLAGS_writePath[0]/<hash>.png instead of "
-            "to FLAGS_writePath[0]/<config>/<sourceType>/<sourceOptions>/<name>.png");
-DEFINE_bool2(pathOpsExtended, x, false, "Run extended pathOps tests.");
-DEFINE_string(matrix, "1 0 0 1",
-              "2x2 scale+skew matrix to apply or upright when using "
-              "'matrix' or 'upright' in config.");
-DEFINE_bool(gpu_threading, false, "Allow GPU work to run on multiple threads?");
+static DEFINE_string(src, "tests gm skp image", "Source types to test.");
+static DEFINE_bool(nameByHash, false,
+                   "If true, write to FLAGS_writePath[0]/<hash>.png instead of "
+                   "to FLAGS_writePath[0]/<config>/<sourceType>/<sourceOptions>/<name>.png");
+static DEFINE_bool2(pathOpsExtended, x, false, "Run extended pathOps tests.");
+static DEFINE_string(matrix, "1 0 0 1",
+                    "2x2 scale+skew matrix to apply or upright when using "
+                    "'matrix' or 'upright' in config.");
+static DEFINE_bool(gpu_threading, false, "Allow GPU work to run on multiple threads?");
 
-DEFINE_string(blacklist, "",
+static DEFINE_string(blacklist, "",
         "Space-separated config/src/srcOptions/name quadruples to blacklist. "
         "'_' matches anything. '~' negates the match. E.g. \n"
         "'--blacklist gpu skp _ _' will blacklist all SKPs drawn into the gpu config.\n"
@@ -77,31 +73,79 @@ DEFINE_string(blacklist, "",
         "'--blacklist ~8888 svg _ svgparse_' blocks non-8888 SVGs that contain \"svgparse_\" in "
                                             "the name.");
 
-DEFINE_string2(readPath, r, "", "If set check for equality with golden results in this directory.");
+static DEFINE_string2(readPath, r, "",
+                      "If set check for equality with golden results in this directory.");
+DEFINE_string2(writePath, w, "", "If set, write bitmaps here as .pngs.");
 
-DEFINE_string(uninterestingHashesFile, "",
+
+static DEFINE_string(uninterestingHashesFile, "",
         "File containing a list of uninteresting hashes. If a result hashes to something in "
         "this list, no image is written for that result.");
 
-DEFINE_int32(shards, 1, "We're splitting source data into this many shards.");
-DEFINE_int32(shard,  0, "Which shard do I run?");
+static DEFINE_int(shards, 1, "We're splitting source data into this many shards.");
+static DEFINE_int(shard,  0, "Which shard do I run?");
 
-DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
-DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
+static DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
+static DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
 
-DEFINE_string(bisect, "",
+static DEFINE_string(bisect, "",
         "Pair of: SKP file to bisect, followed by an l/r bisect trail string (e.g., 'lrll'). The "
         "l/r trail specifies which half to keep at each step of a binary search through the SKP's "
         "paths. An empty string performs no bisect. Only the SkPaths are bisected; all other draws "
         "are thrown out. This is useful for finding a reduced repo case for path drawing bugs.");
 
-DEFINE_bool(ignoreSigInt, false, "ignore SIGINT signals during test execution");
+static DEFINE_bool(ignoreSigInt, false, "ignore SIGINT signals during test execution");
 
-DEFINE_string(dont_write, "", "File extensions to skip writing to --writePath.");  // See skia:6821
+static DEFINE_string(dont_write, "", "File extensions to skip writing to --writePath.");  // See skia:6821
 
-DEFINE_bool(gdi, false, "On Windows, use GDI instead of DirectWrite for font rendering.");
+static DEFINE_bool(checkF16, false, "Ensure that F16Norm pixels are clamped.");
 
-DEFINE_bool(checkF16, false, "Ensure that F16Norm pixels are clamped.");
+static DEFINE_string(colorImages, "",
+              "List of images and/or directories to decode with color correction. "
+              "A directory with no images is treated as a fatal error.");
+
+static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.");
+
+static DEFINE_bool(cpu, true, "master switch for running CPU-bound work.");
+static DEFINE_bool(gpu, true, "master switch for running GPU-bound work.");
+
+static DEFINE_bool(dryRun, false,
+                   "just print the tests that would be run, without actually running them.");
+
+static DEFINE_string(images, "",
+                     "List of images and/or directories to decode. A directory with no images"
+                     " is treated as a fatal error.");
+
+static DEFINE_bool(simpleCodec, false,
+                   "Runs of a subset of the codec tests, "
+                   "with no scaling or subsetting, always using the canvas color type.");
+
+static DEFINE_string2(match, m, nullptr,
+               "[~][^]substring[$] [...] of name to run.\n"
+               "Multiple matches may be separated by spaces.\n"
+               "~ causes a matching name to always be skipped\n"
+               "^ requires the start of the name to match\n"
+               "$ requires the end of the name to match\n"
+               "^ and $ requires an exact match\n"
+               "If a name does not match any list entry,\n"
+               "it is skipped unless some list entry starts with ~");
+
+static DEFINE_bool2(quiet, q, false, "if true, don't print status updates.");
+static DEFINE_bool2(verbose, v, false, "enable verbose output from the test driver.");
+
+static DEFINE_string(skps, "skps", "Directory to read skps from.");
+static DEFINE_string(lotties, "lotties", "Directory to read (Bodymovin) jsons from.");
+static DEFINE_string(svgs, "", "Directory to read SVGs from, or a single SVG file.");
+
+static DEFINE_int_2(threads, j, -1,
+               "Run threadsafe tests on a threadpool with this many extra threads, "
+               "defaulting to one extra thread per core.");
+
+static DEFINE_string(key, "",
+                     "Space-separated key/value pairs to add to JSON identifying this builder.");
+static DEFINE_string(properties, "",
+                     "Space-separated key/value pairs to add to JSON identifying this run.");
+
 
 using namespace DM;
 using sk_gpu_test::GrContextFactory;
@@ -160,6 +204,12 @@ struct Running {
     }
 };
 
+static void dump_json() {
+    if (!FLAGS_writePath.isEmpty()) {
+        JsonWriter::DumpJson(FLAGS_writePath[0], FLAGS_key, FLAGS_properties);
+    }
+}
+
 // We use a spinlock to make locking this in a signal handler _somewhat_ safe.
 static SkSpinlock        gMutex;
 static int               gPending;
@@ -183,7 +233,7 @@ static void done(const char* config, const char* src, const char* srcOptions, co
     // We write out dm.json file and print out a progress update every once in a while.
     // Notice this also handles the final dm.json and progress update when pending == 0.
     if (pending % 500 == 0) {
-        JsonWriter::DumpJson();
+        dump_json();
 
         int curr = sk_tools::getCurrResidentSetSizeMB(),
             peak = sk_tools::getMaxResidentSetSizeMB();
@@ -556,9 +606,8 @@ static bool in_shard() {
 
 static void push_src(const char* tag, ImplicitString options, Src* s) {
     std::unique_ptr<Src> src(s);
-    if (in_shard() &&
-        FLAGS_src.contains(tag) &&
-        !SkCommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
+    if (in_shard() && FLAGS_src.contains(tag) &&
+        !CommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
         TaggedSrc& s = gSrcs.push_back();
         s.reset(src.release());
         s.tag = tag;
@@ -923,8 +972,9 @@ static void push_codec_srcs(Path path) {
 }
 
 template <typename T>
-void gather_file_srcs(const SkCommandLineFlags::StringArray& flags, const char* ext,
-                      const char* src_name = nullptr) {
+void gather_file_srcs(const CommandLineFlags::StringArray& flags,
+                      const char*                          ext,
+                      const char*                          src_name = nullptr) {
     if (!src_name) {
         // With the exception of Lottie files, the source name is the extension.
         src_name = ext;
@@ -1103,9 +1153,6 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
 
 static Sink* create_via(const SkString& tag, Sink* wrapped) {
 #define VIA(t, via, ...) if (tag.equals(t)) return new via(__VA_ARGS__)
-    VIA("gbr",       ViaCSXform,           wrapped, rgb_to_gbr(), true);
-    VIA("p3",        ViaCSXform,           wrapped,
-                     SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDCIP3), false);
     VIA("lite",      ViaLite,              wrapped);
 #ifdef TEST_VIA_SVG
     VIA("svg",       ViaSVG,               wrapped);
@@ -1401,8 +1448,8 @@ struct Task {
         if (bitmap) {
             result.gamut         = identify_gamut               (bitmap->colorSpace());
             result.transferFn    = identify_transfer_fn         (bitmap->colorSpace());
-            result.colorType     = sk_tool_utils::colortype_name(bitmap->colorType ());
-            result.alphaType     = sk_tool_utils::alphatype_name(bitmap->alphaType ());
+            result.colorType     = ToolUtils::colortype_name(bitmap->colorType());
+            result.alphaType     = ToolUtils::alphatype_name(bitmap->alphaType());
             result.colorDepth    = color_depth                  (bitmap->colorType());
         }
         JsonWriter::AddBitmapResult(result);
@@ -1414,8 +1461,9 @@ struct Task {
         }
 
         const char* dir = FLAGS_writePath[0];
+        SkString resources = GetResourcePath();
         if (0 == strcmp(dir, "@")) {  // Needed for iOS.
-            dir = FLAGS_resourcePath[0];
+            dir = resources.c_str();
         }
         sk_mkdir(dir);
 
@@ -1475,7 +1523,7 @@ static void gather_tests() {
         if (!in_shard()) {
             continue;
         }
-        if (SkCommandLineFlags::ShouldSkip(FLAGS_match, test.name)) {
+        if (CommandLineFlags::ShouldSkip(FLAGS_match, test.name)) {
             continue;
         }
         if (test.needsGpu && FLAGS_gpu) {
@@ -1515,17 +1563,7 @@ int main(int argc, char** argv) {
 #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) && defined(SK_HAS_HEIF_LIBRARY)
     android::ProcessState::self()->startThreadPool();
 #endif
-    SkCommandLineFlags::Parse(argc, argv);
-
-    if (!FLAGS_nativeFonts) {
-        gSkFontMgr_DefaultFactory = &sk_tool_utils::MakePortableFontMgr;
-    }
-
-#if defined(SK_BUILD_FOR_WIN)
-    if (FLAGS_gdi) {
-        gSkFontMgr_DefaultFactory = &SkFontMgr_New_GDI;
-    }
-#endif
+    CommandLineFlags::Parse(argc, argv);
 
     initializeEventTracingForTools();
 
@@ -1535,15 +1573,9 @@ int main(int argc, char** argv) {
     setbuf(stdout, nullptr);
     setup_crash_handler();
 
-    gSkUseAnalyticAA = FLAGS_analyticAA;
-    gSkUseDeltaAA = FLAGS_deltaAA;
+    ToolUtils::SetDefaultFontMgr();
+    SetAnalyticAAFromCommonFlags();
 
-    if (FLAGS_forceAnalyticAA) {
-        gSkForceAnalyticAA = true;
-    }
-    if (FLAGS_forceDeltaAA) {
-        gSkForceDeltaAA = true;
-    }
     if (FLAGS_forceRasterPipeline) {
         gSkForceRasterPipelineBlitter = true;
     }
@@ -1560,7 +1592,8 @@ int main(int argc, char** argv) {
     GrContextOptions grCtxOptions;
     SetCtxOptionsFromCommonFlags(&grCtxOptions);
 
-    JsonWriter::DumpJson();  // It's handy for the bots to assume this is ~never missing.
+    dump_json();  // It's handy for the bots to assume this is ~never missing.
+
     SkAutoGraphics ag;
     SkTaskGroup::Enabler enabled(FLAGS_threads);
 
@@ -1628,7 +1661,7 @@ int main(int argc, char** argv) {
     // We'd better have run everything.
     SkASSERT(gPending == 0);
     // Make sure we've flushed all our results to disk.
-    JsonWriter::DumpJson();
+    dump_json();
 
     if (gFailures.count() > 0) {
         info("Failures:\n");
@@ -1636,6 +1669,11 @@ int main(int argc, char** argv) {
             info("\t%s\n", gFailures[i].c_str());
         }
         info("%d failures\n", gFailures.count());
+        // A non-zero return code does not make it to Swarming
+        // An abort does.
+#ifdef SK_BUILD_FOR_IOS
+        SK_ABORT("There were failures!");
+#endif
         return 1;
     }
 

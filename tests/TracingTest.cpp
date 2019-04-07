@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "SkCommandLineFlags.h"
+#include "CommandLineFlags.h"
 #include "SkImageInfo.h"
 #include "SkLeanWindows.h"
 #include "SkPoint.h"
@@ -13,7 +13,8 @@
 #include "SkTraceEvent.h"
 #include "Test.h"
 
-DEFINE_bool(slowTracingTest, false, "Artificially slow down tracing test to produce nicer JSON");
+static DEFINE_bool(slowTracingTest, false,
+                   "Artificially slow down tracing test to produce nicer JSON");
 
 namespace {
 

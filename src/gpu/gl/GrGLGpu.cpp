@@ -530,7 +530,7 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
         this->hwBufferState(GrGpuBufferType::kXferCpuToGpu)->invalidate();
         this->hwBufferState(GrGpuBufferType::kXferGpuToCpu)->invalidate();
 
-        if (kGL_GrGLStandard == this->glStandard()) {
+        if (GR_IS_GR_GL(this->glStandard())) {
 #ifndef USE_NSIGHT
             // Desktop-only state that we never change
             if (!this->glCaps().isCoreProfile()) {
@@ -561,7 +561,7 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
 
         }
 
-        if (kGLES_GrGLStandard == this->glStandard() &&
+        if (GR_IS_GR_GL_ES(this->glStandard()) &&
             this->glCaps().fbFetchRequiresEnablePerSample()) {
             // The arm extension requires specifically enabling MSAA fetching per sample.
             // On some devices this may have a perf hit.  Also multiple render targets are disabled
@@ -987,15 +987,7 @@ static bool allocate_and_populate_texture(GrPixelConfig config,
                                           int baseWidth, int baseHeight) {
     CLEAR_ERROR_BEFORE_ALLOC(&interface);
 
-    bool useTexStorage = caps.isConfigTexSupportEnabled(config);
-    // We can only use TexStorage if we know we will not later change the storage requirements.
-    // This means if we may later want to add mipmaps, we cannot use TexStorage.
-    // Right now, we cannot know if we will later add mipmaps or not.
-    // The only time we can use TexStorage is when we already have the
-    // mipmaps.
-    useTexStorage &= mipLevelCount > 1;
-
-    if (useTexStorage) {
+    if (caps.isConfigTexSupportEnabled(config)) {
         // We never resize or change formats of textures.
         GL_ALLOC_CALL(&interface,
                       TexStorage2D(target, SkTMax(mipLevelCount, 1), internalFormatForTexStorage,
@@ -3057,16 +3049,16 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, GrGLTexture*
             GrGLenum glValues[4];
             get_gl_swizzle_values(swizzle, glValues);
             this->setTextureUnit(unitIdx);
-            if (this->glStandard() == kGLES_GrGLStandard) {
+            if (GR_IS_GR_GL(this->glStandard())) {
+                GR_STATIC_ASSERT(sizeof(glValues[0]) == sizeof(GrGLint));
+                GL_CALL(TexParameteriv(target, GR_GL_TEXTURE_SWIZZLE_RGBA,
+                                       reinterpret_cast<const GrGLint*>(glValues)));
+            } else if (GR_IS_GR_GL_ES(this->glStandard())) {
                 // ES3 added swizzle support but not GL_TEXTURE_SWIZZLE_RGBA.
                 GL_CALL(TexParameteri(target, GR_GL_TEXTURE_SWIZZLE_R, glValues[0]));
                 GL_CALL(TexParameteri(target, GR_GL_TEXTURE_SWIZZLE_G, glValues[1]));
                 GL_CALL(TexParameteri(target, GR_GL_TEXTURE_SWIZZLE_B, glValues[2]));
                 GL_CALL(TexParameteri(target, GR_GL_TEXTURE_SWIZZLE_A, glValues[3]));
-            } else {
-                GR_STATIC_ASSERT(sizeof(glValues[0]) == sizeof(GrGLint));
-                GL_CALL(TexParameteriv(target, GR_GL_TEXTURE_SWIZZLE_RGBA,
-                                       reinterpret_cast<const GrGLint*>(glValues)));
             }
         }
     }

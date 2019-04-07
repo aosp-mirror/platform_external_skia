@@ -5,15 +5,17 @@
  * found in the LICENSE file.
  */
 
+#include "CommandLineFlags.h"
 #include "Fuzz.h"
 #include "SkCanvas.h"
-#include "SkCommonFlags.h"
 #include "SkGradientShader.h"
 #include "SkSurface.h"
 #include "SkTLazy.h"
 
 #include <algorithm>
 #include <vector>
+
+static DEFINE_bool2(verbose, v, false, "log verbose linear gradient description");
 
 const int MAX_COUNT = 400;
 

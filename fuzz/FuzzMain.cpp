@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
+#include "CommandLineFlags.h"
 #include "Fuzz.h"
 #include "SkCanvas.h"
 #include "SkCodec.h"
-#include "SkCommandLineFlags.h"
 #include "SkData.h"
 #include "SkImage.h"
 #include "SkImageEncoder.h"
@@ -23,20 +23,20 @@
 #include "SkSurface.h"
 #include "SkTextBlob.h"
 
-#include "sk_tool_utils.h"
+#include "ToolUtils.h"
 
 #include <iostream>
 #include <map>
 #include <regex>
 #include <signal.h>
 
-DEFINE_string2(bytes, b, "", "A path to a file or a directory. If a file, the "
-        "contents will be used as the fuzz bytes. If a directory, all files "
-        "in the directory will be used as fuzz bytes for the fuzzer, one at a "
-        "time.");
-DEFINE_string2(name, n, "", "If --type is 'api', fuzz the API with this name.");
-DEFINE_string2(dump, d, "", "If not empty, dump 'image*' or 'skp' types as a "
-        "PNG with this name.");
+static DEFINE_string2(bytes, b, "", "A path to a file or a directory. If a file, the "
+                      "contents will be used as the fuzz bytes. If a directory, all files "
+                      "in the directory will be used as fuzz bytes for the fuzzer, one at a "
+                      "time.");
+static DEFINE_string2(name, n, "", "If --type is 'api', fuzz the API with this name.");
+static DEFINE_string2(dump, d, "", "If not empty, dump 'image*' or 'skp' types as a "
+                                   "PNG with this name.");
 DEFINE_bool2(verbose, v, false, "Print more information while fuzzing.");
 
 // This cannot be inlined in DEFINE_string2 due to interleaved ifdefs
@@ -64,7 +64,7 @@ static constexpr char g_type_message[] = "How to interpret --bytes, one of:\n"
 #endif
                                          "textblob";
 
-DEFINE_string2(type, t, "", g_type_message);
+static DEFINE_string2(type, t, "", g_type_message);
 
 static int fuzz_file(SkString path, SkString type);
 static uint8_t calculate_option(SkData*);
@@ -96,11 +96,12 @@ static void fuzz_skottie_json(sk_sp<SkData>);
 #endif
 
 int main(int argc, char** argv) {
-    SkCommandLineFlags::SetUsage("Usage: fuzz -t <type> -b <path/to/file> [-n api-to-fuzz]\n"
-                                 "       fuzz -b <path/to/file>\n"
-                                 "--help lists the valid types. If type is not specified,\n"
-                                 "fuzz will make a guess based on the name of the file.\n");
-    SkCommandLineFlags::Parse(argc, argv);
+    CommandLineFlags::SetUsage(
+            "Usage: fuzz -t <type> -b <path/to/file> [-n api-to-fuzz]\n"
+            "       fuzz -b <path/to/file>\n"
+            "--help lists the valid types. If type is not specified,\n"
+            "fuzz will make a guess based on the name of the file.\n");
+    CommandLineFlags::Parse(argc, argv);
 
     SkString path = SkString(FLAGS_bytes.isEmpty() ? argv[0] : FLAGS_bytes[0]);
     SkString type = SkString(FLAGS_type.isEmpty() ? "" : FLAGS_type[0]);
@@ -227,7 +228,7 @@ static int fuzz_file(SkString path, SkString type) {
         return 0;
     }
     SkDebugf("Unknown type %s\n", type.c_str());
-    SkCommandLineFlags::PrintUsage();
+    CommandLineFlags::PrintUsage();
     return 1;
 }
 
@@ -353,7 +354,7 @@ static void fuzz_api(sk_sp<SkData> bytes, SkString name) {
 
 static void dump_png(SkBitmap bitmap) {
     if (!FLAGS_dump.isEmpty()) {
-        sk_tool_utils::EncodeImageToFile(FLAGS_dump[0], bitmap, SkEncodedImageFormat::kPNG, 100);
+        ToolUtils::EncodeImageToFile(FLAGS_dump[0], bitmap, SkEncodedImageFormat::kPNG, 100);
         SkDebugf("Dumped to %s\n", FLAGS_dump[0]);
     }
 }

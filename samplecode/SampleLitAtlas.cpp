@@ -5,18 +5,18 @@
  * found in the LICENSE file.
  */
 
+#include "AnimTimer.h"
 #include "Sample.h"
-#include "SkAnimTimer.h"
 #include "SkBitmapProcShader.h"
 #include "SkCanvas.h"
 #include "SkDrawable.h"
 #include "SkLightingShader.h"
 #include "SkLights.h"
 #include "SkNormalSource.h"
-#include "SkRandom.h"
 #include "SkRSXform.h"
+#include "SkRandom.h"
 
-#include "sk_tool_utils.h"
+#include "ToolUtils.h"
 
 // A crude normal mapped asteroids-like sample
 class DrawLitAtlasDrawable : public SkDrawable {
@@ -251,9 +251,8 @@ private:
                 }
             }
 
-            sk_tool_utils::create_hemi_normal_map(&atlas,
-                                                  SkIRect::MakeXYWH(kNormXOff, kBigYOff,
-                                                                    kBigSize, kBigSize));
+            ToolUtils::create_hemi_normal_map(
+                    &atlas, SkIRect::MakeXYWH(kNormXOff, kBigYOff, kBigSize, kBigSize));
         }
 
         // medium asteroid
@@ -264,9 +263,8 @@ private:
                 }
             }
 
-            sk_tool_utils::create_frustum_normal_map(&atlas,
-                                                     SkIRect::MakeXYWH(kNormXOff, kMedYOff,
-                                                                       kMedSize, kMedSize));
+            ToolUtils::create_frustum_normal_map(
+                    &atlas, SkIRect::MakeXYWH(kNormXOff, kMedYOff, kMedSize, kMedSize));
         }
 
         // small asteroid
@@ -285,9 +283,8 @@ private:
                 }
             }
 
-            sk_tool_utils::create_hemi_normal_map(&atlas,
-                                                  SkIRect::MakeXYWH(kNormXOff, kSmYOff,
-                                                                    kSmSize, kSmSize));
+            ToolUtils::create_hemi_normal_map(
+                    &atlas, SkIRect::MakeXYWH(kNormXOff, kSmYOff, kSmSize, kSmSize));
         }
 
         // ship
@@ -314,9 +311,8 @@ private:
                 }
             }
 
-            sk_tool_utils::create_tetra_normal_map(&atlas,
-                                                   SkIRect::MakeXYWH(kNormXOff, kShipYOff,
-                                                                     kMedSize, kMedSize));
+            ToolUtils::create_tetra_normal_map(
+                    &atlas, SkIRect::MakeXYWH(kNormXOff, kShipYOff, kMedSize, kMedSize));
         }
 
         return atlas;
@@ -486,9 +482,7 @@ protected:
         canvas->drawDrawable(fDrawable.get());
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
-        return true;
-    }
+    bool onAnimate(const AnimTimer& timer) override { return true; }
 
 private:
     sk_sp<DrawLitAtlasDrawable> fDrawable;

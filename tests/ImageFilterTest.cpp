@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
+#include "Resources.h"
 #include "SkArithmeticImageFilter.h"
 #include "SkBitmap.h"
 #include "SkBlurImageFilter.h"
 #include "SkCanvas.h"
 #include "SkColorFilterImageFilter.h"
 #include "SkColorMatrixFilter.h"
-#include "SkColorSpaceXformer.h"
 #include "SkComposeImageFilter.h"
 #include "SkDisplacementMapEffect.h"
 #include "SkDropShadowImageFilter.h"
@@ -38,9 +38,8 @@
 #include "SkTableColorFilter.h"
 #include "SkTileImageFilter.h"
 #include "SkXfermodeImageFilter.h"
-#include "Resources.h"
 #include "Test.h"
-#include "sk_tool_utils.h"
+#include "ToolUtils.h"
 
 #include "GrCaps.h"
 #include "GrContext.h"
@@ -63,9 +62,6 @@ protected:
         REPORTER_ASSERT(fReporter, ctx.ctm() == fExpectedMatrix);
         offset->fX = offset->fY = 0;
         return sk_ref_sp<SkSpecialImage>(source);
-    }
-    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override {
-        return sk_ref_sp(const_cast<MatrixTestImageFilter*>(this));
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
@@ -94,9 +90,6 @@ public:
     sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* source,
                                         const Context& ctx,
                                         SkIPoint* offset) const override {
-        return nullptr;
-    }
-    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override {
         return nullptr;
     }
 
@@ -295,7 +288,6 @@ private:
                                         SkIPoint* offset) const override {
         return nullptr;
     }
-    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override { return nullptr; }
 
     SkIRect onFilterBounds(const SkIRect&, const SkMatrix&,
                            MapDirection, const SkIRect*) const override {
@@ -713,7 +705,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
 
     SkPaint textPaint;
     textPaint.setColor(SK_ColorWHITE);
-    SkFont font(sk_tool_utils::create_portable_typeface(), height);
+    SkFont font(ToolUtils::create_portable_typeface(), height);
 
     const char* text = "ABC";
     const SkScalar yPos = SkIntToScalar(height);
@@ -751,7 +743,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
                 }
             }
 
-            if (!sk_tool_utils::equal_pixels(untiledResult, tiledResult)) {
+            if (!ToolUtils::equal_pixels(untiledResult, tiledResult)) {
                 REPORTER_ASSERT(reporter, false, filters.getName(i));
                 break;
             }
@@ -1806,48 +1798,6 @@ DEF_TEST(ImageFilterComplexCTM, reporter) {
         const bool canHandle = rec.fFilter->canHandleComplexCTM();
         REPORTER_ASSERT(reporter, canHandle == rec.fExpectCanHandle);
     }
-}
-
-// Test that transforming the filter DAG doesn't clone shared nodes multiple times.
-DEF_TEST(ImageFilterColorSpaceDAG, reporter) {
-
-    // Helper for counting makeColorSpace() clones.
-    class TestFilter final : public SkImageFilter {
-    public:
-        TestFilter() : INHERITED(nullptr, 0, nullptr) {}
-
-        Factory getFactory() const override { return nullptr; }
-        const char* getTypeName() const override { return nullptr; }
-
-        size_t cloneCount() const { return fCloneCount; }
-
-    protected:
-        sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* src, const Context&,
-                                            SkIPoint* offset) const override {
-            return nullptr;
-        }
-        sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override {
-            fCloneCount++;
-            return sk_ref_sp(const_cast<TestFilter*>(this));
-        }
-
-    private:
-        typedef SkImageFilter INHERITED;
-
-        mutable size_t fCloneCount = 0;
-    };
-
-    auto filter = sk_make_sp<TestFilter>();
-    REPORTER_ASSERT(reporter, filter->cloneCount() == 0u);
-
-    // Build a DAG referencing the filter twice.
-    auto complexFilter = SkMergeImageFilter::Make(filter, SkOffsetImageFilter::Make(1, 1, filter));
-    REPORTER_ASSERT(reporter, filter->cloneCount() == 0u);
-
-    auto xformer = SkColorSpaceXformer::Make(SkColorSpace::MakeSRGB());
-    auto xformedFilter = xformer->apply(complexFilter.get());
-
-    REPORTER_ASSERT(reporter, filter->cloneCount() == 1u);
 }
 
 // Test SkXfermodeImageFilter::filterBounds with different blending modes.

@@ -5,7 +5,11 @@
 * found in the LICENSE file.
 */
 
+#include "Viewer.h"
 #include "BisectSlide.h"
+#include "CommandLineFlags.h"
+#include "CommonFlags.h"
+#include "EventTracingPriv.h"
 #include "GMSlide.h"
 #include "GrContext.h"
 #include "GrContextPriv.h"
@@ -16,11 +20,6 @@
 #include "SampleSlide.h"
 #include "SkCanvas.h"
 #include "SkColorSpacePriv.h"
-#include "SkCommandLineFlags.h"
-#include "SkCommonFlags.h"
-#include "SkCommonFlagsGpu.h"
-#include "SkEventTracingPriv.h"
-#include "SkFontMgrPriv.h"
 #include "SkGraphics.h"
 #include "SkImagePriv.h"
 #include "SkJSONWriter.h"
@@ -33,11 +32,10 @@
 #include "SkStream.h"
 #include "SkSurface.h"
 #include "SkTaskGroup.h"
-#include "SkTestFontMgr.h"
 #include "SkTo.h"
 #include "SlideDir.h"
 #include "SvgSlide.h"
-#include "Viewer.h"
+#include "ToolUtils.h"
 #include "ccpr/GrCoverageCountingPathRenderer.h"
 
 #include <stdlib.h>
@@ -74,13 +72,41 @@ static DEFINE_bool(list, false, "List samples?");
 
 static DEFINE_string2(backend, b, "sw", "Backend to use. Allowed values are " BACKENDS_STR ".");
 
-static DEFINE_int32(msaa, 1, "Number of subpixel samples. 0 for no HW antialiasing.");
+static DEFINE_int(msaa, 1, "Number of subpixel samples. 0 for no HW antialiasing.");
 
-DEFINE_string(bisect, "", "Path to a .skp or .svg file to bisect.");
+static DEFINE_string(bisect, "", "Path to a .skp or .svg file to bisect.");
 
-DECLARE_int32(threads)
+static DEFINE_string2(file, f, "", "Open a single file for viewing.");
 
-DEFINE_string2(file, f, "", "Open a single file for viewing.");
+static DEFINE_string2(match, m, nullptr,
+               "[~][^]substring[$] [...] of name to run.\n"
+               "Multiple matches may be separated by spaces.\n"
+               "~ causes a matching name to always be skipped\n"
+               "^ requires the start of the name to match\n"
+               "$ requires the end of the name to match\n"
+               "^ and $ requires an exact match\n"
+               "If a name does not match any list entry,\n"
+               "it is skipped unless some list entry starts with ~");
+
+#if defined(SK_BUILD_FOR_ANDROID)
+    static DEFINE_string(jpgs, "/data/local/tmp/resources", "Directory to read jpgs from.");
+    static DEFINE_string(nimas, "/data/local/tmp/nimas", "Directory to read NIMA animations from.");
+    static DEFINE_string(skps, "/data/local/tmp/skps", "Directory to read skps from.");
+    static DEFINE_string(lotties, "/data/local/tmp/lotties",
+                         "Directory to read (Bodymovin) jsons from.");
+#else
+    static DEFINE_string(jpgs, "jpgs", "Directory to read jpgs from.");
+    static DEFINE_string(nimas, "nimas", "Directory to read NIMA animations from.");
+    static DEFINE_string(skps, "skps", "Directory to read skps from.");
+    static DEFINE_string(lotties, "lotties", "Directory to read (Bodymovin) jsons from.");
+#endif
+
+static DEFINE_string(svgs, "", "Directory to read SVGs from, or a single SVG file.");
+
+static DEFINE_int_2(threads, j, -1,
+               "Run threadsafe tests on a threadpool with this many extra threads, "
+               "defaulting to one extra thread per core.");
+
 
 const char* kBackendTypeStrings[sk_app::Window::kBackendTypeCount] = {
     "OpenGL",
@@ -233,14 +259,12 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     }
     SkDebugf("\n");
 
-    SkCommandLineFlags::Parse(argc, argv);
+    CommandLineFlags::Parse(argc, argv);
 #ifdef SK_BUILD_FOR_ANDROID
     SetResourcePath("/data/local/tmp/resources");
 #endif
 
-    if (!FLAGS_nativeFonts) {
-        gSkFontMgr_DefaultFactory = &sk_tool_utils::MakePortableFontMgr;
-    }
+    ToolUtils::SetDefaultFontMgr();
 
     initializeEventTracingForTools();
     static SkTaskGroup::Enabler kTaskGroupEnabler(FLAGS_threads);
@@ -382,6 +406,13 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
         this->updateTitle();
         fWindow->inval();
     });
+    fCommands.addCommand('v', "VSync", "Toggle vsync on/off", [this]() {
+        DisplayParams params = fWindow->getRequestedDisplayParams();
+        params.fDisableVsync = !params.fDisableVsync;
+        fWindow->setRequestedDisplayParams(params);
+        this->updateTitle();
+        fWindow->inval();
+    });
     fCommands.addCommand('H', "Font", "Hinting mode", [this]() {
         if (!fFontOverrides.fHinting) {
             fFontOverrides.fHinting = true;
@@ -412,44 +443,27 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
             fPaintOverrides.fAntiAlias = true;
             fPaint.setAntiAlias(false);
             gSkUseAnalyticAA = gSkForceAnalyticAA = false;
-            gSkUseDeltaAA = gSkForceDeltaAA = false;
         } else {
             fPaint.setAntiAlias(true);
             switch (fPaintOverrides.fAntiAliasState) {
                 case SkPaintFields::AntiAliasState::Alias:
                     fPaintOverrides.fAntiAliasState = SkPaintFields::AntiAliasState::Normal;
                     gSkUseAnalyticAA = gSkForceAnalyticAA = false;
-                    gSkUseDeltaAA = gSkForceDeltaAA = false;
                     break;
                 case SkPaintFields::AntiAliasState::Normal:
                     fPaintOverrides.fAntiAliasState = SkPaintFields::AntiAliasState::AnalyticAAEnabled;
                     gSkUseAnalyticAA = true;
                     gSkForceAnalyticAA = false;
-                    gSkUseDeltaAA = gSkForceDeltaAA = false;
                     break;
                 case SkPaintFields::AntiAliasState::AnalyticAAEnabled:
                     fPaintOverrides.fAntiAliasState = SkPaintFields::AntiAliasState::AnalyticAAForced;
                     gSkUseAnalyticAA = gSkForceAnalyticAA = true;
-                    gSkUseDeltaAA = gSkForceDeltaAA = false;
                     break;
                 case SkPaintFields::AntiAliasState::AnalyticAAForced:
-                    fPaintOverrides.fAntiAliasState = SkPaintFields::AntiAliasState::DeltaAAEnabled;
-                    gSkUseAnalyticAA = gSkForceAnalyticAA = false;
-                    gSkUseDeltaAA = true;
-                    gSkForceDeltaAA = false;
-                    break;
-                case SkPaintFields::AntiAliasState::DeltaAAEnabled:
-                    fPaintOverrides.fAntiAliasState = SkPaintFields::AntiAliasState::DeltaAAForced;
-                    gSkUseAnalyticAA = gSkForceAnalyticAA = false;
-                    gSkUseDeltaAA = gSkForceDeltaAA = true;
-                    break;
-                case SkPaintFields::AntiAliasState::DeltaAAForced:
                     fPaintOverrides.fAntiAliasState = SkPaintFields::AntiAliasState::Alias;
                     fPaintOverrides.fAntiAlias = false;
                     gSkUseAnalyticAA = fPaintOverrides.fOriginalSkUseAnalyticAA;
                     gSkForceAnalyticAA = fPaintOverrides.fOriginalSkForceAnalyticAA;
-                    gSkUseDeltaAA = fPaintOverrides.fOriginalSkUseDeltaAA;
-                    gSkForceDeltaAA = fPaintOverrides.fOriginalSkForceDeltaAA;
                     break;
             }
         }
@@ -549,7 +563,7 @@ void Viewer::initSlides() {
     static const struct {
         const char*                            fExtension;
         const char*                            fDirName;
-        const SkCommandLineFlags::StringArray& fFlags;
+        const CommandLineFlags::StringArray&   fFlags;
         const SlideFactory                     fFactory;
     } gExternalSlidesInfo[] = {
         { ".skp", "skp-dir", FLAGS_skps,
@@ -582,18 +596,17 @@ void Viewer::initSlides() {
 
     SkTArray<sk_sp<Slide>> dirSlides;
 
-    const auto addSlide = [&](const SkString& name,
-                              const SkString& path,
-                              const SlideFactory& fact) {
-        if (SkCommandLineFlags::ShouldSkip(FLAGS_match,  name.c_str())) {
-            return;
-        }
+    const auto addSlide =
+            [&](const SkString& name, const SkString& path, const SlideFactory& fact) {
+                if (CommandLineFlags::ShouldSkip(FLAGS_match, name.c_str())) {
+                    return;
+                }
 
-        if (auto slide = fact(name, path)) {
-            dirSlides.push_back(slide);
-            fSlides.push_back(std::move(slide));
-        }
-    };
+                if (auto slide = fact(name, path)) {
+                    dirSlides.push_back(slide);
+                    fSlides.push_back(std::move(slide));
+                }
+            };
 
     if (!FLAGS_file.isEmpty()) {
         // single file mode
@@ -618,7 +631,7 @@ void Viewer::initSlides() {
     // Bisect slide.
     if (!FLAGS_bisect.isEmpty()) {
         sk_sp<BisectSlide> bisect = BisectSlide::Create(FLAGS_bisect[0]);
-        if (bisect && !SkCommandLineFlags::ShouldSkip(FLAGS_match, bisect->getName().c_str())) {
+        if (bisect && !CommandLineFlags::ShouldSkip(FLAGS_match, bisect->getName().c_str())) {
             if (FLAGS_bisect.count() >= 2) {
                 for (const char* ch = FLAGS_bisect[1]; *ch; ++ch) {
                     bisect->onChar(*ch);
@@ -632,7 +645,7 @@ void Viewer::initSlides() {
     int firstGM = fSlides.count();
     for (skiagm::GMFactory gmFactory : skiagm::GMRegistry::Range()) {
         std::unique_ptr<skiagm::GM> gm(gmFactory(nullptr));
-        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, gm->getName())) {
+        if (!CommandLineFlags::ShouldSkip(FLAGS_match, gm->getName())) {
             sk_sp<Slide> slide(new GMSlide(gm.release()));
             fSlides.push_back(std::move(slide));
         }
@@ -646,7 +659,7 @@ void Viewer::initSlides() {
     // samples
     for (const SampleFactory factory : SampleRegistry::Range()) {
         sk_sp<Slide> slide(new SampleSlide(factory));
-        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
+        if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
             fSlides.push_back(slide);
         }
     }
@@ -655,7 +668,7 @@ void Viewer::initSlides() {
     {
         // TODO: Convert this to a sample
         sk_sp<Slide> slide(new ParticlesSlide());
-        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
+        if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
             fSlides.push_back(std::move(slide));
         }
     }
@@ -725,13 +738,7 @@ void Viewer::updateTitle() {
     SkString title("Viewer: ");
     title.append(fSlides[fCurrentSlide]->getName());
 
-    if (gSkUseDeltaAA) {
-        if (gSkForceDeltaAA) {
-            title.append(" <FDAA>");
-        } else {
-            title.append(" <DAA>");
-        }
-    } else if (gSkUseAnalyticAA) {
+    if (gSkUseAnalyticAA) {
         if (gSkForceAnalyticAA) {
             title.append(" <FAAA>");
         } else {
@@ -992,8 +999,8 @@ SkMatrix Viewer::computePerspectiveMatrix() {
 
 SkMatrix Viewer::computePreTouchMatrix() {
     SkMatrix m = fDefaultMatrix;
-    SkScalar zoomScale = (fZoomLevel < 0) ? SK_Scalar1 / (SK_Scalar1 - fZoomLevel)
-                                          : SK_Scalar1 + fZoomLevel;
+
+    SkScalar zoomScale = exp(fZoomLevel);
     m.preTranslate((fOffset.x() - 0.5f) * 2.0f, (fOffset.y() - 0.5f) * 2.0f);
     m.preScale(zoomScale, zoomScale);
 
@@ -1123,8 +1130,14 @@ public:
             this->filterTextBlob(paint, blob, &cache), x, y, paint);
     }
     bool filterFont(SkTCopyOnFirstWrite<SkFont>* font) const {
-        if (fFontOverrides->fTextSize) {
+        if (fFontOverrides->fSize) {
             font->writable()->setSize(fFont->getSize());
+        }
+        if (fFontOverrides->fScaleX) {
+            font->writable()->setScaleX(fFont->getScaleX());
+        }
+        if (fFontOverrides->fSkewX) {
+            font->writable()->setSkewX(fFont->getSkewX());
         }
         if (fFontOverrides->fHinting) {
             font->writable()->setHinting(fFont->getHinting());
@@ -1634,13 +1647,10 @@ void Viewer::drawImGui() {
                     aliasIdx = SkTo<int>(fPaintOverrides.fAntiAliasState) + 1;
                 }
                 if (ImGui::Combo("Anti-Alias", &aliasIdx,
-                                 "Default\0Alias\0Normal\0AnalyticAAEnabled\0AnalyticAAForced\0"
-                                 "DeltaAAEnabled\0DeltaAAForced\0\0"))
+                                 "Default\0Alias\0Normal\0AnalyticAAEnabled\0AnalyticAAForced\0\0"))
                 {
                     gSkUseAnalyticAA = fPaintOverrides.fOriginalSkUseAnalyticAA;
                     gSkForceAnalyticAA = fPaintOverrides.fOriginalSkForceAnalyticAA;
-                    gSkUseDeltaAA = fPaintOverrides.fOriginalSkUseDeltaAA;
-                    gSkForceDeltaAA = fPaintOverrides.fOriginalSkForceDeltaAA;
                     if (aliasIdx == 0) {
                         fPaintOverrides.fAntiAliasState = SkPaintFields::AntiAliasState::Alias;
                         fPaintOverrides.fAntiAlias = false;
@@ -1656,20 +1666,9 @@ void Viewer::drawImGui() {
                             case SkPaintFields::AntiAliasState::AnalyticAAEnabled:
                                 gSkUseAnalyticAA = true;
                                 gSkForceAnalyticAA = false;
-                                gSkUseDeltaAA = gSkForceDeltaAA = false;
                                 break;
                             case SkPaintFields::AntiAliasState::AnalyticAAForced:
                                 gSkUseAnalyticAA = gSkForceAnalyticAA = true;
-                                gSkUseDeltaAA = gSkForceDeltaAA = false;
-                                break;
-                            case SkPaintFields::AntiAliasState::DeltaAAEnabled:
-                                gSkUseAnalyticAA = gSkForceAnalyticAA = false;
-                                gSkUseDeltaAA = true;
-                                gSkForceDeltaAA = false;
-                                break;
-                            case SkPaintFields::AntiAliasState::DeltaAAForced:
-                                gSkUseAnalyticAA = gSkForceAnalyticAA = false;
-                                gSkUseDeltaAA = gSkForceDeltaAA = true;
                                 break;
                         }
                     }
@@ -1799,18 +1798,35 @@ void Viewer::drawImGui() {
                     paramsChanged = true;
                 }
 
-                ImGui::Checkbox("Override TextSize", &fFontOverrides.fTextSize);
-                if (fFontOverrides.fTextSize) {
-                    ImGui::DragFloat2("TextRange", fFontOverrides.fTextSizeRange,
+                ImGui::Checkbox("Override Size", &fFontOverrides.fSize);
+                if (fFontOverrides.fSize) {
+                    ImGui::DragFloat2("TextRange", fFontOverrides.fSizeRange,
                                       0.001f, -10.0f, 300.0f, "%.6f", 2.0f);
                     float textSize = fFont.getSize();
                     if (ImGui::DragFloat("TextSize", &textSize, 0.001f,
-                                         fFontOverrides.fTextSizeRange[0],
-                                         fFontOverrides.fTextSizeRange[1],
+                                         fFontOverrides.fSizeRange[0],
+                                         fFontOverrides.fSizeRange[1],
                                          "%.6f", 2.0f))
                     {
                         fFont.setSize(textSize);
-                        this->preTouchMatrixChanged();
+                        paramsChanged = true;
+                    }
+                }
+
+                ImGui::Checkbox("Override ScaleX", &fFontOverrides.fScaleX);
+                if (fFontOverrides.fScaleX) {
+                    float scaleX = fFont.getScaleX();
+                    if (ImGui::SliderFloat("ScaleX", &scaleX, MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL)) {
+                        fFont.setScaleX(scaleX);
+                        paramsChanged = true;
+                    }
+                }
+
+                ImGui::Checkbox("Override SkewX", &fFontOverrides.fSkewX);
+                if (fFontOverrides.fSkewX) {
+                    float skewX = fFont.getSkewX();
+                    if (ImGui::SliderFloat("SkewX", &skewX, MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL)) {
+                        fFont.setSkewX(skewX);
                         paramsChanged = true;
                     }
                 }
@@ -1831,6 +1847,13 @@ void Viewer::drawImGui() {
                                 controls.findScalars(name, &count, val);
                                 if (ImGui::SliderFloat(name, &val[0], val[1], val[2])) {
                                     controls.setScalars(name, 3, val);
+                                }
+                            } else if (type == SkMetaData::kBool_Type) {
+                                bool val;
+                                SkASSERT(count == 1);
+                                controls.findBool(name, &val);
+                                if (ImGui::Checkbox(name, &val)) {
+                                    controls.setBool(name, val);
                                 }
                             }
                         }
