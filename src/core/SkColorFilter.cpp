@@ -33,10 +33,6 @@ bool SkColorFilter::asColorMatrix(SkScalar matrix[20]) const {
     return false;
 }
 
-bool SkColorFilter::asComponentTable(SkBitmap*) const {
-    return false;
-}
-
 #if SK_SUPPORT_GPU
 std::unique_ptr<GrFragmentProcessor> SkColorFilter::asFragmentProcessor(
         GrRecordingContext*, const GrColorSpaceInfo&) const {
@@ -157,12 +153,6 @@ sk_sp<SkFlattenable> SkComposeColorFilter::CreateProc(SkReadBuffer& buffer) {
 sk_sp<SkColorFilter> SkColorFilter::makeComposed(sk_sp<SkColorFilter> inner) const {
     if (!inner) {
         return sk_ref_sp(this);
-    }
-
-    // Give the subclass a shot at a more optimal composition...
-    auto composition = this->onMakeComposed(inner);
-    if (composition) {
-        return composition;
     }
 
     int count = inner->privateComposedFilterCount() + this->privateComposedFilterCount();

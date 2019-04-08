@@ -481,15 +481,12 @@ GrSemaphoresSubmitted GrDrawingManager::prepareSurfaceForExternalIO(
         return GrSemaphoresSubmitted::kNo; // Can't flush while DDL recording
     }
 
-    auto resourceProvider = direct->priv().resourceProvider();
-
-    GrSemaphoresSubmitted result = GrSemaphoresSubmitted::kNo;
-    if (proxy->priv().hasPendingIO() || numSemaphores ||
-        SkToBool(flags & SkSurface::kSyncCpu_FlushFlag)) {
-        result = this->flush(proxy, access, flags, numSemaphores, backendSemaphores);
-    }
-
-    if (!proxy->instantiate(resourceProvider)) {
+    // TODO: It is important to upgrade the drawingmanager to just flushing the
+    // portion of the DAG required by 'proxy' in order to restore some of the
+    // semantics of this method.
+    GrSemaphoresSubmitted result = this->flush(proxy, access, flags, numSemaphores,
+                                               backendSemaphores);
+    if (!proxy->isInstantiated()) {
         return result;
     }
 

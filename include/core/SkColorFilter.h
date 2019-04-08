@@ -32,37 +32,19 @@ class SkString;
  */
 class SK_API SkColorFilter : public SkFlattenable {
 public:
-    /**
+    /** DEPRECATED. skbug.com/8941
      *  If the filter can be represented by a source color plus Mode, this
      *  returns true, and sets (if not NULL) the color and mode appropriately.
      *  If not, this returns false and ignores the parameters.
      */
     virtual bool asColorMode(SkColor* color, SkBlendMode* bmode) const;
 
-    /**
+    /** DEPRECATED. skbug.com/8941
      *  If the filter can be represented by a 5x4 matrix, this
      *  returns true, and sets the matrix appropriately.
      *  If not, this returns false and ignores the parameter.
      */
     virtual bool asColorMatrix(SkScalar matrix[20]) const;
-
-    /**
-     *  If the filter can be represented by per-component table, return true,
-     *  and if table is not null, copy the bitmap containing the table into it.
-     *
-     *  The table bitmap will be in SkBitmap::kA8_Config. Each row corresponding
-     *  to each component in ARGB order. e.g. row[0] == alpha, row[1] == red,
-     *  etc. To transform a color, you (logically) perform the following:
-     *
-     *      a' = *table.getAddr8(a, 0);
-     *      r' = *table.getAddr8(r, 1);
-     *      g' = *table.getAddr8(g, 2);
-     *      b' = *table.getAddr8(b, 3);
-     *
-     *  The original component value is the horizontal index for a given row,
-     *  and the stored value at that index is the new value for that component.
-     */
-    virtual bool asComponentTable(SkBitmap* table) const;
 
     bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const;
 
@@ -176,15 +158,6 @@ public:
 
 protected:
     SkColorFilter() {}
-
-    /**
-     *  If this subclass can optimally createa composition with the inner filter, return it as
-     *  a new filter (which the caller must unref() when it is done). If no such optimization
-     *  is known, return NULL.
-     *
-     *  e.g. result(color) == this_filter(inner(color))
-     */
-    virtual sk_sp<SkColorFilter> onMakeComposed(sk_sp<SkColorFilter>) const { return nullptr; }
 
 private:
     /*
