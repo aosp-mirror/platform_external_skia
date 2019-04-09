@@ -145,16 +145,8 @@ public:
         uint32_t    fGradientFlags; //!< see SkGradientShader::Flags
     };
 
+    // DEPRECATED. skbug.com/8941
     virtual GradientType asAGradient(GradientInfo* info) const;
-
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    struct ComposeRec {
-        const SkShader*     fShaderA;
-        const SkShader*     fShaderB;
-        SkBlendMode         fBlendMode;
-    };
-    virtual bool asACompose(ComposeRec*) const { return false; }
-#endif
 
     //////////////////////////////////////////////////////////////////////////
     //  Methods to create combinations or variants of shaders
@@ -193,38 +185,25 @@ public:
      */
     static sk_sp<SkShader> MakeColorShader(const SkColor4f&, sk_sp<SkColorSpace>);
 
-    /**
-     *  Compose two shaders together, using two operators: mode and lerp. The resulting colors
-     *  are computed by first combining the src and dst shaders using mode, and then linearly
-     *  interpolating between the dst and result colors using lerp.
-     *
-     *      result = dst * (1 - lerp) + (src (mode) dst) * lerp
-     *
-     *  If either shader is nullptr, then this returns nullptr.
-     *  If lerp is NaN then this returns nullptr, otherwise lerp is clamped to [0..1].
-     */
-    static sk_sp<SkShader> MakeCompose(sk_sp<SkShader> dst, sk_sp<SkShader> src,
-                                       SkBlendMode mode, float lerp = 1);
+    static sk_sp<SkShader> MakeBlend(SkBlendMode mode, sk_sp<SkShader> dst, sk_sp<SkShader> src);
 
     /*
-     *  DEPRECATED: call MakeCompose.
+     *  DEPRECATED: call MakeBlend.
      */
     static sk_sp<SkShader> MakeComposeShader(sk_sp<SkShader> dst, sk_sp<SkShader> src,
                                              SkBlendMode mode) {
-        return MakeCompose(std::move(dst), std::move(src), mode, 1);
+        return MakeBlend(mode, std::move(dst), std::move(src));
     }
 
     /**
      *  Compose two shaders together using a weighted average.
      *
-     *  result = dst * (1 - lerp) + src * lerp
+     *  result = dst * (1 - weight) + src * weight
      *
      *  If either shader is nullptr, then this returns nullptr.
-     *  If lerp is NaN then this returns nullptr, otherwise lerp is clamped to [0..1].
+     *  If weight is NaN then this returns nullptr, otherwise lerp is clamped to [0..1].
      */
-    static sk_sp<SkShader> MakeLerp(sk_sp<SkShader> dst, sk_sp<SkShader> src, float lerp) {
-        return MakeCompose(std::move(dst), std::move(src), SkBlendMode::kSrc, lerp);
-    }
+    static sk_sp<SkShader> MakeLerp(float weight, sk_sp<SkShader> dst, sk_sp<SkShader> src);
 
     static sk_sp<SkShader> MakeMixer(sk_sp<SkShader> dst, sk_sp<SkShader> src, sk_sp<SkMixer>);
 
@@ -264,7 +243,7 @@ public:
     static sk_sp<SkShader> MakePictureShader(sk_sp<SkPicture> src, TileMode tmx, TileMode tmy,
                                              const SkMatrix* localMatrix, const SkRect* tile);
 
-    /**
+    /** DEPRECATED. skbug.com/8941
      *  If this shader can be represented by another shader + a localMatrix, return that shader and
      *  the localMatrix. If not, return nullptr and ignore the localMatrix parameter.
      */

@@ -396,7 +396,6 @@ static void test_write_pixels(skiatest::Reporter* reporter, SkSurface* surface,
                                                        rect.height(), SkToBool(tightBmp)));
                 uint32_t idBefore = surface->generationID();
 
-                // ToolUtils::write_pixels(&canvas, bmp, rect.fLeft, rect.fTop, ct, at);
                 surface->writePixels(bmp, rect.fLeft, rect.fTop);
 
                 uint32_t idAfter = surface->generationID();
@@ -533,7 +532,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WritePixelsPendingIO, reporter, ctxInfo) {
             context->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
 
         sk_sp<GrTextureProxy> temp = proxyProvider->createProxy(
-                format, desc, kTopLeft_GrSurfaceOrigin, SkBackingFit::kApprox, SkBudgeted::kYes);
+                format, desc, kTopLeft_GrSurfaceOrigin, SkBackingFit::kApprox, SkBudgeted::kYes,
+                GrInternalSurfaceFlags::kNoPendingIO);
         temp->instantiate(context->priv().resourceProvider());
     }
 

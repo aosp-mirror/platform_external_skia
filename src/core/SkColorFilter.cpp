@@ -7,6 +7,7 @@
 
 #include "SkArenaAlloc.h"
 #include "SkColorFilter.h"
+#include "SkColorFilter_Mixer.h"
 #include "SkColorFilterPriv.h"
 #include "SkColorSpacePriv.h"
 #include "SkColorSpaceXformSteps.h"
@@ -32,10 +33,6 @@ bool SkColorFilter::asColorMatrix(SkScalar matrix[20]) const {
     return false;
 }
 
-bool SkColorFilter::asComponentTable(SkBitmap*) const {
-    return false;
-}
-
 #if SK_SUPPORT_GPU
 std::unique_ptr<GrFragmentProcessor> SkColorFilter::asFragmentProcessor(
         GrRecordingContext*, const GrColorSpaceInfo&) const {
@@ -43,8 +40,8 @@ std::unique_ptr<GrFragmentProcessor> SkColorFilter::asFragmentProcessor(
 }
 #endif
 
-void SkColorFilter::appendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
-    this->onAppendStages(rec, shaderIsOpaque);
+bool SkColorFilter::appendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
+    return this->onAppendStages(rec, shaderIsOpaque);
 }
 
 SkColor SkColorFilter::filterColor(SkColor c) const {
@@ -92,13 +89,13 @@ public:
         return fOuter->getFlags() & fInner->getFlags();
     }
 
-    void onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
+    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
         bool innerIsOpaque = shaderIsOpaque;
         if (!(fInner->getFlags() & kAlphaUnchanged_Flag)) {
             innerIsOpaque = false;
         }
-        fInner->appendStages(rec, shaderIsOpaque);
-        fOuter->appendStages(rec, innerIsOpaque);
+        return fInner->appendStages(rec, shaderIsOpaque) &&
+               fOuter->appendStages(rec, innerIsOpaque);
     }
 
 #if SK_SUPPORT_GPU
@@ -158,12 +155,6 @@ sk_sp<SkColorFilter> SkColorFilter::makeComposed(sk_sp<SkColorFilter> inner) con
         return sk_ref_sp(this);
     }
 
-    // Give the subclass a shot at a more optimal composition...
-    auto composition = this->onMakeComposed(inner);
-    if (composition) {
-        return composition;
-    }
-
     int count = inner->privateComposedFilterCount() + this->privateComposedFilterCount();
     if (count > SK_MAX_COMPOSE_COLORFILTER_COUNT) {
         return nullptr;
@@ -209,7 +200,7 @@ public:
     }
 #endif
 
-    void onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
+    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
         if (!shaderIsOpaque) {
             rec.fPipeline->append(SkRasterPipeline::unpremul);
         }
@@ -221,6 +212,7 @@ public:
         if (!shaderIsOpaque) {
             rec.fPipeline->append(SkRasterPipeline::premul);
         }
+        return true;
     }
 
 protected:
@@ -277,7 +269,7 @@ public:
         return f0 & f1;
     }
 
-    void onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
+    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
         // want cf0 * (1 - w) + cf1 * w == lerp(w)
         // which means
         //      dr,dg,db,da <-- cf0
@@ -303,6 +295,7 @@ public:
         }
         float* storage = rec.fAlloc->make<float>(fWeight);
         p->append(SkRasterPipeline::lerp_1_float, storage);
+        return true;
     }
 
 #if SK_SUPPORT_GPU
@@ -393,7 +386,7 @@ public:
     }
 #endif
 
-    void onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
+    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
         if (fCpuFunction) {
             struct CpuFuncCtx : public SkRasterPipeline_CallbackCtx {
                 SkRuntimeColorFilterFn cpuFn;
@@ -439,6 +432,7 @@ public:
             };
             rec.fPipeline->append(SkRasterPipeline::callback, ctx);
         }
+        return true;
     }
 
 protected:
@@ -498,6 +492,7 @@ void SkColorFilter::RegisterFlattenables() {
     SK_REGISTER_FLATTENABLE(SkModeColorFilter);
     SK_REGISTER_FLATTENABLE(SkSRGBGammaColorFilter);
     SK_REGISTER_FLATTENABLE(SkMixerColorFilter);
+    SK_REGISTER_FLATTENABLE(SkColorFilter_Mixer);
 #if SK_SUPPORT_GPU
     SK_REGISTER_FLATTENABLE(SkRuntimeColorFilter);
 #endif

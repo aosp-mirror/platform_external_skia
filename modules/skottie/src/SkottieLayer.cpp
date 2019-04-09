@@ -17,13 +17,13 @@
 #include "SkottieValue.h"
 #include "SkParse.h"
 #include "SkSGClipEffect.h"
-#include "SkSGColor.h"
 #include "SkSGDraw.h"
 #include "SkSGGroup.h"
 #include "SkSGImage.h"
 #include "SkSGMaskEffect.h"
 #include "SkSGMerge.h"
 #include "SkSGOpacityEffect.h"
+#include "SkSGPaint.h"
 #include "SkSGPath.h"
 #include "SkSGRect.h"
 #include "SkSGTransform.h"
@@ -501,7 +501,10 @@ private:
 
 sk_sp<sksg::RenderNode> AnimationBuilder::attachLayer(const skjson::ObjectValue* jlayer,
                                                       AttachLayerContext* layerCtx) const {
-    if (!jlayer) return nullptr;
+    if (!jlayer || ParseDefault<bool>((*jlayer)["hd"], false)) {
+        // Ignore hidden layers.
+        return nullptr;
+    }
 
     const LayerInfo layer_info = {
         ParseDefault<float>((*jlayer)["ip"], 0.0f),

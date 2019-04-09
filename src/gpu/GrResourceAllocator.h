@@ -42,26 +42,23 @@ class GrResourceProvider;
  */
 class GrResourceAllocator {
 public:
-    GrResourceAllocator(GrResourceProvider* resourceProvider, GrDeinstantiateProxyTracker* tracker)
-            : fResourceProvider(resourceProvider), fDeinstantiateTracker(tracker) {}
+    GrResourceAllocator(GrResourceProvider* resourceProvider,
+                        GrDeinstantiateProxyTracker* tracker
+                        SkDEBUGCODE(, int numOpLists))
+            : fResourceProvider(resourceProvider)
+            , fDeinstantiateTracker(tracker)
+            SkDEBUGCODE(, fNumOpLists(numOpLists)) {
+    }
 
     ~GrResourceAllocator();
 
     unsigned int curOp() const { return fNumOps; }
     void incOps() { fNumOps++; }
-    unsigned int numOps() const { return fNumOps; }
 
     // Add a usage interval from 'start' to 'end' inclusive. This is usually used for renderTargets.
     // If an existing interval already exists it will be expanded to include the new range.
     void addInterval(GrSurfaceProxy*, unsigned int start, unsigned int end
                      SkDEBUGCODE(, bool isDirectDstRead = false));
-
-    // Add an interval that spans just the current op. Usually this is for texture uses.
-    // If an existing interval already exists it will be expanded to include the new operation.
-    void addInterval(GrSurfaceProxy* proxy
-                     SkDEBUGCODE(, bool isDirectDstRead = false)) {
-        this->addInterval(proxy, fNumOps, fNumOps SkDEBUGCODE(, isDirectDstRead));
-    }
 
     enum class AssignError {
         kNoError,
@@ -87,6 +84,9 @@ private:
 
     // Remove dead intervals from the active list
     void expire(unsigned int curIndex);
+
+    bool onOpListBoundary() const;
+    void forceIntermediateFlush(int* stopIndex);
 
     // These two methods wrap the interactions with the free pool
     void recycleSurface(sk_sp<GrSurface> surface);
@@ -218,11 +218,11 @@ private:
 
     IntervalList                 fIntvlList;         // All the intervals sorted by increasing start
     IntervalList                 fActiveIntvls;      // List of live intervals during assignment
-                                               // (sorted by increasing end)
-    unsigned int                 fNumOps = 1;        // op # 0 is reserved for uploads at the start
-                                               // of a flush
+                                                     // (sorted by increasing end)
+    unsigned int                 fNumOps = 0;
     SkTArray<unsigned int>       fEndOfOpListOpIndices;
     int                          fCurOpListIndex = 0;
+    SkDEBUGCODE(const int        fNumOpLists = -1;)
 
     SkDEBUGCODE(bool             fAssigned = false;)
 
