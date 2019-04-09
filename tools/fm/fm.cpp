@@ -20,6 +20,7 @@
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkSVGDOM.h"
+#include "SkTHash.h"
 #include "Skottie.h"
 #include "SkottieUtils.h"
 #include "ToolUtils.h"
@@ -34,10 +35,11 @@ using sk_gpu_test::GrContextFactory;
 static DEFINE_string2(sources, s, "", "Which GMs, .skps, or images to draw.");
 static DEFINE_string2(backend, b, "", "Backend used to create a canvas to draw into.");
 
-static DEFINE_string(ct   ,   "8888", "The color type for any raster backend.");
-static DEFINE_string(at   , "premul", "The alpha type for any raster backend.");
-static DEFINE_string(gamut,   "srgb", "The color gamut for any raster backend.");
-static DEFINE_string(tf   ,   "srgb", "The transfer function for any raster backend.");
+static DEFINE_string(ct    ,   "8888", "The color type for any raster backend.");
+static DEFINE_string(at    , "premul", "The alpha type for any raster backend.");
+static DEFINE_string(gamut ,   "srgb", "The color gamut for any raster backend.");
+static DEFINE_string(tf    ,   "srgb", "The transfer function for any raster backend.");
+static DEFINE_bool  (legacy,    false, "Use a null SkColorSpace instead of --gamut and --tf?");
 
 static DEFINE_int   (samples ,         0, "Samples per pixel in GPU backends.");
 static DEFINE_bool  (nvpr    ,     false, "Use NV_path_rendering in GPU backends?");
@@ -364,18 +366,27 @@ int main(int argc, char** argv) {
     GrContextOptions baseOptions;
     SetCtxOptionsFromCommonFlags(&baseOptions);
 
-
-    SkTArray<Source> sources;
+    SkTHashMap<SkString, skiagm::GMFactory> gm_factories;
     for (skiagm::GMFactory factory : skiagm::GMRegistry::Range()) {
-        std::shared_ptr<skiagm::GM> gm{factory(nullptr)};
-
+        std::unique_ptr<skiagm::GM> gm{factory(nullptr)};
         if (FLAGS_sources.isEmpty()) {
             fprintf(stdout, "%s\n", gm->getName());
-        } else if (FLAGS_sources.contains(gm->getName())) {
-            sources.push_back(gm_source(gm));
+        } else {
+            gm_factories.set(SkString{gm->getName()}, factory);
         }
     }
+    if (FLAGS_sources.isEmpty()) {
+        return 0;
+    }
+
+    SkTArray<Source> sources;
     for (const SkString& source : FLAGS_sources) {
+        if (skiagm::GMFactory* factory = gm_factories.find(source)) {
+            std::shared_ptr<skiagm::GM> gm{(*factory)(nullptr)};
+            sources.push_back(gm_source(gm));
+            continue;
+        }
+
         if (sk_sp<SkData> blob = SkData::MakeFromFileName(source.c_str())) {
             const SkString dir  = SkOSPath::Dirname (source.c_str()),
                            name = SkOSPath::Basename(source.c_str());
@@ -383,25 +394,29 @@ int main(int argc, char** argv) {
             if (name.endsWith(".skp")) {
                 if (sk_sp<SkPicture> pic = SkPicture::MakeFromData(blob.get())) {
                     sources.push_back(picture_source(name, pic));
+                    continue;
                 }
             } else if (name.endsWith(".svg")) {
                 SkMemoryStream stream{blob};
                 if (sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(stream)) {
                     sources.push_back(svg_source(name, svg));
+                    continue;
                 }
             } else if (name.endsWith(".json")) {
                 if (sk_sp<skottie::Animation> animation = skottie::Animation::Builder()
                         .setResourceProvider(skottie_utils::FileResourceProvider::Make(dir))
-                        .makeFromFile(source.c_str())) {
+                        .make((const char*)blob->data(), blob->size())) {
                     sources.push_back(skottie_source(name, animation));
+                    continue;
                 }
             } else if (std::shared_ptr<SkCodec> codec = SkCodec::MakeFromData(blob)) {
                 sources.push_back(codec_source(name, codec));
+                continue;
             }
         }
-    }
-    if (sources.empty()) {
-        return 0;
+
+        fprintf(stderr, "Don't understand source '%s'... bailing out.\n", source.c_str());
+        return 1;
     }
 
     enum NonGpuBackends {
@@ -473,7 +488,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const SkImageInfo unsized_info = SkImageInfo::Make(0,0, ct,at, SkColorSpace::MakeRGB(tf,gamut));
+    sk_sp<SkColorSpace> cs = FLAGS_legacy ? nullptr
+                                          : SkColorSpace::MakeRGB(tf,gamut);
+    const SkImageInfo unsized_info = SkImageInfo::Make(0,0, ct,at,cs);
 
     for (auto source : sources) {
         const auto start = std::chrono::steady_clock::now();

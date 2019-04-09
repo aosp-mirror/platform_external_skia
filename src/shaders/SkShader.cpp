@@ -118,7 +118,7 @@ const SkMatrix& SkShader::getLocalMatrix() const {
     return as_SB(this)->getLocalMatrix();
 }
 
-SkImage* SkShader::isAImage(SkMatrix* localMatrix, TileMode xy[2]) const {
+SkImage* SkShader::isAImage(SkMatrix* localMatrix, SkTileMode xy[2]) const {
     return as_SB(this)->onIsAImage(localMatrix, xy);
 }
 
@@ -140,7 +140,7 @@ sk_sp<SkShader> SkShader::MakeEmptyShader() { return sk_make_sp<SkEmptyShader>()
 
 sk_sp<SkShader> SkShader::MakeColorShader(SkColor color) { return sk_make_sp<SkColorShader>(color); }
 
-sk_sp<SkShader> SkShader::MakeBitmapShader(const SkBitmap& src, TileMode tmx, TileMode tmy,
+sk_sp<SkShader> SkShader::MakeBitmapShader(const SkBitmap& src, SkTileMode tmx, SkTileMode tmy,
                                            const SkMatrix* localMatrix) {
     if (localMatrix && !localMatrix->invert(nullptr)) {
         return nullptr;
@@ -148,13 +148,13 @@ sk_sp<SkShader> SkShader::MakeBitmapShader(const SkBitmap& src, TileMode tmx, Ti
     return SkMakeBitmapShader(src, tmx, tmy, localMatrix, kIfMutable_SkCopyPixelsMode);
 }
 
+#ifdef SK_SUPPORT_LEGACY_TILEMODE_ENUM
 sk_sp<SkShader> SkShader::MakePictureShader(sk_sp<SkPicture> src, TileMode tmx, TileMode tmy,
                                             const SkMatrix* localMatrix, const SkRect* tile) {
-    if (localMatrix && !localMatrix->invert(nullptr)) {
-        return nullptr;
-    }
-    return SkPictureShader::Make(std::move(src), tmx, tmy, localMatrix, tile);
+    return src ? src->makeShader((SkTileMode)tmx, (SkTileMode)tmy, localMatrix, tile)
+               : MakeEmptyShader();
 }
+#endif
 
 bool SkShaderBase::appendStages(const SkStageRec& rec) const {
     return this->onAppendStages(rec);

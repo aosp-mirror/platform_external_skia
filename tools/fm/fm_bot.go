@@ -29,7 +29,7 @@ func defaultProcessLimit() int {
 	return limit
 }
 
-var script = flag.String("script", "", "A file with jobs to run, one per line.")
+var script = flag.String("script", "", "A file with jobs to run, one per line. - for stdin.")
 var random = flag.Bool("random", true, "Assign sources into job batches randomly?")
 var quiet = flag.Bool("quiet", false, "Print only failures?")
 var exact = flag.Bool("exact", false, "Match GM names only exactly.")
@@ -83,6 +83,11 @@ func sourcesAndFlags(args []string, gms []string) ([]string, []string, error) {
 	sources := []string{}
 	flags := []string{}
 	for _, arg := range args {
+		// Everything after a # is a comment.
+		if strings.HasPrefix(arg, "#") {
+			break
+		}
+
 		// Treat "gm" or "gms" as a shortcut for all known GMs.
 		if arg == "gm" || arg == "gms" {
 			sources = append(sources, gms...)
@@ -159,11 +164,14 @@ func main() {
 	// and any number can come one per line from -script.
 	jobs := [][]string{flag.Args()[1:]}
 	if *script != "" {
-		file, err := os.Open(*script)
-		if err != nil {
-			log.Fatal(err)
+		file := os.Stdin
+		if *script != "-" {
+			file, err := os.Open(*script)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer file.Close()
 		}
-		defer file.Close()
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
@@ -227,7 +235,11 @@ func main() {
 		sourcesPerBatch := (len(sources) + *processLimit - 1) / *processLimit
 
 		for i := 0; i < len(sources); i += sourcesPerBatch {
-			batch := sources[i : i+sourcesPerBatch]
+			end := i+sourcesPerBatch
+			if end > len(sources) {
+				end = len(sources)
+			}
+			batch := sources[i : end]
 
 			queue <- struct {
 				Sources []string

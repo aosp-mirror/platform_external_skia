@@ -46,7 +46,7 @@ static void draw_gpu_only_message(SkCanvas* canvas) {
     localM.setRotate(35.f);
     localM.postTranslate(10.f, 0.f);
     paint.setShader(SkShader::MakeBitmapShader(
-            bmp, SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, &localM));
+            bmp, SkTileMode::kMirror, SkTileMode::kMirror, &localM));
     paint.setFilterQuality(kMedium_SkFilterQuality);
     canvas->drawPaint(paint);
 }
@@ -171,7 +171,7 @@ DrawResult GpuGM::onDraw(SkCanvas* canvas, SkString* errorMsg) {
     }
     if (ctx->abandoned()) {
         *errorMsg = "GrContext abandoned.";
-        return DrawResult::kFail;
+        return DrawResult::kSkip;
     }
     return this->onDraw(ctx, rtc, canvas, errorMsg);
 }
