@@ -226,13 +226,16 @@ def dm_flags(api, bot):
         # Decoding transparent images to 1010102 just looks bad
         blacklist('vk1010102 image _ _')
       else:
-        configs.extend(['gl1010102', 'gltestpersistentcache'])
+        configs.extend(['gl1010102', 'gltestpersistentcache', 'gltestglslcache'])
         # Decoding transparent images to 1010102 just looks bad
         blacklist('gl1010102 image _ _')
         # These tests produce slightly different pixels run to run on NV.
         blacklist('gltestpersistentcache gm _ atlastext')
         blacklist('gltestpersistentcache gm _ dftext')
         blacklist('gltestpersistentcache gm _ glyph_pos_h_b')
+        blacklist('gltestglslcache gm _ atlastext')
+        blacklist('gltestglslcache gm _ dftext')
+        blacklist('gltestglslcache gm _ glyph_pos_h_b')
 
     # Test rendering to wrapped dsts on a few bots
     # Also test 'glenarrow', which hits F16 surfaces and F16 vertex colors.
@@ -250,7 +253,7 @@ def dm_flags(api, bot):
     # Test coverage counting path renderer.
     if 'CCPR' in bot:
       configs = [c for c in configs if c == 'gl' or c == 'gles']
-      args.extend(['--pr', 'ccpr', '--cachePathMasks', 'false'])
+      args.extend(['--pr', 'ccpr', '--cc', 'true', '--cachePathMasks', 'false'])
 
     # DDL is a GPU-only feature
     if 'DDL1' in bot:
