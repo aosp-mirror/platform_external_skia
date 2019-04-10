@@ -87,10 +87,6 @@ def dm_flags(api, bot):
   if 'Test' in bot and 'DISCARDABLE' in bot:
     thread_limit = MAIN_THREAD_ONLY
 
-  # See if staying on the main thread helps skia:6748.
-  if 'Test-iOS' in bot:
-    thread_limit = MAIN_THREAD_ONLY
-
   if thread_limit is not None:
     args.extend(['--threads', str(thread_limit)])
 
@@ -728,6 +724,7 @@ def dm_flags(api, bot):
     match.append('~^RGB565TextureTest$')
     match.append('~^RGBA4444TextureTest$')
     match.append('~^TextureIdleProcFlushTest$')
+    match.append('~^TextureStripAtlasManagerColorFilterTest$')
     match.append('~^WritePixelsNonTextureMSAA_Gpu$')
 
   if 'ANGLE' in bot:
