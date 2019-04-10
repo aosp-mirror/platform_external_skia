@@ -141,47 +141,57 @@ void GrVkCommandBuffer::pipelineBarrier(const GrVkGpu* gpu,
     // never have buffer barriers inside of a render pass. For now we will just assert that we are
     // not in a render pass.
     SkASSERT(!fActiveRenderPass);
-    VkDependencyFlags dependencyFlags = byRegion ? VK_DEPENDENCY_BY_REGION_BIT : 0;
 
-    switch (barrierType) {
-        case kMemory_BarrierType: {
-            const VkMemoryBarrier* barrierPtr = reinterpret_cast<VkMemoryBarrier*>(barrier);
-            GR_VK_CALL(gpu->vkInterface(), CmdPipelineBarrier(fCmdBuffer, srcStageMask,
-                                                              dstStageMask, dependencyFlags,
-                                                              1, barrierPtr,
-                                                              0, nullptr,
-                                                              0, nullptr));
-            break;
-        }
-
-        case kBufferMemory_BarrierType: {
-            const VkBufferMemoryBarrier* barrierPtr =
-                                                 reinterpret_cast<VkBufferMemoryBarrier*>(barrier);
-            GR_VK_CALL(gpu->vkInterface(), CmdPipelineBarrier(fCmdBuffer, srcStageMask,
-                                                              dstStageMask, dependencyFlags,
-                                                              0, nullptr,
-                                                              1, barrierPtr,
-                                                              0, nullptr));
-            break;
-        }
-
-        case kImageMemory_BarrierType: {
-            const VkImageMemoryBarrier* barrierPtr =
-                                                  reinterpret_cast<VkImageMemoryBarrier*>(barrier);
-            GR_VK_CALL(gpu->vkInterface(), CmdPipelineBarrier(fCmdBuffer, srcStageMask,
-                                                              dstStageMask, dependencyFlags,
-                                                              0, nullptr,
-                                                              0, nullptr,
-                                                              1, barrierPtr));
-            break;
-        }
+    if (barrierType == kBufferMemory_BarrierType) {
+        const VkBufferMemoryBarrier* barrierPtr = reinterpret_cast<VkBufferMemoryBarrier*>(barrier);
+        fBufferBarriers.push_back(*barrierPtr);
+    } else {
+        SkASSERT(barrierType == kImageMemory_BarrierType);
+        const VkImageMemoryBarrier* barrierPtr = reinterpret_cast<VkImageMemoryBarrier*>(barrier);
+        fImageBarriers.push_back(*barrierPtr);
     }
+    fBarriersByRegion |= byRegion;
+
+    fSrcStageMask = fSrcStageMask | srcStageMask;
+    fDstStageMask = fDstStageMask | dstStageMask;
+
+    fHasWork = true;
     if (resource) {
         this->addResource(resource);
     }
-
-    this->addedWork();
 }
+
+void GrVkCommandBuffer::submitPipelineBarriers(const GrVkGpu* gpu) {
+    SkASSERT(fIsActive);
+
+    // Currently we never submit a pipeline barrier without at least one memory barrier.
+    if (fBufferBarriers.count() || fImageBarriers.count()) {
+        // For images we can have barriers inside of render passes but they require us to add more
+        // support in subpasses which need self dependencies to have barriers inside them. Also, we
+        // can never have buffer barriers inside of a render pass. For now we will just assert that
+        // we are not in a render pass.
+        SkASSERT(!fActiveRenderPass);
+        SkASSERT(!this->isWrapped());
+        SkASSERT(fSrcStageMask && fDstStageMask);
+
+        VkDependencyFlags dependencyFlags = fBarriersByRegion ? VK_DEPENDENCY_BY_REGION_BIT : 0;
+        GR_VK_CALL(gpu->vkInterface(), CmdPipelineBarrier(
+                fCmdBuffer, fSrcStageMask, fDstStageMask, dependencyFlags, 0, nullptr,
+                fBufferBarriers.count(), fBufferBarriers.begin(),
+                fImageBarriers.count(), fImageBarriers.begin()));
+        fBufferBarriers.reset();
+        fImageBarriers.reset();
+        fBarriersByRegion = false;
+        fSrcStageMask = 0;
+        fDstStageMask = 0;
+    }
+    SkASSERT(!fBufferBarriers.count());
+    SkASSERT(!fImageBarriers.count());
+    SkASSERT(!fBarriersByRegion);
+    SkASSERT(!fSrcStageMask);
+    SkASSERT(!fDstStageMask);
+}
+
 
 void GrVkCommandBuffer::bindInputBuffer(GrVkGpu* gpu, uint32_t binding,
                                         const GrVkVertexBuffer* vbuffer) {
@@ -221,11 +231,14 @@ void GrVkCommandBuffer::clearAttachments(const GrVkGpu* gpu,
                                          int numAttachments,
                                          const VkClearAttachment* attachments,
                                          int numRects,
-                                         const VkClearRect* clearRects) const {
+                                         const VkClearRect* clearRects) {
     SkASSERT(fIsActive);
     SkASSERT(fActiveRenderPass);
     SkASSERT(numAttachments > 0);
     SkASSERT(numRects > 0);
+
+    this->addingWork(gpu);
+
 #ifdef SK_DEBUG
     for (int i = 0; i < numAttachments; ++i) {
         if (attachments[i].aspectMask == VK_IMAGE_ASPECT_COLOR_BIT) {
@@ -240,7 +253,6 @@ void GrVkCommandBuffer::clearAttachments(const GrVkGpu* gpu,
                                                        attachments,
                                                        numRects,
                                                        clearRects));
-    this->addedWork();
 }
 
 void GrVkCommandBuffer::bindDescriptorSets(const GrVkGpu* gpu,
@@ -303,31 +315,31 @@ void GrVkCommandBuffer::drawIndexed(const GrVkGpu* gpu,
                                     uint32_t instanceCount,
                                     uint32_t firstIndex,
                                     int32_t vertexOffset,
-                                    uint32_t firstInstance) const {
+                                    uint32_t firstInstance) {
     SkASSERT(fIsActive);
     SkASSERT(fActiveRenderPass);
+    this->addingWork(gpu);
     GR_VK_CALL(gpu->vkInterface(), CmdDrawIndexed(fCmdBuffer,
                                                   indexCount,
                                                   instanceCount,
                                                   firstIndex,
                                                   vertexOffset,
                                                   firstInstance));
-    this->addedWork();
 }
 
 void GrVkCommandBuffer::draw(const GrVkGpu* gpu,
                              uint32_t vertexCount,
                              uint32_t instanceCount,
                              uint32_t firstVertex,
-                             uint32_t firstInstance) const {
+                             uint32_t firstInstance) {
     SkASSERT(fIsActive);
     SkASSERT(fActiveRenderPass);
+    this->addingWork(gpu);
     GR_VK_CALL(gpu->vkInterface(), CmdDraw(fCmdBuffer,
                                            vertexCount,
                                            instanceCount,
                                            firstVertex,
                                            firstInstance));
-    this->addedWork();
 }
 
 void GrVkCommandBuffer::setViewport(const GrVkGpu* gpu,
@@ -367,6 +379,11 @@ void GrVkCommandBuffer::setBlendConstants(const GrVkGpu* gpu,
         GR_VK_CALL(gpu->vkInterface(), CmdSetBlendConstants(fCmdBuffer, blendConstants));
         memcpy(fCachedBlendConstant, blendConstants, 4 * sizeof(float));
     }
+}
+
+void GrVkCommandBuffer::addingWork(const GrVkGpu* gpu) {
+    this->submitPipelineBarriers(gpu);
+    fHasWork = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -414,6 +431,9 @@ void GrVkPrimaryCommandBuffer::begin(const GrVkGpu* gpu) {
 void GrVkPrimaryCommandBuffer::end(GrVkGpu* gpu) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+
+    this->submitPipelineBarriers(gpu);
+
     GR_VK_CALL_ERRCHECK(gpu->vkInterface(), EndCommandBuffer(fCmdBuffer));
     for (int i = 0; i < fTrackedRecordingResources.count(); ++i) {
         fTrackedRecordingResources[i]->unref(gpu);
@@ -433,6 +453,8 @@ void GrVkPrimaryCommandBuffer::beginRenderPass(const GrVkGpu* gpu,
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
     SkASSERT(renderPass->isCompatible(target));
+
+    this->addingWork(gpu);
 
     VkRenderPassBeginInfo beginInfo;
     VkRect2D renderArea;
@@ -455,15 +477,14 @@ void GrVkPrimaryCommandBuffer::beginRenderPass(const GrVkGpu* gpu,
     fActiveRenderPass = renderPass;
     this->addResource(renderPass);
     target.addResources(*this);
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::endRenderPass(const GrVkGpu* gpu) {
     SkASSERT(fIsActive);
     SkASSERT(fActiveRenderPass);
+    this->addingWork(gpu);
     GR_VK_CALL(gpu->vkInterface(), CmdEndRenderPass(fCmdBuffer));
     fActiveRenderPass = nullptr;
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::executeCommands(const GrVkGpu* gpu,
@@ -477,13 +498,14 @@ void GrVkPrimaryCommandBuffer::executeCommands(const GrVkGpu* gpu,
     SkASSERT(fActiveRenderPass);
     SkASSERT(fActiveRenderPass->isCompatible(*buffer->fActiveRenderPass));
 
+    this->addingWork(gpu);
+
     GR_VK_CALL(gpu->vkInterface(), CmdExecuteCommands(fCmdBuffer, 1, &buffer->fCmdBuffer));
     buffer->ref();
     fSecondaryCommandBuffers.push_back(buffer);
     // When executing a secondary command buffer all state (besides render pass state) becomes
     // invalidated and must be reset. This includes bound buffers, pipelines, dynamic state, etc.
     this->invalidateState();
-    this->addedWork();
 }
 
 static void submit_to_queue(const GrVkInterface* interface,
@@ -638,6 +660,7 @@ void GrVkPrimaryCommandBuffer::copyImage(const GrVkGpu* gpu,
                                          const VkImageCopy* copyRegions) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+    this->addingWork(gpu);
     this->addResource(srcImage->resource());
     this->addResource(dstImage->resource());
     GR_VK_CALL(gpu->vkInterface(), CmdCopyImage(fCmdBuffer,
@@ -647,7 +670,6 @@ void GrVkPrimaryCommandBuffer::copyImage(const GrVkGpu* gpu,
                                                 dstLayout,
                                                 copyRegionCount,
                                                 copyRegions));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::blitImage(const GrVkGpu* gpu,
@@ -662,6 +684,7 @@ void GrVkPrimaryCommandBuffer::blitImage(const GrVkGpu* gpu,
                                          VkFilter filter) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+    this->addingWork(gpu);
     this->addResource(srcResource);
     this->addResource(dstResource);
     GR_VK_CALL(gpu->vkInterface(), CmdBlitImage(fCmdBuffer,
@@ -672,7 +695,6 @@ void GrVkPrimaryCommandBuffer::blitImage(const GrVkGpu* gpu,
                                                 blitRegionCount,
                                                 blitRegions,
                                                 filter));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::blitImage(const GrVkGpu* gpu,
@@ -702,6 +724,7 @@ void GrVkPrimaryCommandBuffer::copyImageToBuffer(const GrVkGpu* gpu,
                                                  const VkBufferImageCopy* copyRegions) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+    this->addingWork(gpu);
     this->addResource(srcImage->resource());
     this->addResource(dstBuffer->resource());
     GR_VK_CALL(gpu->vkInterface(), CmdCopyImageToBuffer(fCmdBuffer,
@@ -710,7 +733,6 @@ void GrVkPrimaryCommandBuffer::copyImageToBuffer(const GrVkGpu* gpu,
                                                         dstBuffer->buffer(),
                                                         copyRegionCount,
                                                         copyRegions));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::copyBufferToImage(const GrVkGpu* gpu,
@@ -721,6 +743,7 @@ void GrVkPrimaryCommandBuffer::copyBufferToImage(const GrVkGpu* gpu,
                                                  const VkBufferImageCopy* copyRegions) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+    this->addingWork(gpu);
     this->addResource(srcBuffer->resource());
     this->addResource(dstImage->resource());
     GR_VK_CALL(gpu->vkInterface(), CmdCopyBufferToImage(fCmdBuffer,
@@ -729,7 +752,6 @@ void GrVkPrimaryCommandBuffer::copyBufferToImage(const GrVkGpu* gpu,
                                                         dstLayout,
                                                         copyRegionCount,
                                                         copyRegions));
-    this->addedWork();
 }
 
 
@@ -740,6 +762,7 @@ void GrVkPrimaryCommandBuffer::copyBuffer(GrVkGpu* gpu,
                                           const VkBufferCopy* regions) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+    this->addingWork(gpu);
 #ifdef SK_DEBUG
     for (uint32_t i = 0; i < regionCount; ++i) {
         const VkBufferCopy& region = regions[i];
@@ -757,7 +780,6 @@ void GrVkPrimaryCommandBuffer::copyBuffer(GrVkGpu* gpu,
                                                  dstBuffer->buffer(),
                                                  regionCount,
                                                  regions));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::updateBuffer(GrVkGpu* gpu,
@@ -771,13 +793,13 @@ void GrVkPrimaryCommandBuffer::updateBuffer(GrVkGpu* gpu,
     // TODO: handle larger transfer sizes
     SkASSERT(dataSize <= 65536);
     SkASSERT(0 == (dataSize & 0x03));    // four byte aligned
+    this->addingWork(gpu);
     this->addResource(dstBuffer->resource());
     GR_VK_CALL(gpu->vkInterface(), CmdUpdateBuffer(fCmdBuffer,
                                                    dstBuffer->buffer(),
                                                    dstOffset,
                                                    dataSize,
                                                    (const uint32_t*) data));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::clearColorImage(const GrVkGpu* gpu,
@@ -787,6 +809,7 @@ void GrVkPrimaryCommandBuffer::clearColorImage(const GrVkGpu* gpu,
                                                const VkImageSubresourceRange* subRanges) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+    this->addingWork(gpu);
     this->addResource(image->resource());
     GR_VK_CALL(gpu->vkInterface(), CmdClearColorImage(fCmdBuffer,
                                                       image->image(),
@@ -794,7 +817,6 @@ void GrVkPrimaryCommandBuffer::clearColorImage(const GrVkGpu* gpu,
                                                       color,
                                                       subRangeCount,
                                                       subRanges));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::clearDepthStencilImage(const GrVkGpu* gpu,
@@ -804,6 +826,7 @@ void GrVkPrimaryCommandBuffer::clearDepthStencilImage(const GrVkGpu* gpu,
                                                       const VkImageSubresourceRange* subRanges) {
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
+    this->addingWork(gpu);
     this->addResource(image->resource());
     GR_VK_CALL(gpu->vkInterface(), CmdClearDepthStencilImage(fCmdBuffer,
                                                              image->image(),
@@ -811,7 +834,6 @@ void GrVkPrimaryCommandBuffer::clearDepthStencilImage(const GrVkGpu* gpu,
                                                              color,
                                                              subRangeCount,
                                                              subRanges));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::resolveImage(GrVkGpu* gpu,
@@ -822,6 +844,7 @@ void GrVkPrimaryCommandBuffer::resolveImage(GrVkGpu* gpu,
     SkASSERT(fIsActive);
     SkASSERT(!fActiveRenderPass);
 
+    this->addingWork(gpu);
     this->addResource(srcImage.resource());
     this->addResource(dstImage.resource());
 
@@ -832,7 +855,6 @@ void GrVkPrimaryCommandBuffer::resolveImage(GrVkGpu* gpu,
                                                    dstImage.currentLayout(),
                                                    regionCount,
                                                    regions));
-    this->addedWork();
 }
 
 void GrVkPrimaryCommandBuffer::onFreeGPUData(GrVkGpu* gpu) const {
