@@ -20,6 +20,9 @@
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkSVGDOM.h"
+#include "SkTHash.h"
+#include "Skottie.h"
+#include "SkottieUtils.h"
 #include "ToolUtils.h"
 #include "gm.h"
 #include <chrono>
@@ -32,10 +35,11 @@ using sk_gpu_test::GrContextFactory;
 static DEFINE_string2(sources, s, "", "Which GMs, .skps, or images to draw.");
 static DEFINE_string2(backend, b, "", "Backend used to create a canvas to draw into.");
 
-static DEFINE_string(ct   ,   "8888", "The color type for any raster backend.");
-static DEFINE_string(at   , "premul", "The alpha type for any raster backend.");
-static DEFINE_string(gamut,   "srgb", "The color gamut for any raster backend.");
-static DEFINE_string(tf   ,   "srgb", "The transfer function for any raster backend.");
+static DEFINE_string(ct    ,   "8888", "The color type for any raster backend.");
+static DEFINE_string(at    , "premul", "The alpha type for any raster backend.");
+static DEFINE_string(gamut ,   "srgb", "The color gamut for any raster backend.");
+static DEFINE_string(tf    ,   "srgb", "The transfer function for any raster backend.");
+static DEFINE_bool  (legacy,    false, "Use a null SkColorSpace instead of --gamut and --tf?");
 
 static DEFINE_int   (samples ,         0, "Samples per pixel in GPU backends.");
 static DEFINE_bool  (nvpr    ,     false, "Use NV_path_rendering in GPU backends?");
@@ -57,7 +61,6 @@ static DEFINE_bool(PDFA, false, "Create PDF/A with --backend pdf?");
 
 static DEFINE_bool   (cpuDetect, true, "Detect CPU features for runtime optimizations?");
 static DEFINE_string2(writePath, w, "", "Write .pngs to this directory if set.");
-static DEFINE_bool2  (verbose, v, false, "Print progress to stdout.");
 
 static DEFINE_string(key,        "", "Metadata passed through to .png encoder and .json output.");
 static DEFINE_string(parameters, "", "Metadata passed through to .png encoder and .json output.");
@@ -94,23 +97,27 @@ static void exit_with_failure() {
 struct Source {
     SkString                               name;
     SkISize                                size;
-    std::function<void(SkCanvas*)>         draw;
     std::function<void(GrContextOptions*)> tweak;
+    std::function<bool(SkCanvas*)>         draw;  // true -> ok, false -> skip;
+                                                  // failures should exit_with_failure()
 };
 
 static Source gm_source(std::shared_ptr<skiagm::GM> gm) {
     return {
         SkString{gm->getName()},
         gm->getISize(),
+        [gm](GrContextOptions* options) { gm->modifyGrContextOptions(options); },
         [gm](SkCanvas* canvas) {
             SkString err;
-            if (skiagm::DrawResult::kFail == gm->draw(canvas, &err)) {
-                fprintf(stderr, "Drawing GM %s failed: %s\n",
-                        gm->getName(), err.c_str());
-                exit_with_failure();
+            switch (gm->draw(canvas, &err)) {
+                case skiagm::DrawResult::kOk:   return true;
+                case skiagm::DrawResult::kSkip: break;
+                case skiagm::DrawResult::kFail:
+                    fprintf(stderr, "Drawing GM %s failed: %s\n", gm->getName(), err.c_str());
+                    exit_with_failure();
             }
+            return false;
         },
-        [gm](GrContextOptions* options) { gm->modifyGrContextOptions(options); },
     };
 }
 
@@ -118,10 +125,11 @@ static Source picture_source(SkString name, sk_sp<SkPicture> pic) {
     return {
         name,
         pic->cullRect().roundOut().size(),
+        [](GrContextOptions*) {},
         [pic](SkCanvas* canvas) {
             canvas->drawPicture(pic);
+            return true;
         },
-        [](GrContextOptions*) {},
     };
 }
 
@@ -129,6 +137,7 @@ static Source codec_source(SkString name, std::shared_ptr<SkCodec> codec) {
     return {
         name,
         codec->dimensions(),
+        [](GrContextOptions*) {},
         [codec](SkCanvas* canvas) {
             SkImageInfo info = codec->getInfo();
             if (FLAGS_decodeToDst) {
@@ -144,13 +153,13 @@ static Source codec_source(SkString name, std::shared_ptr<SkCodec> codec) {
                 case SkCodec::kErrorInInput:
                 case SkCodec::kIncompleteInput:
                     canvas->drawBitmap(bm, 0,0);
-                    break;
+                    return true;
                 default:
                     fprintf(stderr, "SkCodec::getPixels failed: %d.", result);
                     exit_with_failure();
             }
+            return false;
         },
-        [](GrContextOptions*) {},
     };
 }
 
@@ -159,29 +168,69 @@ static Source svg_source(SkString name, sk_sp<SkSVGDOM> svg) {
         name,
         svg->containerSize().isEmpty() ? SkISize{1000,1000}
                                        : svg->containerSize().toCeil(),
-        [svg](SkCanvas* canvas) { svg->render(canvas); },
         [](GrContextOptions*) {},
+        [svg](SkCanvas* canvas) {
+            svg->render(canvas);
+            return true;
+        },
+    };
+}
+
+static Source skottie_source(SkString name, sk_sp<skottie::Animation> animation) {
+    return {
+        name,
+        {1000,1000},
+        [](GrContextOptions*) {},
+        [animation](SkCanvas* canvas) {
+            canvas->clear(SK_ColorWHITE);
+
+            // Draw frames in a shuffled order to exercise nonlinear frame progression.
+            // The film strip will still be in time order, just drawn out of order.
+            const int order[] = { 4, 0, 3, 1, 2 };
+            const int tiles = SK_ARRAY_COUNT(order);
+            const float dim = 1000.0f / tiles;
+
+            const float dt = 1.0f / (tiles*tiles - 1);
+
+            for (int y : order)
+            for (int x : order) {
+                SkRect dst = {x*dim, y*dim, (x+1)*dim, (y+1)*dim};
+
+                SkAutoCanvasRestore _(canvas, true/*save now*/);
+                canvas->clipRect(dst, /*aa=*/true);
+                canvas->concat(SkMatrix::MakeRectToRect(SkRect::MakeSize(animation->size()),
+                                                        dst,
+                                                        SkMatrix::kCenter_ScaleToFit));
+                float t = (y*tiles + x) * dt;
+                animation->seek(t);
+                animation->render(canvas);
+            }
+            return true;
+        },
     };
 }
 
 
-static sk_sp<SkImage> draw_with_cpu(std::function<void(SkCanvas*)> draw,
+static sk_sp<SkImage> draw_with_cpu(std::function<bool(SkCanvas*)> draw,
                                     SkImageInfo info) {
     if (sk_sp<SkSurface> surface = SkSurface::MakeRaster(info)) {
-        draw(surface->getCanvas());
-        return surface->makeImageSnapshot();
+        if (draw(surface->getCanvas())) {
+            return surface->makeImageSnapshot();
+        }
     }
     return nullptr;
 }
 
-static sk_sp<SkData> draw_as_skp(std::function<void(SkCanvas*)> draw,
+static sk_sp<SkData> draw_as_skp(std::function<bool(SkCanvas*)> draw,
                                  SkImageInfo info) {
     SkPictureRecorder recorder;
-    draw(recorder.beginRecording(info.width(), info.height()));
-    return recorder.finishRecordingAsPicture()->serialize();
+    if (draw(recorder.beginRecording(info.width(), info.height()))) {
+        return recorder.finishRecordingAsPicture()->serialize();
+    }
+    return nullptr;
 }
 
-static sk_sp<SkData> draw_as_pdf(std::function<void(SkCanvas*)> draw,
+static sk_sp<SkData> draw_as_pdf(std::function<bool(SkCanvas*)> draw,
                                  SkImageInfo info,
                                  SkString name) {
     SkPDF::Metadata metadata;
@@ -192,15 +241,16 @@ static sk_sp<SkData> draw_as_pdf(std::function<void(SkCanvas*)> draw,
 
     SkDynamicMemoryWStream stream;
     if (sk_sp<SkDocument> doc = SkPDF::MakeDocument(&stream, metadata)) {
-        draw(doc->beginPage(info.width(), info.height()));
-        doc->endPage();
-        doc->close();
-        return stream.detachAsData();
+        if (draw(doc->beginPage(info.width(), info.height()))) {
+            doc->endPage();
+            doc->close();
+            return stream.detachAsData();
+        }
     }
     return nullptr;
 }
 
-static sk_sp<SkImage> draw_with_gpu(std::function<void(SkCanvas*)> draw,
+static sk_sp<SkImage> draw_with_gpu(std::function<bool(SkCanvas*)> draw,
                                     SkImageInfo info,
                                     GrContextFactory::ContextType api,
                                     GrContextFactory* factory) {
@@ -279,8 +329,10 @@ static sk_sp<SkImage> draw_with_gpu(std::function<void(SkCanvas*)> draw,
         factory->abandonContexts();
     }
 
-    draw(surface->getCanvas());
-    sk_sp<SkImage> image = surface->makeImageSnapshot();
+    sk_sp<SkImage> image;
+    if (draw(surface->getCanvas())) {
+        image = surface->makeImageSnapshot();
+    }
 
     if (FLAGS_abandonGpuContext) {
         factory->abandonContexts();
@@ -314,37 +366,57 @@ int main(int argc, char** argv) {
     GrContextOptions baseOptions;
     SetCtxOptionsFromCommonFlags(&baseOptions);
 
-
-    SkTArray<Source> sources;
+    SkTHashMap<SkString, skiagm::GMFactory> gm_factories;
     for (skiagm::GMFactory factory : skiagm::GMRegistry::Range()) {
-        std::shared_ptr<skiagm::GM> gm{factory(nullptr)};
-
+        std::unique_ptr<skiagm::GM> gm{factory(nullptr)};
         if (FLAGS_sources.isEmpty()) {
             fprintf(stdout, "%s\n", gm->getName());
-        } else if (FLAGS_sources.contains(gm->getName())) {
-            sources.push_back(gm_source(gm));
+        } else {
+            gm_factories.set(SkString{gm->getName()}, factory);
         }
     }
+    if (FLAGS_sources.isEmpty()) {
+        return 0;
+    }
+
+    SkTArray<Source> sources;
     for (const SkString& source : FLAGS_sources) {
+        if (skiagm::GMFactory* factory = gm_factories.find(source)) {
+            std::shared_ptr<skiagm::GM> gm{(*factory)(nullptr)};
+            sources.push_back(gm_source(gm));
+            continue;
+        }
+
         if (sk_sp<SkData> blob = SkData::MakeFromFileName(source.c_str())) {
-            const SkString name = SkOSPath::Basename(source.c_str());
+            const SkString dir  = SkOSPath::Dirname (source.c_str()),
+                           name = SkOSPath::Basename(source.c_str());
 
             if (name.endsWith(".skp")) {
                 if (sk_sp<SkPicture> pic = SkPicture::MakeFromData(blob.get())) {
                     sources.push_back(picture_source(name, pic));
+                    continue;
                 }
             } else if (name.endsWith(".svg")) {
                 SkMemoryStream stream{blob};
                 if (sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(stream)) {
                     sources.push_back(svg_source(name, svg));
+                    continue;
+                }
+            } else if (name.endsWith(".json")) {
+                if (sk_sp<skottie::Animation> animation = skottie::Animation::Builder()
+                        .setResourceProvider(skottie_utils::FileResourceProvider::Make(dir))
+                        .make((const char*)blob->data(), blob->size())) {
+                    sources.push_back(skottie_source(name, animation));
+                    continue;
                 }
             } else if (std::shared_ptr<SkCodec> codec = SkCodec::MakeFromData(blob)) {
                 sources.push_back(codec_source(name, codec));
+                continue;
             }
         }
-    }
-    if (sources.empty()) {
-        return 0;
+
+        fprintf(stderr, "Don't understand source '%s'... bailing out.\n", source.c_str());
+        return 1;
     }
 
     enum NonGpuBackends {
@@ -416,13 +488,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const SkImageInfo unsized_info = SkImageInfo::Make(0,0, ct,at, SkColorSpace::MakeRGB(tf,gamut));
+    sk_sp<SkColorSpace> cs = FLAGS_legacy ? nullptr
+                                          : SkColorSpace::MakeRGB(tf,gamut);
+    const SkImageInfo unsized_info = SkImageInfo::Make(0,0, ct,at,cs);
 
     for (auto source : sources) {
         const auto start = std::chrono::steady_clock::now();
-        if (FLAGS_verbose) {
-            fprintf(stdout, "%50s", source.name.c_str());
-        }
+        fprintf(stdout, "%50s", source.name.c_str());
 
         const SkImageInfo info = unsized_info.makeWH(source.size.width(),
                                                      source.size.height());
@@ -453,8 +525,8 @@ int main(int argc, char** argv) {
         }
 
         if (!image && !blob) {
-            fprintf(stderr, "FM backend returned a no image or data blob.\n");
-            exit_with_failure();
+            fprintf(stdout, "\tskipped\n");
+            continue;
         }
 
         SkBitmap bitmap;
@@ -496,12 +568,10 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (FLAGS_verbose) {
-            const auto elapsed = std::chrono::steady_clock::now() - start;
-            fprintf(stdout, "\t%s\t%7dms\n",
-                    md5.c_str(),
-                    (int)std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
-        }
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        fprintf(stdout, "\t%s\t%7dms\n",
+                md5.c_str(),
+                (int)std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
     }
 
     return 0;

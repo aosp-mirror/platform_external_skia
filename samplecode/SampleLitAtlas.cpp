@@ -42,8 +42,9 @@ public:
     }
 
     void rotateLight() {
-        SkScalar c;
-        SkScalar s = SkScalarSinCos(SK_ScalarPI/6.0f, &c);
+        SkScalar r = SK_ScalarPI / 6.0f,
+                 s = SkScalarSin(r),
+                 c = SkScalarCos(r);
 
         SkScalar newX = c * fLightDir.fX - s * fLightDir.fY;
         SkScalar newY = s * fLightDir.fX + c * fLightDir.fY;
@@ -65,8 +66,8 @@ public:
     }
 
     void thrust() {
-        SkScalar c;
-        SkScalar s = SkScalarSinCos(fShip.rot(), &c);
+        SkScalar s = SkScalarSin(fShip.rot()),
+                 c = SkScalarCos(fShip.rot());
 
         SkVector newVel = fShip.velocity();
         newVel.fX += s;
@@ -131,12 +132,12 @@ protected:
             SkMatrix m;
             m.setRSXform(xforms[i]);
 
-            sk_sp<SkShader> normalMap = SkShader::MakeBitmapShader(fAtlas, SkShader::kClamp_TileMode,
-                    SkShader::kClamp_TileMode, &normalMat);
+            sk_sp<SkShader> normalMap = SkShader::MakeBitmapShader(fAtlas, SkTileMode::kClamp,
+                    SkTileMode::kClamp, &normalMat);
             sk_sp<SkNormalSource> normalSource = SkNormalSource::MakeFromNormalMap(
                     std::move(normalMap), m);
             sk_sp<SkShader> diffuseShader = SkShader::MakeBitmapShader(fAtlas,
-                    SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &diffMat);
+                    SkTileMode::kClamp, SkTileMode::kClamp, &diffMat);
             paint.setShader(SkLightingShader::Make(std::move(diffuseShader),
                     std::move(normalSource), fLights));
 
