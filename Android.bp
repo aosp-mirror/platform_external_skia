@@ -666,6 +666,8 @@ cc_library_static {
           "src/gpu/effects/GrBlurredEdgeFragmentProcessor.cpp",
           "src/gpu/effects/GrCircleBlurFragmentProcessor.cpp",
           "src/gpu/effects/GrCircleEffect.cpp",
+          "src/gpu/effects/GrComposeLerpEffect.cpp",
+          "src/gpu/effects/GrComposeLerpRedEffect.cpp",
           "src/gpu/effects/GrConfigConversionEffect.cpp",
           "src/gpu/effects/GrConstColorProcessor.cpp",
           "src/gpu/effects/GrConvexPolyEffect.cpp",
