@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@fb201c5e208dda3fb657ae3c543f0f6059ecb4f0",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@90b1865e2a8b644bc3e200726de9e3a321ee5c18",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@96443b262250c390b0caefbf3eed8463ba35ecae",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
   "third_party/externals/expat"           : "https://android.googlesource.com/platform/external/expat.git@android-6.0.1_r55",
@@ -28,15 +28,15 @@ deps = {
   "third_party/externals/sfntly"          : "https://chromium.googlesource.com/external/github.com/googlei18n/sfntly.git@b55ff303ea2f9e26702b514cf6a3196a2e3e2974",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@661ad91124e6af2272afd00f804d8aa276e17107",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@e9e4393b1c5aad7553c05782acefbe32b42644bd",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@0e3d328ac338c4c9474f5d967455ff501bd869cb",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@4ba1911b2d7f526695ffed525faa9c903cd6737b",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
-  "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@ae6e8db4ad4236654e7b8c68d24f41a37e5f4f96",
+  "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@f58ffbc927899b9534a273d3057094ce6ac1ed61",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
   "third_party/externals/Nima-Cpp"        : "https://skia.googlesource.com/external/github.com/2d-inc/Nima-Cpp.git@4bd02269d7d1d2e650950411325eafa15defb084",
   "third_party/externals/Nima-Math-Cpp"   : "https://skia.googlesource.com/external/github.com/2d-inc/Nima-Math-Cpp.git@e0c12772093fa8860f55358274515b86885f0108",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@3e2882be2ddeaaad85c29469d785f08a90a25e8e",
+    "url": "https://chromium.googlesource.com/chromium/src.git@afd96fdcf75ab534f1fd128468d3982f1a51b7c6",
     "condition": "checkout_chromium",
   },
 }
