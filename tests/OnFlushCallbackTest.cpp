@@ -20,7 +20,7 @@
 
 #include "SkBitmap.h"
 #include "SkPointPriv.h"
-#include "effects/GrSimpleTextureEffect.h"
+#include "effects/generated/GrSimpleTextureEffect.h"
 #include "ops/GrSimpleMeshDrawOpHelper.h"
 
 namespace {
@@ -581,7 +581,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(OnFlushCallbackTest, reporter, ctxInfo) {
     }
 
     rtc->prepareForExternalIO(SkSurface::BackendSurfaceAccess::kNoAccess,
-                              SkSurface::kNone_FlushFlags, 0, nullptr);
+                              kNone_GrFlushFlags, 0, nullptr);
 
     SkBitmap readBack;
     readBack.allocN32Pixels(kFinalWidth, kFinalHeight);

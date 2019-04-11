@@ -237,8 +237,12 @@ private:
     bool onWritePixels(GrSurface*, int left, int top, int width, int height, GrColorType,
                        const GrMipLevel texels[], int mipLevelCount) override;
 
-    bool onTransferPixels(GrTexture*, int left, int top, int width, int height, GrColorType,
-                          GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes) override;
+    bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height, GrColorType,
+                            GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes) override;
+    size_t onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height, GrColorType,
+                                GrGpuBuffer* transferBuffer, size_t offset) override;
+    bool readOrTransferPixelsFrom(GrSurface*, int left, int top, int width, int height, GrColorType,
+                                  void* offsetOrPtr, size_t rowBytes);
 
     // Before calling any variation of TexImage, TexSubImage, etc..., call this to ensure that the
     // PIXEL_UNPACK_BUFFER is unbound.
@@ -290,7 +294,7 @@ private:
     void flushBlend(const GrXferProcessor::BlendInfo& blendInfo, const GrSwizzle&);
 
     void onFinishFlush(GrSurfaceProxy*, SkSurface::BackendSurfaceAccess access,
-                       SkSurface::FlushFlags flags, bool insertedSemaphores) override;
+                       GrFlushFlags flags, bool insertedSemaphores) override;
 
     bool copySurfaceAsDraw(GrSurface* dst, GrSurfaceOrigin dstOrigin,
                            GrSurface* src, GrSurfaceOrigin srcOrigin,

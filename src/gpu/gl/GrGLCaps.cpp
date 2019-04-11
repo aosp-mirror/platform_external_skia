@@ -470,7 +470,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     if (GR_IS_GR_GL(standard)) {
-        if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_ARB_pixel_buffer_object")) {
+        if (version >= GR_GL_VER(2, 1) || ctxInfo.hasExtension("GL_ARB_pixel_buffer_object") ||
+            ctxInfo.hasExtension("GL_EXT_pixel_buffer_object")) {
+            fTransferBufferSupport = true;
             fTransferBufferType = kPBO_TransferBufferType;
         }
     } else if (GR_IS_GR_GL_ES(standard)) {
@@ -478,9 +480,11 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
             (ctxInfo.hasExtension("GL_NV_pixel_buffer_object") &&
              // GL_EXT_unpack_subimage needed to support subtexture rectangles
              ctxInfo.hasExtension("GL_EXT_unpack_subimage"))) {
+            fTransferBufferSupport = true;
             fTransferBufferType = kPBO_TransferBufferType;
 // TODO: get transfer buffers working in Chrome
 //        } else if (ctxInfo.hasExtension("GL_CHROMIUM_pixel_transfer_buffer_object")) {
+//            fTransferBufferSupport = true;
 //            fTransferBufferType = kChromium_TransferBufferType;
         }
     } // no WebGL support
@@ -2622,6 +2626,8 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // See skbug.com/7058
     fMapBufferType = kNone_MapBufferType;
     fMapBufferFlags = kNone_MapFlags;
+    fTransferBufferSupport = false;
+    fTransferBufferType = kNone_TransferBufferType;
 #endif
 #endif
 
@@ -2633,10 +2639,13 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         ctxInfo.driverVersion() > GR_GL_DRIVER_VER(127, 0, 0)) {
         fMapBufferType = kNone_MapBufferType;
         fMapBufferFlags = kNone_MapFlags;
+        fTransferBufferSupport = false;
+        fTransferBufferType = kNone_TransferBufferType;
     }
 
     // TODO: re-enable for ANGLE
     if (kANGLE_GrGLDriver == ctxInfo.driver()) {
+        fTransferBufferSupport = false;
         fTransferBufferType = kNone_TransferBufferType;
     }
 
@@ -2885,6 +2894,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         shaderCaps->fRemovePowWithConstantExponent = true;
     }
 
+    if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() ||
+        kAdreno4xx_other_GrGLRenderer == ctxInfo.renderer()) {
+        shaderCaps->fMustWriteToFragColor = true;
+    }
+
     // Disabling advanced blend on various platforms with major known issues. We also block Chrome
     // for now until its own blacklists can be updated.
     if (kAdreno430_GrGLRenderer == ctxInfo.renderer() ||
@@ -2967,7 +2981,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (kMesa_GrGLDriver == ctxInfo.driver() &&
         (kIntelSandyBridge_GrGLRenderer == ctxInfo.renderer() ||
          kIntelBayTrail_GrGLRenderer == ctxInfo.renderer())) {
-        fBlacklistCoverageCounting = true;
+        fDriverBlacklistCCPR = true;
     }
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -3219,6 +3233,9 @@ static GrPixelConfig get_yuva_config(GrGLenum format) {
             break;
         case GR_GL_RGB10_A2:
             config = kRGBA_1010102_GrPixelConfig;
+            break;
+        case GR_GL_R16F:
+            config = kAlpha_half_as_Red_GrPixelConfig;
             break;
     }
 

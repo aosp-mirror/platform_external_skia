@@ -209,8 +209,8 @@ public:
      * fDstClipCount, so the pointer can become invalid after this returns.
      */
     void drawTextureSet(const GrClip&, const TextureSetEntry[], int cnt, GrSamplerState::Filter,
-                        SkBlendMode mode, GrAA aa, const SkMatrix& viewMatrix,
-                        sk_sp<GrColorSpaceXform> texXform);
+                        SkBlendMode mode, GrAA aa, SkCanvas::SrcRectConstraint,
+                        const SkMatrix& viewMatrix, sk_sp<GrColorSpaceXform> texXform);
 
     /**
      * Draw a roundrect using a paint.
@@ -407,7 +407,7 @@ public:
      * if the surface has MSAA it will be resolved.
      */
     GrSemaphoresSubmitted prepareForExternalIO(SkSurface::BackendSurfaceAccess access,
-                                               SkSurface::FlushFlags flags, int numSemaphores,
+                                               GrFlushFlags flags, int numSemaphores,
                                                GrBackendSemaphore backendSemaphores[]);
 
     /**

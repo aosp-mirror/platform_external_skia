@@ -21,7 +21,7 @@ static sk_sp<SkImageFilter> make_brightness(float amount, sk_sp<SkImageFilter> i
                             0, 1, 0, 0, amount255,
                             0, 0, 1, 0, amount255,
                             0, 0, 0, 1, 0 };
-    sk_sp<SkColorFilter> filter(SkColorFilter::MakeMatrixFilterRowMajor255(matrix));
+    sk_sp<SkColorFilter> filter(SkColorFilters::MatrixRowMajor255(matrix));
     return SkColorFilterImageFilter::Make(std::move(filter), std::move(input));
 }
 
@@ -32,12 +32,12 @@ static sk_sp<SkImageFilter> make_grayscale(sk_sp<SkImageFilter> input) {
     matrix[1] = matrix[6] = matrix[11] = 0.7152f;
     matrix[2] = matrix[7] = matrix[12] = 0.0722f;
     matrix[18] = 1.0f;
-    sk_sp<SkColorFilter> filter(SkColorFilter::MakeMatrixFilterRowMajor255(matrix));
+    sk_sp<SkColorFilter> filter(SkColorFilters::MatrixRowMajor255(matrix));
     return SkColorFilterImageFilter::Make(std::move(filter), std::move(input));
 }
 
 static sk_sp<SkImageFilter> make_mode_blue(sk_sp<SkImageFilter> input) {
-    sk_sp<SkColorFilter> filter(SkColorFilter::MakeModeFilter(SK_ColorBLUE, SkBlendMode::kSrcIn));
+    sk_sp<SkColorFilter> filter(SkColorFilters::Blend(SK_ColorBLUE, SkBlendMode::kSrcIn));
     return SkColorFilterImageFilter::Make(std::move(filter), std::move(input));
 }
 
@@ -279,67 +279,3 @@ DEF_BENCH( return new ColorFilterBrightBlueBench(false); )
 DEF_BENCH( return new ColorFilterBrightBench(false); )
 DEF_BENCH( return new ColorFilterBlueBench(false); )
 DEF_BENCH( return new ColorFilterGrayBench(false); )
-
-////////////////////////////////////////////////////////////////
-
-#include "Resources.h"
-#include "SkMixer.h"
-
-class CFMixerBench : public Benchmark {
-    SkString fName;
-    enum Flags {
-        kUseCF0 = 1 << 0,
-        kUseCF1 = 1 << 1,
-    };
-
-    sk_sp<SkShader>      fShader;
-    sk_sp<SkColorFilter> fFilter;
-    const unsigned       fFlags;
-
-public:
-    CFMixerBench(unsigned flags) : fFlags(flags) {
-        fName.printf("colorfilter_mixer_%d", flags);
-    }
-    ~CFMixerBench() override {}
-
-protected:
-    const char* onGetName() override { return fName.c_str(); }
-    void onDelayedSetup() override {
-        auto img = GetResourceAsImage("images/mandrill_256.png");
-        if (img) {
-            img = img->makeRasterImage();
-        }
-        fShader = img->makeShader();
-        auto cf0 = SkColorFilter::MakeModeFilter(0x88FF3366, SkBlendMode::kDstIn);
-        auto cf1 = SkColorFilter::MakeModeFilter(0x88FF3366, SkBlendMode::kDstATop);
-        auto mx = SkMixer::MakeLerp(0.5f);
-        if (!(fFlags & kUseCF0)) {
-            cf0 = nullptr;
-        }
-        if (!(fFlags & kUseCF1)) {
-            cf1 = nullptr;
-        }
-        fFilter = SkColorFilter::MakeMixer(cf0, cf1, mx);
-    }
-    void onDraw(int loops, SkCanvas* canvas) override {
-        SkRect r = SkRect::MakeWH(256, 256);
-        SkPaint paint;
-        paint.setShader(fShader);
-        paint.setColorFilter(fFilter);
-        paint.setBlendMode(SkBlendMode::kSrc);  // no need to measure this step
-
-        for (int j = 0; j < 100; ++j) {
-            for (int i = 0; i < loops; i++) {
-                canvas->drawRect(r, paint);
-            }
-        }
-    }
-private:
-    typedef Benchmark INHERITED;
-};
-DEF_BENCH(return new CFMixerBench(0);)
-DEF_BENCH(return new CFMixerBench(1);)
-DEF_BENCH(return new CFMixerBench(2);)
-DEF_BENCH(return new CFMixerBench(3);)
-
-

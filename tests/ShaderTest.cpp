@@ -45,7 +45,7 @@ DEF_TEST(Shader_isAImage, reporter) {
     const SkTileMode tmx = SkTileMode::kRepeat;
     const SkTileMode tmy = SkTileMode::kMirror;
 
-    auto shader0 = SkShader::MakeBitmapShader(bm, tmx, tmy, &localM);
+    auto shader0 = bm.makeShader(tmx, tmy, &localM);
     auto shader1 = SkImage::MakeFromBitmap(bm)->makeShader(tmx, tmy, &localM);
 
     check_isaimage(reporter, shader0.get(), W, H, tmx, tmy, localM);
@@ -60,10 +60,9 @@ DEF_TEST(ComposeShaderSingle, reporter) {
     SkCanvas canvas(srcBitmap);
     SkPaint p;
     p.setShader(
-        SkShader::MakeComposeShader(
-        SkShader::MakeEmptyShader(),
-        SkPerlinNoiseShader::MakeFractalNoise(1.0f, 1.0f, 2, 0.0f),
-        SkBlendMode::kClear));
+        SkShaders::Blend(SkBlendMode::kClear,
+        SkShaders::Empty(),
+        SkPerlinNoiseShader::MakeFractalNoise(1.0f, 1.0f, 2, 0.0f)));
     SkRRect rr;
     SkVector rd[] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}};
     rr.setRectRadii({0, 0, 0, 0}, rd);

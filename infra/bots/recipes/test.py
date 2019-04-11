@@ -87,10 +87,6 @@ def dm_flags(api, bot):
   if 'Test' in bot and 'DISCARDABLE' in bot:
     thread_limit = MAIN_THREAD_ONLY
 
-  # See if staying on the main thread helps skia:6748.
-  if 'Test-iOS' in bot:
-    thread_limit = MAIN_THREAD_ONLY
-
   if thread_limit is not None:
     args.extend(['--threads', str(thread_limit)])
 
@@ -184,8 +180,11 @@ def dm_flags(api, bot):
       blacklist('gltestthreading gm _ persp_shaders_bw')
       blacklist('gltestthreading gm _ dftext_blob_persp')
       blacklist('gltestthreading gm _ dftext')
-    # skbug.com/7523 - Flaky on various GPUs
+      # skbug.com/7523 - Flaky on various GPUs
       blacklist('gltestthreading gm _ orientation')
+      # These GMs only differ in the low bits
+      blacklist('gltestthreading gm _ stroketext')
+      blacklist('gltestthreading gm _ draw_image_set')
 
     # CommandBuffer bot *only* runs the command_buffer config.
     if 'CommandBuffer' in bot:
@@ -226,13 +225,16 @@ def dm_flags(api, bot):
         # Decoding transparent images to 1010102 just looks bad
         blacklist('vk1010102 image _ _')
       else:
-        configs.extend(['gl1010102', 'gltestpersistentcache'])
+        configs.extend(['gl1010102', 'gltestpersistentcache', 'gltestglslcache'])
         # Decoding transparent images to 1010102 just looks bad
         blacklist('gl1010102 image _ _')
         # These tests produce slightly different pixels run to run on NV.
         blacklist('gltestpersistentcache gm _ atlastext')
         blacklist('gltestpersistentcache gm _ dftext')
         blacklist('gltestpersistentcache gm _ glyph_pos_h_b')
+        blacklist('gltestglslcache gm _ atlastext')
+        blacklist('gltestglslcache gm _ dftext')
+        blacklist('gltestglslcache gm _ glyph_pos_h_b')
 
     # Test rendering to wrapped dsts on a few bots
     # Also test 'glenarrow', which hits F16 surfaces and F16 vertex colors.
@@ -250,7 +252,7 @@ def dm_flags(api, bot):
     # Test coverage counting path renderer.
     if 'CCPR' in bot:
       configs = [c for c in configs if c == 'gl' or c == 'gles']
-      args.extend(['--pr', 'ccpr', '--cachePathMasks', 'false'])
+      args.extend(['--pr', 'ccpr', '--cc', 'true', '--cachePathMasks', 'false'])
 
     # DDL is a GPU-only feature
     if 'DDL1' in bot:
@@ -666,6 +668,8 @@ def dm_flags(api, bot):
     match.append('~FloatingPointTextureTest$')
 
   if 'Vulkan' in bot and 'Win10' in bot and 'IntelIris655' in bot:
+    # skia:8961
+    blacklist(['vk', 'gm', '_', 'savelayer_clipmask'])
     # skia:8659
     blacklist(['vk', 'gm', '_', 'aarectmodes'])
     blacklist(['vk', 'gm', '_', 'aaxfermodes'])
@@ -722,6 +726,7 @@ def dm_flags(api, bot):
     match.append('~^RGB565TextureTest$')
     match.append('~^RGBA4444TextureTest$')
     match.append('~^TextureIdleProcFlushTest$')
+    match.append('~^TextureStripAtlasManagerColorFilterTest$')
     match.append('~^WritePixelsNonTextureMSAA_Gpu$')
 
   if 'ANGLE' in bot:
@@ -758,28 +763,8 @@ def dm_flags(api, bot):
 
   if 'Metal' in bot:
     # skia:8243
-    match.append('~^DDLMakeRenderTargetTest$')
-    match.append('~^DDLNonTextureabilityTest$')
     match.append('~^DDLOperatorEqTest$')
-    match.append('~^DDLSurfaceCharacterizationTest$')
-    match.append('~^GrContext_colorTypeSupportedAsImage$')
-    match.append('~^GrContext_colorTypeSupportedAsSurface$')
-    match.append('~^GrContext_maxSurfaceSamplesForColorType$')
-    match.append('~^GrContextFactory_sharedContexts$')
-    match.append('~^GrDefaultPathRendererTest$')
-    match.append('~^GrPipelineDynamicStateTest$')
-    match.append('~^InitialTextureClear$')
-    match.append('~^PromiseImageTextureFullCache$')
-    match.append('~^PromiseImageTextureReuseDifferentConfig$')
-    match.append('~^SurfaceSemaphores$')
-    match.append('~^SurfaceTest$')
-    match.append('~^TransferPixelsTest$')
-    match.append('~^VertexAttributeCount$')
     match.append('~^WritePixelsNonTexture_Gpu$')
-    if 'Mac' in bot:
-      match.append('~^RGB565TextureTest$')
-      match.append('~^RGBA4444TextureTest$')
-      match.append('~^TextureIdleProcFlushTest$')
 
   if 'Wuffs' in api.vars.extra_tokens:
     # skia:8750

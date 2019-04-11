@@ -27,7 +27,7 @@
 #error "SkWuffsCodec should not #define WUFFS_IMPLEMENTATION"
 #endif
 #include "wuffs-v0.2.c"
-#if WUFFS_VERSION_BUILD_METADATA_COMMIT_COUNT < 1655
+#if WUFFS_VERSION_BUILD_METADATA_COMMIT_COUNT < 1675
 #error "Wuffs version is too old. Upgrade to the latest version."
 #endif
 
@@ -209,13 +209,13 @@ SkWuffsFrame::SkWuffsFrame(wuffs_base__frame_config* fc)
 }
 
 SkCodec::FrameInfo SkWuffsFrame::frameInfo(bool fullyReceived) const {
-    return ((SkCodec::FrameInfo){
-        .fRequiredFrame = getRequiredFrame(),
-        .fDuration = getDuration(),
-        .fFullyReceived = fullyReceived,
-        .fAlphaType = hasAlpha() ? kUnpremul_SkAlphaType : kOpaque_SkAlphaType,
-        .fDisposalMethod = getDisposalMethod(),
-    });
+    SkCodec::FrameInfo ret;
+    ret.fRequiredFrame = getRequiredFrame();
+    ret.fDuration = getDuration();
+    ret.fFullyReceived = fullyReceived;
+    ret.fAlphaType = hasAlpha() ? kUnpremul_SkAlphaType : kOpaque_SkAlphaType;
+    ret.fDisposalMethod = getDisposalMethod();
+    return ret;
 }
 
 uint64_t SkWuffsFrame::ioPosition() const {

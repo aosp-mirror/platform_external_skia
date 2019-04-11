@@ -25,7 +25,7 @@
 #include "SkSurface_Gpu.h"
 #include "SkTaskGroup.h"
 #include "SkTraceMemoryDump.h"
-#include "effects/GrConfigConversionEffect.h"
+#include "effects/generated/GrConfigConversionEffect.h"
 #include "effects/GrSkSLFP.h"
 #include "ccpr/GrCoverageCountingPathRenderer.h"
 #include "text/GrTextBlobCache.h"
@@ -244,19 +244,18 @@ void GrContext::flush() {
     RETURN_IF_ABANDONED
 
     this->drawingManager()->flush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess,
-                                  SkSurface::kNone_FlushFlags, 0, nullptr);
+                                  kNone_GrFlushFlags, 0, nullptr);
 }
 
-GrSemaphoresSubmitted GrContext::flushAndSignalSemaphores(int numSemaphores,
-                                                          GrBackendSemaphore signalSemaphores[]) {
+GrSemaphoresSubmitted GrContext::flush(GrFlushFlags flags, int numSemaphores,
+                                       GrBackendSemaphore signalSemaphores[]) {
     ASSERT_SINGLE_OWNER
     if (this->abandoned()) {
         return GrSemaphoresSubmitted::kNo;
     }
 
     return this->drawingManager()->flush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess,
-                                         SkSurface::kNone_FlushFlags, numSemaphores,
-                                         signalSemaphores);
+                                         flags, numSemaphores, signalSemaphores);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

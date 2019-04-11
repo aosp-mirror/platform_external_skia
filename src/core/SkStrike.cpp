@@ -142,9 +142,7 @@ const void* SkStrike::findImage(const SkGlyph& glyph) {
 }
 
 void SkStrike::initializeImage(const volatile void* data, size_t size, SkGlyph* glyph) {
-    // Don't overwrite the image if we already have one. We could have used a fallback if the
-    // glyph was missing earlier.
-    if (glyph->fImage) return;
+    SkASSERT(!glyph->fImage);
 
     if (glyph->fWidth > 0 && glyph->fWidth < kMaxGlyphWidth) {
         size_t allocSize = glyph->allocImage(&fAlloc);
@@ -180,9 +178,7 @@ const SkPath* SkStrike::findPath(const SkGlyph& glyph) {
 }
 
 bool SkStrike::initializePath(SkGlyph* glyph, const volatile void* data, size_t size) {
-    // Don't overwrite the path if we already have one. We could have used a fallback if the
-    // glyph was missing earlier.
-    if (glyph->fPathData) return true;
+    SkASSERT(!glyph->fPathData);
 
     if (glyph->fWidth) {
         SkGlyph::PathData* pathData = fAlloc.make<SkGlyph::PathData>();
@@ -237,24 +233,22 @@ const SkGlyph& SkStrike::getGlyphMetrics(SkGlyphID glyphID, SkPoint position) {
 
 // N.B. This glyphMetrics call culls all the glyphs which will not display based on a non-finite
 // position or that there are no mask pixels.
-int SkStrike::glyphMetrics(const SkGlyphID glyphIDs[],
-                 const SkPoint positions[],
-                 int n,
-                 SkGlyphPos result[]) {
-
-    int drawableGlyphCount = 0;
-    const SkPoint* posCursor = positions;
-    for (int i = 0; i < n; i++) {
-        SkPoint glyphPos = *posCursor++;
+SkSpan<const SkGlyphPos> SkStrike::glyphMetrics(const SkGlyphID glyphIDs[],
+                                                const SkPoint positions[],
+                                                size_t n,
+                                                SkGlyphPos result[]) {
+    size_t drawableGlyphCount = 0;
+    for (size_t i = 0; i < n; i++) {
+        SkPoint glyphPos = positions[i];
         if (SkScalarsAreFinite(glyphPos.x(), glyphPos.y())) {
             const SkGlyph& glyph = this->getGlyphMetrics(glyphIDs[i], glyphPos);
             if (!glyph.isEmpty()) {
-                result[drawableGlyphCount++] = {&glyph, glyphPos};
+                result[drawableGlyphCount++] = {i, &glyph, glyphPos};
             }
         }
     }
 
-    return drawableGlyphCount;
+    return SkSpan<const SkGlyphPos>{result, drawableGlyphCount};
 }
 
 #include "../pathops/SkPathOpsCubic.h"

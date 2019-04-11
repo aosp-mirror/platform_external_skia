@@ -44,9 +44,9 @@ public:
 
     id<MTLDevice> device() const { return fDevice; }
 
-    id<MTLCommandBuffer> commandBuffer() const { return fCmdBuffer; }
-
     GrMtlResourceProvider& resourceProvider() { return fResourceProvider; }
+
+    id<MTLCommandBuffer> commandBuffer();
 
     enum SyncQueue {
         kForce_SyncQueue,
@@ -162,12 +162,19 @@ private:
     bool onWritePixels(GrSurface*, int left, int top, int width, int height, GrColorType,
                        const GrMipLevel[], int mipLevelCount) override;
 
-    bool onTransferPixels(GrTexture*,
-                          int left, int top, int width, int height,
-                          GrColorType, GrGpuBuffer*,
-                          size_t offset, size_t rowBytes) override {
+    bool onTransferPixelsTo(GrTexture*,
+                            int left, int top, int width, int height,
+                            GrColorType, GrGpuBuffer*,
+                            size_t offset, size_t rowBytes) override {
         // TODO: not sure this is worth the work since nobody uses it
         return false;
+    }
+    size_t onTransferPixelsFrom(GrSurface*,
+                                int left, int top, int width, int height,
+                                GrColorType, GrGpuBuffer*,
+                                size_t offset) override {
+        // TODO: Will need to implement this to support async read backs.
+        return 0;
     }
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
@@ -175,8 +182,8 @@ private:
     void onResolveRenderTarget(GrRenderTarget* target) override { return; }
 
     void onFinishFlush(GrSurfaceProxy*, SkSurface::BackendSurfaceAccess access,
-                       SkSurface::FlushFlags flags, bool insertedSemaphores) override {
-        if (flags & SkSurface::kSyncCpu_FlushFlag) {
+                       GrFlushFlags flags, bool insertedSemaphores) override {
+        if (flags & kSyncCpu_GrFlushFlag) {
             this->submitCommandBuffer(kForce_SyncQueue);
         } else {
             this->submitCommandBuffer(kSkip_SyncQueue);

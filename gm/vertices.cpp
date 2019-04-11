@@ -35,11 +35,11 @@ static sk_sp<SkShader> make_shader1(SkScalar shaderScale) {
 }
 
 static sk_sp<SkShader> make_shader2() {
-    return SkShader::MakeColorShader(SK_ColorBLUE);
+    return SkShaders::Color(SK_ColorBLUE);
 }
 
 static sk_sp<SkColorFilter> make_color_filter() {
-    return SkColorFilter::MakeModeFilter(0xFFAABBCC, SkBlendMode::kDarken);
+    return SkColorFilters::Blend(0xFFAABBCC, SkBlendMode::kDarken);
 }
 
 static constexpr SkScalar kMeshSize = 30;

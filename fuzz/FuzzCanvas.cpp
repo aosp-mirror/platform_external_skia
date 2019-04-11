@@ -115,7 +115,7 @@ static sk_sp<SkColorFilter> make_fuzz_colorfilter(Fuzz* fuzz, int depth) {
             SkBlendMode mode;
             fuzz->next(&color);
             fuzz->nextRange(&mode, 0, SkBlendMode::kLastMode);
-            return SkColorFilter::MakeModeFilter(color, mode);
+            return SkColorFilters::Blend(color, mode);
         }
         case 2: {
             sk_sp<SkColorFilter> outer = make_fuzz_colorfilter(fuzz, depth - 1);
@@ -129,7 +129,7 @@ static sk_sp<SkColorFilter> make_fuzz_colorfilter(Fuzz* fuzz, int depth) {
         case 3: {
             SkScalar array[20];
             fuzz->nextN(array, SK_ARRAY_COUNT(array));
-            return SkColorFilter::MakeMatrixFilterRowMajor255(array);
+            return SkColorFilters::MatrixRowMajor255(array);
         }
         case 4: {
             SkColor mul, add;
@@ -204,10 +204,10 @@ static sk_sp<SkShader> make_fuzz_shader(Fuzz* fuzz, int depth) {
         case 0:
             return nullptr;
         case 1:
-            return SkShader::MakeEmptyShader();
+            return SkShaders::Empty();
         case 2:
             fuzz->next(&color);
-            return SkShader::MakeColorShader(color);
+            return SkShaders::Color(color);
         case 3:
             img = make_fuzz_image(fuzz);
             fuzz->nextRange(&tmX, 0, SkTileMode::kLastTileMode);
@@ -225,7 +225,7 @@ static sk_sp<SkShader> make_fuzz_shader(Fuzz* fuzz, int depth) {
             if (useMatrix) {
                 FuzzNiceMatrix(fuzz, &matrix);
             }
-            return SkShader::MakeBitmapShader(bitmap, tmX, tmY, useMatrix ? &matrix : nullptr);
+            return bitmap.makeShader(tmX, tmY, useMatrix ? &matrix : nullptr);
         case 5:
             shader1 = make_fuzz_shader(fuzz, depth - 1);  // limit recursion.
             FuzzNiceMatrix(fuzz, &matrix);
@@ -238,7 +238,7 @@ static sk_sp<SkShader> make_fuzz_shader(Fuzz* fuzz, int depth) {
             shader1 = make_fuzz_shader(fuzz, depth - 1);  // limit recursion.
             shader2 = make_fuzz_shader(fuzz, depth - 1);
             fuzz->nextRange(&blendMode, 0, SkBlendMode::kLastMode);
-            return SkShader::MakeComposeShader(std::move(shader1), std::move(shader2), blendMode);
+            return SkShaders::Blend(blendMode, std::move(shader1), std::move(shader2));
         case 8: {
             auto pic = make_fuzz_picture(fuzz, depth - 1);
             bool useTile;

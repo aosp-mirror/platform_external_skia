@@ -29,9 +29,9 @@ static sk_sp<SkShader> make_bitmapfade(const SkBitmap& bm) {
     colors[1] = SkColorSetARGB(0, 0, 0, 0);
     auto shaderA = SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kClamp);
 
-    auto shaderB = SkShader::MakeBitmapShader(bm, SkTileMode::kClamp, SkTileMode::kClamp);
+    auto shaderB = bm.makeShader();
 
-    return SkShader::MakeComposeShader(std::move(shaderB), std::move(shaderA), SkBlendMode::kDstIn);
+    return SkShaders::Blend(SkBlendMode::kDstIn, std::move(shaderB), std::move(shaderA));
 }
 
 class ShaderView : public Sample {
@@ -57,8 +57,7 @@ public:
         colors[1] = SkColorSetARGB(0x80, 0, 0, 0);
         auto shaderB = SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kClamp);
 
-        fShader = SkShader::MakeComposeShader(std::move(shaderA), std::move(shaderB),
-                                              SkBlendMode::kDstIn);
+        fShader = SkShaders::Blend(SkBlendMode::kDstIn, std::move(shaderA), std::move(shaderB));
     }
 
 protected:

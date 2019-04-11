@@ -625,8 +625,6 @@ public:
             clipMatrix uses alpha channel of image, transformed by clipMatrix, to clip
             layer when drawn to SkCanvas.
 
-            Implementation is not complete; has no effect if SkBaseDevice is GPU-backed.
-
             @param bounds          layer dimensions; may be nullptr
             @param paint           graphics state applied to layer when overlaying prior
                                    layer; may be nullptr
@@ -1815,7 +1813,10 @@ public:
         ImageSetEntry(sk_sp<const SkImage> image, const SkRect& srcRect, const SkRect& dstRect,
                       float alpha, unsigned aaFlags);
 
-        ImageSetEntry() = default;
+        ImageSetEntry();
+        ~ImageSetEntry();
+        ImageSetEntry(const ImageSetEntry&);
+        ImageSetEntry& operator=(const ImageSetEntry&);
 
         sk_sp<const SkImage> fImage;
         SkRect fSrcRect;

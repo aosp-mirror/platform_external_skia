@@ -75,8 +75,6 @@ public:
 
     bool preferTrianglesOverSampleMask() const { return fPreferTrianglesOverSampleMask; }
 
-    bool blacklistCoverageCounting() const { return fBlacklistCoverageCounting; }
-
     bool avoidStencilBuffers() const { return fAvoidStencilBuffers; }
 
     bool avoidWritePixelsFastPath() const { return fAvoidWritePixelsFastPath; }
@@ -222,6 +220,26 @@ public:
         return GrPixelConfigToColorType(config);
     }
 
+    /** Are transfer buffers (to textures and from surfaces) supported? */
+    bool transferBufferSupport() const { return fTransferBufferSupport; }
+
+    /**
+     * Gets the requirements to use GrGpu::transferPixelsFrom for a given GrColorType. To check
+     * whether a pixels as GrColorType can be read for a given surface see
+     * supportedReadPixelsColorType() and surfaceSupportsReadPixels().
+     *
+     * @param bufferColorType The color type of the pixel data that will be stored in the transfer
+     *                        buffer.
+     * @param width  The number of color values per row that will be stored in the buffer.
+     * @param rowBytes The number of bytes per row that will be used in the transfer buffer.
+     * @param alignment The required alignment of the offset into the transfer buffer passed
+     *                         to GrGpu::transferPixelsFrom.
+     * @return true if transferPixelFrom is supported, false otherwise. If false then rowBytes and
+     * alignment are not updated.
+     */
+    bool transferFromBufferRequirements(GrColorType bufferColorType, int width, size_t* rowBytes,
+                                        size_t* offsetAlignment) const;
+
     bool suppressPrints() const { return fSuppressPrints; }
 
     size_t bufferMapThreshold() const {
@@ -267,16 +285,19 @@ public:
     }
 
     // Many drivers have issues with color clears.
-    bool performColorClearsAsDraws() const {
-        return fPerformColorClearsAsDraws;
-    }
+    bool performColorClearsAsDraws() const { return fPerformColorClearsAsDraws; }
 
     /// Adreno 4xx devices experience an issue when there are a large number of stencil clip bit
     /// clears. The minimal repro steps are not precisely known but drawing a rect with a stencil
     /// op instead of using glClear seems to resolve the issue.
-    bool performStencilClearsAsDraws() const {
-        return fPerformStencilClearsAsDraws;
-    }
+    bool performStencilClearsAsDraws() const { return fPerformStencilClearsAsDraws; }
+
+    // Can we use coverage counting shortcuts to render paths? Coverage counting can cause artifacts
+    // along shared edges if care isn't taken to ensure both contours wind in the same direction.
+    bool allowCoverageCounting() const { return fAllowCoverageCounting; }
+
+    // Should we disable the CCPR code due to a faulty driver?
+    bool driverBlacklistCCPR() const { return fDriverBlacklistCCPR; }
 
     /**
      * This is can be called before allocating a texture to be a dst for copySurface. This is only
@@ -359,9 +380,11 @@ protected:
     bool fPerformPartialClearsAsDraws                : 1;
     bool fPerformColorClearsAsDraws                  : 1;
     bool fPerformStencilClearsAsDraws                : 1;
+    bool fAllowCoverageCounting                      : 1;
+    bool fTransferBufferSupport                      : 1;
 
     // Driver workaround
-    bool fBlacklistCoverageCounting                  : 1;
+    bool fDriverBlacklistCCPR                        : 1;
     bool fAvoidStencilBuffers                        : 1;
     bool fAvoidWritePixelsFastPath                   : 1;
 
@@ -403,6 +426,8 @@ private:
     virtual bool onSurfaceSupportsWritePixels(const GrSurface*) const = 0;
     virtual bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                                   const SkIRect& srcRect, const SkIPoint& dstPoint) const = 0;
+    virtual bool onTransferFromBufferRequirements(GrColorType bufferColorType, int width,
+                                                  size_t* rowBytes, size_t* offsetAlignment) const;
 
     // Backends should implement this if they have any extra requirements for use of window
     // rectangles for a specific GrBackendRenderTarget outside of basic support.

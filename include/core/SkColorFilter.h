@@ -18,7 +18,6 @@ class GrFragmentProcessor;
 class GrRecordingContext;
 class SkBitmap;
 class SkColorSpace;
-class SkMixer;
 struct SkStageRec;
 class SkString;
 
@@ -61,17 +60,6 @@ public:
     SkColor filterColor(SkColor) const;
     SkColor4f filterColor4f(const SkColor4f&, SkColorSpace*) const;
 
-    /** Create a colorfilter that uses the specified color and mode.
-        If the Mode is DST, this function will return NULL (since that
-        mode will have no effect on the result).
-        @param c    The source color used with the specified mode
-        @param mode The blend that is applied to each color in
-                        the colorfilter's filterSpan[16,32] methods
-        @return colorfilter object that applies the src color and mode,
-                    or NULL if the mode will have no effect.
-    */
-    static sk_sp<SkColorFilter> MakeModeFilter(SkColor c, SkBlendMode mode);
-
     /** Construct a colorfilter whose effect is to first apply the inner filter and then apply
      *  this filter, applied to the output of the inner filter.
      *
@@ -81,45 +69,6 @@ public:
      *  always check.
      */
     sk_sp<SkColorFilter> makeComposed(sk_sp<SkColorFilter> inner) const;
-
-    // DEPRECATED, call makeComposed instead
-    static sk_sp<SkColorFilter> MakeComposeFilter(sk_sp<SkColorFilter> outer,
-                                                  sk_sp<SkColorFilter> inner) {
-        return outer ? outer->makeComposed(inner) : inner;
-    }
-
-    /** Construct a color filter that transforms a color by a 4x5 matrix. The matrix is in row-
-     *  major order and the translation column is specified in unnormalized, 0...255, space.
-     */
-    static sk_sp<SkColorFilter> MakeMatrixFilterRowMajor255(const SkScalar array[20]);
-
-    /** Construct a colorfilter that applies the srgb gamma curve to the RGB channels */
-    static sk_sp<SkColorFilter> MakeLinearToSRGBGamma();
-
-    /** Construct a colorfilter that applies the inverse of the srgb gamma curve to the
-     *  RGB channels
-     */
-    static sk_sp<SkColorFilter> MakeSRGBToLinearGamma();
-
-    /**
-     *  Returns a new filter that returns the weighted average between the outputs of
-     *  two other filters. If either is null, then it is treated as an identity filter.
-     *
-     *  result = cf0(color) * (1 - weight) + cf1(color) * weight
-     *
-     *  If both filters are null, or if weight is NaN, then null is returned.
-     */
-    static sk_sp<SkColorFilter> MakeLerp(sk_sp<SkColorFilter> cf0, sk_sp<SkColorFilter> cf1,
-                                         float weight);
-
-    /**
-     *  Returns a new filter that mixes the output of two other filters. If either filter is null,
-     *  then it is treated like an identity filter.
-     *
-     *  result = mx(cf0(color), cf1(color))
-     */
-    static sk_sp<SkColorFilter> MakeMixer(sk_sp<SkColorFilter> cf0, sk_sp<SkColorFilter> cf1,
-                                          sk_sp<SkMixer> mx);
 
 #if SK_SUPPORT_GPU
     /**
@@ -156,6 +105,49 @@ public:
                                   kSkColorFilter_Type, data, size, procs).release()));
     }
 
+#ifdef SK_SUPPORT_LEGACY_COLORFILTER_FACTORIES
+    /** Create a colorfilter that uses the specified color and mode.
+         If the Mode is DST, this function will return NULL (since that
+         mode will have no effect on the result).
+         @param c    The source color used with the specified mode
+         @param mode The blend that is applied to each color in
+         the colorfilter's filterSpan[16,32] methods
+         @return colorfilter object that applies the src color and mode,
+         or NULL if the mode will have no effect.
+     */
+    static sk_sp<SkColorFilter> MakeModeFilter(SkColor c, SkBlendMode mode);
+
+    // DEPRECATED, call makeComposed instead
+    static sk_sp<SkColorFilter> MakeComposeFilter(sk_sp<SkColorFilter> outer,
+                                                  sk_sp<SkColorFilter> inner) {
+        return outer ? outer->makeComposed(inner) : inner;
+    }
+
+    /** Construct a color filter that transforms a color by a 4x5 matrix. The matrix is in row-
+     *  major order and the translation column is specified in unnormalized, 0...255, space.
+     */
+    static sk_sp<SkColorFilter> MakeMatrixFilterRowMajor255(const SkScalar array[20]);
+
+    /** Construct a colorfilter that applies the srgb gamma curve to the RGB channels */
+    static sk_sp<SkColorFilter> MakeLinearToSRGBGamma();
+
+    /** Construct a colorfilter that applies the inverse of the srgb gamma curve to the
+     *  RGB channels
+     */
+    static sk_sp<SkColorFilter> MakeSRGBToLinearGamma();
+
+    /**
+     *  Returns a new filter that returns the weighted average between the outputs of
+     *  two other filters. If either is null, then it is treated as an identity filter.
+     *
+     *  result = cf0(color) * (1 - weight) + cf1(color) * weight
+     *
+     *  If both filters are null, or if weight is NaN, then null is returned.
+     */
+    static sk_sp<SkColorFilter> MakeLerp(sk_sp<SkColorFilter> cf0, sk_sp<SkColorFilter> cf1,
+                                         float weight);
+#endif
+
 protected:
     SkColorFilter() {}
 
@@ -174,6 +166,21 @@ private:
     friend class SkComposeColorFilter;
 
     typedef SkFlattenable INHERITED;
+};
+
+class SK_API SkColorFilters {
+public:
+    static sk_sp<SkColorFilter> Compose(sk_sp<SkColorFilter> outer, sk_sp<SkColorFilter> inner) {
+        return outer ? outer->makeComposed(inner) : inner;
+    }
+    static sk_sp<SkColorFilter> Blend(SkColor c, SkBlendMode mode);
+    static sk_sp<SkColorFilter> MatrixRowMajor255(const SkScalar array[20]);
+    static sk_sp<SkColorFilter> LinearToSRGBGamma();
+    static sk_sp<SkColorFilter> SRGBToLinearGamma();
+    static sk_sp<SkColorFilter> Lerp(float t, sk_sp<SkColorFilter> dst, sk_sp<SkColorFilter> src);
+
+private:
+    SkColorFilters() = delete;
 };
 
 #endif

@@ -22,7 +22,7 @@
 #include "GrRenderTargetContext.h"
 #include "GrTextureProxy.h"
 #include "SkGr.h"
-#include "effects/GrConstColorProcessor.h"
+#include "effects/generated/GrConstColorProcessor.h"
 #include "effects/GrSkSLFP.h"
 #include "effects/GrTextureDomain.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
@@ -31,13 +31,13 @@
 #include "glsl/GrGLSLUniformHandler.h"
 
 GR_FP_SRC_STRING SKSL_ARITHMETIC_SRC = R"(
-in uniform half4 k;
+in uniform float4 k;
 layout(key) const in bool enforcePMColor;
 in fragmentProcessor child;
 
 void main(inout half4 color) {
     half4 dst = process(child);
-    color = saturate(k.x * color * dst + k.y * color + k.z * dst + k.w);
+    color = saturate(half(k.x) * color * dst + half(k.y) * color + half(k.z) * dst + half(k.w));
     if (enforcePMColor) {
         color.rgb = min(color.rgb, color.a);
     }

@@ -37,7 +37,6 @@ var CanvasKit = {
 	MakeCanvas: function() {},
 	MakeCanvasSurface: function() {},
 	MakeGrContext: function() {},
-	MakeImageShader: function() {},
 	/** @return {CanvasKit.SkImage} */
 	MakeImageFromEncoded: function() {},
 	/** @return {LinearCanvasGradient} */
@@ -65,7 +64,6 @@ var CanvasKit = {
 	// private API (i.e. things declared in the bindings that we use
 	// in the pre-js file)
 	_MakeImage: function() {},
-	_MakeImageShader: function() {},
 	_MakeLinearGradientShader: function() {},
 	_MakePathFromCmds: function() {},
 	_MakeRadialGradientShader: function() {},
@@ -92,6 +90,8 @@ var CanvasKit = {
 	},
 
 	RSXFormBuilder: function() {},
+	SkColorBuilder: function() {},
+	SkRectBuilder: function() {},
 
 	ShapedText: {
 		// public API (from C++ bindings)
@@ -111,6 +111,7 @@ var CanvasKit = {
 		drawOval: function() {},
 		drawPaint: function() {},
 		drawPath: function() {},
+		drawPicture: function() {},
 		drawRect: function() {},
 		drawRoundRect: function() {},
 		drawShadow: function() {},
@@ -130,6 +131,7 @@ var CanvasKit = {
 		translate: function() {},
 
 		// private API
+		_drawAtlas: function() {},
 		_drawSimpleText: function() {},
 		_readPixels: function() {},
 		_writePixels: function() {},
@@ -167,6 +169,7 @@ var CanvasKit = {
 		// private API
 		_encodeToData: function() {},
 		_encodeToDataWithFormat: function() {},
+		_makeShader: function() {},
 	},
 
 	SkMatrix: {
@@ -257,6 +260,15 @@ var CanvasKit = {
 		getPosTan: function() {},
 		isClosed: function() {},
 		nextContour: function() {},
+	},
+
+	SkPicture: {
+		DEBUGONLY_serialize: function() {},
+	},
+
+	SkPictureRecorder: {
+		beginRecording: function() {},
+		finishRecordingAsPicture: function() {},
 	},
 
 	SkRect: {
@@ -505,15 +517,20 @@ CanvasKit.SkPath.prototype.stroke = function() {};
 CanvasKit.SkPath.prototype.transform = function() {};
 CanvasKit.SkPath.prototype.trim = function() {};
 
+CanvasKit.SkPicture.prototype.DEBUGONLY_saveAsFile = function() {};
+
 CanvasKit.SkSurface.prototype.dispose = function() {};
 CanvasKit.SkSurface.prototype.flush = function() {};
 CanvasKit.SkSurface.prototype.requestAnimationFrame = function() {};
+CanvasKit.SkSurface.prototype.captureFrameAsSkPicture = function() {};
 
 /** @return {CanvasKit.SkVertices} */
 CanvasKit.SkVertices.prototype.applyBones = function() {};
 
 CanvasKit.SkImage.prototype.encodeToData = function() {};
+CanvasKit.SkImage.prototype.makeShader = function() {};
 
+CanvasKit.SkCanvas.prototype.drawAtlas = function() {};
 CanvasKit.SkCanvas.prototype.drawText = function() {};
 /** @return {Uint8Array} */
 CanvasKit.SkCanvas.prototype.readPixels = function() {};
@@ -526,6 +543,12 @@ CanvasKit.SkFont.prototype.getWidths = function() {};
 CanvasKit.RSXFormBuilder.prototype.build = function() {};
 CanvasKit.RSXFormBuilder.prototype.delete = function() {};
 CanvasKit.RSXFormBuilder.prototype.push = function() {};
+CanvasKit.RSXFormBuilder.prototype.set = function() {};
+
+CanvasKit.SkColorBuilder.prototype.build = function() {};
+CanvasKit.SkColorBuilder.prototype.delete = function() {};
+CanvasKit.SkColorBuilder.prototype.push = function() {};
+CanvasKit.SkColorBuilder.prototype.set = function() {};
 
 // Define StrokeOpts object
 var StrokeOpts = {};
@@ -628,5 +651,3 @@ var DOMMatrix = {
 
 // Not sure why this is needed - might be a bug in emsdk that this isn't properly declared.
 function loadWebAssemblyModule() {};
-
-var DOMMatrix = {};

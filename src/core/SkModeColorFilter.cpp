@@ -58,7 +58,7 @@ void SkModeColorFilter::flatten(SkWriteBuffer& buffer) const {
 sk_sp<SkFlattenable> SkModeColorFilter::CreateProc(SkReadBuffer& buffer) {
     SkColor color = buffer.readColor();
     SkBlendMode mode = (SkBlendMode)buffer.readUInt();
-    return SkColorFilter::MakeModeFilter(color, mode);
+    return SkColorFilters::Blend(color, mode);
 }
 
 bool SkModeColorFilter::onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
@@ -75,7 +75,7 @@ bool SkModeColorFilter::onAppendStages(const SkStageRec& rec, bool shaderIsOpaqu
 #if SK_SUPPORT_GPU
 #include "GrBlend.h"
 #include "effects/GrXfermodeFragmentProcessor.h"
-#include "effects/GrConstColorProcessor.h"
+#include "effects/generated/GrConstColorProcessor.h"
 #include "SkGr.h"
 
 std::unique_ptr<GrFragmentProcessor> SkModeColorFilter::asFragmentProcessor(
@@ -104,7 +104,13 @@ std::unique_ptr<GrFragmentProcessor> SkModeColorFilter::asFragmentProcessor(
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef SK_SUPPORT_LEGACY_COLORFILTER_FACTORIES
 sk_sp<SkColorFilter> SkColorFilter::MakeModeFilter(SkColor color, SkBlendMode mode) {
+    return SkColorFilters::Blend(color, mode);
+}
+#endif
+
+sk_sp<SkColorFilter> SkColorFilters::Blend(SkColor color, SkBlendMode mode) {
     if (!SkIsValidMode(mode)) {
         return nullptr;
     }

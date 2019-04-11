@@ -8,13 +8,16 @@
 #ifndef SkShaper_DEFINED
 #define SkShaper_DEFINED
 
+#include "SkPoint.h"
+#include "SkRefCnt.h"
+#include "SkScalar.h"
+#include "SkTextBlob.h"
+#include "SkTypes.h"
+
 #include <memory>
 
-#include "SkPoint.h"
-#include "SkTextBlob.h"
-#include "SkTypeface.h"
-
 class SkFont;
+class SkFontMgr;
 
 /**
    Shapes text using HarfBuzz and places the shaped text into a
@@ -26,7 +29,8 @@ class SkShaper {
 public:
     static std::unique_ptr<SkShaper> MakePrimitive();
     #ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
-    static std::unique_ptr<SkShaper> MakeHarfBuzz();
+    static std::unique_ptr<SkShaper> MakeShaperDrivenWrapper();
+    static std::unique_ptr<SkShaper> MakeShapeThenWrap();
     #endif
 
     static std::unique_ptr<SkShaper> Make();
@@ -44,25 +48,42 @@ public:
         /** Return true if consume should no longer be called. */
         virtual bool atEnd() const = 0;
     };
+
+    class FontRunIterator : public RunIterator {
+    public:
+        virtual const SkFont& currentFont() const = 0;
+    };
+    static std::unique_ptr<FontRunIterator>
+    MakeFontMgrRunIterator(const char* utf8, size_t utf8Bytes,
+                           const SkFont& font, sk_sp<SkFontMgr> fallback);
+
     class BiDiRunIterator : public RunIterator {
     public:
         /** The unicode bidi embedding level (even ltr, odd rtl) */
         virtual uint8_t currentLevel() const = 0;
     };
+    #ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
+    static std::unique_ptr<SkShaper::BiDiRunIterator>
+    MakeIcuBiDiRunIterator(const char* utf8, size_t utf8Bytes, uint8_t bidiLevel);
+    #endif
+
     class ScriptRunIterator : public RunIterator {
     public:
         /** Should be iso15924 codes. */
         virtual SkFourByteTag currentScript() const = 0;
     };
+    #ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
+    static std::unique_ptr<SkShaper::ScriptRunIterator>
+    MakeHbIcuScriptRunIterator(const char* utf8, size_t utf8Bytes);
+    #endif
+
     class LanguageRunIterator : public RunIterator {
     public:
         /** Should be BCP-47, c locale names may also work. */
         virtual const char* currentLanguage() const = 0;
     };
-    class FontRunIterator : public RunIterator {
-    public:
-        virtual const SkFont& currentFont() const = 0;
-    };
+    static std::unique_ptr<SkShaper::LanguageRunIterator>
+    MakeStdLanguageRunIterator(const char* utf8, size_t utf8Bytes);
 
     class RunHandler {
     public:

@@ -21,16 +21,11 @@ class SkBitmap;
 class SkColorFilter;
 class SkColorSpace;
 class SkImage;
-class SkMixer;
 class SkPath;
 class SkPicture;
 class SkRasterPipeline;
 class GrContext;
 class GrFragmentProcessor;
-
-#ifndef SK_SUPPORT_LEGACY_TILEMODE_ENUM
-#define SK_SUPPORT_LEGACY_TILEMODE_ENUM
-#endif
 
 /** \class SkShader
  *
@@ -73,14 +68,6 @@ public:
 
     static constexpr int kTileModeCount = kLast_TileMode + 1;
 #endif
-
-    /**
-     *  Returns the local matrix.
-     *
-     *  FIXME: This can be incorrect for a Shader with its own local matrix
-     *  that is also wrapped via CreateLocalMatrixShader.
-     */
-    const SkMatrix& getLocalMatrix() const;
 
     /**
      *  Returns true if the shader is guaranteed to produce only opaque
@@ -182,6 +169,7 @@ public:
     //////////////////////////////////////////////////////////////////////////
     //  Factory methods for stock shaders
 
+#ifdef SK_SUPPORT_LEGACY_SHADER_FACTORIES
     /**
      *  Call this to create a new "empty" shader, that will not draw anything.
      */
@@ -220,10 +208,11 @@ public:
      *  If weight is NaN then this returns nullptr, otherwise lerp is clamped to [0..1].
      */
     static sk_sp<SkShader> MakeLerp(float weight, sk_sp<SkShader> dst, sk_sp<SkShader> src);
+#endif
 
-    static sk_sp<SkShader> MakeMixer(sk_sp<SkShader> dst, sk_sp<SkShader> src, sk_sp<SkMixer>);
-
-    /** Call this to create a new shader that will draw with the specified bitmap.
+#ifdef SK_SUPPORT_LEGACY_BITMAPSHADER_FACTORY
+    /** DEPRECATED. call bitmap.makeShader()
+     *  Call this to create a new shader that will draw with the specified bitmap.
      *
      *  If the bitmap cannot be used (e.g. has no pixels, or its dimensions
      *  exceed implementation limits (currently at 64K - 1)) then SkEmptyShader
@@ -239,12 +228,10 @@ public:
     */
     static sk_sp<SkShader> MakeBitmapShader(const SkBitmap& src, SkTileMode tmx, SkTileMode tmy,
                                             const SkMatrix* localMatrix = nullptr);
+#endif
 #ifdef SK_SUPPORT_LEGACY_TILEMODE_ENUM
     static sk_sp<SkShader> MakeBitmapShader(const SkBitmap& src, TileMode tmx, TileMode tmy,
-                                            const SkMatrix* localMatrix = nullptr) {
-        return MakeBitmapShader(src, static_cast<SkTileMode>(tmx), static_cast<SkTileMode>(tmy),
-                                localMatrix);
-    }
+                                            const SkMatrix* localMatrix = nullptr);
 
     /** DEPRECATED: call picture->makeShader(...)
      *  Call this to create a new shader that will draw with the specified picture.
@@ -265,18 +252,30 @@ public:
                                              const SkMatrix* localMatrix, const SkRect* tile);
 #endif
 
-    /** DEPRECATED. skbug.com/8941
-     *  If this shader can be represented by another shader + a localMatrix, return that shader and
-     *  the localMatrix. If not, return nullptr and ignore the localMatrix parameter.
-     */
-    // TODO: clean up clients, move to SkShaderBase.
-    virtual sk_sp<SkShader> makeAsALocalMatrixShader(SkMatrix* localMatrix) const;
+#ifdef SK_SUPPORT_LEGACY_SHADER_LOCALMATRIX
+    SkMatrix getLocalMatrix() const;
+    sk_sp<SkShader> makeAsALocalMatrixShader(SkMatrix* localMatrix) const;
+#endif
 
 private:
     SkShader() = default;
     friend class SkShaderBase;
 
     typedef SkFlattenable INHERITED;
+};
+
+class SK_API SkShaders {
+public:
+    static sk_sp<SkShader> Empty();
+    static sk_sp<SkShader> Color(SkColor);
+    static sk_sp<SkShader> Color(const SkColor4f&, sk_sp<SkColorSpace>);
+    static sk_sp<SkShader> Blend(SkBlendMode mode, sk_sp<SkShader> dst, sk_sp<SkShader> src);
+    static sk_sp<SkShader> Lerp(float t, sk_sp<SkShader> dst, sk_sp<SkShader> src);
+
+    static sk_sp<SkShader> Lerp(sk_sp<SkShader> red, sk_sp<SkShader> dst, sk_sp<SkShader> src);
+
+private:
+    SkShaders() = delete;
 };
 
 #endif

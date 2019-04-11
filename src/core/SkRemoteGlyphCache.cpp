@@ -174,6 +174,10 @@ bool read_path(Deserializer* deserializer, SkGlyph* glyph, SkStrike* cache) {
     auto* path = deserializer->read(pathSize, kPathAlignment);
     if (!path) return false;
 
+    // Don't overwrite the path if we already have one. We could have used a fallback if the
+    // glyph was missing earlier.
+    if (glyph->fPathData != nullptr) return true;
+
     return cache->initializePath(glyph, path, pathSize);
 }
 
@@ -486,8 +490,9 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
     for (const auto& glyphID : fPendingGlyphImages) {
         SkGlyph glyph{glyphID};
         fContext->getMetrics(&glyph);
-        writeGlyph(&glyph, serializer);
+        SkASSERT(SkMask::IsValidFormat(glyph.fMaskFormat));
 
+        writeGlyph(&glyph, serializer);
         auto imageSize = glyph.computeImageSize();
         if (imageSize == 0u) continue;
 
@@ -503,6 +508,8 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
     for (const auto& glyphID : fPendingGlyphPaths) {
         SkGlyph glyph{glyphID};
         fContext->getMetrics(&glyph);
+        SkASSERT(SkMask::IsValidFormat(glyph.fMaskFormat));
+
         writeGlyph(&glyph, serializer);
         writeGlyphPath(glyphID, serializer);
     }
@@ -603,13 +610,12 @@ void SkStrikeServer::SkGlyphCacheState::writeGlyphPath(const SkPackedGlyphID& gl
 
 // This version of glyphMetrics only adds entries to result if their data need to be sent to the
 // GPU process.
-int SkStrikeServer::SkGlyphCacheState::glyphMetrics(
-        const SkGlyphID glyphIDs[], const SkPoint positions[], int n, SkGlyphPos result[]) {
+SkSpan<const SkGlyphPos> SkStrikeServer::SkGlyphCacheState::glyphMetrics(
+        const SkGlyphID glyphIDs[], const SkPoint positions[], size_t n, SkGlyphPos result[]) {
 
-    int glyphsToSendCount = 0;
-    const SkPoint* posCursor = positions;
-    for (int i = 0; i < n; i++) {
-        SkPoint glyphPos = *posCursor++;
+    size_t glyphsToSendCount = 0;
+    for (size_t i = 0; i < n; i++) {
+        SkPoint glyphPos = positions[i];
         SkGlyphID glyphID = glyphIDs[i];
         SkIPoint lookupPoint = SkStrikeCommon::SubpixelLookup(fAxisAlignmentForHText, glyphPos);
         SkPackedGlyphID packedGlyphID = fIsSubpixel ? SkPackedGlyphID{glyphID, lookupPoint}
@@ -627,7 +633,7 @@ int SkStrikeServer::SkGlyphCacheState::glyphMetrics(
             this->ensureScalerContext();
             fContext->getMetrics(glyphPtr);
 
-            result[glyphsToSendCount++] = {glyphPtr, glyphPos};
+            result[glyphsToSendCount++] = {i, glyphPtr, glyphPos};
 
             // Make sure to send the glyph to the GPU because we always send the image for a glyph.
             fCachedGlyphImages.add(packedGlyphID);
@@ -635,7 +641,7 @@ int SkStrikeServer::SkGlyphCacheState::glyphMetrics(
         }
     }
 
-    return glyphsToSendCount;
+    return SkSpan<const SkGlyphPos>{result, glyphsToSendCount};
 }
 
 // SkStrikeClient -----------------------------------------
@@ -680,6 +686,8 @@ static bool readGlyph(SkTLazy<SkGlyph>& glyph, Deserializer* deserializer) {
     if (!deserializer->read<int16_t>(&glyph->fLeft)) return false;
     if (!deserializer->read<int8_t>(&glyph->fForceBW)) return false;
     if (!deserializer->read<uint8_t>(&glyph->fMaskFormat)) return false;
+    if (!SkMask::IsValidFormat(glyph->fMaskFormat)) return false;
+
     return true;
 }
 
@@ -764,9 +772,14 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             auto imageSize = glyph->computeImageSize();
             if (imageSize == 0u) continue;
 
-            auto* image = deserializer.read(imageSize, allocatedGlyph->formatAlignment());
+            auto* image = deserializer.read(imageSize, glyph->formatAlignment());
             if (!image) READ_FAILURE
-            strike->initializeImage(image, imageSize, allocatedGlyph);
+
+            // Don't overwrite the image if we already have one. We could have used a fallback if
+            // the glyph was missing earlier.
+            if (allocatedGlyph->fImage == nullptr) {
+                strike->initializeImage(image, imageSize, allocatedGlyph);
+            }
         }
 
         uint64_t glyphPathsCount = 0u;

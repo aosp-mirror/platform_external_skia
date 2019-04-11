@@ -373,10 +373,6 @@ bool SkImage_GpuBase::RenderYUVAToRGBA(GrContext* ctx, GrRenderTargetContext* re
     paint.addColorFragmentProcessor(std::move(fp));
 
     renderTargetContext->drawRect(GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(), rect);
-
-    // DDL TODO: in the promise image version we must not flush here
-    ctx->priv().flushSurfaceWrites(renderTargetContext->asSurfaceProxy());
-
     return true;
 }
 
@@ -463,6 +459,10 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
             // Fulfill once. So return our cached result.
             if (fTexture) {
                 return {sk_ref_sp(fTexture), kKeySyncMode};
+            } else if (fConfig == kUnknown_GrPixelConfig) {
+                // We've already called fulfill and it failed. Our contract says that we should only
+                // call each callback once.
+                return {};
             }
             SkASSERT(fDoneCallback);
             PromiseImageTextureContext textureContext = fDoneCallback->context();
@@ -471,6 +471,8 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
             // the return from fulfill was invalid or we fail for some other reason.
             auto releaseCallback = sk_make_sp<GrRefCntedCallback>(fReleaseProc, textureContext);
             if (!promiseTexture) {
+                // This records that we have failed.
+                fConfig = kUnknown_GrPixelConfig;
                 return {};
             }
 
