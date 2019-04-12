@@ -143,4 +143,27 @@ DEF_TEST(SkVx, r) {
     REPORTER_ASSERT(r, all(five == 5));
 
     REPORTER_ASSERT(r, all(max(2, min(float4{1,2,3,4}, 3)) == float4{2,2,3,3}));
+
+    for (int x = 0; x < 256; x++)
+    for (int y = 0; y < 256; y++) {
+        uint8_t want = (uint8_t)( 255*(x/255.0 * y/255.0) + 0.5 );
+
+        {
+            uint8_t got = skvx::div255(skvx::Vec<8, uint16_t>(x) *
+                                       skvx::Vec<8, uint16_t>(y) )[0];
+            REPORTER_ASSERT(r, got == want);
+        }
+
+        {
+            uint8_t got = skvx::approx_scale(skvx::Vec<8,uint8_t>(x),
+                                             skvx::Vec<8,uint8_t>(y))[0];
+
+            REPORTER_ASSERT(r, got == want-1 ||
+                               got == want   ||
+                               got == want+1);
+            if (x == 0 || y == 0 || x == 255 || y == 255) {
+                REPORTER_ASSERT(r, got == want);
+            }
+        }
+    }
 }
