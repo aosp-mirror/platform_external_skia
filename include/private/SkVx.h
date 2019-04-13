@@ -389,7 +389,28 @@ static inline Vec<N,D> cast(Vec<N,S> src) {
 // The only real restriction is that the output also be a legal N=power-of-two sknx::Vec.
 template <int... Ix, int N, typename T>
 static inline Vec<sizeof...(Ix),T> shuffle(Vec<N,T> x) {
+#if !defined(SKNX_NO_SIMD) && defined(__clang__)
+    return to_vec<sizeof...(Ix),T>(__builtin_shufflevector(to_vext(x), to_vext(x), Ix...));
+#else
     return { x[Ix]... };
+#endif
+}
+
+// div255(x) = (x + 127) / 255 is a bit-exact rounding divide-by-255, packing down to 8-bit.
+template <int N>
+static inline Vec<N,uint8_t> div255(Vec<N,uint16_t> x) {
+    return cast<uint8_t>( (x+127)/255 );
+}
+
+// approx_scale(x,y) approximates div255(cast<uint16_t>(x)*cast<uint16_t>(y)) within a bit,
+// and is always perfect when x or y is 0 or 255.
+template <int N>
+static inline Vec<N,uint8_t> approx_scale(Vec<N,uint8_t> x, Vec<N,uint8_t> y) {
+    // All of (x*y+x)/256, (x*y+y)/256, and (x*y+255)/256 meet the criteria above.
+    // We happen to have historically picked (x*y+x)/256.
+    auto X = cast<uint16_t>(x),
+         Y = cast<uint16_t>(y);
+    return cast<uint8_t>( (X*Y+X)/256 );
 }
 
 #if !defined(SKNX_NO_SIMD)

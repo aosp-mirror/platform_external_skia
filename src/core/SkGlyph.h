@@ -150,7 +150,9 @@ public:
     // fImage, fPath, fID, fMaskFormat fields.
     void zeroMetrics();
 
-    void toMask(SkMask* mask) const;
+    SkMask mask() const;
+
+    SkMask mask(SkPoint position) const;
 
     SkPath* addPath(SkScalerContext*, SkArenaAlloc*);
 

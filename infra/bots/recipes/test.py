@@ -443,7 +443,8 @@ def dm_flags(api, bot):
                        'fontmgr_bounds',
                        'fontmgr_match',
                        'fontmgr_iter',
-                       'imagemasksubset']
+                       'imagemasksubset',
+                       'wacky_yuv_formats_domain']
 
   # skia:5589
   bad_serialize_gms.extend(['bitmapfilters',
@@ -760,11 +761,6 @@ def dm_flags(api, bot):
   if 'Mac' in bot and 'IntelHD615' in bot:
     # skia:7603
     match.append('~^GrMeshTest$')
-
-  if 'Metal' in bot:
-    # skia:8243
-    match.append('~^DDLOperatorEqTest$')
-    match.append('~^WritePixelsNonTexture_Gpu$')
 
   if 'Wuffs' in api.vars.extra_tokens:
     # skia:8750
@@ -1094,11 +1090,6 @@ def GenTests(api):
       test += api.step_data(
           'read chromecast ip',
           stdout=api.raw_io.output('192.168.1.2:5555'))
-
-    if 'ChromeOS' in builder:
-      test += api.step_data(
-          'read chromeos ip',
-          stdout=api.raw_io.output('{"user_ip":"foo@127.0.0.1"}'))
 
     yield test
 
