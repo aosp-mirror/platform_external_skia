@@ -1492,7 +1492,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
             fHWBoundRenderTargetUniqueID.makeInvalid();
         }
     }
-    return tex;
+    return std::move(tex);
 }
 
 namespace {
