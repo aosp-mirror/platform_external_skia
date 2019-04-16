@@ -88,7 +88,7 @@ public:
         virtual void onChange() = 0;
     };
 
-    // Takes ownership of listener.
+    // Takes ownership of listener.  Threadsafe.
     void addGenIDChangeListener(GenIDChangeListener* listener);
 
     // Call when this pixelref is part of the key to a resourcecache entry. This allows the cache
@@ -119,6 +119,7 @@ private:
     const uint32_t fStableID;
 #endif
 
+    SkMutex                         fGenIDChangeListenersMutex;
     SkTDArray<GenIDChangeListener*> fGenIDChangeListeners;  // pointers are owned
 
     // Set true by caches when they cache content that's derived from the current pixels.
