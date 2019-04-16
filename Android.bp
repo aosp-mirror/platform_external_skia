@@ -1582,6 +1582,7 @@ cc_test {
         "tests/GrCCPRTest.cpp",
         "tests/GrContextAbandonTest.cpp",
         "tests/GrContextFactoryTest.cpp",
+        "tests/GrFinishedFlushTest.cpp",
         "tests/GrGLExtensionsTest.cpp",
         "tests/GrMemoryPoolTest.cpp",
         "tests/GrMeshTest.cpp",
