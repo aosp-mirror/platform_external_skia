@@ -184,8 +184,7 @@ private:
 
     void onResetTextureBindings() override;
 
-    void querySampleLocations(
-            GrRenderTarget*, const GrStencilSettings&, SkTArray<SkPoint>*) override;
+    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override;
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
 
@@ -239,10 +238,10 @@ private:
 
     bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height, GrColorType,
                             GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes) override;
-    size_t onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height, GrColorType,
-                                GrGpuBuffer* transferBuffer, size_t offset) override;
+    bool onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height, GrColorType,
+                              GrGpuBuffer* transferBuffer, size_t offset) override;
     bool readOrTransferPixelsFrom(GrSurface*, int left, int top, int width, int height, GrColorType,
-                                  void* offsetOrPtr, size_t rowBytes);
+                                  void* offsetOrPtr, int rowWidthInPixels);
 
     // Before calling any variation of TexImage, TexSubImage, etc..., call this to ensure that the
     // PIXEL_UNPACK_BUFFER is unbound.

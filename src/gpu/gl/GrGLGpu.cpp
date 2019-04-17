@@ -959,31 +959,14 @@ bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
     return true;
 }
 
-size_t GrGLGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
-                                     GrColorType dstColorType, GrGpuBuffer* transferBuffer,
-                                     size_t offset) {
-    size_t offsetAlignment;
-    size_t rowBytes;
-    if (!this->glCaps().transferFromBufferRequirements(dstColorType, width, &rowBytes,
-                                                       &offsetAlignment)) {
-        return false;
-    }
-    if (offset % offsetAlignment) {
-        return false;
-    }
-    if (offset + rowBytes * height > transferBuffer->size()) {
-        return false;
-    }
-
+bool GrGLGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
+                                   GrColorType dstColorType, GrGpuBuffer* transferBuffer,
+                                   size_t offset) {
     auto* glBuffer = static_cast<GrGLBuffer*>(transferBuffer);
     this->bindBuffer(GrGpuBufferType::kXferGpuToCpu, glBuffer);
-
     auto offsetAsPtr = reinterpret_cast<void*>(offset);
-    if (this->readOrTransferPixelsFrom(surface, left, top, width, height, dstColorType, offsetAsPtr,
-                                       rowBytes)) {
-        return rowBytes;
-    }
-    return 0;
+    return this->readOrTransferPixelsFrom(surface, left, top, width, height, dstColorType,
+                                          offsetAsPtr, width);
 }
 
 /**
@@ -2363,7 +2346,7 @@ bool GrGLGpu::readPixelsSupported(GrSurface* surfaceForConfig, GrPixelConfig rea
 
 bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
                                        GrColorType dstColorType, void* offsetOrPtr,
-                                       size_t rowBytes) {
+                                       int rowWidthInPixels) {
     SkASSERT(surface);
 
     GrGLRenderTarget* renderTarget = static_cast<GrGLRenderTarget*>(surface->asRenderTarget());
@@ -2413,13 +2396,10 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
     GrGLIRect readRect;
     readRect.setRelativeTo(glvp, left, top, width, height, kTopLeft_GrSurfaceOrigin);
 
-    int bytesPerPixel = GrBytesPerPixel(dstAsConfig);
-    size_t tightRowBytes = bytesPerPixel * width;
     // determine if GL can read using the passed rowBytes or if we need a scratch buffer.
-    if (rowBytes != tightRowBytes) {
+    if (rowWidthInPixels != width) {
         SkASSERT(this->glCaps().packRowLengthSupport());
-        SkASSERT(!(rowBytes % bytesPerPixel));
-        GL_CALL(PixelStorei(GR_GL_PACK_ROW_LENGTH, static_cast<GrGLint>(rowBytes / bytesPerPixel)));
+        GL_CALL(PixelStorei(GR_GL_PACK_ROW_LENGTH, rowWidthInPixels));
     }
     GL_CALL(PixelStorei(GR_GL_PACK_ALIGNMENT, config_alignment(dstAsConfig)));
 
@@ -2444,7 +2424,7 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
                                         GR_GL_RENDERBUFFER, stencilAttachment->renderbufferID()));
     }
 
-    if (rowBytes != tightRowBytes) {
+    if (rowWidthInPixels != width) {
         SkASSERT(this->glCaps().packRowLengthSupport());
         GL_CALL(PixelStorei(GR_GL_PACK_ROW_LENGTH, 0));
     }
@@ -2459,36 +2439,37 @@ bool GrGLGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
                            GrColorType dstColorType, void* buffer, size_t rowBytes) {
     SkASSERT(surface);
 
-    // TODO: Avoid this conversion by making GrGLCaps work with color types.
-    auto dstAsConfig = GrColorTypeToPixelConfig(dstColorType, GrSRGBEncoded::kNo);
+    int bytesPerPixel = GrColorTypeBytesPerPixel(dstColorType);
 
-    int bytesPerPixel = GrBytesPerPixel(dstAsConfig);
-    size_t tightRowBytes = bytesPerPixel * width;
-
-    size_t readDstRowBytes = tightRowBytes;
+    // GL_PACK_ROW_LENGTH is in terms of pixels not bytes.
+    int rowPixelWidth;
     void* readDst = buffer;
 
     // determine if GL can read using the passed rowBytes or if we need a scratch buffer.
     SkAutoSMalloc<32 * sizeof(GrColor)> scratch;
-    if (rowBytes != tightRowBytes) {
+    if (!rowBytes || rowBytes == (size_t)(width * bytesPerPixel)) {
+        rowPixelWidth = width;
+    } else {
         if (this->glCaps().packRowLengthSupport() && !(rowBytes % bytesPerPixel)) {
-            readDstRowBytes = rowBytes;
+            rowPixelWidth = rowBytes / bytesPerPixel;
         } else {
-            scratch.reset(tightRowBytes * height);
+            scratch.reset(width * bytesPerPixel * height);
             readDst = scratch.get();
+            rowPixelWidth = width;
         }
     }
     if (!this->readOrTransferPixelsFrom(surface, left, top, width, height, dstColorType, readDst,
-                                        readDstRowBytes)) {
+                                        rowPixelWidth)) {
         return false;
     }
 
     if (readDst != buffer) {
         SkASSERT(readDst != buffer);
-        SkASSERT(rowBytes != tightRowBytes);
+        SkASSERT(rowBytes != (size_t)(rowPixelWidth * bytesPerPixel));
         const char* src = reinterpret_cast<const char*>(readDst);
         char* dst = reinterpret_cast<char*>(buffer);
-        SkRectMemcpy(dst, rowBytes, src, readDstRowBytes, tightRowBytes, height);
+        SkRectMemcpy(dst, rowBytes, src, rowPixelWidth * bytesPerPixel, width * bytesPerPixel,
+                     height);
     }
     return true;
 }
@@ -3461,24 +3442,19 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
         "}"
     );
 
-    const char* str;
-    GrGLint length;
-
-    str = vshaderTxt.c_str();
-    length = SkToInt(vshaderTxt.size());
+    SkSL::String sksl(vshaderTxt.c_str(), vshaderTxt.size());
     SkSL::Program::Settings settings;
     settings.fCaps = shaderCaps;
     SkSL::String glsl;
     std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(*fGLContext, GR_GL_VERTEX_SHADER,
-                                                          &str, &length, 1, settings, &glsl);
+                                                          sksl, settings, &glsl);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fCopyPrograms[progIdx].fProgram,
                                                   GR_GL_VERTEX_SHADER, glsl.c_str(), glsl.size(),
                                                   &fStats, settings);
     SkASSERT(program->fInputs.isEmpty());
 
-    str = fshaderTxt.c_str();
-    length = SkToInt(fshaderTxt.size());
-    program = GrSkSLtoGLSL(*fGLContext, GR_GL_FRAGMENT_SHADER, &str, &length, 1, settings, &glsl);
+    sksl.assign(fshaderTxt.c_str(), fshaderTxt.size());
+    program = GrSkSLtoGLSL(*fGLContext, GR_GL_FRAGMENT_SHADER, sksl, settings, &glsl);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fCopyPrograms[progIdx].fProgram,
                                                   GR_GL_FRAGMENT_SHADER, glsl.c_str(), glsl.size(),
                                                   &fStats, settings);
@@ -3620,24 +3596,19 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
 
     fshaderTxt.append("}");
 
-    const char* str;
-    GrGLint length;
-
-    str = vshaderTxt.c_str();
-    length = SkToInt(vshaderTxt.size());
+    SkSL::String sksl(vshaderTxt.c_str(), vshaderTxt.size());
     SkSL::Program::Settings settings;
     settings.fCaps = shaderCaps;
     SkSL::String glsl;
     std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(*fGLContext, GR_GL_VERTEX_SHADER,
-                                                          &str, &length, 1, settings, &glsl);
+                                                          sksl, settings, &glsl);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fMipmapPrograms[progIdx].fProgram,
                                                   GR_GL_VERTEX_SHADER, glsl.c_str(), glsl.size(),
                                                   &fStats, settings);
     SkASSERT(program->fInputs.isEmpty());
 
-    str = fshaderTxt.c_str();
-    length = SkToInt(fshaderTxt.size());
-    program = GrSkSLtoGLSL(*fGLContext, GR_GL_FRAGMENT_SHADER, &str, &length, 1, settings, &glsl);
+    sksl.assign(fshaderTxt.c_str(), fshaderTxt.size());
+    program = GrSkSLtoGLSL(*fGLContext, GR_GL_FRAGMENT_SHADER, sksl, settings, &glsl);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fMipmapPrograms[progIdx].fProgram,
                                                   GR_GL_FRAGMENT_SHADER, glsl.c_str(), glsl.size(),
                                                   &fStats, settings);
@@ -3960,11 +3931,8 @@ bool GrGLGpu::onRegenerateMipMapLevels(GrTexture* texture) {
 }
 
 void GrGLGpu::querySampleLocations(
-        GrRenderTarget* renderTarget, const GrStencilSettings& stencilSettings,
-        SkTArray<SkPoint>* sampleLocations) {
-    this->flushStencil(stencilSettings);
-    this->flushHWAAState(renderTarget, true);
-    this->flushRenderTarget(static_cast<GrGLRenderTarget*>(renderTarget));
+        GrRenderTarget* renderTarget, SkTArray<SkPoint>* sampleLocations) {
+    this->flushRenderTargetNoColorWrites(static_cast<GrGLRenderTarget*>(renderTarget));
 
     int effectiveSampleCnt;
     GR_GL_GetIntegerv(this->glInterface(), GR_GL_SAMPLES, &effectiveSampleCnt);

@@ -73,8 +73,7 @@ public:
         kSkip_SyncQueue
     };
 
-    void querySampleLocations(
-            GrRenderTarget*, const GrStencilSettings&, SkTArray<SkPoint>*) override {
+    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override {
         SkASSERT(!this->caps()->sampleLocationsSupport());
         SK_ABORT("Sample locations not yet implemented for Vulkan.");
     }
@@ -213,8 +212,8 @@ private:
 
     bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height, GrColorType,
                             GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes) override;
-    size_t onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
-                                GrColorType, GrGpuBuffer* transferBuffer, size_t offset) override;
+    bool onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
+                              GrColorType, GrGpuBuffer* transferBuffer, size_t offset) override;
 
     bool onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin, GrSurface* src,
                        GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,

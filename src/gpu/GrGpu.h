@@ -227,10 +227,14 @@ public:
 
     /**
      * Reads the pixels from a rectangle of a surface into a buffer. Use
-     * GrCaps::transferFromBufferRequirements to determine the requirements for the buffer size
-     * and offset alignment. If the surface is a MIP mapped texture, the base level is read.
+     * GrCaps::transferFromOffsetAlignment to determine the requirements for the buffer offset
+     * alignment. If the surface is a MIP mapped texture, the base level is read.
      *
-     * Returns the number of bytes per row in the buffer or zero on failure.
+     * If successful the row bytes in the buffer is always:
+     *   GrColorTypeBytesPerPixel(bufferColorType) * width
+     *
+     * Asserts that the caller has passed a properly aligned offset and that the buffer is
+     * large enough to hold the result
      *
      * @param surface          The surface to read from.
      * @param left             left edge of the rectangle to read (inclusive)
@@ -241,9 +245,9 @@ public:
      * @param transferBuffer   GrBuffer to write pixels to (type must be "kXferGpuToCpu")
      * @param offset           offset from the start of the buffer
      */
-    size_t transferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
-                              GrColorType bufferColorType, GrGpuBuffer* transferBuffer,
-                              size_t offset);
+    bool transferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
+                            GrColorType bufferColorType, GrGpuBuffer* transferBuffer,
+                            size_t offset);
 
     // After the client interacts directly with the 3D context state the GrGpu
     // must resync its internal state and assumptions about 3D context state.
@@ -274,10 +278,7 @@ public:
     // Queries the per-pixel HW sample locations for the given render target, and then finds or
     // assigns a key that uniquely identifies the sample pattern. The actual sample locations can be
     // retrieved with retrieveSampleLocations().
-    //
-    // NOTE: The pipeline argument is required in order for us to flush draw state prior to querying
-    // multisample info. The pipeline itself is not expected to affect sample locations.
-    int findOrAssignSamplePatternKey(GrRenderTarget*, const GrPipeline&);
+    int findOrAssignSamplePatternKey(GrRenderTarget*);
 
     // Retrieves the per-pixel HW sample locations for the given sample pattern key, and, as a
     // by-product, the actual number of samples in use. (This may differ from the number of samples
@@ -494,8 +495,7 @@ private:
 
     // Queries the effective number of samples in use by the hardware for the given render target,
     // and queries the individual sample locations.
-    virtual void querySampleLocations(
-            GrRenderTarget*, const GrStencilSettings&, SkTArray<SkPoint>*) = 0;
+    virtual void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) = 0;
 
     // Called before certain draws in order to guarantee coherent results from dst reads.
     virtual void xferBarrier(GrRenderTarget*, GrXferBarrierType) = 0;
@@ -532,9 +532,9 @@ private:
                                     GrColorType colorType, GrGpuBuffer* transferBuffer,
                                     size_t offset, size_t rowBytes) = 0;
     // overridden by backend-specific derived class to perform the surface transfer
-    virtual size_t onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height,
-                                        GrColorType colorType, GrGpuBuffer* transferBuffer,
-                                        size_t offset) = 0;
+    virtual bool onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height,
+                                      GrColorType colorType, GrGpuBuffer* transferBuffer,
+                                      size_t offset) = 0;
 
     // overridden by backend-specific derived class to perform the resolve
     virtual void onResolveRenderTarget(GrRenderTarget* target) = 0;

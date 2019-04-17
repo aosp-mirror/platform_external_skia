@@ -54,8 +54,7 @@ private:
 
     void onResetContext(uint32_t resetBits) override {}
 
-    void querySampleLocations(
-            GrRenderTarget*, const GrStencilSettings&, SkTArray<SkPoint>*) override {
+    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override {
         SkASSERT(!this->caps()->sampleLocationsSupport());
         SK_ABORT("Sample locations not implemented for mock GPU.");
     }
@@ -96,8 +95,8 @@ private:
                             size_t rowBytes) override {
         return true;
     }
-    size_t onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
-                                GrColorType, GrGpuBuffer* transferBuffer, size_t offset) override {
+    bool onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
+                              GrColorType, GrGpuBuffer* transferBuffer, size_t offset) override {
         return true;
     }
     bool onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin, GrSurface* src,

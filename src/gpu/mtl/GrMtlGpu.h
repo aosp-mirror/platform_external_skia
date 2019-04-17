@@ -131,8 +131,7 @@ private:
 
     void onResetContext(uint32_t resetBits) override {}
 
-    void querySampleLocations(
-            GrRenderTarget*, const GrStencilSettings&, SkTArray<SkPoint>*) override {
+    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override {
         SkASSERT(!this->caps()->sampleLocationsSupport());
         SK_ABORT("Sample locations not yet implemented for Metal.");
     }
@@ -169,12 +168,10 @@ private:
         // TODO: not sure this is worth the work since nobody uses it
         return false;
     }
-    size_t onTransferPixelsFrom(GrSurface*,
-                                int left, int top, int width, int height,
-                                GrColorType, GrGpuBuffer*,
-                                size_t offset) override {
+    bool onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height, GrColorType,
+                              GrGpuBuffer*, size_t offset) override {
         // TODO: Will need to implement this to support async read backs.
-        return 0;
+        return false;
     }
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
