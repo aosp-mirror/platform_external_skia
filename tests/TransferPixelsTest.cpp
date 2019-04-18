@@ -272,9 +272,11 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
         }
         ++expectedTransferCnt;
 
-        // TODO(bsalomon): caps to know if the map() is synchronous and skip the flush if so.
-        gpu->finishFlush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess,
-                         kSyncCpu_GrFlushFlag, 0, nullptr, nullptr, nullptr);
+        GrFlushInfo flushInfo;
+        flushInfo.fFlags = kSyncCpu_GrFlushFlag;
+        if (context->priv().caps()->mapBufferFlags() & GrCaps::kAsyncRead_MapFlag) {
+            gpu->finishFlush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess, flushInfo);
+        }
 
         const auto* map = reinterpret_cast<const GrColor*>(buffer->map());
         REPORTER_ASSERT(reporter, map);
@@ -301,9 +303,9 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
         }
         ++expectedTransferCnt;
 
-        // TODO(bsalomon): caps to know if the map() is synchronous and skip the flush if so.
-        gpu->finishFlush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess,
-                         kSyncCpu_GrFlushFlag, 0, nullptr, nullptr, nullptr);
+        if (context->priv().caps()->mapBufferFlags() & GrCaps::kAsyncRead_MapFlag) {
+            gpu->finishFlush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess, flushInfo);
+        }
 
         map = reinterpret_cast<const GrColor*>(buffer->map());
         REPORTER_ASSERT(reporter, map);

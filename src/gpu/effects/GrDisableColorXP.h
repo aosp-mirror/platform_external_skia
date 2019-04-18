@@ -23,15 +23,12 @@
 #endif
 class GrDisableColorXPFactory : public GrXPFactory {
 public:
-    static const GrDisableColorXPFactory* Get() {
-        static const GrDisableColorXPFactory gDisableColorXPFactory;
-        return &gDisableColorXPFactory;
-    }
+    static const GrDisableColorXPFactory* Get();
 
-    sk_sp<const GrXferProcessor> makeXferProcessor() const { return fXferProcessor; }
+    static sk_sp<const GrXferProcessor> MakeXferProcessor();
 
 private:
-    GrDisableColorXPFactory();
+    constexpr GrDisableColorXPFactory() {}
 
     AnalysisProperties analysisProperties(
             const GrProcessorAnalysisColor&, const GrProcessorAnalysisCoverage&, const GrCaps&,
@@ -43,10 +40,8 @@ private:
     sk_sp<const GrXferProcessor> makeXferProcessor(
             const GrProcessorAnalysisColor&, GrProcessorAnalysisCoverage, bool hasMixedSamples,
             const GrCaps&, GrClampType) const override {
-        return this->makeXferProcessor();
+        return MakeXferProcessor();
     }
-
-    const sk_sp<const GrXferProcessor> fXferProcessor;
 
     GR_DECLARE_XP_FACTORY_TEST
 
@@ -58,5 +53,15 @@ private:
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
+
+inline const GrDisableColorXPFactory* GrDisableColorXPFactory::Get() {
+    // If this is constructed as static constexpr by cl.exe (2015 SP2) the vtable is null.
+#ifdef SK_BUILD_FOR_WIN
+    static const GrDisableColorXPFactory gDisableColorXPFactory;
+#else
+    static constexpr const GrDisableColorXPFactory gDisableColorXPFactory;
+#endif
+    return &gDisableColorXPFactory;
+}
 
 #endif

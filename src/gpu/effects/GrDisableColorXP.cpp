@@ -63,8 +63,8 @@ GrGLSLXferProcessor* DisableColorXP::createGLSLInstance() const {
     return new GLDisableColorXP();
 }
 
-GrDisableColorXPFactory::GrDisableColorXPFactory()
-        : fXferProcessor(new DisableColorXP()) {
+sk_sp<const GrXferProcessor> GrDisableColorXPFactory::MakeXferProcessor() {
+    return sk_make_sp<DisableColorXP>();
 }
 
 GR_DEFINE_XP_FACTORY_TEST(GrDisableColorXPFactory);
