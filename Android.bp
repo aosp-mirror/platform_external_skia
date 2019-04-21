@@ -682,6 +682,7 @@ cc_library_static {
           "src/gpu/effects/GrMatrixConvolutionEffect.cpp",
           "src/gpu/effects/GrMixerEffect.cpp",
           "src/gpu/effects/GrOvalEffect.cpp",
+          "src/gpu/effects/GrOverrideInputFragmentProcessor.cpp",
           "src/gpu/effects/GrPorterDuffXferProcessor.cpp",
           "src/gpu/effects/GrPremulInputFragmentProcessor.cpp",
           "src/gpu/effects/GrRRectBlurEffect.cpp",
