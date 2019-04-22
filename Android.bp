@@ -38,6 +38,7 @@ cc_library_static {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
+        "third_party/skcms/",
     ],
 
     local_include_dirs: [
@@ -80,6 +81,7 @@ cc_library_static {
         "third_party/etc1/",
         "third_party/gif/",
         "third_party/skcms",
+        "third_party/skcms/",
     ],
 
     srcs: [
@@ -1101,6 +1103,7 @@ cc_test {
         "third_party/etc1/",
         "third_party/gif/",
         "third_party/skcms",
+        "third_party/skcms/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",
@@ -1944,6 +1947,7 @@ cc_test {
         "src/xml/",
         "third_party/etc1/",
         "third_party/gif/",
+        "third_party/skcms/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",
