@@ -57,7 +57,16 @@ GrResourceAllocator::~GrResourceAllocator() {
 
 void GrResourceAllocator::addInterval(GrSurfaceProxy* proxy, unsigned int start, unsigned int end
                                       SkDEBUGCODE(, bool isDirectDstRead)) {
-    if (proxy->canSkipResourceAllocator()) {
+
+    bool needsStencil = proxy->asRenderTargetProxy()
+                                        ? proxy->asRenderTargetProxy()->needsStencil()
+                                        : false;
+
+    // If we're going to need to add a stencil buffer in assign, we
+    // need to add at least a symbolic interval
+    // TODO: adding this interval just to add a stencil buffer is
+    // a bit heavy weight. Is there a simpler way to accomplish this?
+    if (!needsStencil && proxy->canSkipResourceAllocator()) {
         return;
     }
 
