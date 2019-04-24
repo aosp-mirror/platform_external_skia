@@ -4,7 +4,6 @@
 #include "SkUserConfigManual.h"
 #define NOMINMAX
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
-#define SK_ENABLE_DISCRETE_GPU
 #define SK_GAMMA_APPLY_TO_A8
 #define SK_GAMMA_CONTRAST 0.0
 #define SK_GAMMA_EXPONENT 1.4
