@@ -5,36 +5,36 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 #if defined(SK_BUILD_FOR_WIN)
 
-#include "SkAdvancedTypefaceMetrics.h"
-#include "SkBase64.h"
-#include "SkColorData.h"
-#include "SkData.h"
-#include "SkDescriptor.h"
-#include "SkFontDescriptor.h"
-#include "SkFontMetrics.h"
-#include "SkGlyph.h"
-#include "SkHRESULT.h"
-#include "SkMacros.h"
-#include "SkMakeUnique.h"
-#include "SkMaskGamma.h"
-#include "SkMatrix22.h"
-#include "SkOTTable_OS_2.h"
-#include "SkOTTable_maxp.h"
-#include "SkOTTable_name.h"
-#include "SkOTUtils.h"
-#include "SkOnce.h"
-#include "SkPath.h"
-#include "SkSFNTHeader.h"
-#include "SkStream.h"
-#include "SkString.h"
-#include "SkTemplates.h"
-#include "SkTo.h"
-#include "SkTypefaceCache.h"
-#include "SkTypeface_win.h"
-#include "SkUtils.h"
+#include "include/core/SkData.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/ports/SkTypeface_win.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkMacros.h"
+#include "include/private/SkOnce.h"
+#include "include/private/SkTemplates.h"
+#include "include/private/SkTo.h"
+#include "include/utils/SkBase64.h"
+#include "src/core/SkAdvancedTypefaceMetrics.h"
+#include "src/core/SkDescriptor.h"
+#include "src/core/SkFontDescriptor.h"
+#include "src/core/SkGlyph.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkMaskGamma.h"
+#include "src/core/SkTypefaceCache.h"
+#include "src/core/SkUtils.h"
+#include "src/sfnt/SkOTTable_OS_2.h"
+#include "src/sfnt/SkOTTable_maxp.h"
+#include "src/sfnt/SkOTTable_name.h"
+#include "src/sfnt/SkOTUtils.h"
+#include "src/sfnt/SkSFNTHeader.h"
+#include "src/utils/SkMatrix22.h"
+#include "src/utils/win/SkHRESULT.h"
 
 #include <tchar.h>
 #include <usp10.h>
@@ -723,7 +723,7 @@ SkScalerContext_GDI::SkScalerContext_GDI(sk_sp<LogFontTypeface> rawTypeface,
         }
 
         // Create a hires matrix if we need linear metrics.
-        if (this->isSubpixel()) {
+        if (this->isLinearMetrics()) {
             OUTLINETEXTMETRIC otm;
             UINT success = GetOutlineTextMetrics(fDDC, sizeof(otm), &otm);
             if (0 == success) {
@@ -885,7 +885,7 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
     glyph->fAdvanceX = (float)((int)gm.gmCellIncX);
     glyph->fAdvanceY = (float)((int)gm.gmCellIncY);
 
-    if (this->isSubpixel()) {
+    if ((fTM.tmPitchAndFamily & TMPF_VECTOR) && this->isLinearMetrics()) {
         sk_bzero(&gm, sizeof(gm));
         status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, nullptr, &fHighResMat22);
         if (GDI_ERROR != status) {
@@ -1023,7 +1023,7 @@ static const uint8_t* getInverseGammaTableClearType() {
     return gTableClearType;
 }
 
-#include "SkColorData.h"
+#include "include/private/SkColorData.h"
 
 //Cannot assume that the input rgb is gray due to possible setting of kGenA8FromLCD_Flag.
 template<bool APPLY_PREBLEND>
@@ -2117,8 +2117,8 @@ void LogFontTypeface::onFilterRec(SkScalerContextRec* rec) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkFontMgr.h"
-#include "SkDataTable.h"
+#include "include/core/SkDataTable.h"
+#include "include/core/SkFontMgr.h"
 
 static bool valid_logfont_for_enum(const LOGFONT& lf) {
     // TODO: Vector FON is unsupported and should not be listed.

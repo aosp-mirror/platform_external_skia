@@ -8,12 +8,12 @@
 #ifndef GrSurfaceProxy_DEFINED
 #define GrSurfaceProxy_DEFINED
 
-#include "../private/SkNoncopyable.h"
-#include "GrBackendSurface.h"
-#include "GrGpuResource.h"
-#include "GrSurface.h"
-#include "GrTexture.h"
-#include "SkRect.h"
+#include "include/core/SkRect.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrGpuResource.h"
+#include "include/gpu/GrSurface.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/SkNoncopyable.h"
 
 class GrCaps;
 class GrContext_Base;
@@ -506,6 +506,17 @@ protected:
     sk_sp<GrSurface> createSurfaceImpl(GrResourceProvider*, int sampleCnt, bool needsStencil,
                                        GrSurfaceDescFlags, GrMipMapped,
                                        bool forceNoPendingIO) const;
+
+    // Once the size of a fully-lazy proxy is decided, and before it gets instantiated, the client
+    // can use this optional method to specify the proxy's size. (A proxy's size can be less than
+    // the GPU surface that backs it. e.g., SkBackingFit::kApprox.) Otherwise, the proxy's size will
+    // be set to match the underlying GPU surface upon instantiation.
+    void setLazySize(int width, int height) {
+        SkASSERT(GrSurfaceProxy::LazyState::kFully == this->lazyInstantiationState());
+        SkASSERT(width > 0 && height > 0);
+        fWidth = width;
+        fHeight = height;
+    }
 
     bool instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt, bool needsStencil,
                          GrSurfaceDescFlags descFlags, GrMipMapped, const GrUniqueKey*,

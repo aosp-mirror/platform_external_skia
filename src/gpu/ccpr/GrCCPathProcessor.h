@@ -9,10 +9,10 @@
 #define GrCCPathProcessor_DEFINED
 
 #include <array>
-#include "GrCaps.h"
-#include "GrGeometryProcessor.h"
-#include "GrPipeline.h"
-#include "SkPath.h"
+#include "include/core/SkPath.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrPipeline.h"
 
 class GrCCPathCacheEntry;
 class GrCCPerFlushResources;
@@ -61,14 +61,10 @@ public:
     static sk_sp<const GrGpuBuffer> FindVertexBuffer(GrOnFlushResourceProvider*);
     static sk_sp<const GrGpuBuffer> FindIndexBuffer(GrOnFlushResourceProvider*);
 
-    GrCCPathProcessor(const GrTextureProxy* atlas,
+    GrCCPathProcessor(const GrTexture* atlasTexture, GrSurfaceOrigin atlasOrigin,
                       const SkMatrix& viewMatrixIfUsingLocalCoords = SkMatrix::I());
 
     const char* name() const override { return "GrCCPathProcessor"; }
-    const SkISize& atlasSize() const { return fAtlasSize; }
-    GrSurfaceOrigin atlasOrigin() const { return fAtlasOrigin; }
-    const SkMatrix& localMatrix() const { return fLocalMatrix; }
-
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
     GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override;
 

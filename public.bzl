@@ -273,7 +273,7 @@ def codec_srcs(limited):
             "src/codec/*Webp*.cpp",
             "src/codec/*Png*",
         ]
-    return native.glob(["src/codec/*.cpp", "third_party/etc1/*.cpp", "third_party/gif/*.cpp"], exclude = exclude)
+    return native.glob(["src/codec/*.cpp", "third_party/gif/*.cpp"], exclude = exclude)
 
 GL_SRCS_UNIX = struct(
     include = [
@@ -406,6 +406,7 @@ def skia_srcs(os_conditions):
 
 # Includes needed by Skia implementation.  Not public includes.
 INCLUDES = [
+    ".",
     "include/android",
     "include/c",
     "include/codec",
@@ -434,7 +435,6 @@ INCLUDES = [
     "src/shaders/gradients",
     "src/sksl",
     "src/utils",
-    "third_party/etc1",
     "third_party/gif",
     "third_party/skcms",
 ]
@@ -540,6 +540,7 @@ def dm_srcs(os_conditions):
 ################################################################################
 
 DM_INCLUDES = [
+    ".",
     "dm",
     "gm",
     "experimental/pipe",
@@ -634,7 +635,7 @@ def base_defines(os_conditions):
             [
                 "PNG_SKIP_SETJMP_CHECK",
                 "SK_BUILD_FOR_UNIX",
-                "SK_SAMPLES_FOR_X",
+                "SK_R32_SHIFT=16",
                 "SK_PDF_USE_SFNTLY",
                 "SK_HAS_PNG_LIBRARY",
                 "SK_HAS_WEBP_LIBRARY",
@@ -687,6 +688,7 @@ def base_linkopts(os_conditions):
 ################################################################################
 
 SKOTTIE_TOOL_INCLUDES = [
+    ".",
     "modules/skottie/utils",
     "tools/flags",
 ]
@@ -705,6 +707,7 @@ SKOTTIE_TOOL_SRCS = [
 ################################################################################
 
 SKSHAPER_INCLUDES = [
+    ".",
     "modules/skshaper/include",
 ]
 

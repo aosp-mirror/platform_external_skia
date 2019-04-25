@@ -5,29 +5,29 @@
  * found in the LICENSE file.
  */
 
-#include "SkottieAdapter.h"
+#include "modules/skottie/src/SkottieAdapter.h"
 
-#include "Sk3D.h"
-#include "SkFont.h"
-#include "SkMatrix.h"
-#include "SkMatrix44.h"
-#include "SkPath.h"
-#include "SkRRect.h"
-#include "SkSGColorFilter.h"
-#include "SkSGDraw.h"
-#include "SkSGGradient.h"
-#include "SkSGGroup.h"
-#include "SkSGPaint.h"
-#include "SkSGPath.h"
-#include "SkSGRect.h"
-#include "SkSGRenderEffect.h"
-#include "SkSGText.h"
-#include "SkSGTransform.h"
-#include "SkSGTrimEffect.h"
-#include "SkTableColorFilter.h"
-#include "SkTo.h"
-#include "SkottieShaper.h"
-#include "SkottieValue.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkMatrix44.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRRect.h"
+#include "include/effects/SkTableColorFilter.h"
+#include "include/private/SkTo.h"
+#include "include/utils/Sk3D.h"
+#include "modules/skottie/src/SkottieShaper.h"
+#include "modules/skottie/src/SkottieValue.h"
+#include "modules/sksg/include/SkSGColorFilter.h"
+#include "modules/sksg/include/SkSGDraw.h"
+#include "modules/sksg/include/SkSGGradient.h"
+#include "modules/sksg/include/SkSGGroup.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGPath.h"
+#include "modules/sksg/include/SkSGRect.h"
+#include "modules/sksg/include/SkSGRenderEffect.h"
+#include "modules/sksg/include/SkSGText.h"
+#include "modules/sksg/include/SkSGTransform.h"
+#include "modules/sksg/include/SkSGTrimEffect.h"
 
 #include <cmath>
 #include <utility>
@@ -90,13 +90,12 @@ SkMatrix44 TransformAdapter3D::totalMatrix() const {
     t.setTranslate(-fAnchorPoint.fX, -fAnchorPoint.fY, -fAnchorPoint.fZ);
     t.postScale(fScale.fX / 100, fScale.fY / 100, fScale.fZ / 100);
 
-    // TODO: SkMatrix44:postRotate()?
     SkMatrix44 r;
-    r.setRotateDegreesAbout(1, 0, 0, fRotation.fX);
+    r.setRotateDegreesAbout(0, 0, 1, fRotation.fZ);
     t.postConcat(r);
     r.setRotateDegreesAbout(0, 1, 0, fRotation.fY);
     t.postConcat(r);
-    r.setRotateDegreesAbout(0, 0, 1, fRotation.fZ);
+    r.setRotateDegreesAbout(1, 0, 0, fRotation.fX);
     t.postConcat(r);
 
     t.postTranslate(fPosition.fX, fPosition.fY, fPosition.fZ);
