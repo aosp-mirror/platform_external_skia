@@ -12,6 +12,7 @@
 
 #include "GrColor.h"
 #include "GrMesh.h"
+#include "GrTRecorder.h"
 #include "GrTypes.h"
 #include "GrVkPipelineState.h"
 #include "vk/GrVkTypes.h"
@@ -22,11 +23,28 @@ class GrVkRenderPass;
 class GrVkRenderTarget;
 class GrVkSecondaryCommandBuffer;
 
+/** Base class for tasks executed on primary command buffer, between secondary command buffers. */
+class GrVkPrimaryCommandBufferTask {
+public:
+    virtual ~GrVkPrimaryCommandBufferTask();
+
+    struct Args {
+        GrGpu* fGpu;
+        GrSurface* fSurface;
+        GrSurfaceOrigin fOrigin;
+    };
+
+    virtual void execute(const Args& args) = 0;
+
+protected:
+    GrVkPrimaryCommandBufferTask();
+    GrVkPrimaryCommandBufferTask(const GrVkPrimaryCommandBufferTask&) = delete;
+    GrVkPrimaryCommandBufferTask& operator=(const GrVkPrimaryCommandBufferTask&) = delete;
+};
+
 class GrVkGpuTextureCommandBuffer : public GrGpuTextureCommandBuffer {
 public:
     GrVkGpuTextureCommandBuffer(GrVkGpu* gpu) : fGpu(gpu) {}
-
-    ~GrVkGpuTextureCommandBuffer() override;
 
     void copy(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
               const SkIPoint& dstPoint) override;
@@ -34,26 +52,15 @@ public:
     void insertEventMarker(const char*) override;
 
     void reset() {
-        fCopies.reset();
+        fTasks.reset();
         fTexture = nullptr;
     }
 
     void submit();
 
 private:
-    struct CopyInfo {
-        CopyInfo(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
-                 const SkIPoint& dstPoint)
-                : fSrc(src), fSrcOrigin(srcOrigin), fSrcRect(srcRect), fDstPoint(dstPoint) {}
-        using Src = GrPendingIOResource<GrSurface, kRead_GrIOType>;
-        Src              fSrc;
-        GrSurfaceOrigin  fSrcOrigin;
-        SkIRect          fSrcRect;
-        SkIPoint         fDstPoint;
-    };
-
-    GrVkGpu*                    fGpu;
-    SkTArray<CopyInfo>          fCopies;
+    GrVkGpu*                                    fGpu;
+    GrTRecorder<GrVkPrimaryCommandBufferTask>   fTasks{1024};
 
     typedef GrGpuTextureCommandBuffer INHERITED;
 };
@@ -148,30 +155,6 @@ private:
     void addAdditionalCommandBuffer();
     void addAdditionalRenderPass();
 
-    struct InlineUploadInfo {
-        InlineUploadInfo(GrOpFlushState* state, const GrDeferredTextureUploadFn& upload)
-                : fFlushState(state), fUpload(upload) {}
-
-        GrOpFlushState* fFlushState;
-        GrDeferredTextureUploadFn fUpload;
-    };
-
-    struct CopyInfo {
-        CopyInfo(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
-                 const SkIPoint& dstPoint, bool shouldDiscardDst)
-                : fSrc(src)
-                , fSrcOrigin(srcOrigin)
-                , fSrcRect(srcRect)
-                , fDstPoint(dstPoint)
-                , fShouldDiscardDst(shouldDiscardDst) {}
-        using Src = GrPendingIOResource<GrSurface, kRead_GrIOType>;
-        Src              fSrc;
-        GrSurfaceOrigin  fSrcOrigin;
-        SkIRect          fSrcRect;
-        SkIPoint         fDstPoint;
-        bool             fShouldDiscardDst;
-    };
-
     enum class LoadStoreState {
         kUnknown,
         kStartsWithClear,
@@ -183,14 +166,11 @@ private:
         using SampledTexture = GrPendingIOResource<GrVkTexture, kRead_GrIOType>;
         const GrVkRenderPass*                  fRenderPass;
         SkTArray<GrVkSecondaryCommandBuffer*>  fCommandBuffers;
+        int                                    fNumPreCmds = 0;
         VkClearValue                           fColorClearValue;
         SkRect                                 fBounds;
         bool                                   fIsEmpty = true;
         LoadStoreState                         fLoadStoreState = LoadStoreState::kUnknown;
-        // The PreDrawUploads and PreCopies are sent to the GPU before submitting the secondary
-        // command buffer.
-        SkTArray<InlineUploadInfo>             fPreDrawUploads;
-        SkTArray<CopyInfo>                     fPreCopies;
         // Array of images that will be sampled and thus need to be transferred to sampled layout
         // before submitting the secondary command buffers. This must happen after we do any predraw
         // uploads or copies.
@@ -201,16 +181,16 @@ private:
         }
     };
 
-    SkTArray<CommandBufferInfo> fCommandBufferInfos;
-    int                         fCurrentCmdInfo;
-
-    GrVkGpu*                    fGpu;
-    VkAttachmentLoadOp          fVkColorLoadOp;
-    VkAttachmentStoreOp         fVkColorStoreOp;
-    VkAttachmentLoadOp          fVkStencilLoadOp;
-    VkAttachmentStoreOp         fVkStencilStoreOp;
-    SkPMColor4f                 fClearColor;
-    GrVkPipelineState*          fLastPipelineState;
+    SkTArray<CommandBufferInfo>                 fCommandBufferInfos;
+    GrTRecorder<GrVkPrimaryCommandBufferTask>   fPreCommandBufferTasks{1024};
+    GrVkGpu*                                    fGpu;
+    GrVkPipelineState*                          fLastPipelineState = nullptr;
+    SkPMColor4f                                 fClearColor;
+    VkAttachmentLoadOp                          fVkColorLoadOp;
+    VkAttachmentStoreOp                         fVkColorStoreOp;
+    VkAttachmentLoadOp                          fVkStencilLoadOp;
+    VkAttachmentStoreOp                         fVkStencilStoreOp;
+    int                                         fCurrentCmdInfo = -1;
 
     typedef GrGpuRTCommandBuffer INHERITED;
 };

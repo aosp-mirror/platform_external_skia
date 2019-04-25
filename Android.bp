@@ -151,7 +151,7 @@ cc_library_static {
         "src/core/SkClipStackDevice.cpp",
         "src/core/SkColor.cpp",
         "src/core/SkColorFilter.cpp",
-        "src/core/SkColorMatrixFilterRowMajor255.cpp",
+        "src/core/SkColorFilter_Matrix.cpp",
         "src/core/SkColorSpace.cpp",
         "src/core/SkColorSpaceXformSteps.cpp",
         "src/core/SkContourMeasure.cpp",

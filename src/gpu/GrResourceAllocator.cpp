@@ -39,8 +39,10 @@ void GrResourceAllocator::Interval::assign(sk_sp<GrSurface> s) {
 
 void GrResourceAllocator::determineRecyclability() {
     for (Interval* cur = fIntvlList.peekHead(); cur; cur = cur->next()) {
-        SkASSERT(!cur->proxy()->priv().ignoredByResourceAllocator() &&
-                 !cur->proxy()->canSkipResourceAllocator());
+        if (cur->proxy()->canSkipResourceAllocator()) {
+            // These types of proxies can slip in here if they require a stencil buffer
+            continue;
+        }
 
         if (cur->uses() >= cur->proxy()->priv().getTotalRefs()) {
             // All the refs on the proxy are known to the resource allocator thus no one
