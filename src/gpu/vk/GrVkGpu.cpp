@@ -5,42 +5,42 @@
  * found in the LICENSE file.
  */
 
-#include "GrVkGpu.h"
+#include "src/gpu/vk/GrVkGpu.h"
 
-#include "GrContextPriv.h"
-#include "GrBackendSemaphore.h"
-#include "GrBackendSurface.h"
-#include "GrContextOptions.h"
-#include "GrGeometryProcessor.h"
-#include "GrGpuResourceCacheAccess.h"
-#include "GrMesh.h"
-#include "GrPipeline.h"
-#include "GrRenderTargetPriv.h"
-#include "GrTexturePriv.h"
-#include "GrVkAMDMemoryAllocator.h"
-#include "GrVkCommandBuffer.h"
-#include "GrVkCommandPool.h"
-#include "GrVkGpuCommandBuffer.h"
-#include "GrVkImage.h"
-#include "GrVkIndexBuffer.h"
-#include "GrVkInterface.h"
-#include "GrVkMemory.h"
-#include "GrVkPipeline.h"
-#include "GrVkPipelineState.h"
-#include "GrVkRenderPass.h"
-#include "GrVkResourceProvider.h"
-#include "GrVkSemaphore.h"
-#include "GrVkTexture.h"
-#include "GrVkTextureRenderTarget.h"
-#include "GrVkTransferBuffer.h"
-#include "GrVkVertexBuffer.h"
-#include "SkConvertPixels.h"
-#include "SkMipMap.h"
-#include "SkSLCompiler.h"
-#include "SkTo.h"
+#include "include/gpu/GrBackendSemaphore.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContextOptions.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkConvertPixels.h"
+#include "src/core/SkMipMap.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrGpuResourceCacheAccess.h"
+#include "src/gpu/GrMesh.h"
+#include "src/gpu/GrPipeline.h"
+#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/vk/GrVkAMDMemoryAllocator.h"
+#include "src/gpu/vk/GrVkCommandBuffer.h"
+#include "src/gpu/vk/GrVkCommandPool.h"
+#include "src/gpu/vk/GrVkGpuCommandBuffer.h"
+#include "src/gpu/vk/GrVkImage.h"
+#include "src/gpu/vk/GrVkIndexBuffer.h"
+#include "src/gpu/vk/GrVkInterface.h"
+#include "src/gpu/vk/GrVkMemory.h"
+#include "src/gpu/vk/GrVkPipeline.h"
+#include "src/gpu/vk/GrVkPipelineState.h"
+#include "src/gpu/vk/GrVkRenderPass.h"
+#include "src/gpu/vk/GrVkResourceProvider.h"
+#include "src/gpu/vk/GrVkSemaphore.h"
+#include "src/gpu/vk/GrVkTexture.h"
+#include "src/gpu/vk/GrVkTextureRenderTarget.h"
+#include "src/gpu/vk/GrVkTransferBuffer.h"
+#include "src/gpu/vk/GrVkVertexBuffer.h"
+#include "src/sksl/SkSLCompiler.h"
 
-#include "vk/GrVkExtensions.h"
-#include "vk/GrVkTypes.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "include/gpu/vk/GrVkTypes.h"
 
 #include <utility>
 
@@ -49,7 +49,7 @@
 #endif // !defined(SK_BUILD_FOR_WIN)
 
 #if defined(SK_BUILD_FOR_WIN) && defined(SK_DEBUG)
-#include "SkLeanWindows.h"
+#include "include/private/SkLeanWindows.h"
 #endif
 
 #define VK_CALL(X) GR_VK_CALL(this->vkInterface(), X)
@@ -115,9 +115,15 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
             return nullptr;
         }
     } else {
-        // None of our current GrVkExtension flags actually affect the vulkan backend so we just
-        // make an empty GrVkExtensions and pass that to the GrVkInterface.
         GrVkExtensions extensions;
+        // The only extension flag that may effect the vulkan backend is the swapchain extension. We
+        // need to know if this is enabled to know if we can transition to a present layout when
+        // flushing a surface.
+        if (backendContext.fExtensions & kKHR_swapchain_GrVkExtensionFlag) {
+            const char* swapChainExtName = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+            extensions.init(backendContext.fGetProc, backendContext.fInstance,
+                            backendContext.fPhysicalDevice, 0, nullptr, 1, &swapChainExtName);
+        }
         interface.reset(new GrVkInterface(backendContext.fGetProc,
                                           backendContext.fInstance,
                                           backendContext.fDevice,

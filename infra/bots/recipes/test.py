@@ -213,9 +213,21 @@ def dm_flags(api, bot):
         # skbug.com/7376
         blacklist('_ test _ ProcessorCloneTest')
 
-    # Vulkan bot *only* runs the vk config.
+    if 'AndroidOne' in bot or ('Nexus' in bot and 'Nexus5x' not in bot) or 'GalaxyS6' in bot:
+      # skbug.com/9019
+      blacklist('_ test _ ProcessorCloneTest')
+      blacklist('_ test _ GLPrograms')
+      blacklist('_ test _ ProcessorOptimizationValidationTest')
+
     if 'Vulkan' in bot:
       configs = ['vk']
+      if 'Android' in bot or 'iOS' in bot:
+        configs.append('vkmsaa4')
+      else:
+        # skbug.com/9023
+        if ('IntelHD405' not in bot and
+            'IntelIris655' not in bot):
+          configs.append('vkmsaa8')
 
     if 'Metal' in bot:
       configs = ['mtl']
@@ -1112,6 +1124,7 @@ def GenTests(api):
                    gold_hashes_url='https://example.com/hashes.txt',
                    swarm_out_dir='[SWARM_OUT_DIR]',
                    task_id='task_12345') +
+    api.platform('win', 64) +
     api.properties(patch_storage='gerrit') +
     api.properties.tryserver(
           buildername=builder,

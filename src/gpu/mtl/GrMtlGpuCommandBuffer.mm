@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "GrMtlGpuCommandBuffer.h"
+#include "src/gpu/mtl/GrMtlGpuCommandBuffer.h"
 
-#include "GrColor.h"
-#include "GrFixedClip.h"
-#include "GrMtlCommandBuffer.h"
-#include "GrMtlPipelineState.h"
-#include "GrMtlPipelineStateBuilder.h"
-#include "GrMtlRenderTarget.h"
-#include "GrRenderTargetPriv.h"
-#include "GrTexturePriv.h"
+#include "include/private/GrColor.h"
+#include "src/gpu/GrFixedClip.h"
+#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/mtl/GrMtlCommandBuffer.h"
+#include "src/gpu/mtl/GrMtlPipelineState.h"
+#include "src/gpu/mtl/GrMtlPipelineStateBuilder.h"
+#include "src/gpu/mtl/GrMtlRenderTarget.h"
 
 GrMtlGpuRTCommandBuffer::GrMtlGpuRTCommandBuffer(
         GrMtlGpu* gpu, GrRenderTarget* rt, GrSurfaceOrigin origin, const SkRect& bounds,
@@ -75,7 +75,7 @@ void GrMtlGpuRTCommandBuffer::addNullCommand() {
     SkASSERT(nil == fActiveRenderCmdEncoder);
 
     SkDEBUGCODE(id<MTLRenderCommandEncoder> cmdEncoder =)
-            fGpu->commandBuffer()->getRenderCommandEncoder(fRenderPassDesc);
+            fGpu->commandBuffer()->getRenderCommandEncoder(fRenderPassDesc, nullptr);
     SkASSERT(nil != cmdEncoder);
 }
 
@@ -175,7 +175,8 @@ void GrMtlGpuRTCommandBuffer::onDraw(const GrPrimitiveProcessor& primProc,
     }
 
     SkASSERT(nil == fActiveRenderCmdEncoder);
-    fActiveRenderCmdEncoder = fGpu->commandBuffer()->getRenderCommandEncoder(fRenderPassDesc);
+    fActiveRenderCmdEncoder = fGpu->commandBuffer()->getRenderCommandEncoder(fRenderPassDesc,
+                                                                             pipelineState);
     SkASSERT(fActiveRenderCmdEncoder);
     // TODO: can we set this once somewhere at the beginning of the draw?
     [fActiveRenderCmdEncoder setFrontFacingWinding:MTLWindingCounterClockwise];

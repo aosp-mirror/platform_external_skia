@@ -5,42 +5,42 @@
 * found in the LICENSE file.
 */
 
-#include "Viewer.h"
-#include "BisectSlide.h"
-#include "CommandLineFlags.h"
-#include "CommonFlags.h"
-#include "EventTracingPriv.h"
-#include "GMSlide.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrGpu.h"
-#include "GrPersistentCacheUtils.h"
-#include "ImageSlide.h"
-#include "ParticlesSlide.h"
-#include "Resources.h"
-#include "SKPSlide.h"
-#include "SampleSlide.h"
-#include "SkCanvas.h"
-#include "SkColorSpacePriv.h"
-#include "SkData.h"
-#include "SkGraphics.h"
-#include "SkImagePriv.h"
-#include "SkJSONWriter.h"
-#include "SkMakeUnique.h"
-#include "SkMD5.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
-#include "SkPaintFilterCanvas.h"
-#include "SkPictureRecorder.h"
-#include "SkScan.h"
-#include "SkStream.h"
-#include "SkSurface.h"
-#include "SkTaskGroup.h"
-#include "SkTo.h"
-#include "SlideDir.h"
-#include "SvgSlide.h"
-#include "ToolUtils.h"
-#include "ccpr/GrCoverageCountingPathRenderer.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/SkTo.h"
+#include "include/utils/SkPaintFilterCanvas.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkImagePriv.h"
+#include "src/core/SkMD5.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkOSFile.h"
+#include "src/core/SkScan.h"
+#include "src/core/SkTaskGroup.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrPersistentCacheUtils.h"
+#include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
+#include "src/utils/SkJSONWriter.h"
+#include "src/utils/SkOSPath.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
+#include "tools/flags/CommandLineFlags.h"
+#include "tools/flags/CommonFlags.h"
+#include "tools/trace/EventTracingPriv.h"
+#include "tools/viewer/BisectSlide.h"
+#include "tools/viewer/GMSlide.h"
+#include "tools/viewer/ImageSlide.h"
+#include "tools/viewer/ParticlesSlide.h"
+#include "tools/viewer/SKPSlide.h"
+#include "tools/viewer/SampleSlide.h"
+#include "tools/viewer/SlideDir.h"
+#include "tools/viewer/SvgSlide.h"
+#include "tools/viewer/Viewer.h"
 
 #include <stdlib.h>
 #include <map>
@@ -49,11 +49,11 @@
 #include "misc/cpp/imgui_stdlib.h"  // For ImGui support of std::string
 
 #if defined(SK_ENABLE_SKOTTIE)
-    #include "SkottieSlide.h"
+    #include "tools/viewer/SkottieSlide.h"
 #endif
 
 #if !(defined(SK_BUILD_FOR_WIN) && defined(__clang__))
-    #include "NIMASlide.h"
+    #include "tools/viewer/NIMASlide.h"
 #endif
 
 using namespace sk_app;
@@ -1949,8 +1949,20 @@ void Viewer::drawImGui() {
                 }
             }
 
-            if (Window::kNativeGL_BackendType == fBackendType &&
-                ImGui::CollapsingHeader("Shaders")) {
+            bool backendIsGL = Window::kNativeGL_BackendType == fBackendType
+#if SK_ANGLE && defined(SK_BUILD_FOR_WIN)
+                            || Window::kANGLE_BackendType == fBackendType
+#endif
+                ;
+
+            // HACK: If we get here when SKSL caching isn't enabled, and we're on a backend other
+            // than GL, we need to force it on. Just do that on the first frame after the backend
+            // switch, then resume normal operation.
+            if (!backendIsGL && !params.fGrContextOptions.fCacheSKSL) {
+                params.fGrContextOptions.fCacheSKSL = true;
+                paramsChanged = true;
+                fPersistentCache.reset();
+            } else if (ImGui::CollapsingHeader("Shaders")) {
                 // To re-load shaders from the currently active programs, we flush all caches on one
                 // frame, then set a flag to poll the cache on the next frame.
                 static bool gLoadPending = false;
@@ -1966,8 +1978,8 @@ void Viewer::drawImGui() {
                             entry.fKeyString.appendf("%02x", digest.data[i]);
                         }
 
-                        GrPersistentCacheUtils::UnpackCachedGLSL(data.get(), &entry.fInputs,
-                                                                 entry.fShader);
+                        entry.fShaderType = GrPersistentCacheUtils::UnpackCachedShaders(
+                                data.get(), entry.fShader, entry.fInputs, kGrShaderTypeCount);
                     };
                     fCachedGLSL.reset();
                     fPersistentCache.foreach(collectShaders);
@@ -1977,11 +1989,14 @@ void Viewer::drawImGui() {
                 // Defer actually doing the load/save logic so that we can trigger a save when we
                 // start or finish hovering on a tree node in the list below:
                 bool doLoad = ImGui::Button("Load"); ImGui::SameLine();
-                bool doSave = ImGui::Button("Save"); ImGui::SameLine();
-                if (ImGui::Checkbox("SkSL", &params.fGrContextOptions.fCacheSKSL)) {
-                    paramsChanged = true;
-                    doLoad = true;
-                    fDeferredActions.push_back([=]() { fPersistentCache.reset(); });
+                bool doSave = ImGui::Button("Save");
+                if (backendIsGL) {
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("SkSL", &params.fGrContextOptions.fCacheSKSL)) {
+                        paramsChanged = true;
+                        doLoad = true;
+                        fDeferredActions.push_back([=]() { fPersistentCache.reset(); });
+                    }
                 }
 
                 ImGui::BeginChild("##ScrollingRegion");
@@ -2026,8 +2041,10 @@ void Viewer::drawImGui() {
                             entry.fShader[kFragment_GrShaderType] = highlight;
                         }
 
-                        auto data = GrPersistentCacheUtils::PackCachedGLSL(entry.fInputs,
-                                                                           entry.fShader);
+                        auto data = GrPersistentCacheUtils::PackCachedShaders(entry.fShaderType,
+                                                                              entry.fShader,
+                                                                              entry.fInputs,
+                                                                              kGrShaderTypeCount);
                         fPersistentCache.store(*entry.fKey, *data);
 
                         entry.fShader[kFragment_GrShaderType] = backup;

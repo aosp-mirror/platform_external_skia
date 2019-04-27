@@ -8,12 +8,12 @@
 #ifndef GrSurfaceProxy_DEFINED
 #define GrSurfaceProxy_DEFINED
 
-#include "../private/SkNoncopyable.h"
-#include "GrBackendSurface.h"
-#include "GrGpuResource.h"
-#include "GrSurface.h"
-#include "GrTexture.h"
-#include "SkRect.h"
+#include "include/core/SkRect.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrGpuResource.h"
+#include "include/gpu/GrSurface.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/SkNoncopyable.h"
 
 class GrCaps;
 class GrContext_Base;
@@ -363,8 +363,7 @@ public:
         return fUniqueID;
     }
 
-    virtual bool instantiate(GrResourceProvider* resourceProvider,
-                             bool dontForceNoPendingIO = false) = 0;
+    virtual bool instantiate(GrResourceProvider*) = 0;
 
     void deinstantiate();
 
@@ -504,12 +503,10 @@ protected:
     void assign(sk_sp<GrSurface> surface);
 
     sk_sp<GrSurface> createSurfaceImpl(GrResourceProvider*, int sampleCnt, bool needsStencil,
-                                       GrSurfaceDescFlags, GrMipMapped,
-                                       bool forceNoPendingIO) const;
+                                       GrSurfaceDescFlags, GrMipMapped) const;
 
     bool instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt, bool needsStencil,
-                         GrSurfaceDescFlags descFlags, GrMipMapped, const GrUniqueKey*,
-                         bool dontForceNoPendingIO);
+                         GrSurfaceDescFlags descFlags, GrMipMapped, const GrUniqueKey*);
 
     // In many cases these flags aren't actually known until the proxy has been instantiated.
     // However, Ganesh frequently needs to change its behavior based on these settings. For

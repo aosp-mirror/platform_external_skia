@@ -4,10 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkFont.h"
-#include "SkTypeface.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkTypeface.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
@@ -65,6 +65,7 @@ protected:
             }
             canvas->translate(0, SkIntToScalar(360));
             font.setSubpixel(true);
+            font.setLinearMetrics(true);
         }
     }
 
