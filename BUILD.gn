@@ -99,11 +99,8 @@ if (defined(skia_settings)) {
 
 # Skia public API, generally provided by :skia.
 config("skia_public") {
-  include_dirs = [
-    ".",
-    "third_party/skcms",
-    "include/third_party/vulkan",
-  ]
+  include_dirs = [ "." ]
+
   defines = []
   if (is_component_build) {
     defines += [ "SKIA_DLL" ]
@@ -165,9 +162,7 @@ config("skia_private") {
 # Any code that's linked into Skia-the-library should use this config via += skia_library_configs.
 config("skia_library") {
   visibility = [ ":*" ]
-  if (is_component_build) {
-    defines = [ "SKIA_IMPLEMENTATION=1" ]
-  }
+  defines = [ "SKIA_IMPLEMENTATION=1" ]
 }
 
 skia_library_configs = [
@@ -762,8 +757,9 @@ source_set("skcms") {
   }
 
   public = [
-    "third_party/skcms/skcms.h",
+    "include/third_party/skcms/skcms.h",
   ]
+  include_dirs = [ "include/third_party/skcms" ]
   sources = rebase_path(skcms_sources, ".", "third_party/skcms")
 }
 
@@ -1208,21 +1204,24 @@ if (skia_enable_tools) {
     }
   }
 
+  config("our_vulkan_headers") {
+    # We add this directory to simulate the client already have
+    # vulkan/vulkan_core.h on their path.
+    include_dirs = [ "include/third_party/vulkan" ]
+  }
+
   source_set("public_headers_warnings_check") {
     sources = [
       "tools/public_headers_warnings_check.cpp",
     ]
     configs -= [ "//gn:warnings_except_public_headers" ]
+    configs += [ ":our_vulkan_headers" ]
     deps = [
       ":skia",
       ":skia.h",
       "modules/skottie",
       "modules/skshaper",
     ]
-
-    # We add this directory to simulate the client already have
-    # vulkan/vulkan_core.h on their path.
-    include_dirs = [ "include/third_party/vulkan" ]
   }
 
   template("test_lib") {
@@ -1438,6 +1437,10 @@ if (skia_enable_tools) {
 
   test_lib("gpu_tool_utils") {
     public_defines = []
+
+    # Bots and even devs may not have Vulkan headers, so put
+    # include/third_party/vulkan on our path so they're always available.
+    all_dependent_configs = [ ":our_vulkan_headers" ]
 
     defines = []
     if (skia_enable_discrete_gpu) {
@@ -2174,6 +2177,10 @@ if (skia_enable_tools) {
   }
 
   test_lib("sk_app") {
+    public_deps = [
+      ":skia",
+      ":gpu_tool_utils",
+    ]
     sources = [
       "tools/sk_app/CommandSet.cpp",
       "tools/sk_app/GLWindowContext.cpp",
@@ -2257,8 +2264,6 @@ if (skia_enable_tools) {
     }
 
     deps = [
-      ":gpu_tool_utils",
-      ":skia",
       ":tool_utils",
     ]
     if (is_android) {
@@ -2460,9 +2465,10 @@ if (skia_enable_tools) {
     is_shared_library = is_android
     sources = [
       "experimental/editor/editor_application.cpp",
+      "experimental/editor/editor.cpp",
+      "experimental/editor/editor.h",
     ]
     deps = [
-      ":gpu_tool_utils",
       ":sk_app",
       ":skia",
       "modules/skshaper",
