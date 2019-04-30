@@ -37,20 +37,16 @@ cc_library_static {
         "include/pathops/",
         "include/ports/",
         "include/svg/",
-        "include/third_party/vulkan/",
         "include/utils/",
         "include/utils/mac/",
         "modules/skottie/include/",
         "modules/sksg/include/",
         "modules/skshaper/include/",
-        "third_party/skcms/",
     ],
 
     local_include_dirs: [
         "",
-        "include/third_party/vulkan/",
         "third_party/skcms",
-        "third_party/skcms/",
     ],
 
     srcs: [
@@ -1031,7 +1027,6 @@ cc_test {
         "modules/skottie/utils/",
         "modules/sksg/include/",
         "third_party/skcms",
-        "third_party/skcms/",
     ],
 
     srcs: [
@@ -1829,7 +1824,6 @@ cc_test {
         "",
         "include/third_party/vulkan/",
         "modules/sksg/include/",
-        "third_party/skcms/",
     ],
 
     srcs: [
