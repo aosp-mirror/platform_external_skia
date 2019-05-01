@@ -14,8 +14,7 @@
   #define SK_USE_FREETYPE_EMBOLDEN
 
   // Disable these Ganesh features
-  #define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
-  #define SK_DISABLE_RENDER_TARGET_SORTING
+  #define SK_DISABLE_REDUCE_OPLIST_SPLITTING
   // Check error is expensive. HWUI historically also doesn't check its allocations
   #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR 0
 
