@@ -7,7 +7,6 @@
 _gm = get_path_info("../gm", "abspath")
 
 gm_sources = [
-  "$_gm/3dgm.cpp",
   "$_gm/aaa.cpp",
   "$_gm/aaclip.cpp",
   "$_gm/aarectmodes.cpp",
@@ -276,6 +275,7 @@ gm_sources = [
   "$_gm/poly2poly.cpp",
   "$_gm/polygons.cpp",
   "$_gm/polygonoffset.cpp",
+  "$_gm/postercircle.cpp",
   "$_gm/quadpaths.cpp",
   "$_gm/radial_gradient_precision.cpp",
   "$_gm/readpixels.cpp",

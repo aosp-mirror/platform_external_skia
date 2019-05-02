@@ -46,7 +46,7 @@ cc_library_static {
 
     local_include_dirs: [
         "",
-        "third_party/skcms",
+        "include/third_party/skcms",
     ],
 
     srcs: [
@@ -577,10 +577,10 @@ cc_library_static {
           "src/gpu/GrResourceAllocator.cpp",
           "src/gpu/GrResourceCache.cpp",
           "src/gpu/GrResourceProvider.cpp",
-          "src/gpu/GrSKSLPrettyPrint.cpp",
           "src/gpu/GrSWMaskHelper.cpp",
           "src/gpu/GrSamplePatternDictionary.cpp",
           "src/gpu/GrShaderCaps.cpp",
+          "src/gpu/GrShaderUtils.cpp",
           "src/gpu/GrShaderVar.cpp",
           "src/gpu/GrShape.cpp",
           "src/gpu/GrSoftwarePathRenderer.cpp",
@@ -1022,11 +1022,11 @@ cc_test {
 
     local_include_dirs: [
         "",
+        "include/third_party/skcms",
         "include/third_party/vulkan/",
         "modules/skottie/include/",
         "modules/skottie/utils/",
         "modules/sksg/include/",
-        "third_party/skcms",
     ],
 
     srcs: [
@@ -1057,7 +1057,6 @@ cc_test {
         "experimental/svg/model/SkSVGTransformableNode.cpp",
         "experimental/svg/model/SkSVGUse.cpp",
         "experimental/svg/model/SkSVGValue.cpp",
-        "gm/3dgm.cpp",
         "gm/OverStroke.cpp",
         "gm/aaa.cpp",
         "gm/aaclip.cpp",
@@ -1326,6 +1325,7 @@ cc_test {
         "gm/poly2poly.cpp",
         "gm/polygonoffset.cpp",
         "gm/polygons.cpp",
+        "gm/postercircle.cpp",
         "gm/quadpaths.cpp",
         "gm/radial_gradient_precision.cpp",
         "gm/readpixels.cpp",
@@ -1967,7 +1967,6 @@ cc_test {
         "experimental/svg/model/SkSVGTransformableNode.cpp",
         "experimental/svg/model/SkSVGUse.cpp",
         "experimental/svg/model/SkSVGValue.cpp",
-        "gm/3dgm.cpp",
         "gm/OverStroke.cpp",
         "gm/aaa.cpp",
         "gm/aaclip.cpp",
@@ -2236,6 +2235,7 @@ cc_test {
         "gm/poly2poly.cpp",
         "gm/polygonoffset.cpp",
         "gm/polygons.cpp",
+        "gm/postercircle.cpp",
         "gm/quadpaths.cpp",
         "gm/radial_gradient_precision.cpp",
         "gm/readpixels.cpp",

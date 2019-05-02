@@ -224,8 +224,17 @@ def dm_flags(api, bot):
     if 'GPU' in bot and ('Nexus7' in bot or
                          'NexusPlayer' in bot or
                          'NVIDIA_Shield' in bot or
-                         'Nexus5x' in bot):
+                         'Nexus5x' in bot or
+                         ('Win10' in bot and 'GTX660' in bot and 'Vulkan' in bot) or
+                         'Chorizo' in bot):
       blacklist(['_', 'gm', '_', 'savelayer_clipmask'])
+
+    # skbug.com/9043 - these devices render this test incorrectly
+    # when opList splitting reduction is enabled
+    if 'GPU' in bot and 'Vulkan' in bot and ('MoltenVK' in bot or
+                                             'RadeonR9M470X' in bot or
+                                             'RadeonHD7770' in bot):
+      blacklist(['_', 'tests', '_', 'VkDrawableImportTest'])
 
     if 'Vulkan' in bot:
       configs = ['vk']
@@ -819,20 +828,6 @@ def dm_flags(api, bot):
 
   if 'GDI' in bot:
     args.append('--gdi')
-
-  if ('QuadroP400' in bot or
-      'Adreno540' in bot or
-      'IntelHD2000' in bot or   # gen 6 - sandy bridge
-      'IntelHD4400' in bot or   # gen 7 - haswell
-      'IntelHD405' in bot or    # gen 8 - cherryview braswell
-      'IntelIris6100' in bot or # gen 8 - broadwell
-      'IntelIris540' in bot or  # gen 9 - skylake
-      'IntelIris640' in bot or  # gen 9 - kaby lake
-      'IntelIris655' in bot or  # gen 9 - coffee lake
-      'MaliT760' in bot or
-      'MaliT860' in bot or
-      'MaliT880' in bot):
-    args.extend(['--reduceOpListSplitting'])
 
   # Let's make all bots produce verbose output by default.
   args.append('--verbose')
