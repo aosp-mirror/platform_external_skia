@@ -7,19 +7,32 @@
 
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkData.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
 #include "src/core/SkColorFilterPriv.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/gpu/effects/GrSkSLFP.h"
+#include "src/core/SkWriteBuffer.h"
 #include "tools/Resources.h"
-#include "tools/ToolUtils.h"
+
+#include <stddef.h>
+#include <utility>
+
+class GrContext;
+class GrRenderTargetContext;
 
 const char* SKSL_TEST_SRC = R"(
     layout(ctype=float) in uniform half b;
 
     void main(inout half4 color) {
-        color.rg = color.gr;
-        color.b = b;
+        color.a = color.r*0.3 + color.g*0.6 + color.b*0.1;
+        color.r = 0;
+        color.g = 0;
+        color.b = 0;
     }
 )";
 
