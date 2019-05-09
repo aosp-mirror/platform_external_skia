@@ -36,11 +36,14 @@ public:
         kTopBaseline,
         // Align the center of the shaped text bounds with the center of the text box.
         kCenter,
+        // Resize the text such that it fits (snuggly) in the given box.
+        kResizeToFit,
     };
 
     struct TextDesc {
         const sk_sp<SkTypeface>&  fTypeface;
-        SkScalar                  fTextSize;
+        SkScalar                  fTextSize,
+                                  fLineHeight; // when 0, use natural/computed line height.
         SkTextUtils::Align        fHAlign;
         VAlign                    fVAlign;
     };

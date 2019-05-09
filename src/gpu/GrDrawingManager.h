@@ -8,6 +8,7 @@
 #ifndef GrDrawingManager_DEFINED
 #define GrDrawingManager_DEFINED
 
+#include <set>
 #include "include/core/SkSurface.h"
 #include "include/private/SkTArray.h"
 #include "src/gpu/GrBufferAllocPool.h"
@@ -70,9 +71,15 @@ public:
 
     static bool ProgramUnitTest(GrContext* context, int maxStages, int maxLevels);
 
-    GrSemaphoresSubmitted flushSurface(GrSurfaceProxy*,
+    GrSemaphoresSubmitted flushSurfaces(GrSurfaceProxy* proxies[],
+                                        int cnt,
+                                        SkSurface::BackendSurfaceAccess access,
+                                        const GrFlushInfo& info);
+    GrSemaphoresSubmitted flushSurface(GrSurfaceProxy* proxy,
                                        SkSurface::BackendSurfaceAccess access,
-                                       const GrFlushInfo& info);
+                                       const GrFlushInfo& info) {
+        return this->flushSurfaces(&proxy, 1, access, info);
+    }
 
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
@@ -146,7 +153,8 @@ private:
     // return true if any opLists were actually executed; false otherwise
     bool executeOpLists(int startIndex, int stopIndex, GrOpFlushState*, int* numOpListsExecuted);
 
-    GrSemaphoresSubmitted flush(GrSurfaceProxy* proxy,
+    GrSemaphoresSubmitted flush(GrSurfaceProxy* proxies[],
+                                int numProxies,
                                 SkSurface::BackendSurfaceAccess access,
                                 const GrFlushInfo&);
 
@@ -185,6 +193,16 @@ private:
     bool                              fReduceOpListSplitting;
 
     SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
+
+    void addDDLTarget(GrSurfaceProxy* proxy) { fDDLTargets.insert(proxy); }
+    bool isDDLTarget(GrSurfaceProxy* proxy) { return fDDLTargets.find(proxy) != fDDLTargets.end(); }
+    void clearDDLTargets() { fDDLTargets.clear(); }
+
+    // We play a trick with lazy proxies to retarget the base target of a DDL to the SkSurface
+    // it is replayed on. Because of this remapping we need to explicitly store the targets of
+    // DDL replaying.
+    // Note: we do not expect a whole lot of these per flush
+    std::set<GrSurfaceProxy*> fDDLTargets;
 };
 
 #endif

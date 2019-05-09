@@ -412,13 +412,14 @@ int GrGpu::findOrAssignSamplePatternKey(GrRenderTarget* renderTarget) {
     return fSamplePatternDictionary.findOrAssignSamplePatternKey(sampleLocations);
 }
 
-GrSemaphoresSubmitted GrGpu::finishFlush(GrSurfaceProxy* proxy,
+GrSemaphoresSubmitted GrGpu::finishFlush(GrSurfaceProxy* proxies[],
+                                         int n,
                                          SkSurface::BackendSurfaceAccess access,
                                          const GrFlushInfo& info) {
     this->stats()->incNumFinishFlushes();
     GrResourceProvider* resourceProvider = fContext->priv().resourceProvider();
 
-    if (this->caps()->fenceSyncSupport()) {
+    if (this->caps()->semaphoreSupport()) {
         for (int i = 0; i < info.fNumSemaphores; ++i) {
             sk_sp<GrSemaphore> semaphore;
             if (info.fSignalSemaphores[i].isInitialized()) {
@@ -436,8 +437,8 @@ GrSemaphoresSubmitted GrGpu::finishFlush(GrSurfaceProxy* proxy,
             }
         }
     }
-    this->onFinishFlush(proxy, access, info);
-    return this->caps()->fenceSyncSupport() ? GrSemaphoresSubmitted::kYes
+    this->onFinishFlush(proxies, n, access, info);
+    return this->caps()->semaphoreSupport() ? GrSemaphoresSubmitted::kYes
                                             : GrSemaphoresSubmitted::kNo;
 }
 
