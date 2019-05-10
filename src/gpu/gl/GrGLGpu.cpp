@@ -3990,6 +3990,9 @@ GrBackendTexture GrGLGpu::createTestingOnlyBackendTexture(const void* pixels, in
         return GrBackendTexture();  // invalid
     }
 
+    if (mipMapped == GrMipMapped::kYes && !this->caps()->mipMapSupport()) {
+        return GrBackendTexture();
+    }
     int bpp = GrColorTypeBytesPerPixel(colorType);
     const size_t trimRowBytes = w * bpp;
     if (!rowBytes) {
@@ -4275,7 +4278,7 @@ GrGLAttribArrayState* GrGLGpu::HWVertexArrayState::bindInternalVertexArray(GrGLG
 }
 
 void GrGLGpu::onFinishFlush(GrSurfaceProxy*[], int, SkSurface::BackendSurfaceAccess access,
-                            const GrFlushInfo& info) {
+                            const GrFlushInfo& info, const GrPrepareForExternalIORequests&) {
     // If we inserted semaphores during the flush, we need to call GLFlush.
     bool insertedSemaphore = info.fNumSemaphores > 0 && this->caps()->semaphoreSupport();
     // We call finish if the client told us to sync or if we have a finished proc but don't support
