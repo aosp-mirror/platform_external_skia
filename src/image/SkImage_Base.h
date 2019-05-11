@@ -48,6 +48,10 @@ public:
     virtual GrContext* context() const { return nullptr; }
 
 #if SK_SUPPORT_GPU
+    virtual GrSemaphoresSubmitted onFlush(GrContext* context, const GrFlushInfo&) {
+        return GrSemaphoresSubmitted::kNo;
+    }
+
     // Return the proxy if this image is backed by a single proxy. For YUVA images, this
     // will return nullptr unless the YUVA planes have been converted to RGBA in which case
     // that single backing proxy will be returned.
@@ -60,8 +64,6 @@ public:
         return nullptr;
     }
     virtual bool isYUVA() const { return false; }
-    virtual bool asYUVATextureProxiesRef(sk_sp<GrTextureProxy>[4], SkYUVAIndex[4],
-                                         SkYUVColorSpace*) const { return false; }
     virtual GrTexture* onGetTexture() const { return nullptr; }
 #endif
     virtual GrBackendTexture onGetBackendTexture(bool flushPendingGrContextIO,

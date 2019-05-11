@@ -18,8 +18,10 @@
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrMesh.h"
 #include "src/gpu/GrPipeline.h"
+#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/SkGpuDevice.h"
 #include "src/gpu/vk/GrVkAMDMemoryAllocator.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkCommandPool.h"
@@ -37,6 +39,8 @@
 #include "src/gpu/vk/GrVkTextureRenderTarget.h"
 #include "src/gpu/vk/GrVkTransferBuffer.h"
 #include "src/gpu/vk/GrVkVertexBuffer.h"
+#include "src/image/SkImage_Gpu.h"
+#include "src/image/SkSurface_Gpu.h"
 #include "src/sksl/SkSLCompiler.h"
 
 #include "include/gpu/vk/GrVkExtensions.h"
@@ -805,6 +809,17 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int widt
         if (!copyTexture) {
             return false;
         }
+
+        bool dstHasYcbcr = tex->ycbcrConversionInfo().isValid();
+        if (!this->vkCaps().canCopyAsBlit(tex->config(), 1, false, dstHasYcbcr,
+                                          copyTexture->config(), 1, false,
+                                          false) &&
+            !this->vkCaps().canCopyAsDraw(tex->config(), SkToBool(tex->asRenderTarget()),
+                                          dstHasYcbcr,
+                                          copyTexture->config(), true, false)) {
+            return false;
+        }
+
         uploadTexture = copyTexture.get();
         uploadLeft = 0;
         uploadTop = 0;
@@ -1889,22 +1904,78 @@ void GrVkGpu::addImageMemoryBarrier(const GrVkResource* resource,
                                        barrier);
 }
 
-void GrVkGpu::onFinishFlush(GrSurfaceProxy* proxy, SkSurface::BackendSurfaceAccess access,
-                            const GrFlushInfo& info) {
+void GrVkGpu::onFinishFlush(GrSurfaceProxy* proxies[], int n,
+                            SkSurface::BackendSurfaceAccess access, const GrFlushInfo& info,
+                            const GrPrepareForExternalIORequests& externalRequests) {
+    SkASSERT(n >= 0);
+    SkASSERT(!n || proxies);
     // Submit the current command buffer to the Queue. Whether we inserted semaphores or not does
     // not effect what we do here.
-    if (proxy && access == SkSurface::BackendSurfaceAccess::kPresent) {
+    if (n && access == SkSurface::BackendSurfaceAccess::kPresent) {
         GrVkImage* image;
-        SkASSERT(proxy->isInstantiated());
-        if (GrTexture* tex = proxy->peekTexture()) {
-            image = static_cast<GrVkTexture*>(tex);
-        } else {
-            GrRenderTarget* rt = proxy->peekRenderTarget();
-            SkASSERT(rt);
-            image = static_cast<GrVkRenderTarget*>(rt);
+        for (int i = 0; i < n; ++i) {
+            SkASSERT(proxies[i]->isInstantiated());
+            if (GrTexture* tex = proxies[i]->peekTexture()) {
+                image = static_cast<GrVkTexture*>(tex);
+            } else {
+                GrRenderTarget* rt = proxies[i]->peekRenderTarget();
+                SkASSERT(rt);
+                image = static_cast<GrVkRenderTarget*>(rt);
+            }
+            image->prepareForPresent(this);
         }
-        image->prepareForPresent(this);
     }
+
+    // Handle requests for preparing for external IO
+    for (int i = 0; i < externalRequests.fNumImages; ++i) {
+        SkImage* image = externalRequests.fImages[i];
+        if (!image->isTextureBacked()) {
+            continue;
+        }
+        SkImage_GpuBase* gpuImage = static_cast<SkImage_GpuBase*>(as_IB(image));
+        sk_sp<GrTextureProxy> proxy = gpuImage->asTextureProxyRef(this->getContext());
+        SkASSERT(proxy);
+
+        if (!proxy->isInstantiated()) {
+            auto resourceProvider = this->getContext()->priv().resourceProvider();
+            if (!proxy->instantiate(resourceProvider)) {
+                continue;
+            }
+        }
+
+        GrTexture* tex = proxy->peekTexture();
+        if (!tex) {
+            continue;
+        }
+        GrVkTexture* vkTex = static_cast<GrVkTexture*>(tex);
+        vkTex->prepareForExternal(this);
+    }
+    for (int i = 0; i < externalRequests.fNumSurfaces; ++i) {
+        SkSurface* surface = externalRequests.fSurfaces[i];
+        if (!surface->getCanvas()->getGrContext()) {
+            continue;
+        }
+        SkSurface_Gpu* gpuSurface = static_cast<SkSurface_Gpu*>(surface);
+        auto* rtc = gpuSurface->getDevice()->accessRenderTargetContext();
+        sk_sp<GrRenderTargetProxy> proxy = rtc->asRenderTargetProxyRef();
+        if (!proxy->isInstantiated()) {
+            auto resourceProvider = this->getContext()->priv().resourceProvider();
+            if (!proxy->instantiate(resourceProvider)) {
+                continue;
+            }
+        }
+
+        GrRenderTarget* rt = proxy->peekRenderTarget();
+        SkASSERT(rt);
+        GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(rt);
+        if (externalRequests.fPrepareSurfaceForPresent &&
+            externalRequests.fPrepareSurfaceForPresent[i]) {
+            vkRT->prepareForPresent(this);
+        } else {
+            vkRT->prepareForExternal(this);
+        }
+    }
+
     if (info.fFlags & kSyncCpu_GrFlushFlag) {
         this->submitCommandBuffer(kForce_SyncQueue, info.fFinishedProc, info.fFinishedContext);
     } else {
@@ -2232,9 +2303,8 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
             srcSampleCount = rt->numColorSamples();
         }
         bool srcHasYcbcr = image->ycbcrConversionInfo().isValid();
-        static const GrSurfaceOrigin kOrigin = kTopLeft_GrSurfaceOrigin;
-        if (!this->vkCaps().canCopyAsBlit(copySurface->config(), 1, kOrigin, false,
-                                          surface->config(), srcSampleCount, kOrigin,
+        if (!this->vkCaps().canCopyAsBlit(copySurface->config(), 1, false, false,
+                                          surface->config(), srcSampleCount, image->isLinearTiled(),
                                           srcHasYcbcr) &&
             !this->vkCaps().canCopyAsDraw(copySurface->config(), false, false,
                                           surface->config(), SkToBool(surface->asTexture()),
@@ -2242,6 +2312,7 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
             return false;
         }
         SkIRect srcRect = SkIRect::MakeXYWH(left, top, width, height);
+        static const GrSurfaceOrigin kOrigin = kTopLeft_GrSurfaceOrigin;
         if (!this->copySurface(copySurface.get(), kOrigin, surface, kOrigin,
                                srcRect, SkIPoint::Make(0,0))) {
             return false;

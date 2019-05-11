@@ -61,6 +61,10 @@ std::unique_ptr<ByteCodeFunction> ByteCodeGenerator::writeFunction(const Functio
     this->write8(0);
     result->fParameterCount = fParameterCount;
     result->fLocalCount = fLocals.size();
+    const Type& returnType = f.fDeclaration.fReturnType;
+    if (returnType != *fContext.fVoid_Type) {
+        result->fReturnCount = returnType.columns() * returnType.rows();
+    }
     fLocals.clear();
     fFunction = nullptr;
     return result;
@@ -148,8 +152,13 @@ int ByteCodeGenerator::getLocation(const Variable& var) {
 }
 
 void ByteCodeGenerator::align(int divisor, int remainder) {
-    while ((int) fCode->size() % divisor != remainder) {
-        this->write(ByteCodeInstruction::kNop);
+    switch (remainder - (int) fCode->size() % divisor) {
+        case 0: return;
+        case 3: this->write(ByteCodeInstruction::kNop3); // fall through
+        case 2: this->write(ByteCodeInstruction::kNop2); // fall through
+        case 1: this->write(ByteCodeInstruction::kNop1);
+                break;
+        default: SkASSERT(false);
     }
 }
 
@@ -268,7 +277,7 @@ void ByteCodeGenerator::writeBinaryExpression(const BinaryExpression& b) {
         case Token::Kind::PERCENT:
             this->writeTypedInstruction(b.fLeft->fType, ByteCodeInstruction::kRemainderS,
                                         ByteCodeInstruction::kRemainderU,
-                                        ByteCodeInstruction::kInvalid);
+                                        ByteCodeInstruction::kRemainderF);
             break;
         case Token::Kind::PLUS:
             this->writeTypedInstruction(b.fLeft->fType, ByteCodeInstruction::kAddI,
@@ -396,12 +405,19 @@ void ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p) {
             lvalue->store();
             break;
         }
-        case Token::Kind::MINUS:
+        case Token::Kind::MINUS: {
+            this->writeExpression(*p.fOperand);
+            int count = slot_count(p.fOperand->fType);
+            if (count > 1) {
+                this->write(ByteCodeInstruction::kVector);
+                this->write8(count);
+            }
             this->writeTypedInstruction(p.fType,
                                         ByteCodeInstruction::kNegateS,
                                         ByteCodeInstruction::kInvalid,
                                         ByteCodeInstruction::kNegateF);
             break;
+        }
         default:
             SkASSERT(false);
     }

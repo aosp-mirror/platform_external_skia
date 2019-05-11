@@ -27,8 +27,10 @@ void test(skiatest::Reporter* r, const char* src, SkSL::Interpreter::Value* in, 
         }
         SkSL::ByteCodeFunction* main = byteCode->fFunctions[0].get();
         SkSL::Interpreter interpreter(std::move(program), std::move(byteCode));
-        SkSL::Interpreter::Value* out = interpreter.run(*main, in, nullptr);
-        bool valid = !memcmp(out, expected, sizeof(SkSL::Interpreter::Value) * expectedCount);
+        std::unique_ptr<SkSL::Interpreter::Value[]> out =
+           std::unique_ptr<SkSL::Interpreter::Value[]>(new SkSL::Interpreter::Value[expectedCount]);
+        interpreter.run(*main, in, out.get());
+        bool valid = !memcmp(out.get(), expected, sizeof(SkSL::Interpreter::Value) * expectedCount);
         if (!valid) {
             printf("for program: %s\n", src);
             printf("    expected (");
@@ -40,7 +42,7 @@ void test(skiatest::Reporter* r, const char* src, SkSL::Interpreter::Value* in, 
             printf("), but received (");
             separator = "";
             for (int i = 0; i < expectedCount; ++i) {
-                printf("%s%f", separator, out[i].fFloat);
+                printf("%s%f", separator, out.get()[i].fFloat);
                 separator = ", ";
             }
             printf(")\n");
@@ -102,6 +104,8 @@ DEF_TEST(SkSLInterpreterSubtract, r) {
     test(r, "void main(inout half4 color) { color -= half4(1, 2, 3, 4); }", 5, 5, 5, 5, 4, 3, 2, 1);
     test(r, "void main(inout half4 color) { half4 c = color; color -= c; }", 4, 3, 2, 1,
          0, 0, 0, 0);
+    test(r, "void main(inout half4 color) { color.x = -color.x; }", 4, 3, 2, 1, -4, 3, 2, 1);
+    test(r, "void main(inout half4 color) { color = -color; }", 4, 3, 2, 1, -4, -3, -2, -1);
     test(r, "void main(inout half4 color) { int a = 3; int b = 1; color.r = a - b; }", 0, 0, 0, 0,
          2, 0, 0, 0);
 }
@@ -129,6 +133,10 @@ DEF_TEST(SkSLInterpreterDivide, r) {
 }
 
 DEF_TEST(SkSLInterpreterRemainder, r) {
+    test(r, "void main(inout half4 color) { color.r = color.r % color.g; }", 3.125, 2, 0, 0,
+         1.125, 2, 0, 0);
+    test(r, "void main(inout half4 color) { color %= half4(1, 2, 3, 4); }", 9.5, 9.5, 9.5, 9.5,
+         0.5, 1.5, 0.5, 1.5);
     test(r, "void main(inout half4 color) { int a = 8; int b = 3; a %= b; color.r = a; }", 0, 0, 0,
          0, 2, 0, 0, 0);
     test(r, "void main(inout half4 color) { int a = 8; int b = 3; color.r = a % b; }", 0, 0, 0, 0,
@@ -245,4 +253,43 @@ DEF_TEST(SkSLInterpreterGeneric, r) {
     test(r, "float2 main(float x, float y) { return float2(x * x, y * y); }",
          (SkSL::Interpreter::Value*) &value2, 2,
          (SkSL::Interpreter::Value*) expected2);
+}
+
+DEF_TEST(SkSLInterpreterSetInputs, r) {
+    const char* src = R"(
+        layout(ctype=float) in uniform float x;
+        float main(float y) { return x + y; }
+    )";
+
+    SkSL::Compiler compiler;
+    SkSL::Program::Settings settings;
+    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
+                                                             SkSL::Program::kGeneric_Kind,
+                                                             SkSL::String(src), settings);
+    REPORTER_ASSERT(r, program);
+
+    std::unique_ptr<SkSL::ByteCode> byteCode = compiler.toByteCode(*program);
+    REPORTER_ASSERT(r, !compiler.errorCount());
+
+    SkSL::ByteCodeFunction* main = byteCode->fFunctions[0].get();
+
+    float x = 1.0f;
+    SkSL::Interpreter interpreter(std::move(program), std::move(byteCode),
+                                    (SkSL::Interpreter::Value*)&x);
+    float out = 0.0f;
+    float in  = 2.0f;
+    interpreter.run(*main, (SkSL::Interpreter::Value*)&in, (SkSL::Interpreter::Value*)&out);
+    REPORTER_ASSERT(r, out == 3.0f);
+
+    // External updates should be ignored
+    x = 3.0f;
+    out = 0.0f;
+    interpreter.run(*main, (SkSL::Interpreter::Value*)&in, (SkSL::Interpreter::Value*)&out);
+    REPORTER_ASSERT(r, out == 3.0f);
+
+    // Updating inputs should affect subsequent calls to run
+    out = 0.0f;
+    interpreter.setInputs((SkSL::Interpreter::Value*)&x);
+    interpreter.run(*main, (SkSL::Interpreter::Value*)&in, (SkSL::Interpreter::Value*)&out);
+    REPORTER_ASSERT(r, out == 5.0f);
 }

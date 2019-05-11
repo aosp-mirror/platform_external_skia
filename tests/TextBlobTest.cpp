@@ -159,10 +159,10 @@ public:
 
             const char* txt = "BOOO";
             const size_t txtLen = strlen(txt);
-            const int glyphCount = font.countText(txt, txtLen, kUTF8_SkTextEncoding);
+            const int glyphCount = font.countText(txt, txtLen, SkTextEncoding::kUTF8);
             const SkTextBlobBuilder::RunBuffer& buffer = builder.allocRunPos(font, glyphCount);
 
-            font.textToGlyphs(txt, txtLen, kUTF8_SkTextEncoding, buffer.glyphs, glyphCount);
+            font.textToGlyphs(txt, txtLen, SkTextEncoding::kUTF8, buffer.glyphs, glyphCount);
 
             memset(buffer.pos, 0, sizeof(SkScalar) * glyphCount * 2);
             sk_sp<SkTextBlob> blob(builder.make());
@@ -178,7 +178,7 @@ public:
         font.setScaleX(4.2f);
         font.setTypeface(ToolUtils::create_portable_typeface());
         font.setSkewX(0.42f);
-        font.setHinting(kFull_SkFontHinting);
+        font.setHinting(SkFontHinting::kFull);
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
         font.setEmbolden(true);
         font.setLinearMetrics(true);
@@ -319,9 +319,9 @@ DEF_TEST(TextBlob_extended, reporter) {
     const char text1[] = "Foo";
     const char text2[] = "Bar";
 
-    int glyphCount = font.countText(text1, strlen(text1), kUTF8_SkTextEncoding);
+    int glyphCount = font.countText(text1, strlen(text1), SkTextEncoding::kUTF8);
     SkAutoTMalloc<uint16_t> glyphs(glyphCount);
-    (void)font.textToGlyphs(text1, strlen(text1), kUTF8_SkTextEncoding, glyphs.get(), glyphCount);
+    (void)font.textToGlyphs(text1, strlen(text1), SkTextEncoding::kUTF8, glyphs.get(), glyphCount);
 
     auto run = SkTextBlobBuilderPriv::AllocRunText(&textBlobBuilder,
             font, glyphCount, 0, 0, SkToInt(strlen(text2)), SkString(), nullptr);
@@ -362,11 +362,11 @@ static void add_run(SkTextBlobBuilder* builder, const char text[], SkScalar x, S
     font.setSize(16);
     font.setTypeface(tf);
 
-    int glyphCount = font.countText(text, strlen(text), kUTF8_SkTextEncoding);
+    int glyphCount = font.countText(text, strlen(text), SkTextEncoding::kUTF8);
 
     SkTextBlobBuilder::RunBuffer buffer = builder->allocRun(font, glyphCount, x, y);
 
-    (void)font.textToGlyphs(text, strlen(text), kUTF8_SkTextEncoding, buffer.glyphs, glyphCount);
+    (void)font.textToGlyphs(text, strlen(text), SkTextEncoding::kUTF8, buffer.glyphs, glyphCount);
 }
 
 static sk_sp<SkImage> render(const SkTextBlob* blob) {
@@ -435,7 +435,7 @@ DEF_TEST(TextBlob_serialize, reporter) {
 
 DEF_TEST(TextBlob_MakeAsDrawText, reporter) {
     const char text[] = "Hello";
-    auto blob = SkTextBlob::MakeFromString(text, SkFont(), kUTF8_SkTextEncoding);
+    auto blob = SkTextBlob::MakeFromString(text, SkFont(), SkTextEncoding::kUTF8);
 
     int runs = 0;
     for(SkTextBlobRunIterator it(blob.get()); !it.done(); it.next()) {

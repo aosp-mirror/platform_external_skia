@@ -14,7 +14,9 @@ namespace SkSL {
 
 enum class ByteCodeInstruction : uint8_t {
     kInvalid,
-    kNop,
+    kNop1,
+    kNop2,
+    kNop3,
     // B = bool, F = float, I = int, S = signed, U = unsigned
     kAddF,
     kAddI,
@@ -70,6 +72,7 @@ enum class ByteCodeInstruction : uint8_t {
     kPop,
     // Followed by a 32 bit value containing the value to push
     kPushImmediate,
+    kRemainderF,
     kRemainderS,
     kRemainderU,
     // Followed by a byte indicating the number of slots being returned
@@ -102,6 +105,10 @@ struct ByteCodeFunction {
     const FunctionDeclaration& fDeclaration;
     int fParameterCount = 0;
     int fLocalCount = 0;
+    // TODO: Compute this value analytically. For now, just pick an arbitrary value that we probably
+    // won't overflow.
+    int fStackCount = 128;
+    int fReturnCount = 0;
     std::vector<uint8_t> fCode;
 };
 

@@ -244,7 +244,7 @@ int GrContext::maxSurfaceSampleCountForColorType(SkColorType colorType) const {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool GrContext::wait(int numSemaphores, const GrBackendSemaphore waitSemaphores[]) {
-    if (!fGpu || fGpu->caps()->fenceSyncSupport()) {
+    if (!fGpu || fGpu->caps()->semaphoreSupport()) {
         return false;
     }
     for (int i = 0; i < numSemaphores; ++i) {
@@ -258,14 +258,15 @@ bool GrContext::wait(int numSemaphores, const GrBackendSemaphore waitSemaphores[
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrSemaphoresSubmitted GrContext::flush(const GrFlushInfo& info) {
+GrSemaphoresSubmitted GrContext::flush(const GrFlushInfo& info,
+                                       const GrPrepareForExternalIORequests& externalRequests) {
     ASSERT_SINGLE_OWNER
     if (this->abandoned()) {
         return GrSemaphoresSubmitted::kNo;
     }
 
-    return this->drawingManager()->flush(nullptr, SkSurface::BackendSurfaceAccess::kNoAccess,
-                                         info);
+    return this->drawingManager()->flush(nullptr, 0, SkSurface::BackendSurfaceAccess::kNoAccess,
+                                         info, externalRequests);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
