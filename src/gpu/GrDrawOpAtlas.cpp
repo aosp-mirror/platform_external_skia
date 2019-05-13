@@ -271,9 +271,8 @@ bool GrDrawOpAtlas::addToAtlas(GrResourceProvider* resourceProvider,
     for (unsigned int pageIdx = 0; pageIdx < fNumActivePages; ++pageIdx) {
         Plot* plot = fPages[pageIdx].fPlotList.tail();
         SkASSERT(plot);
-        if ((fNumActivePages == this->maxPages() &&
-             plot->lastUseToken() < target->tokenTracker()->nextTokenToFlush()) ||
-            plot->flushesSinceLastUsed() >= kRecentlyUsedCount) {
+        if (fNumActivePages == this->maxPages() &&
+            plot->lastUseToken() < target->tokenTracker()->nextTokenToFlush()) {
             this->processEvictionAndResetRects(plot);
             SkASSERT(GrBytesPerPixel(fProxies[pageIdx]->config()) == plot->bpp());
             SkDEBUGCODE(bool verify = )plot->addSubImage(width, height, image, loc);
