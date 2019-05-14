@@ -1567,6 +1567,7 @@ cc_test {
         "tests/MipMapTest.cpp",
         "tests/NonlinearBlendingTest.cpp",
         "tests/OSPathTest.cpp",
+        "tests/OctoBoundsTest.cpp",
         "tests/OffsetSimplePolyTest.cpp",
         "tests/OnFlushCallbackTest.cpp",
         "tests/OnceTest.cpp",
