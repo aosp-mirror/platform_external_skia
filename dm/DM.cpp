@@ -15,9 +15,6 @@
 #include "include/core/SkDocument.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkGraphics.h"
-#include "include/encode/SkJpegEncoder.h"
-#include "include/encode/SkPngEncoder.h"
-#include "include/encode/SkWebpEncoder.h"
 #include "include/ports/SkTypeface_win.h"
 #include "include/private/SkChecksum.h"
 #include "include/private/SkHalf.h"
@@ -25,10 +22,6 @@
 #include "include/private/SkMutex.h"
 #include "include/private/SkSpinlock.h"
 #include "include/private/SkTHash.h"
-#include "src/codec/SkIcoCodec.h"
-#include "src/codec/SkJpegCodec.h"
-#include "src/codec/SkPngCodec.h"
-#include "src/codec/SkWebpCodec.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
@@ -1392,19 +1385,6 @@ int main(int argc, char** argv) {
 #endif
     CommandLineFlags::Parse(argc, argv);
 
-    // TODO(mtklein): remove after fixing weird iOS configuration in Google3.
-#if !defined(SK_BUILD_FOR_IOS)
-
-    SkCodec::Register( SkIcoCodec::IsIco ,  SkIcoCodec::MakeFromStream);
-    SkCodec::Register(SkJpegCodec::IsJpeg, SkJpegCodec::MakeFromStream);
-    SkCodec::Register( SkPngCodec::IsPng ,  SkPngCodec::MakeFromStream);
-    SkCodec::Register(SkWebpCodec::IsWebp, SkWebpCodec::MakeFromStream);
-
-    SkRegisterEncoder(SkEncodedImageFormat::kJPEG, SkJpegEncoder::Encode);
-    SkRegisterEncoder(SkEncodedImageFormat::kPNG ,  SkPngEncoder::Encode);
-    SkRegisterEncoder(SkEncodedImageFormat::kWEBP, SkWebpEncoder::Encode);
-
-#endif
     initializeEventTracingForTools();
 
 #if !defined(SK_BUILD_FOR_GOOGLE3) && defined(SK_BUILD_FOR_IOS)
