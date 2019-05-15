@@ -247,6 +247,7 @@ cc_library_static {
         "src/core/SkStream.cpp",
         "src/core/SkStrike.cpp",
         "src/core/SkStrikeCache.cpp",
+        "src/core/SkStrikeSpec.cpp",
         "src/core/SkString.cpp",
         "src/core/SkStringUtils.cpp",
         "src/core/SkStroke.cpp",
