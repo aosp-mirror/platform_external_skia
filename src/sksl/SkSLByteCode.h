@@ -10,7 +10,14 @@
 
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 
+#include <memory>
+#include <vector>
+
 namespace SkSL {
+
+struct ByteCode;
+class  ExternalValue;
+struct FunctionDeclaration;
 
 enum class ByteCodeInstruction : uint8_t {
     kInvalid,
@@ -23,6 +30,8 @@ enum class ByteCodeInstruction : uint8_t {
     kAndB,
     kAndI,
     kBranch,
+    // Followed by a byte indicating the index of the function to call
+    kCall,
     kCompareIEQ,
     kCompareINEQ,
     kCompareFEQ,
@@ -59,11 +68,11 @@ enum class ByteCodeInstruction : uint8_t {
     kLoadGlobal,
     // Followed by a count byte (1-4), and then one byte per swizzle component (0-3).
     kLoadSwizzle,
+    kLoadSwizzleGlobal,
     kNegateF,
     kNegateS,
     kMultiplyF,
-    kMultiplyS,
-    kMultiplyU,
+    kMultiplyI,
     kNot,
     kOrB,
     kOrI,
@@ -72,6 +81,8 @@ enum class ByteCodeInstruction : uint8_t {
     kPop,
     // Followed by a 32 bit value containing the value to push
     kPushImmediate,
+    // Followed by a byte indicating external value to read
+    kReadExternal,
     kRemainderF,
     kRemainderS,
     kRemainderU,
@@ -92,16 +103,14 @@ enum class ByteCodeInstruction : uint8_t {
     // Followed by a byte indicating vector count. Modifies the next instruction to operate on the
     // indicated number of columns, e.g. kVector 2 kMultiplyf performs a float2 * float2 operation.
     kVector,
+    // Followed by a byte indicating external value to write
+    kWriteExternal,
 };
 
-struct ByteCode;
-
 struct ByteCodeFunction {
-    ByteCodeFunction(const ByteCode* owner, const FunctionDeclaration* declaration)
-        : fOwner(*owner)
-        , fDeclaration(*declaration) {}
+    ByteCodeFunction(const FunctionDeclaration* declaration)
+        : fDeclaration(*declaration) {}
 
-    const ByteCode& fOwner;
     const FunctionDeclaration& fDeclaration;
     int fParameterCount = 0;
     int fLocalCount = 0;
@@ -114,10 +123,20 @@ struct ByteCodeFunction {
 
 struct ByteCode {
     int fGlobalCount = 0;
-    int fInputCount = 0;
     // one entry per input slot, contains the global slot to which the input slot maps
     std::vector<uint8_t> fInputSlots;
     std::vector<std::unique_ptr<ByteCodeFunction>> fFunctions;
+
+    const ByteCodeFunction* getFunction(const char* name) const {
+        for (const auto& f : fFunctions) {
+            if (f->fDeclaration.fName == name) {
+                return f.get();
+            }
+        }
+        return nullptr;
+    }
+
+    std::vector<ExternalValue*> fExternalValues;
 };
 
 }

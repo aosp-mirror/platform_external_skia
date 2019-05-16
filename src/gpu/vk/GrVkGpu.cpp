@@ -426,7 +426,7 @@ bool GrVkGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
         return false;
     }
 
-    SkASSERT(!GrPixelConfigIsCompressed(vkTex->config()));
+    SkASSERT(!GrVkFormatIsCompressed(vkTex->imageFormat()));
     bool success = false;
     bool linearTiling = vkTex->isLinearTiled();
     if (linearTiling) {
@@ -457,9 +457,6 @@ bool GrVkGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
 bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
                                  GrColorType bufferColorType, GrGpuBuffer* transferBuffer,
                                  size_t bufferOffset, size_t rowBytes) {
-    // Can't transfer compressed data
-    SkASSERT(!GrPixelConfigIsCompressed(texture->config()));
-
     // Vulkan only supports 4-byte aligned offsets
     if (SkToBool(bufferOffset & 0x2)) {
         return false;
@@ -468,6 +465,10 @@ bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
     if (!vkTex) {
         return false;
     }
+
+    // Can't transfer compressed data
+    SkASSERT(!GrVkFormatIsCompressed(vkTex->imageFormat()));
+
     GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer);
     if (!vkBuffer) {
         return false;
@@ -717,7 +718,7 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int widt
         SkASSERT(tex->config() == kRGB_888_GrPixelConfig);
         // First check that we'll be able to do the copy to the to the R8G8B8 image in the end via a
         // blit or draw.
-        if (!this->vkCaps().configCanBeDstofBlit(kRGB_888_GrPixelConfig, tex->isLinearTiled()) &&
+        if (!this->vkCaps().formatCanBeDstofBlit(VK_FORMAT_R8G8B8_UNORM, tex->isLinearTiled()) &&
             !this->vkCaps().maxRenderTargetSampleCount(kRGB_888_GrPixelConfig)) {
             return false;
         }
@@ -922,7 +923,7 @@ bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int w
 
     SkTArray<size_t> individualMipOffsets(mipLevelCount);
     individualMipOffsets.push_back(0);
-    size_t combinedBufferSize = GrCompressedFormatDataSize(tex->config(), width, height);
+    size_t combinedBufferSize = GrVkFormatCompressedDataSize(tex->imageFormat(), width, height);
     int currentWidth = width;
     int currentHeight = height;
     if (!texels[0].fPixels) {
@@ -936,8 +937,8 @@ bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int w
         currentHeight = SkTMax(1, currentHeight / 2);
 
         if (texels[currentMipLevel].fPixels) {
-            const size_t dataSize = GrCompressedFormatDataSize(tex->config(), currentWidth,
-                                                               currentHeight);
+            const size_t dataSize = GrVkFormatCompressedDataSize(tex->imageFormat(), currentWidth,
+                                                                 currentHeight);
             individualMipOffsets.push_back(combinedBufferSize);
             combinedBufferSize += dataSize;
         } else {
@@ -972,8 +973,8 @@ bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int w
             SkASSERT(currentHeight == layerHeight);
             SkASSERT(0 == uploadLeft && 0 == uploadTop);
 
-            const size_t dataSize = GrCompressedFormatDataSize(tex->config(), currentWidth,
-                                                               currentHeight);
+            const size_t dataSize = GrVkFormatCompressedDataSize(tex->imageFormat(), currentWidth,
+                                                                 currentHeight);
 
             // copy data into the buffer, skipping the trailing bytes
             char* dst = buffer + individualMipOffsets[currentMipLevel];
@@ -1079,7 +1080,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted 
         return nullptr;
     }
 
-    bool isCompressed = GrPixelConfigIsCompressed(desc.fConfig);
+    bool isCompressed = GrVkFormatIsCompressed(tex->imageFormat());
     auto colorType = GrPixelConfigToColorType(desc.fConfig);
     if (mipLevelCount) {
         bool success;
@@ -1159,6 +1160,27 @@ static bool check_image_info(const GrVkCaps& caps,
     return true;
 }
 
+static bool check_tex_image_info(const GrVkCaps& caps, const GrVkImageInfo& info) {
+    if (info.fImageTiling == VK_IMAGE_TILING_OPTIMAL) {
+        if (!caps.isFormatTexturable(info.fFormat)) {
+            return false;
+        }
+    } else {
+        SkASSERT(info.fImageTiling == VK_IMAGE_TILING_LINEAR);
+        if (!caps.isFormatTexturableLinearly(info.fFormat)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool check_rt_image_info(const GrVkCaps& caps, const GrVkImageInfo& info) {
+    if (!caps.maxRenderTargetSampleCount(info.fFormat)) {
+        return false;
+    }
+    return true;
+}
+
 sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTex,
                                                GrWrapOwnership ownership, GrWrapCacheable cacheable,
                                                GrIOType ioType) {
@@ -1168,6 +1190,9 @@ sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     }
 
     if (!check_image_info(this->vkCaps(), imageInfo, backendTex.config(), false)) {
+        return nullptr;
+    }
+    if (!check_tex_image_info(this->vkCaps(), imageInfo)) {
         return nullptr;
     }
 
@@ -1194,6 +1219,12 @@ sk_sp<GrTexture> GrVkGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
     }
 
     if (!check_image_info(this->vkCaps(), imageInfo, backendTex.config(), false)) {
+        return nullptr;
+    }
+    if (!check_tex_image_info(this->vkCaps(), imageInfo)) {
+        return nullptr;
+    }
+    if (!check_rt_image_info(this->vkCaps(), imageInfo)) {
         return nullptr;
     }
 
@@ -1228,6 +1259,10 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     if (!check_image_info(this->vkCaps(), info, backendRT.config(), true)) {
         return nullptr;
     }
+    if (!check_rt_image_info(this->vkCaps(), info)) {
+        return nullptr;
+    }
+
 
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
@@ -1260,7 +1295,9 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
     if (!check_image_info(this->vkCaps(), imageInfo, tex.config(), false)) {
         return nullptr;
     }
-
+    if (!check_rt_image_info(this->vkCaps(), imageInfo)) {
+        return nullptr;
+    }
 
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
@@ -1318,8 +1355,8 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
 
     // determine if we can blit to and from this format
     const GrVkCaps& caps = this->vkCaps();
-    if (!caps.configCanBeDstofBlit(tex->config(), false) ||
-        !caps.configCanBeSrcofBlit(tex->config(), false) ||
+    if (!caps.formatCanBeDstofBlit(vkTex->imageFormat(), false) ||
+        !caps.formatCanBeSrcofBlit(vkTex->imageFormat(), false) ||
         !caps.mipMapSupport()) {
         return false;
     }
@@ -1446,6 +1483,46 @@ bool copy_testing_data(GrVkGpu* gpu, const void* srcData, const GrVkAlloc& alloc
 }
 
 #if GR_TEST_UTILS
+static size_t compute_combined_buffer_size(VkFormat format, size_t bpp, int w, int h,
+                                           SkTArray<size_t>* individualMipOffsets,
+                                           uint32_t mipLevels) {
+
+    size_t combinedBufferSize = w * bpp * h;
+    if (GrVkFormatIsCompressed(format)) {
+        combinedBufferSize = GrVkFormatCompressedDataSize(format, w, h);
+    }
+
+    int currentWidth = w;
+    int currentHeight = h;
+
+    // The Vulkan spec for copying a buffer to an image, requires that the alignment must be at
+    // least 4 bytes and a multiple of the bytes per pixel of the image config.
+    SkASSERT(bpp == 1 || bpp == 2 || bpp == 3 || bpp == 4 || bpp == 8 || bpp == 16);
+    int desiredAlignment = (bpp == 3) ? 12 : (bpp > 4 ? bpp : 4);
+
+    for (uint32_t currentMipLevel = 1; currentMipLevel < mipLevels; currentMipLevel++) {
+        currentWidth = SkTMax(1, currentWidth / 2);
+        currentHeight = SkTMax(1, currentHeight / 2);
+
+        size_t trimmedSize;
+        if (GrVkFormatIsCompressed(format)) {
+            trimmedSize = GrVkFormatCompressedDataSize(format, currentWidth, currentHeight);
+        } else {
+            trimmedSize = currentWidth * bpp * currentHeight;
+        }
+        const size_t alignmentDiff = combinedBufferSize % desiredAlignment;
+        if (alignmentDiff != 0) {
+            combinedBufferSize += desiredAlignment - alignmentDiff;
+        }
+        SkASSERT((0 == combinedBufferSize % 4) && (0 == combinedBufferSize % bpp));
+
+        individualMipOffsets->push_back(combinedBufferSize);
+        combinedBufferSize += trimmedSize;
+    }
+
+    return combinedBufferSize;
+}
+
 bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool texturable,
                                        bool renderable, GrMipMapped mipMapped, const void* srcData,
                                        size_t srcRowBytes, GrVkImageInfo* info) {
@@ -1454,8 +1531,8 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
         SkASSERT(GrMipMapped::kNo == mipMapped);
         SkASSERT(!srcData);
     }
-    VkFormat pixelFormat;
-    if (!GrPixelConfigToVkFormat(config, &pixelFormat)) {
+    VkFormat vkFormat;
+    if (!GrPixelConfigToVkFormat(config, &vkFormat)) {
         return false;
     }
 
@@ -1503,7 +1580,7 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
             nullptr,                              // pNext
             0,                                    // VkImageCreateFlags
             VK_IMAGE_TYPE_2D,                     // VkImageType
-            pixelFormat,                          // VkFormat
+            vkFormat,                             // VkFormat
             {(uint32_t)w, (uint32_t)h, 1},        // VkExtent3D
             mipLevels,                            // mipLevels
             1,                                    // arrayLayers
@@ -1555,7 +1632,7 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
     err = VK_CALL(BeginCommandBuffer(cmdBuffer, &cmdBufferBeginInfo));
     SkASSERT(!err);
 
-    size_t bpp = GrBytesPerPixel(config);
+    size_t bpp = GrVkBytesPerFormat(vkFormat);
     SkASSERT(w && h);
 
     const size_t trimRowBytes = w * bpp;
@@ -1565,35 +1642,9 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
 
     SkTArray<size_t> individualMipOffsets(mipLevels);
     individualMipOffsets.push_back(0);
-    size_t combinedBufferSize = w * bpp * h;
-    if (GrPixelConfigIsCompressed(config)) {
-        combinedBufferSize = GrCompressedFormatDataSize(config, w, h);
-        bpp = 4; // we have at least this alignment, which will pass the code below
-    }
-    int currentWidth = w;
-    int currentHeight = h;
-    // The alignment must be at least 4 bytes and a multiple of the bytes per pixel of the image
-    // config. This works with the assumption that the bytes in pixel config is always a power
-    // of 2.
-    SkASSERT((bpp & (bpp - 1)) == 0);
-    const size_t alignmentMask = 0x3 | (bpp - 1);
-    for (uint32_t currentMipLevel = 1; currentMipLevel < mipLevels; currentMipLevel++) {
-        currentWidth = SkTMax(1, currentWidth / 2);
-        currentHeight = SkTMax(1, currentHeight / 2);
 
-        size_t trimmedSize;
-        if (GrPixelConfigIsCompressed(config)) {
-            trimmedSize = GrCompressedFormatDataSize(config, currentWidth, currentHeight);
-        } else {
-            trimmedSize = currentWidth * bpp * currentHeight;
-        }
-        const size_t alignmentDiff = combinedBufferSize & alignmentMask;
-        if (alignmentDiff != 0) {
-            combinedBufferSize += alignmentMask - alignmentDiff + 1;
-        }
-        individualMipOffsets.push_back(combinedBufferSize);
-        combinedBufferSize += trimmedSize;
-    }
+    size_t combinedBufferSize = compute_combined_buffer_size(vkFormat, bpp, w, h,
+                                                             &individualMipOffsets, mipLevels);
 
     VkBufferCreateInfo bufInfo;
     memset(&bufInfo, 0, sizeof(VkBufferCreateInfo));
@@ -1624,14 +1675,14 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
         return false;
     }
 
-    currentWidth = w;
-    currentHeight = h;
+    int currentWidth = w;
+    int currentHeight = h;
     for (uint32_t currentMipLevel = 0; currentMipLevel < mipLevels; currentMipLevel++) {
         SkASSERT(0 == currentMipLevel || !srcData);
         size_t bufferOffset = individualMipOffsets[currentMipLevel];
         bool result;
-        if (GrPixelConfigIsCompressed(config)) {
-            size_t levelSize = GrCompressedFormatDataSize(config, currentWidth, currentHeight);
+        if (GrVkFormatIsCompressed(vkFormat)) {
+            size_t levelSize = GrVkFormatCompressedDataSize(vkFormat, currentWidth, currentHeight);
             size_t currentRowBytes = levelSize / currentHeight;
             result = copy_testing_data(this, srcData, bufferAlloc, bufferOffset, currentRowBytes,
                                        currentRowBytes, currentRowBytes, currentHeight);
@@ -1769,7 +1820,7 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
     info->fAlloc = alloc;
     info->fImageTiling = VK_IMAGE_TILING_OPTIMAL;
     info->fImageLayout = initialLayout;
-    info->fFormat = pixelFormat;
+    info->fFormat = vkFormat;
     info->fLevelCount = mipLevels;
 
     return true;

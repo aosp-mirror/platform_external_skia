@@ -22,6 +22,7 @@
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
+#include "src/sksl/ir/SkSLExternalValueReference.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
@@ -139,6 +140,39 @@ private:
 #endif
     };
 
+    class DeferredCallTarget {
+    public:
+        DeferredCallTarget(ByteCodeGenerator* generator, const FunctionDeclaration& function)
+                : fGenerator(*generator)
+                , fCode(generator->fCode)
+                , fOffset(generator->fCode->size())
+                , fFunction(function) {
+            generator->write8(0);
+        }
+
+        bool set() {
+            size_t idx;
+            const auto& functions(fGenerator.fOutput->fFunctions);
+            for (idx = 0; idx < functions.size(); ++idx) {
+                if (fFunction.matches(functions[idx]->fDeclaration)) {
+                    break;
+                }
+            }
+            if (idx > 255 || idx > functions.size()) {
+                SkASSERT(false);
+                return false;
+            }
+            (*fCode)[fOffset] = idx;
+            return true;
+        }
+
+    private:
+        ByteCodeGenerator& fGenerator;
+        std::vector<uint8_t>* fCode;
+        size_t fOffset;
+        const FunctionDeclaration& fFunction;
+    };
+
     /**
      * Returns the local slot into which var should be stored, allocating a new slot if it has not
      * already been assigned one. Compound variables (e.g. vectors) will consume more than one local
@@ -163,6 +197,8 @@ private:
     void writeFunctionCall(const FunctionCall& c);
 
     void writeConstructor(const Constructor& c);
+
+    void writeExternalValue(const ExternalValueReference& r);
 
     void writeFieldAccess(const FieldAccess& f);
 
@@ -229,6 +265,8 @@ private:
     std::stack<std::vector<DeferredLocation>> fContinueTargets;
 
     std::stack<std::vector<DeferredLocation>> fBreakTargets;
+
+    std::vector<DeferredCallTarget> fCallTargets;
 
     int fParameterCount;
 
