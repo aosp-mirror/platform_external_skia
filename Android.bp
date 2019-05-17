@@ -1433,6 +1433,7 @@ cc_test {
         "tests/ApplyGammaTest.cpp",
         "tests/ArenaAllocTest.cpp",
         "tests/AsADashTest.cpp",
+        "tests/BackendAllocationTest.cpp",
         "tests/BadIcoTest.cpp",
         "tests/BitSetTest.cpp",
         "tests/BitmapCopyTest.cpp",
