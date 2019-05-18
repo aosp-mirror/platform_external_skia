@@ -80,6 +80,7 @@ void test(skiatest::Reporter* r, const char* src, float inR, float inG, float in
             printf("    expected (%f, %f, %f, %f), but received (%f, %f, %f, %f)\n", expectedR,
                    expectedG, expectedB, expectedA, inoutColor[0], inoutColor[1], inoutColor[2],
                    inoutColor[3]);
+            interpreter.disassemble(*main);
         }
         REPORTER_ASSERT(r, inoutColor[0] == expectedR);
         REPORTER_ASSERT(r, inoutColor[1] == expectedG);
@@ -145,6 +146,13 @@ DEF_TEST(SkSLInterpreterRemainder, r) {
          2, 0, 0, 0);
     test(r, "void main(inout half4 color) { int2 a = int2(8, 10); a %= 6; color.rg = a; }", 0, 0, 0,
          0, 2, 4, 0, 0);
+}
+
+DEF_TEST(SkSLInterpreterTernary, r) {
+    test(r, "void main(inout half4 color) { color.r = color.g > color.b ? color.g : color.b; }",
+         0, 1, 2, 0, 2, 1, 2, 0);
+    test(r, "void main(inout half4 color) { color.r = color.g > color.b ? color.g : color.b; }",
+         0, 3, 2, 0, 3, 3, 2, 0);
 }
 
 DEF_TEST(SkSLInterpreterCast, r) {
@@ -260,6 +268,11 @@ DEF_TEST(SkSLInterpreterFor, r) {
          495, 0, 0, 0);
 }
 
+DEF_TEST(SkSLInterpreterPrefixPostfix, r) {
+    test(r, "void main(inout half4 color) { color.r = ++color.g; }", 1, 2, 3, 4, 3, 3, 3, 4);
+    test(r, "void main(inout half4 color) { color.r = color.g++; }", 1, 2, 3, 4, 2, 3, 3, 4);
+}
+
 DEF_TEST(SkSLInterpreterSwizzle, r) {
     test(r, "void main(inout half4 color) { color = color.abgr; }", 1, 2, 3, 4, 4, 3, 2, 1);
     test(r, "void main(inout half4 color) { color.rgb = half4(5, 6, 7, 8).bbg; }", 1, 2, 3, 4, 7, 7,
@@ -274,6 +287,8 @@ DEF_TEST(SkSLInterpreterGlobal, r) {
     test(r, "float4 x; void main(inout float4 color) { x = color * 2; color = x; }",
          1, 2, 3, 4, 2, 4, 6, 8);
     test(r, "float4 x; void main(inout float4 color) { x = float4(5, 6, 7, 8); color = x.wzyx; }",
+         1, 2, 3, 4, 8, 7, 6, 5);
+    test(r, "float4 x; void main(inout float4 color) { x.wzyx = float4(5, 6, 7, 8); color = x; }",
          1, 2, 3, 4, 8, 7, 6, 5);
 }
 
@@ -342,7 +357,7 @@ DEF_TEST(SkSLInterpreterFunctions, r) {
         "float dot(float3 a, float3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }\n"
         "float dot3_test(float x) { return dot(float3(x, x + 1, x + 2), float3(1, -1, 2)); }\n"
         "float dot2_test(float x) { return dot(float2(x, x + 1), float2(1, -1)); }\n"
-        "int fib(int i) { if (i < 2) { return 1; } else { return fib(i - 1) + fib(i - 2); } }";
+        "int fib(int i) { return (i < 2) ? 1 : fib(i - 1) + fib(i - 2); }";
 
     SkSL::Compiler compiler;
     SkSL::Program::Settings settings;
