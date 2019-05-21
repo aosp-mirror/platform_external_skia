@@ -179,6 +179,7 @@ cc_library_static {
         "src/core/SkMatrix.cpp",
         "src/core/SkMatrix44.cpp",
         "src/core/SkMatrixImageFilter.cpp",
+        "src/core/SkMiniRecorder.cpp",
         "src/core/SkMipMap.cpp",
         "src/core/SkModeColorFilter.cpp",
         "src/core/SkMultiPictureDraw.cpp",

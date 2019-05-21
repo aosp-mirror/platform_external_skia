@@ -557,10 +557,8 @@
   },
   {
     "failure": {
-      "failure": {
-        "step": "parse lottie 3!.json trace"
-      },
-      "humanReason": "Step('parse lottie 3!.json trace') failed with return_code 1"
+      "failure": {},
+      "humanReason": "Step('parse lottie 3!.json trace') (retcode: 1)"
     },
     "name": "$result"
   }

@@ -228,10 +228,8 @@
   },
   {
     "failure": {
-      "failure": {
-        "step": "Upload SKPs"
-      },
-      "humanReason": "Step('Upload SKPs') failed with return_code 1"
+      "failure": {},
+      "humanReason": "Step('Upload SKPs') (retcode: 1)"
     },
     "name": "$result"
   }
