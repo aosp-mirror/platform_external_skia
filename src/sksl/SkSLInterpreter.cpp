@@ -95,7 +95,7 @@ void Interpreter::disassemble(const ByteCodeFunction& f) {
     const uint8_t* ip = f.fCode.data();
     while (ip < f.fCode.data() + f.fCode.size()) {
         printf("%d: ", (int) (ip - f.fCode.data()));
-        switch ((ByteCodeInstruction) READ8()) {
+        switch ((ByteCodeInstruction) READ16()) {
             VECTOR_DISASSEMBLE(kAddF, "addf")
             VECTOR_DISASSEMBLE(kAddI, "addi")
             case ByteCodeInstruction::kAndB: printf("andb"); break;
@@ -163,7 +163,7 @@ void Interpreter::disassemble(const ByteCodeFunction& f) {
             VECTOR_DISASSEMBLE(kMultiplyF, "multiplyf")
             VECTOR_DISASSEMBLE(kMultiplyI, "multiplyi")
             VECTOR_DISASSEMBLE(kNegateF, "negatef")
-            VECTOR_DISASSEMBLE(kNegateS, "negates")
+            VECTOR_DISASSEMBLE(kNegateI, "negatei")
             VECTOR_DISASSEMBLE(kNot, "not")
             VECTOR_DISASSEMBLE(kOrB, "orb")
             VECTOR_DISASSEMBLE(kOrI, "ori")
@@ -292,7 +292,7 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
     std::vector<StackFrame> frames;
 
     for (;;) {
-        ByteCodeInstruction inst = (ByteCodeInstruction) READ8();
+        ByteCodeInstruction inst = (ByteCodeInstruction) READ16();
 #ifdef TRACE
         printf("at %d\n", (int) (ip - code - 1));
 #endif
@@ -431,10 +431,10 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             case ByteCodeInstruction::kNegateF : sp[ 0].fFloat = -sp[ 0].fFloat;
                                                  break;
 
-            case ByteCodeInstruction::kNegateS4: sp[-3].fSigned = -sp[-3].fSigned;
-            case ByteCodeInstruction::kNegateS3: sp[-2].fSigned = -sp[-2].fSigned;
-            case ByteCodeInstruction::kNegateS2: sp[-1].fSigned = -sp[-1].fSigned;
-            case ByteCodeInstruction::kNegateS : sp[ 0].fSigned = -sp [0].fSigned;
+            case ByteCodeInstruction::kNegateI4: sp[-3].fSigned = -sp[-3].fSigned;
+            case ByteCodeInstruction::kNegateI3: sp[-2].fSigned = -sp[-2].fSigned;
+            case ByteCodeInstruction::kNegateI2: sp[-1].fSigned = -sp[-1].fSigned;
+            case ByteCodeInstruction::kNegateI : sp[ 0].fSigned = -sp [0].fSigned;
                                                  break;
 
             case ByteCodeInstruction::kPop4: POP();

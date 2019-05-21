@@ -20,8 +20,7 @@ class  ExternalValue;
 struct FunctionDeclaration;
 
 #define VECTOR(name) name, name ## 2, name ## 3, name ## 4
-enum class ByteCodeInstruction : uint8_t {
-    kInvalid,
+enum class ByteCodeInstruction : uint16_t {
     // B = bool, F = float, I = int, S = signed, U = unsigned
     VECTOR(kAddF),
     VECTOR(kAddI),
@@ -68,7 +67,7 @@ enum class ByteCodeInstruction : uint8_t {
     kLoadSwizzle,
     kLoadSwizzleGlobal,
     VECTOR(kNegateF),
-    VECTOR(kNegateS),
+    VECTOR(kNegateI),
     VECTOR(kMultiplyF),
     VECTOR(kMultiplyI),
     VECTOR(kNot),
@@ -102,9 +101,7 @@ enum class ByteCodeInstruction : uint8_t {
     VECTOR(kXorI),
     // Followed by a byte indicating external value to write
     VECTOR(kWriteExternal),
-    kLast
 };
-static_assert((int) ByteCodeInstruction::kLast <= 256, "opcodes must fit into a single byte");
 #undef VECTOR
 
 struct ByteCodeFunction {

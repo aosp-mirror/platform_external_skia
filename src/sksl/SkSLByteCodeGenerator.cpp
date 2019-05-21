@@ -178,7 +178,7 @@ void ByteCodeGenerator::write32(uint32_t i) {
 }
 
 void ByteCodeGenerator::write(ByteCodeInstruction i) {
-    this->write8((uint8_t) i);
+    this->write16((uint16_t)i);
 }
 
 static ByteCodeInstruction vector_instruction(ByteCodeInstruction base, int count) {
@@ -436,8 +436,8 @@ void ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p) {
         case Token::Kind::MINUS: {
             this->writeExpression(*p.fOperand);
             this->writeTypedInstruction(p.fType,
-                                        ByteCodeInstruction::kNegateS,
-                                        ByteCodeInstruction::kInvalid,
+                                        ByteCodeInstruction::kNegateI,
+                                        ByteCodeInstruction::kNegateI,
                                         ByteCodeInstruction::kNegateF,
                                         slot_count(p.fOperand->fType));
             break;
