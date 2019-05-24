@@ -8,6 +8,7 @@
 #ifndef SKSL_STANDALONE
 
 #include "src/core/SkRasterPipeline.h"
+#include "src/sksl/SkSLByteCodeGenerator.h"
 #include "src/sksl/SkSLExternalValue.h"
 #include "src/sksl/SkSLInterpreter.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -64,8 +65,7 @@ void Interpreter::run(const ByteCodeFunction& f, Interpreter::Value args[],
     this->innerRun(f, stack, outReturn);
 
     for (const Variable* p : f.fDeclaration.fParameters) {
-        const int nvalues = p->fType.columns()
-                          * p->fType.rows();
+        const int nvalues = ByteCodeGenerator::SlotCount(p->fType);
         if (p->fModifiers.fFlags & Modifiers::kOut_Flag) {
             memcpy(args, stack, nvalues * sizeof(Value));
         }
@@ -85,152 +85,181 @@ static T unaligned_load(const void* ptr) {
 #define READ16() (ip += 2, unaligned_load<uint16_t>(ip - 2))
 #define READ32() (ip += 4, unaligned_load<uint32_t>(ip - 4))
 
-#define VECTOR_DISASSEMBLE(op, text)                               \
+#define VECTOR_DISASSEMBLE(op, text)                          \
     case ByteCodeInstruction::op: printf(text); break;        \
     case ByteCodeInstruction::op##2: printf(text "2"); break; \
     case ByteCodeInstruction::op##3: printf(text "3"); break; \
     case ByteCodeInstruction::op##4: printf(text "4"); break;
 
+static const uint8_t* disassemble_instruction(const uint8_t* ip) {
+    switch ((ByteCodeInstruction) READ16()) {
+        VECTOR_DISASSEMBLE(kAddF, "addf")
+        VECTOR_DISASSEMBLE(kAddI, "addi")
+        case ByteCodeInstruction::kAndB: printf("andb"); break;
+        case ByteCodeInstruction::kAndI: printf("andi"); break;
+        case ByteCodeInstruction::kBranch: printf("branch %d", READ16()); break;
+        case ByteCodeInstruction::kCall: printf("call %d", READ8()); break;
+        case ByteCodeInstruction::kCallExternal: {
+            int argumentCount = READ8();
+            int returnCount = READ8();
+            int externalValue = READ8();
+            printf("callexternal %d, %d, %d", argumentCount, returnCount, externalValue);
+            break;
+        }
+        VECTOR_DISASSEMBLE(kCompareIEQ, "compareieq")
+        VECTOR_DISASSEMBLE(kCompareINEQ, "compareineq")
+        VECTOR_DISASSEMBLE(kCompareFEQ, "comparefeq")
+        VECTOR_DISASSEMBLE(kCompareFNEQ, "comparefneq")
+        VECTOR_DISASSEMBLE(kCompareFGT, "comparefgt")
+        VECTOR_DISASSEMBLE(kCompareFGTEQ, "comparefgteq")
+        VECTOR_DISASSEMBLE(kCompareFLT, "compareflt")
+        VECTOR_DISASSEMBLE(kCompareFLTEQ, "compareflteq")
+        VECTOR_DISASSEMBLE(kCompareSGT, "comparesgt")
+        VECTOR_DISASSEMBLE(kCompareSGTEQ, "comparesgteq")
+        VECTOR_DISASSEMBLE(kCompareSLT, "compareslt")
+        VECTOR_DISASSEMBLE(kCompareSLTEQ, "compareslteq")
+        VECTOR_DISASSEMBLE(kCompareUGT, "compareugt")
+        VECTOR_DISASSEMBLE(kCompareUGTEQ, "compareugteq")
+        VECTOR_DISASSEMBLE(kCompareULT, "compareult")
+        VECTOR_DISASSEMBLE(kCompareULTEQ, "compareulteq")
+        case ByteCodeInstruction::kConditionalBranch:
+            printf("conditionalbranch %d", READ16());
+            break;
+        VECTOR_DISASSEMBLE(kConvertFtoI, "convertftoi")
+        VECTOR_DISASSEMBLE(kConvertStoF, "convertstof")
+        VECTOR_DISASSEMBLE(kConvertUtoF, "convertutof")
+        VECTOR_DISASSEMBLE(kCos, "cos")
+        case ByteCodeInstruction::kDebugPrint: printf("debugprint"); break;
+        VECTOR_DISASSEMBLE(kDivideF, "dividef")
+        VECTOR_DISASSEMBLE(kDivideS, "divideS")
+        VECTOR_DISASSEMBLE(kDivideU, "divideu")
+        VECTOR_DISASSEMBLE(kDup, "dup")
+        case ByteCodeInstruction::kDupN: printf("dupN %d", READ8()); break;
+        case ByteCodeInstruction::kLoad: printf("load %d", READ8()); break;
+        case ByteCodeInstruction::kLoad2: printf("load2 %d", READ8()); break;
+        case ByteCodeInstruction::kLoad3: printf("load3 %d", READ8()); break;
+        case ByteCodeInstruction::kLoad4: printf("load4 %d", READ8()); break;
+        case ByteCodeInstruction::kLoadGlobal: printf("loadglobal %d", READ8()); break;
+        case ByteCodeInstruction::kLoadGlobal2: printf("loadglobal2 %d", READ8()); break;
+        case ByteCodeInstruction::kLoadGlobal3: printf("loadglobal3 %d", READ8()); break;
+        case ByteCodeInstruction::kLoadGlobal4: printf("loadglobal4 %d", READ8()); break;
+        case ByteCodeInstruction::kLoadSwizzle: {
+            int target = READ8();
+            int count = READ8();
+            printf("loadswizzle %d %d", target, count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
+        case ByteCodeInstruction::kLoadSwizzleGlobal: {
+            int target = READ8();
+            int count = READ8();
+            printf("loadswizzleglobal %d %d", target, count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
+        case ByteCodeInstruction::kLoadExtended: printf("loadextended %d", READ8()); break;
+        case ByteCodeInstruction::kLoadExtendedGlobal: printf("loadextendedglobal %d", READ8());
+            break;
+        VECTOR_DISASSEMBLE(kMultiplyF, "multiplyf")
+        VECTOR_DISASSEMBLE(kMultiplyI, "multiplyi")
+        VECTOR_DISASSEMBLE(kNegateF, "negatef")
+        VECTOR_DISASSEMBLE(kNegateI, "negatei")
+        VECTOR_DISASSEMBLE(kNot, "not")
+        VECTOR_DISASSEMBLE(kOrB, "orb")
+        VECTOR_DISASSEMBLE(kOrI, "ori")
+        VECTOR_DISASSEMBLE(kPop, "pop")
+        case ByteCodeInstruction::kPopN: printf("popN %d", READ8()); break;
+        case ByteCodeInstruction::kPushImmediate: {
+            uint32_t v = READ32();
+            union { uint32_t u; float f; } pun = { v };
+            printf("pushimmediate %s", (to_string(v) + "(" + to_string(pun.f) + ")").c_str());
+            break;
+        }
+        case ByteCodeInstruction::kReadExternal: printf("readexternal %d", READ8()); break;
+        case ByteCodeInstruction::kReadExternal2: printf("readexternal2 %d", READ8()); break;
+        case ByteCodeInstruction::kReadExternal3: printf("readexternal3 %d", READ8()); break;
+        case ByteCodeInstruction::kReadExternal4: printf("readexternal4 %d", READ8()); break;
+        VECTOR_DISASSEMBLE(kRemainderF, "remainderf")
+        VECTOR_DISASSEMBLE(kRemainderS, "remainders")
+        VECTOR_DISASSEMBLE(kRemainderU, "remainderu")
+        case ByteCodeInstruction::kReturn: printf("return %d", READ8()); break;
+        VECTOR_DISASSEMBLE(kSin, "sin")
+        VECTOR_DISASSEMBLE(kSqrt, "sqrt")
+        case ByteCodeInstruction::kStore: printf("store %d", READ8()); break;
+        case ByteCodeInstruction::kStore2: printf("store2 %d", READ8()); break;
+        case ByteCodeInstruction::kStore3: printf("store3 %d", READ8()); break;
+        case ByteCodeInstruction::kStore4: printf("store4 %d", READ8()); break;
+        case ByteCodeInstruction::kStoreGlobal: printf("storeglobal %d", READ8()); break;
+        case ByteCodeInstruction::kStoreGlobal2: printf("storeglobal2 %d", READ8()); break;
+        case ByteCodeInstruction::kStoreGlobal3: printf("storeglobal3 %d", READ8()); break;
+        case ByteCodeInstruction::kStoreGlobal4: printf("storeglobal4 %d", READ8()); break;
+        case ByteCodeInstruction::kStoreSwizzle: {
+            int target = READ8();
+            int count = READ8();
+            printf("storeswizzle %d %d", target, count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
+        case ByteCodeInstruction::kStoreSwizzleGlobal: {
+            int target = READ8();
+            int count = READ8();
+            printf("storeswizzleglobal %d %d", target, count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
+        case ByteCodeInstruction::kStoreSwizzleIndirect: {
+            int count = READ8();
+            printf("storeswizzleindirect %d", count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
+        case ByteCodeInstruction::kStoreSwizzleIndirectGlobal: {
+            int count = READ8();
+            printf("storeswizzleindirectglobal %d", count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
+        case ByteCodeInstruction::kStoreExtended: printf("storeextended %d", READ8()); break;
+        case ByteCodeInstruction::kStoreExtendedGlobal: printf("storeextendedglobal %d", READ8());
+            break;
+        VECTOR_DISASSEMBLE(kSubtractF, "subtractf")
+        VECTOR_DISASSEMBLE(kSubtractI, "subtracti")
+        case ByteCodeInstruction::kSwizzle: {
+            printf("swizzle %d, ", READ8());
+            int count = READ8();
+            printf("%d", count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
+        VECTOR_DISASSEMBLE(kTan, "tan")
+        case ByteCodeInstruction::kWriteExternal: printf("writeexternal %d", READ8()); break;
+        case ByteCodeInstruction::kWriteExternal2: printf("writeexternal2 %d", READ8()); break;
+        case ByteCodeInstruction::kWriteExternal3: printf("writeexternal3 %d", READ8()); break;
+        case ByteCodeInstruction::kWriteExternal4: printf("writeexternal4 %d", READ8()); break;
+        default: printf("unknown(%d)\n", *(ip - 1)); SkASSERT(false);
+    }
+    return ip;
+}
+
 void Interpreter::disassemble(const ByteCodeFunction& f) {
     const uint8_t* ip = f.fCode.data();
     while (ip < f.fCode.data() + f.fCode.size()) {
         printf("%d: ", (int) (ip - f.fCode.data()));
-        switch ((ByteCodeInstruction) READ16()) {
-            VECTOR_DISASSEMBLE(kAddF, "addf")
-            VECTOR_DISASSEMBLE(kAddI, "addi")
-            case ByteCodeInstruction::kAndB: printf("andb"); break;
-            case ByteCodeInstruction::kAndI: printf("andi"); break;
-            case ByteCodeInstruction::kBranch: printf("branch %d", READ16()); break;
-            case ByteCodeInstruction::kCall: printf("call %d", READ8()); break;
-            case ByteCodeInstruction::kCallExternal: {
-                int argumentCount = READ8();
-                int returnCount = READ8();
-                int externalValue = READ8();
-                printf("callexternal %d, %d, %d", argumentCount, returnCount, externalValue);
-                break;
-            }
-            VECTOR_DISASSEMBLE(kCompareIEQ, "compareieq")
-            VECTOR_DISASSEMBLE(kCompareINEQ, "compareineq")
-            VECTOR_DISASSEMBLE(kCompareFEQ, "comparefeq")
-            VECTOR_DISASSEMBLE(kCompareFNEQ, "comparefneq")
-            VECTOR_DISASSEMBLE(kCompareFGT, "comparefgt")
-            VECTOR_DISASSEMBLE(kCompareFGTEQ, "comparefgteq")
-            VECTOR_DISASSEMBLE(kCompareFLT, "compareflt")
-            VECTOR_DISASSEMBLE(kCompareFLTEQ, "compareflteq")
-            VECTOR_DISASSEMBLE(kCompareSGT, "comparesgt")
-            VECTOR_DISASSEMBLE(kCompareSGTEQ, "comparesgteq")
-            VECTOR_DISASSEMBLE(kCompareSLT, "compareslt")
-            VECTOR_DISASSEMBLE(kCompareSLTEQ, "compareslteq")
-            VECTOR_DISASSEMBLE(kCompareUGT, "compareugt")
-            VECTOR_DISASSEMBLE(kCompareUGTEQ, "compareugteq")
-            VECTOR_DISASSEMBLE(kCompareULT, "compareult")
-            VECTOR_DISASSEMBLE(kCompareULTEQ, "compareulteq")
-            case ByteCodeInstruction::kConditionalBranch:
-                printf("conditionalbranch %d", READ16());
-                break;
-            VECTOR_DISASSEMBLE(kConvertFtoI, "convertftoi")
-            VECTOR_DISASSEMBLE(kConvertStoF, "convertstof")
-            VECTOR_DISASSEMBLE(kConvertUtoF, "convertutof")
-            VECTOR_DISASSEMBLE(kCos, "cos")
-            case ByteCodeInstruction::kDebugPrint: printf("debugprint"); break;
-            VECTOR_DISASSEMBLE(kDivideF, "dividef")
-            VECTOR_DISASSEMBLE(kDivideS, "divideS")
-            VECTOR_DISASSEMBLE(kDivideU, "divideu")
-            VECTOR_DISASSEMBLE(kDup, "dup")
-            case ByteCodeInstruction::kLoad: printf("load %d", READ8()); break;
-            case ByteCodeInstruction::kLoad2: printf("load2 %d", READ8()); break;
-            case ByteCodeInstruction::kLoad3: printf("load3 %d", READ8()); break;
-            case ByteCodeInstruction::kLoad4: printf("load4 %d", READ8()); break;
-            case ByteCodeInstruction::kLoadGlobal: printf("loadglobal %d", READ8()); break;
-            case ByteCodeInstruction::kLoadGlobal2: printf("loadglobal2 %d", READ8()); break;
-            case ByteCodeInstruction::kLoadGlobal3: printf("loadglobal3 %d", READ8()); break;
-            case ByteCodeInstruction::kLoadGlobal4: printf("loadglobal4 %d", READ8()); break;
-            case ByteCodeInstruction::kLoadSwizzle: {
-                int target = READ8();
-                int count = READ8();
-                printf("loadswizzle %d %d", target, count);
-                for (int i = 0; i < count; ++i) {
-                    printf(", %d", READ8());
-                }
-                break;
-            }
-            case ByteCodeInstruction::kLoadSwizzleGlobal: {
-                int target = READ8();
-                int count = READ8();
-                printf("loadswizzleglobal %d %d", target, count);
-                for (int i = 0; i < count; ++i) {
-                    printf(", %d", READ8());
-                }
-                break;
-            }
-            VECTOR_DISASSEMBLE(kMultiplyF, "multiplyf")
-            VECTOR_DISASSEMBLE(kMultiplyI, "multiplyi")
-            VECTOR_DISASSEMBLE(kNegateF, "negatef")
-            VECTOR_DISASSEMBLE(kNegateI, "negatei")
-            VECTOR_DISASSEMBLE(kNot, "not")
-            VECTOR_DISASSEMBLE(kOrB, "orb")
-            VECTOR_DISASSEMBLE(kOrI, "ori")
-            VECTOR_DISASSEMBLE(kPop, "pop")
-            case ByteCodeInstruction::kPushImmediate: {
-                uint32_t v = READ32();
-                union { uint32_t u; float f; } pun = { v };
-                printf("pushimmediate %s", (to_string(v) + "(" + to_string(pun.f) + ")").c_str());
-                break;
-            }
-            case ByteCodeInstruction::kReadExternal: printf("readexternal %d", READ8()); break;
-            case ByteCodeInstruction::kReadExternal2: printf("readexternal2 %d", READ8()); break;
-            case ByteCodeInstruction::kReadExternal3: printf("readexternal3 %d", READ8()); break;
-            case ByteCodeInstruction::kReadExternal4: printf("readexternal4 %d", READ8()); break;
-            VECTOR_DISASSEMBLE(kRemainderF, "remainderf")
-            VECTOR_DISASSEMBLE(kRemainderS, "remainders")
-            VECTOR_DISASSEMBLE(kRemainderU, "remainderu")
-            case ByteCodeInstruction::kReturn: printf("return %d", READ8()); break;
-            VECTOR_DISASSEMBLE(kSin, "sin")
-            VECTOR_DISASSEMBLE(kSqrt, "sqrt")
-            case ByteCodeInstruction::kStore: printf("store %d", READ8()); break;
-            case ByteCodeInstruction::kStore2: printf("store2 %d", READ8()); break;
-            case ByteCodeInstruction::kStore3: printf("store3 %d", READ8()); break;
-            case ByteCodeInstruction::kStore4: printf("store4 %d", READ8()); break;
-            case ByteCodeInstruction::kStoreGlobal: printf("storeglobal %d", READ8()); break;
-            case ByteCodeInstruction::kStoreGlobal2: printf("storeglobal2 %d", READ8()); break;
-            case ByteCodeInstruction::kStoreGlobal3: printf("storeglobal3 %d", READ8()); break;
-            case ByteCodeInstruction::kStoreGlobal4: printf("storeglobal4 %d", READ8()); break;
-            case ByteCodeInstruction::kStoreSwizzle: {
-                int target = READ8();
-                int count = READ8();
-                printf("storeswizzle %d %d", target, count);
-                for (int i = 0; i < count; ++i) {
-                    printf(", %d", READ8());
-                }
-                break;
-            }
-            case ByteCodeInstruction::kStoreSwizzleGlobal: {
-                int target = READ8();
-                int count = READ8();
-                printf("storeswizzleglobal %d %d", target, count);
-                for (int i = 0; i < count; ++i) {
-                    printf(", %d", READ8());
-                }
-                break;
-            }
-            VECTOR_DISASSEMBLE(kSubtractF, "subtractf")
-            VECTOR_DISASSEMBLE(kSubtractI, "subtracti")
-            case ByteCodeInstruction::kSwizzle: {
-                printf("swizzle %d, ", READ8());
-                int count = READ8();
-                printf("%d", count);
-                for (int i = 0; i < count; ++i) {
-                    printf(", %d", READ8());
-                }
-                break;
-            }
-            VECTOR_DISASSEMBLE(kTan, "tan")
-            case ByteCodeInstruction::kWriteExternal: printf("writeexternal %d", READ8()); break;
-            case ByteCodeInstruction::kWriteExternal2: printf("writeexternal2 %d", READ8()); break;
-            case ByteCodeInstruction::kWriteExternal3: printf("writeexternal3 %d", READ8()); break;
-            case ByteCodeInstruction::kWriteExternal4: printf("writeexternal4 %d", READ8()); break;
-            default: printf("unknown(%d)\n", *(ip - 1)); SkASSERT(false);
-        }
+        ip = disassemble_instruction(ip);
         printf("\n");
     }
 }
@@ -303,10 +332,12 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
     std::vector<StackFrame> frames;
 
     for (;;) {
-        ByteCodeInstruction inst = (ByteCodeInstruction) READ16();
 #ifdef TRACE
-        printf("at %d\n", (int) (ip - code - 1));
+        printf("at %3d  ", (int) (ip - code));
+        disassemble_instruction(ip);
+        printf("\n");
 #endif
+        ByteCodeInstruction inst = (ByteCodeInstruction) READ16();
         switch (inst) {
             VECTOR_BINARY_OP(kAddI, fSigned, +)
             VECTOR_BINARY_OP(kAddF, fFloat, +)
@@ -404,6 +435,13 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             case ByteCodeInstruction::kDup : PUSH(sp[(int)ByteCodeInstruction::kDup - (int)inst]);
                                              break;
 
+            case ByteCodeInstruction::kDupN: {
+                int count = READ8();
+                memcpy(sp + 1, sp - count + 1, count * sizeof(Value));
+                sp += count;
+                break;
+            }
+
             case ByteCodeInstruction::kLoad4: sp[4] = stack[*ip + 3];
             case ByteCodeInstruction::kLoad3: sp[3] = stack[*ip + 2];
             case ByteCodeInstruction::kLoad2: sp[2] = stack[*ip + 1];
@@ -417,8 +455,26 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             case ByteCodeInstruction::kLoadGlobal2: sp[2] = fGlobals[*ip + 1];
             case ByteCodeInstruction::kLoadGlobal : sp[1] = fGlobals[*ip + 0];
                                                     ++ip;
-                                                    sp += (int)inst - (int)ByteCodeInstruction::kLoadGlobal + 1;
+                                                    sp += (int)inst -
+                                                          (int)ByteCodeInstruction::kLoadGlobal + 1;
                                                     break;
+
+            case ByteCodeInstruction::kLoadExtended: {
+                int count = READ8();
+                int src = POP().fSigned;
+                memcpy(sp + 1, &stack[src], count * sizeof(Value));
+                sp += count;
+                break;
+            }
+
+            case ByteCodeInstruction::kLoadExtendedGlobal: {
+                int count = READ8();
+                int src = POP().fSigned;
+                SkASSERT(src + count <= (int) fGlobals.size());
+                memcpy(sp + 1, &fGlobals[src], count * sizeof(Value));
+                sp += count;
+                break;
+            }
 
             case ByteCodeInstruction::kLoadSwizzle: {
                 int src = READ8();
@@ -465,6 +521,10 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             case ByteCodeInstruction::kPop2: POP();
             case ByteCodeInstruction::kPop : POP();
                                              break;
+
+            case ByteCodeInstruction::kPopN:
+                sp -= READ8();
+                break;
 
             case ByteCodeInstruction::kPushImmediate:
                 PUSH(READ32());
@@ -525,6 +585,22 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
                                                      ++ip;
                                                      break;
 
+            case ByteCodeInstruction::kStoreExtended: {
+                int count = READ8();
+                int target = POP().fSigned;
+                memcpy(&stack[target], sp - count + 1, count * sizeof(Value));
+                sp -= count;
+                break;
+            }
+            case ByteCodeInstruction::kStoreExtendedGlobal: {
+                int count = READ8();
+                int target = POP().fSigned;
+                SkASSERT(target + count <= (int) fGlobals.size());
+                memcpy(&fGlobals[target], sp - count + 1, count * sizeof(Value));
+                sp -= count;
+                break;
+            }
+
             case ByteCodeInstruction::kStoreSwizzle: {
                 int target = READ8();
                 int count = READ8();
@@ -537,6 +613,24 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
 
             case ByteCodeInstruction::kStoreSwizzleGlobal: {
                 int target = READ8();
+                int count = READ8();
+                for (int i = count - 1; i >= 0; --i) {
+                    fGlobals[target + *(ip + i)] = POP();
+                }
+                ip += count;
+                break;
+            }
+            case ByteCodeInstruction::kStoreSwizzleIndirect: {
+                int target = POP().fSigned;
+                int count = READ8();
+                for (int i = count - 1; i >= 0; --i) {
+                    stack[target + *(ip + i)] = POP();
+                }
+                ip += count;
+                break;
+            }
+            case ByteCodeInstruction::kStoreSwizzleIndirectGlobal: {
+                int target = POP().fSigned;
                 int count = READ8();
                 for (int i = count - 1; i >= 0; --i) {
                     fGlobals[target + *(ip + i)] = POP();
@@ -579,7 +673,7 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
         int stackSize = (int) (sp - stack + 1);
         printf("STACK(%d):", stackSize);
         for (int i = 0; i < stackSize; ++i) {
-            printf(" %d(%f)", stack[i].fSigned, stack[i].fFloat);
+            printf(" %d(%g)", stack[i].fSigned, stack[i].fFloat);
         }
         printf("\n");
 #endif
