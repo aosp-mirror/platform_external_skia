@@ -14,12 +14,17 @@ ByteCodeGenerator::ByteCodeGenerator(const Context* context, const Program* prog
                   ByteCode* output)
     : INHERITED(program, errors, nullptr)
     , fContext(*context)
-    , fOutput(output) {
-    fIntrinsics["cos"]  = ByteCodeInstruction::kCos;
-    fIntrinsics["sin"]  = ByteCodeInstruction::kSin;
-    fIntrinsics["sqrt"] = ByteCodeInstruction::kSqrt;
-    fIntrinsics["tan"]  = ByteCodeInstruction::kTan;
-}
+    , fOutput(output)
+    , fIntrinsics {
+         { "cos",   ByteCodeInstruction::kCos },
+         { "cross", ByteCodeInstruction::kCross },
+         { "dot",   SpecialIntrinsic::kDot },
+         { "sin",   ByteCodeInstruction::kSin },
+         { "sqrt",  ByteCodeInstruction::kSqrt },
+         { "tan",   ByteCodeInstruction::kTan },
+         { "mix",   ByteCodeInstruction::kMix },
+      } {}
+
 
 int ByteCodeGenerator::SlotCount(const Type& type) {
     if (type.kind() == Type::kStruct_Kind) {
@@ -129,6 +134,27 @@ static TypeCategory type_category(const Type& type) {
     }
 }
 
+// A "simple" Swizzle is based on a variable (or a compound variable like a struct or array), and
+// that references consecutive values, such that it can be implemented using normal load/store ops
+// with an offset. Note that all single-component swizzles (of suitable base types) are simple.
+static bool swizzle_is_simple(const Swizzle& s) {
+    switch (s.fBase->fKind) {
+        case Expression::kFieldAccess_Kind:
+        case Expression::kIndex_Kind:
+        case Expression::kVariableReference_Kind:
+            break;
+        default:
+            return false;
+    }
+
+    for (size_t i = 1; i < s.fComponents.size(); ++i) {
+        if (s.fComponents[i] != s.fComponents[i - 1] + 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int ByteCodeGenerator::getLocation(const Variable& var) {
     // given that we seldom have more than a couple of variables, linear search is probably the most
     // efficient way to handle lookups
@@ -187,6 +213,7 @@ int ByteCodeGenerator::getLocation(const Variable& var) {
     }
 }
 
+// TODO: Elide Add 0 and Mul 1 sequences
 int ByteCodeGenerator::getLocation(const Expression& expr, Variable::Storage* storage) {
     switch (expr.fKind) {
         case Expression::kFieldAccess_Kind: {
@@ -231,6 +258,20 @@ int ByteCodeGenerator::getLocation(const Expression& expr, Variable::Storage* st
             }
             this->write(ByteCodeInstruction::kAddI);
             return -1;
+        }
+        case Expression::kSwizzle_Kind: {
+            const Swizzle& s = (const Swizzle&)expr;
+            SkASSERT(swizzle_is_simple(s));
+            int baseAddr = this->getLocation(*s.fBase, storage);
+            int offset = s.fComponents[0];
+            if (baseAddr < 0) {
+                this->write(ByteCodeInstruction::kPushImmediate);
+                this->write32(offset);
+                this->write(ByteCodeInstruction::kAddI);
+                return -1;
+            } else {
+                return baseAddr + offset;
+            }
         }
         case Expression::kVariableReference_Kind: {
             const Variable& var = ((const VariableReference&)expr).fVariable;
@@ -489,27 +530,42 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
         fErrors.error(c.fOffset, "unsupported intrinsic function");
         return;
     }
-    switch (found->second) {
-        case ByteCodeInstruction::kCos:  // fall through
-        case ByteCodeInstruction::kSin:  // fall through
-        case ByteCodeInstruction::kSqrt: // fall through
-        case ByteCodeInstruction::kTan:
-            SkASSERT(c.fArguments.size() == 1);
-            this->write((ByteCodeInstruction) ((int) found->second +
-                        SlotCount(c.fArguments[0]->fType) - 1));
-            break;
-        default:
-            SkASSERT(false);
+    if (found->second.fIsSpecial) {
+        SkASSERT(found->second.fValue.fSpecial == SpecialIntrinsic::kDot);
+        SkASSERT(c.fArguments.size() == 2);
+        SkASSERT(SlotCount(c.fArguments[0]->fType) == SlotCount(c.fArguments[1]->fType));
+        this->write((ByteCodeInstruction) ((int) ByteCodeInstruction::kMultiplyF +
+                    SlotCount(c.fArguments[0]->fType) - 1));
+        for (int i = SlotCount(c.fArguments[0]->fType); i > 1; --i) {
+            this->write(ByteCodeInstruction::kAddF);
+        }
+    } else {
+        switch (found->second.fValue.fInstruction) {
+            case ByteCodeInstruction::kCos:
+            case ByteCodeInstruction::kMix:
+            case ByteCodeInstruction::kSin:
+            case ByteCodeInstruction::kSqrt:
+            case ByteCodeInstruction::kTan:
+                SkASSERT(c.fArguments.size() > 0);
+                this->write((ByteCodeInstruction) ((int) found->second.fValue.fInstruction +
+                            SlotCount(c.fArguments[0]->fType) - 1));
+                break;
+            case ByteCodeInstruction::kCross:
+                this->write(found->second.fValue.fInstruction);
+                break;
+            default:
+                SkASSERT(false);
+        }
     }
 }
 
 void ByteCodeGenerator::writeFunctionCall(const FunctionCall& f) {
+    for (const auto& arg : f.fArguments) {
+        this->writeExpression(*arg);
+    }
     if (f.fFunction.fBuiltin) {
         this->writeIntrinsicCall(f);
         return;
-    }
-    for (const auto& arg : f.fArguments) {
-        this->writeExpression(*arg);
     }
     this->write(ByteCodeInstruction::kCall);
     fCallTargets.emplace_back(this, f.fFunction);
@@ -599,6 +655,11 @@ void ByteCodeGenerator::writePostfixExpression(const PostfixExpression& p) {
 }
 
 void ByteCodeGenerator::writeSwizzle(const Swizzle& s) {
+    if (swizzle_is_simple(s)) {
+        this->writeVariableExpression(s);
+        return;
+    }
+
     switch (s.fBase->fKind) {
         case Expression::kVariableReference_Kind: {
             const Variable& var = ((VariableReference&) *s.fBase).fVariable;
@@ -805,8 +866,12 @@ std::unique_ptr<ByteCodeGenerator::LValue> ByteCodeGenerator::getLValue(const Ex
         case Expression::kIndex_Kind:
         case Expression::kVariableReference_Kind:
             return std::unique_ptr<LValue>(new ByteCodeExpressionLValue(this, e));
-        case Expression::kSwizzle_Kind:
-            return std::unique_ptr<LValue>(new ByteCodeSwizzleLValue(this, (Swizzle&) e));
+        case Expression::kSwizzle_Kind: {
+            const Swizzle& s = (const Swizzle&) e;
+            return swizzle_is_simple(s)
+                    ? std::unique_ptr<LValue>(new ByteCodeExpressionLValue(this, e))
+                    : std::unique_ptr<LValue>(new ByteCodeSwizzleLValue(this, s));
+        }
         case Expression::kTernary_Kind:
         default:
             printf("unsupported lvalue %s\n", e.description().c_str());

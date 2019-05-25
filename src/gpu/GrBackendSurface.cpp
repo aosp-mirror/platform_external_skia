@@ -390,10 +390,8 @@ GrBackendFormat GrBackendTexture::getBackendFormat() const {
         return GrBackendFormat();
     }
     switch (fBackend) {
-#ifdef SK_GL
         case GrBackendApi::kOpenGL:
             return GrBackendFormat::MakeGL(fGLInfo.fFormat, fGLInfo.fTarget);
-#endif
 #ifdef SK_VULKAN
         case GrBackendApi::kVulkan: {
             auto info = fVkInfo.snapImageInfo();
