@@ -96,8 +96,8 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
     switch ((ByteCodeInstruction) READ16()) {
         VECTOR_DISASSEMBLE(kAddF, "addf")
         VECTOR_DISASSEMBLE(kAddI, "addi")
-        case ByteCodeInstruction::kAndB: printf("andb"); break;
-        case ByteCodeInstruction::kAndI: printf("andi"); break;
+        VECTOR_DISASSEMBLE(kAndB, "andb")
+        VECTOR_DISASSEMBLE(kAndI, "andb")
         case ByteCodeInstruction::kBranch: printf("branch %d", READ16()); break;
         case ByteCodeInstruction::kCall: printf("call %d", READ8()); break;
         case ByteCodeInstruction::kCallExternal: {
@@ -165,6 +165,14 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         case ByteCodeInstruction::kLoadExtended: printf("loadextended %d", READ8()); break;
         case ByteCodeInstruction::kLoadExtendedGlobal: printf("loadextendedglobal %d", READ8());
             break;
+        case ByteCodeInstruction::kMatrixToMatrix: {
+            int srcCols = READ8();
+            int srcRows = READ8();
+            int dstCols = READ8();
+            int dstRows = READ8();
+            printf("matrixtomatrix %dx%d %dx%d", srcCols, srcRows, dstCols, dstRows);
+            break;
+        }
         VECTOR_DISASSEMBLE(kMix, "mix")
         VECTOR_DISASSEMBLE(kMultiplyF, "multiplyf")
         VECTOR_DISASSEMBLE(kMultiplyI, "multiplyi")
@@ -189,6 +197,12 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         VECTOR_DISASSEMBLE(kRemainderS, "remainders")
         VECTOR_DISASSEMBLE(kRemainderU, "remainderu")
         case ByteCodeInstruction::kReturn: printf("return %d", READ8()); break;
+        case ByteCodeInstruction::kScalarToMatrix: {
+            int cols = READ8();
+            int rows = READ8();
+            printf("scalartomatrix %dx%d", cols, rows);
+            break;
+        }
         VECTOR_DISASSEMBLE(kSin, "sin")
         VECTOR_DISASSEMBLE(kSqrt, "sqrt")
         case ByteCodeInstruction::kStore: printf("store %d", READ8()); break;
@@ -347,6 +361,7 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
         switch (inst) {
             VECTOR_BINARY_OP(kAddI, fSigned, +)
             VECTOR_BINARY_OP(kAddF, fFloat, +)
+            VECTOR_BINARY_OP(kAndB, fBool, &&)
 
             case ByteCodeInstruction::kBranch:
                 ip = code + READ16();
@@ -517,6 +532,29 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
                 break;
             }
 
+            case ByteCodeInstruction::kMatrixToMatrix: {
+                int srcCols = READ8();
+                int srcRows = READ8();
+                int dstCols = READ8();
+                int dstRows = READ8();
+                SkASSERT(srcCols >= 2 && srcCols <= 4);
+                SkASSERT(srcRows >= 2 && srcRows <= 4);
+                SkASSERT(dstCols >= 2 && dstCols <= 4);
+                SkASSERT(dstRows >= 2 && dstRows <= 4);
+                SkMatrix44 m;
+                for (int c = srcCols - 1; c >= 0; --c) {
+                    for (int r = srcRows - 1; r >= 0; --r) {
+                        m.set(r, c, POP().fFloat);
+                    }
+                }
+                for (int c = 0; c < dstCols; ++c) {
+                    for (int r = 0; r < dstRows; ++r) {
+                        PUSH(m.get(r, c));
+                    }
+                }
+                break;
+            }
+
             // stack looks like: X1 Y1 Z1 W1 X2 Y2 Z2 W2 T
             case ByteCodeInstruction::kMix4:
                 sp[-5] = mix(sp[-5].fFloat, sp[-1].fFloat, sp[0].fFloat);
@@ -559,6 +597,8 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             case ByteCodeInstruction::kNegateI2: sp[-1] = -sp[-1].fSigned;
             case ByteCodeInstruction::kNegateI : sp[ 0] = -sp [0].fSigned;
                                                  break;
+
+            VECTOR_BINARY_OP(kOrB, fBool, ||)
 
             case ByteCodeInstruction::kPop4: POP();
             case ByteCodeInstruction::kPop3: POP();
@@ -610,6 +650,18 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
                     frames.pop_back();
                     break;
                 }
+            }
+
+            case ByteCodeInstruction::kScalarToMatrix: {
+                int cols = READ8();
+                int rows = READ8();
+                Value v = POP();
+                for (int c = 0; c < cols; ++c) {
+                    for (int r = 0; r < rows; ++r) {
+                        PUSH(c == r ? v : 0.0f);
+                    }
+                }
+                break;
             }
 
             VECTOR_UNARY_FN(kSin, sinf, fFloat)

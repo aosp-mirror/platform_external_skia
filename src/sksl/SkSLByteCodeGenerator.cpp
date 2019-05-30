@@ -334,6 +334,8 @@ void ByteCodeGenerator::writeBinaryExpression(const BinaryExpression& b) {
         lvalue->store();
         return;
     }
+    const Type& lType = b.fLeft->fType;
+    const Type& rType = b.fRight->fType;
     Token::Kind op;
     std::unique_ptr<LValue> lvalue;
     if (is_assignment(b.fOperator)) {
@@ -343,27 +345,31 @@ void ByteCodeGenerator::writeBinaryExpression(const BinaryExpression& b) {
     } else {
         this->writeExpression(*b.fLeft);
         op = b.fOperator;
-        if (b.fLeft->fType.kind() == Type::kScalar_Kind &&
-            b.fRight->fType.kind() == Type::kVector_Kind) {
-            for (int i = b.fRight->fType.columns(); i > 1; --i) {
+        if (lType.kind() == Type::kScalar_Kind &&
+            (rType.kind() == Type::kVector_Kind || rType.kind() == Type::kMatrix_Kind)) {
+            for (int i = SlotCount(rType); i > 1; --i) {
                 this->write(ByteCodeInstruction::kDup);
             }
         }
     }
     this->writeExpression(*b.fRight);
-    if (b.fLeft->fType.kind() == Type::kVector_Kind &&
-        b.fRight->fType.kind() == Type::kScalar_Kind) {
-        for (int i = b.fLeft->fType.columns(); i > 1; --i) {
+    if ((lType.kind() == Type::kVector_Kind || lType.kind() == Type::kMatrix_Kind) &&
+        rType.kind() == Type::kScalar_Kind) {
+        for (int i = SlotCount(lType); i > 1; --i) {
             this->write(ByteCodeInstruction::kDup);
         }
     }
-    int count = SlotCount(b.fType);
+    int count = std::max(SlotCount(lType), SlotCount(rType));
     switch (op) {
         case Token::Kind::EQEQ:
             this->writeTypedInstruction(b.fLeft->fType, ByteCodeInstruction::kCompareIEQ,
                                         ByteCodeInstruction::kCompareIEQ,
                                         ByteCodeInstruction::kCompareFEQ,
                                         count);
+            // Collapse to a single bool
+            for (int i = count; i > 1; --i) {
+                this->write(ByteCodeInstruction::kAndB);
+            }
             break;
         case Token::Kind::GT:
             this->writeTypedInstruction(b.fLeft->fType, ByteCodeInstruction::kCompareSGT,
@@ -400,6 +406,10 @@ void ByteCodeGenerator::writeBinaryExpression(const BinaryExpression& b) {
                                         ByteCodeInstruction::kCompareINEQ,
                                         ByteCodeInstruction::kCompareFNEQ,
                                         count);
+            // Collapse to a single bool
+            for (int i = count; i > 1; --i) {
+                this->write(ByteCodeInstruction::kOrB);
+            }
             break;
         case Token::Kind::PERCENT:
             this->writeTypedInstruction(b.fLeft->fType, ByteCodeInstruction::kRemainderS,
@@ -443,10 +453,12 @@ void ByteCodeGenerator::writeConstructor(const Constructor& c) {
         this->writeExpression(*arg);
     }
     if (c.fArguments.size() == 1) {
-        TypeCategory inCategory = type_category(c.fArguments[0]->fType);
-        TypeCategory outCategory = type_category(c.fType);
-        int inCount = c.fArguments[0]->fType.columns();
-        int outCount = c.fType.columns();
+        const Type& inType = c.fArguments[0]->fType;
+        const Type& outType = c.fType;
+        TypeCategory inCategory = type_category(inType);
+        TypeCategory outCategory = type_category(outType);
+        int inCount = SlotCount(inType);
+        int outCount = SlotCount(outType);
         if (inCategory != outCategory) {
             SkASSERT(inCount == outCount);
             if (inCategory == TypeCategory::kFloat) {
@@ -464,10 +476,23 @@ void ByteCodeGenerator::writeConstructor(const Constructor& c) {
                 SkASSERT(false);
             }
         }
-        if (inCount != outCount) {
+        if (inType.kind() == Type::kMatrix_Kind && outType.kind() == Type::kMatrix_Kind) {
+            this->write(ByteCodeInstruction::kMatrixToMatrix);
+            this->write8(inType.columns());
+            this->write8(inType.rows());
+            this->write8(outType.columns());
+            this->write8(outType.rows());
+        } else if (inCount != outCount) {
             SkASSERT(inCount == 1);
-            for (; inCount != outCount; ++inCount) {
-                this->write(ByteCodeInstruction::kDup);
+            if (outType.kind() == Type::kMatrix_Kind) {
+                this->write(ByteCodeInstruction::kScalarToMatrix);
+                this->write8(outType.columns());
+                this->write8(outType.rows());
+            } else {
+                SkASSERT(outType.kind() == Type::kVector_Kind);
+                for (; inCount != outCount; ++inCount) {
+                    this->write(ByteCodeInstruction::kDup);
+                }
             }
         }
     }
