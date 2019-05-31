@@ -92,9 +92,16 @@ static T unaligned_load(const void* ptr) {
     case ByteCodeInstruction::op##3: printf(text "3"); break; \
     case ByteCodeInstruction::op##4: printf(text "4"); break;
 
+#define VECTOR_MATRIX_DISASSEMBLE(op, text)                   \
+    case ByteCodeInstruction::op: printf(text); break;        \
+    case ByteCodeInstruction::op##2: printf(text "2"); break; \
+    case ByteCodeInstruction::op##3: printf(text "3"); break; \
+    case ByteCodeInstruction::op##4: printf(text "4"); break; \
+    case ByteCodeInstruction::op##N: printf(text "N %d", READ8()); break;
+
 static const uint8_t* disassemble_instruction(const uint8_t* ip) {
     switch ((ByteCodeInstruction) READ16()) {
-        VECTOR_DISASSEMBLE(kAddF, "addf")
+        VECTOR_MATRIX_DISASSEMBLE(kAddF, "addf")
         VECTOR_DISASSEMBLE(kAddI, "addi")
         VECTOR_DISASSEMBLE(kAndB, "andb")
         VECTOR_DISASSEMBLE(kAndI, "andb")
@@ -109,8 +116,8 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         }
         VECTOR_DISASSEMBLE(kCompareIEQ, "compareieq")
         VECTOR_DISASSEMBLE(kCompareINEQ, "compareineq")
-        VECTOR_DISASSEMBLE(kCompareFEQ, "comparefeq")
-        VECTOR_DISASSEMBLE(kCompareFNEQ, "comparefneq")
+        VECTOR_MATRIX_DISASSEMBLE(kCompareFEQ, "comparefeq")
+        VECTOR_MATRIX_DISASSEMBLE(kCompareFNEQ, "comparefneq")
         VECTOR_DISASSEMBLE(kCompareFGT, "comparefgt")
         VECTOR_DISASSEMBLE(kCompareFGTEQ, "comparefgteq")
         VECTOR_DISASSEMBLE(kCompareFLT, "compareflt")
@@ -131,11 +138,10 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         VECTOR_DISASSEMBLE(kConvertUtoF, "convertutof")
         VECTOR_DISASSEMBLE(kCos, "cos")
         case ByteCodeInstruction::kDebugPrint: printf("debugprint"); break;
-        VECTOR_DISASSEMBLE(kDivideF, "dividef")
+        VECTOR_MATRIX_DISASSEMBLE(kDivideF, "dividef")
         VECTOR_DISASSEMBLE(kDivideS, "divideS")
         VECTOR_DISASSEMBLE(kDivideU, "divideu")
-        VECTOR_DISASSEMBLE(kDup, "dup")
-        case ByteCodeInstruction::kDupN: printf("dupN %d", READ8()); break;
+        VECTOR_MATRIX_DISASSEMBLE(kDup, "dup")
         case ByteCodeInstruction::kLoad: printf("load %d", READ8()); break;
         case ByteCodeInstruction::kLoad2: printf("load2 %d", READ8()); break;
         case ByteCodeInstruction::kLoad3: printf("load3 %d", READ8()); break;
@@ -173,16 +179,22 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
             printf("matrixtomatrix %dx%d %dx%d", srcCols, srcRows, dstCols, dstRows);
             break;
         }
+        case ByteCodeInstruction::kMatrixMultiply: {
+            int lCols = READ8();
+            int lRows = READ8();
+            int rCols = READ8();
+            printf("matrixmultiply %dx%d %dx%d", lCols, lRows, rCols, lCols);
+            break;
+        }
         VECTOR_DISASSEMBLE(kMix, "mix")
-        VECTOR_DISASSEMBLE(kMultiplyF, "multiplyf")
+        VECTOR_MATRIX_DISASSEMBLE(kMultiplyF, "multiplyf")
         VECTOR_DISASSEMBLE(kMultiplyI, "multiplyi")
-        VECTOR_DISASSEMBLE(kNegateF, "negatef")
+        VECTOR_MATRIX_DISASSEMBLE(kNegateF, "negatef")
         VECTOR_DISASSEMBLE(kNegateI, "negatei")
         VECTOR_DISASSEMBLE(kNot, "not")
         VECTOR_DISASSEMBLE(kOrB, "orb")
         VECTOR_DISASSEMBLE(kOrI, "ori")
-        VECTOR_DISASSEMBLE(kPop, "pop")
-        case ByteCodeInstruction::kPopN: printf("popN %d", READ8()); break;
+        VECTOR_MATRIX_DISASSEMBLE(kPop, "pop")
         case ByteCodeInstruction::kPushImmediate: {
             uint32_t v = READ32();
             union { uint32_t u; float f; } pun = { v };
@@ -250,7 +262,7 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         case ByteCodeInstruction::kStoreExtended: printf("storeextended %d", READ8()); break;
         case ByteCodeInstruction::kStoreExtendedGlobal: printf("storeextendedglobal %d", READ8());
             break;
-        VECTOR_DISASSEMBLE(kSubtractF, "subtractf")
+        VECTOR_MATRIX_DISASSEMBLE(kSubtractF, "subtractf")
         VECTOR_DISASSEMBLE(kSubtractI, "subtracti")
         case ByteCodeInstruction::kSwizzle: {
             printf("swizzle %d, ", READ8());
@@ -299,6 +311,17 @@ void Interpreter::disassemble(const ByteCodeFunction& f) {
         int count = (int) ByteCodeInstruction::base - (int) inst - 1; \
         sp[count] = sp[count].field op sp[0].field;                   \
         POP();                                                        \
+        break;                                                        \
+    }
+
+#define VECTOR_MATRIX_BINARY_OP(base, field, op)                      \
+    VECTOR_BINARY_OP(base, field, op)                                 \
+    case ByteCodeInstruction::base ## N: {                            \
+        int count = READ8();                                          \
+        for (int i = count; i > 0; --i) {                             \
+            sp[-count] = sp[-count].field op sp[0].field;             \
+            POP();                                                    \
+        }                                                             \
         break;                                                        \
     }
 
@@ -360,7 +383,7 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
         ByteCodeInstruction inst = (ByteCodeInstruction) READ16();
         switch (inst) {
             VECTOR_BINARY_OP(kAddI, fSigned, +)
-            VECTOR_BINARY_OP(kAddF, fFloat, +)
+            VECTOR_MATRIX_BINARY_OP(kAddF, fFloat, +)
             VECTOR_BINARY_OP(kAndB, fBool, &&)
 
             case ByteCodeInstruction::kBranch:
@@ -396,9 +419,9 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             }
 
             VECTOR_BINARY_OP(kCompareIEQ, fSigned, ==)
-            VECTOR_BINARY_OP(kCompareFEQ, fFloat, ==)
+            VECTOR_MATRIX_BINARY_OP(kCompareFEQ, fFloat, ==)
             VECTOR_BINARY_OP(kCompareINEQ, fSigned, !=)
-            VECTOR_BINARY_OP(kCompareFNEQ, fFloat, !=)
+            VECTOR_MATRIX_BINARY_OP(kCompareFNEQ, fFloat, !=)
             VECTOR_BINARY_OP(kCompareSGT, fSigned, >)
             VECTOR_BINARY_OP(kCompareUGT, fUnsigned, >)
             VECTOR_BINARY_OP(kCompareFGT, fFloat, >)
@@ -462,7 +485,7 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
 
             VECTOR_BINARY_OP(kDivideS, fSigned, /)
             VECTOR_BINARY_OP(kDivideU, fUnsigned, /)
-            VECTOR_BINARY_OP(kDivideF, fFloat, /)
+            VECTOR_MATRIX_BINARY_OP(kDivideF, fFloat, /)
 
             case ByteCodeInstruction::kDup4: PUSH(sp[(int)ByteCodeInstruction::kDup - (int)inst]);
             case ByteCodeInstruction::kDup3: PUSH(sp[(int)ByteCodeInstruction::kDup - (int)inst]);
@@ -555,6 +578,27 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
                 break;
             }
 
+            case ByteCodeInstruction::kMatrixMultiply: {
+                int lCols = READ8();
+                int lRows = READ8();
+                int rCols = READ8();
+                int rRows = lCols;
+                float tmp[16] = { 0.0f };
+                float* B = &(sp - (rCols * rRows) + 1)->fFloat;
+                float* A = B - (lCols * lRows);
+                for (int c = 0; c < rCols; ++c) {
+                    for (int r = 0; r < lRows; ++r) {
+                        for (int j = 0; j < lCols; ++j) {
+                            tmp[c*lRows + r] += A[j*lRows + r] * B[c*rRows + j];
+                        }
+                    }
+                }
+                sp -= (lCols * lRows) + (rCols * rRows);
+                memcpy(sp + 1, tmp, rCols * lRows * sizeof(Value));
+                sp += (rCols * lRows);
+                break;
+            }
+
             // stack looks like: X1 Y1 Z1 W1 X2 Y2 Z2 W2 T
             case ByteCodeInstruction::kMix4:
                 sp[-5] = mix(sp[-5].fFloat, sp[-1].fFloat, sp[0].fFloat);
@@ -580,7 +624,7 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             }
 
             VECTOR_BINARY_OP(kMultiplyI, fSigned, *)
-            VECTOR_BINARY_OP(kMultiplyF, fFloat, *)
+            VECTOR_MATRIX_BINARY_OP(kMultiplyF, fFloat, *)
 
             case ByteCodeInstruction::kNot:
                 sp[0].fBool = !sp[0].fBool;
@@ -591,6 +635,14 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             case ByteCodeInstruction::kNegateF2: sp[-1] = -sp[-1].fFloat;
             case ByteCodeInstruction::kNegateF : sp[ 0] = -sp[ 0].fFloat;
                                                  break;
+
+            case ByteCodeInstruction::kNegateFN: {
+                int count = READ8();
+                for (int i = count - 1; i >= 0; --i) {
+                    sp[-i] = -sp[-i].fFloat;
+                }
+                break;
+            }
 
             case ByteCodeInstruction::kNegateI4: sp[-3] = -sp[-3].fSigned;
             case ByteCodeInstruction::kNegateI3: sp[-2] = -sp[-2].fSigned;
@@ -736,7 +788,7 @@ void Interpreter::innerRun(const ByteCodeFunction& f, Value* stack, Value* outRe
             }
 
             VECTOR_BINARY_OP(kSubtractI, fSigned, -)
-            VECTOR_BINARY_OP(kSubtractF, fFloat, -)
+            VECTOR_MATRIX_BINARY_OP(kSubtractF, fFloat, -)
 
             case ByteCodeInstruction::kSwizzle: {
                 Value tmp[4];
