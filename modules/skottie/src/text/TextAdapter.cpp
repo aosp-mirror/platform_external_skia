@@ -22,11 +22,14 @@ TextAdapter::TextAdapter(sk_sp<sksg::Group> root, bool hasAnimators)
 TextAdapter::~TextAdapter() = default;
 
 struct TextAdapter::FragmentRec {
-    // More text SG props will surface here as we add range selector support.
-    sk_sp<sksg::TransformEffect> fRoot;
+    SkPoint                       fOrigin; // fragment position
+
+    sk_sp<sksg::Matrix<SkMatrix>> fMatrixNode;
+    sk_sp<sksg::Color>            fFillColorNode,
+                                  fStrokeColorNode;
 };
 
-TextAdapter::FragmentRec TextAdapter::buildFragment(const skottie::Shaper::Fragment& frag) const {
+void TextAdapter::addFragment(const skottie::Shaper::Fragment& frag) {
     // For a given shaped fragment, build a corresponding SG fragment:
     //
     //   [TransformEffect] -> [Transform]
@@ -37,7 +40,11 @@ TextAdapter::FragmentRec TextAdapter::buildFragment(const skottie::Shaper::Fragm
     // * where the blob node is shared
 
     auto blob_node = sksg::TextBlob::Make(frag.fBlob);
-    blob_node->setPosition(frag.fPos);
+
+    FragmentRec rec;
+    rec.fOrigin = frag.fPos;
+    rec.fMatrixNode = sksg::Matrix<SkMatrix>::Make(SkMatrix::MakeTrans(frag.fPos.x(),
+                                                                       frag.fPos.y()));
 
     std::vector<sk_sp<sksg::RenderNode>> draws;
     draws.reserve(static_cast<size_t>(fText.fHasFill) + static_cast<size_t>(fText.fHasStroke));
@@ -45,15 +52,15 @@ TextAdapter::FragmentRec TextAdapter::buildFragment(const skottie::Shaper::Fragm
     SkASSERT(fText.fHasFill || fText.fHasStroke);
 
     if (fText.fHasFill) {
-        auto fill_paint = sksg::Color::Make(fText.fFillColor);
-        fill_paint->setAntiAlias(true);
-        draws.push_back(sksg::Draw::Make(blob_node, std::move(fill_paint)));
+        rec.fFillColorNode = sksg::Color::Make(fText.fFillColor);
+        rec.fFillColorNode->setAntiAlias(true);
+        draws.push_back(sksg::Draw::Make(blob_node, rec.fFillColorNode));
     }
     if (fText.fHasStroke) {
-        auto stroke_paint = sksg::Color::Make(fText.fStrokeColor);
-        stroke_paint->setAntiAlias(true);
-        stroke_paint->setStyle(SkPaint::kStroke_Style);
-        draws.push_back(sksg::Draw::Make(blob_node, std::move(stroke_paint)));
+        rec.fStrokeColorNode = sksg::Color::Make(fText.fStrokeColor);
+        rec.fStrokeColorNode->setAntiAlias(true);
+        rec.fStrokeColorNode->setStyle(SkPaint::kStroke_Style);
+        draws.push_back(sksg::Draw::Make(blob_node, rec.fStrokeColorNode));
     }
 
     SkASSERT(!draws.empty());
@@ -62,9 +69,8 @@ TextAdapter::FragmentRec TextAdapter::buildFragment(const skottie::Shaper::Fragm
             ? sksg::Group::Make(std::move(draws))
             : std::move(draws[0]);
 
-    return {
-        sksg::TransformEffect::Make(std::move(draws_node), SkMatrix::I()),
-    };
+    fRoot->addChild(sksg::TransformEffect::Make(std::move(draws_node), rec.fMatrixNode));
+    fFragments.push_back(std::move(rec));
 }
 
 void TextAdapter::apply() {
@@ -89,8 +95,7 @@ void TextAdapter::apply() {
     fFragments.clear();
 
     for (const auto& frag : shape_result.fFragments) {
-        fFragments.push_back(this->buildFragment(frag));
-        fRoot->addChild(fFragments.back().fRoot);
+        this->addFragment(frag);
     }
 
 #if (0)
@@ -110,6 +115,31 @@ void TextAdapter::apply() {
     fRoot->addChild(sksg::Draw::Make(sksg::Rect::Make(shape_result.computeBounds()),
                                      std::move(bounds_color)));
 #endif
+}
+
+void TextAdapter::applyAnimatedProps(const AnimatedProps& props) {
+    // TODO: share this with TransformAdapter2D?
+    auto t = SkMatrix::MakeTrans(props.position.x(), props.position.y());
+    t.preRotate(props.rotation);
+    t.preScale(props.scale, props.scale);
+
+    const auto fc = SkColorSetA(props.fill_color,
+                                SkScalarRoundToInt(props.opacity*SkColorGetA(props.fill_color))),
+               sc = SkColorSetA(props.stroke_color,
+                                SkScalarRoundToInt(props.opacity*SkColorGetA(props.stroke_color)));
+
+    for (const auto& rec : fFragments) {
+        rec.fMatrixNode->setMatrix(SkMatrix::Concat(SkMatrix::MakeTrans(rec.fOrigin.x(),
+                                                                        rec.fOrigin.y()),
+                                                    t));
+
+        if (rec.fFillColorNode) {
+            rec.fFillColorNode->setColor(fc);
+        }
+        if (rec.fStrokeColorNode) {
+            rec.fStrokeColorNode->setColor(sc);
+        }
+    }
 }
 
 } // namespace skottie

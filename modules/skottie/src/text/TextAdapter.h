@@ -29,10 +29,21 @@ public:
 
     const sk_sp<sksg::Group>& root() const { return fRoot; }
 
+    struct AnimatedProps {
+        SkPoint   position = { 0, 0 };
+        SkColor fill_color = SK_ColorTRANSPARENT,
+              stroke_color = SK_ColorTRANSPARENT;
+        float      opacity = 1,
+                     scale = 1,
+                  rotation = 0;
+    };
+
+    void applyAnimatedProps(const AnimatedProps&);
+
 private:
     struct FragmentRec;
 
-    FragmentRec buildFragment(const skottie::Shaper::Fragment&) const;
+    void addFragment(const skottie::Shaper::Fragment&);
 
     void apply();
 

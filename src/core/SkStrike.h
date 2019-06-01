@@ -83,7 +83,7 @@ public:
         to the array (if non-null), and set the count to the updated array length.
     */
     void findIntercepts(const SkScalar bounds[2], SkScalar scale, SkScalar xPos,
-                        bool yAxis, SkGlyph* , SkScalar* array, int* count);
+                        SkGlyph* , SkScalar* array, int* count);
 
     /** Return the Path associated with the glyph. If it has not been generated this will trigger
         that.
@@ -176,12 +176,6 @@ private:
         kFull_MetricsType
     };
 
-    enum {
-        kHashBits  = 8,
-        kHashCount = 1 << kHashBits,
-        kHashMask  = kHashCount - 1
-    };
-
     /** Returns a glyph with valid fAdvance field. The remaining fields may be
         valid, but that is not guaranteed. If you require those, call getGlyphIDMetrics instead.
     */
@@ -194,15 +188,6 @@ private:
 
     static void OffsetResults(const SkGlyph::Intercept* intercept, SkScalar scale,
                               SkScalar xPos, SkScalar* array, int* count);
-    static void AddInterval(SkScalar val, SkGlyph::Intercept* intercept);
-    static void AddPoints(const SkPoint* pts, int ptCount, const SkScalar bounds[2],
-                          bool yAxis, SkGlyph::Intercept* intercept);
-    static void AddLine(const SkPoint pts[2], SkScalar axis, bool yAxis,
-                        SkGlyph::Intercept* intercept);
-    static void AddQuad(const SkPoint pts[2], SkScalar axis, bool yAxis,
-                        SkGlyph::Intercept* intercept);
-    static void AddCubic(const SkPoint pts[3], SkScalar axis, bool yAxis,
-                         SkGlyph::Intercept* intercept);
     static const SkGlyph::Intercept* MatchBounds(const SkGlyph* glyph,
                                                  const SkScalar bounds[2]);
 
