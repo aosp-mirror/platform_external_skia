@@ -1942,6 +1942,7 @@ cc_test {
         "bench/ShapesBench.cpp",
         "bench/Sk4fBench.cpp",
         "bench/SkGlyphCacheBench.cpp",
+        "bench/SkSLBench.cpp",
         "bench/SortBench.cpp",
         "bench/StreamBench.cpp",
         "bench/StrokeBench.cpp",
