@@ -9,11 +9,11 @@
 #include "src/core/SkOpts.h"
 #include "src/core/SkVM.h"
 #include <string.h>
+#if defined(SK_BUILD_FOR_WIN)
+    #include <intrin.h>
+#endif
 
 namespace skvm {
-
-    // We reserve the last ID as a sentinel meaning none, n/a, null, nil, etc.
-    static const ID NA = ~0;
 
     Program::Program(std::vector<Instruction> instructions, int regs)
         : fInstructions(std::move(instructions))
@@ -94,14 +94,11 @@ namespace skvm {
                 inst.op,
                 lookup_register(id),
                 lookup_register(inst.x),
-                lookup_register(inst.y),
+               {lookup_register(inst.y)},
                {lookup_register(inst.z)},
             };
-            // If the z argument is the N/A sentinel, copy in the immediate instead.
-            // (No Op uses both 3 arguments and an immediate.)
-            if (inst.z == NA) {
-                pinst.z.imm = inst.imm;
-            }
+            if (inst.y == NA) { pinst.y.imm = inst.immy; }
+            if (inst.z == NA) { pinst.z.imm = inst.immz; }
             program.push_back(pinst);
         }
 
@@ -111,19 +108,8 @@ namespace skvm {
     // Most instructions produce a value and return it by ID,
     // the value-producing instruction's own index in the program vector.
 
-    ID Builder::push(Op op, ID x=NA, ID y=NA, ID z=NA, int imm=0) {
-        Instruction inst{op, /*life=*/NA, x, y, z, imm};
-
-        // Simple peepholes that come up fairly often.
-
-        auto is_zero = [&](ID id) {
-            return fProgram[id].op  == Op::splat
-                && fProgram[id].imm == 0;
-        };
-
-        // x*y+0 --> x*y
-        if (op == Op::mad_f32 && is_zero(z)) { inst = { Op::mul_f32, NA, x,y,NA, 0 }; }
-
+    ID Builder::push(Op op, ID x, ID y, ID z, int immy, int immz) {
+        Instruction inst{op, /*life=*/NA, x, y, z, immy, immz};
 
         // Basic common subexpression elimination:
         // if we've already seen this exact Instruction, use it instead of creating a new one.
@@ -136,6 +122,11 @@ namespace skvm {
         fProgram.push_back(inst);
         fIndex[inst] = id;
         return id;
+    }
+
+    bool Builder::isZero(ID id) const {
+        return fProgram[id].op   == Op::splat
+            && fProgram[id].immy == 0;
     }
 
     Arg Builder::arg(int ix) { return {ix}; }
@@ -154,11 +145,16 @@ namespace skvm {
         return {this->push(Op::splat, NA,NA,NA, bits)};
     }
 
-    F32 Builder::add(F32 x, F32 y       ) { return {this->push(Op::add_f32, x.id, y.id      )}; }
-    F32 Builder::sub(F32 x, F32 y       ) { return {this->push(Op::sub_f32, x.id, y.id      )}; }
-    F32 Builder::mul(F32 x, F32 y       ) { return {this->push(Op::mul_f32, x.id, y.id      )}; }
-    F32 Builder::div(F32 x, F32 y       ) { return {this->push(Op::div_f32, x.id, y.id      )}; }
-    F32 Builder::mad(F32 x, F32 y, F32 z) { return {this->push(Op::mad_f32, x.id, y.id, z.id)}; }
+    F32 Builder::add(F32 x, F32 y       ) { return {this->push(Op::add_f32, x.id, y.id)}; }
+    F32 Builder::sub(F32 x, F32 y       ) { return {this->push(Op::sub_f32, x.id, y.id)}; }
+    F32 Builder::mul(F32 x, F32 y       ) { return {this->push(Op::mul_f32, x.id, y.id)}; }
+    F32 Builder::div(F32 x, F32 y       ) { return {this->push(Op::div_f32, x.id, y.id)}; }
+    F32 Builder::mad(F32 x, F32 y, F32 z) {
+        if (this->isZero(z.id)) {
+            return this->mul(x,y);
+        }
+        return {this->push(Op::mad_f32, x.id, y.id, z.id)};
+    }
 
     I32 Builder::add(I32 x, I32 y) { return {this->push(Op::add_i32, x.id, y.id)}; }
     I32 Builder::sub(I32 x, I32 y) { return {this->push(Op::sub_i32, x.id, y.id)}; }
@@ -172,12 +168,35 @@ namespace skvm {
     I32 Builder::shr(I32 x, int bits) { return {this->push(Op::shr, x.id,NA,NA, bits)}; }
     I32 Builder::sra(I32 x, int bits) { return {this->push(Op::sra, x.id,NA,NA, bits)}; }
 
+    I32 Builder::mul_unorm8(I32 x, I32 y) { return {this->push(Op::mul_unorm8, x.id, y.id)}; }
+
+    I32 Builder::extract(I32 x, int mask) {
+        SkASSERT(mask != 0);
+    #if defined(SK_BUILD_FOR_WIN)
+        unsigned long shift;
+        _BitScanForward(&shift, mask);
+    #else
+        const int shift = __builtin_ctz(mask);
+    #endif
+        if ((unsigned)mask == (~0u << shift)) {
+            return this->shr(x, shift);
+        }
+        return {this->push(Op::extract, x.id,NA,NA, mask, shift)};
+    }
+
+    I32 Builder::pack(I32 x, I32 y, int bits) {
+        return {this->push(Op::pack, x.id,y.id,NA, 0,bits)};
+    }
+
     F32 Builder::to_f32(I32 x) { return {this->push(Op::to_f32, x.id)}; }
     I32 Builder::to_i32(F32 x) { return {this->push(Op::to_i32, x.id)}; }
 
     // ~~~~ Program::dump() and co. ~~~~ //
 
-    struct Reg { ID id; };
+    struct R { ID id; };
+    struct Shift { int bits; };
+    struct Mask  { int bits; };
+    struct Splat { int bits; };
 
     static void write(SkWStream* o, const char* s) {
         o->writeText(s);
@@ -188,17 +207,34 @@ namespace skvm {
         o->writeDecAsText(a.ix);
         write(o, ")");
     }
-    static void write(SkWStream* o, Reg r) {
+    static void write(SkWStream* o, R r) {
         write(o, "r");
         o->writeDecAsText(r.id);
     }
-
-    static void write(SkWStream* o, int bits) {
+    static void write(SkWStream* o, Shift s) {
+        o->writeDecAsText(s.bits);
+    }
+    static void write(SkWStream* o, Mask m) {
+        o->writeHexAsText(m.bits);
+    }
+    static void write(SkWStream* o, Splat s) {
+        o->writeHexAsText(s.bits);
         float f;
-        memcpy(&f, &bits, 4);
-        o->writeHexAsText(bits);
+        memcpy(&f, &s.bits, 4);
         write(o, " (");
-        o->writeScalarAsText(f);
+
+        // It's friendlier to print floats that represent 1/K as fractions.
+        const int d = (int)(1.0f/f);
+
+        if (f < 1.0f && f == 1.0f/d) {
+            write(o, "1/");
+            o->writeDecAsText(d);
+        } else if (f < 1.0f && f == 1.0f/(d+1)) {
+            write(o, "1/");
+            o->writeDecAsText(d+1);
+        } else {
+            o->writeScalarAsText(f);
+        }
         write(o, ")");
     }
 
@@ -210,41 +246,50 @@ namespace skvm {
     }
 
     void Program::dump(SkWStream* o) const {
+        o->writeDecAsText(fRegs);
+        o->writeText(" registers, ");
+        o->writeDecAsText(fInstructions.size());
+        o->writeText(" instructions:\n");
         for (const Instruction& inst : fInstructions) {
             Op  op = inst.op;
             ID   d = inst.d,
-                 x = inst.x,
-                 y = inst.y;
-            auto z = inst.z;
+                 x = inst.x;
+            auto y = inst.y,
+                 z = inst.z;
             switch (op) {
-                case Op::store8:  write(o, "store8" , Arg{z.imm}, Reg{x}); break;
-                case Op::store32: write(o, "store32", Arg{z.imm}, Reg{x}); break;
+                case Op::store8:  write(o, "store8" , Arg{y.imm}, R{x}); break;
+                case Op::store32: write(o, "store32", Arg{y.imm}, R{x}); break;
 
-                case Op::load8:  write(o, Reg{d}, "= load8" , Arg{z.imm}); break;
-                case Op::load32: write(o, Reg{d}, "= load32", Arg{z.imm}); break;
+                case Op::load8:  write(o, R{d}, "= load8" , Arg{y.imm}); break;
+                case Op::load32: write(o, R{d}, "= load32", Arg{y.imm}); break;
 
-                case Op::splat:  write(o, Reg{d}, "= splat", z.imm); break;
+                case Op::splat:  write(o, R{d}, "= splat", Splat{y.imm}); break;
 
-                case Op::add_f32: write(o, Reg{d}, "= add_f32", Reg{x}, Reg{y}           ); break;
-                case Op::sub_f32: write(o, Reg{d}, "= sub_f32", Reg{x}, Reg{y}           ); break;
-                case Op::mul_f32: write(o, Reg{d}, "= mul_f32", Reg{x}, Reg{y}           ); break;
-                case Op::div_f32: write(o, Reg{d}, "= div_f32", Reg{x}, Reg{y}           ); break;
-                case Op::mad_f32: write(o, Reg{d}, "= mad_f32", Reg{x}, Reg{y}, Reg{z.id}); break;
+                case Op::add_f32: write(o, R{d}, "= add_f32", R{x}, R{y.id}           ); break;
+                case Op::sub_f32: write(o, R{d}, "= sub_f32", R{x}, R{y.id}           ); break;
+                case Op::mul_f32: write(o, R{d}, "= mul_f32", R{x}, R{y.id}           ); break;
+                case Op::div_f32: write(o, R{d}, "= div_f32", R{x}, R{y.id}           ); break;
+                case Op::mad_f32: write(o, R{d}, "= mad_f32", R{x}, R{y.id}, R{z.id}); break;
 
-                case Op::add_i32: write(o, Reg{d}, "= add_i32", Reg{x}, Reg{y}); break;
-                case Op::sub_i32: write(o, Reg{d}, "= sub_i32", Reg{x}, Reg{y}); break;
-                case Op::mul_i32: write(o, Reg{d}, "= mul_i32", Reg{x}, Reg{y}); break;
+                case Op::add_i32: write(o, R{d}, "= add_i32", R{x}, R{y.id}); break;
+                case Op::sub_i32: write(o, R{d}, "= sub_i32", R{x}, R{y.id}); break;
+                case Op::mul_i32: write(o, R{d}, "= mul_i32", R{x}, R{y.id}); break;
 
-                case Op::bit_and: write(o, Reg{d}, "= bit_and", Reg{x}, Reg{y}); break;
-                case Op::bit_or : write(o, Reg{d}, "= bit_or" , Reg{x}, Reg{y}); break;
-                case Op::bit_xor: write(o, Reg{d}, "= bit_xor", Reg{x}, Reg{y}); break;
+                case Op::bit_and: write(o, R{d}, "= bit_and", R{x}, R{y.id}); break;
+                case Op::bit_or : write(o, R{d}, "= bit_or" , R{x}, R{y.id}); break;
+                case Op::bit_xor: write(o, R{d}, "= bit_xor", R{x}, R{y.id}); break;
 
-                case Op::shl: write(o, Reg{d}, "= shl", Reg{x}, z.imm); break;
-                case Op::shr: write(o, Reg{d}, "= shr", Reg{x}, z.imm); break;
-                case Op::sra: write(o, Reg{d}, "= sra", Reg{x}, z.imm); break;
+                case Op::shl: write(o, R{d}, "= shl", R{x}, Shift{y.imm}); break;
+                case Op::shr: write(o, R{d}, "= shr", R{x}, Shift{y.imm}); break;
+                case Op::sra: write(o, R{d}, "= sra", R{x}, Shift{y.imm}); break;
 
-                case Op::to_f32: write(o, Reg{d}, "= to_f32", Reg{x}); break;
-                case Op::to_i32: write(o, Reg{d}, "= to_i32", Reg{x}); break;
+                case Op::mul_unorm8: write(o, R{d}, "= mul_unorm8", R{x}, R{y.id}); break;
+
+                case Op::extract: write(o, R{d}, "= extract", R{x}, Mask{y.imm}); break;
+                case Op::pack: write(o, R{d}, "= pack", R{x}, R{y.id}, Shift{z.imm}); break;
+
+                case Op::to_f32: write(o, R{d}, "= to_f32", R{x}); break;
+                case Op::to_i32: write(o, R{d}, "= to_i32", R{x}); break;
             }
             write(o, "\n");
         }

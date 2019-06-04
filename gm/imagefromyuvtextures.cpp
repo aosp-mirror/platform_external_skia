@@ -143,7 +143,8 @@ protected:
     void createResultTexture(GrContext* context, int width, int height,
                              GrBackendTexture* resultTexture) {
         *resultTexture = context->createBackendTexture(
-                width, height, kRGBA_8888_SkColorType, GrMipMapped::kNo, GrRenderable::kYes);
+                width, height, kRGBA_8888_SkColorType, SkColors::kTransparent,
+                GrMipMapped::kNo, GrRenderable::kYes);
 
         context->resetContext();
     }

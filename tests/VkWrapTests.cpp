@@ -38,6 +38,7 @@ void wrap_tex_test(skiatest::Reporter* reporter, GrContext* context) {
 
     GrBackendTexture origBackendTex = context->createBackendTexture(kW, kH,
                                                                     kColorType,
+                                                                    SkColors::kTransparent,
                                                                     GrMipMapped::kNo,
                                                                     GrRenderable::kNo);
     GrVkImageInfo imageInfo;
@@ -92,6 +93,7 @@ void wrap_rt_test(skiatest::Reporter* reporter, GrContext* context) {
 
     GrBackendTexture origBackendTex = context->createBackendTexture(kW, kH,
                                                                     kColorType,
+                                                                    SkColors::kTransparent,
                                                                     GrMipMapped::kNo,
                                                                     GrRenderable::kYes);
 
@@ -135,6 +137,7 @@ void wrap_trt_test(skiatest::Reporter* reporter, GrContext* context) {
 
     GrBackendTexture origBackendTex = context->createBackendTexture(kW, kH,
                                                                     kColorType,
+                                                                    SkColors::kTransparent,
                                                                     GrMipMapped::kNo,
                                                                     GrRenderable::kYes);
     GrVkImageInfo imageInfo;

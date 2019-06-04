@@ -23,6 +23,9 @@ namespace skvm {
         add_i32, sub_i32, mul_i32,
         bit_and, bit_or, bit_xor,
         shl, shr, sra,
+        mul_unorm8,
+        extract,
+        pack,
         to_f32, to_i32,
     };
 
@@ -30,10 +33,10 @@ namespace skvm {
 
     class Program {
     public:
-        struct Instruction {   // d = op(x,y, z.id/z.imm)
+        struct Instruction {   // d = op(x, y.id/y.imm, z.id/z.imm)
             Op op;
-            ID d,x,y;
-            union { ID id; int imm; } z;
+            ID d,x;
+            union { ID id; int imm; } y,z;
         };
 
         Program(std::vector<Instruction>, int regs);
@@ -92,15 +95,36 @@ namespace skvm {
         I32 shr(I32 x, int bits);
         I32 sra(I32 x, int bits);
 
+        I32 mul_unorm8(I32 x, I32 y);   // (x*y+255)/256, approximating (x*y+127)/255.
+
+        // (x & mask) >> k, where k is the lowest set bit of mask. E.g.
+        //    extract(x, 0xff)   == (x & 0xff)
+        //    extract(x, 0xff00) == (x & 0xff00) >> 8
+        //
+        //    extract(x, 0x00ff00ff) == (x & 0x00ff00ff)
+        //    extract(x, 0xff00ff00) == (x & 0xff00ff00) >> 8
+        //
+        //    extract(x, 0x003ff) == (x & 0x003ff)
+        //    extract(x, 0xffc00) == (x & 0xffc00) >> 10
+        I32 extract(I32 x, int mask);
+
+        // Interlace bits from x and y as if x | (y << bits),
+        // assuming no bits from x and (y << bits) collide with each other, (x & (y << bits)) == 0.
+        // (This allows implementation with SSE punpckl?? or NEON vzip.?? instructions.)
+        I32 pack(I32 x, I32 y, int bits);
+
         F32 to_f32(I32 x);
         I32 to_i32(F32 x);
 
     private:
+        // We reserve the last ID as a sentinel meaning none, n/a, null, nil, etc.
+        static const ID NA = ~0;
+
         struct Instruction {
-            Op  op;      // v* = op(x,y,z,imm), where * == index of this Instruction.
-            ID  life;    // ID of last instruction using this instruction's result.
-            ID  x,y,z;   // Enough arguments for mad().
-            int imm;     // Immediate bit pattern, shift count, or argument index.
+            Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
+            ID  life;       // ID of last instruction using this instruction's result.
+            ID  x,y,z;      // Enough arguments for mad().
+            int immy,immz;  // Immediate bit patterns, shift counts, argument indexes.
 
             bool operator==(const Instruction& o) const {
                 return op   == o.op
@@ -108,7 +132,8 @@ namespace skvm {
                     && x    == o.x
                     && y    == o.y
                     && z    == o.z
-                    && imm  == o.imm;
+                    && immy == o.immy
+                    && immz == o.immz;
             }
         };
 
@@ -123,14 +148,16 @@ namespace skvm {
                      ^ Hash(inst.x)
                      ^ Hash(inst.y)
                      ^ Hash(inst.z)
-                     ^ Hash(inst.imm);
+                     ^ Hash(inst.immy)
+                     ^ Hash(inst.immz);
             }
         };
 
+        ID push(Op, ID x, ID y=NA, ID z=NA, int immy=0, int immz=0);
+        bool isZero(ID) const;
+
         std::unordered_map<Instruction, ID, InstructionHash> fIndex;
         std::vector<Instruction>                             fProgram;
-
-        ID push(Op, ID, ID, ID, int);
     };
 
     // TODO: comparison operations, if_then_else
