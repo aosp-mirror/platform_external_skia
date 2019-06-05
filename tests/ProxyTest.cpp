@@ -277,6 +277,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     GrBackendTexture backendTex =
                             context->createBackendTexture(kWidthHeight, kWidthHeight,
                                                           colorType,
+                                                          SkColors::kTransparent,
                                                           GrMipMapped::kNo,
                                                           GrRenderable::kYes);
                     sk_sp<GrSurfaceProxy> sProxy = proxyProvider->wrapBackendTextureAsRenderTarget(
@@ -302,6 +303,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     GrBackendTexture backendTex =
                             context->createBackendTexture(kWidthHeight, kWidthHeight,
                                                           colorType,
+                                                          SkColors::kTransparent,
                                                           GrMipMapped::kNo,
                                                           GrRenderable::kYes);
 
@@ -330,6 +332,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     GrBackendTexture backendTex =
                             context->createBackendTexture(kWidthHeight, kWidthHeight,
                                                           colorType,
+                                                          SkColors::kTransparent,
                                                           GrMipMapped::kNo,
                                                           GrRenderable::kNo);
 

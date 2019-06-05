@@ -63,6 +63,7 @@ static GrSurfaceProxy* make_backend(GrContext* context, const ProxyParams& p,
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
 
     *backendTex = context->createBackendTexture(p.fSize, p.fSize, p.fColorType,
+                                                SkColors::kTransparent,
                                                 GrMipMapped::kNo, GrRenderable::kNo);
     if (!backendTex->isValid()) {
         return nullptr;

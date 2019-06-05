@@ -88,6 +88,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     static const int kSize = 100;
     backendTexture1 =
         context1->createBackendTexture(kSize, kSize, kRGBA_8888_SkColorType,
+                                       SkColors::kTransparent,
                                        GrMipMapped::kNo, GrRenderable::kNo);
 
     if (!backendTexture1.isValid() || !gpu1->isTestingOnlyBackendTexture(backendTexture1)) {

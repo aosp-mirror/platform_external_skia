@@ -34,6 +34,7 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkImageLayoutTest, reporter, ctxInfo) {
 
     GrBackendTexture backendTex = context->createBackendTexture(1, 1,
                                                                 kRGBA_8888_SkColorType,
+                                                                SkColors::kTransparent,
                                                                 GrMipMapped::kNo,
                                                                 GrRenderable::kNo);
     REPORTER_ASSERT(reporter, backendTex.isValid());
@@ -140,6 +141,7 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkReleaseExternalQueueTest, reporter, ctxInfo) {
     for (bool useExternal : {false, true}) {
         GrBackendTexture backendTex = context->createBackendTexture(1, 1,
                                                                     kRGBA_8888_SkColorType,
+                                                                    SkColors::kTransparent,
                                                                     GrMipMapped::kNo,
                                                                     GrRenderable::kNo);
         sk_sp<SkImage> image;
@@ -223,7 +225,8 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkPrepareForExternalIOQueueTransitionTest, report
                 continue;
             }
             GrBackendTexture backendTex = context->createBackendTexture(
-                    4, 4, kRGBA_8888_SkColorType, GrMipMapped::kNo,
+                    4, 4, kRGBA_8888_SkColorType,
+                    SkColors::kTransparent, GrMipMapped::kNo,
                     useSurface ? GrRenderable::kYes : GrRenderable::kNo);
 
             // Make a backend texture with an external queue family and general layout.
@@ -339,7 +342,8 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkTransitionExternalQueueTest, reporter, ctxInfo)
     }
 
     GrBackendTexture backendTex = context->createBackendTexture(
-            1, 1, kRGBA_8888_SkColorType, GrMipMapped::kNo, GrRenderable::kNo);
+            1, 1, kRGBA_8888_SkColorType,
+            SkColors::kTransparent, GrMipMapped::kNo, GrRenderable::kNo);
     sk_sp<SkImage> image;
     // Make a backend texture with an external queue family and general layout.
     GrVkImageInfo vkInfo;
