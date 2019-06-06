@@ -887,12 +887,6 @@ static inline GrGLint config_alignment(GrPixelConfig config) {
         case kRGB_ETC1_GrPixelConfig:
         case kUnknown_GrPixelConfig:
             return 0;
-
-        // Experimental (for P016 and P010)
-        case kR_16_GrPixelConfig:
-            return 2;
-        case kRG_1616_GrPixelConfig:
-            return 4;
     }
     SK_ABORT("Invalid pixel config");
     return 0;
@@ -1589,6 +1583,44 @@ static GrGLTextureParameters::SamplerOverriddenState set_initial_texture_params(
     return state;
 }
 
+size_t GLBytesPerPixel(GrGLenum glFormat) {
+    switch (glFormat) {
+        case GR_GL_LUMINANCE8:
+        case GR_GL_ALPHA8:
+        case GR_GL_R8:
+            return 1;
+
+        case GR_GL_RGB565:
+        case GR_GL_RGBA4:
+        case GR_GL_RG8:
+        case GR_GL_R16F:
+            return 2;
+
+        case GR_GL_RGB8:
+            return 3;
+
+        case GR_GL_RGBA8:
+        case GR_GL_SRGB8_ALPHA8:
+        case GR_GL_BGRA8:
+        case GR_GL_RGB10_A2:
+            return 4;
+
+        case GR_GL_RGBA16F:
+        case GR_GL_RG32F:
+            return 8;
+
+        case GR_GL_RGBA32F:
+            return 16;
+
+        case GR_GL_COMPRESSED_RGB8_ETC2: // fall through
+        case GR_GL_COMPRESSED_ETC1_RGB8:
+            return 0;
+    }
+
+    SK_ABORT("Invalid GL format");
+    return 0;
+}
+
 sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
                                           SkBudgeted budgeted,
                                           const GrMipLevel texels[],
@@ -1608,7 +1640,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
     std::unique_ptr<uint8_t[]> zeros;
     if (performClear && !this->glCaps().clearTextureSupport() &&
         !this->glCaps().canConfigBeFBOColorAttachment(desc.fConfig)) {
-        size_t rowSize = GrGLBytesPerFormat(glFormat) * desc.fWidth;
+        size_t rowSize = GLBytesPerPixel(glFormat) * desc.fWidth;
         size_t size = rowSize * desc.fHeight;
         zeros.reset(new uint8_t[size]);
         memset(zeros.get(), 0, size);
@@ -3398,7 +3430,6 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
         return false;
     }
 
-    const char* version = shaderCaps->versionDeclString();
     GrShaderVar aVertex("a_vertex", kHalf2_GrSLType, GrShaderVar::kIn_TypeModifier);
     GrShaderVar uTexCoordXform("u_texCoordXform", kHalf4_GrSLType,
                                GrShaderVar::kUniform_TypeModifier);
@@ -3407,7 +3438,7 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
     GrShaderVar vTexCoord("v_texCoord", kHalf2_GrSLType, GrShaderVar::kOut_TypeModifier);
     GrShaderVar oFragColor("o_FragColor", kHalf4_GrSLType, GrShaderVar::kOut_TypeModifier);
 
-    SkString vshaderTxt(version);
+    SkString vshaderTxt;
     if (shaderCaps->noperspectiveInterpolationSupport()) {
         if (const char* extension = shaderCaps->noperspectiveInterpolationExtensionString()) {
             vshaderTxt.appendf("#extension %s : require\n", extension);
@@ -3433,7 +3464,7 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
         "}"
     );
 
-    SkString fshaderTxt(version);
+    SkString fshaderTxt;
     if (shaderCaps->noperspectiveInterpolationSupport()) {
         if (const char* extension = shaderCaps->noperspectiveInterpolationExtensionString()) {
             fshaderTxt.appendf("#extension %s : require\n", extension);
@@ -4025,14 +4056,6 @@ static bool gl_format_to_pixel_config(GrGLenum format, GrPixelConfig* config) {
         case GR_GL_R16F:
             *config = kAlpha_half_GrPixelConfig;
             return true;
-
-        // Experimental (for P016 and P010)
-        case GR_GL_R16:
-            *config = kR_16_GrPixelConfig;
-            return true;
-        case GR_GL_RG16:
-            *config = kRG_1616_GrPixelConfig;
-            return true;
     }
 
     SK_ABORT("Unexpected config");
@@ -4043,7 +4066,7 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
                                                const GrBackendFormat& format,
                                                GrMipMapped mipMapped,
                                                GrRenderable renderable,
-                                               const void* srcPixels, size_t rowBytes,
+                                               const void* pixels, size_t rowBytes,
                                                const SkColor4f& colorf) {
     this->handleDirtyContext();
 
@@ -4068,7 +4091,7 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
     }
 
     // Currently we don't support uploading pixel data when mipped.
-    if (srcPixels && GrMipMapped::kYes == mipMapped) {
+    if (pixels && GrMipMapped::kYes == mipMapped) {
         return GrBackendTexture();  // invalid
     }
 
@@ -4082,36 +4105,43 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
         mipLevelCount = SkMipMap::ComputeLevelCount(w, h) + 1;
     }
 
-    SkAutoTMalloc<GrMipLevel> texels(mipLevelCount);
-
     SkAutoMalloc pixelStorage;
 
-    if (!srcPixels) {
-        GrCompression compression = GrGLFormat2Compression(*glFormat);
+    if (GrGLFormatIsCompressed(*glFormat)) {
+        // we have to do something special for compressed textures
+        SkASSERT(0 == rowBytes);
 
-        SkTArray<size_t> individualMipOffsets(mipLevelCount);
-        size_t bytesPerPixel = GrGLBytesPerFormat(*glFormat);
-
-        size_t totalSize = GrComputeTightCombinedBufferSize(compression, bytesPerPixel, w, h,
-                                                            &individualMipOffsets, mipLevelCount);
-
-        char* tmpPixels = (char *) pixelStorage.reset(totalSize);
-
-        GrFillInData(compression, config, w, h, individualMipOffsets, tmpPixels, colorf);
-
-        for (int i = 0; i < mipLevelCount; ++i) {
-            size_t offset = individualMipOffsets[i];
-
-            texels.get()[i] = { &(tmpPixels[offset]), 0 };
+        if (!pixels) {
+            size_t etc1Size = GrGLFormatCompressedDataSize(*glFormat, w, h);
+            pixelStorage.reset(etc1Size);
+            GrFillInETC1WithColor(w, h, colorf, pixelStorage.get());
+            pixels = pixelStorage.get();
+            rowBytes = 0;
         }
     } else {
-        SkASSERT(1 == mipLevelCount);
-
-        if (GrGLFormatIsCompressed(*glFormat)) {
-            SkASSERT(0 == rowBytes);
+        int bpp = GrBytesPerPixel(config);
+        const size_t trimRowBytes = w * bpp;
+        if (!rowBytes) {
+            rowBytes = trimRowBytes;
         }
 
-        texels.get()[0] = { srcPixels, rowBytes };
+        if (!pixels) {
+            size_t baseLayerSize = trimRowBytes * h;
+            pixelStorage.reset(baseLayerSize);
+            if (!GrFillBufferWithColor(config, w, h, colorf, pixelStorage.get())) {
+                return GrBackendTexture();  // invalid
+            }
+
+            pixels = pixelStorage.get();
+            rowBytes = trimRowBytes;
+        }
+    }
+
+    SkAutoTMalloc<GrMipLevel> texels(mipLevelCount);
+
+    for (int i = 0; i < mipLevelCount; ++i) {
+        // TODO: this isn't correct when pixels for additional mip levels are passed in
+        texels.get()[i] = { pixels, rowBytes };
     }
 
     GrSurfaceDesc desc;
