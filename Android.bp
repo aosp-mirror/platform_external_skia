@@ -663,6 +663,7 @@ cc_library_static {
           "src/gpu/effects/generated/GrSimpleTextureEffect.cpp",
           "src/gpu/geometry/GrPathUtils.cpp",
           "src/gpu/geometry/GrQuad.cpp",
+          "src/gpu/geometry/GrQuadUtils.cpp",
           "src/gpu/geometry/GrShape.cpp",
           "src/gpu/gl/GrGLAssembleGLESInterfaceAutogen.cpp",
           "src/gpu/gl/GrGLAssembleGLInterfaceAutogen.cpp",
