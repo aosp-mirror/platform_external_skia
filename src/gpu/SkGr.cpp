@@ -133,31 +133,8 @@ sk_sp<GrTextureProxy> GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
         return nullptr;
     }
 
-    GrProxyProvider* proxyProvider = ctx->priv().proxyProvider();
-    GrSurfaceDesc desc;
-    desc.fFlags = kNone_GrSurfaceFlags;
-    desc.fWidth = baseProxy->width();
-    desc.fHeight = baseProxy->height();
-    desc.fConfig = baseProxy->config();
-    desc.fSampleCnt = 1;
-
-    GrBackendFormat format = baseProxy->backendFormat().makeTexture2D();
-    if (!format.isValid()) {
-        return nullptr;
-    }
-
-    sk_sp<GrTextureProxy> proxy =
-            proxyProvider->createMipMapProxy(format, desc, baseProxy->origin(), SkBudgeted::kYes);
-    if (!proxy) {
-        return nullptr;
-    }
-
-    // Copy the base layer to our proxy
-    sk_sp<GrSurfaceContext> sContext = ctx->priv().makeWrappedSurfaceContext(proxy);
-    SkASSERT(sContext);
-    SkAssertResult(sContext->copy(baseProxy));
-
-    return proxy;
+    return GrSurfaceProxy::Copy(ctx, baseProxy, GrMipMapped::kYes, SkBackingFit::kExact,
+                                SkBudgeted::kYes);
 }
 
 sk_sp<GrTextureProxy> GrRefCachedBitmapTextureProxy(GrRecordingContext* ctx,
@@ -319,6 +296,9 @@ static inline int32_t dither_range_type_for_config(GrPixelConfig dstConfig) {
         case kRGB_888X_GrPixelConfig:
         case kRG_88_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
+        // Experimental (for P016 and P010)
+        case kR_16_GrPixelConfig:
+        case kRG_1616_GrPixelConfig:
             return 0;
         case kRGB_565_GrPixelConfig:
             return 1;

@@ -48,7 +48,6 @@ public:
     bool dstReadInShaderSupport() const { return fDstReadInShaderSupport; }
     bool dualSourceBlendingSupport() const { return fDualSourceBlendingSupport; }
     bool integerSupport() const { return fIntegerSupport; }
-    int imageLoadStoreSupport() const { return fImageLoadStoreSupport; }
 
     /**
      * Some helper functions for encapsulating various extensions to read FB Buffer on openglES
@@ -64,8 +63,6 @@ public:
     const char* fbFetchColorName() const { return fFBFetchColorName; }
 
     const char* fbFetchExtensionString() const { return fFBFetchExtensionString; }
-
-    bool dropsTileOnZeroDivide() const { return fDropsTileOnZeroDivide; }
 
     bool flatInterpolationSupport() const { return fFlatInterpolationSupport; }
 
@@ -92,8 +89,6 @@ public:
     bool halfIs32Bits() const { return fHalfIs32Bits; }
 
     bool hasLowFragmentPrecision() const { return fHasLowFragmentPrecision; }
-
-    bool unsignedSupport() const { return fUnsignedSupport; }
 
     // SkSL only.
     bool builtinFMASupport() const { return fBuiltinFMASupport; }
@@ -225,11 +220,6 @@ public:
         return fSampleVariablesExtensionString;
     }
 
-    const char* imageLoadStoreExtensionString() const {
-        SkASSERT(this->imageLoadStoreSupport());
-        return fImageLoadStoreExtensionString;
-    }
-
     int maxFragmentSamplers() const { return fMaxFragmentSamplers; }
 
     /**
@@ -240,6 +230,8 @@ public:
     const GrSwizzle& configTextureSwizzle(GrPixelConfig config) const {
         return fConfigTextureSwizzle[config];
     }
+
+    bool textureSwizzleAppliedInShader() const { return fTextureSwizzleAppliedInShader; }
 
     /** Swizzle that should occur on the fragment shader outputs for a given config. */
     const GrSwizzle& configOutputSwizzle(GrPixelConfig config) const {
@@ -260,8 +252,6 @@ private:
     bool fDstReadInShaderSupport            : 1;
     bool fDualSourceBlendingSupport         : 1;
     bool fIntegerSupport                    : 1;
-    bool fImageLoadStoreSupport             : 1;
-    bool fDropsTileOnZeroDivide             : 1;
     bool fFBFetchSupport                    : 1;
     bool fFBFetchNeedsCustomOutput          : 1;
     bool fUsesPrecisionModifiers            : 1;
@@ -276,7 +266,7 @@ private:
     bool fFloatIs32Bits                     : 1;
     bool fHalfIs32Bits                      : 1;
     bool fHasLowFragmentPrecision           : 1;
-    bool fUnsignedSupport                   : 1;
+    bool fTextureSwizzleAppliedInShader     : 1;
 
     // Used by SkSL to know when to generate polyfills.
     bool fBuiltinFMASupport : 1;
@@ -311,7 +301,6 @@ private:
     const char* fSecondExternalTextureExtensionString;
     const char* fNoPerspectiveInterpolationExtensionString;
     const char* fSampleVariablesExtensionString;
-    const char* fImageLoadStoreExtensionString;
 
     const char* fFBFetchColorName;
     const char* fFBFetchExtensionString;

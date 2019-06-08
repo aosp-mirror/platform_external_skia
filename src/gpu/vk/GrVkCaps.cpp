@@ -54,8 +54,7 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
 }
 
 bool GrVkCaps::initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
-                                  GrSurfaceOrigin* origin, bool* rectsMustMatch,
-                                  bool* disallowSubrect) const {
+                                  bool* rectsMustMatch, bool* disallowSubrect) const {
     // Vk doesn't use rectsMustMatch or disallowSubrect. Always return false.
     *rectsMustMatch = false;
     *disallowSubrect = false;
@@ -63,7 +62,6 @@ bool GrVkCaps::initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc*
     // We can always succeed here with either a CopyImage (none msaa src) or ResolveImage (msaa).
     // For CopyImage we can make a simple texture, for ResolveImage we require the dst to be a
     // render target as well.
-    *origin = src->origin();
     desc->fConfig = src->config();
     if (src->numColorSamples() > 1 || src->asTextureProxy()) {
         desc->fFlags = kRenderTarget_GrSurfaceFlag;
@@ -110,14 +108,18 @@ static int get_compatible_format_class(GrPixelConfig config) {
         case kGray_8_as_Lum_GrPixelConfig:
             SK_ABORT("Unsupported Vulkan pixel config");
             return 0;
+        // Experimental (for P016 and P010)
+        case kR_16_GrPixelConfig:
+            return 2;
+        case kRG_1616_GrPixelConfig:
+            return 4;
     }
     SK_ABORT("Invalid pixel config");
     return 0;
 }
 
-bool GrVkCaps::canCopyImage(GrPixelConfig dstConfig, int dstSampleCnt, GrSurfaceOrigin dstOrigin,
-                            bool dstHasYcbcr, GrPixelConfig srcConfig, int srcSampleCnt,
-                            GrSurfaceOrigin srcOrigin, bool srcHasYcbcr) const {
+bool GrVkCaps::canCopyImage(GrPixelConfig dstConfig, int dstSampleCnt, bool dstHasYcbcr,
+                            GrPixelConfig srcConfig, int srcSampleCnt, bool srcHasYcbcr) const {
     if ((dstSampleCnt > 1 || srcSampleCnt > 1) && dstSampleCnt != srcSampleCnt) {
         return false;
     }
@@ -128,8 +130,7 @@ bool GrVkCaps::canCopyImage(GrPixelConfig dstConfig, int dstSampleCnt, GrSurface
 
     // We require that all vulkan GrSurfaces have been created with transfer_dst and transfer_src
     // as image usage flags.
-    if (srcOrigin != dstOrigin ||
-        get_compatible_format_class(srcConfig) != get_compatible_format_class(dstConfig)) {
+    if (get_compatible_format_class(srcConfig) != get_compatible_format_class(dstConfig)) {
         return false;
     }
 
@@ -174,10 +175,8 @@ bool GrVkCaps::canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCnt, bool dst
     return true;
 }
 
-bool GrVkCaps::canCopyAsResolve(GrPixelConfig dstConfig, int dstSampleCnt,
-                                GrSurfaceOrigin dstOrigin, bool dstHasYcbcr,
-                                GrPixelConfig srcConfig, int srcSampleCnt,
-                                GrSurfaceOrigin srcOrigin, bool srcHasYcbcr) const {
+bool GrVkCaps::canCopyAsResolve(GrPixelConfig dstConfig, int dstSampleCnt, bool dstHasYcbcr,
+                                GrPixelConfig srcConfig, int srcSampleCnt, bool srcHasYcbcr) const {
     // The src surface must be multisampled.
     if (srcSampleCnt <= 1) {
         return false;
@@ -193,33 +192,7 @@ bool GrVkCaps::canCopyAsResolve(GrPixelConfig dstConfig, int dstSampleCnt,
         return false;
     }
 
-    // Surfaces must have the same origin.
-    if (srcOrigin != dstOrigin) {
-        return false;
-    }
-
     if (dstHasYcbcr || srcHasYcbcr) {
-        return false;
-    }
-
-    return true;
-}
-
-bool GrVkCaps::canCopyAsDraw(GrPixelConfig dstConfig, bool dstIsRenderable, bool dstHasYcbcr,
-                             GrPixelConfig srcConfig, bool srcIsTextureable,
-                             bool srcHasYcbcr) const {
-    // TODO: Make copySurfaceAsDraw handle the swizzle
-    if (this->shaderCaps()->configOutputSwizzle(srcConfig) !=
-        this->shaderCaps()->configOutputSwizzle(dstConfig)) {
-        return false;
-    }
-
-    // Make sure the dst is a render target and the src is a texture.
-    if (!dstIsRenderable || !srcIsTextureable) {
-        return false;
-    }
-
-    if (dstHasYcbcr) {
         return false;
     }
 
@@ -228,9 +201,6 @@ bool GrVkCaps::canCopyAsDraw(GrPixelConfig dstConfig, bool dstIsRenderable, bool
 
 bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                                 const SkIRect& srcRect, const SkIPoint& dstPoint) const {
-    GrSurfaceOrigin dstOrigin = dst->origin();
-    GrSurfaceOrigin srcOrigin = src->origin();
-
     GrPixelConfig dstConfig = dst->config();
     GrPixelConfig srcConfig = src->config();
 
@@ -278,14 +248,12 @@ bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy*
         }
     }
 
-    return this->canCopyImage(dstConfig, dstSampleCnt, dstOrigin, dstHasYcbcr,
-                              srcConfig, srcSampleCnt, srcOrigin, srcHasYcbcr) ||
+    return this->canCopyImage(dstConfig, dstSampleCnt, dstHasYcbcr,
+                              srcConfig, srcSampleCnt, srcHasYcbcr) ||
            this->canCopyAsBlit(dstConfig, dstSampleCnt, dstIsLinear, dstHasYcbcr,
                                srcConfig, srcSampleCnt, srcIsLinear, srcHasYcbcr) ||
-           this->canCopyAsResolve(dstConfig, dstSampleCnt, dstOrigin, dstHasYcbcr,
-                                  srcConfig, srcSampleCnt, srcOrigin, srcHasYcbcr) ||
-           this->canCopyAsDraw(dstConfig, dstSampleCnt > 0, dstHasYcbcr,
-                               srcConfig, SkToBool(src->asTextureProxy()), srcHasYcbcr);
+           this->canCopyAsResolve(dstConfig, dstSampleCnt, dstHasYcbcr,
+                                  srcConfig, srcSampleCnt, srcHasYcbcr);
 }
 
 template<typename T> T* get_extension_feature_struct(const VkPhysicalDeviceFeatures2& features,
@@ -654,9 +622,6 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties,
     shaderCaps->fFloatIs32Bits = true;
     shaderCaps->fHalfIs32Bits = false;
 
-    // SPIR-V supports unsigned integers.
-    shaderCaps->fUnsignedSupport = true;
-
     shaderCaps->fMaxFragmentSamplers = SkTMin(
                                        SkTMin(properties.limits.maxPerStageDescriptorSampledImages,
                                               properties.limits.maxPerStageDescriptorSamplers),
@@ -713,6 +678,9 @@ static bool format_is_srgb(VkFormat format) {
         case VK_FORMAT_R32G32_SFLOAT:
         case VK_FORMAT_R16G16B16A16_SFLOAT:
         case VK_FORMAT_R16_SFLOAT:
+        // Experimental (for P016 and P010)
+        case VK_FORMAT_R16_UNORM:
+        case VK_FORMAT_R16G16_UNORM:
             return false;
         default:
             SK_ABORT("Unsupported VkFormat");
@@ -739,7 +707,11 @@ static constexpr VkFormat kVkFormats[] = {
     VK_FORMAT_R32G32_SFLOAT,
     VK_FORMAT_R8G8B8A8_SRGB,
     VK_FORMAT_B8G8R8A8_SRGB,
-    VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK
+    VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,
+
+    // Experimental (for P016 and P010)
+    VK_FORMAT_R16_UNORM,
+    VK_FORMAT_R16G16_UNORM,
 };
 
 const GrVkCaps::FormatInfo& GrVkCaps::getFormatInfo(VkFormat format) const {
@@ -1078,6 +1050,11 @@ static GrPixelConfig get_yuva_config(VkFormat vkFormat) {
             return kBGRA_8888_GrPixelConfig;
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
             return kRGBA_1010102_GrPixelConfig;
+        // Experimental (for P016 and P010)
+        case VK_FORMAT_R16_UNORM:
+            return kR_16_GrPixelConfig;
+        case VK_FORMAT_R16G16_UNORM:
+            return kRG_1616_GrPixelConfig;
         default:
             return kUnknown_GrPixelConfig;
     }
@@ -1140,6 +1117,11 @@ static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorTyp
             return VK_FORMAT_R32G32B32A32_SFLOAT == vkFormat;
         case GrColorType::kRGB_ETC1:
             return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK == vkFormat;
+        // Experimental (for P016 and P010)
+        case GrColorType::kR_16:
+            return VK_FORMAT_R16_UNORM == vkFormat;
+        case GrColorType::kRG_1616:
+            return VK_FORMAT_R16G16_UNORM == vkFormat;
     }
     SK_ABORT("Unknown color type");
     return false;

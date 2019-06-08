@@ -216,8 +216,9 @@ private:
     // The texture is populated with |texels|, if it exists.
     // The texture parameters are cached in |initialTexParams|.
     bool createTextureImpl(const GrSurfaceDesc& desc, GrGLTextureInfo* info, GrRenderable,
-                           GrGLTexture::SamplerParams* initialTexParams, const GrMipLevel texels[],
-                           int mipLevelCount, GrMipMapsStatus* mipMapsStatus);
+                           GrGLTextureParameters::SamplerOverriddenState* initialState,
+                           const GrMipLevel texels[], int mipLevelCount,
+                           GrMipMapsStatus* mipMapsStatus);
 
     // Checks whether glReadPixels can be called to get pixel values in readConfig from the
     // render target.
@@ -254,10 +255,8 @@ private:
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 
-    bool onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin,
-                       GrSurface* src, GrSurfaceOrigin srcOrigin,
-                       const SkIRect& srcRect, const SkIPoint& dstPoint,
-                       bool canDiscardOutsideDstRect) override;
+    bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                       const SkIPoint& dstPoint, bool canDiscardOutsideDstRect) override;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -300,15 +299,12 @@ private:
 
     bool waitSync(GrGLsync, uint64_t timeout, bool flush);
 
-    bool copySurfaceAsDraw(GrSurface* dst, GrSurfaceOrigin dstOrigin,
-                           GrSurface* src, GrSurfaceOrigin srcOrigin,
-                           const SkIRect& srcRect, const SkIPoint& dstPoint);
-    void copySurfaceAsCopyTexSubImage(GrSurface* dst, GrSurfaceOrigin dstOrigin,
-                                      GrSurface* src, GrSurfaceOrigin srcOrigin,
-                                      const SkIRect& srcRect, const SkIPoint& dstPoint);
-    bool copySurfaceAsBlitFramebuffer(GrSurface* dst, GrSurfaceOrigin dstOrigin,
-                                      GrSurface* src, GrSurfaceOrigin srcOrigin,
-                                      const SkIRect& srcRect, const SkIPoint& dstPoint);
+    bool copySurfaceAsDraw(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                           const SkIPoint& dstPoint);
+    void copySurfaceAsCopyTexSubImage(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                                      const SkIPoint& dstPoint);
+    bool copySurfaceAsBlitFramebuffer(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                                      const SkIPoint& dstPoint);
 
     static bool BlendCoeffReferencesConstant(GrBlendCoeff coeff);
 
@@ -664,6 +660,8 @@ private:
     }
 
     GrPrimitiveType fLastPrimitiveType;
+
+    GrGLTextureParameters::ResetTimestamp fResetTimestampForTextureParameters = 0;
 
     class SamplerObjectCache;
     std::unique_ptr<SamplerObjectCache> fSamplerObjectCache;

@@ -139,22 +139,17 @@ public:
      * the surface is not a render target, otherwise it is the number of samples in the render
      * target.
      */
-    bool canCopyImage(GrPixelConfig dstConfig, int dstSampleCnt, GrSurfaceOrigin dstOrigin,
-                      bool dstHasYcbcr, GrPixelConfig srcConfig, int srcSamplecnt,
-                      GrSurfaceOrigin srcOrigin, bool srcHasYcbcr) const;
+    bool canCopyImage(GrPixelConfig dstConfig, int dstSampleCnt, bool dstHasYcbcr,
+                      GrPixelConfig srcConfig, int srcSamplecnt, bool srcHasYcbcr) const;
 
     bool canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCnt, bool dstIsLinear,
                        bool dstHasYcbcr, GrPixelConfig srcConfig, int srcSampleCnt,
                        bool srcIsLinear, bool srcHasYcbcr) const;
 
-    bool canCopyAsResolve(GrPixelConfig dstConfig, int dstSampleCnt, GrSurfaceOrigin dstOrigin,
-                          bool dstHasYcbcr, GrPixelConfig srcConfig, int srcSamplecnt,
-                          GrSurfaceOrigin srcOrigin, bool srcHasYcbcr) const;
+    bool canCopyAsResolve(GrPixelConfig dstConfig, int dstSampleCnt, bool dstHasYcbcr,
+                          GrPixelConfig srcConfig, int srcSamplecnt, bool srcHasYcbcr) const;
 
-    bool canCopyAsDraw(GrPixelConfig dstConfig, bool dstIsRenderable, bool dstHasYcbcr,
-                       GrPixelConfig srcConfig, bool srcIsTextureable, bool srcHasYcbcr) const;
-
-    bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc, GrSurfaceOrigin*,
+    bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
                             bool* rectsMustMatch, bool* disallowSubrect) const override;
 
     GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,
@@ -223,7 +218,7 @@ private:
 
         SkTDArray<int> fColorSampleCounts;
     };
-    static const size_t kNumVkFormats = 17;
+    static const size_t kNumVkFormats = 19;
     FormatInfo fFormatTable[kNumVkFormats];
 
     const FormatInfo& getFormatInfo(VkFormat) const;

@@ -119,18 +119,13 @@ void GrMtlCaps::initFeatureSet(MTLFeatureSet featureSet) {
 }
 
 bool GrMtlCaps::canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCount,
-                              GrSurfaceOrigin dstOrigin,
                               GrPixelConfig srcConfig, int srcSampleCount,
-                              GrSurfaceOrigin srcOrigin,
                               const SkIRect& srcRect, const SkIPoint& dstPoint,
                               bool areDstSrcSameObj) const {
     if (dstConfig != srcConfig) {
         return false;
     }
     if ((dstSampleCount > 1 || srcSampleCount > 1) && (dstSampleCount != srcSampleCount)) {
-        return false;
-    }
-    if (dstOrigin != srcOrigin) {
         return false;
     }
     if (areDstSrcSameObj) {
@@ -143,38 +138,8 @@ bool GrMtlCaps::canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCount,
     return true;
 }
 
-bool GrMtlCaps::canCopyAsDraw(GrPixelConfig dstConfig, bool dstIsRenderable,
-                              GrPixelConfig srcConfig, bool srcIsTextureable) const {
-    // TODO: Make copySurfaceAsDraw handle the swizzle
-    if (this->shaderCaps()->configOutputSwizzle(srcConfig) !=
-        this->shaderCaps()->configOutputSwizzle(dstConfig)) {
-        return false;
-    }
-
-    if (!dstIsRenderable || !srcIsTextureable) {
-        return false;
-    }
-    return true;
-}
-
-bool GrMtlCaps::canCopyAsDrawThenBlit(GrPixelConfig dstConfig, GrPixelConfig srcConfig,
-                                      bool srcIsTextureable) const {
-    // TODO: Make copySurfaceAsDraw handle the swizzle
-    if (this->shaderCaps()->configOutputSwizzle(srcConfig) !=
-        this->shaderCaps()->configOutputSwizzle(dstConfig)) {
-        return false;
-    }
-    if (!srcIsTextureable) {
-        return false;
-    }
-    return true;
-}
-
 bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                                  const SkIRect& srcRect, const SkIPoint& dstPoint) const {
-    GrSurfaceOrigin dstOrigin = dst->origin();
-    GrSurfaceOrigin srcOrigin = src->origin();
-
     int dstSampleCnt = 0;
     int srcSampleCnt = 0;
     if (const GrRenderTargetProxy* rtProxy = dst->asRenderTargetProxy()) {
@@ -186,13 +151,8 @@ bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy
     SkASSERT((dstSampleCnt > 0) == SkToBool(dst->asRenderTargetProxy()));
     SkASSERT((srcSampleCnt > 0) == SkToBool(src->asRenderTargetProxy()));
 
-    return this->canCopyAsBlit(dst->config(), dstSampleCnt, dstOrigin,
-                               src->config(), srcSampleCnt, srcOrigin,
-                               srcRect, dstPoint, dst == src) ||
-           this->canCopyAsDraw(dst->config(), SkToBool(dst->asRenderTargetProxy()),
-                               src->config(), SkToBool(src->asTextureProxy())) ||
-           this->canCopyAsDrawThenBlit(dst->config(), src->config(),
-                                       SkToBool(src->asTextureProxy()));
+    return this->canCopyAsBlit(dst->config(), dstSampleCnt, src->config(), srcSampleCnt, srcRect,
+                               dstPoint, dst == src);
 }
 
 void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
@@ -346,14 +306,10 @@ void GrMtlCaps::initShaderCaps() {
 
     shaderCaps->fIntegerSupport = true;
     shaderCaps->fVertexIDSupport = false;
-    shaderCaps->fImageLoadStoreSupport = false;
 
     // Metal uses IEEE float and half floats so assuming those values here.
     shaderCaps->fFloatIs32Bits = true;
     shaderCaps->fHalfIs32Bits = false;
-
-    // Metal supports unsigned integers.
-    shaderCaps->fUnsignedSupport = true;
 
     shaderCaps->fMaxFragmentSamplers = 16;
 }
@@ -446,6 +402,13 @@ void GrMtlCaps::initConfigTable() {
 
     info = &fConfigTable[kRGBA_half_Clamped_GrPixelConfig];
     info->fFlags = ConfigInfo::kAllFlags;
+
+    // Experimental (for P016 and P010)
+    info = &fConfigTable[kR_16_GrPixelConfig];
+    info->fFlags = 0;
+
+    info = &fConfigTable[kRG_1616_GrPixelConfig];
+    info->fFlags = 0;
 }
 
 void GrMtlCaps::initStencilFormat(id<MTLDevice> physDev) {
@@ -578,6 +541,13 @@ static GrPixelConfig get_yuva_config(GrMTLPixelFormat grFormat) {
         case MTLPixelFormatBGRA8Unorm:
             return kBGRA_8888_GrPixelConfig;
             break;
+        // Experimental (for P016 and P010)
+        case MTLPixelFormatR16Unorm:
+            return kR_16_GrPixelConfig;
+            break;
+        case MTLPixelFormatRG16Unorm:
+            return kRG_1616_GrPixelConfig;
+            break;
         default:
             return kUnknown_GrPixelConfig;
             break;
@@ -652,6 +622,11 @@ static bool format_color_type_valid_pair(MTLPixelFormat format, GrColorType colo
 #else
             return MTLPixelFormatETC2_RGB8 == format;
 #endif
+        // Experimental (for P016 and P010)
+        case GrColorType::kR_16:
+            return MTLPixelFormatR16Unorm == format;
+        case GrColorType::kRG_1616:
+            return MTLPixelFormatRG16Unorm == format;
     }
     SK_ABORT("Unknown color type");
     return false;

@@ -12,7 +12,8 @@
 
 namespace SK_OPTS_NS {
 
-    inline void eval(const skvm::Program::Instruction insts[], const int ninsts, const int nregs,
+    inline void eval(const skvm::Program::Instruction insts[], const int ninsts,
+                     const int nregs, const int loop,
                      int n, void* args[], size_t strides[], const int nargs) {
         using namespace skvm;
 
@@ -33,16 +34,24 @@ namespace SK_OPTS_NS {
             F32 f32;
         };
 
-        // Annoyingly we can't trust that malloc() or new will work with Slot because
-        // the skvx::Vec types may have alignment greater than what they provide.
-        // We'll overallocate one extra register so we can align manually.
-        std::unique_ptr<char[]> regs_buf{ new char[ sizeof(Slot) * (nregs + 1) ]};
+        Slot                     few_regs[16];
+        std::unique_ptr<char[]> many_regs;
 
-        uintptr_t addr = (uintptr_t)regs_buf.get();
-        while (addr & (alignof(Slot) - 1)) {
-            addr++;
+        Slot* regs = few_regs;
+
+        if (nregs > (int)SK_ARRAY_COUNT(few_regs)) {
+            // Annoyingly we can't trust that malloc() or new will work with Slot because
+            // the skvx::Vec types may have alignment greater than what they provide.
+            // We'll overallocate one extra register so we can align manually.
+            many_regs.reset(new char[ sizeof(Slot) * (nregs + 1) ]);
+
+            uintptr_t addr = (uintptr_t)many_regs.get();
+            addr += alignof(Slot) -
+                     (addr & (alignof(Slot) - 1));
+            SkASSERT((addr & (alignof(Slot) - 1)) == 0);
+            regs = (Slot*)addr;
         }
-        Slot* regs = (Slot*)addr;
+
 
         auto r = [&](ID id) -> Slot& {
             SkASSERT(0 <= id && id < nregs);
@@ -66,11 +75,12 @@ namespace SK_OPTS_NS {
             SkASSERT(arg == args + nargs);
         };
 
-        int stride;
-        for ( ; n > 0; n -= stride, step_args(stride)) {
+        int start = 0,
+            stride;
+        for ( ; n > 0; start = loop, n -= stride, step_args(stride)) {
             stride = n >= K ? K : 1;
 
-            for (int i = 0; i < ninsts; i++) {
+            for (int i = start; i < ninsts; i++) {
                 skvm::Program::Instruction inst = insts[i];
 
                 // d = op(x, y.id/z.imm, z.id/z.imm)
@@ -122,7 +132,9 @@ namespace SK_OPTS_NS {
                     CASE(Op::sra): r(d).i32 = r(x).i32 >> y.imm; break;
                     CASE(Op::shr): r(d).u32 = r(x).u32 >> y.imm; break;
 
-                    CASE(Op::mul_unorm8): r(d).i32 = (r(x).i32 * r(y.id).i32 + 255) / 256; break;
+                    CASE(Op::mul_unorm8): r(d).u32 = (r(x).u32 * r(y.id).u32 + 255) / 256; break;
+                    CASE(Op::mad_unorm8): r(d).u32 = (r(x).u32 * r(y.id).u32 + 255) / 256
+                                                   + r(z.id).u32; break;
 
                     CASE(Op::extract): r(d).u32 = (r(x).u32 & y.imm) >> z.imm; break;
 

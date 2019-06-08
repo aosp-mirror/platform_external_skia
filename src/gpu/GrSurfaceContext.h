@@ -39,25 +39,14 @@ public:
     int width() const { return this->asSurfaceProxy()->width(); }
     int height() const { return this->asSurfaceProxy()->height(); }
 
-    /*
-     * Copy 'src' into the proxy backing this context
-     * @param src       src of pixels
-     * @param srcRect   the subset of 'src' to copy
-     * @param dstPoint  the origin of the 'srcRect' in the destination coordinate space
-     * @return          true if the copy succeeded; false otherwise
-     *
-     * Note: Notionally, 'srcRect' is clipped to 'src's extent with 'dstPoint' being adjusted.
-     *       Then the 'srcRect' offset by 'dstPoint' is clipped against the dst's extent.
-     *       The end result is only valid src pixels and dst pixels will be touched but the copied
-     *       regions will not be shifted.
-     */
-    bool copy(GrSurfaceProxy* src, const SkIRect& srcRect, const SkIPoint& dstPoint);
-
-    bool copy(GrSurfaceProxy* src) {
-        return this->copy(src,
-                          SkIRect::MakeWH(src->width(), src->height()),
-                          SkIPoint::Make(0, 0));
-    }
+   /**
+    * These flags can be used with the read/write pixels functions below.
+    */
+    enum PixelOpsFlags {
+        /** The src for write or dst read is unpremultiplied. This is only respected if both the
+            config src and dst configs are an RGBA/BGRA 8888 format. */
+        kUnpremul_PixelOpsFlag  = 0x4,
+    };
 
     /**
      * Reads a rectangle of pixels from the render target context.
@@ -88,6 +77,23 @@ public:
     bool writePixels(const SkImageInfo& srcInfo, const void* srcBuffer, size_t srcRowBytes,
                      int x, int y, uint32_t flags = 0);
 
+#if GR_TEST_UTILS
+    // Accessors for tests to directly call read/writePixelsImpl
+    bool writePixels(GrContext* direct, int left, int top, int width, int height,
+                     GrColorType srcColorType, SkColorSpace* srcColorSpace,
+                     const void* srcBuffer, size_t srcRowBytes = 0, uint32_t pixelOpsFlags = 0) {
+        return writePixelsImpl(direct, left, top, width, height, srcColorType, srcColorSpace,
+                               srcBuffer, srcRowBytes, pixelOpsFlags);
+    }
+
+    bool readPixels(GrContext* direct, int left, int top, int width, int height,
+                    GrColorType dstColorType, SkColorSpace* dstColorSpace, void* buffer,
+                    size_t rowBytes = 0, uint32_t pixelOpsFlags = 0) {
+        return readPixelsImpl(direct, left, top, width, height, dstColorType, dstColorSpace,
+                              buffer, rowBytes, pixelOpsFlags);
+    }
+#endif
+
     // TODO: this is virtual b.c. this object doesn't have a pointer to the wrapped GrSurfaceProxy?
     virtual GrSurfaceProxy* asSurfaceProxy() = 0;
     virtual const GrSurfaceProxy* asSurfaceProxy() const = 0;
@@ -108,6 +114,17 @@ public:
     GrSurfaceContextPriv surfPriv();
     const GrSurfaceContextPriv surfPriv() const;
 
+#if GR_TEST_UTILS
+    bool testCopy(GrSurfaceProxy* src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
+        return this->copy(src, srcRect, dstPoint);
+    }
+
+    bool testCopy(GrSurfaceProxy* src) {
+        return this->copy(src);
+    }
+#endif
+
+
 protected:
     friend class GrSurfaceContextPriv;
 
@@ -124,6 +141,38 @@ protected:
     GrRecordingContext* fContext;
 
 private:
+    friend class GrSurfaceProxy; // for copy
+
+    /**
+     * Copy 'src' into the proxy backing this context. This call will not do any draw fallback.
+     * Currently only writePixels and replaceRenderTarget call this directly. All other copies
+     * should go through GrSurfaceProxy::Copy.
+     * @param src       src of pixels
+     * @param srcRect   the subset of 'src' to copy
+     * @param dstPoint  the origin of the 'srcRect' in the destination coordinate space
+     * @return          true if the copy succeeded; false otherwise
+     *
+     * Note: Notionally, 'srcRect' is clipped to 'src's extent with 'dstPoint' being adjusted.
+     *       Then the 'srcRect' offset by 'dstPoint' is clipped against the dst's extent.
+     *       The end result is only valid src pixels and dst pixels will be touched but the copied
+     *       regions will not be shifted. The 'src' must have the same origin as the backing proxy
+     *       of fSurfaceContext.
+     */
+    bool copy(GrSurfaceProxy* src, const SkIRect& srcRect, const SkIPoint& dstPoint);
+
+    bool copy(GrSurfaceProxy* src) {
+        return this->copy(src, SkIRect::MakeWH(src->width(), src->height()), SkIPoint::Make(0, 0));
+    }
+
+    bool writePixelsImpl(GrContext* direct, int left, int top, int width, int height,
+                         GrColorType srcColorType, SkColorSpace* srcColorSpace,
+                         const void* srcBuffer, size_t srcRowBytes, uint32_t pixelOpsFlags);
+
+    bool readPixelsImpl(GrContext* direct, int left, int top, int width,
+                        int height, GrColorType dstColorType,
+                        SkColorSpace* dstColorSpace, void* buffer, size_t rowBytes,
+                        uint32_t pixelOpsFlags);
+
     GrColorSpaceInfo    fColorSpaceInfo;
 
     typedef SkRefCnt INHERITED;

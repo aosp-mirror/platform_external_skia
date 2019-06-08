@@ -133,11 +133,6 @@ public:
         return SkToBool(fConfigTable[config].fFlags & ConfigInfo::kCanUseTexStorage_Flag);
     }
 
-    /** Returns the mapping between GrPixelConfig components and GL internal format components. */
-    const GrSwizzle& configSwizzle(GrPixelConfig config) const {
-        return fConfigTable[config].fSwizzle;
-    }
-
     GrGLenum configSizedInternalFormat(GrPixelConfig config) const {
         return fConfigTable[config].fFormats.fSizedInternalFormat;
     }
@@ -330,9 +325,6 @@ public:
     /// Are textures with GL_TEXTURE_RECTANGLE type supported.
     bool rectangleTextureSupport() const { return fRectangleTextureSupport; }
 
-    /// GL_ARB_texture_swizzle
-    bool textureSwizzleSupport() const { return fTextureSwizzleSupport; }
-
     bool mipMapLevelAndLodControlSupport() const { return fMipMapLevelAndLodControlSupport; }
 
     bool doManualMipmapping() const { return fDoManualMipmapping; }
@@ -396,21 +388,18 @@ public:
     }
 
     bool canCopyTexSubImage(GrPixelConfig dstConfig, bool dstHasMSAARenderBuffer,
-                            bool dstIsTextureable, bool dstIsGLTexture2D,
-                            GrSurfaceOrigin dstOrigin,
+                            const GrTextureType* dstTypeIfTexture,
                             GrPixelConfig srcConfig, bool srcHasMSAARenderBuffer,
-                            bool srcIsTextureable, bool srcIsGLTexture2D,
-                            GrSurfaceOrigin srcOrigin) const;
+                            const GrTextureType* srcTypeIfTexture) const;
     bool canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCnt,
-                       bool dstIsTextureable, bool dstIsGLTexture2D,
-                       GrSurfaceOrigin dstOrigin,
+                       const GrTextureType* dstTypeIfTexture,
                        GrPixelConfig srcConfig, int srcSampleCnt,
-                       bool srcIsTextureable, bool srcIsGLTexture2D,
-                       GrSurfaceOrigin srcOrigin, const SkRect& srcBounds,
+                        const GrTextureType* srcTypeIfTexture,
+                       const SkRect& srcBounds, bool srcBoundsExact,
                        const SkIRect& srcRect, const SkIPoint& dstPoint) const;
     bool canCopyAsDraw(GrPixelConfig dstConfig, bool srcIsTextureable) const;
 
-    bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc, GrSurfaceOrigin*,
+    bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
                             bool* rectsMustMatch, bool* disallowSubrect) const override;
 
     bool programBinarySupport() const { return fProgramBinarySupport; }
@@ -502,7 +491,6 @@ private:
     bool fPartialFBOReadIsSlow : 1;
     bool fBindUniformLocationSupport : 1;
     bool fRectangleTextureSupport : 1;
-    bool fTextureSwizzleSupport : 1;
     bool fMipMapLevelAndLodControlSupport : 1;
     bool fRGBAToBGRAReadbackConversionsAreSlow : 1;
     bool fUseBufferDataNullHint                : 1;
@@ -596,8 +584,6 @@ private:
         // verification of color attachment validity is done while flushing. Although only ever
         // used in the (sole) rendering thread it can cause races if it is glommed into fFlags.
         bool fVerifiedColorAttachment = false;
-
-        GrSwizzle fSwizzle;
     };
 
     ConfigInfo fConfigTable[kGrPixelConfigCnt];

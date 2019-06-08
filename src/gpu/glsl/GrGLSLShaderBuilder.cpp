@@ -158,7 +158,7 @@ void GrGLSLShaderBuilder::appendColorGamutXform(SkString* out,
         const GrShaderVar gColorXformArgs[] = { GrShaderVar("color", kHalf4_GrSLType) };
         SkString body;
         if (colorXformHelper->applyUnpremul()) {
-            body.append("half nonZeroAlpha = max(color.a, 0.00001);");
+            body.append("half nonZeroAlpha = max(color.a, 0.0001);");
             body.append("color = half4(color.rgb / nonZeroAlpha, nonZeroAlpha);");
         }
         if (colorXformHelper->applySrcTF()) {
@@ -239,7 +239,6 @@ void GrGLSLShaderBuilder::compileAndAppendLayoutQualifiers() {
 
 void GrGLSLShaderBuilder::finalize(uint32_t visibility) {
     SkASSERT(!fFinalized);
-    this->versionDecl() = fProgramBuilder->shaderCaps()->versionDeclString();
     this->compileAndAppendLayoutQualifiers();
     SkASSERT(visibility);
     fProgramBuilder->appendUniformDecls((GrShaderFlags) visibility, &this->uniforms());

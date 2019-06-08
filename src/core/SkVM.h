@@ -8,8 +8,8 @@
 #ifndef SkVM_DEFINED
 #define SkVM_DEFINED
 
-#include "include/core/SkTypes.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
 #include <unordered_map>
 #include <vector>
 
@@ -23,7 +23,7 @@ namespace skvm {
         add_i32, sub_i32, mul_i32,
         bit_and, bit_or, bit_xor,
         shl, shr, sra,
-        mul_unorm8,
+        mul_unorm8, mad_unorm8,
         extract,
         pack,
         to_f32, to_i32,
@@ -39,8 +39,8 @@ namespace skvm {
             union { ID id; int imm; } y,z;
         };
 
-        Program(std::vector<Instruction>, int regs);
-        Program() : Program({}, 0) {}
+        Program(std::vector<Instruction>, int regs, int loop);
+        Program() : Program({}, 0, 0) {}
 
         void dump(SkWStream*) const;
 
@@ -56,6 +56,7 @@ namespace skvm {
 
         std::vector<Instruction> fInstructions;
         int                      fRegs;
+        int                      fLoop;
     };
 
     struct Arg { int ix; };
@@ -95,7 +96,8 @@ namespace skvm {
         I32 shr(I32 x, int bits);
         I32 sra(I32 x, int bits);
 
-        I32 mul_unorm8(I32 x, I32 y);   // (x*y+255)/256, approximating (x*y+127)/255.
+        I32 mul_unorm8(I32 x, I32 y);          // (x*y+255)/256, approximating (x*y+127)/255.
+        I32 mad_unorm8(I32 x, I32 y, I32 z);   // mul_unorm8(x,y) + z
 
         // (x & mask) >> k, where k is the lowest set bit of mask. E.g.
         //    extract(x, 0xff)   == (x & 0xff)
@@ -121,19 +123,21 @@ namespace skvm {
         static const ID NA = ~0;
 
         struct Instruction {
-            Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
-            ID  life;       // ID of last instruction using this instruction's result.
-            ID  x,y,z;      // Enough arguments for mad().
-            int immy,immz;  // Immediate bit patterns, shift counts, argument indexes.
+            Op   op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
+            bool hoist;      // Can this instruction be hoisted outside our implicit loop?
+            ID   life;       // ID of last instruction using this instruction's result.
+            ID   x,y,z;      // Enough arguments for mad().
+            int  immy,immz;  // Immediate bit patterns, shift counts, argument indexes.
 
             bool operator==(const Instruction& o) const {
-                return op   == o.op
-                    && life == o.life
-                    && x    == o.x
-                    && y    == o.y
-                    && z    == o.z
-                    && immy == o.immy
-                    && immz == o.immz;
+                return op    == o.op
+                    && hoist == o.hoist
+                    && life  == o.life
+                    && x     == o.x
+                    && y     == o.y
+                    && z     == o.z
+                    && immy  == o.immy
+                    && immz  == o.immz;
             }
         };
 
@@ -144,6 +148,7 @@ namespace skvm {
             }
             size_t operator()(const Instruction& inst) const {
                 return Hash((uint8_t)inst.op)
+                     ^ Hash(inst.hoist)
                      ^ Hash(inst.life)
                      ^ Hash(inst.x)
                      ^ Hash(inst.y)

@@ -56,6 +56,14 @@ public:
 
     const void* get() const { return fCFObject; }
 
+    /* Explicitly retains ownership of the object rather than transferring it.
+     * For translating from other shared_ptr/unique_ptr classes that wish to
+     * maintain their own ownership.
+     */
+    void retain(const void* resource) {
+        this->assign(resource);
+    }
+
     bool operator==(const GrCFResource& that) const {
         return this->fCFObject == that.fCFObject;
     }
