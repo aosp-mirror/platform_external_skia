@@ -670,11 +670,13 @@ void SkPathRef::addGenIDChangeListener(GenIDChangeListener* listener) {
         delete listener;
         return;
     }
+    SkAutoMutexAcquire lock(fGenIDChangeListenersMutex);
     *fGenIDChangeListeners.append() = listener;
 }
 
 // we need to be called *before* the genID gets changed or zerod
 void SkPathRef::callGenIDChangeListeners() {
+    SkAutoMutexAcquire lock(fGenIDChangeListenersMutex);
     for (int i = 0; i < fGenIDChangeListeners.count(); i++) {
         fGenIDChangeListeners[i]->onChange();
     }
