@@ -589,6 +589,7 @@ cc_library_static {
           "src/gpu/GrSurface.cpp",
           "src/gpu/GrSurfaceContext.cpp",
           "src/gpu/GrSurfaceProxy.cpp",
+          "src/gpu/GrSwizzle.cpp",
           "src/gpu/GrTessellator.cpp",
           "src/gpu/GrTestUtils.cpp",
           "src/gpu/GrTexture.cpp",
