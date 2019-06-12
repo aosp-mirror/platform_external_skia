@@ -402,11 +402,12 @@ namespace skvm {
                    body_ends = 0,
                    tail_ends = 0;
 
+            // 8 float values in a ymm register.
+            static constexpr int K = 8;
+
             JIT(const std::vector<Program::Instruction>& instructions, int regs, int loop,
                 size_t strides[], int nargs)
             {
-                // 8 float values in a ymm register.
-                constexpr int K = 8;
 
             #if defined(SK_BUILD_FOR_WIN)
                 // TODO  Windows ABI?
@@ -419,9 +420,8 @@ namespace skvm {
                 // All 16 ymm registers are available as scratch.
                 Xbyak::Ymm r[] = {
                     ymm0, ymm1, ymm2 , ymm3 , ymm4 , ymm5 , ymm6 , ymm7 ,
-                    ymm8, ymm9, ymm10, ymm11, ymm12, ymm13, ymm14,
-                }, tmp = ymm15;
-                Xbyak::Xmm tmplo = xmm15;
+                    ymm8, ymm9, ymm10, ymm11, ymm12, ymm13, ymm14, ymm15,
+                };
              #endif
 
                 // Label / 4-byte values we need to write after ret.
@@ -441,10 +441,13 @@ namespace skvm {
                          z = inst.z;
                     switch (op) {
                         case Op::store8:
-                            vpackusdw(tmp, r[x], r[x]);    // pack 32-bit -> 16-bit
-                            vpermq   (tmp, tmp, 0xd8);     // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
-                            vpackuswb(tmp, tmp, tmp);      // pack 16-bit -> 8-bit
-                            vmovq(ptr[arg[y.imm]], tmplo); // store low 8 bytes
+                            // Like any other instruction, store8 has been assigned
+                            // a "destination" register we can use as a temporary scratch.
+                            vpackusdw(r[d], r[x], r[x]);       // pack 32-bit -> 16-bit
+                            vpermq   (r[d], r[d], 0xd8);       // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
+                            vpackuswb(r[d], r[d], r[d]);       // pack 16-bit -> 8-bit
+                            vmovq(ptr[arg[y.imm]],             // store low 8 bytes
+                                  Xbyak::Xmm{r[d].getIdx()});  // (arg must be an xmm register)
                             break;
 
                         case Op::store32: vmovups(ptr[arg[y.imm]], r[x]); break;
@@ -491,8 +494,12 @@ namespace skvm {
                                              vpaddd(r[d], r[d], r[z.id]);
                                              break;
 
-                        case Op::extract: if (y.imm) { vpsrld(r[d], r[x], y.imm); }
-                                          vandps(r[d], r[d], r[z.id]);
+                        case Op::extract: if (y.imm) {
+                                              vpsrld(r[d], r[x], y.imm);
+                                              vandps(r[d], r[d], r[z.id]);
+                                          } else {
+                                              vandps(r[d], r[x], r[z.id]);
+                                          }
                                           break;
 
                         case Op::pack: vpslld(r[d], r[y.id], z.imm);
@@ -505,12 +512,11 @@ namespace skvm {
                 }
 
                 this->body_ends = this->getSize();
-                sub(N, K);
                 for (int i = 0; i < nargs; i++) {
                     add(arg[i], K*(int)strides[i]);
                 }
-                cmp(N, K-1);
-                jg("loop");
+                sub(N, K);
+                jne("loop");
 
                 this->tail_ends = this->getSize();
                 vzeroupper();
@@ -615,16 +621,24 @@ namespace skvm {
         #endif
         }
 
-        if (n >= 8) {
+        if (const int jitN = (n / JIT::K) * JIT::K) {
             bool ran = true;
             switch (nargs) {
-                case 0: fJIT->getCode<void(*)(int              )>()(n                  ); break;
-                case 1: fJIT->getCode<void(*)(int, void*       )>()(n, args[0]         ); break;
-                case 2: fJIT->getCode<void(*)(int, void*, void*)>()(n, args[0], args[1]); break;
+                case 0: fJIT->getCode<void(*)(int              )>()(jitN                  ); break;
+                case 1: fJIT->getCode<void(*)(int, void*       )>()(jitN, args[0]         ); break;
+                case 2: fJIT->getCode<void(*)(int, void*, void*)>()(jitN, args[0], args[1]); break;
                 default: ran = false; break;
             }
             if (ran) {
-                n &= 7;
+                // Step n and arguments forward to where the JIT stopped.
+                n -= jitN;
+
+                void**        arg    = args;
+                const size_t* stride = strides;
+                for (; *arg; arg++, stride++) {
+                    *arg = (void*)( (char*)*arg + jitN * *stride );
+                }
+                SkASSERT(arg == args + nargs);
             }
         }
     #endif

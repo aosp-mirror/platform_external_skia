@@ -1679,7 +1679,7 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
     // Set image layout and add barrier
     set_image_layout(this->vkInterface(), cmdBuffer, info,
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels,
-                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     SkTArray<VkBufferImageCopy> regions(mipLevels);
 
@@ -1822,12 +1822,18 @@ static bool vk_format_to_pixel_config(VkFormat format, GrPixelConfig* config) {
         case VK_FORMAT_R16_SFLOAT:
             *config = kAlpha_half_GrPixelConfig;
             return true;
-        // Experimental (for P016 and P010)
         case VK_FORMAT_R16_UNORM:
             *config = kR_16_GrPixelConfig;
             return true;
         case VK_FORMAT_R16G16_UNORM:
             *config = kRG_1616_GrPixelConfig;
+            return true;
+        // Experimental (for Y416 and mutant P016/P010)
+        case VK_FORMAT_R16G16B16A16_UNORM:
+            *config = kRGBA_16161616_GrPixelConfig;
+            return true;
+        case VK_FORMAT_R16G16_SFLOAT:
+            *config = kRG_half_GrPixelConfig;
             return true;
         default:
             return false;
