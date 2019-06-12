@@ -1841,6 +1841,7 @@ cc_test {
         "",
         "include/third_party/vulkan/",
         "modules/sksg/include/",
+        "modules/skshaper/include/",
     ],
 
     srcs: [
@@ -1943,7 +1944,6 @@ cc_test {
         "bench/ScalarBench.cpp",
         "bench/ShaderMaskFilterBench.cpp",
         "bench/ShadowBench.cpp",
-        "bench/ShaperBench.cpp",
         "bench/ShapesBench.cpp",
         "bench/Sk4fBench.cpp",
         "bench/SkGlyphCacheBench.cpp",
