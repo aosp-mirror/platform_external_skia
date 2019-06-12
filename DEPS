@@ -28,14 +28,14 @@ deps = {
   "third_party/externals/sfntly"          : "https://chromium.googlesource.com/external/github.com/googlei18n/sfntly.git@b55ff303ea2f9e26702b514cf6a3196a2e3e2974",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@661ad91124e6af2272afd00f804d8aa276e17107",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@e9e4393b1c5aad7553c05782acefbe32b42644bd",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@0a9f0179ddef5b1ed14ff19ca2ac7f340b7272d5",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@b8260a8e915d92116a20c348736d0fd7c36e90a3",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@f58ffbc927899b9534a273d3057094ce6ac1ed61",
   "third_party/externals/xbyak"           : "https://skia.googlesource.com/third_party/xbyak.git@v5.80",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@3032e0d81bfa5d38a8897d166ea122692fee1726",
+    "url": "https://chromium.googlesource.com/chromium/src.git@5dc4d131fb352dd2dc79d7eae32f5789b62bd78c",
     "condition": "checkout_chromium",
   },
 }
