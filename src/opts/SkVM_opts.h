@@ -28,6 +28,8 @@ namespace SK_OPTS_NS {
         using U32 = skvx::Vec<K, uint32_t>;
         using  U8 = skvx::Vec<K, uint8_t>;
 
+        using I16x2 = skvx::Vec<2*K, int16_t>;
+
         union Slot {
             I32 i32;
             U32 u32;
@@ -124,6 +126,10 @@ namespace SK_OPTS_NS {
                     CASE(Op::sub_i32): r(d).i32 = r(x).i32 - r(y.id).i32; break;
                     CASE(Op::mul_i32): r(d).i32 = r(x).i32 * r(y.id).i32; break;
 
+                    CASE(Op::mul_i16x2):
+                        r(d).i32 = skvx::bit_pun<I32>(skvx::bit_pun<I16x2>(r(x   ).i32) *
+                                                      skvx::bit_pun<I16x2>(r(y.id).i32) ); break;
+
                     CASE(Op::bit_and): r(d).i32 = r(x).i32 & r(y.id).i32; break;
                     CASE(Op::bit_or ): r(d).i32 = r(x).i32 | r(y.id).i32; break;
                     CASE(Op::bit_xor): r(d).i32 = r(x).i32 ^ r(y.id).i32; break;
@@ -131,11 +137,6 @@ namespace SK_OPTS_NS {
                     CASE(Op::shl): r(d).i32 = r(x).i32 << y.imm; break;
                     CASE(Op::sra): r(d).i32 = r(x).i32 >> y.imm; break;
                     CASE(Op::shr): r(d).u32 = r(x).u32 >> y.imm; break;
-
-                    CASE(Op::mul_unorm8):
-                        r(d).u32 = (r(x).u32 * r(y.id).u32 + r(x).u32)/256              ; break;
-                    CASE(Op::mad_unorm8):
-                        r(d).u32 = (r(x).u32 * r(y.id).u32 + r(x).u32)/256 + r(z.id).u32; break;
 
                     CASE(Op::extract): r(d).u32 = (r(x).u32 >> y.imm) & r(z.id).u32; break;
                     CASE(Op::pack):    r(d).u32 = r(x).u32 | (r(y.id).u32 << z.imm); break;
