@@ -6,6 +6,8 @@
  */
 
 #include "include/core/SkString.h"
+#include "include/private/SkSpinlock.h"
+#include "include/private/SkThreadID.h"
 #include "include/private/SkVx.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkVM.h"
@@ -400,11 +402,12 @@ namespace skvm {
                    body_ends = 0,
                    tail_ends = 0;
 
+            // 8 float values in a ymm register.
+            static constexpr int K = 8;
+
             JIT(const std::vector<Program::Instruction>& instructions, int regs, int loop,
                 size_t strides[], int nargs)
             {
-                // 8 float values in a ymm register.
-                constexpr int K = 8;
 
             #if defined(SK_BUILD_FOR_WIN)
                 // TODO  Windows ABI?
@@ -417,9 +420,8 @@ namespace skvm {
                 // All 16 ymm registers are available as scratch.
                 Xbyak::Ymm r[] = {
                     ymm0, ymm1, ymm2 , ymm3 , ymm4 , ymm5 , ymm6 , ymm7 ,
-                    ymm8, ymm9, ymm10, ymm11, ymm12, ymm13, ymm14,
-                }, tmp = ymm15;
-                Xbyak::Xmm tmplo = xmm15;
+                    ymm8, ymm9, ymm10, ymm11, ymm12, ymm13, ymm14, ymm15,
+                };
              #endif
 
                 // Label / 4-byte values we need to write after ret.
@@ -439,10 +441,13 @@ namespace skvm {
                          z = inst.z;
                     switch (op) {
                         case Op::store8:
-                            vpackusdw(tmp, r[x], r[x]);    // pack 32-bit -> 16-bit
-                            vpermq   (tmp, tmp, 0xd8);     // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
-                            vpackuswb(tmp, tmp, tmp);      // pack 16-bit -> 8-bit
-                            vmovq(ptr[arg[y.imm]], tmplo); // store low 8 bytes
+                            // Like any other instruction, store8 has been assigned
+                            // a "destination" register we can use as a temporary scratch.
+                            vpackusdw(r[d], r[x], r[x]);       // pack 32-bit -> 16-bit
+                            vpermq   (r[d], r[d], 0xd8);       // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
+                            vpackuswb(r[d], r[d], r[d]);       // pack 16-bit -> 8-bit
+                            vmovq(ptr[arg[y.imm]],             // store low 8 bytes
+                                  Xbyak::Xmm{r[d].getIdx()});  // (arg must be an xmm register)
                             break;
 
                         case Op::store32: vmovups(ptr[arg[y.imm]], r[x]); break;
@@ -489,8 +494,12 @@ namespace skvm {
                                              vpaddd(r[d], r[d], r[z.id]);
                                              break;
 
-                        case Op::extract: if (y.imm) { vpsrld(r[d], r[x], y.imm); }
-                                          vandps(r[d], r[d], r[z.id]);
+                        case Op::extract: if (y.imm) {
+                                              vpsrld(r[d], r[x], y.imm);
+                                              vandps(r[d], r[d], r[z.id]);
+                                          } else {
+                                              vandps(r[d], r[x], r[z.id]);
+                                          }
                                           break;
 
                         case Op::pack: vpslld(r[d], r[y.id], z.imm);
@@ -503,12 +512,11 @@ namespace skvm {
                 }
 
                 this->body_ends = this->getSize();
-                sub(N, K);
                 for (int i = 0; i < nargs; i++) {
                     add(arg[i], K*(int)strides[i]);
                 }
-                cmp(N, K-1);
-                jg("loop");
+                sub(N, K);
+                jne("loop");
 
                 this->tail_ends = this->getSize();
                 vzeroupper();
@@ -523,51 +531,114 @@ namespace skvm {
         };
     #endif
 
+
     void Program::eval(int n, void* args[], size_t strides[], int nargs) const {
     #if defined(SKVM_JIT)
         if (!fJIT) {
             fJIT.reset(new JIT{fInstructions, fRegs, fLoop, strides, nargs});
 
         #if 1
+            // We're doing some really stateful things below,
+            // so one thread at a time please...
+            static SkSpinlock dump_lock;
+            SkAutoSpinlock lock(dump_lock);
+
             uint32_t hash = SkOpts::hash(fJIT->getCode(), fJIT->getSize());
 
-            SkString name = SkStringPrintf("skvm-jit-%08x", hash),
-                      bin = SkStringPrintf("/tmp/%s.bin", name.c_str()),
-                      map = SkStringPrintf("/tmp/perf-%d.map", getpid());
+            SkString name = SkStringPrintf("skvm-jit-%u", hash);
 
+            // Create a jit-<pid>.dump file that we can `perf inject -j` into a
+            // perf.data captured with `perf record -k 1`, letting us see each
+            // JIT'd Program as if a function named skvm-jit-<hash>.   E.g.
+            //
+            //   ninja -C out nanobench
+            //   perf record -k 1 out/nanobench -m SkVM_4096_I32\$
+            //   perf inject -j -i perf.data -o perf.data.jit
+            //   perf report -i perf.data.jit
+            //
+            // Running `perf inject -j` will also dump an .so for each JIT'd
+            // program, named jitted-<pid>-<hash>.so.
 
-            {
-                SkFILEWStream code(bin.c_str());
-                code.write(fJIT->getCode(), fJIT->getSize());
-            }
+            auto timestamp_ns = []() -> uint64_t {
+                // It's important to use CLOCK_MONOTONIC here so that perf can
+                // correlate our timestamps with those captured by `perf record
+                // -k 1`.  That's also what `-k 1` does, by the way, tell perf
+                // record to use CLOCK_MONOTONIC.
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                return ts.tv_sec * (uint64_t)1e9 + ts.tv_nsec;
+            };
 
-            {
-                FILE* f = fopen(map.c_str(), "a");
+            // We'll open the jit-<pid>.dump file and write a small header once,
+            // and just leave it open forever because we're lazy.
+            static FILE* jitdump = [&]{
+                // Must map as w+ for the mmap() call below to work.
+                FILE* f = fopen(SkStringPrintf("jit-%d.dump", getpid()).c_str(), "w+");
 
-                auto code = (size_t)fJIT->getCode();
-                fprintf(f, "%zx %zx %s-head\n"
-                           "%zx %zx %s-body\n"
-                           "%zx %zx %s-tail\n"
-                           "%zx %zx %s-exit\n",
-                           code                  , fJIT->head_ends                  , name.c_str(),
-                           code + fJIT->head_ends, fJIT->body_ends - fJIT->head_ends, name.c_str(),
-                           code + fJIT->body_ends, fJIT->tail_ends - fJIT->body_ends, name.c_str(),
-                           code + fJIT->tail_ends, fJIT->getSize() - fJIT->tail_ends, name.c_str());
-                fclose(f);
-            }
+                // Calling mmap() on the file adds a "hey they mmap()'d this" record to
+                // the perf.data file that will point `perf inject -j` at this log file.
+                // Kind of a strange way to tell `perf inject` where the file is...
+                void* marker = mmap(nullptr,
+                                    sysconf(_SC_PAGESIZE),
+                                    PROT_READ|PROT_EXEC,
+                                    MAP_PRIVATE,
+                                    fileno(f),
+                                    /*offset=*/0);
+                SkASSERT_RELEASE(marker != MAP_FAILED);
+                // Like never calling fclose(f), we'll also just always leave marker mmap()'d.
+
+                struct Header {
+                    uint32_t magic, version, header_size, elf_mach, reserved, pid;
+                    uint64_t timestamp_us, flags;
+                } header = {
+                    0x4A695444, 1, sizeof(Header), 62/*x86-64*/, 0, (uint32_t)getpid(),
+                    timestamp_ns() / 1000, 0,
+                };
+                fwrite(&header, sizeof(header), 1, f);
+
+                return f;
+            }();
+
+            struct CodeLoad {
+                uint32_t event_type, event_size;
+                uint64_t timestamp_ns;
+
+                uint32_t pid, tid;
+                uint64_t vma/*???*/, code_addr, code_size, id;
+            } load = {
+                0/*code load*/, (uint32_t)(sizeof(CodeLoad) + name.size() + 1 + fJIT->getSize()),
+                timestamp_ns(),
+
+                (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
+                (uint64_t)fJIT->getCode(), (uint64_t)fJIT->getCode(), fJIT->getSize(), hash,
+            };
+
+            // Write the header, the JIT'd function name, and the JIT'd code itself.
+            fwrite(&load, sizeof(load), 1, jitdump);
+            fwrite(name.c_str(), 1, name.size(), jitdump);
+            fwrite("\0", 1, 1, jitdump);
+            fwrite(fJIT->getCode(), 1, fJIT->getSize(), jitdump);
         #endif
         }
 
-        if (n >= 8) {
+        if (const int jitN = (n / JIT::K) * JIT::K) {
             bool ran = true;
             switch (nargs) {
-                case 0: fJIT->getCode<void(*)(int              )>()(n                  ); break;
-                case 1: fJIT->getCode<void(*)(int, void*       )>()(n, args[0]         ); break;
-                case 2: fJIT->getCode<void(*)(int, void*, void*)>()(n, args[0], args[1]); break;
+                case 0: fJIT->getCode<void(*)(int              )>()(jitN                  ); break;
+                case 1: fJIT->getCode<void(*)(int, void*       )>()(jitN, args[0]         ); break;
+                case 2: fJIT->getCode<void(*)(int, void*, void*)>()(jitN, args[0], args[1]); break;
                 default: ran = false; break;
             }
             if (ran) {
-                n &= 7;
+                // Step n and arguments forward to where the JIT stopped.
+                n -= jitN;
+
+                void**        arg    = args;
+                const size_t* stride = strides;
+                for (; *arg; arg++, stride++) {
+                    *arg = (void*)( (char*)*arg + jitN * *stride );
+                }
+                SkASSERT(arg == args + nargs);
             }
         }
     #endif
@@ -579,4 +650,3 @@ namespace skvm {
 }
 
 // TODO: argument strides (more generally types) should come earlier, the pointers themselves later.
-// TODO: share 255 splats
