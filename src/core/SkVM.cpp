@@ -9,6 +9,7 @@
 #include "include/private/SkSpinlock.h"
 #include "include/private/SkThreadID.h"
 #include "include/private/SkVx.h"
+#include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkVM.h"
 #include <string.h>
@@ -218,7 +219,9 @@ namespace skvm {
     I32 Builder::sub(I32 x, I32 y) { return {this->push(Op::sub_i32, x.id, y.id)}; }
     I32 Builder::mul(I32 x, I32 y) { return {this->push(Op::mul_i32, x.id, y.id)}; }
 
+    I32 Builder::sub_16x2(I32 x, I32 y) { return {this->push(Op::sub_i16x2, x.id, y.id)}; }
     I32 Builder::mul_16x2(I32 x, I32 y) { return {this->push(Op::mul_i16x2, x.id, y.id)}; }
+    I32 Builder::shr_16x2(I32 x, int bits) { return {this->push(Op::shr_i16x2, x.id,NA,NA, bits)}; }
 
     I32 Builder::bit_and(I32 x, I32 y) { return {this->push(Op::bit_and, x.id, y.id)}; }
     I32 Builder::bit_or (I32 x, I32 y) { return {this->push(Op::bit_or , x.id, y.id)}; }
@@ -314,7 +317,9 @@ namespace skvm {
                 case Op::sub_i32: write(o, V{id}, "= sub_i32", V{x}, V{y}); break;
                 case Op::mul_i32: write(o, V{id}, "= mul_i32", V{x}, V{y}); break;
 
+                case Op::sub_i16x2: write(o, V{id}, "= sub_i16x2", V{x}, V{y}); break;
                 case Op::mul_i16x2: write(o, V{id}, "= mul_i16x2", V{x}, V{y}); break;
+                case Op::shr_i16x2: write(o, V{id}, "= shr_i16x2", V{x}, Shift{immy}); break;
 
                 case Op::bit_and: write(o, V{id}, "= bit_and", V{x}, V{y}); break;
                 case Op::bit_or : write(o, V{id}, "= bit_or" , V{x}, V{y}); break;
@@ -369,7 +374,9 @@ namespace skvm {
                 case Op::sub_i32: write(o, R{d}, "= sub_i32", R{x}, R{y.id}); break;
                 case Op::mul_i32: write(o, R{d}, "= mul_i32", R{x}, R{y.id}); break;
 
+                case Op::sub_i16x2: write(o, R{d}, "= sub_i16x2", R{x}, R{y.id}); break;
                 case Op::mul_i16x2: write(o, R{d}, "= mul_i16x2", R{x}, R{y.id}); break;
+                case Op::shr_i16x2: write(o, R{d}, "= shr_i16x2", R{x}, Shift{y.imm}); break;
 
                 case Op::bit_and: write(o, R{d}, "= bit_and", R{x}, R{y.id}); break;
                 case Op::bit_or : write(o, R{d}, "= bit_or" , R{x}, R{y.id}); break;
@@ -393,16 +400,19 @@ namespace skvm {
 
     #if defined(SKVM_JIT)
         struct Program::JIT : Xbyak::CodeGenerator {
-            size_t head_ends = 0,
-                   body_ends = 0,
-                   tail_ends = 0;
-
             // 8 float values in a ymm register.
             static constexpr int K = 8;
+
+            static bool Supported(int regs) {
+                return true
+                    && SkCpu::Supports(SkCpu::HSW)
+                    && regs < 16;
+            }
 
             JIT(const std::vector<Program::Instruction>& instructions, int regs, int loop,
                 size_t strides[], int nargs)
             {
+                SkASSERT(Supported(regs));
 
             #if defined(SK_BUILD_FOR_WIN)
                 // TODO  Windows ABI?
@@ -426,7 +436,6 @@ namespace skvm {
                 for (int i = 0; i < (int)instructions.size(); i++) {
                     if (i == loop) {
                         L("loop");
-                        this->head_ends = this->getSize();
                     }
                     const Instruction& inst = instructions[i];
                     Op  op = inst.op;
@@ -436,18 +445,22 @@ namespace skvm {
                     auto y = inst.y,
                          z = inst.z;
                     switch (op) {
-
                         // Ops producing multiple AVX instructions should always
                         // use tmp as the result of all but the final instruction
                         // to avoid any possible dst/arg aliasing.  You don't want
                         // to overwrite your arguments before you're done using them!
 
                         case Op::store8:
-                            vpackusdw(tmp, r[x], r[x]);      // pack 32-bit -> 16-bit
-                            vpermq   (tmp, tmp, 0xd8);       // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
-                            vpackuswb(tmp, tmp, tmp);        // pack 16-bit -> 8-bit
-                            vmovq(ptr[arg[y.imm]],           // store low 8 bytes
-                                  Xbyak::Xmm{tmp.getIdx()}); // (arg must be an xmm register)
+                            if (SkCpu::Supports(SkCpu::SKX)) {
+                                // One stop shop!  Pack 8x I32 -> U8 and store to ptr.
+                                vpmovusdb(ptr[arg[y.imm]], r[x]);
+                            } else {
+                                vpackusdw(tmp, r[x], r[x]);      // pack 32-bit -> 16-bit
+                                vpermq   (tmp, tmp, 0xd8);       // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
+                                vpackuswb(tmp, tmp, tmp);        // pack 16-bit -> 8-bit
+                                vmovq(ptr[arg[y.imm]],           // store low 8 bytes
+                                      Xbyak::Xmm{tmp.getIdx()}); // (arg must be an xmm register)
+                            }
                             break;
 
                         case Op::store32: vmovups(ptr[arg[y.imm]], r[x]); break;
@@ -475,7 +488,9 @@ namespace skvm {
                         case Op::sub_i32: vpsubd (r[d], r[x], r[y.id]); break;
                         case Op::mul_i32: vpmulld(r[d], r[x], r[y.id]); break;
 
+                        case Op::sub_i16x2: vpsubw (r[d], r[x], r[y.id]); break;
                         case Op::mul_i16x2: vpmullw(r[d], r[x], r[y.id]); break;
+                        case Op::shr_i16x2: vpsrlw (r[d], r[x],   y.imm); break;
 
                         case Op::bit_and: vandps(r[d], r[x], r[y.id]); break;
                         case Op::bit_or : vorps (r[d], r[x], r[y.id]); break;
@@ -502,14 +517,12 @@ namespace skvm {
                     }
                 }
 
-                this->body_ends = this->getSize();
                 for (int i = 0; i < nargs; i++) {
                     add(arg[i], K*(int)strides[i]);
                 }
                 sub(N, K);
                 jne("loop");
 
-                this->tail_ends = this->getSize();
                 vzeroupper();
                 ret();
 
@@ -525,7 +538,7 @@ namespace skvm {
 
     void Program::eval(int n, void* args[], size_t strides[], int nargs) const {
     #if defined(SKVM_JIT)
-        if (!fJIT) {
+        if (!fJIT && JIT::Supported(fRegs)) {
             fJIT.reset(new JIT{fInstructions, fRegs, fLoop, strides, nargs});
 
         #if 1
@@ -612,7 +625,8 @@ namespace skvm {
         #endif
         }
 
-        if (const int jitN = (n / JIT::K) * JIT::K) {
+        const int jitN = (n / JIT::K) * JIT::K;
+        if (fJIT && jitN > 0) {
             bool ran = true;
             switch (nargs) {
                 case 0: fJIT->getCode<void(*)(int              )>()(jitN                  ); break;
