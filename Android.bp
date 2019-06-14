@@ -1949,6 +1949,7 @@ cc_test {
         "bench/Sk4fBench.cpp",
         "bench/SkGlyphCacheBench.cpp",
         "bench/SkSLBench.cpp",
+        "bench/SkSLInterpreterBench.cpp",
         "bench/SkVMBench.cpp",
         "bench/SortBench.cpp",
         "bench/StreamBench.cpp",

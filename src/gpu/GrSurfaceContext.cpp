@@ -72,11 +72,9 @@ static bool valid_premul_color_type(GrColorType ct) {
         case GrColorType::kRG_F32:           return false;
         case GrColorType::kRGBA_F32:         return true;
         case GrColorType::kRGB_ETC1:         return false;
+        // Experimental (for P016 and P010)
         case GrColorType::kR_16:             return false;
         case GrColorType::kRG_1616:          return false;
-        // Experimental (for Y416 and mutant P016/P010)
-        case GrColorType::kRGBA_16161616:    return false;
-        case GrColorType::kRG_half:          return false;
     }
     SK_ABORT("Invalid GrColorType");
     return false;
@@ -110,11 +108,9 @@ static bool valid_premul_config(GrPixelConfig config) {
         case kAlpha_half_as_Red_GrPixelConfig:  return false;
         case kGray_8_as_Lum_GrPixelConfig:      return false;
         case kGray_8_as_Red_GrPixelConfig:      return false;
+        // Experimental (for P016 and P010)
         case kR_16_GrPixelConfig:               return false;
         case kRG_1616_GrPixelConfig:            return false;
-        // Experimental (for Y416 and mutant P016/P010)
-        case kRGBA_16161616_GrPixelConfig:      return false;
-        case kRG_half_GrPixelConfig:            return false;
     }
     SK_ABORT("Invalid GrPixelConfig");
     return false;
@@ -382,8 +378,16 @@ bool GrSurfaceContext::writePixelsImpl(GrContext* direct, int left, int top, int
             }
         }
 
+        // It is more efficient for us to write pixels into a top left origin so we prefer that.
+        // However, if the final proxy isn't a render target then we must use a copy to move the
+        // data into it which requires the origins to match. If the final proxy is a render target
+        // we can use a draw instead which doesn't have this origin restriction. Thus for render
+        // targets we will use top left and otherwise we will make the origins match.
+        GrSurfaceOrigin tempOrigin = this->asRenderTargetContext() ? kTopLeft_GrSurfaceOrigin :
+                                                                     dstProxy->origin();
         auto tempProxy = direct->priv().proxyProvider()->createProxy(
-                format, desc, dstProxy->origin(), SkBackingFit::kApprox, SkBudgeted::kYes);
+                format, desc, tempOrigin, SkBackingFit::kApprox, SkBudgeted::kYes);
+
         if (!tempProxy) {
             return false;
         }
