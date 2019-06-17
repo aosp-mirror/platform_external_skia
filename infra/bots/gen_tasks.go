@@ -455,7 +455,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			"Mac10.14":   "Mac-10.14.3",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
-			"Win10":      "Windows-10-17763.437",
+			"Win10":      "Windows-10-17763.503",
 			"Win2016":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
 			"Win8":       "Windows-8.1-SP0",
@@ -467,6 +467,10 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		if os == "Win10" && parts["model"] == "Golo" {
 			// ChOps-owned machines have Windows 10 v1709, but a slightly different version than Skolo.
 			d["os"] = "Windows-10-16299.309"
+		}
+		if os == "Mac10.14" && parts["model"] == "VMware7.1" {
+			// ChOps VMs are at a newer version of MacOS.
+			d["os"] = "Mac-10.14.4"
 		}
 		if d["os"] == DEFAULT_OS_WIN {
 			// Upgrades result in a new image but not a new OS version.
@@ -534,7 +538,8 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		} else if parts["cpu_or_gpu"] == "CPU" {
 			modelMapping, ok := map[string]map[string]string{
 				"AVX": {
-					"Golo": "x86-64-E5-2670",
+					"Golo":      "x86-64-E5-2670",
+					"VMware7.1": "x86-64-E5-2697_v2",
 				},
 				"AVX2": {
 					"GCE":            "x86-64-Haswell_GCE",
