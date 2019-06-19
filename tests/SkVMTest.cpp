@@ -178,3 +178,70 @@ DEF_TEST(SkVM_LoopCounts, r) {
         }
     }
 }
+
+
+#if defined(SKVM_JIT)
+
+template <typename Fn>
+static void test_asm(skiatest::Reporter* r, Fn&& fn, std::initializer_list<uint8_t> expected) {
+    skvm::Assembler a;
+    fn(a);
+
+    REPORTER_ASSERT(r, a.size() == expected.size());
+
+    auto got = (const uint8_t*)a.code(),
+         want = expected.begin();
+    for (int i = 0; i < (int)std::min(a.size(), expected.size()); i++) {
+        REPORTER_ASSERT(r, got[i] == want[i],
+                        "byte %d was %02x, want %02x", i, got[i], want[i]);
+    }
+}
+
+DEF_TEST(SkVM_Assembler, r) {
+    using skvm::Assembler;
+    // Our exit strategy from AVX code.
+    test_asm(r, [&](Assembler& a) {
+        a.vzeroupper();
+        a.ret();
+    },{
+        0xc5, 0xf8, 0x77,
+        0xc3,
+    });
+
+    // Align should pad with nop().
+    test_asm(r, [&](Assembler& a) {
+        a.ret();
+        a.align(4);
+    },{
+        0xc3,
+        0x90, 0x90, 0x90,
+    });
+
+    test_asm(r, [&](Assembler& a) {
+        a.add(Assembler::rax, 8);       // Always good to test rax.
+        a.sub(Assembler::rax, 32);
+
+        a.add(Assembler::rdi, 12);      // Last 0x48 REX
+        a.sub(Assembler::rdi, 8);
+
+        a.add(Assembler::r8 , 7);       // First 0x4c REX
+        a.sub(Assembler::r8 , 4);
+
+        a.add(Assembler::rsi, 128);     // Requires 4 byte immediate.
+        a.sub(Assembler::r8 , 1000000);
+    },{
+        0x48, 0x83, 0b11'000'000, 0x08,
+        0x48, 0x83, 0b11'101'000, 0x20,
+
+        0x48, 0x83, 0b11'000'111, 0x0c,
+        0x48, 0x83, 0b11'101'111, 0x08,
+
+        0x4c, 0x83, 0b11'000'000, 0x07,
+        0x4c, 0x83, 0b11'101'000, 0x04,
+
+        0x48, 0x81, 0b11'000'110, 0x80, 0x00, 0x00, 0x00,
+        0x4c, 0x81, 0b11'101'000, 0x40, 0x42, 0x0f, 0x00,
+    });
+}
+
+#endif
