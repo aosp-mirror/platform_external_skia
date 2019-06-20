@@ -748,6 +748,12 @@
       ],
       "trigger": "nightly"
     },
+    "Housekeeper-Nightly-UpdateGoDeps": {
+      "tasks": [
+        "Housekeeper-Nightly-UpdateGoDeps"
+      ],
+      "trigger": "nightly"
+    },
     "Housekeeper-OnDemand-Presubmit": {
       "priority": 1,
       "tasks": [
@@ -758,6 +764,11 @@
     "Housekeeper-PerCommit": {
       "tasks": [
         "Housekeeper-PerCommit"
+      ]
+    },
+    "Housekeeper-PerCommit-BuildTaskDrivers": {
+      "tasks": [
+        "Housekeeper-PerCommit-BuildTaskDrivers"
       ]
     },
     "Housekeeper-PerCommit-BundleRecipes": {
@@ -1351,9 +1362,19 @@
         "Upload-Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit"
       ]
     },
+    "Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-SkottieWASM": {
+      "tasks": [
+        "Upload-Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-SkottieWASM"
+      ]
+    },
     "Perf-Debian9-EMCC-GCE-GPU-AVX2-wasm-Release-All-CanvasKit": {
       "tasks": [
         "Upload-Perf-Debian9-EMCC-GCE-GPU-AVX2-wasm-Release-All-CanvasKit"
+      ]
+    },
+    "Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-wasm-Release-All-SkottieWASM": {
+      "tasks": [
+        "Upload-Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-wasm-Release-All-SkottieWASM"
       ]
     },
     "Perf-Debian9-GCC-GCE-CPU-AVX2-x86-Debug-All": {
@@ -5956,11 +5977,11 @@
           "cache/vpython"
         ]
       },
-      "execution_timeout_ns": 3600000000000,
+      "execution_timeout_ns": 7200000000000,
       "extra_tags": {
         "log_location": "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
       },
-      "io_timeout_ns": 3600000000000,
+      "io_timeout_ns": 7200000000000,
       "isolate": "swarm_recipe.isolate",
       "max_attempts": 1,
       "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
@@ -6050,11 +6071,11 @@
           "cache/vpython"
         ]
       },
-      "execution_timeout_ns": 3600000000000,
+      "execution_timeout_ns": 7200000000000,
       "extra_tags": {
         "log_location": "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
       },
-      "io_timeout_ns": 3600000000000,
+      "io_timeout_ns": 7200000000000,
       "isolate": "swarm_recipe.isolate",
       "max_attempts": 1,
       "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
@@ -16871,7 +16892,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17007,7 +17028,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17143,7 +17164,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17279,7 +17300,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17415,7 +17436,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17550,7 +17571,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17686,7 +17707,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17822,7 +17843,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -17958,7 +17979,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -18094,7 +18115,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -18230,7 +18251,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -18371,7 +18392,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -18507,7 +18528,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -18643,7 +18664,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -18779,7 +18800,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -18915,7 +18936,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19051,7 +19072,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19187,7 +19208,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19323,7 +19344,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19459,7 +19480,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19590,7 +19611,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19721,7 +19742,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19852,7 +19873,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -19983,7 +20004,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -20114,7 +20135,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -20245,7 +20266,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -20376,7 +20397,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -20507,7 +20528,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -20638,7 +20659,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -20769,7 +20790,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -20900,7 +20921,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -21031,7 +21052,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -21162,7 +21183,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/git/${platform}",
@@ -22450,6 +22471,92 @@
       "max_attempts": 2,
       "service_account": "skia-recreate-skps@skia-swarming-bots.iam.gserviceaccount.com"
     },
+    "Housekeeper-Nightly-UpdateGoDeps": {
+      "caches": [
+        {
+          "name": "go_cache",
+          "path": "cache/go_cache"
+        },
+        {
+          "name": "gopath",
+          "path": "cache/gopath"
+        }
+      ],
+      "cipd_packages": [
+        {
+          "name": "infra/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.17.1.chromium15"
+        },
+        {
+          "name": "infra/tools/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:c9c8a52bfeaf8bc00ece22fdfd447822c8fcad77"
+        },
+        {
+          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        },
+        {
+          "name": "skia/bots/go",
+          "path": "go",
+          "version": "version:7"
+        },
+        {
+          "name": "skia/bots/protoc",
+          "path": "protoc",
+          "version": "version:0"
+        }
+      ],
+      "command": [
+        "./update_go_deps",
+        "--project_id",
+        "skia-swarming-bots",
+        "--task_id",
+        "<(TASK_ID)",
+        "--task_name",
+        "Housekeeper-Nightly-UpdateGoDeps",
+        "--workdir",
+        ".",
+        "--gerrit_project",
+        "skia",
+        "--gerrit_url",
+        "https://skia-review.googlesource.com",
+        "--repo",
+        "<(REPO)",
+        "--reviewers",
+        "borenet@google.com",
+        "--revision",
+        "<(REVISION)",
+        "--patch_issue",
+        "<(ISSUE)",
+        "--patch_set",
+        "<(PATCHSET)",
+        "--patch_server",
+        "<(CODEREVIEW_SERVER)",
+        "--alsologtostderr"
+      ],
+      "dependencies": [
+        "Housekeeper-PerCommit-BuildTaskDrivers"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "machine_type:n1-standard-16",
+        "os:Debian-9.8",
+        "pool:Skia"
+      ],
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin",
+          "go/go/bin"
+        ]
+      },
+      "isolate": "empty.isolate",
+      "service_account": "skia-recreate-skps@skia-swarming-bots.iam.gserviceaccount.com"
+    },
     "Housekeeper-OnDemand-Presubmit": {
       "caches": [
         {
@@ -22693,6 +22800,60 @@
       "isolate": "swarm_recipe.isolate",
       "max_attempts": 2,
       "service_account": "skia-external-housekeeper@skia-swarming-bots.iam.gserviceaccount.com"
+    },
+    "Housekeeper-PerCommit-BuildTaskDrivers": {
+      "caches": [
+        {
+          "name": "go_cache",
+          "path": "cache/go_cache"
+        },
+        {
+          "name": "gopath",
+          "path": "cache/gopath"
+        }
+      ],
+      "cipd_packages": [
+        {
+          "name": "infra/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.17.1.chromium15"
+        },
+        {
+          "name": "infra/tools/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:c9c8a52bfeaf8bc00ece22fdfd447822c8fcad77"
+        },
+        {
+          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        },
+        {
+          "name": "skia/bots/go",
+          "path": "go",
+          "version": "version:7"
+        }
+      ],
+      "command": [
+        "/bin/bash",
+        "skia/infra/bots/build_task_drivers.sh",
+        "${ISOLATED_OUTDIR}"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "machine_type:n1-highmem-2",
+        "os:Debian-9.8",
+        "pool:Skia"
+      ],
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin",
+          "go/go/bin"
+        ]
+      },
+      "isolate": "task_drivers.isolate"
     },
     "Housekeeper-PerCommit-BundleRecipes": {
       "cipd_packages": [
@@ -25195,7 +25356,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -25295,7 +25456,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -25395,7 +25556,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -25495,7 +25656,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -25595,7 +25756,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -27143,6 +27304,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -27243,6 +27409,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -27343,6 +27514,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -27443,6 +27619,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -34671,6 +34852,143 @@
         "perf"
       ]
     },
+    "Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-SkottieWASM": {
+      "caches": [
+        {
+          "name": "vpython",
+          "path": "cache/vpython"
+        }
+      ],
+      "cipd_packages": [
+        {
+          "name": "infra/tools/luci/kitchen/${platform}",
+          "path": ".",
+          "version": "git_revision:d8f38ca9494b5af249942631f9cee45927f6b4bc"
+        },
+        {
+          "name": "infra/tools/luci-auth/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        },
+        {
+          "name": "infra/tools/luci/vpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:39"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:191"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        },
+        {
+          "name": "skia/bots/node",
+          "path": "node",
+          "version": "version:1"
+        },
+        {
+          "name": "skia/bots/lottie-samples",
+          "path": "lottie-samples",
+          "version": "version:1"
+        },
+        {
+          "name": "infra/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.17.1.chromium15"
+        },
+        {
+          "name": "infra/tools/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:c9c8a52bfeaf8bc00ece22fdfd447822c8fcad77"
+        },
+        {
+          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        }
+      ],
+      "command": [
+        "./kitchen${EXECUTABLE_SUFFIX}",
+        "cook",
+        "-checkout-dir",
+        "recipe_bundle",
+        "-mode",
+        "swarming",
+        "-luci-system-account",
+        "system",
+        "-cache-dir",
+        "cache",
+        "-temp-dir",
+        "tmp",
+        "-known-gerrit-host",
+        "android.googlesource.com",
+        "-known-gerrit-host",
+        "boringssl.googlesource.com",
+        "-known-gerrit-host",
+        "chromium.googlesource.com",
+        "-known-gerrit-host",
+        "dart.googlesource.com",
+        "-known-gerrit-host",
+        "fuchsia.googlesource.com",
+        "-known-gerrit-host",
+        "go.googlesource.com",
+        "-known-gerrit-host",
+        "llvm.googlesource.com",
+        "-known-gerrit-host",
+        "skia.googlesource.com",
+        "-known-gerrit-host",
+        "webrtc.googlesource.com",
+        "-output-result-json",
+        "${ISOLATED_OUTDIR}/build_result_filename",
+        "-workdir",
+        ".",
+        "-recipe",
+        "perf_skottie_wasm",
+        "-properties",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-SkottieWASM\",\"patch_issue\":\"<(ISSUE)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"perf\",\"task_id\":\"<(TASK_ID)\"}",
+        "-logdog-annotation-url",
+        "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      ],
+      "dependencies": [
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Build-Debian9-EMCC-wasm-Release-CanvasKit_CPU"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "machine_type:n1-standard-16",
+        "os:Debian-9.8",
+        "pool:Skia"
+      ],
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin"
+        ],
+        "VPYTHON_VIRTUALENV_ROOT": [
+          "cache/vpython"
+        ]
+      },
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_tags": {
+        "log_location": "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      },
+      "io_timeout_ns": 14400000000000,
+      "isolate": "perf_skia_bundled.isolate",
+      "max_attempts": 2,
+      "outputs": [
+        "perf"
+      ]
+    },
     "Perf-Debian9-EMCC-GCE-GPU-AVX2-wasm-Release-All-CanvasKit": {
       "caches": [
         {
@@ -34748,6 +35066,147 @@
         "os:Debian-9.8",
         "pool:Skia",
         "docker_installed:true"
+      ],
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin"
+        ],
+        "VPYTHON_VIRTUALENV_ROOT": [
+          "cache/vpython"
+        ]
+      },
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_tags": {
+        "log_location": "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      },
+      "io_timeout_ns": 14400000000000,
+      "isolate": "perf_skia_bundled.isolate",
+      "max_attempts": 2,
+      "outputs": [
+        "perf"
+      ]
+    },
+    "Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-wasm-Release-All-SkottieWASM": {
+      "caches": [
+        {
+          "name": "vpython",
+          "path": "cache/vpython"
+        }
+      ],
+      "cipd_packages": [
+        {
+          "name": "infra/tools/luci/kitchen/${platform}",
+          "path": ".",
+          "version": "git_revision:d8f38ca9494b5af249942631f9cee45927f6b4bc"
+        },
+        {
+          "name": "infra/tools/luci-auth/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        },
+        {
+          "name": "infra/tools/luci/vpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:39"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:191"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        },
+        {
+          "name": "skia/bots/mesa_intel_driver_linux",
+          "path": "mesa_intel_driver_linux",
+          "version": "version:5"
+        },
+        {
+          "name": "skia/bots/node",
+          "path": "node",
+          "version": "version:1"
+        },
+        {
+          "name": "skia/bots/lottie-samples",
+          "path": "lottie-samples",
+          "version": "version:1"
+        },
+        {
+          "name": "infra/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.17.1.chromium15"
+        },
+        {
+          "name": "infra/tools/git/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:c9c8a52bfeaf8bc00ece22fdfd447822c8fcad77"
+        },
+        {
+          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        }
+      ],
+      "command": [
+        "./kitchen${EXECUTABLE_SUFFIX}",
+        "cook",
+        "-checkout-dir",
+        "recipe_bundle",
+        "-mode",
+        "swarming",
+        "-luci-system-account",
+        "system",
+        "-cache-dir",
+        "cache",
+        "-temp-dir",
+        "tmp",
+        "-known-gerrit-host",
+        "android.googlesource.com",
+        "-known-gerrit-host",
+        "boringssl.googlesource.com",
+        "-known-gerrit-host",
+        "chromium.googlesource.com",
+        "-known-gerrit-host",
+        "dart.googlesource.com",
+        "-known-gerrit-host",
+        "fuchsia.googlesource.com",
+        "-known-gerrit-host",
+        "go.googlesource.com",
+        "-known-gerrit-host",
+        "llvm.googlesource.com",
+        "-known-gerrit-host",
+        "skia.googlesource.com",
+        "-known-gerrit-host",
+        "webrtc.googlesource.com",
+        "-output-result-json",
+        "${ISOLATED_OUTDIR}/build_result_filename",
+        "-workdir",
+        ".",
+        "-recipe",
+        "perf_skottie_wasm",
+        "-properties",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-wasm-Release-All-SkottieWASM\",\"patch_issue\":\"<(ISSUE)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"perf\",\"task_id\":\"<(TASK_ID)\"}",
+        "-logdog-annotation-url",
+        "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      ],
+      "dependencies": [
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Build-Debian9-EMCC-wasm-Release-CanvasKit"
+      ],
+      "dimensions": [
+        "gpu:8086:5926",
+        "os:Debian-9.4",
+        "pool:Skia"
       ],
       "env_prefixes": {
         "PATH": [
@@ -37720,7 +38179,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -37836,7 +38295,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -37952,7 +38411,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38068,7 +38527,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38184,7 +38643,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38300,7 +38759,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38416,7 +38875,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38532,7 +38991,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38648,7 +39107,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38764,7 +39223,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38880,7 +39339,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -38997,7 +39456,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -39114,7 +39573,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -39231,7 +39690,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -39348,7 +39807,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -39465,7 +39924,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -39582,7 +40041,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -39685,7 +40144,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -39788,7 +40247,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -39891,7 +40350,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40007,7 +40466,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40123,7 +40582,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40239,7 +40698,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40355,7 +40814,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40471,7 +40930,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40587,7 +41046,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40703,7 +41162,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40819,7 +41278,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -40935,7 +41394,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41051,7 +41510,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41167,7 +41626,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41283,7 +41742,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41399,7 +41858,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41515,7 +41974,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41631,7 +42090,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41747,7 +42206,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41863,7 +42322,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -41979,7 +42438,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42095,7 +42554,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42211,7 +42670,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42327,7 +42786,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42443,7 +42902,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42559,7 +43018,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42675,7 +43134,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42791,7 +43250,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -42907,7 +43366,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43023,7 +43482,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43139,7 +43598,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43255,7 +43714,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43371,7 +43830,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43487,7 +43946,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43603,7 +44062,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43719,7 +44178,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43835,7 +44294,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -43951,7 +44410,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44067,7 +44526,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44183,7 +44642,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44299,7 +44758,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44416,7 +44875,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44533,7 +44992,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44650,7 +45109,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44767,7 +45226,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -44885,7 +45344,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45003,7 +45462,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45121,7 +45580,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45239,7 +45698,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45357,7 +45816,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45475,7 +45934,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45593,7 +46052,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45709,7 +46168,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45825,7 +46284,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -45941,7 +46400,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -49097,7 +49556,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -49197,7 +49656,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -49297,7 +49756,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -49397,7 +49856,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -49497,7 +49956,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -49597,7 +50056,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -49697,7 +50156,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.010_2604118_1256.7693",
         "device_type:foster",
         "os:Android",
         "pool:Skia"
@@ -51345,6 +51804,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -51445,6 +51909,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -51545,6 +52014,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -51645,6 +52119,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -51745,6 +52224,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -51845,6 +52329,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         }
       ],
       "command": [
@@ -68431,7 +68920,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -68547,7 +69036,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -68663,7 +69152,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -68779,7 +69268,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -68895,7 +69384,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69011,7 +69500,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69127,7 +69616,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69243,7 +69732,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69359,7 +69848,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69475,7 +69964,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69591,7 +70080,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69707,7 +70196,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69823,7 +70312,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -69939,7 +70428,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70055,7 +70544,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70176,7 +70665,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70292,7 +70781,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70408,7 +70897,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70524,7 +71013,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70640,7 +71129,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70756,7 +71245,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70877,7 +71366,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -70993,7 +71482,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71109,7 +71598,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71225,7 +71714,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71341,7 +71830,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71457,7 +71946,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71573,7 +72062,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71689,7 +72178,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71805,7 +72294,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -71921,7 +72410,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72037,7 +72526,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72153,7 +72642,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72269,7 +72758,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72385,7 +72874,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72501,7 +72990,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72617,7 +73106,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72733,7 +73222,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72849,7 +73338,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -72965,7 +73454,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73081,7 +73570,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73197,7 +73686,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73313,7 +73802,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73429,7 +73918,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73545,7 +74034,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73661,7 +74150,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73777,7 +74266,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -73893,7 +74382,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74009,7 +74498,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74125,7 +74614,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74241,7 +74730,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74357,7 +74846,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74473,7 +74962,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74589,7 +75078,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74705,7 +75194,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74821,7 +75310,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -74937,7 +75426,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75053,7 +75542,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75169,7 +75658,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75285,7 +75774,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75401,7 +75890,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75517,7 +76006,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75633,7 +76122,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75749,7 +76238,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75865,7 +76354,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -75981,7 +76470,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -76097,7 +76586,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -76213,7 +76702,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -76329,7 +76818,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -76667,7 +77156,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -76785,7 +77274,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -76903,7 +77392,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77021,7 +77510,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77139,7 +77628,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77257,7 +77746,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77375,7 +77864,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77493,7 +77982,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77611,7 +78100,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77729,7 +78218,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77847,7 +78336,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -77965,7 +78454,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78083,7 +78572,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78201,7 +78690,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78319,7 +78808,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78437,7 +78926,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78553,7 +79042,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78669,7 +79158,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78785,7 +79274,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -78901,7 +79390,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -79017,7 +79506,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -79133,7 +79622,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -79249,7 +79738,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -79365,7 +79854,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -79481,7 +79970,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "skia/bots/skimage",
@@ -83667,6 +84156,11 @@
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
         },
         {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
+        },
+        {
           "name": "infra/gsutil",
           "path": "cipd_bin_packages",
           "version": "version:4.28"
@@ -83765,6 +84259,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -87843,6 +88342,106 @@
       "max_attempts": 2,
       "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
+    "Upload-Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-SkottieWASM": {
+      "caches": [
+        {
+          "name": "vpython",
+          "path": "cache/vpython"
+        }
+      ],
+      "cipd_packages": [
+        {
+          "name": "infra/tools/luci/kitchen/${platform}",
+          "path": ".",
+          "version": "git_revision:d8f38ca9494b5af249942631f9cee45927f6b4bc"
+        },
+        {
+          "name": "infra/tools/luci-auth/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        },
+        {
+          "name": "infra/tools/luci/vpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/gsutil",
+          "path": "cipd_bin_packages",
+          "version": "version:4.28"
+        }
+      ],
+      "command": [
+        "./kitchen${EXECUTABLE_SUFFIX}",
+        "cook",
+        "-checkout-dir",
+        "recipe_bundle",
+        "-mode",
+        "swarming",
+        "-luci-system-account",
+        "system",
+        "-cache-dir",
+        "cache",
+        "-temp-dir",
+        "tmp",
+        "-known-gerrit-host",
+        "android.googlesource.com",
+        "-known-gerrit-host",
+        "boringssl.googlesource.com",
+        "-known-gerrit-host",
+        "chromium.googlesource.com",
+        "-known-gerrit-host",
+        "dart.googlesource.com",
+        "-known-gerrit-host",
+        "fuchsia.googlesource.com",
+        "-known-gerrit-host",
+        "go.googlesource.com",
+        "-known-gerrit-host",
+        "llvm.googlesource.com",
+        "-known-gerrit-host",
+        "skia.googlesource.com",
+        "-known-gerrit-host",
+        "webrtc.googlesource.com",
+        "-output-result-json",
+        "${ISOLATED_OUTDIR}/build_result_filename",
+        "-workdir",
+        ".",
+        "-recipe",
+        "upload_nano_results",
+        "-properties",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-SkottieWASM\",\"gs_bucket\":\"skia-perf\",\"patch_issue\":\"<(ISSUE)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"output_ignored\",\"task_id\":\"<(TASK_ID)\"}",
+        "-logdog-annotation-url",
+        "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      ],
+      "dependencies": [
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-SkottieWASM"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "machine_type:n1-highmem-2",
+        "os:Debian-9.8",
+        "pool:Skia"
+      ],
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin"
+        ],
+        "VPYTHON_VIRTUALENV_ROOT": [
+          "cache/vpython"
+        ]
+      },
+      "execution_timeout_ns": 3600000000000,
+      "extra_tags": {
+        "log_location": "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      },
+      "io_timeout_ns": 3600000000000,
+      "isolate": "swarm_recipe.isolate",
+      "max_attempts": 2,
+      "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+    },
     "Upload-Perf-Debian9-EMCC-GCE-GPU-AVX2-wasm-Release-All-CanvasKit": {
       "caches": [
         {
@@ -87917,6 +88516,106 @@
       "dependencies": [
         "Housekeeper-PerCommit-BundleRecipes",
         "Perf-Debian9-EMCC-GCE-GPU-AVX2-wasm-Release-All-CanvasKit"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "machine_type:n1-highmem-2",
+        "os:Debian-9.8",
+        "pool:Skia"
+      ],
+      "env_prefixes": {
+        "PATH": [
+          "cipd_bin_packages",
+          "cipd_bin_packages/bin"
+        ],
+        "VPYTHON_VIRTUALENV_ROOT": [
+          "cache/vpython"
+        ]
+      },
+      "execution_timeout_ns": 3600000000000,
+      "extra_tags": {
+        "log_location": "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      },
+      "io_timeout_ns": 3600000000000,
+      "isolate": "swarm_recipe.isolate",
+      "max_attempts": 2,
+      "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+    },
+    "Upload-Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-wasm-Release-All-SkottieWASM": {
+      "caches": [
+        {
+          "name": "vpython",
+          "path": "cache/vpython"
+        }
+      ],
+      "cipd_packages": [
+        {
+          "name": "infra/tools/luci/kitchen/${platform}",
+          "path": ".",
+          "version": "git_revision:d8f38ca9494b5af249942631f9cee45927f6b4bc"
+        },
+        {
+          "name": "infra/tools/luci-auth/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e"
+        },
+        {
+          "name": "infra/tools/luci/vpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/gsutil",
+          "path": "cipd_bin_packages",
+          "version": "version:4.28"
+        }
+      ],
+      "command": [
+        "./kitchen${EXECUTABLE_SUFFIX}",
+        "cook",
+        "-checkout-dir",
+        "recipe_bundle",
+        "-mode",
+        "swarming",
+        "-luci-system-account",
+        "system",
+        "-cache-dir",
+        "cache",
+        "-temp-dir",
+        "tmp",
+        "-known-gerrit-host",
+        "android.googlesource.com",
+        "-known-gerrit-host",
+        "boringssl.googlesource.com",
+        "-known-gerrit-host",
+        "chromium.googlesource.com",
+        "-known-gerrit-host",
+        "dart.googlesource.com",
+        "-known-gerrit-host",
+        "fuchsia.googlesource.com",
+        "-known-gerrit-host",
+        "go.googlesource.com",
+        "-known-gerrit-host",
+        "llvm.googlesource.com",
+        "-known-gerrit-host",
+        "skia.googlesource.com",
+        "-known-gerrit-host",
+        "webrtc.googlesource.com",
+        "-output-result-json",
+        "${ISOLATED_OUTDIR}/build_result_filename",
+        "-workdir",
+        ".",
+        "-recipe",
+        "upload_nano_results",
+        "-properties",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-wasm-Release-All-SkottieWASM\",\"gs_bucket\":\"skia-perf\",\"patch_issue\":\"<(ISSUE)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"output_ignored\",\"task_id\":\"<(TASK_ID)\"}",
+        "-logdog-annotation-url",
+        "logdog://logs.chromium.org/skia/<(TASK_ID)/+/annotations"
+      ],
+      "dependencies": [
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-wasm-Release-All-SkottieWASM"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -89269,7 +89968,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -89374,7 +90073,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -89479,7 +90178,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -89584,7 +90283,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -89689,7 +90388,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -89794,7 +90493,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -89899,7 +90598,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90004,7 +90703,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90109,7 +90808,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90214,7 +90913,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90319,7 +91018,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90424,7 +91123,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90529,7 +91228,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90634,7 +91333,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90739,7 +91438,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90844,7 +91543,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -90949,7 +91648,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91054,7 +91753,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91159,7 +91858,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91264,7 +91963,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91369,7 +92068,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91474,7 +92173,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91579,7 +92278,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91684,7 +92383,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91789,7 +92488,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91894,7 +92593,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -91999,7 +92698,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -92104,7 +92803,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -92209,7 +92908,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -92314,7 +93013,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -92419,7 +93118,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -92524,7 +93223,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -92629,7 +93328,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -97732,6 +98431,11 @@
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
         },
         {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
+        },
+        {
           "name": "infra/gsutil",
           "path": "cipd_bin_packages",
           "version": "version:4.28"
@@ -97830,6 +98534,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -97932,6 +98641,11 @@
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
         },
         {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
+        },
+        {
           "name": "infra/gsutil",
           "path": "cipd_bin_packages",
           "version": "version:4.28"
@@ -98030,6 +98744,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -98132,6 +98851,11 @@
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
         },
         {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
+        },
+        {
           "name": "infra/gsutil",
           "path": "cipd_bin_packages",
           "version": "version:4.28"
@@ -98230,6 +98954,11 @@
           "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:96f81e737868d43124b4661cf1c325296ca04944"
+        },
+        {
+          "name": "infra/python/cpython/${platform}",
+          "path": "cipd_bin_packages",
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -109634,7 +110363,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -109739,7 +110468,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -109844,7 +110573,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -109949,7 +110678,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110054,7 +110783,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110159,7 +110888,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110264,7 +110993,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110369,7 +111098,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110474,7 +111203,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110579,7 +111308,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110684,7 +111413,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110789,7 +111518,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110894,7 +111623,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -110999,7 +111728,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111104,7 +111833,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111209,7 +111938,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111314,7 +112043,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111419,7 +112148,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111524,7 +112253,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111629,7 +112358,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111734,7 +112463,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111839,7 +112568,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -111944,7 +112673,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112049,7 +112778,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112154,7 +112883,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112259,7 +112988,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112364,7 +113093,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112469,7 +113198,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112574,7 +113303,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112679,7 +113408,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112784,7 +113513,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112889,7 +113618,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -112994,7 +113723,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113099,7 +113828,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113204,7 +113933,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113309,7 +114038,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113414,7 +114143,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113519,7 +114248,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113624,7 +114353,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113729,7 +114458,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113834,7 +114563,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -113939,7 +114668,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114044,7 +114773,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114149,7 +114878,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114254,7 +114983,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114359,7 +115088,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114464,7 +115193,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114569,7 +115298,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114674,7 +115403,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114779,7 +115508,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114884,7 +115613,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -114989,7 +115718,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115094,7 +115823,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115199,7 +115928,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115304,7 +116033,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115409,7 +116138,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115514,7 +116243,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115619,7 +116348,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115724,7 +116453,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115829,7 +116558,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -115934,7 +116663,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116039,7 +116768,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116144,7 +116873,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116249,7 +116978,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116554,7 +117283,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116659,7 +117388,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116764,7 +117493,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116869,7 +117598,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -116974,7 +117703,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117079,7 +117808,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117184,7 +117913,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117289,7 +118018,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117394,7 +118123,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117499,7 +118228,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117604,7 +118333,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117709,7 +118438,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117814,7 +118543,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -117919,7 +118648,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118024,7 +118753,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118129,7 +118858,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118234,7 +118963,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118339,7 +119068,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118444,7 +119173,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118549,7 +119278,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118654,7 +119383,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",
@@ -118759,7 +119488,7 @@
         {
           "name": "infra/python/cpython/${platform}",
           "path": "cipd_bin_packages",
-          "version": "version:2.7.14.chromium14"
+          "version": "version:2.7.15.chromium14"
         },
         {
           "name": "infra/gsutil",

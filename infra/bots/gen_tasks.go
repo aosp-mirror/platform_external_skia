@@ -30,6 +30,7 @@ import (
 )
 
 const (
+	BUILD_TASK_DRIVERS_NAME    = "Housekeeper-PerCommit-BuildTaskDrivers"
 	BUNDLE_RECIPES_NAME        = "Housekeeper-PerCommit-BundleRecipes"
 	ISOLATE_GCLOUD_LINUX_NAME  = "Housekeeper-PerCommit-IsolateGCloudLinux"
 	ISOLATE_SKIMAGE_NAME       = "Housekeeper-PerCommit-IsolateSkImage"
@@ -162,7 +163,7 @@ var (
 		&specs.CipdPackage{
 			Name:    "infra/python/cpython/${platform}",
 			Path:    "cipd_bin_packages",
-			Version: "version:2.7.14.chromium14",
+			Version: "version:2.7.15.chromium14",
 		},
 	}
 
@@ -262,6 +263,8 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 	}
 	cipd := append([]*specs.CipdPackage{}, CIPD_PKGS_KITCHEN...)
 	if strings.Contains(name, "Win") && !strings.Contains(name, "LenovoYogaC630") {
+		cipd = append(cipd, CIPD_PKGS_CPYTHON...)
+	} else if strings.Contains(name, "P30") {
 		cipd = append(cipd, CIPD_PKGS_CPYTHON...)
 	}
 	properties := map[string]string{
@@ -368,7 +371,7 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 		ec := []string{}
 		if val := parts["extra_config"]; val != "" {
 			ec = strings.Split(val, "_")
-			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing"}
+			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !util.In(part, ignore) {
@@ -408,7 +411,7 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 		if strings.Contains(jobName, "PathKit") {
 			ec = []string{"PathKit"}
 		}
-		if strings.Contains(jobName, "CanvasKit") {
+		if strings.Contains(jobName, "CanvasKit") || strings.Contains(jobName, "SkottieWASM") {
 			if parts["cpu_or_gpu"] == "CPU" {
 				ec = []string{"CanvasKit_CPU"}
 			} else {
@@ -494,7 +497,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
 				"GalaxyS9":        {"starlte", "R16NW_G960FXXU2BRJ8"}, // This is Oreo.
 				"MotoG4":          {"athene", "NPJS25.93-14.7-8"},
-				"NVIDIA_Shield":   {"foster", "OPR6.170623.010"},
+				"NVIDIA_Shield":   {"foster", "OPR6.170623.010_2604118_1256.7693"},
 				"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
@@ -709,6 +712,61 @@ func bundleRecipes(b *specs.TasksCfgBuilder) string {
 		Isolate: relpath("swarm_recipe.isolate"),
 	})
 	return BUNDLE_RECIPES_NAME
+}
+
+// buildTaskDrivers generates the task to compile the task driver code to run on
+// all platforms.
+func buildTaskDrivers(b *specs.TasksCfgBuilder) string {
+	b.MustAddTask(BUILD_TASK_DRIVERS_NAME, &specs.TaskSpec{
+		Caches:       CACHES_GO,
+		CipdPackages: append(CIPD_PKGS_GIT, b.MustGetCipdPackageFromAsset("go")),
+		Command: []string{
+			"/bin/bash", "skia/infra/bots/build_task_drivers.sh", specs.PLACEHOLDER_ISOLATED_OUTDIR,
+		},
+		Dimensions: linuxGceDimensions(MACHINE_TYPE_SMALL),
+		EnvPrefixes: map[string][]string{
+			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
+		},
+		Isolate: "task_drivers.isolate",
+	})
+	return BUILD_TASK_DRIVERS_NAME
+}
+
+func updateGoDeps(b *specs.TasksCfgBuilder, name string) string {
+	cipd := append([]*specs.CipdPackage{}, CIPD_PKGS_GIT...)
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("go"))
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("protoc"))
+
+	machineType := MACHINE_TYPE_MEDIUM
+	t := &specs.TaskSpec{
+		Caches:       CACHES_GO,
+		CipdPackages: cipd,
+		Command: []string{
+			"./update_go_deps",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", name,
+			"--workdir", ".",
+			"--gerrit_project", "skia",
+			"--gerrit_url", "https://skia-review.googlesource.com",
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--reviewers", "borenet@google.com",
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--alsologtostderr",
+		},
+		Dependencies: []string{BUILD_TASK_DRIVERS_NAME},
+		Dimensions:   linuxGceDimensions(machineType),
+		EnvPrefixes: map[string][]string{
+			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
+		},
+		Isolate:        "empty.isolate",
+		ServiceAccount: SERVICE_ACCOUNT_RECREATE_SKPS,
+	}
+	b.MustAddTask(name, t)
+	return name
 }
 
 type isolateAssetCfg struct {
@@ -972,7 +1030,7 @@ func housekeeper(b *specs.TasksCfgBuilder, name string) string {
 // should add as a dependency.
 func androidFrameworkCompile(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "android_compile", "swarm_recipe.isolate", SERVICE_ACCOUNT_COMPILE, linuxGceDimensions(MACHINE_TYPE_SMALL), nil, OUTPUT_NONE)
-	timeout(task, time.Hour)
+	timeout(task, 2*time.Hour)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -1179,6 +1237,8 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		recipe = "perf_canvaskit"
 	} else if strings.Contains(name, "SkottieTracing") {
 		recipe = "perf_skottietrace"
+	} else if strings.Contains(name, "SkottieWASM") {
+		recipe = "perf_skottie_wasm"
 	}
 	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), nil, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
@@ -1201,6 +1261,10 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	} else if parts["arch"] == "x86" && parts["configuration"] == "Debug" {
 		// skia:6737
 		timeout(task, 6*time.Hour)
+	} else if strings.Contains(parts["extra_config"], "SkottieWASM") {
+		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("node"))
+		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
+		task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	} else if strings.Contains(parts["extra_config"], "Skottie") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
 	}
@@ -1268,6 +1332,9 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	if name == BUNDLE_RECIPES_NAME {
 		deps = append(deps, bundleRecipes(b))
 	}
+	if name == BUILD_TASK_DRIVERS_NAME {
+		deps = append(deps, buildTaskDrivers(b))
+	}
 
 	// Isolate CIPD assets.
 	if _, ok := ISOLATE_ASSET_MAPPING[name]; ok {
@@ -1282,6 +1349,12 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	// RecreateSKPs.
 	if strings.Contains(name, "RecreateSKPs") {
 		deps = append(deps, recreateSKPs(b, name))
+	}
+
+	// Update Go Dependencies.
+	if strings.Contains(name, "UpdateGoDeps") {
+		// Update Go deps bot.
+		deps = append(deps, updateGoDeps(b, name))
 	}
 
 	// Infra tests.
@@ -1319,12 +1392,15 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		name != "Housekeeper-PerCommit-BundleRecipes" &&
 		name != "Housekeeper-PerCommit-InfraTests" &&
 		name != "Housekeeper-PerCommit-CheckGeneratedFiles" &&
+		name != "Housekeeper-Nightly-UpdateGoDeps" &&
 		name != "Housekeeper-OnDemand-Presubmit" &&
 		name != "Housekeeper-PerCommit" &&
+		name != BUILD_TASK_DRIVERS_NAME &&
 		!strings.Contains(name, "Android_Framework") &&
 		!strings.Contains(name, "G3_Framework") &&
 		!strings.Contains(name, "RecreateSKPs") &&
 		!strings.Contains(name, "Housekeeper-PerCommit-Isolate") &&
+		!strings.Contains(name, "SkottieWASM") &&
 		!strings.Contains(name, "LottieWeb") {
 		compile(b, compileTaskName, compileTaskParts)
 		if parts["role"] == "Calmbench" {

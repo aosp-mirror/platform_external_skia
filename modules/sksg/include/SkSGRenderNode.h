@@ -12,6 +12,7 @@
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkMaskFilter.h"
 #include "include/core/SkShader.h"
 
 class SkCanvas;
@@ -35,6 +36,11 @@ public:
     // Normally, hit-testing stops at leaf Draw nodes.
     const RenderNode* nodeAt(const SkPoint& point) const;
 
+    // Controls the visibility of the render node.  Invisible nodes are not rendered,
+    // but they still participate in revalidation.
+    bool isVisible() const;
+    void setVisible(bool);
+
 protected:
     explicit RenderNode(uint32_t inval_traits = 0);
 
@@ -47,7 +53,9 @@ protected:
     struct RenderContext {
         sk_sp<SkColorFilter> fColorFilter;
         sk_sp<SkShader>      fShader;
-        SkMatrix             fShaderCTM = SkMatrix::I();
+        sk_sp<SkMaskFilter>  fMaskFilter;
+        SkMatrix             fShaderCTM = SkMatrix::I(),
+                             fMaskCTM   = SkMatrix::I();
         float                fOpacity   = 1;
         SkBlendMode          fBlendMode = SkBlendMode::kSrcOver;
 
@@ -81,6 +89,7 @@ protected:
         ScopedRenderContext&& modulateOpacity(float opacity);
         ScopedRenderContext&& modulateColorFilter(sk_sp<SkColorFilter>);
         ScopedRenderContext&& modulateShader(sk_sp<SkShader>, const SkMatrix& shader_ctm);
+        ScopedRenderContext&& modulateMaskFilter(sk_sp<SkMaskFilter>, const SkMatrix& mf_ctm);
         ScopedRenderContext&& modulateBlendMode(SkBlendMode);
 
         // Force content isolation for a node sub-DAG by applying the RenderContext

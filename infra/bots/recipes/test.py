@@ -481,7 +481,11 @@ def dm_flags(api, bot):
                        'fontmgr_match',
                        'fontmgr_iter',
                        'imagemasksubset',
-                       'wacky_yuv_formats_domain']
+                       'wacky_yuv_formats_domain',
+                       'imagemakewithfilter',
+                       'imagemakewithfilter_crop',
+                       'imagemakewithfilter_crop_ref',
+                       'imagemakewithfilter_ref']
 
   # skia:5589
   bad_serialize_gms.extend(['bitmapfilters',
@@ -736,6 +740,10 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'imagefiltersscaled'])
     blacklist(['vk', 'gm', '_', 'imagefiltersstroked'])
     blacklist(['vk', 'gm', '_', 'imagefilterstransformed'])
+    blacklist(['vk', 'gm', '_', 'imagemakewithfilter'])
+    blacklist(['vk', 'gm', '_', 'imagemakewithfilter_crop'])
+    blacklist(['vk', 'gm', '_', 'imagemakewithfilter_crop_ref'])
+    blacklist(['vk', 'gm', '_', 'imagemakewithfilter_ref'])
     blacklist(['vk', 'gm', '_', 'imageresizetiled'])
     blacklist(['vk', 'gm', '_', 'lcdblendmodes'])
     blacklist(['vk', 'gm', '_', 'lcdoverlap'])
