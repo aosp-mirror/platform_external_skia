@@ -1337,13 +1337,6 @@ bool GrGLCaps::getExternalFormat(GrPixelConfig surfaceConfig, GrPixelConfig memo
     bool surfaceIsAlphaOnly = GrPixelConfigIsAlphaOnly(surfaceConfig);
     bool memoryIsAlphaOnly = GrPixelConfigIsAlphaOnly(memoryConfig);
 
-    // We don't currently support moving RGBA data into and out of ALPHA surfaces. It could be
-    // made to work. However, this is complicated by the use of GL_RED for alpha-only textures but
-    // is not needed currently.
-    if (surfaceIsAlphaOnly && !memoryIsAlphaOnly) {
-        return false;
-    }
-
     *externalFormat = fConfigTable[memoryConfig].fFormats.fExternalFormat[usage];
     *externalType = fConfigTable[memoryConfig].fFormats.fExternalType;
 
@@ -1557,9 +1550,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     fConfigTable[kRGB_888_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_RGB8;
     // Our external RGB data always has a byte where alpha would be. When calling read pixels we
     // want to read to kRGB_888x color type and ensure that gets 0xFF written. Using GL_RGB would
-    // read back unaligned 24bit RGB color values. Note that this all a bit moot as we don't
-    // currently expect to ever read back GrColorType::kRGB_888x because our implementation of
-    // supportedReadPixelsColorType never returns it.
+    // read back unaligned 24bit RGB color values.
     fConfigTable[kRGB_888_GrPixelConfig].fFormats.fExternalFormat[kReadPixels_ExternalFormatUsage] = GR_GL_RGBA;
     fConfigTable[kRGB_888_GrPixelConfig].fFormats.fExternalType = GR_GL_UNSIGNED_BYTE;
     fConfigTable[kRGB_888_GrPixelConfig].fFormatType = kNormalizedFixedPoint_FormatType;
@@ -1840,6 +1831,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     alphaInfo.fFormats.fBaseInternalFormat = GR_GL_ALPHA;
     alphaInfo.fFormats.fSizedInternalFormat = GR_GL_ALPHA8;
     alphaInfo.fFormats.fExternalFormat[kReadPixels_ExternalFormatUsage] = GR_GL_ALPHA;
+    alphaInfo.fRGBAReadSwizzle = GrSwizzle("000a");
     if (fAlpha8IsRenderable && alpha8IsValidForGL) {
         alphaInfo.fFlags |= allRenderFlags;
     }
@@ -1850,6 +1842,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     redInfo.fFormats.fExternalFormat[kReadPixels_ExternalFormatUsage] = GR_GL_RED;
     redInfo.fFormats.fExternalType = GR_GL_UNSIGNED_BYTE;
     redInfo.fFormatType = kNormalizedFixedPoint_FormatType;
+    redInfo.fRGBAReadSwizzle = GrSwizzle("000r");
 
     // ES2 Command Buffer does not allow TexStorage with R8_EXT (so Alpha_8 and Gray_8)
     if (texStorageSupported && !disablePerFormatTextureStorageForCommandBufferES2) {
@@ -2022,6 +2015,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     redHalf.fFormats.fBaseInternalFormat = GR_GL_RED;
     redHalf.fFormats.fSizedInternalFormat = GR_GL_R16F;
     redHalf.fFormats.fExternalFormat[kReadPixels_ExternalFormatUsage] = GR_GL_RED;
+    redHalf.fRGBAReadSwizzle = GrSwizzle("000r");
     if (textureRedSupport && hasFP16Textures) {
         redHalf.fFlags = ConfigInfo::kTextureable_Flag;
 
@@ -2101,7 +2095,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         //    GL 3.0 requires support for R16 & RG16
         //    GL_ARB_texture_rg adds R16 & RG16 support for OpenGL 1.1 and above
         // For ES:
-        //    GL_EXT_texture_norm16 adds support but it requires ES 3.1
+        //    GL_EXT_texture_norm16 adds support for both texturing and rendering
         //    There is also the GL_NV_image_formats extension - for further investigation
         bool r16AndRG1616Supported = false;
         if (GR_IS_GR_GL(standard)) {
@@ -2109,22 +2103,26 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
                 r16AndRG1616Supported = true;
             }
         } else if (GR_IS_GR_GL_ES(standard)) {
-            if (version >= GR_GL_VER(3, 1) && ctxInfo.hasExtension("GL_EXT_texture_norm16")) {
+            if (ctxInfo.hasExtension("GL_EXT_texture_norm16")) {
                 r16AndRG1616Supported = true;
             }
         } // No WebGL support
 
         // For desktop:
-        //    GL 3.0 requires support for RGBA16
+        //    GL 3.0 requires both texture and render support for RGBA16
         // For ES:
-        //    GL_EXT_texture_norm16 adds support but it requires ES 3.1
+        //    GL_EXT_texture_norm16 adds support for both texturing and rendering
+        //    There is also the GL_NV_image_formats extension - for further investigation
+        //
+        // This is basically the same as R16F and RG16F except the GL_ARB_texture_rg extension
+        // doesn't add this format
         bool rgba16161616Supported = false;
         if (GR_IS_GR_GL(standard)) {
             if (version >= GR_GL_VER(3, 0)) {
                 rgba16161616Supported = true;
             }
         } else if (GR_IS_GR_GL_ES(standard)) {
-            if (version >= GR_GL_VER(3, 1) && ctxInfo.hasExtension("GL_EXT_texture_norm16")) {
+            if (ctxInfo.hasExtension("GL_EXT_texture_norm16")) {
                 rgba16161616Supported = true;
             }
         } // No WebGL support
@@ -2172,6 +2170,29 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
 
     // Experimental (for Y416 and mutant P016/P010)
     {
+        bool rg16fTexturesSupported = false;
+        bool rg16fRenderingSupported = false;
+        // For desktop:
+        //  3.0 requires both texture and render support
+        //  GL_ARB_texture_rg adds both texture and render support
+        // For ES:
+        //  3.2 requires RG16F as both renderable and texturable
+        //  3.0 only requires RG16F as texture-only
+        //  GL_EXT_color_buffer_float adds texture and render support
+        if (GR_IS_GR_GL(standard)) {
+            if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_ARB_texture_rg")) {
+                rg16fTexturesSupported = true;
+                rg16fRenderingSupported = true;
+            }
+        } else if (GR_IS_GR_GL_ES(standard)) {
+            if (version >= GR_GL_VER(3, 2) || ctxInfo.hasExtension("GL_EXT_color_buffer_float")) {
+                rg16fTexturesSupported = true;
+                rg16fRenderingSupported = true;
+            } else if (version >= GR_GL_VER(3, 0)) {
+                rg16fTexturesSupported = true;      // texture only
+            }
+        }
+
         ConfigInfo& rgHalf = fConfigTable[kRG_half_GrPixelConfig];
 
         rgHalf.fFormats.fBaseInternalFormat = GR_GL_RG;
@@ -2183,12 +2204,11 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
             rgHalf.fFormats.fExternalType = GR_GL_HALF_FLOAT_OES;
         }
         rgHalf.fFormatType = kFloat_FormatType;
-        if (hasFP16Textures) {
-            rgHalf.fFlags = rgIsTexturable ? ConfigInfo::kTextureable_Flag : 0;
-
-            if (HalfFPRenderTargetSupport::kAll == halfFPRenderTargetSupport) {
-                rgHalf.fFlags |= fpRenderFlags;
-            }
+        if (rg16fTexturesSupported) {
+            rgHalf.fFlags |= ConfigInfo::kTextureable_Flag;
+        }
+        if (rg16fRenderingSupported) {
+            rgHalf.fFlags |= fpRenderFlags;
         }
     }
 
@@ -3032,30 +3052,29 @@ bool GrGLCaps::surfaceSupportsReadPixels(const GrSurface* surface) const {
     return true;
 }
 
-GrColorType GrGLCaps::supportedReadPixelsColorType(GrPixelConfig config,
-                                                   GrColorType dstColorType) const {
+GrCaps::SupportedRead GrGLCaps::supportedReadPixelsColorType(GrPixelConfig srcPixelConfig,
+                                                             const GrBackendFormat& srcFormat,
+                                                             GrColorType dstColorType) const {
     // For now, we mostly report the read back format that is required by the ES spec without
     // checking for implementation allowed formats or consider laxer rules in non-ES GL. TODO: Relax
     // this as makes sense to increase performance and correctness.
-    switch (fConfigTable[config].fFormatType) {
-        case kNormalizedFixedPoint_FormatType:
-            if (kRGB_888X_GrPixelConfig == config) {
-                return GrColorType::kRGB_888x;
-            }
-            return GrColorType::kRGBA_8888;
-        case kFloat_FormatType:
-            if ((kAlpha_half_GrPixelConfig == config ||
-                 kAlpha_half_as_Red_GrPixelConfig == config) &&
-                GrColorType::kAlpha_F16 == dstColorType) {
-                return GrColorType::kAlpha_F16;
-            }
-            // And similar for full float RG.
-            if (kRG_float_GrPixelConfig == config && GrColorType::kRG_F32 == dstColorType) {
-                return GrColorType::kRG_F32;
-            }
-            return GrColorType::kRGBA_F32;
+    const GrGLenum* glFormat = srcFormat.getGLFormat();
+    if (!glFormat) {
+        return {GrSwizzle{}, GrColorType::kUnknown};
     }
-    return GrColorType::kUnknown;
+    auto swizzle = fConfigTable[srcPixelConfig].fRGBAReadSwizzle;
+    switch (fConfigTable[srcPixelConfig].fFormatType) {
+        case kNormalizedFixedPoint_FormatType:
+            if (kRGB_888X_GrPixelConfig == srcPixelConfig && *glFormat == GR_GL_RGBA8 &&
+                GrColorTypeHasAlpha(dstColorType)) {
+                // This can skip an unnecessary conversion.
+                return {swizzle, GrColorType::kRGB_888x};
+            }
+            return {swizzle, GrColorType::kRGBA_8888};
+        case kFloat_FormatType:
+            return {swizzle, GrColorType::kRGBA_F32};
+    }
+    return {GrSwizzle{}, GrColorType::kUnknown};
 }
 
 bool GrGLCaps::onIsWindowRectanglesSupportedForRT(const GrBackendRenderTarget& backendRT) const {
