@@ -137,11 +137,6 @@ bool GrVkCaps::canCopyImage(GrPixelConfig dstConfig, int dstSampleCnt, bool dstH
         return false;
     }
 
-    if (this->shaderCaps()->configOutputSwizzle(srcConfig) !=
-        this->shaderCaps()->configOutputSwizzle(dstConfig)) {
-        return false;
-    }
-
     return true;
 }
 
@@ -157,11 +152,6 @@ bool GrVkCaps::canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCnt, bool dst
     // as image usage flags.
     if (!this->formatCanBeDstofBlit(dstFormat, dstIsLinear) ||
         !this->formatCanBeSrcofBlit(srcFormat, srcIsLinear)) {
-        return false;
-    }
-
-    if (this->shaderCaps()->configOutputSwizzle(srcConfig) !=
-        this->shaderCaps()->configOutputSwizzle(dstConfig)) {
         return false;
     }
 
@@ -566,34 +556,6 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties,
     GrShaderCaps* shaderCaps = fShaderCaps.get();
     shaderCaps->fVersionDeclString = "#version 330\n";
 
-
-    // fConfigOutputSwizzle will default to RGBA so we only need to set it for alpha only config.
-    for (int i = 0; i < kGrPixelConfigCnt; ++i) {
-        GrPixelConfig config = static_cast<GrPixelConfig>(i);
-        // Vulkan doesn't support a single channel format stored in alpha.
-        if (GrPixelConfigIsAlphaOnly(config) &&
-            kAlpha_8_as_Alpha_GrPixelConfig != config) {
-            shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RRRR();
-            shaderCaps->fConfigOutputSwizzle[i] = GrSwizzle::AAAA();
-        } else {
-            if (kGray_8_GrPixelConfig == config ||
-                kGray_8_as_Red_GrPixelConfig == config) {
-                shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RRRA();
-            } else if (kRGBA_4444_GrPixelConfig == config) {
-                // The vulkan spec does not require R4G4B4A4 to be supported for texturing so we
-                // store the data in a B4G4R4A4 texture and then swizzle it when doing texture reads
-                // or writing to outputs. Since we're not actually changing the data at all, the
-                // only extra work is the swizzle in the shader for all operations.
-                shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::BGRA();
-                shaderCaps->fConfigOutputSwizzle[i] = GrSwizzle::BGRA();
-            } else if (kRGB_888X_GrPixelConfig == config) {
-                shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RGB1();
-            } else {
-                shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RGBA();
-            }
-        }
-    }
-
     // Vulkan is based off ES 3.0 so the following should all be supported
     shaderCaps->fUsesPrecisionModifiers = true;
     shaderCaps->fFlatInterpolationSupport = true;
@@ -662,7 +624,6 @@ static bool format_is_srgb(VkFormat format) {
             return true;
         case VK_FORMAT_R8G8B8A8_UNORM:
         case VK_FORMAT_B8G8R8A8_UNORM:
-        case VK_FORMAT_R8G8B8A8_SINT:
         case VK_FORMAT_R8G8B8_UNORM:
         case VK_FORMAT_R8G8_UNORM:
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
@@ -696,7 +657,6 @@ static constexpr VkFormat kVkFormats[] = {
     VK_FORMAT_R5G6B5_UNORM_PACK16,
     VK_FORMAT_R16G16B16A16_SFLOAT,
     VK_FORMAT_R16_SFLOAT,
-    VK_FORMAT_R8G8B8A8_SINT,
     VK_FORMAT_R8G8B8_UNORM,
     VK_FORMAT_R8G8_UNORM,
     VK_FORMAT_A2B10G10R10_UNORM_PACK32,
@@ -723,8 +683,8 @@ const GrVkCaps::FormatInfo& GrVkCaps::getFormatInfo(VkFormat format) const {
         }
     }
     SK_ABORT("Invalid VkFormat");
-    static const FormatInfo kInvalidConfig;
-    return kInvalidConfig;
+    static const FormatInfo kInvalidFormat;
+    return kInvalidFormat;
 }
 
 void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice physDev,

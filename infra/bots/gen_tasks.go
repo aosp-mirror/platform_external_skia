@@ -497,7 +497,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
 				"GalaxyS9":        {"starlte", "R16NW_G960FXXU2BRJ8"}, // This is Oreo.
 				"MotoG4":          {"athene", "NPJS25.93-14.7-8"},
-				"NVIDIA_Shield":   {"foster", "OPR6.170623.010_2604118_1256.7693"},
+				"NVIDIA_Shield":   {"foster", "OPR6.170623.010_3507953_1441.7411"},
 				"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
@@ -588,9 +588,9 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"GTX660":        "10de:11c0-25.21.14.1634",
 					"GTX960":        "10de:1401-25.21.14.1634",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
-					"IntelIris540":  "8086:1926-25.20.100.6444",
+					"IntelIris540":  "8086:1926-25.20.100.6519",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
-					"IntelIris655":  "8086:3ea5-25.20.100.6444",
+					"IntelIris655":  "8086:3ea5-25.20.100.6519",
 					"RadeonHD7770":  "1002:683d-24.20.13001.1010",
 					"RadeonR9M470X": "1002:6646-24.20.13001.1010",
 					"QuadroP400":    "10de:1cb3-25.21.14.1678",
@@ -1237,12 +1237,15 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		recipe = "perf_canvaskit"
 	} else if strings.Contains(name, "SkottieTracing") {
 		recipe = "perf_skottietrace"
-	} else if strings.Contains(name, "SkottieWASM") {
-		recipe = "perf_skottie_wasm"
+	} else if strings.Contains(name, "SkottieWASM") || strings.Contains(name, "LottieWeb") {
+		recipe = "perf_skottiewasm_lottieweb"
 	}
 	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), nil, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
-	task.Dependencies = append(task.Dependencies, compileTaskName)
+	if !strings.Contains(name, "LottieWeb") {
+		// Perf.+LottieWeb doesn't require anything in Skia to be compiled.
+		task.Dependencies = append(task.Dependencies, compileTaskName)
+	}
 	task.Expiration = 20 * time.Hour
 	timeout(task, 4*time.Hour)
 	if deps := getIsolatedCIPDDeps(parts); len(deps) > 0 {
@@ -1261,7 +1264,7 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	} else if parts["arch"] == "x86" && parts["configuration"] == "Debug" {
 		// skia:6737
 		timeout(task, 6*time.Hour)
-	} else if strings.Contains(parts["extra_config"], "SkottieWASM") {
+	} else if strings.Contains(parts["extra_config"], "SkottieWASM") || strings.Contains(parts["extra_config"], "LottieWeb") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("node"))
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
 		task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
@@ -1452,7 +1455,7 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	if strings.Contains(name, "ProcDump") {
 		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("procdump_win"))
 	}
-	if strings.Contains(name, "CanvasKit") || strings.Contains(name, "LottieWeb") || strings.Contains(name, "PathKit") {
+	if strings.Contains(name, "CanvasKit") || (parts["role"] == "Test" && strings.Contains(name, "LottieWeb")) || strings.Contains(name, "PathKit") {
 		// Docker-based tests that don't need the standard CIPD assets
 		pkgs = []*specs.CipdPackage{}
 	}

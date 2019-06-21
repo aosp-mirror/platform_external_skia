@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "src/gpu/GrRenderTargetContext.h"
 #include "include/core/SkDrawable.h"
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/gpu/GrRenderTarget.h"
@@ -25,6 +26,7 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDataUtils.h"
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrFixedClip.h"
 #include "src/gpu/GrGpuResourcePriv.h"
@@ -32,7 +34,6 @@
 #include "src/gpu/GrOpList.h"
 #include "src/gpu/GrPathRenderer.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrStencilAttachment.h"
@@ -1123,16 +1124,7 @@ void GrRenderTargetContext::drawRRect(const GrClip& origClip,
     GrAAType aaType = this->chooseAAType(aa);
 
     std::unique_ptr<GrDrawOp> op;
-    if (GrAAType::kCoverage == aaType && rrect.isSimple() &&
-        rrect.getSimpleRadii().fX == rrect.getSimpleRadii().fY &&
-        viewMatrix.rectStaysRect() && viewMatrix.isSimilarity()) {
-        // In coverage mode, we draw axis-aligned circular roundrects with the GrOvalOpFactory
-        // to avoid perf regressions on some platforms.
-        assert_alive(paint);
-        op = GrOvalOpFactory::MakeCircularRRectOp(
-                fContext, std::move(paint), viewMatrix, rrect, stroke, this->caps()->shaderCaps());
-    }
-    if (!op && style.isSimpleFill()) {
+    if (style.isSimpleFill()) {
         assert_alive(paint);
         op = GrFillRRectOp::Make(
                 fContext, aaType, viewMatrix, rrect, *this->caps(), std::move(paint));
@@ -1141,6 +1133,7 @@ void GrRenderTargetContext::drawRRect(const GrClip& origClip,
         assert_alive(paint);
         op = GrOvalOpFactory::MakeRRectOp(
                 fContext, std::move(paint), viewMatrix, rrect, stroke, this->caps()->shaderCaps());
+
     }
     if (op) {
         this->addDrawOp(*clip, std::move(op));
@@ -1539,23 +1532,20 @@ void GrRenderTargetContext::drawOval(const GrClip& clip,
     GrAAType aaType = this->chooseAAType(aa);
 
     std::unique_ptr<GrDrawOp> op;
-    if (GrAAType::kCoverage == aaType && oval.width() == oval.height() &&
-        viewMatrix.isSimilarity()) {
-        // We don't draw true circles as round rects in coverage mode, because it can
-        // cause perf regressions on some platforms as compared to the dedicated circle Op.
-        assert_alive(paint);
-        op = GrOvalOpFactory::MakeCircleOp(fContext, std::move(paint), viewMatrix, oval, style,
-                                           this->caps()->shaderCaps());
-    }
-    if (!op && style.isSimpleFill()) {
+    if (style.isSimpleFill()) {
         // GrFillRRectOp has special geometry and a fragment-shader branch to conditionally evaluate
         // the arc equation. This same special geometry and fragment branch also turn out to be a
         // substantial optimization for drawing ovals (namely, by not evaluating the arc equation
         // inside the oval's inner diamond). Given these optimizations, it's a clear win to draw
         // ovals the exact same way we do round rects.
-        assert_alive(paint);
-        op = GrFillRRectOp::Make(fContext, aaType, viewMatrix, SkRRect::MakeOval(oval),
-                                 *this->caps(), std::move(paint));
+        //
+        // However, we still don't draw true circles as round rects in coverage mode, because it can
+        // cause perf regressions on some platforms as compared to the dedicated circle Op.
+        if (GrAAType::kCoverage != aaType || oval.height() != oval.width()) {
+            assert_alive(paint);
+            op = GrFillRRectOp::Make(fContext, aaType, viewMatrix, SkRRect::MakeOval(oval),
+                                     *this->caps(), std::move(paint));
+        }
     }
     if (!op && GrAAType::kCoverage == aaType) {
         assert_alive(paint);
@@ -1826,19 +1816,21 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
     auto dstCT = SkColorTypeToGrColorType(info.colorType());
     bool needsRescale = srcRect.width() != info.width() || srcRect.height() != info.height();
     GrPixelConfig configOfFinalContext = fRenderTargetProxy->config();
+    auto backendFormatOfFinalContext = fRenderTargetProxy->backendFormat();
     if (needsRescale) {
-        auto backendFormat = this->caps()->getBackendFormatFromColorType(info.colorType());
-        configOfFinalContext =
-                this->caps()->getConfigFromBackendFormat(backendFormat, info.colorType());
+        backendFormatOfFinalContext = this->caps()->getBackendFormatFromColorType(info.colorType());
+        configOfFinalContext = this->caps()->getConfigFromBackendFormat(backendFormatOfFinalContext,
+                                                                        info.colorType());
     }
-    auto readCT = this->caps()->supportedReadPixelsColorType(configOfFinalContext, dstCT);
-    // Fail if we can't do a CPU conversion from readCT to dstCT.
-    if (GrColorTypeToSkColorType(readCT) == kUnknown_SkColorType) {
+    auto readInfo = this->caps()->supportedReadPixelsColorType(configOfFinalContext,
+                                                               backendFormatOfFinalContext, dstCT);
+    // Fail if we can't read from the source surface's color type.
+    if (readInfo.fColorType == GrColorType::kUnknown) {
         callback(context, nullptr, 0);
         return;
     }
     // Fail if readCT does not have all of readCT's color channels.
-    if (GrColorTypeComponentFlags(dstCT) & ~GrColorTypeComponentFlags(readCT)) {
+    if (GrColorTypeComponentFlags(dstCT) & ~GrColorTypeComponentFlags(readInfo.fColorType)) {
         callback(context, nullptr, 0);
         return;
     }
@@ -1908,42 +1900,55 @@ GrRenderTargetContext::PixelTransferResult GrRenderTargetContext::transferPixels
     if (fRenderTargetProxy->wrapsVkSecondaryCB()) {
         return {};
     }
-    auto readCT = this->caps()->supportedReadPixelsColorType(fRenderTargetProxy->config(), dstCT);
-    // Fail if we can't do a CPU conversion from readCT to dstCT.
-    if (readCT != dstCT && (GrColorTypeToSkColorType(readCT) == kUnknown_SkColorType ||
-                            GrColorTypeToSkColorType(dstCT) == kUnknown_SkColorType)) {
-        return {};
-    }
+    auto supportedRead = this->caps()->supportedReadPixelsColorType(
+            fRenderTargetProxy->config(), fRenderTargetProxy->backendFormat(), dstCT);
     // Fail if readCT does not have all of readCT's color channels.
-    if (GrColorTypeComponentFlags(dstCT) & ~GrColorTypeComponentFlags(readCT)) {
+    if (GrColorTypeComponentFlags(dstCT) & ~GrColorTypeComponentFlags(supportedRead.fColorType)) {
         return {};
     }
 
     if (!this->caps()->transferBufferSupport() ||
-        !this->caps()->transferFromOffsetAlignment(readCT)) {
+        !this->caps()->transferFromOffsetAlignment(supportedRead.fColorType)) {
         return {};
     }
 
-    size_t rowBytes = GrColorTypeBytesPerPixel(readCT) * rect.width();
+    size_t rowBytes = GrColorTypeBytesPerPixel(supportedRead.fColorType) * rect.width();
     size_t size = rowBytes * rect.height();
     auto buffer = direct->priv().resourceProvider()->createBuffer(
             size, GrGpuBufferType::kXferGpuToCpu, GrAccessPattern::kStream_GrAccessPattern);
     if (!buffer) {
         return {};
     }
-    this->getRTOpList()->addOp(GrTransferFromOp::Make(fContext, rect, readCT, buffer, 0),
-                               *this->caps());
+    auto srcRect = rect;
+    bool flip = this->origin() == kBottomLeft_GrSurfaceOrigin;
+    if (flip) {
+        srcRect = SkIRect::MakeLTRB(rect.fLeft, this->height() - rect.fBottom, rect.fRight,
+                                    this->height() - rect.fTop);
+    }
+    auto op = GrTransferFromOp::Make(fContext, srcRect, supportedRead.fColorType, buffer, 0);
+    this->getRTOpList()->addOp(std::move(op), *this->caps());
     PixelTransferResult result;
     result.fTransferBuffer = std::move(buffer);
-    if (readCT != dstCT) {
-        result.fPixelConverter =
-                [w = rect.width(), h = rect.height(), dstCT = GrColorTypeToSkColorType(dstCT),
-                 srcCT = GrColorTypeToSkColorType(readCT)](void* dst, const void* src) {
-                    auto dstII = SkImageInfo::Make(w, h, dstCT, kPremul_SkAlphaType, nullptr);
-                    auto srcII = SkImageInfo::Make(w, h, srcCT, kPremul_SkAlphaType, nullptr);
-                    SkConvertPixels(dstII, dst, w * SkColorTypeBytesPerPixel(dstCT), srcII, src,
-                                    w * SkColorTypeBytesPerPixel(srcCT));
-                };
+    if (supportedRead.fColorType != dstCT || supportedRead.fSwizzle != GrSwizzle("rgba") || flip) {
+        result.fPixelConverter = [w = rect.width(), h = rect.height(), dstCT, supportedRead](
+                                         void* dst, const void* src) {
+            GrPixelInfo srcInfo;
+            srcInfo.fColorInfo.fAlphaType = kPremul_SkAlphaType;
+            srcInfo.fColorInfo.fColorType = supportedRead.fColorType;
+            srcInfo.fColorInfo.fColorSpace = nullptr;
+            srcInfo.fRowBytes = GrColorTypeBytesPerPixel(supportedRead.fColorType) * w;
+
+            GrPixelInfo dstInfo;
+            dstInfo.fColorInfo.fAlphaType = kPremul_SkAlphaType;
+            dstInfo.fColorInfo.fColorType = dstCT;
+            dstInfo.fColorInfo.fColorSpace = nullptr;
+            dstInfo.fRowBytes = GrColorTypeBytesPerPixel(dstCT) * w;
+
+            srcInfo.fWidth  = dstInfo.fWidth  = w;
+            srcInfo.fHeight = dstInfo.fHeight = h;
+
+            GrConvertPixels(dstInfo, dst, srcInfo, src, supportedRead.fSwizzle);
+        };
     }
     return result;
 }
@@ -2075,26 +2080,16 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(
         callback(context, nullptr, nullptr);
         return;
     }
-    GrPixelConfig planeConfig = kAlpha_8_GrPixelConfig;
-    GrColorType planeColorType = GrColorType::kAlpha_8;
-    if (this->caps()->supportedReadPixelsColorType(planeConfig, planeColorType) !=
-        GrColorType::kAlpha_8) {
-        // TODO: Because there are issues with reading back/transferring A8 textures on GL, we are
-        // currently using RGBA textures for the planes. Fix this once the A8 read back/transfer
-        // issues are addressed.
-        planeConfig = kRGBA_8888_GrPixelConfig;
-        planeColorType = GrColorType::kRGBA_8888;
-    }
-    const auto backendFormat = this->caps()->getBackendFormatFromGrColorType(
-            planeColorType, GrSRGBEncoded::kNo);
+    const auto backendFormat = this->caps()->getBackendFormatFromGrColorType(GrColorType::kAlpha_8,
+                                                                             GrSRGBEncoded::kNo);
     auto yRTC = direct->priv().makeDeferredRenderTargetContext(
-            backendFormat, SkBackingFit::kApprox, dstW, dstH, planeConfig, dstColorSpace,
+            backendFormat, SkBackingFit::kApprox, dstW, dstH, kAlpha_8_GrPixelConfig, dstColorSpace,
             1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
     auto uRTC = direct->priv().makeDeferredRenderTargetContext(
-            backendFormat, SkBackingFit::kApprox, dstW / 2, dstH / 2, planeConfig,
+            backendFormat, SkBackingFit::kApprox, dstW / 2, dstH / 2, kAlpha_8_GrPixelConfig,
             dstColorSpace, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
     auto vRTC = direct->priv().makeDeferredRenderTargetContext(
-            backendFormat, SkBackingFit::kApprox, dstW / 2, dstH / 2, planeConfig,
+            backendFormat, SkBackingFit::kApprox, dstW / 2, dstH / 2, kAlpha_8_GrPixelConfig,
             dstColorSpace, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
     if (!yRTC || !uRTC || !vRTC) {
         callback(context, nullptr, nullptr);
