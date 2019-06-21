@@ -6,7 +6,6 @@
  */
 
 #include "include/core/SkString.h"
-#include "include/private/SkSpinlock.h"
 #include "include/private/SkTFitsIn.h"
 #include "include/private/SkThreadID.h"
 #include "include/private/SkVx.h"
@@ -22,8 +21,29 @@
 namespace skvm {
 
     Program::~Program() = default;
-    Program::Program(Program&&) = default;
-    Program& Program::operator=(Program&&) = default;
+
+    Program::Program(Program&& other) {
+        fInstructions = std::move(other.fInstructions);
+        fRegs = other.fRegs;
+        fLoop = other.fLoop;
+    #if defined(SKVM_JIT)
+        // Don't bother trying to move other.fJIT*.  We can just regenerate it.
+    #endif
+    }
+
+    Program& Program::operator=(Program&& other) {
+        fInstructions = std::move(other.fInstructions);
+        fRegs = other.fRegs;
+        fLoop = other.fLoop;
+    #if defined(SKVM_JIT)
+        // Don't bother trying to move other.fJIT*.  We can just regenerate it,
+        // but we do need to invalidate anything we have cached ourselves.
+        fJITLock.acquire();
+        fJIT = JIT();
+        fJITLock.release();
+    #endif
+        return *this;
+    }
 
     Program::Program(std::vector<Instruction> instructions, int regs, int loop)
         : fInstructions(std::move(instructions))
@@ -457,14 +477,14 @@ namespace skvm {
         uint8_t bytes[3];
     };
 
-    static VEX vex(bool WE,   // Like REX W for int operations, or opcode extension for float?
-                   bool  R,   // Same as REX R.  Pass high bit of dst register, dst>>3.
-                   bool  X,   // Same as REX X.
-                   bool  B,   // Same as REX B.  Pass high bit of y register, y>>3.
-                   int map,   // SSE opcode map selector: 0x0f, 0x380f, 0x3a0f.
-                   int   x,   // 4-bit second operand register, our x, called vvvv in docs.
-                   bool  L,   // Set for 256-bit ymm operations, off for 128-bit xmm.
-                   int  pp) { // SSE mandatory prefix: 0x66, 0xf3, 0xf2, else none.
+    static VEX vex(bool  WE,   // Like REX W for int operations, or opcode extension for float?
+                   bool   R,   // Same as REX R.  Pass high bit of dst register, dst>>3.
+                   bool   X,   // Same as REX X.
+                   bool   B,   // Same as REX B.  Pass y>>3 for 3-arg ops, x>>3 for 2-arg.
+                   int  map,   // SSE opcode map selector: 0x0f, 0x380f, 0x3a0f.
+                   int vvvv,   // 4-bit second operand register.  Pass our x for 3-arg ops.
+                   bool   L,   // Set for 256-bit ymm operations, off for 128-bit xmm.
+                   int   pp) { // SSE mandatory prefix: 0x66, 0xf3, 0xf2, else none.
 
         // Pack x86 opcode map selector to 5-bit VEX encoding.
         map = [map]{
@@ -493,22 +513,22 @@ namespace skvm {
             // With these conditions met, we can optionally compress VEX to 2-byte.
             vex.len = 2;
             vex.bytes[0] = 0xc5;
-            vex.bytes[1] = (pp  &  3) << 0
-                         | (L   &  1) << 2
-                         | (~x  & 15) << 3
-                         | (~R  &  1) << 7;
+            vex.bytes[1] = (pp    &  3) << 0
+                         | (L     &  1) << 2
+                         | (~vvvv & 15) << 3
+                         | (~R    &  1) << 7;
         } else {
             // We could use this 3-byte VEX prefix all the time if we like.
             vex.len = 3;
             vex.bytes[0] = 0xc4;
-            vex.bytes[1] = (map & 31) << 0
-                         | (~B  &  1) << 5
-                         | (~X  &  1) << 6
-                         | (~R  &  1) << 7;
-            vex.bytes[2] = (pp  &  3) << 0
-                         | (L   &  1) << 2
-                         | (~x  & 15) << 3
-                         | (WE  &  1) << 7;
+            vex.bytes[1] = (map   & 31) << 0
+                         | (~B    &  1) << 5
+                         | (~X    &  1) << 6
+                         | (~R    &  1) << 7;
+            vex.bytes[2] = (pp    &  3) << 0
+                         | (L     &  1) << 2
+                         | (~vvvv & 15) << 3
+                         | (WE    &  1) << 7;
         }
         return vex;
     }
@@ -569,10 +589,6 @@ namespace skvm {
         this->byte(opcode);
         this->byte(mod_rm(Mod::Direct, dst&7, y&7));
     }
-    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, bool W/*=false*/) {
-        // Two arguments ops seem to pass them in dst and y, forcing x to 0 so VEX.vvvv == 1111.
-        this->op(prefix,map,opcode, dst,(Ymm)0,x,W);
-    }
 
     void Assembler::vpaddd (Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0xfe, dst,x,y); }
     void Assembler::vpsubd (Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0xfa, dst,x,y); }
@@ -622,6 +638,29 @@ namespace skvm {
     void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(0,   0x0f,0x5b, dst,x); }
     void Assembler::vcvttps2dq(Ymm dst, Ymm x) { this->op(0xf3,0x0f,0x5b, dst,x); }
 
+    Assembler::Label Assembler::here() {
+        return { this->size() };
+    }
+
+    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, Label l) {
+        // IP-relative addressing uses Mod::Indirect with the R/M encoded as-if rbp or r13.
+        const int rip = rbp;
+
+        VEX v = vex(0, dst>>3, 0, rip>>3,
+                    map, x, /*ymm?*/1, prefix);
+        this->byte(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(Mod::Indirect, dst&7, rip&7));
+
+        // IP relative addresses are relative to IP _after_ this instruction.
+        int imm = l.offset - (here().offset + 4);
+        this->byte(&imm, 4);
+    }
+
+    void Assembler::vbroadcastss(Ymm dst, Label l) { this->op(0x66,0x380f,0x18, dst,l); }
+
+    void Assembler::vpshufb(Ymm dst, Ymm x, Label l) { this->op(0x66,0x380f,0x00, dst,x,l); }
+
     static bool can_jit(int regs, int nargs) {
         return true
             && SkCpu::Supports(SkCpu::HSW)   // TODO: SSE4.1 target?
@@ -670,7 +709,7 @@ namespace skvm {
         // the instructions that use them... no relocations.
 
         // Map from our bytes() control y.imm to 32-byte mask for vpshufb.
-        std::unordered_map<int, Xbyak::Label> vpshufb_masks;
+        std::unordered_map<int, A::Label> vpshufb_masks;
         for (const Program::Instruction& inst : instructions) {
             if (inst.op == Op::bytes && vpshufb_masks.end() == vpshufb_masks.find(inst.y.imm)) {
                 // Translate bytes()'s control nibbles to vpshufb's control bytes.
@@ -706,7 +745,7 @@ namespace skvm {
 
                 // Notice, same pattern for top 4 32-bit lanes as bottom 4 lanes.
                 SkASSERT(a.size() % 32 == 0);
-                Xbyak::Label label = X.L();
+                A::Label label = a.here();
                 a.byte(p, sizeof(p));
                 a.byte(p, sizeof(p));
                 vpshufb_masks[inst.y.imm] = label;
@@ -716,7 +755,7 @@ namespace skvm {
 
         // Map from splat bit pattern to 4-byte aligned data location holding that pattern.
         // (If we were really brave we could just point at the copy we already have in Program...)
-        std::unordered_map<int, Xbyak::Label> splats;
+        std::unordered_map<int, A::Label> splats;
         for (const Program::Instruction& inst : instructions) {
             if (inst.op == Op::splat) {
                 // Splats are deduplicated at an earlier layer, so we shouldn't find any duplicates.
@@ -728,7 +767,7 @@ namespace skvm {
                 SkASSERT(splats.end() == splats.find(inst.y.imm));
 
                 SkASSERT(a.size() % 4 == 0);
-                Xbyak::Label label = X.L();
+                A::Label label = a.here();
                 a.byte(&inst.y.imm, 4);
                 splats[inst.y.imm] = label;
             }
@@ -773,8 +812,7 @@ namespace skvm {
                 case Op::load8:  X.vpmovzxbd(r(d), X.ptr[xarg(y.imm)]); break;
                 case Op::load32: X.vmovups  (r(d), X.ptr[xarg(y.imm)]); break;
 
-                case Op::splat: X.vbroadcastss(r(d), X.ptr[X.rip + splats[y.imm]]);
-                                break;
+                case Op::splat: a.vbroadcastss(ar(d), splats[y.imm]); break;
 
                 case Op::add_f32: a.vaddps(ar(d), ar(x), ar(y.id)); break;
                 case Op::sub_f32: a.vsubps(ar(d), ar(x), ar(y.id)); break;
@@ -819,10 +857,7 @@ namespace skvm {
                 case Op::to_f32: a.vcvtdq2ps (ar(d), ar(x)); break;
                 case Op::to_i32: a.vcvttps2dq(ar(d), ar(x)); break;
 
-                case Op::bytes: {
-                    X.vpshufb(r(d), r(x),
-                              X.ptr[X.rip + vpshufb_masks[y.imm]]);
-                } break;
+                case Op::bytes: a.vpshufb(ar(d), ar(x), vpshufb_masks[y.imm]); break;
             }
         }
 
@@ -838,106 +873,140 @@ namespace skvm {
         // Return mask to apply to N for elements the JIT can handle.
         return ~(K-1);
     }
+
+    Program::JIT::~JIT() {
+        if (buf) {
+            munmap(buf,size);
+        }
+    }
 #endif //defined(SKVM_JIT)
 
     void Program::eval(int n, void* args[], size_t strides[], int nargs) const {
     #if defined(SKVM_JIT)
-        if (!fJIT && can_jit(fRegs, nargs)) {
-            fJIT.reset(new Assembler);
-            fJITMask = jit(*fJIT, &fJITCode, fInstructions, fRegs, fLoop, strides, nargs);
-        #if 1
-            // We're doing some really stateful things below,
-            // so one thread at a time please...
-            static SkSpinlock dump_lock;
-            SkAutoSpinlock lock(dump_lock);
+        void (*entry)() = nullptr;
+        int    mask     = 0;
 
-            uint32_t hash = SkOpts::hash(fJIT->data(), fJIT->size());
+        // If we can't grab this lock, another thread is probably assembling the program.
+        // We can just fall through to the interpreter.
+        if (fJITLock.tryAcquire()) {
+            if (fJIT.entry) {
+                // Use cached program.
+                entry = fJIT.entry;
+                mask  = fJIT.mask;
+            } else if (can_jit(fRegs, nargs)) {
+                Assembler a;
+                size_t code;
+                mask = jit(a,&code, fInstructions, fRegs, fLoop, strides, nargs);
 
-            SkString name = SkStringPrintf("skvm-jit-%u", hash);
+                // mprotect() can only change at a page level granularity, so round a.size() up.
+                size_t page = sysconf(_SC_PAGESIZE),                           // Probably 4096.
+                       size = ((a.size() + page - 1) / page) * page;
 
-            // Create a jit-<pid>.dump file that we can `perf inject -j` into a
-            // perf.data captured with `perf record -k 1`, letting us see each
-            // JIT'd Program as if a function named skvm-jit-<hash>.   E.g.
-            //
-            //   ninja -C out nanobench
-            //   perf record -k 1 out/nanobench -m SkVM_4096_I32\$
-            //   perf inject -j -i perf.data -o perf.data.jit
-            //   perf report -i perf.data.jit
-            //
-            // Running `perf inject -j` will also dump an .so for each JIT'd
-            // program, named jitted-<pid>-<hash>.so.
+                // JIT safety hygiene is: mmap() r/w, copy over code, mprotect() to r/x.
+                void* buf =
+                    mmap(nullptr, size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1,0);
+                memcpy(buf, a.data(), a.size());
+                mprotect(buf,size, PROT_READ|PROT_EXEC);
 
-            auto timestamp_ns = []() -> uint64_t {
-                // It's important to use CLOCK_MONOTONIC here so that perf can
-                // correlate our timestamps with those captured by `perf record
-                // -k 1`.  That's also what `-k 1` does, by the way, tell perf
-                // record to use CLOCK_MONOTONIC.
-                struct timespec ts;
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                return ts.tv_sec * (uint64_t)1e9 + ts.tv_nsec;
-            };
+                entry = (decltype(entry))( (const uint8_t*)buf + code );
 
-            // We'll open the jit-<pid>.dump file and write a small header once,
-            // and just leave it open forever because we're lazy.
-            static FILE* jitdump = [&]{
-                // Must map as w+ for the mmap() call below to work.
-                FILE* f = fopen(SkStringPrintf("jit-%d.dump", getpid()).c_str(), "w+");
+                fJIT.buf   = buf;
+                fJIT.size  = size;
+                fJIT.entry = entry;
+                fJIT.mask  = mask;
 
-                // Calling mmap() on the file adds a "hey they mmap()'d this" record to
-                // the perf.data file that will point `perf inject -j` at this log file.
-                // Kind of a strange way to tell `perf inject` where the file is...
-                void* marker = mmap(nullptr,
-                                    sysconf(_SC_PAGESIZE),
-                                    PROT_READ|PROT_EXEC,
-                                    MAP_PRIVATE,
-                                    fileno(f),
-                                    /*offset=*/0);
-                SkASSERT_RELEASE(marker != MAP_FAILED);
-                // Like never calling fclose(f), we'll also just always leave marker mmap()'d.
+            #if 1   // Debug dumps for profiler.
+                // We're doing some really stateful things below so one thread at a time please...
+                static SkSpinlock dump_lock;
+                SkAutoSpinlock lock(dump_lock);
 
-                struct Header {
-                    uint32_t magic, version, header_size, elf_mach, reserved, pid;
-                    uint64_t timestamp_us, flags;
-                } header = {
-                    0x4A695444, 1, sizeof(Header), 62/*x86-64*/, 0, (uint32_t)getpid(),
-                    timestamp_ns() / 1000, 0,
+                uint32_t hash = SkOpts::hash(fJIT.buf, fJIT.size);
+                SkString name = SkStringPrintf("skvm-jit-%u", hash);
+
+                // Create a jit-<pid>.dump file that we can `perf inject -j` into a
+                // perf.data captured with `perf record -k 1`, letting us see each
+                // JIT'd Program as if a function named skvm-jit-<hash>.   E.g.
+                //
+                //   ninja -C out nanobench
+                //   perf record -k 1 out/nanobench -m SkVM_4096_I32\$
+                //   perf inject -j -i perf.data -o perf.data.jit
+                //   perf report -i perf.data.jit
+                //
+                // Running `perf inject -j` will also dump an .so for each JIT'd
+                // program, named jitted-<pid>-<hash>.so.
+
+                auto timestamp_ns = []() -> uint64_t {
+                    // It's important to use CLOCK_MONOTONIC here so that perf can
+                    // correlate our timestamps with those captured by `perf record
+                    // -k 1`.  That's also what `-k 1` does, by the way, tell perf
+                    // record to use CLOCK_MONOTONIC.
+                    struct timespec ts;
+                    clock_gettime(CLOCK_MONOTONIC, &ts);
+                    return ts.tv_sec * (uint64_t)1e9 + ts.tv_nsec;
                 };
-                fwrite(&header, sizeof(header), 1, f);
 
-                return f;
-            }();
+                // We'll open the jit-<pid>.dump file and write a small header once,
+                // and just leave it open forever because we're lazy.
+                static FILE* jitdump = [&]{
+                    // Must map as w+ for the mmap() call below to work.
+                    FILE* f = fopen(SkStringPrintf("jit-%d.dump", getpid()).c_str(), "w+");
 
-            struct CodeLoad {
-                uint32_t event_type, event_size;
-                uint64_t timestamp_ns;
+                    // Calling mmap() on the file adds a "hey they mmap()'d this" record to
+                    // the perf.data file that will point `perf inject -j` at this log file.
+                    // Kind of a strange way to tell `perf inject` where the file is...
+                    void* marker = mmap(nullptr,
+                                        sysconf(_SC_PAGESIZE),
+                                        PROT_READ|PROT_EXEC,
+                                        MAP_PRIVATE,
+                                        fileno(f),
+                                        /*offset=*/0);
+                    SkASSERT_RELEASE(marker != MAP_FAILED);
+                    // Like never calling fclose(f), we'll also just always leave marker mmap()'d.
 
-                uint32_t pid, tid;
-                uint64_t vma/*???*/, code_addr, code_size, id;
-            } load = {
-                0/*code load*/, (uint32_t)(sizeof(CodeLoad) + name.size() + 1 + fJIT->size()),
-                timestamp_ns(),
+                    struct Header {
+                        uint32_t magic, version, header_size, elf_mach, reserved, pid;
+                        uint64_t timestamp_us, flags;
+                    } header = {
+                        0x4A695444, 1, sizeof(Header), 62/*x86-64*/, 0, (uint32_t)getpid(),
+                        timestamp_ns() / 1000, 0,
+                    };
+                    fwrite(&header, sizeof(header), 1, f);
 
-                (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
-                (uint64_t)fJIT->data(), (uint64_t)fJIT->data(), fJIT->size(), hash,
-            };
+                    return f;
+                }();
 
-            // Write the header, the JIT'd function name, and the JIT'd code itself.
-            fwrite(&load, sizeof(load), 1, jitdump);
-            fwrite(name.c_str(), 1, name.size(), jitdump);
-            fwrite("\0", 1, 1, jitdump);
-            fwrite(fJIT->data(), 1, fJIT->size(), jitdump);
-        #endif
+                struct CodeLoad {
+                    uint32_t event_type, event_size;
+                    uint64_t timestamp_ns;
+
+                    uint32_t pid, tid;
+                    uint64_t vma/*???*/, code_addr, code_size, id;
+                } load = {
+                    0/*code load*/, (uint32_t)(sizeof(CodeLoad) + name.size() + 1 + fJIT.size),
+                    timestamp_ns(),
+
+                    (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
+                    (uint64_t)fJIT.buf, (uint64_t)fJIT.buf, fJIT.size, hash,
+                };
+
+                // Write the header, the JIT'd function name, and the JIT'd code itself.
+                fwrite(&load, sizeof(load), 1, jitdump);
+                fwrite(name.c_str(), 1, name.size(), jitdump);
+                fwrite("\0", 1, 1, jitdump);
+                fwrite(fJIT.buf, 1, fJIT.size, jitdump);
+            #endif
+            }
+            fJITLock.release();   // pairs with tryAcquire() in the if().
         }
 
-        const int jitN = n & fJITMask;
-        if (fJIT && jitN > 0) {
+        if (const int jitN = n & mask) {
+            SkASSERT(entry);
             bool ran = true;
 
-            const uint8_t* fn = fJIT->data() + fJITCode;
             switch (nargs) {
-                case 0: ((void(*)(int              ))fn)(jitN                  ); break;
-                case 1: ((void(*)(int, void*       ))fn)(jitN, args[0]         ); break;
-                case 2: ((void(*)(int, void*, void*))fn)(jitN, args[0], args[1]); break;
+                case 0: ((void(*)(int              ))entry)(jitN                  ); break;
+                case 1: ((void(*)(int, void*       ))entry)(jitN, args[0]         ); break;
+                case 2: ((void(*)(int, void*, void*))entry)(jitN, args[0], args[1]); break;
                 default: ran = false; break;
             }
             if (ran) {
