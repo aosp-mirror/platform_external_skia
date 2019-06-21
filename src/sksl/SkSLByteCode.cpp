@@ -146,6 +146,7 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         VECTOR_DISASSEMBLE(kRemainderF, "remainderf")
         VECTOR_DISASSEMBLE(kRemainderS, "remainders")
         VECTOR_DISASSEMBLE(kRemainderU, "remainderu")
+        case ByteCodeInstruction::kReserve: printf("reserve %d", READ8()); break;
         case ByteCodeInstruction::kReturn: printf("return %d", READ8()); break;
         case ByteCodeInstruction::kScalarToMatrix: {
             int cols = READ8();
@@ -334,6 +335,7 @@ struct StackFrame {
     const uint8_t* fCode;
     const uint8_t* fIP;
     VValue* fStack;
+    int fParameterCount;
 };
 
 static F32 mix(F32 start, F32 end, F32 t) {
@@ -346,8 +348,13 @@ static T vec_mod(T a, T b) {
     return a - skvx::trunc(a / b) * b;
 }
 
-void innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack,
-              float* outReturn[], I32 initMask, VValue globals[], bool stripedOutput) {
+static void innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack,
+                     float* outReturn[], VValue globals[], bool stripedOutput, int N) {
+    // Needs to be the first N non-negative integers, at least as large as VecWidth
+    static const Interpreter::I32 gLanes = {
+        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
+    };
+
     VValue* sp = stack + f->fParameterCount + f->fLocalCount - 1;
 
     auto POP =  [&]           { SkASSERT(sp     >= stack); return *(sp--); };
@@ -361,7 +368,7 @@ void innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack
     I32 maskStack[16];  // Combined masks (eg maskStack[0] & maskStack[1] & ...)
     I32 contStack[16];  // Continue flags for loops
     I32 loopStack[16];  // Loop execution masks
-    condStack[0] = maskStack[0] = initMask;
+    condStack[0] = maskStack[0] = (gLanes < N);
     contStack[0] = I32( 0);
     loopStack[0] = I32(~0);
     I32* condPtr = condStack;
@@ -404,19 +411,16 @@ void innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack
                 break;
 
             case ByteCodeInstruction::kCall: {
-                // Precursor code has pushed all parameters to the stack. Update our bottom of
-                // stack to point at the first parameter, and our sp to point past those parameters
-                // (plus space for locals).
+                // Precursor code reserved space for the return value, and pushed all parameters to
+                // the stack. Update our bottom of stack to point at the first parameter, and our
+                // sp to point past those parameters (plus space for locals).
                 int target = READ8();
                 const ByteCodeFunction* fun = byteCode->fFunctions[target].get();
                 if (skvx::any(mask())) {
-                    frames.push_back({ code, ip, stack });
+                    frames.push_back({ code, ip, stack, fun->fParameterCount });
                     ip = code = fun->fCode.data();
                     stack = sp - fun->fParameterCount + 1;
                     sp = stack + fun->fParameterCount + fun->fLocalCount - 1;
-                } else {
-                    sp -= fun->fParameterCount;
-                    sp += fun->fReturnCount;
                 }
                 break;
             }
@@ -715,25 +719,25 @@ void innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack
             VECTOR_BINARY_FN(kRemainderS, fSigned, vec_mod<I32>)
             VECTOR_BINARY_FN(kRemainderU, fUnsigned, vec_mod<U32>)
 
+            case ByteCodeInstruction::kReserve:
+                sp += READ8();
+                break;
+
             case ByteCodeInstruction::kReturn: {
                 int count = READ8();
                 if (frames.empty()) {
                     if (outReturn) {
-                        // TODO: This can be smarter, knowing that mask is left-justified
-                        I32 m = mask();
                         VValue* src = sp - count + 1;
                         if (stripedOutput) {
                             for (int i = 0; i < count; ++i) {
-                                memcpy(outReturn[i], &src->fFloat, VecWidth * sizeof(float));
-                                src += 1;
+                                memcpy(outReturn[i], &src->fFloat, N * sizeof(float));
+                                ++src;
                             }
                         } else {
                             float* outPtr = outReturn[0];
                             for (int i = 0; i < count; ++i) {
-                                for (int j = 0; j < VecWidth; ++j) {
-                                    if (m[j]) {
-                                        outPtr[count * j] = src->fFloat[j];
-                                    }
+                                for (int j = 0; j < N; ++j) {
+                                    outPtr[count * j] = src->fFloat[j];
                                 }
                                 ++outPtr;
                                 ++src;
@@ -742,14 +746,17 @@ void innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack
                     }
                     return;
                 } else {
-                    // When we were called, 'stack' was positioned at the old top-of-stack (where
-                    // our parameters were placed). So copy our return values to that same spot.
-                    memmove(stack, sp - count + 1, count * sizeof(VValue));
+                    // When we were called, the caller reserved stack space for their copy of our
+                    // return value, then 'stack' was positioned after that, where our parameters
+                    // were placed. Copy our return values to their reserved area.
+                    memcpy(stack - count, sp - count + 1, count * sizeof(VValue));
 
-                    // Now move the stack pointer to the end of the just-pushed return values,
-                    // and restore everything else.
+                    // Now move the stack pointer to the end of the passed-in parameters. This odd
+                    // calling convention requires the caller to pop the arguments after calling,
+                    // but allows them to store any out-parameters back during that unwinding.
+                    // After that sequence finishes, the return value will be the top of the stack.
                     const StackFrame& frame(frames.back());
-                    sp = stack + count - 1;
+                    sp = stack + frame.fParameterCount - 1;
                     stack = frame.fStack;
                     code = frame.fCode;
                     ip = frame.fIP;
@@ -992,12 +999,7 @@ void ByteCode::run(const ByteCodeFunction* f, float* args, float* outReturn, int
 #ifdef TRACE
     f->disassemble();
 #endif
-    Interpreter::VValue smallStack[128];
-
-    // Needs to be the first N non-negative integers, at least as large as VecWidth
-    static const Interpreter::I32 gLanes = {
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
-    };
+    Interpreter::VValue stack[128];
 
     SkASSERT(uniformCount == (int)fInputSlots.size());
     Interpreter::VValue globals[32];
@@ -1007,10 +1009,7 @@ void ByteCode::run(const ByteCodeFunction* f, float* args, float* outReturn, int
     }
 
     while (N) {
-        Interpreter::VValue* stack = smallStack;
-
         int w = std::min(N, Interpreter::VecWidth);
-        N -= w;
 
         // Transpose args into stack
         {
@@ -1026,8 +1025,7 @@ void ByteCode::run(const ByteCodeFunction* f, float* args, float* outReturn, int
 
         bool stripedOutput = false;
         float** outArray = outReturn ? &outReturn : nullptr;
-        auto mask = w > gLanes;
-        innerRun(this, f, stack, outArray, mask, globals, stripedOutput);
+        innerRun(this, f, stack, outArray, globals, stripedOutput, w);
 
         // Transpose out parameters back
         {
@@ -1052,6 +1050,7 @@ void ByteCode::run(const ByteCodeFunction* f, float* args, float* outReturn, int
         if (outReturn) {
             outReturn += f->fReturnCount * w;
         }
+        N -= w;
     }
 }
 
@@ -1062,11 +1061,6 @@ void ByteCode::runStriped(const ByteCodeFunction* f, float* args[], int nargs, i
     f->disassemble();
 #endif
     Interpreter::VValue stack[128];
-
-    // Needs to be the first N non-negative integers, at least as large as VecWidth
-    static const Interpreter::I32 gLanes = {
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
-    };
 
     // innerRun just takes outArgs, so clear it if the count is zero
     if (outCount == 0) {
@@ -1091,8 +1085,7 @@ void ByteCode::runStriped(const ByteCodeFunction* f, float* args[], int nargs, i
         }
 
         bool stripedOutput = true;
-        auto mask = w > gLanes;
-        innerRun(this, f, stack, outArgs, mask, globals, stripedOutput);
+        innerRun(this, f, stack, outArgs, globals, stripedOutput, w);
 
         // Copy out parameters back
         int slot = 0;
