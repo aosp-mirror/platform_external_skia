@@ -6,7 +6,6 @@
  */
 
 #include "include/core/SkString.h"
-#include "include/private/SkSpinlock.h"
 #include "include/private/SkTFitsIn.h"
 #include "include/private/SkThreadID.h"
 #include "include/private/SkVx.h"
@@ -15,15 +14,31 @@
 #include "src/core/SkVM.h"
 #include <string.h>
 #if defined(SKVM_JIT)
-    #define XBYAK_NO_OP_NAMES
-    #include "xbyak/xbyak.h"
+    #include <sys/mman.h>
 #endif
 
 namespace skvm {
 
     Program::~Program() = default;
-    Program::Program(Program&&) = default;
-    Program& Program::operator=(Program&&) = default;
+
+    Program::Program(Program&& other) {
+        fInstructions = std::move(other.fInstructions);
+        fRegs = other.fRegs;
+        fLoop = other.fLoop;
+        // Don't bother trying to move other.fJIT*.  We can just regenerate it.
+    }
+
+    Program& Program::operator=(Program&& other) {
+        fInstructions = std::move(other.fInstructions);
+        fRegs = other.fRegs;
+        fLoop = other.fLoop;
+        // Don't bother trying to move other.fJIT*.  We can just regenerate it,
+        // but we do need to invalidate anything we have cached ourselves.
+        fJITLock.acquire();
+        fJIT = JIT();
+        fJITLock.release();
+        return *this;
+    }
 
     Program::Program(std::vector<Instruction> instructions, int regs, int loop)
         : fInstructions(std::move(instructions))
@@ -66,7 +81,8 @@ namespace skvm {
         }
 
         // We'll need to map each live value to a register.
-        std::unordered_map<ID, ID> val_to_reg;
+        // TODO: this could be another field on Instruction / fProgram to avoid this side alloc?
+        std::vector<ID> val_to_reg(fProgram.size());
 
         // Count the registers we've used so far.
         ID next_reg = 0;
@@ -86,7 +102,7 @@ namespace skvm {
         // values have finite liftimes, so we track pre-owned registers that have become available
         // and a schedule of which registers become available as we reach a given instruction.
         std::vector<ID>                         avail;
-        std::unordered_map<ID, std::vector<ID>> deaths;
+        std::vector<std::vector<ID>>            deaths(fProgram.size());
 
         for (ID val = 0; val < (ID)fProgram.size(); val++) {
             Instruction& inst = fProgram[val];
@@ -129,6 +145,7 @@ namespace skvm {
         // The loop begins at the loop'th Instruction.
         int loop = 0;
         std::vector<Program::Instruction> program;
+        program.reserve(fProgram.size());
 
         auto push_instruction = [&](ID id, const Builder::Instruction& inst) {
             Program::Instruction pinst{
@@ -172,14 +189,14 @@ namespace skvm {
 
         // Basic common subexpression elimination:
         // if we've already seen this exact Instruction, use it instead of creating a new one.
-        auto lookup = fIndex.find(inst);
-        if (lookup != fIndex.end()) {
-            return lookup->second;
+
+        if (ID* lookup = fIndex.find(inst)) {
+            return *lookup;
         }
 
         ID id = static_cast<ID>(fProgram.size());
         fProgram.push_back(inst);
-        fIndex[inst] = id;
+        fIndex.set(inst, id);
         return id;
     }
 
@@ -410,7 +427,6 @@ namespace skvm {
 
     // ~~~~ Program::eval() and co. ~~~~ //
 
-#if defined(SKVM_JIT)
     // Handy references for x86-64 instruction encoding:
     // https://wiki.osdev.org/X86-64_Instruction_Encoding
     // https://www-user.tu-chemnitz.de/~heha/viewchm.php/hs/x86.chm/x64.htm
@@ -457,14 +473,14 @@ namespace skvm {
         uint8_t bytes[3];
     };
 
-    static VEX vex(bool WE,   // Like REX W for int operations, or opcode extension for float?
-                   bool  R,   // Same as REX R.  Pass high bit of dst register, dst>>3.
-                   bool  X,   // Same as REX X.
-                   bool  B,   // Same as REX B.  Pass high bit of y register, y>>3.
-                   int map,   // SSE opcode map selector: 0x0f, 0x380f, 0x3a0f.
-                   int   x,   // 4-bit second operand register, our x, called vvvv in docs.
-                   bool  L,   // Set for 256-bit ymm operations, off for 128-bit xmm.
-                   int  pp) { // SSE mandatory prefix: 0x66, 0xf3, 0xf2, else none.
+    static VEX vex(bool  WE,   // Like REX W for int operations, or opcode extension for float?
+                   bool   R,   // Same as REX R.  Pass high bit of dst register, dst>>3.
+                   bool   X,   // Same as REX X.
+                   bool   B,   // Same as REX B.  Pass y>>3 for 3-arg ops, x>>3 for 2-arg.
+                   int  map,   // SSE opcode map selector: 0x0f, 0x380f, 0x3a0f.
+                   int vvvv,   // 4-bit second operand register.  Pass our x for 3-arg ops.
+                   bool   L,   // Set for 256-bit ymm operations, off for 128-bit xmm.
+                   int   pp) { // SSE mandatory prefix: 0x66, 0xf3, 0xf2, else none.
 
         // Pack x86 opcode map selector to 5-bit VEX encoding.
         map = [map]{
@@ -493,34 +509,35 @@ namespace skvm {
             // With these conditions met, we can optionally compress VEX to 2-byte.
             vex.len = 2;
             vex.bytes[0] = 0xc5;
-            vex.bytes[1] = (pp  &  3) << 0
-                         | (L   &  1) << 2
-                         | (~x  & 15) << 3
-                         | (~R  &  1) << 7;
+            vex.bytes[1] = (pp      &  3) << 0
+                         | (L       &  1) << 2
+                         | (~vvvv   & 15) << 3
+                         | (~(int)R &  1) << 7;
         } else {
             // We could use this 3-byte VEX prefix all the time if we like.
             vex.len = 3;
             vex.bytes[0] = 0xc4;
-            vex.bytes[1] = (map & 31) << 0
-                         | (~B  &  1) << 5
-                         | (~X  &  1) << 6
-                         | (~R  &  1) << 7;
-            vex.bytes[2] = (pp  &  3) << 0
-                         | (L   &  1) << 2
-                         | (~x  & 15) << 3
-                         | (WE  &  1) << 7;
+            vex.bytes[1] = (map     & 31) << 0
+                         | (~(int)B &  1) << 5
+                         | (~(int)X &  1) << 6
+                         | (~(int)R &  1) << 7;
+            vex.bytes[2] = (pp    &  3) << 0
+                         | (L     &  1) << 2
+                         | (~vvvv & 15) << 3
+                         | (WE    &  1) << 7;
         }
         return vex;
     }
 
-    Assembler::Assembler() : X{new Xbyak::CodeGenerator} {}
+    Assembler::Assembler() = default;
     Assembler::~Assembler() = default;
 
-    const uint8_t* Assembler::data() const { return X->getCode(); }
-    size_t         Assembler::size() const { return X->getSize(); }
+    const uint8_t* Assembler::data() const { return fCode.data(); }
+    size_t         Assembler::size() const { return fCode.size(); }
 
     void Assembler::byte(const void* p, int n) {
-        X->db((const uint8_t*)p, (size_t)n);
+        auto b = (const uint8_t*)p;
+        fCode.insert(fCode.end(), b, b+n);
     }
 
     void Assembler::byte(uint8_t b) { this->byte(&b, 1); }
@@ -568,10 +585,6 @@ namespace skvm {
         this->byte(v.bytes, v.len);
         this->byte(opcode);
         this->byte(mod_rm(Mod::Direct, dst&7, y&7));
-    }
-    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, bool W/*=false*/) {
-        // Two arguments ops seem to pass them in dst and y, forcing x to 0 so VEX.vvvv == 1111.
-        this->op(prefix,map,opcode, dst,(Ymm)0,x,W);
     }
 
     void Assembler::vpaddd (Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0xfe, dst,x,y); }
@@ -622,6 +635,69 @@ namespace skvm {
     void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(0,   0x0f,0x5b, dst,x); }
     void Assembler::vcvttps2dq(Ymm dst, Ymm x) { this->op(0xf3,0x0f,0x5b, dst,x); }
 
+    Assembler::Label Assembler::here() {
+        return { this->size() };
+    }
+
+    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, Label l) {
+        // IP-relative addressing uses Mod::Indirect with the R/M encoded as-if rbp or r13.
+        const int rip = rbp;
+
+        VEX v = vex(0, dst>>3, 0, rip>>3,
+                    map, x, /*ymm?*/1, prefix);
+        this->byte(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(Mod::Indirect, dst&7, rip&7));
+
+        // IP relative addresses are relative to IP _after_ this instruction.
+        int imm = l.offset - (here().offset + 4);
+        this->byte(&imm, 4);
+    }
+
+    void Assembler::vbroadcastss(Ymm dst, Label l) { this->op(0x66,0x380f,0x18, dst,l); }
+
+    void Assembler::vpshufb(Ymm dst, Ymm x, Label l) { this->op(0x66,0x380f,0x00, dst,x,l); }
+
+    void Assembler::jne(Label l) {
+        // jne can be either 2 bytes (short) or 6 bytes (near):
+        //    75     one-byte-disp
+        //    0F 85 four-byte-disp
+        // As usual, all displacements relative to the end of this instruction.
+        int shrt = l.offset - (here().offset + 2),
+            near = l.offset - (here().offset + 6);
+
+        if (SkTFitsIn<int8_t>(shrt)) {
+            this->byte(0x75);
+            this->byte(&shrt, 1);
+        } else {
+            this->byte(0x0f, 0x85);
+            this->byte(&near, 4);
+        }
+    }
+
+    void Assembler::load_store(int prefix, int map, int opcode, Ymm ymm, GP64 ptr) {
+        VEX v = vex(0, ymm>>3, 0, ptr>>3,
+                    map, 0, /*ymm?*/1, prefix);
+        this->byte(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(Mod::Indirect, ymm&7, ptr&7));
+    }
+
+    void Assembler::vmovups  (Ymm dst, GP64 src) { this->load_store(0   ,  0x0f,0x10, dst,src); }
+    void Assembler::vpmovzxbd(Ymm dst, GP64 src) { this->load_store(0x66,0x380f,0x31, dst,src); }
+    void Assembler::vmovups  (GP64 dst, Ymm src) { this->load_store(0   ,  0x0f,0x11, src,dst); }
+    void Assembler::vmovq    (GP64 dst, Xmm src) {
+        int prefix = 0x66,
+            map    = 0x0f,
+            opcode = 0xd6;
+        VEX v = vex(0, src>>3, 0, dst>>3,
+                    map, 0, /*ymm?*/0, prefix);
+        this->byte(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(Mod::Indirect, src&7, dst&7));
+    }
+
+#if defined(SKVM_JIT)
     static bool can_jit(int regs, int nargs) {
         return true
             && SkCpu::Supports(SkCpu::HSW)   // TODO: SSE4.1 target?
@@ -637,8 +713,6 @@ namespace skvm {
 
         SkASSERT(can_jit(regs,nargs));
 
-        Xbyak::CodeGenerator& X = *a.X;
-
         static constexpr int K = 8;
 
     #if defined(SK_BUILD_FOR_WIN)
@@ -649,15 +723,8 @@ namespace skvm {
         A::GP64 N = A::rdi,
             arg[] = { A::rsi, A::rdx, A::rcx, A::r8, A::r9 };
 
-        // Temporary shims for mapping back and forth between Assembler and Xbyak types.
-        // All register values should match, so these are essentially no-ops.
-        auto xarg = [&](int ix) {
-            return Xbyak::Reg64{arg[ix]};
-        };
-
         // All 16 ymm registers are available as scratch, keeping 15 as a temporary for us.
-        auto ar = [](int ix) { SkASSERT(ix < 16); return (A::Ymm)ix; };
-        auto  r = [](int ix) { SkASSERT(ix < 16); return Xbyak::Ymm(ix); };
+        auto r = [](int ix) { SkASSERT(ix < 16); return (A::Ymm)ix; };
         const int tmp = 15;
     #endif
 
@@ -670,9 +737,9 @@ namespace skvm {
         // the instructions that use them... no relocations.
 
         // Map from our bytes() control y.imm to 32-byte mask for vpshufb.
-        std::unordered_map<int, Xbyak::Label> vpshufb_masks;
+        SkTHashMap<int, A::Label> vpshufb_masks;
         for (const Program::Instruction& inst : instructions) {
-            if (inst.op == Op::bytes && vpshufb_masks.end() == vpshufb_masks.find(inst.y.imm)) {
+            if (inst.op == Op::bytes && vpshufb_masks.find(inst.y.imm) == nullptr) {
                 // Translate bytes()'s control nibbles to vpshufb's control bytes.
                 auto nibble_to_vpshufb = [](unsigned n) -> uint8_t {
                     return n == 0 ? 0xff  // Fill with zero.
@@ -706,17 +773,17 @@ namespace skvm {
 
                 // Notice, same pattern for top 4 32-bit lanes as bottom 4 lanes.
                 SkASSERT(a.size() % 32 == 0);
-                Xbyak::Label label = X.L();
+                A::Label label = a.here();
                 a.byte(p, sizeof(p));
                 a.byte(p, sizeof(p));
-                vpshufb_masks[inst.y.imm] = label;
+                vpshufb_masks.set(inst.y.imm, label);
             }
 
         }
 
         // Map from splat bit pattern to 4-byte aligned data location holding that pattern.
         // (If we were really brave we could just point at the copy we already have in Program...)
-        std::unordered_map<int, Xbyak::Label> splats;
+        SkTHashMap<int, A::Label> splats;
         for (const Program::Instruction& inst : instructions) {
             if (inst.op == Op::splat) {
                 // Splats are deduplicated at an earlier layer, so we shouldn't find any duplicates.
@@ -725,22 +792,22 @@ namespace skvm {
                 //
                 // TODO: in an AVX-512 world, it makes less sense to assign splats to registers at
                 // all.  Perhaps we should move the deduping / register coloring for splats here?
-                SkASSERT(splats.end() == splats.find(inst.y.imm));
+                SkASSERT(splats.find(inst.y.imm) == nullptr);
 
                 SkASSERT(a.size() % 4 == 0);
-                Xbyak::Label label = X.L();
+                A::Label label = a.here();
                 a.byte(&inst.y.imm, 4);
-                splats[inst.y.imm] = label;
+                splats.set(inst.y.imm, label);
             }
         }
 
         // Executable code starts here.
         *code = a.size();
 
-        Xbyak::Label loop_label;
+        A::Label loop_label;
         for (int i = 0; i < (int)instructions.size(); i++) {
             if (i == loop) {
-                X.L(loop_label);
+                loop_label = a.here();
             }
             const Program::Instruction& inst = instructions[i];
             Op  op = inst.op;
@@ -756,73 +823,64 @@ namespace skvm {
                 // to overwrite your arguments before you're done using them!
 
                 case Op::store8:
-                    if (SkCpu::Supports(SkCpu::SKX)) {
-                        // One stop shop!  Pack 8x I32 -> U8 and store to ptr.
-                        X.vpmovusdb(X.ptr[xarg(y.imm)], r(x));
-                    } else {
-                        a.vpackusdw(ar(tmp), ar(x), ar(x)); // pack 32-bit -> 16-bit
-                        a.vpermq   (ar(tmp), ar(tmp), 0xd8);  // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
-                        a.vpackuswb(ar(tmp), ar(tmp), ar(tmp));   // pack 16-bit -> 8-bit
-                        X.vmovq(X.ptr[xarg(y.imm)],         // store low 8 bytes
-                                Xbyak::Xmm{tmp}); // (arg must be an xmm)
-                    }
+                    // TODO: if SkCpu::Supports(SkCpu::SKX) { a.vpmovusdb(arg[y.imm], ar(x)) }
+                    a.vpackusdw(r(tmp), r(x), r(x));      // pack 32-bit -> 16-bit
+                    a.vpermq   (r(tmp), r(tmp), 0xd8);     // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
+                    a.vpackuswb(r(tmp), r(tmp), r(tmp));  // pack 16-bit -> 8-bit
+                    a.vmovq    (arg[y.imm], (A::Xmm)tmp);    // store low 8 bytes
                     break;
 
-                case Op::store32: X.vmovups(X.ptr[xarg(y.imm)], r(x)); break;
+                case Op::store32: a.vmovups(arg[y.imm], r(x)); break;
 
-                case Op::load8:  X.vpmovzxbd(r(d), X.ptr[xarg(y.imm)]); break;
-                case Op::load32: X.vmovups  (r(d), X.ptr[xarg(y.imm)]); break;
+                case Op::load8:  a.vpmovzxbd(r(d), arg[y.imm]); break;
+                case Op::load32: a.vmovups  (r(d), arg[y.imm]); break;
 
-                case Op::splat: X.vbroadcastss(r(d), X.ptr[X.rip + splats[y.imm]]);
-                                break;
+                case Op::splat: a.vbroadcastss(r(d), *splats.find(y.imm)); break;
 
-                case Op::add_f32: a.vaddps(ar(d), ar(x), ar(y.id)); break;
-                case Op::sub_f32: a.vsubps(ar(d), ar(x), ar(y.id)); break;
-                case Op::mul_f32: a.vmulps(ar(d), ar(x), ar(y.id)); break;
-                case Op::div_f32: a.vdivps(ar(d), ar(x), ar(y.id)); break;
+                case Op::add_f32: a.vaddps(r(d), r(x), r(y.id)); break;
+                case Op::sub_f32: a.vsubps(r(d), r(x), r(y.id)); break;
+                case Op::mul_f32: a.vmulps(r(d), r(x), r(y.id)); break;
+                case Op::div_f32: a.vdivps(r(d), r(x), r(y.id)); break;
                 case Op::mad_f32:
-                    if (d == x   ) { a.vfmadd132ps(ar(x   ), ar(z.id), ar(y.id)); } else
-                    if (d == y.id) { a.vfmadd213ps(ar(y.id), ar(x   ), ar(z.id)); } else
-                    if (d == z.id) { a.vfmadd231ps(ar(z.id), ar(x   ), ar(y.id)); } else
-                                   { a.vmulps(ar(tmp), ar(x), ar(y.id));
-                                     a.vaddps(ar(d), ar(tmp), ar(z.id)); }
+                    if (d == x   ) { a.vfmadd132ps(r(x   ), r(z.id), r(y.id)); } else
+                    if (d == y.id) { a.vfmadd213ps(r(y.id), r(x   ), r(z.id)); } else
+                    if (d == z.id) { a.vfmadd231ps(r(z.id), r(x   ), r(y.id)); } else
+                                   { a.vmulps(r(tmp), r(x), r(y.id));
+                                     a.vaddps(r(d), r(tmp), r(z.id)); }
                     break;
 
-                case Op::add_i32: a.vpaddd (ar(d), ar(x), ar(y.id)); break;
-                case Op::sub_i32: a.vpsubd (ar(d), ar(x), ar(y.id)); break;
-                case Op::mul_i32: a.vpmulld(ar(d), ar(x), ar(y.id)); break;
+                case Op::add_i32: a.vpaddd (r(d), r(x), r(y.id)); break;
+                case Op::sub_i32: a.vpsubd (r(d), r(x), r(y.id)); break;
+                case Op::mul_i32: a.vpmulld(r(d), r(x), r(y.id)); break;
 
-                case Op::sub_i16x2: a.vpsubw (ar(d), ar(x), ar(y.id)); break;
-                case Op::mul_i16x2: a.vpmullw(ar(d), ar(x), ar(y.id)); break;
-                case Op::shr_i16x2: a.vpsrlw (ar(d), ar(x),    y.imm); break;
+                case Op::sub_i16x2: a.vpsubw (r(d), r(x), r(y.id)); break;
+                case Op::mul_i16x2: a.vpmullw(r(d), r(x), r(y.id)); break;
+                case Op::shr_i16x2: a.vpsrlw (r(d), r(x),    y.imm); break;
 
-                case Op::bit_and: a.vpand(ar(d), ar(x), ar(y.id)); break;
-                case Op::bit_or : a.vpor (ar(d), ar(x), ar(y.id)); break;
-                case Op::bit_xor: a.vpxor(ar(d), ar(x), ar(y.id)); break;
+                case Op::bit_and: a.vpand(r(d), r(x), r(y.id)); break;
+                case Op::bit_or : a.vpor (r(d), r(x), r(y.id)); break;
+                case Op::bit_xor: a.vpxor(r(d), r(x), r(y.id)); break;
 
-                case Op::shl: a.vpslld(ar(d), ar(x), y.imm); break;
-                case Op::shr: a.vpsrld(ar(d), ar(x), y.imm); break;
-                case Op::sra: a.vpsrad(ar(d), ar(x), y.imm); break;
+                case Op::shl: a.vpslld(r(d), r(x), y.imm); break;
+                case Op::shr: a.vpsrld(r(d), r(x), y.imm); break;
+                case Op::sra: a.vpsrad(r(d), r(x), y.imm); break;
 
                 case Op::extract: if (y.imm) {
-                                      a.vpsrld(ar(tmp), ar(x), y.imm);
-                                      a.vpand (ar(d), ar(tmp), ar(z.id));
+                                      a.vpsrld(r(tmp), r(x), y.imm);
+                                      a.vpand (r(d), r(tmp), r(z.id));
                                   } else {
-                                      a.vpand (ar(d), ar(x), ar(z.id));
+                                      a.vpand (r(d), r(x), r(z.id));
                                   }
                                   break;
 
-                case Op::pack: a.vpslld(ar(tmp), ar(y.id), z.imm);
-                               a.vpor  (ar(d), ar(tmp), ar(x));
+                case Op::pack: a.vpslld(r(tmp), r(y.id), z.imm);
+                               a.vpor  (r(d), r(tmp), r(x));
                                break;
 
-                case Op::to_f32: a.vcvtdq2ps (ar(d), ar(x)); break;
-                case Op::to_i32: a.vcvttps2dq(ar(d), ar(x)); break;
+                case Op::to_f32: a.vcvtdq2ps (r(d), r(x)); break;
+                case Op::to_i32: a.vcvttps2dq(r(d), r(x)); break;
 
-                case Op::bytes: {
-                    X.vpshufb(r(d), r(x),
-                              X.ptr[X.rip + vpshufb_masks[y.imm]]);
-                } break;
+                case Op::bytes: a.vpshufb(r(d), r(x), *vpshufb_masks.find(y.imm)); break;
             }
         }
 
@@ -830,7 +888,7 @@ namespace skvm {
             a.add(arg[i], K*(int)strides[i]);
         }
         a.sub(N, K);
-        X.jne(loop_label);
+        a.jne(loop_label);
 
         a.vzeroupper();
         a.ret();
@@ -838,106 +896,143 @@ namespace skvm {
         // Return mask to apply to N for elements the JIT can handle.
         return ~(K-1);
     }
-#endif //defined(SKVM_JIT)
+
+    Program::JIT::~JIT() {
+        if (buf) {
+            munmap(buf,size);
+        }
+    }
+#else
+    Program::JIT::~JIT() { SkASSERT(buf == nullptr); }
+#endif // defined(SKVM_JIT)
 
     void Program::eval(int n, void* args[], size_t strides[], int nargs) const {
+        void (*entry)() = nullptr;
+        int    mask     = 0;
+
     #if defined(SKVM_JIT)
-        if (!fJIT && can_jit(fRegs, nargs)) {
-            fJIT.reset(new Assembler);
-            fJITMask = jit(*fJIT, &fJITCode, fInstructions, fRegs, fLoop, strides, nargs);
-        #if 1
-            // We're doing some really stateful things below,
-            // so one thread at a time please...
-            static SkSpinlock dump_lock;
-            SkAutoSpinlock lock(dump_lock);
+        // If we can't grab this lock, another thread is probably assembling the program.
+        // We can just fall through to the interpreter.
+        if (fJITLock.tryAcquire()) {
+            if (fJIT.entry) {
+                // Use cached program.
+                entry = fJIT.entry;
+                mask  = fJIT.mask;
+            } else if (can_jit(fRegs, nargs)) {
+                Assembler a;
+                size_t code;
+                mask = jit(a,&code, fInstructions, fRegs, fLoop, strides, nargs);
 
-            uint32_t hash = SkOpts::hash(fJIT->data(), fJIT->size());
+                // mprotect() can only change at a page level granularity, so round a.size() up.
+                size_t page = sysconf(_SC_PAGESIZE),                           // Probably 4096.
+                       size = ((a.size() + page - 1) / page) * page;
 
-            SkString name = SkStringPrintf("skvm-jit-%u", hash);
+                // JIT safety hygiene is: mmap() r/w, copy over code, mprotect() to r/x.
+                void* buf =
+                    mmap(nullptr, size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1,0);
+                memcpy(buf, a.data(), a.size());
+                mprotect(buf,size, PROT_READ|PROT_EXEC);
 
-            // Create a jit-<pid>.dump file that we can `perf inject -j` into a
-            // perf.data captured with `perf record -k 1`, letting us see each
-            // JIT'd Program as if a function named skvm-jit-<hash>.   E.g.
-            //
-            //   ninja -C out nanobench
-            //   perf record -k 1 out/nanobench -m SkVM_4096_I32\$
-            //   perf inject -j -i perf.data -o perf.data.jit
-            //   perf report -i perf.data.jit
-            //
-            // Running `perf inject -j` will also dump an .so for each JIT'd
-            // program, named jitted-<pid>-<hash>.so.
+                entry = (decltype(entry))( (const uint8_t*)buf + code );
 
-            auto timestamp_ns = []() -> uint64_t {
-                // It's important to use CLOCK_MONOTONIC here so that perf can
-                // correlate our timestamps with those captured by `perf record
-                // -k 1`.  That's also what `-k 1` does, by the way, tell perf
-                // record to use CLOCK_MONOTONIC.
-                struct timespec ts;
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                return ts.tv_sec * (uint64_t)1e9 + ts.tv_nsec;
-            };
+                fJIT.buf   = buf;
+                fJIT.size  = size;
+                fJIT.entry = entry;
+                fJIT.mask  = mask;
 
-            // We'll open the jit-<pid>.dump file and write a small header once,
-            // and just leave it open forever because we're lazy.
-            static FILE* jitdump = [&]{
-                // Must map as w+ for the mmap() call below to work.
-                FILE* f = fopen(SkStringPrintf("jit-%d.dump", getpid()).c_str(), "w+");
+            #if 1 && defined(SK_BUILD_FOR_UNIX)   // Debug dumps for perf.
+                // We're doing some really stateful things below so one thread at a time please...
+                static SkSpinlock dump_lock;
+                SkAutoSpinlock lock(dump_lock);
 
-                // Calling mmap() on the file adds a "hey they mmap()'d this" record to
-                // the perf.data file that will point `perf inject -j` at this log file.
-                // Kind of a strange way to tell `perf inject` where the file is...
-                void* marker = mmap(nullptr,
-                                    sysconf(_SC_PAGESIZE),
-                                    PROT_READ|PROT_EXEC,
-                                    MAP_PRIVATE,
-                                    fileno(f),
-                                    /*offset=*/0);
-                SkASSERT_RELEASE(marker != MAP_FAILED);
-                // Like never calling fclose(f), we'll also just always leave marker mmap()'d.
+                uint32_t hash = SkOpts::hash(fJIT.buf, fJIT.size);
+                SkString name = SkStringPrintf("skvm-jit-%u", hash);
 
-                struct Header {
-                    uint32_t magic, version, header_size, elf_mach, reserved, pid;
-                    uint64_t timestamp_us, flags;
-                } header = {
-                    0x4A695444, 1, sizeof(Header), 62/*x86-64*/, 0, (uint32_t)getpid(),
-                    timestamp_ns() / 1000, 0,
+                // Create a jit-<pid>.dump file that we can `perf inject -j` into a
+                // perf.data captured with `perf record -k 1`, letting us see each
+                // JIT'd Program as if a function named skvm-jit-<hash>.   E.g.
+                //
+                //   ninja -C out nanobench
+                //   perf record -k 1 out/nanobench -m SkVM_4096_I32\$
+                //   perf inject -j -i perf.data -o perf.data.jit
+                //   perf report -i perf.data.jit
+                //
+                // Running `perf inject -j` will also dump an .so for each JIT'd
+                // program, named jitted-<pid>-<hash>.so.
+
+                auto timestamp_ns = []() -> uint64_t {
+                    // It's important to use CLOCK_MONOTONIC here so that perf can
+                    // correlate our timestamps with those captured by `perf record
+                    // -k 1`.  That's also what `-k 1` does, by the way, tell perf
+                    // record to use CLOCK_MONOTONIC.
+                    struct timespec ts;
+                    clock_gettime(CLOCK_MONOTONIC, &ts);
+                    return ts.tv_sec * (uint64_t)1e9 + ts.tv_nsec;
                 };
-                fwrite(&header, sizeof(header), 1, f);
 
-                return f;
-            }();
+                // We'll open the jit-<pid>.dump file and write a small header once,
+                // and just leave it open forever because we're lazy.
+                static FILE* jitdump = [&]{
+                    // Must map as w+ for the mmap() call below to work.
+                    FILE* f = fopen(SkStringPrintf("jit-%d.dump", getpid()).c_str(), "w+");
 
-            struct CodeLoad {
-                uint32_t event_type, event_size;
-                uint64_t timestamp_ns;
+                    // Calling mmap() on the file adds a "hey they mmap()'d this" record to
+                    // the perf.data file that will point `perf inject -j` at this log file.
+                    // Kind of a strange way to tell `perf inject` where the file is...
+                    void* marker = mmap(nullptr,
+                                        sysconf(_SC_PAGESIZE),
+                                        PROT_READ|PROT_EXEC,
+                                        MAP_PRIVATE,
+                                        fileno(f),
+                                        /*offset=*/0);
+                    SkASSERT_RELEASE(marker != MAP_FAILED);
+                    // Like never calling fclose(f), we'll also just always leave marker mmap()'d.
 
-                uint32_t pid, tid;
-                uint64_t vma/*???*/, code_addr, code_size, id;
-            } load = {
-                0/*code load*/, (uint32_t)(sizeof(CodeLoad) + name.size() + 1 + fJIT->size()),
-                timestamp_ns(),
+                    struct Header {
+                        uint32_t magic, version, header_size, elf_mach, reserved, pid;
+                        uint64_t timestamp_us, flags;
+                    } header = {
+                        0x4A695444, 1, sizeof(Header), 62/*x86-64*/, 0, (uint32_t)getpid(),
+                        timestamp_ns() / 1000, 0,
+                    };
+                    fwrite(&header, sizeof(header), 1, f);
 
-                (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
-                (uint64_t)fJIT->data(), (uint64_t)fJIT->data(), fJIT->size(), hash,
-            };
+                    return f;
+                }();
 
-            // Write the header, the JIT'd function name, and the JIT'd code itself.
-            fwrite(&load, sizeof(load), 1, jitdump);
-            fwrite(name.c_str(), 1, name.size(), jitdump);
-            fwrite("\0", 1, 1, jitdump);
-            fwrite(fJIT->data(), 1, fJIT->size(), jitdump);
-        #endif
+                struct CodeLoad {
+                    uint32_t event_type, event_size;
+                    uint64_t timestamp_ns;
+
+                    uint32_t pid, tid;
+                    uint64_t vma/*???*/, code_addr, code_size, id;
+                } load = {
+                    0/*code load*/, (uint32_t)(sizeof(CodeLoad) + name.size() + 1 + fJIT.size),
+                    timestamp_ns(),
+
+                    (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
+                    (uint64_t)fJIT.buf, (uint64_t)fJIT.buf, fJIT.size, hash,
+                };
+
+                // Write the header, the JIT'd function name, and the JIT'd code itself.
+                fwrite(&load, sizeof(load), 1, jitdump);
+                fwrite(name.c_str(), 1, name.size(), jitdump);
+                fwrite("\0", 1, 1, jitdump);
+                fwrite(fJIT.buf, 1, fJIT.size, jitdump);
+            #endif
+            }
+            fJITLock.release();   // pairs with tryAcquire() in the if().
         }
+    #endif  // defined(SKVM_JIT)
 
-        const int jitN = n & fJITMask;
-        if (fJIT && jitN > 0) {
+        if (const int jitN = n & mask) {
+            SkASSERT(entry);
             bool ran = true;
 
-            const uint8_t* fn = fJIT->data() + fJITCode;
             switch (nargs) {
-                case 0: ((void(*)(int              ))fn)(jitN                  ); break;
-                case 1: ((void(*)(int, void*       ))fn)(jitN, args[0]         ); break;
-                case 2: ((void(*)(int, void*, void*))fn)(jitN, args[0], args[1]); break;
+                case 0: ((void(*)(int              ))entry)(jitN                  ); break;
+                case 1: ((void(*)(int, void*       ))entry)(jitN, args[0]         ); break;
+                case 2: ((void(*)(int, void*, void*))entry)(jitN, args[0], args[1]); break;
                 default: ran = false; break;
             }
             if (ran) {
@@ -952,7 +1047,6 @@ namespace skvm {
                 SkASSERT(arg == args + nargs);
             }
         }
-    #endif
         if (n) {
             SkOpts::eval(fInstructions.data(), (int)fInstructions.size(), fRegs, fLoop,
                          n, args, strides, nargs);

@@ -10,10 +10,9 @@
 
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
-#include <unordered_map>
+#include "include/private/SkTHash.h"
+#include "include/private/SkSpinlock.h"
 #include <vector>
-
-namespace Xbyak { class CodeGenerator; }
 
 namespace skvm {
 
@@ -70,20 +69,45 @@ namespace skvm {
         using DstEqOpX = void(Ymm dst, Ymm x);
         DstEqOpX vcvtdq2ps, vcvttps2dq;
 
-    //private:
-        std::unique_ptr<Xbyak::CodeGenerator> X;
+        struct Label { size_t offset; };
+        Label here();
+
+        void jne(Label);
+
+        void vbroadcastss(Ymm dst, Label);
+        void vpshufb(Ymm dst, Ymm x, Label);
+
+        void vmovups  (Ymm dst, GP64 src);
+        void vpmovzxbd(Ymm dst, GP64 src);
+
+        void vmovups(GP64 dst, Ymm src);
+        void vmovq  (GP64 dst, Xmm src);
+
     private:
-        // dst = dst op imm
+        // dst = op(dst, imm)
         void op(int opcode, int opcode_ext, GP64 dst, int imm);
 
-        // dst = op x
-        void op(int prefix, int map, int opcode, Ymm dst, Ymm x,        bool W=false);
 
-        // dst = x op y
+        // dst = op(x,y) or op(x)
         void op(int prefix, int map, int opcode, Ymm dst, Ymm x, Ymm y, bool W=false);
+        void op(int prefix, int map, int opcode, Ymm dst, Ymm x,        bool W=false) {
+            // Two arguments ops seem to pass them in dst and y, forcing x to 0 so VEX.vvvv == 1111.
+            this->op(prefix, map, opcode, dst,(Ymm)0,x, W);
+        }
 
-        // dst = x op imm
+        // dst = op(x,imm)
         void op(int prefix, int map, int opcode, int opcode_ext, Ymm dst, Ymm x, int imm);
+
+        // dst = op(x,label) or op(label)
+        void op(int prefix, int map, int opcode, Ymm dst, Ymm x, Label l);
+        void op(int prefix, int map, int opcode, Ymm dst,        Label l) {
+            this->op(prefix, map, opcode, dst, (Ymm)0, l);
+        }
+
+        // *ptr = ymm or ymm = *ptr, depending on opcode.
+        void load_store(int prefix, int map, int opcode, Ymm ymm, GP64 ptr);
+
+        std::vector<uint8_t> fCode;
     };
 
     enum class Op : uint8_t {
@@ -133,17 +157,22 @@ namespace skvm {
         }
 
     private:
+        struct JIT {
+            ~JIT();
+
+            void*  buf      = nullptr;  // Raw mmap'd buffer.
+            size_t size     = 0;        // Size of buf in bytes.
+            void (*entry)() = nullptr;  // Entry point, offset into buf.
+            int    mask     = 0;        // Mask of N the JIT'd code can handle.
+        };
+
         void eval(int n, void* args[], size_t strides[], int nargs) const;
 
         std::vector<Instruction> fInstructions;
         int                      fRegs;
         int                      fLoop;
-    #if defined(SKVM_JIT)
-        // TODO: what a mess, clean up
-        mutable int                        fJITMask = 0;  // Mask of N the JIT can handle.
-        mutable size_t                     fJITCode = 0;  // Code entry point, offset from data().
-        mutable std::unique_ptr<Assembler> fJIT;
-    #endif
+        mutable SkSpinlock       fJITLock;
+        mutable JIT              fJIT;
     };
 
     struct Arg { int ix; };
@@ -262,7 +291,7 @@ namespace skvm {
         ID push(Op, ID x, ID y=NA, ID z=NA, int immy=0, int immz=0);
         bool isZero(ID) const;
 
-        std::unordered_map<Instruction, ID, InstructionHash> fIndex;
+        SkTHashMap<Instruction, ID, InstructionHash>         fIndex;
         std::vector<Instruction>                             fProgram;
     };
 
