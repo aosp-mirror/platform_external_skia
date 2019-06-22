@@ -196,7 +196,7 @@ static void test_asm(skiatest::Reporter* r, Fn&& fn, std::initializer_list<uint8
 
     REPORTER_ASSERT(r, a.size() == expected.size());
 
-    auto got = (const uint8_t*)a.code(),
+    auto got = (const uint8_t*)a.data(),
          want = expected.begin();
     for (int i = 0; i < (int)std::min(a.size(), expected.size()); i++) {
         REPORTER_ASSERT(r, got[i] == want[i],
@@ -275,6 +275,20 @@ DEF_TEST(SkVM_Assembler, r) {
         0xc4, 0xc1, 0x75, 0xfe, 0xc0,
         0xc4, 0xe2, 0x75, 0x40, 0xc2,
         0xc5,       0xf5, 0xfa, 0xc2,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.vpsrld(A::ymm15, A::ymm2, 8);
+        a.vpsrld(A::ymm0 , A::ymm8, 5);
+    },{
+        0xc5,     0x85, 0x72,0xd2, 0x08,
+        0xc4,0xc1,0x7d, 0x72,0xd0, 0x05,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.vpermq(A::ymm1, A::ymm2, 5);
+    },{
+        0xc4,0xe3,0xfd, 0x00,0xca, 0x05,
     });
 }
 

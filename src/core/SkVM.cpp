@@ -464,7 +464,7 @@ namespace skvm {
                    int map,   // SSE opcode map selector: 0x0f, 0x380f, 0x3a0f.
                    int   x,   // 4-bit second operand register, our x, called vvvv in docs.
                    bool  L,   // Set for 256-bit ymm operations, off for 128-bit xmm.
-                   int  pp) { // SSE mandatory prefix: 0x66, 0xf3, 0xf2 (, 0x00?).
+                   int  pp) { // SSE mandatory prefix: 0x66, 0xf3, 0xf2, else none.
 
         // Pack x86 opcode map selector to 5-bit VEX encoding.
         map = [map]{
@@ -485,7 +485,6 @@ namespace skvm {
                 case 0xf3: return 0b10;
                 case 0xf2: return 0b11;
             }
-            // TODO: Not sure if this is reachable or not.
             return 0b00;
         }();
 
@@ -517,9 +516,8 @@ namespace skvm {
     Assembler::Assembler() : X{new Xbyak::CodeGenerator} {}
     Assembler::~Assembler() = default;
 
-    void*  Assembler::code() const { return (void*)X->getCode(); }
-    size_t Assembler::size() const { return        X->getSize(); }
-
+    const uint8_t* Assembler::data() const { return X->getCode(); }
+    size_t         Assembler::size() const { return X->getSize(); }
 
     void Assembler::byte(const void* p, int n) {
         X->db((const uint8_t*)p, (size_t)n);
@@ -557,25 +555,72 @@ namespace skvm {
 
         this->byte(rex(1,dst>>3,0,0));
         this->byte(opcode);
-        this->byte(_233(0b11, opcode_ext, dst&7));  // Not sure if this is ModRM or what 0b11 means.
+        this->byte(mod_rm(Mod::Direct, opcode_ext, dst&7));
         this->byte(&imm, imm_bytes);
     }
 
     void Assembler::add(GP64 dst, int imm) { this->op(0,0b000, dst,imm); }
     void Assembler::sub(GP64 dst, int imm) { this->op(0,0b101, dst,imm); }
 
-    // dst = x op y, all ymm.  Maybe only for int ops?  We'll see.
-    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, Ymm y) {
-        VEX v = vex(0/*unsure what this means here*/, dst>>3, 0, y>>3,
+    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, Ymm y, bool W/*=false*/) {
+        VEX v = vex(W, dst>>3, 0, y>>3,
                     map, x, 1/*ymm, not xmm*/, prefix);
         this->byte(v.bytes, v.len);
         this->byte(opcode);
         this->byte(mod_rm(Mod::Direct, dst&7, y&7));
     }
+    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, bool W/*=false*/) {
+        // Two arguments ops seem to pass them in dst and y, forcing x to 0 so VEX.vvvv == 1111.
+        this->op(prefix,map,opcode, dst,(Ymm)0,x,W);
+    }
 
     void Assembler::vpaddd (Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0xfe, dst,x,y); }
     void Assembler::vpsubd (Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0xfa, dst,x,y); }
     void Assembler::vpmulld(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x40, dst,x,y); }
+
+    void Assembler::vpsubw (Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xf9, dst,x,y); }
+    void Assembler::vpmullw(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xd5, dst,x,y); }
+
+    void Assembler::vpand(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xdb, dst,x,y); }
+    void Assembler::vpor (Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xeb, dst,x,y); }
+    void Assembler::vpxor(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xef, dst,x,y); }
+
+    void Assembler::vaddps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x58, dst,x,y); }
+    void Assembler::vsubps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5c, dst,x,y); }
+    void Assembler::vmulps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x59, dst,x,y); }
+    void Assembler::vdivps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5e, dst,x,y); }
+
+    void Assembler::vfmadd132ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x98, dst,x,y); }
+    void Assembler::vfmadd213ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xa8, dst,x,y); }
+    void Assembler::vfmadd231ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xb8, dst,x,y); }
+
+    void Assembler::vpackusdw(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x2b, dst,x,y); }
+    void Assembler::vpackuswb(Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0x67, dst,x,y); }
+
+    // dst = x op /opcode_ext imm
+    void Assembler::op(int prefix, int map, int opcode, int opcode_ext, Ymm dst, Ymm x, int imm) {
+        // This is a little weird, but if we pass the opcode_ext as if it were the dst register,
+        // the dst register as if x, and the x register as if y, all the bits end up where we want.
+        this->op(prefix, map, opcode, (Ymm)opcode_ext,dst,x);
+        this->byte(imm);
+    }
+
+    void Assembler::vpslld(Ymm dst, Ymm x, int imm) { this->op(0x66,0x0f,0x72,6, dst,x,imm); }
+    void Assembler::vpsrld(Ymm dst, Ymm x, int imm) { this->op(0x66,0x0f,0x72,2, dst,x,imm); }
+    void Assembler::vpsrad(Ymm dst, Ymm x, int imm) { this->op(0x66,0x0f,0x72,4, dst,x,imm); }
+
+    void Assembler::vpsrlw(Ymm dst, Ymm x, int imm) { this->op(0x66,0x0f,0x71,2, dst,x,imm); }
+
+
+    void Assembler::vpermq(Ymm dst, Ymm x, int imm) {
+        // A bit unusual among the instructions we use, this is 64-bit operation, so we set W.
+        bool W = true;
+        this->op(0x66,0x3a0f,0x00, dst,x,W);
+        this->byte(imm);
+    }
+
+    void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(0,   0x0f,0x5b, dst,x); }
+    void Assembler::vcvttps2dq(Ymm dst, Ymm x) { this->op(0xf3,0x0f,0x5b, dst,x); }
 
     static bool can_jit(int regs, int nargs) {
         return true
@@ -585,7 +630,7 @@ namespace skvm {
     }
 
     // Returns stride of the JIT, currently always 8.
-    static int jit(Assembler& a,
+    static int jit(Assembler& a, size_t* code,
                    const std::vector<Program::Instruction>& instructions,
                    int regs, int loop, size_t strides[], int nargs) {
         using A = Assembler;
@@ -611,25 +656,91 @@ namespace skvm {
         };
 
         // All 16 ymm registers are available as scratch, keeping 15 as a temporary for us.
-        auto ar = [](int ix) { SkASSERT(ix < 15); return (A::Ymm)ix; };
-        auto  r = [](int ix) { SkASSERT(ix < 15); return Xbyak::Ymm(ix); };
-
-        Xbyak::Ymm tmp = X.ymm15;
+        auto ar = [](int ix) { SkASSERT(ix < 16); return (A::Ymm)ix; };
+        auto  r = [](int ix) { SkASSERT(ix < 16); return Xbyak::Ymm(ix); };
+        const int tmp = 15;
     #endif
 
-        // Label / N-byte values we need to write after ret.
-        struct Data4  { Xbyak::Label label; int bits   ; };
-        struct Data32 { Xbyak::Label label; int bits[8]; };
-        std::vector<Data4 > data4;
-        std::vector<Data32> data32;
+        // We'll lay out our function as:
+        //   - 32-byte aligned data (from Op::bytes)
+        //   -  4-byte aligned data (from Op::splat)
+        //   -    byte aligned code
+        // This makes the code as compact as possible, requiring no alignment padding.
+        // It also makes working with labels easy, as they'll all be resolved before
+        // the instructions that use them... no relocations.
 
-        // Map from our bytes() control y.imm to index in data32;
-        // no need to splat out duplicate bytes for the same control.
-        std::unordered_map<int, int> vpshufb_masks;
+        // Map from our bytes() control y.imm to 32-byte mask for vpshufb.
+        std::unordered_map<int, Xbyak::Label> vpshufb_masks;
+        for (const Program::Instruction& inst : instructions) {
+            if (inst.op == Op::bytes && vpshufb_masks.end() == vpshufb_masks.find(inst.y.imm)) {
+                // Translate bytes()'s control nibbles to vpshufb's control bytes.
+                auto nibble_to_vpshufb = [](unsigned n) -> uint8_t {
+                    return n == 0 ? 0xff  // Fill with zero.
+                                  : n-1;  // Select n'th 1-indexed byte.
+                };
+                uint8_t control[] = {
+                    nibble_to_vpshufb( (inst.y.imm >>  0) & 0xf ),
+                    nibble_to_vpshufb( (inst.y.imm >>  4) & 0xf ),
+                    nibble_to_vpshufb( (inst.y.imm >>  8) & 0xf ),
+                    nibble_to_vpshufb( (inst.y.imm >> 12) & 0xf ),
+                };
 
+                // Now, vpshufb is one of those weird AVX instructions
+                // that does everything in 2 128-bit chunks, so we'll
+                // only really need 4 distinct values to write in our pattern:
+                int p[4];
+                for (int i = 0; i < 4; i++) {
+                    p[i] = (int)control[0] <<  0
+                        | (int)control[1] <<  8
+                        | (int)control[2] << 16
+                        | (int)control[3] << 24;
+
+                    // Update each byte that refers to a byte index by 4 to
+                    // point into the next 32-bit lane, but leave any 0xff
+                    // that fills with zero alone.
+                    control[0] += control[0] == 0xff ? 0 : 4;
+                    control[1] += control[1] == 0xff ? 0 : 4;
+                    control[2] += control[2] == 0xff ? 0 : 4;
+                    control[3] += control[3] == 0xff ? 0 : 4;
+                }
+
+                // Notice, same pattern for top 4 32-bit lanes as bottom 4 lanes.
+                SkASSERT(a.size() % 32 == 0);
+                Xbyak::Label label = X.L();
+                a.byte(p, sizeof(p));
+                a.byte(p, sizeof(p));
+                vpshufb_masks[inst.y.imm] = label;
+            }
+
+        }
+
+        // Map from splat bit pattern to 4-byte aligned data location holding that pattern.
+        // (If we were really brave we could just point at the copy we already have in Program...)
+        std::unordered_map<int, Xbyak::Label> splats;
+        for (const Program::Instruction& inst : instructions) {
+            if (inst.op == Op::splat) {
+                // Splats are deduplicated at an earlier layer, so we shouldn't find any duplicates.
+                // (It really wouldn't be that big a deal if we did, but they'd be assigned distinct
+                // registers redundantly, so that's something we'd like to know about.)
+                //
+                // TODO: in an AVX-512 world, it makes less sense to assign splats to registers at
+                // all.  Perhaps we should move the deduping / register coloring for splats here?
+                SkASSERT(splats.end() == splats.find(inst.y.imm));
+
+                SkASSERT(a.size() % 4 == 0);
+                Xbyak::Label label = X.L();
+                a.byte(&inst.y.imm, 4);
+                splats[inst.y.imm] = label;
+            }
+        }
+
+        // Executable code starts here.
+        *code = a.size();
+
+        Xbyak::Label loop_label;
         for (int i = 0; i < (int)instructions.size(); i++) {
             if (i == loop) {
-                X.L("loop");
+                X.L(loop_label);
             }
             const Program::Instruction& inst = instructions[i];
             Op  op = inst.op;
@@ -649,11 +760,11 @@ namespace skvm {
                         // One stop shop!  Pack 8x I32 -> U8 and store to ptr.
                         X.vpmovusdb(X.ptr[xarg(y.imm)], r(x));
                     } else {
-                        X.vpackusdw(tmp, r(x), r(x)); // pack 32-bit -> 16-bit
-                        X.vpermq   (tmp, tmp, 0xd8);  // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
-                        X.vpackuswb(tmp, tmp, tmp);   // pack 16-bit -> 8-bit
+                        a.vpackusdw(ar(tmp), ar(x), ar(x)); // pack 32-bit -> 16-bit
+                        a.vpermq   (ar(tmp), ar(tmp), 0xd8);  // u64 tmp[0,1,2,3] = tmp[0,2,1,3]
+                        a.vpackuswb(ar(tmp), ar(tmp), ar(tmp));   // pack 16-bit -> 8-bit
                         X.vmovq(X.ptr[xarg(y.imm)],         // store low 8 bytes
-                                Xbyak::Xmm{tmp.getIdx()}); // (arg must be an xmm)
+                                Xbyak::Xmm{tmp}); // (arg must be an xmm)
                     }
                     break;
 
@@ -662,93 +773,55 @@ namespace skvm {
                 case Op::load8:  X.vpmovzxbd(r(d), X.ptr[xarg(y.imm)]); break;
                 case Op::load32: X.vmovups  (r(d), X.ptr[xarg(y.imm)]); break;
 
-                case Op::splat: data4.push_back(Data4{Xbyak::Label(), y.imm});
-                                X.vbroadcastss(r(d), X.ptr[X.rip + data4.back().label]);
+                case Op::splat: X.vbroadcastss(r(d), X.ptr[X.rip + splats[y.imm]]);
                                 break;
 
-                case Op::add_f32: X.vaddps(r(d), r(x), r(y.id)); break;
-                case Op::sub_f32: X.vsubps(r(d), r(x), r(y.id)); break;
-                case Op::mul_f32: X.vmulps(r(d), r(x), r(y.id)); break;
-                case Op::div_f32: X.vdivps(r(d), r(x), r(y.id)); break;
+                case Op::add_f32: a.vaddps(ar(d), ar(x), ar(y.id)); break;
+                case Op::sub_f32: a.vsubps(ar(d), ar(x), ar(y.id)); break;
+                case Op::mul_f32: a.vmulps(ar(d), ar(x), ar(y.id)); break;
+                case Op::div_f32: a.vdivps(ar(d), ar(x), ar(y.id)); break;
                 case Op::mad_f32:
-                    if (d == x   ) { X.vfmadd132ps(r(x   ), r(z.id), r(y.id)); } else
-                    if (d == y.id) { X.vfmadd213ps(r(y.id), r(x   ), r(z.id)); } else
-                    if (d == z.id) { X.vfmadd231ps(r(z.id), r(x   ), r(y.id)); } else
-                                   { X.vmulps(tmp, r(x), r(y.id));
-                                     X.vaddps(r(d), tmp, r(z.id)); }
+                    if (d == x   ) { a.vfmadd132ps(ar(x   ), ar(z.id), ar(y.id)); } else
+                    if (d == y.id) { a.vfmadd213ps(ar(y.id), ar(x   ), ar(z.id)); } else
+                    if (d == z.id) { a.vfmadd231ps(ar(z.id), ar(x   ), ar(y.id)); } else
+                                   { a.vmulps(ar(tmp), ar(x), ar(y.id));
+                                     a.vaddps(ar(d), ar(tmp), ar(z.id)); }
                     break;
 
                 case Op::add_i32: a.vpaddd (ar(d), ar(x), ar(y.id)); break;
                 case Op::sub_i32: a.vpsubd (ar(d), ar(x), ar(y.id)); break;
                 case Op::mul_i32: a.vpmulld(ar(d), ar(x), ar(y.id)); break;
 
-                case Op::sub_i16x2: X.vpsubw (r(d), r(x), r(y.id)); break;
-                case Op::mul_i16x2: X.vpmullw(r(d), r(x), r(y.id)); break;
-                case Op::shr_i16x2: X.vpsrlw (r(d), r(x),   y.imm); break;
+                case Op::sub_i16x2: a.vpsubw (ar(d), ar(x), ar(y.id)); break;
+                case Op::mul_i16x2: a.vpmullw(ar(d), ar(x), ar(y.id)); break;
+                case Op::shr_i16x2: a.vpsrlw (ar(d), ar(x),    y.imm); break;
 
-                case Op::bit_and: X.vandps(r(d), r(x), r(y.id)); break;
-                case Op::bit_or : X.vorps (r(d), r(x), r(y.id)); break;
-                case Op::bit_xor: X.vxorps(r(d), r(x), r(y.id)); break;
+                case Op::bit_and: a.vpand(ar(d), ar(x), ar(y.id)); break;
+                case Op::bit_or : a.vpor (ar(d), ar(x), ar(y.id)); break;
+                case Op::bit_xor: a.vpxor(ar(d), ar(x), ar(y.id)); break;
 
-                case Op::shl: X.vpslld(r(d), r(x), y.imm); break;
-                case Op::shr: X.vpsrld(r(d), r(x), y.imm); break;
-                case Op::sra: X.vpsrad(r(d), r(x), y.imm); break;
+                case Op::shl: a.vpslld(ar(d), ar(x), y.imm); break;
+                case Op::shr: a.vpsrld(ar(d), ar(x), y.imm); break;
+                case Op::sra: a.vpsrad(ar(d), ar(x), y.imm); break;
 
                 case Op::extract: if (y.imm) {
-                                      X.vpsrld(tmp, r(x), y.imm);
-                                      X.vandps(r(d), tmp, r(z.id));
+                                      a.vpsrld(ar(tmp), ar(x), y.imm);
+                                      a.vpand (ar(d), ar(tmp), ar(z.id));
                                   } else {
-                                      X.vandps(r(d), r(x), r(z.id));
+                                      a.vpand (ar(d), ar(x), ar(z.id));
                                   }
                                   break;
 
-                case Op::pack: X.vpslld(tmp, r(y.id), z.imm);
-                               X.vorps (r(d), tmp, r(x));
+                case Op::pack: a.vpslld(ar(tmp), ar(y.id), z.imm);
+                               a.vpor  (ar(d), ar(tmp), ar(x));
                                break;
 
-                case Op::to_f32: X.vcvtdq2ps (r(d), r(x)); break;
-                case Op::to_i32: X.vcvttps2dq(r(d), r(x)); break;
+                case Op::to_f32: a.vcvtdq2ps (ar(d), ar(x)); break;
+                case Op::to_i32: a.vcvttps2dq(ar(d), ar(x)); break;
 
                 case Op::bytes: {
-                    if (vpshufb_masks.end() == vpshufb_masks.find(y.imm)) {
-                        // Translate bytes()'s control nibbles to vpshufb's control bytes.
-                        auto nibble_to_vpshufb = [](unsigned n) -> uint8_t {
-                            return n == 0 ? 0xff  // Fill with zero.
-                                          : n-1;  // Select n'th 1-indexed byte.
-                        };
-                        uint8_t control[] = {
-                            nibble_to_vpshufb( (y.imm >>  0) & 0xf ),
-                            nibble_to_vpshufb( (y.imm >>  4) & 0xf ),
-                            nibble_to_vpshufb( (y.imm >>  8) & 0xf ),
-                            nibble_to_vpshufb( (y.imm >> 12) & 0xf ),
-                        };
-
-                        // Now, vpshufb is one of those weird AVX instructions
-                        // that does everything in 2 128-bit chunks, so we'll
-                        // only really need 4 distinct values to write in our pattern:
-                        int p[4];
-                        for (int i = 0; i < 4; i++) {
-                            p[i] = (int)control[0] <<  0
-                                 | (int)control[1] <<  8
-                                 | (int)control[2] << 16
-                                 | (int)control[3] << 24;
-
-                            // Update each byte that refers to a byte index by 4 to
-                            // point into the next 32-bit lane, but leave any 0xff
-                            // that fills with zero alone.
-                            control[0] += control[0] == 0xff ? 0 : 4;
-                            control[1] += control[1] == 0xff ? 0 : 4;
-                            control[2] += control[2] == 0xff ? 0 : 4;
-                            control[3] += control[3] == 0xff ? 0 : 4;
-                        }
-
-                        // Notice, same patterns for top 4 32-bit lanes as bottom.
-                        data32.push_back(Data32{Xbyak::Label(), {p[0], p[1], p[2], p[3],
-                                                                 p[0], p[1], p[2], p[3]}});
-                        vpshufb_masks[y.imm] = data32.size() - 1;
-                    }
                     X.vpshufb(r(d), r(x),
-                              X.ptr[X.rip + data32[vpshufb_masks[y.imm]].label]);
+                              X.ptr[X.rip + vpshufb_masks[y.imm]]);
                 } break;
             }
         }
@@ -757,23 +830,10 @@ namespace skvm {
             a.add(arg[i], K*(int)strides[i]);
         }
         a.sub(N, K);
-        X.jne("loop");
+        X.jne(loop_label);
 
         a.vzeroupper();
         a.ret();
-
-        for (auto data : data4) {
-            a.align(4);
-            X.L(data.label);
-            X.dd(data.bits);
-        }
-        for (auto data : data32) {
-            a.align(32);
-            X.L(data.label);
-            for (int i = 0; i < 8; i++) {
-                X.dd(data.bits[i]);
-            }
-        }
 
         // Return mask to apply to N for elements the JIT can handle.
         return ~(K-1);
@@ -784,14 +844,14 @@ namespace skvm {
     #if defined(SKVM_JIT)
         if (!fJIT && can_jit(fRegs, nargs)) {
             fJIT.reset(new Assembler);
-            fJITMask = jit(*fJIT, fInstructions, fRegs, fLoop, strides, nargs);
+            fJITMask = jit(*fJIT, &fJITCode, fInstructions, fRegs, fLoop, strides, nargs);
         #if 1
             // We're doing some really stateful things below,
             // so one thread at a time please...
             static SkSpinlock dump_lock;
             SkAutoSpinlock lock(dump_lock);
 
-            uint32_t hash = SkOpts::hash(fJIT->code(), fJIT->size());
+            uint32_t hash = SkOpts::hash(fJIT->data(), fJIT->size());
 
             SkString name = SkStringPrintf("skvm-jit-%u", hash);
 
@@ -858,14 +918,14 @@ namespace skvm {
                 timestamp_ns(),
 
                 (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
-                (uint64_t)fJIT->code(), (uint64_t)fJIT->code(), fJIT->size(), hash,
+                (uint64_t)fJIT->data(), (uint64_t)fJIT->data(), fJIT->size(), hash,
             };
 
             // Write the header, the JIT'd function name, and the JIT'd code itself.
             fwrite(&load, sizeof(load), 1, jitdump);
             fwrite(name.c_str(), 1, name.size(), jitdump);
             fwrite("\0", 1, 1, jitdump);
-            fwrite(fJIT->code(), 1, fJIT->size(), jitdump);
+            fwrite(fJIT->data(), 1, fJIT->size(), jitdump);
         #endif
         }
 
@@ -873,7 +933,7 @@ namespace skvm {
         if (fJIT && jitN > 0) {
             bool ran = true;
 
-            void* fn = fJIT->code();
+            const uint8_t* fn = fJIT->data() + fJITCode;
             switch (nargs) {
                 case 0: ((void(*)(int              ))fn)(jitN                  ); break;
                 case 1: ((void(*)(int, void*       ))fn)(jitN, args[0]         ); break;

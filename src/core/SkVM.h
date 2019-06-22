@@ -22,7 +22,8 @@ namespace skvm {
         Assembler();
         ~Assembler();
 
-        void*  code() const;
+        // This program is size() total bytes long starting at data().
+        const uint8_t* data() const;
         size_t size() const;
 
         // Order matters... GP64, Xmm, Ymm values match 4-bit register encoding for each.
@@ -39,6 +40,10 @@ namespace skvm {
             ymm8, ymm9, ymm10, ymm11, ymm12, ymm13, ymm14, ymm15,
         };
 
+        void byte(const void*, int);
+        void byte(uint8_t);
+        template <typename... Rest> void byte(uint8_t, Rest...);
+
         void nop();
         void align(int mod);
 
@@ -49,19 +54,36 @@ namespace skvm {
         void sub(GP64, int imm);
 
         // All dst = x op y.
-        void vpaddd (Ymm dst, Ymm x, Ymm y);
-        void vpsubd (Ymm dst, Ymm x, Ymm y);
-        void vpmulld(Ymm dst, Ymm x, Ymm y);
+        using DstEqXOpY = void(Ymm dst, Ymm x, Ymm y);
+        DstEqXOpY vpaddd, vpsubd, vpmulld,
+                  vpsubw, vpmullw,
+                  vpand, vpor, vpxor,
+                  vaddps, vsubps, vmulps, vdivps,
+                  vfmadd132ps, vfmadd213ps, vfmadd231ps,
+                  vpackusdw, vpackuswb;
+
+        using DstEqXOpImm = void(Ymm dst, Ymm x, int imm);
+        DstEqXOpImm vpslld, vpsrld, vpsrad,
+                    vpsrlw,
+                    vpermq;
+
+        using DstEqOpX = void(Ymm dst, Ymm x);
+        DstEqOpX vcvtdq2ps, vcvttps2dq;
 
     //private:
         std::unique_ptr<Xbyak::CodeGenerator> X;
     private:
-        void byte(const void*, int);
-        void byte(uint8_t);
-        template <typename... Rest> void byte(uint8_t, Rest...);
-
+        // dst = dst op imm
         void op(int opcode, int opcode_ext, GP64 dst, int imm);
-        void op(int prefix, int map, int opcode, Ymm dst, Ymm x, Ymm y);
+
+        // dst = op x
+        void op(int prefix, int map, int opcode, Ymm dst, Ymm x,        bool W=false);
+
+        // dst = x op y
+        void op(int prefix, int map, int opcode, Ymm dst, Ymm x, Ymm y, bool W=false);
+
+        // dst = x op imm
+        void op(int prefix, int map, int opcode, int opcode_ext, Ymm dst, Ymm x, int imm);
     };
 
     enum class Op : uint8_t {
@@ -118,7 +140,8 @@ namespace skvm {
         int                      fLoop;
     #if defined(SKVM_JIT)
         // TODO: what a mess, clean up
-        mutable int                        fJITMask = 0;
+        mutable int                        fJITMask = 0;  // Mask of N the JIT can handle.
+        mutable size_t                     fJITCode = 0;  // Code entry point, offset from data().
         mutable std::unique_ptr<Assembler> fJIT;
     #endif
     };
