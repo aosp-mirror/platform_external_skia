@@ -30,23 +30,27 @@ public:
     GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
              VkPhysicalDevice device, const VkPhysicalDeviceFeatures2& features,
              uint32_t instanceVersion, uint32_t physicalDeviceVersion,
-             const GrVkExtensions& extensions);
+             const GrVkExtensions& extensions, GrProtected isProtected = GrProtected::kNo);
 
+    bool isFormatTexturable(SkColorType, const GrBackendFormat&) const override;
     bool isFormatTexturable(VkFormat) const;
     bool isConfigTexturable(GrPixelConfig config) const override;
 
-    bool isConfigCopyable(GrPixelConfig config) const override {
-        return true;
-    }
+    bool isFormatCopyable(SkColorType, const GrBackendFormat&) const override { return true; }
+    bool isConfigCopyable(GrPixelConfig config) const override { return true; }
 
     bool isFormatRenderable(VkFormat) const;
 
+    int getRenderTargetSampleCount(int requestedCount,
+                                   SkColorType, const GrBackendFormat&) const override;
     int getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const override;
     int getRenderTargetSampleCount(int requestedCount, VkFormat) const;
+
+    int maxRenderTargetSampleCount(SkColorType, const GrBackendFormat&) const override;
     int maxRenderTargetSampleCount(GrPixelConfig config) const override;
     int maxRenderTargetSampleCount(VkFormat format) const;
 
-    bool surfaceSupportsReadPixels(const GrSurface*) const override;
+    ReadFlags surfaceSupportsReadPixels(const GrSurface*) const override;
 
     bool isFormatTexturableLinearly(VkFormat format) const {
         return SkToBool(FormatInfo::kTextureable_Flag & this->getFormatInfo(format).fLinearFlags);
@@ -134,6 +138,9 @@ public:
     // Returns true if it supports ycbcr conversion for samplers
     bool supportsYcbcrConversion() const { return fSupportsYcbcrConversion; }
 
+    // Returns true if the device supports protected memory.
+    bool supportsProtectedMemory() const { return fSupportsProtectedMemory; }
+
     /**
      * Helpers used by canCopySurface. In all cases if the SampleCnt parameter is zero that means
      * the surface is not a render target, otherwise it is the number of samples in the render
@@ -176,7 +183,7 @@ private:
 
     void init(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
               VkPhysicalDevice device, const VkPhysicalDeviceFeatures2&,
-              uint32_t physicalDeviceVersion, const GrVkExtensions&);
+              uint32_t physicalDeviceVersion, const GrVkExtensions&, GrProtected isProtected);
     void initGrCaps(const GrVkInterface* vkInterface,
                     VkPhysicalDevice physDev,
                     const VkPhysicalDeviceProperties&,
@@ -248,6 +255,8 @@ private:
     bool fSupportsAndroidHWBExternalMemory = false;
 
     bool fSupportsYcbcrConversion = false;
+
+    bool fSupportsProtectedMemory = false;
 
     typedef GrCaps INHERITED;
 };

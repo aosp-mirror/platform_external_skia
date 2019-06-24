@@ -141,7 +141,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface, report
         if (surf) {
             auto* rtc = ((SkSurface_Gpu*)(surf.get()))->getDevice()->accessRenderTargetContext();
             int storedCnt = rtc->numSamples();
-            int allowedCnt = context->priv().caps()->getSampleCount(
+            int allowedCnt = context->priv().caps()->getRenderTargetSampleCount(
                     storedCnt, rtc->asSurfaceProxy()->config());
             REPORTER_ASSERT(reporter, storedCnt == allowedCnt,
                             "Should store an allowed sample count (%d vs %d)", allowedCnt,
@@ -157,7 +157,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface, report
         if (surf) {
             auto* rtc = ((SkSurface_Gpu*)(surf.get()))->getDevice()->accessRenderTargetContext();
             int storedCnt = rtc->numSamples();
-            int allowedCnt = context->priv().caps()->getSampleCount(
+            int allowedCnt = context->priv().caps()->getRenderTargetSampleCount(
                     storedCnt, rtc->asSurfaceProxy()->config());
             REPORTER_ASSERT(reporter, storedCnt == allowedCnt,
                             "Should store an allowed sample count (%d vs %d)", allowedCnt,
@@ -779,7 +779,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SurfaceClear_Gpu, reporter, ctxInfo) {
             sk_sp<SkImage> i(s->makeImageSnapshot());
             SkImage_Gpu* gpuImage = (SkImage_Gpu *) as_IB(i);
             sk_sp<GrTextureProxy> proxy = gpuImage->asTextureProxyRef(context);
-            return context->priv().makeWrappedSurfaceContext(std::move(proxy),
+            return context->priv().makeWrappedSurfaceContext(std::move(proxy), kPremul_SkAlphaType,
                                                              gpuImage->refColorSpace());
         }
     };

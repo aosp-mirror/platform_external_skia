@@ -3065,15 +3065,15 @@ bool GrGLCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     return true;
 }
 
-bool GrGLCaps::surfaceSupportsReadPixels(const GrSurface* surface) const {
+GrCaps::ReadFlags GrGLCaps::surfaceSupportsReadPixels(const GrSurface* surface) const {
     if (auto tex = static_cast<const GrGLTexture*>(surface->asTexture())) {
         // We don't support reading pixels directly from EXTERNAL textures as it would require
         // binding the texture to a FBO.
         if (tex->target() == GR_GL_TEXTURE_EXTERNAL) {
-            return false;
+            return kRequiresCopy_ReadFlag;
         }
     }
-    return true;
+    return kSupported_ReadFlag;
 }
 
 GrCaps::SupportedRead GrGLCaps::supportedReadPixelsColorType(GrPixelConfig srcPixelConfig,
@@ -3108,6 +3108,25 @@ bool GrGLCaps::onIsWindowRectanglesSupportedForRT(const GrBackendRenderTarget& b
     return fbInfo.fFBOID != 0;
 }
 
+bool GrGLCaps::isFormatTexturable(SkColorType ct, const GrBackendFormat& format) const {
+    GrPixelConfig config = this->getConfigFromBackendFormat(format, ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return false;
+    }
+
+    return this->isConfigTexturable(config);
+}
+
+int GrGLCaps::getRenderTargetSampleCount(int requestedCount, SkColorType ct,
+                                         const GrBackendFormat& format) const {
+    GrPixelConfig config = this->getConfigFromBackendFormat(format, ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return 0;
+    }
+
+    return this->getRenderTargetSampleCount(requestedCount, config);
+}
+
 int GrGLCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const {
     requestedCount = SkTMax(1, requestedCount);
     int count = fConfigTable[config].fColorSampleCounts.count();
@@ -3131,6 +3150,15 @@ int GrGLCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig confi
     return 0;
 }
 
+int GrGLCaps::maxRenderTargetSampleCount(SkColorType ct, const GrBackendFormat& format) const {
+    GrPixelConfig config = this->getConfigFromBackendFormat(format, ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return 0;
+    }
+
+    return this->maxRenderTargetSampleCount(config);
+}
+
 int GrGLCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
     const auto& table = fConfigTable[config].fColorSampleCounts;
     if (!table.count()) {
@@ -3141,6 +3169,15 @@ int GrGLCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
         count = SkTMin(count, 4);
     }
     return count;
+}
+
+bool GrGLCaps::isFormatCopyable(SkColorType ct, const GrBackendFormat& format) const {
+    GrPixelConfig config = this->getConfigFromBackendFormat(format, ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return false;
+    }
+
+    return this->isConfigCopyable(config);
 }
 
 GrPixelConfig validate_sized_format(GrGLenum format, SkColorType ct, GrGLStandard standard) {
@@ -3348,7 +3385,7 @@ static bool format_color_type_valid_pair(GrGLenum format, GrColorType colorType)
         // Experimental (for Y416 and mutant P016/P010)
         case GrColorType::kRGBA_16161616:
             return GR_GL_RGBA16 == format;
-        case GrColorType::kRG_half:
+        case GrColorType::kRG_F16:
             return GR_GL_RG16F == format;
 
     }

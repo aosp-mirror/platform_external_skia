@@ -375,6 +375,7 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrRecordingContext* context,
             context->priv().makeDeferredSurfaceContext(format, desc, c.origin(),
                                                        GrMipMapped(c.isMipMapped()),
                                                        SkBackingFit::kExact, budgeted,
+                                                       kPremul_SkAlphaType,
                                                        c.refColorSpace(),
                                                        &c.surfaceProps()));
     if (!sc || !sc->asRenderTargetContext()) {
@@ -706,6 +707,7 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrContext* context,
 
     // We currently don't support protected content
     if (isProtectedContent) {
+        SkDebugf("We currently don't support protected content on android\n");
         return nullptr;
     }
 

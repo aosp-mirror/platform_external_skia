@@ -231,6 +231,23 @@ void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
     fHalfFloatVertexAttributeSupport = true;
 }
 
+bool GrMtlCaps::isFormatTexturable(SkColorType ct, const GrBackendFormat& format) const {
+    GrPixelConfig config = this->getConfigFromBackendFormat(format, ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return false;
+    }
+
+    return this->isConfigTexturable(config);
+}
+
+int GrMtlCaps::maxRenderTargetSampleCount(SkColorType ct, const GrBackendFormat& format) const {
+    GrPixelConfig config = this->getConfigFromBackendFormat(format, ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return false;
+    }
+
+    return this->maxRenderTargetSampleCount(config);
+}
 
 int GrMtlCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
     if (fConfigTable[config].fFlags & ConfigInfo::kMSAA_Flag) {
@@ -239,6 +256,16 @@ int GrMtlCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
         return 1;
     }
     return 0;
+}
+
+int GrMtlCaps::getRenderTargetSampleCount(int requestedCount,
+                                          SkColorType ct, const GrBackendFormat& format) const {
+    GrPixelConfig config = this->getConfigFromBackendFormat(format, ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return false;
+    }
+
+    return this->getRenderTargetSampleCount(requestedCount, config);
 }
 
 int GrMtlCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const {
@@ -652,7 +679,7 @@ static bool format_color_type_valid_pair(MTLPixelFormat format, GrColorType colo
         // Experimental (for Y416 and mutant P016/P010)
         case GrColorType::kRGBA_16161616:
             return MTLPixelFormatRGBA16Unorm == format;
-        case GrColorType::kRG_half:
+        case GrColorType::kRG_F16:
             return MTLPixelFormatRG16Float == format;
     }
     SK_ABORT("Unknown color type");
@@ -707,4 +734,3 @@ GrSwizzle GrMtlCaps::getTextureSwizzle(const GrBackendFormat& format, GrColorTyp
 GrSwizzle GrMtlCaps::getOutputSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
     return get_swizzle(format, colorType, true);
 }
-
