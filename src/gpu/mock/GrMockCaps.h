@@ -35,12 +35,38 @@ public:
 
         this->applyOptionsOverrides(contextOptions);
     }
+
+    bool isFormatTexturable(SkColorType, const GrBackendFormat& format) const override {
+        if (!format.getMockFormat()) {
+            return false;
+        }
+
+        return this->isConfigTexturable(*format.getMockFormat());
+    }
+
     bool isConfigTexturable(GrPixelConfig config) const override {
         return fOptions.fConfigOptions[config].fTexturable;
     }
 
+    bool isFormatCopyable(SkColorType, const GrBackendFormat& format) const override {
+        if (!format.getMockFormat()) {
+            return false;
+        }
+
+        return this->isConfigCopyable(*format.getMockFormat());
+    }
+
     bool isConfigCopyable(GrPixelConfig config) const override {
         return false;
+    }
+
+    int getRenderTargetSampleCount(int requestCount,
+                                   SkColorType, const GrBackendFormat& format) const override {
+        if (!format.getMockFormat()) {
+            return 0;
+        }
+
+        return this->getRenderTargetSampleCount(requestCount, *format.getMockFormat());
     }
 
     int getRenderTargetSampleCount(int requestCount, GrPixelConfig config) const override {
@@ -56,6 +82,14 @@ public:
         return 0;
     }
 
+    int maxRenderTargetSampleCount(SkColorType, const GrBackendFormat& format) const override {
+        if (!format.getMockFormat()) {
+            return 0;
+        }
+
+        return this->maxRenderTargetSampleCount(*format.getMockFormat());
+    }
+
     int maxRenderTargetSampleCount(GrPixelConfig config) const override {
         switch (fOptions.fConfigOptions[config].fRenderability) {
             case GrMockOptions::ConfigOptions::Renderability::kNo:
@@ -68,7 +102,9 @@ public:
         return 0;
     }
 
-    bool surfaceSupportsReadPixels(const GrSurface*) const override { return true; }
+    ReadFlags surfaceSupportsReadPixels(const GrSurface*) const override {
+        return kSupported_ReadFlag;
+    }
 
     bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
                             bool* rectsMustMatch, bool* disallowSubrect) const override {

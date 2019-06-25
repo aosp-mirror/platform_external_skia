@@ -140,8 +140,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface, report
         // Ensure that the sample count stored on the resulting SkSurface is a valid value.
         if (surf) {
             auto* rtc = ((SkSurface_Gpu*)(surf.get()))->getDevice()->accessRenderTargetContext();
-            int storedCnt = rtc->numStencilSamples();
-            int allowedCnt = context->priv().caps()->getSampleCount(
+            int storedCnt = rtc->numSamples();
+            int allowedCnt = context->priv().caps()->getRenderTargetSampleCount(
                     storedCnt, rtc->asSurfaceProxy()->config());
             REPORTER_ASSERT(reporter, storedCnt == allowedCnt,
                             "Should store an allowed sample count (%d vs %d)", allowedCnt,
@@ -156,8 +156,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsSurface, report
                         colorType);
         if (surf) {
             auto* rtc = ((SkSurface_Gpu*)(surf.get()))->getDevice()->accessRenderTargetContext();
-            int storedCnt = rtc->numStencilSamples();
-            int allowedCnt = context->priv().caps()->getSampleCount(
+            int storedCnt = rtc->numSamples();
+            int allowedCnt = context->priv().caps()->getRenderTargetSampleCount(
                     storedCnt, rtc->asSurfaceProxy()->config());
             REPORTER_ASSERT(reporter, storedCnt == allowedCnt,
                             "Should store an allowed sample count (%d vs %d)", allowedCnt,
@@ -218,7 +218,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_maxSurfaceSamplesForColorType, repo
         int sampleCnt = ((SkSurface_Gpu*)(surf.get()))
                                 ->getDevice()
                                 ->accessRenderTargetContext()
-                                ->numStencilSamples();
+                                ->numSamples();
         REPORTER_ASSERT(reporter, sampleCnt == max, "Exected: %d, actual: %d", max, sampleCnt);
     }
 }
@@ -779,7 +779,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SurfaceClear_Gpu, reporter, ctxInfo) {
             sk_sp<SkImage> i(s->makeImageSnapshot());
             SkImage_Gpu* gpuImage = (SkImage_Gpu *) as_IB(i);
             sk_sp<GrTextureProxy> proxy = gpuImage->asTextureProxyRef(context);
-            return context->priv().makeWrappedSurfaceContext(std::move(proxy),
+            return context->priv().makeWrappedSurfaceContext(std::move(proxy), kPremul_SkAlphaType,
                                                              gpuImage->refColorSpace());
         }
     };

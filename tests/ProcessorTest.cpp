@@ -45,13 +45,15 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
 
-    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
-                                      GrFSAAType fsaaType, GrClampType clampType) override {
+    GrProcessorSet::Analysis finalize(
+            const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
+            GrClampType clampType) override {
         static constexpr GrProcessorAnalysisColor kUnknownColor;
         SkPMColor4f overrideColor;
         return fProcessors.finalize(
                 kUnknownColor, GrProcessorAnalysisCoverage::kNone, clip,
-                &GrUserStencilSettings::kUnused, fsaaType, caps, clampType, &overrideColor);
+                &GrUserStencilSettings::kUnused, hasMixedSampledCoverage, caps, clampType,
+                &overrideColor);
     }
 
 private:
@@ -344,7 +346,9 @@ bool log_surface_context(sk_sp<GrSurfaceContext> src, SkString* dst) {
 }
 
 bool log_surface_proxy(GrContext* context, sk_sp<GrSurfaceProxy> src, SkString* dst) {
-    sk_sp<GrSurfaceContext> sContext(context->priv().makeWrappedSurfaceContext(src));
+    // All the proxies are created from premul sources.
+    sk_sp<GrSurfaceContext> sContext(
+            context->priv().makeWrappedSurfaceContext(src, kPremul_SkAlphaType));
     return log_surface_context(sContext, dst);
 }
 

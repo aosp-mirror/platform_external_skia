@@ -156,6 +156,7 @@ sk_sp<GrVkRenderTarget> GrVkRenderTarget::MakeWrappedRenderTarget(
                                   VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         msImageDesc.fMemProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        msImageDesc.fIsProtected = desc.fIsProtected;
 
         if (!GrVkImage::InitImageInfo(gpu, msImageDesc, &msInfo)) {
             return nullptr;
@@ -265,7 +266,7 @@ void GrVkRenderTarget::getAttachmentsDescriptor(
     VkFormat colorFormat;
     GrPixelConfigToVkFormat(this->config(), &colorFormat);
     desc->fColor.fFormat = colorFormat;
-    desc->fColor.fSamples = this->numColorSamples();
+    desc->fColor.fSamples = this->numSamples();
     *attachmentFlags = GrVkRenderPass::kColor_AttachmentFlag;
     uint32_t attachmentCount = 1;
 
@@ -376,8 +377,9 @@ void GrVkRenderTarget::onAbandon() {
 
 GrBackendRenderTarget GrVkRenderTarget::getBackendRenderTarget() const {
     SkASSERT(!this->wrapsSecondaryCommandBuffer());
-    return GrBackendRenderTarget(this->width(), this->height(), this->numColorSamples(),
-                                 fInfo, this->grVkImageLayout());
+    return GrBackendRenderTarget(this->width(), this->height(), this->numSamples(),
+                                 this->isProtected() ? GrProtected::kYes : GrProtected::kNo, fInfo,
+                                 this->grVkImageLayout());
 }
 
 const GrVkResource* GrVkRenderTarget::stencilImageResource() const {

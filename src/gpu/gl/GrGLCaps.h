@@ -60,12 +60,8 @@ public:
          * GL_MAX_SAMPLES value.
          */
         kES_EXT_MsToTexture_MSFBOType,
-        /**
-         * GL_NV_framebuffer_mixed_samples.
-         */
-        kMixedSamples_MSFBOType,
 
-        kLast_MSFBOType = kMixedSamples_MSFBOType
+        kLast_MSFBOType = kES_EXT_MsToTexture_MSFBOType
     };
 
     enum BlitFramebufferFlags {
@@ -110,13 +106,20 @@ public:
     GrGLCaps(const GrContextOptions& contextOptions, const GrGLContextInfo& ctxInfo,
              const GrGLInterface* glInterface);
 
+    bool isFormatTexturable(SkColorType, const GrBackendFormat&) const override;
+
     bool isConfigTexturable(GrPixelConfig config) const override {
         return SkToBool(fConfigTable[config].fFlags & ConfigInfo::kTextureable_Flag);
     }
 
+    int getRenderTargetSampleCount(int requestedCount,
+                                   SkColorType, const GrBackendFormat&) const override;
     int getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const override;
+
+    int maxRenderTargetSampleCount(SkColorType, const GrBackendFormat&) const override;
     int maxRenderTargetSampleCount(GrPixelConfig config) const override;
 
+    bool isFormatCopyable(SkColorType, const GrBackendFormat&) const override;
     bool isConfigCopyable(GrPixelConfig config) const override {
         // In GL we have three ways to be able to copy. CopyTexImage, blit, and draw. CopyTexImage
         // requires the src to be an FBO attachment, blit requires both src and dst to be FBO
@@ -223,8 +226,7 @@ public:
     bool usesMSAARenderBuffers() const {
         return kNone_MSFBOType != fMSFBOType &&
                kES_IMG_MsToTexture_MSFBOType != fMSFBOType &&
-               kES_EXT_MsToTexture_MSFBOType != fMSFBOType &&
-               kMixedSamples_MSFBOType != fMSFBOType;
+               kES_EXT_MsToTexture_MSFBOType != fMSFBOType;
     }
 
     /**
@@ -306,7 +308,7 @@ public:
     /// Use indices or vertices in CPU arrays rather than VBOs for dynamic content.
     bool useNonVBOVertexAndIndexDynamicData() const { return fUseNonVBOVertexAndIndexDynamicData; }
 
-    bool surfaceSupportsReadPixels(const GrSurface*) const override;
+    ReadFlags surfaceSupportsReadPixels(const GrSurface*) const override;
     SupportedRead supportedReadPixelsColorType(GrPixelConfig, const GrBackendFormat&,
                                                GrColorType) const override;
 

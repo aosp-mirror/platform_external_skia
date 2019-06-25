@@ -58,7 +58,7 @@ public:
     bool sampleLocationsSupport() const { return fSampleLocationsSupport; }
     bool multisampleDisableSupport() const { return fMultisampleDisableSupport; }
     bool instanceAttribSupport() const { return fInstanceAttribSupport; }
-    bool usesMixedSamples() const { return fUsesMixedSamples; }
+    bool mixedSamplesSupport() const { return fMixedSamplesSupport; }
     bool halfFloatVertexAttributeSupport() const { return fHalfFloatVertexAttributeSupport; }
 
     // Primitive restart functionality is core in ES 3.0, but using it will cause slowdowns on some
@@ -157,19 +157,22 @@ public:
         return this->maxWindowRectangles() > 0 && this->onIsWindowRectanglesSupportedForRT(rt);
     }
 
+    virtual bool isFormatTexturable(SkColorType, const GrBackendFormat&) const = 0;
     virtual bool isConfigTexturable(GrPixelConfig) const = 0;
 
     // Returns whether a texture of the given config can be copied to a texture of the same config.
+    virtual bool isFormatCopyable(SkColorType, const GrBackendFormat&) const = 0;
     virtual bool isConfigCopyable(GrPixelConfig) const = 0;
 
     // Returns the maximum supported sample count for a config. 0 means the config is not renderable
     // 1 means the config is renderable but doesn't support MSAA.
+    virtual int maxRenderTargetSampleCount(SkColorType, const GrBackendFormat&) const = 0;
     virtual int maxRenderTargetSampleCount(GrPixelConfig) const = 0;
 
     // Returns the number of samples to use when performing internal draws to the given config with
-    // MSAA or mixed samples. See maxRenderTargetSampleCount() for meanings of 0 or 1 return values.
-    int preferredInternalSampleCount(GrPixelConfig config) const {
-        return SkTMin(fPreferredInternalSampleCount, this->maxRenderTargetSampleCount(config));
+    // MSAA or mixed samples. If 0, Ganesh should not attempt to use internal multisampling.
+    int internalMultisampleCount(GrPixelConfig config) const {
+        return SkTMin(fInternalMultisampleCount, this->maxRenderTargetSampleCount(config));
     }
 
     bool isConfigRenderable(GrPixelConfig config) const {
@@ -185,6 +188,8 @@ public:
     // color buffer of the given config or 0 if no such sample count is supported. If the requested
     // sample count is 1 then 1 will be returned if non-MSAA rendering is supported, otherwise 0.
     // For historical reasons requestedCount==0 is handled identically to requestedCount==1.
+    virtual int getRenderTargetSampleCount(int requestedCount,
+                                           SkColorType, const GrBackendFormat&) const = 0;
     virtual int getRenderTargetSampleCount(int requestedCount, GrPixelConfig) const = 0;
     // TODO: Remove. Legacy name used by Chrome.
     int getSampleCount(int requestedCount, GrPixelConfig config) const {
@@ -198,13 +203,24 @@ public:
      */
     bool surfaceSupportsWritePixels(const GrSurface*) const;
 
+
+    /**
+     * Indicates whether surface supports readPixels or the alternatives.
+     */
+    enum ReadFlags {
+        kSupported_ReadFlag     = 0x0,
+        kRequiresCopy_ReadFlag  = 0x1,
+        kProtected_ReadFlag     = 0x2,
+    };
+
     /**
      * Backends may have restrictions on what types of surfaces support GrGpu::readPixels().
-     * If this returns false then the caller should implement a fallback where a temporary texture
-     * is created, the surface is drawn or copied into the temporary, and pixels are read from the
-     * temporary.
+     * If this returns kRequiresCopy_ReadFlag then the caller should implement a fallback where a
+     * temporary texture is created, the surface is drawn or copied into the temporary, and
+     * pixels are read from the temporary. If this returns kProtected_ReadFlag, then the caller
+     * should not attempt reading it.
      */
-    virtual bool surfaceSupportsReadPixels(const GrSurface*) const = 0;
+    virtual ReadFlags surfaceSupportsReadPixels(const GrSurface*) const = 0;
 
     /**
      * Given a dst pixel config and a src color type what color type must the caller coax the
@@ -391,7 +407,7 @@ protected:
     bool fSampleLocationsSupport                     : 1;
     bool fMultisampleDisableSupport                  : 1;
     bool fInstanceAttribSupport                      : 1;
-    bool fUsesMixedSamples                           : 1;
+    bool fMixedSamplesSupport                        : 1;
     bool fUsePrimitiveRestart                        : 1;
     bool fPreferClientSideDynamicBuffers             : 1;
     bool fPreferFullscreenClears                     : 1;
@@ -439,7 +455,7 @@ protected:
     int fMaxTextureSize;
     int fMaxTileSize;
     int fMaxWindowRectangles;
-    int fPreferredInternalSampleCount;
+    int fInternalMultisampleCount;
 
     GrDriverBugWorkarounds fDriverBugWorkarounds;
 

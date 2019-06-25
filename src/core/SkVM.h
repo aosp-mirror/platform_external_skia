@@ -18,11 +18,8 @@ namespace skvm {
 
     class Assembler {
     public:
-        Assembler();
-        ~Assembler();
+        explicit Assembler(void* buf);
 
-        // This program is size() total bytes long starting at data().
-        const uint8_t* data() const;
         size_t size() const;
 
         // Order matters... GP64, Xmm, Ymm values match 4-bit register encoding for each.
@@ -56,7 +53,7 @@ namespace skvm {
         using DstEqXOpY = void(Ymm dst, Ymm x, Ymm y);
         DstEqXOpY vpaddd, vpsubd, vpmulld,
                   vpsubw, vpmullw,
-                  vpand, vpor, vpxor,
+                  vpand, vpor, vpxor, vpandn,
                   vaddps, vsubps, vmulps, vdivps,
                   vfmadd132ps, vfmadd213ps, vfmadd231ps,
                   vpackusdw, vpackuswb;
@@ -107,7 +104,8 @@ namespace skvm {
         // *ptr = ymm or ymm = *ptr, depending on opcode.
         void load_store(int prefix, int map, int opcode, Ymm ymm, GP64 ptr);
 
-        std::vector<uint8_t> fCode;
+        uint8_t* fCode;
+        size_t   fSize;
     };
 
     enum class Op : uint8_t {
@@ -117,7 +115,7 @@ namespace skvm {
         add_f32, sub_f32, mul_f32, div_f32, mad_f32,
         add_i32, sub_i32, mul_i32,
         sub_i16x2, mul_i16x2, shr_i16x2,
-        bit_and, bit_or, bit_xor,
+        bit_and, bit_or, bit_xor, bit_clear,
         shl, shr, sra,
         extract,
         pack,
@@ -125,12 +123,12 @@ namespace skvm {
         to_f32, to_i32,
     };
 
-    using ID = int;  // Could go 16-bit?
+    using Reg = int;
 
-    struct ProgramInstruction {   // d = op(x, y.id/y.imm, z.id/z.imm)
-        Op op;
-        ID d,x;
-        union { ID id; int imm; } y,z;
+    struct ProgramInstruction {   // d = op(x, y, z/imm)
+        Op  op;
+        Reg d,x,y;
+        union { Reg z; int imm; };
     };
 
     class Program {
@@ -175,13 +173,15 @@ namespace skvm {
         mutable JIT              fJIT;
     };
 
+    using Val = int;
+
     struct Arg { int ix; };
-    struct I32 { ID id; };
-    struct F32 { ID id; };
+    struct I32 { Val id; };
+    struct F32 { Val id; };
 
     class Builder {
     public:
-        Program done();
+        Program done() const;
 
         Arg arg(int);
 
@@ -209,9 +209,10 @@ namespace skvm {
         I32 mul_16x2(I32 x, I32 y);
         I32 shr_16x2(I32 x, int bits);
 
-        I32 bit_and(I32 x, I32 y);
-        I32 bit_or (I32 x, I32 y);
-        I32 bit_xor(I32 x, I32 y);
+        I32 bit_and  (I32 x, I32 y);
+        I32 bit_or   (I32 x, I32 y);
+        I32 bit_xor  (I32 x, I32 y);
+        I32 bit_clear(I32 x, I32 y);   // x & ~y
 
         I32 shl(I32 x, int bits);
         I32 shr(I32 x, int bits);
@@ -245,29 +246,23 @@ namespace skvm {
         F32 to_f32(I32 x);
         I32 to_i32(F32 x);
 
-        // Call after done() to make sure all analysis has been performed.
         void dump(SkWStream*) const;
 
     private:
-        // We reserve the last ID as a sentinel meaning none, n/a, null, nil, etc.
-        static const ID NA = ~0;
+        // We reserve the last Val ID as a sentinel meaning none, n/a, null, nil, etc.
+        static const Val NA = ~0;
 
         struct Instruction {
-            Op   op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
-            bool hoist;      // Can this instruction be hoisted outside our implicit loop?
-            ID   life;       // ID of last instruction using this instruction's result.
-            ID   x,y,z;      // Enough arguments for mad().
-            int  immy,immz;  // Immediate bit patterns, shift counts, argument indexes.
+            Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
+            Val x,y,z;      // Enough arguments for mad().
+            int imm;        // Immediate bit pattern, shift count, argument index, etc.
 
             bool operator==(const Instruction& o) const {
-                return op    == o.op
-                    && hoist == o.hoist
-                    && life  == o.life
-                    && x     == o.x
-                    && y     == o.y
-                    && z     == o.z
-                    && immy  == o.immy
-                    && immz  == o.immz;
+                return op  == o.op
+                    && x   == o.x
+                    && y   == o.y
+                    && z   == o.z
+                    && imm == o.imm;
             }
         };
 
@@ -278,21 +273,18 @@ namespace skvm {
             }
             size_t operator()(const Instruction& inst) const {
                 return Hash((uint8_t)inst.op)
-                     ^ Hash(inst.hoist)
-                     ^ Hash(inst.life)
                      ^ Hash(inst.x)
                      ^ Hash(inst.y)
                      ^ Hash(inst.z)
-                     ^ Hash(inst.immy)
-                     ^ Hash(inst.immz);
+                     ^ Hash(inst.imm);
             }
         };
 
-        ID push(Op, ID x, ID y=NA, ID z=NA, int immy=0, int immz=0);
-        bool isZero(ID) const;
+        Val push(Op, Val x, Val y=NA, Val z=NA, int imm=0);
+        bool isZero(Val) const;
 
-        SkTHashMap<Instruction, ID, InstructionHash>         fIndex;
-        std::vector<Instruction>                             fProgram;
+        SkTHashMap<Instruction, Val, InstructionHash> fIndex;
+        std::vector<Instruction>                      fProgram;
     };
 
     // TODO: comparison operations, if_then_else

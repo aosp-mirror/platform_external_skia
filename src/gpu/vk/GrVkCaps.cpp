@@ -17,12 +17,15 @@
 #include "src/gpu/vk/GrVkTexture.h"
 #include "src/gpu/vk/GrVkUtil.h"
 
+#ifdef SK_BUILD_FOR_ANDROID
+#include <sys/system_properties.h>
+#endif
+
 GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
                    VkPhysicalDevice physDev, const VkPhysicalDeviceFeatures2& features,
                    uint32_t instanceVersion, uint32_t physicalDeviceVersion,
-                   const GrVkExtensions& extensions)
-    : INHERITED(contextOptions) {
-
+                   const GrVkExtensions& extensions, GrProtected isProtected)
+        : INHERITED(contextOptions) {
     /**************************************************************************
      * GrCaps fields
      **************************************************************************/
@@ -50,7 +53,8 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
 
     fShaderCaps.reset(new GrShaderCaps(contextOptions));
 
-    this->init(contextOptions, vkInterface, physDev, features, physicalDeviceVersion, extensions);
+    this->init(contextOptions, vkInterface, physDev, features, physicalDeviceVersion, extensions,
+               isProtected);
 }
 
 bool GrVkCaps::initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
@@ -63,7 +67,7 @@ bool GrVkCaps::initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc*
     // For CopyImage we can make a simple texture, for ResolveImage we require the dst to be a
     // render target as well.
     desc->fConfig = src->config();
-    if (src->numColorSamples() > 1 || src->asTextureProxy()) {
+    if (src->numSamples() > 1 || src->asTextureProxy()) {
         desc->fFlags = kRenderTarget_GrSurfaceFlag;
     } else {
         // Just going to use CopyImage here
@@ -194,6 +198,10 @@ bool GrVkCaps::canCopyAsResolve(GrPixelConfig dstConfig, int dstSampleCnt, bool 
 
 bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                                 const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+    if (src->isProtected() && !dst->isProtected()) {
+        return false;
+    }
+
     GrPixelConfig dstConfig = dst->config();
     GrPixelConfig srcConfig = src->config();
 
@@ -213,7 +221,7 @@ bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy*
         if (rtProxy->wrapsVkSecondaryCB()) {
             return false;
         }
-        dstSampleCnt = rtProxy->numColorSamples();
+        dstSampleCnt = rtProxy->numSamples();
     }
     if (const GrRenderTargetProxy* rtProxy = src->asRenderTargetProxy()) {
         // Copying to or from render targets that wrap a secondary command buffer is not allowed
@@ -222,7 +230,7 @@ bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy*
         if (rtProxy->wrapsVkSecondaryCB()) {
             return false;
         }
-        srcSampleCnt = rtProxy->numColorSamples();
+        srcSampleCnt = rtProxy->numSamples();
     }
     SkASSERT((dstSampleCnt > 0) == SkToBool(dst->asRenderTargetProxy()));
     SkASSERT((srcSampleCnt > 0) == SkToBool(src->asRenderTargetProxy()));
@@ -272,7 +280,8 @@ template<typename T> T* get_extension_feature_struct(const VkPhysicalDeviceFeatu
 
 void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
                     VkPhysicalDevice physDev, const VkPhysicalDeviceFeatures2& features,
-                    uint32_t physicalDeviceVersion, const GrVkExtensions& extensions) {
+                    uint32_t physicalDeviceVersion, const GrVkExtensions& extensions,
+                    GrProtected isProtected) {
     VkPhysicalDeviceProperties properties;
     GR_VK_CALL(vkInterface, GetPhysicalDeviceProperties(physDev, &properties));
 
@@ -360,6 +369,13 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
     // will return a key of 0.
     fYcbcrInfos.push_back(GrVkYcbcrConversionInfo());
 
+    if ((isProtected == GrProtected::kYes) &&
+        (physicalDeviceVersion >= VK_MAKE_VERSION(1, 1, 0))) {
+        fSupportsProtectedMemory = true;
+        fAvoidUpdateBuffers = true;
+        fShouldAlwaysUseDedicatedImageMemory = true;
+    }
+
     this->initGrCaps(vkInterface, physDev, properties, memoryProperties, features, extensions);
     this->initShaderCaps(properties, features);
 
@@ -424,6 +440,17 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
 #elif defined(SK_BUILD_FOR_ANDROID)
     if (kImagination_VkVendor == properties.vendorID) {
         fMustSleepOnTearDown = true;
+    }
+#endif
+
+#if defined(SK_BUILD_FOR_ANDROID)
+    // Protected memory features have problems in Android P and earlier.
+    if (fSupportsProtectedMemory && (kQualcomm_VkVendor == properties.vendorID)) {
+        char androidAPIVersion[PROP_VALUE_MAX];
+        int strLength = __system_property_get("ro.build.version.sdk", androidAPIVersion);
+        if (strLength == 0 || atoi(androidAPIVersion) <= 28) {
+            fSupportsProtectedMemory = false;
+        }
     }
 #endif
 
@@ -777,6 +804,14 @@ void GrVkCaps::FormatInfo::init(const GrVkInterface* interface,
     }
 }
 
+bool GrVkCaps::isFormatTexturable(SkColorType, const GrBackendFormat& format) const {
+    if (!format.getVkFormat()) {
+        return false;
+    }
+
+    return this->isFormatTexturable(*format.getVkFormat());
+}
+
 bool GrVkCaps::isFormatTexturable(VkFormat format) const {
     if (!GrVkFormatIsSupported(format)) {
         return false;
@@ -796,6 +831,15 @@ bool GrVkCaps::isConfigTexturable(GrPixelConfig config) const {
 
 bool GrVkCaps::isFormatRenderable(VkFormat format) const {
     return this->maxRenderTargetSampleCount(format) > 0;
+}
+
+int GrVkCaps::getRenderTargetSampleCount(int requestedCount,
+                                         SkColorType, const GrBackendFormat& format) const {
+    if (!format.getVkFormat()) {
+        return 0;
+    }
+
+    return this->getRenderTargetSampleCount(requestedCount, *format.getVkFormat());
 }
 
 int GrVkCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const {
@@ -837,6 +881,14 @@ int GrVkCaps::getRenderTargetSampleCount(int requestedCount, VkFormat format) co
     return 0;
 }
 
+int GrVkCaps::maxRenderTargetSampleCount(SkColorType, const GrBackendFormat& format) const {
+    if (!format.getVkFormat()) {
+        return 0;
+    }
+
+    return this->maxRenderTargetSampleCount(*format.getVkFormat());
+}
+
 int GrVkCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
     // Currently we don't allow RGB_888X to be renderable because we don't have a way to handle
     // blends that reference dst alpha when the values in the dst alpha channel are uninitialized.
@@ -861,19 +913,22 @@ int GrVkCaps::maxRenderTargetSampleCount(VkFormat format) const {
     return table[table.count() - 1];
 }
 
-bool GrVkCaps::surfaceSupportsReadPixels(const GrSurface* surface) const {
+GrCaps::ReadFlags GrVkCaps::surfaceSupportsReadPixels(const GrSurface* surface) const {
+    if (surface->isProtected()) {
+        return kProtected_ReadFlag;
+    }
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
         // We can't directly read from a VkImage that has a ycbcr sampler.
         if (tex->ycbcrConversionInfo().isValid()) {
-            return false;
+            return kRequiresCopy_ReadFlag;
         }
     }
-    return true;
+    return kSupported_ReadFlag;
 }
 
 bool GrVkCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     if (auto rt = surface->asRenderTarget()) {
-        return rt->numColorSamples() <= 1 && SkToBool(surface->asTexture());
+        return rt->numSamples() <= 1 && SkToBool(surface->asTexture());
     }
     // We can't write to a texture that has a ycbcr sampler.
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
@@ -1088,7 +1143,7 @@ static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorTyp
         // Experimental (for Y416 and mutant P016/P010)
         case GrColorType::kRGBA_16161616:
             return VK_FORMAT_R16G16B16A16_UNORM == vkFormat;
-        case GrColorType::kRG_half:
+        case GrColorType::kRG_F16:
             return VK_FORMAT_R16G16_SFLOAT == vkFormat;
     }
     SK_ABORT("Unknown color type");

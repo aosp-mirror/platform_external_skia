@@ -1778,6 +1778,7 @@ cc_test {
         "tests/VkDrawableTest.cpp",
         "tests/VkHardwareBufferTest.cpp",
         "tests/VkPriorityExtensionTest.cpp",
+        "tests/VkProtectedContextTest.cpp",
         "tests/VkWrapTests.cpp",
         "tests/VptrTest.cpp",
         "tests/WindowRectanglesTest.cpp",

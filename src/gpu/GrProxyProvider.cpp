@@ -210,14 +210,14 @@ sk_sp<GrTextureProxy> GrProxyProvider::createTextureProxy(sk_sp<SkImage> srcImag
     }
 
     const SkImageInfo& info = srcImage->imageInfo();
-    GrPixelConfig config = SkImageInfo2GrPixelConfig(info);
+    SkColorType ct = info.colorType();
 
-    if (kUnknown_GrPixelConfig == config) {
+    GrBackendFormat format = this->caps()->getBackendFormatFromColorType(ct);
+    if (!format.isValid()) {
         return nullptr;
     }
 
-    SkColorType ct = info.colorType();
-    if (!this->caps()->isConfigTexturable(config)) {
+    if (!this->caps()->isFormatTexturable(ct, format)) {
         SkBitmap copy8888;
         if (!copy8888.tryAllocPixels(info.makeColorType(kRGBA_8888_SkColorType)) ||
             !srcImage->readPixels(copy8888.pixmap(), 0, 0)) {
@@ -225,26 +225,23 @@ sk_sp<GrTextureProxy> GrProxyProvider::createTextureProxy(sk_sp<SkImage> srcImag
         }
         copy8888.setImmutable();
         srcImage = SkMakeImageFromRasterBitmap(copy8888, kNever_SkCopyPixelsMode);
-        config = kRGBA_8888_GrPixelConfig;
         ct = kRGBA_8888_SkColorType;
-    }
-
-    GrBackendFormat format = this->caps()->getBackendFormatFromColorType(ct);
-    if (!format.isValid()) {
-        return nullptr;
-    }
-
-    if (SkToBool(descFlags & kRenderTarget_GrSurfaceFlag)) {
-        sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, config);
-        if (!sampleCnt) {
+        format = this->caps()->getBackendFormatFromColorType(ct);
+        if (!format.isValid()) {
             return nullptr;
         }
     }
 
     if (SkToBool(descFlags & kRenderTarget_GrSurfaceFlag)) {
-        if (this->caps()->usesMixedSamples() && sampleCnt > 1) {
-            surfaceFlags |= GrInternalSurfaceFlags::kMixedSampled;
+        sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, ct, format);
+        if (!sampleCnt) {
+            return nullptr;
         }
+    }
+
+    GrPixelConfig config = SkColorType2GrPixelConfig(ct);
+    if (kUnknown_GrPixelConfig == config) {
+        return nullptr;
     }
 
     GrSurfaceDesc desc;
@@ -334,9 +331,13 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxyFromBitmap(const SkBitmap& bit
     }
 
     SkColorType colorType = bitmap.info().colorType();
+    GrBackendFormat format = this->caps()->getBackendFormatFromColorType(colorType);
+    if (!format.isValid()) {
+        return nullptr;
+    }
     GrSurfaceDesc desc = GrImageInfoToSurfaceDesc(bitmap.info());
 
-    if (!this->caps()->isConfigTexturable(desc.fConfig)) {
+    if (!this->caps()->isFormatTexturable(colorType, format)) {
         SkBitmap copy8888;
         if (!copy8888.tryAllocPixels(bitmap.info().makeColorType(kRGBA_8888_SkColorType)) ||
             !bitmap.readPixels(copy8888.pixmap())) {
@@ -346,12 +347,12 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxyFromBitmap(const SkBitmap& bit
         baseLevel = SkMakeImageFromRasterBitmap(copy8888, kNever_SkCopyPixelsMode);
         desc.fConfig = kRGBA_8888_GrPixelConfig;
         colorType = kRGBA_8888_SkColorType;
+        format = this->caps()->getBackendFormatFromColorType(colorType);
+        if (!format.isValid()) {
+            return nullptr;
+        }
     }
 
-    const GrBackendFormat format = this->caps()->getBackendFormatFromColorType(colorType);
-    if (!format.isValid()) {
-        return nullptr;
-    }
 
     SkPixmap pixmap;
     SkAssertResult(baseLevel->peekPixels(&pixmap));
@@ -751,14 +752,6 @@ sk_sp<GrTextureProxy> GrProxyProvider::createLazyProxy(LazyInstantiateCallback&&
 
     SkASSERT(validate_backend_format_and_config(this->caps(), format, desc.fConfig));
 
-#ifdef SK_DEBUG
-    if (SkToBool(kRenderTarget_GrSurfaceFlag & desc.fFlags)) {
-        if (SkToBool(surfaceFlags & GrInternalSurfaceFlags::kMixedSampled)) {
-            SkASSERT(this->caps()->usesMixedSamples() && desc.fSampleCnt > 1);
-        }
-    }
-#endif
-
     GrColorType colorType = GrPixelConfigToColorType(desc.fConfig);
     GrSwizzle texSwizzle = this->caps()->getTextureSwizzle(format, colorType);
     GrSwizzle outSwizzle = this->caps()->getOutputSwizzle(format, colorType);
@@ -787,12 +780,6 @@ sk_sp<GrRenderTargetProxy> GrProxyProvider::createLazyRenderTargetProxy(
 
     SkASSERT(SkToBool(kRenderTarget_GrSurfaceFlag & desc.fFlags));
     SkASSERT(validate_backend_format_and_config(this->caps(), format, desc.fConfig));
-
-#ifdef SK_DEBUG
-    if (SkToBool(surfaceFlags & GrInternalSurfaceFlags::kMixedSampled)) {
-        SkASSERT(this->caps()->usesMixedSamples() && desc.fSampleCnt > 1);
-    }
-#endif
 
     using LazyInstantiationType = GrSurfaceProxy::LazyInstantiationType;
     // For non-ddl draws always make lazy proxy's single use.
@@ -829,9 +816,6 @@ sk_sp<GrTextureProxy> GrProxyProvider::MakeFullyLazyProxy(
     GrInternalSurfaceFlags surfaceFlags = GrInternalSurfaceFlags::kNone;
     if (Renderable::kYes == renderable) {
         desc.fFlags = kRenderTarget_GrSurfaceFlag;
-        if (sampleCnt > 1 && caps.usesMixedSamples()) {
-            surfaceFlags |= GrInternalSurfaceFlags::kMixedSampled;
-        }
     }
     desc.fWidth = -1;
     desc.fHeight = -1;

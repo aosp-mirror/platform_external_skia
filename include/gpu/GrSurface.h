@@ -85,13 +85,10 @@ public:
      */
     bool readOnly() const { return fSurfaceFlags & GrInternalSurfaceFlags::kReadOnly; }
 
-protected:
-    void setHasMixedSamples() {
-        SkASSERT(this->asRenderTarget());
-        fSurfaceFlags |= GrInternalSurfaceFlags::kMixedSampled;
-    }
-    bool hasMixedSamples() const { return fSurfaceFlags & GrInternalSurfaceFlags::kMixedSampled; }
+    // Returns true if we are working with protected content.
+    bool isProtected() const { return fIsProtected == GrProtected::kYes; }
 
+protected:
     void setGLRTFBOIDIs0() {
         SkASSERT(this->asRenderTarget());
         fSurfaceFlags |= GrInternalSurfaceFlags::kGLRTFBOIDIs0;
@@ -118,7 +115,8 @@ protected:
             , fConfig(desc.fConfig)
             , fWidth(desc.fWidth)
             , fHeight(desc.fHeight)
-            , fSurfaceFlags(GrInternalSurfaceFlags::kNone) {
+            , fSurfaceFlags(GrInternalSurfaceFlags::kNone)
+            , fIsProtected(desc.fIsProtected) {
     }
 
     ~GrSurface() override {
@@ -146,6 +144,7 @@ private:
     int                        fWidth;
     int                        fHeight;
     GrInternalSurfaceFlags     fSurfaceFlags;
+    GrProtected                fIsProtected;
     sk_sp<GrRefCntedCallback>  fReleaseHelper;
 
     typedef GrGpuResource INHERITED;
