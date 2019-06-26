@@ -2805,7 +2805,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     // See http://crbug.com/710443
 #ifdef SK_BUILD_FOR_MAC
-    if (kIntel6xxx_GrGLRenderer == ctxInfo.renderer()) {
+    if (kIntelBroadwell_GrGLRenderer == ctxInfo.renderer()) {
         fClearToBoundaryValuesIsBroken = true;
     }
 #endif
@@ -3006,11 +3006,12 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     fUnpackRowLengthSupport = false;
 #endif
 
-    // CCPR edge AA is busted on Mesa, Sandy Bridge/Bay Trail.
+    // CCPR edge AA is busted on Mesa, Sandy Bridge/Valley View (Bay Trail).
     // http://skbug.com/8162
     if (kMesa_GrGLDriver == ctxInfo.driver() &&
         (kIntelSandyBridge_GrGLRenderer == ctxInfo.renderer() ||
-         kIntelBayTrail_GrGLRenderer == ctxInfo.renderer())) {
+         kIntelIvyBridge_GrGLRenderer == ctxInfo.renderer() ||
+         kIntelValleyView_GrGLRenderer == ctxInfo.renderer())) {
         fDriverBlacklistCCPR = true;
     }
 
@@ -3106,6 +3107,25 @@ bool GrGLCaps::onIsWindowRectanglesSupportedForRT(const GrBackendRenderTarget& b
     SkAssertResult(backendRT.getGLFramebufferInfo(&fbInfo));
     // Window Rectangles are not supported for FBO 0;
     return fbInfo.fFBOID != 0;
+}
+
+static bool format_is_srgb(GrGLenum format) {
+    SkASSERT(GrGLFormatIsSupported(format));
+
+    switch (format) {
+        case GR_GL_SRGB8_ALPHA8:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool GrGLCaps::isFormatSRGB(const GrBackendFormat& format) const {
+    if (!format.getGLFormat()) {
+        return false;
+    }
+
+    return format_is_srgb(*format.getGLFormat());
 }
 
 bool GrGLCaps::isFormatTexturable(SkColorType ct, const GrBackendFormat& format) const {
