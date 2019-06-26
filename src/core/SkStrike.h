@@ -39,21 +39,25 @@ public:
              std::unique_ptr<SkScalerContext> scaler,
              const SkFontMetrics&);
 
-    /** Return true if glyph is cached. */
-    bool isGlyphCached(SkGlyphID glyphID, SkFixed x, SkFixed y) const;
-
     // Return a glyph. Create it if it doesn't exist, and initialize the glyph with metrics and
-    // advances.
+    // advances using a scaler.
     SkGlyph* glyph(SkPackedGlyphID packedID);
     SkGlyph* glyph(SkGlyphID glyphID);
-    SkGlyph* glyphFromPrototype(const SkGlyphPrototype& p, void* image = nullptr);
     SkGlyph* glyph(SkGlyphID, SkPoint);
+
+    // Return a glyph.  Create it if it doesn't exist, and initialize with the prototype.
+    SkGlyph* glyphFromPrototype(const SkGlyphPrototype& p, void* image = nullptr);
 
     // Return a glyph or nullptr if it does not exits in the strike.
     SkGlyph* glyphOrNull(SkPackedGlyphID id) const;
 
-    // Return a glyph. Create it if it doesn't exist, but zero the data.
-    SkGlyph* uninitializedGlyph(SkPackedGlyphID id);
+    const void* prepareImage(SkGlyph* glyph);
+
+    // Lookup (or create if needed) the toGlyph using toID. If that glyph is not initialized with
+    // an image, then use the information in from to initialize the width, height top, left,
+    // format and image of the toGlyph. This is mainly used preserving the glyph if it was
+    // created by a search of desperation.
+    SkGlyph* mergeGlyphAndImage(SkPackedGlyphID toID, const SkGlyph& from);
 
     // If the path has never been set, then use the scaler context to add the glyph.
     const SkPath* preparePath(SkGlyph*) override;
@@ -70,15 +74,6 @@ public:
     /** Return the number of glyphs currently cached. */
     int countCachedGlyphs() const;
 
-    /** Return the image associated with the glyph. If it has not been generated this will
-        trigger that.
-    */
-    const void* findImage(const SkGlyph&);
-
-    /** Initializes the image associated with the glyph with |data|.
-     */
-    void initializeImage(const void* data, size_t size, SkGlyph*);
-
     /** If the advance axis intersects the glyph's path, append the positions scaled and offset
         to the array (if non-null), and set the count to the updated array length.
     */
@@ -93,7 +88,6 @@ public:
      */
     const SkGlyph* getCachedGlyphAnySubPix(SkGlyphID,
                                            SkPackedGlyphID vetoID = SkPackedGlyphID()) const;
-    void initializeGlyphFromFallback(SkGlyph* glyph, const SkGlyph&);
 
     /** Return the vertical metrics for this strike.
     */
