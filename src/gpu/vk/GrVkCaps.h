@@ -32,6 +32,8 @@ public:
              uint32_t instanceVersion, uint32_t physicalDeviceVersion,
              const GrVkExtensions& extensions, GrProtected isProtected = GrProtected::kNo);
 
+    bool isFormatSRGB(const GrBackendFormat& format) const override;
+
     bool isFormatTexturable(SkColorType, const GrBackendFormat&) const override;
     bool isFormatTexturable(VkFormat) const;
     bool isConfigTexturable(GrPixelConfig config) const override;
@@ -167,6 +169,7 @@ public:
 
     GrBackendFormat getBackendFormatFromGrColorType(GrColorType ct,
                                                     GrSRGBEncoded srgbEncoded) const override;
+    GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
     GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;

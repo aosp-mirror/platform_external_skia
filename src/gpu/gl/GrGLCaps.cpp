@@ -333,11 +333,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     GrShaderCaps* shaderCaps = fShaderCaps.get();
 
     shaderCaps->fPathRenderingSupport = this->hasPathRenderingSupport(ctxInfo, gli);
-#if GR_TEST_UTILS
-    if (contextOptions.fSuppressPathRendering) {
-        shaderCaps->fPathRenderingSupport = false;
-    }
-#endif
 
     // Enable supported shader-related caps
     if (GR_IS_GR_GL(standard)) {
@@ -2805,7 +2800,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     // See http://crbug.com/710443
 #ifdef SK_BUILD_FOR_MAC
-    if (kIntel6xxx_GrGLRenderer == ctxInfo.renderer()) {
+    if (kIntelBroadwell_GrGLRenderer == ctxInfo.renderer()) {
         fClearToBoundaryValuesIsBroken = true;
     }
 #endif
@@ -3006,11 +3001,12 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     fUnpackRowLengthSupport = false;
 #endif
 
-    // CCPR edge AA is busted on Mesa, Sandy Bridge/Bay Trail.
+    // CCPR edge AA is busted on Mesa, Sandy Bridge/Valley View (Bay Trail).
     // http://skbug.com/8162
     if (kMesa_GrGLDriver == ctxInfo.driver() &&
         (kIntelSandyBridge_GrGLRenderer == ctxInfo.renderer() ||
-         kIntelBayTrail_GrGLRenderer == ctxInfo.renderer())) {
+         kIntelIvyBridge_GrGLRenderer == ctxInfo.renderer() ||
+         kIntelValleyView_GrGLRenderer == ctxInfo.renderer())) {
         fDriverBlacklistCCPR = true;
     }
 
@@ -3106,6 +3102,25 @@ bool GrGLCaps::onIsWindowRectanglesSupportedForRT(const GrBackendRenderTarget& b
     SkAssertResult(backendRT.getGLFramebufferInfo(&fbInfo));
     // Window Rectangles are not supported for FBO 0;
     return fbInfo.fFBOID != 0;
+}
+
+static bool format_is_srgb(GrGLenum format) {
+    SkASSERT(GrGLFormatIsSupported(format));
+
+    switch (format) {
+        case GR_GL_SRGB8_ALPHA8:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool GrGLCaps::isFormatSRGB(const GrBackendFormat& format) const {
+    if (!format.getGLFormat()) {
+        return false;
+    }
+
+    return format_is_srgb(*format.getGLFormat());
 }
 
 bool GrGLCaps::isFormatTexturable(SkColorType ct, const GrBackendFormat& format) const {
@@ -3343,6 +3358,16 @@ GrBackendFormat GrGLCaps::getBackendFormatFromGrColorType(GrColorType ct,
     return GrBackendFormat::MakeGL(this->configSizedInternalFormat(config), GR_GL_TEXTURE_2D);
 }
 
+GrBackendFormat GrGLCaps::getBackendFormatFromCompressionType(
+        SkImage::CompressionType compressionType) const {
+    switch (compressionType) {
+        case SkImage::kETC1_CompressionType:
+            return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D);
+    }
+    SK_ABORT("Invalid compression type");
+    return {};
+}
+
 #ifdef SK_DEBUG
 static bool format_color_type_valid_pair(GrGLenum format, GrColorType colorType) {
     switch (colorType) {
@@ -3357,7 +3382,10 @@ static bool format_color_type_valid_pair(GrGLenum format, GrColorType colorType)
         case GrColorType::kRGBA_8888:
             return GR_GL_RGBA8 == format || GR_GL_SRGB8_ALPHA8 == format;
         case GrColorType::kRGB_888x:
-            return GR_GL_RGB8 == format || GR_GL_RGBA8 == format;
+            GR_STATIC_ASSERT(GrCompressionTypeClosestColorType(SkImage::kETC1_CompressionType) ==
+                             GrColorType::kRGB_888x);
+            return GR_GL_RGB8 == format || GR_GL_RGBA8 == format ||
+                   GR_GL_COMPRESSED_RGB8_ETC2 == format || GR_GL_COMPRESSED_ETC1_RGB8 == format;
         case GrColorType::kRG_88:
             return GR_GL_RG8 == format;
         case GrColorType::kBGRA_8888:
@@ -3376,8 +3404,6 @@ static bool format_color_type_valid_pair(GrGLenum format, GrColorType colorType)
             return GR_GL_RG32F == format;
         case GrColorType::kRGBA_F32:
             return GR_GL_RGBA32F == format;
-        case GrColorType::kRGB_ETC1:
-            return GR_GL_COMPRESSED_RGB8_ETC2 == format || GR_GL_COMPRESSED_ETC1_RGB8 == format;
         case GrColorType::kR_16:
             return GR_GL_R16 == format;
         case GrColorType::kRG_1616:

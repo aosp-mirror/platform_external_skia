@@ -383,36 +383,69 @@ GrGLRenderer GrGLGetRendererFromStrings(const char* rendererString,
         }
 
         if (const char* intelString = strstr(rendererString, "Intel")) {
-            if (0 == strcmp("Intel Iris Pro OpenGL Engine", intelString)) {
-                return kIntelIrisPro_GrGLRenderer;
+            // These generic strings seem to always come from Haswell: Iris 5100 or Iris Pro 5200
+            if (0 == strcmp("Intel Iris OpenGL Engine", intelString) ||
+                0 == strcmp("Intel Iris Pro OpenGL Engine", intelString)) {
+                return kIntelHaswell_GrGLRenderer;
             }
             if (strstr(intelString, "Sandybridge")) {
                 return kIntelSandyBridge_GrGLRenderer;
             }
             if (strstr(intelString, "Bay Trail")) {
-                return kIntelBayTrail_GrGLRenderer;
+                return kIntelValleyView_GrGLRenderer;
             }
-            int intelNumber;
-            if (sscanf(intelString, "Intel(R) Iris(TM) Graphics %d", &intelNumber) ||
-                sscanf(intelString, "Intel(R) Iris(TM) Pro Graphics %d", &intelNumber) ||
-                sscanf(intelString, "Intel(R) Iris(TM) Pro Graphics P%d", &intelNumber) ||
-                sscanf(intelString, "Intel(R) Iris(R) Graphics %d", &intelNumber) ||
-                sscanf(intelString, "Intel(R) Iris(R) Pro Graphics %d", &intelNumber) ||
-                sscanf(intelString, "Intel(R) Iris(R) Pro Graphics P%d", &intelNumber) ||
-                sscanf(intelString, "Intel(R) HD Graphics %d", &intelNumber) ||
-                sscanf(intelString, "Intel(R) HD Graphics P%d", &intelNumber)) {
+            // There are many possible intervening strings here:
+            // 'Intel(R)' is a common prefix
+            // 'Iris' may appear, followed by '(R)' or '(TM)'
+            // 'Iris' can then be followed by 'Graphics', 'Pro Graphics', or 'Plus Graphics'
+            // If 'Iris' isn't there, we might have 'HD Graphics' or 'UHD Graphics'
+            //
+            // In all cases, though, we end with 'Graphics ', an optional 'P', and a number,
+            // so just skip to that and handle two cases:
+            if (const char* intelGfxString = strstr(intelString, "Graphics")) {
+                int intelNumber;
+                if (sscanf(intelGfxString, "Graphics %d", &intelNumber) ||
+                    sscanf(intelGfxString, "Graphics P%d", &intelNumber)) {
 
-                if (intelNumber >= 4000 && intelNumber < 5000) {
-                    return kIntel4xxx_GrGLRenderer;
-                }
-                if (intelNumber >= 6000 && intelNumber < 7000) {
-                    return kIntel6xxx_GrGLRenderer;
-                }
-                if (intelNumber >= 2000 && intelNumber < 4000) {
-                    return kIntelSandyBridge_GrGLRenderer;
-                }
-                if (intelNumber >= 500 && intelNumber < 600) {
-                    return kIntelSkylake_GrGLRenderer;
+                    if (intelNumber == 2000 || intelNumber == 3000) {
+                        return kIntelSandyBridge_GrGLRenderer;
+                    }
+                    if (intelNumber == 2500 || intelNumber == 4000) {
+                        return kIntelIvyBridge_GrGLRenderer;
+                    }
+                    if (intelNumber >= 4200 && intelNumber <= 5200) {
+                        return kIntelHaswell_GrGLRenderer;
+                    }
+                    if (intelNumber >= 400 && intelNumber <= 405) {
+                        return kIntelCherryView_GrGLRenderer;
+                    }
+                    if (intelNumber >= 5300 && intelNumber <= 6300) {
+                        return kIntelBroadwell_GrGLRenderer;
+                    }
+                    if (intelNumber >= 500 && intelNumber <= 505) {
+                        return kIntelApolloLake_GrGLRenderer;
+                    }
+                    if (intelNumber >= 510 && intelNumber <= 580) {
+                        return kIntelSkyLake_GrGLRenderer;
+                    }
+                    if (intelNumber >= 600 && intelNumber <= 605) {
+                        return kIntelGeminiLake_GrGLRenderer;
+                    }
+                    // 610 and 630 are reused from KabyLake to CoffeeLake. The CoffeeLake variants
+                    // are "UHD Graphics", while the KabyLake ones are "HD Graphics"
+                    if (intelNumber == 610 || intelNumber == 630) {
+                        return strstr(intelString, "UHD") ? kIntelCoffeeLake_GrGLRenderer
+                                                          : kIntelKabyLake_GrGLRenderer;
+                    }
+                    if (intelNumber >= 610 && intelNumber <= 650) {
+                        return kIntelKabyLake_GrGLRenderer;
+                    }
+                    if (intelNumber == 655) {
+                        return kIntelCoffeeLake_GrGLRenderer;
+                    }
+                    if (intelNumber >= 910 && intelNumber <= 950) {
+                        return kIntelIceLake_GrGLRenderer;
+                    }
                 }
             }
         }
@@ -569,36 +602,17 @@ bool GrGLFormatIsCompressed(GrGLenum glFormat) {
         default:
             return false;
     }
-    SK_ABORT("Invalid format");
-    return false;
 }
 
-GrCompression GrGLFormat2Compression(GrGLenum glFormat) {
+bool GrGLFormatToCompressionType(GrGLenum glFormat, SkImage::CompressionType* compressionType) {
     switch (glFormat) {
         case GR_GL_COMPRESSED_RGB8_ETC2: // fall through
         case GR_GL_COMPRESSED_ETC1_RGB8:
-            return GrCompression::kETC1;
+            *compressionType = SkImage::kETC1_CompressionType;
+            return true;
         default:
-            return GrCompression::kNone;
+            return false;
     }
-    SK_ABORT("Invalid format");
-    return GrCompression::kNone;
-}
-
-size_t GrGLFormatCompressedDataSize(GrGLenum glFormat, int width, int height) {
-    SkASSERT(GrGLFormatIsCompressed(glFormat));
-
-    switch (glFormat) {
-        case GR_GL_COMPRESSED_RGB8_ETC2:  // fall through
-        case GR_GL_COMPRESSED_ETC1_RGB8:
-            return GrETC1CompressedDataSize(width, height);
-        default:
-            SK_ABORT("Unknown compressed format");
-            return 4 * width * height;
-    }
-
-    SK_ABORT("Unknown compressed format");
-    return 4 * width * height;
 }
 
 size_t GrGLBytesPerFormat(GrGLenum glFormat) {
@@ -645,4 +659,34 @@ size_t GrGLBytesPerFormat(GrGLenum glFormat) {
 
     SK_ABORT("Invalid GL format");
     return 0;
+}
+
+bool GrGLFormatIsSupported(GrGLenum format) {
+    switch (format) {
+        case GR_GL_LUMINANCE8:
+        case GR_GL_ALPHA8:
+        case GR_GL_R8:
+        case GR_GL_RGB565:
+        case GR_GL_RGBA4:
+        case GR_GL_RG8:
+        case GR_GL_R16F:
+        case GR_GL_R16:
+        case GR_GL_RGB8:
+        case GR_GL_RGBA8:
+        case GR_GL_SRGB8_ALPHA8:
+        case GR_GL_BGRA8:
+        case GR_GL_RGB10_A2:
+        case GR_GL_RG16:
+        case GR_GL_RGBA16F:
+        case GR_GL_RG32F:
+        case GR_GL_RGBA32F:
+        case GR_GL_COMPRESSED_RGB8_ETC2:
+        case GR_GL_COMPRESSED_ETC1_RGB8:
+        // Experimental (for Y416 and mutant P016/P010)
+        case GR_GL_RG16F:
+        case GR_GL_RGBA16:
+            return true;
+        default:
+            return false;
+    }
 }

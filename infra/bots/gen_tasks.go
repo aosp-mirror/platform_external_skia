@@ -370,7 +370,7 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 		ec := []string{}
 		if val := parts["extra_config"]; val != "" {
 			ec = strings.Split(val, "_")
-			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM"}
+			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM", "NonNVPR"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !util.In(part, ignore) {
@@ -713,7 +713,8 @@ func bundleRecipes(b *specs.TasksCfgBuilder) string {
 		EnvPrefixes: map[string][]string{
 			"PATH": []string{"cipd_bin_packages", "cipd_bin_packages/bin"},
 		},
-		Isolate: relpath("swarm_recipe.isolate"),
+		Idempotent: true,
+		Isolate:    relpath("swarm_recipe.isolate"),
 	})
 	return BUNDLE_RECIPES_NAME
 }
@@ -731,7 +732,8 @@ func buildTaskDrivers(b *specs.TasksCfgBuilder) string {
 		EnvPrefixes: map[string][]string{
 			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
 		},
-		Isolate: "task_drivers.isolate",
+		Idempotent: true,
+		Isolate:    "task_drivers.isolate",
 	})
 	return BUILD_TASK_DRIVERS_NAME
 }
@@ -818,6 +820,7 @@ func isolateCIPDAsset(b *specs.TasksCfgBuilder, name string) string {
 		},
 		Command:    []string{"/bin/cp", "-rL", asset.path, "${ISOLATED_OUTDIR}"},
 		Dimensions: linuxGceDimensions(MACHINE_TYPE_SMALL),
+		Idempotent: true,
 		Isolate:    relpath("empty.isolate"),
 	})
 	return name

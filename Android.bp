@@ -840,6 +840,7 @@ cc_library_static {
           "src/sksl/SkSLSPIRVCodeGenerator.cpp",
           "src/xps/SkXPSDevice.cpp",
           "src/xps/SkXPSDocument.cpp",
+          "tools/SkSharingProc.cpp",
           "third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
         ],
         local_include_dirs: [

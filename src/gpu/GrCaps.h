@@ -157,6 +157,8 @@ public:
         return this->maxWindowRectangles() > 0 && this->onIsWindowRectanglesSupportedForRT(rt);
     }
 
+    virtual bool isFormatSRGB(const GrBackendFormat&) const = 0;
+
     virtual bool isFormatTexturable(SkColorType, const GrBackendFormat&) const = 0;
     virtual bool isConfigTexturable(GrPixelConfig) const = 0;
 
@@ -364,6 +366,8 @@ public:
     virtual GrBackendFormat getBackendFormatFromGrColorType(GrColorType ct,
                                                             GrSRGBEncoded srgbEncoded) const = 0;
     GrBackendFormat getBackendFormatFromColorType(SkColorType ct) const;
+
+    virtual GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const = 0;
 
     /**
      * The CLAMP_TO_BORDER wrap mode for texture coordinates was added to desktop GL in 1.3, and

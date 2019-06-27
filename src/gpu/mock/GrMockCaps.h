@@ -36,6 +36,15 @@ public:
         this->applyOptionsOverrides(contextOptions);
     }
 
+    bool isFormatSRGB(const GrBackendFormat& format) const override {
+        if (!format.getMockFormat()) {
+            return false;
+        }
+
+        return kSRGBA_8888_GrPixelConfig == *format.getMockFormat() ||
+               kSBGRA_8888_GrPixelConfig == *format.getMockFormat();
+    }
+
     bool isFormatTexturable(SkColorType, const GrBackendFormat& format) const override {
         if (!format.getMockFormat()) {
             return false;
@@ -140,6 +149,16 @@ public:
             return GrBackendFormat();
         }
         return GrBackendFormat::MakeMock(config);
+    }
+
+    GrBackendFormat getBackendFormatFromCompressionType(
+            SkImage::CompressionType compressionType) const override {
+        switch (compressionType) {
+            case SkImage::kETC1_CompressionType:
+                return GrBackendFormat::MakeMock(kRGB_ETC1_GrPixelConfig);
+        }
+        SK_ABORT("Invalid compression type");
+        return {};
     }
 
     GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override {

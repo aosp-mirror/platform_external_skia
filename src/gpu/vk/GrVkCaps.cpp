@@ -645,32 +645,13 @@ void GrVkCaps::initStencilFormat(const GrVkInterface* interface, VkPhysicalDevic
 }
 
 static bool format_is_srgb(VkFormat format) {
+    SkASSERT(GrVkFormatIsSupported(format));
+
     switch (format) {
         case VK_FORMAT_R8G8B8A8_SRGB:
         case VK_FORMAT_B8G8R8A8_SRGB:
             return true;
-        case VK_FORMAT_R8G8B8A8_UNORM:
-        case VK_FORMAT_B8G8R8A8_UNORM:
-        case VK_FORMAT_R8G8B8_UNORM:
-        case VK_FORMAT_R8G8_UNORM:
-        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-        case VK_FORMAT_R5G6B5_UNORM_PACK16:
-        case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
-        case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
-        case VK_FORMAT_R8_UNORM:
-        case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
-        case VK_FORMAT_R32G32B32A32_SFLOAT:
-        case VK_FORMAT_R32G32_SFLOAT:
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-        case VK_FORMAT_R16_SFLOAT:
-        case VK_FORMAT_R16_UNORM:
-        case VK_FORMAT_R16G16_UNORM:
-        // Experimental (for Y416 and mutant P016/P010)
-        case VK_FORMAT_R16G16B16A16_UNORM:
-        case VK_FORMAT_R16G16_SFLOAT:
-            return false;
         default:
-            SK_ABORT("Unsupported VkFormat");
             return false;
     }
 }
@@ -802,6 +783,14 @@ void GrVkCaps::FormatInfo::init(const GrVkInterface* interface,
     if (fOptimalFlags & kRenderable_Flag) {
         this->initSampleCounts(interface, physDev, properties, format);
     }
+}
+
+bool GrVkCaps::isFormatSRGB(const GrBackendFormat& format) const {
+    if (!format.getVkFormat()) {
+        return false;
+    }
+
+    return format_is_srgb(*format.getVkFormat());
 }
 
 bool GrVkCaps::isFormatTexturable(SkColorType, const GrBackendFormat& format) const {
@@ -1100,6 +1089,16 @@ GrBackendFormat GrVkCaps::getBackendFormatFromGrColorType(GrColorType ct,
     return GrBackendFormat::MakeVk(format);
 }
 
+GrBackendFormat GrVkCaps::getBackendFormatFromCompressionType(
+        SkImage::CompressionType compressionType) const {
+    switch (compressionType) {
+        case SkImage::kETC1_CompressionType:
+            return GrBackendFormat::MakeVk(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK);
+    }
+    SK_ABORT("Invalid compression type");
+    return {};
+}
+
 #ifdef SK_DEBUG
 static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorType) {
     switch (colorType) {
@@ -1115,7 +1114,10 @@ static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorTyp
         case GrColorType::kRGBA_8888:
             return VK_FORMAT_R8G8B8A8_UNORM == vkFormat || VK_FORMAT_R8G8B8A8_SRGB == vkFormat;
         case GrColorType::kRGB_888x:
-            return VK_FORMAT_R8G8B8_UNORM == vkFormat || VK_FORMAT_R8G8B8A8_UNORM == vkFormat;
+            GR_STATIC_ASSERT(GrCompressionTypeClosestColorType(SkImage::kETC1_CompressionType) ==
+                             GrColorType::kRGB_888x);
+            return VK_FORMAT_R8G8B8_UNORM == vkFormat || VK_FORMAT_R8G8B8A8_UNORM == vkFormat ||
+                   VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK == vkFormat;
         case GrColorType::kRG_88:
             return VK_FORMAT_R8G8_UNORM == vkFormat;
         case GrColorType::kBGRA_8888:
@@ -1134,8 +1136,6 @@ static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorTyp
             return VK_FORMAT_R32G32_SFLOAT == vkFormat;
         case GrColorType::kRGBA_F32:
             return VK_FORMAT_R32G32B32A32_SFLOAT == vkFormat;
-        case GrColorType::kRGB_ETC1:
-            return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK == vkFormat;
         case GrColorType::kR_16:
             return VK_FORMAT_R16_UNORM == vkFormat;
         case GrColorType::kRG_1616:
