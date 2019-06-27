@@ -97,7 +97,6 @@ static int get_compatible_format_class(GrPixelConfig config) {
         case kRGB_888X_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
-        case kSBGRA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRG_1616_GrPixelConfig:
             return 4;
@@ -985,8 +984,6 @@ static GrPixelConfig validate_image_info(VkFormat format, SkColorType ct, bool h
         case kBGRA_8888_SkColorType:
             if (VK_FORMAT_B8G8R8A8_UNORM == format) {
                 return kBGRA_8888_GrPixelConfig;
-            } else if (VK_FORMAT_B8G8R8A8_SRGB == format) {
-                return kSBGRA_8888_GrPixelConfig;
             }
             break;
         case kRGBA_1010102_SkColorType:
@@ -1089,16 +1086,6 @@ GrBackendFormat GrVkCaps::getBackendFormatFromGrColorType(GrColorType ct,
     return GrBackendFormat::MakeVk(format);
 }
 
-GrBackendFormat GrVkCaps::getBackendFormatFromCompressionType(
-        SkImage::CompressionType compressionType) const {
-    switch (compressionType) {
-        case SkImage::kETC1_CompressionType:
-            return GrBackendFormat::MakeVk(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK);
-    }
-    SK_ABORT("Invalid compression type");
-    return {};
-}
-
 #ifdef SK_DEBUG
 static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorType) {
     switch (colorType) {
@@ -1114,10 +1101,7 @@ static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorTyp
         case GrColorType::kRGBA_8888:
             return VK_FORMAT_R8G8B8A8_UNORM == vkFormat || VK_FORMAT_R8G8B8A8_SRGB == vkFormat;
         case GrColorType::kRGB_888x:
-            GR_STATIC_ASSERT(GrCompressionTypeClosestColorType(SkImage::kETC1_CompressionType) ==
-                             GrColorType::kRGB_888x);
-            return VK_FORMAT_R8G8B8_UNORM == vkFormat || VK_FORMAT_R8G8B8A8_UNORM == vkFormat ||
-                   VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK == vkFormat;
+            return VK_FORMAT_R8G8B8_UNORM == vkFormat || VK_FORMAT_R8G8B8A8_UNORM == vkFormat;
         case GrColorType::kRG_88:
             return VK_FORMAT_R8G8_UNORM == vkFormat;
         case GrColorType::kBGRA_8888:
@@ -1136,6 +1120,8 @@ static bool format_color_type_valid_pair(VkFormat vkFormat, GrColorType colorTyp
             return VK_FORMAT_R32G32_SFLOAT == vkFormat;
         case GrColorType::kRGBA_F32:
             return VK_FORMAT_R32G32B32A32_SFLOAT == vkFormat;
+        case GrColorType::kRGB_ETC1:
+            return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK == vkFormat;
         case GrColorType::kR_16:
             return VK_FORMAT_R16_UNORM == vkFormat;
         case GrColorType::kRG_1616:
