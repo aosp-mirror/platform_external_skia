@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrTypes.h"
@@ -50,6 +51,7 @@ enum GrPixelConfig {
     kRG_88_GrPixelConfig,
     kBGRA_8888_GrPixelConfig,
     kSRGBA_8888_GrPixelConfig,
+    kSBGRA_8888_GrPixelConfig,
     kRGBA_1010102_GrPixelConfig,
     kRGBA_float_GrPixelConfig,
     kRG_float_GrPixelConfig,
@@ -861,6 +863,7 @@ enum class GrSRGBConversion {
 static inline GrSRGBEncoded GrPixelConfigIsSRGBEncoded(GrPixelConfig config) {
     switch (config) {
         case kSRGBA_8888_GrPixelConfig:
+        case kSBGRA_8888_GrPixelConfig:
             return GrSRGBEncoded::kYes;
         case kUnknown_GrPixelConfig:
         case kAlpha_8_GrPixelConfig:
@@ -899,6 +902,14 @@ static inline bool GrPixelConfigIsSRGB(GrPixelConfig config) {
     return GrSRGBEncoded::kYes == GrPixelConfigIsSRGBEncoded(config);
 }
 
+static inline GrPixelConfig GrCompressionTypePixelConfig(SkImage::CompressionType compression) {
+    switch (compression) {
+        case SkImage::kETC1_CompressionType: return kRGB_ETC1_GrPixelConfig;
+    }
+    SK_ABORT("Invalid compression type.");
+    return kUnknown_GrPixelConfig;
+}
+
 static inline size_t GrBytesPerPixel(GrPixelConfig config) {
     switch (config) {
         case kAlpha_8_GrPixelConfig:
@@ -920,6 +931,7 @@ static inline size_t GrBytesPerPixel(GrPixelConfig config) {
         case kRGB_888X_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
+        case kSBGRA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRG_1616_GrPixelConfig:
             return 4;
@@ -968,6 +980,7 @@ static inline bool GrPixelConfigIsOpaque(GrPixelConfig config) {
         case kRGBA_8888_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
+        case kSBGRA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRGBA_half_GrPixelConfig:
         case kRGBA_half_Clamped_GrPixelConfig:
@@ -1000,6 +1013,7 @@ static inline bool GrPixelConfigIsAlphaOnly(GrPixelConfig config) {
         case kRG_88_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
+        case kSBGRA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRGBA_float_GrPixelConfig:
         case kRG_float_GrPixelConfig:
@@ -1034,6 +1048,7 @@ static inline bool GrPixelConfigIsFloatingPoint(GrPixelConfig config) {
         case kRGBA_8888_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
+        case kSBGRA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRGB_ETC1_GrPixelConfig:
         case kR_16_GrPixelConfig:
@@ -1131,6 +1146,7 @@ static inline GrSLPrecision GrSLSamplerPrecision(GrPixelConfig config) {
         case kRG_88_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
+        case kSBGRA_8888_GrPixelConfig:
         case kRGB_ETC1_GrPixelConfig:
             return kLow_GrSLPrecision;
         case kRGBA_float_GrPixelConfig:
@@ -1177,7 +1193,6 @@ enum class GrColorType {
     kRGBA_F16_Clamped,
     kRG_F32,
     kRGBA_F32,
-    kRGB_ETC1,      // Not in SkColorType
 
     kR_16,          // Not in SkColorType
     kRG_1616,       // Not in SkColorType
@@ -1204,7 +1219,6 @@ static inline SkColorType GrColorTypeToSkColorType(GrColorType ct) {
         case GrColorType::kRGBA_F16_Clamped: return kRGBA_F16Norm_SkColorType;
         case GrColorType::kRG_F32:           return kUnknown_SkColorType;
         case GrColorType::kRGBA_F32:         return kRGBA_F32_SkColorType;
-        case GrColorType::kRGB_ETC1:         return kUnknown_SkColorType;
         case GrColorType::kR_16:             return kUnknown_SkColorType;
         case GrColorType::kRG_1616:          return kUnknown_SkColorType;
         // Experimental (for Y416 and mutant P016/P010)
@@ -1254,7 +1268,6 @@ static inline uint32_t GrColorTypeComponentFlags(GrColorType ct) {
         case GrColorType::kRG_F32:           return kRed_SkColorTypeComponentFlag |
                                                     kGreen_SkColorTypeComponentFlag;
         case GrColorType::kRGBA_F32:         return kRGBA_SkColorTypeComponentFlags;
-        case GrColorType::kRGB_ETC1:         return kRGB_SkColorTypeComponentFlags;
         case GrColorType::kR_16:             return kRed_SkColorTypeComponentFlag;
         case GrColorType::kRG_1616:          return kRed_SkColorTypeComponentFlag |
                                                     kGreen_SkColorTypeComponentFlag;
@@ -1278,7 +1291,6 @@ static inline bool GrColorTypeHasAlpha(GrColorType ct) {
 static inline int GrColorTypeBytesPerPixel(GrColorType ct) {
     switch (ct) {
         case GrColorType::kUnknown:          return 0;
-        case GrColorType::kRGB_ETC1:         return 0;
         case GrColorType::kAlpha_8:          return 1;
         case GrColorType::kBGR_565:          return 2;
         case GrColorType::kABGR_4444:        return 2;
@@ -1301,6 +1313,21 @@ static inline int GrColorTypeBytesPerPixel(GrColorType ct) {
     }
     SK_ABORT("Invalid GrColorType");
     return 0;
+}
+
+// We may need a roughly equivalent color type for a compressed texture. This should be the logical
+// format for decompressing the data into.
+static inline constexpr GrColorType GrCompressionTypeClosestColorType(
+        SkImage::CompressionType type) {
+    switch (type) {
+        case SkImage::CompressionType::kETC1_CompressionType: return GrColorType::kRGB_888x;
+    }
+    // Stupid workaround for GCC constexpr
+    bool failed = true;
+    if (failed) {
+        SK_ABORT("Invalid GrColorType");
+    }
+    return GrColorType::kUnknown;
 }
 
 static inline GrColorType GrPixelConfigToColorTypeAndEncoding(GrPixelConfig config,
@@ -1339,6 +1366,9 @@ static inline GrColorType GrPixelConfigToColorTypeAndEncoding(GrPixelConfig conf
         case kSRGBA_8888_GrPixelConfig:
             *srgbEncoded = GrSRGBEncoded::kYes;
             return GrColorType::kRGBA_8888;
+        case kSBGRA_8888_GrPixelConfig:
+            *srgbEncoded = GrSRGBEncoded::kYes;
+            return GrColorType::kBGRA_8888;
         case kRGBA_1010102_GrPixelConfig:
             *srgbEncoded = GrSRGBEncoded::kNo;
             return GrColorType::kRGBA_1010102;
@@ -1359,7 +1389,7 @@ static inline GrColorType GrPixelConfigToColorTypeAndEncoding(GrPixelConfig conf
             return GrColorType::kRGBA_F16_Clamped;
         case kRGB_ETC1_GrPixelConfig:
             *srgbEncoded = GrSRGBEncoded::kNo;
-            return GrColorType::kRGB_ETC1;
+            return GrCompressionTypeClosestColorType(SkImage::kETC1_CompressionType);
         case kAlpha_8_as_Alpha_GrPixelConfig:
             *srgbEncoded = GrSRGBEncoded::kNo;
             return GrColorType::kAlpha_8;
@@ -1432,7 +1462,7 @@ static inline GrPixelConfig GrColorTypeToPixelConfig(GrColorType config,
                                                         : kRG_88_GrPixelConfig;
 
         case GrColorType::kBGRA_8888:
-            return (GrSRGBEncoded::kYes == srgbEncoded) ? kUnknown_GrPixelConfig
+            return (GrSRGBEncoded::kYes == srgbEncoded) ? kSBGRA_8888_GrPixelConfig
                                                         : kBGRA_8888_GrPixelConfig;
 
         case GrColorType::kRGBA_1010102:
@@ -1458,10 +1488,6 @@ static inline GrPixelConfig GrColorTypeToPixelConfig(GrColorType config,
         case GrColorType::kRGBA_F16_Clamped:
             return (GrSRGBEncoded::kYes == srgbEncoded) ? kUnknown_GrPixelConfig
                                                         : kRGBA_half_Clamped_GrPixelConfig;
-
-        case GrColorType::kRGB_ETC1:
-            return (GrSRGBEncoded::kYes == srgbEncoded) ? kUnknown_GrPixelConfig
-                                                        : kRGB_ETC1_GrPixelConfig;
 
         case GrColorType::kR_16:
             return (GrSRGBEncoded::kYes == srgbEncoded) ? kUnknown_GrPixelConfig
