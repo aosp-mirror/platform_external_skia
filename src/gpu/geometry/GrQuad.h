@@ -129,12 +129,19 @@ public:
     // True if anti-aliasing affects this quad. Only valid when quadType == kAxisAligned
     bool aaHasEffectOnRect() const;
 
+    // True if this quad is axis-aligned and still has its top-left corner at v0. Equivalently,
+    // quad == GrQuad(quad->bounds()). Axis-aligned quads with flips and rotations may exactly
+    // fill their bounds, but their vertex order will not match TL BL TR BR anymore.
+    bool asRect(SkRect* rect) const;
+
     // The non-const pointers are provided to support modifying a GrQuad in-place, but care must be
     // taken to keep its quad type aligned with the geometric nature of the new coordinates. This is
     // no different than using the constructors that accept a quad type.
-
+    const float* xs() const { return fX; }
     float* xs() { return fX; }
+    const float* ys() const { return fY; }
     float* ys() { return fY; }
+    const float* ws() const { return fW; }
     float* ws() { return fW; }
 
     void setQuadType(Type newType) { fType = newType; }

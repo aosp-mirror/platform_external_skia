@@ -105,7 +105,8 @@ namespace skvm {
         DOpNM  and16b, orr16b, eor16b, bic16b,
                add4s,  sub4s,  mul4s,
                        sub8h,  mul8h,
-              fadd4s, fsub4s, fmul4s, fdiv4s;
+              fadd4s, fsub4s, fmul4s, fdiv4s,
+              tbl;
 
         // d += n*m
         void fmla4s(V d, V n, V m);
@@ -126,6 +127,7 @@ namespace skvm {
         void subs(X d, X n, int imm12);
         void bne (Label);
 
+        void ldrq(V dst, Label);  // 128-bit PC-relative load
         void ldrq(V dst, X src);  // 128-bit dst = *src
         void strq(V src, X dst);  // 128-bit *dst = src
 
