@@ -5,11 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-// This is a GR test
-#if SK_SUPPORT_GPU
+#include "SkTypes.h"
+
 #include "GrClipStackClip.h"
-#include "GrContext.h"
+#include "SkClipOpPriv.h"
+#include "SkClipStack.h"
+#include "SkMatrix.h"
+#include "SkRect.h"
+#include "Test.h"
 
 // Ensure that the 'getConservativeBounds' calls are returning bounds clamped
 // to the render target
@@ -51,5 +54,3 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrClipBounds, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, intScreen == devGrClipBound);
     REPORTER_ASSERT(reporter, isIntersectionOfRects);
 }
-
-#endif

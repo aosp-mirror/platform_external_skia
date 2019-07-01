@@ -11,12 +11,12 @@
 #include "GrGpuResource.h"
 #include "GrGpuResourceCacheAccess.h"
 #include "GrGpuResourcePriv.h"
-#include "GrResourceCache.h"
 #include "GrResourceKey.h"
 #include "SkMessageBus.h"
 #include "SkRefCnt.h"
 #include "SkTArray.h"
 #include "SkTDPQueue.h"
+#include "SkTHash.h"
 #include "SkTInternalLList.h"
 #include "SkTMultiMap.h"
 
@@ -24,11 +24,18 @@ class GrCaps;
 class GrProxyProvider;
 class SkString;
 class SkTraceMemoryDump;
+class GrSingleOwner;
 
 struct GrGpuResourceFreedMessage {
     GrGpuResource* fResource;
     uint32_t fOwningUniqueID;
 };
+
+static inline bool SkShouldPostMessageToBus(
+        const GrGpuResourceFreedMessage& msg, uint32_t msgBusUniqueID) {
+    // The inbox's ID is the unique ID of the owning GrContext.
+    return msgBusUniqueID == msg.fOwningUniqueID;
+}
 
 /**
  * Manages the lifetime of all GrGpuResource instances.
@@ -49,32 +56,23 @@ struct GrGpuResourceFreedMessage {
  */
 class GrResourceCache {
 public:
-    GrResourceCache(const GrCaps*, uint32_t contextUniqueID);
+    GrResourceCache(const GrCaps*, GrSingleOwner* owner, uint32_t contextUniqueID);
     ~GrResourceCache();
 
     // Default maximum number of budgeted resources in the cache.
     static const int    kDefaultMaxCount            = 2 * (1 << 12);
     // Default maximum number of bytes of gpu memory of budgeted resources in the cache.
     static const size_t kDefaultMaxSize             = 96 * (1 << 20);
-    // Default number of external flushes a budgeted resources can go unused in the cache before it
-    // is purged. Using a value <= 0 disables this feature. This will be removed once Chrome
-    // starts using time-based purging.
-    static const int    kDefaultMaxUnusedFlushes =
-            1  * /* flushes per frame */
-            60 * /* fps */
-            30;  /* seconds */
 
     /** Used to access functionality needed by GrGpuResource for lifetime management. */
     class ResourceAccess;
     ResourceAccess resourceAccess();
 
-    /**
-     * Sets the cache limits in terms of number of resources, max gpu memory byte size, and number
-     * of external GrContext flushes that a resource can be unused before it is evicted. The latter
-     * value is a suggestion and there is no promise that a resource will be purged immediately
-     * after it hasn't been used in maxUnusedFlushes flushes.
-     */
-    void setLimits(int count, size_t bytes, int maxUnusedFlushes = kDefaultMaxUnusedFlushes);
+    /** Unique ID of the owning GrContext. */
+    uint32_t contextUniqueID() const { return fContextUniqueID; }
+
+    /** Sets the cache limits in terms of number of resources and max gpu memory byte size. */
+    void setLimits(int count, size_t bytes);
 
     /**
      * Returns the number of resources.
@@ -125,19 +123,19 @@ public:
      */
     void releaseAll();
 
-    enum {
+    enum class ScratchFlags {
+        kNone = 0,
         /** Preferentially returns scratch resources with no pending IO. */
-        kPreferNoPendingIO_ScratchFlag = 0x1,
+        kPreferNoPendingIO = 0x1,
         /** Will not return any resources that match but have pending IO. */
-        kRequireNoPendingIO_ScratchFlag = 0x2,
+        kRequireNoPendingIO = 0x2,
     };
 
     /**
      * Find a resource that matches a scratch key.
      */
-    GrGpuResource* findAndRefScratchResource(const GrScratchKey& scratchKey,
-                                             size_t resourceSize,
-                                             uint32_t flags);
+    GrGpuResource* findAndRefScratchResource(const GrScratchKey& scratchKey, size_t resourceSize,
+                                             ScratchFlags);
 
 #ifdef SK_DEBUG
     // This is not particularly fast and only used for validation, so debug only.
@@ -195,16 +193,10 @@ public:
 
     /** Returns true if the cache would like a flush to occur in order to make more resources
         purgeable. */
-    bool requestsFlush() const { return fRequestFlush; }
-
-    enum FlushType {
-        kExternal,
-        kCacheRequested,
-    };
-    void notifyFlushOccurred(FlushType);
+    bool requestsFlush() const { return this->overBudget() && !fPurgeableQueue.count(); }
 
     /** Maintain a ref to this resource until we receive a GrGpuResourceFreedMessage. */
-    void insertCrossContextGpuResource(GrGpuResource* resource);
+    void insertDelayedResourceUnref(GrGpuResource* resource);
 
 #if GR_CACHE_STATS
     struct Stats {
@@ -234,7 +226,7 @@ public:
             if (resource->resourcePriv().refsWrappedObjects()) {
                 ++fWrapped;
             }
-            if (SkBudgeted::kNo  == resource->resourcePriv().isBudgeted()) {
+            if (GrBudgetedType::kBudgeted != resource->resourcePriv().budgetedType()) {
                 fUnbudgetedSize += resource->gpuMemorySize();
             }
         }
@@ -242,9 +234,12 @@ public:
 
     void getStats(Stats*) const;
 
+#if GR_TEST_UTILS
     void dumpStats(SkString*) const;
 
     void dumpStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* value) const;
+#endif
+
 #endif
 
 #ifdef SK_DEBUG
@@ -266,7 +261,6 @@ private:
     void insertResource(GrGpuResource*);
     void removeResource(GrGpuResource*);
     void notifyCntReachedZero(GrGpuResource*, uint32_t flags);
-    void didChangeGpuMemorySize(const GrGpuResource*, size_t oldSize);
     void changeUniqueKey(GrGpuResource*, const GrUniqueKey&);
     void removeUniqueKey(GrGpuResource*);
     void willRemoveScratchKey(const GrGpuResource*);
@@ -274,7 +268,6 @@ private:
     void refAndMakeResourceMRU(GrGpuResource*);
     /// @}
 
-    void processInvalidUniqueKeys(const SkTArray<GrUniqueKeyInvalidatedMessage>&);
     void processFreedGpuResources();
     void addToNonpurgeableArray(GrGpuResource*);
     void removeFromNonpurgeableArray(GrGpuResource*);
@@ -313,6 +306,25 @@ private:
     };
     typedef SkTDynamicHash<GrGpuResource, GrUniqueKey, UniqueHashTraits> UniqueHash;
 
+    class ResourceAwaitingUnref {
+    public:
+        ResourceAwaitingUnref();
+        ResourceAwaitingUnref(GrGpuResource* resource);
+        ResourceAwaitingUnref(const ResourceAwaitingUnref&) = delete;
+        ResourceAwaitingUnref& operator=(const ResourceAwaitingUnref&) = delete;
+        ResourceAwaitingUnref(ResourceAwaitingUnref&&);
+        ResourceAwaitingUnref& operator=(ResourceAwaitingUnref&&);
+        ~ResourceAwaitingUnref();
+        void addRef();
+        void unref();
+        bool finished();
+
+    private:
+        GrGpuResource* fResource = nullptr;
+        int fNumUnrefs = 0;
+    };
+    using ReourcesAwaitingUnref = SkTHashMap<uint32_t, ResourceAwaitingUnref>;
+
     static bool CompareTimestamp(GrGpuResource* const& a, GrGpuResource* const& b) {
         return a->cacheAccess().timestamp() < b->cacheAccess().timestamp();
     }
@@ -342,7 +354,6 @@ private:
     // our budget, used in purgeAsNeeded()
     int                                 fMaxCount;
     size_t                              fMaxBytes;
-    int                                 fMaxUnusedFlushes;
 
 #if GR_CACHE_STATS
     int                                 fHighWaterCount;
@@ -360,13 +371,12 @@ private:
     size_t                              fBudgetedBytes;
     size_t                              fPurgeableBytes;
 
-    bool                                fRequestFlush;
-    uint32_t                            fExternalFlushCnt;
-
     InvalidUniqueKeyInbox               fInvalidUniqueKeyInbox;
     FreedGpuResourceInbox               fFreedGpuResourceInbox;
+    ReourcesAwaitingUnref               fResourcesAwaitingUnref;
 
     uint32_t                            fContextUniqueID;
+    GrSingleOwner*                      fSingleOwner;
 
     // This resource is allowed to be in the nonpurgeable array for the sake of validate() because
     // we're in the midst of converting it to purgeable status.
@@ -374,6 +384,8 @@ private:
 
     bool                                fPreferVRAMUseOverFlushes;
 };
+
+GR_MAKE_BITFIELD_CLASS_OPS(GrResourceCache::ScratchFlags);
 
 class GrResourceCache::ResourceAccess {
 private:
@@ -411,13 +423,6 @@ private:
      */
     void notifyCntReachedZero(GrGpuResource* resource, uint32_t flags) {
         fCache->notifyCntReachedZero(resource, flags);
-    }
-
-    /**
-     * Called by GrGpuResources when their sizes change.
-     */
-    void didChangeGpuMemorySize(const GrGpuResource* resource, size_t oldSize) {
-        fCache->didChangeGpuMemorySize(resource, oldSize);
     }
 
     /**

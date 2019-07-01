@@ -7,14 +7,17 @@
 
 #include "SkAndroidCodec.h"
 #include "SkBitmap.h"
-#include "SkCodec.h"
+#include "SkColor.h"
 #include "SkColorSpace.h"
+#include "SkData.h"
 #include "SkEncodedImageFormat.h"
 #include "SkImageEncoder.h"
 #include "SkImageInfo.h"
 #include "SkStream.h"
-
 #include "Test.h"
+
+#include <memory>
+#include <utility>
 
 DEF_TEST(Codec_recommendedF16, r) {
     // Encode an F16 bitmap. SkEncodeImage will encode this to a true-color PNG
@@ -22,7 +25,7 @@ DEF_TEST(Codec_recommendedF16, r) {
     // such a PNG.
     SkBitmap bm;
     bm.allocPixels(SkImageInfo::Make(10, 10, kRGBA_F16_SkColorType,
-            kPremul_SkAlphaType, SkColorSpace::MakeSRGBLinear()));
+            kPremul_SkAlphaType, SkColorSpace::MakeSRGB()));
     // What is drawn is not important.
     bm.eraseColor(SK_ColorBLUE);
 

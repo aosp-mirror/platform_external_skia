@@ -7,8 +7,6 @@
 
 #include "SkTypes.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrContextFactory.h"
 #include "GrContextPriv.h"
 #include "GrCaps.h"
@@ -29,9 +27,8 @@ DEF_GPUTEST(GrContextFactory_NVPRContextOptionHasPathRenderingSupport, reporter,
         if (!context) {
             continue;
         }
-        REPORTER_ASSERT(
-            reporter,
-            context->caps()->shaderCaps()->pathRenderingSupport());
+        REPORTER_ASSERT(reporter,
+                        context->priv().caps()->shaderCaps()->pathRenderingSupport());
     }
 }
 
@@ -44,31 +41,8 @@ DEF_GPUTEST(GrContextFactory_NoPathRenderingIfNVPRDisabled, reporter, options) {
         GrContext* context =
             testFactory.get(ctxType, GrContextFactory::ContextOverrides::kDisableNVPR);
         if (context) {
-            REPORTER_ASSERT(
-                reporter,
-                !context->caps()->shaderCaps()->pathRenderingSupport());
-        }
-    }
-}
-
-DEF_GPUTEST(GrContextFactory_RequiredSRGBSupport, reporter, options) {
-    // Test that if sRGB support is requested, the context always has that capability
-    // or the context creation fails. Also test that if the creation fails, a context
-    // created without that flag would not have had sRGB support.
-    for (int i = 0; i < GrContextFactory::kContextTypeCnt; ++i) {
-        GrContextFactory testFactory(options);
-        // Test that if sRGB is requested, caps are in sync.
-        GrContextFactory::ContextType ctxType = static_cast<GrContextFactory::ContextType>(i);
-        GrContext* context =
-            testFactory.get(ctxType, GrContextFactory::ContextOverrides::kRequireSRGBSupport);
-
-        if (context) {
-            REPORTER_ASSERT(reporter, context->caps()->srgbSupport());
-        } else {
-            context = testFactory.get(ctxType);
-            if (context) {
-                REPORTER_ASSERT(reporter, !context->caps()->srgbSupport());
-            }
+            REPORTER_ASSERT(reporter,
+                            !context->priv().caps()->shaderCaps()->pathRenderingSupport());
         }
     }
 }
@@ -154,20 +128,20 @@ DEF_GPUTEST(GrContextFactory_executorAndTaskGroup, reporter, options) {
         GrContextFactory::ContextType ctxType = static_cast<GrContextFactory::ContextType>(i);
         ContextInfo serialInfo = serialFactory.getContextInfo(ctxType);
         if (GrContext* serialContext = serialInfo.grContext()) {
-            REPORTER_ASSERT(reporter, nullptr == serialContext->contextPriv().getTaskGroup());
+            REPORTER_ASSERT(reporter, nullptr == serialContext->priv().getTaskGroup());
         }
 
         ContextInfo threadedInfo = threadedFactory.getContextInfo(ctxType);
         if (GrContext* threadedContext = threadedInfo.grContext()) {
-            REPORTER_ASSERT(reporter, nullptr != threadedContext->contextPriv().getTaskGroup());
+            REPORTER_ASSERT(reporter, nullptr != threadedContext->priv().getTaskGroup());
         }
     }
 }
 
+#ifdef SK_ENABLE_DUMP_GPU
 DEF_GPUTEST_FOR_ALL_CONTEXTS(GrContextDump, reporter, ctxInfo) {
     // Ensure that GrContext::dump doesn't assert (which is possible, if the JSON code is wrong)
-    SkString result = ctxInfo.grContext()->dump();
+    SkString result = ctxInfo.grContext()->priv().dump();
     REPORTER_ASSERT(reporter, !result.isEmpty());
 }
-
 #endif

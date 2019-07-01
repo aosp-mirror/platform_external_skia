@@ -24,7 +24,9 @@ public:
     void endTiming(Timer);
     double getLastTime(Timer);
 
-    void onPaint(SkCanvas* canvas) override;
+    void onPaint(SkSurface*) override;
+
+    void setDisplayScale(float scale) { fDisplayScale = scale; }
 
 private:
     static const int kMeasurementCount = 1 << 6;  // should be power of 2 for fast mod
@@ -38,6 +40,7 @@ private:
     int fCurrentMeasurement;
     double fCumulativeMeasurementTime;
     int fCumulativeMeasurementCount;
+    float fDisplayScale;
 };
 
 #endif

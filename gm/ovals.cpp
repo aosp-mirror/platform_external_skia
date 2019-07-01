@@ -151,7 +151,7 @@ protected:
         rectPaint.setAntiAlias(true);
         rectPaint.setStyle(SkPaint::kStroke_Style);
         rectPaint.setStrokeWidth(SkIntToScalar(0));
-        rectPaint.setColor(sk_tool_utils::color_to_565(SK_ColorLTGRAY));
+        rectPaint.setColor(SK_ColorLTGRAY);
 
         int testCount = 0;
         for (int i = 0; i < fPaints.count(); ++i) {
@@ -299,7 +299,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new OvalGM; }
-static GMRegistry reg(MyFactory);
+DEF_GM( return new OvalGM; )
 
 }

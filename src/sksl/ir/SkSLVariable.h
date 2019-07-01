@@ -25,6 +25,7 @@ struct Expression;
 struct Variable : public Symbol {
     enum Storage {
         kGlobal_Storage,
+        kInterfaceBlock_Storage,
         kLocal_Storage,
         kParameter_Storage
     };
@@ -44,7 +45,7 @@ struct Variable : public Symbol {
         if (fInitialValue) {
             --fWriteCount;
         }
-        ASSERT(!fReadCount && !fWriteCount);
+        SkASSERT(!fReadCount && !fWriteCount);
     }
 
     virtual String description() const override {
@@ -52,7 +53,13 @@ struct Variable : public Symbol {
     }
 
     bool dead() const {
-        return !fWriteCount || (!fReadCount && !(fModifiers.fFlags & Modifiers::kOut_Flag));
+        if (fModifiers.fFlags & (Modifiers::kIn_Flag | Modifiers::kOut_Flag |
+                                 Modifiers::kUniform_Flag)) {
+            return false;
+        }
+        return !fWriteCount ||
+               (!fReadCount && !(fModifiers.fFlags & (Modifiers::kPLS_Flag |
+                                                      Modifiers::kPLSOut_Flag)));
     }
 
     mutable Modifiers fModifiers;

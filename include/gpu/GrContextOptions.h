@@ -12,12 +12,14 @@
 #include "SkTypes.h"
 #include "GrTypes.h"
 #include "../private/GrTypesPriv.h"
+#include "GrDriverBugWorkarounds.h"
 
 #include <vector>
 
 class SkExecutor;
 
-struct GrContextOptions {
+#if SK_SUPPORT_GPU
+struct SK_API GrContextOptions {
     enum class Enable {
         /** Forces an option to be disabled. */
         kNo,
@@ -34,7 +36,7 @@ struct GrContextOptions {
      * Skia stores compiled shader binaries (only when glProgramBinary / glGetProgramBinary are
      * supported) when provided a persistent cache, but this may extend to other data in the future.
      */
-    class PersistentCache {
+    class SK_API PersistentCache {
     public:
         virtual ~PersistentCache() {}
 
@@ -76,6 +78,13 @@ struct GrContextOptions {
     bool fDoManualMipmapping = false;
 
     /**
+     * Disables the coverage counting path renderer. Coverage counting can sometimes cause new
+     * rendering artifacts along shared edges if care isn't taken to ensure both contours wind in
+     * the same direction.
+     */
+    bool fDisableCoverageCountingPaths = false;
+
+    /**
      * Disables distance field rendering for paths. Distance field computation can be expensive,
      * and yields no benefit if a path is not rendered multiple times with different transforms.
      */
@@ -88,14 +97,6 @@ struct GrContextOptions {
     bool fAllowPathMaskCaching = true;
 
     /**
-     * If true, sRGB support will not be enabled unless sRGB decoding can be disabled (via an
-     * extension). If mixed use of "legacy" mode and sRGB/color-correct mode is not required, this
-     * can be set to false, which will significantly expand the number of devices that qualify for
-     * sRGB support.
-     */
-    bool fRequireDecodeDisableForSRGB = true;
-
-    /**
      * If true, the GPU will not be used to perform YUV -> RGB conversion when generating
      * textures from codec-backed images.
      */
@@ -104,7 +105,7 @@ struct GrContextOptions {
     /**
      * The maximum size of cache textures used for Skia's Glyph cache.
      */
-    float fGlyphCacheTextureMaximumBytes = 2048 * 1024 * 4;
+    size_t fGlyphCacheTextureMaximumBytes = 2048 * 1024 * 4;
 
     /**
      * Below this threshold size in device space distance field fonts won't be used. Distance field
@@ -132,19 +133,6 @@ struct GrContextOptions {
     bool fAvoidStencilBuffers = false;
 
     /**
-     * When specifing new data for a vertex/index buffer that replaces old data Ganesh can give
-     * a hint to the driver that the previous data will not be used in future draws like this:
-     *  glBufferData(GL_..._BUFFER, size, NULL, usage);       //<--hint, NULL means
-     *  glBufferSubData(GL_..._BUFFER, 0, lessThanSize, data) //   old data can't be
-     *                                                        //   used again.
-     * However, this can be an unoptimization on some platforms, esp. Chrome.
-     * Chrome's cmd buffer will create a new allocation and memset the whole thing
-     * to zero (for security reasons).
-     * Defaults to the value of GR_GL_USE_BUFFER_DATA_NULL_HINT #define (which is, by default, 1).
-     */
-    Enable fUseGLBufferDataNullHint = Enable::kDefault;
-
-    /**
      * If true, texture fetches from mip-mapped textures will be biased to read larger MIP levels.
      * This has the effect of sharpening those textures, at the cost of some aliasing, and possible
      * performance impact.
@@ -152,10 +140,9 @@ struct GrContextOptions {
     bool fSharpenMipmappedTextures = false;
 
     /**
-     * Enables driver workaround to use draws instead of glClear. This only applies to
-     * kOpenGL_GrBackend.
+     * Enables driver workaround to use draws instead of HW clears, e.g. glClear on the GL backend.
      */
-    Enable fUseDrawInsteadOfGLClear = Enable::kDefault;
+    Enable fUseDrawInsteadOfClear = Enable::kDefault;
 
     /**
      * Allow Ganesh to explicitly allocate resources at flush time rather than incrementally while
@@ -171,6 +158,20 @@ struct GrContextOptions {
     Enable fSortRenderTargets = Enable::kDefault;
 
     /**
+     * Allow Ganesh to more aggressively reorder operations. This is an optional
+     * behavior that is only relevant when 'fSortRenderTargets' is enabled.
+     * Eventually this will just be what is done and will not be optional.
+     */
+    Enable fReduceOpListSplitting = Enable::kDefault;
+
+    /**
+     * Some ES3 contexts report the ES2 external image extension, but not the ES3 version.
+     * If support for external images is critical, enabling this option will cause Ganesh to limit
+     * shaders to the ES2 shading language in that situation.
+     */
+    bool fPreferExternalImagesOverES3 = false;
+
+    /**
      * Disables correctness workarounds that are enabled for particular GPUs, OSes, or drivers.
      * This does not affect code path choices that are made for perfomance reasons nor does it
      * override other GrContextOption settings.
@@ -181,6 +182,14 @@ struct GrContextOptions {
      * Cache in which to store compiled shader binaries between runs.
      */
     PersistentCache* fPersistentCache = nullptr;
+
+    /**
+     * This affects the usage of the PersistentCache. If this is set to true GLSL shader strings
+     * rather than GL program binaries will be cached. It is intended to be used when the driver's
+     * binary loading/storing is believed to have bugs. Caching GLSL strings still saves a
+     * significant amount of CPU work when a GL program is created.
+     */
+     bool fDisallowGLSLBinaryCaching = false;
 
 #if GR_TEST_UTILS
     /**
@@ -216,13 +225,7 @@ struct GrContextOptions {
     /**
      * Include or exclude specific GPU path renderers.
      */
-    GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kDefault;
-
-    /**
-     * Disables using multiple texture units to batch multiple images into a single draw on
-     * supported GPUs.
-     */
-    bool fDisableImageMultitexturing = false;
+    GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kAll;
 #endif
 
 #if SK_SUPPORT_ATLAS_TEXT
@@ -232,6 +235,13 @@ struct GrContextOptions {
      */
     Enable fDistanceFieldGlyphVerticesAlwaysHaveW = Enable::kDefault;
 #endif
+
+    GrDriverBugWorkarounds fDriverBugWorkarounds;
 };
+#else
+struct GrContextOptions {
+    struct PersistentCache {};
+};
+#endif
 
 #endif

@@ -1,46 +1,30 @@
 #Topic Automatic_Canvas_Restore
 
-#Subtopic Overview
-    #Subtopic Subtopic
-    #Populate
-    ##
-##
-
 #Class SkAutoCanvasRestore
 
-Stack helper class calls SkCanvas::restoreToCount() when SkAutoCanvasRestore
+#Code
+#Populate
+##
+
+Stack helper class calls SkCanvas::restoreToCount when SkAutoCanvasRestore
 goes out of scope. Use this to guarantee that the canvas is restored to a known
 state.
 
-#Subtopic Constructor
-#Populate
-##
-
-#Subtopic Member_Function
-#Populate
-##
-
 #Method SkAutoCanvasRestore(SkCanvas* canvas, bool doSave)
 
-#Line # preserves Canvas save count ##
-Preserves Canvas save count. Optionally saves Canvas_Clip and Canvas_Matrix.
-
-#Param canvas  Canvas to guard ##
-#Param doSave  call SkCanvas::save() ##
-
-#Return utility to restore Canvas state on destructor ##
+#Line # restores Canvas when out of scope ##
+#Populate
 
 #Example
 #Height 128
     SkPaint p;
-    p.setAntiAlias(true);
-    p.setTextSize(64);
+    SkFont font(nullptr, 64);
     for (SkScalar sx : { -1, 1 } ) {
         for (SkScalar sy : { -1, 1 } ) {
             SkAutoCanvasRestore autoRestore(canvas, true);
             SkMatrix m = SkMatrix::MakeAll(sx, 1, 96,    0, sy, 64,   0, 0, 1);
             canvas->concat(m);
-            canvas->drawString("R", 0, 0, p);
+            canvas->drawString("R", 0, 0, font, p);
         }
     }
 ##
@@ -52,8 +36,7 @@ Preserves Canvas save count. Optionally saves Canvas_Clip and Canvas_Matrix.
 #Method ~SkAutoCanvasRestore()
 
 #Line # restores Canvas to saved state ##
-Restores Canvas to saved state. Destructor is called when container goes out of
-scope.
+#Populate
 
 #NoExample
 ##
@@ -65,8 +48,7 @@ scope.
 #Method void restore()
 #In Member_Function
 #Line # restores Canvas to saved state ##
-Restores Canvas to saved state immediately. Subsequent calls and
-~SkAutoCanvasRestore have no effect.
+#Populate
 
 #Example
 for (bool callRestore : { false, true } ) {

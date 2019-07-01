@@ -434,3 +434,84 @@ DEF_TEST(region_inverse_union_skbug_7491, reporter) {
     REPORTER_ASSERT(reporter, clip == rgn);
 }
 
+DEF_TEST(giant_path_region, reporter) {
+    const SkScalar big = 32767;
+    SkPath path;
+    path.moveTo(-big, 0);
+    path.quadTo(big, 0, big, big);
+    SkIRect ir = path.getBounds().round();
+    SkRegion rgn;
+    rgn.setPath(path, SkRegion(ir));
+}
+
+DEF_TEST(rrect_region_crbug_850350, reporter) {
+    SkMatrix m;
+    m.reset();
+    m[1] = 0.753662348f;
+    m[3] = 1.40079998E+20f;
+
+    const SkPoint corners[] = {
+        { 2.65876e-19f, 0.0194088f },
+        { 4896, 0.00114702f },
+        { 0, 0 },
+        { 0.00114702f, 0.00495333f },
+    };
+    SkRRect rrect;
+    rrect.setRectRadii({-8.72387e-31f, 1.29996e-38f, 4896, 1.125f}, corners);
+
+    SkPath path;
+    path.addRRect(rrect);
+    path.transform(m);
+
+    SkRegion rgn;
+    rgn.setPath(path, SkRegion{SkIRect{0, 0, 24, 24}});
+}
+
+DEF_TEST(region_bug_chromium_873051, reporter) {
+    SkRegion region;
+    REPORTER_ASSERT(reporter,  region.setRect({0, 0, 0x7FFFFFFE, 0x7FFFFFFE}));
+    REPORTER_ASSERT(reporter, !region.setRect({0, 0, 0x7FFFFFFE, 0x7FFFFFFF}));
+    REPORTER_ASSERT(reporter, !region.setRect({0, 0, 0x7FFFFFFF, 0x7FFFFFFE}));
+    REPORTER_ASSERT(reporter, !region.setRect({0, 0, 0x7FFFFFFF, 0x7FFFFFFF}));
+}
+
+DEF_TEST(region_empty_iter, reporter) {
+    SkRegion::Iterator emptyIter;
+    REPORTER_ASSERT(reporter, !emptyIter.rewind());
+    REPORTER_ASSERT(reporter, emptyIter.done());
+    auto eRect = emptyIter.rect();
+    REPORTER_ASSERT(reporter, eRect.isEmpty());
+    REPORTER_ASSERT(reporter, SkIRect::MakeEmpty() == eRect);
+    REPORTER_ASSERT(reporter, !emptyIter.rgn());
+
+    SkRegion region;
+    SkRegion::Iterator resetIter;
+    resetIter.reset(region);
+    REPORTER_ASSERT(reporter, resetIter.rewind());
+    REPORTER_ASSERT(reporter, resetIter.done());
+    auto rRect = resetIter.rect();
+    REPORTER_ASSERT(reporter, rRect.isEmpty());
+    REPORTER_ASSERT(reporter, SkIRect::MakeEmpty() == rRect);
+    REPORTER_ASSERT(reporter, resetIter.rgn());
+    REPORTER_ASSERT(reporter, resetIter.rgn()->isEmpty());
+
+    SkRegion::Iterator iter(region);
+    REPORTER_ASSERT(reporter, iter.done());
+    auto iRect = iter.rect();
+    REPORTER_ASSERT(reporter, iRect.isEmpty());
+    REPORTER_ASSERT(reporter, SkIRect::MakeEmpty() == iRect);
+    REPORTER_ASSERT(reporter, iter.rgn());
+    REPORTER_ASSERT(reporter, iter.rgn()->isEmpty());
+
+    SkRegion::Cliperator clipIter(region, {0, 0, 100, 100});
+    REPORTER_ASSERT(reporter, clipIter.done());
+    auto cRect = clipIter.rect();
+    REPORTER_ASSERT(reporter, cRect.isEmpty());
+    REPORTER_ASSERT(reporter, SkIRect::MakeEmpty() == cRect);
+
+    SkRegion::Spanerator spanIter(region, 0, 0, 100);
+    int left = 0, right = 0;
+    REPORTER_ASSERT(reporter, !spanIter.next(&left, &right));
+    REPORTER_ASSERT(reporter, !left);
+    REPORTER_ASSERT(reporter, !right);
+}

@@ -10,9 +10,10 @@
 
 #include "GrColor.h"
 #include "GrTypes.h"
-#include "vk/GrVkDefines.h"
-#include "vk/GrVkInterface.h"
+#include "GrVkInterface.h"
+#include "SkMacros.h"
 #include "ir/SkSLProgram.h"
+#include "vk/GrVkTypes.h"
 
 class GrVkGpu;
 
@@ -32,23 +33,14 @@ class GrVkGpu;
  */
 bool GrPixelConfigToVkFormat(GrPixelConfig config, VkFormat* format);
 
-/**
-* Returns the GrPixelConfig for the given vulkan texture format
-*/
-GrPixelConfig GrVkFormatToPixelConfig(VkFormat format);
-
 bool GrVkFormatIsSupported(VkFormat);
 
+#ifdef SK_DEBUG
 /**
  * Returns true if the passed in VkFormat and GrPixelConfig are compatible with each other.
  */
 bool GrVkFormatPixelConfigPairIsValid(VkFormat, GrPixelConfig);
-
-/**
- * Returns true if the given vulkan texture format is sRGB encoded.
- * Also provides the non-sRGB version, if there is one.
- */
-bool GrVkFormatIsSRGB(VkFormat format, VkFormat* linearFormat);
+#endif
 
 bool GrSampleCountToVkSampleCount(uint32_t samples, VkSampleCountFlagBits* vkSamples);
 
@@ -58,6 +50,13 @@ bool GrCompileVkShaderModule(const GrVkGpu* gpu,
                              VkShaderModule* shaderModule,
                              VkPipelineShaderStageCreateInfo* stageInfo,
                              const SkSL::Program::Settings& settings,
+                             SkSL::String* outSPIRV,
                              SkSL::Program::Inputs* outInputs);
+
+bool GrInstallVkShaderModule(const GrVkGpu* gpu,
+                             const SkSL::String& spirv,
+                             VkShaderStageFlagBits stage,
+                             VkShaderModule* shaderModule,
+                             VkPipelineShaderStageCreateInfo* stageInfo);
 
 #endif

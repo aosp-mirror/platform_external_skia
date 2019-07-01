@@ -5,11 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include <iostream>
-
 #include "SkDebugCanvas.h"
 #include "SkNullCanvas.h"
+#include "SkPicture.h"
 #include "SkStream.h"
+
+#include <iostream>
 
 #ifdef SK_BUILD_FOR_WIN
 #include <fcntl.h>
@@ -54,8 +55,12 @@ int main(int argc, char** argv) {
     pic->playback(&debugCanvas);
     std::unique_ptr<SkCanvas> nullCanvas = SkMakeNullCanvas();
     UrlDataManager dataManager(SkString("data"));
-    Json::Value json = debugCanvas.toJSON(
-            dataManager, debugCanvas.getSize(), nullCanvas.get());
+    SkDynamicMemoryWStream stream;
+    SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
+    writer.beginObject(); // root
+    debugCanvas.toJSON(writer, dataManager, debugCanvas.getSize(), nullCanvas.get());
+    writer.endObject(); // root
+    writer.flush();
     if (argc > 2) {
         if (UrlDataManager::UrlData* data =
             dataManager.getDataFromUrl(SkString(argv[2]))) {
@@ -71,7 +76,8 @@ int main(int argc, char** argv) {
             return 4;
         }
     } else {
-        Json::StyledStreamWriter("  ").write(std::cout, json);
+        sk_sp<SkData> data = stream.detachAsData();
+        fwrite(data->data(), data->size(), 1, stdout);
     }
     return 0;
 }

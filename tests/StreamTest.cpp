@@ -14,6 +14,7 @@
 #include "SkRandom.h"
 #include "SkStream.h"
 #include "SkStreamPriv.h"
+#include "SkTo.h"
 #include "Test.h"
 
 #include <functional>
@@ -159,9 +160,12 @@ static void TestPackedUInt(skiatest::Reporter* reporter) {
 
     std::unique_ptr<SkStreamAsset> rstream(wstream.detachAsStream());
     for (i = 0; i < SK_ARRAY_COUNT(sizes); ++i) {
-        size_t n = rstream->readPackedUInt();
+        size_t n;
+        if (!rstream->readPackedUInt(&n)) {
+            ERRORF(reporter, "[%d] sizes:%x could not be read\n", i, sizes[i]);
+        }
         if (sizes[i] != n) {
-            ERRORF(reporter, "sizes:%x != n:%x\n", i, sizes[i], n);
+            ERRORF(reporter, "[%d] sizes:%x != n:%x\n", i, sizes[i], n);
         }
     }
 }

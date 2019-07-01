@@ -42,6 +42,42 @@
 #include "ir/SkSLWhileStatement.h"
 #include "spirv.h"
 
+union ConstantValue {
+    ConstantValue(int64_t i)
+        : fInt(i) {}
+
+    ConstantValue(double d)
+        : fDouble(d) {}
+
+    bool operator==(const ConstantValue& other) const {
+        return fInt == other.fInt;
+    }
+
+    int64_t fInt;
+    double fDouble;
+};
+
+enum class ConstantType {
+    kInt,
+    kUInt,
+    kShort,
+    kUShort,
+    kFloat,
+    kDouble,
+    kHalf,
+};
+
+namespace std {
+
+template <>
+struct hash<std::pair<ConstantValue, ConstantType>> {
+    size_t operator()(const std::pair<ConstantValue, ConstantType>& key) const {
+        return key.first.fInt ^ (int) key.second;
+    }
+};
+
+}
+
 namespace SkSL {
 
 #define kLast_Capability SpvCapabilityMultiViewport
@@ -69,7 +105,7 @@ public:
     : INHERITED(program, errors, out)
     , fContext(*context)
     , fDefaultLayout(MemoryLayout::k140_Standard)
-    , fCapabilities(1 << SpvCapabilityShader)
+    , fCapabilities(0)
     , fIdCount(1)
     , fBoolTrue(0)
     , fBoolFalse(0)
@@ -95,9 +131,15 @@ private:
         kMin_SpecialIntrinsic,
         kMix_SpecialIntrinsic,
         kMod_SpecialIntrinsic,
+        kDFdy_SpecialIntrinsic,
+        kSaturate_SpecialIntrinsic,
         kSubpassLoad_SpecialIntrinsic,
-        kTexelFetch_SpecialIntrinsic,
         kTexture_SpecialIntrinsic,
+    };
+
+    enum class Precision {
+        kLow,
+        kHigh,
     };
 
     void setupIntrinsics();
@@ -119,7 +161,9 @@ private:
     SpvId getPointerType(const Type& type, const MemoryLayout& layout,
                          SpvStorageClass_ storageClass);
 
-    void writePrecisionModifier(const Modifiers& modifiers, SpvId id);
+    void writePrecisionModifier(Precision precision, SpvId id);
+
+    void writePrecisionModifier(const Type& type, SpvId id);
 
     std::vector<SpvId> getAccessChain(const Expression& expr, OutputStream& out);
 
@@ -191,6 +235,10 @@ private:
     void writeMatrixCopy(SpvId id, SpvId src, const Type& srcType, const Type& dstType,
                          OutputStream& out);
 
+    void addColumnEntry(SpvId columnType, Precision precision, std::vector<SpvId>* currentColumn,
+                        std::vector<SpvId>* columnIds, int* currentCount, int rows, SpvId entry,
+                        OutputStream& out);
+
     SpvId writeMatrixConstructor(const Constructor& c, OutputStream& out);
 
     SpvId writeVectorConstructor(const Constructor& c, OutputStream& out);
@@ -209,10 +257,15 @@ private:
      * same dimensions, and applys all() to it to fold it down to a single bool value. Otherwise,
      * returns the original id value.
      */
-    SpvId foldToBool(SpvId id, const Type& operandType, OutputStream& out);
+    SpvId foldToBool(SpvId id, const Type& operandType, SpvOp op, OutputStream& out);
 
     SpvId writeMatrixComparison(const Type& operandType, SpvId lhs, SpvId rhs, SpvOp_ floatOperator,
-                                SpvOp_ intOperator, OutputStream& out);
+                                SpvOp_ intOperator, SpvOp_ vectorMergeOperator,
+                                SpvOp_ mergeOperator, OutputStream& out);
+
+    SpvId writeComponentwiseMatrixBinary(const Type& operandType, SpvId lhs, SpvId rhs,
+                                         SpvOp_ floatOperator, SpvOp_ intOperator,
+                                         OutputStream& out);
 
     SpvId writeBinaryOperation(const Type& resultType, const Type& operandType, SpvId lhs,
                                SpvId rhs, SpvOp_ ifFloat, SpvOp_ ifInt, SpvOp_ ifUInt,
@@ -220,6 +273,10 @@ private:
 
     SpvId writeBinaryOperation(const BinaryExpression& expr, SpvOp_ ifFloat, SpvOp_ ifInt,
                                SpvOp_ ifUInt, OutputStream& out);
+
+    SpvId writeBinaryExpression(const Type& leftType, SpvId lhs, Token::Kind op,
+                                const Type& rightType, SpvId rhs, const Type& resultType,
+                                OutputStream& out);
 
     SpvId writeBinaryExpression(const BinaryExpression& b, OutputStream& out);
 
@@ -327,10 +384,9 @@ private:
 
     SpvId fBoolTrue;
     SpvId fBoolFalse;
-    std::unordered_map<int64_t, SpvId> fIntConstants;
-    std::unordered_map<uint64_t, SpvId> fUIntConstants;
-    std::unordered_map<float, SpvId> fFloatConstants;
-    std::unordered_map<double, SpvId> fDoubleConstants;
+    std::unordered_map<std::pair<ConstantValue, ConstantType>, SpvId> fNumberConstants;
+    // The constant float2(0, 1), used in swizzling
+    SpvId fConstantZeroOneVector = 0;
     bool fSetupFragPosition;
     // label of the current block, or 0 if we are not in a block
     SpvId fCurrentBlock;
@@ -340,6 +396,7 @@ private:
     SpvId fRTHeightFieldIndex = (SpvId) -1;
     // holds variables synthesized during output, for lifetime purposes
     SymbolTable fSynthetics;
+    int fSkInCount = 1;
 
     friend class PointerLValue;
     friend class SwizzleLValue;

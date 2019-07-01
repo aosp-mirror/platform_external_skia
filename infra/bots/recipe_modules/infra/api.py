@@ -27,14 +27,15 @@ class InfraApi(recipe_api.RecipeApi):
   @property
   def go_env(self):
     return {
+        'GOCACHE': self.m.vars.cache_dir.join('go_cache'),
         'GOPATH': self.gopath,
         'GOROOT': self.goroot,
-        'PATH': '%s:%s:%%(PATH)s' % (self.go_bin, self.gopath),
+        'PATH': '%s:%s:%%(PATH)s' % (self.go_bin, self.gopath.join('bin')),
     }
 
   @property
   def gopath(self):
-    return self.m.vars.slave_dir.join('gopath')
+    return self.m.vars.slave_dir.join('go_deps')
 
   def go_version(self):
     """Print the Go version."""
@@ -49,36 +50,6 @@ class InfraApi(recipe_api.RecipeApi):
           self.m.step,
           'env go version',
           cmd=['go', 'version'])
-
-  def update_go_deps(self):
-    """Attempt to update go dependencies.
-
-    This fails flakily sometimes, so perform multiple attempts.
-    """
-    self.go_version()
-    env = self.m.context.env
-    env.update(self.go_env)
-    with self.m.context(env=env):
-      self.m.run.with_retry(
-          self.m.step,
-          'update go pkgs',
-          UPDATE_GO_ATTEMPTS,
-          cmd=[self.go_exe, 'get', '-u', '-t', '%s/...' % INFRA_GO_PKG])
-
-  class DownloadGitCookies(object):
-    """Class to download gitcookies from GS."""
-    def __init__(self, gs_path, local_path, api):
-      self._gs_path = gs_path
-      self._local_path = local_path
-      self._api = api
-
-    def __enter__(self):
-      cmd = ['gsutil', 'cp', self._gs_path, self._local_path]
-      self._api.step('download gitcookies', cmd=cmd, infra_step=True)
-
-    def __exit__(self, exc_type, _value, _traceback):
-      if self._api.path.exists(self._local_path):
-        self._api.file.remove('remove %s' % self._local_path, self._local_path)
 
   class MetadataFetch():
     def __init__(self, api, metadata_key, local_file, **kwargs):

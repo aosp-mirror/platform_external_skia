@@ -6,7 +6,6 @@
  */
 
 #include "gm.h"
-#include "sk_tool_utils.h"
 #include "SkGradientShader.h"
 
 namespace skiagm {
@@ -61,7 +60,7 @@ static sk_sp<SkShader> MakeLinear(const SkPoint pts[2], const GradData& data,
 
 static sk_sp<SkShader> MakeLinear4f(const SkPoint pts[2], const GradData& data,
                                     SkShader::TileMode tm, const SkMatrix& localMatrix) {
-    auto srgb = SkColorSpace::MakeSRGBLinear();
+    auto srgb = SkColorSpace::MakeSRGB();
     return SkGradientShader::MakeLinear(pts, data.fColors4f, srgb, data.fPos, data.fCount, tm, 0,
                                         &localMatrix);
 }
@@ -80,7 +79,7 @@ static sk_sp<SkShader> MakeRadial4f(const SkPoint pts[2], const GradData& data,
     SkPoint center;
     center.set(SkScalarAve(pts[0].fX, pts[1].fX),
                SkScalarAve(pts[0].fY, pts[1].fY));
-    auto srgb = SkColorSpace::MakeSRGBLinear();
+    auto srgb = SkColorSpace::MakeSRGB();
     return SkGradientShader::MakeRadial(center, center.fX, data.fColors4f, srgb, data.fPos,
                                         data.fCount, tm, 0, &localMatrix);
 }
@@ -99,7 +98,7 @@ static sk_sp<SkShader> MakeSweep4f(const SkPoint pts[2], const GradData& data,
     SkPoint center;
     center.set(SkScalarAve(pts[0].fX, pts[1].fX),
                SkScalarAve(pts[0].fY, pts[1].fY));
-    auto srgb = SkColorSpace::MakeSRGBLinear();
+    auto srgb = SkColorSpace::MakeSRGB();
     return SkGradientShader::MakeSweep(center.fX, center.fY, data.fColors4f, srgb, data.fPos,
                                        data.fCount, 0, &localMatrix);
 }
@@ -124,7 +123,7 @@ static sk_sp<SkShader> Make2Radial4f(const SkPoint pts[2], const GradData& data,
                 SkScalarAve(pts[0].fY, pts[1].fY));
     center1.set(SkScalarInterp(pts[0].fX, pts[1].fX, SkIntToScalar(3) / 5),
                 SkScalarInterp(pts[0].fY, pts[1].fY, SkIntToScalar(1) / 4));
-    auto srgb = SkColorSpace::MakeSRGBLinear();
+    auto srgb = SkColorSpace::MakeSRGB();
     return SkGradientShader::MakeTwoPointConical(center1, (pts[1].fX - pts[0].fX) / 7,
                                                  center0, (pts[1].fX - pts[0].fX) / 2,
                                                  data.fColors4f, srgb, data.fPos, data.fCount, tm,
@@ -150,7 +149,7 @@ static sk_sp<SkShader> Make2Conical4f(const SkPoint pts[2], const GradData& data
     SkScalar radius1 = (pts[1].fX - pts[0].fX) / 3;
     center0.set(pts[0].fX + radius0, pts[0].fY + radius0);
     center1.set(pts[1].fX - radius1, pts[1].fY - radius1);
-    auto srgb = SkColorSpace::MakeSRGBLinear();
+    auto srgb = SkColorSpace::MakeSRGB();
     return SkGradientShader::MakeTwoPointConical(center1, radius1, center0, radius0,
                                                  data.fColors4f, srgb, data.fPos,
                                                  data.fCount, tm, 0, &localMatrix);
@@ -170,7 +169,7 @@ constexpr GradMaker gGradMakers4f[] ={
 class GradientsGM : public GM {
 public:
     GradientsGM(bool dither) : fDither(dither) {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
+        this->setBGColor(0xFFDDDDDD);
     }
 
 protected:
@@ -226,7 +225,7 @@ DEF_GM( return new GradientsGM(false); )
 class Gradients4fGM : public GM {
 public:
     Gradients4fGM(bool dither) : fDither(dither) {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
+        this->setBGColor(0xFFDDDDDD);
     }
 
 protected:
@@ -283,7 +282,7 @@ DEF_GM(return new Gradients4fGM(false); )
 class GradientsLocalPerspectiveGM : public GM {
 public:
     GradientsLocalPerspectiveGM(bool dither) : fDither(dither) {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
+        this->setBGColor(0xFFDDDDDD);
     }
 
 protected:
@@ -471,7 +470,7 @@ protected:
     virtual SkISize onISize() { return SkISize::Make(640, 510); }
 
     void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
+        canvas->drawColor(0xFFDDDDDD);
     }
 
     virtual void onDraw(SkCanvas* canvas) {
@@ -913,19 +912,6 @@ static void draw_many_stops(SkCanvas* canvas) {
 
 DEF_SIMPLE_GM(gradient_many_stops, canvas, 500, 500) {
     draw_many_stops(canvas);
-}
-
-static void draw_subpixel_gradient(SkCanvas* canvas) {
-    const SkPoint pts[] = { {50, 50}, {50.1f, 50.1f}};
-    SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE };
-    SkPaint p;
-    p.setShader(SkGradientShader::MakeLinear(
-        pts, colors, nullptr, SK_ARRAY_COUNT(colors), SkShader::kRepeat_TileMode));
-    canvas->drawRect(SkRect::MakeXYWH(0, 0, 500, 500), p);
-}
-
-DEF_SIMPLE_GM(gradient_subpixel, canvas, 500, 500) {
-    draw_subpixel_gradient(canvas);
 }
 
 #include "SkPictureRecorder.h"

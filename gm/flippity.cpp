@@ -10,10 +10,8 @@
 
 #include "SkSurface.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrContextPriv.h"
-#include "GrProxyProvider.h"
+#include "ProxyUtils.h"
 #include "SkImage_Gpu.h"
 
 static const int kNumMatrices = 6;
@@ -61,13 +59,16 @@ static const SkMatrix kUVMatrices[kNumMatrices] = {
 // Create a fixed size text label like "LL" or "LR".
 static sk_sp<SkImage> make_text_image(GrContext* context, const char* text, SkColor color) {
     SkPaint paint;
-    sk_tool_utils::set_portable_typeface(&paint);
     paint.setAntiAlias(true);
-    paint.setTextSize(32);
     paint.setColor(color);
 
+    SkFont font;
+    font.setEdging(SkFont::Edging::kAntiAlias);
+    font.setTypeface(sk_tool_utils::create_portable_typeface());
+    font.setSize(32);
+
     SkRect bounds;
-    paint.measureText(text, strlen(text), &bounds);
+    font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
     const SkMatrix mat = SkMatrix::MakeRectToRect(bounds, SkRect::MakeWH(kLabelSize, kLabelSize),
                                                   SkMatrix::kFill_ScaleToFit);
 
@@ -78,15 +79,11 @@ static sk_sp<SkImage> make_text_image(GrContext* context, const char* text, SkCo
 
     canvas->clear(SK_ColorWHITE);
     canvas->concat(mat);
-    canvas->drawText(text, strlen(text), 0, 0, paint);
+    canvas->drawSimpleText(text, strlen(text), kUTF8_SkTextEncoding, 0, 0, font, paint);
 
     sk_sp<SkImage> image = surf->makeImageSnapshot();
 
     return image->makeTextureImage(context, nullptr);
-}
-
-static SkColor swap_red_and_blue(SkColor c) {
-    return SkColorSetRGB(SkColorGetB(c), SkColorGetG(c), SkColorGetR(c));
 }
 
 // Create an image with each corner marked w/ "LL", "LR", etc., with the origin either bottom-left
@@ -94,11 +91,10 @@ static SkColor swap_red_and_blue(SkColor c) {
 static sk_sp<SkImage> make_reference_image(GrContext* context,
                                            const SkTArray<sk_sp<SkImage>>& labels,
                                            bool bottomLeftOrigin) {
-    GrProxyProvider* proxyProvider = context->contextPriv().proxyProvider();
     SkASSERT(kNumLabels == labels.count());
 
-    SkImageInfo ii = SkImageInfo::Make(kImageSize, kImageSize,
-                                       kN32_SkColorType, kOpaque_SkAlphaType);
+    SkImageInfo ii =
+            SkImageInfo::Make(kImageSize, kImageSize, kRGBA_8888_SkColorType, kOpaque_SkAlphaType);
     SkBitmap bm;
     bm.allocPixels(ii);
     SkCanvas canvas(bm);
@@ -110,36 +106,17 @@ static sk_sp<SkImage> make_reference_image(GrContext* context,
                          0.0 != kPoints[i].fY ? kPoints[i].fY-kLabelSize-kInset : kInset);
     }
 
-    GrSurfaceDesc desc;
-    desc.fOrigin = kTopLeft_GrSurfaceOrigin;
-    desc.fWidth = kImageSize;
-    desc.fHeight = kImageSize;
-    desc.fConfig = kRGBA_8888_GrPixelConfig;
+    auto origin = bottomLeftOrigin ? kBottomLeft_GrSurfaceOrigin : kTopLeft_GrSurfaceOrigin;
 
-    if (bottomLeftOrigin) {
-        // Note that Ganesh will flip the data when it is uploaded
-        desc.fOrigin = kBottomLeft_GrSurfaceOrigin;
-    }
-
-    if (kN32_SkColorType == kBGRA_8888_SkColorType) {
-        // We're playing a game here and uploading N32 data into an RGB dest. We might have
-        // to swap red & blue to compensate.
-        for (int y = 0; y < bm.height(); ++y) {
-            uint32_t *sl = bm.getAddr32(0, y);
-            for (int x = 0; x < bm.width(); ++x) {
-                sl[x] = swap_red_and_blue(sl[x]);
-            }
-        }
-    }
-
-    sk_sp<GrTextureProxy> proxy = proxyProvider->createTextureProxy(desc, SkBudgeted::kYes,
-                                                                    bm.getPixels(), bm.rowBytes());
+    auto proxy = sk_gpu_test::MakeTextureProxyFromData(context, false, kImageSize, kImageSize,
+                                                       bm.colorType(), origin, bm.getPixels(),
+                                                       bm.rowBytes());
     if (!proxy) {
         return nullptr;
     }
 
-    return sk_make_sp<SkImage_Gpu>(context, kNeedNewImageUniqueID, kOpaque_SkAlphaType,
-                                   std::move(proxy), nullptr, SkBudgeted::kYes);
+    return sk_make_sp<SkImage_Gpu>(sk_ref_sp(context), kNeedNewImageUniqueID, kOpaque_SkAlphaType,
+                                   std::move(proxy), nullptr);
 }
 
 // Here we're converting from a matrix that is intended for UVs to a matrix that is intended
@@ -162,10 +139,10 @@ static bool UVMatToGeomMatForImage(SkMatrix* geomMat, const SkMatrix& uvMat) {
 
 // This GM exercises drawImage with a set of matrices that use an unusual amount of flips and
 // rotates.
-class FlippityGM : public skiagm::GM {
+class FlippityGM : public skiagm::GpuGM {
 public:
     FlippityGM() {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFFCCCCCC));
+        this->setBGColor(0xFFCCCCCC);
     }
 
 protected:
@@ -248,13 +225,7 @@ protected:
         SkASSERT(kNumLabels == fLabels.count());
     }
 
-    void onDraw(SkCanvas* canvas) override {
-        GrContext* context = canvas->getGrContext();
-        if (!context) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
-            return;
-        }
-
+    void onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas) override {
         this->makeLabels(context);
 
         canvas->save();
@@ -295,5 +266,3 @@ private:
 };
 
 DEF_GM(return new FlippityGM;)
-
-#endif

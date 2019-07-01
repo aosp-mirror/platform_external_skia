@@ -5,24 +5,86 @@
  * found in the LICENSE file.
  */
 
-#include "bookmaker.h"
 #include "SkOSFile.h"
 #include "SkOSPath.h"
 
-static void debug_out(int len, const char* data) {
-    // convenient place to intercept arbitrary output
-    SkDebugf("%.*s", len, data);
+#include "parserCommon.h"
+
+void ParserCommon::checkLineLength(size_t len, const char* str) {
+    if (!fWritingIncludes) {
+        return;
+    }
+    int column = fColumn;
+    const char* lineStart = str;
+    for (size_t index = 0; index < len; ++index) {
+        if ('\n' == str[index]) {
+            if (column > 100) {
+                SkDebugf("> 100 columns in %s line %d\n", fFileName.c_str(), fLinesWritten);
+                SkDebugf("%.*s\n", &str[index + 1] - lineStart, lineStart);
+                SkDebugf("");  // convenient place to set breakpoints
+            }
+            fLinesWritten++;
+            column = 0;
+            lineStart = &str[index + 1];
+        } else {
+            column++;
+        }
+    }
 }
 
-bool ParserCommon::parseFile(const char* fileOrPath, const char* suffix) {
+// change Xxx_Xxx to xxx xxx
+string ParserCommon::ConvertRef(const string str, bool first) {
+    string substitute;
+    for (char c : str) {
+        if ('_' == c) {
+            c = ' ';
+        } else if (isupper(c) && !first) {
+            c = tolower(c);
+        }
+        substitute += c;
+        first = false;
+    }
+    return substitute;
+}
+
+void ParserCommon::CopyToFile(string oldFile, string newFile) {
+    int bufferSize;
+    char* buffer = ParserCommon::ReadToBuffer(newFile, &bufferSize);
+    FILE* oldOut = fopen(oldFile.c_str(), "wb");
+    if (!oldOut) {
+        SkDebugf("could not open file %s\n", oldFile.c_str());
+        return;
+    }
+    fwrite(buffer, 1, bufferSize, oldOut);
+    fclose(oldOut);
+    remove(newFile.c_str());
+}
+
+string ParserCommon::HtmlFileName(string bmhFileName) {
+    SkASSERT("docs" == bmhFileName.substr(0, 4));
+    SkASSERT('\\' == bmhFileName[4] || '/' == bmhFileName[4]);
+    SkASSERT(".bmh" == bmhFileName.substr(bmhFileName.length() - 4));
+    string result = bmhFileName.substr(5, bmhFileName.length() - 4 - 5);
+    return result;
+}
+
+bool ParserCommon::parseFile(const char* fileOrPath, const char* suffix, OneFile oneFile) {
+    fRawFilePathDir = string(fileOrPath);
     if (!sk_isdir(fileOrPath)) {
         if (!this->parseFromFile(fileOrPath)) {
             SkDebugf("failed to parse %s\n", fileOrPath);
             return false;
         }
-    } else {
+    } else if (OneFile::kNo == oneFile) {
         SkOSFile::Iter it(fileOrPath, suffix);
         for (SkString file; it.next(&file); ) {
+            // FIXME: skip difficult file for now
+            if (string::npos != string(file.c_str()).find("SkFontArguments")) {
+                continue;
+            }
+            if (string::npos != string(file.c_str()).find("SkFontStyle")) {
+                continue;
+            }
             SkString p = SkOSPath::Join(fileOrPath, file.c_str());
             const char* hunk = p.c_str();
             if (!SkStrEndsWith(hunk, suffix)) {
@@ -38,11 +100,12 @@ bool ParserCommon::parseFile(const char* fileOrPath, const char* suffix) {
 }
 
 bool ParserCommon::parseStatus(const char* statusFile, const char* suffix, StatusFilter filter) {
+    fRawFilePathDir = string(statusFile);
     StatusIter iter(statusFile, suffix, filter);
     if (iter.empty()) {
         return false;
     }
-    for (string file; iter.next(&file); ) {
+    for (string file; iter.next(&file, nullptr); ) {
         SkString p = SkOSPath::Join(iter.baseDir().c_str(), file.c_str());
         const char* hunk = p.c_str();
         if (!this->parseFromFile(hunk)) {
@@ -95,39 +158,80 @@ bool ParserCommon::parseSetup(const char* path) {
     return true;
 }
 
-void ParserCommon::writeBlockIndent(int size, const char* data) {
+void ParserCommon::stringAppend(string& result, char ch) const {
+    if (fDebugWriteCodeBlock) {
+        SkDebugf("%c", ch);
+    }
+    result += ch;
+}
+
+void ParserCommon::stringAppend(string& result, string str) const {
+    string condense;
+    char last = result.size() ? result.back() : '\n';
+    for (auto c : str) {
+        if (' ' == c && ' ' == last) {
+            continue;
+        }
+        condense += c;
+        if ('\n' != last || ' ' != c) {
+            last = c;
+        }
+    }
+    if (fDebugWriteCodeBlock) {
+        SkDebugf("%s", condense.c_str());
+    }
+    result += condense;
+}
+
+void ParserCommon::stringAppend(string& result, const Definition* def) const {
+    this->stringAppend(result, string(def->fContentStart, def->length()));
+}
+
+bool ParserCommon::writeBlockIndent(int size, const char* data, bool ignoreIdent) {
+    bool wroteSomething = false;
     while (size && ' ' >= data[size - 1]) {
         --size;
     }
     bool newLine = false;
+    char firstCh = 0;
     while (size) {
-        while (size && ' ' > data[0]) {
+        while (size && (' ' > data[0] || (' ' == data[0] && ignoreIdent))) {
             ++data;
             --size;
         }
         if (!size) {
-            return;
+            return wroteSomething;
+        }
+        if (fReturnOnWrite) {
+            return true;
         }
         if (newLine) {
             this->lf(1);
+        }
+        int indent = fIndent;
+        if (!firstCh) {
+            firstCh = data[0];
+        } else if ('(' == firstCh) {
+            indent += 1;
         }
         TextParser parser(fFileName, data, data + size, fLineCount);
         const char* lineEnd = parser.strnchr('\n', data + size);
         int len = lineEnd ? (int) (lineEnd - data) : size;
         this->writePending();
-        this->indentToColumn(fIndent);
-        if (fDebugOut) {
-            debug_out(len, data);
-        }
-        fprintf(fOut, "%.*s", len, data);
+        this->indentToColumn(indent);
+        FPRINTF("%.*s", len, data);
+        checkLineLength(len, data);
         size -= len;
         data += len;
         newLine = true;
+        wroteSomething = true;
     }
+    return wroteSomething;
 }
 
 bool ParserCommon::writeBlockTrim(int size, const char* data) {
-    if (fOutdentNext) {
+    SkASSERT(size >= 0);
+    if (!fReturnOnWrite && fOutdentNext) {
         fIndent -= 4;
         fOutdentNext = false;
     }
@@ -139,10 +243,15 @@ bool ParserCommon::writeBlockTrim(int size, const char* data) {
         --size;
     }
     if (size <= 0) {
-        fLastChar = '\0';
+        if (!fReturnOnWrite) {
+            fLastChar = '\0';
+        }
         return false;
     }
-    SkASSERT(size < 16000);
+    if (fReturnOnWrite) {
+        return true;
+    }
+    SkASSERT(size < 20000);
     if (size > 3 && !strncmp("#end", data, 4)) {
         fMaxLF = 1;
     }
@@ -150,10 +259,9 @@ bool ParserCommon::writeBlockTrim(int size, const char* data) {
         fPendingSpace = 0;
     }
     this->writePending();
-    if (fDebugOut) {
-        debug_out(size, data);
-    }
-    fprintf(fOut, "%.*s", size, data);
+    FPRINTF("%.*s", size, data);
+    checkLineLength(size, data);
+    fWroteSomething = true;
     int added = 0;
     fLastChar = data[size - 1];
     while (size > 0 && '\n' != data[--size]) {
@@ -171,6 +279,7 @@ bool ParserCommon::writeBlockTrim(int size, const char* data) {
 }
 
 void ParserCommon::writePending() {
+    SkASSERT(!fReturnOnWrite);
     fPendingLF = SkTMin(fPendingLF, fMaxLF);
     bool wroteLF = false;
     while (fLinefeeds < fPendingLF) {
@@ -178,6 +287,7 @@ void ParserCommon::writePending() {
             SkDebugf("\n");
         }
         fprintf(fOut, "\n");
+        checkLineLength(1, "\n");
         ++fLinefeeds;
         wroteLF = true;
     }
@@ -185,6 +295,7 @@ void ParserCommon::writePending() {
     if (wroteLF) {
         SkASSERT(0 == fColumn);
         SkASSERT(fIndent >= fSpaces);
+        SkASSERT(fIndent - fSpaces < 80);
         if (fDebugOut) {
             SkDebugf("%*s", fIndent - fSpaces, "");
         }
@@ -192,6 +303,7 @@ void ParserCommon::writePending() {
         fColumn = fIndent;
         fSpaces = fIndent;
     }
+    SkASSERT(!fWritingIncludes || fColumn + fPendingSpace < 100);
     for (int index = 0; index < fPendingSpace; ++index) {
         if (fDebugOut) {
             SkDebugf(" ");
@@ -203,6 +315,7 @@ void ParserCommon::writePending() {
 }
 
 void ParserCommon::writeString(const char* str) {
+    SkASSERT(!fReturnOnWrite);
     const size_t len = strlen(str);
     SkASSERT(len > 0);
     SkASSERT(' ' < str[0]);
@@ -213,17 +326,15 @@ void ParserCommon::writeString(const char* str) {
         fPendingSpace = 0;
     }
     this->writePending();
-    if (fDebugOut) {
-        debug_out((int) strlen(str), str);
-    }
-    fprintf(fOut, "%s", str);
+    FPRINTF("%s", str);
+    checkLineLength(strlen(str), str);
     fColumn += len;
     fSpaces = 0;
     fLinefeeds = 0;
     fMaxLF = 2;
 }
 
-const char* ParserCommon::ReadToBuffer(string filename, int* size) {
+char* ParserCommon::ReadToBuffer(string filename, int* size) {
     FILE* file = fopen(filename.c_str(), "rb");
     if (!file) {
         return nullptr;
@@ -235,17 +346,30 @@ const char* ParserCommon::ReadToBuffer(string filename, int* size) {
     memset(buffer, ' ', *size);
     SkAssertResult(*size == (int)fread(buffer, 1, *size, file));
     fclose(file);
-    fflush(file);
     return buffer;
 }
 
-bool ParserCommon::writtenFileDiffers(string filename, string readname) {
+char* ParserCommon::FindDateTime(char* buffer, int size) {
+    int index = -1;
+    int lineCount = 8;
+    while (++index < size && ('\n' != buffer[index] || --lineCount))
+        ;
+    if (lineCount) {
+        return nullptr;
+    }
+    if (strncmp("\n   on 20", &buffer[index], 9)) {
+        return nullptr;
+    }
+    return &buffer[index];
+}
+
+bool ParserCommon::WrittenFileDiffers(string filename, string readname) {
     int writtenSize, readSize;
-    const char* written = ReadToBuffer(filename, &writtenSize);
+    char* written = ParserCommon::ReadToBuffer(filename, &writtenSize);
     if (!written) {
         return true;
     }
-    const char* read = ReadToBuffer(readname, &readSize);
+    char* read = ParserCommon::ReadToBuffer(readname, &readSize);
     if (!read) {
         delete[] written;
         return true;
@@ -262,6 +386,12 @@ bool ParserCommon::writtenFileDiffers(string filename, string readname) {
 #endif
     if (readSize != writtenSize) {
         return true;
+    }
+    // force the date/time to be the same, if present in both
+    const char* newDateTime = FindDateTime(written, writtenSize);
+    char* oldDateTime = FindDateTime(read, readSize);
+    if (newDateTime && oldDateTime) {
+        memcpy(oldDateTime, newDateTime, 26);
     }
     bool result = !!memcmp(written, read, writtenSize);
     delete[] written;
@@ -283,7 +413,7 @@ static const char* block_names[] = {
 };
 
 string StatusIter::baseDir() {
-    SkASSERT(fStack.back().fObject.isArray());
+    SkASSERT(fStack.back().fArray);
     SkASSERT(fStack.size() > 2);
     string dir;
     for (unsigned index = 2; index < fStack.size(); ++index) {
@@ -297,24 +427,27 @@ string StatusIter::baseDir() {
 
 // FIXME: need to compare fBlockName against fFilter
 // need to compare fSuffix against next value returned
-bool StatusIter::next(string* str) {
+bool StatusIter::next(string* strPtr, StatusFilter *filter) {
+    string str;
     JsonStatus* status;
+    StatusFilter blockType = StatusFilter::kCompleted;
     do {
         do {
             if (fStack.empty()) {
                 return false;
             }
             status = &fStack.back();
-            if (status->fIter != status->fObject.end()) {
+            if (!status->atEnd()) {
                 break;
             }
             fStack.pop_back();
         } while (true);
         if (1 == fStack.size()) {
             do {
-                StatusFilter blockType = StatusFilter::kUnknown;
+                blockType = StatusFilter::kUnknown;
+                SkASSERT(status->fObject);
                 for (unsigned index = 0; index < SK_ARRAY_COUNT(block_names); ++index) {
-                    if (status->fIter.key().asString() == block_names[index]) {
+                    if (!strcmp(status->fObjectIter->fKey.begin(), block_names[index])) {
                         blockType = (StatusFilter) index;
                         break;
                     }
@@ -322,51 +455,54 @@ bool StatusIter::next(string* str) {
                 if (blockType <= fFilter) {
                     break;
                 }
-                status->fIter++;
-            } while (status->fIter != status->fObject.end());
-            if (status->fIter == status->fObject.end()) {
+                status->advance();
+            } while (!status->atEnd());
+            if (status->atEnd()) {
                 continue;
             }
         }
-        if (!status->fObject.isArray()) {
-            SkASSERT(status->fIter != status->fObject.end());
-            JsonStatus block = {
-                *status->fIter,
-                status->fIter->begin(),
-                status->fIter.key().asString()
-            };
+        if (!status->fArray) {
+            SkASSERT(status->fObjectIter != status->fObject->end());
+            JsonStatus block = JsonStatus::Make(status->current(),
+                                                status->fObjectIter->fKey.begin(),
+                                                blockType);
             fStack.emplace_back(block);
             status = &(&fStack.back())[-1];
-            status->fIter++;
+            status->advance();
             status = &fStack.back();
             continue;
         }
-        *str = status->fIter->asString();
-        status->fIter++;
-        if (str->length() - strlen(fSuffix) == str->find(fSuffix)) {
+        if (const skjson::StringValue* sv = status->current()) {
+            str = sv->begin();
+        } else {
+            str = status->current().toString().c_str();
+        }
+        if (strPtr) {
+            *strPtr = str;
+        }
+        if (filter) {
+            *filter = status->fStatusFilter;
+        }
+        status->advance();
+        if (str.length() - strlen(fSuffix) == str.find(fSuffix)) {
             return true;
         }
     } while (true);
     return true;
 }
 
-bool StatusIter::parseFromFile(const char* path) {
+bool JsonCommon::parseFromFile(const char* path) {
     sk_sp<SkData> json(SkData::MakeFromFileName(path));
     if (!json) {
         SkDebugf("file %s:\n", path);
         return this->reportError<bool>("file not readable");
     }
-    Json::Reader reader;
-    const char* data = (const char*)json->data();
-    if (!reader.parse(data, data+json->size(), fRoot)) {
+    fDom.reset(new skjson::DOM((const char*)json->data(), json->size()));
+    if (!fDom->root().is<skjson::ObjectValue>()) {
         SkDebugf("file %s:\n", path);
         return this->reportError<bool>("file not parsable");
     }
-    JsonStatus block = { fRoot, fRoot.begin(), "" };
+    JsonStatus block = JsonStatus::Make(fDom->root(), "", StatusFilter::kUnknown);
     fStack.emplace_back(block);
     return true;
-}
-
-void StatusIter::reset() {
-    fStack.clear();
 }

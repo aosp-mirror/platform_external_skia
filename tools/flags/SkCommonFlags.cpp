@@ -56,12 +56,16 @@ DEFINE_bool(disableDriverCorrectnessWorkarounds, false, "Disables all GPU driver
 #ifdef SK_BUILD_FOR_ANDROID
 DEFINE_string(skps, "/data/local/tmp/skps", "Directory to read skps from.");
 DEFINE_string(jpgs, "/data/local/tmp/resources", "Directory to read jpgs from.");
-DEFINE_string(jsons, "/data/local/tmp/jsons", "Directory to read (Bodymovin) jsons from.");
+DEFINE_string(lotties, "/data/local/tmp/lotties", "Directory to read (Bodymovin) jsons from.");
+DEFINE_string(nimas, "/data/local/tmp/nimas", "Directory to read NIMA animations from.");
 #else
 DEFINE_string(skps, "skps", "Directory to read skps from.");
 DEFINE_string(jpgs, "jpgs", "Directory to read jpgs from.");
-DEFINE_string(jsons, "jsons", "Directory to read (Bodymovin) jsons from.");
+DEFINE_string(lotties, "lotties", "Directory to read (Bodymovin) jsons from.");
+DEFINE_string(nimas, "nimas", "Directory to read NIMA animations from.");
 #endif
+
+DEFINE_int32(skpViewportSize, 1000, "Width & height of the viewport used to crop skp rendering.");
 
 DEFINE_bool(nativeFonts, true, "If true, use native font manager and rendering. "
                                "If false, fonts will draw as portably as possible.");
@@ -89,14 +93,8 @@ DEFINE_bool(forceAnalyticAA, false, "Force analytic anti-aliasing even if the pa
                                     "whether it's concave or convex, we consider a path complicated"
                                     "if its number of points is comparable to its resolution.");
 
-#if defined(SK_SUPPORT_LEGACY_DELTA_AA) || (defined(_MSC_VER) && !defined(__clang__))
-constexpr bool kDefaultDeltaAA = false;
-#else
-constexpr bool kDefaultDeltaAA = true;
-#endif
-DEFINE_bool(deltaAA, kDefaultDeltaAA,
+DEFINE_bool(deltaAA, false,
             "If true, use delta anti-aliasing in suitable cases (it overrides forceAnalyticAA.");
-
 DEFINE_bool(forceDeltaAA, false, "Force delta anti-aliasing for all paths.");
 
 DEFINE_int32(backendTiles, 3, "Number of tiles in the experimental threaded backend.");
@@ -107,14 +105,20 @@ bool CollectImages(SkCommandLineFlags::StringArray images, SkTArray<SkString>* o
 
     static const char* const exts[] = {
         "bmp", "gif", "jpg", "jpeg", "png", "webp", "ktx", "astc", "wbmp", "ico",
+#if !defined(SK_BUILD_FOR_WIN)
         "BMP", "GIF", "JPG", "JPEG", "PNG", "WEBP", "KTX", "ASTC", "WBMP", "ICO",
+#endif
 #ifdef SK_HAS_HEIF_LIBRARY
         "heic",
+#if !defined(SK_BUILD_FOR_WIN)
         "HEIC",
+#endif
 #endif
 #ifdef SK_CODEC_DECODES_RAW
         "arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
+#if !defined(SK_BUILD_FOR_WIN)
         "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW",
+#endif
 #endif
     };
 
@@ -148,8 +152,6 @@ bool CollectImages(SkCommandLineFlags::StringArray images, SkTArray<SkString>* o
     return true;
 }
 
-#if SK_SUPPORT_GPU
-
 #include "SkCommonFlagsGpu.h"
 
 DEFINE_int32(gpuThreads, 2, "Create this many extra threads to assist with GPU work, "
@@ -159,10 +161,13 @@ DEFINE_bool(cachePathMasks, true, "Allows path mask textures to be cached in GPU
 
 DEFINE_bool(noGS, false, "Disables support for geometry shaders.");
 
-DEFINE_string(pr, "default",
+DEFINE_string(pr, "all",
               "Set of enabled gpu path renderers. Defined as a list of: "
-              "[[~]all [~]default [~]dashline [~]nvpr [~]msaa [~]aaconvex "
-              "[~]aalinearizing [~]small [~]tess]");
+              "[~]none [~]dashline [~]nvpr [~]ccpr [~]aahairline [~]aaconvex [~]aalinearizing "
+              "[~]small [~]tess] [~]all");
+
+DEFINE_bool(disableExplicitAlloc, false, "Disable explicit allocation of GPU resources");
+DEFINE_bool(reduceOpListSplitting, false, "Improve opList sorting");
 
 void SetCtxOptionsFromCommonFlags(GrContextOptions* ctxOptions) {
     static std::unique_ptr<SkExecutor> gGpuExecutor = (0 != FLAGS_gpuThreads)
@@ -172,6 +177,14 @@ void SetCtxOptionsFromCommonFlags(GrContextOptions* ctxOptions) {
     ctxOptions->fSuppressGeometryShaders = FLAGS_noGS;
     ctxOptions->fGpuPathRenderers = CollectGpuPathRenderersFromFlags();
     ctxOptions->fDisableDriverCorrectnessWorkarounds = FLAGS_disableDriverCorrectnessWorkarounds;
-}
 
-#endif
+    if (FLAGS_disableExplicitAlloc) {
+        ctxOptions->fExplicitlyAllocateGPUResources = GrContextOptions::Enable::kNo;
+        // Can't have sorting enabled when explicit allocation is disabled.
+        ctxOptions->fSortRenderTargets = GrContextOptions::Enable::kNo;
+    }
+
+    if (FLAGS_reduceOpListSplitting) {
+        ctxOptions->fReduceOpListSplitting = GrContextOptions::Enable::kYes;
+    }
+}

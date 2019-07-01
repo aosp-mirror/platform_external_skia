@@ -6,14 +6,16 @@
  */
 
 #include "SkBase64.h"
+#include "SkTo.h"
 
 #include "Test.h"
 
 DEF_TEST(SkBase64, reporter) {
     char all[256];
-    for (int index = 0; index < 256; ++index) {
+    for (int index = 0; index < 255; ++index) {
         all[index] = (signed char) (index + 1);
     }
+    all[255] = 0;
 
     for (int offset = 0; offset < 6; ++offset) {
         size_t length = 256 - offset;

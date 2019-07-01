@@ -9,16 +9,17 @@
 #include "sk_tool_utils.h"
 #include "SkClipStack.h"
 #include "SkRRect.h"
+#include "SkTextUtils.h"
 
-#if SK_SUPPORT_GPU
-#  include "GrAppliedClip.h"
-#  include "GrStencilClip.h"
-#  include "GrReducedClip.h"
-#  include "GrRenderTargetContext.h"
-#  include "GrRenderTargetContextPriv.h"
-#  include "GrResourceProvider.h"
-#  include "effects/GrTextureDomain.h"
-#endif
+#include "GrAppliedClip.h"
+#include "GrCaps.h"
+#include "GrContextPriv.h"
+#include "GrReducedClip.h"
+#include "GrRenderTargetContext.h"
+#include "GrRenderTargetContextPriv.h"
+#include "GrResourceProvider.h"
+#include "GrStencilClip.h"
+#include "effects/GrTextureDomain.h"
 
 constexpr static SkIRect kDeviceRect = {0, 0, 600, 600};
 constexpr static SkIRect kCoverRect = {50, 50, 550, 550};
@@ -29,14 +30,14 @@ namespace skiagm {
 
 class WindowRectanglesBaseGM : public GM {
 protected:
-    virtual void onCoverClipStack(const SkClipStack&, SkCanvas*) = 0;
+    virtual DrawResult onCoverClipStack(const SkClipStack&, SkCanvas*, SkString* errorMsg) = 0;
 
 private:
     SkISize onISize() override { return SkISize::Make(kDeviceRect.width(), kDeviceRect.height()); }
-    void onDraw(SkCanvas*) final;
+    DrawResult onDraw(SkCanvas*, SkString* errorMsg) final;
 };
 
-void WindowRectanglesBaseGM::onDraw(SkCanvas* canvas) {
+DrawResult WindowRectanglesBaseGM::onDraw(SkCanvas* canvas, SkString* errorMsg) {
     sk_tool_utils::draw_checkerboard(canvas, 0xffffffff, 0xffc6c3c6, 25);
 
     SkClipStack stack;
@@ -56,7 +57,7 @@ void WindowRectanglesBaseGM::onDraw(SkCanvas* canvas) {
     complx.setRectRadii(SkRect::MakeXYWH(80.25, 80.75, 100, 149), complxRadii);
     stack.clipRRect(complx, SkMatrix::I(), kDifference_SkClipOp, false);
 
-    this->onCoverClipStack(stack, canvas);
+    return this->onCoverClipStack(stack, canvas, errorMsg);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -67,10 +68,11 @@ void WindowRectanglesBaseGM::onDraw(SkCanvas* canvas) {
 class WindowRectanglesGM : public WindowRectanglesBaseGM {
 private:
     SkString onShortName() final { return SkString("windowrectangles"); }
-    void onCoverClipStack(const SkClipStack&, SkCanvas*) final;
+    DrawResult onCoverClipStack(const SkClipStack&, SkCanvas*, SkString* errorMsg) final;
 };
 
-void WindowRectanglesGM::onCoverClipStack(const SkClipStack& stack, SkCanvas* canvas) {
+DrawResult WindowRectanglesGM::onCoverClipStack(const SkClipStack& stack, SkCanvas* canvas,
+                                                SkString* errorMsg) {
     SkPaint paint;
     paint.setColor(0xff00aa80);
 
@@ -96,13 +98,12 @@ void WindowRectanglesGM::onCoverClipStack(const SkClipStack& stack, SkCanvas* ca
     }
 
     canvas->drawRect(SkRect::Make(kCoverRect), paint);
+    return DrawResult::kOk;
 }
 
 DEF_GM( return new WindowRectanglesGM(); )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if SK_SUPPORT_GPU
 
 constexpr static int kNumWindows = 8;
 
@@ -122,11 +123,10 @@ class WindowRectanglesMaskGM : public WindowRectanglesBaseGM {
 private:
     constexpr static int kMaskCheckerSize = 5;
     SkString onShortName() final { return SkString("windowrectangles_mask"); }
-    void onCoverClipStack(const SkClipStack&, SkCanvas*) final;
+    DrawResult onCoverClipStack(const SkClipStack&, SkCanvas*, SkString* errorMsg) final;
     void visualizeAlphaMask(GrContext*, GrRenderTargetContext*, const GrReducedClip&, GrPaint&&);
     void visualizeStencilMask(GrContext*, GrRenderTargetContext*, const GrReducedClip&, GrPaint&&);
     void stencilCheckerboard(GrRenderTargetContext*, bool flip);
-    void fail(SkCanvas*);
 };
 
 /**
@@ -152,7 +152,7 @@ public:
     AlphaOnlyClip(sk_sp<GrTextureProxy> mask, int x, int y) : fMask(mask), fX(x), fY(y) {}
 
 private:
-    bool apply(GrContext*, GrRenderTargetContext*, bool, bool, GrAppliedClip* out,
+    bool apply(GrRecordingContext*, GrRenderTargetContext*, bool, bool, GrAppliedClip* out,
                SkRect* bounds) const override {
         int w = fMask->width();
         int h = fMask->height();
@@ -172,34 +172,42 @@ static GrStencilClip make_stencil_only_clip() {
     return GrStencilClip(SkClipStack::kEmptyGenID);
 };
 
-void WindowRectanglesMaskGM::onCoverClipStack(const SkClipStack& stack, SkCanvas* canvas) {
+DrawResult WindowRectanglesMaskGM::onCoverClipStack(const SkClipStack& stack, SkCanvas* canvas,
+                                                        SkString* errorMsg) {
     GrContext* ctx = canvas->getGrContext();
     GrRenderTargetContext* rtc = canvas->internal_private_accessTopLayerRenderTargetContext();
-
-    if (!ctx || !rtc || rtc->priv().maxWindowRectangles() < kNumWindows) {
-        this->fail(canvas);
-        return;
+    if (!ctx || !rtc) {
+        *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
+        return DrawResult::kSkip;
+    }
+    if (rtc->priv().maxWindowRectangles() < kNumWindows) {
+        *errorMsg = "Requires at least 8 window rectangles. "
+                    "(Are you off FBO 0? Use sRGB to force offscreen rendering.)";
+        return DrawResult::kSkip;
     }
 
-    const GrReducedClip reducedClip(stack, SkRect::Make(kCoverRect), rtc->caps()->shaderCaps(),
-                                    kNumWindows);
+    const GrReducedClip reducedClip(stack, SkRect::Make(kCoverRect), rtc->caps(), kNumWindows);
 
     GrPaint paint;
     if (GrFSAAType::kNone == rtc->fsaaType()) {
-        paint.setColor4f(GrColor4f(0, 0.25f, 1, 1));
+        paint.setColor4f({ 0, 0.25f, 1, 1 });
         this->visualizeAlphaMask(ctx, rtc, reducedClip, std::move(paint));
     } else {
-        paint.setColor4f(GrColor4f(1, 0.25f, 0.25f, 1));
+        paint.setColor4f({ 1, 0.25f, 0.25f, 1 });
         this->visualizeStencilMask(ctx, rtc, reducedClip, std::move(paint));
     }
+    return DrawResult::kOk;
 }
 
 void WindowRectanglesMaskGM::visualizeAlphaMask(GrContext* ctx, GrRenderTargetContext* rtc,
                                                 const GrReducedClip& reducedClip, GrPaint&& paint) {
     const int padRight = (kDeviceRect.right() - kCoverRect.right()) / 2;
     const int padBottom = (kDeviceRect.bottom() - kCoverRect.bottom()) / 2;
+    const GrBackendFormat format =
+            ctx->priv().caps()->getBackendFormatFromColorType(kAlpha_8_SkColorType);
     sk_sp<GrRenderTargetContext> maskRTC(
-        ctx->makeDeferredRenderTargetContextWithFallback(SkBackingFit::kExact,
+        ctx->priv().makeDeferredRenderTargetContextWithFallback(
+                                                         format, SkBackingFit::kExact,
                                                          kCoverRect.width() + padRight,
                                                          kCoverRect.height() + padBottom,
                                                          kAlpha_8_GrPixelConfig, nullptr));
@@ -210,7 +218,7 @@ void WindowRectanglesMaskGM::visualizeAlphaMask(GrContext* ctx, GrRenderTargetCo
     // Draw a checker pattern into the alpha mask so we can visualize the regions left untouched by
     // the clip mask generation.
     this->stencilCheckerboard(maskRTC.get(), true);
-    maskRTC->clear(nullptr, GrColorPackA4(0xff), GrRenderTargetContext::CanClearFullscreen::kYes);
+    maskRTC->clear(nullptr, SK_PMColor4fWHITE, GrRenderTargetContext::CanClearFullscreen::kYes);
     maskRTC->priv().drawAndStencilRect(make_stencil_only_clip(), &GrUserStencilSettings::kUnused,
                                        SkRegion::kDifference_Op, false, GrAA::kNo, SkMatrix::I(),
                                        SkRect::MakeIWH(maskRTC->width(), maskRTC->height()));
@@ -264,24 +272,6 @@ void WindowRectanglesMaskGM::stencilCheckerboard(GrRenderTargetContext* rtc, boo
     }
 }
 
-void WindowRectanglesMaskGM::fail(SkCanvas* canvas) {
-    SkPaint paint;
-    paint.setAntiAlias(true);
-    paint.setTextAlign(SkPaint::kCenter_Align);
-    paint.setTextSize(20);
-    sk_tool_utils::set_portable_typeface(&paint);
-
-    SkString errorMsg;
-    errorMsg.printf("Requires GPU with %i window rectangles", kNumWindows);
-
-    canvas->clipRect(SkRect::Make(kCoverRect));
-    canvas->clear(SK_ColorWHITE);
-    canvas->drawString(errorMsg, SkIntToScalar(kCoverRect.centerX()),
-                     SkIntToScalar(kCoverRect.centerY() - 10), paint);
-}
-
 DEF_GM( return new WindowRectanglesMaskGM(); )
-
-#endif
 
 }

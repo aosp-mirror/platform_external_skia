@@ -35,32 +35,15 @@ PUBLIC_API_OWNERS = (
     'hcm@google.com',
 )
 
-AUTO_COMMIT_BOTS = (
-    'update-docs@skia.org',
-    'update-skps@skia.org'
-)
-
 AUTHORS_FILE_NAME = 'AUTHORS'
 
 DOCS_PREVIEW_URL = 'https://skia.org/?cl='
 GOLD_TRYBOT_URL = 'https://gold.skia.org/search?issue='
 
-# Path to CQ bots feature is described in https://bug.skia.org/4364
-PATH_PREFIX_TO_EXTRA_TRYBOTS = {
-    'src/opts/': ('skia.primary:'
-      'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-SKNX_NO_SIMD'),
-    'include/private/SkAtomics.h': ('skia.primary:'
-      'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-TSAN,'
-      'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN'
-    ),
-
-    # Below are examples to show what is possible with this feature.
-    # 'src/svg/': 'master1:abc;master2:def',
-    # 'src/svg/parser/': 'master3:ghi,jkl;master4:mno',
-    # 'src/image/SkImage_Base.h': 'master5:pqr,stu;master1:abc1;master2:def',
-}
-
-SERVICE_ACCOUNT_SUFFIX = '@skia-buildbots.google.com.iam.gserviceaccount.com'
+SERVICE_ACCOUNT_SUFFIX = [
+    '@%s.iam.gserviceaccount.com' % project for project in [
+        'skia-buildbots.google.com', 'skia-swarming-bots', 'skia-public',
+        'skia-corp.google.com']]
 
 
 def _CheckChangeHasEol(input_api, output_api, source_file_filter=None):
@@ -77,36 +60,6 @@ def _CheckChangeHasEol(input_api, output_api, source_file_filter=None):
       'These files should end in a newline character:',
       items=eof_files)]
   return []
-
-
-def _PythonChecks(input_api, output_api):
-  """Run checks on any modified Python files."""
-  pylint_disabled_files = (
-      'infra/bots/recipes.py',
-  )
-  pylint_disabled_warnings = (
-      'F0401',  # Unable to import.
-      'E0611',  # No name in module.
-      'W0232',  # Class has no __init__ method.
-      'E1002',  # Use of super on an old style class.
-      'W0403',  # Relative import used.
-      'R0201',  # Method could be a function.
-      'E1003',  # Using class name in super.
-      'W0613',  # Unused argument.
-      'W0105',  # String statement has no effect.
-  )
-  # Run Pylint on only the modified python files. Unfortunately it still runs
-  # Pylint on the whole file instead of just the modified lines.
-  affected_python_files = []
-  for affected_file in input_api.AffectedSourceFiles(None):
-    affected_file_path = affected_file.LocalPath()
-    if affected_file_path.endswith('.py'):
-      if affected_file_path not in pylint_disabled_files:
-        affected_python_files.append(affected_file_path)
-  return input_api.canned_checks.RunPylint(
-      input_api, output_api,
-      disabled_warnings=pylint_disabled_warnings,
-      white_list=affected_python_files)
 
 
 def _JsonChecks(input_api, output_api):
@@ -237,6 +190,18 @@ def _CheckGNFormatted(input_api, output_api):
   return results
 
 
+class _WarningsAsErrors():
+  def __init__(self, output_api):
+    self.output_api = output_api
+    self.old_warning = None
+  def __enter__(self):
+    self.old_warning = self.output_api.PresubmitPromptWarning
+    self.output_api.PresubmitPromptWarning = self.output_api.PresubmitError
+    return self.output_api
+  def __exit__(self, ex_type, ex_value, ex_traceback):
+    self.output_api.PresubmitPromptWarning = self.old_warning
+
+
 def _CommonChecks(input_api, output_api):
   """Presubmit checks common to upload and commit."""
   results = []
@@ -249,16 +214,13 @@ def _CommonChecks(input_api, output_api):
                        x.LocalPath().endswith('.c') or
                        x.LocalPath().endswith('.cc') or
                        x.LocalPath().endswith('.cpp'))
-  results.extend(
-      _CheckChangeHasEol(
-          input_api, output_api, source_file_filter=sources))
-  results.extend(
-      input_api.canned_checks.CheckChangeHasNoCR(
-          input_api, output_api, source_file_filter=sources))
-  results.extend(
-      input_api.canned_checks.CheckChangeHasNoStrayWhitespace(
-          input_api, output_api, source_file_filter=sources))
-  results.extend(_PythonChecks(input_api, output_api))
+  results.extend(_CheckChangeHasEol(
+      input_api, output_api, source_file_filter=sources))
+  with _WarningsAsErrors(output_api):
+    results.extend(input_api.canned_checks.CheckChangeHasNoCR(
+        input_api, output_api, source_file_filter=sources))
+    results.extend(input_api.canned_checks.CheckChangeHasNoStrayWhitespace(
+        input_api, output_api, source_file_filter=sources))
   results.extend(_JsonChecks(input_api, output_api))
   results.extend(_IfDefChecks(input_api, output_api))
   results.extend(_CopyrightChecks(input_api, output_api,
@@ -364,8 +326,9 @@ def _CheckOwnerIsInAuthorsFile(input_api, output_api):
     owner_email = cr.GetOwnerEmail()
 
     # Service accounts don't need to be in AUTHORS.
-    if owner_email.endswith(SERVICE_ACCOUNT_SUFFIX):
-      return results
+    for suffix in SERVICE_ACCOUNT_SUFFIX:
+      if owner_email.endswith(suffix):
+        return results
 
     try:
       authors_content = ''
@@ -478,13 +441,6 @@ def PostUploadHook(cl, change, output_api):
   This hook does the following:
   * Adds a link to preview docs changes if there are any docs changes in the CL.
   * Adds 'No-Try: true' if the CL contains only docs changes.
-  * Adds 'No-Tree-Checks: true' for non master branch changes since they do not
-    need to be gated on the master branch's tree.
-  * Adds 'No-Try: true' for non master branch changes since trybots do not yet
-    work on them.
-  * Adds 'No-Presubmit: true' for non master branch changes since those don't
-    run the presubmit checks.
-  * Adds extra trybots for the paths defined in PATH_TO_EXTRA_TRYBOTS.
   """
 
   results = []
@@ -502,11 +458,12 @@ def PostUploadHook(cl, change, output_api):
 
   issue = cl.issue
   if issue:
-    # Skip PostUploadHooks for all auto-commit bots. New patchsets (caused
-    # due to PostUploadHooks) invalidates the CQ+2 vote from the
-    # "--use-commit-queue" flag to "git cl upload".
-    if cl.GetIssueOwner() in AUTO_COMMIT_BOTS:
-      return results
+    # Skip PostUploadHooks for all auto-commit service account bots. New
+    # patchsets (caused due to PostUploadHooks) invalidates the CQ+2 vote from
+    # the "--use-commit-queue" flag to "git cl upload".
+    for suffix in SERVICE_ACCOUNT_SUFFIX:
+      if cl.GetIssueOwner().endswith(suffix):
+        return results
 
     original_description_lines, footers = cl.GetDescriptionFooters()
     new_description_lines = list(original_description_lines)
@@ -532,46 +489,6 @@ def PostUploadHook(cl, change, output_api):
           output_api.PresubmitNotifyResult(
               'Automatically added a link to preview the docs changes to the '
               'CL\'s description'))
-
-    # If the target ref is not master then add 'No-Tree-Checks: true' and
-    # 'No-Try: true' to the CL's description if it does not already exist there.
-    target_ref = cl.GetRemoteBranch()[1]
-    if target_ref != 'refs/remotes/origin/master':
-      if not _FooterExists(footers, 'No-Tree-Checks', 'true'):
-        new_description_lines.append('No-Tree-Checks: true')
-        results.append(
-            output_api.PresubmitNotifyResult(
-                'Branch changes do not need to rely on the master branch\'s '
-                'tree status. Automatically added \'No-Tree-Checks: true\' to '
-                'the CL\'s description'))
-      if not _FooterExists(footers, 'No-Try', 'true'):
-        new_description_lines.append('No-Try: true')
-        results.append(
-            output_api.PresubmitNotifyResult(
-                'Trybots do not yet work for non-master branches. '
-                'Automatically added \'No-Try: true\' to the CL\'s '
-                'description'))
-      if not _FooterExists(footers, 'No-Presubmit', 'true'):
-        new_description_lines.append('No-Presubmit: true')
-        results.append(
-            output_api.PresubmitNotifyResult(
-                'Branch changes do not run the presubmit checks.'))
-
-    # Automatically set Cq-Include-Trybots if any of the changed files here
-    # begin with the paths of interest.
-    bots_to_include = []
-    for affected_file in change.AffectedFiles():
-      affected_file_path = affected_file.LocalPath()
-      for path_prefix, extra_bots in PATH_PREFIX_TO_EXTRA_TRYBOTS.iteritems():
-        if affected_file_path.startswith(path_prefix):
-          results.append(
-              output_api.PresubmitNotifyResult(
-                  'Your CL modifies the path %s.\nAutomatically adding %s to '
-                  'the CL description.' % (affected_file_path, extra_bots)))
-          bots_to_include.append(extra_bots)
-    if bots_to_include:
-      output_api.EnsureCQIncludeTrybotsAreAdded(
-          cl, bots_to_include, new_description_lines)
 
     # If the description has changed update it.
     if new_description_lines != original_description_lines:

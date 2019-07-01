@@ -9,18 +9,28 @@
 
 #include "gm.h"
 
-#if SK_SUPPORT_GPU
-
+#include "GrBackendSurface.h"
 #include "GrContext.h"
 #include "GrContextPriv.h"
 #include "GrGpu.h"
-#include "GrTest.h"
 #include "SkBitmap.h"
 #include "SkGradientShader.h"
 #include "SkImage.h"
+#include "SkTo.h"
+
+static sk_sp<SkColorFilter> yuv_to_rgb_colorfilter() {
+    static const float kJPEGConversionMatrix[20] = {
+        1.0f,  0.0f,       1.402f,    0.0f, -180.0f,
+        1.0f, -0.344136f, -0.714136f, 0.0f,  136.0f,
+        1.0f,  1.772f,     0.0f,      0.0f, -227.6f,
+        0.0f,  0.0f,       0.0f,      1.0f,    0.0f
+    };
+
+    return SkColorFilter::MakeMatrixFilterRowMajor255(kJPEGConversionMatrix);
+}
 
 namespace skiagm {
-class ImageFromYUVTextures : public GM {
+class ImageFromYUVTextures : public GpuGM {
 public:
     ImageFromYUVTextures() {
         this->setBGColor(0xFFFFFFFF);
@@ -32,7 +42,7 @@ protected:
     }
 
     SkISize onISize() override {
-        return SkISize::Make(50, 175);
+        return SkISize::Make(kBmpSize + 2 * kPad, 390);
     }
 
     void onOnceBeforeDraw() override {
@@ -62,8 +72,8 @@ protected:
         uvPixels[0] = static_cast<signed char*>(fYUVBmps[1].getPixels());
         uvPixels[1] = static_cast<signed char*>(fYUVBmps[2].getPixels());
 
-        // Here we encode using the NTC encoding (even though we will draw it with all the supported
-        // yuv color spaces when converted back to RGB)
+        // Here we encode using the kJPEG_SkYUVColorSpace (i.e., full-swing Rec 601) even though
+        // we will draw it with all the supported yuv color spaces when converted back to RGB
         for (int i = 0; i < kBmpSize * kBmpSize; ++i) {
             yPixels[i] = static_cast<unsigned char>(0.299f * SkGetPackedR32(rgbColors[i]) +
                                                     0.587f * SkGetPackedG32(rgbColors[i]) +
@@ -95,7 +105,7 @@ protected:
     }
 
     void createYUVTextures(GrContext* context, GrBackendTexture yuvTextures[3]) {
-        GrGpu* gpu = context->contextPriv().getGpu();
+        GrGpu* gpu = context->priv().getGpu();
         if (!gpu) {
             return;
         }
@@ -105,59 +115,99 @@ protected:
             yuvTextures[i] = gpu->createTestingOnlyBackendTexture(fYUVBmps[i].getPixels(),
                                                                   fYUVBmps[i].width(),
                                                                   fYUVBmps[i].height(),
-                                                                  kAlpha_8_GrPixelConfig,
+                                                                  GrColorType::kAlpha_8,
                                                                   false, GrMipMapped::kNo);
         }
         context->resetContext();
     }
 
-    void deleteYUVTextures(GrContext* context, GrBackendTexture yuvTextures[3]) {
-
-        GrGpu* gpu = context->contextPriv().getGpu();
+    void createResultTexture(GrContext* context, int width, int height,
+                             GrBackendTexture* resultTexture) {
+        GrGpu* gpu = context->priv().getGpu();
         if (!gpu) {
             return;
         }
 
-        for (int i = 0; i < 3; ++i) {
-            if (yuvTextures[i].isValid()) {
-                gpu->deleteTestingOnlyBackendTexture(&yuvTextures[i]);
+        *resultTexture = gpu->createTestingOnlyBackendTexture(
+                nullptr, width, height, GrColorType::kRGBA_8888, true, GrMipMapped::kNo);
+
+        context->resetContext();
+    }
+
+    void deleteBackendTextures(GrContext* context, GrBackendTexture textures[], int n) {
+        if (context->abandoned()) {
+            return;
+        }
+
+        GrGpu* gpu = context->priv().getGpu();
+        if (!gpu) {
+            return;
+        }
+
+        context->flush();
+        gpu->testingOnly_flushGpuAndSync();
+        for (int i = 0; i < n; ++i) {
+            if (textures[i].isValid()) {
+                gpu->deleteTestingOnlyBackendTexture(textures[i]);
             }
         }
 
         context->resetContext();
     }
 
-    void onDraw(SkCanvas* canvas) override {
-        GrContext* context = canvas->getGrContext();
-        if (!context) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
-            return;
-        }
+    void onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas) override {
+        // draw the original
+        SkScalar yOffset = kPad;
+        canvas->drawImage(fRGBImage.get(), kPad, yOffset);
+        yOffset += kBmpSize + kPad;
 
-
-        constexpr SkScalar kPad = 10.f;
-
-        SkISize sizes[] = {
-            { fYUVBmps[0].width(), fYUVBmps[0].height()},
-            { fYUVBmps[1].width(), fYUVBmps[1].height()},
-            { fYUVBmps[2].width(), fYUVBmps[2].height()},
-        };
-        SkTArray<sk_sp<SkImage>> images;
-        images.push_back(fRGBImage);
         for (int space = kJPEG_SkYUVColorSpace; space <= kLastEnum_SkYUVColorSpace; ++space) {
             GrBackendTexture yuvTextures[3];
             this->createYUVTextures(context, yuvTextures);
-            images.push_back(SkImage::MakeFromYUVTexturesCopy(context,
-                                                              static_cast<SkYUVColorSpace>(space),
-                                                              yuvTextures, sizes,
-                                                              kTopLeft_GrSurfaceOrigin));
-            this->deleteYUVTextures(context, yuvTextures);
-        }
-        for (int i = 0; i < images.count(); ++ i) {
-            SkScalar y = (i + 1) * kPad + i * fYUVBmps[0].height();
-            SkScalar x = kPad;
+            auto image = SkImage::MakeFromYUVTexturesCopy(context,
+                                                          static_cast<SkYUVColorSpace>(space),
+                                                          yuvTextures,
+                                                          kTopLeft_GrSurfaceOrigin);
+            this->deleteBackendTextures(context, yuvTextures, 3);
 
-            canvas->drawImage(images[i].get(), x, y);
+            SkPaint paint;
+            if (kIdentity_SkYUVColorSpace == space) {
+                // The identity color space needs post-processing to appear correct
+                paint.setColorFilter(yuv_to_rgb_colorfilter());
+            }
+
+            canvas->drawImage(image.get(), kPad, yOffset, &paint);
+            yOffset += kBmpSize + kPad;
+        }
+
+        for (int space = kJPEG_SkYUVColorSpace; space <= kLastEnum_SkYUVColorSpace; ++space) {
+            GrBackendTexture yuvTextures[3];
+            GrBackendTexture resultTexture;
+            this->createYUVTextures(context, yuvTextures);
+            this->createResultTexture(
+                    context, yuvTextures[0].width(), yuvTextures[0].height(), &resultTexture);
+            auto image = SkImage::MakeFromYUVTexturesCopyWithExternalBackend(
+                                                          context,
+                                                          static_cast<SkYUVColorSpace>(space),
+                                                          yuvTextures,
+                                                          kTopLeft_GrSurfaceOrigin,
+                                                          resultTexture);
+
+            SkPaint paint;
+            if (kIdentity_SkYUVColorSpace == space) {
+                // The identity color space needs post-processing to appear correct
+                paint.setColorFilter(yuv_to_rgb_colorfilter());
+            }
+            canvas->drawImage(image.get(), kPad, yOffset, &paint);
+            yOffset += kBmpSize + kPad;
+
+            GrBackendTexture texturesToDelete[4]{
+                    yuvTextures[0],
+                    yuvTextures[1],
+                    yuvTextures[2],
+                    resultTexture,
+            };
+            this->deleteBackendTextures(context, texturesToDelete, 4);
         }
      }
 
@@ -165,12 +215,11 @@ private:
     sk_sp<SkImage>  fRGBImage;
     SkBitmap        fYUVBmps[3];
 
-    static constexpr int kBmpSize = 32;
+    static constexpr SkScalar kPad = 10.0f;
+    static constexpr int kBmpSize  = 32;
 
     typedef GM INHERITED;
 };
 
 DEF_GM(return new ImageFromYUVTextures;)
 }
-
-#endif

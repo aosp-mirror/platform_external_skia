@@ -7,10 +7,17 @@
 
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkColor.h"
 #include "SkEdgeClipper.h"
 #include "SkLineClipper.h"
-#include "SkPath.h"
+#include "SkPaint.h"
+#include "SkPoint.h"
+#include "SkRect.h"
+#include "SkScalar.h"
+#include "SkTypes.h"
 #include "Test.h"
+
+#include <cstring>
 
 static void test_hairclipping(skiatest::Reporter* reporter) {
     SkBitmap bm;
@@ -149,3 +156,14 @@ DEF_TEST(Clipper, reporter) {
     test_edgeclipper();
     test_hairclipping(reporter);
 }
+
+#include "SkLineClipper.h"
+
+DEF_TEST(LineClipper_skbug_7981, r) {
+    SkPoint src[] = {{ -5.77698802E+17f, -1.81758057E+23f}, {38127, 2}};
+    SkPoint dst[2];
+    SkRect clip = { -32767, -32767, 32767, 32767 };
+
+    SkLineClipper::IntersectLine(src, clip, dst);
+}
+

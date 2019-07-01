@@ -6,17 +6,17 @@
  * found in the LICENSE file.
  */
 
-#include "GrBackendSurface.h"
-#include "GrContext.h"
 #include "GLWindowContext.h"
-
-#include "gl/GrGLDefines.h"
-#include "gl/GrGLUtil.h"
-
+#include "GrBackendSurface.h"
+#include "GrCaps.h"
+#include "GrContext.h"
+#include "GrContextPriv.h"
 #include "SkCanvas.h"
 #include "SkImage_Base.h"
 #include "SkMathPriv.h"
 #include "SkSurface.h"
+#include "gl/GrGLDefines.h"
+#include "gl/GrGLUtil.h"
 
 namespace sk_app {
 
@@ -56,13 +56,12 @@ void GLWindowContext::destroyContext() {
 sk_sp<SkSurface> GLWindowContext::getBackbufferSurface() {
     if (nullptr == fSurface) {
         if (fContext) {
-            GrGLFramebufferInfo fbInfo;
             GrGLint buffer;
-            GR_GL_CALL(fBackendContext.get(), GetIntegerv(GR_GL_FRAMEBUFFER_BINDING,
-                                                          &buffer));
+            GR_GL_CALL(fBackendContext.get(), GetIntegerv(GR_GL_FRAMEBUFFER_BINDING, &buffer));
+
+            GrGLFramebufferInfo fbInfo;
             fbInfo.fFBOID = buffer;
-            fbInfo.fFormat = fContext->caps()->srgbSupport() && fDisplayParams.fColorSpace
-                             ? GR_GL_SRGB8_ALPHA8 : GR_GL_RGBA8;
+            fbInfo.fFormat = GR_GL_RGBA8;
 
             GrBackendRenderTarget backendRT(fWidth,
                                             fHeight,
@@ -74,7 +73,7 @@ sk_sp<SkSurface> GLWindowContext::getBackbufferSurface() {
                                                               kBottomLeft_GrSurfaceOrigin,
                                                               kRGBA_8888_SkColorType,
                                                               fDisplayParams.fColorSpace,
-                                                              &fSurfaceProps);
+                                                              &fDisplayParams.fSurfaceProps);
         }
     }
 

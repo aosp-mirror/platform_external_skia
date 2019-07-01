@@ -5,35 +5,41 @@
  * found in the LICENSE file.
  */
 
-#include "SkBigPicture.h"
+#include "SkBBHFactory.h"
 #include "SkBBoxHierarchy.h"
-#include "SkBlurImageFilter.h"
+#include "SkBigPicture.h"
+#include "SkBitmap.h"
 #include "SkCanvas.h"
-#include "SkColorMatrixFilter.h"
-#include "SkColorPriv.h"
-#include "SkDashPathEffect.h"
+#include "SkClipOp.h"
+#include "SkClipOpPriv.h"
+#include "SkColor.h"
 #include "SkData.h"
-#include "SkImageGenerator.h"
-#include "SkImageEncoder.h"
-#include "SkImageGenerator.h"
-#include "SkMD5.h"
+#include "SkFontStyle.h"
+#include "SkImageInfo.h"
+#include "SkMatrix.h"
 #include "SkMiniRecorder.h"
 #include "SkPaint.h"
-#include "SkPicture.h"
+#include "SkPath.h"
+#include "SkPicturePriv.h"
 #include "SkPictureRecorder.h"
 #include "SkPixelRef.h"
-#include "SkRectPriv.h"
-#include "SkRRect.h"
 #include "SkRandom.h"
-#include "SkRecord.h"
+#include "SkRect.h"
+#include "SkRectPriv.h"
+#include "SkRefCnt.h"
+#include "SkScalar.h"
 #include "SkShader.h"
 #include "SkStream.h"
-#include "sk_tool_utils.h"
-
+#include "SkTypeface.h"
+#include "SkTypes.h"
 #include "Test.h"
 
-#include "SkLumaColorFilter.h"
-#include "SkColorFilterImageFilter.h"
+#include <memory>
+
+class SkRRect;
+class SkRegion;
+template <typename T> class SkTDArray;
+
 
 static void make_bm(SkBitmap* bm, int w, int h, SkColor color, bool immutable) {
     bm->allocN32Pixels(w, h);
@@ -102,12 +108,18 @@ public:
         : INHERITED(width, height)
         , fSaveCount(0)
         , fSaveLayerCount(0)
+        , fSaveBehindCount(0)
         , fRestoreCount(0){
     }
 
     SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec& rec) override {
         ++fSaveLayerCount;
         return this->INHERITED::getSaveLayerStrategy(rec);
+    }
+
+    bool onDoSaveBehind(const SkRect* subset) override {
+        ++fSaveBehindCount;
+        return this->INHERITED::onDoSaveBehind(subset);
     }
 
     void willSave() override {
@@ -122,11 +134,13 @@ public:
 
     unsigned int getSaveCount() const { return fSaveCount; }
     unsigned int getSaveLayerCount() const { return fSaveLayerCount; }
+    unsigned int getSaveBehindCount() const { return fSaveBehindCount; }
     unsigned int getRestoreCount() const { return fRestoreCount; }
 
 private:
     unsigned int fSaveCount;
     unsigned int fSaveLayerCount;
+    unsigned int fSaveBehindCount;
     unsigned int fRestoreCount;
 
     typedef SkCanvas INHERITED;
@@ -446,7 +460,7 @@ static void test_cull_rect_reset(skiatest::Reporter* reporter) {
     canvas->drawRect(bounds, paint);
     canvas->drawRect(bounds, paint);
     sk_sp<SkPicture> p(recorder.finishRecordingAsPictureWithCull(bounds));
-    const SkBigPicture* picture = p->asSkBigPicture();
+    const SkBigPicture* picture = SkPicturePriv::AsSkBigPicture(p);
     REPORTER_ASSERT(reporter, picture);
 
     SkRect finalCullRect = picture->cullRect();
@@ -544,9 +558,8 @@ static void test_gen_id(skiatest::Reporter* reporter) {
 static void test_typeface(skiatest::Reporter* reporter) {
     SkPictureRecorder recorder;
     SkCanvas* canvas = recorder.beginRecording(10, 10);
-    SkPaint paint;
-    paint.setTypeface(SkTypeface::MakeFromName("Arial", SkFontStyle::Italic()));
-    canvas->drawString("Q", 0, 10, paint);
+    SkFont font(SkTypeface::MakeFromName("Arial", SkFontStyle::Italic()));
+    canvas->drawString("Q", 0, 10, font, SkPaint());
     sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
     SkDynamicMemoryWStream stream;
     picture->serialize(&stream);
@@ -646,7 +659,6 @@ DEF_TEST(DontOptimizeSaveLayerDrawDrawRestore, reporter) {
     make_bm(&replayBM, 100, 100, SK_ColorBLACK, false);
     SkCanvas replayCanvas(replayBM);
     picture->playback(&replayCanvas);
-    replayCanvas.flush();
 
     // With the bug present, at (55, 55) we would get a fully opaque red
     // intead of a dark red.

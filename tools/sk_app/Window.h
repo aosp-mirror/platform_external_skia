@@ -10,12 +10,13 @@
 
 #include "DisplayParams.h"
 #include "SkRect.h"
-#include "SkTouchGesture.h"
+#include "SkTDArray.h"
 #include "SkTypes.h"
 
 class GrContext;
 class SkCanvas;
 class SkSurface;
+class SkSurfaceProps;
 
 namespace sk_app {
 
@@ -47,6 +48,9 @@ public:
 #endif
 #ifdef SK_VULKAN
         kVulkan_BackendType,
+#endif
+#if SK_METAL && defined(SK_BUILD_FOR_MAC)
+        kMetal_BackendType,
 #endif
         kRaster_BackendType,
 
@@ -148,7 +152,8 @@ public:
         virtual bool onTouch(intptr_t owner, InputState state, float x, float y) { return false; }
         virtual void onUIStateChanged(const SkString& stateName, const SkString& stateValue) {}
         virtual void onPrePaint() {}
-        virtual void onPaint(SkCanvas*) {}
+        virtual void onPaint(SkSurface*) {}
+        virtual void onResize(int width, int height) {}
 
     private:
         friend class Window;
@@ -157,7 +162,7 @@ public:
 
     void pushLayer(Layer* layer) {
         layer->onAttach(this);
-        fLayers.push(layer);
+        fLayers.push_back(layer);
     }
 
     void onBackendCreated();
@@ -170,8 +175,8 @@ public:
     void onPaint();
     void onResize(int width, int height);
 
-    int width();
-    int height();
+    int width() const;
+    int height() const;
 
     virtual const DisplayParams& getRequestedDisplayParams() { return fRequestedDisplayParams; }
     virtual void setRequestedDisplayParams(const DisplayParams&, bool allowReattach = true);
@@ -181,7 +186,7 @@ public:
     int stencilBits() const;
 
     // Returns null if there is not a GPU backend or if the backend is not yet created.
-    const GrContext* getGrContext() const;
+    GrContext* getGrContext() const;
 
 protected:
     Window();

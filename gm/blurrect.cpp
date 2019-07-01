@@ -5,11 +5,12 @@
 * found in the LICENSE file.
 */
 
-#include "gm.h"
 #include "SkBlurMask.h"
-#include "SkBlurMaskFilter.h"
 #include "SkCanvas.h"
+#include "SkMaskFilter.h"
 #include "SkPath.h"
+#include "SkTo.h"
+#include "gm.h"
 
 #define STROKE_WIDTH    SkIntToScalar(10)
 
@@ -95,9 +96,8 @@ public:
 protected:
     void onOnceBeforeDraw() override {
         for (int i = 0; i <= kLastEnum_SkBlurStyle; ++i) {
-            fMaskFilters[i] = SkBlurMaskFilter::Make((SkBlurStyle)i,
-                                  SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(STROKE_WIDTH/2)),
-                                  SkBlurMaskFilter::kHighQuality_BlurFlag);
+            fMaskFilters[i] = SkMaskFilter::MakeBlur((SkBlurStyle)i,
+                                  SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(STROKE_WIDTH/2)));
         }
     }
 

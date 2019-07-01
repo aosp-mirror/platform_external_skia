@@ -73,12 +73,10 @@ void Window::onPaint() {
     sk_sp<SkSurface> backbuffer = fWindowContext->getBackbufferSurface();
     if (backbuffer) {
         // draw into the canvas of this surface
-        SkCanvas* canvas = backbuffer->getCanvas();
-
         this->visitLayers([](Layer* layer) { layer->onPrePaint(); });
-        this->visitLayers([=](Layer* layer) { layer->onPaint(canvas); });
+        this->visitLayers([=](Layer* layer) { layer->onPaint(backbuffer.get()); });
 
-        canvas->flush();
+        backbuffer->flush();
 
         fWindowContext->swapBuffers();
     } else {
@@ -92,16 +90,17 @@ void Window::onResize(int w, int h) {
         return;
     }
     fWindowContext->resize(w, h);
+    this->visitLayers([=](Layer* layer) { layer->onResize(w, h); });
 }
 
-int Window::width() {
+int Window::width() const {
     if (!fWindowContext) {
         return 0;
     }
     return fWindowContext->width();
 }
 
-int Window::height() {
+int Window::height() const {
     if (!fWindowContext) {
         return 0;
     }
@@ -129,7 +128,7 @@ int Window::stencilBits() const {
     return fWindowContext->stencilBits();
 }
 
-const GrContext* Window::getGrContext() const {
+GrContext* Window::getGrContext() const {
     if (!fWindowContext) {
         return nullptr;
     }

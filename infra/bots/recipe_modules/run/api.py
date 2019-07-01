@@ -9,25 +9,7 @@
 from recipe_engine import recipe_api
 
 
-BUILD_PRODUCTS_ISOLATE_WHITELIST = [
-  'bookmaker',
-  'dm',
-  'dm.exe',
-  'dm.app',
-  'nanobench.app',
-  'get_images_from_skps',
-  'get_images_from_skps.exe',
-  'nanobench',
-  'nanobench.exe',
-  'skpbench',
-  '*.so',
-  '*.dll',
-  '*.dylib',
-  'skia_launcher',
-  'skiaserve',
-  'lib/*.so',
-]
-
+TEST_DEFAULT_ASSET_VERSION = '42'
 
 class SkiaStepApi(recipe_api.RecipeApi):
 
@@ -69,6 +51,21 @@ class SkiaStepApi(recipe_api.RecipeApi):
     """Wrapper around api.file.rmtree."""
     self.m.file.rmtree('rmtree %s' % self.m.path.basename(path), path)
 
+  def asset_version(self, asset_name, skia_dir, test_data=None):
+    """Return the contents of VERSION for the given asset as a string.
+
+    If test_data is not specified, reads the property
+    'test_<asset_name>_version' or if not present, uses
+    TEST_DEFAULT_ASSET_VERSION."""
+    version_file = skia_dir.join(
+        'infra', 'bots', 'assets', asset_name, 'VERSION')
+    if not test_data:
+      test_data = self.m.properties.get(
+          'test_%s_version' % asset_name, TEST_DEFAULT_ASSET_VERSION)
+    return self.m.file.read_text('Get %s VERSION' % asset_name,
+                                 version_file,
+                                 test_data=test_data).rstrip()
+
   def __call__(self, steptype, name, abort_on_failure=True,
                fail_build_on_failure=True, **kwargs):
     """Run a step. If it fails, keep going but mark the build status failed."""
@@ -80,38 +77,6 @@ class SkiaStepApi(recipe_api.RecipeApi):
         self._failed.append(e)
       if abort_on_failure:
         raise
-
-  def copy_build_products(self, src, dst):
-    """Copy whitelisted build products from src to dst."""
-    self.m.python.inline(
-        name='copy build products',
-        program='''import errno
-import glob
-import os
-import shutil
-import sys
-
-src = sys.argv[1]
-dst = sys.argv[2]
-build_products_whitelist = %s
-
-try:
-  os.makedirs(dst)
-except OSError as e:
-  if e.errno != errno.EEXIST:
-    raise
-
-for pattern in build_products_whitelist:
-  path = os.path.join(src, pattern)
-  for f in glob.glob(path):
-    dst_path = os.path.join(dst, os.path.relpath(f, src))
-    if not os.path.isdir(os.path.dirname(dst_path)):
-      os.makedirs(os.path.dirname(dst_path))
-    print 'Copying build product %%s to %%s' %% (f, dst_path)
-    shutil.move(f, dst_path)
-''' % str(BUILD_PRODUCTS_ISOLATE_WHITELIST),
-        args=[src, dst],
-        infra_step=True)
 
   def with_retry(self, steptype, name, attempts, between_attempts_fn=None,
                  abort_on_failure=True, fail_build_on_failure=True, **kwargs):

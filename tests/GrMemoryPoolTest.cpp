@@ -6,8 +6,6 @@
  */
 
 #include "Test.h"
-// This is a GPU-backend specific test
-#if SK_SUPPORT_GPU
 #include "GrMemoryPool.h"
 #include "SkRandom.h"
 #include "SkTArray.h"
@@ -21,10 +19,10 @@ class A {
 public:
     A() {}
     virtual void setValues(int v) {
-        fChar = static_cast<char>(v);
+        fChar = static_cast<char>(v & 0xFF);
     }
     virtual bool checkValues(int v) {
-        return fChar == static_cast<char>(v);
+        return fChar == static_cast<char>(v & 0xFF);
     }
     virtual ~A() {}
 
@@ -320,82 +318,3 @@ DEF_TEST(GrMemoryPoolAPI, reporter) {
         REPORTER_ASSERT(reporter, pool.size() == hugeBlockSize + kMinAllocSize);
     }
 }
-
-DEF_TEST(GrObjectMemoryPoolAPI, reporter) {
-    struct Data {
-        int value[5];
-    };
-    using DataObjectPool = GrObjectMemoryPool<Data>;
-    constexpr size_t kSmallestMinAllocCount = DataObjectPool::kSmallestMinAllocCount;
-
-    // Allocates objects until pool adds a new block (pool.size() changes).
-    // Returns number of objects that fit into the current block (i.e. before pool.size()
-    // changed; newly allocated block always ends up with one object allocated from it).
-    auto allocateObjects = [](DataObjectPool& pool, AutoPoolReleaser& r) -> size_t {
-        size_t count = 0;
-        size_t origPoolSize = pool.size();
-        while (pool.size() == origPoolSize) {
-            r.add(pool.allocate());
-            count++;
-        }
-        return count - 1;
-    };
-
-    // Effective prealloc space capacity is >= kSmallestMinAllocCount.
-    {
-        DataObjectPool pool(kSmallestMinAllocCount / 3, 0);
-        AutoPoolReleaser r(pool);
-
-        size_t preallocCount = allocateObjects(pool, r);
-        REPORTER_ASSERT(reporter, preallocCount == kSmallestMinAllocCount);
-    }
-
-    // Effective prealloc space capacity is >= minAllocCount.
-    {
-        DataObjectPool pool(kSmallestMinAllocCount, 2 * kSmallestMinAllocCount);
-        AutoPoolReleaser r(pool);
-
-        size_t preallocCount = allocateObjects(pool, r);
-        REPORTER_ASSERT(reporter, preallocCount == 2 * kSmallestMinAllocCount);
-    }
-
-    // Effective block capacity is >= kSmallestMinAllocCount.
-    {
-        DataObjectPool pool(kSmallestMinAllocCount, kSmallestMinAllocCount / 2);
-        AutoPoolReleaser r(pool);
-
-        // Fill prealloc space
-        allocateObjects(pool, r);
-
-        size_t minAllocCount = 1 + allocateObjects(pool, r);
-        REPORTER_ASSERT(reporter, minAllocCount == kSmallestMinAllocCount);
-    }
-
-    // Pool allocates space for exactly preallocCount objects on creation.
-    {
-        constexpr size_t kPreallocCount = kSmallestMinAllocCount * 7 / 3;
-        DataObjectPool pool(kPreallocCount, 0);
-        AutoPoolReleaser r(pool);
-
-        size_t preallocCount = allocateObjects(pool, r);
-        REPORTER_ASSERT(reporter, preallocCount == kPreallocCount);
-    }
-
-    // Pool allocates space for minAllocCount objects when it adds a new block.
-    {
-        constexpr size_t kMinAllocCount = kSmallestMinAllocCount * 11 / 3;
-        DataObjectPool pool(0, kMinAllocCount);
-        AutoPoolReleaser r(pool);
-
-        // Fill prealloc space
-        allocateObjects(pool, r);
-
-        size_t firstBlockCount = 1 + allocateObjects(pool, r);
-        REPORTER_ASSERT(reporter, firstBlockCount == kMinAllocCount);
-
-        size_t secondBlockCount = 1 + allocateObjects(pool, r);
-        REPORTER_ASSERT(reporter, secondBlockCount == kMinAllocCount);
-    }
-}
-
-#endif

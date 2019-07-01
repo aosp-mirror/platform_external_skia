@@ -7,19 +7,17 @@
 
 #include "gm.h"
 #include "SkBlurMask.h"
-#include "SkBlurMaskFilter.h"
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
 #include "SkImage.h"
+#include "SkMaskFilter.h"
 #include "SkTDArray.h"
-#include "SkUtils.h"
+#include "SkUTF.h"
 #include "sk_tool_utils.h"
 
-#if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrContextOptions.h"
 #include "SkGr.h"
-#endif
 
 /** Holds either a bitmap or image to be rendered and a rect that indicates what part of the bitmap
     or image should be tested by the GM. The area outside of the rect is present to check
@@ -281,7 +279,7 @@ protected:
 
         SkPaint paint;
         paint.setFilterQuality(filter);
-        paint.setMaskFilter(SkBlurMaskFilter::Make(kNormal_SkBlurStyle,
+        paint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle,
                                                    SkBlurMask::ConvertRadiusToSigma(3)));
         paint.setShader(fShader);
         paint.setColor(SK_ColorBLUE);
@@ -299,7 +297,7 @@ protected:
 
         SkPaint paint;
         paint.setFilterQuality(filter);
-        paint.setMaskFilter(SkBlurMaskFilter::Make(kOuter_SkBlurStyle,
+        paint.setMaskFilter(SkMaskFilter::MakeBlur(kOuter_SkBlurStyle,
                                                    SkBlurMask::ConvertRadiusToSigma(7)));
         paint.setShader(fShader);
         paint.setColor(SK_ColorBLUE);
@@ -402,11 +400,9 @@ protected:
         }
     }
 
-#if SK_SUPPORT_GPU
     void modifyGrContextOptions(GrContextOptions* options) override {
         options->fMaxTileSizeOverride = kMaxTileSize;
     }
-#endif
 
 private:
     static constexpr int kBlockSize = 70;

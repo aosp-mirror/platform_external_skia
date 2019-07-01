@@ -7,9 +7,21 @@
 
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkColor.h"
 #include "SkDashPathEffect.h"
+#include "SkImageInfo.h"
+#include "SkMatrix.h"
+#include "SkPaint.h"
+#include "SkPath.h"
+#include "SkPathEffect.h"
+#include "SkPoint.h"
+#include "SkRRect.h"
+#include "SkRect.h"
+#include "SkRefCnt.h"
+#include "SkScalar.h"
 #include "SkStrokeRec.h"
 #include "SkSurface.h"
+#include "SkTypes.h"
 #include "Test.h"
 
 // test that we can draw an aa-rect at coordinates > 32K (bigger than fixedpoint)
@@ -109,12 +121,9 @@ static void test_crbug_140803() {
     bm.allocN32Pixels(2700, 30*1024);
     SkCanvas canvas(bm);
 
-    SkPath path;
-    path.moveTo(2762, 20);
-    path.quadTo(11, 21702, 10, 21706);
     SkPaint paint;
     paint.setAntiAlias(true);
-    canvas.drawPath(path, paint);
+    canvas.drawPath(SkPath().moveTo(2762, 20).quadTo(11, 21702, 10, 21706), paint);
 }
 
 // Need to exercise drawing an inverse-path whose bounds intersect the clip,

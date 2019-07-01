@@ -206,6 +206,7 @@ static const TagHandler fontHandler = {
         // The character data should be a filename.
         FontFileInfo& file = self->fCurrentFamily->fFonts.push_back();
         self->fCurrentFontInfo = &file;
+        SkString fallbackFor;
         for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
             const char* name = attributes[i];
             const char* value = attributes[i+1];
@@ -225,7 +226,26 @@ static const TagHandler fontHandler = {
                 if (!parse_non_negative_integer(value, &file.fIndex)) {
                     SK_FONTCONFIGPARSER_WARNING("'%s' is an invalid index", value);
                 }
+            } else if (MEMEQ("fallbackFor", name, nameLen)) {
+                /** fallbackFor specifies a family fallback and should have been on family. */
+                fallbackFor = value;
             }
+        }
+        if (!fallbackFor.isEmpty()) {
+            std::unique_ptr<FontFamily>* fallbackFamily =
+                    self->fCurrentFamily->fallbackFamilies.find(fallbackFor);
+            if (!fallbackFamily) {
+                std::unique_ptr<FontFamily> newFallbackFamily(
+                        new FontFamily(self->fCurrentFamily->fBasePath, true));
+                fallbackFamily = self->fCurrentFamily->fallbackFamilies.set(
+                        fallbackFor, std::move(newFallbackFamily));
+                (*fallbackFamily)->fLanguages = self->fCurrentFamily->fLanguages;
+                (*fallbackFamily)->fVariant = self->fCurrentFamily->fVariant;
+                (*fallbackFamily)->fOrder = self->fCurrentFamily->fOrder;
+                (*fallbackFamily)->fFallbackFor = fallbackFor;
+            }
+            self->fCurrentFontInfo = &(*fallbackFamily)->fFonts.emplace_back(file);
+            self->fCurrentFamily->fFonts.pop_back();
         }
     },
     /*end*/[](FamilyData* self, const char* tag) {
@@ -554,7 +574,7 @@ static void XMLCALL start_element_handler(void *data, const char *tag, const cha
             if (child->start) {
                 child->start(self, tag, attributes);
             }
-            self->fHandler.push(child);
+            self->fHandler.push_back(child);
             XML_SetCharacterDataHandler(self->fParser, child->chars);
         } else {
             SK_FONTCONFIGPARSER_WARNING("'%s' tag not recognized, skipping", tag);

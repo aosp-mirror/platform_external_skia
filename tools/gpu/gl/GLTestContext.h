@@ -20,10 +20,7 @@ class GLTestContext : public TestContext {
 public:
     ~GLTestContext() override;
 
-    virtual GrBackend backend() override { return kOpenGL_GrBackend; }
-    virtual GrBackendContext backendContext() override {
-        return reinterpret_cast<GrBackendContext>(fGL.get());
-    }
+    virtual GrBackendApi backend() override { return GrBackendApi::kOpenGL; }
 
     bool isValid() const { return SkToBool(this->gl()); }
 
@@ -35,9 +32,8 @@ public:
     virtual void destroyEGLImage(GrEGLImage) const { }
 
     /** Used for testing GL_TEXTURE_RECTANGLE integration. */
-    GrGLint createTextureRectangle(int width, int height, GrGLenum internalFormat,
-                                   GrGLenum externalFormat, GrGLenum externalType,
-                                   GrGLvoid *data);
+    GrGLuint createTextureRectangle(int width, int height, GrGLenum internalFormat,
+                                    GrGLenum externalFormat, GrGLenum externalType, GrGLvoid* data);
 
     /**
      * Used for testing EGLImage integration. Takes a EGLImage and wraps it in a

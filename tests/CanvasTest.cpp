@@ -46,28 +46,51 @@
  */
 
 #include "SkBitmap.h"
+#include "SkBlendMode.h"
 #include "SkCanvas.h"
-#include "SkClipStack.h"
-#include "SkDocument.h"
+#include "SkCanvasStack.h"
+#include "SkClipOp.h"
+#include "SkClipOpPriv.h"
+#include "SkColor.h"
+#include "SkImageFilter.h"
+#include "SkImageInfo.h"
+#include "SkMalloc.h"
 #include "SkMatrix.h"
 #include "SkNWayCanvas.h"
+#include "SkPDFDocument.h"
 #include "SkPaint.h"
 #include "SkPaintFilterCanvas.h"
 #include "SkPath.h"
-#include "SkPicture.h"
-#include "SkPictureRecord.h"
 #include "SkPictureRecorder.h"
-#include "SkRasterClip.h"
+#include "SkPixmap.h"
+#include "SkPoint.h"
 #include "SkRect.h"
+#include "SkRefCnt.h"
 #include "SkRegion.h"
+#include "SkScalar.h"
 #include "SkShader.h"
+#include "SkSize.h"
 #include "SkSpecialImage.h"
 #include "SkStream.h"
+#include "SkString.h"
 #include "SkSurface.h"
 #include "SkTDArray.h"
 #include "SkTemplates.h"
+#include "SkTypes.h"
 #include "SkVertices.h"
 #include "Test.h"
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+#include "SkColorData.h"
+#include "SkColorSpace.h"
+#endif
+
+#include <memory>
+#include <utility>
+
+class SkColorSpaceXformer;
+class SkReadBuffer;
+template <typename T> class SkTCopyOnFirstWrite;
 
 DEF_TEST(canvas_clipbounds, reporter) {
     SkCanvas canvas(10, 10);
@@ -111,7 +134,9 @@ template <typename F> static void multi_canvas_driver(int w, int h, F proc) {
     proc(SkPictureRecorder().beginRecording(SkRect::MakeIWH(w, h)));
 
     SkNullWStream stream;
-    proc(SkDocument::MakePDF(&stream)->beginPage(SkIntToScalar(w), SkIntToScalar(h)));
+    if (auto doc = SkPDF::MakeDocument(&stream)) {
+        proc(doc->beginPage(SkIntToScalar(w), SkIntToScalar(h)));
+    }
 
     proc(SkSurface::MakeRasterN32Premul(w, h, nullptr)->getCanvas());
 }
@@ -537,9 +562,9 @@ TEST_STEP(NestedSaveRestoreWithFlush, NestedSaveRestoreWithFlushTestStep);
 
 static void TestPdfDevice(skiatest::Reporter* reporter, const TestData& d, CanvasTestStep* step) {
     SkDynamicMemoryWStream outStream;
-    sk_sp<SkDocument> doc(SkDocument::MakePDF(&outStream));
-    REPORTER_ASSERT(reporter, doc);
+    auto doc = SkPDF::MakeDocument(&outStream);
     if (!doc) {
+        INFOF(reporter, "PDF disabled; TestPdfDevice test skipped.");
         return;
     }
     SkCanvas* canvas = doc->beginPage(SkIntToScalar(d.fWidth),
@@ -599,10 +624,10 @@ static void test_newraster(skiatest::Reporter* reporter) {
     info = SkImageInfo::Make(10, 10, kUnknown_SkColorType, info.alphaType());
     REPORTER_ASSERT(reporter, nullptr == SkCanvas::MakeRasterDirect(info, baseAddr, minRowBytes));
 
-    // We should succeed with a zero-sized valid info
+    // We should not succeed with a zero-sized valid info
     info = SkImageInfo::MakeN32Premul(0, 0);
     canvas = SkCanvas::MakeRasterDirect(info, baseAddr, minRowBytes);
-    REPORTER_ASSERT(reporter, canvas);
+    REPORTER_ASSERT(reporter, nullptr == canvas);
 }
 
 DEF_TEST(Canvas, reporter) {
@@ -684,9 +709,6 @@ DEF_TEST(PaintFilterCanvas_ConsistentState, reporter) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#include "SkCanvasStack.h"
-#include "SkNWayCanvas.h"
 
 // Subclass that takes a bool*, which it updates in its construct (true) and destructor (false)
 // to allow the caller to know how long the object is alive.
@@ -784,13 +806,15 @@ DEF_TEST(CanvasClipType, r) {
 
     // test clipstack backend
     SkDynamicMemoryWStream stream;
-    test_cliptype(SkDocument::MakePDF(&stream)->beginPage(100, 100), r);
+    if (auto doc = SkPDF::MakeDocument(&stream)) {
+        test_cliptype(doc->beginPage(100, 100), r);
+    }
 }
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 DEF_TEST(Canvas_LegacyColorBehavior, r) {
-    sk_sp<SkColorSpace> cs = SkColorSpace::MakeRGB(SkColorSpace::kSRGB_RenderTargetGamma,
-                                                   SkColorSpace::kAdobeRGB_Gamut);
+    sk_sp<SkColorSpace> cs = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB,
+                                                   SkNamedGamut::kAdobeRGB);
 
     // Make a Adobe RGB bitmap.
     SkBitmap bitmap;
@@ -813,19 +837,19 @@ class ZeroBoundsImageFilter : public SkImageFilter {
 public:
     static sk_sp<SkImageFilter> Make() { return sk_sp<SkImageFilter>(new ZeroBoundsImageFilter); }
 
-    SK_TO_STRING_OVERRIDE()
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(ZeroBoundsImageFilter)
-
 protected:
     sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage*, const Context&, SkIPoint*) const override {
         return nullptr;
     }
     sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override { return nullptr; }
-    SkIRect onFilterNodeBounds(const SkIRect&, const SkMatrix&, MapDirection) const override {
+    SkIRect onFilterNodeBounds(const SkIRect&, const SkMatrix&,
+                               MapDirection, const SkIRect* inputRect) const override {
         return SkIRect::MakeEmpty();
     }
 
 private:
+    SK_FLATTENABLE_HOOKS(ZeroBoundsImageFilter)
+
     ZeroBoundsImageFilter() : INHERITED(nullptr, 0, nullptr) {}
 
     typedef SkImageFilter INHERITED;
@@ -835,12 +859,6 @@ sk_sp<SkFlattenable> ZeroBoundsImageFilter::CreateProc(SkReadBuffer& buffer) {
     SkDEBUGFAIL("Should never get here");
     return nullptr;
 }
-
-#ifndef SK_IGNORE_TO_STRING
-void ZeroBoundsImageFilter::toString(SkString* str) const {
-    str->appendf("ZeroBoundsImageFilter: ()");
-}
-#endif
 
 }  // anonymous namespace
 
@@ -853,3 +871,51 @@ DEF_TEST(Canvas_SaveLayerWithNullBoundsAndZeroBoundsImageFilter, r) {
     REPORTER_ASSERT(r, canvas.getDeviceClipBounds().isEmpty());
     canvas.restore();
 }
+
+#include "SkPaintImageFilter.h"
+
+// Test that we don't crash/assert when building a canvas with degenerate coordintes
+// (esp. big ones, that might invoke tiling).
+DEF_TEST(Canvas_degenerate_dimension, reporter) {
+    // Need a paint that will sneak us past the quickReject in SkCanvas, so we can test the
+    // raster code further downstream.
+    SkPaint paint;
+    paint.setImageFilter(SkPaintImageFilter::Make(SkPaint(), nullptr));
+    REPORTER_ASSERT(reporter, !paint.canComputeFastBounds());
+
+    const int big = 100 * 1024; // big enough to definitely trigger tiling
+    const SkISize sizes[] {SkISize{0, big}, {big, 0}, {0, 0}};
+    for (SkISize size : sizes) {
+        SkBitmap bm;
+        bm.setInfo(SkImageInfo::MakeN32Premul(size.width(), size.height()));
+        SkCanvas canvas(bm);
+        canvas.drawRect({0, 0, 100, 90*1024}, paint);
+    }
+}
+
+#include "SkBlurImageFilter.h"
+
+DEF_TEST(Canvas_ClippedOutImageFilter, reporter) {
+    SkCanvas canvas(100, 100);
+
+    SkPaint p;
+    p.setColor(SK_ColorGREEN);
+    p.setImageFilter(SkBlurImageFilter::Make(3.0f, 3.0f, nullptr, nullptr));
+
+    SkRect blurredRect = SkRect::MakeXYWH(60, 10, 30, 30);
+
+    SkMatrix invM;
+    invM.setRotate(-45);
+    invM.mapRect(&blurredRect);
+
+    const SkRect clipRect = SkRect::MakeXYWH(0, 50, 50, 50);
+
+    canvas.clipRect(clipRect);
+
+    canvas.rotate(45);
+    const SkMatrix preCTM = canvas.getTotalMatrix();
+    canvas.drawRect(blurredRect, p);
+    const SkMatrix postCTM = canvas.getTotalMatrix();
+    REPORTER_ASSERT(reporter, preCTM == postCTM);
+}
+

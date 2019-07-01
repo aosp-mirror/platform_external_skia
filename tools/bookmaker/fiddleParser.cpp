@@ -5,111 +5,104 @@
  * found in the LICENSE file.
  */
 
-#include "bookmaker.h"
+#include "bmhParser.h"
+#include "fiddleParser.h"
+
+// could make this more elaborate and look up the example definition in the bmh file;
+// see if a simpler hint provided is sufficient
+static bool report_error(const char* blockName, const char* errorMessage) {
+    SkDebugf("%s: %s\n", blockName, errorMessage);
+    return false;
+}
+
+Definition* FiddleBase::findExample(string name) const {
+    return fBmhParser->findExample(name);
+}
 
 bool FiddleBase::parseFiddles() {
-    if (!this->skipExact("{\n")) {
+    if (fStack.empty()) {
         return false;
     }
-    while (!this->eof()) {
-        if (!this->skipExact("  \"")) {
-            return false;
+    JsonStatus* status = &fStack.back();
+    while (!status->atEnd()) {
+        const char* blockName = status->fObjectIter->fKey.begin();
+        Definition* example = nullptr;
+        string textString;
+        if (!status->fObject) {
+            return report_error(blockName, "expected object");
         }
-        const char* nameLoc = fChar;
-        if (!this->skipToEndBracket("\"")) {
-            return false;
-        }
-        string name(nameLoc, fChar - nameLoc);
-        if (!this->skipExact("\": {\n")) {
-            return false;
-        }
-        if (!this->skipExact("    \"compile_errors\": [")) {
-            return false;
-        }
-        if (']' != this->peek()) {
-            // report compiler errors
-            int brackets = 1;
-            do {
-                if ('[' == this->peek()) {
-                    ++brackets;
-                } else if (']' == this->peek()) {
-                    --brackets;
+        const skjson::ObjectValue* obj = status->fObjectIter->fValue;
+        for (auto iter = obj->begin(); obj->end() != iter; ++iter) {
+            const char* memberName = iter->fKey.begin();
+            if (!strcmp("compile_errors", memberName)) {
+                if (!iter->fValue.is<skjson::ArrayValue>()) {
+                    return report_error(blockName, "expected array");
                 }
-            } while (!this->eof() && this->next() && brackets > 0);
-            this->reportError("fiddle compile error");
+                if (iter->fValue.as<skjson::ArrayValue>().size()) {
+                    return report_error(blockName, "fiddle compiler error");
+                }
+                continue;
+            }
+            if (!strcmp("runtime_error", memberName)) {
+                if (!iter->fValue.is<skjson::StringValue>()) {
+                    return report_error(blockName, "expected string 1");
+                }
+                if (iter->fValue.as<skjson::StringValue>().size()) {
+                    return report_error(blockName, "fiddle runtime error");
+                }
+                continue;
+            }
+            if (!strcmp("fiddleHash", memberName)) {
+                const skjson::StringValue* sv = iter->fValue;
+                if (!sv) {
+                    return report_error(blockName, "expected string 2");
+                }
+                example = this->findExample(blockName);
+                if (!example) {
+                    return report_error(blockName, "missing example");
+                }
+                if (example->fHash.length() && example->fHash != sv->begin()) {
+                    return example->reportError<bool>("mismatched hash");
+                }
+                example->fHash = sv->begin();
+                continue;
+            }
+            if (!strcmp("text", memberName)) {
+                const skjson::StringValue* sv = iter->fValue;
+                if (!sv) {
+                    return report_error(blockName, "expected string 3");
+                }
+                textString = sv->begin();
+                continue;
+            }
+            return report_error(blockName, "unexpected key");
         }
-        if (!this->skipExact("],\n")) {
-            return false;
+        if (!example) {
+            return report_error(blockName, "missing fiddleHash");
         }
-        if (!this->skipExact("    \"runtime_error\": \"")) {
-            return false;
-        }
-        if ('"' != this->peek()) {
-            if (!this->skipToEndBracket('"')) {
+        size_t strLen = textString.length();
+        if (strLen) {
+            if (fTextOut
+                    && !this->textOut(example, textString.c_str(), textString.c_str() + strLen)) {
                 return false;
             }
-            this->reportError("fiddle runtime error");
-        }
-        if (!this->skipExact("\",\n")) {
+        } else if (fPngOut && !this->pngOut(example)) {
             return false;
         }
-        if (!this->skipExact("    \"fiddleHash\": \"")) {
-            return false;
-        }
-        const char* hashStart = fChar;
-        if (!this->skipToEndBracket('"')) {
-            return false;
-        }
-        Definition* example = this->findExample(name);
-        if (!example) {
-            this->reportError("missing example");
-        }
-        string hash(hashStart, fChar - hashStart);
-        if (example) {
-            example->fHash = hash;
-        }
-        if (!this->skipExact("\",\n")) {
-            return false;
-        }
-        if (!this->skipExact("    \"text\": \"")) {
-            return false;
-        }
-        if ('"' != this->peek()) {
-            const char* stdOutStart = fChar;
-            do {
-                if ('\\' == this->peek()) {
-                    this->next();
-                } else if ('"' == this->peek()) {
-                    break;
-                }
-            } while (!this->eof() && this->next());
-            const char* stdOutEnd = fChar;
-            if (example && fTextOut) {
-                if (!this->textOut(example, stdOutStart, stdOutEnd)) {
-                    return false;
-                }
-            }
-        } else {
-            if (example && fPngOut) {
-                if (!this->pngOut(example)) {
-                    return false;
-                }
-            }
-        }
-        if (!this->skipExact("\"\n")) {
-            return false;
-        }
-        if (!this->skipExact("  }")) {
-            return false;
-        }
-        if ('\n' == this->peek()) {
-            break;
-        }
-        if (!this->skipExact(",\n")) {
-            return false;
-        }
+        status->advance();
     }
     return true;
+}
+
+bool FiddleParser::parseFromFile(const char* path)  {
+    if (!INHERITED::parseFromFile(path)) {
+        return false;
+    }
+    fBmhParser->resetExampleHashes();
+    if (!INHERITED::parseFiddles()) {
+        return false;
+    }
+    return fBmhParser->checkExampleHashes();
 }
 
 bool FiddleParser::textOut(Definition* example, const char* stdOutStart,
@@ -144,6 +137,7 @@ bool FiddleParser::textOut(Definition* example, const char* stdOutStart,
                 }
             } else  if (strncmp(bmh.fChar, fiddle.fChar, fiddleLen)) {
                 if (!foundVolatile) {
+                    SkDebugf("%.*s\n", fiddleLen, fiddle.fChar);
                     bmh.reportError("mismatched stdout text\n");
                 }
             }

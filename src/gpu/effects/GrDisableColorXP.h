@@ -31,7 +31,7 @@ private:
     AnalysisProperties analysisProperties(const GrProcessorAnalysisColor&,
                                           const GrProcessorAnalysisCoverage&,
                                           const GrCaps&,
-                                          GrPixelConfigIsClamped) const override {
+                                          GrClampType) const override {
         return AnalysisProperties::kCompatibleWithAlphaAsCoverage |
                AnalysisProperties::kIgnoresInputColor;
     }
@@ -40,7 +40,7 @@ private:
                                                    GrProcessorAnalysisCoverage,
                                                    bool hasMixedSamples,
                                                    const GrCaps&,
-                                                   GrPixelConfigIsClamped) const override;
+                                                   GrClampType) const override;
 
     GR_DECLARE_XP_FACTORY_TEST
 
