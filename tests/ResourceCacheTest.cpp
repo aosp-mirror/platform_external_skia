@@ -109,7 +109,7 @@ static sk_sp<GrRenderTarget> create_RT_with_SB(GrResourceProvider* provider,
         return nullptr;
     }
 
-    if (!provider->attachStencilAttachment(tex->asRenderTarget())) {
+    if (!provider->attachStencilAttachment(tex->asRenderTarget(), sampleCount)) {
         return nullptr;
     }
     SkASSERT(get_SB(tex->asRenderTarget()));
@@ -208,10 +208,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, ctxI
 
     backendTextures[0] = context->createBackendTexture(kW, kH, kRGBA_8888_SkColorType,
                                                        SkColors::kTransparent,
-                                                       GrMipMapped::kNo, GrRenderable::kNo);
+                                                       GrMipMapped::kNo, GrRenderable::kNo,
+                                                       GrProtected::kNo);
     backendTextures[1] = context->createBackendTexture(kW, kH, kRGBA_8888_SkColorType,
                                                        SkColors::kTransparent,
-                                                       GrMipMapped::kNo, GrRenderable::kNo);
+                                                       GrMipMapped::kNo, GrRenderable::kNo,
+                                                       GrProtected::kNo);
     REPORTER_ASSERT(reporter, backendTextures[0].isValid());
     REPORTER_ASSERT(reporter, backendTextures[1].isValid());
     if (!backendTextures[0].isValid() || !backendTextures[1].isValid()) {

@@ -105,9 +105,17 @@ public:
 
     SkVector rounding() const override;
 
+    SkIPoint subpixelMask() const override {
+        return SkIPoint::Make((!fIsSubpixel || fAxisAlignment == kY_SkAxisAlignment) ? 0 : ~0,
+                              (!fIsSubpixel || fAxisAlignment == kX_SkAxisAlignment) ? 0 : ~0);
+    }
+
     const SkDescriptor& getDescriptor() const override;
 
-    SkSpan<const SkGlyphPos> prepareForDrawing(const SkGlyphID glyphIDs[],
+    SkSpan<const SkGlyph*> metrics(SkSpan<const SkGlyphID> glyphIDs,
+                                   const SkGlyph* results[]);
+
+    SkSpan<const SkGlyphPos> prepareForDrawing(const SkPackedGlyphID packedGlyphIDs[],
                                                const SkPoint positions[],
                                                size_t n,
                                                int maxDimension,
@@ -162,9 +170,9 @@ private:
 
     SkGlyph* makeGlyph(SkPackedGlyphID);
 
-    // Metrics will hold a mutex while doing its work. This is one of the few places that will
-    // need a mutex.
-    SkSpan<const SkGlyph*> metrics(SkSpan<const SkGlyphID>glyphIDs, const SkGlyph* result[]);
+    // internalMetrics will only be called with a mutex already held.
+    SkSpan<const SkGlyph*> internalMetrics(
+            SkSpan<const SkGlyphID> glyphIDs, const SkGlyph* result[]);
 
     const SkAutoDescriptor                 fDesc;
     const std::unique_ptr<SkScalerContext> fScalerContext;

@@ -43,6 +43,10 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
     fCrossContextTextureSupport = true;
     fHalfFloatVertexAttributeSupport = true;
 
+    // We always copy in/out of a transfer buffer so it's trivial to support row bytes.
+    fReadPixelsRowBytesSupport = true;
+    fWritePixelsRowBytesSupport = true;
+
     fTransferBufferSupport = true;
 
     fMaxRenderTargetSize = 4096; // minimum required by spec
@@ -900,17 +904,18 @@ int GrVkCaps::maxRenderTargetSampleCount(VkFormat format) const {
     return table[table.count() - 1];
 }
 
-GrCaps::ReadFlags GrVkCaps::surfaceSupportsReadPixels(const GrSurface* surface) const {
+GrCaps::SurfaceReadPixelsSupport GrVkCaps::surfaceSupportsReadPixels(
+        const GrSurface* surface) const {
     if (surface->isProtected()) {
-        return kProtected_ReadFlag;
+        return SurfaceReadPixelsSupport::kUnsupported;
     }
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
         // We can't directly read from a VkImage that has a ycbcr sampler.
         if (tex->ycbcrConversionInfo().isValid()) {
-            return kRequiresCopy_ReadFlag;
+            return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
     }
-    return kSupported_ReadFlag;
+    return SurfaceReadPixelsSupport::kSupported;
 }
 
 bool GrVkCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {

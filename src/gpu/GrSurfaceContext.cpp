@@ -34,9 +34,8 @@
 GrSurfaceContext::GrSurfaceContext(GrRecordingContext* context,
                                    GrColorType colorType,
                                    SkAlphaType alphaType,
-                                   sk_sp<SkColorSpace> colorSpace,
-                                   GrPixelConfig config)
-        : fContext(context), fColorSpaceInfo(colorType, alphaType, std::move(colorSpace), config) {}
+                                   sk_sp<SkColorSpace> colorSpace)
+        : fContext(context), fColorSpaceInfo(colorType, alphaType, std::move(colorSpace)) {}
 
 GrAuditTrail* GrSurfaceContext::auditTrail() {
     return fContext->priv().auditTrail();
@@ -71,9 +70,10 @@ bool GrSurfaceContext::readPixels(const GrPixelInfo& origDstInfo, void* dst, siz
         return false;
     }
 
+    size_t tightRowBytes = origDstInfo.minRowBytes();
     if (!rowBytes) {
-        rowBytes = origDstInfo.minRowBytes();
-    } else if (rowBytes < origDstInfo.minRowBytes()) {
+        rowBytes = tightRowBytes;
+    } else if (rowBytes < tightRowBytes) {
         return false;
     }
 
@@ -94,6 +94,8 @@ bool GrSurfaceContext::readPixels(const GrPixelInfo& origDstInfo, void* dst, siz
     if (!dstInfo.clip(this->width(), this->height(), &pt, &dst, rowBytes)) {
         return false;
     }
+    // Our tight row bytes may have been changed by clipping.
+    tightRowBytes = dstInfo.minRowBytes();
 
     bool premul   = this->colorSpaceInfo().alphaType() == kUnpremul_SkAlphaType &&
                     dstInfo.alphaType() == kPremul_SkAlphaType;
@@ -119,11 +121,11 @@ bool GrSurfaceContext::readPixels(const GrPixelInfo& origDstInfo, void* dst, siz
                             direct->priv().validPMUPMConversionExists();
 
     auto readFlag = caps->surfaceSupportsReadPixels(srcSurface);
-    if (readFlag == GrCaps::kProtected_ReadFlag) {
+    if (readFlag == GrCaps::SurfaceReadPixelsSupport::kUnsupported) {
         return false;
     }
 
-    if (readFlag == GrCaps::kRequiresCopy_ReadFlag || canvas2DFastPath) {
+    if (readFlag == GrCaps::SurfaceReadPixelsSupport::kCopyToTexture2D || canvas2DFastPath) {
         GrBackendFormat format;
         GrPixelConfig config;
         GrColorType colorType;
@@ -185,7 +187,9 @@ bool GrSurfaceContext::readPixels(const GrPixelInfo& origDstInfo, void* dst, siz
     auto supportedRead = caps->supportedReadPixelsColorType(
             srcProxy->config(), srcProxy->backendFormat(), dstInfo.colorType());
 
-    bool convert = unpremul || premul || needColorConversion || flip ||
+    bool makeTight = !caps->readPixelsRowBytesSupport() && tightRowBytes != rowBytes;
+
+    bool convert = unpremul || premul || needColorConversion || flip || makeTight ||
                    (dstInfo.colorType() != supportedRead.fColorType) ||
                    supportedRead.fSwizzle != GrSwizzle::RGBA();
 
@@ -240,9 +244,10 @@ bool GrSurfaceContext::writePixels(const GrPixelInfo& origSrcInfo, const void* s
         return false;
     }
 
+    size_t tightRowBytes = origSrcInfo.minRowBytes();
     if (!rowBytes) {
-        rowBytes = origSrcInfo.minRowBytes();
-    } else if (rowBytes < origSrcInfo.minRowBytes()) {
+        rowBytes = tightRowBytes;
+    } else if (rowBytes < tightRowBytes) {
         return false;
     }
 
@@ -261,6 +266,8 @@ bool GrSurfaceContext::writePixels(const GrPixelInfo& origSrcInfo, const void* s
     if (!srcInfo.clip(this->width(), this->height(), &pt, &src, rowBytes)) {
         return false;
     }
+    // Our tight row bytes may have been changed by clipping.
+    tightRowBytes = srcInfo.minRowBytes();
 
     bool premul = this->colorSpaceInfo().alphaType() == kPremul_SkAlphaType &&
             srcInfo.alphaType() == kUnpremul_SkAlphaType;
@@ -371,7 +378,8 @@ bool GrSurfaceContext::writePixels(const GrPixelInfo& origSrcInfo, const void* s
     GrColorType allowedColorType =
             caps->supportedWritePixelsColorType(dstProxy->config(), srcInfo.colorType());
     bool flip = dstProxy->origin() == kBottomLeft_GrSurfaceOrigin;
-    bool convert = premul || unpremul || needColorConversion ||
+    bool makeTight = !caps->writePixelsRowBytesSupport() && rowBytes != tightRowBytes;
+    bool convert = premul || unpremul || needColorConversion || makeTight ||
                    (srcInfo.colorType() != allowedColorType) || flip;
 
     std::unique_ptr<char[]> tmpPixels;

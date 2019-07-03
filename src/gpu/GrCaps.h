@@ -204,24 +204,29 @@ public:
      */
     bool surfaceSupportsWritePixels(const GrSurface*) const;
 
-
     /**
-     * Indicates whether surface supports readPixels or the alternatives.
+     * Indicates whether surface supports GrGpu::readPixels, must be copied, or cannot be read.
      */
-    enum ReadFlags {
-        kSupported_ReadFlag     = 0x0,
-        kRequiresCopy_ReadFlag  = 0x1,
-        kProtected_ReadFlag     = 0x2,
+    enum class SurfaceReadPixelsSupport {
+        /** GrGpu::readPixels is supported by the surface. */
+        kSupported,
+        /**
+         * GrGpu::readPixels is not supported by this surface but this surface can be drawn
+         * or copied to a Ganesh-created GrTextureType::kTexture2D and then that surface will be
+         * readable.
+         */
+        kCopyToTexture2D,
+        /**
+         * Not supported
+         */
+        kUnsupported,
     };
-
     /**
-     * Backends may have restrictions on what types of surfaces support GrGpu::readPixels().
-     * If this returns kRequiresCopy_ReadFlag then the caller should implement a fallback where a
-     * temporary texture is created, the surface is drawn or copied into the temporary, and
-     * pixels are read from the temporary. If this returns kProtected_ReadFlag, then the caller
-     * should not attempt reading it.
+     * Backends may have restrictions on what types of surfaces support GrGpu::readPixels(). We may
+     * either be able to read directly from the surface, read from a copy of the surface, or not
+     * read at all.
      */
-    virtual ReadFlags surfaceSupportsReadPixels(const GrSurface*) const = 0;
+    virtual SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const = 0;
 
     /**
      * Given a dst pixel config and a src color type what color type must the caller coax the
@@ -248,6 +253,16 @@ public:
     virtual SupportedRead supportedReadPixelsColorType(GrPixelConfig srcConfig,
                                                        const GrBackendFormat& srcFormat,
                                                        GrColorType dstColorType) const;
+
+    /**
+     * Do GrGpu::writePixels() and GrGpu::transferPixelsTo() support a src buffer where the row
+     * bytes is not equal to bpp * w?
+     */
+    bool writePixelsRowBytesSupport() const { return fWritePixelsRowBytesSupport; }
+    /**
+     * Does GrGpu::readPixels() support a dst buffer where the row bytes is not equal to bpp * w?
+     */
+    bool readPixelsRowBytesSupport() const { return fReadPixelsRowBytesSupport; }
 
     /** Are transfer buffers (to textures and from surfaces) supported? */
     bool transferBufferSupport() const { return fTransferBufferSupport; }
@@ -425,6 +440,8 @@ protected:
     bool fPerformStencilClearsAsDraws                : 1;
     bool fAllowCoverageCounting                      : 1;
     bool fTransferBufferSupport                      : 1;
+    bool fWritePixelsRowBytesSupport                 : 1;
+    bool fReadPixelsRowBytesSupport                  : 1;
 
     // Driver workaround
     bool fDriverBlacklistCCPR                        : 1;

@@ -112,10 +112,8 @@ public:
 
     bool isConfigTexturable(GrPixelConfig config) const override {
         GrGLenum glFormat = this->configSizedInternalFormat(config);
-        if (!glFormat) {
-            return false;
-        }
-        return SkToBool(this->getFormatInfo(glFormat).fFlags & FormatInfo::kTextureable_Flag);
+        GrColorType ct = GrPixelConfigToColorType(config);
+        return this->isGLFormatTexturable(ct, glFormat);
     }
 
     int getRenderTargetSampleCount(int requestedCount,
@@ -144,7 +142,7 @@ public:
         return this->canFormatBeFBOColorAttachment(format);
     }
 
-    bool isConfigTexSupportEnabled(GrPixelConfig config) const {
+    bool configSupportsTexStorage(GrPixelConfig config) const {
         return SkToBool(fConfigTable[config].fFlags & ConfigInfo::kCanUseTexStorage_Flag);
     }
 
@@ -273,12 +271,6 @@ public:
      */
     bool bgraIsInternalFormat() const;
 
-    /// Is there support for GL_UNPACK_ROW_LENGTH
-    bool unpackRowLengthSupport() const { return fUnpackRowLengthSupport; }
-
-    /// Is there support for GL_PACK_ROW_LENGTH
-    bool packRowLengthSupport() const { return fPackRowLengthSupport; }
-
     /// Is there support for GL_PACK_REVERSE_ROW_ORDER
     bool packFlipYSupport() const { return fPackFlipYSupport; }
 
@@ -320,7 +312,7 @@ public:
     /// Use indices or vertices in CPU arrays rather than VBOs for dynamic content.
     bool useNonVBOVertexAndIndexDynamicData() const { return fUseNonVBOVertexAndIndexDynamicData; }
 
-    ReadFlags surfaceSupportsReadPixels(const GrSurface*) const override;
+    SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override;
     SupportedRead supportedReadPixelsColorType(GrPixelConfig, const GrBackendFormat&,
                                                GrColorType) const override;
 
@@ -478,6 +470,8 @@ private:
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
     size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const override;
 
+    bool isGLFormatTexturable(GrColorType, GrGLenum glFormat) const;
+
     GrGLStandard fStandard;
 
     SkTArray<StencilFormat, true> fStencilFormats;
@@ -489,8 +483,6 @@ private:
     MapBufferType       fMapBufferType;
     TransferBufferType  fTransferBufferType;
 
-    bool fUnpackRowLengthSupport : 1;
-    bool fPackRowLengthSupport : 1;
     bool fPackFlipYSupport : 1;
     bool fTextureUsageSupport : 1;
     bool fAlpha8IsRenderable: 1;
@@ -611,7 +603,28 @@ private:
 
     ConfigInfo fConfigTable[kGrPixelConfigCnt];
 
+    struct ColorTypeInfo {
+        ColorTypeInfo(GrColorType colorType, uint32_t flags)
+                : fColorType(colorType)
+                , fFlags(flags) {}
+
+        GrColorType fColorType;
+        enum {
+            kUploadData_Flag = 0x1,
+        };
+        uint32_t fFlags;
+    };
+
     struct FormatInfo {
+        uint32_t colorTypeFlags(GrColorType colorType) const {
+            for (int i = 0; i < fColorTypeInfos.count(); ++i) {
+                if (fColorTypeInfos[i].fColorType == colorType) {
+                    return fColorTypeInfos[i].fFlags;
+                }
+            }
+            return 0;
+        }
+
         enum {
             kTextureable_Flag                = 0x1,
             /** kFBOColorAttachment means that even if the format cannot be a GrRenderTarget, we can
@@ -620,6 +633,8 @@ private:
             kFBOColorAttachmentWithMSAA_Flag = 0x4,
         };
         uint32_t fFlags = 0;
+
+        SkSTArray<1, ColorTypeInfo> fColorTypeInfos;
     };
 
     static const size_t kNumGLFormats = 21;
