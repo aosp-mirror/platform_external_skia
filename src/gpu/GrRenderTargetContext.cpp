@@ -1652,10 +1652,8 @@ sk_sp<GrRenderTargetContext> GrRenderTargetContext::rescale(const SkImageInfo& i
         return nullptr;
     }
 
-    // We currently don't know our own alpha type, we assume it's premul if we have an alpha channel
-    // and opaque otherwise.
-    if (!GrPixelConfigIsAlphaOnly(fRenderTargetProxy->config()) &&
-        info.alphaType() != kPremul_SkAlphaType) {
+    // We rescale by drawing and don't currently support drawing to a kUnpremul destination.
+    if (info.alphaType() == kUnpremul_SkAlphaType) {
         return nullptr;
     }
 
@@ -1692,21 +1690,19 @@ sk_sp<GrRenderTargetContext> GrRenderTargetContext::rescale(const SkImageInfo& i
         stepsY = sy != 1.f;
     }
     SkASSERT(stepsX || stepsY);
-    auto rescaleColorSapce = this->colorSpaceInfo().refColorSpace();
     auto currRTC = sk_ref_sp(this);
     // Assume we should ignore the rescale linear request if the surface has no color space since
     // it's unclear how we'd linearize from an unknown color space.
-    if (rescaleGamma == SkSurface::RescaleGamma::kLinear &&
-        rescaleColorSapce.get() && !rescaleColorSapce->gammaIsLinear()) {
-        auto cs = rescaleColorSapce->makeLinearGamma();
-        auto backendFormat = this->caps()->getBackendFormatFromGrColorType(GrColorType::kRGBA_F16,
-                                                                           GrSRGBEncoded::kNo);
-        auto xform = GrColorSpaceXform::Make(rescaleColorSapce.get(), kPremul_SkAlphaType, cs.get(),
-                                             kPremul_SkAlphaType);
+    if (rescaleGamma == SkSurface::RescaleGamma::kLinear && this->colorSpaceInfo().colorSpace() &&
+        !this->colorSpaceInfo().colorSpace()->gammaIsLinear()) {
+        auto cs = this->colorSpaceInfo().colorSpace()->makeLinearGamma();
+        auto xform = GrColorSpaceXform::Make(this->colorSpaceInfo().colorSpace(),
+                                             this->colorSpaceInfo().alphaType(),
+                                             cs.get(), kPremul_SkAlphaType);
         // We'll fall back to kRGBA_8888 if half float not supported.
         auto linearRTC = fContext->priv().makeDeferredRenderTargetContextWithFallback(
-                backendFormat, SkBackingFit::kExact, srcW, srcH, kRGBA_half_GrPixelConfig,
-                GrColorType::kRGBA_F16, cs, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
+                SkBackingFit::kExact, srcW, srcH, GrColorType::kRGBA_F16, cs, 1, GrMipMapped::kNo,
+                kTopLeft_GrSurfaceOrigin);
         if (!linearRTC) {
             return nullptr;
         }
@@ -1717,7 +1713,6 @@ sk_sp<GrRenderTargetContext> GrRenderTargetContext::rescale(const SkImageInfo& i
                                std::move(xform));
         texProxy = linearRTC->asTextureProxyRef();
         currRTC = std::move(linearRTC);
-        rescaleColorSapce = std::move(cs);
         srcX = 0;
         srcY = 0;
         constraint = SkCanvas::kFast_SrcRectConstraint;
@@ -1743,23 +1738,21 @@ sk_sp<GrRenderTargetContext> GrRenderTargetContext::rescale(const SkImageInfo& i
             }
             --stepsY;
         }
-        GrBackendFormat backendFormat = texProxy->backendFormat().makeTexture2D();
-        GrPixelConfig config = texProxy->config();
         GrColorType colorType = currRTC->colorSpaceInfo().colorType();
-        auto cs = rescaleColorSapce;
+        auto cs = currRTC->colorSpaceInfo().refColorSpace();
         sk_sp<GrColorSpaceXform> xform;
+        auto prevAlphaType = currRTC->colorSpaceInfo().alphaType();
         if (!stepsX && !stepsY) {
             // Might as well fold conversion to final info in the last step.
-            backendFormat = this->caps()->getBackendFormatFromColorType(info.colorType());
-            config = this->caps()->getConfigFromBackendFormat(backendFormat, info.colorType());
             cs = info.refColorSpace();
             colorType = SkColorTypeToGrColorType(info.colorType());
-            xform = GrColorSpaceXform::Make(rescaleColorSapce.get(),
-                                            kPremul_SkAlphaType, cs.get(), info.alphaType());
+            xform = GrColorSpaceXform::Make(currRTC->colorSpaceInfo().colorSpace(),
+                                            currRTC->colorSpaceInfo().alphaType(),
+                                            cs.get(), info.alphaType());
         }
         currRTC = fContext->priv().makeDeferredRenderTargetContextWithFallback(
-                backendFormat, SkBackingFit::kExact, nextW, nextH, config, colorType, std::move(cs),
-                1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
+                SkBackingFit::kExact, nextW, nextH, colorType, std::move(cs), 1, GrMipMapped::kNo,
+                kTopLeft_GrSurfaceOrigin);
         if (!currRTC) {
             return nullptr;
         }
@@ -1777,9 +1770,9 @@ sk_sp<GrRenderTargetContext> GrRenderTargetContext::rescale(const SkImageInfo& i
             if (srcW != texProxy->width() || srcH != texProxy->height()) {
                 auto domain = GrTextureDomain::MakeTexelDomain(
                         SkIRect::MakeXYWH(srcX, srcY, srcW, srcH), GrTextureDomain::kClamp_Mode);
-                fp = GrBicubicEffect::Make(texProxy, matrix, domain, dir, kPremul_SkAlphaType);
+                fp = GrBicubicEffect::Make(texProxy, matrix, domain, dir, prevAlphaType);
             } else {
-                fp = GrBicubicEffect::Make(texProxy, matrix, dir, kPremul_SkAlphaType);
+                fp = GrBicubicEffect::Make(texProxy, matrix, dir, prevAlphaType);
             }
             if (xform) {
                 fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(xform));
@@ -1819,13 +1812,6 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
         callback(context, nullptr, 0);
         return;
     }
-    // We currently don't know our own alpha type, we assume it's premul if we have an alpha channel
-    // and opaque otherwise.
-    if (!GrPixelConfigIsAlphaOnly(fRenderTargetProxy->config()) &&
-        info.alphaType() != kPremul_SkAlphaType) {
-        callback(context, nullptr, 0);
-        return;
-    }
     auto dstCT = SkColorTypeToGrColorType(info.colorType());
     bool needsRescale = srcRect.width() != info.width() || srcRect.height() != info.height();
     GrPixelConfig configOfFinalContext = fRenderTargetProxy->config();
@@ -1842,8 +1828,12 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
         callback(context, nullptr, 0);
         return;
     }
-    // Fail if readCT does not have all of readCT's color channels.
-    if (GrColorTypeComponentFlags(dstCT) & ~GrColorTypeComponentFlags(readInfo.fColorType)) {
+    // Fail if read color type does not have all of dstCT's color channels and those missing color
+    // channels are in the src.
+    uint32_t dstComponents = GrColorTypeComponentFlags(dstCT);
+    uint32_t legalReadComponents = GrColorTypeComponentFlags(readInfo.fColorType);
+    uint32_t srcComponents = GrColorTypeComponentFlags(this->colorSpaceInfo().colorType());
+    if ((~legalReadComponents & dstComponents) & srcComponents) {
         callback(context, nullptr, 0);
         return;
     }
@@ -1862,12 +1852,18 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
         x = y = 0;
     } else {
         sk_sp<GrColorSpaceXform> xform =
-                GrColorSpaceXform::Make(this->colorSpaceInfo().colorSpace(), kPremul_SkAlphaType,
+                GrColorSpaceXform::Make(this->colorSpaceInfo().colorSpace(),
+                                        this->colorSpaceInfo().alphaType(),
                                         info.colorSpace(), info.alphaType());
         // Insert a draw to a temporary surface if we need to do a y-flip or color space conversion.
         if (this->origin() == kBottomLeft_GrSurfaceOrigin || xform) {
+            // We flip or color convert by drawing and we don't currently support drawing to
+            // kPremul.
+            if (info.alphaType() == kUnpremul_SkAlphaType) {
+                callback(context, nullptr, 0);
+                return;
+            }
             sk_sp<GrTextureProxy> texProxy = sk_ref_sp(fRenderTargetProxy->asTextureProxy());
-            const auto backendFormat = fRenderTargetProxy->backendFormat().makeTexture2D();
             SkRect srcRectToDraw = SkRect::Make(srcRect);
             // If the src is not texturable first try to make a copy to a texture.
             if (!texProxy) {
@@ -1881,9 +1877,9 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
                 srcRectToDraw = SkRect::MakeWH(srcRect.width(), srcRect.height());
             }
             rtc = direct->priv().makeDeferredRenderTargetContext(
-                    backendFormat, SkBackingFit::kApprox, srcRect.width(), srcRect.height(),
-                    fRenderTargetProxy->config(), this->colorSpaceInfo().colorType(),
-                    info.refColorSpace(), 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
+                    SkBackingFit::kApprox, srcRect.width(), srcRect.height(),
+                    this->colorSpaceInfo().colorType(), info.refColorSpace(), 1, GrMipMapped::kNo,
+                    kTopLeft_GrSurfaceOrigin);
             if (!rtc) {
                 callback(context, nullptr, 0);
                 return;
@@ -1915,8 +1911,12 @@ GrRenderTargetContext::PixelTransferResult GrRenderTargetContext::transferPixels
     }
     auto supportedRead = this->caps()->supportedReadPixelsColorType(
             fRenderTargetProxy->config(), fRenderTargetProxy->backendFormat(), dstCT);
-    // Fail if readCT does not have all of readCT's color channels.
-    if (GrColorTypeComponentFlags(dstCT) & ~GrColorTypeComponentFlags(supportedRead.fColorType)) {
+    // Fail if read color type does not have all of dstCT's color channels and those missing color
+    // channels are in the src.
+    uint32_t dstComponents = GrColorTypeComponentFlags(dstCT);
+    uint32_t legalReadComponents = GrColorTypeComponentFlags(supportedRead.fColorType);
+    uint32_t srcComponents = GrColorTypeComponentFlags(this->colorSpaceInfo().colorType());
+    if ((~legalReadComponents & dstComponents) & srcComponents) {
         return {};
     }
 
@@ -1945,6 +1945,8 @@ GrRenderTargetContext::PixelTransferResult GrRenderTargetContext::transferPixels
     if (supportedRead.fColorType != dstCT || supportedRead.fSwizzle != GrSwizzle("rgba") || flip) {
         result.fPixelConverter = [w = rect.width(), h = rect.height(), dstCT, supportedRead](
                                          void* dst, const void* src) {
+            // We're using kPremul here for src and dst simply because we don't want any alpha type
+            // conversions.
             GrPixelInfo srcInfo(supportedRead.fColorType, kPremul_SkAlphaType, nullptr, w, h);
             GrPixelInfo dstInfo(dstCT,                    kPremul_SkAlphaType, nullptr, w, h);
             GrConvertPixels(dstInfo, dst, dstInfo.minRowBytes(),
@@ -1965,7 +1967,8 @@ void GrRenderTargetContext::asyncReadPixels(const SkIRect& rect, SkColorType col
 
     if (!transferResult.fTransferBuffer) {
         SkAutoPixmapStorage pm;
-        auto ii = SkImageInfo::Make(rect.width(), rect.height(), colorType, kPremul_SkAlphaType,
+        auto ii = SkImageInfo::Make(rect.width(), rect.height(), colorType,
+                                    this->colorSpaceInfo().alphaType(),
                                     this->colorSpaceInfo().refColorSpace());
         pm.alloc(ii);
         if (!this->readPixels(ii, pm.writable_addr(), pm.rowBytes(), {rect.fLeft, rect.fTop})) {
@@ -1995,15 +1998,14 @@ void GrRenderTargetContext::asyncReadPixels(const SkIRect& rect, SkColorType col
             delete context;
             return;
         }
-        SkAutoPixmapStorage pm;
+        std::unique_ptr<char[]> tmp;
+        size_t rowBytes = context->fW * SkColorTypeBytesPerPixel(context->fColorType);
         if (context->fTransferResult.fPixelConverter) {
-            pm.alloc(SkImageInfo::Make(context->fW, context->fH, context->fColorType,
-                                       kPremul_SkAlphaType, nullptr));
-            context->fTransferResult.fPixelConverter(pm.writable_addr(), data);
-            data = pm.addr();
+            tmp.reset(new char[rowBytes * context->fH]);
+            context->fTransferResult.fPixelConverter(tmp.get(), data);
+            data = tmp.get();
         }
-        (*context->fClientCallback)(context->fClientContext, data,
-                                    context->fW * SkColorTypeBytesPerPixel(context->fColorType));
+        (*context->fClientCallback)(context->fClientContext, data, rowBytes);
         delete context;
     };
     GrFlushInfo flushInfo;
@@ -2036,6 +2038,7 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(
     auto rtc = sk_ref_sp(this);
     bool needsRescale = srcRect.width() != dstW || srcRect.height() != dstH;
     if (needsRescale) {
+        // We assume the caller wants kPremul. There is no way to indicate a preference.
         auto info = SkImageInfo::Make(dstW, dstH, kRGBA_8888_SkColorType, kPremul_SkAlphaType,
                                       dstColorSpace);
         // TODO: Incorporate the YUV conversion into last pass of rescaling.
@@ -2048,9 +2051,10 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(
         SkASSERT(rtc->origin() == kTopLeft_GrSurfaceOrigin);
         x = y = 0;
     } else {
-        sk_sp<GrColorSpaceXform> xform =
-                GrColorSpaceXform::Make(this->colorSpaceInfo().colorSpace(), kPremul_SkAlphaType,
-                                        dstColorSpace.get(), kPremul_SkAlphaType);
+        // We assume the caller wants kPremul. There is no way to indicate a preference.
+        sk_sp<GrColorSpaceXform> xform = GrColorSpaceXform::Make(
+                this->colorSpaceInfo().colorSpace(), this->colorSpaceInfo().alphaType(),
+                dstColorSpace.get(), kPremul_SkAlphaType);
         if (xform) {
             sk_sp<GrTextureProxy> texProxy = this->asTextureProxyRef();
             // TODO: Do something if the input is not a texture already.
@@ -2058,13 +2062,10 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(
                 callback(context, nullptr, nullptr);
                 return;
             }
-            const auto backendFormat =
-                    this->caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
             SkRect srcRectToDraw = SkRect::Make(srcRect);
             rtc = direct->priv().makeDeferredRenderTargetContext(
-                    backendFormat, SkBackingFit::kApprox, dstW, dstH, fRenderTargetProxy->config(),
-                    this->colorSpaceInfo().colorType(), dstColorSpace, 1, GrMipMapped::kNo,
-                    kTopLeft_GrSurfaceOrigin);
+                    SkBackingFit::kApprox, dstW, dstH, this->colorSpaceInfo().colorType(),
+                    dstColorSpace, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
             if (!rtc) {
                 callback(context, nullptr, nullptr);
                 return;
@@ -2083,17 +2084,15 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(
         callback(context, nullptr, nullptr);
         return;
     }
-    const auto backendFormat = this->caps()->getBackendFormatFromGrColorType(GrColorType::kAlpha_8,
-                                                                             GrSRGBEncoded::kNo);
-    auto yRTC = direct->priv().makeDeferredRenderTargetContext(
-            backendFormat, SkBackingFit::kApprox, dstW, dstH, kAlpha_8_GrPixelConfig,
-            GrColorType::kAlpha_8, dstColorSpace, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
-    auto uRTC = direct->priv().makeDeferredRenderTargetContext(
-            backendFormat, SkBackingFit::kApprox, dstW / 2, dstH / 2, kAlpha_8_GrPixelConfig,
-            GrColorType::kAlpha_8, dstColorSpace, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
-    auto vRTC = direct->priv().makeDeferredRenderTargetContext(
-            backendFormat, SkBackingFit::kApprox, dstW / 2, dstH / 2, kAlpha_8_GrPixelConfig,
-            GrColorType::kAlpha_8, dstColorSpace, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
+    auto yRTC = direct->priv().makeDeferredRenderTargetContextWithFallback(
+            SkBackingFit::kApprox, dstW, dstH, GrColorType::kAlpha_8, dstColorSpace, 1,
+            GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
+    auto uRTC = direct->priv().makeDeferredRenderTargetContextWithFallback(
+            SkBackingFit::kApprox, dstW / 2, dstH / 2, GrColorType::kAlpha_8, dstColorSpace, 1,
+            GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
+    auto vRTC = direct->priv().makeDeferredRenderTargetContextWithFallback(
+            SkBackingFit::kApprox, dstW / 2, dstH / 2, GrColorType::kAlpha_8, dstColorSpace, 1,
+            GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
     if (!yRTC || !uRTC || !vRTC) {
         callback(context, nullptr, nullptr);
         return;

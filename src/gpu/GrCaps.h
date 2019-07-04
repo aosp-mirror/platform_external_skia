@@ -192,10 +192,6 @@ public:
     virtual int getRenderTargetSampleCount(int requestedCount,
                                            SkColorType, const GrBackendFormat&) const = 0;
     virtual int getRenderTargetSampleCount(int requestedCount, GrPixelConfig) const = 0;
-    // TODO: Remove. Legacy name used by Chrome.
-    int getSampleCount(int requestedCount, GrPixelConfig config) const {
-        return this->getRenderTargetSampleCount(requestedCount, config);
-    }
 
     /**
      * Backends may have restrictions on what types of surfaces support GrGpu::writePixels().
@@ -362,15 +358,35 @@ public:
      * returned.
      */
     virtual GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,
-                                                      SkColorType) const = 0;
+                                                      GrColorType) const = 0;
 
-    virtual bool areColorTypeAndFormatCompatible(SkColorType ct, const GrBackendFormat&) const = 0;
+    bool areColorTypeAndFormatCompatible(SkColorType skCT,
+                                         const GrBackendFormat& format) const {
+        GrColorType grCT = SkColorTypeToGrColorType(skCT);
+        if (GrColorType::kUnknown == grCT) {
+            return false;
+        }
+
+        return this->areColorTypeAndFormatCompatible(grCT, format);
+    }
+
+    virtual bool areColorTypeAndFormatCompatible(GrColorType ct, const GrBackendFormat&) const = 0;
+
+    GrPixelConfig getConfigFromBackendFormat(const GrBackendFormat& format,
+                                             SkColorType skCT) const {
+        GrColorType grCT = SkColorTypeToGrColorType(skCT);
+        if (GrColorType::kUnknown == grCT) {
+            return kUnknown_GrPixelConfig;
+        }
+
+        return this->getConfigFromBackendFormat(format, grCT);
+    }
 
     // TODO: replace validateBackendRenderTarget with calls to getConfigFromBackendFormat?
     // TODO: it seems like we could pass the full SkImageInfo and validate its colorSpace too
     // Returns kUnknown if a valid config could not be determined.
     virtual GrPixelConfig getConfigFromBackendFormat(const GrBackendFormat& format,
-                                                     SkColorType ct) const = 0;
+                                                     GrColorType ct) const = 0;
 
     /**
      * Special method only for YUVA images. Returns a config that matches the backend format or

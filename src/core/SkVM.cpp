@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkString.h"
 #include "include/private/SkTFitsIn.h"
 #include "include/private/SkThreadID.h"
 #include "include/private/SkVx.h"
@@ -186,6 +185,14 @@ namespace skvm {
         return { std::move(program), /*register count = */next_reg, loop };
     }
 
+    static bool operator==(const Builder::Instruction& a, const Builder::Instruction& b) {
+        return a.op  == b.op
+            && a.x   == b.x
+            && a.y   == b.y
+            && a.z   == b.z
+            && a.imm == b.imm;
+    }
+
     // Most instructions produce a value and return it by ID,
     // the value-producing instruction's own index in the program vector.
 
@@ -266,168 +273,6 @@ namespace skvm {
 
     F32 Builder::to_f32(I32 x) { return {this->push(Op::to_f32, x.id)}; }
     I32 Builder::to_i32(F32 x) { return {this->push(Op::to_i32, x.id)}; }
-
-    // ~~~~ Program::dump() and co. ~~~~ //
-
-    struct V { Val id; };
-    struct R { Reg id; };
-    struct Shift { int bits; };
-    struct Splat { int bits; };
-    struct Hex   { int bits; };
-
-    static void write(SkWStream* o, const char* s) {
-        o->writeText(s);
-    }
-
-    static void write(SkWStream* o, Arg a) {
-        write(o, "arg(");
-        o->writeDecAsText(a.ix);
-        write(o, ")");
-    }
-    static void write(SkWStream* o, V v) {
-        write(o, "v");
-        o->writeDecAsText(v.id);
-    }
-    static void write(SkWStream* o, R r) {
-        write(o, "r");
-        o->writeDecAsText(r.id);
-    }
-    static void write(SkWStream* o, Shift s) {
-        o->writeDecAsText(s.bits);
-    }
-    static void write(SkWStream* o, Splat s) {
-        float f;
-        memcpy(&f, &s.bits, 4);
-        o->writeHexAsText(s.bits);
-        write(o, " (");
-        o->writeScalarAsText(f);
-        write(o, ")");
-    }
-    static void write(SkWStream* o, Hex h) {
-        o->writeHexAsText(h.bits);
-    }
-
-    template <typename T, typename... Ts>
-    static void write(SkWStream* o, T first, Ts... rest) {
-        write(o, first);
-        write(o, " ");
-        write(o, rest...);
-    }
-
-    void Builder::dump(SkWStream* o) const {
-        o->writeDecAsText(fProgram.size());
-        o->writeText(" values:\n");
-        for (Val id = 0; id < (Val)fProgram.size(); id++) {
-            const Instruction& inst = fProgram[id];
-            Op  op = inst.op;
-            Val  x = inst.x,
-                 y = inst.y,
-                 z = inst.z;
-            int imm = inst.imm;
-            switch (op) {
-                case Op::store8:  write(o, "store8" , Arg{imm}, V{x}); break;
-                case Op::store32: write(o, "store32", Arg{imm}, V{x}); break;
-
-                case Op::load8:  write(o, V{id}, "= load8" , Arg{imm}); break;
-                case Op::load32: write(o, V{id}, "= load32", Arg{imm}); break;
-
-                case Op::splat:  write(o, V{id}, "= splat", Splat{imm}); break;
-
-                case Op::add_f32: write(o, V{id}, "= add_f32", V{x}, V{y}      ); break;
-                case Op::sub_f32: write(o, V{id}, "= sub_f32", V{x}, V{y}      ); break;
-                case Op::mul_f32: write(o, V{id}, "= mul_f32", V{x}, V{y}      ); break;
-                case Op::div_f32: write(o, V{id}, "= div_f32", V{x}, V{y}      ); break;
-                case Op::mad_f32: write(o, V{id}, "= mad_f32", V{x}, V{y}, V{z}); break;
-
-                case Op::add_i32: write(o, V{id}, "= add_i32", V{x}, V{y}); break;
-                case Op::sub_i32: write(o, V{id}, "= sub_i32", V{x}, V{y}); break;
-                case Op::mul_i32: write(o, V{id}, "= mul_i32", V{x}, V{y}); break;
-
-                case Op::sub_i16x2: write(o, V{id}, "= sub_i16x2", V{x}, V{y}); break;
-                case Op::mul_i16x2: write(o, V{id}, "= mul_i16x2", V{x}, V{y}); break;
-                case Op::shr_i16x2: write(o, V{id}, "= shr_i16x2", V{x}, Shift{imm}); break;
-
-                case Op::bit_and  : write(o, V{id}, "= bit_and"  , V{x}, V{y}); break;
-                case Op::bit_or   : write(o, V{id}, "= bit_or"   , V{x}, V{y}); break;
-                case Op::bit_xor  : write(o, V{id}, "= bit_xor"  , V{x}, V{y}); break;
-                case Op::bit_clear: write(o, V{id}, "= bit_clear", V{x}, V{y}); break;
-
-                case Op::shl: write(o, V{id}, "= shl", V{x}, Shift{imm}); break;
-                case Op::shr: write(o, V{id}, "= shr", V{x}, Shift{imm}); break;
-                case Op::sra: write(o, V{id}, "= sra", V{x}, Shift{imm}); break;
-
-                case Op::extract: write(o, V{id}, "= extract", V{x}, Shift{imm}, V{y}); break;
-                case Op::pack:    write(o, V{id}, "= pack",    V{x}, V{y}, Shift{imm}); break;
-
-                case Op::bytes:   write(o, V{id}, "= bytes", V{x}, Hex{imm}); break;
-
-                case Op::to_f32: write(o, V{id}, "= to_f32", V{x}); break;
-                case Op::to_i32: write(o, V{id}, "= to_i32", V{x}); break;
-            }
-
-            write(o, "\n");
-        }
-    }
-
-    void Program::dump(SkWStream* o) const {
-        o->writeDecAsText(fRegs);
-        o->writeText(" registers, ");
-        o->writeDecAsText(fInstructions.size());
-        o->writeText(" instructions:\n");
-        for (int i = 0; i < (int)fInstructions.size(); i++) {
-            if (i == fLoop) {
-                write(o, "loop:\n");
-            }
-            const Instruction& inst = fInstructions[i];
-            Op   op = inst.op;
-            Reg   d = inst.d,
-                  x = inst.x,
-                  y = inst.y,
-                  z = inst.z;
-            int imm = inst.imm;
-            switch (op) {
-                case Op::store8:  write(o, "store8" , Arg{imm}, R{x}); break;
-                case Op::store32: write(o, "store32", Arg{imm}, R{x}); break;
-
-                case Op::load8:  write(o, R{d}, "= load8" , Arg{imm}); break;
-                case Op::load32: write(o, R{d}, "= load32", Arg{imm}); break;
-
-                case Op::splat:  write(o, R{d}, "= splat", Splat{imm}); break;
-
-                case Op::add_f32: write(o, R{d}, "= add_f32", R{x}, R{y}      ); break;
-                case Op::sub_f32: write(o, R{d}, "= sub_f32", R{x}, R{y}      ); break;
-                case Op::mul_f32: write(o, R{d}, "= mul_f32", R{x}, R{y}      ); break;
-                case Op::div_f32: write(o, R{d}, "= div_f32", R{x}, R{y}      ); break;
-                case Op::mad_f32: write(o, R{d}, "= mad_f32", R{x}, R{y}, R{z}); break;
-
-                case Op::add_i32: write(o, R{d}, "= add_i32", R{x}, R{y}); break;
-                case Op::sub_i32: write(o, R{d}, "= sub_i32", R{x}, R{y}); break;
-                case Op::mul_i32: write(o, R{d}, "= mul_i32", R{x}, R{y}); break;
-
-                case Op::sub_i16x2: write(o, R{d}, "= sub_i16x2", R{x}, R{y}); break;
-                case Op::mul_i16x2: write(o, R{d}, "= mul_i16x2", R{x}, R{y}); break;
-                case Op::shr_i16x2: write(o, R{d}, "= shr_i16x2", R{x}, Shift{imm}); break;
-
-                case Op::bit_and  : write(o, R{d}, "= bit_and"  , R{x}, R{y}); break;
-                case Op::bit_or   : write(o, R{d}, "= bit_or"   , R{x}, R{y}); break;
-                case Op::bit_xor  : write(o, R{d}, "= bit_xor"  , R{x}, R{y}); break;
-                case Op::bit_clear: write(o, R{d}, "= bit_clear", R{x}, R{y}); break;
-
-                case Op::shl: write(o, R{d}, "= shl", R{x}, Shift{imm}); break;
-                case Op::shr: write(o, R{d}, "= shr", R{x}, Shift{imm}); break;
-                case Op::sra: write(o, R{d}, "= sra", R{x}, Shift{imm}); break;
-
-                case Op::extract: write(o, R{d}, "= extract", R{x}, Shift{imm}, R{y}); break;
-                case Op::pack:    write(o, R{d}, "= pack",    R{x}, R{y}, Shift{imm}); break;
-
-                case Op::bytes: write(o, R{d}, "= bytes", R{x}, Hex{imm}); break;
-
-                case Op::to_f32: write(o, R{d}, "= to_f32", R{x}); break;
-                case Op::to_i32: write(o, R{d}, "= to_i32", R{x}); break;
-            }
-            write(o, "\n");
-        }
-    }
 
     // ~~~~ Program::eval() and co. ~~~~ //
 
@@ -1248,8 +1093,10 @@ namespace skvm {
                     return hash;
                 };
 
+
                 uint32_t hash = fnv1a(fJIT.buf, fJIT.size);
-                SkString name = SkStringPrintf("skvm-jit-%u", hash);
+                char name[64];
+                sprintf(name, "skvm-jit-%u", hash);
 
                 // Create a jit-<pid>.dump file that we can `perf inject -j` into a
                 // perf.data captured with `perf record -k 1`, letting us see each
@@ -1262,6 +1109,12 @@ namespace skvm {
                 //
                 // Running `perf inject -j` will also dump an .so for each JIT'd
                 // program, named jitted-<pid>-<hash>.so.
+                //
+                //    https://lwn.net/Articles/638566/
+                //    https://v8.dev/docs/linux-perf
+                //    https://cs.chromium.org/chromium/src/v8/src/diagnostics/perf-jit.cc
+                //    https://lore.kernel.org/patchwork/patch/622240/
+
 
                 auto timestamp_ns = []() -> uint64_t {
                     // It's important to use CLOCK_MONOTONIC here so that perf can
@@ -1277,7 +1130,9 @@ namespace skvm {
                 // and just leave it open forever because we're lazy.
                 static FILE* jitdump = [&]{
                     // Must map as w+ for the mmap() call below to work.
-                    FILE* f = fopen(SkStringPrintf("jit-%d.dump", getpid()).c_str(), "w+");
+                    char path[64];
+                    sprintf(path, "jit-%d.dump", getpid());
+                    FILE* f = fopen(path, "w+");
 
                     // Calling mmap() on the file adds a "hey they mmap()'d this" record to
                     // the perf.data file that will point `perf inject -j` at this log file.
@@ -1291,11 +1146,19 @@ namespace skvm {
                     SkASSERT_RELEASE(marker != MAP_FAILED);
                     // Like never calling fclose(f), we'll also just always leave marker mmap()'d.
 
+                #if defined(__x86_64__)
+                    const uint32_t elf_mach = 62;
+                #elif defined(__aarch64__)
+                    const uint32_t elf_mach = 183;
+                #else
+                    const uint32_t elf_mach = 0;  // TODO
+                #endif
+
                     struct Header {
                         uint32_t magic, version, header_size, elf_mach, reserved, pid;
                         uint64_t timestamp_us, flags;
                     } header = {
-                        0x4A695444, 1, sizeof(Header), 62/*x86-64*/, 0, (uint32_t)getpid(),
+                        0x4A695444, 1, sizeof(Header), elf_mach, 0, (uint32_t)getpid(),
                         timestamp_ns() / 1000, 0,
                     };
                     fwrite(&header, sizeof(header), 1, f);
@@ -1310,7 +1173,7 @@ namespace skvm {
                     uint32_t pid, tid;
                     uint64_t vma/*???*/, code_addr, code_size, id;
                 } load = {
-                    0/*code load*/, (uint32_t)(sizeof(CodeLoad) + name.size() + 1 + fJIT.size),
+                    0/*code load*/, (uint32_t)(sizeof(CodeLoad) + strlen(name) + 1 + fJIT.size),
                     timestamp_ns(),
 
                     (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
@@ -1319,7 +1182,7 @@ namespace skvm {
 
                 // Write the header, the JIT'd function name, and the JIT'd code itself.
                 fwrite(&load, sizeof(load), 1, jitdump);
-                fwrite(name.c_str(), 1, name.size(), jitdump);
+                fwrite(name, 1, strlen(name), jitdump);
                 fwrite("\0", 1, 1, jitdump);
                 fwrite(fJIT.buf, 1, fJIT.size, jitdump);
             #endif

@@ -51,6 +51,7 @@ public:
     Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) override;
     bool onClick(Sample::Click*) override;
     bool onQuery(Sample::Event* evt) override;
+    SkString name() override { return SkString("CCPRGeometry"); }
 
 private:
     class Click;
@@ -187,12 +188,9 @@ void CCPRGeometryView::onDrawContent(SkCanvas* canvas) {
 
         GrOpMemoryPool* pool = ctx->priv().opMemoryPool();
 
-        const GrBackendFormat format =
-                ctx->priv().caps()->getBackendFormatFromGrColorType(GrColorType::kAlpha_F16,
-                                                                           GrSRGBEncoded::kNo);
         sk_sp<GrRenderTargetContext> ccbuff = ctx->priv().makeDeferredRenderTargetContext(
-                format, SkBackingFit::kApprox, this->width(), this->height(),
-                kAlpha_half_GrPixelConfig, GrColorType::kAlpha_8, nullptr);
+                SkBackingFit::kApprox, this->width(), this->height(), GrColorType::kAlpha_F16,
+                nullptr);
         SkASSERT(ccbuff);
         ccbuff->clear(nullptr, SK_PMColor4fTRANSPARENT,
                       GrRenderTargetContext::CanClearFullscreen::kYes);
@@ -444,10 +442,6 @@ bool CCPRGeometryView::onClick(Sample::Click* click) {
 }
 
 bool CCPRGeometryView::onQuery(Sample::Event* evt) {
-    if (Sample::TitleQ(*evt)) {
-        Sample::TitleR(evt, "CCPRGeometry");
-        return true;
-    }
     SkUnichar unichar;
     if (Sample::CharQ(*evt, &unichar)) {
         if (unichar >= '1' && unichar <= '4') {

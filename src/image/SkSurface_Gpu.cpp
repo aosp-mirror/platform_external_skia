@@ -208,14 +208,15 @@ bool SkSurface_Gpu::onCharacterize(SkSurfaceCharacterization* characterization) 
     SkImageInfo ii = SkImageInfo::Make(rtc->width(), rtc->height(), ct, kPremul_SkAlphaType,
                                        rtc->colorSpaceInfo().refColorSpace());
 
-    GrPixelConfig config = rtc->asSurfaceProxy()->config();
-    characterization->set(
-            ctx->threadSafeProxy(), maxResourceBytes, ii, rtc->origin(), config, rtc->numSamples(),
-            SkSurfaceCharacterization::Textureable(SkToBool(rtc->asTextureProxy())),
-            SkSurfaceCharacterization::MipMapped(mipmapped),
-            SkSurfaceCharacterization::UsesGLFBO0(usesGLFBO0),
-            SkSurfaceCharacterization::VulkanSecondaryCBCompatible(false), this->props());
+    GrBackendFormat format = rtc->asSurfaceProxy()->backendFormat();
 
+    characterization->set(ctx->threadSafeProxy(), maxResourceBytes, ii, format,
+                          rtc->origin(), rtc->numSamples(),
+                          SkSurfaceCharacterization::Textureable(SkToBool(rtc->asTextureProxy())),
+                          SkSurfaceCharacterization::MipMapped(mipmapped),
+                          SkSurfaceCharacterization::UsesGLFBO0(usesGLFBO0),
+                          SkSurfaceCharacterization::VulkanSecondaryCBCompatible(false),
+                          this->props());
     return true;
 }
 
@@ -299,11 +300,10 @@ bool SkSurface_Gpu::onIsCompatible(const SkSurfaceCharacterization& characteriza
         return false;
     }
 
-    GrPixelConfig config = rtc->asSurfaceProxy()->config();
     return characterization.contextInfo() && characterization.contextInfo()->priv().matches(ctx) &&
            characterization.cacheMaxResourceBytes() <= maxResourceBytes &&
            characterization.origin() == rtc->origin() &&
-           characterization.config() == config &&
+           characterization.backendFormat() == rtc->asSurfaceProxy()->backendFormat() &&
            characterization.width() == rtc->width() &&
            characterization.height() == rtc->height() &&
            characterization.colorType() == rtcColorType &&
@@ -354,26 +354,24 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrRecordingContext* context,
         return nullptr;
     }
 
-    const GrBackendFormat format = caps->getBackendFormatFromColorType(c.colorType());
-    if (!format.isValid()) {
+    if (!SkSurface_Gpu::Valid(caps, c.backendFormat())) {
         return nullptr;
     }
 
-    if (!SkSurface_Gpu::Valid(caps, format)) {
+    GrPixelConfig config = caps->getConfigFromBackendFormat(c.backendFormat(), c.colorType());
+    if (config == kUnknown_GrPixelConfig) {
         return nullptr;
     }
 
-    // In order to ensure compatibility we have to match the backend format (i.e. the GrPixelConfig
-    // of the characterization)
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = c.width();
     desc.fHeight = c.height();
-    desc.fConfig = c.config();
+    desc.fConfig = config;
     desc.fSampleCnt = c.sampleCount();
 
     sk_sp<GrSurfaceContext> sc(
-            context->priv().makeDeferredSurfaceContext(format,
+            context->priv().makeDeferredSurfaceContext(c.backendFormat(),
                                                        desc,
                                                        c.origin(),
                                                        GrMipMapped(c.isMipMapped()),
@@ -392,6 +390,86 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrRecordingContext* context,
                                                 sk_ref_sp(sc->asRenderTargetContext()),
                                                 c.width(), c.height(),
                                                 SkGpuDevice::kClear_InitContents));
+    if (!device) {
+        return nullptr;
+    }
+
+    sk_sp<SkSurface> result = sk_make_sp<SkSurface_Gpu>(std::move(device));
+#ifdef SK_DEBUG
+    if (result) {
+        SkASSERT(result->isCompatible(c));
+    }
+#endif
+
+    return result;
+}
+
+static bool validate_backend_texture(GrContext* ctx, const GrBackendTexture& tex,
+                                     GrPixelConfig* config, int sampleCnt, SkColorType ct,
+                                     bool texturable) {
+    if (!tex.isValid()) {
+        return false;
+    }
+
+    GrBackendFormat backendFormat = tex.getBackendFormat();
+    if (!backendFormat.isValid()) {
+        return false;
+    }
+    *config = ctx->priv().caps()->getConfigFromBackendFormat(backendFormat, ct);
+    if (*config == kUnknown_GrPixelConfig) {
+        return false;
+    }
+
+    // We don't require that the client gave us an exact valid sample cnt. However, it must be
+    // less than the max supported sample count and 1 if MSAA is unsupported for the color type.
+    if (!ctx->priv().caps()->getRenderTargetSampleCount(sampleCnt, ct, backendFormat)) {
+        return false;
+    }
+
+    if (texturable && !ctx->priv().caps()->isFormatTexturable(ct, backendFormat)) {
+        return false;
+    }
+    return true;
+}
+
+sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrContext* context,
+                                                   const SkSurfaceCharacterization& c,
+                                                   const GrBackendTexture& backendTexture,
+                                                   TextureReleaseProc textureReleaseProc,
+                                                   ReleaseContext releaseContext) {
+    if (!context || !c.isValid()) {
+        return nullptr;
+    }
+
+    if (c.usesGLFBO0()) {
+        // If we are making the surface we will never use FBO0.
+        return nullptr;
+    }
+
+    if (!c.isCompatible(backendTexture)) {
+        return nullptr;
+    }
+
+    GrBackendTexture texCopy = backendTexture;
+    if (!validate_backend_texture(context, texCopy, &texCopy.fConfig,
+                                  c.sampleCount(), c.colorType(), true)) {
+        return nullptr;
+    }
+
+    if (!SkSurface_Gpu::Valid(context->priv().caps(), texCopy.getBackendFormat())) {
+        return nullptr;
+    }
+
+    sk_sp<GrRenderTargetContext> rtc(context->priv().makeBackendTextureRenderTargetContext(
+                texCopy, c.origin(), c.sampleCount(), SkColorTypeToGrColorType(c.colorType()),
+                c.refColorSpace(), &c.surfaceProps(), textureReleaseProc, releaseContext));
+    if (!rtc) {
+        return nullptr;
+    }
+
+    sk_sp<SkGpuDevice> device(SkGpuDevice::Make(context, std::move(rtc),
+                                                texCopy.width(), texCopy.height(),
+                                                SkGpuDevice::kUninit_InitContents));
     if (!device) {
         return nullptr;
     }
@@ -444,34 +522,6 @@ sk_sp<SkSurface> SkSurface_Gpu::MakeWrappedRenderTarget(GrContext* context,
     }
 
     return sk_make_sp<SkSurface_Gpu>(std::move(device));
-}
-
-static bool validate_backend_texture(GrContext* ctx, const GrBackendTexture& tex,
-                                     GrPixelConfig* config, int sampleCnt, SkColorType ct,
-                                     bool texturable) {
-    if (!tex.isValid()) {
-        return false;
-    }
-
-    GrBackendFormat backendFormat = tex.getBackendFormat();
-    if (!backendFormat.isValid()) {
-        return false;
-    }
-    *config = ctx->priv().caps()->getConfigFromBackendFormat(backendFormat, ct);
-    if (*config == kUnknown_GrPixelConfig) {
-        return false;
-    }
-
-    // We don't require that the client gave us an exact valid sample cnt. However, it must be
-    // less than the max supported sample count and 1 if MSAA is unsupported for the color type.
-    if (!ctx->priv().caps()->getRenderTargetSampleCount(sampleCnt, ct, backendFormat)) {
-        return false;
-    }
-
-    if (texturable && !ctx->priv().caps()->isFormatTexturable(ct, backendFormat)) {
-        return false;
-    }
-    return true;
 }
 
 sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrContext* context, const GrBackendTexture& tex,
@@ -570,12 +620,18 @@ bool SkSurface_Gpu::onReplaceBackendTexture(const GrBackendTexture& backendTextu
 }
 
 bool validate_backend_render_target(GrContext* ctx, const GrBackendRenderTarget& rt,
-                                    GrPixelConfig* config, SkColorType ct, sk_sp<SkColorSpace> cs) {
+                                    GrPixelConfig* config, SkColorType skCT,
+                                    sk_sp<SkColorSpace> cs) {
+    GrColorType grCT = SkColorTypeToGrColorType(skCT);
+    if (GrColorType::kUnknown == grCT) {
+        return false;
+    }
+
     // TODO: Create a SkImageColorInfo struct for color, alpha, and color space so we don't need to
     // create a fake image info here.
-    SkImageInfo info = SkImageInfo::Make(1, 1, ct, kPremul_SkAlphaType, cs);
+    SkImageInfo info = SkImageInfo::Make(1, 1, skCT, kPremul_SkAlphaType, cs);
 
-    *config = ctx->priv().caps()->validateBackendRenderTarget(rt, ct);
+    *config = ctx->priv().caps()->validateBackendRenderTarget(rt, grCT);
     if (*config == kUnknown_GrPixelConfig) {
         return false;
     }
