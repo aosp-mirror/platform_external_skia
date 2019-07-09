@@ -127,8 +127,13 @@ def dm_flags(api, bot):
       if 'NVIDIA_Shield' not in bot:
         gl_prefix = 'gles'
     elif 'Intel' in bot:
-      # We don't want to test MSAA on older Intel chipsets. These are all newer (Gen9).
-      if 'Iris655' not in bot and 'Iris640' not in bot and 'Iris540' not in bot:
+      # We don't want to test MSAA on older Intel chipsets. These are all newer (Gen8/9).
+      if ('Iris655'       not in bot and  # Gen9
+          'Iris640'       not in bot and
+          'Iris540'       not in bot and
+          'IntelHD405'    not in bot and  # Gen8
+          'IntelHD6000'   not in bot and
+          'IntelIris6100' not in bot):
         sample_count = ''
     elif 'ChromeOS' in bot:
       gl_prefix = 'gles'
@@ -702,7 +707,11 @@ def dm_flags(api, bot):
   if api.vars.is_linux and 'IntelIris640' in bot:
     match.extend(['~GLPrograms']) # skia:7849
 
-  if 'IntelIris640' in bot or 'IntelHD615' in bot or 'IntelHDGraphics615' in bot:
+  if ('IntelIris640'       in bot or
+      'IntelHD615'         in bot or
+      'IntelHDGraphics615' in bot or
+      'IntelHD6000'        in bot or
+      'IntelHD405'         in bot):
     match.append('~^SRGBReadWritePixels$') # skia:9225
 
   if 'Vulkan' in bot and api.vars.is_linux and 'IntelHD405' in bot:
@@ -770,12 +779,6 @@ def dm_flags(api, bot):
   if 'Mac' in bot and 'IntelHD615' in bot:
     # skia:7603
     match.append('~^GrMeshTest$')
-
-  if 'Wuffs' in api.vars.extra_tokens:
-    # skia:8750
-    blacklist(['_', 'tests', '_', 'Codec_partial'])
-    # skia:8762
-    blacklist(['_', 'tests', '_', 'Codec_gif'])
 
   if 'LenovoYogaC630' in bot and 'ANGLE' in api.vars.extra_tokens:
     # skia:8976
@@ -1022,7 +1025,6 @@ TEST_BUILDERS = [
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-MSAN',
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All'
    '-SK_USE_DISCARDABLE_SCALEDIMAGECACHE'),
-  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-Wuffs',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-Lottie',
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All'
    '-SK_FORCE_RASTER_PIPELINE_BLITTER'),
