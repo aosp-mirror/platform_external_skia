@@ -699,7 +699,8 @@ func bundleRecipes(b *specs.TasksCfgBuilder) string {
 		EnvPrefixes: map[string][]string{
 			"PATH": []string{"cipd_bin_packages", "cipd_bin_packages/bin"},
 		},
-		Isolate: relpath("recipes.isolate"),
+		Idempotent: true,
+		Isolate:    relpath("recipes.isolate"),
 	})
 	return BUNDLE_RECIPES_NAME
 }
@@ -717,7 +718,8 @@ func buildTaskDrivers(b *specs.TasksCfgBuilder) string {
 		EnvPrefixes: map[string][]string{
 			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
 		},
-		Isolate: "task_drivers.isolate",
+		Idempotent: true,
+		Isolate:    "task_drivers.isolate",
 	})
 	return BUILD_TASK_DRIVERS_NAME
 }
@@ -804,6 +806,7 @@ func isolateCIPDAsset(b *specs.TasksCfgBuilder, name string) string {
 		},
 		Command:    []string{"/bin/cp", "-rL", asset.path, "${ISOLATED_OUTDIR}"},
 		Dimensions: linuxGceDimensions(MACHINE_TYPE_SMALL),
+		Idempotent: true,
 		Isolate:    relpath("empty.isolate"),
 	})
 	return name
@@ -1054,9 +1057,13 @@ func infra(b *specs.TasksCfgBuilder, name string) string {
 			fmt.Sprintf("pool:%s", CONFIG.Pool),
 		}
 	}
-	task := kitchenTask(name, "infra", "swarm_recipe.isolate", SERVICE_ACCOUNT_COMPILE, dims, EXTRA_PROPS, OUTPUT_NONE)
+	extraProps := map[string]string{
+		"repository":           specs.PLACEHOLDER_REPO,
+	}
+	task := kitchenTask(name, "infra", "infra_tests.isolate", SERVICE_ACCOUNT_COMPILE, dims, extraProps, OUTPUT_NONE)
 	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GSUTIL...)
-	usesGit(task, name)
+	task.Idempotent = true
+	usesGit(task, name) // We don't run bot_update, but Go needs a git repo.
 	usesGo(b, task, name)
 	b.MustAddTask(name, task)
 	return name
