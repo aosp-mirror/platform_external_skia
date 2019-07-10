@@ -266,8 +266,7 @@ bool GrMtlCaps::isFormatTexturable(GrColorType grCT, const GrBackendFormat& form
     return this->isConfigTexturable(config);
 }
 
-int GrMtlCaps::maxRenderTargetSampleCount(SkColorType skCT, const GrBackendFormat& format) const {
-    GrColorType grCT = SkColorTypeToGrColorType(skCT);
+int GrMtlCaps::maxRenderTargetSampleCount(GrColorType grCT, const GrBackendFormat& format) const {
     if (GrColorType::kUnknown == grCT) {
         return 0;
     }
@@ -290,8 +289,7 @@ int GrMtlCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
 }
 
 int GrMtlCaps::getRenderTargetSampleCount(int requestedCount,
-                                          SkColorType skCT, const GrBackendFormat& format) const {
-    GrColorType grCT = SkColorTypeToGrColorType(skCT);
+                                          GrColorType grCT, const GrBackendFormat& format) const {
     if (GrColorType::kUnknown == grCT) {
         return 0;
     }
@@ -618,8 +616,8 @@ GrPixelConfig GrMtlCaps::validateBackendRenderTarget(const GrBackendRenderTarget
     return validate_sized_format(texture.pixelFormat, ct);
 }
 
-bool GrMtlCaps::areColorTypeAndFormatCompatible(GrColorType ct,
-                                                const GrBackendFormat& format) const {
+bool GrMtlCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
+                                                  const GrBackendFormat& format) const {
     const GrMTLPixelFormat* mtlFormat = format.getMtlFormat();
     if (!mtlFormat) {
         return false;
@@ -629,8 +627,8 @@ bool GrMtlCaps::areColorTypeAndFormatCompatible(GrColorType ct,
 }
 
 
-GrPixelConfig GrMtlCaps::getConfigFromBackendFormat(const GrBackendFormat& format,
-                                                    GrColorType ct) const {
+GrPixelConfig GrMtlCaps::onGetConfigFromBackendFormat(const GrBackendFormat& format,
+                                                      GrColorType ct) const {
     const GrMTLPixelFormat* mtlFormat = format.getMtlFormat();
     if (!mtlFormat) {
         return kUnknown_GrPixelConfig;
@@ -687,8 +685,8 @@ GrPixelConfig GrMtlCaps::getYUVAConfigFromBackendFormat(const GrBackendFormat& f
     return get_yuva_config(*mtlFormat);
 }
 
-GrBackendFormat GrMtlCaps::getBackendFormatFromGrColorType(GrColorType ct,
-                                                           GrSRGBEncoded srgbEncoded) const {
+GrBackendFormat GrMtlCaps::getBackendFormatFromColorType(GrColorType ct,
+                                                         GrSRGBEncoded srgbEncoded) const {
     GrPixelConfig config = GrColorTypeToPixelConfig(ct, srgbEncoded);
     if (config == kUnknown_GrPixelConfig) {
         return GrBackendFormat();

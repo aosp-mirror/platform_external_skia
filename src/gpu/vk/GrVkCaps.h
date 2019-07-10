@@ -38,17 +38,17 @@ public:
     bool isVkFormatTexturable(VkFormat) const;
     bool isConfigTexturable(GrPixelConfig config) const override;
 
-    bool isFormatCopyable(SkColorType, const GrBackendFormat&) const override { return true; }
+    bool isFormatCopyable(GrColorType, const GrBackendFormat&) const override { return true; }
     bool isConfigCopyable(GrPixelConfig config) const override { return true; }
 
     bool isFormatRenderable(VkFormat) const;
 
     int getRenderTargetSampleCount(int requestedCount,
-                                   SkColorType, const GrBackendFormat&) const override;
+                                   GrColorType, const GrBackendFormat&) const override;
     int getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const override;
     int getRenderTargetSampleCount(int requestedCount, VkFormat) const;
 
-    int maxRenderTargetSampleCount(SkColorType, const GrBackendFormat&) const override;
+    int maxRenderTargetSampleCount(GrColorType, const GrBackendFormat&) const override;
     int maxRenderTargetSampleCount(GrPixelConfig config) const override;
     int maxRenderTargetSampleCount(VkFormat format) const;
 
@@ -164,13 +164,10 @@ public:
     GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,
                                               GrColorType) const override;
 
-    bool areColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
-
-    GrPixelConfig getConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
     GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat&) const override;
 
-    GrBackendFormat getBackendFormatFromGrColorType(GrColorType ct,
-                                                    GrSRGBEncoded srgbEncoded) const override;
+    GrBackendFormat getBackendFormatFromColorType(GrColorType ct,
+                                                  GrSRGBEncoded srgbEncoded) const override;
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
     GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
@@ -208,6 +205,9 @@ private:
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
     size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const override;
+
+    GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
+    bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
     struct FormatInfo {
         FormatInfo() : fOptimalFlags(0), fLinearFlags(0) {}

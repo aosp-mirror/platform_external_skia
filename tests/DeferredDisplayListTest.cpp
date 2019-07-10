@@ -134,7 +134,8 @@ public:
                                            kPremul_SkAlphaType, fColorSpace);
 
         const GrCaps* caps = context->priv().caps();
-        GrBackendFormat backendFormat = caps->getBackendFormatFromColorType(fColorType);
+        GrBackendFormat backendFormat =
+                caps->getBackendFormatFromColorType(SkColorTypeToGrColorType(fColorType));
         if (!backendFormat.isValid()) {
             return SkSurfaceCharacterization();
         }
@@ -340,7 +341,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLSurfaceCharacterizationTest, reporter, ctx
 
         if (SurfaceParameters::kSampleCount == i) {
             int supportedSampleCount = caps->getRenderTargetSampleCount(
-                    params.sampleCount(), params.colorType(), backend.getBackendFormat());
+                    params.sampleCount(), SkColorTypeToGrColorType(params.colorType()),
+                    backend.getBackendFormat());
             if (1 == supportedSampleCount) {
                 // If changing the sample count won't result in a different
                 // surface characterization, skip this step
@@ -705,7 +707,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLInvalidRecorder, reporter, ctxInfo) {
         REPORTER_ASSERT(reporter, !recorder.detach());
 
         const GrCaps* caps = context->priv().caps();
-        GrBackendFormat format = caps->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
+        GrBackendFormat format = caps->getBackendFormatFromColorType(GrColorType::kRGBA_8888);
 
         sk_sp<SkImage> image = recorder.makePromiseTexture(
                 format, 32, 32, GrMipMapped::kNo,
@@ -791,7 +793,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLSkSurfaceFlush, reporter, ctxInfo) {
         SkDeferredDisplayListRecorder recorder(characterization);
 
         const GrCaps* caps = context->priv().caps();
-        GrBackendFormat format = caps->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
+        GrBackendFormat format = caps->getBackendFormatFromColorType(GrColorType::kRGBA_8888);
 
         sk_sp<SkImage> promiseImage = recorder.makePromiseTexture(
                 format, 32, 32, GrMipMapped::kNo,

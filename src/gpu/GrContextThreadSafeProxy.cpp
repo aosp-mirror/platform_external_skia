@@ -55,11 +55,11 @@ SkSurfaceCharacterization GrContextThreadSafeProxy::createCharacterization(
 
     GrColorType grColorType = SkColorTypeToGrColorType(ii.colorType());
 
-    if (!this->caps()->areColorTypeAndFormatCompatible(ii.colorType(), backendFormat)) {
+    if (!this->caps()->areColorTypeAndFormatCompatible(grColorType, backendFormat)) {
         return SkSurfaceCharacterization(); // return an invalid characterization
     }
 
-    sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, ii.colorType(), backendFormat);
+    sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, grColorType, backendFormat);
     if (!sampleCnt) {
         return SkSurfaceCharacterization(); // return an invalid characterization
     }

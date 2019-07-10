@@ -1096,10 +1096,10 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
         fMSFBOType = kNone_MSFBOType;
     }
 
-    // We disable MSAA for older (pre-Gen8) Intel GPUs for performance reasons.
-    // CherryView (aka Braswell) is the first Gen8 chipset.
+    // We disable MSAA for older (pre-Gen9) Intel GPUs for performance reasons.
+    // ApolloLake is the first Gen9 chipset.
     if (kIntel_GrGLVendor == ctxInfo.vendor() &&
-        (ctxInfo.renderer() < kIntelCherryView_GrGLRenderer ||
+        (ctxInfo.renderer() < kIntelApolloLake_GrGLRenderer ||
          ctxInfo.renderer() == kOther_GrGLRenderer)) {
         fMSFBOType = kNone_MSFBOType;
     }
@@ -3620,9 +3620,8 @@ bool GrGLCaps::isFormatTexturable(GrColorType ct, const GrBackendFormat& format)
     return this->isGLFormatTexturable(ct, *glFormat);
 }
 
-int GrGLCaps::getRenderTargetSampleCount(int requestedCount, SkColorType skCT,
+int GrGLCaps::getRenderTargetSampleCount(int requestedCount, GrColorType grCT,
                                          const GrBackendFormat& format) const {
-    GrColorType grCT = SkColorTypeToGrColorType(skCT);
     if (GrColorType::kUnknown == grCT) {
         return 0;
     }
@@ -3658,8 +3657,7 @@ int GrGLCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig confi
     return 0;
 }
 
-int GrGLCaps::maxRenderTargetSampleCount(SkColorType skCT, const GrBackendFormat& format) const {
-    GrColorType grCT = SkColorTypeToGrColorType(skCT);
+int GrGLCaps::maxRenderTargetSampleCount(GrColorType grCT, const GrBackendFormat& format) const {
     if (GrColorType::kUnknown == grCT) {
         return 0;
     }
@@ -3691,7 +3689,7 @@ bool GrGLCaps::canGLFormatBeFBOColorAttachment(GrGLenum glFormat) const {
     return SkToBool(this->getFormatInfo(glFormat).fFlags & FormatInfo::kFBOColorAttachment_Flag);
 }
 
-bool GrGLCaps::isFormatCopyable(SkColorType ct, const GrBackendFormat& format) const {
+bool GrGLCaps::isFormatCopyable(GrColorType, const GrBackendFormat& format) const {
     const GrGLenum* glFormat = format.getGLFormat();
     if (!glFormat || !GrGLFormatIsSupported(*glFormat)) {
         return false;
@@ -3835,8 +3833,8 @@ GrPixelConfig GrGLCaps::validateBackendRenderTarget(const GrBackendRenderTarget&
     return validate_sized_format(fbInfo.fFormat, ct, fStandard);
 }
 
-bool GrGLCaps::areColorTypeAndFormatCompatible(GrColorType ct,
-                                               const GrBackendFormat& format) const {
+bool GrGLCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
+                                                 const GrBackendFormat& format) const {
     const GrGLenum* glFormat = format.getGLFormat();
     if (!glFormat) {
         return false;
@@ -3845,8 +3843,8 @@ bool GrGLCaps::areColorTypeAndFormatCompatible(GrColorType ct,
     return kUnknown_GrPixelConfig != validate_sized_format(*glFormat, ct, fStandard);
 }
 
-GrPixelConfig GrGLCaps::getConfigFromBackendFormat(const GrBackendFormat& format,
-                                                   GrColorType ct) const {
+GrPixelConfig GrGLCaps::onGetConfigFromBackendFormat(const GrBackendFormat& format,
+                                                     GrColorType ct) const {
     const GrGLenum* glFormat = format.getGLFormat();
     if (!glFormat) {
         return kUnknown_GrPixelConfig;
@@ -3908,8 +3906,8 @@ GrPixelConfig GrGLCaps::getYUVAConfigFromBackendFormat(const GrBackendFormat& fo
     return get_yuva_config(*glFormat);
 }
 
-GrBackendFormat GrGLCaps::getBackendFormatFromGrColorType(GrColorType ct,
-                                                          GrSRGBEncoded srgbEncoded) const {
+GrBackendFormat GrGLCaps::getBackendFormatFromColorType(GrColorType ct,
+                                                        GrSRGBEncoded srgbEncoded) const {
     GrPixelConfig config = GrColorTypeToPixelConfig(ct, srgbEncoded);
     if (config == kUnknown_GrPixelConfig) {
         return GrBackendFormat();
