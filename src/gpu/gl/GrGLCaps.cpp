@@ -113,7 +113,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fWritePixelsRowBytesSupport = version >= GR_GL_VER(2, 0);
         fReadPixelsRowBytesSupport = version >= GR_GL_VER(2, 0);
     }
-
     if (fDriverBugWorkarounds.pack_parameters_workaround_with_pack_buffer) {
         // In some cases drivers handle copying the last row incorrectly
         // when using GL_PACK_ROW_LENGTH.  Chromium handles this by iterating
@@ -1535,6 +1534,12 @@ void GrGLCaps::initFormatTable(const GrContextOptions& contextOptions,
                     info.fColorTypeInfos.emplace_back(GrColorType::kBGRA_8888, flags);
                 }
             }
+        }
+
+        // kRGB_888x
+        {
+            uint32_t flags = ColorTypeInfo::kUploadData_Flag;
+            info.fColorTypeInfos.emplace_back(GrColorType::kRGB_888x, flags);
         }
     }
 
