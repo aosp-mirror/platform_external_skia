@@ -86,7 +86,7 @@ struct SkDVector {
     }
 
     SkDVector& normalize() {
-        double inverseLength = 1 / this->length();
+        double inverseLength = sk_ieee_double_divide(1, this->length());
         fX *= inverseLength;
         fY *= inverseLength;
         return *this;

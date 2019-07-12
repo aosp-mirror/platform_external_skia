@@ -2337,11 +2337,6 @@ static bool almost_equal(SkScalar compA, SkScalar compB) {
     return aBits < bBits + epsilon && bBits < aBits + epsilon;
 }
 
-static bool approximately_zero_when_compared_to(double x, double y) {
-    return x == 0 || fabs(x) < fabs(y * FLT_EPSILON);
-}
-
-
 // only valid for a single contour
 struct Convexicator {
     Convexicator()
