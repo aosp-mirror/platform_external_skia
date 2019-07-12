@@ -1478,12 +1478,12 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
     std::unique_ptr<uint8_t[]> zeros;
     if (performClear && !this->glCaps().clearTextureSupport() &&
         !this->glCaps().canConfigBeFBOColorAttachment(desc.fConfig)) {
-        size_t rowSize = GrGLBytesPerFormat(glFormat) * desc.fWidth;
-        size_t size = rowSize * desc.fHeight;
+        size_t rowBytes = GrGLBytesPerFormat(glFormat) * desc.fWidth;
+        size_t size = rowBytes * desc.fHeight;
         zeros.reset(new uint8_t[size]);
         memset(zeros.get(), 0, size);
         zeroLevel.fPixels = zeros.get();
-        zeroLevel.fRowBytes = 0;
+        zeroLevel.fRowBytes = rowBytes;
         texels = &zeroLevel;
         mipLevelCount = 1;
         performClear = false;
