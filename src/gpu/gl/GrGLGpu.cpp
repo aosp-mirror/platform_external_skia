@@ -44,8 +44,6 @@
 #define GL_CALL(X) GR_GL_CALL(this->glInterface(), X)
 #define GL_CALL_RET(RET, X) GR_GL_CALL_RET(this->glInterface(), RET, X)
 
-#define SKIP_CACHE_CHECK    true
-
 #if GR_GL_CHECK_ALLOC_WITH_GET_ERROR
     #define CLEAR_ERROR_BEFORE_ALLOC(iface)   GrGLClearErr(iface)
     #define GL_ALLOC_CALL(iface, call)        GR_GL_CALL_NOERRCHECK(iface, call)
@@ -845,8 +843,7 @@ bool GrGLGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
     // When we're on ES2 and the dst is GL_SRGB_ALPHA by making the config be kSRGB_8888 we know
     // that our caps will choose GL_SRGB_ALPHA as the external format, too. On ES3 or regular GL our
     // caps knows to make the external format be GL_RGBA.
-    auto srgbEncoded = GrPixelConfigIsSRGBEncoded(surface->config());
-    auto srcAsConfig = GrColorTypeToPixelConfig(srcColorType, srgbEncoded);
+    auto srcAsConfig = GrColorTypeToPixelConfig(srcColorType);
 
     SkASSERT(!GrPixelConfigIsCompressed(glTex->config()));
     return this->uploadTexData(glTex->config(), glTex->width(), glTex->height(), glTex->target(),
@@ -950,7 +947,7 @@ bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
     // External format and type come from the upload data.
     GrGLenum externalFormat;
     GrGLenum externalType;
-    auto bufferAsConfig = GrColorTypeToPixelConfig(bufferColorType, GrSRGBEncoded::kNo);
+    auto bufferAsConfig = GrColorTypeToPixelConfig(bufferColorType);
     if (!this->glCaps().getTexImageFormats(texConfig, bufferAsConfig, &internalFormat,
                                            &externalFormat, &externalType)) {
         return false;
@@ -1469,7 +1466,8 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
         return return_null_texture();
     }
 
-    GrGLenum glFormat = this->glCaps().configSizedInternalFormat(desc.fConfig);
+    GrGLFormat glFormat =
+            GrGLFormatFromGLEnum(this->glCaps().configSizedInternalFormat(desc.fConfig));
 
     bool performClear = (desc.fFlags & kPerformInitialClear_GrSurfaceFlag) &&
                         !GrGLFormatIsCompressed(glFormat);
@@ -1592,10 +1590,11 @@ void inline get_stencil_rb_sizes(const GrGLInterface* gl,
 }
 }
 
-int GrGLGpu::getCompatibleStencilIndex(GrPixelConfig config) {
+int GrGLGpu::getCompatibleStencilIndex(GrGLFormat format) {
     static const int kSize = 16;
-    SkASSERT(this->caps()->isConfigRenderable(config));
-    if (!this->glCaps().hasStencilFormatBeenDeterminedForConfig(config)) {
+    SkASSERT(this->glCaps().canFormatBeFBOColorAttachment(format));
+
+    if (!this->glCaps().hasStencilFormatBeenDeterminedForFormat(format)) {
         // Default to unsupported, set this if we find a stencil format that works.
         int firstWorkingStencilFormatIndex = -1;
 
@@ -1616,13 +1615,13 @@ int GrGLGpu::getCompatibleStencilIndex(GrPixelConfig config) {
                               GR_GL_TEXTURE_WRAP_T,
                               GR_GL_CLAMP_TO_EDGE));
 
-        GrGLenum internalFormat;
-        GrGLenum externalFormat;
-        GrGLenum externalType;
-        if (!this->glCaps().getTexImageFormats(config, config, &internalFormat, &externalFormat,
-                                               &externalType)) {
-            return false;
+        GrGLenum internalFormat = this->glCaps().getTexImageInternalFormat(format);
+        GrGLenum externalFormat = this->glCaps().getBaseInternalFormat(format);
+        GrGLenum externalType   = this->glCaps().getFormatDefaultExternalType(format);
+        if (!internalFormat || !externalFormat || !externalType) {
+            return -1;
         }
+
         this->unbindCpuToGpuXferBuffer();
         CLEAR_ERROR_BEFORE_ALLOC(this->glInterface());
         GL_ALLOC_CALL(this->glInterface(), TexImage2D(GR_GL_TEXTURE_2D,
@@ -1699,9 +1698,9 @@ int GrGLGpu::getCompatibleStencilIndex(GrPixelConfig config) {
         GL_CALL(DeleteTextures(1, &colorID));
         this->bindFramebuffer(GR_GL_FRAMEBUFFER, 0);
         this->deleteFramebuffer(fb);
-        fGLContext->caps()->setStencilFormatIndexForConfig(config, firstWorkingStencilFormatIndex);
+        fGLContext->caps()->setStencilFormatIndexForFormat(format, firstWorkingStencilFormatIndex);
     }
-    return this->glCaps().getStencilFormatIndexForConfig(config);
+    return this->glCaps().getStencilFormatIndexForFormat(format);
 }
 
 bool GrGLGpu::createTextureImpl(const GrSurfaceDesc& desc, GrGLTextureInfo* info,
@@ -1769,7 +1768,8 @@ GrStencilAttachment* GrGLGpu::createStencilAttachmentForRenderTarget(
 
     GrGLStencilAttachment::IDDesc sbDesc;
 
-    int sIdx = this->getCompatibleStencilIndex(rt->config());
+    auto rtFormat = GrGLBackendFormatToGLFormat(rt->backendFormat());
+    int sIdx = this->getCompatibleStencilIndex(rtFormat);
     if (sIdx < 0) {
         return nullptr;
     }
@@ -2276,7 +2276,7 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
     }
 
     // TODO: Avoid this conversion by making GrGLCaps work with color types.
-    auto dstAsConfig = GrColorTypeToPixelConfig(dstColorType, GrSRGBEncoded::kNo);
+    auto dstAsConfig = GrColorTypeToPixelConfig(dstColorType);
 
     if (!this->readPixelsSupported(surface, dstAsConfig)) {
         return false;
@@ -3821,78 +3821,36 @@ void GrGLGpu::xferBarrier(GrRenderTarget* rt, GrXferBarrierType type) {
     }
 }
 
-static bool gl_format_to_pixel_config(GrGLenum format, GrPixelConfig* config) {
-    GrPixelConfig dontCare;
-    if (!config) {
-        config = &dontCare;
-    }
-
+static GrPixelConfig gl_format_to_pixel_config(GrGLFormat format) {
     switch (format) {
-        case GR_GL_RGBA8:
-            *config = kRGBA_8888_GrPixelConfig;
-            return true;
-        case GR_GL_RGB8:
-            *config = kRGB_888_GrPixelConfig;
-            return true;
-        case GR_GL_RG8:
-            *config = kRG_88_GrPixelConfig;
-            return true;
-        case GR_GL_BGRA8:
-            *config = kBGRA_8888_GrPixelConfig;
-            return true;
-        case GR_GL_LUMINANCE8:
-            *config = kGray_8_GrPixelConfig;
-            return true;
-        case GR_GL_SRGB8_ALPHA8:
-            *config = kSRGBA_8888_GrPixelConfig;
-            return true;
-        case GR_GL_RGB10_A2:
-            *config = kRGBA_1010102_GrPixelConfig;
-            return true;
-        case GR_GL_RGB565:
-            *config = kRGB_565_GrPixelConfig;
-            return true;
-        case GR_GL_RGBA4:
-            *config = kRGBA_4444_GrPixelConfig;
-            return true;
-        case GR_GL_ALPHA8: // fall through
-        case GR_GL_R8:
-            *config = kAlpha_8_GrPixelConfig;
-            return true;
-        case GR_GL_RGBA32F:
-            *config = kRGBA_float_GrPixelConfig;
-            return true;
-        case GR_GL_RG32F:
-            *config = kRG_float_GrPixelConfig;
-            return true;
-        case GR_GL_RGBA16F:
-            *config = kRGBA_half_GrPixelConfig;
-            return true;
-        case GR_GL_COMPRESSED_RGB8_ETC2: // fall through
-        case GR_GL_COMPRESSED_ETC1_RGB8:
-            *config = kRGB_ETC1_GrPixelConfig;
-            return true;
-        case GR_GL_R16F:
-            *config = kAlpha_half_GrPixelConfig;
-            return true;
-        case GR_GL_R16:
-            *config = kR_16_GrPixelConfig;
-            return true;
-        case GR_GL_RG16:
-            *config = kRG_1616_GrPixelConfig;
-            return true;
+        case GrGLFormat::kRGBA8:                return kRGBA_8888_GrPixelConfig;
+        case GrGLFormat::kRGB8:                 return kRGB_888_GrPixelConfig;
+        case GrGLFormat::kRG8:                  return kRG_88_GrPixelConfig;
+        case GrGLFormat::kBGRA8:                return kBGRA_8888_GrPixelConfig;
+        case GrGLFormat::kLUMINANCE8:           return kGray_8_GrPixelConfig;
+        case GrGLFormat::kSRGB8_ALPHA8:         return kSRGBA_8888_GrPixelConfig;
+        case GrGLFormat::kRGB10_A2:             return kRGBA_1010102_GrPixelConfig;
+        case GrGLFormat::kRGB565:               return kRGB_565_GrPixelConfig;
+        case GrGLFormat::kRGBA4:                return kRGBA_4444_GrPixelConfig;
+        case GrGLFormat::kRGBA32F:              return kRGBA_float_GrPixelConfig;
+        case GrGLFormat::kRG32F:                return kRG_float_GrPixelConfig;
+        case GrGLFormat::kRGBA16F:              return kRGBA_half_GrPixelConfig;
+        case GrGLFormat::kR16F:                 return kAlpha_half_GrPixelConfig;
+        case GrGLFormat::kR16:                  return kR_16_GrPixelConfig;
+        case GrGLFormat::kRG16:                 return kRG_1616_GrPixelConfig;
+        case GrGLFormat::kRGBA16:               return kRGBA_16161616_GrPixelConfig;
+        case GrGLFormat::kRG16F:                return kRG_half_GrPixelConfig;
+        case GrGLFormat::kUnknown:              return kUnknown_GrPixelConfig;
 
-        // Experimental (for Y416 and mutant P016/P010)
-        case GR_GL_RGBA16:
-            *config = kRGBA_16161616_GrPixelConfig;
-            return true;
-        case GR_GL_RG16F:
-            *config = kRG_half_GrPixelConfig;
-            return true;
+        // Configs with multiple equivalent formats.
+
+        case GrGLFormat::kALPHA8:               return kAlpha_8_GrPixelConfig;
+        case GrGLFormat::kR8:                   return kAlpha_8_GrPixelConfig;
+
+        case GrGLFormat::kCOMPRESSED_RGB8_ETC2: return kRGB_ETC1_GrPixelConfig;
+        case GrGLFormat::kCOMPRESSED_ETC1_RGB8: return kRGB_ETC1_GrPixelConfig;
     }
-
-    SK_ABORT("Unexpected config");
-    return false;
+    SkUNREACHABLE;
 }
 
 GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
@@ -3904,14 +3862,14 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
                                                GrProtected isProtected) {
     this->handleDirtyContext();
 
-    const GrGLenum* glFormat = format.getGLFormat();
-    if (!glFormat) {
+    GrGLFormat glFormat = GrGLBackendFormatToGLFormat(format);
+    if (glFormat == GrGLFormat::kUnknown) {
         return GrBackendTexture();  // invalid
     }
 
-    GrPixelConfig config;
+    GrPixelConfig config = gl_format_to_pixel_config(glFormat);
 
-    if (!gl_format_to_pixel_config(*glFormat, &config)) {
+    if (config == kUnknown_GrPixelConfig) {
         return GrBackendTexture();  // invalid
     }
 
@@ -3940,7 +3898,7 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
     SkAutoTMalloc<GrMipLevel> texels;
     SkAutoMalloc pixelStorage;
     SkImage::CompressionType compressionType;
-    if (GrGLFormatToCompressionType(*glFormat, &compressionType)) {
+    if (GrGLFormatToCompressionType(glFormat, &compressionType)) {
         // Compressed textures currently must be non-MIP mapped and have initial data.
         if (mipMapped == GrMipMapped::kYes) {
             return GrBackendTexture();
@@ -4045,7 +4003,7 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(int w, int h
         return GrBackendRenderTarget();  // invalid
     }
     this->handleDirtyContext();
-    auto config = GrColorTypeToPixelConfig(colorType, GrSRGBEncoded::kNo);
+    auto config = GrColorTypeToPixelConfig(colorType);
     if (!this->glCaps().isConfigRenderable(config)) {
         return {};
     }
@@ -4060,7 +4018,9 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(int w, int h
     } else {
         this->glCaps().getRenderbufferFormat(config, &colorBufferFormat);
     }
-    int sFormatIdx = this->getCompatibleStencilIndex(config);
+    auto format =
+            GrGLBackendFormatToGLFormat(this->caps()->getBackendFormatFromColorType(colorType));
+    int sFormatIdx = this->getCompatibleStencilIndex(format);
     if (sFormatIdx < 0) {
         return {};
     }

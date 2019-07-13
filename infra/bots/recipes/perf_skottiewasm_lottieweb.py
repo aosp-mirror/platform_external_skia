@@ -76,6 +76,9 @@ def RunSteps(api):
   else:
     raise Exception('Could not recognize the buildername %s' % buildername)
 
+  if api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
+    perf_app_cmd.append('--use_gpu')
+
   # Install prerequisites.
   env_prefixes = {'PATH': [api.path['start_dir'].join('node', 'node', 'bin')]}
   with api.context(cwd=perf_app_dir, env_prefixes=env_prefixes):
@@ -89,7 +92,7 @@ def RunSteps(api):
       if not lottie_filename.endswith('.json'):
         continue
       output_file = output_dir.join(lottie_filename)
-      with api.context(cwd=perf_app_dir):
+      with api.context(cwd=perf_app_dir, env={'DISPLAY': ':0'}):
         # This is occasionally flaky due to skbug.com/9207, adding retries.
         attempts = 3
         # Add output and input arguments to the cmd.
@@ -173,25 +176,29 @@ def parse_trace(trace_json, lottie_filename, api, renderer):
   with open(trace_output, 'r') as f:
     trace_json = json.load(f)
   output_json_file = sys.argv[2]
-  renderer = sys.argv[3]
+  renderer = sys.argv[3]  # Unused for now but might be useful in the future.
+
+  # Output data about the GPU that was used.
+  print 'GPU data:'
+  print trace_json['metadata'].get('gpu-gl-renderer')
+  print trace_json['metadata'].get('gpu-driver')
+  print trace_json['metadata'].get('gpu-gl-vendor')
 
   erroneous_termination_statuses = [
       'replaced_by_new_reporter_at_same_stage',
       'did_not_produce_frame',
-      'main_frame_aborted',
   ]
-  accepted_termination_statuses = []
-  if renderer == 'skottie-wasm':
-    accepted_termination_statuses.extend(['main_frame_aborted'])
-  elif renderer == 'lottie-web':
-    accepted_termination_statuses.extend(['missed_frame', 'submitted_frame'])
+  accepted_termination_statuses = [
+      'missed_frame',
+      'submitted_frame',
+      'main_frame_aborted'
+  ]
 
-  frame_max = 0
-  frame_min = 0
-  frame_cumulative = 0
   current_frame_duration = 0
   total_frames = 0
   frame_id_to_start_ts = {}
+  # Will contain tuples of frame_ids and their duration.
+  completed_frame_id_and_duration = []
   for trace in trace_json['traceEvents']:
     if 'PipelineReporter' in trace['name']:
       frame_id = trace['id']
@@ -205,10 +212,8 @@ def parse_trace(trace_json, lottie_filename, api, renderer):
           continue
         current_frame_duration = trace['ts'] - frame_id_to_start_ts[frame_id]
         total_frames += 1
-        frame_max = max(frame_max, current_frame_duration)
-        frame_min = (min(frame_min, current_frame_duration)
-                     if frame_min else current_frame_duration)
-        frame_cumulative += current_frame_duration
+        completed_frame_id_and_duration.append(
+            (frame_id, current_frame_duration))
         # We are done with this frame_id so remove it from the dict.
         frame_id_to_start_ts.pop(frame_id)
         print '%d (%s with %s): %d' % (
@@ -222,11 +227,28 @@ def parse_trace(trace_json, lottie_filename, api, renderer):
               frame_id, args['termination_status'])
           frame_id_to_start_ts.pop(frame_id)
 
+  total_completed_frames = len(completed_frame_id_and_duration)
+  if total_completed_frames < 25:
+    raise Exception('Even with 2 loops found only %d frames' %
+                    total_completed_frames)
+
+  # Get frame avg/min/max for the middle 25 frames.
+  start = (total_completed_frames - 25)/2
+  print 'Got %d total completed frames. Using start_index of %d.' % (
+      total_completed_frames, start)
+  frame_max = 0
+  frame_min = 0
+  frame_cumulative = 0
+  for frame_id, duration in completed_frame_id_and_duration[start:start+25]:
+    frame_max = max(frame_max, duration)
+    frame_min = min(frame_min, duration) if frame_min else duration
+    frame_cumulative += duration
+
   perf_results = {}
   perf_results['frame_max_us'] = frame_max
   perf_results['frame_min_us'] = frame_min
-  perf_results['frame_avg_us'] = frame_cumulative/total_frames
-  print 'For %d frames got: %s' % (total_frames, perf_results)
+  perf_results['frame_avg_us'] = frame_cumulative/25
+  print 'For 25 frames got: %s' % perf_results
 
   # Write perf_results to the output json.
   with open(output_json_file, 'w') as f:
@@ -284,6 +306,24 @@ def GenTests(api):
                      patch_issue=1234,
                      gerrit_project='skia',
                      gerrit_url='https://skia-review.googlesource.com/') +
+      api.step_data('parse lottie1.json trace',
+                    api.json.output(parse_trace_json)) +
+      api.step_data('parse lottie2.json trace',
+                    api.json.output(parse_trace_json)) +
+      api.step_data('parse lottie3.json trace',
+                    api.json.output(parse_trace_json))
+  )
+
+  skottie_gpu_buildername = ('Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-'
+                             'wasm-Release-All-SkottieWASM')
+  yield (
+      api.test('skottie_wasm_perf_gpu') +
+      api.properties(buildername=skottie_gpu_buildername,
+                     repository='https://skia.googlesource.com/skia.git',
+                     revision='abc123',
+                     path_config='kitchen',
+                     trace_test_data=trace_output,
+                     swarm_out_dir='[SWARM_OUT_DIR]') +
       api.step_data('parse lottie1.json trace',
                     api.json.output(parse_trace_json)) +
       api.step_data('parse lottie2.json trace',

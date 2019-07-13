@@ -37,8 +37,6 @@ GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice>
     // doesn't support it.
     fFenceSyncSupport = false;           // Fences are not implemented yet
     fSemaphoreSupport = false;           // Semaphores are not implemented yet
-    fMultisampleDisableSupport = true;   // MSAA and resolving not implemented yet
-    fDiscardRenderTargetSupport = false; // GrMtlGpuCommandBuffer::discard() not implemented
     fCrossContextTextureSupport = false; // GrMtlGpu::prepareTextureForCrossContextUsage() not impl
 }
 
@@ -138,6 +136,30 @@ bool GrMtlCaps::canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCount,
     return true;
 }
 
+bool GrMtlCaps::canCopyAsResolve(GrSurface* dst, int dstSampleCount,
+                                 GrSurface* src, int srcSampleCount,
+                                 const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+    if (dst == src) {
+        return false;
+    }
+    if (dst->backendFormat() != src->backendFormat()) {
+        return false;
+    }
+    if (dstSampleCount > 1 || srcSampleCount == 1 || !src->asRenderTarget()) {
+        return false;
+    }
+
+    // TODO: Support copying subrectangles
+    if (dstPoint != SkIPoint::Make(0, 0)) {
+        return false;
+    }
+    if (srcRect != SkIRect::MakeXYWH(0, 0, src->width(), src->height())) {
+        return false;
+    }
+
+    return true;
+}
+
 bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                                  const SkIRect& srcRect, const SkIPoint& dstPoint) const {
     int dstSampleCnt = 0;
@@ -214,7 +236,6 @@ void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
     fSRGBWriteControl = false;
     fMipMapSupport = true;   // always available in Metal
     fNPOTTextureTileSupport = true;  // always available in Metal
-    fDiscardRenderTargetSupport = true;
 
     fReuseScratchTextures = true; // Assuming this okay
 
@@ -526,7 +547,10 @@ GrPixelConfig validate_sized_format(GrMTLPixelFormat grFormat, GrColorType ct) {
         case GrColorType::kRGBA_8888:
             if (MTLPixelFormatRGBA8Unorm == format) {
                 return kRGBA_8888_GrPixelConfig;
-            } else if (MTLPixelFormatRGBA8Unorm_sRGB == format) {
+            }
+            break;
+        case GrColorType::kRGBA_8888_SRGB:
+            if (MTLPixelFormatRGBA8Unorm_sRGB == format) {
                 return kSRGBA_8888_GrPixelConfig;
             }
             break;
@@ -685,9 +709,8 @@ GrPixelConfig GrMtlCaps::getYUVAConfigFromBackendFormat(const GrBackendFormat& f
     return get_yuva_config(*mtlFormat);
 }
 
-GrBackendFormat GrMtlCaps::getBackendFormatFromColorType(GrColorType ct,
-                                                         GrSRGBEncoded srgbEncoded) const {
-    GrPixelConfig config = GrColorTypeToPixelConfig(ct, srgbEncoded);
+GrBackendFormat GrMtlCaps::getBackendFormatFromColorType(GrColorType ct) const {
+    GrPixelConfig config = GrColorTypeToPixelConfig(ct);
     if (config == kUnknown_GrPixelConfig) {
         return GrBackendFormat();
     }
@@ -732,7 +755,9 @@ static bool format_color_type_valid_pair(MTLPixelFormat format, GrColorType colo
             return MTLPixelFormatABGR4Unorm == format;
 #endif
         case GrColorType::kRGBA_8888:
-            return MTLPixelFormatRGBA8Unorm == format || MTLPixelFormatRGBA8Unorm_sRGB == format;
+            return MTLPixelFormatRGBA8Unorm == format;
+        case GrColorType::kRGBA_8888_SRGB:
+            return MTLPixelFormatRGBA8Unorm_sRGB == format;
         case GrColorType::kRGB_888x:
             GR_STATIC_ASSERT(GrCompressionTypeClosestColorType(SkImage::kETC1_CompressionType) ==
                              GrColorType::kRGB_888x);

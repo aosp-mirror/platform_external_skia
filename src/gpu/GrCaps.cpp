@@ -19,7 +19,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fNPOTTextureTileSupport = false;
     fSRGBSupport = false;
     fSRGBWriteControl = false;
-    fDiscardRenderTargetSupport = false;
     fReuseScratchTextures = true;
     fReuseScratchBuffers = true;
     fGpuTracingSupport = false;
@@ -197,7 +196,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("NPOT Texture Tile Support", fNPOTTextureTileSupport);
     writer->appendBool("sRGB Support", fSRGBSupport);
     writer->appendBool("sRGB Write Control", fSRGBWriteControl);
-    writer->appendBool("Discard Render Target Support", fDiscardRenderTargetSupport);
     writer->appendBool("Reuse Scratch Textures", fReuseScratchTextures);
     writer->appendBool("Reuse Scratch Buffers", fReuseScratchBuffers);
     writer->appendBool("Gpu Tracing Support", fGpuTracingSupport);
@@ -367,10 +365,6 @@ bool GrCaps::validateSurfaceDesc(const GrSurfaceDesc& desc, GrMipMapped mipped) 
     }
 
     return true;
-}
-
-GrBackendFormat GrCaps::getBackendFormatFromColorType(GrColorType ct) const {
-    return this->getBackendFormatFromColorType(ct, GrSRGBEncoded::kNo);
 }
 
 GrCaps::SupportedRead GrCaps::supportedReadPixelsColorType(GrPixelConfig config,

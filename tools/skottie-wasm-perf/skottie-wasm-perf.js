@@ -32,6 +32,11 @@ const opts = [
     description: 'The perf file to write. Defaults to perf.json',
   },
   {
+    name: 'use_gpu',
+    description: 'Whether we should run in non-headless mode with GPU.',
+    type: Boolean,
+  },
+  {
     name: 'port',
     description: 'The port number to use, defaults to 8081.',
     type: Number,
@@ -111,16 +116,28 @@ async function wait(ms) {
 }
 
 const targetURL = "http://localhost:" + options.port + "/";
+const viewPort = {width: 1000, height: 1000};
 
 // Drive chrome to load the web page from the server we have running.
 async function driveBrowser() {
   console.log('- Launching chrome for ' + options.input);
   let browser;
   let page;
+  const headless = !options.use_gpu;
+  let browser_args = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--window-size=' + viewPort.width + ',' + viewPort.height,
+  ];
+  if (options.use_gpu) {
+    browser_args.push('--ignore-gpu-blacklist');
+    browser_args.push('--enable-gpu-rasterization');
+  }
+  console.log("Running with headless: " + headless + " args: " + browser_args);
   try {
-    browser = await puppeteer.launch(
-        {headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']});
+    browser = await puppeteer.launch({headless: headless, args: browser_args});
     page = await browser.newPage();
+    await page.setViewport(viewPort);
   } catch (e) {
     console.log('Could not open the browser.', e);
     process.exit(1);
@@ -131,17 +148,17 @@ async function driveBrowser() {
     await page.tracing.start({
       path: options.output,
       screenshots: false,
-      categories: ["blink", "cc"]
+      categories: ["blink", "cc", "gpu"]
     });
 
     await page.goto(targetURL, {
-      timeout: 20000,
+      timeout: 60000,
       waitUntil: 'networkidle0'
     });
 
-    console.log('Waiting 20s for run to be done');
+    console.log('Waiting 60s for run to be done');
     await page.waitForFunction('window._skottieDone === true', {
-      timeout: 20000,
+      timeout: 60000,
     });
 
     // Stop Trace.
@@ -150,7 +167,7 @@ async function driveBrowser() {
     console.log('Timed out while loading or drawing. Either the JSON file was ' +
                 'too big or hit a bug.', e);
     await browser.close();
-    process.exit(0);
+    process.exit(1);
   }
 
   await browser.close();
