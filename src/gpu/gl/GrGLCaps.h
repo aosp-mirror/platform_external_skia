@@ -337,13 +337,6 @@ public:
     SupportedRead supportedReadPixelsColorType(GrPixelConfig, const GrBackendFormat&,
                                                GrColorType) const override;
 
-    /// Does ReadPixels support reading readConfig pixels from a FBO that is surfaceConfig?
-    bool readPixelsSupported(GrPixelConfig surfaceConfig,
-                             GrPixelConfig readConfig,
-                             std::function<void (GrGLenum, GrGLint*)> getIntegerv,
-                             std::function<bool ()> bindRenderTarget,
-                             std::function<void ()> unbindRenderTarget) const;
-
     bool isCoreProfile() const { return fIsCoreProfile; }
 
     bool bindFragDataLocationSupport() const { return fBindFragDataLocationSupport; }
@@ -444,6 +437,8 @@ public:
 
     GrBackendFormat getBackendFormatFromColorType(GrColorType ct) const override;
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
+
+    bool canClearTextureOnCreation() const override;
 
     GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
