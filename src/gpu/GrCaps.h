@@ -244,7 +244,8 @@ public:
      * to dstColorType the swizzle in the returned struct should be applied. The caller must check
      * the returned color type for kUnknown.
      */
-    virtual SupportedRead supportedReadPixelsColorType(GrPixelConfig srcConfig,
+    virtual SupportedRead supportedReadPixelsColorType(GrColorType srcColorType,
+                                                       GrPixelConfig srcConfig,
                                                        const GrBackendFormat& srcFormat,
                                                        GrColorType dstColorType) const;
 
@@ -395,7 +396,8 @@ public:
      * Special method only for YUVA images. Returns a config that matches the backend format or
      * kUnknown if a config could not be determined.
      */
-    virtual GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat& format) const = 0;
+    virtual GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat&) const = 0;
+    virtual GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const = 0;
 
     /** These are used when creating a new texture internally. */
     virtual GrBackendFormat getBackendFormatFromColorType(GrColorType ct) const = 0;
