@@ -10,6 +10,8 @@
 
 #include "include/gpu/GrContext.h"
 #include "include/private/GrRecordingContext.h"
+#include "src/core/SkMathPriv.h"
+#include "src/core/SkMipMap.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrContextPriv.h"
@@ -18,14 +20,10 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrStencilAttachment.h"
-#include "src/gpu/GrSurfaceContext.h"
-#include "src/gpu/GrSurfaceContextPriv.h"
 #include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrTextureContext.h"
 #include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/GrTextureRenderTargetProxy.h"
-
-#include "src/core/SkMathPriv.h"
-#include "src/core/SkMipMap.h"
 
 #ifdef SK_DEBUG
 #include "include/gpu/GrRenderTarget.h"
@@ -69,7 +67,6 @@ GrSurfaceProxy::GrSurfaceProxy(LazyInstantiateCallback&& callback, LazyInstantia
         , fBudgeted(budgeted)
         , fLazyInstantiateCallback(std::move(callback))
         , fLazyInstantiationType(lazyType)
-        , fNeedsClear(SkToBool(desc.fFlags & kPerformInitialClear_GrSurfaceFlag))
         , fIsProtected(desc.fIsProtected)
         , fGpuMemorySize(kInvalidGpuMemorySize)
         , fLastOpList(nullptr) {
@@ -103,7 +100,6 @@ GrSurfaceProxy::GrSurfaceProxy(sk_sp<GrSurface> surface, GrSurfaceOrigin origin,
                             ? SkBudgeted::kYes
                             : SkBudgeted::kNo)
         , fUniqueID(fTarget->uniqueID())  // Note: converting from unique resource ID to a proxy ID!
-        , fNeedsClear(false)
         , fIsProtected(fTarget->isProtected() ? GrProtected::kYes : GrProtected::kNo)
         , fGpuMemorySize(kInvalidGpuMemorySize)
         , fLastOpList(nullptr) {
@@ -141,9 +137,6 @@ sk_sp<GrSurface> GrSurfaceProxy::createSurfaceImpl(GrResourceProvider* resourceP
     SkASSERT(!fTarget);
     GrSurfaceDesc desc;
     desc.fFlags = descFlags;
-    if (fNeedsClear) {
-        desc.fFlags |= kPerformInitialClear_GrSurfaceFlag;
-    }
     desc.fWidth = fWidth;
     desc.fHeight = fHeight;
     desc.fIsProtected = fIsProtected;
@@ -347,18 +340,18 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrRecordingContext* context,
                                            SkBudgeted budgeted,
                                            RectsMustMatch rectsMustMatch) {
     SkASSERT(LazyState::kFully != src->lazyInstantiationState());
-    GrSurfaceDesc dstDesc;
-    dstDesc.fIsProtected = src->isProtected() ? GrProtected::kYes : GrProtected::kNo;
-    dstDesc.fConfig = src->config();
+    GrProtected isProtected = src->isProtected() ? GrProtected::kYes : GrProtected::kNo;
+    int width;
+    int height;
 
     SkIPoint dstPoint;
     if (rectsMustMatch == RectsMustMatch::kYes) {
-        dstDesc.fWidth = src->width();
-        dstDesc.fHeight = src->height();
+        width = src->width();
+        height = src->height();
         dstPoint = {srcRect.fLeft, srcRect.fTop};
     } else {
-        dstDesc.fWidth = srcRect.width();
-        dstDesc.fHeight = srcRect.height();
+        width = srcRect.width();
+        height = srcRect.height();
         dstPoint = {0, 0};
     }
 
@@ -367,9 +360,9 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrRecordingContext* context,
     }
     auto colorType = GrPixelConfigToColorType(src->config());
     if (src->backendFormat().textureType() != GrTextureType::kExternal) {
-        sk_sp<GrSurfaceContext> dstContext(context->priv().makeDeferredSurfaceContext(
-                src->backendFormat().makeTexture2D(), dstDesc, src->origin(), mipMapped, fit,
-                budgeted, colorType, kUnknown_SkAlphaType));
+        sk_sp<GrTextureContext> dstContext(context->priv().makeDeferredTextureContext(
+                fit, width, height, colorType, kUnknown_SkAlphaType, nullptr, mipMapped,
+                src->origin(), budgeted, isProtected));
         if (!dstContext) {
             return nullptr;
         }
@@ -379,8 +372,8 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrRecordingContext* context,
     }
     if (src->asTextureProxy()) {
         sk_sp<GrRenderTargetContext> dstContext = context->priv().makeDeferredRenderTargetContext(
-                fit, dstDesc.fWidth, dstDesc.fHeight, colorType, nullptr, 1, mipMapped,
-                src->origin(), nullptr, budgeted);
+                fit, width, height, colorType, nullptr, 1, mipMapped, src->origin(), nullptr,
+                budgeted);
 
         if (dstContext && dstContext->blitTexture(src->asTextureProxy(), srcRect, dstPoint)) {
             return dstContext->asTextureProxyRef();

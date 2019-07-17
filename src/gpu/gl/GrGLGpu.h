@@ -203,7 +203,8 @@ private:
     sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrWrapOwnership, GrWrapCacheable,
                                           GrIOType) override;
     sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&, int sampleCnt,
-                                                    GrWrapOwnership, GrWrapCacheable) override;
+                                                    GrColorType, GrWrapOwnership,
+                                                    GrWrapCacheable) override;
     sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&) override;
     sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
                                                              int sampleCnt) override;
@@ -227,20 +228,6 @@ private:
                                      SkImage::CompressionType compression,
                                      GrGLTextureParameters::SamplerOverriddenState* initialState,
                                      const void* data);
-
-    // Checks whether glReadPixels can be called to get pixel values in readConfig from the
-    // render target.
-    bool readPixelsSupported(GrRenderTarget* target, GrPixelConfig readConfig);
-
-    // Checks whether glReadPixels can be called to get pixel values in readConfig from a
-    // render target that has renderTargetConfig. This may have to create a temporary
-    // render target and thus is less preferable than the variant that takes a render target.
-    bool readPixelsSupported(GrPixelConfig renderTargetConfig, GrPixelConfig readConfig);
-
-    // Checks whether glReadPixels can be called to get pixel values in readConfig from a
-    // render target that has the same config as surfaceForConfig. Calls one of the the two
-    // variations above, depending on whether the surface is a render target or not.
-    bool readPixelsSupported(GrSurface* surfaceForConfig, GrPixelConfig readConfig);
 
     bool onReadPixels(GrSurface*, int left, int top, int width, int height, GrColorType,
                       void* buffer, size_t rowBytes) override;

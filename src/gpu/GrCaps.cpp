@@ -111,6 +111,9 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
     if (options.fSuppressGeometryShaders) {
         fShaderCaps->fGeometryShaderSupport = false;
     }
+    if (options.fClearAllTextures) {
+        fShouldInitializeTextures = true;
+    }
 #endif
 
     if (fMaxWindowRectangles > GrWindowRectangles::kMaxWindows) {
@@ -326,7 +329,8 @@ bool GrCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src
     // has the expected values stored in the right places taking the swizzle into account. For now
     // we can be more restrictive and just make sure the configs are the same and if we generalize
     // copies and swizzles more in the future this can be updated.
-    if (dst->config() != src->config()) {
+    if (this->makeConfigSpecific(dst->config(), dst->backendFormat()) !=
+        this->makeConfigSpecific(src->config(), src->backendFormat())) {
         return false;
     }
     return this->onCanCopySurface(dst, src, srcRect, dstPoint);
@@ -372,3 +376,43 @@ GrCaps::SupportedRead GrCaps::supportedReadPixelsColorType(GrPixelConfig config,
                                                            GrColorType dstColorType) const {
     return SupportedRead{GrSwizzle::RGBA(), GrPixelConfigToColorType(config)};
 }
+
+#ifdef SK_DEBUG
+bool GrCaps::AreConfigsCompatible(GrPixelConfig genericConfig, GrPixelConfig specificConfig) {
+    bool compatible = false;
+
+    switch (genericConfig) {
+        case kAlpha_8_GrPixelConfig:
+            compatible = kAlpha_8_GrPixelConfig == specificConfig || // here bc of the mock context
+                         kAlpha_8_as_Alpha_GrPixelConfig == specificConfig ||
+                         kAlpha_8_as_Red_GrPixelConfig == specificConfig;
+            break;
+        case kGray_8_GrPixelConfig:
+            compatible = kGray_8_GrPixelConfig == specificConfig ||  // here bc of the mock context
+                         kGray_8_as_Lum_GrPixelConfig == specificConfig ||
+                         kGray_8_as_Red_GrPixelConfig == specificConfig;
+            break;
+        case kAlpha_half_GrPixelConfig:
+            compatible = kAlpha_half_GrPixelConfig == specificConfig || // bc of the mock context
+                         kAlpha_half_as_Red_GrPixelConfig == specificConfig;
+            break;
+        case kRGB_888_GrPixelConfig:
+            compatible = kRGB_888_GrPixelConfig == specificConfig ||
+                         kRGB_888X_GrPixelConfig == specificConfig;
+            break;
+        case kRGBA_8888_GrPixelConfig:
+            compatible = kRGBA_8888_GrPixelConfig == specificConfig ||
+                         kBGRA_8888_GrPixelConfig == specificConfig;
+            break;
+        default:
+            compatible = genericConfig == specificConfig;
+            break;
+    }
+
+    if (!compatible) {
+        SkDebugf("Configs are not compatible: %d %d\n", genericConfig, specificConfig);
+    }
+
+    return compatible;
+}
+#endif
