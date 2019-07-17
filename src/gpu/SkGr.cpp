@@ -47,7 +47,7 @@ GR_FP_SRC_STRING SKSL_DITHER_SRC = R"(
 // This controls the range of values added to color channels
 layout(key) in int rangeType;
 
-void main(int x, int y, inout half4 color) {
+void main(float x, float y, inout half4 color) {
     half value;
     half range;
     @switch (rangeType) {
@@ -73,7 +73,7 @@ void main(int x, int y, inout half4 color) {
     } else {
         // Simulate the integer effect used above using step/mod. For speed, simulates a 4x4
         // dither pattern rather than an 8x8 one.
-        half4 modValues = mod(half4(x, y, x, y), half4(2.0, 2.0, 4.0, 4.0));
+        half4 modValues = mod(half4(half(x), half(y), half(x), half(y)), half4(2.0, 2.0, 4.0, 4.0));
         half4 stepValues = step(modValues, half4(1.0, 1.0, 2.0, 2.0));
         value = dot(stepValues, half4(8.0 / 16.0, 4.0 / 16.0, 2.0 / 16.0, 1.0 / 16.0)) - 15.0 / 32.0;
     }
@@ -306,7 +306,6 @@ static inline int32_t dither_range_type_for_config(GrColorType dstColorType) {
         case GrColorType::kRGBA_1010102:
         case GrColorType::kAlpha_F16:
         case GrColorType::kRGBA_F32:
-        case GrColorType::kRG_F32:
         case GrColorType::kRGBA_F16:
         case GrColorType::kRGBA_F16_Clamped:
         case GrColorType::kAlpha_8:
