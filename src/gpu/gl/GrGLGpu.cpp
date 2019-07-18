@@ -696,7 +696,6 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     }
 
     GrSurfaceDesc surfDesc;
-    surfDesc.fFlags = kNone_GrSurfaceFlags;
     surfDesc.fWidth = backendTex.width();
     surfDesc.fHeight = backendTex.height();
     surfDesc.fConfig = backendTex.config();
@@ -739,7 +738,6 @@ sk_sp<GrTexture> GrGLGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
     const GrCaps* caps = this->caps();
 
     GrSurfaceDesc surfDesc;
-    surfDesc.fFlags = kRenderTarget_GrSurfaceFlag;
     surfDesc.fWidth = backendTex.width();
     surfDesc.fHeight = backendTex.height();
     surfDesc.fConfig = backendTex.config();
@@ -779,7 +777,6 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     idDesc.fRTFBOOwnership = GrBackendObjectOwnership::kBorrowed;
 
     GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = backendRT.width();
     desc.fHeight = backendRT.height();
     desc.fConfig = backendRT.config();
@@ -805,7 +802,6 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
     }
 
     GrSurfaceDesc surfDesc;
-    surfDesc.fFlags = kRenderTarget_GrSurfaceFlag;
     surfDesc.fWidth = tex.width();
     surfDesc.fHeight = tex.height();
     surfDesc.fConfig = tex.config();
@@ -882,7 +878,6 @@ static inline GrGLint config_alignment(GrPixelConfig config) {
         case kSRGBA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRGBA_float_GrPixelConfig:
-        case kRG_float_GrPixelConfig:
         case kRG_1616_GrPixelConfig:
             return 4;
         case kRGB_ETC1_GrPixelConfig:
@@ -1352,6 +1347,11 @@ bool GrGLGpu::createRenderTargetObjects(const GrSurfaceDesc& desc,
 
     GrGLenum colorRenderbufferFormat = 0; // suppress warning
 
+    GrGLFormat format = GrGLFormatFromGLEnum(texInfo.fFormat);
+    if (format == GrGLFormat::kUnknown) {
+        goto FAILED;
+    }
+
     if (desc.fSampleCnt > 1 && GrGLCaps::kNone_MSFBOType == this->glCaps().msFBOType()) {
         goto FAILED;
     }
@@ -1372,10 +1372,7 @@ bool GrGLGpu::createRenderTargetObjects(const GrSurfaceDesc& desc,
             !idDesc->fMSColorRenderbufferID) {
             goto FAILED;
         }
-        GrGLFormat glFormat =
-                GrGLFormatFromGLEnum(this->glCaps().configSizedInternalFormat(desc.fConfig));
-        colorRenderbufferFormat =
-                this->glCaps().getRenderbufferInternalFormat(glFormat);
+        colorRenderbufferFormat = this->glCaps().getRenderbufferInternalFormat(format);
     } else {
         idDesc->fRTFBOID = idDesc->fTexFBOID;
     }
@@ -1396,12 +1393,12 @@ bool GrGLGpu::createRenderTargetObjects(const GrSurfaceDesc& desc,
                                         GR_GL_COLOR_ATTACHMENT0,
                                         GR_GL_RENDERBUFFER,
                                         idDesc->fMSColorRenderbufferID));
-        if (!this->glCaps().isConfigVerifiedColorAttachment(desc.fConfig)) {
+        if (!this->glCaps().isFormatVerifiedColorAttachment(format)) {
             GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
             if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
                 goto FAILED;
             }
-            fGLContext->caps()->markConfigAsValidColorAttachment(desc.fConfig);
+            fGLContext->caps()->markFormatAsValidColorAttachment(format);
         }
     }
     this->bindFramebuffer(GR_GL_FRAMEBUFFER, idDesc->fTexFBOID);
@@ -1417,12 +1414,12 @@ bool GrGLGpu::createRenderTargetObjects(const GrSurfaceDesc& desc,
                                      texInfo.fTarget,
                                      texInfo.fID, 0));
     }
-    if (!this->glCaps().isConfigVerifiedColorAttachment(desc.fConfig)) {
+    if (!this->glCaps().isFormatVerifiedColorAttachment(format)) {
         GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
         if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
             goto FAILED;
         }
-        fGLContext->caps()->markConfigAsValidColorAttachment(desc.fConfig);
+        fGLContext->caps()->markFormatAsValidColorAttachment(format);
     }
 
     return true;
@@ -1464,6 +1461,7 @@ static GrGLTextureParameters::SamplerOverriddenState set_initial_texture_params(
 }
 
 sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
+                                          GrRenderable renderable,
                                           SkBudgeted budgeted,
                                           const GrMipLevel texels[],
                                           int mipLevelCount) {
@@ -1472,20 +1470,17 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
         return return_null_texture();
     }
 
-    bool isRenderTarget = SkToBool(desc.fFlags & kRenderTarget_GrSurfaceFlag);
-
     GrGLTexture::IDDesc idDesc;
     idDesc.fOwnership = GrBackendObjectOwnership::kOwned;
     GrMipMapsStatus mipMapsStatus;
     GrGLTextureParameters::SamplerOverriddenState initialState;
-    if (!this->createTextureImpl(desc, &idDesc.fInfo,
-                                 isRenderTarget ? GrRenderable::kYes : GrRenderable::kNo,
-                                 &initialState, texels, mipLevelCount, &mipMapsStatus)) {
+    if (!this->createTextureImpl(desc, &idDesc.fInfo, renderable, &initialState, texels,
+                                 mipLevelCount, &mipMapsStatus)) {
         return return_null_texture();
     }
 
     sk_sp<GrGLTexture> tex;
-    if (isRenderTarget) {
+    if (renderable == GrRenderable::kYes) {
         // unbind the texture from the texture unit before binding it to the frame buffer
         GL_CALL(BindTexture(idDesc.fInfo.fTarget, 0));
         GrGLRenderTarget::IDDesc rtIDDesc;
@@ -1503,10 +1498,6 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
     // The non-sampler params are still at their default values.
     tex->parameters()->set(&initialState, GrGLTextureParameters::NonsamplerState(),
                            fResetTimestampForTextureParameters);
-#ifdef TRACE_TEXTURE_CREATION
-    SkDebugf("--- new texture [%d] size=(%d %d) config=%d\n",
-             idDesc.fInfo.fID, desc.fWidth, desc.fHeight, desc.fConfig);
-#endif
     bool clearLevelsWithoutData =
             this->caps()->shouldInitializeTextures() && this->glCaps().clearTextureSupport();
 
@@ -3744,7 +3735,6 @@ static GrPixelConfig gl_format_to_pixel_config(GrGLFormat format) {
         case GrGLFormat::kRGB565:               return kRGB_565_GrPixelConfig;
         case GrGLFormat::kRGBA4:                return kRGBA_4444_GrPixelConfig;
         case GrGLFormat::kRGBA32F:              return kRGBA_float_GrPixelConfig;
-        case GrGLFormat::kRG32F:                return kRG_float_GrPixelConfig;
         case GrGLFormat::kRGBA16F:              return kRGBA_half_GrPixelConfig;
         case GrGLFormat::kR16F:                 return kAlpha_half_GrPixelConfig;
         case GrGLFormat::kR16:                  return kR_16_GrPixelConfig;

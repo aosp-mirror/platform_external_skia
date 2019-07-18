@@ -156,12 +156,13 @@ struct ByteCodeFunction;
 }
 
 struct SkRasterPipeline_InterpreterCtx {
-    SkSL::ByteCode*         byteCode;
-    SkSL::ByteCodeFunction* fn;
+    const SkSL::ByteCode*         byteCode;
+    const SkSL::ByteCodeFunction* fn;
 
+    SkColor4f   paintColor;
     const void* inputs;
     int         ninputs;
-    bool        shader_convention;  // if false, we're a colorfilter
+    bool        shaderConvention;  // if false, we're a colorfilter
 };
 
 struct SkRasterPipeline_GradientCtx {

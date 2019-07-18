@@ -179,9 +179,8 @@ public:
         return this->maxRenderTargetSampleCount(config) > 0;
     }
 
-    // TODO: Remove this after Flutter updated to no longer use it.
-    bool isConfigRenderable(GrPixelConfig config, bool withMSAA) const {
-        return this->maxRenderTargetSampleCount(config) > (withMSAA ? 1 : 0);
+    bool isFormatRenderable(GrColorType ct, const GrBackendFormat& format) const {
+        return this->maxRenderTargetSampleCount(ct, format) > 0;
     }
 
     // Find a sample count greater than or equal to the requested count which is supported for a
@@ -352,14 +351,16 @@ public:
      * This is can be called before allocating a texture to be a dst for copySurface. This is only
      * used for doing dst copies needed in blends, thus the src is always a GrRenderTargetProxy. It
      * will populate config and flags fields of the desc such that copySurface can efficiently
-     * succeed as well as the proxy origin. rectsMustMatch will be set to true if the copy operation
-     * must ensure that the src and dest rects are identical. disallowSubrect will be set to true if
-     * copy rect must equal src's bounds.
+     * succeed as well as the proxy origin. renderable will be set to kYes if the destination
+     * texture should be renderable in order to implement the copy as a draw. rectsMustMatch will be
+     * set to true if the copy operation must ensure that the src and dest rects are identical.
+     * disallowSubrect will be set to true if copy rect must equal src's bounds.
      */
     virtual bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
-                                    bool* rectsMustMatch, bool* disallowSubrect) const = 0;
+                                    GrRenderable* renderable, bool* rectsMustMatch,
+                                    bool* disallowSubrect) const = 0;
 
-    bool validateSurfaceDesc(const GrSurfaceDesc&, GrMipMapped) const;
+    bool validateSurfaceDesc(const GrSurfaceDesc&, GrRenderable renderable, GrMipMapped) const;
 
     /**
      * If the GrBackendRenderTarget can be used with the supplied SkColorType the return will be

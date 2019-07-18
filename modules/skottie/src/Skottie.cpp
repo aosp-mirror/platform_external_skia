@@ -398,7 +398,8 @@ sk_sp<SkData> ResourceProvider::load(const char[], const char[]) const {
     return nullptr;
 }
 
-sk_sp<ImageAsset> ResourceProvider::loadImageAsset(const char path[], const char name[]) const {
+sk_sp<ImageAsset> ResourceProvider::loadImageAsset(const char path[], const char name[],
+                                                   const char id[]) const {
     return nullptr;
 }
 

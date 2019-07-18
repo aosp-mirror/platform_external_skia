@@ -72,7 +72,8 @@ public:
      * ImageAsset proxy.
      */
     virtual sk_sp<ImageAsset> loadImageAsset(const char resource_path[],
-                                             const char resource_name[]) const;
+                                             const char resource_name[],
+                                             const char resource_id[]) const;
 
     /**
      * Load an external font and return as SkData.
