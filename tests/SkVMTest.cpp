@@ -352,9 +352,9 @@ DEF_TEST(SkVM_LoopCounts, r) {
               b.add(b.splat(1),
                     b.load32(arg)));
 
-    int buf[64];
-    for (int N = 0; N <= (int)SK_ARRAY_COUNT(buf); N++) {
-        test_jit_and_interpreter(b.done(), [&](const skvm::Program& program) {
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program) {
+        int buf[64];
+        for (int N = 0; N <= (int)SK_ARRAY_COUNT(buf); N++) {
             for (int i = 0; i < (int)SK_ARRAY_COUNT(buf); i++) {
                 buf[i] = i;
             }
@@ -366,8 +366,36 @@ DEF_TEST(SkVM_LoopCounts, r) {
             for (int i = N; i < (int)SK_ARRAY_COUNT(buf); i++) {
                 REPORTER_ASSERT(r, buf[i] == i);
             }
-        });
+        }
+    });
+}
+
+DEF_TEST(SkVM_mad, r) {
+    // This program is designed to exercise the tricky corners of instruction
+    // and register selection for Op::mad_f32.
+
+    skvm::Builder b;
+    {
+        skvm::Arg arg = b.arg<int>();
+
+        skvm::F32 x = b.to_f32(b.load32(arg)),
+                  y = b.mad(x,x,x),   // x is needed in the future, so r[x] != r[y].
+                  z = b.mad(y,y,x),   // y is needed in the future, but r[z] = r[x] is ok.
+                  w = b.mad(z,z,y),   // w can alias z but not y.
+                  v = b.mad(w,y,w);   // Got to stop somewhere.
+        b.store32(arg, b.to_i32(v));
     }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program) {
+        int x = 2;
+        program.eval(1, &x);
+        // x = 2
+        // y = 2*2 + 2 = 6
+        // z = 6*6 + 2 = 38
+        // w = 38*38 + 6 = 1450
+        // v = 1450*6 + 1450 = 10150
+        REPORTER_ASSERT(r, x == 10150);
+    });
 }
 
 
@@ -687,6 +715,20 @@ DEF_TEST(SkVM_Assembler, r) {
         0x64,0x04,0x1f,0x6f,
         0x64,0x04,0x18,0x6f,
         0x64,0x04,0x11,0x6f,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.sli4s(A::v4, A::v3,  0);
+        a.sli4s(A::v4, A::v3,  1);
+        a.sli4s(A::v4, A::v3,  8);
+        a.sli4s(A::v4, A::v3, 16);
+        a.sli4s(A::v4, A::v3, 31);
+    },{
+        0x64,0x54,0x20,0x6f,
+        0x64,0x54,0x21,0x6f,
+        0x64,0x54,0x28,0x6f,
+        0x64,0x54,0x30,0x6f,
+        0x64,0x54,0x3f,0x6f,
     });
 
     test_asm(r, [&](A& a) {

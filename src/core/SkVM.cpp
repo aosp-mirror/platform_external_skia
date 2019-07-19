@@ -549,6 +549,9 @@ namespace skvm {
                   | (d    &  5_mask) <<  0);
     }
 
+    void Assembler::sli4s(V d, V n, int imm) {
+        this->op(0b0'1'1'011110'0100'000'01010'1,    ( imm&31), n, d);
+    }
     void Assembler::shl4s(V d, V n, int imm) {
         this->op(0b0'1'0'011110'0100'000'01010'1,    ( imm&31), n, d);
     }
@@ -1030,24 +1033,34 @@ namespace skvm {
     }
 
     bool Program::jit(const std::vector<Builder::Instruction>& instructions, Assembler* a) const {
+        using A = Assembler;
+
     #if defined(__x86_64__)
         if (!SkCpu::Supports(SkCpu::HSW)) {
             return false;
         }
+        A::GP64 N     = A::rdi,
+                arg[] = { A::rsi, A::rdx, A::rcx, A::r8, A::r9 };
 
-        using A = Assembler;
+        // All 16 ymm registers are available to use.
+        using Reg = A::Ymm;
+        uint32_t avail = 0xffff;
 
-        A::GP64 N = A::rdi,
-            arg[] = { A::rsi, A::rdx, A::rcx, A::r8, A::r9 };
+    #elif defined(__aarch64__)
+        A::X N     = A::x0,
+             arg[] = { A::x1, A::x2, A::x3, A::x4, A::x5, A::x6, A::x7 };
+
+        // We can use v0-v7 and v16-v31 freely; we'd need to preseve v8-v15.
+        using Reg = A::V;
+        uint32_t avail = 0xffff00ff;
+    #endif
+
         if (SK_ARRAY_COUNT(arg) < fStrides.size()) {
             return false;
         }
 
-        // All 16 ymm registers are available to use.
-        uint32_t avail = 0b1111'1111'1111'1111;
-        std::vector<A::Ymm> r(instructions.size());
-
-        SkTHashMap<int, A::Label> vpshufb_masks,
+        std::vector<Reg> r(instructions.size());
+        SkTHashMap<int, A::Label> bytes_masks,
                                   splats;
 
         auto emit = [&](Val id, bool scalar) {
@@ -1064,7 +1077,7 @@ namespace skvm {
                 z = inst.z;
             int imm = inst.imm;
 
-            // Most (but not all) ops create an output value and need somewhere to put it, dst.
+            // Most (but not all) ops create an output value and need a register to hold it, dst.
             // We track each instruction's dst in r[] so we can thread it through as an input
             // to any future instructions needing that value.
             //
@@ -1072,12 +1085,12 @@ namespace skvm {
             //
             // tmp and dst are very similar and can and will often be assigned the same register,
             // but tmp may never alias any of the instructions's inputs, while dst may when this
-            // instruction consumes that input, if the input reaches its end of life here.
+            // instruction consumes that input, i.e. if the input reaches its end of life here.
             //
             // We'll assign both registers lazily to keep register pressure as low as possible.
             bool tmp_is_set = false,
                  dst_is_set = false;
-            A::Ymm tmp_reg = A::ymm0;  // This initial value won't matter... anything legal is fine.
+            Reg tmp_reg = (Reg)0;  // This initial value won't matter... anything legal is fine.
 
             bool ok = true;   // Set to false if we need to assign a register and none's available.
 
@@ -1089,10 +1102,10 @@ namespace skvm {
                     if (int found = __builtin_ffs(avail)) {
                         // This is a scratch register just for this op,
                         // so we leave it marked available for future ops.
-                        tmp_reg = (A::Ymm)(found - 1);
+                        tmp_reg = (Reg)(found - 1);
                     } else {
                         // We needed a tmp register but couldn't find one available. :'(
-                        // This will cause emit() to return false, in turn causing jit() to too.
+                        // This will cause emit() to return false, in turn causing jit() to fail.
                         ok = false;
                     }
                 }
@@ -1104,10 +1117,10 @@ namespace skvm {
             if (x != NA && instructions[x].death == id) { avail |= 1 << r[x]; }
             if (y != NA && instructions[y].death == id) { avail |= 1 << r[y]; }
             if (z != NA && instructions[z].death == id) { avail |= 1 << r[z]; }
+            // set_dst() and dst() will work read/write with this perhaps-just-updated avail.
 
             // Some ops may decide dst on their own to best fit the instruction (see Op::mad_f32).
-            // set_dst() and dst() just below work with that perhaps-just-updated avail.
-            auto set_dst = [&](A::Ymm reg){
+            auto set_dst = [&](Reg reg){
                 SkASSERT(dst_is_set == false);
                 dst_is_set = true;
 
@@ -1117,11 +1130,12 @@ namespace skvm {
                 r[id] = reg;
             };
 
-            // Thanks to AVX's 3-argument instruction set, most ops can use any register as dst.
+            // Thanks to AVX and NEON's 3-argument instruction sets,
+            // most ops can use any register as dst.
             auto dst = [&]{
                 if (!dst_is_set) {
                     if (int found = __builtin_ffs(avail)) {
-                        set_dst((A::Ymm)(found-1));
+                        set_dst((Reg)(found-1));
                     } else {
                         // Same deal as with tmp... all the registers are occupied.  Time to fail!
                         ok = false;
@@ -1130,11 +1144,17 @@ namespace skvm {
                 return r[id];
             };
 
+            // Because we use the same logic to pick an arbitrary dst and to pick tmp,
+            // and we know that tmp will never overlap any of the inputs, `dst() == tmp()`
+            // is a simple idiom to check that the destination does not overlap any of the inputs.
+            // Sometimes we can use this knowledge to do better instruction selection.
+
             // Ok!  Keep in mind that we haven't assigned tmp or dst yet,
             // just laid out hooks for how to do so if we need them, depending on the instruction.
             //
             // Now let's actually assemble the instruction!
             switch (op) {
+            #if defined(__x86_64__)
                 case Op::store8: if (scalar) { a->vpextrb  (arg[imm], (A::Xmm)r[x], 0); }
                                  else        { a->vpackusdw(tmp(), r[x], r[x]);
                                                a->vpermq   (tmp(), tmp(), 0xd8);
@@ -1167,12 +1187,14 @@ namespace skvm {
                 case Op::div_f32: a->vdivps(dst(), r[x], r[y]); break;
 
                 case Op::mad_f32:
-                    if (avail & (1<<r[x])) { set_dst(r[x]); a->vfmadd132ps(r[x], r[z], r[y]); } else
-                    if (avail & (1<<r[y])) { set_dst(r[y]); a->vfmadd213ps(r[y], r[x], r[z]); } else
-                    if (avail & (1<<r[z])) { set_dst(r[z]); a->vfmadd231ps(r[z], r[x], r[y]); } else
-                                           {                a->vmulps     (tmp(),  r[x], r[y]);
-                                                            a->vaddps     (dst(), tmp(), r[z]); }
-                    break;
+                    if      (avail & (1<<r[x])) { set_dst(r[x]); a->vfmadd132ps(r[x], r[z], r[y]); }
+                    else if (avail & (1<<r[y])) { set_dst(r[y]); a->vfmadd213ps(r[y], r[x], r[z]); }
+                    else if (avail & (1<<r[z])) { set_dst(r[z]); a->vfmadd231ps(r[z], r[x], r[y]); }
+                    else                        {                SkASSERT(dst() == tmp());
+                                                                 // TODO: vpor -> vmovdqa here?
+                                                                 a->vpor       (dst(),r[x], r[x]);
+                                                                 a->vfmadd132ps(dst(),r[z], r[y]); }
+                                                                 break;
 
                 case Op::add_i32: a->vpaddd (dst(), r[x], r[y]); break;
                 case Op::sub_i32: a->vpsubd (dst(), r[x], r[y]); break;
@@ -1203,9 +1225,83 @@ namespace skvm {
                 case Op::to_f32: a->vcvtdq2ps (dst(), r[x]); break;
                 case Op::to_i32: a->vcvttps2dq(dst(), r[x]); break;
 
-                case Op::bytes:  if (!vpshufb_masks.find(imm)) { vpshufb_masks.set(imm, {}); }
-                                 a->vpshufb(dst(), r[x], vpshufb_masks.find(imm));
+                case Op::bytes:  if (!bytes_masks.find(imm)) { bytes_masks.set(imm, {}); }
+                                 a->vpshufb(dst(), r[x], bytes_masks.find(imm));
                                  break;
+            #elif defined(__aarch64__)
+                case Op::store8: a->xtns2h(tmp(), r[x]);
+                                 a->xtnh2b(tmp(), tmp());
+                   if (scalar) { a->strb  (tmp(), arg[imm]); }
+                   else        { a->strs  (tmp(), arg[imm]); }
+                                 break;
+
+                case Op::store32: if (scalar) { a->strs(r[x], arg[imm]); }
+                                  else        { a->strq(r[x], arg[imm]); }
+                                                break;
+
+                case Op::load8: if (scalar) { a->ldrb(tmp(), arg[imm]); }
+                                else        { a->ldrs(tmp(), arg[imm]); }
+                                              a->uxtlb2h(tmp(), tmp());
+                                              a->uxtlh2s(dst(), tmp());
+                                              break;
+
+                case Op::load32: if (scalar) { a->ldrs(dst(), arg[imm]); }
+                                 else        { a->ldrq(dst(), arg[imm]); }
+                                               break;
+
+                case Op::splat:  if (!splats.find(imm)) { splats.set(imm, {}); }
+                                 a->ldrq(dst(), splats.find(imm));
+                                 break;
+
+                case Op::add_f32: a->fadd4s(dst(), r[x], r[y]); break;
+                case Op::sub_f32: a->fsub4s(dst(), r[x], r[y]); break;
+                case Op::mul_f32: a->fmul4s(dst(), r[x], r[y]); break;
+                case Op::div_f32: a->fdiv4s(dst(), r[x], r[y]); break;
+
+                case Op::mad_f32:
+                    if (avail & (1<<r[z])) { set_dst(r[z]); a->fmla4s( r[z],  r[x],  r[y]);   }
+                    else                   {                a->orr16b(tmp(),  r[z],  r[z]);
+                                                            a->fmla4s(tmp(),  r[x],  r[y]);
+                                       if(dst() != tmp()) { a->orr16b(dst(), tmp(), tmp()); } }
+                                                            break;
+
+
+                case Op::add_i32: a->add4s(dst(), r[x], r[y]); break;
+                case Op::sub_i32: a->sub4s(dst(), r[x], r[y]); break;
+                case Op::mul_i32: a->mul4s(dst(), r[x], r[y]); break;
+
+                case Op::sub_i16x2: a->sub8h (dst(), r[x], r[y]); break;
+                case Op::mul_i16x2: a->mul8h (dst(), r[x], r[y]); break;
+                case Op::shr_i16x2: a->ushr8h(dst(), r[x],  imm); break;
+
+                case Op::bit_and:   a->and16b(dst(), r[x], r[y]); break;
+                case Op::bit_or :   a->orr16b(dst(), r[x], r[y]); break;
+                case Op::bit_xor:   a->eor16b(dst(), r[x], r[y]); break;
+                case Op::bit_clear: a->bic16b(dst(), r[x], r[y]); break;
+
+                case Op::shl: a-> shl4s(dst(), r[x], imm); break;
+                case Op::shr: a->ushr4s(dst(), r[x], imm); break;
+                case Op::sra: a->sshr4s(dst(), r[x], imm); break;
+
+                case Op::extract: if (imm) { a->ushr4s(tmp(), r[x], imm);
+                                             a->and16b(dst(), tmp(), r[y]); }
+                                  else     { a->and16b(dst(), r[x], r[y]); }
+                                             break;
+
+                case Op::pack:
+                    if (avail & (1<<r[x])) { set_dst(r[x]); a->sli4s ( r[x],  r[y],  imm); }
+                    else                   {                a->shl4s (tmp(),  r[y],  imm);
+                                                            a->orr16b(dst(), tmp(), r[x]); }
+                                                            break;
+
+                case Op::to_f32: a->scvtf4s (dst(), r[x]); break;
+                case Op::to_i32: a->fcvtzs4s(dst(), r[x]); break;
+
+                case Op::bytes:  if (!bytes_masks.find(imm)) { bytes_masks.set(imm, {}); }
+                                 a->ldrq(tmp(), bytes_masks.find(imm));  // TODO: hoist these
+                                 a->tbl (dst(), r[x], tmp());
+                                 break;
+            #endif
             }
 
             // Calls to tmp() or dst() might have flipped this false from its default true state.
@@ -1216,67 +1312,93 @@ namespace skvm {
                  tail,
                  done;
 
+        #if defined(__x86_64__)
+            const int K = 8;
+            auto jump_if_less = [&](A::Label* l) { a->jl (l); };
+            auto jump         = [&](A::Label* l) { a->jmp(l); };
+
+            auto add = [&](A::GP64 gp, int imm) { a->add(gp, imm); };
+            auto sub = [&](A::GP64 gp, int imm) { a->sub(gp, imm); };
+
+            auto exit = [&]{ a->vzeroupper(); a->ret(); };
+        #elif defined(__aarch64__)
+            const int K = 4;
+            auto jump_if_less = [&](A::Label* l) { a->blt(l); };
+            auto jump         = [&](A::Label* l) { a->b  (l); };
+
+            auto add = [&](A::X gp, int imm) { a->add(gp, gp, imm); };
+            auto sub = [&](A::X gp, int imm) { a->sub(gp, gp, imm); };
+
+            auto exit = [&]{ a->ret(A::x30); };
+        #endif
+
         a->label(&body);
         {
-            const int K = 8;
             a->cmp(N, K);
-            a->jl(&tail);
+            jump_if_less(&tail);
             for (Val id = 0; id < (Val)instructions.size(); id++) {
-                if (!emit(id, /*scalar=*/K==1)) {
+                if (!emit(id, /*scalar=*/false)) {
                     return false;
                 }
             }
             for (int i = 0; i < (int)fStrides.size(); i++) {
-                a->add(arg[i], K*fStrides[i]);
+                add(arg[i], K*fStrides[i]);
             }
-            a->sub(N, K);
-            a->jmp(&body);
+            sub(N, K);
+            jump(&body);
         }
 
         a->label(&tail);
         {
-            const int K = 1;
-            a->cmp(N, K);
-            a->jl(&done);
+            a->cmp(N, 1);
+            jump_if_less(&done);
             for (Val id = 0; id < (Val)instructions.size(); id++) {
-                if (!emit(id, /*scalar=*/K==1)) {
+                if (!emit(id, /*scalar=*/true)) {
                     return false;
                 }
             }
             for (int i = 0; i < (int)fStrides.size(); i++) {
-                a->add(arg[i], K*fStrides[i]);
+                add(arg[i], 1*fStrides[i]);
             }
-            a->sub(N, K);
-            a->jmp(&tail);
+            sub(N, 1);
+            jump(&tail);
         }
 
         a->label(&done);
         {
-            a->vzeroupper();
-            a->ret();
+            exit();
         }
 
-        vpshufb_masks.foreach([&](int imm, A::Label* l) {
+        bytes_masks.foreach([&](int imm, A::Label* l) {
+            // One 16-byte pattern for ARM tbl, that same pattern twice for x86-64 vpshufb.
+        #if defined(__x86_64__)
             a->align(32);
+        #elif defined(__aarch64__)
+            a->align(4);
+        #endif
+
             a->label(l);
             int mask[4];
             bytes_control(imm, mask);
-            // Same pattern for bottom 4 and top 4 32-bit lanes.
             a->bytes(mask, sizeof(mask));
+        #if defined(__x86_64__)
             a->bytes(mask, sizeof(mask));
+        #endif
         });
 
         splats.foreach([&](int imm, A::Label* l) {
+            // vbroadcastss 4 bytes on x86-64, or simply load 16-bytes on aarch64.
             a->align(4);
             a->label(l);
             a->word(imm);
+        #if defined(__aarch64__)
+            a->word(imm);
+            a->word(imm);
+            a->word(imm);
+        #endif
         });
 
         return true;
-    #else
-        (void)bytes_control;
-        return false;
-    #endif
     }
 
     void Program::setupJIT(const std::vector<Builder::Instruction>& instructions,
@@ -1302,17 +1424,20 @@ namespace skvm {
         __builtin___clear_cache((char*)fJITBuf,
                                 (char*)fJITBuf + fJITSize);
     #if defined(SKVM_PERF_DUMPS)
-        this->dumpJIT(debug_name);
+        this->dumpJIT(debug_name, a.size());
     #endif
     }
 #endif
 
 #if defined(SKVM_PERF_DUMPS)
-    void Program::dumpJIT(const char* debug_name) const {
+    void Program::dumpJIT(const char* debug_name, size_t size) const {
     #if defined(__aarch64__)
+        if (debug_name) {
+            SkDebugf("\n%s:", debug_name);
+        }
         // cat | llvm-mc -arch aarch64 -disassemble
         auto cur = (const uint8_t*)fJITBuf;
-        for (int i = 0; i < (int)fJITSize; i++) {
+        for (int i = 0; i < (int)size; i++) {
             if (i % 4 == 0) {
                 SkDebugf("\n");
             }
@@ -1336,7 +1461,7 @@ namespace skvm {
 
 
         char name[64];
-        uint32_t hash = fnv1a(fJITBuf, fJITSize);
+        uint32_t hash = fnv1a(fJITBuf, size);
         if (debug_name) {
             sprintf(name, "skvm-jit-%s", debug_name);
         } else {
@@ -1413,18 +1538,18 @@ namespace skvm {
             uint32_t pid, tid;
             uint64_t vma/*???*/, code_addr, code_size, id;
         } load = {
-            0/*code load*/, (uint32_t)(sizeof(CodeLoad) + strlen(name) + 1 + fJITSize),
+            0/*code load*/, (uint32_t)(sizeof(CodeLoad) + strlen(name) + 1 + size),
             timestamp_ns(),
 
             (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
-            (uint64_t)fJITBuf, (uint64_t)fJITBuf, fJITSize, hash,
+            (uint64_t)fJITBuf, (uint64_t)fJITBuf, size, hash,
         };
 
         // Write the header, the JIT'd function name, and the JIT'd code itself.
         fwrite(&load, sizeof(load), 1, jitdump);
         fwrite(name, 1, strlen(name), jitdump);
         fwrite("\0", 1, 1, jitdump);
-        fwrite(fJITBuf, 1, fJITSize, jitdump);
+        fwrite(fJITBuf, 1, size, jitdump);
     }
 #endif
 
