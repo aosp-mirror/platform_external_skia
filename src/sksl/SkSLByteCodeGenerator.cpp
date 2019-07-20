@@ -17,13 +17,14 @@ ByteCodeGenerator::ByteCodeGenerator(const Context* context, const Program* prog
     , fContext(*context)
     , fOutput(output)
     , fIntrinsics {
-         { "cos",   ByteCodeInstruction::kCos },
-         { "cross", ByteCodeInstruction::kCross },
-         { "dot",   SpecialIntrinsic::kDot },
-         { "sin",   ByteCodeInstruction::kSin },
-         { "sqrt",  ByteCodeInstruction::kSqrt },
-         { "tan",   ByteCodeInstruction::kTan },
-         { "mix",   ByteCodeInstruction::kMix },
+         { "cos",     ByteCodeInstruction::kCos },
+         { "cross",   ByteCodeInstruction::kCross },
+         { "dot",     SpecialIntrinsic::kDot },
+         { "inverse", ByteCodeInstruction::kInverse2x2 },
+         { "sin",     ByteCodeInstruction::kSin },
+         { "sqrt",    ByteCodeInstruction::kSqrt },
+         { "tan",     ByteCodeInstruction::kTan },
+         { "mix",     ByteCodeInstruction::kMix },
       } {}
 
 
@@ -203,6 +204,11 @@ int ByteCodeGenerator::StackUsage(ByteCodeInstruction inst, int count_) {
         VECTOR_UNARY_OP(kNegateF)
         VECTOR_UNARY_OP(kNegateI)
 
+        case ByteCodeInstruction::kInverse2x2:
+        case ByteCodeInstruction::kInverse3x3:
+        case ByteCodeInstruction::kInverse4x4: return 0;
+
+        case ByteCodeInstruction::kClampIndex: return 0;
         case ByteCodeInstruction::kNotB: return 0;
         case ByteCodeInstruction::kNegateFN: return 0;
 
@@ -454,9 +460,16 @@ int ByteCodeGenerator::getLocation(const Expression& expr, Variable::Storage* st
         case Expression::kIndex_Kind: {
             const IndexExpression& i = (const IndexExpression&)expr;
             int stride = SlotCount(i.fType);
+            int length = i.fBase->fType.columns();
+            SkASSERT(length <= 255);
             int offset = -1;
             if (i.fIndex->isConstant()) {
-                offset = i.fIndex->getConstantInt() * stride;
+                int64_t index = i.fIndex->getConstantInt();
+                if (index < 0 || index >= length) {
+                    fErrors.error(i.fIndex->fOffset, "Array index out of bounds.");
+                    return 0;
+                }
+                offset = index * stride;
             } else {
                 if (i.fIndex->hasSideEffects()) {
                     // Having a side-effect in an indexer is technically safe for an rvalue,
@@ -466,6 +479,8 @@ int ByteCodeGenerator::getLocation(const Expression& expr, Variable::Storage* st
                     return 0;
                 }
                 this->writeExpression(*i.fIndex);
+                this->write(ByteCodeInstruction::kClampIndex);
+                this->write8(length);
                 if (stride != 1) {
                     this->write(ByteCodeInstruction::kPushImmediate);
                     this->write32(stride);
@@ -824,7 +839,7 @@ void ByteCodeGenerator::writeExternalValue(const ExternalValueReference& e) {
 }
 
 void ByteCodeGenerator::writeVariableExpression(const Expression& expr) {
-    Variable::Storage storage;
+    Variable::Storage storage = Variable::kLocal_Storage;
     int location = this->getLocation(expr, &storage);
     bool isGlobal = storage == Variable::kGlobal_Storage;
     int count = SlotCount(expr.fType);
@@ -885,6 +900,17 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
             case ByteCodeInstruction::kCross:
                 this->write(found->second.fValue.fInstruction);
                 break;
+            case ByteCodeInstruction::kInverse2x2: {
+                SkASSERT(c.fArguments.size() > 0);
+                auto op = ByteCodeInstruction::kInverse2x2;
+                switch (count) {
+                    case 4: break;  // float2x2
+                    case 9:  op = ByteCodeInstruction::kInverse3x3; break;
+                    case 16: op = ByteCodeInstruction::kInverse4x4; break;
+                    default: SkASSERT(false);
+                }
+                this->write(op);
+            } break;
             default:
                 SkASSERT(false);
         }
@@ -1033,6 +1059,7 @@ bool ByteCodeGenerator::writePostfixExpression(const PostfixExpression& p, bool 
             SkASSERT(SlotCount(p.fOperand->fType) == 1);
             std::unique_ptr<LValue> lvalue = this->getLValue(*p.fOperand);
             lvalue->load();
+            // If we're not supposed to discard the result, then make a copy *before* the +/-
             if (!discard) {
                 this->write(ByteCodeInstruction::kDup);
             }
@@ -1051,8 +1078,8 @@ bool ByteCodeGenerator::writePostfixExpression(const PostfixExpression& p, bool 
                                             ByteCodeInstruction::kSubtractF,
                                             1);
             }
-            lvalue->store(discard);
-            this->write(ByteCodeInstruction::kPop);
+            // Always consume the result as part of the store
+            lvalue->store(true);
             discard = false;
             break;
         }
@@ -1213,7 +1240,7 @@ public:
         if (!discard) {
             fGenerator.write(vector_instruction(ByteCodeInstruction::kDup, count));
         }
-        Variable::Storage storage;
+        Variable::Storage storage = Variable::kLocal_Storage;
         int location = fGenerator.getLocation(*fSwizzle.fBase, &storage);
         bool isGlobal = storage == Variable::kGlobal_Storage;
         if (location < 0) {
@@ -1258,7 +1285,7 @@ public:
                 fGenerator.write(vector_instruction(ByteCodeInstruction::kDup, count));
             }
         }
-        Variable::Storage storage;
+        Variable::Storage storage = Variable::kLocal_Storage;
         int location = fGenerator.getLocation(fExpression, &storage);
         bool isGlobal = storage == Variable::kGlobal_Storage;
         if (location < 0 || count > 4) {

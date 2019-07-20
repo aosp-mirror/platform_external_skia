@@ -408,8 +408,12 @@ GrStencilAttachment* GrMtlGpu::createStencilAttachmentForRenderTarget(
 }
 
 sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc, GrRenderable renderable,
-                                           SkBudgeted budgeted, const GrMipLevel texels[],
-                                           int mipLevelCount) {
+                                           SkBudgeted budgeted, GrProtected isProtected,
+                                           const GrMipLevel texels[], int mipLevelCount) {
+    // We don't support protected textures in Metal.
+    if (isProtected == GrProtected::kYes) {
+        return nullptr;
+    }
     int mipLevels = !mipLevelCount ? 1 : mipLevelCount;
 
     if (!fMtlCaps->isConfigTexturable(desc.fConfig)) {
@@ -659,6 +663,9 @@ bool GrMtlGpu::createTestingOnlyMtlTextureInfo(GrPixelConfig config, MTLPixelFor
 
     // TODO: Create GrMtlTransferBuffer
     id<MTLBuffer> transferBuffer;
+    if (0 == bufferSize) {
+        return false;
+    }
     if (srcData) {
         transferBuffer = [fDevice newBufferWithBytes: srcData
                                               length: bufferSize

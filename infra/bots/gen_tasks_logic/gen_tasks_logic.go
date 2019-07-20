@@ -997,16 +997,32 @@ func attempts(name string) int {
 // compile generates a compile task. Returns the name of the last task in the
 // generated chain of tasks, which the Job should add as a dependency.
 func (b *builder) compile(name string, parts map[string]string) string {
-	task := b.kitchenTask(name, "compile", "swarm_recipe.isolate", b.cfg.ServiceAccountCompile, b.swarmDimensions(parts), EXTRA_PROPS, OUTPUT_BUILD)
-	b.usesGit(task, name)
+	recipe := "compile"
+	isolate := "compile.isolate"
+	var props map[string]string
+	needSync := false
+	if strings.Contains(name, "NoDEPS") ||
+		strings.Contains(name, "CMake") ||
+		strings.Contains(name, "CommandBuffer") ||
+		strings.Contains(name, "Flutter") ||
+		strings.Contains(name, "ParentRevision") ||
+		strings.Contains(name, "SKQP") {
+		recipe = "sync_and_compile"
+		isolate = "swarm_recipe.isolate"
+		props = EXTRA_PROPS
+		needSync = true
+	}
+	task := b.kitchenTask(name, recipe, isolate, b.cfg.ServiceAccountCompile, b.swarmDimensions(parts), props, OUTPUT_BUILD)
+	if needSync {
+		b.usesGit(task, name)
+	} else {
+		task.Idempotent = true
+	}
 	usesDocker(task, name)
 
 	// Android bots require a toolchain.
 	if strings.Contains(name, "Android") {
-		if parts["extra_config"] == "Android_Framework" {
-			// Do not need a toolchain when building the
-			// Android Framework.
-		} else if strings.Contains(name, "Mac") {
+		if strings.Contains(name, "Mac") {
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("android_ndk_darwin"))
 		} else if strings.Contains(name, "Win") {
 			pkg := b.MustGetCipdPackageFromAsset("android_ndk_windows")
@@ -1133,7 +1149,7 @@ func (b *builder) housekeeper(name string) string {
 // the name of the last task in the generated chain of tasks, which the Job
 // should add as a dependency.
 func (b *builder) androidFrameworkCompile(name string) string {
-	task := b.kitchenTask(name, "android_compile", "swarm_recipe.isolate", b.cfg.ServiceAccountCompile, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
+	task := b.kitchenTask(name, "android_compile", "compile_android_framework.isolate", b.cfg.ServiceAccountCompile, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
 	timeout(task, 2*time.Hour)
 	b.MustAddTask(name, task)
 	return name

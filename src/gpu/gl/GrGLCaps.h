@@ -346,7 +346,7 @@ public:
     bool useNonVBOVertexAndIndexDynamicData() const { return fUseNonVBOVertexAndIndexDynamicData; }
 
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override;
-    SupportedRead supportedReadPixelsColorType(GrPixelConfig, const GrBackendFormat&,
+    SupportedRead supportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
                                                GrColorType) const override;
 
     bool isCoreProfile() const { return fIsCoreProfile; }
@@ -432,9 +432,7 @@ public:
                        const SkIRect& srcRect, const SkIPoint& dstPoint) const;
     bool canCopyAsDraw(GrPixelConfig dstConfig, bool srcIsTextureable) const;
 
-    bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
-                            GrRenderable* renderable, bool* rectsMustMatch,
-                            bool* disallowSubrect) const override;
+    DstCopyRestrictions getDstCopyRestrictions(const GrRenderTargetProxy* src) const override;
 
     bool programBinarySupport() const { return fProgramBinarySupport; }
     bool programParameterSupport() const { return fProgramParameterSupport; }
@@ -568,12 +566,6 @@ private:
 
     uint32_t fBlitFramebufferFlags;
 
-    /** Number type of the components (with out considering number of bits.) */
-    enum FormatType {
-        kNormalizedFixedPoint_FormatType,
-        kFloat_FormatType,
-    };
-
     struct ReadPixelsFormat {
         ReadPixelsFormat() : fFormat(0), fType(0) {}
         GrGLenum fFormat;
@@ -599,27 +591,31 @@ private:
     struct ConfigInfo {
         ConfigFormats fFormats;
 
-        FormatType fFormatType;
-
         // On ES contexts there are restrictions on type type/format that may be used for
         // ReadPixels. One is implicitly specified by the current FBO's format. The other is
         // queryable. This stores the queried option (lazily).
         ReadPixelsFormat fSecondReadPixelsFormat;
-
-
-        // If data from a surface of this config is read back to a GrColorType with all four
-        // color channels this indicates how each channel should be interpreted. May contain
-        // 0s and 1s.
-        GrSwizzle fRGBAReadSwizzle = GrSwizzle("rgba");
     };
 
     ConfigInfo fConfigTable[kGrPixelConfigCnt];
+
+    /** Number type of the components (with out considering number of bits.) */
+    enum class FormatType {
+        kUnknown,
+        kNormalizedFixedPoint,
+        kFloat,
+    };
 
     // ColorTypeInfo for a specific format
     struct ColorTypeInfo {
         ColorTypeInfo(GrColorType colorType, uint32_t flags)
                 : fColorType(colorType)
                 , fFlags(flags) {}
+
+        ColorTypeInfo(GrColorType colorType, uint32_t flags, GrSwizzle rgbaReadSwizzle)
+                : fColorType(colorType)
+                , fFlags(flags)
+                , fRGBAReadSwizzle(rgbaReadSwizzle) {}
 
         GrColorType fColorType;
         enum {
@@ -629,6 +625,11 @@ private:
             kRenderable_Flag = 0x2,
         };
         uint32_t fFlags;
+
+        // If data from a surface of this colorType & format is read back to a GrColorType with all
+        // four color channels this indicates how each channel should be interpreted. May contain
+        // 0s and 1s.
+        GrSwizzle fRGBAReadSwizzle = GrSwizzle("rgba");
     };
 
     struct FormatInfo {
@@ -641,6 +642,15 @@ private:
             return 0;
         }
 
+        GrSwizzle rgbaReadSwizzle(GrColorType colorType) const {
+            for (int i = 0; i < fColorTypeInfos.count(); ++i) {
+                if (fColorTypeInfos[i].fColorType == colorType) {
+                    return fColorTypeInfos[i].fRGBAReadSwizzle;
+                }
+            }
+            return GrSwizzle();
+        }
+
         enum {
             kTextureable_Flag                = 0x1,
             /** kFBOColorAttachment means that even if the format cannot be a GrRenderTarget, we can
@@ -650,6 +660,8 @@ private:
             kCanUseTexStorage_Flag           = 0x8,
         };
         uint32_t fFlags = 0;
+
+        FormatType fFormatType = FormatType::kUnknown;
 
         // Both compressed and uncompressed formats have base internal formats.
         GrGLenum fBaseInternalFormat = 0;

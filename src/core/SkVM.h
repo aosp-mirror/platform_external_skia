@@ -48,15 +48,12 @@ namespace skvm {
             v24, v25, v26, v27, v28, v29, v30, v31,
         };
 
-        void byte(const void*, int);
+        void bytes(const void*, int);
         void byte(uint8_t);
-        template <typename... Rest> void byte(uint8_t, Rest...);
-
         void word(uint32_t);
 
         // x86-64
 
-        void nop();
         void align(int mod);
 
         void vzeroupper();
@@ -132,7 +129,8 @@ namespace skvm {
 
         // d = op(n,imm)
         using DOpNImm = void(V d, V n, int imm);
-        DOpNImm shl4s, sshr4s, ushr4s,
+        DOpNImm sli4s,
+                shl4s, sshr4s, ushr4s,
                                ushr8h;
 
         // d = op(n)
@@ -239,56 +237,15 @@ namespace skvm {
         to_f32, to_i32,
     };
 
-    using Reg = int;
-
-    class Program {
-    public:
-        struct Instruction {   // d = op(x, y, z/imm)
-            Op  op;
-            Reg d,x,y;
-            union { Reg z; int imm; };
-        };
-
-        Program(std::vector<Instruction>, int regs, int loop, std::vector<int> strides);
-        Program() : Program({}, 0, 0, {}) {}
-
-        ~Program();
-        Program(Program&&);
-        Program& operator=(Program&&);
-        Program(const Program&) = delete;
-        Program& operator=(const Program&) = delete;
-
-        template <typename... T>
-        void eval(int n, T*... arg) const {
-            void* args[] = { (void*)arg..., nullptr };
-            this->eval(n, args);
-        }
-
-        std::vector<Instruction> instructions() const { return fInstructions; }
-        int nregs() const { return fRegs; }
-        int loop() const { return fLoop; }
-
-        // If this Program has been JITted, drop it, forcing interpreter fallback.
-        void dropJIT();
-
-    private:
-        void eval(int n, void* args[]) const;
-
-        std::vector<Instruction> fInstructions;
-        int                      fRegs;
-        int                      fLoop;
-        std::vector<int>         fStrides;
-
-        void*  fJITBuf      = nullptr;  // Raw mmap'd buffer.
-        size_t fJITSize     = 0;        // Size of buf in bytes.
-        void (*fJITEntry)() = nullptr;  // Entry point, offset into buf.
-    };
-
     using Val = int;
+    // We reserve the last Val ID as a sentinel meaning none, n/a, null, nil, etc.
+    static const Val NA = ~0;
 
     struct Arg { int ix; };
     struct I32 { Val id; };
     struct F32 { Val id; };
+
+    class Program;
 
     class Builder {
     public:
@@ -296,9 +253,12 @@ namespace skvm {
             Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
             Val x,y,z;      // Enough arguments for mad().
             int imm;        // Immediate bit pattern, shift count, argument index, etc.
+
+            // Not populated until done() has been called.
+            int death;      // Index of last live instruction taking this input; live if != 0.
         };
 
-        Program done() const;
+        Program done(const char* debug_name = nullptr);
 
         // Declare a varying argument with given stride.
         Arg arg(int stride);
@@ -340,8 +300,8 @@ namespace skvm {
         I32 shr(I32 x, int bits);
         I32 sra(I32 x, int bits);
 
-        I32 extract(I32 x, int bits, I32 z);   // (x >> bits) & z
-        I32 pack   (I32 x, I32 y, int bits);   // x | (y << bits)
+        I32 extract(I32 x, int bits, I32 y);   // (x >> bits) & y
+        I32 pack   (I32 x, I32 y, int bits);   // x | (y << bits), assuming (x & (y << bits)) == 0
 
         // Shuffle the bytes in x according to each nibble of control, as if
         //
@@ -369,12 +329,8 @@ namespace skvm {
         I32 to_i32(F32 x);
 
         std::vector<Instruction> program() const { return fProgram; }
-        std::vector<Val>         deaths() const;
 
     private:
-        // We reserve the last Val ID as a sentinel meaning none, n/a, null, nil, etc.
-        static const Val NA = ~0;
-
         struct InstructionHash {
             template <typename T>
             static size_t Hash(T val) {
@@ -385,7 +341,8 @@ namespace skvm {
                      ^ Hash(inst.x)
                      ^ Hash(inst.y)
                      ^ Hash(inst.z)
-                     ^ Hash(inst.imm);
+                     ^ Hash(inst.imm)
+                     ^ Hash(inst.death);
             }
         };
 
@@ -396,6 +353,60 @@ namespace skvm {
         std::vector<Instruction>                      fProgram;
         std::vector<int>                              fStrides;
     };
+
+    using Reg = int;
+
+    class Program {
+    public:
+        struct Instruction {   // d = op(x, y, z/imm)
+            Op  op;
+            Reg d,x,y;
+            union { Reg z; int imm; };
+        };
+
+        Program(const std::vector<Builder::Instruction>& instructions,
+                const std::vector<int>                 & strides,
+                const char* debug_name);
+        Program() : Program({}, {}, nullptr) {}
+
+        ~Program();
+        Program(Program&&);
+        Program& operator=(Program&&);
+        Program(const Program&) = delete;
+        Program& operator=(const Program&) = delete;
+
+        template <typename... T>
+        void eval(int n, T*... arg) const {
+            void* args[] = { (void*)arg..., nullptr };
+            this->eval(n, args);
+        }
+
+        std::vector<Instruction> instructions() const { return fInstructions; }
+        int nregs() const { return fRegs; }
+        int loop() const { return fLoop; }
+
+        // If this Program has been JITted, drop it, forcing interpreter fallback.
+        void dropJIT();
+
+    private:
+        void eval(int n, void* args[]) const;
+
+        void setupInterpreter(const std::vector<Builder::Instruction>&);
+        void setupJIT        (const std::vector<Builder::Instruction>&, const char* debug_name);
+        bool jit             (const std::vector<Builder::Instruction>&, Assembler*) const;
+
+        // Dump jit-*.dump files for perf inject.
+        void dumpJIT(const char* debug_name, size_t size) const;
+
+        std::vector<Instruction> fInstructions;
+        int                      fRegs;
+        int                      fLoop;
+        std::vector<int>         fStrides;
+
+        void*  fJITBuf  = nullptr;
+        size_t fJITSize = 0;
+    };
+
 
     // TODO: comparison operations, if_then_else
     // TODO: learn how to do control flow

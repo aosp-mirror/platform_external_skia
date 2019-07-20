@@ -24,6 +24,7 @@ public:
         fMaxRenderTargetSize = SkTMin(options.fMaxRenderTargetSize, fMaxTextureSize);
         fMaxPreferredRenderTargetSize = fMaxRenderTargetSize;
         fMaxVertexAttributes = options.fMaxVertexAttributes;
+        fSampleLocationsSupport = true;
 
         fShaderCaps.reset(new GrShaderCaps(contextOptions));
         fShaderCaps->fGeometryShaderSupport = options.fGeometryShaderSupport;
@@ -32,6 +33,8 @@ public:
         fShaderCaps->fMaxFragmentSamplers = options.fMaxFragmentSamplers;
         fShaderCaps->fShaderDerivativeSupport = options.fShaderDerivativeSupport;
         fShaderCaps->fDualSourceBlendingSupport = options.fDualSourceBlendingSupport;
+        fShaderCaps->fSampleVariablesSupport = true;
+        fShaderCaps->fSampleVariablesStencilSupport = true;
 
         this->applyOptionsOverrides(contextOptions);
     }
@@ -116,12 +119,6 @@ public:
 
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
         return SurfaceReadPixelsSupport::kSupported;
-    }
-
-    bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
-                            GrRenderable* renderable, bool* rectsMustMatch,
-                            bool* disallowSubrect) const override {
-        return false;
     }
 
     GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,

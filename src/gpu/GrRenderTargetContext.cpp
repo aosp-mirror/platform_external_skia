@@ -1742,14 +1742,13 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
     }
     auto dstCT = SkColorTypeToGrColorType(info.colorType());
     bool needsRescale = srcRect.width() != info.width() || srcRect.height() != info.height();
-    GrPixelConfig configOfFinalContext = fRenderTargetProxy->config();
+    auto colorTypeOfFinalContext = this->colorSpaceInfo().colorType();
     auto backendFormatOfFinalContext = fRenderTargetProxy->backendFormat();
     if (needsRescale) {
+        colorTypeOfFinalContext = dstCT;
         backendFormatOfFinalContext = this->caps()->getBackendFormatFromColorType(dstCT);
-        configOfFinalContext = this->caps()->getConfigFromBackendFormat(backendFormatOfFinalContext,
-                                                                        dstCT);
     }
-    auto readInfo = this->caps()->supportedReadPixelsColorType(configOfFinalContext,
+    auto readInfo = this->caps()->supportedReadPixelsColorType(colorTypeOfFinalContext,
                                                                backendFormatOfFinalContext, dstCT);
     // Fail if we can't read from the source surface's color type.
     if (readInfo.fColorType == GrColorType::kUnknown) {
@@ -1838,7 +1837,7 @@ GrRenderTargetContext::PixelTransferResult GrRenderTargetContext::transferPixels
         return {};
     }
     auto supportedRead = this->caps()->supportedReadPixelsColorType(
-            fRenderTargetProxy->config(), fRenderTargetProxy->backendFormat(), dstCT);
+            this->colorSpaceInfo().colorType(), fRenderTargetProxy->backendFormat(), dstCT);
     // Fail if read color type does not have all of dstCT's color channels and those missing color
     // channels are in the src.
     uint32_t dstComponents = GrColorTypeComponentFlags(dstCT);
@@ -2615,44 +2614,24 @@ bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const Gr
 
     // MSAA consideration: When there is support for reading MSAA samples in the shader we could
     // have per-sample dst values by making the copy multisampled.
-    // TODO: We don't really use renderability or GrSurfaceDesc. Remove them from caps function?
-    GrSurfaceDesc desc;
-    bool rectsMustMatch = false;
-    bool disallowSubrect = false;
-    GrRenderable renderable = GrRenderable::kNo;
-    if (!this->caps()->initDescForDstCopy(rtProxy, &desc, &renderable, &rectsMustMatch,
-                                          &disallowSubrect)) {
-        renderable = GrRenderable::kYes;
-        desc.fConfig = rtProxy->config();
-    }
+    GrCaps::DstCopyRestrictions restrictions = this->caps()->getDstCopyRestrictions(rtProxy);
 
-    desc.fIsProtected = rtProxy->isProtected() ? GrProtected::kYes : GrProtected::kNo;
-
-    if (!disallowSubrect) {
+    if (!restrictions.fMustCopyWholeSrc) {
         copyRect = clippedRect;
     }
 
-    SkIPoint dstPoint, dstOffset;
+    SkIPoint dstOffset;
     SkBackingFit fit;
-    GrSurfaceProxy::RectsMustMatch matchRects;
-    if (rectsMustMatch) {
-        desc.fWidth = rtProxy->width();
-        desc.fHeight = rtProxy->height();
-        dstPoint = {copyRect.fLeft, copyRect.fTop};
+    if (restrictions.fRectsMustMatch == GrSurfaceProxy::RectsMustMatch::kYes) {
         dstOffset = {0, 0};
         fit = SkBackingFit::kExact;
-        matchRects = GrSurfaceProxy::RectsMustMatch::kYes;
     } else {
-        desc.fWidth = copyRect.width();
-        desc.fHeight = copyRect.height();
-        dstPoint = {0, 0};
         dstOffset = {copyRect.fLeft, copyRect.fTop};
         fit = SkBackingFit::kApprox;
-        matchRects = GrSurfaceProxy::RectsMustMatch::kNo;
     }
-    sk_sp<GrTextureProxy> newProxy = GrSurfaceProxy::Copy(fContext, rtProxy, GrMipMapped::kNo,
-                                                          copyRect, fit, SkBudgeted::kYes,
-                                                          matchRects);
+    sk_sp<GrTextureProxy> newProxy =
+            GrSurfaceProxy::Copy(fContext, rtProxy, GrMipMapped::kNo, copyRect, fit,
+                                 SkBudgeted::kYes, restrictions.fRectsMustMatch);
     SkASSERT(newProxy);
 
     dstProxy->setProxy(std::move(newProxy));
