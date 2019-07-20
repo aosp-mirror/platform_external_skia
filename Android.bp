@@ -638,6 +638,8 @@ cc_library_static {
           "src/gpu/ccpr/GrCoverageCountingPathRenderer.cpp",
           "src/gpu/ccpr/GrGSCoverageProcessor.cpp",
           "src/gpu/ccpr/GrOctoBounds.cpp",
+          "src/gpu/ccpr/GrSampleMaskProcessor.cpp",
+          "src/gpu/ccpr/GrStencilAtlasOp.cpp",
           "src/gpu/ccpr/GrVSCoverageProcessor.cpp",
           "src/gpu/effects/GrBezierEffect.cpp",
           "src/gpu/effects/GrBicubicEffect.cpp",
