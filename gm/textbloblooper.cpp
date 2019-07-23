@@ -41,6 +41,8 @@
 
 #include <string.h>
 
+#ifdef SK_SUPPORT_LEGACY_DRAWLOOPER
+
 namespace skiagm {
 
 constexpr int kWidth = 1250;
@@ -252,21 +254,13 @@ protected:
 
         int y = 0;
         for (int looper = 0; looper < fLoopers.count(); looper++) {
-            if (0) {
-                paint.setLooper(fLoopers[looper]);
-                canvas->save();
-                canvas->translate(0, SkIntToScalar(y));
-                canvas->drawTextBlob(fBlob, 0, 0, paint);
-                canvas->restore();
-            } else {
-                auto b = fBlob;
-                fLoopers[looper]->apply(canvas, paint, [b, y](SkCanvas* c, const SkPaint& p) {
-                    c->save();
-                    c->translate(0, SkIntToScalar(y));
-                    c->drawTextBlob(b, 0, 0, p);
-                    c->restore();
-                });
-            }
+            SkTextBlob* b = fBlob.get();
+            canvas->save();
+            canvas->translate(0, SkIntToScalar(y));
+            fLoopers[looper]->apply(canvas, paint, [b](SkCanvas* c, const SkPaint& p) {
+                c->drawTextBlob(b, 0, 0, p);
+            });
+            canvas->restore();
             y += SkScalarFloorToInt(bounds.height());
         }
     }
@@ -282,3 +276,5 @@ private:
 
 DEF_GM(return new TextBlobLooperGM;)
 }
+
+#endif
