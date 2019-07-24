@@ -19,6 +19,7 @@
 #include "include/private/SkImageInfoPriv.h"
 #include "include/private/SkWeakRefCnt.h"
 
+class GrBackendFormat;
 class GrCaps;
 
 // The old libstdc++ uses the draft name "monotonic_clock" rather than "steady_clock". This might
@@ -148,7 +149,7 @@ static inline int GrMaskFormatBytesPerPixel(GrMaskFormat format) {
  * Describes a surface to be created.
  */
 struct GrSurfaceDesc {
-    GrSurfaceDesc() : fWidth(0) , fHeight(0) , fConfig(kUnknown_GrPixelConfig) , fSampleCnt(1) {}
+    GrSurfaceDesc() : fWidth(0), fHeight(0), fConfig(kUnknown_GrPixelConfig) {}
 
     int                    fWidth;  //!< Width of the texture
     int                    fHeight; //!< Height of the texture
@@ -158,15 +159,6 @@ struct GrSurfaceDesc {
      * internal format used by 3D API.
      */
     GrPixelConfig          fConfig;
-
-    /**
-     * The number of samples per pixel. Zero is treated equivalently to 1. This only
-     * applies if the kRenderTarget_GrSurfaceFlag is set. The actual number
-     * of samples may not exactly match the request. The request will be rounded
-     * up to the next supported sample count. A value larger than the largest
-     * supported sample count will fail.
-     */
-    int                    fSampleCnt;
 };
 
 /** Ownership rules for external GPU resources imported into Skia. */
@@ -1207,6 +1199,12 @@ static constexpr GrColorType SkColorTypeToGrColorType(SkColorType ct) {
     }
     SkUNREACHABLE;
 }
+
+// This is a temporary means of mapping an SkColorType and format to a
+// GrColorType::kRGBA_8888_SRGB. Once we have an SRGB SkColorType this can go away.
+GrColorType SkColorTypeAndFormatToGrColorType(const GrCaps* caps,
+                                              SkColorType skCT,
+                                              const GrBackendFormat& format);
 
 static constexpr uint32_t GrColorTypeComponentFlags(GrColorType ct) {
     switch (ct) {

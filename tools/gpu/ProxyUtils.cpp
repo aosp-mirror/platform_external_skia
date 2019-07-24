@@ -50,7 +50,8 @@ sk_sp<GrTextureProxy> MakeTextureProxyFromData(GrContext* context,
                     nullptr, nullptr);
         } else {
             proxy = context->priv().proxyProvider()->wrapBackendTexture(
-                    backendTex, origin, kAdopt_GrWrapOwnership, GrWrapCacheable::kNo, kRW_GrIOType);
+                    backendTex, colorType, origin, kAdopt_GrWrapOwnership,
+                    GrWrapCacheable::kNo, kRW_GrIOType);
         }
 
         if (!proxy) {
@@ -68,7 +69,7 @@ sk_sp<GrTextureProxy> MakeTextureProxyFromData(GrContext* context,
         desc.fConfig = config;
         desc.fWidth = width;
         desc.fHeight = height;
-        proxy = context->priv().proxyProvider()->createProxy(format, desc, renderable, origin,
+        proxy = context->priv().proxyProvider()->createProxy(format, desc, renderable, 1, origin,
                                                              SkBackingFit::kExact, SkBudgeted::kYes,
                                                              GrProtected::kNo);
         if (!proxy) {

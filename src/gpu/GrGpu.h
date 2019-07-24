@@ -87,6 +87,8 @@ public:
      *
      * @param desc           describes the texture to be created.
      * @param renderable     should the resulting texture be renderable
+     * @param renderTargetSampleCnt The number of samples to use for rendering if renderable is
+     *                       kYes. If renderable is kNo then this must be 1.
      * @param budgeted       does this texture count against the resource cache budget?
      * @param isProtected    should the texture be created as protected.
      * @param texels         array of mipmap levels containing texel data to load.
@@ -105,14 +107,15 @@ public:
      *                       latter if GrCaps::createTextureMustSpecifyAllLevels() is true.
      * @return  The texture object if successful, otherwise nullptr.
      */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, GrRenderable renderable, SkBudgeted,
-                                   GrProtected isProtected, const GrMipLevel texels[],
-                                   int mipLevelCount);
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, GrRenderable renderable,
+                                   int renderTargetSampleCnt, SkBudgeted, GrProtected isProtected,
+                                   const GrMipLevel texels[], int mipLevelCount);
 
     /**
      * Simplified createTexture() interface for when there is no initial texel data to upload.
      */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, SkBudgeted, GrProtected);
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, int renderTargetSampleCnt,
+                                   SkBudgeted, GrProtected);
 
     sk_sp<GrTexture> createCompressedTexture(int width, int height, SkImage::CompressionType,
                                              SkBudgeted, const void* data, size_t dataSize);
@@ -120,8 +123,8 @@ public:
     /**
      * Implements GrResourceProvider::wrapBackendTexture
      */
-    sk_sp<GrTexture> wrapBackendTexture(const GrBackendTexture&, GrWrapOwnership, GrWrapCacheable,
-                                        GrIOType);
+    sk_sp<GrTexture> wrapBackendTexture(const GrBackendTexture&, GrColorType,
+                                        GrWrapOwnership, GrWrapCacheable, GrIOType);
 
     /**
      * Implements GrResourceProvider::wrapRenderableBackendTexture
@@ -132,13 +135,15 @@ public:
     /**
      * Implements GrResourceProvider::wrapBackendRenderTarget
      */
-    sk_sp<GrRenderTarget> wrapBackendRenderTarget(const GrBackendRenderTarget&);
+    sk_sp<GrRenderTarget> wrapBackendRenderTarget(const GrBackendRenderTarget&,
+                                                  GrColorType colorType);
 
     /**
      * Implements GrResourceProvider::wrapBackendTextureAsRenderTarget
      */
     sk_sp<GrRenderTarget> wrapBackendTextureAsRenderTarget(const GrBackendTexture&,
-                                                           int sampleCnt);
+                                                           int sampleCnt,
+                                                           GrColorType colorType);
 
     /**
      * Implements GrResourceProvider::wrapVulkanSecondaryCBAsRenderTarget
@@ -528,20 +533,22 @@ private:
     // overridden by backend-specific derived class to create objects.
     // Texture size and sample size will have already been validated in base class before
     // onCreateTexture is called.
-    virtual sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&, GrRenderable, SkBudgeted,
-                                             GrProtected, const GrMipLevel[],
-                                             int mipLevelCount) = 0;
+    virtual sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&, GrRenderable,
+                                             int renderTargetSampleCnt, SkBudgeted, GrProtected,
+                                             const GrMipLevel[], int mipLevelCount) = 0;
     virtual sk_sp<GrTexture> onCreateCompressedTexture(int width, int height,
                                                        SkImage::CompressionType, SkBudgeted,
                                                        const void* data) = 0;
-    virtual sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrWrapOwnership,
-                                                  GrWrapCacheable, GrIOType) = 0;
+    virtual sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType,
+                                                  GrWrapOwnership, GrWrapCacheable, GrIOType) = 0;
     virtual sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&, int sampleCnt,
                                                             GrColorType, GrWrapOwnership,
                                                             GrWrapCacheable) = 0;
-    virtual sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&) = 0;
+    virtual sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&,
+                                                            GrColorType) = 0;
     virtual sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
-                                                                     int sampleCnt) = 0;
+                                                                     int sampleCnt,
+                                                                     GrColorType) = 0;
     virtual sk_sp<GrRenderTarget> onWrapVulkanSecondaryCBAsRenderTarget(const SkImageInfo&,
                                                                         const GrVkDrawableInfo&);
 

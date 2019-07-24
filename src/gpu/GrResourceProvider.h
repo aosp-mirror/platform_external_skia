@@ -75,18 +75,20 @@ public:
      * GrRenderTarget. The texture's format and sample count will always match the request.
      * The contents of the texture are undefined.
      */
-    sk_sp<GrTexture> createApproxTexture(const GrSurfaceDesc&, GrRenderable, GrProtected, Flags);
+    sk_sp<GrTexture> createApproxTexture(const GrSurfaceDesc&, GrRenderable,
+                                         int renderTargetSampleCnt, GrProtected, Flags);
 
     /** Create an exact fit texture with no initial data to upload. */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, SkBudgeted, GrProtected,
-                                   Flags = Flags::kNone);
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, int renderTargetSampleCnt,
+                                   SkBudgeted, GrProtected, Flags = Flags::kNone);
 
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, SkBudgeted, GrProtected,
-                                   const GrMipLevel texels[], int mipLevelCount);
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, int renderTargetSampleCnt,
+                                   SkBudgeted, GrProtected, const GrMipLevel texels[],
+                                   int mipLevelCount);
 
     /** Create a potentially loose fit texture with the provided data */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, SkBudgeted, SkBackingFit,
-                                   GrProtected, const GrMipLevel&, Flags);
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, GrRenderable, int renderTargetSampleCnt,
+                                   SkBudgeted, SkBackingFit, GrProtected, const GrMipLevel&, Flags);
 
     /**
      * Creates a compressed texture. The GrGpu must support the SkImageImage::Compression type.
@@ -109,7 +111,7 @@ public:
      *
      * @return GrTexture object or NULL on failure.
      */
-    sk_sp<GrTexture> wrapBackendTexture(const GrBackendTexture& tex, GrWrapOwnership,
+    sk_sp<GrTexture> wrapBackendTexture(const GrBackendTexture& tex, GrColorType, GrWrapOwnership,
                                         GrWrapCacheable, GrIOType);
 
     /**
@@ -132,7 +134,8 @@ public:
      *
      * @return GrRenderTarget object or NULL on failure.
      */
-    sk_sp<GrRenderTarget> wrapBackendRenderTarget(const GrBackendRenderTarget&);
+    sk_sp<GrRenderTarget> wrapBackendRenderTarget(const GrBackendRenderTarget&,
+                                                  GrColorType colorType);
 
     sk_sp<GrRenderTarget> wrapVulkanSecondaryCBAsRenderTarget(const SkImageInfo&,
                                                               const GrVkDrawableInfo&);
@@ -228,7 +231,8 @@ public:
       * @return GrRenderTarget object or NULL on failure.
       */
      sk_sp<GrRenderTarget> wrapBackendTextureAsRenderTarget(const GrBackendTexture&,
-                                                            int sampleCnt);
+                                                            int sampleCnt,
+                                                            GrColorType);
 
     /**
      * Assigns a unique key to a resource. If the key is associated with another resource that
@@ -266,14 +270,15 @@ private:
 
     // Attempts to find a resource in the cache that exactly matches the GrSurfaceDesc. Failing that
     // it returns null. If non-null, the resulting texture is always budgeted.
-    sk_sp<GrTexture> refScratchTexture(const GrSurfaceDesc&, GrRenderable, GrProtected, Flags);
+    sk_sp<GrTexture> refScratchTexture(const GrSurfaceDesc&, GrRenderable,
+                                       int renderTargetSampleCnt, GrProtected, Flags);
 
     /*
      * Try to find an existing scratch texture that exactly matches 'desc'. If successful
      * update the budgeting accordingly.
      */
-    sk_sp<GrTexture> getExactScratch(const GrSurfaceDesc&, GrRenderable, SkBudgeted, GrProtected,
-                                     Flags);
+    sk_sp<GrTexture> getExactScratch(const GrSurfaceDesc&, GrRenderable, int renderTargetSampleCnt,
+                                     SkBudgeted, GrProtected, Flags);
 
     GrResourceCache* cache() { return fCache; }
     const GrResourceCache* cache() const { return fCache; }
