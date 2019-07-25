@@ -15,14 +15,17 @@
 </head>
 <body>
   <main>
-    <div style="width:1000px;height:1000px" class=anim></div>
+    <canvas id=canvas width=1000 height=1000 style="height: 1000px; width: 1000px;"></canvas>
   </main>
   <script type="text/javascript" charset="utf-8">
     (function () {
       const PATH = '/res/lottie.json';
-      const RENDERER = 'svg';
+      const RENDERER = 'canvas';
       const MAX_FRAMES = 25;
       const MAX_LOOPS = 3;
+
+      const cvs = document.getElementById("canvas");
+      const canvasContext = cvs.getContext('2d');
 
       // Get total number of frames of the animation from the hash.
       const hash = window.location.hash;
@@ -38,7 +41,10 @@
         autoplay: false,
         path: PATH,
         rendererSettings: {
-          preserveAspectRatio:'xMidYMid meet'
+          context: canvasContext,
+          scaleMode: 'noScale',
+          clearCanvas: true,
+          preserveAspectRatio:'xMidYMid meet',
         },
       });
 
