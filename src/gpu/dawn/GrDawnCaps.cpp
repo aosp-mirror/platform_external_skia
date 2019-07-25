@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "GrDawnCaps.h"
+#include "src/gpu/dawn/GrDawnCaps.h"
 
 GrDawnCaps::GrDawnCaps(const GrContextOptions& contextOptions) : INHERITED(contextOptions) {
     fBufferMapThreshold = SK_MaxS32;  // FIXME: get this from Dawn?
@@ -56,28 +56,6 @@ GrPixelConfig GrDawnCaps::onGetConfigFromBackendFormat(const GrBackendFormat& fo
             break;
     }
     return kUnknown_GrPixelConfig;
-}
-
-GrPixelConfig GrDawnCaps::getYUVAConfigFromBackendFormat(const GrBackendFormat& backendFormat)
-        const {
-    const dawn::TextureFormat* format = backendFormat.getDawnFormat();
-    if (!format) {
-        return kUnknown_GrPixelConfig;
-    }
-    switch (*format) {
-        case dawn::TextureFormat::R8Unorm:
-            return kAlpha_8_as_Red_GrPixelConfig;
-            break;
-        case dawn::TextureFormat::RGBA8Unorm:
-            return kRGBA_8888_GrPixelConfig;
-            break;
-        case dawn::TextureFormat::BGRA8Unorm:
-            return kBGRA_8888_GrPixelConfig;
-            break;
-        default:
-            return kUnknown_GrPixelConfig;
-            break;
-    }
 }
 
 size_t GrDawnCaps::onTransferFromOffsetAlignment(GrColorType bufferColorType) const {

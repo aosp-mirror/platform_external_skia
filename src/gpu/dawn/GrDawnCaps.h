@@ -8,10 +8,10 @@
 #ifndef GrDawnCaps_DEFINED
 #define GrDawnCaps_DEFINED
 
-#include "src/gpu/GrCaps.h"
-#include "include/gpu/GrContextOptions.h"
-#include "src/gpu/dawn/GrDawnUtil.h"
 #include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContextOptions.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/dawn/GrDawnUtil.h"
 
 class GrDawnCaps : public GrCaps {
 public:
@@ -32,14 +32,7 @@ public:
         return true;
     }
 
-    GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&, GrColorType) const
-                                                                                         override {
-        return GrPixelConfig::kUnknown_GrPixelConfig;
-    }
-
     GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
-
-    GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat&) const override;
 
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
         return SurfaceReadPixelsSupport::kSupported;
