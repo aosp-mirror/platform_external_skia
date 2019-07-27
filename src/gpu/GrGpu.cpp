@@ -399,7 +399,7 @@ bool GrGpu::writePixels(GrSurface* surface, int left, int top, int width, int he
         return false;
     }
 
-    int bpp = GrColorTypeBytesPerPixel(srcColorType);
+    size_t bpp = GrColorTypeBytesPerPixel(srcColorType);
     if (!validate_levels(width, height, texels, mipLevelCount, bpp, this->caps())) {
         return false;
     }
@@ -433,7 +433,7 @@ bool GrGpu::transferPixelsTo(GrTexture* texture, int left, int top, int width, i
         return false;
     }
 
-    int bpp = GrColorTypeBytesPerPixel(bufferColorType);
+    size_t bpp = GrColorTypeBytesPerPixel(bufferColorType);
     if (this->caps()->writePixelsRowBytesSupport()) {
         if (rowBytes < SkToSizeT(bpp * width)) {
             return false;
@@ -465,8 +465,14 @@ bool GrGpu::transferPixelsFrom(GrSurface* surface, int left, int top, int width,
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     SkASSERT(surface);
     SkASSERT(transferBuffer);
-    SkASSERT(this->caps()->transferFromOffsetAlignment(bufferColorType));
-    SkASSERT(offset % this->caps()->transferFromOffsetAlignment(bufferColorType) == 0);
+#ifdef SK_DEBUG
+    GrColorType surfCT = GrPixelConfigToColorType(surface->config());
+    auto supportedRead = this->caps()->supportedReadPixelsColorType(surfCT,
+                                                                    surface->backendFormat(),
+                                                                     bufferColorType);
+    SkASSERT(supportedRead.fOffsetAlignmentForTransferBuffer);
+    SkASSERT(offset % supportedRead.fOffsetAlignmentForTransferBuffer == 0);
+#endif
 
     // We require that the write region is contained in the texture
     SkIRect subRect = SkIRect::MakeXYWH(left, top, width, height);
