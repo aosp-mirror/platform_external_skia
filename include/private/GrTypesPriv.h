@@ -371,8 +371,10 @@ enum GrSLType {
     kTexture2DSampler_GrSLType,
     kTextureExternalSampler_GrSLType,
     kTexture2DRectSampler_GrSLType,
+    kTexture2D_GrSLType,
+    kSampler_GrSLType,
 
-    kLast_GrSLType = kTexture2DRectSampler_GrSLType
+    kLast_GrSLType = kSampler_GrSLType
 };
 static const int kGrSLTypeCount = kLast_GrSLType + 1;
 
@@ -474,6 +476,8 @@ static constexpr bool GrSLTypeIsFloatType(GrSLType type) {
         case kInt4_GrSLType:
         case kUint_GrSLType:
         case kUint2_GrSLType:
+        case kTexture2D_GrSLType:
+        case kSampler_GrSLType:
             return false;
     }
     SkUNREACHABLE;
@@ -531,6 +535,8 @@ static constexpr int GrSLTypeVecLength(GrSLType type) {
         case kTexture2DSampler_GrSLType:
         case kTextureExternalSampler_GrSLType:
         case kTexture2DRectSampler_GrSLType:
+        case kTexture2D_GrSLType:
+        case kSampler_GrSLType:
             return -1;
     }
     SkUNREACHABLE;
@@ -612,6 +618,8 @@ static constexpr bool GrSLTypeIsCombinedSamplerType(GrSLType type) {
         case kUShort2_GrSLType:
         case kUShort3_GrSLType:
         case kUShort4_GrSLType:
+        case kTexture2D_GrSLType:
+        case kSampler_GrSLType:
             return false;
     }
     SkUNREACHABLE;
@@ -1292,6 +1300,15 @@ public:
     constexpr int g() const { return fGBits; }
     constexpr int b() const { return fBBits; }
     constexpr int a() const { return fABits; }
+    constexpr int operator[](int c) const {
+        switch (c) {
+            case 0: return this->r();
+            case 1: return this->g();
+            case 2: return this->b();
+            case 3: return this->a();
+        }
+        SkUNREACHABLE;
+    }
 
     constexpr int gray() const { return fGrayBits; }
 
@@ -1387,7 +1404,7 @@ static constexpr bool GrColorTypeHasAlpha(GrColorType ct) {
     return kAlpha_SkColorTypeComponentFlag & GrColorTypeComponentFlags(ct);
 }
 
-static constexpr int GrColorTypeBytesPerPixel(GrColorType ct) {
+static constexpr size_t GrColorTypeBytesPerPixel(GrColorType ct) {
     switch (ct) {
         case GrColorType::kUnknown:          return 0;
         case GrColorType::kAlpha_8:          return 1;

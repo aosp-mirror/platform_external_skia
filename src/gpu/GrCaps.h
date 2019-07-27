@@ -222,18 +222,26 @@ public:
      */
     virtual SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const = 0;
 
+    struct SupportedWrite {
+        GrColorType fColorType;
+        // If the write is occurring using GrGpu::transferPixelsTo then this provides the
+        // minimum alignment of the offset into the transfer buffer.
+        size_t fOffsetAlignmentForTransferBuffer;
+    };
+
     /**
      * Given a dst pixel config and a src color type what color type must the caller coax the
      * the data into in order to use GrGpu::writePixels().
      */
-    virtual GrColorType supportedWritePixelsColorType(GrPixelConfig config,
-                                                      GrColorType srcColorType) const {
-        return GrPixelConfigToColorType(config);
-    }
+    virtual SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
+                                                         GrColorType srcColorType) const = 0;
 
     struct SupportedRead {
         GrSwizzle fSwizzle;
         GrColorType fColorType;
+        // If the read is occurring using GrGpu::transferPixelsFrom then this provides the
+        // minimum alignment of the offset into the transfer buffer.
+        size_t fOffsetAlignmentForTransferBuffer;
     };
 
     /**
@@ -244,9 +252,9 @@ public:
      * to dstColorType the swizzle in the returned struct should be applied. The caller must check
      * the returned color type for kUnknown.
      */
-    virtual SupportedRead supportedReadPixelsColorType(GrColorType srcColorType,
-                                                       const GrBackendFormat& srcFormat,
-                                                       GrColorType dstColorType) const;
+    SupportedRead supportedReadPixelsColorType(GrColorType srcColorType,
+                                               const GrBackendFormat& srcFormat,
+                                               GrColorType dstColorType) const;
 
     /**
      * Do GrGpu::writePixels() and GrGpu::transferPixelsTo() support a src buffer where the row
@@ -260,18 +268,6 @@ public:
 
     /** Are transfer buffers (to textures and from surfaces) supported? */
     bool transferBufferSupport() const { return fTransferBufferSupport; }
-
-    /**
-     * Gets the alignment requirement for the buffer offset used with GrGpu::transferPixelsFrom for
-     * a given GrColorType. To check whether a pixels as GrColorType can be read for a given surface
-     * see supportedReadPixelsColorType() and surfaceSupportsReadPixels().
-     *
-     * @param bufferColorType The color type of the pixel data that will be stored in the transfer
-     *                        buffer.
-     * @return minimum required alignment for the buffer offset or zero if reading to the color type
-     *         is not supported.
-     */
-    size_t transferFromOffsetAlignment(GrColorType bufferColorType) const;
 
     bool suppressPrints() const { return fSuppressPrints; }
 
@@ -370,14 +366,6 @@ public:
     bool validateSurfaceDesc(const GrSurfaceDesc&, GrRenderable renderable,
                              int renderTargetSampleCnt, GrMipMapped) const;
 
-    /**
-     * If the GrBackendRenderTarget can be used with the supplied SkColorType the return will be
-     * the config that matches the backend format and requested SkColorType. Otherwise, kUnknown is
-     * returned.
-     */
-    virtual GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,
-                                                      GrColorType) const = 0;
-
     bool areColorTypeAndFormatCompatible(GrColorType grCT,
                                          const GrBackendFormat& format) const {
         if (GrColorType::kUnknown == grCT) {
@@ -387,7 +375,6 @@ public:
         return this->onAreColorTypeAndFormatCompatible(grCT, format);
     }
 
-    // TODO: replace validateBackendRenderTarget with calls to getConfigFromBackendFormat?
     // TODO: it seems like we could pass the full SkImageInfo and validate its colorSpace too
     // Returns kUnknown if a valid config could not be determined.
     GrPixelConfig getConfigFromBackendFormat(const GrBackendFormat& format,
@@ -403,7 +390,6 @@ public:
      * Special method only for YUVA images. Returns a config that matches the backend format or
      * kUnknown if a config could not be determined.
      */
-    virtual GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat&) const = 0;
     virtual GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const = 0;
 
     /** These are used when creating a new texture internally. */
@@ -541,7 +527,6 @@ private:
     virtual bool onSurfaceSupportsWritePixels(const GrSurface*) const = 0;
     virtual bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                                   const SkIRect& srcRect, const SkIPoint& dstPoint) const = 0;
-    virtual size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const = 0;
 
     // Backends should implement this if they have any extra requirements for use of window
     // rectangles for a specific GrBackendRenderTarget outside of basic support.
@@ -553,6 +538,10 @@ private:
                                                        GrColorType ct) const = 0;
 
     virtual bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const = 0;
+
+    virtual SupportedRead onSupportedReadPixelsColorType(GrColorType srcColorType,
+                                                         const GrBackendFormat& srcFormat,
+                                                         GrColorType dstColorType) const = 0;
 
 
     bool fSuppressPrints : 1;

@@ -35,6 +35,8 @@ public:
     bool isFormatCopyable(GrColorType, const GrBackendFormat&) const override { return true; }
     bool isConfigCopyable(GrPixelConfig) const override { return true; }
 
+    bool isFormatRenderable(MTLPixelFormat) const;
+
     int getRenderTargetSampleCount(int requestedCount,
                                    GrColorType, const GrBackendFormat&) const override;
     int getRenderTargetSampleCount(int requestedCount, GrPixelConfig) const override;
@@ -44,11 +46,12 @@ public:
     int maxRenderTargetSampleCount(GrPixelConfig) const override;
     int maxRenderTargetSampleCount(MTLPixelFormat) const;
 
+    SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
+                                                 GrColorType srcColorType) const override;
+
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
         return SurfaceReadPixelsSupport::kSupported;
     }
-    SupportedRead supportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
-                                               GrColorType) const override;
 
     /**
      * Returns both a supported and most prefered stencil format to use in draws.
@@ -64,10 +67,6 @@ public:
     bool canCopyAsResolve(GrSurface* dst, int dstSampleCount, GrSurface* src, int srcSampleCount,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const;
 
-    GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,
-                                              GrColorType) const override;
-
-    GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat&) const override;
     GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const override;
 
     GrBackendFormat getBackendFormatFromColorType(GrColorType ct) const override;
@@ -91,12 +90,11 @@ private:
     bool onSurfaceSupportsWritePixels(const GrSurface*) const override;
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
-    size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const override {
-        // Transfer buffers not yet supported.
-        return 0;
-    }
     GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
+
+    SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
+                                                 GrColorType) const override;
 
     struct FormatInfo {
         FormatInfo() : fFlags(0) {}

@@ -248,8 +248,7 @@ const AnimationBuilder::FontInfo* AnimationBuilder::findFont(const SkString& fon
 }
 
 sk_sp<sksg::RenderNode> AnimationBuilder::attachTextLayer(const skjson::ObjectValue& layer,
-                                                          LayerInfo*,
-                                                          AnimatorScope* ascope) const {
+                                                          LayerInfo*) const {
     // General text node format:
     // "t": {
     //    "a": [], // animators (see TextAnimator.cpp)
@@ -292,15 +291,16 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachTextLayer(const skjson::ObjectVa
     }
 
     auto text_root = sksg::Group::Make();
-    auto adapter   = sk_make_sp<TextAdapter>(text_root, has_animators);
+    auto adapter   = sk_make_sp<TextAdapter>(text_root, fLazyFontMgr.getMaybeNull(), has_animators);
 
-    this->bindProperty<TextValue>(*jd, ascope, [adapter] (const TextValue& txt) {
-        adapter->setText(txt);
-    });
+    this->bindProperty<TextValue>(*jd,
+        [adapter] (const TextValue& txt) {
+            adapter->setText(txt);
+        });
 
     if (has_animators) {
         if (auto alist = TextAnimatorList::Make(*animated_props, this, adapter)) {
-            ascope->push_back(std::move(alist));
+            fCurrentAnimatorScope->push_back(std::move(alist));
         }
     }
 

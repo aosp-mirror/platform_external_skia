@@ -952,7 +952,7 @@ bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
         SkASSERT(bounds.contains(subRect));
     )
 
-    int bpp = GrColorTypeBytesPerPixel(bufferColorType);
+    size_t bpp = GrColorTypeBytesPerPixel(bufferColorType);
     const size_t trimRowBytes = width * bpp;
     const void* pixels = (void*)offset;
     if (width < 0 || height < 0) {
@@ -967,14 +967,16 @@ bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
         restoreGLRowLength = true;
     }
 
+    GrGLFormat textureFormat = glTex->format();
+    GrColorType textureColorType = GrPixelConfigToColorType(texConfig);
     // Internal format comes from the texture desc.
     GrGLenum internalFormat;
     // External format and type come from the upload data.
-    GrGLenum externalFormat;
-    GrGLenum externalType;
-    auto bufferAsConfig = GrColorTypeToPixelConfig(bufferColorType);
-    if (!this->glCaps().getTexImageFormats(texConfig, bufferAsConfig, &internalFormat,
-                                           &externalFormat, &externalType)) {
+    GrGLenum externalFormat = 0;
+    GrGLenum externalType = 0;
+    this->glCaps().getTexImageFormats(textureFormat, textureColorType, bufferColorType,
+                                      &internalFormat, &externalFormat, &externalType);
+    if (!externalFormat || !externalType) {
         return false;
     }
 
@@ -1194,13 +1196,17 @@ bool GrGLGpu::uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight
         return false;
     }
 
+    GrGLFormat textureFormat = this->glCaps().pixelConfigToFormat(texConfig);
+    GrColorType textureColorType = GrPixelConfigToColorType(texConfig);
+    GrColorType dataColorType = GrPixelConfigToColorType(dataConfig);
     // Internal format comes from the texture desc.
     GrGLenum internalFormat;
     // External format and type come from the upload data.
     GrGLenum externalFormat;
     GrGLenum externalType;
-    if (!this->glCaps().getTexImageFormats(texConfig, dataConfig, &internalFormat, &externalFormat,
-                                           &externalType)) {
+    this->glCaps().getTexImageFormats(textureFormat, textureColorType, dataColorType,
+                                      &internalFormat, &externalFormat, &externalType);
+    if (!externalFormat || !externalType) {
         return false;
     }
     // TexStorage requires a sized format, and internalFormat may or may not be
@@ -2203,13 +2209,13 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
         return false;
     }
 
-    // TODO: Avoid this conversion by making GrGLCaps work with color types.
-    auto dstAsConfig = GrColorTypeToPixelConfig(dstColorType);
-
-    GrGLenum externalFormat;
-    GrGLenum externalType;
-    if (!this->glCaps().getReadPixelsFormat(surface->config(), dstAsConfig, &externalFormat,
-                                            &externalType)) {
+    GrGLFormat surfaceFormat = GrGLBackendFormatToGLFormat(surface->backendFormat());
+    GrColorType surfaceColorType = GrPixelConfigToColorType(surface->config());
+    GrGLenum externalFormat = 0;
+    GrGLenum externalType = 0;
+    this->glCaps().getReadPixelsFormat(surfaceFormat, surfaceColorType, dstColorType,
+                                       &externalFormat, &externalType);
+    if (!externalFormat || !externalType) {
         return false;
     }
 
@@ -2244,6 +2250,7 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
         SkASSERT(this->glCaps().readPixelsRowBytesSupport());
         GL_CALL(PixelStorei(GR_GL_PACK_ROW_LENGTH, rowWidthInPixels));
     }
+    auto dstAsConfig = GrColorTypeToPixelConfig(dstColorType);
     GL_CALL(PixelStorei(GR_GL_PACK_ALIGNMENT, config_alignment(dstAsConfig)));
 
     bool reattachStencil = false;
@@ -2282,7 +2289,7 @@ bool GrGLGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
                            GrColorType dstColorType, void* buffer, size_t rowBytes) {
     SkASSERT(surface);
 
-    int bytesPerPixel = GrColorTypeBytesPerPixel(dstColorType);
+    size_t bytesPerPixel = GrColorTypeBytesPerPixel(dstColorType);
 
     // GL_PACK_ROW_LENGTH is in terms of pixels not bytes.
     int rowPixelWidth;
@@ -3895,13 +3902,8 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
     auto parameters = sk_make_sp<GrGLTextureParameters>();
     parameters->set(&initialState, GrGLTextureParameters::NonsamplerState(),
                     fResetTimestampForTextureParameters);
-    GrBackendTexture beTex = GrBackendTexture(w, h, mipMapped, info, std::move(parameters));
-#if GR_TEST_UTILS
-    // Lots of tests don't go through Skia's public interface, which will set the config, so for
-    // testing we make sure we set a config here.
-    beTex.setPixelConfig(config);
-#endif
-    return beTex;
+
+    return GrBackendTexture(w, h, mipMapped, info, std::move(parameters));
 }
 
 void GrGLGpu::deleteBackendTexture(const GrBackendTexture& tex) {
@@ -3945,8 +3947,8 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(int w, int h
     GrGLenum externalFormat = 0, externalType = 0;
     if (config == kBGRA_8888_GrPixelConfig && this->glCaps().bgraIsInternalFormat()) {
         // BGRA render buffers are not supported.
-        this->glCaps().getTexImageFormats(config, config, &colorBufferFormat, &externalFormat,
-                                          &externalType);
+        this->glCaps().getTexImageFormats(format, colorType, colorType, &colorBufferFormat,
+                                          &externalFormat, &externalType);
         useTexture = true;
     } else {
         colorBufferFormat = this->glCaps().getRenderbufferInternalFormat(format);
@@ -4032,11 +4034,9 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(int w, int h
         return {};
     }
     auto stencilBits = SkToInt(this->glCaps().stencilFormats()[sFormatIdx].fStencilBits);
+
     GrBackendRenderTarget beRT = GrBackendRenderTarget(w, h, 1, stencilBits, info);
-    // Lots of tests don't go through Skia's public interface which will set the config so for
-    // testing we make sure we set a config here.
-    beRT.setPixelConfig(config);
-    SkASSERT(kUnknown_GrPixelConfig != this->caps()->validateBackendRenderTarget(beRT, colorType));
+    SkASSERT(this->caps()->areColorTypeAndFormatCompatible(colorType, beRT.getBackendFormat()));
     return beRT;
 }
 

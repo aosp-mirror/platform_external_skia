@@ -296,6 +296,10 @@ bool GrMtlCaps::isFormatTexturable(MTLPixelFormat format) const {
     return SkToBool(FormatInfo::kTextureable_Flag && formatInfo.fFlags);
 }
 
+bool GrMtlCaps::isFormatRenderable(MTLPixelFormat format) const {
+    return this->maxRenderTargetSampleCount(format) > 0;
+}
+
 int GrMtlCaps::maxRenderTargetSampleCount(GrColorType grColorType,
                                           const GrBackendFormat& format) const {
     if (!format.getMtlFormat()) {
@@ -685,17 +689,6 @@ GrPixelConfig validate_sized_format(GrMTLPixelFormat grFormat, GrColorType ct) {
     return kUnknown_GrPixelConfig;
 }
 
-GrPixelConfig GrMtlCaps::validateBackendRenderTarget(const GrBackendRenderTarget& rt,
-                                                     GrColorType ct) const {
-    GrMtlTextureInfo fbInfo;
-    if (!rt.getMtlTextureInfo(&fbInfo)) {
-        return kUnknown_GrPixelConfig;
-    }
-
-    id<MTLTexture> texture = (__bridge id<MTLTexture>) fbInfo.fTexture.get();
-    return validate_sized_format(texture.pixelFormat, ct);
-}
-
 bool GrMtlCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
                                                   const GrBackendFormat& format) const {
     const GrMTLPixelFormat* mtlFormat = format.getMtlFormat();
@@ -714,55 +707,6 @@ GrPixelConfig GrMtlCaps::onGetConfigFromBackendFormat(const GrBackendFormat& for
         return kUnknown_GrPixelConfig;
     }
     return validate_sized_format(*mtlFormat, ct);
-}
-
-static GrPixelConfig get_yuva_config(GrMTLPixelFormat grFormat) {
-    MTLPixelFormat format = static_cast<MTLPixelFormat>(grFormat);
-
-    switch (format) {
-        case MTLPixelFormatA8Unorm:
-            return kAlpha_8_as_Alpha_GrPixelConfig;
-            break;
-        case MTLPixelFormatR8Unorm:
-            return kAlpha_8_as_Red_GrPixelConfig;
-            break;
-        case MTLPixelFormatRG8Unorm:
-            return kRG_88_GrPixelConfig;
-            break;
-        case MTLPixelFormatRGBA8Unorm:
-            return kRGBA_8888_GrPixelConfig;
-            break;
-        case MTLPixelFormatBGRA8Unorm:
-            return kBGRA_8888_GrPixelConfig;
-            break;
-        case MTLPixelFormatRGB10A2Unorm:
-            return kRGBA_1010102_GrPixelConfig;
-            break;
-        case MTLPixelFormatR16Unorm:
-            return kR_16_GrPixelConfig;
-            break;
-        case MTLPixelFormatRG16Unorm:
-            return kRG_1616_GrPixelConfig;
-            break;
-        // Experimental (for Y416 and mutant P016/P010)
-        case MTLPixelFormatRGBA16Unorm:
-            return kRGBA_16161616_GrPixelConfig;
-            break;
-        case MTLPixelFormatRG16Float:
-            return kRG_half_GrPixelConfig;
-            break;
-        default:
-            return kUnknown_GrPixelConfig;
-            break;
-    }
-}
-
-GrPixelConfig GrMtlCaps::getYUVAConfigFromBackendFormat(const GrBackendFormat& format) const {
-    const GrMTLPixelFormat* mtlFormat = format.getMtlFormat();
-    if (!mtlFormat) {
-        return kUnknown_GrPixelConfig;
-    }
-    return get_yuva_config(*mtlFormat);
 }
 
 GrColorType GrMtlCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& format) const {
@@ -927,60 +871,86 @@ GrSwizzle GrMtlCaps::getOutputSwizzle(const GrBackendFormat& format, GrColorType
     return get_swizzle(format, colorType, true);
 }
 
-GrCaps::SupportedRead GrMtlCaps::supportedReadPixelsColorType(
+GrCaps::SupportedWrite GrMtlCaps::supportedWritePixelsColorType(GrPixelConfig config,
+                                                                GrColorType srcColorType) const {
+    GrColorType ct = GrPixelConfigToColorType(config);
+    return {ct, GrColorTypeBytesPerPixel(ct)};
+}
+
+GrCaps::SupportedRead GrMtlCaps::onSupportedReadPixelsColorType(
         GrColorType srcColorType, const GrBackendFormat& srcBackendFormat,
         GrColorType dstColorType) const {
     const GrMTLPixelFormat* grMtlFormat = srcBackendFormat.getMtlFormat();
     if (!grMtlFormat) {
-        return {GrSwizzle(), GrColorType::kUnknown};
+        return {GrSwizzle(), GrColorType::kUnknown, 0};
     }
 
+    GrColorType readCT = GrColorType::kUnknown;
     switch (*grMtlFormat) {
         case MTLPixelFormatRGBA8Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kRGBA_8888};
+            readCT = GrColorType::kRGBA_8888;
+            break;
         case MTLPixelFormatR8Unorm:
             if (srcColorType == GrColorType::kAlpha_8) {
-                return {GrSwizzle::RGBA(), GrColorType::kAlpha_8};
+                readCT = GrColorType::kAlpha_8;
             } else if (srcColorType == GrColorType::kGray_8) {
-                return {GrSwizzle::RGBA(), GrColorType::kGray_8};
+                readCT = GrColorType::kGray_8;
             }
+            break;
         case MTLPixelFormatBGRA8Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kBGRA_8888};
-#ifdef SK_BIULD_FOR_IOS
+            readCT = GrColorType::kBGRA_8888;
+            break;
+#ifdef SK_BUILD_FOR_IOS
         case MTLPixelFormatB5G6R5Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kBGR_565};
+            readCT = GrColorType::kBGR_565;
+            break;
 #endif
         case MTLPixelFormatRGBA16Float:
             if (srcColorType == GrColorType::kRGBA_F16) {
-                return {GrSwizzle::RGBA(), GrColorType::kRGBA_F16};
+                readCT = GrColorType::kRGBA_F16;
             } else if (srcColorType == GrColorType::kRGBA_F16_Clamped){
-                return {GrSwizzle::RGBA(), GrColorType::kRGBA_F16_Clamped};
+                readCT = GrColorType::kRGBA_F16_Clamped;
             }
+            break;
         case MTLPixelFormatR16Float:
-            return {GrSwizzle::RGBA(), GrColorType::kAlpha_F16};
+            readCT = GrColorType::kAlpha_F16;
+            break;
         case MTLPixelFormatRG8Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kRG_88};
+            readCT = GrColorType::kRG_88;
+            break;
         case MTLPixelFormatRGB10A2Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kRGBA_1010102};
-#ifdef SK_BIULD_FOR_IOS
+            readCT = GrColorType::kRGBA_1010102;
+            break;
+#ifdef SK_BUILD_FOR_IOS
         case MTLPixelFormatABGR4Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kABGR_4444};
+            readCT = GrColorType::kABGR_4444;
+            break;
 #endif
         case MTLPixelFormatRGBA32Float:
-            return {GrSwizzle::RGBA(), GrColorType::kRGBA_F32};
+            readCT = GrColorType::kRGBA_F32;
+            break;
         case MTLPixelFormatRGBA8Unorm_sRGB:
-            return {GrSwizzle::RGBA(), GrColorType::kRGBA_8888_SRGB};
+            readCT = GrColorType::kRGBA_8888_SRGB;
+            break;
         case MTLPixelFormatR16Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kR_16};
+            readCT = GrColorType::kR_16;
+            break;
         case MTLPixelFormatRG16Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kRG_1616};
+            readCT = GrColorType::kRG_1616;
+            break;
         // Experimental (for Y416 and mutant P016/P010)
         case MTLPixelFormatRGBA16Unorm:
-            return {GrSwizzle::RGBA(), GrColorType::kRGBA_16161616};
+            readCT = GrColorType::kRGBA_16161616;
+            break;
         case MTLPixelFormatRG16Float:
-            return {GrSwizzle::RGBA(), GrColorType::kRG_F16};
+            readCT = GrColorType::kRG_F16;
+            break;
         default:
-            return {GrSwizzle(), GrColorType::kUnknown};
+            // readCT stays as kUnknown
+            break;
     }
+    // Metal requires the destination offset for copyFromTexture to be a multiple of the textures
+    // pixels size.
+    return {GrSwizzle::RGBA(), readCT, GrColorTypeBytesPerPixel(readCT)};
 }
 

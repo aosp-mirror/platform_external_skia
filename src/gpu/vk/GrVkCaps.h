@@ -52,9 +52,10 @@ public:
     int maxRenderTargetSampleCount(GrPixelConfig config) const override;
     int maxRenderTargetSampleCount(VkFormat format) const;
 
+    SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
+                                                 GrColorType srcColorType) const override;
+
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override;
-    SupportedRead supportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
-                                               GrColorType) const override;
 
     bool isVkFormatTexturableLinearly(VkFormat format) const {
         return SkToBool(FormatInfo::kTextureable_Flag & this->getFormatInfo(format).fLinearFlags);
@@ -160,10 +161,6 @@ public:
     bool canCopyAsResolve(GrPixelConfig dstConfig, int dstSampleCnt, bool dstHasYcbcr,
                           GrPixelConfig srcConfig, int srcSamplecnt, bool srcHasYcbcr) const;
 
-    GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,
-                                              GrColorType) const override;
-
-    GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat&) const override;
     GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const override;
 
     GrBackendFormat getBackendFormatFromColorType(GrColorType ct) const override;
@@ -198,17 +195,17 @@ private:
     void initFormatTable(const GrVkInterface*, VkPhysicalDevice, const VkPhysicalDeviceProperties&);
     void initStencilFormat(const GrVkInterface* iface, VkPhysicalDevice physDev);
 
-    uint8_t getYcbcrKeyFromYcbcrInfo(const GrVkYcbcrConversionInfo& info);
-
     void applyDriverCorrectnessWorkarounds(const VkPhysicalDeviceProperties&);
 
     bool onSurfaceSupportsWritePixels(const GrSurface*) const override;
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
-    size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const override;
 
     GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
+
+    SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
+                                                 GrColorType) const override;
 
     struct FormatInfo {
         FormatInfo() : fOptimalFlags(0), fLinearFlags(0) {}
