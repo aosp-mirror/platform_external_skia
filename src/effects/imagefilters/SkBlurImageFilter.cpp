@@ -31,6 +31,8 @@
 
 static constexpr double kPi = 3.14159265358979323846264338327950288;
 
+namespace {
+
 class SkBlurImageFilterImpl final : public SkImageFilter {
 public:
     SkBlurImageFilterImpl(SkScalar sigmaX,
@@ -49,6 +51,7 @@ protected:
                                MapDirection, const SkIRect* inputRect) const override;
 
 private:
+    friend void SkBlurImageFilter::RegisterFlattenables();
     SK_FLATTENABLE_HOOKS(SkBlurImageFilterImpl)
 
     typedef SkImageFilter INHERITED;
@@ -65,7 +68,7 @@ private:
     SkTileMode fTileMode;
 };
 
-void SkImageFilter::RegisterFlattenables() { SK_REGISTER_FLATTENABLE(SkBlurImageFilterImpl); }
+} // end namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -99,6 +102,8 @@ sk_sp<SkImageFilter> SkBlurImageFilter::Make(SkScalar sigmaX, SkScalar sigmaY, S
           new SkBlurImageFilterImpl(sigmaX, sigmaY, tileMode, input, cropRect));
 }
 
+void SkBlurImageFilter::RegisterFlattenables() { SK_REGISTER_FLATTENABLE(SkBlurImageFilterImpl); }
+
 // This rather arbitrary-looking value results in a maximum box blur kernel size
 // of 1000 pixels on the raster path, which matches the WebKit and Firefox
 // implementations. Since the GPU path does not compute a box blur, putting
@@ -126,9 +131,9 @@ sk_sp<SkFlattenable> SkBlurImageFilterImpl::CreateProc(SkReadBuffer& buffer) {
     SkScalar sigmaX = buffer.readScalar();
     SkScalar sigmaY = buffer.readScalar();
     SkTileMode tileMode;
-    if (buffer.isVersionLT(SkReadBuffer::kTileModeInBlurImageFilter_Version)) {
+    if (buffer.isVersionLT(SkPicturePriv::kTileModeInBlurImageFilter_Version)) {
         tileMode = SkTileMode::kDecal;
-    } else if (buffer.isVersionLT(SkReadBuffer::kCleanupImageFilterEnums_Version)) {
+    } else if (buffer.isVersionLT(SkPicturePriv::kCleanupImageFilterEnums_Version)) {
         tileMode = to_sktilemode(buffer.read32LE(SkBlurImageFilter::kLast_TileMode));
     } else {
         tileMode = buffer.read32LE(SkTileMode::kLastTileMode);

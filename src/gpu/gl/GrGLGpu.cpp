@@ -876,50 +876,6 @@ bool GrGLGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
                                mipLevelCount);
 }
 
-// For GL_[UN]PACK_ALIGNMENT. TODO: This really wants to be GrColorType.
-static inline GrGLint config_alignment(GrPixelConfig config) {
-    SkASSERT(!GrPixelConfigIsCompressed(config));
-    switch (config) {
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-            return 1;
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRG_88_GrPixelConfig:
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Lum_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-        case kRGBA_half_Clamped_GrPixelConfig:
-        case kR_16_GrPixelConfig:
-            return 2;
-        case kRGBA_8888_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:  // We're really talking about GrColorType::kRGB_888x here.
-        case kRGB_888X_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kSRGBA_8888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-        case kRGBA_float_GrPixelConfig:
-        case kRG_1616_GrPixelConfig:
-            return 4;
-        case kRGB_ETC1_GrPixelConfig:
-        case kUnknown_GrPixelConfig:
-            return 0;
-
-        // Experimental (for Y416 and mutant P016/P010)
-        case kRGBA_16161616_GrPixelConfig:
-            return 8;
-        case kRG_half_GrPixelConfig:
-            return 4;
-    }
-    SK_ABORT("Invalid pixel config");
-    return 0;
-}
-
 bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
                                  GrColorType bufferColorType, GrGpuBuffer* transferBuffer,
                                  size_t offset, size_t rowBytes) {
@@ -980,7 +936,7 @@ bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
         return false;
     }
 
-    GL_CALL(PixelStorei(GR_GL_UNPACK_ALIGNMENT, config_alignment(texConfig)));
+    GL_CALL(PixelStorei(GR_GL_UNPACK_ALIGNMENT, 1));
     GL_CALL(TexSubImage2D(glTex->target(),
                           0,
                           left, top,
@@ -1034,7 +990,8 @@ static bool allocate_and_populate_texture(GrPixelConfig config,
                                           int mipLevelCount,
                                           int baseWidth,
                                           int baseHeight,
-                                          bool* changedUnpackRowLength) {
+                                          bool* changedUnpackRowLength,
+                                          GrMipMapsStatus* mipMapsStatus) {
     CLEAR_ERROR_BEFORE_ALLOC(&interface);
 
     if (caps.configSupportsTexStorage(config)) {
@@ -1050,6 +1007,9 @@ static bool allocate_and_populate_texture(GrPixelConfig config,
             for (int currentMipLevel = 0; currentMipLevel < mipLevelCount; currentMipLevel++) {
                 const void* currentMipData = texels[currentMipLevel].fPixels;
                 if (currentMipData == nullptr) {
+                    if (mipMapsStatus) {
+                        *mipMapsStatus = GrMipMapsStatus::kDirty;
+                    }
                     continue;
                 }
                 int twoToTheMipLevel = 1 << currentMipLevel;
@@ -1105,7 +1065,8 @@ static bool allocate_and_populate_texture(GrPixelConfig config,
                 const int currentWidth = SkTMax(1, baseWidth / twoToTheMipLevel);
                 const int currentHeight = SkTMax(1, baseHeight / twoToTheMipLevel);
 
-                if (texels[currentMipLevel].fPixels) {
+                const void* currentMipData = texels[currentMipLevel].fPixels;
+                if (currentMipData) {
                     const size_t trimRowBytes = currentWidth * bpp;
                     const size_t rowBytes = texels[currentMipLevel].fRowBytes;
                     if (rowBytes != trimRowBytes) {
@@ -1118,9 +1079,10 @@ static bool allocate_and_populate_texture(GrPixelConfig config,
                         GR_GL_CALL(&interface, PixelStorei(GR_GL_UNPACK_ROW_LENGTH, 0));
                         *changedUnpackRowLength = false;
                     }
+                } else if (mipMapsStatus) {
+                    *mipMapsStatus = GrMipMapsStatus::kDirty;
                 }
 
-                const void* currentMipData = texels[currentMipLevel].fPixels;
                 // Even if curremtMipData is nullptr, continue to call TexImage2D.
                 // This will allocate texture memory which we can later populate.
                 GL_ALLOC_CALL(&interface,
@@ -1224,15 +1186,12 @@ bool GrGLGpu::uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight
     SkAutoSMalloc<128 * 128> tempStorage;
 
     if (mipMapsStatus) {
-        *mipMapsStatus = GrMipMapsStatus::kValid;
-    }
-
-    if (mipMapsStatus && mipLevelCount <= 1) {
-        *mipMapsStatus = GrMipMapsStatus::kNotAllocated;
+        *mipMapsStatus = (mipLevelCount > 1) ?
+                GrMipMapsStatus::kValid : GrMipMapsStatus::kNotAllocated;
     }
 
     if (mipLevelCount) {
-        GR_GL_CALL(interface, PixelStorei(GR_GL_UNPACK_ALIGNMENT, config_alignment(texConfig)));
+        GR_GL_CALL(interface, PixelStorei(GR_GL_UNPACK_ALIGNMENT, 1));
     }
 
     bool succeeded = true;
@@ -1241,13 +1200,16 @@ bool GrGLGpu::uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight
             succeeded = allocate_and_populate_texture(
                     texConfig, *interface, caps, target, internalFormat,
                     internalFormatForTexStorage, externalFormat, externalType, texels,
-                    mipLevelCount, width, height, &restoreGLRowLength);
+                    mipLevelCount, width, height, &restoreGLRowLength, mipMapsStatus);
         } else {
             succeeded = false;
         }
     } else {
         for (int currentMipLevel = 0; currentMipLevel < mipLevelCount; currentMipLevel++) {
             if (!texels[currentMipLevel].fPixels) {
+                if (mipMapsStatus) {
+                    *mipMapsStatus = GrMipMapsStatus::kDirty;
+                }
                 continue;
             }
             int twoToTheMipLevel = 1 << currentMipLevel;
@@ -2250,8 +2212,7 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
         SkASSERT(this->glCaps().readPixelsRowBytesSupport());
         GL_CALL(PixelStorei(GR_GL_PACK_ROW_LENGTH, rowWidthInPixels));
     }
-    auto dstAsConfig = GrColorTypeToPixelConfig(dstColorType);
-    GL_CALL(PixelStorei(GR_GL_PACK_ALIGNMENT, config_alignment(dstAsConfig)));
+    GL_CALL(PixelStorei(GR_GL_PACK_ALIGNMENT, 1));
 
     bool reattachStencil = false;
     if (this->glCaps().detachStencilFromMSAABuffersBeforeReadPixels() &&
