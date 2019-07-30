@@ -168,7 +168,7 @@ GrMtlCommandBuffer* GrMtlGpu::commandBuffer() {
 
 void GrMtlGpu::submitCommandBuffer(SyncQueue sync) {
     if (fCmdBuffer) {
-        fResourceProvider.addBufferCompletionHandler(fCmdBuffer);
+        fResourceProvider.addBufferCompletionHandlers(fCmdBuffer);
         fCmdBuffer->commit(SyncQueue::kForce_SyncQueue == sync);
         delete fCmdBuffer;
         fCmdBuffer = nullptr;
@@ -252,15 +252,13 @@ bool GrMtlGpu::uploadToTexture(GrMtlTexture* tex, int left, int top, int width, 
         return true;
     }
 
-    sk_sp<GrMtlBuffer> transferBuffer = GrMtlBuffer::Make(this, combinedBufferSize,
-                                                          GrGpuBufferType::kXferCpuToGpu,
-                                                          kStream_GrAccessPattern);
+    size_t bufferOffset;
+    id<MTLBuffer> transferBuffer = this->resourceProvider().getTransferBuffer(combinedBufferSize,
+                                                                              &bufferOffset);
     if (!transferBuffer) {
         return false;
     }
-
-    char* buffer = (char*) transferBuffer->map();
-    size_t bufferOffset = transferBuffer->offset();
+    char* buffer = (char*) transferBuffer.contents + bufferOffset;
 
     currentWidth = width;
     currentHeight = height;
@@ -274,12 +272,12 @@ bool GrMtlGpu::uploadToTexture(GrMtlTexture* tex, int left, int top, int width, 
             const size_t trimRowBytes = currentWidth * bpp;
             const size_t rowBytes = texels[currentMipLevel].fRowBytes;
 
-            // copy data into the buffer, skipping the trailing bytes
+            // copy data into the buffer, skipping any trailing bytes
             char* dst = buffer + individualMipOffsets[currentMipLevel];
             const char* src = (const char*)texels[currentMipLevel].fPixels;
             SkRectMemcpy(dst, trimRowBytes, src, rowBytes, trimRowBytes, currentHeight);
 
-            [blitCmdEncoder copyFromBuffer: transferBuffer->mtlBuffer()
+            [blitCmdEncoder copyFromBuffer: transferBuffer
                               sourceOffset: bufferOffset + individualMipOffsets[currentMipLevel]
                          sourceBytesPerRow: trimRowBytes
                        sourceBytesPerImage: trimRowBytes*currentHeight
@@ -293,7 +291,6 @@ bool GrMtlGpu::uploadToTexture(GrMtlTexture* tex, int left, int top, int width, 
         currentHeight = SkTMax(1, currentHeight/2);
         layerHeight = currentHeight;
     }
-    transferBuffer->unmap();
 
     if (mipLevelCount < (int) tex->mtlTexture().mipmapLevelCount) {
         tex->texturePriv().markMipMapsDirty();

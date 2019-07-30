@@ -194,10 +194,12 @@ def _CheckGNFormatted(input_api, output_api):
 
 def _CheckIncludesFormatted(input_api, output_api):
   """Make sure #includes in files we're changing have been formatted."""
+  files = [str(f) for f in input_api.AffectedFiles() if f.Action() != 'D']
   cmd = ['python',
          'tools/rewrite_includes.py',
-         '--dry-run'] + map(str, input_api.AffectedFiles())
-  if 0 != subprocess.call(cmd):
+         '--dry-run'] + files
+  # TODO(mtklein): tools/rewrite_includes.py doesn't work on Windows.
+  if 'win32' not in sys.platform and 0 != subprocess.call(cmd):
     return [output_api.PresubmitError('`%s` failed' % ' '.join(cmd))]
   return []
 
