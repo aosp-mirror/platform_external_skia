@@ -46,6 +46,11 @@ public:
         return *format.getMockColorType() == GrColorType::kRGBA_8888_SRGB;
     }
 
+    // Mock caps doesn't support any compressed formats right now
+    bool isFormatCompressed(const GrBackendFormat&) const override {
+        return false;
+    }
+
     bool isFormatTexturable(GrColorType, const GrBackendFormat& format) const override {
         if (!format.getMockColorType()) {
             return false;
@@ -134,10 +139,6 @@ public:
         return *format.getMockColorType();
     }
 
-    GrBackendFormat getBackendFormatFromColorType(GrColorType ct) const override {
-        return GrBackendFormat::MakeMock(ct);
-    }
-
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override {
         return {};
     }
@@ -156,6 +157,9 @@ private:
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override {
         return true;
+    }
+    GrBackendFormat onGetDefaultBackendFormat(GrColorType ct, GrRenderable) const override {
+        return GrBackendFormat::MakeMock(ct);
     }
 
     GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat& format,

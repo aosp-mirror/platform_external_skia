@@ -176,7 +176,7 @@ sk_sp<GrTextureContext> GrRecordingContext::makeDeferredTextureContext(
         GrSurfaceOrigin origin,
         SkBudgeted budgeted,
         GrProtected isProtected) {
-    auto format = this->caps()->getBackendFormatFromColorType(colorType);
+    auto format = this->caps()->getDefaultBackendFormat(colorType, GrRenderable::kNo);
     if (!format.isValid()) {
         return nullptr;
     }
@@ -225,7 +225,7 @@ sk_sp<GrRenderTargetContext> GrRecordingContext::makeDeferredRenderTargetContext
         return nullptr;
     }
 
-    auto format = this->caps()->getBackendFormatFromColorType(colorType);
+    auto format = this->caps()->getDefaultBackendFormat(colorType, GrRenderable::kYes);
     if (!format.isValid()) {
         return nullptr;
     }
@@ -395,4 +395,27 @@ sk_sp<GrRenderTargetContext> GrRecordingContextPriv::makeDeferredRenderTargetCon
 
 GrContext* GrRecordingContextPriv::backdoor() {
     return (GrContext*) fContext;
+}
+
+GrBackendFormat GrRecordingContext::defaultBackendFormat(SkColorType skColorType,
+                                                         GrRenderable renderable) const {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+
+    if (this->abandoned()) {
+        return GrBackendFormat();
+    }
+
+    const GrCaps* caps = this->caps();
+
+    GrColorType grColorType = SkColorTypeToGrColorType(skColorType);
+
+    GrBackendFormat format = caps->getDefaultBackendFormat(grColorType, renderable);
+    if (!format.isValid()) {
+        return GrBackendFormat();
+    }
+
+    SkASSERT(caps->isFormatTexturable(grColorType, format));
+    SkASSERT(renderable == GrRenderable::kNo || caps->isFormatRenderable(grColorType, format));
+
+    return format;
 }

@@ -116,8 +116,8 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
         GrPixelConfig config = static_cast<GrPixelConfig>(c);
 
         // We don't round trip correctly going from pixelConfig to colorType to
-        // backendFormat with the RGBX config.
-        if (config == kRGB_888X_GrPixelConfig) {
+        // backendFormat with the RGBX and ETC1 configs.
+        if (config == kRGB_888X_GrPixelConfig || config == kRGB_ETC1_GrPixelConfig) {
             continue;
         }
 
@@ -149,7 +149,8 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
                             "config:%d, tex:%d, isConfigTexturable:%d", config, SkToBool(tex), ict);
 
             GrColorType colorType = GrPixelConfigToColorType(config);
-            const GrBackendFormat format = caps->getBackendFormatFromColorType(colorType);
+            const GrBackendFormat format = caps->getDefaultBackendFormat(colorType,
+                                                                         GrRenderable::kNo);
             if (!format.isValid()) {
                 continue;
             }
@@ -561,8 +562,9 @@ DEF_GPUTEST(TextureIdleProcTest, reporter, options) {
                 auto proxy = context->priv().proxyProvider()->createLazyProxy(
                         singleUseLazyCB, backendFormat, desc, renderable, 1,
                         GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin, GrMipMapped::kNo,
-                        GrInternalSurfaceFlags ::kNone, SkBackingFit::kExact, budgeted,
-                        GrProtected::kNo, GrSurfaceProxy::LazyInstantiationType::kSingleUse);
+                        GrMipMapsStatus::kNotAllocated, GrInternalSurfaceFlags ::kNone,
+                        SkBackingFit::kExact, budgeted, GrProtected::kNo,
+                        GrSurfaceProxy::LazyInstantiationType::kSingleUse);
                 rtc->drawTexture(GrNoClip(), proxy, GrSamplerState::Filter::kNearest,
                                  SkBlendMode::kSrcOver, SkPMColor4f(), SkRect::MakeWH(w, h),
                                  SkRect::MakeWH(w, h), GrAA::kNo, GrQuadAAFlags::kNone,
@@ -598,8 +600,9 @@ DEF_GPUTEST(TextureIdleProcTest, reporter, options) {
                 proxy = context->priv().proxyProvider()->createLazyProxy(
                         deinstantiateLazyCB, backendFormat, desc, renderable, 1,
                         GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin, GrMipMapped::kNo,
-                        GrInternalSurfaceFlags ::kNone, SkBackingFit::kExact, budgeted,
-                        GrProtected::kNo, GrSurfaceProxy::LazyInstantiationType::kDeinstantiate);
+                        GrMipMapsStatus::kNotAllocated, GrInternalSurfaceFlags ::kNone,
+                        SkBackingFit::kExact, budgeted, GrProtected::kNo,
+                        GrSurfaceProxy::LazyInstantiationType::kDeinstantiate);
                 rtc->drawTexture(GrNoClip(), std::move(proxy), GrSamplerState::Filter::kNearest,
                                  SkBlendMode::kSrcOver, SkPMColor4f(), SkRect::MakeWH(w, h),
                                  SkRect::MakeWH(w, h), GrAA::kNo, GrQuadAAFlags::kNone,

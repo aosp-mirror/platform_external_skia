@@ -18,6 +18,10 @@ bool GrDawnCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return false;
 }
 
+bool GrDawnCaps::isFormatCompressed(const GrBackendFormat& format) const {
+    return false;
+}
+
 bool GrDawnCaps::isConfigTexturable(GrPixelConfig config) const {
     switch (config) {
         case kRGBA_8888_GrPixelConfig:
@@ -108,7 +112,8 @@ int GrDawnCaps::getRenderTargetSampleCount(int requestedCount, GrColorType ct,
     return this->getRenderTargetSampleCount(requestedCount, config);
 }
 
-GrBackendFormat GrDawnCaps::getBackendFormatFromColorType(GrColorType ct) const {
+GrBackendFormat GrDawnCaps::onGetDefaultBackendFormat(GrColorType ct,
+                                                      GrRenderable renderable) const {
     GrPixelConfig config = GrColorTypeToPixelConfig(ct);
     if (config == kUnknown_GrPixelConfig) {
         return GrBackendFormat();

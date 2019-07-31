@@ -17,7 +17,9 @@ class GrDawnCaps : public GrCaps {
 public:
     GrDawnCaps(const GrContextOptions& contextOptions);
 
-    bool isFormatSRGB(const GrBackendFormat& format) const override;
+    bool isFormatSRGB(const GrBackendFormat&) const override;
+    bool isFormatCompressed(const GrBackendFormat&) const override;
+
     bool isFormatTexturable(GrColorType, const GrBackendFormat& format) const override;
     bool isFormatCopyable(GrColorType, const GrBackendFormat& format) const override;
 
@@ -27,13 +29,6 @@ public:
         return true;
     }
 
-    bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                          const SkIRect& srcRect, const SkIPoint& dstPoint) const override {
-        return true;
-    }
-
-    GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
-
     SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
                                                  GrColorType srcColorType) const override {
         return {GrColorType::kUnknown, 1};
@@ -41,16 +36,6 @@ public:
 
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
         return SurfaceReadPixelsSupport::kSupported;
-    }
-
-    SupportedRead onSupportedReadPixelsColorType(GrColorType srcColorType,
-                                                 const GrBackendFormat& backendFormat,
-                                                 GrColorType dstColorType) const override {
-        return {GrSwizzle(), GrColorType::kUnknown, 0};
-    }
-
-    bool onSurfaceSupportsWritePixels(const GrSurface* surface) const override {
-        return true;
     }
 
     int getRenderTargetSampleCount(int requestedCount, GrColorType,
@@ -69,8 +54,6 @@ public:
         return this->isConfigTexturable(config) ? 1 : 0;
     }
 
-    GrBackendFormat getBackendFormatFromColorType(GrColorType ct) const override;
-
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
     bool canClearTextureOnCreation() const override;
@@ -79,9 +62,27 @@ public:
 
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
 
+    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const override;
+
+private:
+    bool onSurfaceSupportsWritePixels(const GrSurface* surface) const override {
+        return true;
+    }
+    bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
+        const SkIRect& srcRect, const SkIPoint& dstPoint) const override {
+        return true;
+    }
+    GrBackendFormat onGetDefaultBackendFormat(GrColorType, GrRenderable) const override;
+
+    GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
+
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
-    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const override;
+    SupportedRead onSupportedReadPixelsColorType(GrColorType srcColorType,
+                                                 const GrBackendFormat& backendFormat,
+                                                 GrColorType dstColorType) const override {
+        return { GrSwizzle(), GrColorType::kUnknown, 0 };
+    }
 
     typedef GrCaps INHERITED;
 };

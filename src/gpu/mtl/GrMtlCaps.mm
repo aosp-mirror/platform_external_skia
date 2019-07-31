@@ -274,6 +274,20 @@ bool GrMtlCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format_is_srgb(static_cast<MTLPixelFormat>(*format.getMtlFormat()));
 }
 
+bool GrMtlCaps::isFormatCompressed(const GrBackendFormat& format) const {
+#ifdef SK_BUILD_FOR_MAC
+    return false;
+#else
+    if (!format.getMtlFormat()) {
+        return false;
+    }
+
+    MTLPixelFormat mtlFormat = static_cast<MTLPixelFormat>(*format.getMtlFormat());
+
+    return mtlFormat == MTLPixelFormatETC2_RGB8;
+#endif
+}
+
 bool GrMtlCaps::isFormatTexturable(GrColorType, const GrBackendFormat& format) const {
     if (!format.getMtlFormat()) {
         return false;
@@ -740,7 +754,8 @@ GrColorType GrMtlCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& 
     SkUNREACHABLE;
 }
 
-GrBackendFormat GrMtlCaps::getBackendFormatFromColorType(GrColorType ct) const {
+GrBackendFormat GrMtlCaps::onGetDefaultBackendFormat(GrColorType ct,
+                                                     GrRenderable renderable) const {
     GrPixelConfig config = GrColorTypeToPixelConfig(ct);
     if (config == kUnknown_GrPixelConfig) {
         return GrBackendFormat();
