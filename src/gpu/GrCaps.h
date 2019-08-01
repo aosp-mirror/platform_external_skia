@@ -175,10 +175,6 @@ public:
         return SkTMin(fInternalMultisampleCount, this->maxRenderTargetSampleCount(config));
     }
 
-    bool isConfigRenderable(GrPixelConfig config) const {
-        return this->maxRenderTargetSampleCount(config) > 0;
-    }
-
     bool isFormatRenderable(GrColorType ct, const GrBackendFormat& format) const {
         return this->maxRenderTargetSampleCount(ct, format) > 0;
     }
@@ -358,7 +354,8 @@ public:
         GrSurfaceProxy::RectsMustMatch fRectsMustMatch = GrSurfaceProxy::RectsMustMatch::kNo;
         bool fMustCopyWholeSrc = false;
     };
-    virtual DstCopyRestrictions getDstCopyRestrictions(const GrRenderTargetProxy* src) const {
+    virtual DstCopyRestrictions getDstCopyRestrictions(const GrRenderTargetProxy* src,
+                                                       GrColorType ct) const {
         return {};
     }
 
@@ -443,6 +440,15 @@ public:
     // should be used to verify that the pixel config from user-level code (the genericConfig)
     // is compatible with a pixel config we've computed from scratch (the specificConfig).
     static bool AreConfigsCompatible(GrPixelConfig genericConfig, GrPixelConfig specificConfig);
+#endif
+
+#if GR_TEST_UTILS
+    struct TestFormatColorTypeCombination {
+        GrColorType fColorType;
+        GrBackendFormat fFormat;
+    };
+
+    virtual std::vector<TestFormatColorTypeCombination> getTestingCombinations() const = 0;
 #endif
 
 protected:

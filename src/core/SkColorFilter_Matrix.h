@@ -13,8 +13,9 @@
 
 class SkColorFilter_Matrix : public SkColorFilter {
 public:
-    SkColorFilter_Matrix() {}
-    explicit SkColorFilter_Matrix(const float array[20]);
+    enum class Domain : uint8_t { kRGBA, kHSLA };
+
+    explicit SkColorFilter_Matrix(const float array[20], Domain);
 
     uint32_t getFlags() const override;
 
@@ -25,19 +26,17 @@ public:
 
     static void RegisterFlattenables();
 
-protected:
-    void flatten(SkWriteBuffer&) const override;
-    bool onAsAColorMatrix(float matrix[20]) const override;
-
 private:
     SK_FLATTENABLE_HOOKS(SkColorFilter_Matrix)
+    void flatten(SkWriteBuffer&) const override;
 
+    bool onAsAColorMatrix(float matrix[20]) const override;
     bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
+    SkAlphaType onAlphaType() const override { return kUnpremul_SkAlphaType; }
 
     float       fMatrix[20];
-    uint32_t    fFlags;
-
-    void initState();
+    uint16_t    fFlags;
+    Domain      fDomain;
 
     typedef SkColorFilter INHERITED;
 };
