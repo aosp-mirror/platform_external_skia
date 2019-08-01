@@ -112,6 +112,7 @@ public:
     bool isFormatCompressed(const GrBackendFormat&) const override;
 
     bool isFormatTexturable(GrColorType, const GrBackendFormat&) const override;
+    bool isFormatTexturable(GrColorType, GrGLFormat) const;
 
     bool isConfigTexturable(GrPixelConfig config) const override {
         GrColorType ct = GrPixelConfigToColorType(config);
@@ -188,6 +189,8 @@ public:
     const SkTArray<StencilFormat, true>& stencilFormats() const {
         return fStencilFormats;
     }
+
+    bool formatSupportsTexStorage(GrGLFormat) const;
 
     /**
      * Gets the internal format to use with glTexImage...() and glTexStorage...(). May be sized or
@@ -508,9 +511,6 @@ private:
 
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
                                                  GrColorType) const override;
-
-    bool isFormatTexturable(GrColorType, GrGLFormat) const;
-    bool formatSupportsTexStorage(GrGLFormat) const;
 
     int getRenderTargetSampleCount(int requestedCount, GrColorType, GrGLFormat) const;
 
