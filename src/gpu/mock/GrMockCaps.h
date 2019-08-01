@@ -63,11 +63,7 @@ public:
         return fOptions.fConfigOptions[(int)ct].fTexturable;
     }
 
-    bool isFormatCopyable(GrColorType, const GrBackendFormat& format) const override {
-        return false;
-    }
-
-    bool isConfigCopyable(GrPixelConfig config) const override {
+    bool isFormatCopyable(const GrBackendFormat& format) const override {
         return false;
     }
 
@@ -188,7 +184,7 @@ private:
 
     SupportedRead onSupportedReadPixelsColorType(GrColorType srcColorType, const GrBackendFormat&,
                                                  GrColorType) const override {
-        return SupportedRead{GrSwizzle::RGBA(), srcColorType, 1};
+        return SupportedRead{srcColorType, 1};
     }
 
     static const int kMaxSampleCnt = 16;

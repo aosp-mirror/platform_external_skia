@@ -21,13 +21,9 @@ public:
     bool isFormatCompressed(const GrBackendFormat&) const override;
 
     bool isFormatTexturable(GrColorType, const GrBackendFormat& format) const override;
-    bool isFormatCopyable(GrColorType, const GrBackendFormat& format) const override;
+    bool isFormatCopyable(const GrBackendFormat& format) const override { return true; }
 
     bool isConfigTexturable(GrPixelConfig config) const override;
-
-    bool isConfigCopyable(GrPixelConfig config) const override {
-        return true;
-    }
 
     SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
                                                  GrColorType srcColorType) const override {
@@ -81,7 +77,7 @@ private:
     SupportedRead onSupportedReadPixelsColorType(GrColorType srcColorType,
                                                  const GrBackendFormat& backendFormat,
                                                  GrColorType dstColorType) const override {
-        return { GrSwizzle(), GrColorType::kUnknown, 0 };
+        return { GrColorType::kUnknown, 0 };
     }
 
     typedef GrCaps INHERITED;
