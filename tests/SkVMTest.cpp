@@ -778,6 +778,27 @@ DEF_TEST(SkVM_hoist, r) {
     });
 }
 
+DEF_TEST(SkVM_select, r) {
+    skvm::Builder b;
+    {
+        skvm::Arg buf = b.varying<int>();
+
+        skvm::I32 x = b.load32(buf);
+
+        x = b.select( b.gt(x, b.splat(4)), x, b.splat(42) );
+
+        b.store32(buf, x);
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program) {
+        int buf[] = { 0,1,2,3,4,5,6,7,8 };
+        program.eval(SK_ARRAY_COUNT(buf), buf);
+        for (int i = 0; i < (int)SK_ARRAY_COUNT(buf); i++) {
+            REPORTER_ASSERT(r, buf[i] == (i > 4 ? i : 42));
+        }
+    });
+}
+
 DEF_TEST(SkVM_NewOps, r) {
     // Exercise a somewhat arbitrary set of new ops.
     skvm::Builder b;
@@ -933,6 +954,20 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
+        a.vpcmpeqd(A::ymm0, A::ymm1, A::ymm2);
+        a.vpcmpgtd(A::ymm0, A::ymm1, A::ymm2);
+    },{
+        0xc5,0xf5,0x76,0xc2,
+        0xc5,0xf5,0x66,0xc2,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.vpblendvb(A::ymm0, A::ymm1, A::ymm2, A::ymm3);
+    },{
+        0xc4,0xe3,0x75, 0x4c, 0xc2, 0x30,
+    });
+
+    test_asm(r, [&](A& a) {
         a.vpsrld(A::ymm15, A::ymm2, 8);
         a.vpsrld(A::ymm0 , A::ymm8, 5);
     },{
@@ -1017,6 +1052,8 @@ DEF_TEST(SkVM_Assembler, r) {
         a.vmovups(A::ymm5, A::rsi);
         a.vmovups(A::rsi, A::ymm5);
 
+        a.vmovups(A::rsi, A::xmm5);
+
         a.vpmovzxwd(A::ymm4, A::rsi);
         a.vpmovzxbd(A::ymm4, A::rsi);
 
@@ -1025,6 +1062,8 @@ DEF_TEST(SkVM_Assembler, r) {
         /*    VEX    */  /*Op*/  /*  ModRM  */
         0xc5,     0xfc,   0x10,  0b00'101'110,
         0xc5,     0xfc,   0x11,  0b00'101'110,
+
+        0xc5,     0xf8,   0x11,  0b00'101'110,
 
         0xc4,0xe2,0x7d,   0x33,  0b00'100'110,
         0xc4,0xe2,0x7d,   0x31,  0b00'100'110,
@@ -1093,6 +1132,9 @@ DEF_TEST(SkVM_Assembler, r) {
         a.vpinsrb(A::xmm1, A::xmm8, A::rsi, 4);
         a.vpinsrb(A::xmm8, A::xmm1, A::r8, 12);
 
+        a.vpextrw(A::rsi, A::xmm8, 7);
+        a.vpextrw(A::r8,  A::xmm1, 15);
+
         a.vpextrb(A::rsi, A::xmm8, 7);
         a.vpextrb(A::r8,  A::xmm1, 15);
     },{
@@ -1101,6 +1143,9 @@ DEF_TEST(SkVM_Assembler, r) {
 
         0xc4,0xe3,0x39, 0x20, 0x0e,  4,
         0xc4,0x43,0x71, 0x20, 0x00, 12,
+
+        0xc4,0x63,0x79, 0x15, 0x06,  7,
+        0xc4,0xc3,0x79, 0x15, 0x08, 15,
 
         0xc4,0x63,0x79, 0x14, 0x06,  7,
         0xc4,0xc3,0x79, 0x14, 0x08, 15,

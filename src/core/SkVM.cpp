@@ -399,6 +399,21 @@ namespace skvm {
     void Assembler::vpackusdw(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x2b, dst,x,y); }
     void Assembler::vpackuswb(Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0x67, dst,x,y); }
 
+    void Assembler::vpcmpeqd(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0x76, dst,x,y); }
+    void Assembler::vpcmpgtd(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0x66, dst,x,y); }
+
+    void Assembler::vpblendvb(Ymm dst, Ymm x, Ymm y, Ymm z) {
+        int prefix = 0x66,
+            map    = 0x3a0f,
+            opcode = 0x4c;
+        VEX v = vex(0, dst>>3, 0, y>>3,
+                    map, x, /*ymm?*/1, prefix);
+        this->bytes(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(Mod::Direct, dst&7, y&7));
+        this->byte(z << 4);
+    }
+
     // dst = x op /opcode_ext imm
     void Assembler::op(int prefix, int map, int opcode, int opcode_ext, Ymm dst, Ymm x, int imm) {
         // This is a little weird, but if we pass the opcode_ext as if it were the dst register,
@@ -509,6 +524,17 @@ namespace skvm {
     void Assembler::vpmovzxbd(Ymm dst, GP64 src) { this->load_store(0x66,0x380f,0x31, dst,src); }
 
     void Assembler::vmovups  (GP64 dst, Ymm src) { this->load_store(0   ,  0x0f,0x11, src,dst); }
+    void Assembler::vmovups  (GP64 dst, Xmm src) {
+        // Same as vmovups(GP64,YMM) and load_store() except ymm? is 0.
+        int prefix = 0,
+            map    = 0x0f,
+            opcode = 0x11;
+        VEX v = vex(0, src>>3, 0, dst>>3,
+                    map, 0, /*ymm?*/0, prefix);
+        this->bytes(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(Mod::Indirect, src&7, dst&7));
+    }
 
     void Assembler::vmovq(GP64 dst, Xmm src) {
         int prefix = 0x66,
@@ -608,6 +634,18 @@ namespace skvm {
         this->byte(imm);
     }
 
+    void Assembler::vpextrw(GP64 ptr, Xmm src, int imm) {
+        int prefix = 0x66,
+            map    = 0x3a0f,
+            opcode = 0x15;
+
+        VEX v = vex(0, src>>3, 0, ptr>>3,
+                    map, 0, /*ymm?*/0, prefix);
+        this->bytes(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(Mod::Indirect, src&7, ptr&7));
+        this->byte(imm);
+    }
     void Assembler::vpextrb(GP64 ptr, Xmm src, int imm) {
         int prefix = 0x66,
             map    = 0x3a0f,
@@ -1371,14 +1409,17 @@ namespace skvm {
                                                a->vpermq   (tmp(), tmp(), 0xd8);
                                                a->vpackuswb(tmp(), tmp(), tmp());
                                                a->vmovq    (arg[imm], (A::Xmm)tmp()); }
-                                 break;
-                                 // TODO: the else case is a situation where we could use r[x]
-                                 //       as tmp if it's available... we don't need it after the
-                                 //       first instruction.
+                                               break;
+
+                case Op::store16: if (scalar) { a->vpextrw  (arg[imm], (A::Xmm)r[x], 0); }
+                                  else        { a->vpackusdw(tmp(), r[x], r[x]);
+                                                a->vpermq   (tmp(), tmp(), 0xd8);
+                                                a->vmovups  (arg[imm], (A::Xmm)tmp()); }
+                                                break;
 
                 case Op::store32: if (scalar) { a->vmovd  (arg[imm], (A::Xmm)r[x]); }
                                   else        { a->vmovups(arg[imm],         r[x]); }
-                                  break;
+                                                break;
 
                 case Op::load8:  if (scalar) {
                                      a->vpxor  (dst(), dst(), dst());
@@ -1441,10 +1482,15 @@ namespace skvm {
                 case Op::bit_or   : a->vpor  (dst(), r[x], r[y]); break;
                 case Op::bit_xor  : a->vpxor (dst(), r[x], r[y]); break;
                 case Op::bit_clear: a->vpandn(dst(), r[y], r[x]); break;  // N.B. Y then X.
+                case Op::select   : a->vpblendvb(dst(), r[z], r[y], r[x]); break;
 
                 case Op::shl_i32: a->vpslld(dst(), r[x], imm); break;
                 case Op::shr_i32: a->vpsrld(dst(), r[x], imm); break;
                 case Op::sra_i32: a->vpsrad(dst(), r[x], imm); break;
+
+                case Op::eq_i32: a->vpcmpeqd(dst(), r[x], r[y]); break;
+                case Op::lt_i32: a->vpcmpgtd(dst(), r[y], r[x]); break;
+                case Op::gt_i32: a->vpcmpgtd(dst(), r[x], r[y]); break;
 
                 case Op::extract: if (imm == 0) { a->vpand (dst(),  r[x], r[y]); }
                                   else          { a->vpsrld(tmp(),  r[x], imm);
@@ -1588,7 +1634,9 @@ namespace skvm {
                 }
             }
             for (int i = 0; i < (int)fStrides.size(); i++) {
-                add(arg[i], K*fStrides[i]);
+                if (fStrides[i]) {
+                    add(arg[i], K*fStrides[i]);
+                }
             }
             sub(N, K);
             jump(&body);
@@ -1604,7 +1652,9 @@ namespace skvm {
                 }
             }
             for (int i = 0; i < (int)fStrides.size(); i++) {
-                add(arg[i], 1*fStrides[i]);
+                if (fStrides[i]) {
+                    add(arg[i], 1*fStrides[i]);
+                }
             }
             sub(N, 1);
             jump(&tail);

@@ -69,7 +69,8 @@ namespace skvm {
                           vpsubw, vpmullw,
                   vaddps, vsubps, vmulps, vdivps,
                   vfmadd132ps, vfmadd213ps, vfmadd231ps,
-                  vpackusdw, vpackuswb;
+                  vpackusdw, vpackuswb,
+                  vpcmpeqd, vpcmpgtd;
 
         using DstEqXOpImm = void(Ymm dst, Ymm x, int imm);
         DstEqXOpImm vpslld, vpsrld, vpsrad,
@@ -78,6 +79,8 @@ namespace skvm {
 
         using DstEqOpX = void(Ymm dst, Ymm x);
         DstEqOpX vmovdqa, vcvtdq2ps, vcvttps2dq;
+
+        void vpblendvb(Ymm dst, Ymm x, Ymm y, Ymm z);
 
         struct Label {
             int                                 offset = 0;
@@ -106,6 +109,7 @@ namespace skvm {
         void vmovd    (Xmm dst, GP64 ptr);   // dst = *ptr,  32-bit
 
         void vmovups(GP64 ptr, Ymm src);     // *ptr = src, 256-bit
+        void vmovups(GP64 ptr, Xmm src);     // *ptr = src, 128-bit
         void vmovq  (GP64 ptr, Xmm src);     // *ptr = src,  64-bit
         void vmovd  (GP64 ptr, Xmm src);     // *ptr = src,  32-bit
 
@@ -117,6 +121,8 @@ namespace skvm {
 
         void vpinsrw(Xmm dst, Xmm src, GP64 ptr, int imm);  // dst = src; dst[imm] = *ptr, 16-bit
         void vpinsrb(Xmm dst, Xmm src, GP64 ptr, int imm);  // dst = src; dst[imm] = *ptr,  8-bit
+
+        void vpextrw(GP64 ptr, Xmm src, int imm);           // *dst = src[imm]           , 16-bit
         void vpextrb(GP64 ptr, Xmm src, int imm);           // *dst = src[imm]           ,  8-bit
 
         // aarch64
