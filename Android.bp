@@ -590,6 +590,7 @@ cc_library_static {
           "src/gpu/GrRenderTargetContext.cpp",
           "src/gpu/GrRenderTargetOpList.cpp",
           "src/gpu/GrRenderTargetProxy.cpp",
+          "src/gpu/GrRenderTask.cpp",
           "src/gpu/GrResourceAllocator.cpp",
           "src/gpu/GrResourceCache.cpp",
           "src/gpu/GrResourceProvider.cpp",
