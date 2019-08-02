@@ -299,6 +299,7 @@ cc_library_static {
         "src/effects/imagefilters/SkComposeImageFilter.cpp",
         "src/effects/imagefilters/SkDisplacementMapEffect.cpp",
         "src/effects/imagefilters/SkDropShadowImageFilter.cpp",
+        "src/effects/imagefilters/SkImageFilters.cpp",
         "src/effects/imagefilters/SkImageSource.cpp",
         "src/effects/imagefilters/SkLightingImageFilter.cpp",
         "src/effects/imagefilters/SkMagnifierImageFilter.cpp",
