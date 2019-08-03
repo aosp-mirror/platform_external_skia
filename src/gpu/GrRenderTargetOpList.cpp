@@ -585,12 +585,11 @@ bool GrRenderTargetOpList::resetForFullscreenClear(CanDiscardPreviousOps canDisc
 // This closely parallels GrTextureOpList::copySurface but renderTargetOpLists
 // also store the applied clip and dest proxy with the op
 bool GrRenderTargetOpList::copySurface(GrRecordingContext* context,
-                                       GrSurfaceProxy* dst,
                                        GrSurfaceProxy* src,
                                        const SkIRect& srcRect,
                                        const SkIPoint& dstPoint) {
-    SkASSERT(dst->asRenderTargetProxy() == fTarget.get());
-    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(context, dst, src, srcRect, dstPoint);
+    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(
+            context, fTarget.get(), src, srcRect, dstPoint);
     if (!op) {
         return false;
     }
@@ -601,14 +600,16 @@ bool GrRenderTargetOpList::copySurface(GrRecordingContext* context,
 
 void GrRenderTargetOpList::transferFrom(GrRecordingContext* context,
                                         const SkIRect& srcRect,
+                                        GrColorType surfaceColorType,
                                         GrColorType dstColorType,
                                         sk_sp<GrGpuBuffer> dst,
                                         size_t dstOffset) {
-    auto op = GrTransferFromOp::Make(context, srcRect, dstColorType, std::move(dst), dstOffset);
+    auto op = GrTransferFromOp::Make(context, srcRect, surfaceColorType, dstColorType,
+                                     std::move(dst), dstOffset);
     this->addOp(std::move(op), *context->priv().caps());
 }
 
-void GrRenderTargetOpList::purgeOpsWithUninstantiatedProxies() {
+void GrRenderTargetOpList::handleInternalAllocationFailure() {
     bool hasUninstantiatedProxy = false;
     auto checkInstantiation = [&hasUninstantiatedProxy](GrSurfaceProxy* p, GrMipMapped) {
         if (!p->isInstantiated()) {

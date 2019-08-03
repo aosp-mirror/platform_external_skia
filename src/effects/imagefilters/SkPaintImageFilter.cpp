@@ -5,10 +5,11 @@
  * found in the LICENSE file.
  */
 
+#include "include/effects/SkPaintImageFilter.h"
+
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
-#include "include/effects/SkPaintImageFilter.h"
-#include "src/core/SkImageFilterPriv.h"
+#include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
@@ -16,11 +17,11 @@
 
 namespace {
 
-class SkPaintImageFilterImpl final : public SkImageFilter {
+class SkPaintImageFilterImpl final : public SkImageFilter_Base {
 public:
-    static sk_sp<SkImageFilter> Make(const SkPaint& paint, const CropRect* cropRect = nullptr) {
-        return sk_sp<SkImageFilter>(new SkPaintImageFilterImpl(paint, cropRect));
-    }
+    SkPaintImageFilterImpl(const SkPaint& paint, const CropRect* rect)
+            : INHERITED(nullptr, 0, rect)
+            , fPaint(paint) {}
 
     bool affectsTransparentBlack() const override;
 
@@ -33,20 +34,16 @@ private:
     friend void SkPaintImageFilter::RegisterFlattenables();
     SK_FLATTENABLE_HOOKS(SkPaintImageFilterImpl)
 
-    SkPaintImageFilterImpl(const SkPaint& paint, const CropRect* rect)
-            : INHERITED(nullptr, 0, rect)
-            , fPaint(paint) {}
-
     SkPaint fPaint;
 
-    typedef SkImageFilter INHERITED;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 } // end namespace
 
 sk_sp<SkImageFilter> SkPaintImageFilter::Make(const SkPaint& paint,
                                               const SkImageFilter::CropRect* cropRect) {
-    return SkPaintImageFilterImpl::Make(paint, cropRect);
+    return sk_sp<SkImageFilter>(new SkPaintImageFilterImpl(paint, cropRect));
 }
 
 void SkPaintImageFilter::RegisterFlattenables() {
@@ -61,7 +58,7 @@ sk_sp<SkFlattenable> SkPaintImageFilterImpl::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 0);
     SkPaint paint;
     buffer.readPaint(&paint, nullptr);
-    return Make(paint, &common.cropRect());
+    return SkPaintImageFilter::Make(paint, &common.cropRect());
 }
 
 void SkPaintImageFilterImpl::flatten(SkWriteBuffer& buffer) const {

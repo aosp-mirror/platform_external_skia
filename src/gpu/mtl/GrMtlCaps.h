@@ -35,6 +35,8 @@ public:
 
     bool isFormatCopyable(const GrBackendFormat&) const override { return true; }
 
+    bool isFormatRenderable(GrColorType ct, const GrBackendFormat& format,
+                            int sampleCount = 1) const override;
     bool isFormatRenderable(MTLPixelFormat) const;
 
     int getRenderTargetSampleCount(int requestedCount,
@@ -42,11 +44,11 @@ public:
     int getRenderTargetSampleCount(int requestedCount, GrPixelConfig) const override;
     int getRenderTargetSampleCount(int requestedCount, MTLPixelFormat) const;
 
-    int maxRenderTargetSampleCount(GrColorType, const GrBackendFormat&) const override;
-    int maxRenderTargetSampleCount(GrPixelConfig) const override;
+    int maxRenderTargetSampleCount(const GrBackendFormat&) const override;
     int maxRenderTargetSampleCount(MTLPixelFormat) const;
 
-    SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
+    SupportedWrite supportedWritePixelsColorType(GrColorType surfaceColorType,
+                                                 const GrBackendFormat& surfaceFormat,
                                                  GrColorType srcColorType) const override;
 
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
@@ -75,6 +77,10 @@ public:
 
     GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
+
+#if GR_TEST_UTILS
+    std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
+#endif
 
 private:
     void initFeatureSet(MTLFeatureSet featureSet);

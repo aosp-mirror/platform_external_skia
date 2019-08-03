@@ -8,9 +8,12 @@ Milestone 78
 
  * Added RELEASE_NOTES.txt file
 
-SkDrawLooper is no longer supported in SkPaint or SkCanvas.
+ * SkDrawLooper is no longer supported in SkPaint or SkCanvas.
 
-SkImageFilter API refactor started:
- - Consolidated enum types to use SkTileMode and SkColorChannel
- - Hide filter implementation classes
- - Bumps SkPicture version number
+ * SkImageFilter API refactor started:
+   - Provide new factory API in include/effects/SkImageFilters
+   - Consolidated enum types to use SkTileMode and SkColorChannel
+   - Hide filter implementation classes
+   - Hide previously public functions on SkImageFilter that were intended for internal use only
+
+ * SkColorFilters::HSLAMatrix - new matrix color filter operating in HSLA space.

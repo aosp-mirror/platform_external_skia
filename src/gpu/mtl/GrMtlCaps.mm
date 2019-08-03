@@ -310,40 +310,34 @@ bool GrMtlCaps::isFormatTexturable(MTLPixelFormat format) const {
     return SkToBool(FormatInfo::kTextureable_Flag && formatInfo.fFlags);
 }
 
-bool GrMtlCaps::isFormatRenderable(MTLPixelFormat format) const {
-    return this->maxRenderTargetSampleCount(format) > 0;
-}
-
-int GrMtlCaps::maxRenderTargetSampleCount(GrColorType grColorType,
-                                          const GrBackendFormat& format) const {
+bool GrMtlCaps::isFormatRenderable(GrColorType ct, const GrBackendFormat& format,
+                                   int sampleCount) const {
     if (!format.getMtlFormat()) {
-        return 0;
+        return false;
     }
 
     // Currently we don't allow RGB_888X to be renderable because we don't have a way to
     // handle blends that reference dst alpha when the values in the dst alpha channel are
     // uninitialized.
-    if (GrColorType::kRGB_888x == grColorType) {
+    if (ct == GrColorType::kRGB_888x) {
+        return false;
+    }
+
+    MTLPixelFormat mtlFormat = static_cast<MTLPixelFormat>(*format.getMtlFormat());
+    return sampleCount <= this->maxRenderTargetSampleCount(mtlFormat);
+}
+
+bool GrMtlCaps::isFormatRenderable(MTLPixelFormat format) const {
+    return this->maxRenderTargetSampleCount(format) > 0;
+}
+
+int GrMtlCaps::maxRenderTargetSampleCount(const GrBackendFormat& format) const {
+    if (!format.getMtlFormat()) {
         return 0;
     }
 
     MTLPixelFormat mtlFormat = static_cast<MTLPixelFormat>(*format.getMtlFormat());
     return this->maxRenderTargetSampleCount(mtlFormat);
-}
-
-int GrMtlCaps::maxRenderTargetSampleCount(GrPixelConfig config) const {
-    // Currently we don't allow RGB_888X or RGB_888 to be renderable because we don't have a way to
-    // handle blends that reference dst alpha when the values in the dst alpha channel are
-    // uninitialized.
-    if (config == kRGB_888X_GrPixelConfig || config == kRGB_888_GrPixelConfig) {
-        return 0;
-    }
-
-    MTLPixelFormat format;
-    if (!GrPixelConfigToMTLFormat(config, &format)) {
-        return 0;
-    }
-    return this->maxRenderTargetSampleCount(format);
 }
 
 int GrMtlCaps::maxRenderTargetSampleCount(MTLPixelFormat format) const {
@@ -569,7 +563,7 @@ void GrMtlCaps::initFormatTable() {
 #ifdef SK_BUILD_FOR_IOS
     // ETC2_RGB8
     info = &fFormatTable[GetFormatIndex(MTLPixelFormatETC2_RGB8)];
-    info->fFlags = 0; // TBD
+    info->fFlags = FormatInfo::kTextureable_Flag;
 #endif
 
     // Experimental (for Y416 and mutant P016/P010)
@@ -896,10 +890,10 @@ GrSwizzle GrMtlCaps::getOutputSwizzle(const GrBackendFormat& format, GrColorType
     return get_swizzle(format, colorType, true);
 }
 
-GrCaps::SupportedWrite GrMtlCaps::supportedWritePixelsColorType(GrPixelConfig config,
-                                                                GrColorType srcColorType) const {
-    GrColorType ct = GrPixelConfigToColorType(config);
-    return {ct, GrColorTypeBytesPerPixel(ct)};
+GrCaps::SupportedWrite GrMtlCaps::supportedWritePixelsColorType(
+        GrColorType surfaceColorType, const GrBackendFormat& surfaceFormat,
+        GrColorType srcColorType) const {
+    return {surfaceColorType, GrColorTypeBytesPerPixel(surfaceColorType)};
 }
 
 GrCaps::SupportedRead GrMtlCaps::onSupportedReadPixelsColorType(
@@ -982,3 +976,41 @@ GrCaps::SupportedRead GrMtlCaps::onSupportedReadPixelsColorType(
     return {readCT, GrColorTypeBytesPerPixel(readCT)};
 }
 
+#if GR_TEST_UTILS
+std::vector<GrCaps::TestFormatColorTypeCombination> GrMtlCaps::getTestingCombinations() const {
+    std::vector<GrCaps::TestFormatColorTypeCombination> combos = {
+        { GrColorType::kAlpha_8,          GrBackendFormat::MakeMtl(MTLPixelFormatA8Unorm)         },
+        { GrColorType::kAlpha_8,          GrBackendFormat::MakeMtl(MTLPixelFormatR8Unorm)         },
+#ifdef SK_BUILD_FOR_IOS
+        { GrColorType::kBGR_565,          GrBackendFormat::MakeMtl(MTLPixelFormatB5G6R5Unorm)     },
+        { GrColorType::kABGR_4444,        GrBackendFormat::MakeMtl(MTLPixelFormatABGR4Unorm)      },
+#endif
+        { GrColorType::kRGBA_8888,        GrBackendFormat::MakeMtl(MTLPixelFormatRGBA8Unorm)      },
+        { GrColorType::kRGBA_8888_SRGB,   GrBackendFormat::MakeMtl(MTLPixelFormatRGBA8Unorm_sRGB) },
+        { GrColorType::kRGB_888x,         GrBackendFormat::MakeMtl(MTLPixelFormatRGBA8Unorm)      },
+#ifdef SK_BUILD_FOR_IOS
+        { GrColorType::kRGB_888x,         GrBackendFormat::MakeMtl(MTLPixelFormatETC2_RGB8)       },
+#endif
+        { GrColorType::kRG_88,            GrBackendFormat::MakeMtl(MTLPixelFormatRG8Unorm)        },
+        { GrColorType::kBGRA_8888,        GrBackendFormat::MakeMtl(MTLPixelFormatBGRA8Unorm)      },
+        { GrColorType::kRGBA_1010102,     GrBackendFormat::MakeMtl(MTLPixelFormatRGB10A2Unorm)    },
+        { GrColorType::kGray_8,           GrBackendFormat::MakeMtl(MTLPixelFormatR8Unorm)         },
+        { GrColorType::kAlpha_F16,        GrBackendFormat::MakeMtl(MTLPixelFormatR16Float)        },
+        { GrColorType::kRGBA_F16,         GrBackendFormat::MakeMtl(MTLPixelFormatRGBA16Float)     },
+        { GrColorType::kRGBA_F16_Clamped, GrBackendFormat::MakeMtl(MTLPixelFormatRGBA16Float)     },
+        { GrColorType::kRGBA_F32,         GrBackendFormat::MakeMtl(MTLPixelFormatRGBA32Float)     },
+        { GrColorType::kR_16,             GrBackendFormat::MakeMtl(MTLPixelFormatR16Unorm)        },
+        { GrColorType::kRG_1616,          GrBackendFormat::MakeMtl(MTLPixelFormatRG16Unorm)       },
+        { GrColorType::kRGBA_16161616,    GrBackendFormat::MakeMtl(MTLPixelFormatRGBA16Unorm)     },
+        { GrColorType::kRG_F16,           GrBackendFormat::MakeMtl(MTLPixelFormatRG16Float)       },
+    };
+
+#ifdef SK_DEBUG
+    for (auto combo : combos) {
+        SkASSERT(this->onAreColorTypeAndFormatCompatible(combo.fColorType, combo.fFormat));
+    }
+#endif
+
+    return combos;
+}
+#endif

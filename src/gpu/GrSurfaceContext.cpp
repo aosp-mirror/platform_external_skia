@@ -114,13 +114,15 @@ bool GrSurfaceContext::readPixels(const GrPixelInfo& origDstInfo, void* dst, siz
     // getImageData in "legacy" mode are round-trippable we use the GPU to do the complementary
     // unpremul step to writeSurfacePixels's premul step (which is determined empirically in
     // fContext->vaildaPMUPMConversionExists()).
+    GrBackendFormat defaultRGBAFormat = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
+                                                                      GrRenderable::kYes);
     bool canvas2DFastPath = unpremul && !needColorConversion &&
                             (GrColorType::kRGBA_8888 == dstInfo.colorType() ||
                              GrColorType::kBGRA_8888 == dstInfo.colorType()) &&
                             SkToBool(srcProxy->asTextureProxy()) &&
                             (srcProxy->config() == kRGBA_8888_GrPixelConfig ||
                              srcProxy->config() == kBGRA_8888_GrPixelConfig) &&
-                            caps->isConfigRenderable(kRGBA_8888_GrPixelConfig) &&
+                            defaultRGBAFormat.isValid() &&
                             direct->priv().validPMUPMConversionExists();
 
     auto readFlag = caps->surfaceSupportsReadPixels(srcSurface);
@@ -202,8 +204,8 @@ bool GrSurfaceContext::readPixels(const GrPixelInfo& origDstInfo, void* dst, siz
     direct->priv().flushSurface(srcProxy);
 
     if (!direct->priv().getGpu()->readPixels(srcSurface, pt.fX, pt.fY, dstInfo.width(),
-                                             dstInfo.height(), supportedRead.fColorType, readDst,
-                                             readRB)) {
+                                             dstInfo.height(), this->colorSpaceInfo().colorType(),
+                                             supportedRead.fColorType, readDst, readRB)) {
         return false;
     }
 
@@ -364,7 +366,9 @@ bool GrSurfaceContext::writePixels(const GrPixelInfo& origSrcInfo, const void* s
     }
 
     GrColorType allowedColorType =
-            caps->supportedWritePixelsColorType(dstProxy->config(), srcInfo.colorType()).fColorType;
+            caps->supportedWritePixelsColorType(this->colorSpaceInfo().colorType(),
+                                                dstProxy->backendFormat(),
+                                                srcInfo.colorType()).fColorType;
     bool flip = dstProxy->origin() == kBottomLeft_GrSurfaceOrigin;
     bool makeTight = !caps->writePixelsRowBytesSupport() && rowBytes != tightRowBytes;
     bool convert = premul || unpremul || needColorConversion || makeTight ||
@@ -394,8 +398,9 @@ bool GrSurfaceContext::writePixels(const GrPixelInfo& origSrcInfo, const void* s
     // TODO: should this policy decision just be moved into the drawing manager?
     direct->priv().flushSurface(caps->preferVRAMUseOverFlushes() ? dstProxy : nullptr);
 
-    return direct->priv().getGpu()->writePixels(dstSurface, pt.fX, pt.fY, srcInfo.width(),
-                                                srcInfo.height(), srcColorType, src, rowBytes);
+    return direct->priv().getGpu()->writePixels(
+            dstSurface, pt.fX, pt.fY, srcInfo.width(), srcInfo.height(),
+            this->colorSpaceInfo().colorType(), srcColorType, src, rowBytes);
 }
 
 bool GrSurfaceContext::copy(GrSurfaceProxy* src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
@@ -412,13 +417,11 @@ bool GrSurfaceContext::copy(GrSurfaceProxy* src, const SkIRect& srcRect, const S
              caps->makeConfigSpecific(this->asSurfaceProxy()->config(),
                                       this->asSurfaceProxy()->backendFormat()));
 
-    GrSurfaceProxy* dst = this->asSurfaceProxy();
-
-    if (!caps->canCopySurface(dst, src, srcRect, dstPoint)) {
+    if (!caps->canCopySurface(this->asSurfaceProxy(), src, srcRect, dstPoint)) {
         return false;
     }
 
-    return this->getOpList()->copySurface(fContext, dst, src, srcRect, dstPoint);
+    return this->getOpList()->copySurface(fContext, src, srcRect, dstPoint);
 }
 
 sk_sp<GrRenderTargetContext> GrSurfaceContext::rescale(const SkImageInfo& info,
@@ -623,7 +626,8 @@ GrSurfaceContext::PixelTransferResult GrSurfaceContext::transferPixels(GrColorTy
         srcRect = SkIRect::MakeLTRB(rect.fLeft, this->height() - rect.fBottom, rect.fRight,
                                     this->height() - rect.fTop);
     }
-    this->getOpList()->transferFrom(fContext, srcRect, supportedRead.fColorType, buffer, 0);
+    this->getOpList()->transferFrom(fContext, srcRect, this->colorSpaceInfo().colorType(),
+                                    supportedRead.fColorType, buffer, 0);
     PixelTransferResult result;
     result.fTransferBuffer = std::move(buffer);
     auto at = this->colorSpaceInfo().alphaType();

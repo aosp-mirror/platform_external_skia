@@ -151,13 +151,11 @@ void GrTextureOpList::endFlush() {
 // This closely parallels GrRenderTargetOpList::copySurface but renderTargetOpList
 // stores extra data with the op
 bool GrTextureOpList::copySurface(GrRecordingContext* context,
-                                  GrSurfaceProxy* dst,
                                   GrSurfaceProxy* src,
                                   const SkIRect& srcRect,
                                   const SkIPoint& dstPoint) {
-    SkASSERT(dst == fTarget.get());
-
-    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(context, dst, src, srcRect, dstPoint);
+    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(
+            context, fTarget.get(), src, srcRect, dstPoint);
     if (!op) {
         return false;
     }
@@ -174,14 +172,16 @@ bool GrTextureOpList::copySurface(GrRecordingContext* context,
 
 void GrTextureOpList::transferFrom(GrRecordingContext* context,
                                    const SkIRect& srcRect,
+                                   GrColorType surfaceColorType,
                                    GrColorType dstColorType,
                                    sk_sp<GrGpuBuffer> dst,
                                    size_t dstOffset) {
-    auto op = GrTransferFromOp::Make(context, srcRect, dstColorType, std::move(dst), dstOffset);
+    auto op = GrTransferFromOp::Make(context, srcRect, surfaceColorType, dstColorType,
+                                     std::move(dst), dstOffset);
     this->recordOp(std::move(op));
 }
 
-void GrTextureOpList::purgeOpsWithUninstantiatedProxies() {
+void GrTextureOpList::handleInternalAllocationFailure() {
     bool hasUninstantiatedProxy = false;
     auto checkInstantiation = [&hasUninstantiatedProxy](GrSurfaceProxy* p, GrMipMapped) {
         if (!p->isInstantiated()) {

@@ -21,13 +21,16 @@ public:
     bool isFormatCompressed(const GrBackendFormat&) const override;
 
     bool isFormatTexturable(GrColorType, const GrBackendFormat& format) const override;
+    bool isFormatRenderable(GrColorType, const GrBackendFormat& format,
+                            int sampleCount = 1) const override;
     bool isFormatCopyable(const GrBackendFormat& format) const override { return true; }
 
     bool isConfigTexturable(GrPixelConfig config) const override;
 
-    SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
+    SupportedWrite supportedWritePixelsColorType(GrColorType surfaceColorType,
+                                                 const GrBackendFormat& surfaceFormat,
                                                  GrColorType srcColorType) const override {
-        return {GrColorType::kUnknown, 1};
+        return {surfaceColorType, GrColorTypeBytesPerPixel(surfaceColorType)};
     }
 
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
@@ -36,19 +39,9 @@ public:
 
     int getRenderTargetSampleCount(int requestedCount, GrColorType,
                                    const GrBackendFormat&) const override;
+    int getRenderTargetSampleCount(int requestedCount, GrPixelConfig) const override;
 
-    int getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const override {
-        return this->isConfigTexturable(config) ? 1 : 0;
-    }
-
-    int maxRenderTargetSampleCount(GrColorType ct,
-                                   const GrBackendFormat& format) const override {
-        return this->maxRenderTargetSampleCount(this->getConfigFromBackendFormat(format, ct));
-    }
-
-    int maxRenderTargetSampleCount(GrPixelConfig config) const override {
-        return this->isConfigTexturable(config) ? 1 : 0;
-    }
+    int maxRenderTargetSampleCount(const GrBackendFormat& format) const override;
 
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
@@ -59,6 +52,10 @@ public:
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const override;
+
+#if GR_TEST_UTILS
+    std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
+#endif
 
 private:
     bool onSurfaceSupportsWritePixels(const GrSurface* surface) const override {

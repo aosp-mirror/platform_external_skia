@@ -351,21 +351,28 @@ bool Window_win::attach(BackendType attachType) {
 
     switch (attachType) {
         case kNativeGL_BackendType:
-            fWindowContext = window_context_factory::NewGLForWin(fHWnd, fRequestedDisplayParams);
+            fWindowContext = window_context_factory::MakeGLForWin(fHWnd, fRequestedDisplayParams);
             break;
 #if SK_ANGLE
         case kANGLE_BackendType:
-            fWindowContext = window_context_factory::NewANGLEForWin(fHWnd, fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeANGLEForWin(fHWnd, fRequestedDisplayParams);
+            break;
+#endif
+#ifdef SK_DAWN
+        case kDawn_BackendType:
+            fWindowContext =
+                    window_context_factory::MakeDawnD3D12ForWin(fHWnd, fRequestedDisplayParams);
             break;
 #endif
         case kRaster_BackendType:
-            fWindowContext = window_context_factory::NewRasterForWin(fHWnd,
-                                                                     fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeRasterForWin(fHWnd, fRequestedDisplayParams);
             break;
 #ifdef SK_VULKAN
         case kVulkan_BackendType:
-            fWindowContext = window_context_factory::NewVulkanForWin(fHWnd,
-                                                                     fRequestedDisplayParams);
+            fWindowContext =
+                    window_context_factory::MakeVulkanForWin(fHWnd, fRequestedDisplayParams);
             break;
 #endif
     }
@@ -385,7 +392,7 @@ void Window_win::setRequestedDisplayParams(const DisplayParams& params, bool all
         // Need to change these early, so attach() creates the window context correctly
         fRequestedDisplayParams = params;
 
-        delete fWindowContext;
+        fWindowContext = nullptr;
         this->closeWindow();
         this->init(fHInstance);
         this->attach(fBackend);

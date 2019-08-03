@@ -325,7 +325,7 @@ bool SkSurface_Gpu::onDraw(const SkDeferredDisplayList* ddl) {
     GrRenderTargetContext* rtc = fDevice->accessRenderTargetContext();
     GrContext* ctx = fDevice->context();
 
-    ctx->priv().copyOpListsFromDDL(ddl, rtc->asRenderTargetProxy());
+    ctx->priv().copyRenderTasksFromDDL(ddl, rtc->asRenderTargetProxy());
     return true;
 }
 
@@ -622,11 +622,7 @@ bool validate_backend_render_target(const GrCaps* caps, const GrBackendRenderTar
         return false;
     }
 
-    if (rt.sampleCnt() > 1) {
-        if (caps->maxRenderTargetSampleCount(grCT, rt.getBackendFormat()) <= 1) {
-            return false;
-        }
-    } else if (!caps->isFormatRenderable(grCT, rt.getBackendFormat())) {
+    if (!caps->isFormatRenderable(grCT, rt.getBackendFormat(), rt.sampleCnt())) {
         return false;
     }
     if (!SkSurface_Gpu::Valid(caps, rt.getBackendFormat())) {
@@ -746,14 +742,15 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrContext* context,
 
     if (isTextureable) {
         GrAHardwareBufferUtils::DeleteImageProc deleteImageProc = nullptr;
-        GrAHardwareBufferUtils::DeleteImageCtx deleteImageCtx = nullptr;
+        GrAHardwareBufferUtils::UpdateImageProc updateImageProc = nullptr;
+        GrAHardwareBufferUtils::TexImageCtx deleteImageCtx = nullptr;
 
         GrBackendTexture backendTexture =
                 GrAHardwareBufferUtils::MakeBackendTexture(context, hardwareBuffer,
                                                            bufferDesc.width, bufferDesc.height,
-                                                           &deleteImageProc, &deleteImageCtx,
-                                                           isProtectedContent, backendFormat,
-                                                           true);
+                                                           &deleteImageProc, &updateImageProc,
+                                                           &deleteImageCtx, isProtectedContent,
+                                                           backendFormat, true);
         if (!backendTexture.isValid()) {
             return nullptr;
         }

@@ -10,6 +10,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPicture.h"
 #include "include/effects/SkImageSource.h"
+#include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkPicturePriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
@@ -19,12 +20,12 @@
 
 namespace {
 
-class SkPictureImageFilterImpl final : public SkImageFilter {
+class SkPictureImageFilterImpl final : public SkImageFilter_Base {
 public:
-    static sk_sp<SkImageFilter> Make(sk_sp<SkPicture> picture, const SkRect& cropRect) {
-        return sk_sp<SkImageFilter>(new SkPictureImageFilterImpl(std::move(picture), cropRect));
-    }
-
+    SkPictureImageFilterImpl(sk_sp<SkPicture> picture, const SkRect& cropRect)
+            : INHERITED(nullptr, 0, nullptr)
+            , fPicture(std::move(picture))
+            , fCropRect(cropRect) {}
 
 protected:
     /*  Constructs an SkPictureImageFilter object from an SkReadBuffer.
@@ -41,26 +42,21 @@ private:
     friend void SkPictureImageFilter::RegisterFlattenables();
     SK_FLATTENABLE_HOOKS(SkPictureImageFilterImpl)
 
-    SkPictureImageFilterImpl(sk_sp<SkPicture> picture, const SkRect& cropRect)
-            : INHERITED(nullptr, 0, nullptr)
-            , fPicture(std::move(picture))
-            , fCropRect(cropRect) {}
-
     sk_sp<SkPicture>    fPicture;
     SkRect              fCropRect;
 
-    typedef SkImageFilter INHERITED;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 } // end namespace
 
 sk_sp<SkImageFilter> SkPictureImageFilter::Make(sk_sp<SkPicture> picture) {
     SkRect cropRect = picture ? picture->cullRect() : SkRect::MakeEmpty();
-    return SkPictureImageFilterImpl::Make(std::move(picture), cropRect);
+    return Make(std::move(picture), cropRect);
 }
 
 sk_sp<SkImageFilter> SkPictureImageFilter::Make(sk_sp<SkPicture> picture, const SkRect& cropRect) {
-    return SkPictureImageFilterImpl::Make(std::move(picture), cropRect);
+    return sk_sp<SkImageFilter>(new SkPictureImageFilterImpl(std::move(picture), cropRect));
 }
 
 void SkPictureImageFilter::RegisterFlattenables() {
@@ -100,7 +96,7 @@ sk_sp<SkFlattenable> SkPictureImageFilterImpl::CreateProc(SkReadBuffer& buffer) 
                                           buffer.checkFilterQuality());
         }
     }
-    return Make(std::move(picture), cropRect);
+    return SkPictureImageFilter::Make(std::move(picture), cropRect);
 }
 
 void SkPictureImageFilterImpl::flatten(SkWriteBuffer& buffer) const {

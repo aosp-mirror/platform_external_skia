@@ -112,11 +112,19 @@ public:
     bool isFormatCompressed(const GrBackendFormat&) const override;
 
     bool isFormatTexturable(GrColorType, const GrBackendFormat&) const override;
+    bool isFormatTexturable(GrColorType, GrGLFormat) const;
 
     bool isConfigTexturable(GrPixelConfig config) const override {
         GrColorType ct = GrPixelConfigToColorType(config);
         auto format = this->pixelConfigToFormat(config);
         return this->isFormatTexturable(ct, format);
+    }
+
+    bool isFormatRenderable(GrColorType ct, const GrBackendFormat& format,
+                            int sampleCount = 1) const override;
+
+    bool isFormatRenderable(GrGLFormat format) const {
+        return this->maxRenderTargetSampleCount(format) > 0;
     }
 
     int getRenderTargetSampleCount(int requestedCount, GrColorType ct,
@@ -131,14 +139,10 @@ public:
 
     }
 
-    int maxRenderTargetSampleCount(GrColorType ct, const GrBackendFormat& format) const override {
-        return this->maxRenderTargetSampleCount(ct, GrGLBackendFormatToGLFormat(format));
+    int maxRenderTargetSampleCount(const GrBackendFormat& format) const override {
+        return this->maxRenderTargetSampleCount(GrGLBackendFormatToGLFormat(format));
     }
-    int maxRenderTargetSampleCount(GrPixelConfig config) const override {
-        GrColorType ct = GrPixelConfigToColorType(config);
-        auto format = this->pixelConfigToFormat(config);
-        return this->maxRenderTargetSampleCount(ct, format);
-    }
+    int maxRenderTargetSampleCount(GrGLFormat) const;
 
     bool isFormatCopyable(const GrBackendFormat&) const override;
 
@@ -162,6 +166,9 @@ public:
     GrGLenum configSizedInternalFormat(GrPixelConfig config) const {
         return this->getSizedInternalFormat(this->pixelConfigToFormat(config));
     }
+    GrGLenum formatSizedInternalFormat(GrGLFormat format) const {
+        return this->getFormatInfo(format).fSizedInternalFormat;
+    }
 
     // TODO: Once pixel config is no longer used in the caps remove this helper function.
     GrGLFormat pixelConfigToFormat(GrPixelConfig) const;
@@ -184,6 +191,8 @@ public:
     const SkTArray<StencilFormat, true>& stencilFormats() const {
         return fStencilFormats;
     }
+
+    bool formatSupportsTexStorage(GrGLFormat) const;
 
     /**
      * Gets the internal format to use with glTexImage...() and glTexStorage...(). May be sized or
@@ -344,7 +353,8 @@ public:
 
     SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override;
 
-    SupportedWrite supportedWritePixelsColorType(GrPixelConfig config,
+    SupportedWrite supportedWritePixelsColorType(GrColorType surfaceColorType,
+                                                 const GrBackendFormat& surfaceFormat,
                                                  GrColorType srcColorType) const override;
 
     bool isCoreProfile() const { return fIsCoreProfile; }
@@ -433,7 +443,8 @@ public:
                        const SkIRect& srcRect, const SkIPoint& dstPoint) const;
     bool canCopyAsDraw(GrPixelConfig dstConfig, bool srcIsTextureable) const;
 
-    DstCopyRestrictions getDstCopyRestrictions(const GrRenderTargetProxy* src) const override;
+    DstCopyRestrictions getDstCopyRestrictions(const GrRenderTargetProxy* src,
+                                               GrColorType) const override;
 
     bool programBinarySupport() const { return fProgramBinarySupport; }
     bool programParameterSupport() const { return fProgramParameterSupport; }
@@ -453,6 +464,8 @@ public:
 
 #if GR_TEST_UTILS
     GrGLStandard standard() const { return fStandard; }
+
+    std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
 
 private:
@@ -502,11 +515,7 @@ private:
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
                                                  GrColorType) const override;
 
-    bool isFormatTexturable(GrColorType, GrGLFormat) const;
-    bool formatSupportsTexStorage(GrGLFormat) const;
-
     int getRenderTargetSampleCount(int requestedCount, GrColorType, GrGLFormat) const;
-    int maxRenderTargetSampleCount(GrColorType, GrGLFormat) const;
 
     GrGLStandard fStandard;
 

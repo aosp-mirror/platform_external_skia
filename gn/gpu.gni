@@ -160,6 +160,8 @@ skia_gpu_sources = [
   "$_src/gpu/GrRenderTargetProxy.cpp",
   "$_src/gpu/GrRenderTargetProxy.h",
   "$_src/gpu/GrRenderTargetProxyPriv.h",
+  "$_src/gpu/GrRenderTask.cpp",
+  "$_src/gpu/GrRenderTask.h",
   "$_src/gpu/GrReducedClip.cpp",
   "$_src/gpu/GrReducedClip.h",
   "$_src/gpu/GrRenderTargetContext.cpp",
@@ -522,6 +524,7 @@ skia_gpu_sources = [
 
   # Mock
   "$_src/gpu/mock/GrMockBuffer.h",
+  "$_src/gpu/mock/GrMockCaps.cpp",
   "$_src/gpu/mock/GrMockCaps.h",
   "$_src/gpu/mock/GrMockGpu.cpp",
   "$_src/gpu/mock/GrMockGpu.h",
@@ -715,12 +718,18 @@ skia_dawn_sources = [
   "$_src/gpu/dawn/GrDawnGpu.h",
   "$_src/gpu/dawn/GrDawnGpuCommandBuffer.cpp",
   "$_src/gpu/dawn/GrDawnGpuCommandBuffer.h",
+  "$_src/gpu/dawn/GrDawnProgramDataManager.cpp",
+  "$_src/gpu/dawn/GrDawnProgramDataManager.h",
+  "$_src/gpu/dawn/GrDawnProgramBuilder.cpp",
+  "$_src/gpu/dawn/GrDawnProgramBuilder.h",
   "$_src/gpu/dawn/GrDawnRenderTarget.cpp",
   "$_src/gpu/dawn/GrDawnRenderTarget.h",
   "$_src/gpu/dawn/GrDawnUniformHandler.cpp",
   "$_src/gpu/dawn/GrDawnUniformHandler.h",
   "$_src/gpu/dawn/GrDawnUtil.cpp",
   "$_src/gpu/dawn/GrDawnUtil.h",
+  "$_src/gpu/dawn/GrDawnVaryingHandler.cpp",
+  "$_src/gpu/dawn/GrDawnVaryingHandler.h",
 ]
 
 skia_metal_sources = [

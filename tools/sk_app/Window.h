@@ -28,7 +28,7 @@ class Window {
 public:
     static Window* CreateNativeWindow(void* platformData);
 
-    virtual ~Window() { this->detach(); }
+    virtual ~Window();
 
     virtual void setTitle(const char*) = 0;
     virtual void show() = 0;
@@ -47,6 +47,9 @@ public:
         kNativeGL_BackendType,
 #if SK_ANGLE && defined(SK_BUILD_FOR_WIN)
         kANGLE_BackendType,
+#endif
+#ifdef SK_DAWN
+        kDawn_BackendType,
 #endif
 #ifdef SK_VULKAN
         kVulkan_BackendType,
@@ -182,7 +185,7 @@ protected:
     SkTDArray<Layer*>      fLayers;
     DisplayParams          fRequestedDisplayParams;
 
-    WindowContext* fWindowContext = nullptr;
+    std::unique_ptr<WindowContext> fWindowContext;
 
     virtual void onInval() = 0;
 

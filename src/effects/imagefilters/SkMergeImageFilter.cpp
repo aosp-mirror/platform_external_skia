@@ -8,6 +8,7 @@
 #include "include/effects/SkMergeImageFilter.h"
 
 #include "include/core/SkCanvas.h"
+#include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
@@ -16,15 +17,15 @@
 
 namespace {
 
-class SkMergeImageFilterImpl final : public SkImageFilter {
+class SkMergeImageFilterImpl final : public SkImageFilter_Base {
 public:
-    static sk_sp<SkImageFilter> Make(sk_sp<SkImageFilter>* const filters, int count,
-                                     const CropRect* cropRect = nullptr) {
-        return sk_sp<SkImageFilter>(new SkMergeImageFilterImpl(filters, count, cropRect));
+    SkMergeImageFilterImpl(sk_sp<SkImageFilter>* const filters, int count,
+                           const CropRect* cropRect)
+            : INHERITED(filters, count, cropRect) {
+        SkASSERT(count >= 0);
     }
 
 protected:
-    void flatten(SkWriteBuffer&) const override;
     sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* source, const Context&,
                                         SkIPoint* offset) const override;
     bool onCanHandleComplexCTM() const override { return true; }
@@ -33,20 +34,14 @@ private:
     friend void SkMergeImageFilter::RegisterFlattenables();
     SK_FLATTENABLE_HOOKS(SkMergeImageFilterImpl)
 
-    SkMergeImageFilterImpl(sk_sp<SkImageFilter>* const filters, int count,
-                           const CropRect* cropRect)
-            : INHERITED(filters, count, cropRect) {
-        SkASSERT(count >= 0);
-    }
-
-    typedef SkImageFilter INHERITED;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 } // end namespace
 
 sk_sp<SkImageFilter> SkMergeImageFilter::Make(sk_sp<SkImageFilter>* const filters, int count,
                                                const SkImageFilter::CropRect* cropRect) {
-    return SkMergeImageFilterImpl::Make(filters, count, cropRect);
+    return sk_sp<SkImageFilter>(new SkMergeImageFilterImpl(filters, count, cropRect));
 }
 
 void SkMergeImageFilter::RegisterFlattenables() {
@@ -56,6 +51,14 @@ void SkMergeImageFilter::RegisterFlattenables() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+sk_sp<SkFlattenable> SkMergeImageFilterImpl::CreateProc(SkReadBuffer& buffer) {
+    Common common;
+    if (!common.unflatten(buffer, -1) || !buffer.isValid()) {
+        return nullptr;
+    }
+    return SkMergeImageFilter::Make(common.inputs(), common.inputCount(), &common.cropRect());
+}
 
 sk_sp<SkSpecialImage> SkMergeImageFilterImpl::onFilterImage(
         SkSpecialImage* source, const Context& ctx, SkIPoint* offset) const {
@@ -122,16 +125,3 @@ sk_sp<SkSpecialImage> SkMergeImageFilterImpl::onFilterImage(
     offset->fY = bounds.top();
     return surf->makeImageSnapshot();
 }
-
-sk_sp<SkFlattenable> SkMergeImageFilterImpl::CreateProc(SkReadBuffer& buffer) {
-    Common common;
-    if (!common.unflatten(buffer, -1) || !buffer.isValid()) {
-        return nullptr;
-    }
-    return Make(common.inputs(), common.inputCount(), &common.cropRect());
-}
-
-void SkMergeImageFilterImpl::flatten(SkWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
-}
-
