@@ -453,7 +453,8 @@ public:
 
     bool fbFetchRequiresEnablePerSample() const { return fFBFetchRequiresEnablePerSample; }
 
-    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const override;
+    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&,
+                                                  bool isAlphaChannel) const override;
 
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
@@ -607,6 +608,9 @@ private:
             kRenderable_Flag = 0x2,
         };
         uint32_t fFlags = 0;
+
+        GrSwizzle fTextureSwizzle;
+        GrSwizzle fOutputSwizzle;
 
         struct ExternalIOFormats {
             GrColorType fColorType = GrColorType::kUnknown;

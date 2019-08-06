@@ -1128,8 +1128,23 @@ bool GrVkCaps::isFormatRenderable(VkFormat format) const {
 }
 
 int GrVkCaps::getRenderTargetSampleCount(int requestedCount,
-                                         GrColorType, const GrBackendFormat& format) const {
-    if (!format.getVkFormat()) {
+                                         GrColorType colorType,
+                                         const GrBackendFormat& format) const {
+    VkFormat vkFormat;
+    if (const auto* temp = format.getVkFormat()) {
+        vkFormat = *temp;
+    } else {
+        return 0;
+    }
+
+    // Currently we don't allow RGB_888X to be renderable with R8G8B8A8_UNORM because we don't have
+    // a way to handle blends that reference dst alpha when the values in the dst alpha channel are
+    // uninitialized.
+    if (colorType == GrColorType::kRGB_888x && vkFormat == VK_FORMAT_R8G8B8A8_UNORM) {
+        return 0;
+    }
+    // We also do not support rendering to kGray.
+    if (GrColorTypeComponentFlags(colorType) & kGray_SkColorTypeComponentFlag) {
         return 0;
     }
 
@@ -1410,14 +1425,16 @@ GrPixelConfig GrVkCaps::onGetConfigFromBackendFormat(const GrBackendFormat& form
     return validate_image_info(*vkFormat, ct, ycbcrInfo->isValid());
 }
 
-GrColorType GrVkCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& format) const {
+GrColorType GrVkCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& format,
+                                                        bool isAlphaChannel) const {
     const VkFormat* vkFormat = format.getVkFormat();
     if (!vkFormat) {
         return GrColorType::kUnknown;
     }
 
     switch (*vkFormat) {
-        case VK_FORMAT_R8_UNORM:                 return GrColorType::kAlpha_8;
+        case VK_FORMAT_R8_UNORM:                 return isAlphaChannel ? GrColorType::kAlpha_8
+                                                                       : GrColorType::kGray_8;
         case VK_FORMAT_R8G8B8A8_UNORM:           return GrColorType::kRGBA_8888;
         case VK_FORMAT_R8G8B8_UNORM:             return GrColorType::kRGB_888x;
         case VK_FORMAT_R8G8_UNORM:               return GrColorType::kRG_88;

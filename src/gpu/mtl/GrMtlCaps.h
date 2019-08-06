@@ -69,7 +69,8 @@ public:
     bool canCopyAsResolve(GrSurface* dst, int dstSampleCount, GrSurface* src, int srcSampleCount,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const;
 
-    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&) const override;
+    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&,
+                                                  bool isAlphaChannel) const override;
 
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
@@ -102,8 +103,32 @@ private:
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
                                                  GrColorType) const override;
 
+    // ColorTypeInfo for a specific format
+    struct ColorTypeInfo {
+        GrColorType fColorType = GrColorType::kUnknown;
+        enum {
+            kUploadData_Flag = 0x1,
+            // Does Ganesh itself support rendering to this colorType & format pair. Renderability
+            // still additionally depends on if the format itself is renderable.
+            kRenderable_Flag = 0x2,
+        };
+        uint32_t fFlags = 0;
+
+        GrSwizzle fTextureSwizzle;
+        GrSwizzle fOutputSwizzle;
+    };
+
     struct FormatInfo {
         FormatInfo() : fFlags(0) {}
+
+        uint32_t colorTypeFlags(GrColorType colorType) const {
+            for (int i = 0; i < fColorTypeInfoCount; ++i) {
+                if (fColorTypeInfos[i].fColorType == colorType) {
+                    return fColorTypeInfos[i].fFlags;
+                }
+            }
+            return 0;
+        }
 
         enum {
             kTextureable_Flag = 0x1,
@@ -115,6 +140,9 @@ private:
                                           kMSAA_Flag | kResolve_Flag;
 
         uint16_t fFlags;
+
+        std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
+        int fColorTypeInfoCount = 0;
     };
 #ifdef SK_BUILD_FOR_IOS
     static constexpr size_t kNumMtlFormats = 18;
