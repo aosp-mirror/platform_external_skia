@@ -462,8 +462,8 @@ namespace skvm {
         Program(const std::vector<Builder::Instruction>& instructions,
                 const std::vector<int>                 & strides,
                 const char* debug_name);
-        Program() : Program({}, {}, nullptr) {}
 
+        Program();
         ~Program();
         Program(Program&&);
         Program& operator=(Program&&);
@@ -483,6 +483,7 @@ namespace skvm {
         std::vector<Instruction> instructions() const { return fInstructions; }
         int nregs() const { return fRegs; }
         int loop() const { return fLoop; }
+        bool empty() const { return fInstructions.empty(); }
 
         // If this Program has been JITted, drop it, forcing interpreter fallback.
         void dropJIT();
@@ -499,8 +500,8 @@ namespace skvm {
         void dumpJIT(const char* debug_name, size_t size) const;
 
         std::vector<Instruction> fInstructions;
-        int                      fRegs;
-        int                      fLoop;
+        int                      fRegs = 0;
+        int                      fLoop = 0;
         std::vector<int>         fStrides;
 
         void*  fJITBuf  = nullptr;
