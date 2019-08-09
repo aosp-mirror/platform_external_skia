@@ -1699,6 +1699,7 @@ cc_test {
         "tests/RefCntTest.cpp",
         "tests/RegionTest.cpp",
         "tests/RenderTargetContextTest.cpp",
+        "tests/RepeatedClippedBlurTest.cpp",
         "tests/ResourceAllocatorTest.cpp",
         "tests/ResourceCacheTest.cpp",
         "tests/RoundRectTest.cpp",
