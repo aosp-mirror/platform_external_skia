@@ -9,7 +9,6 @@
 #include "modules/skparagraph/include/ParagraphStyle.h"
 #include "modules/skparagraph/include/TextStyle.h"
 #include "modules/skparagraph/src/FontResolver.h"
-#include "modules/skparagraph/src/ParagraphCache.h"
 #include "modules/skparagraph/src/Run.h"
 #include "modules/skparagraph/src/TextLine.h"
 
@@ -68,18 +67,20 @@ public:
     size_t lineNumber() override { return fLines.size(); }
 
     TextLine& addLine(SkVector offset, SkVector advance, TextRange text, TextRange textWithSpaces,
-                      ClusterRange clusters, LineMetrics sizes);
+                      ClusterRange clusters, ClusterRange clustersWithGhosts, SkScalar AddLineToParagraph,
+                      LineMetrics sizes);
 
     SkSpan<const char> text() const { return fTextSpan; }
     InternalState state() const { return fState; }
     SkSpan<Run> runs() { return SkSpan<Run>(fRuns.data(), fRuns.size()); }
-    SkTArray<FontDescr>& switches() { return fFontResolver.switches(); }
+    const SkTArray<FontDescr>& switches() const { return fFontResolver.switches(); }
     SkSpan<Block> styles() {
         return SkSpan<Block>(fTextStyles.data(), fTextStyles.size());
     }
     SkSpan<TextLine> lines() { return SkSpan<TextLine>(fLines.data(), fLines.size()); }
-    ParagraphStyle paragraphStyle() const { return fParagraphStyle; }
+    const ParagraphStyle& paragraphStyle() const { return fParagraphStyle; }
     SkSpan<Cluster> clusters() { return SkSpan<Cluster>(fClusters.begin(), fClusters.size()); }
+    sk_sp<FontCollection> fontCollection() const { return fFontCollection; }
     void formatLines(SkScalar maxWidth);
 
     void shiftCluster(ClusterIndex index, SkScalar shift) {
@@ -100,6 +101,9 @@ public:
     bool strutEnabled() const { return paragraphStyle().getStrutStyle().getStrutEnabled(); }
     bool strutForceHeight() const {
         return paragraphStyle().getStrutStyle().getForceStrutHeight();
+    }
+    bool strutHeightOverride() const {
+        return paragraphStyle().getStrutStyle().getHeightOverride();
     }
     LineMetrics strutMetrics() const { return fStrutMetrics; }
 
@@ -130,9 +134,8 @@ public:
     Block& block(BlockIndex blockIndex);
 
     void markDirty() override { fState = kUnknown; }
-    void turnOnCache(bool on) { fParagraphCacheOn = on; }
+    FontResolver& getResolver() { return fFontResolver; }
     void setState(InternalState state);
-    void resetCache() { fParagraphCache.reset(); }
     sk_sp<SkPicture> getPicture() { return fPicture; }
 
     void resetContext();
@@ -149,6 +152,8 @@ private:
     friend class ParagraphCacheKey;
     friend class ParagraphCacheValue;
     friend class ParagraphCache;
+
+    friend class TextWrapper;
 
     BlockRange findAllBlocks(TextRange textRange);
     void extractStyles();
@@ -178,10 +183,7 @@ private:
 
     SkScalar fOldWidth;
     SkScalar fOldHeight;
-
-    // Cache
-    bool fParagraphCacheOn;
-    static ParagraphCache fParagraphCache;
+    SkScalar fMaxWidthWithTrailingSpaces;
 };
 }  // namespace textlayout
 }  // namespace skia
