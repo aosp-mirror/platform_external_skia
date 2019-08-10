@@ -99,7 +99,6 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
                     break;
                 default:
                     SK_ABORT("Unexpected config");
-                    return nullptr;
             }
             // Only supported compression type right now.
             SkASSERT(config == kRGB_ETC1_GrPixelConfig);
@@ -174,8 +173,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
 
             // Check if 'isFormatAsColorTypeRenderable' agrees with 'createTexture' (w/o MSAA)
             {
-                bool isRenderable = caps->isFormatAsColorTypeRenderable(combo.fColorType,
-                                                                        combo.fFormat);
+                bool isRenderable = caps->isFormatRenderable(combo.fFormat, 1);
 
                 sk_sp<GrSurface> tex = resourceProvider->createTexture(
                         desc, combo.fFormat, GrRenderable::kYes, 1, SkBudgeted::kNo,
@@ -189,8 +187,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
 
             // Check if 'isFormatAsColorTypeRenderable' agrees with 'createTexture' w/ MSAA
             {
-                bool isRenderable = SkToBool(
-                        caps->getRenderTargetSampleCount(2, combo.fColorType, combo.fFormat));
+                bool isRenderable = caps->isFormatRenderable(combo.fFormat, 2);
 
                 sk_sp<GrSurface> tex = resourceProvider->createTexture(
                         desc, combo.fFormat, GrRenderable::kYes, 2, SkBudgeted::kNo,

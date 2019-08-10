@@ -40,9 +40,7 @@ public:
     bool isFormatRenderable(const GrBackendFormat& format, int sampleCount) const override;
     bool isFormatRenderable(MTLPixelFormat, int sampleCount) const;
 
-    int getRenderTargetSampleCount(int requestedCount,
-                                   GrColorType, const GrBackendFormat&) const override;
-    int getRenderTargetSampleCount(int requestedCount, GrPixelConfig) const override;
+    int getRenderTargetSampleCount(int requestedCount, const GrBackendFormat&) const override;
     int getRenderTargetSampleCount(int requestedCount, MTLPixelFormat) const;
 
     int maxRenderTargetSampleCount(const GrBackendFormat&) const override;
@@ -120,8 +118,6 @@ private:
     };
 
     struct FormatInfo {
-        FormatInfo() : fFlags(0) {}
-
         uint32_t colorTypeFlags(GrColorType colorType) const {
             for (int i = 0; i < fColorTypeInfoCount; ++i) {
                 if (fColorTypeInfos[i].fColorType == colorType) {
@@ -140,7 +136,7 @@ private:
         static const uint16_t kAllFlags = kTextureable_Flag | kRenderable_Flag |
                                           kMSAA_Flag | kResolve_Flag;
 
-        uint16_t fFlags;
+        uint16_t fFlags = 0;
 
         std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
         int fColorTypeInfoCount = 0;

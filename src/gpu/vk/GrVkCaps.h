@@ -47,9 +47,7 @@ public:
     bool isFormatRenderable(const GrBackendFormat& format, int sampleCount) const override;
     bool isFormatRenderable(VkFormat, int sampleCount) const;
 
-    int getRenderTargetSampleCount(int requestedCount,
-                                   GrColorType, const GrBackendFormat&) const override;
-    int getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const override;
+    int getRenderTargetSampleCount(int requestedCount, const GrBackendFormat&) const override;
     int getRenderTargetSampleCount(int requestedCount, VkFormat) const;
 
     int maxRenderTargetSampleCount(const GrBackendFormat&) const override;
@@ -88,13 +86,6 @@ public:
     // destroying the command buffers. Therefore we add a sleep to make sure the fence signals.
     bool mustSleepOnTearDown() const {
         return fMustSleepOnTearDown;
-    }
-
-    // Returns true if while adding commands to command buffers, we must make a new command buffer
-    // everytime we want to bind a new VkPipeline. This is true for both primary and secondary
-    // command buffers. This is to work around a driver bug specifically on AMD.
-    bool newCBOnPipelineChange() const {
-        return fNewCBOnPipelineChange;
     }
 
     // Returns true if we should always make dedicated allocations for VkImages.
@@ -274,7 +265,6 @@ private:
 
     bool fMustDoCopiesFromOrigin = false;
     bool fMustSleepOnTearDown = false;
-    bool fNewCBOnPipelineChange = false;
     bool fShouldAlwaysUseDedicatedImageMemory = false;
 
     bool fAvoidUpdateBuffers = false;

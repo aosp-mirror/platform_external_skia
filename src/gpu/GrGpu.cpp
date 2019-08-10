@@ -144,25 +144,29 @@ static bool validate_levels(int w, int h, const GrMipLevel texels[], int mipLeve
     return levelsWithPixelsCnt == mipLevelCount;
 }
 
-sk_sp<GrTexture> GrGpu::createTexture(const GrSurfaceDesc& origDesc, const GrBackendFormat& format,
-                                      GrRenderable renderable, int renderTargetSampleCnt,
-                                      SkBudgeted budgeted, GrProtected isProtected,
-                                      const GrMipLevel texels[], int mipLevelCount) {
+sk_sp<GrTexture> GrGpu::createTexture(const GrSurfaceDesc& desc,
+                                      const GrBackendFormat& format,
+                                      GrRenderable renderable,
+                                      int renderTargetSampleCnt,
+                                      SkBudgeted budgeted,
+                                      GrProtected isProtected,
+                                      const GrMipLevel texels[],
+                                      int mipLevelCount) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    if (GrPixelConfigIsCompressed(origDesc.fConfig)) {
+    if (this->caps()->isFormatCompressed(format)) {
         // Call GrGpu::createCompressedTexture.
         return nullptr;
     }
-    GrSurfaceDesc desc = origDesc;
 
     GrMipMapped mipMapped = mipLevelCount > 1 ? GrMipMapped::kYes : GrMipMapped::kNo;
-    if (!this->caps()->validateSurfaceDesc(desc, renderable, renderTargetSampleCnt, mipMapped)) {
+    if (!this->caps()->validateSurfaceParams({desc.fWidth, desc.fHeight}, format, desc.fConfig,
+                                             renderable, renderTargetSampleCnt, mipMapped)) {
         return nullptr;
     }
 
     if (renderable == GrRenderable::kYes) {
         renderTargetSampleCnt =
-                this->caps()->getRenderTargetSampleCount(renderTargetSampleCnt, desc.fConfig);
+                this->caps()->getRenderTargetSampleCount(renderTargetSampleCnt, format);
     }
     // Attempt to catch un- or wrongly initialized sample counts.
     SkASSERT(renderTargetSampleCnt > 0 && renderTargetSampleCnt <= 64);
@@ -179,8 +183,14 @@ sk_sp<GrTexture> GrGpu::createTexture(const GrSurfaceDesc& origDesc, const GrBac
     }
 
     this->handleDirtyContext();
-    sk_sp<GrTexture> tex = this->onCreateTexture(desc, renderable, renderTargetSampleCnt, budgeted,
-                                                 isProtected, texels, mipLevelCount);
+    sk_sp<GrTexture> tex = this->onCreateTexture(desc,
+                                                 format,
+                                                 renderable,
+                                                 renderTargetSampleCnt,
+                                                 budgeted,
+                                                 isProtected,
+                                                 texels,
+                                                 mipLevelCount);
     if (tex) {
         if (!this->caps()->reuseScratchTextures() && renderable == GrRenderable::kNo) {
             tex->resourcePriv().removeScratchKey();
@@ -191,8 +201,7 @@ sk_sp<GrTexture> GrGpu::createTexture(const GrSurfaceDesc& origDesc, const GrBac
                 fStats.incTextureUploads();
             }
         }
-        //  TODO: Assert this once format is passed to onCreateTexture().
-        //  SkASSERT(tex->backendFormat() == format);
+        SkASSERT(tex->backendFormat() == format);
     }
     return tex;
 }
@@ -260,7 +269,7 @@ sk_sp<GrTexture> GrGpu::wrapRenderableBackendTexture(const GrBackendTexture& bac
     const GrCaps* caps = this->caps();
 
     if (!caps->isFormatTexturable(colorType, backendTex.getBackendFormat()) ||
-        !caps->getRenderTargetSampleCount(sampleCnt, colorType, backendTex.getBackendFormat())) {
+        !caps->isFormatRenderable(backendTex.getBackendFormat(), sampleCnt)) {
         return nullptr;
     }
 
@@ -280,8 +289,7 @@ sk_sp<GrRenderTarget> GrGpu::wrapBackendRenderTarget(const GrBackendRenderTarget
 
     const GrCaps* caps = this->caps();
 
-    if (0 == caps->getRenderTargetSampleCount(backendRT.sampleCnt(), colorType,
-                                              backendRT.getBackendFormat())) {
+    if (!caps->isFormatRenderable(backendRT.getBackendFormat(), backendRT.sampleCnt())) {
         return nullptr;
     }
 
@@ -300,8 +308,7 @@ sk_sp<GrRenderTarget> GrGpu::wrapBackendTextureAsRenderTarget(const GrBackendTex
         return nullptr;
     }
 
-    if (0 == caps->getRenderTargetSampleCount(sampleCnt, colorType,
-                                              backendTex.getBackendFormat())) {
+    if (!caps->isFormatRenderable(backendTex.getBackendFormat(), sampleCnt)) {
         return nullptr;
     }
 

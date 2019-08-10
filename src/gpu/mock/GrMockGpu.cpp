@@ -142,18 +142,20 @@ void GrMockGpu::querySampleLocations(GrRenderTarget* rt, SkTArray<SkPoint>* samp
     }
 }
 
-sk_sp<GrTexture> GrMockGpu::onCreateTexture(const GrSurfaceDesc& desc, GrRenderable renderable,
-                                            int renderTargetSampleCnt, SkBudgeted budgeted,
-                                            GrProtected isProtected, const GrMipLevel texels[],
+sk_sp<GrTexture> GrMockGpu::onCreateTexture(const GrSurfaceDesc& desc,
+                                            const GrBackendFormat& format,
+                                            GrRenderable renderable,
+                                            int renderTargetSampleCnt,
+                                            SkBudgeted budgeted,
+                                            GrProtected isProtected,
+                                            const GrMipLevel texels[],
                                             int mipLevelCount) {
     if (fMockOptions.fFailTextureAllocations) {
         return nullptr;
     }
 
-    GrColorType ct = GrPixelConfigToColorType(desc.fConfig);
-    if (GrColorType::kUnknown == ct) {
-        return nullptr;
-    }
+    GrColorType ct = format.asMockColorType();
+    SkASSERT(ct != GrColorType::kUnknown);
 
     GrMipMapsStatus mipMapsStatus = mipLevelCount > 1 ? GrMipMapsStatus::kValid
                                                       : GrMipMapsStatus::kNotAllocated;
@@ -275,16 +277,12 @@ GrBackendTexture GrMockGpu::createBackendTexture(int w, int h,
                                                  size_t /* rowBytes */,
                                                  const SkColor4f* /* color */,
                                                  GrProtected /* isProtected */) {
-
-    if (!format.getMockColorType()) {
-        return GrBackendTexture();  // invalid;
-    }
-
-    if (!this->caps()->isFormatTexturable(*format.getMockColorType(), format)) {
+    auto colorType = format.asMockColorType();
+    if (!this->caps()->isFormatTexturable(colorType, format)) {
         return GrBackendTexture();  // invalid
     }
 
-    GrMockTextureInfo info(*format.getMockColorType(), NextExternalTextureID());
+    GrMockTextureInfo info(colorType, NextExternalTextureID());
 
     fOutstandingTestingOnlyTextureIDs.add(info.fID);
     return GrBackendTexture(w, h, mipMapped, info);

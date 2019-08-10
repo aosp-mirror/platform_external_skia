@@ -195,7 +195,6 @@ static int gl_target_to_binding_index(GrGLenum target) {
             return 2;
     }
     SK_ABORT("Unexpected GL texture target.");
-    return 0;
 }
 
 GrGpuResource::UniqueID GrGLGpu::TextureUnitBindings::boundID(GrGLenum target) const {
@@ -234,7 +233,6 @@ static GrGLenum filter_to_gl_mag_filter(GrSamplerState::Filter filter) {
         case GrSamplerState::Filter::kMipMap:  return GR_GL_LINEAR;
     }
     SK_ABORT("Unknown filter");
-    return 0;
 }
 
 static GrGLenum filter_to_gl_min_filter(GrSamplerState::Filter filter) {
@@ -244,7 +242,6 @@ static GrGLenum filter_to_gl_min_filter(GrSamplerState::Filter filter) {
         case GrSamplerState::Filter::kMipMap:  return GR_GL_LINEAR_MIPMAP_LINEAR;
     }
     SK_ABORT("Unknown filter");
-    return 0;
 }
 
 static inline GrGLenum wrap_mode_to_gl_wrap(GrSamplerState::WrapMode wrapMode,
@@ -259,7 +256,6 @@ static inline GrGLenum wrap_mode_to_gl_wrap(GrSamplerState::WrapMode wrapMode,
             return GR_GL_CLAMP_TO_BORDER;
     }
     SK_ABORT("Unknown wrap mode");
-    return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -676,8 +672,8 @@ static bool check_backend_texture(const GrBackendTexture& backendTex, const GrCo
         if (!caps.shaderCaps()->externalTextureSupport()) {
             return false;
         }
-    } else if (GR_GL_TEXTURE_RECTANGLE == desc->fTarget && !skipRectTexSupportCheck) {
-        if (!caps.rectangleTextureSupport()) {
+    } else if (GR_GL_TEXTURE_RECTANGLE == desc->fTarget) {
+        if (!caps.rectangleTextureSupport() && !skipRectTexSupportCheck) {
             return false;
         }
     } else if (GR_GL_TEXTURE_2D != desc->fTarget) {
@@ -733,19 +729,21 @@ sk_sp<GrTexture> GrGLGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
         return nullptr;
     }
 
+    const GrGLCaps& caps = this->glCaps();
+
+    if (!caps.isFormatRenderable(desc.fFormat, sampleCnt)) {
+        return nullptr;
+    }
+
     if (kBorrow_GrWrapOwnership == ownership) {
         desc.fOwnership = GrBackendObjectOwnership::kBorrowed;
     } else {
         desc.fOwnership = GrBackendObjectOwnership::kOwned;
     }
 
-    const GrCaps* caps = this->caps();
 
-    sampleCnt =
-            caps->getRenderTargetSampleCount(sampleCnt, colorType, backendTex.getBackendFormat());
-    if (sampleCnt < 1) {
-        return nullptr;
-    }
+    sampleCnt = caps.getRenderTargetSampleCount(sampleCnt, desc.fFormat);
+    SkASSERT(sampleCnt);
 
     GrGLRenderTarget::IDs rtIDs;
     if (!this->createRenderTargetObjects(desc, sampleCnt, &rtIDs)) {
@@ -776,6 +774,11 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
         return nullptr;
     }
 
+    const auto format = backendRT.getBackendFormat().asGLFormat();
+    if (!this->glCaps().isFormatRenderable(format, backendRT.sampleCnt())) {
+        return nullptr;
+    }
+
     GrGLRenderTarget::IDs rtIDs;
     rtIDs.fRTFBOID = info.fFBOID;
     rtIDs.fMSColorRenderbufferID = 0;
@@ -784,14 +787,10 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
 
     GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendRT.getBackendFormat(),
                                                                     grColorType);
-    const auto format = GrGLBackendFormatToGLFormat(backendRT.getBackendFormat());
-
     SkASSERT(kUnknown_GrPixelConfig != config);
 
     const auto size = SkISize::Make(backendRT.width(), backendRT.height());
-    int sampleCount =
-        this->caps()->getRenderTargetSampleCount(backendRT.sampleCnt(), grColorType,
-                                                 backendRT.getBackendFormat());
+    int sampleCount = this->glCaps().getRenderTargetSampleCount(backendRT.sampleCnt(), format);
 
     return GrGLRenderTarget::MakeWrapped(this, size, format, config, sampleCount, rtIDs,
                                          backendRT.stencilBits());
@@ -806,8 +805,12 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
     if (!check_backend_texture(tex, colorType, this->glCaps(), &desc, true)) {
         return nullptr;
     }
-    const int sampleCount =
-            this->caps()->getRenderTargetSampleCount(sampleCnt, colorType, tex.getBackendFormat());
+
+    if (!this->glCaps().isFormatRenderable(desc.fFormat, sampleCnt)) {
+        return nullptr;
+    }
+
+    const int sampleCount = this->glCaps().getRenderTargetSampleCount(sampleCnt, desc.fFormat);
     GrGLRenderTarget::IDs rtIDs;
     if (!this->createRenderTargetObjects(desc, sampleCount, &rtIDs)) {
         return nullptr;
@@ -1422,6 +1425,7 @@ static GrGLTextureParameters::SamplerOverriddenState set_initial_texture_params(
 }
 
 sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
+                                          const GrBackendFormat& format,
                                           GrRenderable renderable,
                                           int renderTargetSampleCnt,
                                           SkBudgeted budgeted,
@@ -1434,16 +1438,18 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
     }
     SkASSERT(GrGLCaps::kNone_MSFBOType != this->glCaps().msFBOType() || renderTargetSampleCnt == 1);
 
-    GrGLenum glFormat = this->glCaps().configSizedInternalFormat(desc.fConfig);
 
     GrMipMapsStatus mipMapsStatus;
     GrGLTextureParameters::SamplerOverriddenState initialState;
     GrGLTexture::Desc texDesc;
     texDesc.fSize = {desc.fWidth, desc.fHeight};
     texDesc.fTarget = GR_GL_TEXTURE_2D;
-    texDesc.fFormat = GrGLFormatFromGLEnum(glFormat);
+    texDesc.fFormat = format.asGLFormat();
     texDesc.fConfig = desc.fConfig;
     texDesc.fOwnership = GrBackendObjectOwnership::kOwned;
+    SkASSERT(texDesc.fFormat != GrGLFormat::kUnknown);
+    SkASSERT(!GrGLFormatIsCompressed(texDesc.fFormat));
+
     // TODO: Take these as parameters.
     auto textureColorType = GrPixelConfigToColorType(desc.fConfig);
     auto srcColorType = GrPixelConfigToColorType(desc.fConfig);
@@ -1689,7 +1695,9 @@ GrGLuint GrGLGpu::createTexture2D(const SkISize& size,
                                   const GrMipLevel texels[],
                                   int mipLevelCount,
                                   GrMipMapsStatus* mipMapsStatus) {
+    SkASSERT(format != GrGLFormat::kUnknown);
     SkASSERT(!GrGLFormatIsCompressed(format));
+
     GrGLuint id = 0;
     GL_CALL(GenTextures(1, &id));
 
@@ -1732,8 +1740,7 @@ GrStencilAttachment* GrGLGpu::createStencilAttachmentForRenderTarget(
 
     GrGLStencilAttachment::IDDesc sbDesc;
 
-    auto rtFormat = GrGLBackendFormatToGLFormat(rt->backendFormat());
-    int sIdx = this->getCompatibleStencilIndex(rtFormat);
+    int sIdx = this->getCompatibleStencilIndex(rt->backendFormat().asGLFormat());
     if (sIdx < 0) {
         return nullptr;
     }
@@ -2166,11 +2173,13 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
         return false;
     }
 
-    GrGLFormat surfaceFormat = GrGLBackendFormatToGLFormat(surface->backendFormat());
     GrGLenum externalFormat = 0;
     GrGLenum externalType = 0;
-    this->glCaps().getReadPixelsFormat(surfaceFormat, surfaceColorType, dstColorType,
-                                       &externalFormat, &externalType);
+    this->glCaps().getReadPixelsFormat(surface->backendFormat().asGLFormat(),
+                                       surfaceColorType,
+                                       dstColorType,
+                                       &externalFormat,
+                                       &externalType);
     if (!externalFormat || !externalType) {
         return false;
     }
@@ -2442,7 +2451,6 @@ static GrGLenum gr_primitive_type_to_gl_mode(GrPrimitiveType primitiveType) {
             return GR_GL_LINES_ADJACENCY;
     }
     SK_ABORT("invalid GrPrimitiveType");
-    return GR_GL_TRIANGLES;
 }
 
 void GrGLGpu::sendMeshToGpu(GrPrimitiveType primitiveType, const GrBuffer* vertexBuffer,
@@ -3757,7 +3765,7 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
                                                GrProtected isProtected) {
     this->handleDirtyContext();
 
-    GrGLFormat glFormat = GrGLBackendFormatToGLFormat(format);
+    GrGLFormat glFormat = format.asGLFormat();
     if (glFormat == GrGLFormat::kUnknown) {
         return GrBackendTexture();  // invalid
     }
@@ -4195,7 +4203,6 @@ int GrGLGpu::TextureToCopyProgramIdx(GrTexture* texture) {
             return 2;
         default:
             SK_ABORT("Unexpected samper type");
-            return 0;
     }
 }
 

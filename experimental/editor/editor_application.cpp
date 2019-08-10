@@ -78,6 +78,7 @@ struct Timer {
 struct EditorLayer : public sk_app::Window::Layer {
     SkString fPath;
     sk_app::Window* fParent = nullptr;
+    // TODO(halcanary): implement a cross-platform clipboard interface.
     std::vector<char> fClipboard;
     editor::Editor fEditor;
     editor::Editor::TextPosition fTextPos{0, 0};
@@ -88,6 +89,7 @@ struct EditorLayer : public sk_app::Window::Layer {
     int fMargin = 10;
     bool fShiftDown = false;
     bool fBlink = false;
+    bool fMouseDown = false;
 
     void loadFile(const char* path) {
         if (sk_sp<SkData> data = SkData::MakeFromFileName(path)) {
@@ -148,31 +150,31 @@ struct EditorLayer : public sk_app::Window::Layer {
 
     void inval() { if (fParent) { fParent->inval(); } }
 
-    bool onMouseWheel(float delta, ModifierKey modifiers) override {
+    bool onMouseWheel(float delta, ModifierKey) override {
         this->scroll(-(int)(delta * fEditor.font().getSpacing()));
         return true;
     }
 
     bool onMouse(int x, int y, InputState state, ModifierKey modifiers) override {
-        if (InputState::kDown == state) {
-            y += fPos - fMargin;
-            x -= fMargin;
-            editor::Editor::TextPosition pos = fEditor.getPosition(SkIPoint{x, y});
-            #ifdef SK_EDITOR_DEBUG_OUT
-            SkDebugf("select:  line:%d column:%d \n", pos.fParagraphIndex, pos.fTextByteIndex);
-            #endif  // SK_EDITOR_DEBUG_OUT
-            if (pos != editor::Editor::TextPosition()) {
-                fTextPos = pos;
-                this->inval();
-            }
+        bool mouseDown = InputState::kDown == state;
+        if (mouseDown) {
+            fMouseDown = true;
+        } else if (InputState::kUp == state) {
+            fMouseDown = false;
         }
-        return true;
+        bool shiftOrDrag = skstd::Any(modifiers & ModifierKey::kShift) || !mouseDown;
+        if (fMouseDown) {
+            return this->move(fEditor.getPosition({x - fMargin, y + fPos - fMargin}), shiftOrDrag);
+        }
+        return false;
     }
 
-    bool onChar(SkUnichar c, ModifierKey modifiers) override {
-        if (!ModifierKeyIsSet(modifiers & (ModifierKey::kControl |
-                                           ModifierKey::kOption  |
-                                           ModifierKey::kCommand))) {
+    bool onChar(SkUnichar c, ModifierKey modi) override {
+        using skstd::Any;
+        modi &= ~ModifierKey::kFirstPress;
+        if (!Any(modi & (ModifierKey::kControl |
+                         ModifierKey::kOption  |
+                         ModifierKey::kCommand))) {
             if (((unsigned)c < 0x7F && (unsigned)c >= 0x20) || c == '\n') {
                 char ch = (char)c;
                 fEditor.insert(fTextPos, &ch, 1);
@@ -182,7 +184,9 @@ struct EditorLayer : public sk_app::Window::Layer {
                 return this->moveCursor(editor::Editor::Movement::kRight);
             }
         }
-        if (modifiers == ModifierKey::kControl) {
+        static constexpr ModifierKey kCommandOrControl = ModifierKey::kCommand |
+                                                         ModifierKey::kControl;
+        if (Any(modi & kCommandOrControl) && !Any(modi & ~kCommandOrControl)) {
             switch (c) {
                 case 'p':
                     for (editor::StringView str : fEditor.text()) {
@@ -192,8 +196,13 @@ struct EditorLayer : public sk_app::Window::Layer {
                 case 's':
                     {
                         std::ofstream out(fPath.c_str());
-                        for (editor::StringView str : fEditor.text()) {
-                            out.write(str.data, str.size) << '\n';
+                        size_t count = fEditor.lineCount();
+                        for (size_t i = 0; i < count; ++i) {
+                            if (i != 0) {
+                                out << '\n';
+                            }
+                            editor::StringView str = fEditor.line(i);
+                            out.write(str.data, str.size);
                         }
                     }
                     return true;
@@ -207,7 +216,7 @@ struct EditorLayer : public sk_app::Window::Layer {
                     if (fMarkPos != editor::Editor::TextPosition()) {
                         fClipboard.resize(fEditor.copy(fMarkPos, fTextPos, nullptr));
                         fEditor.copy(fMarkPos, fTextPos, fClipboard.data());
-                        fTextPos = fEditor.remove(fMarkPos, fTextPos);
+                        (void)this->move(fEditor.remove(fMarkPos, fTextPos), false);
                         this->inval();
                         return true;
                     }
@@ -224,12 +233,23 @@ struct EditorLayer : public sk_app::Window::Layer {
         #endif  // SK_EDITOR_DEBUG_OUT
         return false;
     }
+
     bool moveCursor(editor::Editor::Movement m, bool shift = false) {
+        return this->move(fEditor.move(m, fTextPos), shift);
+    }
+
+    bool move(editor::Editor::TextPosition pos, bool shift) {
+        if (pos == fTextPos || pos == editor::Editor::TextPosition()) {
+            if (!shift) {
+                fMarkPos = editor::Editor::TextPosition();
+            }
+            return false;
+        }
         if (shift != fShiftDown) {
-            fMarkPos = shift ? fTextPos :  editor::Editor::TextPosition();
+            fMarkPos = shift ? fTextPos : editor::Editor::TextPosition();
             fShiftDown = shift;
         }
-        fTextPos = fEditor.move(m, fTextPos);
+        fTextPos = pos;
 
         // scroll if needed.
         SkIRect cursor = fEditor.getLocation(fTextPos).roundOut();
@@ -249,10 +269,12 @@ struct EditorLayer : public sk_app::Window::Layer {
             return false;  // ignore keyup
         }
         // ignore other modifiers.
+        using skstd::Any;
         ModifierKey ctrlAltCmd = modifiers & (ModifierKey::kControl |
                                               ModifierKey::kOption  |
                                               ModifierKey::kCommand);
-        if (!ModifierKeyIsSet(ctrlAltCmd)) {
+        bool shift = Any(modifiers & (ModifierKey::kShift));
+        if (!Any(ctrlAltCmd)) {
             // no modifiers
             switch (key) {
                 case sk_app::Window::Key::kPageDown:
@@ -265,27 +287,22 @@ struct EditorLayer : public sk_app::Window::Layer {
                 case sk_app::Window::Key::kDown:
                 case sk_app::Window::Key::kHome:
                 case sk_app::Window::Key::kEnd:
-                    return this->moveCursor(convert(key),
-                                            (int)(modifiers & ModifierKey::kShift));
+                    return this->moveCursor(convert(key), shift);
                 case sk_app::Window::Key::kDelete:
                     if (fMarkPos != editor::Editor::TextPosition()) {
-                        fTextPos = fEditor.remove(fMarkPos, fTextPos);
-                        fMarkPos = editor::Editor::TextPosition();
+                        (void)this->move(fEditor.remove(fMarkPos, fTextPos), false);
                     } else {
-                        fTextPos = fEditor.remove(fTextPos,
-                                                  fEditor.move(editor::Editor::Movement::kRight,
-                                                               fTextPos));
+                        auto pos = fEditor.move(editor::Editor::Movement::kRight, fTextPos);
+                        (void)this->move(fEditor.remove(fTextPos, pos), false);
                     }
                     this->inval();
                     return true;
                 case sk_app::Window::Key::kBack:
                     if (fMarkPos != editor::Editor::TextPosition()) {
-                        fTextPos = fEditor.remove(fMarkPos, fTextPos);
-                        fMarkPos = editor::Editor::TextPosition();
+                        (void)this->move(fEditor.remove(fMarkPos, fTextPos), false);
                     } else {
-                        fTextPos = fEditor.remove(fTextPos,
-                                                  fEditor.move(editor::Editor::Movement::kLeft,
-                                                               fTextPos));
+                        auto pos = fEditor.move(editor::Editor::Movement::kLeft, fTextPos);
+                        (void)this->move(fEditor.remove(fTextPos, pos), false);
                     }
                     this->inval();
                     return true;
@@ -294,14 +311,12 @@ struct EditorLayer : public sk_app::Window::Layer {
                 default:
                     break;
             }
-        } else if (ModifierKeyIsSet(ctrlAltCmd & (ModifierKey::kControl | ModifierKey::kCommand))) {
+        } else if (skstd::Any(ctrlAltCmd & (ModifierKey::kControl | ModifierKey::kCommand))) {
             switch (key) {
                 case sk_app::Window::Key::kLeft:
-                    return this->moveCursor(editor::Editor::Movement::kWordLeft,
-                                            (int)(modifiers & ModifierKey::kShift));
+                    return this->moveCursor(editor::Editor::Movement::kWordLeft, shift);
                 case sk_app::Window::Key::kRight:
-                    return this->moveCursor(editor::Editor::Movement::kWordRight,
-                                            (int)(modifiers & ModifierKey::kShift));
+                    return this->moveCursor(editor::Editor::Movement::kWordRight, shift);
                 default:
                     break;
             }

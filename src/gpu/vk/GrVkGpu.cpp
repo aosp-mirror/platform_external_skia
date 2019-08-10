@@ -412,7 +412,6 @@ sk_sp<GrGpuBuffer> GrVkGpu::onCreateBuffer(size_t size, GrGpuBufferType type,
             break;
         default:
             SK_ABORT("Unknown buffer type.");
-            return nullptr;
     }
     if (data && buff) {
         buff->updateData(data, size);
@@ -949,12 +948,17 @@ bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int w
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, GrRenderable renderable,
-                                          int renderTargetSampleCnt, SkBudgeted budgeted,
-                                          GrProtected isProtected, const GrMipLevel texels[],
+sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc,
+                                          const GrBackendFormat& format,
+                                          GrRenderable renderable,
+                                          int renderTargetSampleCnt,
+                                          SkBudgeted budgeted,
+                                          GrProtected isProtected,
+                                          const GrMipLevel texels[],
                                           int mipLevelCount) {
     VkFormat pixelFormat;
-    SkAssertResult(GrPixelConfigToVkFormat(desc.fConfig, &pixelFormat));
+    SkAssertResult(format.asVkFormat(&pixelFormat));
+    SkASSERT(!GrVkFormatIsCompressed(pixelFormat));
 
     VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT;
     if (renderable == GrRenderable::kYes) {
@@ -1053,10 +1057,10 @@ sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(int width, int height,
                                                     SkImage::CompressionType compressionType,
                                                     SkBudgeted budgeted, const void* data) {
     GrBackendFormat format = this->caps()->getBackendFormatFromCompressionType(compressionType);
-    if (!format.getVkFormat()) {
+    VkFormat pixelFormat;
+    if (!format.asVkFormat(&pixelFormat)) {
         return nullptr;
     }
-    VkFormat pixelFormat = *format.getVkFormat();
 
     VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT;
 
@@ -1159,8 +1163,8 @@ static bool check_tex_image_info(const GrVkCaps& caps, const GrVkImageInfo& info
     return true;
 }
 
-static bool check_rt_image_info(const GrVkCaps& caps, const GrVkImageInfo& info) {
-    if (!caps.isFormatRenderable(info.fFormat, 1)) {
+static bool check_rt_image_info(const GrVkCaps& caps, const GrVkImageInfo& info, int sampleCnt) {
+    if (!caps.isFormatRenderable(info.fFormat, sampleCnt)) {
         return false;
     }
     return true;
@@ -1218,7 +1222,7 @@ sk_sp<GrTexture> GrVkGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
     if (!check_tex_image_info(this->vkCaps(), imageInfo)) {
         return nullptr;
     }
-    if (!check_rt_image_info(this->vkCaps(), imageInfo)) {
+    if (!check_rt_image_info(this->vkCaps(), imageInfo, sampleCnt)) {
         return nullptr;
     }
 
@@ -1235,8 +1239,7 @@ sk_sp<GrTexture> GrVkGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
     surfDesc.fWidth = backendTex.width();
     surfDesc.fHeight = backendTex.height();
     surfDesc.fConfig = config;
-    sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, colorType,
-                                                         backendTex.getBackendFormat());
+    sampleCnt = this->vkCaps().getRenderTargetSampleCount(sampleCnt, imageInfo.fFormat);
 
     sk_sp<GrVkImageLayout> layout = backendTex.getGrVkImageLayout();
     SkASSERT(layout);
@@ -1267,7 +1270,7 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     if (!check_image_info(this->vkCaps(), info, colorType, false)) {
         return nullptr;
     }
-    if (!check_rt_image_info(this->vkCaps(), info)) {
+    if (!check_rt_image_info(this->vkCaps(), info, backendRT.sampleCnt())) {
         return nullptr;
     }
 
@@ -1305,7 +1308,7 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
     if (!check_image_info(this->vkCaps(), imageInfo, grColorType, false)) {
         return nullptr;
     }
-    if (!check_rt_image_info(this->vkCaps(), imageInfo)) {
+    if (!check_rt_image_info(this->vkCaps(), imageInfo, sampleCnt)) {
         return nullptr;
     }
 
@@ -1322,8 +1325,7 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
     desc.fHeight = tex.height();
     desc.fConfig = config;
 
-    sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, grColorType,
-                                                         tex.getBackendFormat());
+    sampleCnt = this->vkCaps().getRenderTargetSampleCount(sampleCnt, imageInfo.fFormat);
     if (!sampleCnt) {
         return nullptr;
     }
@@ -1346,12 +1348,12 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapVulkanSecondaryCBAsRenderTarget(
     if (!backendFormat.isValid()) {
         return nullptr;
     }
-    GrColorType grColorType = SkColorTypeToGrColorType(imageInfo.colorType());
-    int sampleCnt = this->caps()->getRenderTargetSampleCount(1, grColorType, backendFormat);
+    int sampleCnt = this->vkCaps().getRenderTargetSampleCount(1, vkInfo.fFormat);
     if (!sampleCnt) {
         return nullptr;
     }
 
+    GrColorType grColorType = SkColorTypeToGrColorType(imageInfo.colorType());
     GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendFormat, grColorType);
     if (config == kUnknown_GrPixelConfig) {
         return nullptr;
@@ -1861,19 +1863,19 @@ GrBackendTexture GrVkGpu::createBackendTexture(int w, int h,
         return GrBackendTexture();
     }
 
-    const VkFormat* vkFormat = format.getVkFormat();
-    if (!vkFormat) {
+    VkFormat vkFormat;
+    if (!format.asVkFormat(&vkFormat)) {
         SkDebugf("Could net get vkformat\n");
         return GrBackendTexture();
     }
 
-    if (!caps.isVkFormatTexturable(*vkFormat)) {
+    if (!caps.isVkFormatTexturable(vkFormat)) {
         SkDebugf("Config is not texturable\n");
         return GrBackendTexture();
     }
 
     GrVkImageInfo info;
-    if (!this->createVkImageForBackendSurface(*vkFormat, w, h, true,
+    if (!this->createVkImageForBackendSurface(vkFormat, w, h, true,
                                               GrRenderable::kYes == renderable, mipMapped, srcData,
                                               rowBytes, color, &info, isProtected)) {
         SkDebugf("Failed to create testing only image\n");
@@ -2476,7 +2478,7 @@ void adjust_bounds_to_granularity(SkIRect* dstBounds, const SkIRect& srcBounds,
 }
 
 void GrVkGpu::submitSecondaryCommandBuffer(
-        SkTArray<std::unique_ptr<GrVkSecondaryCommandBuffer>>& buffers,
+        std::unique_ptr<GrVkSecondaryCommandBuffer> buffer,
         const GrVkRenderPass* renderPass,
         const VkClearValue* colorClear,
         GrVkRenderTarget* target, GrSurfaceOrigin origin,
@@ -2518,10 +2520,7 @@ void GrVkGpu::submitSecondaryCommandBuffer(
     clears[1].depthStencil.stencil = 0;
 
     fCurrentCmdBuffer->beginRenderPass(this, renderPass, clears, *target, *pBounds, true);
-    for (int i = 0; i < buffers.count(); ++i) {
-        std::unique_ptr<GrVkSecondaryCommandBuffer> scb = std::move(buffers[i]);
-        fCurrentCmdBuffer->executeCommands(this, std::move(scb));
-    }
+    fCurrentCmdBuffer->executeCommands(this, std::move(buffer));
     fCurrentCmdBuffer->endRenderPass(this);
 
     this->didWriteToSurface(target, origin, &bounds);

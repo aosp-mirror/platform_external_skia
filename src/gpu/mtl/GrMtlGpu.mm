@@ -391,9 +391,13 @@ GrStencilAttachment* GrMtlGpu::createStencilAttachmentForRenderTarget(
     return stencil;
 }
 
-sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc, GrRenderable renderable,
-                                           int renderTargetSampleCnt, SkBudgeted budgeted,
-                                           GrProtected isProtected, const GrMipLevel texels[],
+sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc,
+                                           const GrBackendFormat& format,
+                                           GrRenderable renderable,
+                                           int renderTargetSampleCnt,
+                                           SkBudgeted budgeted,
+                                           GrProtected isProtected,
+                                           const GrMipLevel texels[],
                                            int mipLevelCount) {
     // We don't support protected textures in Metal.
     if (isProtected == GrProtected::kYes) {
@@ -401,17 +405,9 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc, GrRenderab
     }
     int mipLevels = !mipLevelCount ? 1 : mipLevelCount;
 
-    if (!fMtlCaps->isConfigTexturable(desc.fConfig)) {
-        return nullptr;
-    }
-    MTLPixelFormat format;
-    if (!GrPixelConfigToMTLFormat(desc.fConfig, &format)) {
-        return nullptr;
-    }
-
-    if (GrPixelConfigIsCompressed(desc.fConfig)) {
-        return nullptr; // TODO: add compressed texture support
-    }
+    MTLPixelFormat mtlPixelFormat = GrBackendFormatAsMTLPixelFormat(format);
+    SkASSERT(mtlPixelFormat != MTLPixelFormatInvalid);
+    SkASSERT(!this->caps()->isFormatCompressed(format));
 
     sk_sp<GrMtlTexture> tex;
     // This TexDesc refers to the texture that will be read by the client. Thus even if msaa is
@@ -419,7 +415,7 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc, GrRenderab
     // set to 1.
     MTLTextureDescriptor* texDesc = [[MTLTextureDescriptor alloc] init];
     texDesc.textureType = MTLTextureType2D;
-    texDesc.pixelFormat = format;
+    texDesc.pixelFormat = mtlPixelFormat;
     texDesc.width = desc.fWidth;
     texDesc.height = desc.fHeight;
     texDesc.depth = 1;
@@ -533,20 +529,22 @@ sk_sp<GrTexture> GrMtlGpu::onWrapRenderableBackendTexture(const GrBackendTexture
         return nullptr;
     }
 
-    const GrCaps* caps = this->caps();
+    const GrMtlCaps& caps = this->mtlCaps();
 
-    GrPixelConfig config = caps->getConfigFromBackendFormat(backendTex.getBackendFormat(),
-                                                            colorType);
+    MTLPixelFormat format = mtlTexture.pixelFormat;
+    if (!caps.isFormatRenderable(format, sampleCnt)) {
+        return nullptr;
+    }
+
+    GrPixelConfig config = caps.getConfigFromBackendFormat(backendTex.getBackendFormat(),
+                                                           colorType);
     SkASSERT(kUnknown_GrPixelConfig != config);
 
     GrSurfaceDesc surfDesc;
     init_surface_desc(&surfDesc, mtlTexture, GrRenderable::kYes, config);
 
-    sampleCnt = caps->getRenderTargetSampleCount(sampleCnt, colorType,
-                                                 backendTex.getBackendFormat());
-    if (!sampleCnt) {
-        return nullptr;
-    }
+    sampleCnt = caps.getRenderTargetSampleCount(sampleCnt, format);
+    SkASSERT(sampleCnt);
 
     return GrMtlTextureRenderTarget::MakeWrappedTextureRenderTarget(this, surfDesc, sampleCnt,
                                                                     mtlTexture, cacheable);
@@ -581,14 +579,18 @@ sk_sp<GrRenderTarget> GrMtlGpu::onWrapBackendTextureAsRenderTarget(
         return nullptr;
     }
 
+    MTLPixelFormat format = mtlTexture.pixelFormat;
+    if (!this->mtlCaps().isFormatRenderable(format, sampleCnt)) {
+        return nullptr;
+    }
+
     GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendTex.getBackendFormat(),
                                                                     grColorType);
     SkASSERT(kUnknown_GrPixelConfig != config);
 
     GrSurfaceDesc surfDesc;
     init_surface_desc(&surfDesc, mtlTexture, GrRenderable::kYes, config);
-    sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, grColorType,
-                                                         backendTex.getBackendFormat());
+    sampleCnt = this->mtlCaps().getRenderTargetSampleCount(sampleCnt, format);
     if (!sampleCnt) {
         return nullptr;
     }
@@ -721,13 +723,9 @@ GrBackendTexture GrMtlGpu::createBackendTexture(int w, int h,
         return GrBackendTexture();
     }
 
-    const GrMTLPixelFormat* mtlFormat = format.getMtlFormat();
-    if (!mtlFormat) {
-        return GrBackendTexture();
-    }
-
+    const MTLPixelFormat mtlFormat = GrBackendFormatAsMTLPixelFormat(format);
     GrMtlTextureInfo info;
-    if (!this->createTestingOnlyMtlTextureInfo(static_cast<MTLPixelFormat>(*mtlFormat),
+    if (!this->createTestingOnlyMtlTextureInfo(mtlFormat,
                                                w, h, true,
                                                GrRenderable::kYes == renderable, mipMapped,
                                                pixels, rowBytes, &info)) {

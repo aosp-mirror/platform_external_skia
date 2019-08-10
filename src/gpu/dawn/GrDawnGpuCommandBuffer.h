@@ -62,6 +62,7 @@ public:
     void begin() override { }
     void end() override;
 
+    dawn::RenderPassEncoder beginRenderPass(dawn::LoadOp colorOp, dawn::LoadOp stencilOp);
     void transferFrom(const SkIRect& srcRect, GrColorType surfaceColorType,
                       GrColorType bufferColorType, GrGpuBuffer* transferBuffer,
                       size_t offset) override;
@@ -74,14 +75,15 @@ public:
     void submit();
 
 private:
-    void init();
-
     GrGpu* gpu() override;
 
-    // Bind vertex and index buffers
-    void bindGeometry(const GrBuffer* indexBuffer,
-                      const GrBuffer* vertexBuffer,
-                      const GrBuffer* instanceBuffer);
+    void applyState(const GrPipeline& pipeline,
+                    const GrPrimitiveProcessor& primProc,
+                    const GrTextureProxy* const primProcProxies[],
+                    const GrPipeline::FixedDynamicState* fixedDynamicState,
+                    const GrPipeline::DynamicStateArrays* dynamicStateArrays,
+                    const GrPrimitiveType primitiveType,
+                    bool hasPoints);
 
     void onDraw(const GrPrimitiveProcessor& primProc,
                 const GrPipeline& pipeline,
@@ -140,8 +142,10 @@ private:
         SkIPoint        fDstPoint;
     };
 
-    dawn::CommandBuffer         fCommandBuffer;
     GrDawnGpu*                  fGpu;
+    dawn::CommandEncoder        fEncoder;
+    dawn::RenderPassEncoder     fPassEncoder;
+    LoadAndStoreInfo            fColorInfo;
 
     typedef GrGpuRTCommandBuffer INHERITED;
 };

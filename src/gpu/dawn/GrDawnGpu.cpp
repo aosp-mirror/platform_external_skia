@@ -17,9 +17,11 @@
 #include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/dawn/GrDawnBuffer.h"
 #include "src/gpu/dawn/GrDawnCaps.h"
 #include "src/gpu/dawn/GrDawnGpuCommandBuffer.h"
 #include "src/gpu/dawn/GrDawnRenderTarget.h"
+#include "src/gpu/dawn/GrDawnStencilAttachment.h"
 
 #include "src/sksl/SkSLCompiler.h"
 
@@ -75,8 +77,11 @@ GrGpuTextureCommandBuffer* GrDawnGpu::getCommandBuffer(GrTexture* texture,
 ///////////////////////////////////////////////////////////////////////////////
 sk_sp<GrGpuBuffer> GrDawnGpu::onCreateBuffer(size_t size, GrGpuBufferType type,
                                              GrAccessPattern accessPattern, const void* data) {
-    SkASSERT(!"unimplemented");
-    return nullptr;
+    sk_sp<GrGpuBuffer> b(new GrDawnBuffer(this, size, type, accessPattern));
+    if (data && b) {
+        b->updateData(data, size);
+    }
+    return b;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,9 +108,13 @@ bool GrDawnGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-sk_sp<GrTexture> GrDawnGpu::onCreateTexture(const GrSurfaceDesc& desc, GrRenderable renderable,
-                                            int renderTargetSampleCnt, SkBudgeted budgeted,
-                                            GrProtected, const GrMipLevel texels[],
+sk_sp<GrTexture> GrDawnGpu::onCreateTexture(const GrSurfaceDesc& desc,
+                                            const GrBackendFormat& format,
+                                            GrRenderable renderable,
+                                            int renderTargetSampleCnt,
+                                            SkBudgeted budgeted,
+                                            GrProtected,
+                                            const GrMipLevel texels[],
                                             int mipLevelCount) {
     SkASSERT(!"unimplemented");
     return nullptr;
@@ -156,7 +165,7 @@ sk_sp<GrRenderTarget> GrDawnGpu::onWrapBackendTextureAsRenderTarget(const GrBack
     desc.fWidth = tex.width();
     desc.fHeight = tex.height();
     desc.fConfig = this->caps()->getConfigFromBackendFormat(tex.getBackendFormat(), colorType);
-    sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, desc.fConfig);
+    sampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, tex.getBackendFormat());
     if (sampleCnt < 1) {
         return nullptr;
     }
@@ -169,8 +178,12 @@ GrStencilAttachment* GrDawnGpu::createStencilAttachmentForRenderTarget(const GrR
                                                                        int width,
                                                                        int height,
                                                                        int numStencilSamples) {
-    SkASSERT(!"unimplemented");
-    return nullptr;
+    GrDawnStencilAttachment* stencil(GrDawnStencilAttachment::Create(this,
+                                                                     width,
+                                                                     height,
+                                                                     numStencilSamples));
+    fStats.incStencilAttachmentCreates();
+    return stencil;
 }
 
 GrBackendTexture GrDawnGpu::createBackendTexture(int width, int height,
