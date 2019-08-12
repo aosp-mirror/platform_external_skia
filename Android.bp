@@ -1786,6 +1786,7 @@ cc_test {
         "tests/VkPriorityExtensionTest.cpp",
         "tests/VkProtectedContextTest.cpp",
         "tests/VkWrapTests.cpp",
+        "tests/VkYcbcrSamplerTest.cpp",
         "tests/VptrTest.cpp",
         "tests/WindowRectanglesTest.cpp",
         "tests/WritePixelsTest.cpp",
