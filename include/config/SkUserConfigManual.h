@@ -30,6 +30,4 @@
 
   #define SK_DISABLE_DAA  // skbug.com/6886
 
-  #define SK_LEGACY_HEIF_API
-
 #endif // SkUserConfigManual_DEFINED
