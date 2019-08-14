@@ -1053,8 +1053,10 @@ static bool allocate_and_populate_texture(GrGLFormat format,
                     *mipMapsStatus = GrMipMapsStatus::kDirty;
                 }
 
-                // Even if curremtMipData is nullptr, continue to call TexImage2D.
-                // This will allocate texture memory which we can later populate.
+                // We are considering modifying the interface to GrGpu to no longer allow data to
+                // be provided when creating a texture. To test whether that is feasible for
+                // performance on ES2 GPUs without tex storage we're calling glTexImage2D and then
+                // glTexSubImage2D and hoping we don't get any performance regressions.
                 GL_ALLOC_CALL(&interface,
                               TexImage2D(target,
                                          currentMipLevel,
@@ -1063,7 +1065,18 @@ static bool allocate_and_populate_texture(GrGLFormat format,
                                          currentHeight,
                                          0, // border
                                          externalFormat, externalType,
-                                         currentMipData));
+                                         nullptr));
+                if (currentMipData) {
+                    GR_GL_CALL(&interface,
+                               TexSubImage2D(target,
+                                             currentMipLevel,
+                                             0, 0,
+                                             currentWidth,
+                                             currentHeight,
+                                             externalFormat,
+                                             externalType,
+                                             currentMipData));
+                }
                 GrGLenum error = CHECK_ALLOC_ERROR(&interface);
                 if (error != GR_GL_NO_ERROR) {
                     return false;
@@ -1107,7 +1120,7 @@ bool GrGLGpu::uploadTexData(GrGLFormat textureFormat, GrColorType textureColorTy
     // If we're uploading compressed data then we should be using uploadCompressedTexData
     SkASSERT(!GrGLFormatIsCompressed(textureFormat));
 
-    SkASSERT(this->glCaps().isFormatTexturable(textureColorType, textureFormat));
+    SkASSERT(this->glCaps().isFormatTexturable(textureFormat));
     SkDEBUGCODE(
         SkIRect subRect = SkIRect::MakeXYWH(left, top, width, height);
         SkIRect bounds = SkIRect::MakeWH(texWidth, texHeight);
@@ -1205,22 +1218,21 @@ bool GrGLGpu::uploadTexData(GrGLFormat textureFormat, GrColorType textureColorTy
     return succeeded;
 }
 
-GrGLFormat GrGLGpu::uploadCompressedTexData(SkImage::CompressionType compressionType,
-                                            const SkISize& size,
-                                            GrGLenum target,
-                                            const void* data) {
+bool GrGLGpu::uploadCompressedTexData(GrGLFormat format,
+                                      SkImage::CompressionType compressionType,
+                                      const SkISize& size,
+                                      GrGLenum target,
+                                      const void* data) {
+    SkASSERT(format != GrGLFormat::kUnknown);
     const GrGLCaps& caps = this->glCaps();
 
-    GrPixelConfig config = GrCompressionTypePixelConfig(compressionType);
     // We only need the internal format for compressed 2D textures.
-    GrGLenum internalFormat;
-    if (!caps.getCompressedTexImageFormats(config, &internalFormat)) {
-        return GrGLFormat::kUnknown;
+    GrGLenum internalFormat = caps.getTexImageInternalFormat(format);
+    if (!internalFormat) {
+        return 0;
     }
-    GrGLFormat format = GrGLFormatFromGLEnum(internalFormat);
-    SkASSERT(format != GrGLFormat::kUnknown);
 
-    bool useTexStorage = caps.configSupportsTexStorage(config);
+    bool useTexStorage = caps.formatSupportsTexStorage(format);
 
     static constexpr int kMipLevelCount = 1;
 
@@ -1235,7 +1247,7 @@ GrGLFormat GrGLGpu::uploadCompressedTexData(SkImage::CompressionType compression
                 TexStorage2D(target, kMipLevelCount, internalFormat, size.width(), size.height()));
         GrGLenum error = CHECK_ALLOC_ERROR(this->glInterface());
         if (error != GR_GL_NO_ERROR) {
-            return GrGLFormat::kUnknown;
+            return false;
         }
         GL_CALL(CompressedTexSubImage2D(target,
                                         0,  // level
@@ -1258,10 +1270,10 @@ GrGLFormat GrGLGpu::uploadCompressedTexData(SkImage::CompressionType compression
 
         GrGLenum error = CHECK_ALLOC_ERROR(this->glInterface());
         if (error != GR_GL_NO_ERROR) {
-            return GrGLFormat::kUnknown;
+            return false;
         }
     }
-    return format;
+    return true;
 }
 
 static bool renderbuffer_storage_msaa(const GrGLContext& ctx,
@@ -1503,6 +1515,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
 }
 
 sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(int width, int height,
+                                                    const GrBackendFormat& format,
                                                     SkImage::CompressionType compression,
                                                     SkBudgeted budgeted, const void* data) {
     GrGLTextureParameters::SamplerOverriddenState initialState;
@@ -1511,8 +1524,9 @@ sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(int width, int height,
     desc.fTarget = GR_GL_TEXTURE_2D;
     desc.fConfig = GrCompressionTypePixelConfig(compression);
     desc.fOwnership = GrBackendObjectOwnership::kOwned;
-    desc.fID = this->createCompressedTexture2D(desc.fSize, compression, &initialState, data,
-                                               &desc.fFormat);
+    desc.fFormat = format.asGLFormat();
+    desc.fID = this->createCompressedTexture2D(desc.fSize, desc.fFormat, compression, &initialState,
+                                               data);
     if (!desc.fID) {
         return nullptr;
     }
@@ -1664,10 +1678,13 @@ int GrGLGpu::getCompatibleStencilIndex(GrGLFormat format) {
 
 GrGLuint GrGLGpu::createCompressedTexture2D(
         const SkISize& size,
+        GrGLFormat format,
         SkImage::CompressionType compression,
         GrGLTextureParameters::SamplerOverriddenState* initialState,
-        const void* data,
-        GrGLFormat* format) {
+        const void* data) {
+    if (format == GrGLFormat::kUnknown) {
+        return 0;
+    }
     GrGLuint id = 0;
     GL_CALL(GenTextures(1, &id));
     if (!id) {
@@ -1678,8 +1695,7 @@ GrGLuint GrGLGpu::createCompressedTexture2D(
 
     *initialState = set_initial_texture_params(this->glInterface(), GR_GL_TEXTURE_2D);
 
-    *format = this->uploadCompressedTexData(compression, size, GR_GL_TEXTURE_2D, data);
-    if (*format == GrGLFormat::kUnknown) {
+    if (!this->uploadCompressedTexData(format, compression, size, GR_GL_TEXTURE_2D, data)) {
         GL_CALL(DeleteTextures(1, &id));
         return 0;
     }
@@ -3799,7 +3815,9 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
         return GrBackendTexture();  // invalid
     }
 
-    if (!this->caps()->isConfigTexturable(config)) {
+    auto textureColorType = GrPixelConfigToColorType(config);
+
+    if (!this->caps()->isFormatTexturableAndUploadable(textureColorType, format)) {
         return GrBackendTexture();  // invalid
     }
 
@@ -3838,13 +3856,12 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
             srcPixels = pixelStorage.reset(size);
             GrFillInCompressedData(compressionType, w, h, (char*)srcPixels, *color);
         }
-        GrGLFormat format;
         info.fID = this->createCompressedTexture2D(
-                {w, h}, compressionType, &initialState, srcPixels, &format);
+                {w, h}, glFormat, compressionType, &initialState, srcPixels);
         if (!info.fID) {
             return GrBackendTexture();
         }
-        info.fFormat = GrGLFormatToEnum(format);
+        info.fFormat = GrGLFormatToEnum(glFormat);
         info.fTarget = GR_GL_TEXTURE_2D;
     } else {
         if (srcPixels) {
@@ -3885,7 +3902,6 @@ GrBackendTexture GrGLGpu::createBackendTexture(int w, int h,
         info.fTarget = GR_GL_TEXTURE_2D;
         info.fFormat = GrGLFormatToEnum(glFormat);
         // TODO: Take these as parameters.
-        auto textureColorType = GrPixelConfigToColorType(desc.fConfig);
         auto srcColorType = GrPixelConfigToColorType(desc.fConfig);
         info.fID = this->createTexture2D({desc.fWidth, desc.fHeight},
                                          glFormat,

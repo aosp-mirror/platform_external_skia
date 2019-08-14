@@ -13,6 +13,7 @@
 
 class GrPipeline;
 class GrDawnGpuRTCommandBuffer;
+class GrDawnGpuTextureCommandBuffer;
 
 namespace SkSL {
     class Compiler;
@@ -140,14 +141,11 @@ private:
     void onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
                        const GrFlushInfo& info, const GrPrepareForExternalIORequests&) override;
 
-    dawn::Device                                 fDevice;
-    dawn::Queue                                  fQueue;    // Must be Graphics queue
-
-    // Compiler used for compiling sksl into spirv. We only want to create the compiler once since
-    // there is significant overhead to the first compile of any compiler.
-    std::unique_ptr<SkSL::Compiler> fCompiler;
-
-    std::unique_ptr<GrDawnGpuRTCommandBuffer> fCachedRTCommandBuffer;
+    dawn::Device                                    fDevice;
+    dawn::Queue                                     fQueue;
+    std::unique_ptr<SkSL::Compiler>                 fCompiler;
+    std::unique_ptr<GrDawnGpuRTCommandBuffer>       fRTCommandBuffer;
+    std::unique_ptr<GrDawnGpuTextureCommandBuffer>  fTextureCommandBuffer;
 
     typedef GrGpu INHERITED;
 };
