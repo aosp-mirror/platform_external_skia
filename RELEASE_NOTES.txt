@@ -10,6 +10,8 @@ Milestone 78
 
  * SkDrawLooper is no longer supported in SkPaint or SkCanvas.
 
+ * SkImage: new factories: DecodeToRaster, DecodeToTexture
+
  * SkImageFilter API refactor started:
    - Provide new factory API in include/effects/SkImageFilters
    - Consolidated enum types to use SkTileMode and SkColorChannel
@@ -24,3 +26,6 @@ Milestone 78
 
  * Vulkan backend now supports YCbCr sampler for I420 Vulkan images that are not
    backed by external images.
+
+ * Add SkCodec::SelectionPolicy for distinguishing between decoding a still image
+   or an image sequence for a container format that has both (e.g. HEIF).
