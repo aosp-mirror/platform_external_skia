@@ -626,9 +626,9 @@ void SkBitmapDevice::drawSpecial(SkSpecialImage* src, int x, int y, const SkPain
         const SkIRect clipBounds = fRCStack.rc().getBounds().makeOffset(-x, -y);
         sk_sp<SkImageFilterCache> cache(this->getImageFilterCache());
         SkImageFilter_Base::Context ctx(matrix, clipBounds, cache.get(), fBitmap.colorType(),
-                                        fBitmap.colorSpace());
+                                        fBitmap.colorSpace(), src);
 
-        filteredImage = as_IFB(filter)->filterImage(src, ctx, &offset);
+        filteredImage = as_IFB(filter)->filterImage(ctx, &offset);
         if (!filteredImage) {
             return;
         }
@@ -802,10 +802,10 @@ void SkBitmapDevice::validateDevBounds(const SkIRect& drawClipBounds) {
 SkBaseDevice::ClipType SkBitmapDevice::onGetClipType() const {
     const SkRasterClip& rc = fRCStack.rc();
     if (rc.isEmpty()) {
-        return kEmpty_ClipType;
+        return ClipType::kEmpty;
     } else if (rc.isRect()) {
-        return kRect_ClipType;
+        return ClipType::kRect;
     } else {
-        return kComplex_ClipType;
+        return ClipType::kComplex;
     }
 }
