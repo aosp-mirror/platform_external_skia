@@ -12,6 +12,7 @@
 #include "../private/SkAtomics.h"
 #include "../private/SkTDArray.h"
 #include "SkMatrix.h"
+#include "SkMutex.h"
 #include "SkPoint.h"
 #include "SkRRect.h"
 #include "SkRect.h"
@@ -311,7 +312,7 @@ public:
         virtual void onChange() = 0;
     };
 
-    void addGenIDChangeListener(GenIDChangeListener* listener);
+    void addGenIDChangeListener(GenIDChangeListener* listener);  // Threadsafe
 
     bool isValid() const;
     SkDEBUGCODE(void validate() const { SkASSERT(this->isValid()); } )
@@ -538,6 +539,7 @@ private:
     mutable uint32_t    fGenerationID;
     SkDEBUGCODE(int32_t fEditorsAttached;) // assert that only one editor in use at any time.
 
+    SkMutex                         fGenIDChangeListenersMutex;
     SkTDArray<GenIDChangeListener*> fGenIDChangeListeners;  // pointers are owned
 
     mutable uint8_t  fBoundsIsDirty;
