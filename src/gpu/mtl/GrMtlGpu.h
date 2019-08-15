@@ -143,8 +143,9 @@ private:
                                      GrProtected,
                                      const GrMipLevel texels[],
                                      int mipLevelCount) override;
-    sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, SkImage::CompressionType,
-                                               SkBudgeted, const void* data) override {
+    sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
+                                               SkImage::CompressionType, SkBudgeted,
+                                               const void* data) override {
         return nullptr;
     }
 
@@ -227,8 +228,8 @@ private:
     bool createTestingOnlyMtlTextureInfo(MTLPixelFormat,
                                          int w, int h, bool texturable,
                                          bool renderable, GrMipMapped mipMapped,
-                                         const void* srcData, size_t rowBytes,
-                                         GrMtlTextureInfo* info);
+                                         const void* srcData, size_t srcRowBytes,
+                                         const SkColor4f* color, GrMtlTextureInfo* info);
 
     sk_sp<GrMtlCaps> fMtlCaps;
 

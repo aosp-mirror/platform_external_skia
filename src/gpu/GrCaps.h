@@ -57,6 +57,10 @@ public:
     bool multisampleDisableSupport() const { return fMultisampleDisableSupport; }
     bool instanceAttribSupport() const { return fInstanceAttribSupport; }
     bool mixedSamplesSupport() const { return fMixedSamplesSupport; }
+    // This flag indicates that we never have to resolve MSAA. In practice, it means that we have
+    // an MSAA-render-to-texture extension: Any render target we create internally will use the
+    // extension, and any wrapped render target is the client's responsibility.
+    bool msaaResolvesAutomatically() const { return fMSAAResolvesAutomatically; }
     bool halfFloatVertexAttributeSupport() const { return fHalfFloatVertexAttributeSupport; }
 
     // Primitive restart functionality is core in ES 3.0, but using it will cause slowdowns on some
@@ -158,8 +162,11 @@ public:
     virtual bool isFormatSRGB(const GrBackendFormat&) const = 0;
     virtual bool isFormatCompressed(const GrBackendFormat&) const = 0;
 
-    virtual bool isFormatTexturable(GrColorType, const GrBackendFormat&) const = 0;
-    virtual bool isConfigTexturable(GrPixelConfig) const = 0;
+    // TODO: Once we use the supportWritePixels call for uploads, we can remove this function and
+    // instead only have the version that takes a GrBackendFormat.
+    virtual bool isFormatTexturableAndUploadable(GrColorType, const GrBackendFormat&) const = 0;
+    // Can a texture be made with the GrBackendFormat, and then be bound and sampled in a shader.
+    virtual bool isFormatTexturable(const GrBackendFormat&) const = 0;
 
     // Returns whether a texture of the given format can be copied to a texture of the same format.
     virtual bool isFormatCopyable(const GrBackendFormat&) const = 0;
@@ -475,6 +482,7 @@ protected:
     bool fMultisampleDisableSupport                  : 1;
     bool fInstanceAttribSupport                      : 1;
     bool fMixedSamplesSupport                        : 1;
+    bool fMSAAResolvesAutomatically                  : 1;
     bool fUsePrimitiveRestart                        : 1;
     bool fPreferClientSideDynamicBuffers             : 1;
     bool fPreferFullscreenClears                     : 1;

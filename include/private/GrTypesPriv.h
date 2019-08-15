@@ -408,28 +408,6 @@ enum GrShaderFlags {
 };
 GR_MAKE_BITFIELD_OPS(GrShaderFlags)
 
-/**
- * Precisions of shader language variables. Not all shading languages support precisions or actually
- * vary the internal precision based on the qualifiers. These currently only apply to float types (
- * including float vectors and matrices).
- */
-enum GrSLPrecision : int {
-    kLow_GrSLPrecision,
-    kMedium_GrSLPrecision,
-    kHigh_GrSLPrecision,
-
-    // Default precision is a special tag that means "whatever the default for the program/type
-    // combination is". In other words, it maps to the empty string in shader code. There are some
-    // scenarios where kDefault is not allowed (as the default precision for a program, or for
-    // varyings, for example).
-    kDefault_GrSLPrecision,
-
-    // We only consider the "real" precisions here
-    kLast_GrSLPrecision = kHigh_GrSLPrecision,
-};
-
-static const int kGrSLPrecisionCount = kLast_GrSLPrecision + 1;
-
 /** Is the shading language type float (including vectors/matrices)? */
 static constexpr bool GrSLTypeIsFloatType(GrSLType type) {
     switch (type) {
@@ -1081,46 +1059,6 @@ static inline size_t GrCompressedFormatDataSize(GrPixelConfig config,
 }
 
 /**
- * Precision qualifier that should be used with a sampler.
- */
-static constexpr GrSLPrecision GrSLSamplerPrecision(GrPixelConfig config) {
-    switch (config) {
-        case kUnknown_GrPixelConfig:
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRGBA_8888_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:
-        case kRGB_888X_GrPixelConfig:
-        case kRG_88_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kSRGBA_8888_GrPixelConfig:
-        case kRGB_ETC1_GrPixelConfig:
-            return kLow_GrSLPrecision;
-        case kRGBA_float_GrPixelConfig:
-            return kHigh_GrSLPrecision;
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Lum_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-        case kRGBA_half_Clamped_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-        case kR_16_GrPixelConfig:
-        case kRG_1616_GrPixelConfig:
-        // Experimental (for Y416 and mutant P016/P010)
-        case kRGBA_16161616_GrPixelConfig:
-        case kRG_half_GrPixelConfig:
-            return kMedium_GrSLPrecision;
-    }
-    SkUNREACHABLE;
-}
-
-/**
  * Like SkColorType this describes a layout of pixel data in CPU memory. It specifies the channels,
  * their type, and width. This exists so that the GPU backend can have private types that have no
  * analog in the public facing SkColorType enum and omit types not implemented in the GPU backend.
@@ -1449,16 +1387,6 @@ static constexpr size_t GrColorTypeBytesPerPixel(GrColorType ct) {
     SkUNREACHABLE;
 }
 
-// We may need a roughly equivalent color type for a compressed texture. This should be the logical
-// format for decompressing the data into.
-static constexpr GrColorType GrCompressionTypeClosestColorType(
-        SkImage::CompressionType type) {
-    switch (type) {
-        case SkImage::CompressionType::kETC1_CompressionType: return GrColorType::kRGB_888x;
-    }
-    SkUNREACHABLE;
-}
-
 static constexpr GrColorType GrPixelConfigToColorType(GrPixelConfig config) {
     switch (config) {
         case kUnknown_GrPixelConfig:
@@ -1494,7 +1422,9 @@ static constexpr GrColorType GrPixelConfigToColorType(GrPixelConfig config) {
         case kRGBA_half_Clamped_GrPixelConfig:
             return GrColorType::kRGBA_F16_Clamped;
         case kRGB_ETC1_GrPixelConfig:
-            return GrCompressionTypeClosestColorType(SkImage::kETC1_CompressionType);
+            // We may need a roughly equivalent color type for a compressed texture. This should be
+            // the logical format for decompressing the data into.
+            return GrColorType::kRGB_888x;
         case kAlpha_8_as_Alpha_GrPixelConfig:
             return GrColorType::kAlpha_8;
         case kAlpha_8_as_Red_GrPixelConfig:
@@ -1569,6 +1499,17 @@ private:
     Callback fReleaseProc;
     Context fReleaseCtx;
 };
+
+/**
+ * Indicates "resolutions" that need to be done on a texture before it can be sampled from.
+ */
+enum class GrTextureResolveFlags {
+    kNone = 0,
+    kMipMaps = 1 << 0,  // Regenerate all mipmap levels.
+    // TODO: kMSAA = 1 << 1  // Blit the MSAA render buffer into a standard texture.
+};
+
+GR_MAKE_BITFIELD_CLASS_OPS(GrTextureResolveFlags)
 
 #if GR_TEST_UTILS || defined(SK_ENABLE_DUMP_GPU)
 static constexpr const char* GrBackendApiToStr(GrBackendApi api) {
