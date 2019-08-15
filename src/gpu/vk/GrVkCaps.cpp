@@ -16,6 +16,7 @@
 #include "src/gpu/vk/GrVkCaps.h"
 #include "src/gpu/vk/GrVkInterface.h"
 #include "src/gpu/vk/GrVkTexture.h"
+#include "src/gpu/vk/GrVkUniformHandler.h"
 #include "src/gpu/vk/GrVkUtil.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -1067,10 +1068,8 @@ void GrVkCaps::FormatInfo::initSampleCounts(const GrVkInterface* interface,
         return;
     }
     if (kIntel_VkVendor == physProps.vendorID) {
-        // MSAA on Intel before Gen 9 is slow and/or buggy
-        if (GrGetIntelGpuFamily(physProps.deviceID) < kFirstGen9_IntelGpuFamily) {
-            return;
-        }
+        // MSAA doesn't work well on Intel GPUs chromium:527565, chromium:983926
+        return;
     }
     if (flags & VK_SAMPLE_COUNT_2_BIT) {
         fColorSampleCounts.push_back(2);
@@ -1553,6 +1552,14 @@ GrCaps::SupportedRead GrVkCaps::onSupportedReadPixelsColorType(
         }
     }
     return {GrColorType::kUnknown, 0};
+}
+
+int GrVkCaps::getFragmentUniformBinding() const {
+    return GrVkUniformHandler::kUniformBinding;
+}
+
+int GrVkCaps::getFragmentUniformSet() const {
+    return GrVkUniformHandler::kUniformBufferDescSet;
 }
 
 #if GR_TEST_UTILS
