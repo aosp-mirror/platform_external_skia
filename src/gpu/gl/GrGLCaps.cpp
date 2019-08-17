@@ -3574,6 +3574,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // Pixel2XL/Adreno540 and Pixel3/Adreno630
     formatWorkarounds->fDisableLuminance16F = kIntelBroadwell_GrGLRenderer == ctxInfo.renderer() ||
                                               ctxInfo.vendor() == kQualcomm_GrGLVendor;
+
+    // https://github.com/flutter/flutter/issues/38700
+    if (kAndroidEmulator_GrGLDriver == ctxInfo.driver()) {
+        shaderCaps->fNoDefaultPrecisionForExternalSamplers = true;
+    }
 }
 
 void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
@@ -3960,7 +3965,14 @@ static GrPixelConfig validate_sized_format(GrGLFormat format,
 
 bool GrGLCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
                                                  const GrBackendFormat& format) const {
-    return kUnknown_GrPixelConfig != validate_sized_format(format.asGLFormat(), ct, fStandard);
+    GrGLFormat glFormat = format.asGLFormat();
+    const auto& info = this->getFormatInfo(glFormat);
+    for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
+        if (info.fColorTypeInfos[i].fColorType == ct) {
+            return true;
+        }
+    }
+    return false;
 }
 
 GrPixelConfig GrGLCaps::onGetConfigFromBackendFormat(const GrBackendFormat& format,
@@ -4096,12 +4108,6 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrGLCaps::getTestingCombinat
         combos.push_back({ GrColorType::kBGRA_8888,
                            GrBackendFormat::MakeGL(GR_GL_BGRA8, GR_GL_TEXTURE_2D) });
     }
-
-#ifdef SK_DEBUG
-    for (auto combo : combos) {
-        SkASSERT(this->onAreColorTypeAndFormatCompatible(combo.fColorType, combo.fFormat));
-    }
-#endif
 
     return combos;
 }
