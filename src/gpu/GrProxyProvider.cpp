@@ -10,7 +10,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkImage.h"
 #include "include/gpu/GrContext.h"
-#include "include/gpu/GrRenderTarget.h"
 #include "include/gpu/GrTexture.h"
 #include "include/private/GrImageContext.h"
 #include "include/private/GrResourceKey.h"
@@ -23,6 +22,7 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrImageContextPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
@@ -483,7 +483,11 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxy(const GrBackendFormat& format
 
     SkASSERT(GrCaps::AreConfigsCompatible(desc.fConfig,
                                           caps->getConfigFromBackendFormat(format, colorType)));
-    SkASSERT(caps->areColorTypeAndFormatCompatible(colorType, format));
+    // TODO: This check should be removed once we get the swizzle outside of GrProxyProvider and
+    // either pass them to the proxy or store the on some view object.
+    if (!caps->areColorTypeAndFormatCompatible(colorType, format)) {
+        return nullptr;
+    }
 
     if (GrMipMapped::kYes == mipMapped) {
         // SkMipMap doesn't include the base level in the level count so we have to add 1

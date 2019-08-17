@@ -51,25 +51,34 @@ using SkDescriptorSet =
         std::unordered_set<const SkDescriptor*, SkDescriptorMapOperators, SkDescriptorMapOperators>;
 
 // A SkTextBlobCacheDiffCanvas is used to populate the SkStrikeServer with ops
-// which will be serialized and renderered using the SkStrikeClient.
+// which will be serialized and rendered using the SkStrikeClient.
 class SK_API SkTextBlobCacheDiffCanvas : public SkNoDrawCanvas {
 public:
+
+    // DEPRECATED
+    // TODO(herb): remove uses in Chrome
     struct SK_API Settings {
         Settings();
-
         bool fContextSupportsDistanceFieldText = true;
-        SkScalar fMinDistanceFieldFontSize = -1.f;
-        SkScalar fMaxDistanceFieldFontSize = -1.f;
+
+        // These are set by Chrome, but not used in Skia.
         int fMaxTextureSize = 0;
         size_t fMaxTextureBytes = 0u;
     };
 
+    // For testing use only
     SkTextBlobCacheDiffCanvas(int width, int height, const SkSurfaceProps& props,
-                              SkStrikeServer* strikeServer, Settings settings = Settings());
+                              SkStrikeServer* strikeServer, bool DFTSupport = true);
 
+    // DEPRECATED
+    // TODO(herb) : remove uses in Chrome.
     SkTextBlobCacheDiffCanvas(int width, int height, const SkSurfaceProps& props,
                               SkStrikeServer* strikeServer, sk_sp<SkColorSpace> colorSpace,
                               Settings settings = Settings());
+
+    SkTextBlobCacheDiffCanvas(int width, int height, const SkSurfaceProps& props,
+                              SkStrikeServer* strikeServer, sk_sp<SkColorSpace> colorSpace,
+                              bool DFTSupport);
 
     ~SkTextBlobCacheDiffCanvas() override;
 
@@ -81,8 +90,6 @@ protected:
 
 private:
     class TrackLayerDevice;
-
-    static SkScalar SetupForPath(SkPaint* paint, SkFont* font);
 };
 
 using SkDiscardableHandleId = uint32_t;
@@ -117,7 +124,7 @@ public:
     explicit SkStrikeServer(DiscardableHandleManager* discardableHandleManager);
     ~SkStrikeServer() override;
 
-    // Serializes the typeface to be remoted using this server.
+    // Serializes the typeface to be transmitted using this server.
     sk_sp<SkData> serializeTypeface(SkTypeface*);
 
     // Serializes the strike data captured using a SkTextBlobCacheDiffCanvas. Any
@@ -125,7 +132,7 @@ public:
     // unlocked after this call.
     void writeStrikeData(std::vector<uint8_t>* memory);
 
-    // Methods used internally in skia ------------------------------------------
+    // Methods used internally in Skia ------------------------------------------
     class SkGlyphCacheState;
 
     SkGlyphCacheState* getOrCreateCache(const SkPaint&,
@@ -138,6 +145,9 @@ public:
     SkScopedStrike findOrCreateScopedStrike(const SkDescriptor& desc,
                                             const SkScalerContextEffects& effects,
                                             const SkTypeface& typeface) override;
+
+    static void AddGlyphForTesting(
+            SkGlyphCacheState* cache, SkPackedGlyphID glyphID, bool asPath);
 
     void setMaxEntriesInDescriptorMapForTesting(size_t count) {
         fMaxEntriesInDescriptorMap = count;
@@ -187,7 +197,7 @@ public:
     // An interface to delete handles that may be pinned by the remote server.
     class DiscardableHandleManager : public SkRefCnt {
     public:
-        virtual ~DiscardableHandleManager() = default;
+        ~DiscardableHandleManager() override = default;
 
         // Returns true if the handle was unlocked and can be safely deleted. Once
         // successful, subsequent attempts to delete the same handle are invalid.

@@ -147,7 +147,7 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
          !vkGpu->vkCaps().supportsProtectedMemory()) {
          return nullptr;
      }
-     return std::move(vkGpu);
+     return vkGpu;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1050,7 +1050,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc,
                                                           ranges.count(), ranges.begin());
         }
     }
-    return std::move(tex);
+    return tex;
 }
 
 sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(int width, int height,
@@ -1099,7 +1099,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(int width, int height,
         return nullptr;
     }
 
-    return std::move(tex);
+    return tex;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1294,7 +1294,7 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
         SkASSERT(tgt->canAttemptStencilAttachment());
     }
 
-    return std::move(tgt);
+    return tgt;
 }
 
 sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBackendTexture& tex,
@@ -1929,14 +1929,7 @@ GrBackendRenderTarget GrVkGpu::createTestingOnlyBackendRenderTarget(int w, int h
         return GrBackendRenderTarget();
     }
 
-    auto config = GrColorTypeToPixelConfig(ct);
-    if (kUnknown_GrPixelConfig == config) {
-        return {};
-    }
-    VkFormat vkFormat;
-    if (!GrPixelConfigToVkFormat(config, &vkFormat)) {
-        return {};
-    }
+    VkFormat vkFormat = this->vkCaps().getFormatFromColorType(ct);
 
     GrVkImageInfo info;
     if (!this->createVkImageForBackendSurface(vkFormat, w, h, false, true, GrMipMapped::kNo,

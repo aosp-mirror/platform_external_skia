@@ -16,7 +16,6 @@
 #include "src/core/SkNextID.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrSamplerState.h"
 #include "include/private/GrRecordingContext.h"
 #include "include/private/GrResourceKey.h"
 #include "src/gpu/GrCaps.h"
@@ -24,6 +23,7 @@
 #include "src/gpu/GrImageTextureMaker.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrSamplerState.h"
 #include "src/gpu/GrYUVProvider.h"
 #include "src/gpu/SkGr.h"
 #endif
@@ -277,6 +277,24 @@ sk_sp<SkImage> SkImage_Lazy::onMakeColorTypeAndColorSpace(GrRecordingContext*,
         fOnMakeColorTypeAndSpaceResult = result;
     }
     return result;
+}
+
+sk_sp<SkImage> SkImage_Lazy::onReinterpretColorSpace(sk_sp<SkColorSpace> newCS) const {
+    // TODO: The correct thing is to clone the generator, and modify its color space. That's hard,
+    // because we don't have a clone method, and generator is public (and derived-from by clients).
+    // So do the simple/inefficient thing here, and fallback to raster when this is called.
+
+    // We allocate the bitmap with the new color space, then generate the image using the original.
+    SkBitmap bitmap;
+    if (bitmap.tryAllocPixels(this->imageInfo().makeColorSpace(std::move(newCS)))) {
+        SkPixmap pixmap = bitmap.pixmap();
+        pixmap.setColorSpace(this->refColorSpace());
+        if (generate_pixels(ScopedGenerator(fSharedGenerator), pixmap, fOrigin.x(), fOrigin.y())) {
+            bitmap.setImmutable();
+            return SkImage::MakeFromBitmap(bitmap);
+        }
+    }
+    return nullptr;
 }
 
 sk_sp<SkImage> SkImage::MakeFromGenerator(std::unique_ptr<SkImageGenerator> generator,
@@ -543,7 +561,7 @@ sk_sp<SkImage> SkImage::DecodeToTexture(GrContext* ctx, const void* encoded, siz
     if (!img) {
         return nullptr;
     }
-    return img->makeTextureImage(ctx, nullptr);
+    return img->makeTextureImage(ctx);
 }
 
 #endif

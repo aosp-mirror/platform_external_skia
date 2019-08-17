@@ -1022,11 +1022,10 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
         fMSFBOType = kNone_MSFBOType;
     }
 
-    // We disable MSAA for older (pre-Gen9) Intel GPUs for performance reasons.
-    // ApolloLake is the first Gen9 chipset.
-    if (kIntel_GrGLVendor == ctxInfo.vendor() &&
-        (ctxInfo.renderer() < kIntelApolloLake_GrGLRenderer ||
-         ctxInfo.renderer() == kOther_GrGLRenderer)) {
+    // We disable MSAA for all Intel GPUs. Before Gen9, performance was very bad. Even with Gen9,
+    // we've seen driver crashes in the wild. We don't have data on Gen11 yet.
+    // chromium:527565, chromium:983926
+    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
         fMSFBOType = kNone_MSFBOType;
     }
 }
@@ -1248,10 +1247,6 @@ void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const {
 #else
 void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const { }
 #endif
-
-bool GrGLCaps::bgraIsInternalFormat() const {
-    return this->getFormatFromColorType(GrColorType::kBGRA_8888) == GrGLFormat::kBGRA8;
-}
 
 void GrGLCaps::getTexImageFormats(GrGLFormat surfaceFormat, GrColorType surfaceColorType,
                                   GrColorType memoryColorType, GrGLenum* internalFormat,
@@ -2911,7 +2906,7 @@ bool GrGLCaps::canCopyTexSubImage(GrGLFormat dstFormat, bool dstHasMSAARenderBuf
     // Table 3.9 of the ES2 spec indicates the supported formats with CopyTexSubImage
     // and BGRA isn't in the spec. There doesn't appear to be any extension that adds it. Perhaps
     // many drivers would allow it to work, but ANGLE does not.
-    if (GR_IS_GR_GL_ES(fStandard) && this->bgraIsInternalFormat() &&
+    if (GR_IS_GR_GL_ES(fStandard) &&
         (dstFormat == GrGLFormat::kBGRA8 || srcFormat == GrGLFormat::kBGRA8)) {
         return false;
     }
@@ -3083,11 +3078,12 @@ GrCaps::DstCopyRestrictions GrGLCaps::getDstCopyRestrictions(const GrRenderTarge
         blitFramebufferRestrictions.fRectsMustMatch = GrSurfaceProxy::RectsMustMatch::kYes;
     }
 
+    auto srcFormat = src->backendFormat().asGLFormat();
     // Check for format issues with glCopyTexSubImage2D
-    if (this->bgraIsInternalFormat() && kBGRA_8888_GrPixelConfig == src->config()) {
+    if (srcFormat == GrGLFormat::kBGRA8) {
         // glCopyTexSubImage2D doesn't work with this config. If the bgra can be used with fbo blit
         // then we set up for that, otherwise fail.
-        if (this->canConfigBeFBOColorAttachment(kBGRA_8888_GrPixelConfig)) {
+        if (this->canFormatBeFBOColorAttachment(srcFormat)) {
             return blitFramebufferRestrictions;
         }
         // Caller will have to use a draw.
@@ -3100,7 +3096,7 @@ GrCaps::DstCopyRestrictions GrGLCaps::getDstCopyRestrictions(const GrRenderTarge
         if (srcIsMSAARenderbuffer) {
             // It's illegal to call CopyTexSubImage2D on a MSAA renderbuffer. Set up for FBO
             // blit or fail.
-            if (this->canConfigBeFBOColorAttachment(src->config())) {
+            if (this->canFormatBeFBOColorAttachment(srcFormat)) {
                 return blitFramebufferRestrictions;
             }
             // Caller will have to use a draw.
@@ -3578,6 +3574,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // Pixel2XL/Adreno540 and Pixel3/Adreno630
     formatWorkarounds->fDisableLuminance16F = kIntelBroadwell_GrGLRenderer == ctxInfo.renderer() ||
                                               ctxInfo.vendor() == kQualcomm_GrGLVendor;
+
+    // https://github.com/flutter/flutter/issues/38700
+    if (kAndroidEmulator_GrGLDriver == ctxInfo.driver()) {
+        shaderCaps->fNoDefaultPrecisionForExternalSamplers = true;
+    }
 }
 
 void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
@@ -3837,53 +3838,6 @@ bool GrGLCaps::formatSupportsTexStorage(GrGLFormat format) const {
     return SkToBool(this->getFormatInfo(format).fFlags & FormatInfo::kCanUseTexStorage_Flag);
 }
 
-GrGLFormat GrGLCaps::pixelConfigToFormat(GrPixelConfig config) const {
-    switch (config) {
-        case kRGB_888X_GrPixelConfig:
-            return GrGLFormat::kRGBA8;
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-            return GrGLFormat::kALPHA8;
-        case kAlpha_8_as_Red_GrPixelConfig:
-            return GrGLFormat::kR8;
-        case kGray_8_as_Lum_GrPixelConfig:
-            return GrGLFormat::kLUMINANCE8;
-        case kGray_8_as_Red_GrPixelConfig:
-            return GrGLFormat::kR8;
-        case kAlpha_half_as_Lum_GrPixelConfig:
-            return GrGLFormat::kLUMINANCE16F;
-        case kAlpha_half_as_Red_GrPixelConfig:
-            return GrGLFormat::kR16F;
-        case kRGB_ETC1_GrPixelConfig: {
-            const auto& info = this->getFormatInfo(GrGLFormat::kCOMPRESSED_ETC1_RGB8);
-            bool usesETC1 = SkToBool(info.fFlags & FormatInfo::kTexturable_Flag);
-            return usesETC1 ? GrGLFormat::kCOMPRESSED_ETC1_RGB8
-                            : GrGLFormat::kCOMPRESSED_RGB8_ETC2;
-        }
-        case kUnknown_GrPixelConfig:
-        case kAlpha_8_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRGBA_8888_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:
-        case kRG_88_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kSRGBA_8888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-        case kRGBA_float_GrPixelConfig:
-        case kAlpha_half_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-        case kRGBA_half_Clamped_GrPixelConfig:
-        case kR_16_GrPixelConfig:
-        case kRG_1616_GrPixelConfig:
-        case kRGBA_16161616_GrPixelConfig:
-        case kRG_half_GrPixelConfig:
-            return this->getFormatFromColorType(GrPixelConfigToColorType(config));
-    }
-    SkUNREACHABLE;
-    return GrGLFormat::kUnknown;
-}
-
 static GrPixelConfig validate_sized_format(GrGLFormat format,
                                            GrColorType ct,
                                            GrGLStandard standard) {
@@ -4011,7 +3965,14 @@ static GrPixelConfig validate_sized_format(GrGLFormat format,
 
 bool GrGLCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
                                                  const GrBackendFormat& format) const {
-    return kUnknown_GrPixelConfig != validate_sized_format(format.asGLFormat(), ct, fStandard);
+    GrGLFormat glFormat = format.asGLFormat();
+    const auto& info = this->getFormatInfo(glFormat);
+    for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
+        if (info.fColorTypeInfos[i].fColorType == ct) {
+            return true;
+        }
+    }
+    return false;
 }
 
 GrPixelConfig GrGLCaps::onGetConfigFromBackendFormat(const GrBackendFormat& format,
@@ -4147,12 +4108,6 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrGLCaps::getTestingCombinat
         combos.push_back({ GrColorType::kBGRA_8888,
                            GrBackendFormat::MakeGL(GR_GL_BGRA8, GR_GL_TEXTURE_2D) });
     }
-
-#ifdef SK_DEBUG
-    for (auto combo : combos) {
-        SkASSERT(this->onAreColorTypeAndFormatCompatible(combo.fColorType, combo.fFormat));
-    }
-#endif
 
     return combos;
 }
