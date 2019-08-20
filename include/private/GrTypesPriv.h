@@ -724,22 +724,35 @@ enum GrAccessPattern {
 enum class GrInternalSurfaceFlags {
     kNone                           = 0,
 
-    // Surface-level
     // Texture-level
 
     // Means the pixels in the texture are read-only. Cannot also be a GrRenderTarget[Proxy].
     kReadOnly                       = 1 << 0,
 
-    kTextureMask                    = kReadOnly,
-
     // RT-level
 
     // This flag is for use with GL only. It tells us that the internal render target wraps FBO 0.
-    kGLRTFBOIDIs0                   = 1 << 2,
+    kGLRTFBOIDIs0                   = 1 << 1,
 
-   kRenderTargetMask               = kGLRTFBOIDIs0,
+    // This means the render target is multisampled, and internally holds a non-msaa texture for
+    // resolving into. The render target resolves itself by blitting into this internal texture.
+    // (asTexture() might or might not return the internal texture, but if it does, we always
+    // resolve the render target before accessing this texture's data.)
+    kRequiresManualMSAAResolve      = 1 << 2,
 };
+
 GR_MAKE_BITFIELD_CLASS_OPS(GrInternalSurfaceFlags)
+
+// 'GR_MAKE_BITFIELD_CLASS_OPS' defines the & operator on GrInternalSurfaceFlags to return bool.
+// We want to find the bitwise & with these masks, so we declare them as ints.
+constexpr static int kGrInternalTextureFlagsMask = static_cast<int>(
+        GrInternalSurfaceFlags::kReadOnly);
+
+constexpr static int kGrInternalRenderTargetFlagsMask = static_cast<int>(
+        GrInternalSurfaceFlags::kGLRTFBOIDIs0 | GrInternalSurfaceFlags::kRequiresManualMSAAResolve);
+
+constexpr static int kGrInternalTextureRenderTargetFlagsMask =
+        kGrInternalTextureFlagsMask | kGrInternalRenderTargetFlagsMask;
 
 #ifdef SK_DEBUG
 // Takes a pointer to a GrCaps, and will suppress prints if required
@@ -811,42 +824,6 @@ enum class GrSRGBConversion {
 /**
  * Utility functions for GrPixelConfig
  */
-
-static constexpr bool GrPixelConfigIsSRGB(GrPixelConfig config) {
-    switch (config) {
-        case kSRGBA_8888_GrPixelConfig:
-            return true;
-        case kUnknown_GrPixelConfig:
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:
-        case kRGB_888X_GrPixelConfig:
-        case kRG_88_GrPixelConfig:
-        case kRGBA_8888_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-        case kRGBA_float_GrPixelConfig:
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Lum_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-        case kRGBA_half_Clamped_GrPixelConfig:
-        case kRGB_ETC1_GrPixelConfig:
-        case kR_16_GrPixelConfig:
-        case kRG_1616_GrPixelConfig:
-        // Experimental (for Y416 and mutant P016/P010)
-        case kRGBA_16161616_GrPixelConfig:
-        case kRG_half_GrPixelConfig:
-            return false;
-    }
-    SkUNREACHABLE;
-}
 
 static constexpr GrPixelConfig GrCompressionTypePixelConfig(SkImage::CompressionType compression) {
     switch (compression) {
@@ -1023,19 +1000,6 @@ static constexpr bool GrPixelConfigIsCompressed(GrPixelConfig config) {
             return false;
     }
     SkUNREACHABLE;
-}
-
-/**
- * If the pixel config is compressed, return an equivalent uncompressed format.
- */
-static constexpr GrPixelConfig GrMakePixelConfigUncompressed(GrPixelConfig config) {
-    switch (config) {
-        case kRGB_ETC1_GrPixelConfig:
-            return kRGBA_8888_GrPixelConfig;
-        default:
-            return config;
-        }
-        SkUNREACHABLE;
 }
 
 /**
