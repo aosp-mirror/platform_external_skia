@@ -38,11 +38,6 @@ public:
     void onPrepare(GrOpFlushState* flushState) override;
     bool onExecute(GrOpFlushState* flushState) override;
 
-    bool copySurface(GrRecordingContext*,
-                     GrSurfaceProxy* src,
-                     const SkIRect& srcRect,
-                     const SkIPoint& dstPoint) override;
-
     GrTextureOpList* asTextureOpList() override { return this; }
 
     SkDEBUGCODE(void dump(bool printDependencies) const override;)
@@ -58,6 +53,11 @@ private:
     void gatherProxyIntervals(GrResourceAllocator*) const override;
 
     void recordOp(std::unique_ptr<GrOp>);
+
+    ExpectedOutcome onMakeClosed(const GrCaps&) override {
+        return (fRecordedOps.empty()) ?
+                ExpectedOutcome::kTargetUnchanged : ExpectedOutcome::kTargetDirty;
+    }
 
     // The memory for the ops in 'fOpChains' is actually stored in 'fOpMemoryPool'
     SkSTArray<2, std::unique_ptr<GrOp>, true> fRecordedOps;

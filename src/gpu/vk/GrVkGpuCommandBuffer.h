@@ -45,8 +45,6 @@ class GrVkGpuTextureCommandBuffer : public GrGpuTextureCommandBuffer {
 public:
     GrVkGpuTextureCommandBuffer(GrVkGpu* gpu) : fGpu(gpu) {}
 
-    void copy(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint) override;
-
     void insertEventMarker(const char*) override;
 
     void reset() {
@@ -99,8 +97,6 @@ public:
     void insertEventMarker(const char*) override;
 
     void inlineUpload(GrOpFlushState* state, GrDeferredTextureUploadFn& upload) override;
-
-    void copy(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint) override;
 
     void executeDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler>) override;
 
@@ -188,7 +184,6 @@ private:
     };
 
     struct CommandBufferInfo {
-        using SampledTexture = GrPendingIOResource<GrVkTexture, kRead_GrIOType>;
         const GrVkRenderPass* fRenderPass;
         std::unique_ptr<GrVkSecondaryCommandBuffer> fCommandBuffer;
         int fNumPreCmds = 0;
@@ -199,7 +194,7 @@ private:
         // Array of images that will be sampled and thus need to be transferred to sampled layout
         // before submitting the secondary command buffers. This must happen after we do any predraw
         // uploads or copies.
-        SkTArray<SampledTexture> fSampledTextures;
+        SkTArray<sk_sp<GrVkTexture>> fSampledTextures;
 
         GrVkSecondaryCommandBuffer* currentCmdBuf() {
             return fCommandBuffer.get();
