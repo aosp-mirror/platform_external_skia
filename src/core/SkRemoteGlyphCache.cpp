@@ -224,7 +224,7 @@ public:
     prepareForDrawingRemoveEmpty(
             const SkPackedGlyphID packedGlyphIDs[],
             const SkPoint positions[], size_t n,
-            int maxDimension, PreparationDetail detail,
+            int maxDimension,
             SkGlyphPos results[]) override;
 
     void onAboutToExitScope() override {}
@@ -358,21 +358,12 @@ private:
 // -- SkTextBlobCacheDiffCanvas -------------------------------------------------------------------
 // DEPRECATED
 // TODO(herb): remove uses in Chrome
-SkTextBlobCacheDiffCanvas::Settings::Settings() = default;
 
 SkTextBlobCacheDiffCanvas::SkTextBlobCacheDiffCanvas(int width, int height,
                                                      const SkSurfaceProps& props,
                                                      SkStrikeServer* strikeServer,
                                                      bool DFTSupport)
     : SkTextBlobCacheDiffCanvas{width, height, props, strikeServer, nullptr, DFTSupport} { }
-
-SkTextBlobCacheDiffCanvas::SkTextBlobCacheDiffCanvas(int width, int height,
-                                                     const SkSurfaceProps& props,
-                                                     SkStrikeServer* strikeServer,
-                                                     sk_sp<SkColorSpace> colorSpace,
-                                                     Settings settings)
-    : SkTextBlobCacheDiffCanvas{width, height, props, strikeServer, std::move(colorSpace),
-                                settings.fContextSupportsDistanceFieldText} { }
 
 SkTextBlobCacheDiffCanvas::SkTextBlobCacheDiffCanvas(int width, int height,
                                                      const SkSurfaceProps& props,
@@ -660,7 +651,7 @@ SkSpan<const SkGlyphPos>
 SkStrikeServer::SkGlyphCacheState::prepareForDrawingRemoveEmpty(
         const SkPackedGlyphID packedGlyphIDs[],
         const SkPoint positions[], size_t n,
-        int maxDimension, PreparationDetail detail,
+        int maxDimension,
         SkGlyphPos results[]) {
     size_t drawableGlyphCount = 0;
     for (size_t i = 0; i < n; i++) {
