@@ -13,7 +13,6 @@
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrNonAtomicRef.h"
-#include "src/gpu/GrPendingIOResource.h"
 #include "src/gpu/GrProcessorSet.h"
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrScissorState.h"
@@ -142,7 +141,7 @@ public:
             *offset = fDstTextureOffset;
         }
 
-        return fDstTextureProxy ? fDstTextureProxy->asTextureProxy() : nullptr;
+        return fDstTextureProxy.get();
     }
 
     GrTexture* peekDstTexture(SkIPoint* offset = nullptr) const {
@@ -218,7 +217,7 @@ private:
 
     using FragmentProcessorArray = SkAutoSTArray<8, std::unique_ptr<const GrFragmentProcessor>>;
 
-    GrProxyPendingIO fDstTextureProxy;
+    sk_sp<GrTextureProxy> fDstTextureProxy;
     SkIPoint fDstTextureOffset;
     GrWindowRectsState fWindowRectsState;
     const GrUserStencilSettings* fUserStencilSettings;

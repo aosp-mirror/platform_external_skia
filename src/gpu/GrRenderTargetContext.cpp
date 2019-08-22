@@ -875,7 +875,7 @@ void GrRenderTargetContext::internalStencilClear(const GrFixedClip& clip, bool i
 void GrRenderTargetContextPriv::stencilPath(const GrHardClip& clip,
                                             GrAA doStencilMSAA,
                                             const SkMatrix& viewMatrix,
-                                            const GrPath* path) {
+                                            sk_sp<const GrPath> path) {
     ASSERT_SINGLE_OWNER_PRIV
     RETURN_IF_ABANDONED_PRIV
     SkDEBUGCODE(fRenderTargetContext->validate();)
@@ -900,10 +900,9 @@ void GrRenderTargetContextPriv::stencilPath(const GrHardClip& clip,
     std::unique_ptr<GrOp> op = GrStencilPathOp::Make(fRenderTargetContext->fContext,
                                                      viewMatrix,
                                                      GrAA::kYes == doStencilMSAA,
-                                                     path->getFillType(),
                                                      appliedClip.hasStencilClip(),
                                                      appliedClip.scissorState(),
-                                                     path);
+                                                     std::move(path));
     if (!op) {
         return;
     }
@@ -1602,17 +1601,17 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
         return;
     }
 
-    sk_sp<GrRenderTargetContext> rtc;
+    std::unique_ptr<GrRenderTargetContext> tempRTC;
     int x = srcRect.fLeft;
     int y = srcRect.fTop;
     if (needsRescale) {
-        rtc = this->rescale(info, srcRect, rescaleGamma, rescaleQuality);
-        if (!rtc) {
+        tempRTC = this->rescale(info, srcRect, rescaleGamma, rescaleQuality);
+        if (!tempRTC) {
             callback(context, nullptr, 0);
             return;
         }
-        SkASSERT(SkColorSpace::Equals(rtc->colorSpaceInfo().colorSpace(), info.colorSpace()));
-        SkASSERT(rtc->origin() == kTopLeft_GrSurfaceOrigin);
+        SkASSERT(SkColorSpace::Equals(tempRTC->colorSpaceInfo().colorSpace(), info.colorSpace()));
+        SkASSERT(tempRTC->origin() == kTopLeft_GrSurfaceOrigin);
         x = y = 0;
     } else {
         sk_sp<GrColorSpaceXform> xform =
@@ -1640,24 +1639,23 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
                 }
                 srcRectToDraw = SkRect::MakeWH(srcRect.width(), srcRect.height());
             }
-            rtc = direct->priv().makeDeferredRenderTargetContext(
+            tempRTC = direct->priv().makeDeferredRenderTargetContext(
                     SkBackingFit::kApprox, srcRect.width(), srcRect.height(),
                     this->colorSpaceInfo().colorType(), info.refColorSpace(), 1, GrMipMapped::kNo,
                     kTopLeft_GrSurfaceOrigin);
-            if (!rtc) {
+            if (!tempRTC) {
                 callback(context, nullptr, 0);
                 return;
             }
-            rtc->drawTexture(GrNoClip(), std::move(texProxy), GrSamplerState::Filter::kNearest,
-                             SkBlendMode::kSrc, SK_PMColor4fWHITE, srcRectToDraw,
-                             SkRect::MakeWH(srcRect.width(), srcRect.height()), GrAA::kNo,
-                             GrQuadAAFlags::kNone, SkCanvas::kFast_SrcRectConstraint, SkMatrix::I(),
-                             std::move(xform));
+            tempRTC->drawTexture(GrNoClip(), std::move(texProxy), GrSamplerState::Filter::kNearest,
+                                 SkBlendMode::kSrc, SK_PMColor4fWHITE, srcRectToDraw,
+                                 SkRect::MakeWH(srcRect.width(), srcRect.height()), GrAA::kNo,
+                                 GrQuadAAFlags::kNone, SkCanvas::kFast_SrcRectConstraint,
+                                 SkMatrix::I(), std::move(xform));
             x = y = 0;
-        } else {
-            rtc = sk_ref_sp(this);
         }
     }
+    auto rtc = tempRTC ? tempRTC.get() : this;
     return rtc->asyncReadPixels(SkIRect::MakeXYWH(x, y, info.width(), info.height()),
                                 info.colorType(), callback, context);
 }
@@ -1740,20 +1738,20 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(
     }
     int x = srcRect.fLeft;
     int y = srcRect.fTop;
-    auto rtc = sk_ref_sp(this);
+    std::unique_ptr<GrRenderTargetContext> tempRTC;
     bool needsRescale = srcRect.width() != dstW || srcRect.height() != dstH;
     if (needsRescale) {
         // We assume the caller wants kPremul. There is no way to indicate a preference.
         auto info = SkImageInfo::Make(dstW, dstH, kRGBA_8888_SkColorType, kPremul_SkAlphaType,
                                       dstColorSpace);
         // TODO: Incorporate the YUV conversion into last pass of rescaling.
-        rtc = this->rescale(info, srcRect, rescaleGamma, rescaleQuality);
-        if (!rtc) {
+        tempRTC = this->rescale(info, srcRect, rescaleGamma, rescaleQuality);
+        if (!tempRTC) {
             callback(context, nullptr, nullptr);
             return;
         }
-        SkASSERT(SkColorSpace::Equals(rtc->colorSpaceInfo().colorSpace(), info.colorSpace()));
-        SkASSERT(rtc->origin() == kTopLeft_GrSurfaceOrigin);
+        SkASSERT(SkColorSpace::Equals(tempRTC->colorSpaceInfo().colorSpace(), info.colorSpace()));
+        SkASSERT(tempRTC->origin() == kTopLeft_GrSurfaceOrigin);
         x = y = 0;
     } else {
         // We assume the caller wants kPremul. There is no way to indicate a preference.
@@ -1768,22 +1766,22 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(
                 return;
             }
             SkRect srcRectToDraw = SkRect::Make(srcRect);
-            rtc = direct->priv().makeDeferredRenderTargetContext(
+            tempRTC = direct->priv().makeDeferredRenderTargetContext(
                     SkBackingFit::kApprox, dstW, dstH, this->colorSpaceInfo().colorType(),
                     dstColorSpace, 1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin);
-            if (!rtc) {
+            if (!tempRTC) {
                 callback(context, nullptr, nullptr);
                 return;
             }
-            rtc->drawTexture(GrNoClip(), std::move(texProxy), GrSamplerState::Filter::kNearest,
-                             SkBlendMode::kSrc, SK_PMColor4fWHITE, srcRectToDraw,
-                             SkRect::MakeWH(srcRect.width(), srcRect.height()), GrAA::kNo,
-                             GrQuadAAFlags::kNone, SkCanvas::kFast_SrcRectConstraint, SkMatrix::I(),
-                             std::move(xform));
+            tempRTC->drawTexture(GrNoClip(), std::move(texProxy), GrSamplerState::Filter::kNearest,
+                                 SkBlendMode::kSrc, SK_PMColor4fWHITE, srcRectToDraw,
+                                 SkRect::MakeWH(srcRect.width(), srcRect.height()), GrAA::kNo,
+                                 GrQuadAAFlags::kNone, SkCanvas::kFast_SrcRectConstraint,
+                                 SkMatrix::I(), std::move(xform));
             x = y = 0;
         }
     }
-    auto srcProxy = rtc->asTextureProxyRef();
+    auto srcProxy = tempRTC ? tempRTC->asTextureProxyRef() : this->asTextureProxyRef();
     // TODO: Do something if the input is not a texture already.
     if (!srcProxy) {
         callback(context, nullptr, nullptr);

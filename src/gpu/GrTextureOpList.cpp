@@ -18,19 +18,15 @@
 #include "src/gpu/GrResourceAllocator.h"
 #include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/ops/GrCopySurfaceOp.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
 GrTextureOpList::GrTextureOpList(sk_sp<GrOpMemoryPool> opMemoryPool,
                                  sk_sp<GrTextureProxy> proxy,
                                  GrAuditTrail* auditTrail)
-        : INHERITED(std::move(opMemoryPool), proxy, auditTrail) {
+        : INHERITED(std::move(opMemoryPool), std::move(proxy), auditTrail) {
     SkASSERT(fOpMemoryPool);
-    SkASSERT(!proxy->readOnly());
-    if (GrMipMapped::kYes == proxy->mipMapped()) {
-        proxy->markMipMapsDirty();
-    }
+    SkASSERT(!fTarget->readOnly());
     fTarget->setLastRenderTask(this);
 }
 
@@ -101,16 +97,7 @@ void GrTextureOpList::onPrepare(GrOpFlushState* flushState) {
 }
 
 bool GrTextureOpList::onExecute(GrOpFlushState* flushState) {
-    if (0 == fRecordedOps.count()) {
-        // TEMPORARY: We are in the process of moving GrMipMapsStatus from the texture to the proxy.
-        // During this time we want to assert that the proxy resolves mipmaps at the exact same
-        // times the old code would have. A null opList is very exceptional, and the proxy will have
-        // assumed mipmaps are dirty in this scenario. We mark them dirty here on the texture as
-        // well, in order to keep the assert passing.
-        GrTexture* tex = fTarget->peekTexture();
-        if (tex && GrMipMapped::kYes == tex->texturePriv().mipMapped()) {
-            tex->texturePriv().markMipMapsDirty();
-        }
+    if (fRecordedOps.empty()) {
         return false;
     }
 
@@ -150,30 +137,6 @@ void GrTextureOpList::endFlush() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// This closely parallels GrRenderTargetOpList::copySurface but renderTargetOpList
-// stores extra data with the op
-bool GrTextureOpList::copySurface(GrRecordingContext* context,
-                                  GrSurfaceProxy* src,
-                                  const SkIRect& srcRect,
-                                  const SkIPoint& dstPoint) {
-    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(
-            context, fTarget.get(), src, srcRect, dstPoint);
-    if (!op) {
-        return false;
-    }
-
-    GrTextureResolveManager textureResolveManager(context->priv().drawingManager());
-    const GrCaps* caps = context->priv().caps();
-    auto addDependency = [ textureResolveManager, caps, this ] (
-            GrSurfaceProxy* p, GrMipMapped mipmapped) {
-        this->addDependency(p, mipmapped, textureResolveManager, *caps);
-    };
-    op->visitProxies(addDependency);
-
-    this->recordOp(std::move(op));
-    return true;
-}
 
 void GrTextureOpList::handleInternalAllocationFailure() {
     bool hasUninstantiatedProxy = false;

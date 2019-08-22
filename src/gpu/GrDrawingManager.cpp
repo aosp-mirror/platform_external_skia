@@ -14,6 +14,7 @@
 #include "src/core/SkTTopoSort.h"
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrCopyRenderTask.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOnFlushResourceProvider.h"
@@ -281,11 +282,11 @@ GrSemaphoresSubmitted GrDrawingManager::flush(GrSurfaceProxy* proxies[], int num
     if (!fOnFlushCBObjects.empty()) {
         fDAG.gatherIDs(&fFlushingRenderTaskIDs);
 
-        SkSTArray<4, sk_sp<GrRenderTargetContext>> renderTargetContexts;
+        SkSTArray<4, std::unique_ptr<GrRenderTargetContext>> renderTargetContexts;
         for (GrOnFlushCallbackObject* onFlushCBObject : fOnFlushCBObjects) {
             onFlushCBObject->preFlush(&onFlushProvider, fFlushingRenderTaskIDs.begin(),
                                       fFlushingRenderTaskIDs.count(), &renderTargetContexts);
-            for (const sk_sp<GrRenderTargetContext>& rtc : renderTargetContexts) {
+            for (const auto& rtc : renderTargetContexts) {
                 sk_sp<GrRenderTargetOpList> onFlushOpList = sk_ref_sp(rtc->getRTOpList());
                 if (!onFlushOpList) {
                     continue;   // Odd - but not a big deal
@@ -730,6 +731,34 @@ void GrDrawingManager::newTransferFromRenderTask(sk_sp<GrSurfaceProxy> srcProxy,
     SkDEBUGCODE(this->validate());
 }
 
+bool GrDrawingManager::newCopyRenderTask(sk_sp<GrSurfaceProxy> srcProxy,
+                                         const SkIRect& srcRect,
+                                         sk_sp<GrSurfaceProxy> dstProxy,
+                                         const SkIPoint& dstPoint) {
+    SkDEBUGCODE(this->validate());
+    SkASSERT(fContext);
+    this->closeRenderTasksForNewRenderTask(dstProxy.get());
+
+    sk_sp<GrRenderTask> task = GrCopyRenderTask::Make(srcProxy, srcRect, dstProxy, dstPoint);
+    if (!task) {
+        return false;
+    }
+
+    const GrCaps& caps = *fContext->priv().caps();
+
+    // We always say GrMipMapped::kNo here since we are always just copying from the base layer to
+    // another base layer. We don't need to make sure the whole mip map chain is valid.
+    task->addDependency(srcProxy.get(), GrMipMapped::kNo, GrTextureResolveManager(this), caps);
+    task->makeClosed(caps);
+
+    fDAG.add(std::move(task));
+    // We have closed the previous active oplist but since a new oplist isn't being added there
+    // shouldn't be an active one.
+    SkASSERT(!fActiveOpList);
+    SkDEBUGCODE(this->validate());
+    return true;
+}
+
 GrTextContext* GrDrawingManager::getTextContext() {
     if (!fTextContext) {
         fTextContext = GrTextContext::Make(fOptionsForTextContext);
@@ -794,7 +823,7 @@ void GrDrawingManager::flushIfNecessary() {
     }
 }
 
-sk_sp<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext(
+std::unique_ptr<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext(
         sk_sp<GrSurfaceProxy> sProxy,
         GrColorType colorType,
         sk_sp<SkColorSpace> colorSpace,
@@ -813,18 +842,20 @@ sk_sp<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext(
 
     sk_sp<GrRenderTargetProxy> renderTargetProxy(sk_ref_sp(sProxy->asRenderTargetProxy()));
 
-    return sk_sp<GrRenderTargetContext>(new GrRenderTargetContext(fContext,
-                                                                  std::move(renderTargetProxy),
-                                                                  colorType,
-                                                                  std::move(colorSpace),
-                                                                  surfaceProps,
-                                                                  managedOpList));
+    return std::unique_ptr<GrRenderTargetContext>(
+            new GrRenderTargetContext(fContext,
+                                      std::move(renderTargetProxy),
+                                      colorType,
+                                      std::move(colorSpace),
+                                      surfaceProps,
+                                      managedOpList));
 }
 
-sk_sp<GrTextureContext> GrDrawingManager::makeTextureContext(sk_sp<GrSurfaceProxy> sProxy,
-                                                             GrColorType colorType,
-                                                             SkAlphaType alphaType,
-                                                             sk_sp<SkColorSpace> colorSpace) {
+std::unique_ptr<GrTextureContext> GrDrawingManager::makeTextureContext(
+        sk_sp<GrSurfaceProxy> sProxy,
+        GrColorType colorType,
+        SkAlphaType alphaType,
+        sk_sp<SkColorSpace> colorSpace) {
     if (this->wasAbandoned() || !sProxy->asTextureProxy()) {
         return nullptr;
     }
@@ -841,9 +872,6 @@ sk_sp<GrTextureContext> GrDrawingManager::makeTextureContext(sk_sp<GrSurfaceProx
 
     sk_sp<GrTextureProxy> textureProxy(sk_ref_sp(sProxy->asTextureProxy()));
 
-    return sk_sp<GrTextureContext>(new GrTextureContext(fContext,
-                                                        std::move(textureProxy),
-                                                        colorType,
-                                                        alphaType,
-                                                        std::move(colorSpace)));
+    return std::unique_ptr<GrTextureContext>(new GrTextureContext(
+            fContext, std::move(textureProxy), colorType, alphaType, std::move(colorSpace)));
 }

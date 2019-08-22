@@ -44,35 +44,9 @@ private:
     GrDeferredTextureUploadFn fUpload;
 };
 
-class Copy : public GrVkPrimaryCommandBufferTask {
-public:
-    Copy(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint, bool shouldDiscardDst)
-            : fSrc(src)
-            , fSrcRect(srcRect)
-            , fDstPoint(dstPoint)
-            , fShouldDiscardDst(shouldDiscardDst) {}
-
-    void execute(const Args& args) override {
-        args.fGpu->copySurface(args.fSurface, fSrc.get(), fSrcRect, fDstPoint, fShouldDiscardDst);
-    }
-
-private:
-    using Src = GrPendingIOResource<GrSurface, kRead_GrIOType>;
-    Src fSrc;
-    SkIRect fSrcRect;
-    SkIPoint fDstPoint;
-    bool fShouldDiscardDst;
-};
-
 }  // anonymous namespace
 
 /////////////////////////////////////////////////////////////////////////////
-
-void GrVkGpuTextureCommandBuffer::copy(GrSurface* src, const SkIRect& srcRect,
-                                       const SkIPoint& dstPoint) {
-    SkASSERT(!src->isProtected() || (fTexture->isProtected() && fGpu->protectedContext()));
-    fTasks.emplace<Copy>(src, srcRect, dstPoint, false);
-}
 
 void GrVkGpuTextureCommandBuffer::insertEventMarker(const char* msg) {
     // TODO: does Vulkan have a correlate?
@@ -541,47 +515,6 @@ void GrVkGpuRTCommandBuffer::inlineUpload(GrOpFlushState* state,
     ++fCommandBufferInfos[fCurrentCmdInfo].fNumPreCmds;
 }
 
-void GrVkGpuRTCommandBuffer::copy(GrSurface* src, const SkIRect& srcRect,
-                                  const SkIPoint& dstPoint) {
-    CommandBufferInfo& cbInfo = fCommandBufferInfos[fCurrentCmdInfo];
-    if (!cbInfo.fIsEmpty || LoadStoreState::kStartsWithClear == cbInfo.fLoadStoreState) {
-        this->addAdditionalRenderPass();
-    }
-
-    fPreCommandBufferTasks.emplace<Copy>(
-            src, srcRect, dstPoint, LoadStoreState::kStartsWithDiscard == cbInfo.fLoadStoreState);
-    ++fCommandBufferInfos[fCurrentCmdInfo].fNumPreCmds;
-
-    if (LoadStoreState::kLoadAndStore != cbInfo.fLoadStoreState) {
-        // Change the render pass to do a load and store so we don't lose the results of our copy
-        GrVkRenderPass::LoadStoreOps vkColorOps(VK_ATTACHMENT_LOAD_OP_LOAD,
-                                                VK_ATTACHMENT_STORE_OP_STORE);
-        GrVkRenderPass::LoadStoreOps vkStencilOps(VK_ATTACHMENT_LOAD_OP_LOAD,
-                                                  VK_ATTACHMENT_STORE_OP_STORE);
-
-        const GrVkRenderPass* oldRP = cbInfo.fRenderPass;
-
-        GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(fRenderTarget);
-        SkASSERT(!src->isProtected() || (fRenderTarget->isProtected() && fGpu->protectedContext()));
-        const GrVkResourceProvider::CompatibleRPHandle& rpHandle =
-                vkRT->compatibleRenderPassHandle();
-        if (rpHandle.isValid()) {
-            cbInfo.fRenderPass = fGpu->resourceProvider().findRenderPass(rpHandle,
-                                                                         vkColorOps,
-                                                                         vkStencilOps);
-        } else {
-            cbInfo.fRenderPass = fGpu->resourceProvider().findRenderPass(*vkRT,
-                                                                         vkColorOps,
-                                                                         vkStencilOps);
-        }
-        SkASSERT(cbInfo.fRenderPass->isCompatible(*oldRP));
-        oldRP->unref(fGpu);
-
-        cbInfo.fLoadStoreState = LoadStoreState::kLoadAndStore;
-
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 void GrVkGpuRTCommandBuffer::bindGeometry(const GrGpuBuffer* indexBuffer,
@@ -792,7 +725,9 @@ void GrVkGpuRTCommandBuffer::onDraw(const GrPrimitiveProcessor& primProc,
 
 void GrVkGpuRTCommandBuffer::appendSampledTexture(GrTexture* tex) {
     SkASSERT(!tex->isProtected() || (fRenderTarget->isProtected() && fGpu->protectedContext()));
-    fCommandBufferInfos[fCurrentCmdInfo].fSampledTextures.push_back(static_cast<GrVkTexture*>(tex));
+    GrVkTexture* vkTex = static_cast<GrVkTexture*>(tex);
+
+    fCommandBufferInfos[fCurrentCmdInfo].fSampledTextures.push_back(sk_ref_sp(vkTex));
 }
 
 void GrVkGpuRTCommandBuffer::sendInstancedMeshToGpu(GrPrimitiveType,
