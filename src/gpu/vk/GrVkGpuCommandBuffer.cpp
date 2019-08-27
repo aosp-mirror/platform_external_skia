@@ -217,9 +217,8 @@ void GrVkGpuRTCommandBuffer::submit() {
             cbInfo.fBounds = SkRect::MakeWH(vkRT->width(), vkRT->height());
         }
 
-        if (cbInfo.fBounds.intersect(0, 0,
-                                     SkIntToScalar(fRenderTarget->width()),
-                                     SkIntToScalar(fRenderTarget->height()))) {
+        if (cbInfo.fBounds.intersect(SkRect::MakeIWH(fRenderTarget->width(),
+                                                     fRenderTarget->height()))) {
             // Make sure we do the following layout changes after all copies, uploads, or any other
             // pre-work is done since we may change the layouts in the pre-work. Also since the
             // draws will be submitted in different render passes, we need to guard againts write
@@ -637,7 +636,7 @@ void GrVkGpuRTCommandBuffer::onDraw(const GrPrimitiveProcessor& primProc,
         if (texRT && texRT->needsResolve()) {
             fGpu->resolveRenderTargetNoFlush(texRT);
             // TEMPORARY: MSAA resolve will have dirtied mipmaps. This goes away once we switch
-            // to resolving MSAA from the opList as well.
+            // to resolving MSAA from the opsTask as well.
             if (GrSamplerState::Filter::kMipMap == filter &&
                 (vkTexture->width() != 1 || vkTexture->height() != 1)) {
                 SkASSERT(vkTexture->texturePriv().mipMapped() == GrMipMapped::kYes);
@@ -646,7 +645,7 @@ void GrVkGpuRTCommandBuffer::onDraw(const GrPrimitiveProcessor& primProc,
             }
         }
 
-        // Ensure mip maps were all resolved ahead of time by the opList.
+        // Ensure mip maps were all resolved ahead of time by the opsTask.
         if (GrSamplerState::Filter::kMipMap == filter &&
             (vkTexture->width() != 1 || vkTexture->height() != 1)) {
             SkASSERT(vkTexture->texturePriv().mipMapped() == GrMipMapped::kYes);

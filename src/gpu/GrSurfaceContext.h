@@ -19,7 +19,6 @@
 
 class GrAuditTrail;
 class GrDrawingManager;
-class GrOpList;
 class GrRecordingContext;
 class GrRenderTargetContext;
 class GrRenderTargetProxy;
@@ -34,7 +33,7 @@ struct SkIRect;
 /**
  * A helper object to orchestrate commands for a particular surface
  */
-class SK_API GrSurfaceContext {
+class GrSurfaceContext {
 public:
     virtual ~GrSurfaceContext() = default;
 
@@ -110,7 +109,6 @@ protected:
     GrDrawingManager* drawingManager();
     const GrDrawingManager* drawingManager() const;
 
-    virtual GrOpList* getOpList() = 0;
     SkDEBUGCODE(virtual void validate() const = 0;)
 
     SkDEBUGCODE(GrSingleOwner* singleOwner();)

@@ -70,7 +70,7 @@ def dm_flags(api, bot):
     args.append('--randomProcessorTest')
 
   if 'Pixel3' in bot and 'Vulkan' in bot:
-    args.extend(['--dontReduceOpListSplitting'])
+    args.extend(['--dontReduceOpsTaskSplitting'])
 
   thread_limit = None
   MAIN_THREAD_ONLY = 0
@@ -484,7 +484,7 @@ def dm_flags(api, bot):
     # http://b/118312149#comment9
     blacklist('_ test _ SRGBReadWritePixels')
 
-  # skia:4095, skia:9334
+  # skia:4095
   bad_serialize_gms = ['bleed_image',
                        'c_gms',
                        'colortype',
@@ -500,8 +500,7 @@ def dm_flags(api, bot):
                        'imagemakewithfilter',
                        'imagemakewithfilter_crop',
                        'imagemakewithfilter_crop_ref',
-                       'imagemakewithfilter_ref',
-                       'picture_cull_rect']
+                       'imagemakewithfilter_ref']
 
   # skia:5589
   bad_serialize_gms.extend(['bitmapfilters',
@@ -924,7 +923,7 @@ def test_steps(api):
       '--images', api.flavor.device_path_join(
           api.flavor.device_dirs.resource_dir, 'images', 'color_wheel.jpg'),
       '--nameByHash',
-      '--dontReduceOpListSplitting',
+      '--dontReduceOpsTaskSplitting',
       '--properties'
     ] + properties
   else:

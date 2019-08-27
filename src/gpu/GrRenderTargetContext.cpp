@@ -29,7 +29,6 @@
 #include "src/gpu/GrFixedClip.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrMemoryPool.h"
-#include "src/gpu/GrOpList.h"
 #include "src/gpu/GrPathRenderer.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
@@ -136,21 +135,21 @@ private:
     GrDrawingManager* fDrawingManager;
 };
 
-// In MDB mode the reffing of the 'getLastOpList' call's result allows in-progress
-// GrOpLists to be picked up and added to by renderTargetContexts lower in the call
-// stack. When this occurs with a closed GrOpList, a new one will be allocated
-// when the renderTargetContext attempts to use it (via getOpList).
+// In MDB mode the reffing of the 'getLastOpsTask' call's result allows in-progress
+// GrOpsTask to be picked up and added to by renderTargetContexts lower in the call
+// stack. When this occurs with a closed GrOpsTask, a new one will be allocated
+// when the renderTargetContext attempts to use it (via getOpsTask).
 GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
                                              sk_sp<GrRenderTargetProxy> rtp,
                                              GrColorType colorType,
                                              sk_sp<SkColorSpace> colorSpace,
                                              const SkSurfaceProps* surfaceProps,
-                                             bool managedOpList)
+                                             bool managedOpsTask)
         : GrSurfaceContext(context, colorType, kPremul_SkAlphaType, std::move(colorSpace))
         , fRenderTargetProxy(std::move(rtp))
-        , fOpList(sk_ref_sp(fRenderTargetProxy->getLastRenderTargetOpList()))
+        , fOpsTask(sk_ref_sp(fRenderTargetProxy->getLastOpsTask()))
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
-        , fManagedOpList(managedOpList) {
+        , fManagedOpsTask(managedOpsTask) {
     fTextTarget.reset(new TextTarget(this));
     SkDEBUGCODE(this->validate();)
 }
@@ -160,8 +159,8 @@ void GrRenderTargetContext::validate() const {
     SkASSERT(fRenderTargetProxy);
     fRenderTargetProxy->validate(fContext);
 
-    if (fOpList && !fOpList->isClosed()) {
-        SkASSERT(fRenderTargetProxy->getLastRenderTask() == fOpList.get());
+    if (fOpsTask && !fOpsTask->isClosed()) {
+        SkASSERT(fRenderTargetProxy->getLastRenderTask() == fOpsTask.get());
     }
 }
 #endif
@@ -201,19 +200,15 @@ GrMipMapped GrRenderTargetContext::mipMapped() const {
     return GrMipMapped::kNo;
 }
 
-GrRenderTargetOpList* GrRenderTargetContext::getRTOpList() {
+GrOpsTask* GrRenderTargetContext::getOpsTask() {
     ASSERT_SINGLE_OWNER
     SkDEBUGCODE(this->validate();)
 
-    if (!fOpList || fOpList->isClosed()) {
-        fOpList = this->drawingManager()->newRTOpList(fRenderTargetProxy, fManagedOpList);
+    if (!fOpsTask || fOpsTask->isClosed()) {
+        fOpsTask = this->drawingManager()->newOpsTask(fRenderTargetProxy, fManagedOpsTask);
     }
 
-    return fOpList.get();
-}
-
-GrOpList* GrRenderTargetContext::getOpList() {
-    return this->getRTOpList();
+    return fOpsTask.get();
 }
 
 void GrRenderTargetContext::drawGlyphRunList(
@@ -244,7 +239,7 @@ void GrRenderTargetContext::discard() {
 
     AutoCheckFlush acf(this->drawingManager());
 
-    this->getRTOpList()->discard();
+    this->getOpsTask()->discard();
 }
 
 void GrRenderTargetContext::clear(const SkIRect* rect,
@@ -300,16 +295,16 @@ void GrRenderTargetContext::internalClear(const GrFixedClip& clip,
     }
 
     if (isFull) {
-        GrRenderTargetOpList* opList = this->getRTOpList();
-        if (opList->resetForFullscreenClear(this->canDiscardPreviousOpsOnFullClear()) &&
+        GrOpsTask* opsTask = this->getOpsTask();
+        if (opsTask->resetForFullscreenClear(this->canDiscardPreviousOpsOnFullClear()) &&
             !this->caps()->performColorClearsAsDraws()) {
             // The op list was emptied and native clears are allowed, so just use the load op
-            opList->setColorLoadOp(GrLoadOp::kClear, color);
+            opsTask->setColorLoadOp(GrLoadOp::kClear, color);
             return;
         } else {
             // Will use an op for the clear, reset the load op to discard since the op will
             // blow away the color buffer contents
-            opList->setColorLoadOp(GrLoadOp::kDiscard);
+            opsTask->setColorLoadOp(GrLoadOp::kDiscard);
         }
 
         // Must add an op to the list (either because we couldn't use a load op, or because the
@@ -369,7 +364,7 @@ void GrRenderTargetContextPriv::absClear(const SkIRect* clearRect, const SkPMCol
         }
     }
 
-    // TODO: in a post-MDB world this should be handled at the OpList level.
+    // TODO: in a post-MDB world this should be handled at the OpsTask level.
     // This makes sure to always add an op to the list, instead of marking the clear as a load op.
     // This code follows very similar logic to internalClear() below, but critical differences are
     // highlighted in line related to absClear()'s unique behavior.
@@ -394,9 +389,9 @@ void GrRenderTargetContextPriv::absClear(const SkIRect* clearRect, const SkPMCol
         }
     } else {
         // Reset the oplist like in internalClear(), but do not rely on a load op for the clear
-        fRenderTargetContext->getRTOpList()->resetForFullscreenClear(
+        fRenderTargetContext->getOpsTask()->resetForFullscreenClear(
                 fRenderTargetContext->canDiscardPreviousOpsOnFullClear());
-        fRenderTargetContext->getRTOpList()->setColorLoadOp(GrLoadOp::kDiscard);
+        fRenderTargetContext->getOpsTask()->setColorLoadOp(GrLoadOp::kDiscard);
 
         if (fRenderTargetContext->caps()->performColorClearsAsDraws()) {
             // This draws a quad covering the worst case dimensions instead of just the logical
@@ -789,11 +784,11 @@ int GrRenderTargetContextPriv::maxWindowRectangles() const {
             *fRenderTargetContext->caps());
 }
 
-GrRenderTargetOpList::CanDiscardPreviousOps GrRenderTargetContext::canDiscardPreviousOpsOnFullClear(
+GrOpsTask::CanDiscardPreviousOps GrRenderTargetContext::canDiscardPreviousOpsOnFullClear(
         ) const {
 #if GR_TEST_UTILS
     if (fPreserveOpsOnFullClear_TestingOnly) {
-        return GrRenderTargetOpList::CanDiscardPreviousOps::kNo;
+        return GrOpsTask::CanDiscardPreviousOps::kNo;
     }
 #endif
     // Regardless of how the clear is implemented (native clear or a fullscreen quad), all prior ops
@@ -802,7 +797,7 @@ GrRenderTargetOpList::CanDiscardPreviousOps GrRenderTargetContext::canDiscardPre
     // Although the clear will ignore the stencil buffer, following draw ops may not so we can't get
     // rid of all the preceding ops. Beware! If we ever add any ops that have a side effect beyond
     // modifying the stencil buffer we will need a more elaborate tracking system (skbug.com/7002).
-    return GrRenderTargetOpList::CanDiscardPreviousOps(!fNumStencilSamples);
+    return GrOpsTask::CanDiscardPreviousOps(!fNumStencilSamples);
 }
 
 void GrRenderTargetContext::setNeedsStencil(bool multisampled) {
@@ -835,7 +830,7 @@ void GrRenderTargetContext::setNeedsStencil(bool multisampled) {
             // code note when the instantiated stencil buffer is already clear and skip the clear
             // altogether. And on tilers, loading the stencil buffer cleared is even faster than
             // preserving the previous contents.
-            this->getRTOpList()->setStencilLoadOp(GrLoadOp::kClear);
+            this->getOpsTask()->setStencilLoadOp(GrLoadOp::kClear);
         }
     }
 }
@@ -2007,7 +2002,7 @@ bool GrRenderTargetContext::waitOnSemaphores(int numSemaphores,
                 kAdopt_GrWrapOwnership);
         std::unique_ptr<GrOp> waitOp(GrSemaphoreOp::MakeWait(fContext, std::move(sema),
                                                              fRenderTargetProxy.get()));
-        this->getRTOpList()->addWaitOp(
+        this->getOpsTask()->addWaitOp(
                 std::move(waitOp), GrTextureResolveManager(this->drawingManager()), *this->caps());
     }
     return true;
@@ -2284,7 +2279,7 @@ static void op_bounds(SkRect* bounds, const GrOp* op) {
 }
 
 void GrRenderTargetContext::addOp(std::unique_ptr<GrOp> op) {
-    this->getRTOpList()->addOp(
+    this->getOpsTask()->addOp(
             std::move(op), GrTextureResolveManager(this->drawingManager()), *this->caps());
 }
 
@@ -2333,32 +2328,32 @@ void GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<GrDraw
 
     GrXferProcessor::DstProxy dstProxy;
     if (analysis.requiresDstTexture()) {
-        if (!this->setupDstProxy(this->asRenderTargetProxy(), clip, *op, &dstProxy)) {
+        if (!this->setupDstProxy(clip, *op, &dstProxy)) {
             fContext->priv().opMemoryPool()->release(std::move(op));
             return;
         }
     }
 
     op->setClippedBounds(bounds);
-    auto opList = this->getRTOpList();
+    auto opsTask = this->getOpsTask();
     if (willAddFn) {
-        willAddFn(op.get(), opList->uniqueID());
+        willAddFn(op.get(), opsTask->uniqueID());
     }
-    opList->addDrawOp(std::move(op), analysis, std::move(appliedClip), dstProxy,
-                      GrTextureResolveManager(this->drawingManager()), *this->caps());
+    opsTask->addDrawOp(std::move(op), analysis, std::move(appliedClip), dstProxy,
+                       GrTextureResolveManager(this->drawingManager()), *this->caps());
 }
 
-bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const GrClip& clip,
-                                          const GrOp& op, GrXferProcessor::DstProxy* dstProxy) {
+bool GrRenderTargetContext::setupDstProxy(const GrClip& clip, const GrOp& op,
+                                          GrXferProcessor::DstProxy* dstProxy) {
     // If we are wrapping a vulkan secondary command buffer, we can't make a dst copy because we
     // don't actually have a VkImage to make a copy of. Additionally we don't have the power to
     // start and stop the render pass in order to make the copy.
-    if (rtProxy->wrapsVkSecondaryCB()) {
+    if (fRenderTargetProxy->wrapsVkSecondaryCB()) {
         return false;
     }
 
-    if (this->caps()->textureBarrierSupport()) {
-        if (GrTextureProxy* texProxy = rtProxy->asTextureProxy()) {
+    if (this->caps()->textureBarrierSupport() && !fRenderTargetProxy->requiresManualMSAAResolve()) {
+        if (GrTextureProxy* texProxy = fRenderTargetProxy->asTextureProxy()) {
             // The render target is a texture, so we can read from it directly in the shader. The XP
             // will be responsible to detect this situation and request a texture barrier.
             dstProxy->setProxy(sk_ref_sp(texProxy));
@@ -2367,10 +2362,11 @@ bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const Gr
         }
     }
 
-    SkIRect copyRect = SkIRect::MakeWH(rtProxy->width(), rtProxy->height());
+    SkIRect copyRect = SkIRect::MakeWH(fRenderTargetProxy->width(), fRenderTargetProxy->height());
 
     SkIRect clippedRect;
-    clip.getConservativeBounds(rtProxy->width(), rtProxy->height(), &clippedRect);
+    clip.getConservativeBounds(
+            fRenderTargetProxy->width(), fRenderTargetProxy->height(), &clippedRect);
     SkRect opBounds = op.bounds();
     // If the op has aa bloating or is a infinitely thin geometry (hairline) outset the bounds by
     // 0.5 pixels.
@@ -2380,7 +2376,8 @@ bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const Gr
         // performance we may ignore the clip when the draw is entirely inside the clip is float
         // space but will hit pixels just outside the clip when actually rasterizing.
         clippedRect.outset(1, 1);
-        clippedRect.intersect(SkIRect::MakeWH(rtProxy->width(), rtProxy->height()));
+        clippedRect.intersect(SkIRect::MakeWH(
+                fRenderTargetProxy->width(), fRenderTargetProxy->height()));
     }
     SkIRect opIBounds;
     opBounds.roundOut(&opIBounds);
@@ -2394,7 +2391,7 @@ bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const Gr
     // MSAA consideration: When there is support for reading MSAA samples in the shader we could
     // have per-sample dst values by making the copy multisampled.
     GrCaps::DstCopyRestrictions restrictions = this->caps()->getDstCopyRestrictions(
-            rtProxy, this->colorSpaceInfo().colorType());
+            fRenderTargetProxy.get(), this->colorSpaceInfo().colorType());
 
     if (!restrictions.fMustCopyWholeSrc) {
         copyRect = clippedRect;
@@ -2409,9 +2406,9 @@ bool GrRenderTargetContext::setupDstProxy(GrRenderTargetProxy* rtProxy, const Gr
         dstOffset = {copyRect.fLeft, copyRect.fTop};
         fit = SkBackingFit::kApprox;
     }
-    sk_sp<GrTextureProxy> newProxy =
-            GrSurfaceProxy::Copy(fContext, rtProxy, GrMipMapped::kNo, copyRect, fit,
-                                 SkBudgeted::kYes, restrictions.fRectsMustMatch);
+    sk_sp<GrTextureProxy> newProxy = GrSurfaceProxy::Copy(
+            fContext, fRenderTargetProxy.get(), GrMipMapped::kNo, copyRect, fit, SkBudgeted::kYes,
+            restrictions.fRectsMustMatch);
     SkASSERT(newProxy);
 
     dstProxy->setProxy(std::move(newProxy));

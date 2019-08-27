@@ -23,11 +23,11 @@ class GrSurfaceProxy;
 class GrTextBlobCache;
 class GrTextureContext;
 
-class SK_API GrRecordingContext : public GrImageContext {
+class GrRecordingContext : public GrImageContext {
 public:
     ~GrRecordingContext() override;
 
-    GrBackendFormat defaultBackendFormat(SkColorType ct, GrRenderable renderable) const {
+    SK_API GrBackendFormat defaultBackendFormat(SkColorType ct, GrRenderable renderable) const {
         return INHERITED::defaultBackendFormat(ct, renderable);
     }
 
@@ -40,7 +40,7 @@ protected:
 
     GrRecordingContext(GrBackendApi, const GrContextOptions&, uint32_t contextID);
     bool init(sk_sp<const GrCaps>, sk_sp<GrSkSLFPFactoryCache>) override;
-    void setupDrawingManager(bool sortOpLists, bool reduceOpListSplitting);
+    void setupDrawingManager(bool sortOpsTasks, bool reduceOpsTaskSplitting);
 
     void abandonContext() override;
 
