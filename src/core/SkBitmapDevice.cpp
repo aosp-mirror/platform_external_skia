@@ -427,7 +427,7 @@ void SkBitmapDevice::drawBitmapRect(const SkBitmap& bitmap,
     SkRect      bitmapBounds, tmpSrc, tmpDst;
     SkBitmap    tmpBitmap;
 
-    bitmapBounds.isetWH(bitmap.width(), bitmap.height());
+    bitmapBounds.setIWH(bitmap.width(), bitmap.height());
 
     // Compute matrix from the two rectangles
     if (src) {
@@ -494,7 +494,7 @@ void SkBitmapDevice::drawBitmapRect(const SkBitmap& bitmap,
                                                         SkIntToScalar(bitmapPtr->height()));
 #else
         SkRect extractedBitmapBounds;
-        extractedBitmapBounds.isetWH(bitmapPtr->width(), bitmapPtr->height());
+        extractedBitmapBounds.setIWH(bitmapPtr->width(), bitmapPtr->height());
 #endif
         if (extractedBitmapBounds == tmpSrc) {
             // no fractional part in src, we can just call drawBitmap
@@ -628,7 +628,7 @@ void SkBitmapDevice::drawSpecial(SkSpecialImage* src, int x, int y, const SkPain
         SkImageFilter_Base::Context ctx(matrix, clipBounds, cache.get(), fBitmap.colorType(),
                                         fBitmap.colorSpace(), src);
 
-        filteredImage = as_IFB(filter)->filterImage(ctx, &offset);
+        filteredImage = as_IFB(filter)->filterImage(ctx).imageAndOffset(&offset);
         if (!filteredImage) {
             return;
         }
