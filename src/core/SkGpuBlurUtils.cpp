@@ -306,6 +306,9 @@ static sk_sp<GrTextureProxy> decimate(GrRecordingContext* context,
 
     SkIRect dstRect(srcRect);
 
+    // Map the src rect into proxy space, this only has to happen once since subsequent loops
+    // to decimate will have created a new proxy that has its origin at (0, 0).
+    srcRect.offset(proxyOffset.x(), proxyOffset.y());
     std::unique_ptr<GrRenderTargetContext> dstRenderTargetContext;
 
     for (int i = 1; i < scaleFactorX || i < scaleFactorY; i *= 2) {
@@ -364,8 +367,7 @@ static sk_sp<GrTextureProxy> decimate(GrRecordingContext* context,
 
         dstRenderTargetContext->fillRectToRect(GrFixedClip::Disabled(), std::move(paint), GrAA::kNo,
                                                SkMatrix::I(), SkRect::Make(dstRect),
-                                               SkRect::Make(srcRect.makeOffset(proxyOffset.x(),
-                                                                               proxyOffset.y())));
+                                               SkRect::Make(srcRect));
 
         src = dstRenderTargetContext->asTextureProxyRef();
         if (!src) {
@@ -384,7 +386,7 @@ static sk_sp<GrTextureProxy> decimate(GrRecordingContext* context,
             // X convolution from reading garbage.
             SkIRect clearRect = SkIRect::MakeXYWH(contentRect->fRight, contentRect->fTop,
                                                   radiusX, contentRect->height());
-            dstRenderTargetContext->priv().absClear(&clearRect, SK_PMColor4fTRANSPARENT);
+            dstRenderTargetContext->priv().absClear(&clearRect);
         }
     } else {
         if (scaleFactorY > 1) {
@@ -392,7 +394,7 @@ static sk_sp<GrTextureProxy> decimate(GrRecordingContext* context,
             // convolution from reading garbage.
             SkIRect clearRect = SkIRect::MakeXYWH(contentRect->fLeft, contentRect->fBottom,
                                                   contentRect->width(), radiusY);
-            dstRenderTargetContext->priv().absClear(&clearRect, SK_PMColor4fTRANSPARENT);
+            dstRenderTargetContext->priv().absClear(&clearRect);
         }
     }
 
@@ -419,9 +421,9 @@ static std::unique_ptr<GrRenderTargetContext> reexpand(
     // TODO: it seems like we should actually be clamping here rather than darkening
     // the bottom right edges.
     SkIRect clearRect = SkIRect::MakeXYWH(srcRect.fLeft, srcRect.fBottom, srcRect.width() + 1, 1);
-    srcRenderTargetContext->priv().absClear(&clearRect, SK_PMColor4fTRANSPARENT);
+    srcRenderTargetContext->priv().absClear(&clearRect);
     clearRect = SkIRect::MakeXYWH(srcRect.fRight, srcRect.fTop, 1, srcRect.height());
-    srcRenderTargetContext->priv().absClear(&clearRect, SK_PMColor4fTRANSPARENT);
+    srcRenderTargetContext->priv().absClear(&clearRect);
 
     sk_sp<GrTextureProxy> srcProxy = srcRenderTargetContext->asTextureProxyRef();
     if (!srcProxy) {
@@ -552,7 +554,7 @@ std::unique_ptr<GrRenderTargetContext> GaussianBlur(GrRecordingContext* context,
             // convolution from reading garbage.
             SkIRect clearRect = SkIRect::MakeXYWH(srcRect.fLeft, srcRect.fBottom,
                                                   srcRect.width(), radiusY);
-            dstRenderTargetContext->priv().absClear(&clearRect, SK_PMColor4fTRANSPARENT);
+            dstRenderTargetContext->priv().absClear(&clearRect);
         }
 
         srcProxy = dstRenderTargetContext->asTextureProxyRef();

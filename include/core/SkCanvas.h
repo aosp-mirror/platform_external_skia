@@ -1859,7 +1859,12 @@ public:
      * This API only draws solid color, filled rectangles so it does not accept a full SkPaint.
      */
     void experimental_DrawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], QuadAAFlags aaFlags,
-                                     SkColor color, SkBlendMode mode);
+                                     const SkColor4f& color, SkBlendMode mode);
+    void experimental_DrawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], QuadAAFlags aaFlags,
+                                     SkColor color, SkBlendMode mode) {
+        this->experimental_DrawEdgeAAQuad(rect, clip, aaFlags, SkColor4f::FromColor(color), mode);
+    }
+
     /**
      * This is an bulk variant of experimental_DrawEdgeAAQuad() that renders 'cnt' textured quads.
      * For each entry, 'fDstRect' is rendered with its clip (determined by entry's 'fHasClip' and
@@ -2478,7 +2483,11 @@ protected:
                                const SkPaint* paint);
 
     virtual void onDrawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], QuadAAFlags aaFlags,
-                                  SkColor color, SkBlendMode mode);
+                                  const SkColor4f& color, SkBlendMode mode);
+    // DEPRECATED: This is around until Flutter can be updated to use the const SkColor4f& variant.
+    // Subclasses that extend the SkColor4f function should not extend this.
+    virtual void onDrawEdgeAAQuad(const SkRect&, const SkPoint[4], QuadAAFlags,
+                                  SkColor, SkBlendMode) {}
     virtual void onDrawEdgeAAImageSet(const ImageSetEntry imageSet[], int count,
                                       const SkPoint dstClips[], const SkMatrix preViewMatrices[],
                                       const SkPaint* paint, SrcRectConstraint constraint);
