@@ -920,7 +920,7 @@ void SkCanvas::DrawDeviceWithFilter(SkBaseDevice* src, const SkImageFilter* filt
         p.setImageFilter(modifiedFilter->makeWithLocalMatrix(localCTM));
     }
 
-    auto special = src->snapBackImage(snapBounds);
+    auto special = src->snapSpecial(snapBounds);
     if (special) {
         dst->drawSpecial(special.get(), x, y, p, nullptr, SkMatrix::I());
     }
@@ -1111,7 +1111,11 @@ void SkCanvas::internalSaveBehind(const SkRect* localBounds) {
     // need the bounds relative to the device itself
     devBounds.offset(-device->fOrigin.fX, -device->fOrigin.fY);
 
-    auto backImage = device->snapBackImage(devBounds);
+    // This is getting the special image from the current device, which is then drawn into (both by
+    // a client, and the drawClippedToSaveBehind below). Since this is not saving a layer, with its
+    // own device, we need to explicitly copy the back image contents so that its original content
+    // is available when we splat it back later during restore.
+    auto backImage = device->snapSpecial(devBounds, /* copy */ true);
     if (!backImage) {
         return;
     }
@@ -1979,7 +1983,8 @@ void SkCanvas::onDrawShadowRec(const SkPath& path, const SkDrawShadowRec& rec) {
 }
 
 void SkCanvas::experimental_DrawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4],
-                                           QuadAAFlags aaFlags, SkColor color, SkBlendMode mode) {
+                                           QuadAAFlags aaFlags, const SkColor4f& color,
+                                           SkBlendMode mode) {
     TRACE_EVENT0("skia", TRACE_FUNC);
     // Make sure the rect is sorted before passing it along
     this->onDrawEdgeAAQuad(rect.makeSorted(), clip, aaFlags, color, mode);
@@ -2680,8 +2685,8 @@ void SkCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData* va
     DRAW_END
 }
 
-void SkCanvas::onDrawEdgeAAQuad(const SkRect& r, const SkPoint clip[4],  QuadAAFlags edgeAA,
-                                SkColor color, SkBlendMode mode) {
+void SkCanvas::onDrawEdgeAAQuad(const SkRect& r, const SkPoint clip[4], QuadAAFlags edgeAA,
+                                const SkColor4f& color, SkBlendMode mode) {
     SkASSERT(r.isSorted());
 
     // If this used a paint, it would be a filled color with blend mode, which does not
@@ -2690,7 +2695,7 @@ void SkCanvas::onDrawEdgeAAQuad(const SkRect& r, const SkPoint clip[4],  QuadAAF
         return;
     }
 
-    this->predrawNotify();
+    this->predrawNotify(&r, nullptr, false);
     SkDrawIter iter(this);
     while(iter.next()) {
         iter.fDevice->drawEdgeAAQuad(r, clip, edgeAA, color, mode);
@@ -2700,17 +2705,59 @@ void SkCanvas::onDrawEdgeAAQuad(const SkRect& r, const SkPoint clip[4],  QuadAAF
 void SkCanvas::onDrawEdgeAAImageSet(const ImageSetEntry imageSet[], int count,
                                     const SkPoint dstClips[], const SkMatrix preViewMatrices[],
                                     const SkPaint* paint, SrcRectConstraint constraint) {
+    if (count <= 0) {
+        // Nothing to draw
+        return;
+    }
+
     SkPaint realPaint;
     init_image_paint(&realPaint, paint);
 
-    // Looper is used when there are image filters, which drawEdgeAAImageSet needs to support
-    // for Chromium's RenderPassDrawQuads' filters.
-    DRAW_BEGIN(realPaint, nullptr)
-    while (iter.next()) {
-        iter.fDevice->drawEdgeAAImageSet(
-                imageSet, count, dstClips, preViewMatrices, draw.paint(), constraint);
+    // We could calculate the set's dstRect union to always check quickReject(), but we can't reject
+    // individual entries and Chromium's occlusion culling already makes it likely that at least one
+    // entry will be visible. So, we only calculate the draw bounds when it's trivial (count == 1),
+    // or we need it for the autolooper (since it greatly improves image filter perf).
+    bool needsAutoLooper = needs_autodrawlooper(this, realPaint);
+    bool setBoundsValid = count == 1 || needsAutoLooper;
+    SkRect setBounds = imageSet[0].fDstRect;
+    if (imageSet[0].fMatrixIndex >= 0) {
+        // Account for the per-entry transform that is applied prior to the CTM when drawing
+        preViewMatrices[imageSet[0].fMatrixIndex].mapRect(&setBounds);
     }
-    DRAW_END
+    if (needsAutoLooper) {
+        for (int i = 1; i < count; ++i) {
+            SkRect entryBounds = imageSet[i].fDstRect;
+            if (imageSet[i].fMatrixIndex >= 0) {
+                preViewMatrices[imageSet[i].fMatrixIndex].mapRect(&entryBounds);
+            }
+            setBounds.joinPossiblyEmptyRect(entryBounds);
+        }
+    }
+
+    // If we happen to have the draw bounds, though, might as well check quickReject().
+    if (setBoundsValid && realPaint.canComputeFastBounds()) {
+        SkRect tmp;
+        if (this->quickReject(realPaint.computeFastBounds(setBounds, &tmp))) {
+            return;
+        }
+    }
+
+    if (needsAutoLooper) {
+        SkASSERT(setBoundsValid);
+        DRAW_BEGIN(realPaint, &setBounds)
+        while (iter.next()) {
+            iter.fDevice->drawEdgeAAImageSet(
+                imageSet, count, dstClips, preViewMatrices, draw.paint(), constraint);
+        }
+        DRAW_END
+    } else {
+        this->predrawNotify();
+        SkDrawIter iter(this);
+        while(iter.next()) {
+            iter.fDevice->drawEdgeAAImageSet(
+                imageSet, count, dstClips, preViewMatrices, realPaint, constraint);
+        }
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
