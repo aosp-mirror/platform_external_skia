@@ -44,10 +44,10 @@ void GrResourceAllocator::determineRecyclability() {
             continue;
         }
 
-        if (cur->uses() >= cur->proxy()->priv().getProxyRefCnt()) {
+        if (cur->uses() >= cur->proxy()->refCnt()) {
             // All the refs on the proxy are known to the resource allocator thus no one
             // should be holding onto it outside of Ganesh.
-            SkASSERT(cur->uses() == cur->proxy()->priv().getProxyRefCnt());
+            SkASSERT(cur->uses() == cur->proxy()->refCnt());
             cur->markAsRecyclable();
         }
     }
@@ -418,7 +418,7 @@ bool GrResourceAllocator::assign(int* startIndex, int* stopIndex, AssignError* o
     this->dumpIntervals();
 #endif
     while (Interval* cur = fIntvlList.popHead()) {
-        if (fEndOfOpsTaskOpIndices[fCurOpsTaskIndex] <= cur->start()) {
+        while (fEndOfOpsTaskOpIndices[fCurOpsTaskIndex] <= cur->start()) {
             fCurOpsTaskIndex++;
             SkASSERT(fCurOpsTaskIndex < fNumOpsTasks);
         }
