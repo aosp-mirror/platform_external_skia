@@ -21,7 +21,7 @@ PipelineStageCodeGenerator::PipelineStageCodeGenerator(
 : INHERITED(context, program, errors, out)
 , fName("Temp")
 , fFullName(String::printf("Gr%s", fName.c_str()))
-, fSectionAndParameterHelper(*program, *errors)
+, fSectionAndParameterHelper(program, *errors)
 , fFormatArgs(outFormatArgs) {}
 
 void PipelineStageCodeGenerator::writef(const char* s, va_list va) {
@@ -103,8 +103,6 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
             }
         }
         SkASSERT(found);
-        fExtraEmitCodeCode += "        this->invokeChild(" + to_string(index) + ", fChildren[" +
-                              to_string(index) + "], args);\n";
         this->write("%s");
         fFormatArgs->push_back(Compiler::FormatArg(Compiler::FormatArg::Kind::kChildProcessor,
                                                    index));

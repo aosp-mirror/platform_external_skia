@@ -101,17 +101,12 @@ public:
 
 private:
     bool isNoOp() const {
-        // TODO: GrLoadOp::kDiscard -> [empty OpsTask] -> GrStoreOp::kStore should also be a no-op.
-        // We don't count it as a no-op right now because of Vulkan. There are real cases where we
-        // store a discard, and if we skip that render pass, then the next time we load the render
-        // target, Vulkan detects loading of uninitialized memory and complains. If we don't skip
-        // storing the discard, then we trick Vulkan and it doesn't notice us doing anything wrong.
-        // We should definitely address this issue properly.
+        // TODO: GrLoadOp::kDiscard (i.e., storing a discard) should also be grounds for skipping
+        // execution. We currently don't because of Vulkan. See http://skbug.com/9373.
         //
         // TODO: We should also consider stencil load/store here. We get away with it for now
         // because we never discard stencil buffers.
-        return fOpChains.empty() && GrLoadOp::kClear != fColorLoadOp &&
-               GrLoadOp::kDiscard != fColorLoadOp;
+        return fOpChains.empty() && GrLoadOp::kLoad == fColorLoadOp;
     }
 
     void deleteOps();
@@ -170,6 +165,11 @@ private:
                                        const DstProxy*, const GrAppliedClip*, const GrCaps&,
                                        GrOpMemoryPool*, GrAuditTrail*);
 
+        void setSkipExecuteFlag() { fSkipExecute = true; }
+        bool shouldExecute() const {
+            return SkToBool(this->head()) && !fSkipExecute;
+        }
+
     private:
         class List {
         public:
@@ -205,6 +205,10 @@ private:
         DstProxy fDstProxy;
         GrAppliedClip* fAppliedClip;
         SkRect fBounds;
+
+        // We set this flag to true if any of the ops' proxies fail to instantiate so that we know
+        // not to try and draw the op.
+        bool fSkipExecute = false;
     };
 
 
