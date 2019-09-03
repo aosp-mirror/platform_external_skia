@@ -280,31 +280,40 @@ sk_sp<RangeSelector> RangeSelector::Make(const skjson::ObjectValue* jrange,
                               ParseEnum<Domain>(gDomainMap, (*jrange)["b" ], abuilder, "domain"),
                               ParseEnum<Mode>  (gModeMap  , (*jrange)["m" ], abuilder, "mode"  ),
                               ParseEnum<Shape> (gShapeMap , (*jrange)["sh"], abuilder, "shape" )));
+    auto* raw_selector = selector.get();
 
     abuilder->bindProperty<ScalarValue>((*jrange)["s"],
-        [selector](const ScalarValue& s) {
-            selector->fStart = s;
+        [raw_selector](const ScalarValue& s) {
+            raw_selector->fStart = s;
         });
     abuilder->bindProperty<ScalarValue>((*jrange)["e"],
-        [selector](const ScalarValue& e) {
-            selector->fEnd = e;
+        [raw_selector](const ScalarValue& e) {
+            raw_selector->fEnd = e;
         });
     abuilder->bindProperty<ScalarValue>((*jrange)["o"],
-        [selector](const ScalarValue& o) {
-            selector->fOffset = o;
+        [raw_selector](const ScalarValue& o) {
+            raw_selector->fOffset = o;
         });
     abuilder->bindProperty<ScalarValue>((*jrange)["a"],
-        [selector](const ScalarValue& a) {
-            selector->fAmount = a;
+        [raw_selector](const ScalarValue& a) {
+            raw_selector->fAmount = a;
         });
     abuilder->bindProperty<ScalarValue>((*jrange)["ne"],
-        [selector](const ScalarValue& ne) {
-            selector->fEaseLo = ne;
+        [raw_selector](const ScalarValue& ne) {
+            raw_selector->fEaseLo = ne;
         });
     abuilder->bindProperty<ScalarValue>((*jrange)["xe"],
-        [selector](const ScalarValue& xe) {
-            selector->fEaseHi = xe;
+        [raw_selector](const ScalarValue& xe) {
+            raw_selector->fEaseHi = xe;
         });
+
+    // Optional square "smoothness" prop.
+    if (selector->fShape == Shape::kSquare) {
+        abuilder->bindProperty<ScalarValue>((*jrange)["sm"],
+            [selector](const ScalarValue& sm) {
+                selector->fSmoothness = sm;
+            });
+    }
 
     return selector;
 }
@@ -382,13 +391,13 @@ void RangeSelector::modulateCoverage(const TextAnimator::DomainMaps& maps,
         // We achieve this by moving the range edges outward by |smoothness|/2, and adjusting
         // the generator cubic ramp size.
 
-        // TODO: support actual smoothness prop.
-        static constexpr float kSmoothness = 1.0f;
+        // smoothness is percentage-based [0..100]
+        const auto smoothness = SkTPin<float>(fSmoothness / 100, 0, 1);
 
-        r0  -= kSmoothness / 2;
-        len += kSmoothness;
+        r0  -= smoothness / 2;
+        len += smoothness;
 
-        gen.crs += kSmoothness / len;
+        gen.crs += smoothness / len;
     }
 
     SkASSERT(len > 0);

@@ -552,7 +552,6 @@ cc_library_static {
           "src/gpu/GrDDLContext.cpp",
           "src/gpu/GrDataUtils.cpp",
           "src/gpu/GrDefaultGeoProcFactory.cpp",
-          "src/gpu/GrDeinstantiateProxyTracker.cpp",
           "src/gpu/GrDistanceFieldGenFromVector.cpp",
           "src/gpu/GrDrawOpAtlas.cpp",
           "src/gpu/GrDrawOpTest.cpp",

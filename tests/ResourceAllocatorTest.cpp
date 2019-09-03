@@ -11,7 +11,6 @@
 
 #include "include/gpu/GrTexture.h"
 #include "src/gpu/GrContextPriv.h"
-#include "src/gpu/GrDeinstantiateProxyTracker.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrResourceAllocator.h"
@@ -43,8 +42,8 @@ static sk_sp<GrSurfaceProxy> make_deferred(GrProxyProvider* proxyProvider, const
 
     const GrBackendFormat format = caps->getDefaultBackendFormat(p.fColorType, p.fRenderable);
 
-    return proxyProvider->createProxy(format, desc, p.fRenderable, p.fSampleCnt, p.fOrigin, p.fFit,
-                                      p.fBudgeted, GrProtected::kNo);
+    return proxyProvider->createProxy(format, desc, p.fRenderable, p.fSampleCnt, p.fOrigin,
+                                      GrMipMapped::kNo, p.fFit, p.fBudgeted, GrProtected::kNo);
 }
 
 static sk_sp<GrSurfaceProxy> make_backend(GrContext* context, const ProxyParams& p,
@@ -76,8 +75,7 @@ static void cleanup_backend(GrContext* context, const GrBackendTexture& backendT
 static void overlap_test(skiatest::Reporter* reporter, GrResourceProvider* resourceProvider,
                          sk_sp<GrSurfaceProxy> p1, sk_sp<GrSurfaceProxy> p2,
                          bool expectedResult) {
-    GrDeinstantiateProxyTracker deinstantiateTracker;
-    GrResourceAllocator alloc(resourceProvider, &deinstantiateTracker SkDEBUGCODE(, 1));
+    GrResourceAllocator alloc(resourceProvider SkDEBUGCODE(, 1));
 
     alloc.addInterval(p1.get(), 0, 4, GrResourceAllocator::ActualUse::kYes);
     alloc.incOps();
@@ -103,8 +101,7 @@ static void overlap_test(skiatest::Reporter* reporter, GrResourceProvider* resou
 static void non_overlap_test(skiatest::Reporter* reporter, GrResourceProvider* resourceProvider,
                              sk_sp<GrSurfaceProxy> p1, sk_sp<GrSurfaceProxy> p2,
                              bool expectedResult) {
-    GrDeinstantiateProxyTracker deinstantiateTracker;
-    GrResourceAllocator alloc(resourceProvider, &deinstantiateTracker SkDEBUGCODE(, 1));
+    GrResourceAllocator alloc(resourceProvider SkDEBUGCODE(, 1));
 
     alloc.incOps();
     alloc.incOps();
@@ -253,11 +250,9 @@ static void draw(GrContext* context) {
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorStressTest, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
 
-    int maxNum;
-    size_t maxBytes;
-    context->getResourceCacheLimits(&maxNum, &maxBytes);
+    size_t maxBytes = context->getResourceCacheLimit();
 
-    context->setResourceCacheLimits(0, 0); // We'll always be overbudget
+    context->setResourceCacheLimit(0); // We'll always be overbudget
 
     draw(context);
     draw(context);
@@ -265,11 +260,11 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorStressTest, reporter, ctxInf
     draw(context);
     context->flush();
 
-    context->setResourceCacheLimits(maxNum, maxBytes);
+    context->setResourceCacheLimit(maxBytes);
 }
 
 sk_sp<GrSurfaceProxy> make_lazy(GrProxyProvider* proxyProvider, const GrCaps* caps,
-                                const ProxyParams& p, bool deinstantiate) {
+                                const ProxyParams& p) {
     GrPixelConfig config = GrColorTypeToPixelConfig(p.fColorType);
     const auto format = caps->getDefaultBackendFormat(p.fColorType, p.fRenderable);
 
@@ -290,58 +285,13 @@ sk_sp<GrSurfaceProxy> make_lazy(GrProxyProvider* proxyProvider, const GrCaps* ca
                                                       SkBudgeted::kNo, GrProtected::kNo,
                                                       GrResourceProvider::Flags::kNoPendingIO);
         }
-        return GrSurfaceProxy::LazyInstantiationResult(std::move(texture));
+        return GrSurfaceProxy::LazyCallbackResult(std::move(texture));
     };
-    auto lazyType = deinstantiate ? GrSurfaceProxy::LazyInstantiationType ::kDeinstantiate
-                                  : GrSurfaceProxy::LazyInstantiationType ::kSingleUse;
     GrInternalSurfaceFlags flags = GrInternalSurfaceFlags::kNone;
     return proxyProvider->createLazyProxy(
             callback, format, desc, p.fRenderable, p.fSampleCnt, p.fOrigin, GrMipMapped::kNo,
-            GrMipMapsStatus::kNotAllocated, flags, p.fFit, p.fBudgeted, GrProtected::kNo, lazyType);
-}
-
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(LazyDeinstantiation, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
-    GrResourceProvider* resourceProvider = ctxInfo.grContext()->priv().resourceProvider();
-    ProxyParams texParams;
-    texParams.fFit = SkBackingFit::kExact;
-    texParams.fOrigin = kTopLeft_GrSurfaceOrigin;
-    texParams.fColorType = GrColorType::kRGBA_8888;
-    texParams.fRenderable = GrRenderable::kNo;
-    texParams.fSampleCnt = 1;
-    texParams.fSize = 100;
-    texParams.fBudgeted = SkBudgeted::kNo;
-    auto proxyProvider = context->priv().proxyProvider();
-    auto caps = context->priv().caps();
-    auto p0 = make_lazy(proxyProvider, caps, texParams, true);
-    auto p1 = make_lazy(proxyProvider, caps, texParams, false);
-    ProxyParams rtParams = texParams;
-    rtParams.fRenderable = GrRenderable::kYes;
-    rtParams.fFit = SkBackingFit::kApprox;
-    auto p2 = make_lazy(proxyProvider, caps, rtParams, true);
-    auto p3 = make_lazy(proxyProvider, caps, rtParams, false);
-
-    GrDeinstantiateProxyTracker deinstantiateTracker;
-    {
-        GrResourceAllocator alloc(resourceProvider, &deinstantiateTracker SkDEBUGCODE(, 1));
-        alloc.addInterval(p0.get(), 0, 1, GrResourceAllocator::ActualUse::kNo);
-        alloc.addInterval(p1.get(), 0, 1, GrResourceAllocator::ActualUse::kNo);
-        alloc.addInterval(p2.get(), 0, 1, GrResourceAllocator::ActualUse::kNo);
-        alloc.addInterval(p3.get(), 0, 1, GrResourceAllocator::ActualUse::kNo);
-        alloc.incOps();
-        alloc.markEndOfOpsTask(0);
-
-        alloc.determineRecyclability();
-
-        int startIndex, stopIndex;
-        GrResourceAllocator::AssignError error;
-        alloc.assign(&startIndex, &stopIndex, &error);
-    }
-    deinstantiateTracker.deinstantiateAllProxies();
-    REPORTER_ASSERT(reporter, !p0->isInstantiated());
-    REPORTER_ASSERT(reporter, p1->isInstantiated());
-    REPORTER_ASSERT(reporter, !p2->isInstantiated());
-    REPORTER_ASSERT(reporter, p3->isInstantiated());
+            GrMipMapsStatus::kNotAllocated, flags, p.fFit, p.fBudgeted, GrProtected::kNo,
+            GrSurfaceProxy::UseAllocator::kYes);
 }
 
 // Set up so there are two opsTasks that need to be flushed but the resource allocator thinks
@@ -353,12 +303,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorOverBudgetTest, reporter, ct
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     GrResourceProvider* resourceProvider = context->priv().resourceProvider();
 
-    int origMaxNum;
-    size_t origMaxBytes;
-    context->getResourceCacheLimits(&origMaxNum, &origMaxBytes);
+    size_t origMaxBytes = context->getResourceCacheLimit();
 
     // Force the resource allocator to always believe it is over budget
-    context->setResourceCacheLimits(0, 0);
+    context->setResourceCacheLimit(0);
 
     const ProxyParams params  = { 64, GrRenderable::kNo, GrColorType::kRGBA_8888,
                                   SkBackingFit::kExact, 1, kTopLeft_GrSurfaceOrigin,
@@ -370,8 +318,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorOverBudgetTest, reporter, ct
         sk_sp<GrSurfaceProxy> p3 = make_deferred(proxyProvider, caps, params);
         sk_sp<GrSurfaceProxy> p4 = make_deferred(proxyProvider, caps, params);
 
-        GrDeinstantiateProxyTracker deinstantiateTracker;
-        GrResourceAllocator alloc(resourceProvider, &deinstantiateTracker SkDEBUGCODE(, 2));
+        GrResourceAllocator alloc(resourceProvider SkDEBUGCODE(, 2));
 
         alloc.addInterval(p1.get(), 0, 0, GrResourceAllocator::ActualUse::kYes);
         alloc.incOps();
@@ -399,7 +346,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorOverBudgetTest, reporter, ct
         REPORTER_ASSERT(reporter, 1 == startIndex && 2 == stopIndex);
     }
 
-    context->setResourceCacheLimits(origMaxNum, origMaxBytes);
+    context->setResourceCacheLimit(origMaxBytes);
 }
 
 // This test is used to make sure we are tracking the current task index during the assign call in
@@ -414,12 +361,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorCurOpsTaskIndexTest,
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     GrResourceProvider* resourceProvider = context->priv().resourceProvider();
 
-    int origMaxNum;
-    size_t origMaxBytes;
-    context->getResourceCacheLimits(&origMaxNum, &origMaxBytes);
+    size_t origMaxBytes = context->getResourceCacheLimit();
 
     // Force the resource allocator to always believe it is over budget
-    context->setResourceCacheLimits(0, 0);
+    context->setResourceCacheLimit(0);
 
     ProxyParams params;
     params.fFit = SkBackingFit::kExact;
@@ -447,7 +392,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorCurOpsTaskIndexTest,
     if (!proxyWrapped) {
         return;
     }
-    proxyWrapped->priv().setIgnoredByResourceAllocator();
 
     // Same as above, but we actually need to have at least two intervals that don't go through the
     // resource allocator to expose the index bug.
@@ -458,10 +402,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorCurOpsTaskIndexTest,
         cleanup_backend(ctxInfo.grContext(), backEndTex);
         return;
     }
-    proxyWrapped2->priv().setIgnoredByResourceAllocator();
 
-    GrDeinstantiateProxyTracker deinstantiateTracker;
-    GrResourceAllocator alloc(resourceProvider, &deinstantiateTracker SkDEBUGCODE(, 4));
+    GrResourceAllocator alloc(resourceProvider SkDEBUGCODE(, 4));
 
     alloc.addInterval(proxyWrapped.get(), 0, 0, GrResourceAllocator::ActualUse::kYes);
     alloc.incOps();
@@ -501,6 +443,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorCurOpsTaskIndexTest,
     cleanup_backend(ctxInfo.grContext(), backEndTex);
     cleanup_backend(ctxInfo.grContext(), backEndTex2);
 
-    context->setResourceCacheLimits(origMaxNum, origMaxBytes);
+    context->setResourceCacheLimit(origMaxBytes);
 }
 
