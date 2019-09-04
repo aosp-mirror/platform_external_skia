@@ -29,14 +29,18 @@ platform_tools/android/apps/build
 platform_tools/android/apps/*.properties
 platform_tools/android/apps/*/build
 platform_tools/android/apps/*/src/main/libs
+platform_tools/android/apps/*.hprof
+platform_tools/android/apps/*/.externalNativeBuild
+
 sampleapp_prefs.txt
 /skps
+/svgs
 third_party/externals
 tools/skp/page_sets/data/*.json
 tools/skp/page_sets/data/*.wpr
 xcodebuild
 
-build
+/build
 buildtools
 tools/clang
 third_party/llvm-build
@@ -48,3 +52,6 @@ bin/clang_win
 
 vulkan-out
 gl-out
+
+node_modules
+tools/lottiecap/filmstrip.png

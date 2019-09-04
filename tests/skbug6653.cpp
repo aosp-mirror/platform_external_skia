@@ -10,15 +10,14 @@
 #include "SkCanvas.h"
 #include "SkSurface.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrContext.h"
-#include "GrTest.h"
+#include "GrContextPriv.h"
 #include "Test.h"
 
-static SkBitmap read_pixels(sk_sp<SkSurface> surface) {
+static SkBitmap read_pixels(sk_sp<SkSurface> surface, SkColor initColor) {
     SkBitmap bmp;
     bmp.allocN32Pixels(surface->width(), surface->height());
+    bmp.eraseColor(initColor);
     if (!surface->readPixels(bmp, 0, 0)) {
         SkDebugf("readPixels failed\n");
     }
@@ -31,10 +30,7 @@ static sk_sp<SkSurface> make_surface(GrContext* context) {
                                        kBottomLeft_GrSurfaceOrigin, nullptr);
 }
 
-// Tests that readPixels returns up-to-date results. Demonstrates a bug on Galaxy S6
-// (Mali T760), in MSAA mode.
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(skbug6653, reporter, ctxInfo) {
-    GrContext* ctx = ctxInfo.grContext();
+static void test_bug_6653(GrContext* ctx, skiatest::Reporter* reporter, const char* label) {
     SkRect rect = SkRect::MakeWH(50, 50);
 
     SkPaint paint;
@@ -57,18 +53,18 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(skbug6653, reporter, ctxInfo) {
         auto s1 = make_surface(ctx);
         s1->getCanvas()->clear(SK_ColorBLACK);
         s1->getCanvas()->drawOval(rect, paint);
-        SkBitmap b1 = read_pixels(s1);
+        SkBitmap b1 = read_pixels(s1, SK_ColorBLACK);
         s1 = nullptr;
 
         // The bug requires that all three of the following surfaces are cleared to the same color
         auto s2 = make_surface(ctx);
         s2->getCanvas()->clear(SK_ColorBLUE);
-        SkBitmap b2 = read_pixels(s2);
+        SkBitmap b2 = read_pixels(s2, SK_ColorBLACK);
         s2 = nullptr;
 
         auto s3 = make_surface(ctx);
         s3->getCanvas()->clear(SK_ColorBLUE);
-        SkBitmap b3 = read_pixels(s3);
+        SkBitmap b3 = read_pixels(s3, SK_ColorBLACK);
         s0->getCanvas()->drawBitmap(b3, 0, 0);
         s3 = nullptr;
 
@@ -78,9 +74,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(skbug6653, reporter, ctxInfo) {
 
         // When this fails, b4 will "succeed", but return an empty bitmap (containing just the
         // clear color). Regardless, b5 will contain the oval that was just drawn, so diffing the
-        // two bitmaps tests for the failure case.
-        SkBitmap b4 = read_pixels(s4);
-        SkBitmap b5 = read_pixels(s4);
+        // two bitmaps tests for the failure case. Initialize the bitmaps to different colors so
+        // that if the readPixels doesn't work, this test will always fail.
+        SkBitmap b4 = read_pixels(s4, SK_ColorRED);
+        SkBitmap b5 = read_pixels(s4, SK_ColorGREEN);
 
         bool match = true;
         for (int y = 0; y < b4.height() && match; ++y) {
@@ -93,8 +90,21 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(skbug6653, reporter, ctxInfo) {
             }
         }
 
-        REPORTER_ASSERT(reporter, match);
+        REPORTER_ASSERT(reporter, match, label);
     }
 }
 
-#endif
+// Tests that readPixels returns up-to-date results. This has failed on several GPUs,
+// from multiple vendors, in MSAA mode.
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(skbug6653, reporter, ctxInfo) {
+    GrContext* ctx = ctxInfo.grContext();
+    test_bug_6653(ctx, reporter, "Default");
+}
+
+// Same as above, but without explicit resource allocation.
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(skbug6653_noExplicitResourceAllocation, reporter, ctxInfo) {
+    GrContext* ctx = ctxInfo.grContext();
+    ctx->flush();
+    ctx->priv().resourceProvider()->testingOnly_setExplicitlyAllocateGPUResources(false);
+    test_bug_6653(ctx, reporter, "No ERA");
+}

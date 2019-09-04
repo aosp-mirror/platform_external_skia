@@ -6,9 +6,11 @@
  */
 
 #include "CrashHandler.h"
+#include "GrContext.h"
+#include "GrContextFactory.h"
 #include "OverwriteLine.h"
+#include "PathOpsDebug.h"
 #include "Resources.h"
-#include "SkAtomics.h"
 #include "SkCommonFlags.h"
 #include "SkGraphics.h"
 #include "SkOSFile.h"
@@ -18,13 +20,7 @@
 #include "SkTemplates.h"
 #include "SkTime.h"
 #include "Test.h"
-
-#if SK_SUPPORT_GPU
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#else
-struct GrContextOptions {};
-#endif
+#include <atomic>
 
 using namespace skiatest;
 using namespace sk_gpu_test;
@@ -33,6 +29,7 @@ DEFINE_bool2(dumpOp, d, false, "dump the pathOps to a file to recover mid-crash.
 DEFINE_bool2(extendedTest, x, false, "run extended tests for pathOps.");
 DEFINE_bool2(runFail, f, false, "check for success on tests known to fail.");
 DEFINE_bool2(verifyOp, y, false, "compare the pathOps result against a region.");
+DEFINE_string2(json, J, "", "write json version of tests.");
 
 #if DEBUG_COIN
 DEFINE_bool2(coinTest, c, false, "detect unused coincidence algorithms.");
@@ -52,10 +49,8 @@ public:
                  bool success,
                  SkMSec elapsed,
                  int testCount) {
-        const int done = 1 + sk_atomic_inc(&fDone);
-        for (int i = 0; i < testCount; ++i) {
-            sk_atomic_inc(&fTestCount);
-        }
+        const int done = ++fDone;
+        fTestCount += testCount;
         if (!success) {
             SkDebugf("\n---- %s FAILED", testName);
         }
@@ -70,15 +65,15 @@ public:
                  testName);
     }
 
-    void reportFailure() { sk_atomic_inc(&fFailCount); }
+    void reportFailure() { fFailCount++; }
 
     int32_t testCount() { return fTestCount; }
     int32_t failCount() { return fFailCount; }
 
 private:
-    int32_t fDone;  // atomic
-    int32_t fTestCount;  // atomic
-    int32_t fFailCount;  // atomic
+    std::atomic<int32_t> fDone;
+    std::atomic<int32_t> fTestCount;
+    std::atomic<int32_t> fFailCount;
     const int fTotal;
 };
 
@@ -138,6 +133,15 @@ int main(int argc, char** argv) {
 #endif
     SkPathOpsDebug::gRunFail = FLAGS_runFail;
     SkPathOpsDebug::gVeryVerbose = FLAGS_veryVerbose;
+    PathOpsDebug::gOutFirst = true;
+    PathOpsDebug::gCheckForDuplicateNames = false;
+    PathOpsDebug::gOutputSVG = false;
+    if ((PathOpsDebug::gJson = !FLAGS_json.isEmpty())) {
+        PathOpsDebug::gOut = fopen(FLAGS_json[0], "wb");
+        fprintf(PathOpsDebug::gOut, "{\n");
+        FLAGS_threads = 0;
+        PathOpsDebug::gMarkJsonFlaky = false;
+    }
     SetupCrashHandler();
 
     SkAutoGraphics ag;
@@ -199,9 +203,7 @@ int main(int argc, char** argv) {
     int total = 0;
     int toRun = 0;
 
-    for (const TestRegistry* iter = TestRegistry::Head(); iter;
-         iter = iter->next()) {
-        const Test& test = iter->factory();
+    for (const Test& test : TestRegistry::Range()) {
         if (should_run(test.name, test.needsGpu)) {
             toRun++;
         }
@@ -216,9 +218,8 @@ int main(int argc, char** argv) {
     SkTArray<const Test*> gpuTests;
 
     Status status(toRun);
-    for (const TestRegistry* iter = TestRegistry::Head(); iter;
-         iter = iter->next()) {
-        const Test& test = iter->factory();
+
+    for (const Test& test : TestRegistry::Range()) {
         if (!should_run(test.name, test.needsGpu)) {
             ++skipCount;
         } else if (test.needsGpu) {
@@ -252,6 +253,9 @@ int main(int argc, char** argv) {
         SkPathOpsDebug::DumpCoinDict();
     }
 #endif
-
+    if (PathOpsDebug::gJson) {
+        fprintf(PathOpsDebug::gOut, "\n}\n");
+        fclose(PathOpsDebug::gOut);
+    }
     return (status.failCount() == 0) ? 0 : 1;
 }

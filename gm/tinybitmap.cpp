@@ -9,7 +9,7 @@
 #include "SkColorPriv.h"
 #include "SkShader.h"
 #include "SkCanvas.h"
-#include "SkUtils.h"
+#include "SkUTF.h"
 
 namespace skiagm {
 
@@ -23,7 +23,7 @@ static SkBitmap make_bitmap() {
 class TinyBitmapGM : public GM {
 public:
     TinyBitmapGM() {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
+        this->setBGColor(0xFFDDDDDD);
     }
 
 protected:
@@ -36,7 +36,7 @@ protected:
     virtual void onDraw(SkCanvas* canvas) {
         SkBitmap bm = make_bitmap();
         SkPaint paint;
-        paint.setAlpha(0x80);
+        paint.setAlphaf(0.5f);
         paint.setShader(SkShader::MakeBitmapShader(bm, SkShader::kRepeat_TileMode,
                                                    SkShader::kMirror_TileMode));
         canvas->drawPaint(paint);
@@ -48,7 +48,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new TinyBitmapGM; }
-static GMRegistry reg(MyFactory);
+DEF_GM( return new TinyBitmapGM; )
 
 }

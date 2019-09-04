@@ -6,8 +6,14 @@
  */
 
 #include "SkBitmap.h"
+#include "SkColor.h"
+#include "SkColorSpace.h"
+#include "SkImageInfo.h"
+#include "SkPoint.h"
 #include "SkRect.h"
-#include "SkTemplates.h"
+#include "SkRefCnt.h"
+#include "SkSize.h"
+#include "SkTypes.h"
 #include "Test.h"
 #include "sk_tool_utils.h"
 
@@ -65,7 +71,7 @@ static void setup_src_bitmaps(SkBitmap* srcOpaque, SkBitmap* srcPremul,
                               SkColorType ct) {
     sk_sp<SkColorSpace> colorSpace = nullptr;
     if (kRGBA_F16_SkColorType == ct) {
-        colorSpace = SkColorSpace::MakeSRGBLinear();
+        colorSpace = SkColorSpace::MakeSRGB();
     }
 
     srcOpaque->allocPixels(SkImageInfo::Make(W, H, ct, kOpaque_SkAlphaType, colorSpace));

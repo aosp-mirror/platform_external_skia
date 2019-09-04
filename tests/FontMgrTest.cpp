@@ -11,6 +11,7 @@
 #include "SkFontMgr.h"
 #include "SkPaint.h"
 #include "SkTypeface.h"
+#include "SkStream.h"
 #include "Test.h"
 
 #include <initializer_list>
@@ -18,39 +19,34 @@
 #include <vector>
 
 static void test_font(skiatest::Reporter* reporter) {
-    uint32_t flags = 0;
-    sk_sp<SkFont> font(SkFont::Make(nullptr, 24, SkFont::kA8_MaskType, flags));
+    SkFont font(nullptr, 24);
 
-    REPORTER_ASSERT(reporter, font->getTypeface());
-    REPORTER_ASSERT(reporter, 24 == font->getSize());
-    REPORTER_ASSERT(reporter, 1 == font->getScaleX());
-    REPORTER_ASSERT(reporter, 0 == font->getSkewX());
-    REPORTER_ASSERT(reporter, SkFont::kA8_MaskType == font->getMaskType());
+    //REPORTER_ASSERT(reporter, SkTypeface::GetDefaultTypeface() == font.getTypeface());
+    REPORTER_ASSERT(reporter, 24 == font.getSize());
+    REPORTER_ASSERT(reporter, 1 == font.getScaleX());
+    REPORTER_ASSERT(reporter, 0 == font.getSkewX());
 
     uint16_t glyphs[5];
     sk_bzero(glyphs, sizeof(glyphs));
 
-    int count = font->textToGlyphs("Hello", 5, kUTF8_SkTextEncoding, glyphs, SK_ARRAY_COUNT(glyphs));
-
+    // Check that no glyphs are copied with insufficient storage.
+    int count = font.textToGlyphs("Hello", 5, kUTF8_SkTextEncoding, glyphs, 2);
     REPORTER_ASSERT(reporter, 5 == count);
+    for (const auto glyph : glyphs) { REPORTER_ASSERT(reporter, glyph == 0); }
+
+    SkAssertResult(font.textToGlyphs("Hello", 5, kUTF8_SkTextEncoding, glyphs,
+                                     SK_ARRAY_COUNT(glyphs)) == count);
+
     for (int i = 0; i < count; ++i) {
         REPORTER_ASSERT(reporter, 0 != glyphs[i]);
     }
     REPORTER_ASSERT(reporter, glyphs[0] != glyphs[1]); // 'h' != 'e'
     REPORTER_ASSERT(reporter, glyphs[2] == glyphs[3]); // 'l' == 'l'
 
-    sk_sp<SkFont> newFont(font->makeWithSize(36));
-    REPORTER_ASSERT(reporter, newFont.get());
-    REPORTER_ASSERT(reporter, font->getTypeface() == newFont->getTypeface());
-    REPORTER_ASSERT(reporter, 36 == newFont->getSize());   // double check we haven't changed
-    REPORTER_ASSERT(reporter, 24 == font->getSize());   // double check we haven't changed
-
-    SkPaint paint;
-    paint.setTextSize(18);
-    font = SkFont::Testing_CreateFromPaint(paint);
-    REPORTER_ASSERT(reporter, font.get());
-    REPORTER_ASSERT(reporter, font->getSize() == paint.getTextSize());
-    REPORTER_ASSERT(reporter, SkFont::kBW_MaskType == font->getMaskType());
+    const SkFont newFont(font.makeWithSize(36));
+    REPORTER_ASSERT(reporter, font.getTypefaceOrDefault() == newFont.getTypefaceOrDefault());
+    REPORTER_ASSERT(reporter, 36 == newFont.getSize());   // double check we haven't changed
+    REPORTER_ASSERT(reporter, 24 == font.getSize());   // double check we haven't changed
 }
 
 /*
@@ -127,7 +123,10 @@ static void test_matchStyleCSS3(skiatest::Reporter* reporter) {
     public:
         TestTypeface(const SkFontStyle& fontStyle) : SkTypeface(fontStyle, false){}
     protected:
-        SkStreamAsset* onOpenStream(int* ttcIndex) const override { return nullptr; }
+        std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override { return nullptr; }
+        sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override {
+            return sk_ref_sp(this);
+        }
         SkScalerContext* onCreateScalerContext(const SkScalerContextEffects&,
                                                const SkDescriptor*) const override {
             return nullptr;

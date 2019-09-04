@@ -8,14 +8,16 @@
 #include "gm.h"
 
 #if SK_SUPPORT_ATLAS_TEXT
+#include "GrContext.h"
 
 #include "SkAtlasTextContext.h"
 #include "SkAtlasTextFont.h"
 #include "SkAtlasTextTarget.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkFont.h"
 #include "SkTypeface.h"
-#include "SkUtils.h"
+#include "SkUTF.h"
 #include "gpu/TestContext.h"
 #include "gpu/atlastext/GLTestAtlasTextRenderer.h"
 #include "gpu/atlastext/TestAtlasTextRenderer.h"
@@ -28,18 +30,17 @@ static SkScalar draw_string(SkAtlasTextTarget* target, const SkString& text, SkS
     if (!text.size()) {
         return x;
     }
-    auto font = SkAtlasTextFont::Make(typeface, size);
-    int cnt = SkUTF8_CountUnichars(text.c_str());
+    auto atlas_font = SkAtlasTextFont::Make(typeface, size);
+    int cnt = SkUTF::CountUTF8(text.c_str(), text.size());
     std::unique_ptr<SkGlyphID[]> glyphs(new SkGlyphID[cnt]);
     typeface->charsToGlyphs(text.c_str(), SkTypeface::Encoding::kUTF8_Encoding, glyphs.get(), cnt);
 
     // Using a paint to get the positions for each glyph.
-    SkPaint paint;
-    paint.setTextSize(size);
-    paint.setTypeface(std::move(typeface));
-    paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    SkFont font;
+    font.setSize(size);
+    font.setTypeface(std::move(typeface));
     std::unique_ptr<SkScalar[]> widths(new SkScalar[cnt]);
-    paint.getTextWidths(glyphs.get(), cnt * sizeof(SkGlyphID), widths.get(), nullptr);
+    font.getWidths(glyphs.get(), cnt, widths.get());
 
     std::unique_ptr<SkPoint[]> positions(new SkPoint[cnt]);
     positions[0] = {x, y};
@@ -47,7 +48,7 @@ static SkScalar draw_string(SkAtlasTextTarget* target, const SkString& text, SkS
         positions[i] = {positions[i - 1].fX + widths[i - 1], y};
     }
 
-    target->drawText(glyphs.get(), positions.get(), cnt, color, *font);
+    target->drawText(glyphs.get(), positions.get(), cnt, color, *atlas_font);
 
     // Return the width of the of draw.
     return positions[cnt - 1].fX + widths[cnt - 1] - positions[0].fX;
@@ -72,6 +73,7 @@ protected:
         if (!targetHandle) {
             return;
         }
+
         fTarget = SkAtlasTextTarget::Make(fContext, kSize, kSize, targetHandle);
 
         fTypefaces[0] = sk_tool_utils::create_portable_typeface("serif", SkFontStyle::Italic());
@@ -84,16 +86,17 @@ protected:
         fTypefaces[5] = sk_tool_utils::create_portable_typeface("sans-serif", SkFontStyle::Bold());
     }
 
-    void onDraw(SkCanvas* canvas) override {
+    DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
         if (!fRenderer || !fTarget || !fTarget->handle()) {
-            canvas->clear(SK_ColorRED);
-            return;
+            *errorMsg = "No renderer and/or target.";
+            return DrawResult::kFail;
         }
         fRenderer->clearTarget(fTarget->handle(), 0xFF808080);
         auto bmp = this->drawText();
         SkPaint paint;
         paint.setBlendMode(SkBlendMode::kSrc);
         canvas->drawBitmap(bmp, 0, 0);
+        return DrawResult::kOk;
     }
 
 private:

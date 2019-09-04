@@ -6,12 +6,27 @@
       "RECIPE_MODULE[recipe_engine::file]\\resources\\fileutil.py",
       "--json-output",
       "/path/to/tmp/json",
+      "ensure-directory",
+      "--mode",
+      "0777",
+      "[START_DIR]\\tmp"
+    ],
+    "infra_step": true,
+    "name": "makedirs tmp_dir"
+  },
+  {
+    "cmd": [
+      "python",
+      "-u",
+      "RECIPE_MODULE[recipe_engine::file]\\resources\\fileutil.py",
+      "--json-output",
+      "/path/to/tmp/json",
       "copy",
       "[START_DIR]\\skia\\infra\\bots\\assets\\skp\\VERSION",
       "/path/to/tmp/"
     ],
     "infra_step": true,
-    "name": "Get downloaded SKP VERSION"
+    "name": "Get skp VERSION"
   },
   {
     "cmd": [
@@ -39,7 +54,7 @@
       "/path/to/tmp/"
     ],
     "infra_step": true,
-    "name": "Get downloaded skimage VERSION"
+    "name": "Get skimage VERSION"
   },
   {
     "cmd": [
@@ -67,7 +82,7 @@
       "/path/to/tmp/"
     ],
     "infra_step": true,
-    "name": "Get downloaded SVG VERSION"
+    "name": "Get svg VERSION"
   },
   {
     "cmd": [
@@ -90,26 +105,38 @@
       "RECIPE_MODULE[recipe_engine::file]\\resources\\fileutil.py",
       "--json-output",
       "/path/to/tmp/json",
-      "ensure-directory",
-      "--mode",
-      "0777",
-      "[START_DIR]\\tmp"
+      "rmtree",
+      "[START_DIR]\\test"
     ],
     "infra_step": true,
-    "name": "makedirs tmp_dir"
+    "name": "rmtree test"
   },
   {
     "cmd": [
       "python",
       "-u",
-      "\nimport contextlib\nimport math\nimport socket\nimport sys\nimport time\nimport urllib2\n\nHASHES_URL = 'https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt'\nRETRIES = 5\nTIMEOUT = 60\nWAIT_BASE = 15\n\nsocket.setdefaulttimeout(TIMEOUT)\nfor retry in range(RETRIES):\n  try:\n    with contextlib.closing(\n        urllib2.urlopen(HASHES_URL, timeout=TIMEOUT)) as w:\n      hashes = w.read()\n      with open(sys.argv[1], 'w') as f:\n        f.write(hashes)\n        break\n  except Exception as e:\n    print 'Failed to get uninteresting hashes from %s:' % HASHES_URL\n    print e\n    if retry == RETRIES:\n      raise\n    waittime = WAIT_BASE * math.pow(2, retry)\n    print 'Retry in %d seconds.' % waittime\n    time.sleep(waittime)\n",
+      "RECIPE_MODULE[recipe_engine::file]\\resources\\fileutil.py",
+      "--json-output",
+      "/path/to/tmp/json",
+      "ensure-directory",
+      "--mode",
+      "0777",
+      "[START_DIR]\\test"
+    ],
+    "infra_step": true,
+    "name": "makedirs test"
+  },
+  {
+    "cmd": [
+      "python",
+      "-u",
+      "\nimport contextlib\nimport math\nimport socket\nimport sys\nimport time\nimport urllib2\n\nHASHES_URL = sys.argv[1]\nRETRIES = 5\nTIMEOUT = 60\nWAIT_BASE = 15\n\nsocket.setdefaulttimeout(TIMEOUT)\nfor retry in range(RETRIES):\n  try:\n    with contextlib.closing(\n        urllib2.urlopen(HASHES_URL, timeout=TIMEOUT)) as w:\n      hashes = w.read()\n      with open(sys.argv[2], 'w') as f:\n        f.write(hashes)\n        break\n  except Exception as e:\n    print 'Failed to get uninteresting hashes from %s:' % HASHES_URL\n    print e\n    if retry == RETRIES:\n      raise\n    waittime = WAIT_BASE * math.pow(2, retry)\n    print 'Retry in %d seconds.' % waittime\n    time.sleep(waittime)\n",
+      "https://example.com/hashes.txt",
       "[START_DIR]\\tmp\\uninteresting_hashes.txt"
     ],
     "env": {
-      "BUILDTYPE": "Debug_x64",
       "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>;RECIPE_PACKAGE_REPO[depot_tools]",
-      "SKIA_OUT": "[START_DIR]\\out"
+      "PATH": "<PATH>;RECIPE_REPO[depot_tools]"
     },
     "infra_step": true,
     "name": "get uninteresting hashes",
@@ -122,7 +149,7 @@
       "@@@STEP_LOG_LINE@python.inline@import time@@@",
       "@@@STEP_LOG_LINE@python.inline@import urllib2@@@",
       "@@@STEP_LOG_LINE@python.inline@@@@",
-      "@@@STEP_LOG_LINE@python.inline@HASHES_URL = 'https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt'@@@",
+      "@@@STEP_LOG_LINE@python.inline@HASHES_URL = sys.argv[1]@@@",
       "@@@STEP_LOG_LINE@python.inline@RETRIES = 5@@@",
       "@@@STEP_LOG_LINE@python.inline@TIMEOUT = 60@@@",
       "@@@STEP_LOG_LINE@python.inline@WAIT_BASE = 15@@@",
@@ -133,7 +160,7 @@
       "@@@STEP_LOG_LINE@python.inline@    with contextlib.closing(@@@",
       "@@@STEP_LOG_LINE@python.inline@        urllib2.urlopen(HASHES_URL, timeout=TIMEOUT)) as w:@@@",
       "@@@STEP_LOG_LINE@python.inline@      hashes = w.read()@@@",
-      "@@@STEP_LOG_LINE@python.inline@      with open(sys.argv[1], 'w') as f:@@@",
+      "@@@STEP_LOG_LINE@python.inline@      with open(sys.argv[2], 'w') as f:@@@",
       "@@@STEP_LOG_LINE@python.inline@        f.write(hashes)@@@",
       "@@@STEP_LOG_LINE@python.inline@        break@@@",
       "@@@STEP_LOG_LINE@python.inline@  except Exception as e:@@@",
@@ -177,7 +204,7 @@
   },
   {
     "cmd": [
-      "[START_DIR]\\out\\Debug_x64\\dm",
+      "[START_DIR]\\build\\dm",
       "--resourcePath",
       "[START_DIR]\\skia\\resources",
       "--skps",
@@ -194,6 +221,8 @@
       "Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE",
       "buildbucket_build_id",
       "123454321",
+      "task_id",
+      "task_12345",
       "swarming_bot_id",
       "skia-bot-123",
       "swarming_task_id",
@@ -217,10 +246,12 @@
       "ShuttleC",
       "os",
       "Win10",
+      "style",
+      "default",
       "--uninterestingHashesFile",
       "[START_DIR]\\tmp\\uninteresting_hashes.txt",
       "--writePath",
-      "[CUSTOM_[SWARM_OUT_DIR]]\\dm",
+      "[START_DIR]\\[SWARM_OUT_DIR]",
       "--dont_write",
       "pdf",
       "--randomProcessorTest",
@@ -232,6 +263,9 @@
       "angle_d3d11_es3",
       "angle_d3d11_es2_msaa8",
       "angle_d3d11_es3_msaa8",
+      "angle_gl_es3",
+      "angle_gl_es2_msaa8",
+      "angle_gl_es3_msaa8",
       "--src",
       "tests",
       "gm",
@@ -291,6 +325,10 @@
       "image",
       "gen_platf",
       "rle4-height-negative.bmp",
+      "_",
+      "image",
+      "gen_platf",
+      "error",
       "_",
       "image",
       "_",
@@ -383,20 +421,19 @@
       "image",
       "_",
       ".SRW",
+      "--match",
+      "~BlurMaskBiggerThanDest",
       "--nonativeFonts",
       "--verbose"
     ],
     "env": {
-      "BUILDTYPE": "Debug_x64",
       "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>;RECIPE_PACKAGE_REPO[depot_tools]",
-      "SKIA_OUT": "[START_DIR]\\out"
+      "PATH": "<PATH>;RECIPE_REPO[depot_tools]"
     },
     "name": "dm"
   },
   {
-    "name": "$result",
-    "recipe_result": null,
-    "status_code": 0
+    "jsonResult": null,
+    "name": "$result"
   }
 ]

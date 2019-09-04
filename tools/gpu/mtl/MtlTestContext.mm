@@ -14,6 +14,10 @@
 
 #ifdef SK_METAL
 
+// Helper macros for autorelease pools
+#define SK_BEGIN_AUTORELEASE_BLOCK @autoreleasepool {
+#define SK_END_AUTORELEASE_BLOCK }
+
 namespace {
 /**
  * Implements sk_gpu_test::FenceSync for Metal.
@@ -111,18 +115,18 @@ GR_STATIC_ASSERT(sizeof(VkFence) <= sizeof(sk_gpu_test::PlatformFence));
 class MtlTestContext : public sk_gpu_test::TestContext {
 public:
     static MtlTestContext* Create(TestContext* sharedContext) {
+        SK_BEGIN_AUTORELEASE_BLOCK
         SkASSERT(!sharedContext);
         id<MTLDevice> device = MTLCreateSystemDefaultDevice();
         id<MTLCommandQueue> queue = [device newCommandQueue];
 
         return new MtlTestContext(device, queue);
+        SK_END_AUTORELEASE_BLOCK
     }
 
     ~MtlTestContext() override { this->teardown(); }
 
-    GrBackend backend() override { return kMetal_GrBackend; }
-
-    GrBackendContext backendContext() override { return 0; }
+    GrBackendApi backend() override { return GrBackendApi::kMetal; }
 
     void testAbandon() override {}
 

@@ -11,21 +11,28 @@
 #ifndef GrEllipseEffect_DEFINED
 #define GrEllipseEffect_DEFINED
 #include "SkTypes.h"
-#if SK_SUPPORT_GPU
 
 #include "GrShaderCaps.h"
 #include "GrFragmentProcessor.h"
 #include "GrCoordTransform.h"
 class GrEllipseEffect : public GrFragmentProcessor {
 public:
-    GrClipEdgeType edgeType() const { return fEdgeType; }
-    SkPoint center() const { return fCenter; }
-    SkPoint radii() const { return fRadii; }
+    const GrClipEdgeType& edgeType() const { return fEdgeType; }
+    const SkPoint& center() const { return fCenter; }
+    const SkPoint& radii() const { return fRadii; }
 
     static std::unique_ptr<GrFragmentProcessor> Make(GrClipEdgeType edgeType, SkPoint center,
                                                      SkPoint radii, const GrShaderCaps& caps) {
         // Small radii produce bad results on devices without full float.
         if (!caps.floatIs32Bits() && (radii.fX < 0.5f || radii.fY < 0.5f)) {
+            return nullptr;
+        }
+        // Very narrow ellipses produce bad results on devices without full float
+        if (!caps.floatIs32Bits() && (radii.fX > 255 * radii.fY || radii.fY > 255 * radii.fX)) {
+            return nullptr;
+        }
+        // Very large ellipses produce bad results on devices without full float
+        if (!caps.floatIs32Bits() && (radii.fX > 16384 || radii.fY > 16384)) {
             return nullptr;
         }
         return std::unique_ptr<GrFragmentProcessor>(new GrEllipseEffect(edgeType, center, radii));
@@ -50,5 +57,4 @@ private:
     SkPoint fRadii;
     typedef GrFragmentProcessor INHERITED;
 };
-#endif
 #endif

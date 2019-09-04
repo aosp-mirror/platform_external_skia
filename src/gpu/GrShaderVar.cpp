@@ -36,7 +36,6 @@ void GrShaderVar::setIOType(GrIOType ioType) {
 }
 
 void GrShaderVar::appendDecl(const GrShaderCaps* shaderCaps, SkString* out) const {
-    SkASSERT(kDefault_GrSLPrecision == fPrecision || GrSLTypeTemporarilyAcceptsPrecision(fType));
     SkString layout = fLayoutQualifier;
     if (!fLayoutQualifier.isEmpty()) {
         out->appendf("layout(%s) ", fLayoutQualifier.c_str());
@@ -47,25 +46,17 @@ void GrShaderVar::appendDecl(const GrShaderCaps* shaderCaps, SkString* out) cons
         out->append(" ");
     }
     GrSLType effectiveType = this->getType();
-    if (shaderCaps->usesPrecisionModifiers() && GrSLTypeAcceptsPrecision(effectiveType)) {
-        // Desktop GLSL has added precision qualifiers but they don't do anything.
-        out->appendf("%s ", GrGLSLPrecisionString(fPrecision));
-    }
     if (this->isArray()) {
         if (this->isUnsizedArray()) {
-            out->appendf("%s %s[]",
-                         GrGLSLTypeString(shaderCaps, effectiveType),
-                         this->getName().c_str());
+            out->appendf("%s %s[]", GrGLSLTypeString(effectiveType), this->getName().c_str());
         } else {
             SkASSERT(this->getArrayCount() > 0);
             out->appendf("%s %s[%d]",
-                         GrGLSLTypeString(shaderCaps, effectiveType),
+                         GrGLSLTypeString(effectiveType),
                          this->getName().c_str(),
                          this->getArrayCount());
         }
     } else {
-        out->appendf("%s %s",
-                     GrGLSLTypeString(shaderCaps, effectiveType),
-                     this->getName().c_str());
+        out->appendf("%s %s", GrGLSLTypeString(effectiveType), this->getName().c_str());
     }
 }

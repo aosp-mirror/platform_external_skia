@@ -7,8 +7,6 @@
 
 #include "Benchmark.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrContext.h"
 #include "GrContextPriv.h"
 #include "GrGpu.h"
@@ -78,13 +76,13 @@ protected:
         // Set the cache budget to be very large so no purging occurs.
         context->setResourceCacheLimits(CACHE_SIZE_COUNT, 1 << 30);
 
-        GrResourceCache* cache = context->contextPriv().getResourceCache();
+        GrResourceCache* cache = context->priv().getResourceCache();
 
         // Make sure the cache is empty.
         cache->purgeAllUnlocked();
         SkASSERT(0 == cache->getResourceCount() && 0 == cache->getResourceBytes());
 
-        GrGpu* gpu = context->contextPriv().getGpu();
+        GrGpu* gpu = context->priv().getGpu();
 
         for (int i = 0; i < loops; ++i) {
             populate_cache(gpu, CACHE_SIZE_COUNT, fKeyData32Count);
@@ -124,13 +122,13 @@ protected:
         // Set the cache budget to be very large so no purging occurs.
         fContext->setResourceCacheLimits(CACHE_SIZE_COUNT, 1 << 30);
 
-        GrResourceCache* cache = fContext->contextPriv().getResourceCache();
+        GrResourceCache* cache = fContext->priv().getResourceCache();
 
         // Make sure the cache is empty.
         cache->purgeAllUnlocked();
         SkASSERT(0 == cache->getResourceCount() && 0 == cache->getResourceBytes());
 
-        GrGpu* gpu = fContext->contextPriv().getGpu();
+        GrGpu* gpu = fContext->priv().getGpu();
 
         populate_cache(gpu, CACHE_SIZE_COUNT, fKeyData32Count);
     }
@@ -139,7 +137,7 @@ protected:
         if (!fContext) {
             return;
         }
-        GrResourceCache* cache = fContext->contextPriv().getResourceCache();
+        GrResourceCache* cache = fContext->priv().getResourceCache();
         SkASSERT(CACHE_SIZE_COUNT == cache->getResourceCount());
         for (int i = 0; i < loops; ++i) {
             for (int k = 0; k < CACHE_SIZE_COUNT; ++k) {
@@ -183,6 +181,4 @@ DEF_BENCH( return new GrResourceCacheBenchFind(25); )
 DEF_BENCH( return new GrResourceCacheBenchFind(54); )
 DEF_BENCH( return new GrResourceCacheBenchFind(55); )
 DEF_BENCH( return new GrResourceCacheBenchFind(56); )
-#endif
-
 #endif

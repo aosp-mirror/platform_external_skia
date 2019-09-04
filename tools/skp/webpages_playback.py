@@ -51,6 +51,7 @@ SKP(s). The tools are run after all SKPs are succesfully captured to make sure
 they can be added to the buildbots with no breakages.
 """
 
+import datetime
 import glob
 import optparse
 import os
@@ -106,7 +107,7 @@ CHROMIUM_PAGE_SETS_TO_PREFIX = {
 
 PAGE_SETS_TO_EXCLUSIONS = {
     # See skbug.com/7348
-    'key_mobile_sites_smooth.py': '"(digg|worldjournal|Twitter)"',
+    'key_mobile_sites_smooth.py': '"(digg|worldjournal|twitter|espn)"',
     # See skbug.com/7421
     'top_25_smooth.py': '"(mail\.google\.com)"',
 }
@@ -222,7 +223,6 @@ class SkPicturePlayback(object):
           '--extra-browser-args="%s"' % self._browser_args,
           '--browser=exact',
           '--browser-executable=%s' % self._browser_executable,
-          '--use-wpr-go',
           '%s_page_set' % page_set_basename,
           '--page-set-base-dir=%s' % page_set_dir
         )
@@ -340,11 +340,16 @@ class SkPicturePlayback(object):
       print '\n\n=======Uploading to Partner bucket %s =======\n\n' % (
           PARTNERS_GS_BUCKET)
       partner_gs = GoogleStorageDataStore(PARTNERS_GS_BUCKET)
-      partner_gs.delete_path(SKPICTURES_DIR_NAME)
-      print 'Uploading %s to %s' % (self._local_skp_dir, SKPICTURES_DIR_NAME)
-      partner_gs.upload_dir_contents(self._local_skp_dir, SKPICTURES_DIR_NAME)
+      timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+      upload_dir = posixpath.join(SKPICTURES_DIR_NAME, timestamp)
+      try:
+        partner_gs.delete_path(upload_dir)
+      except subprocess.CalledProcessError:
+        print 'Cannot delete %s because it does not exist yet.' % upload_dir
+      print 'Uploading %s to %s' % (self._local_skp_dir, upload_dir)
+      partner_gs.upload_dir_contents(self._local_skp_dir, upload_dir)
       print '\n\n=======New SKPs have been uploaded to %s =======\n\n' % (
-          posixpath.join(partner_gs.target_name(), SKPICTURES_DIR_NAME))
+          posixpath.join(partner_gs.target_name(), upload_dir))
 
     return 0
 
