@@ -14,7 +14,6 @@
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrBufferAllocPool.h"
 #include "src/gpu/GrDeferredUpload.h"
-#include "src/gpu/GrDeinstantiateProxyTracker.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
 
@@ -37,7 +36,11 @@ public:
         executed. */
     void preExecuteDraws();
 
-    void doUpload(GrDeferredTextureUploadFn&);
+    /** Called to upload data to a texture using the GrDeferredTextureUploadFn. If the uploaded
+        surface needs to be prepared for being sampled in a draw after the upload, the caller
+        should pass in true for shouldPrepareSurfaceForSampling. This feature is needed for Vulkan
+        when doing inline uploads to reset the image layout back to sampled. */
+    void doUpload(GrDeferredTextureUploadFn&, bool shouldPrepareSurfaceForSampling = false);
 
     /** Called as ops are executed. Must be called in the same order as the ops were prepared. */
     void executeDrawsAndUploadsForMeshDrawOp(
@@ -73,6 +76,14 @@ public:
         return *fOpArgs;
     }
 
+    void setSampledProxyArray(SkTArray<GrTextureProxy*, true>* sampledProxies) {
+        fSampledProxies = sampledProxies;
+    }
+
+    SkTArray<GrTextureProxy*, true>* sampledProxyArray() override {
+        return fSampledProxies;
+    }
+
     /** Overrides of GrDeferredUploadTarget. */
 
     const GrTokenTracker* tokenTracker() final { return fTokenTracker; }
@@ -80,9 +91,9 @@ public:
     GrDeferredUploadToken addASAPUpload(GrDeferredTextureUploadFn&&) final;
 
     /** Overrides of GrMeshDrawOp::Target. */
-    void recordDraw(
-            sk_sp<const GrGeometryProcessor>, const GrMesh[], int meshCnt,
-            const GrPipeline::FixedDynamicState*, const GrPipeline::DynamicStateArrays*) final;
+    void recordDraw(sk_sp<const GrGeometryProcessor>, const GrMesh[], int meshCnt,
+                    const GrPipeline::FixedDynamicState*,
+                    const GrPipeline::DynamicStateArrays*) final;
     void* makeVertexSpace(size_t vertexSize, int vertexCount, sk_sp<const GrBuffer>*,
                           int* startVertex) final;
     uint16_t* makeIndexSpace(int indexCount, sk_sp<const GrBuffer>*, int* startIndex) final;
@@ -108,12 +119,10 @@ public:
     // permissible).
     GrAtlasManager* atlasManager() const final;
 
-    GrDeinstantiateProxyTracker* deinstantiateProxyTracker() { return &fDeinstantiateProxyTracker; }
-
     /** GrMeshDrawOp::Target override. */
     SkArenaAlloc* allocator() override { return &fArena; }
-private:
 
+private:
     struct InlineUpload {
         InlineUpload(GrDeferredTextureUploadFn&& upload, GrDeferredUploadToken token)
                 : fUpload(std::move(upload)), fUploadBeforeToken(token) {}
@@ -155,6 +164,10 @@ private:
     // an op is not currently preparing of executing.
     OpArgs* fOpArgs = nullptr;
 
+    // This field is only transiently set during flush. Each GrOpsTask will set it to point to an
+    // array of proxies it uses before call onPrepare and onExecute.
+    SkTArray<GrTextureProxy*, true>* fSampledProxies;
+
     GrGpu* fGpu;
     GrResourceProvider* fResourceProvider;
     GrTokenTracker* fTokenTracker;
@@ -163,9 +176,6 @@ private:
     // Variables that are used to track where we are in lists as ops are executed
     SkArenaAllocList<Draw>::Iter fCurrDraw;
     SkArenaAllocList<InlineUpload>::Iter fCurrUpload;
-
-    // Used to track the proxies that need to be deinstantiated after we finish a flush
-    GrDeinstantiateProxyTracker fDeinstantiateProxyTracker;
 };
 
 #endif
