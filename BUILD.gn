@@ -7,11 +7,6 @@ import("gn/flutter_defines.gni")
 import("gn/fuchsia_defines.gni")
 import("gn/shared_sources.gni")
 
-if (is_fuchsia) {
-  import("//build/fuchsia/sdk.gni")
-  import("//build/vulkan/config.gni")
-}
-
 import("gn/skia.gni")
 
 if (skia_use_dawn) {
@@ -2568,6 +2563,14 @@ if (skia_enable_tools) {
       if (target_cpu == "x64") {
         sources += [ "src/core/SkCpu.cpp" ]
       }
+    }
+  }
+
+  if (is_ios && skia_use_metal) {
+    group("minimal_ios_mtl_skia_app") {
+      deps = [
+        "experimental/minimal_ios_mtl_skia_app",
+      ]
     }
   }
 }
