@@ -10,7 +10,9 @@
 
 #include "Slide.h"
 
-namespace skottie { class Animation; }
+#if defined(SK_ENABLE_SKOTTIE)
+#include "Skottie.h"
+
 namespace sksg    { class Scene;     }
 
 class SkottieSlide : public Slide {
@@ -30,13 +32,17 @@ public:
     bool onMouse(SkScalar x, SkScalar y, sk_app::Window::InputState, uint32_t modifiers) override;
 
 private:
-    SkString                  fPath;
-    sk_sp<skottie::Animation> fAnimation;
-    SkSize                    fWinSize = SkSize::MakeEmpty();
-    SkMSec                    fTimeBase  = 0;
-    bool                      fShowAnimationInval = false;
+    SkString                           fPath;
+    sk_sp<skottie::Animation>          fAnimation;
+    skottie::Animation::Builder::Stats fAnimationStats;
+    SkSize                             fWinSize = SkSize::MakeEmpty();
+    SkMSec                             fTimeBase  = 0;
+    bool                               fShowAnimationInval = false,
+                                       fShowAnimationStats = false;
 
     typedef Slide INHERITED;
 };
+
+#endif // SK_ENABLE_SKOTTIE
 
 #endif // SkottieSlide_DEFINED

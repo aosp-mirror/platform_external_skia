@@ -5,18 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "sk_tool_utils.h"
-#include "SampleCode.h"
-#include "SkView.h"
+#include "Sample.h"
+#include "SkBlendMode.h"
 #include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkPointPriv.h"
-#include "SkRegion.h"
-#include "SkShader.h"
-#include "SkUtils.h"
-#include "SkImage.h"
-#include "SkSurface.h"
 #include "SkClipOpPriv.h"
+#include "SkColor.h"
+#include "SkImageInfo.h"
+#include "SkMatrix.h"
+#include "SkPaint.h"
+#include "SkPath.h"
+#include "SkPoint.h"
+#include "SkPointPriv.h"
+#include "SkRect.h"
+#include "SkRefCnt.h"
+#include "SkScalar.h"
+#include "SkShader.h"
+#include "SkString.h"
+#include "SkSurface.h"
+#include "SkTypes.h"
+#include "sk_tool_utils.h"
+
+class SkEvent;
 
 #define FAT_PIXEL_COLOR     SK_ColorBLACK
 #define PIXEL_CENTER_SIZE   3
@@ -352,17 +361,17 @@ void FatBits::drawTriangle(SkCanvas* canvas, SkPoint pts[3]) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-class IndexClick : public SkView::Click {
+class IndexClick : public Sample::Click {
     int fIndex;
 public:
-    IndexClick(SkView* v, int index) : SkView::Click(v), fIndex(index) {}
+    IndexClick(Sample* v, int index) : Sample::Click(v), fIndex(index) {}
 
-    static int GetIndex(SkView::Click* click) {
+    static int GetIndex(Sample::Click* click) {
         return ((IndexClick*)click)->fIndex;
     }
 };
 
-class DrawLineView : public SampleView {
+class DrawLineView : public Sample {
     FatBits fFB;
     SkPoint fPts[3];
     bool    fIsRect;
@@ -382,13 +391,13 @@ public:
     }
 
 protected:
-    bool onQuery(SkEvent* evt) override {
-        if (SampleCode::TitleQ(*evt)) {
-            SampleCode::TitleR(evt, "FatBits");
+    bool onQuery(Sample::Event* evt) override {
+        if (Sample::TitleQ(*evt)) {
+            Sample::TitleR(evt, "FatBits");
             return true;
         }
         SkUnichar uni;
-        if (SampleCode::CharQ(*evt, &uni)) {
+        if (Sample::CharQ(*evt, &uni)) {
             switch (uni) {
                 case 'c':
                     fFB.setUseClip(!fFB.getUseClip());
@@ -458,14 +467,13 @@ protected:
                        FatBits::kHair_Style == fFB.getStyle() ? "Hair" : "Stroke",
                        fFB.getUseClip() ? "clip" : "noclip");
             SkPaint paint;
-            paint.setAntiAlias(true);
-            paint.setTextSize(16);
             paint.setColor(SK_ColorBLUE);
-            canvas->drawString(str, 10, 16, paint);
+            SkFont font(nullptr, 16);
+            canvas->drawString(str, 10, 16, font, paint);
         }
     }
 
-    SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) override {
+    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) override {
         SkPoint pt = { x, y };
         int index = -1;
         int count = fFB.getTriangle() ? 3 : 2;
@@ -496,10 +504,9 @@ protected:
 
 private:
 
-    typedef SampleView INHERITED;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
-static SkView* MyFactory() { return new DrawLineView; }
-static SkViewRegister reg(MyFactory);
+DEF_SAMPLE( return new DrawLineView(); )

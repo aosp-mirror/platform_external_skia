@@ -8,6 +8,16 @@
 
 #include "gl/GLTestContext.h"
 
+#if defined(_M_ARM64)
+
+namespace sk_gpu_test {
+
+GLTestContext* CreatePlatformGLTestContext(GrGLStandard, GLTestContext*) { return nullptr; }
+
+}  // namespace sk_gpu_test
+
+#else
+
 #include <windows.h>
 #include <GL/GL.h>
 #include "win/SkWGL.h"
@@ -39,7 +49,7 @@ private:
     HDC fDeviceContext;
     HGLRC fGlRenderContext;
     static ATOM gWC;
-    SkWGLPbufferContext* fPbufferContext;
+    sk_sp<SkWGLPbufferContext> fPbufferContext;
 };
 
 ATOM WinGLTestContext::gWC = 0;
@@ -148,7 +158,7 @@ WinGLTestContext::~WinGLTestContext() {
 }
 
 void WinGLTestContext::destroyGLContext() {
-    SkSafeSetNull(fPbufferContext);
+    fPbufferContext = nullptr;
     if (fGlRenderContext) {
         // This deletes the context immediately even if it is current.
         wglDeleteContext(fGlRenderContext);
@@ -220,3 +230,4 @@ GLTestContext* CreatePlatformGLTestContext(GrGLStandard forcedGpuAPI,
 }
 }  // namespace sk_gpu_test
 
+#endif

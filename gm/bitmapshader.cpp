@@ -5,12 +5,14 @@
  * found in the LICENSE file.
  */
 #include "gm.h"
-#include "sk_tool_utils.h"
 
 #include "SkBitmap.h"
 #include "SkPaint.h"
 #include "SkShader.h"
+
+#include "GrCaps.h"
 #include "GrContext.h"
+#include "GrContextPriv.h"
 
 namespace skiagm {
 
@@ -40,7 +42,7 @@ class BitmapShaderGM : public GM {
 
 protected:
     void onOnceBeforeDraw() override {
-        this->setBGColor(sk_tool_utils::color_to_565(SK_ColorGRAY));
+        this->setBGColor(SK_ColorGRAY);
         draw_bm(&fBitmap);
         draw_mask(&fMask);
     }
@@ -70,6 +72,7 @@ protected:
 
             // draw the shader with a bitmap mask
             canvas->drawBitmap(fMask, 0, 0, &paint);
+            // no blue circle expected (the bitmap shader's coordinates are aligned to CTM still)
             canvas->drawBitmap(fMask, 30, 0, &paint);
 
             canvas->translate(0, 25);
@@ -117,7 +120,7 @@ DEF_SIMPLE_GM(hugebitmapshader, canvas, 100, 100) {
     int bitmapW = 1;
     int bitmapH = 60000;
     if (auto* ctx = canvas->getGrContext()) {
-        bitmapH = ctx->caps()->maxTextureSize() + 1;
+        bitmapH = ctx->priv().caps()->maxTextureSize() + 1;
     }
     bitmap.setInfo(SkImageInfo::MakeA8(bitmapW, bitmapH), bitmapW);
     uint8_t* pixels = new uint8_t[bitmapH];
@@ -136,7 +139,6 @@ DEF_SIMPLE_GM(hugebitmapshader, canvas, 100, 100) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new BitmapShaderGM; }
-static GMRegistry reg(MyFactory);
+DEF_GM( return new BitmapShaderGM; )
 
 }

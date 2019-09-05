@@ -28,7 +28,7 @@ static sk_sp<SkImage> make_image(SkCanvas* canvas, int direction) {
         for (int x = 0; x < info.width(); x += width) {
             paint.setColor(colors[x/width % 5]);
             if (yDirection) {
-                paint.setAlpha(127);
+                paint.setAlphaf(0.5f);
             }
             c->drawRect(SkRect::MakeXYWH(x, 0, width, info.height()), paint);
         }
@@ -38,7 +38,7 @@ static sk_sp<SkImage> make_image(SkCanvas* canvas, int direction) {
         for (int y = 0; y < info.height(); y += width) {
             paint.setColor(colors[y/width % 5]);
             if (xDirection) {
-                paint.setAlpha(127);
+                paint.setAlphaf(0.5f);
             }
             c->drawRect(SkRect::MakeXYWH(0, y, info.width(), width), paint);
         }
@@ -62,7 +62,7 @@ namespace skiagm {
 class ImageBlurRepeatModeGM : public GM {
 public:
     ImageBlurRepeatModeGM() {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFFCCCCCC));
+        this->setBGColor(0xFFCCCCCC);
     }
 
 protected:
