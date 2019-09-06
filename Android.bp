@@ -1508,6 +1508,7 @@ cc_test {
         "tests/EncodeTest.cpp",
         "tests/EncodedInfoTest.cpp",
         "tests/ExifTest.cpp",
+        "tests/ExtendedSkColorTypeTests.cpp",
         "tests/F16StagesTest.cpp",
         "tests/FillPathTest.cpp",
         "tests/FitsInTest.cpp",
