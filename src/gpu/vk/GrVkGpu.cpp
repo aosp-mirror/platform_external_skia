@@ -18,6 +18,7 @@
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrMesh.h"
+#include "src/gpu/GrNativeRect.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrRenderTargetPriv.h"
@@ -2477,22 +2478,12 @@ void adjust_bounds_to_granularity(SkIRect* dstBounds, const SkIRect& srcBounds,
     }
 }
 
-void GrVkGpu::submitSecondaryCommandBuffer(
-        std::unique_ptr<GrVkSecondaryCommandBuffer> buffer,
-        const GrVkRenderPass* renderPass,
-        const VkClearValue* colorClear,
-        GrVkRenderTarget* target, GrSurfaceOrigin origin,
-        const SkIRect& bounds) {
-
+void GrVkGpu::beginRenderPass(const GrVkRenderPass* renderPass,
+                              const VkClearValue* colorClear,
+                              GrVkRenderTarget* target, GrSurfaceOrigin origin,
+                              const SkIRect& bounds) {
     SkASSERT (!target->wrapsSecondaryCommandBuffer());
-    const SkIRect* pBounds = &bounds;
-    SkIRect flippedBounds;
-    if (kBottomLeft_GrSurfaceOrigin == origin) {
-        flippedBounds = bounds;
-        flippedBounds.fTop = target->height() - bounds.fBottom;
-        flippedBounds.fBottom = target->height() - bounds.fTop;
-        pBounds = &flippedBounds;
-    }
+    auto nativeBounds = GrNativeRect::MakeRelativeTo(origin, target->height(), bounds);
 
     // The bounds we use for the render pass should be of the granularity supported
     // by the device.
@@ -2500,9 +2491,10 @@ void GrVkGpu::submitSecondaryCommandBuffer(
     SkIRect adjustedBounds;
     if ((0 != granularity.width && 1 != granularity.width) ||
         (0 != granularity.height && 1 != granularity.height)) {
-        adjust_bounds_to_granularity(&adjustedBounds, *pBounds, granularity,
+        adjust_bounds_to_granularity(&adjustedBounds, nativeBounds.asSkIRect(), granularity,
                                      target->width(), target->height());
-        pBounds = &adjustedBounds;
+    } else {
+        adjustedBounds = nativeBounds.asSkIRect();
     }
 
 #ifdef SK_DEBUG
@@ -2519,18 +2511,24 @@ void GrVkGpu::submitSecondaryCommandBuffer(
     clears[1].depthStencil.depth = 0.0f;
     clears[1].depthStencil.stencil = 0;
 
-    fCurrentCmdBuffer->beginRenderPass(this, renderPass, clears, *target, *pBounds, true);
-    fCurrentCmdBuffer->executeCommands(this, std::move(buffer));
-    fCurrentCmdBuffer->endRenderPass(this);
+    fCurrentCmdBuffer->beginRenderPass(this, renderPass, clears, *target, adjustedBounds, true);
+}
 
+void GrVkGpu::endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin,
+                            const SkIRect& bounds) {
+    fCurrentCmdBuffer->endRenderPass(this);
     this->didWriteToSurface(target, origin, &bounds);
 }
 
-void GrVkGpu::submit(GrOpsRenderPass* renderPass) {
-        SkASSERT(fCachedOpsRenderPass.get() == renderPass);
+void GrVkGpu::submitSecondaryCommandBuffer(std::unique_ptr<GrVkSecondaryCommandBuffer> buffer) {
+    fCurrentCmdBuffer->executeCommands(this, std::move(buffer));
+}
 
-        fCachedOpsRenderPass->submit();
-        fCachedOpsRenderPass->reset();
+void GrVkGpu::submit(GrOpsRenderPass* renderPass) {
+    SkASSERT(fCachedOpsRenderPass.get() == renderPass);
+
+    fCachedOpsRenderPass->submit();
+    fCachedOpsRenderPass->reset();
 }
 
 GrFence SK_WARN_UNUSED_RESULT GrVkGpu::insertFence() {

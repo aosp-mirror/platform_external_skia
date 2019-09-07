@@ -116,19 +116,10 @@ public:
      */
     void releaseAll();
 
-    enum class ScratchFlags {
-        kNone = 0,
-        /** Preferentially returns scratch resources with no pending IO. */
-        kPreferNoPendingIO = 0x1,
-        /** Will not return any resources that match but have pending IO. */
-        kRequireNoPendingIO = 0x2,
-    };
-
     /**
      * Find a resource that matches a scratch key.
      */
-    GrGpuResource* findAndRefScratchResource(const GrScratchKey& scratchKey, size_t resourceSize,
-                                             ScratchFlags);
+    GrGpuResource* findAndRefScratchResource(const GrScratchKey& scratchKey);
 
 #ifdef SK_DEBUG
     // This is not particularly fast and only used for validation, so debug only.
@@ -253,7 +244,7 @@ private:
     ////
     void insertResource(GrGpuResource*);
     void removeResource(GrGpuResource*);
-    void notifyCntReachedZero(GrGpuResource*, uint32_t flags);
+    void notifyRefCntReachedZero(GrGpuResource*);
     void changeUniqueKey(GrGpuResource*, const GrUniqueKey&);
     void removeUniqueKey(GrGpuResource*);
     void willRemoveScratchKey(const GrGpuResource*);
@@ -377,8 +368,6 @@ private:
     bool                                fPreferVRAMUseOverFlushes = false;
 };
 
-GR_MAKE_BITFIELD_CLASS_OPS(GrResourceCache::ScratchFlags);
-
 class GrResourceCache::ResourceAccess {
 private:
     ResourceAccess(GrResourceCache* cache) : fCache(cache) { }
@@ -412,15 +401,10 @@ private:
         kRefCntReachedZero_RefNotificationFlag  = 0x2,
     };
     /**
-     * Called by GrGpuResources when they detect that their ref/io cnts have reached zero. When the
-     * normal ref cnt reaches zero the flags that are set should be:
-     *     a) kRefCntReachedZero if a pending IO cnt is still non-zero.
-     *     b) (kRefCntReachedZero | kAllCntsReachedZero) when all pending IO cnts are also zero.
-     * kAllCntsReachedZero is set by itself if a pending IO cnt is decremented to zero and all the
-     * the other cnts are already zero.
+     * Called by GrGpuResources when they detect that their ref cnt has reached zero.
      */
-    void notifyCntReachedZero(GrGpuResource* resource, uint32_t flags) {
-        fCache->notifyCntReachedZero(resource, flags);
+    void notifyRefCntReachedZero(GrGpuResource* resource) {
+        fCache->notifyRefCntReachedZero(resource);
     }
 
     /**

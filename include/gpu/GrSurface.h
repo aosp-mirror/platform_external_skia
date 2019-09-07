@@ -75,8 +75,6 @@ public:
     inline GrSurfacePriv surfacePriv();
     inline const GrSurfacePriv surfacePriv() const;
 
-    static size_t WorstCaseSize(const GrSurfaceDesc& desc, GrRenderable renderable,
-                                int renderTargetSampleCnt, bool binSize = false);
     static size_t ComputeSize(GrPixelConfig config, int width, int height, int colorSamplesPerPixel,
                               GrMipMapped, bool binSize = false);
 
@@ -113,11 +111,6 @@ protected:
         SkASSERT(!this->asRenderTarget());
         fSurfaceFlags |= GrInternalSurfaceFlags::kReadOnly;
     }
-
-    // Methods made available via GrSurfacePriv
-    bool hasPendingRead() const;
-    bool hasPendingWrite() const;
-    bool hasPendingIO() const;
 
     // Provides access to methods that should be public within Skia code.
     friend class GrSurfacePriv;
