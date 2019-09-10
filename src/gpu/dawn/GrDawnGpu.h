@@ -12,6 +12,7 @@
 #include "dawn/dawncpp.h"
 #include "src/core/SkLRUCache.h"
 #include "src/gpu/dawn/GrDawnRingBuffer.h"
+#include "src/gpu/dawn/GrDawnStagingManager.h"
 
 class GrDawnOpsRenderPass;
 class GrPipeline;
@@ -62,7 +63,8 @@ public:
     GrOpsRenderPass* getOpsRenderPass(
             GrRenderTarget*, GrSurfaceOrigin, const SkRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
-            const GrOpsRenderPass::StencilLoadAndStoreInfo&) override;
+            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+            const SkTArray<GrTextureProxy*, true>& sampledProxies) override;
 
     SkSL::Compiler* shaderCompiler() const {
         return fCompiler.get();
@@ -93,6 +95,8 @@ public:
                                                    GrPrimitiveType primitiveType);
 
     GrDawnRingBuffer::Slice allocateUniformRingBufferSlice(int size);
+    GrDawnStagingBuffer* getStagingBuffer(size_t size);
+    GrDawnStagingManager* getStagingManager() { return &fStagingManager; }
     dawn::CommandEncoder getCopyEncoder();
     void flushCopyEncoder();
     void appendCommandBuffer(dawn::CommandBuffer commandBuffer);
@@ -134,8 +138,9 @@ private:
                       size_t rowBytes) override;
 
     bool onWritePixels(GrSurface* surface, int left, int top, int width, int height,
-                       GrColorType surfaceColorType, GrColorType dstColorType,
-                       const GrMipLevel texels[], int mipLevelCount) override;
+                       GrColorType surfaceColorType, GrColorType srcColorType,
+                       const GrMipLevel texels[], int mipLevelCount,
+                       bool prepForTexSampling) override;
 
     bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height,
                             GrColorType textureColorType, GrColorType bufferColorType,
@@ -171,6 +176,7 @@ private:
     };
 
     SkLRUCache<GrProgramDesc, sk_sp<GrDawnProgram>, ProgramDescHash>    fRenderPipelineCache;
+    GrDawnStagingManager fStagingManager;
 
     typedef GrGpu INHERITED;
 };

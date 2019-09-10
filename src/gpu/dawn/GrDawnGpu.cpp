@@ -102,7 +102,8 @@ GrDawnGpu::GrDawnGpu(GrContext* context, const GrContextOptions& options,
         , fQueue(device.CreateQueue())
         , fCompiler(new SkSL::Compiler())
         , fUniformRingBuffer(this, dawn::BufferUsageBit::Uniform)
-        , fRenderPipelineCache(kMaxRenderPipelineEntries) {
+        , fRenderPipelineCache(kMaxRenderPipelineEntries)
+        , fStagingManager(fDevice) {
     fCaps.reset(new GrDawnCaps(options));
 }
 
@@ -119,7 +120,8 @@ void GrDawnGpu::disconnect(DisconnectType type) {
 GrOpsRenderPass* GrDawnGpu::getOpsRenderPass(
             GrRenderTarget* rt, GrSurfaceOrigin origin, const SkRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
-            const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo) {
+            const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
+            const SkTArray<GrTextureProxy*, true>& sampledProxies) {
     fOpsRenderPass.reset(new GrDawnOpsRenderPass(this, rt, origin, colorInfo, stencilInfo));
     return fOpsRenderPass.get();
 }
@@ -136,8 +138,9 @@ sk_sp<GrGpuBuffer> GrDawnGpu::onCreateBuffer(size_t size, GrGpuBufferType type,
 
 ////////////////////////////////////////////////////////////////////////////////
 bool GrDawnGpu::onWritePixels(GrSurface* surface, int left, int top, int width, int height,
-                              GrColorType textureColorType, GrColorType bufferColorType,
-                              const GrMipLevel texels[], int mipLevelCount) {
+                              GrColorType surfaceColorType, GrColorType srcColorType,
+                              const GrMipLevel texels[], int mipLevelCount,
+                              bool prepForTexSampling) {
     GrDawnTexture* texture = static_cast<GrDawnTexture*>(surface->asTexture());
     if (!texture) {
         SkASSERT(!"uploading to non-texture unimplemented");
@@ -352,21 +355,21 @@ GrBackendTexture GrDawnGpu::createBackendTexture(int width, int height,
         size_t origRowBytes = bpp * w;
         size_t rowBytes = GrDawnRoundRowBytes(origRowBytes);
         size_t size = rowBytes * h;
-        dawn::BufferDescriptor bufferDesc;
-        bufferDesc.size = size;
-        bufferDesc.usage = dawn::BufferUsageBit::CopySrc | dawn::BufferUsageBit::CopyDst;
-        dawn::Buffer buffer = this->device().CreateBuffer(&bufferDesc);
-        const uint8_t* src = static_cast<const uint8_t*>(pixels);
+        GrDawnStagingBuffer* stagingBuffer = this->getStagingBuffer(size);
         if (rowBytes == origRowBytes) {
-            buffer.SetSubData(0, size, src);
+            memcpy(stagingBuffer->fData, pixels, size);
         } else {
-            uint32_t offset = 0;
+            const char* src = static_cast<const char*>(pixels);
+            char* dst = static_cast<char*>(stagingBuffer->fData);
             for (int row = 0; row < h; row++) {
-                buffer.SetSubData(offset, origRowBytes, src);
-                offset += rowBytes;
+                memcpy(dst, src, origRowBytes);
+                dst += rowBytes;
                 src += origRowBytes;
             }
         }
+        dawn::Buffer buffer = stagingBuffer->fBuffer;
+        buffer.Unmap();
+        stagingBuffer->fData = nullptr;
         dawn::BufferCopyView srcBuffer;
         srcBuffer.buffer = buffer;
         srcBuffer.offset = 0;
@@ -456,6 +459,8 @@ void GrDawnGpu::flush() {
     this->flushCopyEncoder();
     fQueue.Submit(fCommandBuffers.size(), &fCommandBuffers.front());
     fCommandBuffers.clear();
+    fStagingManager.mapBusyList();
+    fDevice.Tick();
 }
 
 void GrDawnGpu::onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
@@ -640,6 +645,10 @@ sk_sp<GrDawnProgram> GrDawnGpu::getOrCreateRenderPipeline(
 
 GrDawnRingBuffer::Slice GrDawnGpu::allocateUniformRingBufferSlice(int size) {
     return fUniformRingBuffer.allocate(size);
+}
+
+GrDawnStagingBuffer* GrDawnGpu::getStagingBuffer(size_t size) {
+    return fStagingManager.findOrCreateStagingBuffer(size);
 }
 
 void GrDawnGpu::appendCommandBuffer(dawn::CommandBuffer commandBuffer) {
