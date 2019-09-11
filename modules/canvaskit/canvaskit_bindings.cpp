@@ -558,12 +558,35 @@ struct PosTan {
 // SimpleRRect is simpler than passing a (complex) SkRRect over the wire to JS.
 struct SimpleRRect {
     SkRect rect;
-    SkScalar rx;
-    SkScalar ry;
+
+    SkScalar rx1;
+    SkScalar ry1;
+    SkScalar rx2;
+    SkScalar ry2;
+    SkScalar rx3;
+    SkScalar ry3;
+    SkScalar rx4;
+    SkScalar ry4;
 };
 
 SkRRect toRRect(const SimpleRRect& r) {
-    return SkRRect::MakeRectXY(r.rect, r.rx, r.ry);
+    SkVector fRadii[4] = {{r.rx1, r.ry1}, {r.rx2, r.ry2},
+                          {r.rx3, r.ry3}, {r.rx4, r.ry4}};
+    SkRRect rr;
+    rr.setRectRadii(r.rect, fRadii);
+    return rr;
+}
+
+struct TonalColors {
+    SkColor ambientColor;
+    SkColor spotColor;
+};
+
+TonalColors computeTonalColors(const TonalColors& in) {
+    TonalColors out;
+    SkShadowUtils::ComputeTonalColors(in.ambientColor, in.spotColor,
+        &out.ambientColor, &out.spotColor);
+    return out;
 }
 
 // These objects have private destructors / delete methods - I don't think
@@ -613,6 +636,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     constant("gpu", true);
 #endif
+    function("computeTonalColors", &computeTonalColors);
     function("_decodeImage", optional_override([](uintptr_t /* uint8_t*  */ iptr,
                                                   size_t length)->sk_sp<SkImage> {
         uint8_t* imgData = reinterpret_cast<uint8_t*>(iptr);
@@ -1310,14 +1334,24 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     value_object<SimpleRRect>("SkRRect")
         .field("rect", &SimpleRRect::rect)
-        .field("rx",   &SimpleRRect::rx)
-        .field("ry",   &SimpleRRect::ry);
+        .field("rx1",  &SimpleRRect::rx1)
+        .field("ry1",  &SimpleRRect::ry1)
+        .field("rx2",  &SimpleRRect::rx2)
+        .field("ry2",  &SimpleRRect::ry2)
+        .field("rx3",  &SimpleRRect::rx3)
+        .field("ry3",  &SimpleRRect::ry3)
+        .field("rx4",  &SimpleRRect::rx4)
+        .field("ry4",  &SimpleRRect::ry4);
 
     value_object<SkIRect>("SkIRect")
         .field("fLeft",   &SkIRect::fLeft)
         .field("fTop",    &SkIRect::fTop)
         .field("fRight",  &SkIRect::fRight)
         .field("fBottom", &SkIRect::fBottom);
+
+    value_object<TonalColors>("TonalColors")
+        .field("ambient", &TonalColors::ambientColor)
+        .field("spot",    &TonalColors::spotColor);
 
     value_object<SimpleImageInfo>("SkImageInfo")
         .field("width",     &SimpleImageInfo::width)
