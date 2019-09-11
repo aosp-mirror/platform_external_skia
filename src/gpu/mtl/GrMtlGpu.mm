@@ -107,11 +107,13 @@ GrMtlGpu::GrMtlGpu(GrContext* context, const GrContextOptions& options,
     fMtlCaps.reset(new GrMtlCaps(options, fDevice, featureSet));
     fCaps = fMtlCaps;
 #ifdef GR_METAL_SDK_SUPPORTS_EVENTS
-    if (fMtlCaps->fenceSyncSupport()) {
-        fSharedEvent = [fDevice newSharedEvent];
-        dispatch_queue_t dispatchQueue = dispatch_queue_create("MTLFenceSync", NULL);
-        fSharedEventListener = [[MTLSharedEventListener alloc] initWithDispatchQueue:dispatchQueue];
-        fLatestEvent = 0;
+    if (@available(macOS 10.14, iOS 12.0, *)) {
+        if (fMtlCaps->fenceSyncSupport()) {
+            fSharedEvent = [fDevice newSharedEvent];
+            dispatch_queue_t dispatchQ = dispatch_queue_create("MTLFenceSync", NULL);
+            fSharedEventListener = [[MTLSharedEventListener alloc] initWithDispatchQueue:dispatchQ];
+            fLatestEvent = 0;
+        }
     }
 #endif
 }
@@ -400,13 +402,13 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc,
                                            int renderTargetSampleCnt,
                                            SkBudgeted budgeted,
                                            GrProtected isProtected,
-                                           const GrMipLevel texels[],
-                                           int mipLevelCount) {
+                                           int mipLevelCount,
+                                           uint32_t levelClearMask) {
     // We don't support protected textures in Metal.
     if (isProtected == GrProtected::kYes) {
         return nullptr;
     }
-    int mipLevels = !mipLevelCount ? 1 : mipLevelCount;
+    SkASSERT(mipLevelCount > 0);
 
     MTLPixelFormat mtlPixelFormat = GrBackendFormatAsMTLPixelFormat(format);
     SkASSERT(mtlPixelFormat != MTLPixelFormatInvalid);
@@ -422,7 +424,7 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc,
     texDesc.width = desc.fWidth;
     texDesc.height = desc.fHeight;
     texDesc.depth = 1;
-    texDesc.mipmapLevelCount = mipLevels;
+    texDesc.mipmapLevelCount = mipLevelCount;
     texDesc.sampleCount = 1;
     texDesc.arrayLength = 1;
     // Make all textures have private gpu only access. We can use transfer buffers or textures
@@ -431,17 +433,8 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc,
     texDesc.usage = MTLTextureUsageShaderRead;
     texDesc.usage |= (renderable == GrRenderable::kYes) ? MTLTextureUsageRenderTarget : 0;
 
-    GrMipMapsStatus mipMapsStatus = GrMipMapsStatus::kNotAllocated;
-    if (mipLevels > 1) {
-        mipMapsStatus = GrMipMapsStatus::kValid;
-        for (int i = 0; i < mipLevels; ++i) {
-            if (!texels[i].fPixels) {
-                mipMapsStatus = GrMipMapsStatus::kDirty;
-                break;
-            }
-        }
-    }
-
+    GrMipMapsStatus mipMapsStatus =
+            mipLevelCount > 1 ? GrMipMapsStatus::kDirty : GrMipMapsStatus::kNotAllocated;
     if (renderable == GrRenderable::kYes) {
         tex = GrMtlTextureRenderTarget::MakeNewTextureRenderTarget(this, budgeted,
                                                                    desc, renderTargetSampleCnt,
@@ -454,24 +447,9 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(const GrSurfaceDesc& desc,
         return nullptr;
     }
 
-    auto colorType = GrPixelConfigToColorType(desc.fConfig);
-    if (mipLevelCount && texels[0].fPixels) {
-        if (!this->uploadToTexture(tex.get(), 0, 0, desc.fWidth, desc.fHeight, colorType, texels,
-                                   mipLevelCount)) {
-            tex->unref();
-            return nullptr;
-        }
-    }
-
-    if (this->caps()->shouldInitializeTextures()) {
-        uint32_t levelMask = ~0;
-        SkASSERT(mipLevelCount < 32);
-        for (int i = 0; i < mipLevelCount; ++i) {
-            if (!texels[i].fPixels) {
-                levelMask &= ~(1 << i);
-            }
-        }
-        this->clearTexture(tex.get(), colorType, levelMask);
+    if (levelClearMask) {
+        auto colorType = GrPixelConfigToColorType(desc.fConfig);
+        this->clearTexture(tex.get(), colorType, levelClearMask);
     }
 
     return tex;
@@ -1048,12 +1026,14 @@ bool GrMtlGpu::onReadPixels(GrSurface* surface, int left, int top, int width, in
 
 GrFence SK_WARN_UNUSED_RESULT GrMtlGpu::insertFence() {
 #ifdef GR_METAL_SDK_SUPPORTS_EVENTS
-    if (this->caps()->fenceSyncSupport()) {
-        GrMtlCommandBuffer* cmdBuffer = this->commandBuffer();
-        ++fLatestEvent;
-        cmdBuffer->encodeSignalEvent(fSharedEvent, fLatestEvent);
+    if (@available(macOS 10.14, iOS 12.0, *)) {
+        if (this->caps()->fenceSyncSupport()) {
+            GrMtlCommandBuffer* cmdBuffer = this->commandBuffer();
+            ++fLatestEvent;
+            cmdBuffer->encodeSignalEvent(fSharedEvent, fLatestEvent);
 
-        return fLatestEvent;
+            return fLatestEvent;
+        }
     }
 #endif
     return 0;
@@ -1061,20 +1041,22 @@ GrFence SK_WARN_UNUSED_RESULT GrMtlGpu::insertFence() {
 
 bool GrMtlGpu::waitFence(GrFence value, uint64_t timeout) {
 #ifdef GR_METAL_SDK_SUPPORTS_EVENTS
-    if (this->caps()->fenceSyncSupport()) {
-        dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    if (@available(macOS 10.14, iOS 12.0, *)) {
+        if (this->caps()->fenceSyncSupport()) {
+            dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
-        // Add listener for this particular value or greater
-        __block dispatch_semaphore_t block_sema = semaphore;
-        [fSharedEvent notifyListener: fSharedEventListener
-                             atValue: value
-                               block: ^(id<MTLSharedEvent> sharedEvent, uint64_t value) {
-                                   dispatch_semaphore_signal(block_sema);
-                               }];
+            // Add listener for this particular value or greater
+            __block dispatch_semaphore_t block_sema = semaphore;
+            [fSharedEvent notifyListener: fSharedEventListener
+                                 atValue: value
+                                   block: ^(id<MTLSharedEvent> sharedEvent, uint64_t value) {
+                                       dispatch_semaphore_signal(block_sema);
+                                   }];
 
-        long result = dispatch_semaphore_wait(semaphore, timeout);
+            long result = dispatch_semaphore_wait(semaphore, timeout);
 
-        return !result;
+            return !result;
+        }
     }
 #endif
     return true;
@@ -1107,17 +1089,21 @@ sk_sp<GrSemaphore> GrMtlGpu::wrapBackendSemaphore(const GrBackendSemaphore& sema
 
 void GrMtlGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore) {
 #ifdef GR_METAL_SDK_SUPPORTS_EVENTS
-    GrMtlSemaphore* mtlSem = static_cast<GrMtlSemaphore*>(semaphore.get());
+    if (@available(macOS 10.14, iOS 12.0, *)) {
+        GrMtlSemaphore* mtlSem = static_cast<GrMtlSemaphore*>(semaphore.get());
 
-    this->commandBuffer()->encodeSignalEvent(mtlSem->event(), mtlSem->value());
+        this->commandBuffer()->encodeSignalEvent(mtlSem->event(), mtlSem->value());
+    }
 #endif
 }
 
 void GrMtlGpu::waitSemaphore(sk_sp<GrSemaphore> semaphore) {
 #ifdef GR_METAL_SDK_SUPPORTS_EVENTS
-    GrMtlSemaphore* mtlSem = static_cast<GrMtlSemaphore*>(semaphore.get());
+    if (@available(macOS 10.14, iOS 12.0, *)) {
+        GrMtlSemaphore* mtlSem = static_cast<GrMtlSemaphore*>(semaphore.get());
 
-    this->commandBuffer()->encodeWaitForEvent(mtlSem->event(), mtlSem->value());
+        this->commandBuffer()->encodeWaitForEvent(mtlSem->event(), mtlSem->value());
+    }
 #endif
 }
 

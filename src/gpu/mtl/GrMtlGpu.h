@@ -139,8 +139,8 @@ private:
                                      int renderTargetSampleCnt,
                                      SkBudgeted budgeted,
                                      GrProtected,
-                                     const GrMipLevel texels[],
-                                     int mipLevelCount) override;
+                                     int mipLevelCount,
+                                     uint32_t levelClearMask) override;
     sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
                                                SkImage::CompressionType, SkBudgeted,
                                                const void* data) override {
@@ -243,8 +243,8 @@ private:
 
 #ifdef GR_METAL_SDK_SUPPORTS_EVENTS
     // For FenceSync
-    id<MTLSharedEvent>      fSharedEvent;
-    MTLSharedEventListener* fSharedEventListener;
+    id<MTLSharedEvent>      fSharedEvent API_AVAILABLE(macos(10.14), ios(12.0));
+    MTLSharedEventListener* fSharedEventListener API_AVAILABLE(macos(10.14), ios(12.0));
     uint64_t                fLatestEvent;
 #endif
 
