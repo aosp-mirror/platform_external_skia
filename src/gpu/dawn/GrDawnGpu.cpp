@@ -198,33 +198,21 @@ sk_sp<GrTexture> GrDawnGpu::onCreateTexture(const GrSurfaceDesc& desc,
                                             int renderTargetSampleCnt,
                                             SkBudgeted budgeted,
                                             GrProtected,
-                                            const GrMipLevel texels[],
-                                            int mipLevelCount) {
+                                            int mipLevelCount,
+                                            uint32_t levelClearMask) {
+    SkASSERT(!levelClearMask);
     dawn::TextureFormat format;
     if (!backendFormat.asDawnFormat(&format)) {
         return nullptr;
     }
 
-    GrMipMapsStatus mipMapsStatus = GrMipMapsStatus::kNotAllocated;
-    if (mipLevelCount > 1) {
-        mipMapsStatus = GrMipMapsStatus::kValid;
-        for (int i = 0; i < mipLevelCount; ++i) {
-            if (!texels[i].fPixels) {
-                mipMapsStatus = GrMipMapsStatus::kDirty;
-                break;
-            }
-        }
-    }
+    GrMipMapsStatus mipMapsStatus =
+        mipLevelCount > 1 ? GrMipMapsStatus::kDirty : GrMipMapsStatus::kNotAllocated;
 
-    sk_sp<GrDawnTexture> tex = GrDawnTexture::Make(this, { desc.fWidth, desc.fHeight },
-                                                   desc.fConfig, format, renderable,
-                                                   renderTargetSampleCnt, budgeted, mipLevelCount,
-                                                   mipMapsStatus);
-    if (!tex) {
-        return nullptr;
-    }
-    tex->upload(texels, mipLevelCount, this->getCopyEncoder());
-    return tex;
+    return GrDawnTexture::Make(this, { desc.fWidth, desc.fHeight },
+                                       desc.fConfig, format, renderable,
+                                       renderTargetSampleCnt, budgeted, mipLevelCount,
+                                       mipMapsStatus);
 }
 
 sk_sp<GrTexture> GrDawnGpu::onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
@@ -482,8 +470,10 @@ void GrDawnGpu::testingOnly_flushGpuAndSync() {
 
 void GrDawnGpu::flush() {
     this->flushCopyEncoder();
-    fQueue.Submit(fCommandBuffers.size(), &fCommandBuffers.front());
-    fCommandBuffers.clear();
+    if (!fCommandBuffers.empty()) {
+        fQueue.Submit(fCommandBuffers.size(), &fCommandBuffers.front());
+        fCommandBuffers.clear();
+    }
     fStagingManager.mapBusyList();
     fDevice.Tick();
 }
