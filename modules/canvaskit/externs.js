@@ -29,6 +29,8 @@ var CanvasKit = {
 	LTRBRect: function() {},
 	/** @return {CanvasKit.SkRect} */
 	XYWHRect: function() {},
+	/** @return {CanvasKit.SkRRect} */
+	RRectXY: function() {},
 	/** @return {ImageData} */
 	ImageData: function() {},
 
@@ -55,6 +57,8 @@ var CanvasKit = {
 	/** @return {RadialCanvasGradient} */
 	MakeTwoPointConicalGradientShader: function() {},
 	MakeWebGLCanvasSurface: function() {},
+	/** @return {TonalColors} */
+	computeTonalColors: function() {},
 	currentContext: function() {},
 	getColorComponents: function() {},
 	getSkDataBytes: function() {},
@@ -285,8 +289,14 @@ var CanvasKit = {
 
 	SkRRect: {
 		rect: {},
-		rx: {},
-		ry: {},
+		rx1: {},
+		ry1: {},
+		rx2: {},
+		ry2: {},
+		rx3: {},
+		ry3: {},
+		rx4: {},
+		ry4: {},
 	},
 
 	SkSurface: {
