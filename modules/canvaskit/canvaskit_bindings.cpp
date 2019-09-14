@@ -9,6 +9,7 @@
 #include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
 #include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkFilterQuality.h"
@@ -881,6 +882,18 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         ;
 
+    class_<SkColorFilter>("SkColorFilter")
+        .smart_ptr<sk_sp<SkColorFilter>>("sk_sp<SkColorFilter>>")
+        .class_function("MakeBlend", &SkColorFilters::Blend)
+        .class_function("MakeCompose", &SkColorFilters::Compose)
+        .class_function("MakeLerp", &SkColorFilters::Lerp)
+        .class_function("MakeLinearToSRGBGamma", &SkColorFilters::LinearToSRGBGamma)
+        .class_function("_makeMatrix", optional_override([](uintptr_t /* float* */ fPtr) {
+            float* twentyFloats = reinterpret_cast<float*>(fPtr);
+            return SkColorFilters::Matrix(twentyFloats);
+        }))
+        .class_function("MakeSRGBToLinearGamma", &SkColorFilters::SRGBToLinearGamma);
+
     class_<SkData>("SkData")
         .smart_ptr<sk_sp<SkData>>("sk_sp<SkData>>")
         .function("size", &SkData::size);
@@ -1006,6 +1019,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                     float r, float g, float b, float a) {
             self.setColor({r, g, b, a});
         }))
+        .function("setColorFilter", &SkPaint::setColorFilter)
         .function("setFilterQuality", &SkPaint::setFilterQuality)
         .function("setMaskFilter", &SkPaint::setMaskFilter)
         .function("setPathEffect", &SkPaint::setPathEffect)
@@ -1259,7 +1273,9 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("Gray_8", SkColorType::kGray_8_SkColorType)
         .value("RGBA_F16", SkColorType::kRGBA_F16_SkColorType)
         .value("RGBA_F32", SkColorType::kRGBA_F32_SkColorType)
-        .value("RG_88", SkColorType::kRG_88_SkColorType);
+        .value("RG_88", SkColorType::kRG_88_SkColorType)
+        .value("Alpha_16", SkColorType::kAlpha_16_SkColorType)
+        .value("RG_1616", SkColorType::kRG_1616_SkColorType);
 
     enum_<SkPath::FillType>("FillType")
         .value("Winding",           SkPath::FillType::kWinding_FillType)

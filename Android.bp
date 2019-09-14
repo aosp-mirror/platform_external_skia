@@ -1896,6 +1896,7 @@ cc_test {
         "bench/CoverageBench.cpp",
         "bench/CubicKLMBench.cpp",
         "bench/CubicMapBench.cpp",
+        "bench/DDLRecorderBench.cpp",
         "bench/DashBench.cpp",
         "bench/DisplacementBench.cpp",
         "bench/DrawBitmapAABench.cpp",
