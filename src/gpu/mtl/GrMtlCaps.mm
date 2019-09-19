@@ -745,8 +745,7 @@ void GrMtlCaps::initFormatTable() {
 #ifdef SK_BUILD_FOR_IOS
     // ETC2_RGB8
     info = &fFormatTable[GetFormatIndex(MTLPixelFormatETC2_RGB8)];
-    // GrMtlGpu::onCreateCompressedTexture() not implemented.
-    info->fFlags = 0;
+    info->fFlags = FormatInfo::kTexturable_Flag;
     // NO supported colorTypes
 #endif
 
@@ -971,6 +970,7 @@ GrColorType GrMtlCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& 
         case MTLPixelFormatBGRA8Unorm:        return GrColorType::kBGRA_8888;
         case MTLPixelFormatRGB10A2Unorm:      return GrColorType::kRGBA_1010102;
         case MTLPixelFormatR16Unorm:          return GrColorType::kAlpha_16;
+        case MTLPixelFormatR16Float:          return GrColorType::kAlpha_F16;
         case MTLPixelFormatRG16Unorm:         return GrColorType::kRG_1616;
         // Experimental (for Y416 and mutant P016/P010)
         case MTLPixelFormatRGBA16Unorm:       return GrColorType::kRGBA_16161616;

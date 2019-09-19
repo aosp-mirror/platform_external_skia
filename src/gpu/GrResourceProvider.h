@@ -70,11 +70,18 @@ public:
                                    const GrBackendFormat& format,
                                    GrRenderable renderable,
                                    int renderTargetSampleCnt,
+                                   GrMipMapped mipMapped,
                                    SkBudgeted budgeted,
                                    GrProtected isProtected);
 
+    /**
+     * Create an exact fit texture with initial data to upload. The color type must be valid
+     * for the format and also describe the texel data. This will ensure any conversions that
+     * need to get applied to the data before upload are applied.
+     */
     sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc,
                                    const GrBackendFormat& format,
+                                   GrColorType colorType,
                                    GrRenderable renderable,
                                    int renderTargetSampleCnt,
                                    SkBudgeted budgeted,
@@ -82,15 +89,19 @@ public:
                                    const GrMipLevel texels[],
                                    int mipLevelCount);
 
-    /** Create a potentially loose fit texture with the provided data */
+    /**
+     * Create a potentially loose fit texture with the provided data. The color type must be valid
+     * for the format and also describe the texel data. This will ensure any conversions that
+     * need to get applied to the data before upload are applied.
+     */
     sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc,
                                    const GrBackendFormat& format,
+                                   GrColorType srcColorType,
                                    GrRenderable renderable,
                                    int renderTargetSampleCnt,
                                    SkBudgeted budgeted,
                                    SkBackingFit fit,
                                    GrProtected isProtected,
-                                   GrColorType srcColorType,
                                    const GrMipLevel& mipLevel);
 
     /**
@@ -273,22 +284,24 @@ private:
 
     // Attempts to find a resource in the cache that exactly matches the GrSurfaceDesc. Failing that
     // it returns null. If non-null, the resulting texture is always budgeted.
-    sk_sp<GrTexture> refScratchTexture(const GrSurfaceDesc& desc,
-                                       const GrBackendFormat& format,
-                                       GrRenderable renderable,
+    sk_sp<GrTexture> refScratchTexture(const GrSurfaceDesc&,
+                                       const GrBackendFormat&,
+                                       GrRenderable,
                                        int renderTargetSampleCnt,
-                                       GrProtected isProtected);
+                                       GrMipMapped,
+                                       GrProtected);
 
     /*
      * Try to find an existing scratch texture that exactly matches 'desc'. If successful
      * update the budgeting accordingly.
      */
-    sk_sp<GrTexture> getExactScratch(const GrSurfaceDesc& desc,
-                                     const GrBackendFormat& format,
-                                     GrRenderable renderable,
+    sk_sp<GrTexture> getExactScratch(const GrSurfaceDesc&,
+                                     const GrBackendFormat&,
+                                     GrRenderable,
                                      int renderTargetSampleCnt,
-                                     SkBudgeted budgeted,
-                                     GrProtected isProtected);
+                                     SkBudgeted,
+                                     GrMipMapped,
+                                     GrProtected);
 
     GrResourceCache* cache() { return fCache; }
     const GrResourceCache* cache() const { return fCache; }

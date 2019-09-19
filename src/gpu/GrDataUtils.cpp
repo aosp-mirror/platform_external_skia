@@ -97,13 +97,18 @@ static void create_etc1_block(SkColor col, ETC1Block* block) {
     }
 }
 
-static int num_ETC1_blocks(int w, int h) {
+static int num_ETC1_blocks_w(int w) {
     if (w < 4) {
         w = 1;
     } else {
-       SkASSERT((w & 3) == 0);
-       w >>= 2;
+        SkASSERT((w & 3) == 0);
+        w >>= 2;
     }
+    return w;
+}
+
+static int num_ETC1_blocks(int w, int h) {
+    w = num_ETC1_blocks_w(w);
 
     if (h < 4) {
         h = 1;
@@ -120,6 +125,15 @@ size_t GrCompressedDataSize(SkImage::CompressionType type, int width, int height
         case SkImage::kETC1_CompressionType:
             int numBlocks = num_ETC1_blocks(width, height);
             return numBlocks * sizeof(ETC1Block);
+    }
+    SK_ABORT("Unexpected compression type");
+}
+
+size_t GrCompressedRowBytes(SkImage::CompressionType type, int width) {
+    switch (type) {
+        case SkImage::kETC1_CompressionType:
+            int numBlocksWidth = num_ETC1_blocks_w(width);
+            return numBlocksWidth * sizeof(ETC1Block);
     }
     SK_ABORT("Unexpected compression type");
 }
@@ -285,7 +299,7 @@ static bool fill_buffer_with_color(GrPixelConfig config, int width, int height,
             uint32_t rHalf = SkFloatToHalf(colorf.fR);
             uint32_t gHalf = SkFloatToHalf(colorf.fG);
 
-            uint32_t rgHalf = (rHalf << 16) | gHalf;
+            uint32_t rgHalf = (gHalf << 16) | rHalf;
 
             sk_memset32((uint32_t *) dest, rgHalf, width * height);
             break;

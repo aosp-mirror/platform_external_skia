@@ -683,6 +683,7 @@ cc_library_static {
           "src/gpu/effects/generated/GrPremulInputFragmentProcessor.cpp",
           "src/gpu/effects/generated/GrRRectBlurEffect.cpp",
           "src/gpu/effects/generated/GrRectBlurEffect.cpp",
+          "src/gpu/effects/generated/GrSaturateProcessor.cpp",
           "src/gpu/effects/generated/GrSimpleTextureEffect.cpp",
           "src/gpu/geometry/GrPathUtils.cpp",
           "src/gpu/geometry/GrQuad.cpp",
