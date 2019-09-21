@@ -1204,6 +1204,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkBitmap& bitmap) {
                                                rect,
                                                bitmap.getGenerationID(),
                                                std::move(proxy),
+                                               SkColorTypeToGrColorType(bitmap.colorType()),
                                                bitmap.refColorSpace(),
                                                &this->surfaceProps());
 }
@@ -1217,6 +1218,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkImage* image) {
                                                    SkIRect::MakeWH(image->width(), image->height()),
                                                    image->uniqueID(),
                                                    std::move(proxy),
+                                                   SkColorTypeToGrColorType(image->colorType()),
                                                    image->refColorSpace(),
                                                    &this->surfaceProps());
     } else if (image->peekPixels(&pm)) {
@@ -1262,10 +1264,13 @@ sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial(const SkIRect& subset, bool force
         finalSubset = SkIRect::MakeSize(proxy->isize());
     }
 
+    GrColorType ct = SkColorTypeToGrColorType(this->imageInfo().colorType());
+
     return SkSpecialImage::MakeDeferredFromGpu(fContext.get(),
                                                finalSubset,
                                                kNeedNewImageUniqueID_SpecialImage,
                                                std::move(proxy),
+                                               ct,
                                                this->imageInfo().refColorSpace(),
                                                &this->surfaceProps());
 }
@@ -1619,18 +1624,13 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
     SkBackingFit fit = kNever_TileUsage == cinfo.fTileUsage ? SkBackingFit::kApprox
                                                             : SkBackingFit::kExact;
 
-    GrColorType colorType = fRenderTargetContext->colorSpaceInfo().colorType();
-    if (colorType == GrColorType::kRGBA_1010102) {
-        // If the original device is 1010102, fall back to 8888 so that we have a usable alpha
-        // channel in the layer.
-        colorType = GrColorType::kRGBA_8888;
-    }
+    SkASSERT(cinfo.fInfo.colorType() != kRGBA_1010102_SkColorType);
 
-    auto rtc = fContext->priv().makeDeferredRenderTargetContext(
+    auto rtc = fContext->priv().makeDeferredRenderTargetContextWithFallback(
             fit,
             cinfo.fInfo.width(),
             cinfo.fInfo.height(),
-            colorType,
+            SkColorTypeToGrColorType(cinfo.fInfo.colorType()),
             fRenderTargetContext->colorSpaceInfo().refColorSpace(),
             fRenderTargetContext->numSamples(),
             GrMipMapped::kNo,
