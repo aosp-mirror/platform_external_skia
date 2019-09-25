@@ -168,6 +168,9 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
             printf("scalartomatrix %dx%d", cols, rows);
             break;
         }
+        case ByteCodeInstruction::kShiftLeft: printf("shl %d", READ8()); break;
+        case ByteCodeInstruction::kShiftRightS: printf("shrs %d", READ8()); break;
+        case ByteCodeInstruction::kShiftRightU: printf("shru %d", READ8()); break;
         VECTOR_DISASSEMBLE(kSin, "sin")
         VECTOR_DISASSEMBLE_NO_COUNT(kSqrt, "sqrt")
         case ByteCodeInstruction::kStore: printf("store %d", READ8()); break;
@@ -285,6 +288,45 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         NEXT();                                       \
     }
 
+// A naive implementation of / or % using skvx operations will likely crash with a divide by zero
+// in inactive vector lanesm, so we need to be sure to avoid masked-off lanes.
+#define VECTOR_BINARY_MASKED_OP(base, field, op)            \
+    LABEL(base ## 4)                                        \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-4].field[i] op ## = sp[0].field[i];     \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+        /* fall through */                                  \
+    LABEL(base ## 3) {                                      \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-ip[0]].field[i] op ## = sp[0].field[i]; \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+    }   /* fall through */                                  \
+    LABEL(base ## 2) {                                      \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-ip[0]].field[i] op ## = sp[0].field[i]; \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+    }   /* fall through */                                  \
+    LABEL(base) {                                           \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-ip[0]].field[i] op ## = sp[0].field[i]; \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+        ++ip;                                               \
+        NEXT();                                             \
+    }
+
+
 #define VECTOR_MATRIX_BINARY_OP(base, field, op)          \
     VECTOR_BINARY_OP(base, field, op)                     \
     LABEL(base ## N) {                                    \
@@ -388,7 +430,6 @@ struct StackFrame {
     int fParameterCount;
 };
 
-// TODO: trunc on integers?
 template <typename T>
 static T vec_mod(T a, T b) {
     return a - skvx::trunc(a / b) * b;
@@ -570,6 +611,9 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         &&kReserve,
         &&kReturn,
         &&kScalarToMatrix,
+        &&kShiftLeft,
+        &&kShiftRightS,
+        &&kShiftRightU,
         VECTOR_LABELS(kSin),
         VECTOR_LABELS(kSqrt),
         VECTOR_LABELS(kStore),
@@ -658,6 +702,9 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
     CHECK_LABEL(kReserve);
     CHECK_LABEL(kReturn);
     CHECK_LABEL(kScalarToMatrix);
+    CHECK_LABEL(kShiftLeft);
+    CHECK_LABEL(kShiftRightS);
+    CHECK_LABEL(kShiftRightU);
     CHECK_VECTOR_LABELS(kSin);
     CHECK_VECTOR_LABELS(kSqrt);
     CHECK_VECTOR_LABELS(kStore);
@@ -830,8 +877,8 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
 
     VECTOR_UNARY_FN_VEC(kCos, cosf)
 
-    VECTOR_BINARY_OP(kDivideS, fSigned, /)
-    VECTOR_BINARY_OP(kDivideU, fUnsigned, /)
+    VECTOR_BINARY_MASKED_OP(kDivideS, fSigned, /)
+    VECTOR_BINARY_MASKED_OP(kDivideU, fUnsigned, /)
     VECTOR_MATRIX_BINARY_OP(kDivideF, fFloat, /)
 
     LABEL(kDup4) PUSH(sp[1 - ip[0]]);
@@ -1031,8 +1078,8 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
     }
 
     VECTOR_BINARY_FN(kRemainderF, fFloat, vec_mod<F32>)
-    VECTOR_BINARY_FN(kRemainderS, fSigned, vec_mod<I32>)
-    VECTOR_BINARY_FN(kRemainderU, fUnsigned, vec_mod<U32>)
+    VECTOR_BINARY_MASKED_OP(kRemainderS, fSigned, %)
+    VECTOR_BINARY_MASKED_OP(kRemainderU, fUnsigned, %)
 
     LABEL(kReserve)
         sp += READ8();
@@ -1091,6 +1138,16 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         }
         NEXT();
     }
+
+    LABEL(kShiftLeft)
+        sp[0] = sp[0].fSigned << READ8();
+        NEXT();
+    LABEL(kShiftRightS)
+        sp[0] = sp[0].fSigned >> READ8();
+        NEXT();
+    LABEL(kShiftRightU)
+        sp[0] = sp[0].fUnsigned >> READ8();
+        NEXT();
 
     VECTOR_UNARY_FN_VEC(kSin, sinf)
     VECTOR_UNARY_FN(kSqrt, skvx::sqrt, fFloat)
@@ -1448,6 +1505,9 @@ void ByteCodeFunction::preprocess(const void* labels[]) {
             case ByteCodeInstruction::kReserve: READ8(); break;
             case ByteCodeInstruction::kReturn: READ8(); break;
             case ByteCodeInstruction::kScalarToMatrix: READ8(); READ8(); break;
+            case ByteCodeInstruction::kShiftLeft: READ8(); break;
+            case ByteCodeInstruction::kShiftRightS: READ8(); break;
+            case ByteCodeInstruction::kShiftRightU: READ8(); break;
             VECTOR_PREPROCESS(kSin)
             VECTOR_PREPROCESS_NO_COUNT(kSqrt)
 
