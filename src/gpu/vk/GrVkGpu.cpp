@@ -1105,14 +1105,17 @@ static bool check_image_info(const GrVkCaps& caps,
         return false;
     }
 
+    if (info.fImageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && !caps.supportsSwapchain()) {
+        return false;
+    }
+
     if (info.fYcbcrConversionInfo.isValid()) {
         if (!caps.supportsYcbcrConversion()) {
             return false;
         }
-    }
-
-    if (info.fImageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && !caps.supportsSwapchain()) {
-        return false;
+        if (info.fYcbcrConversionInfo.fExternalFormat != 0) {
+            return true;
+        }
     }
 
     SkASSERT(GrVkFormatColorTypePairIsValid(info.fFormat, colorType));
@@ -1120,6 +1123,9 @@ static bool check_image_info(const GrVkCaps& caps,
 }
 
 static bool check_tex_image_info(const GrVkCaps& caps, const GrVkImageInfo& info) {
+    if (info.fYcbcrConversionInfo.isValid() && info.fYcbcrConversionInfo.fExternalFormat != 0) {
+        return true;
+    }
     if (info.fImageTiling == VK_IMAGE_TILING_OPTIMAL) {
         if (!caps.isVkFormatTexturable(info.fFormat)) {
             return false;
@@ -1344,6 +1350,7 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
         SkDebugf("Trying to create mipmap for linear tiled texture");
         return false;
     }
+    SkASSERT(tex->texturePriv().textureType() == GrTextureType::k2D);
 
     // determine if we can blit to and from this format
     const GrVkCaps& caps = this->vkCaps();
@@ -1448,23 +1455,26 @@ GrStencilAttachment* GrVkGpu::createStencilAttachmentForRenderTarget(
 ////////////////////////////////////////////////////////////////////////////////
 
 bool copy_src_data(GrVkGpu* gpu, const GrVkAlloc& alloc, VkFormat vkFormat,
-                   int width, int height,
-                   const void* srcData, size_t srcRowBytes) {
-    SkASSERT(srcData);
+                   const SkTArray<size_t>& individualMipOffsets,
+                   const SkPixmap srcData[], int numMipLevels) {
+    SkASSERT(srcData && numMipLevels);
     SkASSERT(!GrVkFormatIsCompressed(vkFormat));
+    SkASSERT(individualMipOffsets.count() == numMipLevels);
 
-    void* mapPtr = GrVkMemory::MapAlloc(gpu, alloc);
+    char* mapPtr = (char*) GrVkMemory::MapAlloc(gpu, alloc);
     if (!mapPtr) {
         return false;
     }
     size_t bytesPerPixel = GrVkBytesPerFormat(vkFormat);
-    const size_t trimRowBytes = width * bytesPerPixel;
-    if (!srcRowBytes) {
-        srcRowBytes = trimRowBytes;
-    }
-    SkASSERT(trimRowBytes * height <= alloc.fSize);
 
-    SkRectMemcpy(mapPtr, trimRowBytes, srcData, srcRowBytes, trimRowBytes, height);
+    for (int level = 0; level < numMipLevels; ++level) {
+        const size_t trimRB = srcData[level].width() * bytesPerPixel;
+        SkASSERT(individualMipOffsets[level] + trimRB * srcData[level].height() <= alloc.fSize);
+
+        SkRectMemcpy(mapPtr + individualMipOffsets[level], trimRB,
+                     srcData[level].addr(), srcData[level].rowBytes(),
+                     trimRB, srcData[level].height());
+    }
 
     GrVkMemory::FlushMappedAlloc(gpu, alloc, 0, alloc.fSize);
     GrVkMemory::UnmapAlloc(gpu, alloc);
@@ -1524,11 +1534,6 @@ bool GrVkGpu::createVkImageForBackendSurface(VkFormat vkFormat, int w, int h, bo
     }
 
     if (renderable && !fVkCaps->isFormatRenderable(vkFormat, 1)) {
-        return false;
-    }
-
-    // Currently we don't support uploading pixel data when mipped.
-    if (srcData && GrMipMapped::kYes == mipMapped) {
         return false;
     }
 
@@ -1644,9 +1649,8 @@ bool GrVkGpu::createVkImageForBackendSurface(VkFormat vkFormat, int w, int h, bo
             return false;
         }
 
-        SkASSERT(1 == mipLevelCount);
-        bool result = copy_src_data(this, bufferAlloc, vkFormat, w, h,
-                                    srcData->addr(), srcData->rowBytes());
+        bool result = copy_src_data(this, bufferAlloc, vkFormat, individualMipOffsets,
+                                    srcData, numMipLevels);
         if (!result) {
             GrVkImage::DestroyImageInfo(this, info);
             GrVkMemory::FreeBufferMemory(this, GrVkBuffer::kCopyRead_Type, bufferAlloc);
