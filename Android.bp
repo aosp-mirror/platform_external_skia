@@ -1592,7 +1592,7 @@ cc_test {
         "tests/MessageBusTest.cpp",
         "tests/MetaDataTest.cpp",
         "tests/MipMapTest.cpp",
-        "tests/MultiSkpTest.cpp",
+        "tests/MultiPictureDocumentTest.cpp",
         "tests/NonlinearBlendingTest.cpp",
         "tests/OSPathTest.cpp",
         "tests/OctoBoundsTest.cpp",
