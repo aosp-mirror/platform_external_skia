@@ -175,10 +175,6 @@ def nanobench_flags(api, bot):
     match.append('~keymobi')
     match.append('~path_hairline')
     match.append('~GLInstancedArraysBench') # skia:4714
-  if 'MoltenVK' in bot:
-    # skbug.com/7962
-    match.append('~^path_text_clipped_uncached$')
-    match.append('~^path_text_uncached$')
   if ('Intel' in bot and api.vars.is_linux and not 'Vulkan' in bot):
     # TODO(dogben): Track down what's causing bots to die.
     verbose = True
@@ -208,7 +204,7 @@ def nanobench_flags(api, bot):
     match.append('~top25desk_ebay_com.skp_1.1')
     match.append('~top25desk_ebay.skp_1.1')
     match.append('~top25desk_ebay.skp_1.1_mpd')
-  if 'Vulkan' in bot and ('Nexus5x' in bot or 'GTX660' in bot):
+  if 'Vulkan' in bot and 'GTX660' in bot:
     # skia:8523 skia:9271
     match.append('~compositing_images')
   if 'MacBook10.1' in bot and 'CommandBuffer' in bot:
@@ -375,7 +371,6 @@ TEST_BUILDERS = [
   'Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android',
   ('Perf-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Release-All-'
    'Android_NoGPUThreads'),
-  'Perf-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Release-All-Android_Vulkan',
   'Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Release-All-Android',
   'Perf-Android-Clang-P30-GPU-MaliG76-arm64-Release-All-Android_Vulkan',
   'Perf-Android-Clang-Pixel3a-GPU-Adreno615-arm64-Release-All-Android',
@@ -392,13 +387,12 @@ TEST_BUILDERS = [
    'CommandBuffer'),
   ('Perf-Mac10.13-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Release-All-'
    'Metal'),
-  ('Perf-Mac10.13-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Release-All-'
-   'MoltenVK_Vulkan'),
   ('Perf-Mac10.13-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-All-'
    'CommandBuffer'),
   ('Perf-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release-All-'
     'Valgrind_SK_CPU_LIMIT_SSE41'),
   'Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-ANGLE',
+  'Perf-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Release-All-Vulkan',
   'Perf-iOS-Clang-iPadPro-GPU-PowerVRGT7800-arm64-Release-All',
   'Perf-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All-Metal',
 ]

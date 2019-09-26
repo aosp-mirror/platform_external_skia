@@ -20,7 +20,7 @@
 #include "src/gpu/gl/GrGLUtil.h"
 #endif
 
-// Test wrapping of GrBackendObjects in SkSurfaces and SkImages
+// Test wrapping of GrBackendObjects in SkSurfaces and SkImages (non-static since used in Mtl test)
 void test_wrapping(GrContext* context, skiatest::Reporter* reporter,
                    std::function<GrBackendTexture (GrContext*,
                                                    GrMipMapped,
@@ -140,7 +140,11 @@ static SkColor4f get_expected_color(SkColor4f orig, SkColorType ct) {
     return { r, g, b, a };
 }
 
-// Test initialization of GrBackendObjects to a specific color
+static void check_mipmaps(GrContext* context, const GrBackendTexture& backendTex,
+                          SkColorType skColorType, const SkColor4f expectedColors[6],
+                          skiatest::Reporter* reporter);
+
+// Test initialization of GrBackendObjects to a specific color (non-static since used in Mtl test)
 void test_color_init(GrContext* context, skiatest::Reporter* reporter,
                      std::function<GrBackendTexture (GrContext*,
                                                      const SkColor4f&,
@@ -215,68 +219,86 @@ void test_color_init(GrContext* context, skiatest::Reporter* reporter,
                                        "SkImage::readPixels");
                 }
             }
-
-            // Draw the wrapped image into an RGBA surface attempting to access all the
-            // mipMap levels.
-            {
-#ifdef SK_GL
-                // skbug.com/9141 (RGBA_F32 mipmaps appear to be broken on some Mali devices)
-                if (GrBackendApi::kOpenGL == context->backend()) {
-                    GrGLGpu* glGPU = static_cast<GrGLGpu*>(context->priv().getGpu());
-
-                    if (kRGBA_F32_SkColorType == skColorType && GrMipMapped::kYes == mipMapped &&
-                        kGLES_GrGLStandard == glGPU->ctxInfo().standard()) {
-                        context->deleteBackendTexture(backendTex);
-                        return;
-                    }
-                }
-#endif
-
-                SkImageInfo newII = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType,
-                                                      kPremul_SkAlphaType);
-
-                sk_sp<SkSurface> surf = SkSurface::MakeRenderTarget(context,
-                                                                    SkBudgeted::kNo,
-                                                                    newII, 1,
-                                                                    kTopLeft_GrSurfaceOrigin,
-                                                                    nullptr);
-                if (!surf) {
-                    context->deleteBackendTexture(backendTex);
-                    return;
-                }
-
-                SkCanvas* canvas = surf->getCanvas();
-
-                SkPaint p;
-                p.setFilterQuality(kHigh_SkFilterQuality);
-
-                int numMipLevels = (GrMipMapped::kYes == mipMapped) ? 6 : 1;
-
-                for (int i = 0, rectSize = 32; i < numMipLevels; ++i, rectSize /= 2) {
-                    SkASSERT(rectSize >= 1);
-
-                    SkRect r = SkRect::MakeWH(rectSize, rectSize);
-                    canvas->clear(SK_ColorTRANSPARENT);
-                    canvas->drawImageRect(img, r, &p);
-
-                    SkImageInfo readbackII = SkImageInfo::Make(rectSize, rectSize,
-                                                               kRGBA_8888_SkColorType,
-                                                               kPremul_SkAlphaType);
-                    SkAutoPixmapStorage actual2;
-                    SkAssertResult(actual2.tryAlloc(readbackII));
-                    actual2.erase(SkColors::kTransparent);
-
-                    bool result = surf->readPixels(actual2, 0, 0);
-                    REPORTER_ASSERT(reporter, result);
-
-                    check_solid_pixmap(reporter, expectedColor, actual2, skColorType,
-                                       "mip-level failure");
-                }
-            }
         }
     }
 
+    if (mipMapped == GrMipMapped::kYes) {
+        SkColor4f expectedColor = get_expected_color(color, skColorType);
+        SkColor4f expectedColors[6] = { expectedColor, expectedColor, expectedColor,
+                                        expectedColor, expectedColor, expectedColor };
+        check_mipmaps(context, backendTex, skColorType, expectedColors, reporter);
+    }
+
     context->deleteBackendTexture(backendTex);
+}
+
+// Draw the backend texture (wrapped in an SkImage) into an RGBA surface, attempting to access
+// all the mipMap levels.
+static void check_mipmaps(GrContext* context, const GrBackendTexture& backendTex,
+                          SkColorType skColorType, const SkColor4f expectedColors[6],
+                          skiatest::Reporter* reporter) {
+
+#ifdef SK_GL
+    // skbug.com/9141 (RGBA_F32 mipmaps appear to be broken on some Mali devices)
+    if (GrBackendApi::kOpenGL == context->backend()) {
+        GrGLGpu* glGPU = static_cast<GrGLGpu*>(context->priv().getGpu());
+
+        if (kRGBA_F32_SkColorType == skColorType &&
+            kGLES_GrGLStandard == glGPU->ctxInfo().standard()) {
+            return;
+        }
+    }
+#endif
+
+    SkAlphaType at = SkColorTypeIsAlwaysOpaque(skColorType) ? kOpaque_SkAlphaType
+                                                            : kPremul_SkAlphaType;
+    sk_sp<SkImage> img = SkImage::MakeFromTexture(context,
+                                                  backendTex,
+                                                  kTopLeft_GrSurfaceOrigin,
+                                                  skColorType,
+                                                  at,
+                                                  nullptr);
+    if (!img) {
+        return;
+    }
+
+    SkImageInfo newII = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+
+    sk_sp<SkSurface> surf = SkSurface::MakeRenderTarget(context,
+                                                        SkBudgeted::kNo,
+                                                        newII, 1,
+                                                        kTopLeft_GrSurfaceOrigin,
+                                                        nullptr);
+    if (!surf) {
+        return;
+    }
+
+    SkCanvas* canvas = surf->getCanvas();
+
+    SkPaint p;
+    p.setFilterQuality(kHigh_SkFilterQuality);
+
+    int numMipLevels = 6;
+
+    for (int i = 0, rectSize = 32; i < numMipLevels; ++i, rectSize /= 2) {
+        SkASSERT(rectSize >= 1);
+
+        SkRect r = SkRect::MakeWH(rectSize, rectSize);
+        canvas->clear(SK_ColorTRANSPARENT);
+        canvas->drawImageRect(img, r, &p);
+
+        SkImageInfo readbackII = SkImageInfo::Make(rectSize, rectSize,
+                                                   kRGBA_8888_SkColorType,
+                                                   kPremul_SkAlphaType);
+        SkAutoPixmapStorage actual2;
+        SkAssertResult(actual2.tryAlloc(readbackII));
+        actual2.erase(SkColors::kTransparent);
+
+        bool result = surf->readPixels(actual2, 0, 0);
+        REPORTER_ASSERT(reporter, result);
+
+        check_solid_pixmap(reporter, expectedColors[i], actual2, skColorType, "mip-level failure");
+    }
 }
 
 enum class VkLayout {
@@ -493,9 +515,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ColorTypeBackendAllocationTest, reporter, ctx
                             kGray_8_SkColorType == combo.fColorType) {
                             continue;
                         }
-                    } else if (GrBackendApi::kMetal == context->backend()) {
-                        // Not yet implemented for Metal
-                        continue;
                     }
 
                     auto createWithColorMtd = [colorType](GrContext* context,
@@ -584,9 +603,6 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLBackendAllocationTest, reporter, ctxInfo) {
 
         { GrColorType::kRGBA_16161616,    GR_GL_RGBA16,               SkColors::kLtGray    },
         { GrColorType::kRG_F16,           GR_GL_RG16F,                SkColors::kYellow    },
-
-        { GrColorType::kUnknown,          GR_GL_COMPRESSED_RGB8_ETC2, SkColors::kRed      },
-        { GrColorType::kUnknown,          GR_GL_COMPRESSED_ETC1_RGB8, SkColors::kRed      },
     };
 
     for (auto combo : combinations) {
@@ -618,10 +634,7 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLBackendAllocationTest, reporter, ctxInfo) {
                     }
                 }
 
-
-                // We current disallow uninitialized compressed textures in the GL backend
-                if (GR_GL_COMPRESSED_RGB8_ETC2 != combo.fFormat &&
-                    GR_GL_COMPRESSED_ETC1_RGB8 != combo.fFormat) {
+                {
                     auto uninitCreateMtd = [format](GrContext* context,
                                                     GrMipMapped mipMapped,
                                                     GrRenderable renderable) {
@@ -709,7 +722,6 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkBackendAllocationTest, reporter, ctxInfo) {
         { GrColorType::kRGBA_F16_Clamped, VK_FORMAT_R16G16B16A16_SFLOAT,      SkColors::kLtGray   },
         { GrColorType::kRGBA_F16,         VK_FORMAT_R16G16B16A16_SFLOAT,      SkColors::kYellow   },
 
-        // These backend formats don't have SkColorType equivalents
         { GrColorType::kRG_88,            VK_FORMAT_R8G8_UNORM,               { 1, 0.5f, 0, 1 }   },
         { GrColorType::kAlpha_F16,        VK_FORMAT_R16_SFLOAT,               { 1.0f, 0, 0, 0.5f }},
 
@@ -717,8 +729,6 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkBackendAllocationTest, reporter, ctxInfo) {
         { GrColorType::kRG_1616,          VK_FORMAT_R16G16_UNORM,             SkColors::kYellow   },
         { GrColorType::kRGBA_16161616,    VK_FORMAT_R16G16B16A16_UNORM,       SkColors::kLtGray   },
         { GrColorType::kRG_F16,           VK_FORMAT_R16G16_SFLOAT,            SkColors::kYellow   },
-
-        { GrColorType::kUnknown,          VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,  SkColors::kRed      },
     };
 
     for (auto combo : combinations) {
@@ -744,8 +754,7 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkBackendAllocationTest, reporter, ctxInfo) {
                     }
                 }
 
-                // We current disallow uninitialized compressed textures in the Vulkan backend
-                if (combo.fFormat != VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK) {
+                {
                     auto uninitCreateMtd = [format](GrContext* context,
                                                     GrMipMapped mipMapped,
                                                     GrRenderable renderable) {
