@@ -108,10 +108,6 @@ public:
         this->didWriteToSurface(surface, origin, bounds);
     }
 
-    void resolveRenderTargetNoFlush(GrRenderTarget* target) {
-        this->internalResolveRenderTarget(target, false);
-    }
-
 private:
     GrMtlGpu(GrContext* context, const GrContextOptions& options,
              id<MTLDevice> device, id<MTLCommandQueue> queue, MTLFeatureSet featureSet);
@@ -185,14 +181,9 @@ private:
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 
-    void onResolveRenderTarget(GrRenderTarget* target) override {
-        // This resolve is called when we are preparing an msaa surface for external I/O. It is
-        // called after flushing, so we need to make sure we submit the command buffer after doing
-        // the resolve so that the resolve actually happens.
-        this->internalResolveRenderTarget(target, true);
-    }
+    void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
+                               GrSurfaceOrigin resolveOrigin, ForExternalIO) override;
 
-    void internalResolveRenderTarget(GrRenderTarget* target, bool requiresSubmit);
     void resolveTexture(id<MTLTexture> colorTexture, id<MTLTexture> resolveTexture);
 
     void onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
@@ -226,6 +217,11 @@ private:
                                            bool renderable, GrMipMapped,
                                            const SkPixmap srcData[], int numMipLevels,
                                            const SkColor4f* color, GrMtlTextureInfo*);
+
+#if GR_TEST_UTILS
+    void testingOnly_startCapture() override;
+    void testingOnly_endCapture() override;
+#endif
 
     sk_sp<GrMtlCaps> fMtlCaps;
 
