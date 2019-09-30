@@ -137,7 +137,7 @@ public:
 private:
     ClockwiseTestOp(bool readSkFragCoord, float y)
             : GrDrawOp(ClassID()), fReadSkFragCoord(readSkFragCoord), fY(y) {
-        this->setBounds(SkRect::MakeIWH(300, 100), HasAABloat::kNo, IsZeroArea::kNo);
+        this->setBounds(SkRect::MakeXYWH(0, fY, 100, 100), HasAABloat::kNo, IsZeroArea::kNo);
     }
 
     const char* name() const override { return "ClockwiseTestOp"; }
@@ -166,7 +166,8 @@ private:
         mesh.setNonIndexedNonInstanced(4);
         mesh.setVertexData(std::move(fVertexBuffer));
         flushState->opsRenderPass()->draw(ClockwiseTestProcessor(fReadSkFragCoord), pipeline,
-                                          nullptr, nullptr, &mesh, 1, SkRect::MakeIWH(100, 100));
+                                          nullptr, nullptr, &mesh, 1,
+                                          SkRect::MakeXYWH(0, fY, 100, 100));
     }
 
     sk_sp<GrBuffer> fVertexBuffer;
@@ -188,7 +189,7 @@ void ClockwiseGM::onDraw(GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* c
 
     // Draw the test to an off-screen, top-down render target.
     if (auto topLeftRTC = ctx->priv().makeDeferredRenderTargetContext(
-                SkBackingFit::kExact, 100, 200, rtc->colorSpaceInfo().colorType(), nullptr, 1,
+                SkBackingFit::kExact, 100, 200, rtc->colorInfo().colorType(), nullptr, 1,
                 GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin, nullptr, SkBudgeted::kYes)) {
         topLeftRTC->clear(nullptr, SK_PMColor4fTRANSPARENT,
                           GrRenderTargetContext::CanClearFullscreen::kYes);
@@ -204,7 +205,7 @@ void ClockwiseGM::onDraw(GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* c
 
     // Draw the test to an off-screen, bottom-up render target.
     if (auto topLeftRTC = ctx->priv().makeDeferredRenderTargetContext(
-                SkBackingFit::kExact, 100, 200, rtc->colorSpaceInfo().colorType(), nullptr, 1,
+                SkBackingFit::kExact, 100, 200, rtc->colorInfo().colorType(), nullptr, 1,
                 GrMipMapped::kNo, kBottomLeft_GrSurfaceOrigin, nullptr, SkBudgeted::kYes)) {
         topLeftRTC->clear(nullptr, SK_PMColor4fTRANSPARENT,
                           GrRenderTargetContext::CanClearFullscreen::kYes);
