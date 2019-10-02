@@ -544,7 +544,7 @@ cc_library_static {
           "src/gpu/GrBufferAllocPool.cpp",
           "src/gpu/GrCaps.cpp",
           "src/gpu/GrClipStackClip.cpp",
-          "src/gpu/GrColorSpaceInfo.cpp",
+          "src/gpu/GrColorInfo.cpp",
           "src/gpu/GrColorSpaceXform.cpp",
           "src/gpu/GrContext.cpp",
           "src/gpu/GrContextPriv.cpp",
@@ -2439,6 +2439,6 @@ cc_test {
     ],
 
     data: [
-        "resources/*",
+        "resources/**/*",
     ],
 }
