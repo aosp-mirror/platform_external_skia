@@ -543,7 +543,6 @@ cc_library_static {
           "src/gpu/GrBlurUtils.cpp",
           "src/gpu/GrBufferAllocPool.cpp",
           "src/gpu/GrCaps.cpp",
-          "src/gpu/GrClientMappedBufferManager.cpp",
           "src/gpu/GrClipStackClip.cpp",
           "src/gpu/GrColorInfo.cpp",
           "src/gpu/GrColorSpaceXform.cpp",

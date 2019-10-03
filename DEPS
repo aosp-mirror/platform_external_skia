@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@f22f16d3c0a80ce7bbc4a8eeff81fde63aa6ad40",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@2328d65ab30dc165f7126392eb7a18ccbb6d6f82",
   "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@472bd1ec29d8d4e03404bf4b4e0233e4fc6031ce",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
@@ -30,13 +30,13 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@53ab2144b90abede33be5161aec5dfc94ddc3caf",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@29c11140baaf9f7fdaa39a583672c556bf1795a1",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@0c4feb643b89d1792b02f7cbef315e9d95633bd7",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@0cd9a67ce84f0083fef7aee7e0f3a0e5e59b8053",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@5be09849424d901df56cfacd6f543bb4c6738993",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@65e7b2b6c98a4d35e26bc2fc437e2e00f1393dc2",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@c00626cb02916c536888a67a3069e73d9a6dff19",
+    "url": "https://chromium.googlesource.com/chromium/src.git@61886adc17cde5490e7f4ab2d7f250f4d1e73ee4",
     "condition": "checkout_chromium",
   },
 }

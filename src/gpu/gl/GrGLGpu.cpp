@@ -1658,6 +1658,7 @@ void GrGLGpu::disableWindowRectangles() {
 }
 
 bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget,
+                           int numSamples,
                            GrSurfaceOrigin origin,
                            const GrPrimitiveProcessor& primProc,
                            const GrPipeline& pipeline,
@@ -1677,7 +1678,8 @@ bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget,
     SkASSERT(SkToBool(primProcProxies) == SkToBool(primProc.numTextureSamplers()));
 
     sk_sp<GrGLProgram> program(fProgramCache->refProgram(
-            this, renderTarget, origin, primProc, primProcProxies, pipeline, willDrawPoints));
+            this, renderTarget, numSamples, origin, primProc, primProcProxies, pipeline,
+            willDrawPoints));
     if (!program) {
         GrCapsDebugf(this->caps(), "Failed to create program!\n");
         return false;
@@ -1872,15 +1874,7 @@ void GrGLGpu::clearStencil(GrRenderTarget* target, int clearValue) {
     fHWStencilSettings.invalidate();
 }
 
-static bool use_tiled_rendering(const GrGLCaps& glCaps,
-                                const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilLoadStore) {
-    // Only use the tiled rendering extension if we can explicitly clear and discard the stencil.
-    // Otherwise it's faster to just not use it.
-    return glCaps.tiledRenderingSupport() && GrLoadOp::kClear == stencilLoadStore.fLoadOp &&
-           GrStoreOp::kDiscard == stencilLoadStore.fStoreOp;
-}
-
-void GrGLGpu::beginCommandBuffer(GrRenderTarget* rt, const SkIRect& bounds, GrSurfaceOrigin origin,
+void GrGLGpu::beginCommandBuffer(GrRenderTarget* rt,
                                  const GrOpsRenderPass::LoadAndStoreInfo& colorLoadStore,
                                  const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilLoadStore) {
     SkASSERT(!fIsExecutingCommandBuffer_DebugOnly);
@@ -1890,15 +1884,6 @@ void GrGLGpu::beginCommandBuffer(GrRenderTarget* rt, const SkIRect& bounds, GrSu
     auto glRT = static_cast<GrGLRenderTarget*>(rt);
     this->flushRenderTarget(glRT);
     SkDEBUGCODE(fIsExecutingCommandBuffer_DebugOnly = true);
-
-    if (use_tiled_rendering(this->glCaps(), stencilLoadStore)) {
-        auto nativeBounds = GrNativeRect::MakeRelativeTo(origin, glRT->height(), bounds);
-        GrGLbitfield preserveMask = (GrLoadOp::kLoad == colorLoadStore.fLoadOp)
-                ? GR_GL_COLOR_BUFFER_BIT0 : GR_GL_NONE;
-        SkASSERT(GrLoadOp::kLoad != stencilLoadStore.fLoadOp);  // Handled by use_tiled_rendering().
-        GL_CALL(StartTiling(nativeBounds.fX, nativeBounds.fY, nativeBounds.fWidth,
-                            nativeBounds.fHeight, preserveMask));
-    }
 
     GrGLbitfield clearMask = 0;
     if (GrLoadOp::kClear == colorLoadStore.fLoadOp) {
@@ -1956,14 +1941,6 @@ void GrGLGpu::endCommandBuffer(GrRenderTarget* rt,
                                            discardAttachments.begin()));
             }
         }
-    }
-
-    if (use_tiled_rendering(this->glCaps(), stencilLoadStore)) {
-        GrGLbitfield preserveMask = (GrStoreOp::kStore == colorLoadStore.fStoreOp)
-                ? GR_GL_COLOR_BUFFER_BIT0 : GR_GL_NONE;
-        // Handled by use_tiled_rendering().
-        SkASSERT(GrStoreOp::kStore != stencilLoadStore.fStoreOp);
-        GL_CALL(EndTiling(preserveMask));
     }
 
     SkDEBUGCODE(fIsExecutingCommandBuffer_DebugOnly = false);
@@ -2121,7 +2098,7 @@ GrOpsRenderPass* GrGLGpu::getOpsRenderPass(
         fCachedOpsRenderPass.reset(new GrGLOpsRenderPass(this));
     }
 
-    fCachedOpsRenderPass->set(rt, bounds, origin, colorInfo, stencilInfo);
+    fCachedOpsRenderPass->set(rt, origin, colorInfo, stencilInfo);
     return fCachedOpsRenderPass.get();
 }
 
@@ -2203,7 +2180,7 @@ void GrGLGpu::flushViewport(int width, int height) {
     #endif
 #endif
 
-void GrGLGpu::draw(GrRenderTarget* renderTarget, GrSurfaceOrigin origin,
+void GrGLGpu::draw(GrRenderTarget* renderTarget, int numSamples, GrSurfaceOrigin origin,
                    const GrPrimitiveProcessor& primProc,
                    const GrPipeline& pipeline,
                    const GrPipeline::FixedDynamicState* fixedDynamicState,
@@ -2219,7 +2196,7 @@ void GrGLGpu::draw(GrRenderTarget* renderTarget, GrSurfaceOrigin origin,
             break;
         }
     }
-    if (!this->flushGLState(renderTarget, origin, primProc, pipeline, fixedDynamicState,
+    if (!this->flushGLState(renderTarget, numSamples, origin, primProc, pipeline, fixedDynamicState,
                             dynamicStateArrays, meshCount, hasPoints)) {
         return;
     }
