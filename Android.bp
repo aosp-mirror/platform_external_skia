@@ -163,6 +163,7 @@ cc_library_static {
         "src/core/SkICC.cpp",
         "src/core/SkImageFilter.cpp",
         "src/core/SkImageFilterCache.cpp",
+        "src/core/SkImageFilterTypes.cpp",
         "src/core/SkImageGenerator.cpp",
         "src/core/SkImageInfo.cpp",
         "src/core/SkLatticeIter.cpp",
