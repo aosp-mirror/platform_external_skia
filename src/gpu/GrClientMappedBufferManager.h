@@ -34,7 +34,7 @@ public:
     };
     using BufferFinishedMessageBus = SkMessageBus<BufferFinishedMessage>;
 
-    GrClientMappedBufferManager() = default;
+    GrClientMappedBufferManager(uint32_t contextID);
     GrClientMappedBufferManager(const GrClientMappedBufferManager&) = delete;
     GrClientMappedBufferManager(GrClientMappedBufferManager&&) = delete;
 

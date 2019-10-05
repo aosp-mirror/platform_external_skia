@@ -27,8 +27,7 @@ public:
     GrGLOpsRenderPass(GrGLGpu* gpu) : fGpu(gpu) {}
 
     void begin() override {
-        fGpu->beginCommandBuffer(fRenderTarget, fContentBounds, fOrigin, fColorLoadAndStoreInfo,
-                                 fStencilLoadAndStoreInfo);
+        fGpu->beginCommandBuffer(fRenderTarget, fColorLoadAndStoreInfo, fStencilLoadAndStoreInfo);
     }
 
     void end() override {
@@ -43,8 +42,8 @@ public:
         state->doUpload(upload);
     }
 
-    void set(GrRenderTarget*, const SkIRect& contentBounds, GrSurfaceOrigin,
-             const LoadAndStoreInfo&, const StencilLoadAndStoreInfo&);
+    void set(GrRenderTarget*, GrSurfaceOrigin, const LoadAndStoreInfo&,
+             const StencilLoadAndStoreInfo&);
 
     void reset() {
         fRenderTarget = nullptr;
@@ -60,8 +59,8 @@ private:
                 const GrMesh mesh[],
                 int meshCount,
                 const SkRect& bounds) override {
-        fGpu->draw(fRenderTarget, fOrigin, primProc, pipeline, fixedDynamicState,
-                   dynamicStateArrays, mesh, meshCount);
+        fGpu->draw(fRenderTarget, fRenderTarget->numSamples(), fOrigin, primProc, pipeline,
+                   fixedDynamicState, dynamicStateArrays, mesh, meshCount);
     }
 
     void onClear(const GrFixedClip& clip, const SkPMColor4f& color) override {
@@ -72,10 +71,9 @@ private:
         fGpu->clearStencilClip(clip, insideStencilMask, fRenderTarget, fOrigin);
     }
 
-    GrGLGpu*                fGpu;
-    SkIRect                 fContentBounds;
-    LoadAndStoreInfo        fColorLoadAndStoreInfo;
-    StencilLoadAndStoreInfo fStencilLoadAndStoreInfo;
+    GrGLGpu*                                 fGpu;
+    GrOpsRenderPass::LoadAndStoreInfo        fColorLoadAndStoreInfo;
+    GrOpsRenderPass::StencilLoadAndStoreInfo fStencilLoadAndStoreInfo;
 
     typedef GrOpsRenderPass INHERITED;
 };

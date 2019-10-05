@@ -67,7 +67,9 @@ GrMtlPipelineState* GrMtlOpsRenderPass::prepareDrawState(
     SkASSERT(SkToBool(primProcProxies) == SkToBool(primProc.numTextureSamplers()));
 
     GrMtlPipelineState* pipelineState =
-        fGpu->resourceProvider().findOrCreateCompatiblePipelineState(fRenderTarget, fOrigin,
+        fGpu->resourceProvider().findOrCreateCompatiblePipelineState(fRenderTarget,
+                                                                     fRenderTarget->numSamples(),
+                                                                     fOrigin,
                                                                      pipeline,
                                                                      primProc,
                                                                      primProcProxies,
@@ -303,7 +305,6 @@ void GrMtlOpsRenderPass::sendMeshToGpu(GrPrimitiveType primitiveType,
                                        int baseVertex) {
     this->bindGeometry(vertexBuffer, 0, nullptr);
 
-    SkASSERT(primitiveType != GrPrimitiveType::kLinesAdjacency); // Geometry shaders not supported.
     [fActiveRenderCmdEncoder drawPrimitives:gr_to_mtl_primitive(primitiveType)
                                 vertexStart:baseVertex
                                 vertexCount:vertexCount];
@@ -320,7 +321,6 @@ void GrMtlOpsRenderPass::sendIndexedMeshToGpu(GrPrimitiveType primitiveType,
                                               GrPrimitiveRestart restart) {
     this->bindGeometry(vertexBuffer, fCurrentVertexStride*baseVertex, nullptr);
 
-    SkASSERT(primitiveType != GrPrimitiveType::kLinesAdjacency); // Geometry shaders not supported.
     id<MTLBuffer> mtlIndexBuffer = nil;
     if (indexBuffer) {
         SkASSERT(!indexBuffer->isCpuBuffer());
@@ -350,7 +350,6 @@ void GrMtlOpsRenderPass::sendInstancedMeshToGpu(GrPrimitiveType primitiveType,
                                                 int baseInstance) {
     this->bindGeometry(vertexBuffer, 0, instanceBuffer);
 
-    SkASSERT(primitiveType != GrPrimitiveType::kLinesAdjacency); // Geometry shaders not supported.
     [fActiveRenderCmdEncoder drawPrimitives:gr_to_mtl_primitive(primitiveType)
                                 vertexStart:baseVertex
                                 vertexCount:vertexCount
@@ -370,7 +369,6 @@ void GrMtlOpsRenderPass::sendIndexedInstancedMeshToGpu(GrPrimitiveType primitive
                                                             GrPrimitiveRestart restart) {
     this->bindGeometry(vertexBuffer, 0, instanceBuffer);
 
-    SkASSERT(primitiveType != GrPrimitiveType::kLinesAdjacency); // Geometry shaders not supported.
     id<MTLBuffer> mtlIndexBuffer = nil;
     if (indexBuffer) {
         SkASSERT(!indexBuffer->isCpuBuffer());

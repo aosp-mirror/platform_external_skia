@@ -1227,9 +1227,8 @@ GrFence SK_WARN_UNUSED_RESULT GrMtlGpu::insertFence() {
     // If MTLSharedEvent isn't available, we create a semaphore and signal it
     // within the current command buffer's completion handler.
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-    __block dispatch_semaphore_t block_sema = semaphore;
     cmdBuffer->addCompletedHandler(^(id <MTLCommandBuffer>commandBuffer) {
-        dispatch_semaphore_signal(block_sema);
+        dispatch_semaphore_signal(semaphore);
     });
 
     const void* cfFence = (__bridge_retained const void*) semaphore;

@@ -9,6 +9,9 @@
 
 #include <algorithm>
 
+GrClientMappedBufferManager::GrClientMappedBufferManager(uint32_t contextID)
+        : fFinishedBufferInbox(contextID) {}
+
 GrClientMappedBufferManager::~GrClientMappedBufferManager() {
     this->process();
     if (!fAbandoned) {

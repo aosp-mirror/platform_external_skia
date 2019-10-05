@@ -78,6 +78,7 @@ bool GrContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFac
     if (fGpu) {
         fResourceCache = new GrResourceCache(this->caps(), this->singleOwner(), this->contextID());
         fResourceProvider = new GrResourceProvider(fGpu.get(), fResourceCache, this->singleOwner());
+        fMappedBufferManager = skstd::make_unique<GrClientMappedBufferManager>(this->contextID());
     }
 
     if (fResourceCache) {
@@ -97,8 +98,6 @@ bool GrContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFac
     if (!fShaderErrorHandler) {
         fShaderErrorHandler = GrShaderUtils::DefaultShaderErrorHandler();
     }
-
-    fMappedBufferManager = skstd::make_unique<GrClientMappedBufferManager>();
 
     return true;
 }
@@ -192,6 +191,10 @@ void GrContext::performDeferredCleanup(std::chrono::milliseconds msNotUsed) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
     ASSERT_SINGLE_OWNER
+
+    if (this->abandoned()) {
+        return;
+    }
 
     fMappedBufferManager->process();
     auto purgeTime = GrStdSteadyClock::now() - msNotUsed;
