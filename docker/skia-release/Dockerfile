@@ -45,7 +45,7 @@ RUN cd /tmp/skia/skia \
   && ./bin/gn gen out/Static \
   && git rev-parse HEAD > VERSION \
   && /tmp/depot_tools/ninja -C out/Static \
-  && chown -R skia:skia out/Static
+  && chown -R skia:skia .
 
 # Uncomment the lines below and update the ref to patch in a CL.
 #
