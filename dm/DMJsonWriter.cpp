@@ -10,7 +10,8 @@
 #include "ProcStats.h"
 #include "SkCommonFlags.h"
 #include "SkData.h"
-#include "SkJSONCPP.h"
+#include "SkJSON.h"
+#include "SkJSONWriter.h"
 #include "SkMutex.h"
 #include "SkOSFile.h"
 #include "SkOSPath.h"
@@ -40,60 +41,86 @@ void JsonWriter::DumpJson() {
         return;
     }
 
-    Json::Value root;
+    SkString path = SkOSPath::Join(FLAGS_writePath[0], "dm.json");
+    sk_mkdir(FLAGS_writePath[0]);
+    SkFILEWStream stream(path.c_str());
+    SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
+
+    writer.beginObject(); // root
 
     for (int i = 1; i < FLAGS_properties.count(); i += 2) {
-        root[FLAGS_properties[i-1]] = FLAGS_properties[i];
+        writer.appendString(FLAGS_properties[i-1], FLAGS_properties[i]);
     }
+
+    writer.beginObject("key");
     for (int i = 1; i < FLAGS_key.count(); i += 2) {
-        root["key"][FLAGS_key[i-1]] = FLAGS_key[i];
+        writer.appendString(FLAGS_key[i-1], FLAGS_key[i]);
+    }
+    writer.endObject();
+
+    int maxResidentSetSizeMB = sk_tools::getMaxResidentSetSizeMB();
+    if (maxResidentSetSizeMB != -1) {
+        writer.appendS32("max_rss_MB", maxResidentSetSizeMB);
     }
 
     {
         SkAutoMutexAcquire lock(&gBitmapResultLock);
+        writer.beginArray("results");
         for (int i = 0; i < gBitmapResults.count(); i++) {
-            Json::Value result;
-            result["key"]["name"]              = gBitmapResults[i].name.c_str();
-            result["key"]["config"]            = gBitmapResults[i].config.c_str();
-            result["key"]["source_type"]       = gBitmapResults[i].sourceType.c_str();
-            result["options"]["ext"]           = gBitmapResults[i].ext.c_str();
-            result["options"]["gamma_correct"] = gBitmapResults[i].gammaCorrect ? "yes" : "no";
-            result["md5"]                      = gBitmapResults[i].md5.c_str();
+            writer.beginObject();
+
+            writer.beginObject("key");
+            writer.appendString("name"       , gBitmapResults[i].name.c_str());
+            writer.appendString("config"     , gBitmapResults[i].config.c_str());
+            writer.appendString("source_type", gBitmapResults[i].sourceType.c_str());
 
             // Source options only need to be part of the key if they exist.
             // Source type by source type, we either always set options or never set options.
             if (!gBitmapResults[i].sourceOptions.isEmpty()) {
-                result["key"]["source_options"] = gBitmapResults[i].sourceOptions.c_str();
+                writer.appendString("source_options", gBitmapResults[i].sourceOptions.c_str());
             }
+            writer.endObject(); // key
 
-            root["results"].append(result);
+            writer.beginObject("options");
+            writer.appendString("ext"  ,       gBitmapResults[i].ext.c_str());
+            writer.appendString("gamut",       gBitmapResults[i].gamut.c_str());
+            writer.appendString("transfer_fn", gBitmapResults[i].transferFn.c_str());
+            writer.appendString("color_type",  gBitmapResults[i].colorType.c_str());
+            writer.appendString("alpha_type",  gBitmapResults[i].alphaType.c_str());
+            writer.appendString("color_depth", gBitmapResults[i].colorDepth.c_str());
+            writer.endObject(); // options
+
+            writer.appendString("md5", gBitmapResults[i].md5.c_str());
+
+            writer.endObject(); // 1 result
         }
+        writer.endArray(); // results
     }
 
     {
         SkAutoMutexAcquire lock(gFailureLock);
-        for (int i = 0; i < gFailures.count(); i++) {
-            Json::Value result;
-            result["file_name"]     = gFailures[i].fileName;
-            result["line_no"]       = gFailures[i].lineNo;
-            result["condition"]     = gFailures[i].condition;
-            result["message"]       = gFailures[i].message.c_str();
-
-            root["test_results"]["failures"].append(result);
+        if (gFailures.count() > 0) {
+            writer.beginObject("test_results");
+            writer.beginArray("failures");
+            for (int i = 0; i < gFailures.count(); i++) {
+                writer.beginObject();
+                writer.appendString("file_name", gFailures[i].fileName);
+                writer.appendS32   ("line_no"  , gFailures[i].lineNo);
+                writer.appendString("condition", gFailures[i].condition);
+                writer.appendString("message"  , gFailures[i].message.c_str());
+                writer.endObject(); // 1 failure
+            }
+            writer.endArray(); // failures
+            writer.endObject(); // test_results
         }
     }
 
-    int maxResidentSetSizeMB = sk_tools::getMaxResidentSetSizeMB();
-    if (maxResidentSetSizeMB != -1) {
-        root["max_rss_MB"] = sk_tools::getMaxResidentSetSizeMB();
-    }
-
-    SkString path = SkOSPath::Join(FLAGS_writePath[0], "dm.json");
-    sk_mkdir(FLAGS_writePath[0]);
-    SkFILEWStream stream(path.c_str());
-    stream.writeText(Json::StyledWriter().write(root).c_str());
+    writer.endObject(); // root
+    writer.flush();
     stream.flush();
 }
+
+using namespace skjson;
 
 bool JsonWriter::ReadJson(const char* path, void(*callback)(BitmapResult)) {
     sk_sp<SkData> json(SkData::MakeFromFileName(path));
@@ -101,26 +128,35 @@ bool JsonWriter::ReadJson(const char* path, void(*callback)(BitmapResult)) {
         return false;
     }
 
-    Json::Reader reader;
-    Json::Value root;
-    const char* data = (const char*)json->data();
-    if (!reader.parse(data, data+json->size(), root)) {
+    DOM dom((const char*)json->data(), json->size());
+    const ObjectValue* root = dom.root();
+    if (!root) {
         return false;
     }
 
-    const Json::Value& results = root["results"];
-    BitmapResult br;
-    for (unsigned i = 0; i < results.size(); i++) {
-        const Json::Value& r = results[i];
-        br.name         = r["key"]["name"].asCString();
-        br.config       = r["key"]["config"].asCString();
-        br.sourceType   = r["key"]["source_type"].asCString();
-        br.ext          = r["options"]["ext"].asCString();
-        br.gammaCorrect = 0 == strcmp("yes", r["options"]["gamma_correct"].asCString());
-        br.md5          = r["md5"].asCString();
+    const ArrayValue* results = (*root)["results"];
+    if (!results) {
+        return false;
+    }
 
-        if (!r["key"]["source_options"].isNull()) {
-            br.sourceOptions = r["key"]["source_options"].asCString();
+    BitmapResult br;
+    for (const ObjectValue* r : *results) {
+        const ObjectValue& key = (*r)["key"].as<ObjectValue>();
+        const ObjectValue& options = (*r)["options"].as<ObjectValue>();
+
+        br.name         = key["name"].as<StringValue>().begin();
+        br.config       = key["config"].as<StringValue>().begin();
+        br.sourceType   = key["source_type"].as<StringValue>().begin();
+        br.ext          = options["ext"].as<StringValue>().begin();
+        br.gamut        = options["gamut"].as<StringValue>().begin();
+        br.transferFn   = options["transfer_fn"].as<StringValue>().begin();
+        br.colorType    = options["color_type"].as<StringValue>().begin();
+        br.alphaType    = options["alpha_type"].as<StringValue>().begin();
+        br.colorDepth   = options["color_depth"].as<StringValue>().begin();
+        br.md5          = (*r)["md5"].as<StringValue>().begin();
+
+        if (const StringValue* so = key["source_options"]) {
+            br.sourceOptions = so->begin();
         }
         callback(br);
     }

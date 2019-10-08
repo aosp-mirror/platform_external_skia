@@ -12,15 +12,16 @@
  * have been selected to require 32 bits of precision and full IEEE conformance
  */
 
-#include <float.h>
 #include "Test.h"
 
-#if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrContextPriv.h"
 #include "GrProxyProvider.h"
 #include "GrTextureProxy.h"
+#include "ProxyUtils.h"
 #include "SkHalf.h"
+
+#include <float.h>
 
 static const int DEV_W = 100, DEV_H = 100;
 
@@ -33,7 +34,6 @@ void runFPTest(skiatest::Reporter* reporter, GrContext* context, T min, T max, T
         return;
     }
 
-    GrProxyProvider* proxyProvider = context->contextPriv().proxyProvider();
     SkTDArray<T> controlPixelData, readBuffer;
     controlPixelData.setCount(arraySize);
     readBuffer.setCount(arraySize);
@@ -45,26 +45,19 @@ void runFPTest(skiatest::Reporter* reporter, GrContext* context, T min, T max, T
         controlPixelData[i + 3] = maxInt;
     }
 
-    for (int origin = 0; origin < 2; ++origin) {
-        GrSurfaceDesc desc;
-        desc.fFlags = kRenderTarget_GrSurfaceFlag;
-        desc.fOrigin = 0 == origin ? kTopLeft_GrSurfaceOrigin : kBottomLeft_GrSurfaceOrigin;
-        desc.fWidth = DEV_W;
-        desc.fHeight = DEV_H;
-        desc.fConfig = GrColorTypeToPixelConfig(colorType, GrSRGBEncoded::kNo);
-
-        sk_sp<GrTextureProxy> fpProxy = proxyProvider->createTextureProxy(
-                                           desc, SkBudgeted::kNo, controlPixelData.begin(), 0);
+    for (auto origin : {kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin}) {
+        auto fpProxy = sk_gpu_test::MakeTextureProxyFromData(context, true, DEV_W, DEV_H, colorType,
+                                                             origin, controlPixelData.begin(), 0);
         // Floating point textures are NOT supported everywhere
         if (!fpProxy) {
             continue;
         }
 
-        sk_sp<GrSurfaceContext> sContext = context->contextPriv().makeWrappedSurfaceContext(
+        sk_sp<GrSurfaceContext> sContext = context->priv().makeWrappedSurfaceContext(
                                                                             std::move(fpProxy));
         REPORTER_ASSERT(reporter, sContext);
 
-        bool result = context->contextPriv().readSurfacePixels(
+        bool result = context->priv().readSurfacePixels(
                 sContext.get(), 0, 0, DEV_W, DEV_H, colorType, nullptr, readBuffer.begin(), 0);
         REPORTER_ASSERT(reporter, result);
         REPORTER_ASSERT(reporter,
@@ -105,5 +98,3 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(HalfFloatRGBATextureTest, reporter, ctxInfo) 
                       kMaxIntegerRepresentableInHalfFloatingPoint, HALF_RGBA_CONTROL_ARRAY_SIZE,
                       GrColorType::kRGBA_F16);
 }
-
-#endif

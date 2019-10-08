@@ -7,11 +7,10 @@
 
 #include "SkTypes.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrContextFactory.h"
+#include "GrContextPriv.h"
 #include "GrShaderCaps.h"
 #include "GrTypes.h"
 #include "SkBitmap.h"
@@ -120,7 +119,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ApplyGamma, reporter, ctxInfo) {
     SkAutoTMalloc<uint32_t> read(kW * kH);
 
     // We allow more error on GPUs with lower precision shader variables.
-    float error = context->caps()->shaderCaps()->halfIs32Bits() ? 0.5f : 1.2f;
+    float error = context->priv().caps()->shaderCaps()->halfIs32Bits() ? 0.5f : 1.2f;
 
     for (auto toSRGB : { false, true }) {
         sk_sp<SkSurface> dst(SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, ii));
@@ -133,7 +132,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ApplyGamma, reporter, ctxInfo) {
         SkCanvas* dstCanvas = dst->getCanvas();
 
         dstCanvas->clear(SK_ColorRED);
-        dstCanvas->flush();
+        dst->flush();
 
         SkPaint gammaPaint;
         gammaPaint.setBlendMode(SkBlendMode::kSrc);
@@ -141,7 +140,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ApplyGamma, reporter, ctxInfo) {
                                          : SkColorFilter::MakeSRGBToLinearGamma());
 
         dstCanvas->drawBitmap(bm, 0, 0, &gammaPaint);
-        dstCanvas->flush();
+        dst->flush();
 
         sk_memset32(read.get(), 0, kW * kH);
         if (!dst->readPixels(ii, read.get(), kRowBytes, 0, 0)) {
@@ -167,4 +166,3 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ApplyGamma, reporter, ctxInfo) {
         }
     }
 }
-#endif

@@ -9,17 +9,14 @@
 #define nanobench_DEFINED
 
 #include "Benchmark.h"
+#include "GrContextFactory.h"
 #include "SkImageInfo.h"
 #include "SkSurface.h"
 #include "SkTypes.h"
 
-#if SK_SUPPORT_GPU
-#include "GrContextFactory.h"
-#endif
-
-class ResultsWriter;
 class SkBitmap;
 class SkCanvas;
+class NanoJSONResultsWriter;
 
 struct Config {
     SkString name;
@@ -28,15 +25,9 @@ struct Config {
     SkAlphaType alpha;
     sk_sp<SkColorSpace> colorSpace;
     int samples;
-#if SK_SUPPORT_GPU
     sk_gpu_test::GrContextFactory::ContextType ctxType;
     sk_gpu_test::GrContextFactory::ContextOverrides ctxOverrides;
     bool useDFText;
-#else
-    int bogusInt;
-    int bogusIntOption;
-    bool bogusBool;
-#endif
 };
 
 struct Target {
@@ -77,7 +68,7 @@ struct Target {
     virtual bool capturePixels(SkBitmap* bmp);
 
     /** Writes any config-specific data to the log. */
-    virtual void fillOptions(ResultsWriter*) { }
+    virtual void fillOptions(NanoJSONResultsWriter& log) { }
 
     /** Writes gathered stats using SkDebugf. */
     virtual void dumpStats() {}

@@ -20,11 +20,17 @@ static bool nearly_equal_scalar(SkScalar a, SkScalar b) {
 static bool nearly_equal(const SkMatrix& a, const SkMatrix& b) {
     for (int i = 0; i < 9; i++) {
         if (!nearly_equal_scalar(a[i], b[i])) {
-            SkDebugf("not equal %g %g\n", (float)a[i], (float)b[i]);
+            SkDebugf("matrices not equal [%d] %g %g\n", i, (float)a[i], (float)b[i]);
             return false;
         }
     }
     return true;
+}
+
+static int float_bits(float f) {
+    int result;
+    memcpy(&result, &f, 4);
+    return result;
 }
 
 static bool are_equal(skiatest::Reporter* reporter,
@@ -38,8 +44,8 @@ static bool are_equal(skiatest::Reporter* reporter,
             for (int i = 0; i < 9; ++i) {
                 float aVal = a.get(i);
                 float bVal = b.get(i);
-                int aValI = *SkTCast<int*>(&aVal);
-                int bValI = *SkTCast<int*>(&bVal);
+                int aValI = float_bits(aVal);
+                int bValI = float_bits(bVal);
                 if (0 == aVal && 0 == bVal && aValI != bValI) {
                     foundZeroSignDiff = true;
                 } else {
@@ -52,8 +58,8 @@ static bool are_equal(skiatest::Reporter* reporter,
             for (int i = 0; i < 9; ++i) {
                 float aVal = a.get(i);
                 float bVal = b.get(i);
-                int aValI = *SkTCast<int*>(&aVal);
-                int bValI = *SkTCast<int*>(&bVal);
+                int aValI = float_bits(aVal);
+                int bValI = float_bits(bVal);
                 if (sk_float_isnan(aVal) && aValI == bValI) {
                     foundNaN = true;
                 } else {
@@ -798,18 +804,56 @@ static void test_matrix_homogeneous(skiatest::Reporter* reporter) {
 
 }
 
-static bool check_decompScale(const SkMatrix& matrix) {
+static bool check_decompScale(const SkMatrix& original) {
     SkSize scale;
     SkMatrix remaining;
 
-    if (!matrix.decomposeScale(&scale, &remaining)) {
+    if (!original.decomposeScale(&scale, &remaining)) {
         return false;
     }
     if (scale.width() <= 0 || scale.height() <= 0) {
         return false;
     }
-    remaining.preScale(scale.width(), scale.height());
-    return nearly_equal(matrix, remaining);
+
+    // First ensure that the decomposition reconstitutes back to the original
+    {
+        SkMatrix reconstituted = remaining;
+
+        // This should be 'preScale' but, due to skbug.com/7211, it is reversed!
+        reconstituted.postScale(scale.width(), scale.height());
+        if (!nearly_equal(original, reconstituted)) {
+            return false;
+        }
+    }
+
+    // Then push some points through both paths and make sure they are the same.
+    static const int kNumPoints = 5;
+    const SkPoint testPts[kNumPoints] = {
+        {  0.0f,  0.0f },
+        {  1.0f,  1.0f },
+        {  1.0f,  0.5f },
+        { -1.0f, -0.5f },
+        { -1.0f,  2.0f }
+    };
+
+    SkPoint v1[kNumPoints];
+    original.mapPoints(v1, testPts, kNumPoints);
+
+    SkPoint v2[kNumPoints];
+    SkMatrix scaleMat = SkMatrix::MakeScale(scale.width(), scale.height());
+
+    // Note, we intend the decomposition to be applied in the order scale and then remainder but,
+    // due to skbug.com/7211, the order is reversed!
+    remaining.mapPoints(v2, testPts, kNumPoints);
+    scaleMat.mapPoints(v2, kNumPoints);
+
+    for (int i = 0; i < kNumPoints; ++i) {
+        if (!SkPointPriv::EqualsWithinTolerance(v1[i], v2[i], 0.00001f)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static void test_decompScale(skiatest::Reporter* reporter) {
@@ -824,6 +868,14 @@ static void test_decompScale(skiatest::Reporter* reporter) {
 
     m.setScale(1, 0);
     REPORTER_ASSERT(reporter, !check_decompScale(m));
+
+    m.setRotate(35, 0, 0);
+    m.preScale(2, 3);
+    REPORTER_ASSERT(reporter, check_decompScale(m));
+
+    m.setRotate(35, 0, 0);
+    m.postScale(2, 3);
+    REPORTER_ASSERT(reporter, check_decompScale(m));
 }
 
 DEF_TEST(Matrix, reporter) {
@@ -987,14 +1039,30 @@ DEF_TEST(Matrix_maprects, r) {
                                       rand.nextSScalar1() * scale,
                                       rand.nextSScalar1() * scale,
                                       rand.nextSScalar1() * scale);
-        SkRect dst[3];
+        SkRect dst[4];
 
         mat.mapPoints((SkPoint*)&dst[0].fLeft, (SkPoint*)&src.fLeft, 2);
         dst[0].sort();
         mat.mapRect(&dst[1], src);
         mat.mapRectScaleTranslate(&dst[2], src);
+        dst[3] = mat.mapRect(src);
 
         REPORTER_ASSERT(r, dst[0] == dst[1]);
         REPORTER_ASSERT(r, dst[0] == dst[2]);
+        REPORTER_ASSERT(r, dst[0] == dst[3]);
+    }
+
+    // We should report nonfinite-ness after a mapping
+    {
+        // We have special-cases in mapRect for different matrix types
+        SkMatrix m0 = SkMatrix::MakeScale(1e20f, 1e20f);
+        SkMatrix m1; m1.setRotate(30); m1.postScale(1e20f, 1e20f);
+
+        for (const auto& m : { m0, m1 }) {
+            SkRect rect = { 0, 0, 1e20f, 1e20f };
+            REPORTER_ASSERT(r, rect.isFinite());
+            rect = m.mapRect(rect);
+            REPORTER_ASSERT(r, !rect.isFinite());
+        }
     }
 }

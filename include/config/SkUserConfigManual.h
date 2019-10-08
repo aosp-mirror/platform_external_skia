@@ -7,7 +7,6 @@
 
 #ifndef SkUserConfigManual_DEFINED
 #define SkUserConfigManual_DEFINED
-  #define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
   #define GR_TEST_UTILS 1
   #define SK_BUILD_FOR_ANDROID_FRAMEWORK
   #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
@@ -17,19 +16,22 @@
   // Disable these Ganesh features
   #define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
   #define SK_DISABLE_RENDER_TARGET_SORTING
+  // Check error is expensive. HWUI historically also doesn't check its allocations
+  #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR 0
 
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
-  #define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
-  #define SK_SUPPORT_LEGACY_BILERP_IGNORING_HACK
+  #define SK_SUPPORT_LEGACY_DRAWLOOPER
+  #define SK_SUPPORT_LEGACY_TILEMODE_ENUM
+  
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
-  #define SK_SUPPORT_LEGACY_DRAWFILTER
   #define SK_SUPPORT_LEGACY_EMBOSSMASKFILTER
-  #define SK_SUPPORT_LEGACY_GRADIENT_DITHERING
-  #define SK_SUPPORT_LEGACY_SHADER_ISABITMAP
-  #define SK_SUPPORT_LEGACY_TILED_BITMAPS
-  #define SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
-  #define SK_SUPPORT_LEGACY_RECTMAKELARGEST
+  #define SK_SUPPORT_LEGACY_AA_CHOICE
+  #define SK_SUPPORT_LEGACY_A8_MASKBLITTER
+  #define SK_SUPPORT_LEGACY_AAA_CHOICE
+
+  #define SK_DISABLE_DAA  // skbug.com/6886
+
 #endif // SkUserConfigManual_DEFINED

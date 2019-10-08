@@ -10,7 +10,7 @@
 #include "GrContextPriv.h"
 #include "SkAtlasTextContext.h"
 #include "SkAtlasTextRenderer.h"
-#include "text/GrGlyphCache.h"
+#include "text/GrStrikeCache.h"
 
 SkAtlasTextRenderer* SkGetAtlasTextRendererFromInternalContext(
         class SkInternalAtlasTextContext& internal) {
@@ -38,21 +38,23 @@ SkInternalAtlasTextContext::SkInternalAtlasTextContext(sk_sp<SkAtlasTextRenderer
 SkInternalAtlasTextContext::~SkInternalAtlasTextContext() {
     if (fDistanceFieldAtlas.fProxy) {
 #ifdef SK_DEBUG
-        auto restrictedAtlasManager = fGrContext->contextPriv().getRestrictedAtlasManager();
-        unsigned int numProxies;
-        restrictedAtlasManager->getProxies(kA8_GrMaskFormat, &numProxies);
-        SkASSERT(1 == numProxies);
+        auto atlasManager = fGrContext->priv().getAtlasManager();
+        if (atlasManager) {
+            unsigned int numProxies;
+            atlasManager->getProxies(kA8_GrMaskFormat, &numProxies);
+            SkASSERT(1 == numProxies);
+        }
 #endif
         fRenderer->deleteTexture(fDistanceFieldAtlas.fTextureHandle);
     }
 }
 
-GrGlyphCache* SkInternalAtlasTextContext::glyphCache() {
-    return fGrContext->contextPriv().getGlyphCache();
+GrStrikeCache* SkInternalAtlasTextContext::glyphCache() {
+    return fGrContext->priv().getGrStrikeCache();
 }
 
 GrTextBlobCache* SkInternalAtlasTextContext::textBlobCache() {
-    return fGrContext->contextPriv().getTextBlobCache();
+    return fGrContext->priv().getTextBlobCache();
 }
 
 GrDeferredUploadToken SkInternalAtlasTextContext::addInlineUpload(
@@ -75,10 +77,10 @@ void SkInternalAtlasTextContext::recordDraw(const void* srcVertexData, int glyph
     memcpy(vertexData, srcVertexData, vertexDataSize);
     for (int i = 0; i < 4 * glyphCnt; ++i) {
         auto* vertex = reinterpret_cast<SkAtlasTextRenderer::SDFVertex*>(vertexData) + i;
-        // GrAtlasTextContext encodes a texture index into the lower bit of each texture coord.
+        // GrTextContext encodes a texture index into the lower bit of each texture coord.
         // This isn't expected by SkAtlasTextRenderer subclasses.
-        vertex->fTextureCoord.fX /= 2;
-        vertex->fTextureCoord.fY /= 2;
+        vertex->fTextureCoordX /= 2;
+        vertex->fTextureCoordY /= 2;
         matrix.mapHomogeneousPoints(&vertex->fPosition, &vertex->fPosition, 1);
     }
     fDraws.append(&fArena,
@@ -86,11 +88,10 @@ void SkInternalAtlasTextContext::recordDraw(const void* srcVertexData, int glyph
 }
 
 void SkInternalAtlasTextContext::flush() {
-    auto* restrictedAtlasManager = fGrContext->contextPriv().getRestrictedAtlasManager();
+    auto* atlasManager = fGrContext->priv().getAtlasManager();
     if (!fDistanceFieldAtlas.fProxy) {
         unsigned int numProxies;
-        fDistanceFieldAtlas.fProxy = restrictedAtlasManager->getProxies(kA8_GrMaskFormat,
-                                                                        &numProxies)->get();
+        fDistanceFieldAtlas.fProxy = atlasManager->getProxies(kA8_GrMaskFormat, &numProxies)->get();
         SkASSERT(1 == numProxies);
         fDistanceFieldAtlas.fTextureHandle =
                 fRenderer->createTexture(SkAtlasTextRenderer::AtlasFormat::kA8,
