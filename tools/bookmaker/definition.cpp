@@ -5,52 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "bookmaker.h"
 #include "SkOSPath.h"
 
-static size_t count_indent(const string& text, size_t test, size_t end) {
-    size_t result = test;
-    while (test < end) {
-        if (' ' != text[test]) {
-            break;
-        }
-        ++test;
-    }
-    return test - result;
-}
-
-static void add_code(const string& text, int pos, int end,
-        size_t outIndent, size_t textIndent, string& example) {
-    do {
-         // fix this to move whole paragraph in, out, but preserve doc indent
-        int nextIndent = count_indent(text, pos, end);
-        size_t len = text.find('\n', pos);
-        if (string::npos == len) {
-            len = end;
-        }
-        if ((size_t) (pos + nextIndent) < len) {
-            size_t indent = outIndent + nextIndent;
-            SkASSERT(indent >= textIndent);
-            indent -= textIndent;
-            for (size_t index = 0; index < indent; ++index) {
-                example += ' ';
-            }
-            pos += nextIndent;
-            while ((size_t) pos < len) {
-                example += '"' == text[pos] ? "\\\"" :
-                    '\\' == text[pos] ? "\\\\" :
-                    text.substr(pos, 1);
-                ++pos;
-            }
-            example += "\\n";
-        } else {
-            pos += nextIndent;
-        }
-        if ('\n' == text[pos]) {
-            ++pos;
-        }
-    } while (pos < end);
-}
+#include "definition.h"
+#include "textParser.h"
 
 #ifdef CONST
 #undef CONST
@@ -83,7 +41,6 @@ enum class OpType : int8_t {
     kVoid,
     kBool,
     kChar,
-    kFloat,
     kInt,
     kScalar,
     kSizeT,
@@ -161,7 +118,9 @@ const struct OperatorParser {
                                     {{ BLANK,  OpType::kThis,   OpMod::kMove, }}},
     { DEFOP::kMultiply, "*", "multiply", BLANK, OpType::kThis, OpMod::kNone,         CONST,
                                     {{ BLANK,  OpType::kScalar, OpMod::kNone, }}},
-    { DEFOP::kMultiply, "*", "multiply1", BLANK, OpType::kThis, OpMod::kNone,         BLANK,
+    { DEFOP::kMultiply, "*", "multiply1", BLANK, OpType::kThis, OpMod::kNone,         CONST,
+                                    {{ CONST,  OpType::kThis,   OpMod::kReference, }}},
+    { DEFOP::kMultiply, "*", "multiply2", BLANK, OpType::kThis, OpMod::kNone,         BLANK,
                                     {{ CONST,  OpType::kThis,   OpMod::kReference, },
                                      { CONST,  OpType::kThis,   OpMod::kReference, }}},
     { DEFOP::kMultiplyBy, "*=", "multiplyby", BLANK,  OpType::kThis, OpMod::kReference, BLANK,
@@ -183,12 +142,15 @@ const struct OperatorParser {
                                     {{ CONST,  OpType::kThis,   OpMod::kReference, }}},
 };
 
-OpType lookup_type(const string& typeWord, const string& name) {
+OpType lookup_type(string typeWord, string name) {
     if (typeWord == name || (typeWord == "SkIVector" && name == "SkIPoint")
                          || (typeWord == "SkVector" && name == "SkPoint")) {
         return OpType::kThis;
     }
-    const char* keyWords[] = { "void", "bool", "char", "float", "int", "SkScalar", "size_t" };
+    if ("float" == typeWord || "double" == typeWord) {
+        return OpType::kScalar;
+    }
+    const char* keyWords[] = { "void", "bool", "char", "int", "SkScalar", "size_t" };
     for (unsigned i = 0; i < SK_ARRAY_COUNT(keyWords); ++i) {
         if (typeWord == keyWords[i]) {
             return (OpType) (i + 1);
@@ -223,11 +185,8 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
     string className(fName, 0, doubleColons - 2);
     TextParser iParser(fFileName, fStart, fContentStart, fLineCount);
     SkAssertResult(iParser.skipWord("#Method"));
-    iParser.skipExact("SK_API");
     iParser.skipWhiteSpace();
     bool isStatic = iParser.skipExact("static");
-    iParser.skipWhiteSpace();
-    iParser.skipExact("SK_API");
     iParser.skipWhiteSpace();
     bool returnsConst = iParser.skipExact("const");
     if (returnsConst) {
@@ -236,7 +195,7 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
     SkASSERT(isStatic == false || returnsConst == false);
     iParser.skipWhiteSpace();
     const char* returnTypeStart = iParser.fChar;
-    iParser.skipToNonAlphaNum();
+    iParser.skipToNonName();
     SkASSERT(iParser.fChar > returnTypeStart);
     string returnType(returnTypeStart, iParser.fChar - returnTypeStart);
     OpType returnOpType = lookup_type(returnType, className);
@@ -245,7 +204,7 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
     SkAssertResult(iParser.skipExact("operator"));
     iParser.skipWhiteSpace();
     fMethodType = Definition::MethodType::kOperator;
-    TextParser::Save save(&iParser);
+    TextParserSave save(&iParser);
     for (auto parser : opData) {
         save.restore();
         if (!iParser.skipExact(parser.fSymbol)) {
@@ -286,7 +245,7 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
             }
             iParser.skipWhiteSpace();
             const char* paramStart = iParser.fChar;
-            iParser.skipToNonAlphaNum();
+            iParser.skipToNonName();
             SkASSERT(iParser.fChar > paramStart);
             string paramType(paramStart, iParser.fChar - paramStart);
             OpType paramOpType = lookup_type(paramType, className);
@@ -302,7 +261,7 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
                 countsMatch = false;
                 break;
             }
-            iParser.skipToNonAlphaNum();
+            iParser.skipToNonName();
             if ('[' == iParser.peek()) {
                 paramMod = OpMod::kArray;
                 SkAssertResult(iParser.skipExact("[]"));
@@ -316,7 +275,7 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
             continue;
         }
         iParser.next();
-        bool constMethod = iParser.skipExact("_const");
+        bool constMethod = iParser.skipExact(" const");
         if (parser.fConstMethod != ANY && (parser.fConstMethod == CONST) != constMethod) {
             continue;
         }
@@ -328,40 +287,6 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
     }
     SkASSERT(0); // incomplete
     return false;
-#if 0
-    if ('!' == fName[opPos]) {
-        SkASSERT('=' == fName[opPos + 1]);
-        result += "not_equal_operator";
-    } else if ('=' == fName[opPos]) {
-        if ('(' == fName[opPos + 1]) {
-            result += isMove ? "move_" : "copy_";
-            result += "assignment_operator";
-        } else {
-            SkASSERT('=' == fName[opPos + 1]);
-            result += "equal_operator";
-        }
-    } else if ('[' == fName[opPos]) {
-        result += "subscript_operator";
-        const char* end = fContentStart;
-        while (end > fStart && ' ' >= end[-1]) {
-            --end;
-        }
-        string constCheck(fStart, end - fStart);
-        size_t constPos = constCheck.rfind("const");
-        if (constCheck.length() == constPos + 5) {
-            result += "_const";
-        }
-    } else if ('*' == fName[opPos]) {
-        result += "multiply_operator";
-    } else if ('-' == fName[opPos]) {
-        result += "subtract_operator";
-    } else if ('+' == fName[opPos]) {
-        result += "add_operator";
-    } else {
-        SkASSERT(0);  // todo: incomplete
-    }
-#endif
-    return true;
 }
 
 #undef CONST
@@ -369,7 +294,7 @@ bool Definition::parseOperator(size_t doubleColons, string& result) {
 #undef BLANK
 #undef DEFOP
 
-bool Definition::boilerplateIfDef(Definition* parent) {
+bool Definition::boilerplateIfDef() {
     const Definition& label = fTokens.front();
     if (Type::kWord != label.fType) {
         return false;
@@ -378,38 +303,12 @@ bool Definition::boilerplateIfDef(Definition* parent) {
     return true;
 }
 
-// todo: this is matching #ifndef SkXXX_DEFINED for no particular reason
-// it doesn't do anything useful with arbitrary input, e.g. #ifdef SK_SUPPORT_LEGACY_CANVAS_HELPERS
-// also doesn't know what to do with SK_REQUIRE_LOCAL_VAR()
-bool Definition::boilerplateDef(Definition* parent) {
-    if (!this->boilerplateIfDef(parent)) {
-        return false;
-    }
-    const char* s = fName.c_str();
-    const char* e = strchr(s, '_');
-    return true; // fixme: if this is trying to do something useful with define, do it here
-    if (!e) {
-        return false;
-    }
-    string prefix(s, e - s);
-    const char* inName = strstr(parent->fName.c_str(), prefix.c_str());
-    if (!inName) {
-        return false;
-    }
-    if ('/' != inName[-1] && '\\' != inName[-1]) {
-        return false;
-    }
-    if (strcmp(inName + prefix.size(), ".h")) {
-        return false;
-    }
-    return true;
-}
 
 // fixme: this will need to be more complicated to handle all of Skia
 // for now, just handle paint -- maybe fiddle will loosen naming restrictions
 void Definition::setCanonicalFiddle() {
     fMethodType = Definition::MethodType::kNone;
-    size_t doubleColons = fName.find("::", 0);
+    size_t doubleColons = fName.rfind("::");
     SkASSERT(string::npos != doubleColons);
     string base = fName.substr(0, doubleColons);
     string result = base + "_";
@@ -442,6 +341,15 @@ void Definition::setCanonicalFiddle() {
             size_t openParen = fName.find('(', doubleColons);
             if (string::npos == openParen) {
                 result += fName.substr(doubleColons);
+                // see if it is a constructor -- if second to last delimited name equals last
+                size_t nextColons = fName.find("::", doubleColons);
+                if (string::npos != nextColons) {
+                    nextColons += 2;
+                    if (!strncmp(&fName[doubleColons], &fName[nextColons],
+                            nextColons - doubleColons - 2)) {
+                        fMethodType = Definition::MethodType::kConstructor;
+                    }
+                }
             } else {
                 size_t comma = fName.find(',', doubleColons);
                 if (string::npos == comma) {
@@ -459,7 +367,7 @@ void Definition::setCanonicalFiddle() {
                     if (params.startsWith("const") || params.startsWith("int")
                             || params.startsWith("Sk")) {
                         const char* wordStart = params.fChar;
-                        params.skipToNonAlphaNum();
+                        params.skipToNonName();
                         if (underline) {
                             result += '_';
                         } else {
@@ -467,7 +375,7 @@ void Definition::setCanonicalFiddle() {
                         }
                         result += string(wordStart, params.fChar - wordStart);
                     } else {
-                        params.skipToNonAlphaNum();
+                        params.skipToNonName();
                     }
                     if (!params.eof() && '*' == params.peek()) {
                         if (underline) {
@@ -485,215 +393,6 @@ void Definition::setCanonicalFiddle() {
         }
     }
     fFiddle = Definition::NormalizedName(result);
-}
-
-void Definition::setWrapper() {
-    const char drawWrapper[] = "void draw(SkCanvas* canvas) {";
-    const char drawNoCanvas[] = "void draw(SkCanvas* ) {";
-    string text = this->extractText(Definition::TrimExtract::kNo);
-    size_t nonSpace = 0;
-    while (nonSpace < text.length() && ' ' >= text[nonSpace]) {
-        ++nonSpace;
-    }
-    bool hasFunc = !text.compare(nonSpace, sizeof(drawWrapper) - 1, drawWrapper);
-    bool noCanvas = !text.compare(nonSpace, sizeof(drawNoCanvas) - 1, drawNoCanvas);
-    bool hasCanvas = string::npos != text.find("SkCanvas canvas");
-    SkASSERT(!hasFunc || !noCanvas);
-    bool preprocessor = text[0] == '#';
-    bool wrapCode = !hasFunc && !noCanvas && !preprocessor;
-    if (wrapCode) {
-        fWrapper = hasCanvas ? string(drawNoCanvas) : string(drawWrapper);
-    }
-}
-
-bool Definition::exampleToScript(string* result, ExampleOptions exampleOptions) const {
-    bool hasFiddle = true;
-    const Definition* platform = this->hasChild(MarkType::kPlatform);
-    if (platform) {
-        TextParser platParse(platform);
-        hasFiddle = !platParse.strnstr("!fiddle", platParse.fEnd);
-    }
-    if (!hasFiddle) {
-        *result = "";
-        return true;
-    }
-    string text = this->extractText(Definition::TrimExtract::kNo);
-    bool textOut = string::npos != text.find("SkDebugf(")
-            || string::npos != text.find("dump(")
-            || string::npos != text.find("dumpHex(");
-    string heightStr = "256";
-    string widthStr = "256";
-    string normalizedName(fFiddle);
-    string code;
-    string imageStr = "0";
-    string srgbStr = "false";
-    string durationStr = "0";
-    for (auto const& iter : fChildren) {
-        switch (iter->fMarkType) {
-            case MarkType::kDuration:
-                durationStr = string(iter->fContentStart, iter->fContentEnd - iter->fContentStart);
-                break;
-            case MarkType::kHeight:
-                heightStr = string(iter->fContentStart, iter->fContentEnd - iter->fContentStart);
-                break;
-            case MarkType::kWidth:
-                widthStr = string(iter->fContentStart, iter->fContentEnd - iter->fContentStart);
-                break;
-            case MarkType::kDescription:
-                // ignore for now
-                break;
-            case MarkType::kFunction: {
-                // emit this, but don't wrap this in draw()
-                string funcText(iter->fContentStart, iter->fContentEnd - iter->fContentStart);
-                size_t pos = 0;
-                while (pos < funcText.length() && ' ' > funcText[pos]) {
-                    ++pos;
-                }
-                size_t indent = count_indent(funcText, pos, funcText.length());
-                add_code(funcText, pos, funcText.length(), 0, indent, code);
-                code += "\\n";
-                } break;
-            case MarkType::kComment:
-                break;
-            case MarkType::kImage:
-                imageStr = string(iter->fContentStart, iter->fContentEnd - iter->fContentStart);
-                break;
-            case MarkType::kToDo:
-                break;
-            case MarkType::kBug:
-            case MarkType::kMarkChar:
-            case MarkType::kPlatform:
-                // ignore for now
-                break;
-            case MarkType::kSet:
-                if ("sRGB" == string(iter->fContentStart,
-                                     iter->fContentEnd - iter->fContentStart)) {
-                    srgbStr = "true";
-                } else {
-                    SkASSERT(0);   // more work to do
-                    return false;
-                }
-                break;
-            case MarkType::kStdOut:
-                textOut = true;
-                break;
-            default:
-                SkASSERT(0);  // more coding to do
-        }
-    }
-    string animatedStr = "0" != durationStr ? "true" : "false";
-    string textOutStr = textOut ? "true" : "false";
-    size_t pos = 0;
-    while (pos < text.length() && ' ' > text[pos]) {
-        ++pos;
-    }
-    size_t end = text.length();
-    size_t outIndent = 0;
-    size_t textIndent = count_indent(text, pos, end);
-    if (fWrapper.length() > 0) {
-        code += fWrapper;
-        code += "\\n";
-        outIndent = 4;
-    }
-    add_code(text, pos, end, outIndent, textIndent, code);
-    if (fWrapper.length() > 0) {
-        code += "}";
-    }
-    string example = "\"" + normalizedName + "\": {\n";
-    size_t nameStart = fFileName.find(SkOSPath::SEPARATOR, 0);
-    SkASSERT(string::npos != nameStart);
-    string baseFile = fFileName.substr(nameStart + 1, fFileName.length() - nameStart - 5);
-    if (ExampleOptions::kText == exampleOptions) {
-        example += "    \"code\": \"" + code + "\",\n";
-        example += "    \"hash\": \"" + fHash + "\",\n";
-        example += "    \"file\": \"" + baseFile + "\",\n";
-        example += "    \"name\": \"" + fName + "\",";
-    } else {
-        example += "    \"code\": \"" + code + "\",\n";
-        if (ExampleOptions::kPng == exampleOptions) {
-            example += "    \"width\": " + widthStr + ",\n";
-            example += "    \"height\": " + heightStr + ",\n";
-            example += "    \"hash\": \"" + fHash + "\",\n";
-            example += "    \"file\": \"" + baseFile + "\",\n";
-            example += "    \"name\": \"" + fName + "\"\n";
-            example += "}";
-       } else {
-            example += "    \"options\": {\n";
-            example += "        \"width\": " + widthStr + ",\n";
-            example += "        \"height\": " + heightStr + ",\n";
-            example += "        \"source\": " + imageStr + ",\n";
-            example += "        \"srgb\": " + srgbStr + ",\n";
-            example += "        \"f16\": false,\n";
-            example += "        \"textOnly\": " + textOutStr + ",\n";
-            example += "        \"animated\": " + animatedStr + ",\n";
-            example += "        \"duration\": " + durationStr + "\n";
-            example += "    },\n";
-            example += "    \"fast\": true";
-        }
-    }
-    *result = example;
-    return true;
-}
-
-string Definition::extractText(TrimExtract trimExtract) const {
-    string result;
-    TextParser parser(fFileName, fContentStart, fContentEnd, fLineCount);
-    int childIndex = 0;
-    char mc = '#';
-    while (parser.fChar < parser.fEnd) {
-        if (TrimExtract::kYes == trimExtract && !parser.skipWhiteSpace()) {
-            break;
-        }
-        if (parser.next() == mc) {
-            if (parser.next() == mc) {
-                if (parser.next() == mc) {
-                    mc = parser.next();
-                }
-            } else {
-                // fixme : more work to do if # style comment is in text
-                // if in method definition, could be alternate method name
-                --parser.fChar;
-                if (' ' < parser.fChar[0]) {
-                    if (islower(parser.fChar[0])) {
-                        result += '\n';
-                        parser.skipLine();
-                    } else {
-                        SkASSERT(isupper(parser.fChar[0]));
-                        parser.skipTo(fChildren[childIndex]->fTerminator);
-                        if (mc == parser.fChar[0] && mc == parser.fChar[1]) {
-                            parser.next();
-                            parser.next();
-                        }
-                        childIndex++;
-                    }
-                } else {
-                    parser.skipLine();
-                }
-                continue;
-            }
-        } else {
-            --parser.fChar;
-        }
-        const char* end = parser.fEnd;
-        const char* mark = parser.strnchr(mc, end);
-        if (mark) {
-            end = mark;
-        }
-        string fragment(parser.fChar, end - parser.fChar);
-        trim_end(fragment);
-        if (TrimExtract::kYes == trimExtract) {
-            trim_start(fragment);
-            if (result.length()) {
-                result += '\n';
-                result += '\n';
-            }
-        }
-        if (TrimExtract::kYes == trimExtract || has_nonwhitespace(fragment)) {
-            result += fragment;
-        }
-        parser.skipTo(end);
-    }
-    return result;
 }
 
 static void space_pad(string* str) {
@@ -732,10 +431,9 @@ bool Definition::checkMethod() const {
     }
     bool expectReturn = this->methodHasReturn(name, &methodParser);
     bool foundReturn = false;
-    bool foundException = false;
+    bool foundPopulate = false;
     for (auto& child : fChildren) {
-        foundException |= MarkType::kDeprecated == child->fMarkType
-                || MarkType::kExperimental == child->fMarkType;
+        foundPopulate |= MarkType::kPopulate == child->fMarkType;
         if (MarkType::kReturn != child->fMarkType) {
             if (MarkType::kParam == child->fMarkType) {
                 child->fVisited = false;
@@ -750,7 +448,7 @@ bool Definition::checkMethod() const {
         }
         foundReturn = true;
     }
-    if (expectReturn && !foundReturn && !foundException) {
+    if (expectReturn && !foundReturn && !foundPopulate) {
         return methodParser.reportError<bool>("missing #Return marker");
     }
     const char* paren = methodParser.strnchr('(', methodParser.fEnd);
@@ -784,7 +482,7 @@ bool Definition::checkMethod() const {
             foundParam = true;
 
         }
-        if (!foundParam && !foundException) {
+        if (!foundParam && !foundPopulate) {
             return methodParser.reportError<bool>("no #Param found");
         }
         if (')' == nextEnd[0]) {
@@ -798,6 +496,77 @@ bool Definition::checkMethod() const {
         if (!child->fVisited) {
             TextParser paramError(child);
             return paramError.reportError<bool>("#Param without param in #Method");
+        }
+    }
+    // check after end of #Line and before next child for description
+    const char* descStart = fContentStart;
+    const char* descEnd = nullptr;
+    const Definition* defEnd = nullptr;
+    const Definition* priorDef = nullptr;
+    bool incomplete = false;
+    for (auto& child : fChildren) {
+        if (MarkType::kAnchor == child->fMarkType) {
+            continue;
+        }
+        if (MarkType::kCode == child->fMarkType) {
+            priorDef = child;
+            continue;
+        }
+        if (MarkType::kFormula == child->fMarkType) {
+            continue;
+        }
+        if (MarkType::kLine == child->fMarkType) {
+            SkASSERT(child->fChildren.size() > 0);
+            TextParser childDesc(child->fChildren[0]);
+            incomplete |= childDesc.startsWith("incomplete");
+        }
+        if (MarkType::kList == child->fMarkType) {
+            priorDef = child;
+            continue;
+        }
+        if (MarkType::kMarkChar == child->fMarkType) {
+            continue;
+        }
+        if (MarkType::kPhraseRef == child->fMarkType) {
+            continue;
+        }
+        TextParser emptyCheck(fFileName, descStart, child->fStart, child->fLineCount);
+        if (!emptyCheck.eof() && emptyCheck.skipWhiteSpace()) {
+            descStart = emptyCheck.fChar;
+            emptyCheck.trimEnd();
+            defEnd = priorDef;
+            descEnd = emptyCheck.fEnd;
+            break;
+        }
+        descStart = child->fTerminator;
+        priorDef = nullptr;
+    }
+    if (!descEnd) {
+        return incomplete || foundPopulate ? true :
+                methodParser.reportError<bool>("missing description");
+    }
+    TextParser description(fFileName, descStart, descEnd, fLineCount);
+    // expect first word capitalized and pluralized. expect a trailing period
+    SkASSERT(descStart < descEnd);
+    if (!isupper(descStart[0])) {
+        description.reportWarning("expected capital");
+    } else if ('.' != descEnd[-1]) {
+        if (!defEnd || defEnd->fTerminator != descEnd) {
+            if (!incomplete) {
+                description.reportWarning("expected period");
+            }
+        }
+    } else {
+        if (!description.startsWith("For use by Android")) {
+            description.skipToSpace();
+            if (',' == description.fChar[-1]) {
+                --description.fChar;
+            }
+            if ('s' != description.fChar[-1]) {
+                if (!incomplete) {
+                    description.reportWarning("expected plural");
+                }
+            }
         }
     }
     return true;
@@ -828,12 +597,22 @@ bool Definition::crossCheck(const Definition& includeToken) const {
     return crossCheckInside(fContentStart, fContentEnd, includeToken);
 }
 
-bool Definition::crossCheckInside(const char* start, const char* end,
-        const Definition& includeToken) const {
-    TextParser def(fFileName, start, end, fLineCount);
-    TextParser inc("", includeToken.fContentStart, includeToken.fContentEnd, 0);
+const char* Definition::methodEnd() const {
+    const char defaultTag[] = " = default";
+    size_t tagSize = sizeof(defaultTag) - 1;
+    const char* tokenEnd = fContentEnd - tagSize;
+    if (tokenEnd <= fContentStart || strncmp(tokenEnd, defaultTag, tagSize)) {
+        tokenEnd = fContentEnd;
+    }
+    return tokenEnd;
+}
+
+bool Definition::SkipImplementationWords(TextParser& inc) {
     if (inc.startsWith("SK_API")) {
         inc.skipWord("SK_API");
+    }
+    if (inc.startsWith("inline")) {
+        inc.skipWord("inline");
     }
     if (inc.startsWith("friend")) {
         inc.skipWord("friend");
@@ -841,7 +620,23 @@ bool Definition::crossCheckInside(const char* start, const char* end,
     if (inc.startsWith("SK_API")) {
         inc.skipWord("SK_API");
     }
-    inc.skipExact("SkDEBUGCODE(");
+    return inc.skipExact("SkDEBUGCODE(");
+}
+
+bool Definition::crossCheckInside(const char* start, const char* end,
+        const Definition& includeToken) const {
+    TextParser def(fFileName, start, end, fLineCount);
+    const char* tokenEnd = includeToken.methodEnd();
+    TextParser inc("", includeToken.fContentStart, tokenEnd, 0);
+    if (inc.startsWith("static")) {
+        def.skipWhiteSpace();
+        if (!def.startsWith("static")) {
+            return false;
+        }
+        inc.skipWord("static");
+        def.skipWord("static");
+    }
+    (void) Definition::SkipImplementationWords(inc);
     do {
         bool defEof;
         bool incEof;
@@ -880,6 +675,9 @@ bool Definition::crossCheckInside(const char* start, const char* end,
         char defCh;
         do {
             defCh = def.next();
+            if (inc.skipExact("SK_WARN_UNUSED_RESULT")) {
+                inc.skipSpace();
+            }
             char incCh = inc.next();
             if (' ' >= defCh && ' ' >= incCh) {
                 break;
@@ -924,7 +722,7 @@ string Definition::formatFunction(Format format) const {
         indent = (size_t) (lastEnd - lastStart);
     }
     // trim indent so longest line doesn't exceed box width
-    TextParser::Save savePlace(&methodParser);
+    TextParserSave savePlace(&methodParser);
     const char* saveStart = lastStart;
     ptrdiff_t maxLine = 0;
     do {
@@ -956,12 +754,12 @@ string Definition::formatFunction(Format format) const {
     lastStart = saveStart;
     lastEnd = methodParser.fChar;
     indent = SkTMin(indent, (size_t) (limit - maxLine));
-    // write string wtih trimmmed indent
+    // write string with trimmmed indent
     string methodStr;
     int written = 0;
     do {
         const char* nextStart = lastEnd;
-        SkASSERT(written < limit);
+//        SkASSERT(written < limit);
         const char* delimiter = methodParser.anyOf(",)");
         const char* nextEnd = delimiter ? delimiter : methodParser.fEnd;
         if (delimiter) {
@@ -980,8 +778,12 @@ string Definition::formatFunction(Format format) const {
             if (lastStart[0] != ' ') {
                 space_pad(&methodStr);
             }
-            methodStr += string(lastStart, (size_t) (lastEnd - lastStart));
-            written += (size_t) (lastEnd - lastStart);
+            string addon(lastStart, (size_t) (lastEnd - lastStart));
+            if (" const" == addon) {
+                addon = "const";
+            }
+            methodStr += addon;
+            written += addon.length();
         }
         if (delimiter) {
             if (nextEnd - nextStart >= (ptrdiff_t) (limit - written)) {
@@ -1020,6 +822,18 @@ string Definition::fiddleName() const {
     return fFiddle.substr(start, end - start);
 }
 
+string Definition::fileName() const {
+    size_t nameStart = fFileName.rfind(SkOSPath::SEPARATOR);
+    if (SkOSPath::SEPARATOR != '/') {
+        size_t altNameStart = fFileName.rfind('/');
+        nameStart = string::npos == nameStart ? altNameStart :
+                string::npos != altNameStart && altNameStart > nameStart ? altNameStart : nameStart;
+    }
+    SkASSERT(string::npos != nameStart);
+    string baseFile = fFileName.substr(nameStart + 1);
+    return baseFile;
+}
+
 const Definition* Definition::findClone(string match) const {
     for (auto child : fChildren) {
         if (!child->fClone) {
@@ -1045,7 +859,7 @@ const Definition* Definition::hasChild(MarkType markType) const {
     return nullptr;
 }
 
-const Definition* Definition::hasParam(const string& ref) const {
+Definition* Definition::hasParam(string ref) {
     SkASSERT(MarkType::kMethod == fMarkType);
     for (auto iter : fChildren) {
         if (MarkType::kParam != iter->fMarkType) {
@@ -1054,12 +868,23 @@ const Definition* Definition::hasParam(const string& ref) const {
         if (iter->fName == ref) {
             return &*iter;
         }
-
+    }
+    for (auto& iter : fTokens) {
+        if (MarkType::kComment != iter.fMarkType) {
+            continue;
+        }
+        TextParser parser(&iter);
+        if (!parser.skipExact("@param ")) {
+            continue;
+        }
+        if (parser.skipExact(ref.c_str()) && ' ' == parser.peek()) {
+            return &iter;
+        }
     }
     return nullptr;
 }
 
-bool Definition::hasMatch(const string& name) const {
+bool Definition::hasMatch(string name) const {
     for (auto child : fChildren) {
         if (name == child->fName) {
             return true;
@@ -1081,8 +906,11 @@ bool Definition::isStructOrClass() const {
     return true;
 }
 
-bool Definition::methodHasReturn(const string& name, TextParser* methodParser) const {
+bool Definition::methodHasReturn(string name, TextParser* methodParser) const {
     if (methodParser->skipExact("static")) {
+        methodParser->skipWhiteSpace();
+    }
+    if (methodParser->skipExact("virtual")) {
         methodParser->skipWhiteSpace();
     }
     const char* lastStart = methodParser->fChar;
@@ -1143,20 +971,20 @@ string Definition::methodName() const {
 bool Definition::nextMethodParam(TextParser* methodParser, const char** nextEndPtr,
         string* paramName) const {
     int parenCount = 0;
-    TextParser::Save saveState(methodParser);
+    TextParserSave saveState(methodParser);
     while (true) {
         if (methodParser->eof()) {
             return methodParser->reportError<bool>("#Method function missing close paren");
         }
         char ch = methodParser->peek();
-        if ('(' == ch) {
+        if ('(' == ch || '{' == ch) {
             ++parenCount;
         }
         if (parenCount == 0 && (')' == ch || ',' == ch)) {
             *nextEndPtr = methodParser->fChar;
             break;
         }
-        if (')' == ch) {
+        if (')' == ch || '}' == ch) {
             if (0 > --parenCount) {
                 return this->reportError<bool>("mismatched parentheses");
             }
@@ -1219,7 +1047,7 @@ string Definition::NormalizedName(string name) {
     return normalizedName;
 }
 
-static string unpreformat(const string& orig) {
+static string unpreformat(string orig) {
     string result;
     int amp = 0;
     for (auto c : orig) {
@@ -1284,7 +1112,7 @@ static string unpreformat(const string& orig) {
     return result;
 }
 
-bool Definition::paramsMatch(const string& matchFormatted, const string& name) const {
+bool Definition::paramsMatch(string matchFormatted, string name) const {
     string match = unpreformat(matchFormatted);
     TextParser def(fFileName, fStart, fContentStart, fLineCount);
     const char* dName = def.strnstr(name.c_str(), fContentStart);
@@ -1317,6 +1145,13 @@ bool Definition::paramsMatch(const string& matchFormatted, const string& name) c
     return !def.eof() && ')' == def.peek() && !m.eof() && ')' == m.peek();
 }
 
+
+void Definition::trimEnd() {
+    while (fContentEnd > fContentStart && ' ' >= fContentEnd[-1]) {
+        --fContentEnd;
+    }
+}
+
 void RootDefinition::clearVisited() {
     fVisited = false;
     for (auto& leaf : fLeaves) {
@@ -1336,10 +1171,6 @@ bool RootDefinition::dumpUnVisited() {
             if ("SkBitmap::validate()" == leaf.first) {
                 continue;
             }
-            // SkPath::pathRefIsValid in #ifdef ; prefer to remove chrome dependency to fix
-            if ("SkPath::pathRefIsValid" == leaf.first) {
-                continue;
-            }
             // FIXME: end of long tail bugs
             SkDebugf("defined in bmh but missing in include: %s\n", leaf.first.c_str());
             success = false;
@@ -1351,26 +1182,42 @@ bool RootDefinition::dumpUnVisited() {
     return success;
 }
 
-const Definition* RootDefinition::find(const string& ref, AllowParens allowParens) const {
+Definition* RootDefinition::find(string ref, AllowParens allowParens) {
     const auto leafIter = fLeaves.find(ref);
     if (leafIter != fLeaves.end()) {
         return &leafIter->second;
     }
-    if (AllowParens::kYes == allowParens && string::npos == ref.find("()")) {
-        string withParens = ref + "()";
-        const auto parensIter = fLeaves.find(withParens);
-        if (parensIter != fLeaves.end()) {
-            return &parensIter->second;
+    if (AllowParens::kYes == allowParens) {
+        size_t leftParen = ref.find('(');
+        if (string::npos == leftParen
+                || (leftParen + 1 < ref.length() && ')' != ref[leftParen + 1])) {
+            string withParens = ref + "()";
+            const auto parensIter = fLeaves.find(withParens);
+            if (parensIter != fLeaves.end()) {
+                return &parensIter->second;
+            }
+        }
+        if (string::npos != leftParen) {
+            string name = ref.substr(0, leftParen);
+            size_t posInDefName = fName.find(name);
+            if (string::npos != posInDefName && posInDefName > 2
+                    && "::" == fName.substr(posInDefName - 2, 2)) {
+                string fullRef = fName + "::" + ref;
+                const auto fullIter = fLeaves.find(fullRef);
+                if (fullIter != fLeaves.end()) {
+                    return &fullIter->second;
+                }
+            }
         }
     }
     const auto branchIter = fBranches.find(ref);
     if (branchIter != fBranches.end()) {
-        const RootDefinition* rootDef = branchIter->second;
+        RootDefinition* rootDef = branchIter->second;
         return rootDef;
     }
-    const Definition* result = nullptr;
+    Definition* result = nullptr;
     for (const auto& branch : fBranches) {
-        const RootDefinition* rootDef = branch.second;
+        RootDefinition* rootDef = branch.second;
         result = rootDef->find(ref, allowParens);
         if (result) {
             break;

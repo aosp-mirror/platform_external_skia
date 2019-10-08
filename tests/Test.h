@@ -8,22 +8,11 @@
 #define skiatest_Test_DEFINED
 
 #include "../tools/Registry.h"
+#include "GrContextFactory.h"
 #include "SkClipOpPriv.h"
 #include "SkString.h"
 #include "SkTraceEvent.h"
 #include "SkTypes.h"
-
-#if SK_SUPPORT_GPU
-#include "GrContextFactory.h"
-#else
-namespace sk_gpu_test {
-class GrContextFactory;
-class ContextInfo;
-class GLTestContext;
-}  // namespace sk_gpu_test
-class GrContext;
-struct GrContextOptions;
-#endif
 
 namespace skiatest {
 
@@ -48,20 +37,8 @@ public:
     virtual bool verbose() const;
     virtual void* stats() const { return nullptr; }
 
-    void reportFailedWithContext(const skiatest::Failure& f) {
-        SkString fullMessage = f.message;
-        if (!fContextStack.empty()) {
-            fullMessage.append(" [");
-            for (int i = 0; i < fContextStack.count(); ++i) {
-                if (i > 0) {
-                    fullMessage.append(", ");
-                }
-                fullMessage.append(fContextStack[i]);
-            }
-            fullMessage.append("]");
-        }
-        this->reportFailed(skiatest::Failure(f.fileName, f.lineNo, f.condition, fullMessage));
-    }
+    void reportFailedWithContext(const skiatest::Failure&);
+
     void push(const SkString& message) {
         fContextStack.push_back(message);
     }
@@ -133,17 +110,14 @@ typedef sk_tools::Registry<Test> TestRegistry;
     }
 */
 
-#if SK_SUPPORT_GPU
 using GrContextFactoryContextType = sk_gpu_test::GrContextFactory::ContextType;
-#else
-using GrContextFactoryContextType = int;
-#endif
 
 typedef void GrContextTestFn(Reporter*, const sk_gpu_test::ContextInfo&);
 typedef bool GrContextTypeFilterFn(GrContextFactoryContextType);
 
 extern bool IsGLContextType(GrContextFactoryContextType);
 extern bool IsVulkanContextType(GrContextFactoryContextType);
+extern bool IsMetalContextType(GrContextFactoryContextType);
 extern bool IsRenderingGLContextType(GrContextFactoryContextType);
 extern bool IsNullGLContextType(GrContextFactoryContextType);
 void RunWithGPUTestContexts(GrContextTestFn*, GrContextTypeFilterFn*, Reporter*,
@@ -228,11 +202,14 @@ private:
 #define DEF_GPUTEST_FOR_VULKAN_CONTEXT(name, reporter, context_info)                        \
         DEF_GPUTEST_FOR_CONTEXTS(name, &skiatest::IsVulkanContextType,                      \
                                  reporter, context_info, nullptr)
+#define DEF_GPUTEST_FOR_METAL_CONTEXT(name, reporter, context_info)                         \
+        DEF_GPUTEST_FOR_CONTEXTS(name, &skiatest::IsMetalContextType,                       \
+                                 reporter, context_info, nullptr)
 
 #define REQUIRE_PDF_DOCUMENT(TEST_NAME, REPORTER)                          \
     do {                                                                   \
-        SkDynamicMemoryWStream testStream;                                 \
-        sk_sp<SkDocument> testDoc(SkDocument::MakePDF(&testStream));       \
+        SkNullWStream testStream;                                          \
+        auto testDoc = SkPDF::MakeDocument(&testStream);                   \
         if (!testDoc) {                                                    \
             INFOF(REPORTER, "PDF disabled; %s test skipped.", #TEST_NAME); \
             return;                                                        \

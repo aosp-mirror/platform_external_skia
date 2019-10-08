@@ -7,10 +7,11 @@
 
 #include "Benchmark.h"
 #include "SkCanvas.h"
-#include "SkGlyphCache.h"
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkRandom.h"
+#include "SkStrike.h"
+#include "SkStrikeCache.h"
 #include "sk_tool_utils.h"
 
 static constexpr int kScreenWidth = 1500;
@@ -29,7 +30,6 @@ static_assert(52 == kNumGlyphs, "expected 52 glyphs");
 class PathTextBench : public Benchmark {
 public:
     PathTextBench(bool clipped, bool uncached) : fClipped(clipped), fUncached(uncached) {}
-    bool isVisual() override { return true; }
 
 private:
     const char* onGetName() override {
@@ -45,12 +45,11 @@ private:
     SkIPoint onGetSize() override { return SkIPoint::Make(kScreenWidth, kScreenHeight); }
 
     void onDelayedSetup() override {
-        SkPaint defaultPaint;
-        SkAutoGlyphCache agc(defaultPaint, nullptr, &SkMatrix::I());
-        SkGlyphCache* cache = agc.getCache();
+        SkFont defaultFont;
+        auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(defaultFont);
         for (int i = 0; i < kNumGlyphs; ++i) {
-            SkGlyphID id = cache->unicharToGlyph(kGlyphs[i]);
-            cache->getScalerContext()->getPath(SkPackedGlyphID(id), &fGlyphs[i]);
+            SkPackedGlyphID id(defaultFont.unicharToGlyph(kGlyphs[i]));
+            sk_ignore_unused_variable(cache->getScalerContext()->getPath(id, &fGlyphs[i]));
             fGlyphs[i].setIsVolatile(fUncached);
         }
 

@@ -30,7 +30,6 @@ public:
     ExtractBitmapGM() {}
 
 protected:
-    // overrides from SkEventSink
     SkString onShortName() override {
         return SkString("extractbitmap");
     }
@@ -79,7 +78,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new ExtractBitmapGM; }
-static GMRegistry reg(MyFactory);
+DEF_GM( return new ExtractBitmapGM; )
 
 }

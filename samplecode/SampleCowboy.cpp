@@ -5,7 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SampleCode.h"
+#include "SkTypes.h"
+
+#ifdef SK_XML
+
+#include "Sample.h"
 #include "Resources.h"
 #include "SkCanvas.h"
 #include "SkDOM.h"
@@ -14,11 +18,10 @@
 #include "SkRect.h"
 #include "SkStream.h"
 #include "SkSVGDOM.h"
-#include "SkView.h"
 
 namespace {
 
-class CowboyView : public SampleView {
+class CowboyView : public Sample {
 public:
     CowboyView()
         : fLabel("SampleCowboy")
@@ -93,9 +96,9 @@ protected:
         this->INHERITED::onSizeChange();
     }
 
-    bool onQuery(SkEvent* evt) override {
-        if (SampleCode::TitleQ(*evt)) {
-            SampleCode::TitleR(evt, fLabel.c_str());
+    bool onQuery(Sample::Event* evt) override {
+        if (Sample::TitleQ(*evt)) {
+            Sample::TitleR(evt, fLabel.c_str());
             return true;
         }
 
@@ -136,10 +139,11 @@ private:
     int             fAnimationLoop;
     SkScalar        fDelta;
 
-    typedef SampleView INHERITED;
+    typedef Sample INHERITED;
 };
 
 } // anonymous namespace
 
 DEF_SAMPLE( return new CowboyView(); )
 
+#endif  // SK_XML

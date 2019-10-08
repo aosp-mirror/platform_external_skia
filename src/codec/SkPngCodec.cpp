@@ -9,8 +9,8 @@
 #include "SkCodecPriv.h"
 #include "SkColorData.h"
 #include "SkColorSpace.h"
-#include "SkColorSpacePriv.h"
 #include "SkColorTable.h"
+#include "SkMacros.h"
 #include "SkMath.h"
 #include "SkOpts.h"
 #include "SkPngCodec.h"
@@ -251,6 +251,10 @@ bool SkPngCodec::processData() {
 
 static constexpr SkColorType kXformSrcColorType = kRGBA_8888_SkColorType;
 
+static inline bool needs_premul(SkAlphaType dstAT, SkEncodedInfo::Alpha encodedAlpha) {
+    return kPremul_SkAlphaType == dstAT && SkEncodedInfo::kUnpremul_Alpha == encodedAlpha;
+}
+
 // Note: SkColorTable claims to store SkPMColors, which is not necessarily the case here.
 bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo) {
 
@@ -268,10 +272,7 @@ bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo) {
     png_bytep alphas;
     int numColorsWithAlpha = 0;
     if (png_get_tRNS(fPng_ptr, fInfo_ptr, &alphas, &numColorsWithAlpha, nullptr)) {
-        // If we are performing a color xform, it will handle the premultiply.  Otherwise,
-        // we'll do it here.
-        bool premultiply = !this->colorXform() && needs_premul(dstInfo.alphaType(),
-                                                               this->getEncodedInfo().alpha());
+        bool premultiply = needs_premul(dstInfo.alphaType(), this->getEncodedInfo().alpha());
 
         // Choose which function to use to create the color table. If the final destination's
         // colortype is unpremultiplied, the color table will store unpremultiplied colors.
@@ -296,10 +297,10 @@ bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo) {
 #endif
 
         if (is_rgba(tableColorType)) {
-            SkOpts::RGB_to_RGB1(colorTable + numColorsWithAlpha, palette,
+            SkOpts::RGB_to_RGB1(colorTable + numColorsWithAlpha, (const uint8_t*)palette,
                     numColors - numColorsWithAlpha);
         } else {
-            SkOpts::RGB_to_BGR1(colorTable + numColorsWithAlpha, palette,
+            SkOpts::RGB_to_BGR1(colorTable + numColorsWithAlpha, (const uint8_t*)palette,
                     numColors - numColorsWithAlpha);
         }
     }
@@ -345,13 +346,11 @@ static float png_inverted_fixed_point_to_float(png_fixed_point x) {
 
 #endif // LIBPNG >= 1.6
 
-// Returns a colorSpace object that represents any color space information in
-// the encoded data.  If the encoded data contains an invalid/unsupported color space,
-// this will return NULL. If there is no color space information, it will guess sRGB
-sk_sp<SkColorSpace> read_color_space(png_structp png_ptr, png_infop info_ptr) {
+// If there is no color profile information, it will use sRGB.
+std::unique_ptr<SkEncodedInfo::ICCProfile> read_color_profile(png_structp png_ptr,
+                                                              png_infop info_ptr) {
 
 #if (PNG_LIBPNG_VER_MAJOR > 1) || (PNG_LIBPNG_VER_MAJOR == 1 && PNG_LIBPNG_VER_MINOR >= 6)
-
     // First check for an ICC profile
     png_bytep profile;
     png_uint_32 length;
@@ -365,74 +364,70 @@ sk_sp<SkColorSpace> read_color_space(png_structp png_ptr, png_infop info_ptr) {
     int compression;
     if (PNG_INFO_iCCP == png_get_iCCP(png_ptr, info_ptr, &name, &compression, &profile,
             &length)) {
-        return SkColorSpace::MakeICC(profile, length);
+        auto data = SkData::MakeWithCopy(profile, length);
+        return SkEncodedInfo::ICCProfile::Make(std::move(data));
     }
 
     // Second, check for sRGB.
+    // Note that Blink does this first. This code checks ICC first, with the thinking that
+    // an image has both truly wants the potentially more specific ICC chunk, with sRGB as a
+    // backup in case the decoder does not support full color management.
     if (png_get_valid(png_ptr, info_ptr, PNG_INFO_sRGB)) {
-
         // sRGB chunks also store a rendering intent: Absolute, Relative,
         // Perceptual, and Saturation.
-        // FIXME (msarett): Extract this information from the sRGB chunk once
+        // FIXME (scroggo): Extract this information from the sRGB chunk once
         //                  we are able to handle this information in
-        //                  SkColorSpace.
-        return SkColorSpace::MakeSRGB();
+        //                  skcms_ICCProfile
+        return nullptr;
     }
 
+    // Default to SRGB gamut.
+    skcms_Matrix3x3 toXYZD50 = skcms_sRGB_profile()->toXYZD50;
     // Next, check for chromaticities.
     png_fixed_point chrm[8];
     png_fixed_point gamma;
     if (png_get_cHRM_fixed(png_ptr, info_ptr, &chrm[0], &chrm[1], &chrm[2], &chrm[3], &chrm[4],
                            &chrm[5], &chrm[6], &chrm[7]))
     {
-        SkColorSpacePrimaries primaries;
-        primaries.fRX = png_fixed_point_to_float(chrm[2]);
-        primaries.fRY = png_fixed_point_to_float(chrm[3]);
-        primaries.fGX = png_fixed_point_to_float(chrm[4]);
-        primaries.fGY = png_fixed_point_to_float(chrm[5]);
-        primaries.fBX = png_fixed_point_to_float(chrm[6]);
-        primaries.fBY = png_fixed_point_to_float(chrm[7]);
-        primaries.fWX = png_fixed_point_to_float(chrm[0]);
-        primaries.fWY = png_fixed_point_to_float(chrm[1]);
+        float rx = png_fixed_point_to_float(chrm[2]);
+        float ry = png_fixed_point_to_float(chrm[3]);
+        float gx = png_fixed_point_to_float(chrm[4]);
+        float gy = png_fixed_point_to_float(chrm[5]);
+        float bx = png_fixed_point_to_float(chrm[6]);
+        float by = png_fixed_point_to_float(chrm[7]);
+        float wx = png_fixed_point_to_float(chrm[0]);
+        float wy = png_fixed_point_to_float(chrm[1]);
 
-        SkMatrix44 toXYZD50(SkMatrix44::kUninitialized_Constructor);
-        if (!primaries.toXYZD50(&toXYZD50)) {
-            toXYZD50.set3x3RowMajorf(gSRGB_toXYZD50);
+        skcms_Matrix3x3 tmp;
+        if (skcms_PrimariesToXYZD50(rx, ry, gx, gy, bx, by, wx, wy, &tmp)) {
+            toXYZD50 = tmp;
+        } else {
+            // Note that Blink simply returns nullptr in this case. We'll fall
+            // back to srgb.
         }
+    }
 
-        if (PNG_INFO_gAMA == png_get_gAMA_fixed(png_ptr, info_ptr, &gamma)) {
-            SkColorSpaceTransferFn fn;
-            fn.fA = 1.0f;
-            fn.fB = fn.fC = fn.fD = fn.fE = fn.fF = 0.0f;
-            fn.fG = png_inverted_fixed_point_to_float(gamma);
-
-            return SkColorSpace::MakeRGB(fn, toXYZD50);
-        }
-
+    skcms_TransferFunction fn;
+    if (PNG_INFO_gAMA == png_get_gAMA_fixed(png_ptr, info_ptr, &gamma)) {
+        fn.a = 1.0f;
+        fn.b = fn.c = fn.d = fn.e = fn.f = 0.0f;
+        fn.g = png_inverted_fixed_point_to_float(gamma);
+    } else {
         // Default to sRGB gamma if the image has color space information,
         // but does not specify gamma.
-        return SkColorSpace::MakeRGB(SkColorSpace::kSRGB_RenderTargetGamma, toXYZD50);
+        // Note that Blink would again return nullptr in this case.
+        fn = *skcms_sRGB_TransferFunction();
     }
 
-    // Last, check for gamma.
-    if (PNG_INFO_gAMA == png_get_gAMA_fixed(png_ptr, info_ptr, &gamma)) {
-        SkColorSpaceTransferFn fn;
-        fn.fA = 1.0f;
-        fn.fB = fn.fC = fn.fD = fn.fE = fn.fF = 0.0f;
-        fn.fG = png_inverted_fixed_point_to_float(gamma);
+    skcms_ICCProfile skcmsProfile;
+    skcms_Init(&skcmsProfile);
+    skcms_SetTransferFunction(&skcmsProfile, &fn);
+    skcms_SetXYZD50(&skcmsProfile, &toXYZD50);
 
-        // Since there is no cHRM, we will guess sRGB gamut.
-        SkMatrix44 toXYZD50(SkMatrix44::kUninitialized_Constructor);
-        toXYZD50.set3x3RowMajorf(gSRGB_toXYZD50);
-
-        return SkColorSpace::MakeRGB(fn, toXYZD50);
-    }
-
+    return SkEncodedInfo::ICCProfile::Make(skcmsProfile);
+#else // LIBPNG >= 1.6
+    return nullptr;
 #endif // LIBPNG >= 1.6
-
-    // Report that there is no color space information in the PNG.
-    // Guess sRGB in this case.
-    return SkColorSpace::MakeSRGB();
 }
 
 void SkPngCodec::allocateStorage(const SkImageInfo& dstInfo) {
@@ -457,17 +452,19 @@ void SkPngCodec::allocateStorage(const SkImageInfo& dstInfo) {
     }
 }
 
-static SkColorSpaceXform::ColorFormat png_select_xform_format(const SkEncodedInfo& info) {
+static skcms_PixelFormat png_select_xform_format(const SkEncodedInfo& info) {
     // We use kRGB and kRGBA formats because color PNGs are always RGB or RGBA.
     if (16 == info.bitsPerComponent()) {
         if (SkEncodedInfo::kRGBA_Color == info.color()) {
-            return SkColorSpaceXform::kRGBA_U16_BE_ColorFormat;
+            return skcms_PixelFormat_RGBA_16161616BE;
         } else if (SkEncodedInfo::kRGB_Color == info.color()) {
-            return SkColorSpaceXform::kRGB_U16_BE_ColorFormat;
+            return skcms_PixelFormat_RGB_161616BE;
         }
+    } else if (SkEncodedInfo::kGray_Color == info.color()) {
+        return skcms_PixelFormat_G_8;
     }
 
-    return SkColorSpaceXform::kRGBA_8888_ColorFormat;
+    return skcms_PixelFormat_RGBA_8888;
 }
 
 void SkPngCodec::applyXformRow(void* dst, const void* src) {
@@ -495,10 +492,9 @@ static SkCodec::Result log_and_return_error(bool success) {
 
 class SkPngNormalDecoder : public SkPngCodec {
 public:
-    SkPngNormalDecoder(const SkEncodedInfo& info, const SkImageInfo& imageInfo,
-                       std::unique_ptr<SkStream> stream, SkPngChunkReader* reader,
-                       png_structp png_ptr, png_infop info_ptr, int bitDepth)
-        : INHERITED(info, imageInfo, std::move(stream), reader, png_ptr, info_ptr, bitDepth)
+    SkPngNormalDecoder(SkEncodedInfo&& info, std::unique_ptr<SkStream> stream,
+            SkPngChunkReader* reader, png_structp png_ptr, png_infop info_ptr, int bitDepth)
+        : INHERITED(std::move(info), std::move(stream), reader, png_ptr, info_ptr, bitDepth)
         , fRowsWrittenToOutput(0)
         , fDst(nullptr)
         , fRowBytes(0)
@@ -531,7 +527,7 @@ private:
     }
 
     Result decodeAllRows(void* dst, size_t rowBytes, int* rowsDecoded) override {
-        const int height = this->getInfo().height();
+        const int height = this->dimensions().height();
         png_set_progressive_read_fn(this->png_ptr(), this, nullptr, AllRowsCallback, nullptr);
         fDst = dst;
         fRowBytes = rowBytes;
@@ -612,10 +608,10 @@ private:
 
 class SkPngInterlacedDecoder : public SkPngCodec {
 public:
-    SkPngInterlacedDecoder(const SkEncodedInfo& info, const SkImageInfo& imageInfo,
-            std::unique_ptr<SkStream> stream, SkPngChunkReader* reader, png_structp png_ptr,
+    SkPngInterlacedDecoder(SkEncodedInfo&& info, std::unique_ptr<SkStream> stream,
+            SkPngChunkReader* reader, png_structp png_ptr,
             png_infop info_ptr, int bitDepth, int numberPasses)
-        : INHERITED(info, imageInfo, std::move(stream), reader, png_ptr, info_ptr, bitDepth)
+        : INHERITED(std::move(info), std::move(stream), reader, png_ptr, info_ptr, bitDepth)
         , fNumberPasses(numberPasses)
         , fFirstRow(0)
         , fLastRow(0)
@@ -664,7 +660,7 @@ private:
             if (fNumberPasses - 1 == pass && rowNum == fLastRow) {
                 // Last pass, and we have read all of the rows we care about.
                 fInterlacedComplete = true;
-                if (fLastRow != this->getInfo().height() - 1 ||
+                if (fLastRow != this->dimensions().height() - 1 ||
                         (this->swizzler() && this->swizzler()->sampleY() != 1)) {
                     // Fake error to stop decoding scanlines. Only stop if we're not decoding the
                     // whole image, in which case processing the rest of the image might be
@@ -677,7 +673,7 @@ private:
     }
 
     Result decodeAllRows(void* dst, size_t rowBytes, int* rowsDecoded) override {
-        const int height = this->getInfo().height();
+        const int height = this->dimensions().height();
         this->setUpInterlaceBuffer(height);
         png_set_progressive_read_fn(this->png_ptr(), this, nullptr, InterlacedRowCallback,
                                     nullptr);
@@ -920,36 +916,29 @@ void AutoCleanPng::infoCallback(size_t idatLength) {
 
     if (fOutCodec) {
         SkASSERT(nullptr == *fOutCodec);
-        sk_sp<SkColorSpace> colorSpace = read_color_space(fPng_ptr, fInfo_ptr);
-        if (colorSpace) {
-            switch (colorSpace->type()) {
-                case SkColorSpace::kCMYK_Type:
-                    colorSpace = nullptr;
+        auto profile = read_color_profile(fPng_ptr, fInfo_ptr);
+        if (profile) {
+            switch (profile->profile()->data_color_space) {
+                case skcms_Signature_CMYK:
+                    profile = nullptr;
                     break;
-                case SkColorSpace::kGray_Type:
+                case skcms_Signature_Gray:
                     if (SkEncodedInfo::kGray_Color != color &&
                         SkEncodedInfo::kGrayAlpha_Color != color)
                     {
-                        colorSpace = nullptr;
+                        profile = nullptr;
                     }
                     break;
-                case SkColorSpace::kRGB_Type:
+                default:
                     break;
             }
         }
-        if (!colorSpace) {
-            // Treat unsupported/invalid color spaces as sRGB.
-            colorSpace = SkColorSpace::MakeSRGB();
-        }
-
-        SkEncodedInfo encodedInfo = SkEncodedInfo::Make(color, alpha, bitDepth);
-        SkImageInfo imageInfo = encodedInfo.makeImageInfo(origWidth, origHeight, colorSpace);
 
         if (encodedColorType == PNG_COLOR_TYPE_GRAY_ALPHA) {
             png_color_8p sigBits;
             if (png_get_sBIT(fPng_ptr, fInfo_ptr, &sigBits)) {
                 if (8 == sigBits->alpha && kGraySigBit_GrayAlphaIsJustAlpha == sigBits->gray) {
-                    imageInfo = imageInfo.makeColorType(kAlpha_8_SkColorType);
+                    color = SkEncodedInfo::kXAlpha_Color;
                 }
             }
         } else if (SkEncodedInfo::kOpaque_Alpha == alpha) {
@@ -957,16 +946,18 @@ void AutoCleanPng::infoCallback(size_t idatLength) {
             if (png_get_sBIT(fPng_ptr, fInfo_ptr, &sigBits)) {
                 if (5 == sigBits->red && 6 == sigBits->green && 5 == sigBits->blue) {
                     // Recommend a decode to 565 if the sBIT indicates 565.
-                    imageInfo = imageInfo.makeColorType(kRGB_565_SkColorType);
+                    color = SkEncodedInfo::k565_Color;
                 }
             }
         }
 
+        SkEncodedInfo encodedInfo = SkEncodedInfo::Make(origWidth, origHeight, color, alpha,
+                                                        bitDepth, std::move(profile));
         if (1 == numberPasses) {
-            *fOutCodec = new SkPngNormalDecoder(encodedInfo, imageInfo,
+            *fOutCodec = new SkPngNormalDecoder(std::move(encodedInfo),
                    std::unique_ptr<SkStream>(fStream), fChunkReader, fPng_ptr, fInfo_ptr, bitDepth);
         } else {
-            *fOutCodec = new SkPngInterlacedDecoder(encodedInfo, imageInfo,
+            *fOutCodec = new SkPngInterlacedDecoder(std::move(encodedInfo),
                     std::unique_ptr<SkStream>(fStream), fChunkReader, fPng_ptr, fInfo_ptr, bitDepth,
                     numberPasses);
         }
@@ -978,10 +969,9 @@ void AutoCleanPng::infoCallback(size_t idatLength) {
     this->releasePngPtrs();
 }
 
-SkPngCodec::SkPngCodec(const SkEncodedInfo& encodedInfo, const SkImageInfo& imageInfo,
-                       std::unique_ptr<SkStream> stream, SkPngChunkReader* chunkReader,
-                       void* png_ptr, void* info_ptr, int bitDepth)
-    : INHERITED(encodedInfo, imageInfo, png_select_xform_format(encodedInfo), std::move(stream))
+SkPngCodec::SkPngCodec(SkEncodedInfo&& encodedInfo, std::unique_ptr<SkStream> stream,
+                       SkPngChunkReader* chunkReader, void* png_ptr, void* info_ptr, int bitDepth)
+    : INHERITED(std::move(encodedInfo), png_select_xform_format(encodedInfo), std::move(stream))
     , fPngChunkReader(SkSafeRef(chunkReader))
     , fPng_ptr(png_ptr)
     , fInfo_ptr(info_ptr)
@@ -1020,7 +1010,7 @@ SkCodec::Result SkPngCodec::initializeXforms(const SkImageInfo& dstInfo, const O
     // interlaced scanline decoder may need to rewind.
     fSwizzler.reset(nullptr);
 
-    // If SkColorSpaceXform directly supports the encoded PNG format, we should skip format
+    // If skcms directly supports the encoded PNG format, we should skip format
     // conversion in the swizzler (or skip swizzling altogether).
     bool skipFormatConversion = false;
     switch (this->getEncodedInfo().color()) {
@@ -1031,6 +1021,7 @@ SkCodec::Result SkPngCodec::initializeXforms(const SkImageInfo& dstInfo, const O
 
             // Fall through
         case SkEncodedInfo::kRGBA_Color:
+        case SkEncodedInfo::kGray_Color:
             skipFormatConversion = this->colorXform();
             break;
         default:
@@ -1070,7 +1061,11 @@ void SkPngCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& o
     Options swizzlerOptions = options;
     fXformMode = kSwizzleOnly_XformMode;
     if (this->colorXform() && this->xformOnDecode()) {
-        swizzlerInfo = swizzlerInfo.makeColorType(kXformSrcColorType);
+        if (SkEncodedInfo::kGray_Color == this->getEncodedInfo().color()) {
+            swizzlerInfo = swizzlerInfo.makeColorType(kGray_8_SkColorType);
+        } else {
+            swizzlerInfo = swizzlerInfo.makeColorType(kXformSrcColorType);
+        }
         if (kPremul_SkAlphaType == dstInfo.alphaType()) {
             swizzlerInfo = swizzlerInfo.makeAlphaType(kUnpremul_SkAlphaType);
         }
@@ -1184,17 +1179,6 @@ SkCodec::Result SkPngCodec::onIncrementalDecode(int* rowsDecoded) {
     this->initializeXformParams();
 
     return this->decode(rowsDecoded);
-}
-
-uint64_t SkPngCodec::onGetFillValue(const SkImageInfo& dstInfo) const {
-    const SkPMColor* colorPtr = get_color_ptr(fColorTable.get());
-    if (colorPtr) {
-        SkAlphaType alphaType = select_xform_alpha(dstInfo.alphaType(),
-                                                   this->getInfo().alphaType());
-        return get_color_table_fill_value(dstInfo.colorType(), alphaType, colorPtr, 0,
-                                          this->colorXform(), true);
-    }
-    return INHERITED::onGetFillValue(dstInfo);
 }
 
 std::unique_ptr<SkCodec> SkPngCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
