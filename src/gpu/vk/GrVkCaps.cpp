@@ -425,6 +425,19 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
         fShouldAlwaysUseDedicatedImageMemory = true;
     }
 
+    // On Mali galaxy s7 and s9 we see lots of rendering issues with image filters dropping out when
+    // using only primary command buffers.
+    if (kARM_VkVendor == properties.vendorID) {
+        fPreferPrimaryOverSecondaryCommandBuffers = false;
+    }
+
+    // On various devices, when calling vkCmdClearAttachments on a primary command buffer, it
+    // corrupts the bound buffers on the command buffer. As a workaround we invalidate our knowledge
+    // of bound buffers so that we will rebind them on the next draw.
+    if (kQualcomm_VkVendor == properties.vendorID || kAMD_VkVendor == properties.vendorID) {
+        fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments = true;
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // GrCaps workarounds
     ////////////////////////////////////////////////////////////////////////////
@@ -700,6 +713,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 4;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 2;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -727,6 +741,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R8_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 1;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 2;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -755,6 +770,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 4;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -773,6 +789,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R5G6B5_UNORM_PACK16;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 2;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -791,6 +808,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R16G16B16A16_SFLOAT;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 8;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 2;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -816,6 +834,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R16_SFLOAT;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 2;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -836,6 +855,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R8G8B8_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 3;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -854,6 +874,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R8G8_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 2;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -872,6 +893,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 4;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -890,6 +912,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_B4G4R4A4_UNORM_PACK16;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 2;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -910,6 +933,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R4G4B4A4_UNORM_PACK16;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 2;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -928,6 +952,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 4;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -946,6 +971,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R16_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 2;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -966,6 +992,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R16G16_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 4;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -984,6 +1011,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R16G16B16A16_UNORM;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 8;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -1002,6 +1030,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_R16G16_SFLOAT;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 4;
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
@@ -1019,6 +1048,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
     {
         constexpr VkFormat format = VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
         auto& info = this->getFormatInfo(format);
+        info.fBytesPerPixel = 0;
         if (fSupportsYcbcrConversion) {
             info.init(interface, physDev, properties, format);
         }
@@ -1039,6 +1069,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
     {
         constexpr VkFormat format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
         auto& info = this->getFormatInfo(format);
+        info.fBytesPerPixel = 0;
         if (fSupportsYcbcrConversion) {
             info.init(interface, physDev, properties, format);
         }
@@ -1060,6 +1091,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         constexpr VkFormat format = VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 0;
         // No supported GrColorTypes.
     }
 
@@ -1347,7 +1379,7 @@ GrCaps::SupportedWrite GrVkCaps::supportedWritePixelsColorType(GrColorType surfa
     }
 
     // The VkBufferImageCopy bufferOffset field must be both a multiple of 4 and of a single texel.
-    size_t offsetAlignment = align_to_4(GrVkBytesPerFormat(vkFormat));
+    size_t offsetAlignment = align_to_4(this->bytesPerPixel(vkFormat));
 
     const auto& info = this->getFormatInfo(vkFormat);
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
@@ -1637,7 +1669,7 @@ GrCaps::SupportedRead GrVkCaps::onSupportedReadPixelsColorType(
     }
 
     // The VkBufferImageCopy bufferOffset field must be both a multiple of 4 and of a single texel.
-    size_t offsetAlignment = align_to_4(GrVkBytesPerFormat(vkFormat));
+    size_t offsetAlignment = align_to_4(this->bytesPerPixel(vkFormat));
 
     const auto& info = this->getFormatInfo(vkFormat);
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
