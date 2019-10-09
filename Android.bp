@@ -586,6 +586,7 @@ cc_library_static {
           "src/gpu/GrProcessorSet.cpp",
           "src/gpu/GrProcessorUnitTest.cpp",
           "src/gpu/GrProgramDesc.cpp",
+          "src/gpu/GrProgramInfo.cpp",
           "src/gpu/GrProxyProvider.cpp",
           "src/gpu/GrRecordingContext.cpp",
           "src/gpu/GrRectanizer_pow2.cpp",
