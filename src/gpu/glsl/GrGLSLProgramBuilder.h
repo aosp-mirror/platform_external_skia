@@ -41,11 +41,13 @@ public:
     GrSurfaceOrigin origin() const { return fProgramInfo.origin(); }
     const GrPipeline& pipeline() const { return fProgramInfo.pipeline(); }
     const GrPrimitiveProcessor& primitiveProcessor() const { return fProgramInfo.primProc(); }
-    const GrTextureProxy* const* primProcProxies() const { return fProgramInfo.primProcProxies(); }
+    GrProcessor::CustomFeatures processorFeatures() const {
+        return fProgramInfo.requestedFeatures();
+    }
 
     // TODO: stop passing in the renderTarget for just the sampleLocations
     int effectiveSampleCnt() const {
-        SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & header().processorFeatures());
+        SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
         return fRenderTarget->renderTargetPriv().getSampleLocations().count();
     }
     const SkTArray<SkPoint>& getSampleLocations() const {
@@ -157,7 +159,7 @@ private:
                                     SkString output,
                                     SkTArray<std::unique_ptr<GrGLSLFragmentProcessor>>*);
     void emitAndInstallXferProc(const SkString& colorIn, const SkString& coverageIn);
-    SamplerHandle emitSampler(const GrTexture*, const GrSamplerState&, const GrSwizzle&,
+    SamplerHandle emitSampler(const GrTextureProxy*, const GrSamplerState&, const GrSwizzle&,
                               const char* name);
     bool checkSamplerCounts();
 

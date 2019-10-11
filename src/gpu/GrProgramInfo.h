@@ -12,45 +12,41 @@
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrPrimitiveProcessor.h"
 
+class GrMesh;
+
 class GrProgramInfo {
 public:
-    // TODO: it seems like this object should also get the number of copies in
-    // dynamicStateArrays. If that were true a portion of checkAllInstantiated could be moved
-    // to validate.
     GrProgramInfo(int numSamples,
                   GrSurfaceOrigin origin,
                   const GrPipeline& pipeline,
                   const GrPrimitiveProcessor& primProc,
                   const GrPipeline::FixedDynamicState* fixedDynamicState,
-                  const GrPipeline::DynamicStateArrays* dynamicStateArrays)
+                  const GrPipeline::DynamicStateArrays* dynamicStateArrays,
+                  int numDynamicStateArrays)
             : fNumSamples(numSamples)
             , fOrigin(origin)
             , fPipeline(pipeline)
             , fPrimProc(primProc)
             , fFixedDynamicState(fixedDynamicState)
-            , fDynamicStateArrays(dynamicStateArrays) {
+            , fDynamicStateArrays(dynamicStateArrays)
+            , fNumDynamicStateArrays(numDynamicStateArrays) {
+        fRequestedFeatures = fPrimProc.requestedFeatures();
+        for (int i = 0; i < fPipeline.numFragmentProcessors(); ++i) {
+            fRequestedFeatures |= fPipeline.getFragmentProcessor(i).requestedFeatures();
+        }
+        fRequestedFeatures |= fPipeline.getXferProcessor().requestedFeatures();
+
         SkDEBUGCODE(this->validate();)
+        (void) fNumDynamicStateArrays;  // touch this to quiet unused member warnings
     }
+
+    GrProcessor::CustomFeatures requestedFeatures() const { return fRequestedFeatures; }
 
     int numSamples() const { return fNumSamples;  }
     GrSurfaceOrigin origin() const { return fOrigin;  }
     const GrPipeline& pipeline() const { return fPipeline; }
     const GrPrimitiveProcessor& primProc() const { return fPrimProc; }
     const GrPipeline::FixedDynamicState* fixedDynamicState() const { return fFixedDynamicState; }
-    const GrPipeline::DynamicStateArrays* dynamicStateArrays() const { return fDynamicStateArrays; }
-
-    // TODO: can this be removed?
-    const GrTextureProxy* const* primProcProxies() const {
-        const GrTextureProxy* const* primProcProxies = nullptr;
-        if (fDynamicStateArrays && fDynamicStateArrays->fPrimitiveProcessorTextures) {
-            primProcProxies = fDynamicStateArrays->fPrimitiveProcessorTextures;
-        } else if (fFixedDynamicState) {
-            primProcProxies = fFixedDynamicState->fPrimitiveProcessorTextures;
-        }
-
-        SkASSERT(SkToBool(primProcProxies) == SkToBool(fPrimProc.numTextureSamplers()));
-        return primProcProxies;
-    }
 
     bool hasDynamicScissors() const {
         return fPipeline.isScissorEnabled() &&
@@ -77,6 +73,7 @@ public:
 
     const GrTextureProxy* const* dynamicPrimProcTextures(int i) const {
         SkASSERT(this->hasDynamicPrimProcTextures());
+        SkASSERT(i < fNumDynamicStateArrays);
 
         return fDynamicStateArrays->fPrimitiveProcessorTextures +
                                                                 i * fPrimProc.numTextureSamplers();
@@ -94,22 +91,13 @@ public:
 
 #ifdef SK_DEBUG
     void validate() const;
-    void checkAllInstantiated(int meshCount) const;
-    void checkMSAAAndMIPSAreResolved(int meshCount) const;
+    void checkAllInstantiated() const;
+    void checkMSAAAndMIPSAreResolved() const;
+    void compatibleWithMeshes(const GrMesh meshes[], int meshCount) const;
 
     bool isNVPR() const {
         return fPrimProc.isPathRendering() && !fPrimProc.willUseGeoShader() &&
                !fPrimProc.numVertexAttributes() && !fPrimProc.numInstanceAttributes();
-    }
-
-    // TODO: calculate this once in the ctor and use more widely
-    GrProcessor::CustomFeatures requestedFeatures() const {
-        GrProcessor::CustomFeatures requestedFeatures = fPrimProc.requestedFeatures();
-        for (int i = 0; i < fPipeline.numFragmentProcessors(); ++i) {
-            requestedFeatures |= fPipeline.getFragmentProcessor(i).requestedFeatures();
-        }
-        requestedFeatures |= fPipeline.getXferProcessor().requestedFeatures();
-        return requestedFeatures;
     }
 #endif
 
@@ -120,6 +108,8 @@ private:
     const GrPrimitiveProcessor&           fPrimProc;
     const GrPipeline::FixedDynamicState*  fFixedDynamicState;
     const GrPipeline::DynamicStateArrays* fDynamicStateArrays;
+    const int                             fNumDynamicStateArrays;
+    GrProcessor::CustomFeatures           fRequestedFeatures;
 };
 
 #endif
