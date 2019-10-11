@@ -7,79 +7,47 @@
 
 #include "GrAtlasManager.h"
 
-#include "GrCaps.h"
 #include "GrGlyph.h"
-#include "GrGlyphCache.h"
-#include "GrProxyProvider.h"
+#include "GrStrikeCache.h"
 
-GrRestrictedAtlasManager::GrRestrictedAtlasManager(
-                                        sk_sp<const GrCaps> caps,
-                                        float maxTextureBytes,
-                                        GrDrawOpAtlas::AllowMultitexturing allowMultitexturing)
-            : fCaps(std::move(caps))
-            , fAllowMultitexturing(allowMultitexturing) {
-    // Calculate RGBA size. Must be between 512 x 256 and MaxTextureSize x MaxTextureSize / 2
-    int log2MaxTextureSize = SkPrevLog2(fCaps->maxTextureSize());
-    int log2MaxDim = 9;
-    for (; log2MaxDim <= log2MaxTextureSize; ++log2MaxDim) {
-        int maxDim = 1 << log2MaxDim;
-        int minDim = 1 << (log2MaxDim - 1);
+GrAtlasManager::GrAtlasManager(GrProxyProvider* proxyProvider, GrStrikeCache* glyphCache,
+                               size_t maxTextureBytes,
+                               GrDrawOpAtlas::AllowMultitexturing allowMultitexturing)
+            : fAllowMultitexturing{allowMultitexturing}
+            , fProxyProvider{proxyProvider}
+            , fCaps{fProxyProvider->refCaps()}
+            , fGlyphCache{glyphCache}
+            , fAtlasConfig{fCaps->maxTextureSize(), maxTextureBytes} { }
 
-        if (maxDim * minDim * 4 >= maxTextureBytes) break;
-    }
+GrAtlasManager::~GrAtlasManager() = default;
 
-    int log2MinDim = log2MaxDim - 1;
-    int maxDim = 1 << log2MaxDim;
-    int minDim = 1 << log2MinDim;
-    // Plots are either 256 or 512.
-    int maxPlot = SkTMin(512, SkTMax(256, 1 << (log2MaxDim - 2)));
-    int minPlot = SkTMin(512, SkTMax(256, 1 << (log2MaxDim - 3)));
-
-    // Setup default atlas configs. The A8 atlas uses maxDim for both width and height, as the A8
-    // format is already very compact.
-    fAtlasConfigs[kA8_GrMaskFormat].fWidth = maxDim;
-    fAtlasConfigs[kA8_GrMaskFormat].fHeight = maxDim;
-    fAtlasConfigs[kA8_GrMaskFormat].fPlotWidth = maxPlot;
-    fAtlasConfigs[kA8_GrMaskFormat].fPlotHeight = minPlot;
-
-    // A565 and ARGB use maxDim x minDim.
-    fAtlasConfigs[kA565_GrMaskFormat].fWidth = minDim;
-    fAtlasConfigs[kA565_GrMaskFormat].fHeight = maxDim;
-    fAtlasConfigs[kA565_GrMaskFormat].fPlotWidth = minPlot;
-    fAtlasConfigs[kA565_GrMaskFormat].fPlotHeight = minPlot;
-
-    fAtlasConfigs[kARGB_GrMaskFormat].fWidth = minDim;
-    fAtlasConfigs[kARGB_GrMaskFormat].fHeight = maxDim;
-    fAtlasConfigs[kARGB_GrMaskFormat].fPlotWidth = minPlot;
-    fAtlasConfigs[kARGB_GrMaskFormat].fPlotHeight = minPlot;
-
-    fGlyphSizeLimit = minPlot;
-}
-
-GrRestrictedAtlasManager::~GrRestrictedAtlasManager() {
-}
-
-static GrPixelConfig mask_format_to_pixel_config(GrMaskFormat format, const GrCaps& caps) {
+static GrPixelConfig mask_format_to_pixel_config(GrMaskFormat format) {
     switch (format) {
         case kA8_GrMaskFormat:
             return kAlpha_8_GrPixelConfig;
         case kA565_GrMaskFormat:
             return kRGB_565_GrPixelConfig;
         case kARGB_GrMaskFormat:
-            return caps.srgbSupport() ? kSRGBA_8888_GrPixelConfig : kRGBA_8888_GrPixelConfig;
+            return kRGBA_8888_GrPixelConfig;
         default:
             SkDEBUGFAIL("unsupported GrMaskFormat");
             return kAlpha_8_GrPixelConfig;
     }
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
-GrAtlasManager::GrAtlasManager(GrProxyProvider* proxyProvider, GrGlyphCache* glyphCache,
-                               float maxTextureBytes,
-                               GrDrawOpAtlas::AllowMultitexturing allowMultitexturing)
-            : INHERITED(proxyProvider->refCaps(), maxTextureBytes, allowMultitexturing)
-            , fProxyProvider(proxyProvider)
-            , fGlyphCache(glyphCache) {
+static SkColorType mask_format_to_color_type(GrMaskFormat format) {
+    switch (format) {
+        case kA8_GrMaskFormat:
+            return kAlpha_8_SkColorType;
+        case kA565_GrMaskFormat:
+            return kRGB_565_SkColorType;
+        case kARGB_GrMaskFormat:
+            return kRGBA_8888_SkColorType;
+        default:
+            SkDEBUGFAIL("unsupported GrMaskFormat");
+            return kAlpha_8_SkColorType;
+    }
+
 }
 
 void GrAtlasManager::freeAll() {
@@ -94,14 +62,15 @@ bool GrAtlasManager::hasGlyph(GrGlyph* glyph) {
 }
 
 // add to texture atlas that matches this format
-bool GrAtlasManager::addToAtlas(GrResourceProvider* resourceProvider,
-                                GrGlyphCache* glyphCache,
+GrDrawOpAtlas::ErrorCode GrAtlasManager::addToAtlas(
+                                GrResourceProvider* resourceProvider,
+                                GrStrikeCache* glyphCache,
                                 GrTextStrike* strike, GrDrawOpAtlas::AtlasID* id,
                                 GrDeferredUploadTarget* target, GrMaskFormat format,
                                 int width, int height, const void* image, SkIPoint16* loc) {
     glyphCache->setStrikeToPreserve(strike);
     return this->getAtlas(format)->addToAtlas(resourceProvider, id, target, width, height,
-                                                image, loc);
+                                              image, loc);
 }
 
 void GrAtlasManager::addGlyphToBulkAndSetUseToken(GrDrawOpAtlas::BulkUseTokenUpdater* updater,
@@ -140,8 +109,7 @@ static bool save_pixels(GrContext* context, GrSurfaceProxy* sProxy, const char* 
         return false;
     }
 
-    sk_sp<GrSurfaceContext> sContext(context->contextPriv().makeWrappedSurfaceContext(
-                                                                                sk_ref_sp(sProxy)));
+    sk_sp<GrSurfaceContext> sContext(context->priv().makeWrappedSurfaceContext(sk_ref_sp(sProxy)));
     if (!sContext || !sContext->asTextureProxy()) {
         return false;
     }
@@ -193,28 +161,31 @@ void GrAtlasManager::dump(GrContext* context) const {
 }
 #endif
 
-void GrAtlasManager::setAtlasSizes_ForTesting(const GrDrawOpAtlasConfig configs[3]) {
+void GrAtlasManager::setAtlasSizesToMinimum_ForTesting() {
     // Delete any old atlases.
     // This should be safe to do as long as we are not in the middle of a flush.
     for (int i = 0; i < kMaskFormatCount; i++) {
         fAtlases[i] = nullptr;
     }
-    memcpy(fAtlasConfigs, configs, sizeof(fAtlasConfigs));
+
+    // Set all the atlas sizes to 1x1 plot each.
+    new (&fAtlasConfig) GrDrawOpAtlasConfig{};
 }
 
 bool GrAtlasManager::initAtlas(GrMaskFormat format) {
     int index = MaskFormatToAtlasIndex(format);
-    if (!fAtlases[index]) {
-        GrPixelConfig config = mask_format_to_pixel_config(format, *fCaps);
-        int width = fAtlasConfigs[index].fWidth;
-        int height = fAtlasConfigs[index].fHeight;
-        int numPlotsX = fAtlasConfigs[index].numPlotsX();
-        int numPlotsY = fAtlasConfigs[index].numPlotsY();
+    if (fAtlases[index] == nullptr) {
+        GrPixelConfig config = mask_format_to_pixel_config(format);
+        SkColorType colorType = mask_format_to_color_type(format);
+        SkISize atlasDimensions = fAtlasConfig.atlasDimensions(format);
+        SkISize plotDimensions = fAtlasConfig.plotDimensions(format);
 
-        fAtlases[index] = GrDrawOpAtlas::Make(fProxyProvider, config, width, height,
-                                              numPlotsX, numPlotsY, fAllowMultitexturing,
-                                              &GrGlyphCache::HandleEviction,
-                                              fGlyphCache);
+        const GrBackendFormat format = fCaps->getBackendFormatFromColorType(colorType);
+
+        fAtlases[index] = GrDrawOpAtlas::Make(
+                fProxyProvider, format, config, atlasDimensions.width(), atlasDimensions.height(),
+                plotDimensions.width(), plotDimensions.height(), fAllowMultitexturing,
+                &GrStrikeCache::HandleEviction, fGlyphCache);
         if (!fAtlases[index]) {
             return false;
         }

@@ -38,7 +38,6 @@ DEF_TEST(serial_procs_image, reporter) {
     };
     const SkDeserialImageProc dprocs[] = {
         [](const void* data, size_t length, void*) -> sk_sp<SkImage> {
-            SK_ABORT("should not get called");
             return nullptr;
         },
         [](const void* data, size_t length, void*) {
@@ -177,5 +176,40 @@ DEF_TEST(serial_procs_picture, reporter) {
         c->drawColor(SK_ColorBLUE);
     });
     test_pictures(reporter, p0, 1, true);
+}
+
+static sk_sp<SkPicture> make_picture(sk_sp<SkTypeface> tf0, sk_sp<SkTypeface> tf1) {
+    SkPictureRecorder rec;
+    SkCanvas* canvas = rec.beginRecording(100, 100);
+    SkPaint paint;
+    SkFont font;
+    font.setTypeface(tf0); canvas->drawString("hello", 0, 0, font, paint);
+    font.setTypeface(tf1); canvas->drawString("hello", 0, 0, font, paint);
+    font.setTypeface(tf0); canvas->drawString("hello", 0, 0, font, paint);
+    font.setTypeface(tf1); canvas->drawString("hello", 0, 0, font, paint);
+    return rec.finishRecordingAsPicture();
+}
+
+DEF_TEST(serial_typeface, reporter) {
+    auto tf0 = MakeResourceAsTypeface("fonts/hintgasp.ttf");
+    auto tf1 = MakeResourceAsTypeface("fonts/Roboto2-Regular_NoEmbed.ttf");
+    if (!tf0 || !tf1 || tf0.get() == tf1.get()) {
+        return; // need two different typefaces for this test to make sense.
+    }
+
+    auto pic = make_picture(tf0, tf1);
+
+    int counter = 0;
+    SkSerialProcs procs;
+    procs.fTypefaceProc = [](SkTypeface* tf, void* ctx) -> sk_sp<SkData> {
+        *(int*)ctx += 1;
+        return nullptr;
+    };
+    procs.fTypefaceCtx = &counter;
+    auto data = pic->serialize(&procs);
+
+    // The picture has 2 references to each typeface, but we want the serialized picture to
+    // only have written the data 1 time per typeface.
+    REPORTER_ASSERT(reporter, counter == 2);
 }
 

@@ -80,7 +80,7 @@ sk_sp<const GrXferProcessor> GrDisableColorXPFactory::makeXferProcessor(
         GrProcessorAnalysisCoverage,
         bool hasMixedSamples,
         const GrCaps& caps,
-        GrPixelConfigIsClamped dstIsClamped) const {
+        GrClampType clampType) const {
     return sk_sp<const GrXferProcessor>(new DisableColorXP);
 }
 

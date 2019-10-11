@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
 #include "SkHalf.h"
 #include "SkRasterPipeline.h"
-#include "../src/jumper/SkJumper.h"
+#include "SkTo.h"
+#include "Test.h"
 
 DEF_TEST(SkRasterPipeline, r) {
     // Build and run a simple pipeline to exercise SkRasterPipeline,
@@ -17,9 +17,9 @@ DEF_TEST(SkRasterPipeline, r) {
              blue = 0x3800380000000000ull,
              result;
 
-    SkJumper_MemoryCtx load_s_ctx = { &blue, 0 },
-                       load_d_ctx = { &red, 0 },
-                       store_ctx  = { &result, 0 };
+    SkRasterPipeline_MemoryCtx load_s_ctx = { &blue, 0 },
+                               load_d_ctx = { &red, 0 },
+                               store_ctx  = { &result, 0 };
 
     SkRasterPipeline_<256> p;
     p.append(SkRasterPipeline::load_f16,     &load_s_ctx);
@@ -61,7 +61,7 @@ DEF_TEST(SkRasterPipeline_JIT, r) {
          0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
     };
 
-    SkJumper_MemoryCtx src = { buf +  0, 0 },
+    SkRasterPipeline_MemoryCtx src = { buf +  0, 0 },
                        dst = { buf + 36, 0 };
 
     // Copy buf[x] to buf[x+36] for x in [15,35).
@@ -93,14 +93,6 @@ static uint16_t h(float f) {
                   : SkTo<uint16_t>((s>>16) + (em>>13) - ((127-15)<<10));
 }
 
-static uint16_t n(uint16_t x) {
-    return (x<<8) | (x>>8);
-}
-
-static float a(uint16_t x) {
-    return (1/65535.0f) * x;
-}
-
 DEF_TEST(SkRasterPipeline_tail, r) {
     {
         float data[][4] = {
@@ -112,7 +104,7 @@ DEF_TEST(SkRasterPipeline_tail, r) {
 
         float buffer[4][4];
 
-        SkJumper_MemoryCtx src = { &data[0][0], 0 },
+        SkRasterPipeline_MemoryCtx src = { &data[0][0], 0 },
                            dst = { &buffer[0][0], 0 };
 
         for (unsigned i = 1; i <= 4; i++) {
@@ -144,7 +136,7 @@ DEF_TEST(SkRasterPipeline_tail, r) {
             {h(30), h(31), h(32), h(33)},
         };
         alignas(8) uint16_t buffer[4][4];
-        SkJumper_MemoryCtx src = { &data[0][0], 0 },
+        SkRasterPipeline_MemoryCtx src = { &data[0][0], 0 },
                            dst = { &buffer[0][0], 0 };
 
         for (unsigned i = 1; i <= 4; i++) {
@@ -164,46 +156,6 @@ DEF_TEST(SkRasterPipeline_tail, r) {
             }
         }
     }
-
-    {
-        uint16_t data[][3] = {
-            {n(00), n(01), n(02)},
-            {n(10), n(11), n(12)},
-            {n(20), n(21), n(22)},
-            {n(30), n(31), n(32)}
-        };
-
-        float answer[][4] = {
-            {a(00), a(01), a(02), 1.0f},
-            {a(10), a(11), a(12), 1.0f},
-            {a(20), a(21), a(22), 1.0f},
-            {a(30), a(31), a(32), 1.0f}
-        };
-
-        float buffer[4][4];
-        SkJumper_MemoryCtx src = { &data[0][0], 0 },
-                           dst = { &buffer[0][0], 0 };
-
-        for (unsigned i = 1; i <= 4; i++) {
-            memset(buffer, 0xff, sizeof(buffer));
-            SkRasterPipeline_<256> p;
-            p.append(SkRasterPipeline::load_rgb_u16_be, &src);
-            p.append(SkRasterPipeline::store_f32, &dst);
-            p.run(0,0, i,1);
-            for (unsigned j = 0; j < i; j++) {
-                for (unsigned k = 0; k < 4; k++) {
-                    if (buffer[j][k] != answer[j][k]) {
-                        ERRORF(r, "(%u, %u) - a: %g r: %g\n", j, k, answer[j][k], buffer[j][k]);
-                    }
-                }
-            }
-            for (int j = i; j < 4; j++) {
-                for (auto f : buffer[j]) {
-                    REPORTER_ASSERT(r, SkScalarIsNaN(f));
-                }
-            }
-        }
-    }
 }
 
 DEF_TEST(SkRasterPipeline_lowp, r) {
@@ -215,10 +167,11 @@ DEF_TEST(SkRasterPipeline_lowp, r) {
                 | (4*i+3) << 24;
     }
 
-    SkJumper_MemoryCtx ptr = { rgba, 0 };
+    SkRasterPipeline_MemoryCtx ptr = { rgba, 0 };
 
     SkRasterPipeline_<256> p;
-    p.append(SkRasterPipeline::load_bgra,  &ptr);
+    p.append(SkRasterPipeline::load_8888,  &ptr);
+    p.append(SkRasterPipeline::swap_rb);
     p.append(SkRasterPipeline::store_8888, &ptr);
     p.run(0,0,64,1);
 
@@ -231,4 +184,21 @@ DEF_TEST(SkRasterPipeline_lowp, r) {
             ERRORF(r, "got %08x, want %08x\n", rgba[i], want);
         }
     }
+}
+
+DEF_TEST(SkRasterPipeline_lowp_clamp01, r) {
+    // This may seem like a funny pipeline to create,
+    // but it certainly shouldn't crash when you run it.
+
+    uint32_t rgba = 0xff00ff00;
+
+    SkRasterPipeline_MemoryCtx ptr = { &rgba, 0 };
+
+    SkRasterPipeline_<256> p;
+    p.append(SkRasterPipeline::load_8888,  &ptr);
+    p.append(SkRasterPipeline::swap_rb);
+    p.append(SkRasterPipeline::clamp_0);
+    p.append(SkRasterPipeline::clamp_1);
+    p.append(SkRasterPipeline::store_8888, &ptr);
+    p.run(0,0,1,1);
 }

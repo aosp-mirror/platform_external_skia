@@ -5,25 +5,29 @@
  * found in the LICENSE file.
  */
 
-#include <functional>
 #include "SkBitmap.h"
+#include "SkBlendMode.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
-#include "SkColorPriv.h"
+#include "SkColorSpace.h"
+#include "SkImageInfo.h"
+#include "SkPaint.h"
+#include "SkPoint.h"
+#include "SkRect.h"
+#include "SkRefCnt.h"
 #include "SkSurface.h"
-#include "SkTaskGroup.h"
-#include "SkUtils.h"
+#include "SkTypes.h"
 #include "Test.h"
 
-#if SK_SUPPORT_GPU
+#include "GrBackendSurface.h"
 #include "GrContext.h"
+#include "GrContextFactory.h"
 #include "GrContextPriv.h"
 #include "GrResourceProvider.h"
-#include "GrSurfaceContext.h"
-#include "GrSurfaceProxy.h"
-#include "GrTest.h"
 #include "GrTexture.h"
-#endif
+#include "GrTypes.h"
+
+#include <vector>
 
 struct Results { int diffs, diffs_0x00, diffs_0xff, diffs_by_1; };
 
@@ -81,7 +85,6 @@ DEF_TEST(Blend_byte_multiply, r) {
     for (auto multiply : perfect) { REPORTER_ASSERT(r, test(multiply).diffs == 0); }
 }
 
-#if SK_SUPPORT_GPU
 namespace {
 static sk_sp<SkSurface> create_gpu_surface_backend_texture_as_render_target(
         GrContext* context, int sampleCnt, int width, int height, SkColorType colorType,
@@ -89,13 +92,12 @@ static sk_sp<SkSurface> create_gpu_surface_backend_texture_as_render_target(
         sk_sp<GrTexture>* backingSurface) {
     GrSurfaceDesc backingDesc;
     backingDesc.fFlags = kRenderTarget_GrSurfaceFlag;
-    backingDesc.fOrigin = origin;
     backingDesc.fWidth = width;
     backingDesc.fHeight = height;
     backingDesc.fConfig = config;
     backingDesc.fSampleCnt = sampleCnt;
 
-    auto resourceProvider = context->contextPriv().resourceProvider();
+    auto resourceProvider = context->priv().resourceProvider();
 
     *backingSurface = resourceProvider->createTexture(backingDesc, SkBudgeted::kNo);
     if (!(*backingSurface)) {
@@ -201,4 +203,3 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ES2BlendWithNoTexture, reporter, ctxInfo) 
         backingSurface.reset();
     }
 }
-#endif

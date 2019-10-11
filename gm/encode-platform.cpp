@@ -14,31 +14,9 @@
 #include "SkImageEncoderPriv.h"
 #include "SkJpegEncoder.h"
 #include "SkPngEncoder.h"
-#include "SkUnPreMultiply.h"
 #include "SkWebpEncoder.h"
 
 namespace skiagm {
-
-static void make_opaque_256(SkBitmap* bitmap) {
-    GetResourceAsBitmap("images/mandrill_256.png", bitmap);
-}
-
-static void make_premul_256(SkBitmap* bitmap) {
-    SkBitmap tmp;
-    GetResourceAsBitmap("images/yellow_rose.png", &tmp);
-    tmp.extractSubset(bitmap, SkIRect::MakeWH(256, 256));
-}
-
-static void make_unpremul_256(SkBitmap* bitmap) {
-    make_premul_256(bitmap);
-    for (int y = 0; y < bitmap->height(); y++) {
-        for (int x = 0; x < bitmap->width(); x++) {
-            SkPMColor* pixel = bitmap->getAddr32(x, y);
-            *pixel = SkUnPreMultiply::UnPreMultiplyPreservingByteOrder(*pixel);
-        }
-    }
-    bitmap->setAlphaType(kUnpremul_SkAlphaType);
-}
 
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
 static SkEncodedImageFormat kTypes[] {
@@ -72,9 +50,7 @@ static sk_sp<SkData> encode_data(SkEncodedImageFormat type, const SkBitmap& bitm
     #else
         switch (type) {
             case SkEncodedImageFormat::kPNG: {
-                SkPngEncoder::Options options;
-                options.fUnpremulBehavior = SkTransferFunctionBehavior::kIgnore;
-                bool success = SkPngEncoder::Encode(&buf, src, options);
+                bool success = SkPngEncoder::Encode(&buf, src, SkPngEncoder::Options());
                 return success ? buf.detachAsData() : nullptr;
             }
             case SkEncodedImageFormat::kJPEG: {
@@ -82,9 +58,7 @@ static sk_sp<SkData> encode_data(SkEncodedImageFormat type, const SkBitmap& bitm
                 return success ? buf.detachAsData() : nullptr;
             }
             case SkEncodedImageFormat::kWEBP: {
-                SkWebpEncoder::Options options;
-                options.fUnpremulBehavior = SkTransferFunctionBehavior::kIgnore;
-                bool success = SkWebpEncoder::Encode(&buf, src, options);
+                bool success = SkWebpEncoder::Encode(&buf, src, SkWebpEncoder::Options());
                 return success ? buf.detachAsData() : nullptr;
             }
             default:
@@ -107,11 +81,24 @@ protected:
         return SkISize::Make(256 * SK_ARRAY_COUNT(kTypes), 256 * 3);
     }
 
-    void onDraw(SkCanvas* canvas) override {
+    DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
         SkBitmap opaqueBm, premulBm, unpremulBm;
-        make_opaque_256(&opaqueBm);
-        make_premul_256(&premulBm);
-        make_unpremul_256(&unpremulBm);
+
+        if (!GetResourceAsBitmap("images/mandrill_256.png", &opaqueBm)) {
+            *errorMsg = "Could not load images/mandrill_256.png.png. "
+                        "Did you forget to set the resourcePath?";
+            return DrawResult::kFail;
+        }
+        SkBitmap tmp;
+        if (!GetResourceAsBitmap("images/yellow_rose.png", &tmp)) {
+            *errorMsg = "Could not load images/yellow_rose.png. "
+                        "Did you forget to set the resourcePath?";
+            return DrawResult::kFail;
+        }
+        tmp.extractSubset(&premulBm, SkIRect::MakeWH(256, 256));
+        tmp.reset();
+        unpremulBm.allocPixels(premulBm.info().makeAlphaType(kUnpremul_SkAlphaType));
+        SkAssertResult(premulBm.readPixels(unpremulBm.pixmap()));
 
         for (SkEncodedImageFormat type : kTypes) {
             auto opaqueImage = SkImage::MakeFromEncoded(encode_data(type, opaqueBm));
@@ -124,6 +111,7 @@ protected:
 
             canvas->translate(256.0f, 0.0f);
         }
+        return DrawResult::kOk;
     }
 
 private:

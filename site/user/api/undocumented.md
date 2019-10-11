@@ -1,952 +1,949 @@
 undocumented
 ===
 
-# <a name="Alias"></a> Alias
 
-# <a name="Anti-alias"></a> Anti-alias
-
-# <a name="Arc"></a> Arc
-
-# <a name="BBH_Factory"></a> BBH Factory
-
-# <a name="SkBBHFactory"></a> Class SkBBHFactory
-
-# <a name="Backend_Semaphore"></a> Backend Semaphore
-
-# <a name="GrBackendSemaphore"></a> Class GrBackendSemaphore
-
-# <a name="Blend_Mode"></a> Blend Mode
-
-## <a name="SkBlendMode"></a> Enum SkBlendMode
-
-### Constants
-
-<table>
-  <tr>
-    <td><a name="SkBlendMode_kSrc"> <code><strong>SkBlendMode::kSrc </strong></code> </a></td><td>1</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkBlendMode_kSrcOver"> <code><strong>SkBlendMode::kSrcOver </strong></code> </a></td><td>3</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkBlendMode_kPlus"> <code><strong>SkBlendMode::kPlus </strong></code> </a></td><td>12</td><td></td>
-  </tr>
-
-</table>
-
-# <a name="Circle"></a> Circle
-
-# <a name="Clip_Op"></a> Clip Op
-
-## <a name="SkClipOp"></a> Enum SkClipOp
-
-### Constants
-
-<table>
-  <tr>
-    <td><a name="SkClipOp_kDifference"> <code><strong>SkClipOp::kDifference </strong></code> </a></td><td>0</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkClipOp_kIntersect"> <code><strong>SkClipOp::kIntersect </strong></code> </a></td><td>1</td><td></td>
-  </tr>
-
-</table>
-
-# <a name="Color"></a> Color
-
-<a name="SkColorGetA"></a>
-## SkColorGetA
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-int SkColorGetA(color)
-</pre>
+<a name='SkBBHFactory'></a>
 
 ---
 
-<a name="SkColorGetR"></a>
-## SkColorGetR
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-int SkColorGetR(color)
-</pre>
+<a name='GrBackendSemaphore'></a>
 
 ---
 
-<a name="SkColorGetG"></a>
-## SkColorGetG
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-int SkColorGetG(color)
-</pre>
-
----
-
-<a name="SkColorGetB"></a>
-## SkColorGetB
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-int SkColorGetB(color)
-</pre>
-
----
-
-<a name="SkColorSetARGB"></a>
-## SkColorSetARGB
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-int SkColorSetARGB(a, r, g, b)
-</pre>
-
----
-
-<a name="SkPreMultiplyARGB"></a>
-## SkPreMultiplyARGB
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkPMColor SkPreMultiplyARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b)
-</pre>
+<a name='SkClipOp'></a>
 
 ---
 
 ### Constants
 
-<table>
-  <tr>
-    <td><a name="SK_ColorBLACK"> <code><strong>SK_ColorBLACK </strong></code> </a></td><td>0xFF000000 </td><td></td>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkClipOp_kDifference'><code>SkClipOp::kDifference</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="SK_ColorBLUE"> <code><strong>SK_ColorBLUE </strong></code> </a></td><td>0xFF0000FF </td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SK_ColorGREEN"> <code><strong>SK_ColorGREEN </strong></code> </a></td><td>0xFF00FF00 </td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SK_ColorRED"> <code><strong>SK_ColorRED </strong></code> </a></td><td>0xFFFF0000 </td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SK_ColorWHITE"> <code><strong>SK_ColorWHITE </strong></code> </a></td><td>0xFFFFFFFF </td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkClipOp_kIntersect'><code>SkClipOp::kIntersect</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>1</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
 </table>
 
-## <a name="Alpha"></a> Alpha
-
-## <a name="RGB"></a> RGB
-
-## <a name="RGB_Red"></a> RGB Red
-
-## <a name="RGB_Blue"></a> RGB Blue
-
-## <a name="RGB_Green"></a> RGB Green
-
-## <a name="ARGB"></a> ARGB
-
-## <a name="RBG"></a> RBG
-
-## <a name="RGB-565"></a> RGB-565
-
-## <a name="Gray"></a> Gray
-
-# <a name="Color_Filter"></a> Color Filter
-
-# <a name="SkColorFilter"></a> Class SkColorFilter
-
-<a name="SkColorFilter_toString"></a>
-## toString
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void toString(SkString* str) const
-</pre>
+<a name='SkColorFilter'></a>
 
 ---
 
-# <a name="Color_Space"></a> Color Space
-
-# <a name="SkColorSpace"></a> Class SkColorSpace
-
-<a name="SkColorSpace_MakeSRGBLinear"></a>
-## MakeSRGBLinear
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-static sk_sp&lt;SkColorSpace&gt; MakeSRGBLinear()
-</pre>
+<a name='SkColorSpace'></a>
 
 ---
 
-## <a name="SkTransferFunctionBehavior"></a> Enum SkTransferFunctionBehavior
+<a name='SkColorSpace_MakeSRGBLinear'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+static <a href='#sk_sp'>sk sp</a>&lt;<a href='#SkColorSpace'>SkColorSpace</a>&gt; <a href='#SkColorSpace_MakeSRGBLinear'>MakeSRGBLinear</a>()
+</pre>
+
+<a name='SkColorSpace_gammaCloseToSRGB'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#SkColorSpace_gammaCloseToSRGB'>gammaCloseToSRGB</a>() const
+</pre>
+
+<a name='SkColorSpace_Equals'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+static bool <a href='#SkColorSpace_Equals'>Equals</a>(const <a href='#SkColorSpace'>SkColorSpace</a>* src, const <a href='#SkColorSpace'>SkColorSpace</a>* dst)
+</pre>
+
+<a name='SkCreateColorSpaceXformCanvas'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+std::unique_ptr&lt;<a href='SkCanvas_Reference#SkCanvas'>SkCanvas</a>&gt; SK_API <a href='#SkCreateColorSpaceXformCanvas'>SkCreateColorSpaceXformCanvas</a>(<a href='SkCanvas_Reference#SkCanvas'>SkCanvas</a>* target,
+                                                     <a href='#sk_sp'>sk sp</a>&lt;<a href='#SkColorSpace'>SkColorSpace</a>&gt; targetCS)
+</pre>
+
+<a name='SkData'></a>
+
+---
+
+<a name='SkDebugCanvas'></a>
+
+---
+
+<a name='SkDebugf'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+SK_API void <a href='#SkDebugf'>SkDebugf</a>(const char format[], ...)
+</pre>
+
+<a name='SkDeferredDisplayList'></a>
+
+---
+
+<a name='Recorder'></a>
+
+<a name='SkDeferredDisplayListRecorder'></a>
+
+---
+
+<a name='SkDeserialProcs'></a>
+
+---<table style='border-collapse: collapse; width: 62.5em'>
+
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Type</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Member</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkDeserialPictureProc</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkDeserialProcs_fPictureProc'><code>fPictureProc</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>void*</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkDeserialProcs_fPictureCtx'><code>fPictureCtx</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkDeserialTypefaceProc</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkDeserialProcs_fTypefaceProc'><code>fTypefaceProc</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>void*</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkDeserialProcs_fTypefaceCtx'><code>fTypefaceCtx</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+</table>
+
+<a name='SkBaseDevice'></a>
+
+---
+
+<a name='SkDocument'></a>
+
+---
+
+<a name='SkDocument_beginPage'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+<a href='SkCanvas_Reference#SkCanvas'>SkCanvas</a>* <a href='#SkDocument_beginPage'>beginPage</a>(<a href='#SkScalar'>SkScalar</a> width, <a href='#SkScalar'>SkScalar</a> height, const <a href='SkRect_Reference#SkRect'>SkRect</a>* content = NULL)
+</pre>
+
+<a name='PDF'></a>
+
+<a name='SkDrawLooper'></a>
+
+---
+
+<a name='SkDrawable'></a>
+
+---
+
+<a name='SkDrawable_draw'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+void <a href='#SkDrawable_draw'>draw</a>(<a href='SkCanvas_Reference#SkCanvas'>SkCanvas</a>*, const <a href='SkMatrix_Reference#SkMatrix'>SkMatrix</a>* = NULL)
+</pre>
+
+<a name='SkFilterQuality'></a>
+
+---
 
 ### Constants
 
-<table>
-  <tr>
-    <td><a name="SkTransferFunctionBehavior_kRespect"> <code><strong>SkTransferFunctionBehavior::kRespect </strong></code> </a></td><td>0</td><td></td>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kNone_SkFilterQuality'><code>kNone_SkFilterQuality</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="SkTransferFunctionBehavior_kIgnore"> <code><strong>SkTransferFunctionBehavior::kIgnore </strong></code> </a></td><td>1</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kLow_SkFilterQuality'><code>kLow_SkFilterQuality</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>1</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
-
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kMedium_SkFilterQuality'><code>kMedium_SkFilterQuality</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>2</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kHigh_SkFilterQuality'><code>kHigh_SkFilterQuality</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>3</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
 </table>
 
-# <a name="Core_Graphics"></a> Core Graphics
+<a name='Nearest_Neighbor'></a>
 
-# <a name="Core_Text"></a> Core Text
+<a name='Bilerp'></a>
 
-# <a name="Create_Color_Space_Xform_Canvas"></a> Create Color Space Xform Canvas
+<a name='MipMap'></a>
 
-<a name="SkCreateColorSpaceXformCanvas"></a>
-## SkCreateColorSpaceXformCanvas
+<a name='BiCubic'></a>
 
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-std::unique_ptr&lt;SkCanvas&gt; SK_API SkCreateColorSpaceXformCanvas(SkCanvas* target,
-                                                     sk_sp&lt;SkColorSpace&gt; targetCS)
-</pre>
+<a name='Advance'></a>
 
----
+<a name='Engine'></a>
 
-# <a name="Curve"></a> Curve
-
-# <a name="Data"></a> Data
-
-# <a name="SkData"></a> Class SkData
-
-# <a name="Debugging"></a> Debugging
-
-<a name="SkDebugf"></a>
-## SkDebugf
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SK_API void SkDebugf(const char format[], ...)
-</pre>
+<a name='SkTextEncoding'></a>
 
 ---
-
-# <a name="Deferred_Display_List"></a> Deferred Display List
-
-# <a name="SkDeferredDisplayList"></a> Class SkDeferredDisplayList
-
-## <a name="Recorder"></a> Recorder
-
-# <a name="SkDeferredDisplayListRecorder"></a> Class SkDeferredDisplayListRecorder
-
-# <a name="Device"></a> Device
-
-# <a name="SkBaseDevice"></a> Class SkBaseDevice
-
-# <a name="Document"></a> Document
-
-# <a name="SkDocument"></a> Class SkDocument
-
-<a name="SkDocument_beginPage"></a>
-## beginPage
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkCanvas* beginPage(SkScalar width, SkScalar height, const SkRect* content = NULL)
-</pre>
-
----
-
-## <a name="PDF"></a> PDF
-
-# <a name="Draw_Filter"></a> Draw Filter
-
-# <a name="SkDrawFilter"></a> Class SkDrawFilter
-
-# <a name="Draw_Layer"></a> Draw Layer
-
-# <a name="Draw_Looper"></a> Draw Looper
-
-# <a name="SkDrawLooper"></a> Class SkDrawLooper
-
-# <a name="Drawable"></a> Drawable
-
-# <a name="SkDrawable"></a> Class SkDrawable
-
-<a name="SkDrawable_draw"></a>
-## draw
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void draw(SkCanvas*, const SkMatrix* = NULL)
-</pre>
-
----
-
-# <a name="Dump_Canvas"></a> Dump Canvas
-
-# <a name="SkDumpCanvas"></a> Class SkDumpCanvas
-
-# <a name="Encoded_Image_Format"></a> Encoded Image Format
-
-## <a name="SkEncodedImageFormat"></a> Enum SkEncodedImageFormat
 
 ### Constants
 
-<table>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kUnknown"> <code><strong>SkEncodedImageFormat::kUnknown </strong></code> </a></td><td>0</td><td></td>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kUTF8_SkTextEncoding'><code>kUTF8_SkTextEncoding</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="SkEncodedImageFormat_kBMP"> <code><strong>SkEncodedImageFormat::kBMP </strong></code> </a></td><td>1</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kUTF16_SkTextEncoding'><code>kUTF16_SkTextEncoding</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>1</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kUTF32_SkTextEncoding'><code>kUTF32_SkTextEncoding</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>2</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="SkEncodedImageFormat_kGIF"> <code><strong>SkEncodedImageFormat::kGIF </strong></code> </a></td><td>2</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kGlyphID_SkTextEncoding'><code>kGlyphID_SkTextEncoding</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>3</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kICO"> <code><strong>SkEncodedImageFormat::kICO </strong></code> </a></td><td>3</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kJPEG"> <code><strong>SkEncodedImageFormat::kJPEG </strong></code> </a></td><td>4</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kPNG"> <code><strong>SkEncodedImageFormat::kPNG </strong></code> </a></td><td>5</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kWBMP"> <code><strong>SkEncodedImageFormat::kWBMP </strong></code> </a></td><td>6</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kWEBP"> <code><strong>SkEncodedImageFormat::kWEBP </strong></code> </a></td><td>7</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kPKM"> <code><strong>SkEncodedImageFormat::kPKM </strong></code> </a></td><td>8</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kKTX"> <code><strong>SkEncodedImageFormat::kKTX </strong></code> </a></td><td>9</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kASTC"> <code><strong>SkEncodedImageFormat::kASTC </strong></code> </a></td><td>10</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kDNG"> <code><strong>SkEncodedImageFormat::kDNG </strong></code> </a></td><td>11</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkEncodedImageFormat_kHEIF"> <code><strong>SkEncodedImageFormat::kHEIF </strong></code> </a></td><td>12</td><td></td>
-  </tr>
-
 </table>
 
-# <a name="Filter_Quality"></a> Filter Quality
+<a name='SkFont'></a>
 
-## <a name="SkFilterQuality"></a> Enum SkFilterQuality
+---
+
+<a name='SkFontHinting'></a>
+
+---
 
 ### Constants
 
-<table>
-  <tr>
-    <td><a name="kNone_SkFilterQuality"> <code><strong>kNone_SkFilterQuality </strong></code> </a></td><td>0</td><td></td>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kNo_SkFontHinting'><code>kNo_SkFontHinting</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="kLow_SkFilterQuality"> <code><strong>kLow_SkFilterQuality </strong></code> </a></td><td>1</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kSlight_SkFontHinting'><code>kSlight_SkFontHinting</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>1</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kNormal_SkFontHinting'><code>kNormal_SkFontHinting</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>2</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="kMedium_SkFilterQuality"> <code><strong>kMedium_SkFilterQuality </strong></code> </a></td><td>2</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='kFull_SkFontHinting'><code>kFull_SkFontHinting</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>3</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
-  <tr>
-    <td><a name="kHigh_SkFilterQuality"> <code><strong>kHigh_SkFilterQuality </strong></code> </a></td><td>3</td><td></td>
-  </tr>
-
 </table>
 
-## <a name="Nearest_Neighbor"></a> Nearest Neighbor
-
-## <a name="Bilerp"></a> Bilerp
-
-## <a name="MipMap"></a> MipMap
-
-## <a name="BiCubic"></a> BiCubic
-
-# <a name="Font"></a> Font
-
-## <a name="Advance"></a> Advance
-
-## <a name="Engine"></a> Engine
-
-# <a name="Font_Manager"></a> Font Manager
-
-# <a name="GPU_Context"></a> GPU Context
-
-## <a name="Resource_Cache_Limits"></a> Resource Cache Limits
-
-# <a name="GrContext"></a> Class GrContext
-
-<a name="GrContext_flush"></a>
-## flush
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void flush()
-</pre>
+<a name='SkFontMetrics'></a>
 
 ---
 
-# <a name="GPU_Surface"></a> GPU Surface
+<a href='#SkFontMetrics'>SkFontMetrics</a> is filled out by <a href='SkPaint_Reference#SkPaint_getFontMetrics'>SkPaint::getFontMetrics</a>. <a href='#SkFontMetrics'>SkFontMetrics</a> contents
+reflect the values
+computed by <a href='#Font_Manager'>Font Manager</a> using <a href='#Typeface'>Typeface</a>. Values are set to zero if they are
+not available.
 
-# <a name="GPU_Texture"></a> GPU Texture
+All vertical values are relative to the baseline, on a y-axis pointing down.
+Zero is on the baseline, negative values are above the baseline, and positive
+values are below the baseline.
 
-# <a name="Glyph"></a> Glyph
+<a href='#SkFontMetrics_fUnderlineThickness'>fUnderlineThickness</a> and <a href='#SkFontMetrics_fUnderlinePosition'>fUnderlinePosition</a> have a bit set in <a href='#SkFontMetrics_fFlags'>fFlags</a> if their values
+are valid, since their value may be zero.
 
-# <a name="HTML_Canvas"></a> HTML Canvas
+<a href='#SkFontMetrics_fStrikeoutThickness'>fStrikeoutThickness</a> and <a href='#SkFontMetrics_fStrikeoutPosition'>fStrikeoutPosition</a> have a bit set in <a href='#SkFontMetrics_fFlags'>fFlags</a> if their values
+are valid, since their value may be zero.
 
-## <a name="ArcTo"></a> ArcTo
-
-# <a name="ISize"></a> ISize
-
-# <a name="SkISize"></a> Struct SkISize
-
-# <a name="Image_Filter"></a> Image Filter
-
-## <a name="Scaling"></a> Scaling
-
-# <a name="SkImageFilter"></a> Class SkImageFilter
-
-<a name="SkImageFilter_toString"></a>
-## toString
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void toString(SkString* str) const
-</pre>
+<a name='SkFontMetrics_FontMetricsFlags'></a>
 
 ---
 
-# <a name="Image_Scaling"></a> Image Scaling
-
-# <a name="Left_Side_Bearing"></a> Left Side Bearing
-
-# <a name="Line"></a> Line
-
-# <a name="Malloc_Pixel_Ref"></a> Malloc Pixel Ref
-
-# <a name="SkMallocPixelRef"></a> Class SkMallocPixelRef
-
-<a name="SkMallocPixelRef_MakeZeroed"></a>
-## MakeZeroed
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-static sk_sp&lt;SkPixelRef&gt; MakeZeroed(const SkImageInfo&, size_t rowBytes)
-</pre>
-
----
-
-<a name="SkMallocPixelRef_MakeAllocate"></a>
-## MakeAllocate
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-static sk_sp&lt;SkPixelRef&gt; MakeAllocate(const SkImageInfo&, size_t rowBytes)
-</pre>
-
----
-
-# <a name="Mask_Alpha"></a> Mask Alpha
-
-# <a name="Mask_Filter"></a> Mask Filter
-
-# <a name="SkMaskFilter"></a> Class SkMaskFilter
-
-<a name="SkMaskFilter_toString"></a>
-## toString
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void toString(SkString* str) const
-</pre>
-
----
-
-# <a name="Math"></a> Math
-
-<a name="sk_64_isS32"></a>
-## sk_64_isS32
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-static inline bool sk_64_isS32(int64_t value)
-</pre>
-
----
-
-<a name="SkIntToScalar"></a>
-## SkIntToScalar
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkIntToScalar(x)
-</pre>
-
----
-
-<a name="SkScalarRoundToInt"></a>
-## SkScalarRoundToInt
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkScalarRoundToInt(x)
-</pre>
-
----
-
-<a name="SkScalarFloorToInt"></a>
-## SkScalarFloorToInt
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkScalarFloorToInt(x)
-</pre>
-
----
-
-<a name="SkScalarCeilToInt"></a>
-## SkScalarCeilToInt
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkScalarCeilToInt(x)
-</pre>
-
----
-
-<a name="SkScalarFloorToScalar"></a>
-## SkScalarFloorToScalar
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkScalarFloorToScalar(x)
-</pre>
-
----
-
-<a name="SkScalarCeilToScalar"></a>
-## SkScalarCeilToScalar
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkScalarCeilToScalar(x)
-</pre>
-
----
-
-<a name="SkScalarIsFinite"></a>
-## SkScalarIsFinite
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkScalarIsFinite(x)
-</pre>
-
----
-
-<a name="SkScalarIsNaN"></a>
-## SkScalarIsNaN
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkScalarIsNaN(x)
-</pre>
-
----
-
-<a name="SkTFitsIn"></a>
-## SkTFitsIn
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-template &lt;typename D, typename S&gt; inline bool SkTFitsIn(S s)
-</pre>
-
----
-
-# <a name="Meta_Data"></a> Meta Data
-
-# <a name="SkMetaData"></a> Class SkMetaData
-
-# <a name="Mip_Map"></a> Mip Map
-
-# <a name="Nine_Patch"></a> Nine Patch
-
-# <a name="Number_Types"></a> Number Types
-
-## <a name="Scalar"></a> Scalar
+<a href='#SkFontMetrics_FontMetricsFlags'>FontMetricsFlags</a> are set in <a href='#SkFontMetrics_fFlags'>fFlags</a> when underline and strikeout metrics are valid;
+the underline or strikeout metric may be valid and zero.
+Fonts with embedded bitmaps may not have valid underline or strikeout metrics.
 
 ### Constants
 
-<table>
-  <tr>
-    <td><a name="SK_MinS32FitsInFloat"> <code><strong>SK_MinS32FitsInFloat </strong></code> </a></td><td>to be written</td><td></td>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_kUnderlineThicknessIsValid_Flag'><code>SkFontMetrics::kUnderlineThicknessIsValid_Flag</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0x0001</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+set if fUnderlineThickness is valid</td>
   </tr>
   <tr>
-    <td><a name="SK_MaxS32FitsInFloat"> <code><strong>SK_MaxS32FitsInFloat </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_kUnderlinePositionIsValid_Flag'><code>SkFontMetrics::kUnderlinePositionIsValid_Flag</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0x0002</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+set if fUnderlinePosition is valid</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_kStrikeoutThicknessIsValid_Flag'><code>SkFontMetrics::kStrikeoutThicknessIsValid_Flag</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0x0004</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+set if fStrikeoutThickness is valid</td>
   </tr>
   <tr>
-    <td><a name="SK_ScalarMin"> <code><strong>SK_ScalarMin </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_kStrikeoutPositionIsValid_Flag'><code>SkFontMetrics::kStrikeoutPositionIsValid_Flag</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0x0008</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+set if fStrikeoutPosition is valid</td>
+  </tr>
+</table><table style='border-collapse: collapse; width: 62.5em'>
+
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Type</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Member</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>uint32_t</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fFlags'><code>fFlags</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+is set to FontMetricsFlags when metrics are valid</td>
   </tr>
   <tr>
-    <td><a name="SK_ScalarMax"> <code><strong>SK_ScalarMax </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fTop'><code>fTop</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Greatest extent above the baseline for any glyph.
+Typically less than zero.
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fAscent'><code>fAscent</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Recommended distance above the baseline to reserve for a line of text.
+Typically less than zero.
+</td>
   </tr>
   <tr>
-    <td><a name="SK_ScalarInfinity"> <code><strong>SK_ScalarInfinity </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fDescent'><code>fDescent</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Recommended distance below the baseline to reserve for a line of text.
+Typically greater than zero.
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fBottom'><code>fBottom</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Greatest extent below the baseline for any glyph.
+Typically greater than zero.
+</td>
   </tr>
   <tr>
-    <td><a name="SK_ScalarNegativeInfinity"> <code><strong>SK_ScalarNegativeInfinity </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fLeading'><code>fLeading</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Recommended distance to add between lines of text.
+Typically greater than or equal to zero.
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fAvgCharWidth'><code>fAvgCharWidth</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Average character width, if it is available.
+Zero if no average width is stored in the font.
+</td>
   </tr>
   <tr>
-    <td><a name="SK_ScalarNaN"> <code><strong>SK_ScalarNaN </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fMaxCharWidth'><code>fMaxCharWidth</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+maximum character width</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fXMin'><code>fXMin</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Minimum bounding box x-axis value for all <a href='#Glyph'>Glyphs</a>.
+Typically less than zero.
+</td>
   </tr>
   <tr>
-    <td><a name="SK_MinS32"> <code><strong>SK_MinS32 </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fXMax'><code>fXMax</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Maximum bounding box x-axis value for all <a href='#Glyph'>Glyphs</a>.
+Typically greater than zero.
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fXHeight'><code>fXHeight</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+May be zero if no lower-case height is stored in the font.
+</td>
   </tr>
   <tr>
-    <td><a name="SK_MaxS32"> <code><strong>SK_MaxS32 </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fCapHeight'><code>fCapHeight</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+May be zero if no upper-case height is stored in the font.
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fUnderlineThickness'><code>fUnderlineThickness</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+If the metric is valid, the <a href='#SkFontMetrics_kUnderlineThicknessIsValid_Flag'>kUnderlineThicknessIsValid Flag</a> is set in <a href='#SkFontMetrics_fFlags'>fFlags</a>.
+If <a href='#SkFontMetrics_kUnderlineThicknessIsValid_Flag'>kUnderlineThicknessIsValid Flag</a> is clear, <a href='#SkFontMetrics_fUnderlineThickness'>fUnderlineThickness</a> is zero.
+</td>
   </tr>
   <tr>
-    <td><a name="SK_MaxSizeT"> <code><strong>SK_MaxSizeT </strong></code> </a></td><td>to be written</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fUnderlinePosition'><code>fUnderlinePosition</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Position of the top of the underline stroke relative to the baseline.
+Typically positive when valid.
+
+If the metric is valid, the <a href='#SkFontMetrics_kUnderlinePositionIsValid_Flag'>kUnderlinePositionIsValid Flag</a> is set in <a href='#SkFontMetrics_fFlags'>fFlags</a>.
+If <a href='#SkFontMetrics_kUnderlinePositionIsValid_Flag'>kUnderlinePositionIsValid Flag</a> is clear, <a href='#SkFontMetrics_fUnderlinePosition'>fUnderlinePosition</a> is zero.
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fStrikeoutThickness'><code>fStrikeoutThickness</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+If the metric is valid, the <a href='#SkFontMetrics_kStrikeoutThicknessIsValid_Flag'>kStrikeoutThicknessIsValid Flag</a> is set in <a href='#SkFontMetrics_fFlags'>fFlags</a>.
+If <a href='#SkFontMetrics_kStrikeoutThicknessIsValid_Flag'>kStrikeoutThicknessIsValid Flag</a> is clear, <a href='#SkFontMetrics_fStrikeoutThickness'>fStrikeoutThickness</a> is zero.
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkFontMetrics_fStrikeoutPosition'><code>fStrikeoutPosition</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+Position of the bottom of the strikeout stroke relative to the baseline.
+Typically negative when valid.
+
+If the metric is valid, the <a href='#SkFontMetrics_kStrikeoutPositionIsValid_Flag'>kStrikeoutPositionIsValid Flag</a> is set in <a href='#SkFontMetrics_fFlags'>fFlags</a>.
+If <a href='#SkFontMetrics_kStrikeoutPositionIsValid_Flag'>kStrikeoutPositionIsValid Flag</a> is clear, <a href='#SkFontMetrics_fStrikeoutPosition'>fStrikeoutPosition</a> is zero.
+</td>
   </tr>
 </table>
 
-# <a name="OS_X"></a> OS X
+<a name='SkFontMetrics_hasUnderlineThickness'></a>
 
-# <a name="Oval"></a> Oval
+---
 
-# <a name="Paint_Defaults"></a> Paint Defaults
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#SkFontMetrics_hasUnderlineThickness'>hasUnderlineThickness</a>(<a href='#SkScalar'>SkScalar</a>* thickness) const
+</pre>
+
+<a name='SkFontMetrics_hasUnderlinePosition'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#SkFontMetrics_hasUnderlinePosition'>hasUnderlinePosition</a>(<a href='#SkScalar'>SkScalar</a>* position) const
+</pre>
+
+<a name='SkFontMetrics_hasStrikeoutThickness'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#SkFontMetrics_hasStrikeoutThickness'>hasStrikeoutThickness</a>(<a href='#SkScalar'>SkScalar</a>* thickness) const
+</pre>
+
+<a name='SkFontMetrics_hasStrikeoutPosition'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#SkFontMetrics_hasStrikeoutPosition'>hasStrikeoutPosition</a>(<a href='#SkScalar'>SkScalar</a>* position) const
+</pre>
+
+<a name='GrContext'></a>
+
+---
+
+<a name='GrContext_flush'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+void <a href='#GrContext_flush'>flush</a>()
+</pre>
+
+<a name='ID'></a>
+
+<a name='ArcTo'></a>
+
+<a name='SkISize'></a>
+
+---
+
+<a name='SkISize_width'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+int32_t <a href='#SkISize_width'>width</a>() const
+</pre>
+
+<a name='SkISize_height'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+int32_t <a href='#SkISize_height'>height</a>() const
+</pre>
+
+<a name='SkImageFilter'></a>
+
+---
+
+<a name='SkMaskFilter'></a>
+
+---
+
+<a name='SkMetaData'></a>
+
+---
 
 ### Constants
 
-<table>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
   <tr>
-    <td><a name="SkPaintDefaults_Flags"> <code><strong>SkPaintDefaults_Flags </strong></code> </a></td><td>0</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkPaintDefaults_Hinting'><code>SkPaintDefaults_Hinting</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>2</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkPaintDefaults_TextSize'><code>SkPaintDefaults_TextSize</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>12</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="SkPaintDefaults_Hinting"> <code><strong>SkPaintDefaults_Hinting </strong></code> </a></td><td>2</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkPaintDefaults_MiterLimit'><code>SkPaintDefaults_MiterLimit</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>4</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
-  <tr>
-    <td><a name="SkPaintDefaults_TextSize"> <code><strong>SkPaintDefaults_TextSize </strong></code> </a></td><td>12</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="SkPaintDefaults_MiterLimit"> <code><strong>SkPaintDefaults_MiterLimit </strong></code> </a></td><td>4</td><td></td>
-  </tr>
+
+
+<a name='SkPathOp'></a>
+
+---
+
 </table>
 
-# <a name="Patch"></a> Patch
-
-# <a name="PathOps"></a> PathOps
-
-<a name="Op"></a>
-## Op
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-bool SK_API Op(const SkPath& one, const SkPath& two, SkPathOp op, SkPath* result)
-</pre>
+<a name='Op'></a>
 
 ---
 
-# <a name="Path_Effect"></a> Path Effect
-
-# <a name="SkPathEffect"></a> Class SkPathEffect
-
-<a name="SkPathEffect_toString"></a>
-## toString
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void toString(SkString* str) const
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool SK_API <a href='#Op'>Op</a>(const <a href='SkPath_Reference#SkPath'>SkPath</a>& one, const <a href='SkPath_Reference#SkPath'>SkPath</a>& two, <a href='#SkPathOp'>SkPathOp</a> op, <a href='SkPath_Reference#SkPath'>SkPath</a>* result)
 </pre>
+
+<a name='SkPathEffect'></a>
 
 ---
 
-# <a name="Path_Measure"></a> Path Measure
-
-# <a name="SkPathMeasure"></a> Class SkPathMeasure
-
-<a name="SkPathMeasure_dump"></a>
-## dump
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void dump() const
-</pre>
+<a name='SkPictureRecorder'></a>
 
 ---
 
-# <a name="Picture"></a> Picture
-
-# <a name="SkPicture"></a> Class SkPicture
-
-<a name="SkPicture_playback"></a>
-## playback
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-virtual void playback(SkCanvas*, AbortCallback* = nullptr) const = 0
-</pre>
+<a name='SkPictureRecorder_beginRecording'></a>
 
 ---
 
-## <a name="Recorder"></a> Recorder
-
-# <a name="SkPictureRecorder"></a> Class SkPictureRecorder
-
-<a name="SkPictureRecorder_beginRecording"></a>
-## beginRecording
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-SkCanvas* beginRecording(const SkRect& bounds, SkBBHFactory* bbhFactory = NULL,
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+<a href='SkCanvas_Reference#SkCanvas'>SkCanvas</a>* <a href='#SkPictureRecorder_beginRecording'>beginRecording</a>(const <a href='SkRect_Reference#SkRect'>SkRect</a>& bounds, <a href='#SkBBHFactory'>SkBBHFactory</a>* bbhFactory = NULL,
                          uint32_t recordFlags = 0)
 </pre>
 
+<a name='Storage'></a>
+
+<a name='SkPixelRef'></a>
+
 ---
 
-# <a name="Pixel"></a> Pixel
+<a name='SkPixelRef_width'></a>
 
-## <a name="Storage"></a> Storage
+---
 
-# <a name="Pixel_Ref"></a> Pixel Ref
-
-# <a name="SkPixelRef"></a> Class SkPixelRef
-
-<a name="SkPixelRef_width"></a>
-## width
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-int width() const
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+int <a href='#SkPixelRef_width'>width</a>() const
 </pre>
 
+<a name='SkPixelRef_height'></a>
+
 ---
 
-<a name="SkPixelRef_height"></a>
-## height
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-int height() const
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+int <a href='#SkPixelRef_height'>height</a>() const
 </pre>
 
+<a name='SkPixelRef_isImmutable'></a>
+
 ---
 
-<a name="SkPixelRef_isImmutable"></a>
-## isImmutable
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-bool isImmutable() const
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#SkPixelRef_isImmutable'>isImmutable</a>() const
 </pre>
 
+<a name='SkPixelRef_setImmutable'></a>
+
 ---
 
-<a name="SkPixelRef_setImmutable"></a>
-## setImmutable
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void setImmutable()
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+void <a href='#SkPixelRef_setImmutable'>setImmutable</a>()
 </pre>
 
+<a name='SkPoint3'></a>
+
 ---
 
-# <a name="Point3"></a> Point3
+<a name='Arct'></a>
 
-# <a name="SkPoint3"></a> Struct SkPoint3
+<a name='SkRSXform'></a>
 
-# <a name="PostScript"></a> PostScript
+---<table style='border-collapse: collapse; width: 62.5em'>
 
-## <a name="Arct"></a> Arct
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Type</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Member</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkRSXform_fSCos'><code>fSCos</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkRSXform_fSSin'><code>fSSin</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkRSXform_fTx'><code>fTx</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkScalar</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkRSXform_fTy'><code>fTy</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+</table>
 
-# <a name="Premultiply"></a> Premultiply
+<a name='SkRasterHandleAllocator'></a>
 
-# <a name="RSXform"></a> RSXform
+---
 
-# <a name="SkRSXform"></a> Struct SkRSXform
+<a name='SkRasterHandleAllocator_Handle'></a>
 
-# <a name="Raster_Bitmap"></a> Raster Bitmap
+---
 
-# <a name="Raster_Engine"></a> Raster Engine
+<a name='SkRasterHandleAllocator_Rec'></a>
 
-# <a name="Raster_Handle_Allocator"></a> Raster Handle Allocator
+---
 
-# <a name="SkRasterHandleAllocator"></a> Class SkRasterHandleAllocator
+<a name='SkRasterHandleAllocator_MakeCanvas'></a>
 
-# <a name="SkRasterHandleAllocator_Rec"></a> Struct SkRasterHandleAllocator::Rec
+---
 
-<a name="SkRasterHandleAllocator_MakeCanvas"></a>
-## MakeCanvas
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-static std::unique_ptr&lt;SkCanvas&gt; MakeCanvas(std::unique_ptr&lt;SkRasterHandleAllocator&gt;,
-                                            const SkImageInfo&, const Rec* rec = nullptr)
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+static std::unique_ptr&lt;<a href='SkCanvas_Reference#SkCanvas'>SkCanvas</a>&gt; <a href='#SkRasterHandleAllocator_MakeCanvas'>MakeCanvas</a>(std::unique_ptr&lt;<a href='#SkRasterHandleAllocator'>SkRasterHandleAllocator</a>&gt;,
+                                            const <a href='SkImageInfo_Reference#SkImageInfo'>SkImageInfo</a>&, const <a href='#SkRasterHandleAllocator_Rec'>Rec</a>* rec = nullptr)
 </pre>
 
+<a name='SkRefCnt'></a>
+
 ---
 
-# <a name="Raster_Surface"></a> Raster Surface
+<a name='GrBackendRenderTarget'></a>
 
-# <a name="Rasterizer"></a> Rasterizer
+---
 
-# <a name="SkRasterizer"></a> Class SkRasterizer
+<a name='GrBackendRenderTarget_isValid'></a>
 
-## <a name="Layer"></a> Layer
+---
 
-# <a name="Read_Buffer"></a> Read Buffer
-
-# <a name="SkReadBuffer"></a> Struct SkReadBuffer
-
-# <a name="Reference_Count"></a> Reference Count
-
-# <a name="SkRefCnt"></a> Class SkRefCnt
-
-# <a name="sk_sp"></a> Class sk_sp
-
-# <a name="Region"></a> Region
-
-# <a name="SkRegion"></a> Class SkRegion
-
-# <a name="Render_Target"></a> Render Target
-
-# <a name="GrRenderTarget"></a> Class GrRenderTarget
-
-# <a name="Right_Side_Bearing"></a> Right Side Bearing
-
-# <a name="Round_Rect"></a> Round Rect
-
-# <a name="SkRRect"></a> Class SkRRect
-
-<a name="SkRRect_dump"></a>
-## dump
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void dump() const
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#GrBackendRenderTarget_isValid'>isValid</a>() const
 </pre>
 
----
-
-<a name="SkRRect_dumpHex"></a>
-## dumpHex
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-void dumpHex() const
-</pre>
+<a name='GrRenderTarget'></a>
 
 ---
 
-# <a name="SVG"></a> SVG
+<a name='Canvas'></a>
 
-## <a name="Canvas"></a> Canvas
+<a name='Arc'></a>
 
-## <a name="Arc"></a> Arc
+<a name='Sweep_Flag'></a>
 
-# <a name="Shader"></a> Shader
+<a name='SkScalar'></a>
 
-# <a name="SkShader"></a> Class SkShader
+---
 
-## <a name="SkShader_TileMode"></a> Enum SkShader::TileMode
+<a name='SkSerialProcs'></a>
+
+---<table style='border-collapse: collapse; width: 62.5em'>
+
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Type</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Member</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkSerialPictureProc</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkSerialProcs_fPictureProc'><code>fPictureProc</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>void*</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkSerialProcs_fPictureCtx'><code>fPictureCtx</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>SkSerialTypefaceProc</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkSerialProcs_fTypefaceProc'><code>fTypefaceProc</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>void*</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkSerialProcs_fTypefaceCtx'><code>fTypefaceCtx</code></a></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
+  </tr>
+</table>
+
+<a name='SkShader'></a>
+
+---
+
+<a name='SkShader_TileMode'></a>
+
+---
 
 ### Constants
 
-<table>
-  <tr>
-    <td><a name="SkShader_kClamp_TileMode"> <code><strong>SkShader::kClamp_TileMode </strong></code> </a></td><td>0</td><td></td>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkShader_kClamp_TileMode'><code>SkShader::kClamp_TileMode</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
   <tr>
-    <td><a name="SkShader_kRepeat_TileMode"> <code><strong>SkShader::kRepeat_TileMode </strong></code> </a></td><td>1</td><td></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkShader_kRepeat_TileMode'><code>SkShader::kRepeat_TileMode</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>1</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
-  <tr>
-    <td><a name="SkShader_kMirror_TileMode"> <code><strong>SkShader::kMirror_TileMode </strong></code> </a></td><td>2</td><td></td>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkShader_kMirror_TileMode'><code>SkShader::kMirror_TileMode</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>2</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
-
 </table>
 
-<a name="SkShader_MakeBitmapShader"></a>
-## MakeBitmapShader
-
-<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
-static sk_sp&lt;SkShader&gt; MakeBitmapShader(const SkBitmap& src, TileMode tmx, TileMode tmy,
-                                        const SkMatrix* localMatrix = nullptr)
-</pre>
+<a name='SkShader_MakeBitmapShader'></a>
 
 ---
 
-## <a name="Gradient"></a> Gradient
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+static <a href='#sk_sp'>sk sp</a>&lt;<a href='#SkShader'>SkShader</a>&gt; <a href='#SkShader_MakeBitmapShader'>MakeBitmapShader</a>(const <a href='SkBitmap_Reference#SkBitmap'>SkBitmap</a>& src, <a href='#SkShader_TileMode'>TileMode</a> tmx, <a href='#SkShader_TileMode'>TileMode</a> tmy,
+                                        const <a href='SkMatrix_Reference#SkMatrix'>SkMatrix</a>* localMatrix = nullptr)
+</pre>
 
-# <a name="Size"></a> Size
+<a name='SkShader_MakeCompose'></a>
 
-# <a name="SkSize"></a> Struct SkSize
+---
 
-# <a name="Sprite"></a> Sprite
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+static <a href='#sk_sp'>sk sp</a>&lt;<a href='#SkShader'>SkShader</a>&gt; <a href='#SkShader_MakeCompose'>MakeCompose</a>(<a href='#sk_sp'>sk sp</a>&lt;<a href='#SkShader'>SkShader</a>&gt; dst, <a href='#sk_sp'>sk sp</a>&lt;<a href='#SkShader'>SkShader</a>&gt; src, <a href='SkBlendMode_Reference#SkBlendMode'>SkBlendMode</a> mode,
+                                   float lerp = 1)
+</pre>
 
-# <a name="Stream"></a> Stream
+<a name='SkSize'></a>
 
-# <a name="SkStream"></a> Class SkStream
+---
 
-# <a name="String"></a> String
+<a name='SkSize_width'></a>
 
-# <a name="SkString"></a> Class SkString
+---
 
-# <a name="Supersampling"></a> Supersampling
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+int32_t <a href='#SkSize_width'>width</a>() const
+</pre>
 
-# <a name="Surface_Characterization"></a> Surface Characterization
+<a name='SkSize_height'></a>
 
-# <a name="SkSurfaceCharacterization"></a> Class SkSurfaceCharacterization
+---
 
-# <a name="Surface_Properties"></a> Surface Properties
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+int32_t <a href='#SkSize_height'>height</a>() const
+</pre>
 
-# <a name="SkSurfaceProps"></a> Class SkSurfaceProps
+<a name='sk_sp'></a>
 
-## <a name="Legacy_Font_Host"></a> Legacy Font Host
+---
 
-## <a name="SkSurfaceProps_InitType"></a> Enum SkSurfaceProps::InitType
+<a name='SkStreamAsset'></a>
 
-### Constants
+---
 
-<table>
-  <tr>
-    <td><a name="SkSurfaceProps_kLegacyFontHost_InitType"> <code><strong>SkSurfaceProps::kLegacyFontHost_InitType </strong></code> </a></td><td>0</td><td></td>
-  </tr>
+<a name='SkString'></a>
 
-</table>
+---
 
-# <a name="Text"></a> Text
+<a name='SkSurfaceCharacterization'></a>
 
-# <a name="Text_Blob"></a> Text Blob
+---
 
-# <a name="SkTextBlob"></a> Class SkTextBlob
+<a name='SkSurfaceProps'></a>
 
-# <a name="Texture"></a> Texture
+---
 
-# <a name="GrBackendTexture"></a> Class GrBackendTexture
+<a name='Legacy_Font_Host'></a>
 
-# <a name="Typeface"></a> Typeface
+<a name='SkSurfaceProps_InitType'></a>
 
-# <a name="SkTypeface"></a> Class SkTypeface
-
-# <a name="Types"></a> Types
-
-## <a name="GrSurfaceOrigin"></a> Enum GrSurfaceOrigin
-
-### Constants
-
-<table>
-  <tr>
-    <td><a name="kBottomLeft_GrSurfaceOrigin"> <code><strong>kBottomLeft_GrSurfaceOrigin </strong></code> </a></td><td>0 </td><td></td>
-  </tr>
-  <tr>
-    <td><a name="kTopLeft_GrSurfaceOrigin"> <code><strong>kTopLeft_GrSurfaceOrigin </strong></code> </a></td><td>1</td><td></td>
-  </tr>
-
-</table>
-
-## <a name="Budgeted"></a> Budgeted
-
-## <a name="SkBudgeted"></a> Enum SkBudgeted
+---
 
 ### Constants
 
-<table>
-  <tr>
-    <td><a name="SkBudgeted_kNo"> <code><strong>SkBudgeted::kNo </strong></code> </a></td><td>0</td><td></td>
+<table style='border-collapse: collapse; width: 62.5em'>
+  <tr><th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Const</th>
+<th style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>Value</th>
+<th style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>Description</th></tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a name='SkSurfaceProps_kLegacyFontHost_InitType'><code>SkSurfaceProps::kLegacyFontHost_InitType</code></a></td>
+    <td style='text-align: center; border: 2px solid #dddddd; padding: 8px; '>0</td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '>
+</td>
   </tr>
-  <tr>
-    <td><a name="SkBudgeted_kYes"> <code><strong>SkBudgeted::kYes </strong></code> </a></td><td>1</td><td></td>
-  </tr>
-
 </table>
 
-## <a name="GrSemaphoresSubmitted"></a> Enum GrSemaphoresSubmitted
+#
+Topic
 
-### Constants
+<a name='GrBackendTexture'></a>
 
-<table>
-  <tr>
-    <td><a name="GrSemaphoresSubmitted_kNo"> <code><strong>GrSemaphoresSubmitted::kNo </strong></code> </a></td><td>0</td><td></td>
-  </tr>
-  <tr>
-    <td><a name="GrSemaphoresSubmitted_kYes"> <code><strong>GrSemaphoresSubmitted::kYes </strong></code> </a></td><td>1</td><td></td>
-  </tr>
+---
 
-</table>
+<a name='GrBackendTexture_isValid'></a>
 
-# <a name="Unpremultiply"></a> Unpremultiply
+---
 
-# <a name="Vertices"></a> Vertices
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+bool <a href='#GrBackendTexture_isValid'>isValid</a>() const
+</pre>
 
-## <a name="Colors"></a> Colors
+<a name='ID'></a>
 
-## <a name="Texs"></a> Texs
+<a name='SkFontID'></a>
 
-# <a name="Write_Buffer"></a> Write Buffer
+---
 
-# <a name="SkWriteBuffer"></a> Struct SkWriteBuffer
+<a name='SkTypeface'></a>
+
+---
+
+<a name='SkTypeface_uniqueID'></a>
+
+---
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+<a href='#SkFontID'>SkFontID</a> <a href='#SkTypeface_uniqueID'>uniqueID</a>() const
+</pre>
+
+<a name='SkVertices'></a>
+
+---
+
+<a name='SkVertices_Bone'></a>
+
+---
+
+<a name='Colors'></a>
+
+<a name='Texs'></a>
+
+<a name='SkXfermodeImageFilter'></a>
+
+---
+
+<a name='SkYUVAIndex'></a>
+
+---
+

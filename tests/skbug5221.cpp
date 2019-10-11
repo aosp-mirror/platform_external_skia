@@ -6,16 +6,15 @@
  */
 
 #include "Test.h"
+
 #include "SkCanvas.h"
+#include "SkFont.h"
 #include "SkSurface.h"
 
 // This passes by not crashing.
 static void test(SkCanvas* canvas) {
-    SkPaint paint;
-    paint.setAntiAlias(true);
     canvas->scale(63, 0);
-    static const char kTxt[] = "A";
-    canvas->drawText(kTxt, SK_ARRAY_COUNT(kTxt), 50, 50, paint);
+    canvas->drawString("A", 50, 50, SkFont(), SkPaint());
 }
 
 DEF_TEST(skbug5221, r) {
@@ -23,11 +22,9 @@ DEF_TEST(skbug5221, r) {
     test(surface->getCanvas());
 }
 
-#if SK_SUPPORT_GPU
 DEF_GPUTEST_FOR_ALL_CONTEXTS(skbug5221_GPU, r, contextInfo) {
     sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(
             contextInfo.grContext(), SkBudgeted::kYes,
             SkImageInfo::Make(256, 256, kRGBA_8888_SkColorType, kPremul_SkAlphaType)));
     test(surface->getCanvas());
 }
-#endif
