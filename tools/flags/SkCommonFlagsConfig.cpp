@@ -5,15 +5,14 @@
  * found in the LICENSE file.
  */
 
+#include "SkColorSpacePriv.h"
 #include "SkCommonFlagsConfig.h"
 #include "SkImageInfo.h"
 #include "SkTHash.h"
 
 #include <stdlib.h>
 
-#if SK_SUPPORT_GPU
 using sk_gpu_test::GrContextFactory;
-#endif
 
 #if defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_IOS)
 #    define DEFAULT_GPU_CONFIG "gles"
@@ -30,12 +29,12 @@ static const char defaultConfigs[] =
 
 #undef DEFAULT_GPU_CONFIG
 
+// clang-format off
 static const struct {
     const char* predefinedConfig;
     const char* backend;
     const char* options;
-} gPredefinedConfigs[] ={
-#if SK_SUPPORT_GPU
+} gPredefinedConfigs[] = {
     { "gl",                    "gpu", "api=gl" },
     { "gles",                  "gpu", "api=gles" },
     { "glmsaa4",               "gpu", "api=gl,samples=4" },
@@ -44,28 +43,34 @@ static const struct {
     { "glnvpr4",               "gpu", "api=gl,nvpr=true,samples=4" },
     { "glnvpr8" ,              "gpu", "api=gl,nvpr=true,samples=8" },
     { "glesnvpr4",             "gpu", "api=gles,nvpr=true,samples=4" },
+    { "glbetex",               "gpu", "api=gl,surf=betex" },
+    { "glesbetex",             "gpu", "api=gles,surf=betex" },
+    { "glbert",                "gpu", "api=gl,surf=bert" },
+    { "glesbert",              "gpu", "api=gles,surf=bert" },
     { "gl4444",                "gpu", "api=gl,color=4444" },
-    { "gl565",                 "gpu", "api=gl,color=565" },
-    { "glf16",                 "gpu", "api=gl,color=f16" },
-    { "gl1010102",             "gpu", "api=gl,color=1010102" },
-    { "glsrgb",                "gpu", "api=gl,color=srgb" },
-    { "glsrgbnl",              "gpu", "api=gl,color=srgbnl" },
-    { "glesf16",               "gpu", "api=gles,color=f16" },
-    { "gles1010102",           "gpu", "api=gles,color=1010102" },
-    { "glessrgb",              "gpu", "api=gles,color=srgb" },
-    { "glessrgbnl",            "gpu", "api=gles,color=srgbnl" },
-    { "glsrgb",                "gpu", "api=gl,color=srgb" },
-    { "glwide",                "gpu", "api=gl,color=f16_wide" },
-    { "glnarrow",              "gpu", "api=gl,color=f16_narrow" },
-    { "glnostencils",          "gpu", "api=gl,stencils=false" },
     { "gles4444",              "gpu", "api=gles,color=4444" },
+    { "gl565",                 "gpu", "api=gl,color=565" },
+    { "gl888x",                "gpu", "api=gl,color=888x" },
+    { "gles888x",              "gpu", "api=gles,color=888x" },
+    { "gl1010102",             "gpu", "api=gl,color=1010102" },
+    { "gles1010102",           "gpu", "api=gles,color=1010102" },
+    { "glsrgb",                "gpu", "api=gl,color=srgb" },
+    { "glp3",                  "gpu", "api=gl,color=p3" },
+    { "glesrgb",               "gpu", "api=gl,color=esrgb" },
+    { "glnarrow",              "gpu", "api=gl,color=narrow" },
+    { "glenarrow",             "gpu", "api=gl,color=enarrow" },
+    { "glf16",                 "gpu", "api=gl,color=f16" },
+    { "glf16norm",             "gpu", "api=gl,color=f16norm" },
     { "glessrgb",              "gpu", "api=gles,color=srgb" },
-    { "gleswide",              "gpu", "api=gles,color=f16_wide" },
-    { "glesnarrow",            "gpu", "api=gles,color=f16_narrow" },
+    { "glesesrgb",             "gpu", "api=gles,color=esrgb" },
+    { "glesnarrow",            "gpu", "api=gles,color=narrow" },
+    { "glesenarrow",           "gpu", "api=gles,color=enarrow" },
+    { "glesf16",               "gpu", "api=gles,color=f16" },
+    { "glnostencils",          "gpu", "api=gl,stencils=false" },
     { "gldft",                 "gpu", "api=gl,dit=true" },
     { "glesdft",               "gpu", "api=gles,dit=true" },
     { "gltestthreading",       "gpu", "api=gl,testThreading=true" },
-    { "debuggl",               "gpu", "api=debuggl" },
+    { "gltestpersistentcache", "gpu", "api=gl,testPersistentCache=true" },
     { "nullgl",                "gpu", "api=nullgl" },
     { "angle_d3d11_es2",       "gpu", "api=angle_d3d11_es2" },
     { "angle_d3d11_es3",       "gpu", "api=angle_d3d11_es3" },
@@ -76,28 +81,33 @@ static const struct {
     { "angle_d3d11_es3_msaa8", "gpu", "api=angle_d3d11_es3,samples=8" },
     { "angle_gl_es2",          "gpu", "api=angle_gl_es2" },
     { "angle_gl_es3",          "gpu", "api=angle_gl_es3" },
+    { "angle_gl_es2_msaa8",    "gpu", "api=angle_gl_es2,samples=8" },
+    { "angle_gl_es3_msaa8",    "gpu", "api=angle_gl_es3,samples=8" },
     { "commandbuffer",         "gpu", "api=commandbuffer" },
-    { "mock",                  "gpu", "api=mock" }
+    { "mock",                  "gpu", "api=mock" },
 #ifdef SK_VULKAN
-    ,{ "vk",                   "gpu", "api=vulkan" }
-    ,{ "vk1010102",            "gpu", "api=vulkan,color=1010102" }
-    ,{ "vksrgb",               "gpu", "api=vulkan,color=srgb" }
-    ,{ "vkwide",               "gpu", "api=vulkan,color=f16_wide" }
-    ,{ "vkmsaa4",              "gpu", "api=vulkan,samples=4" }
-    ,{ "vkmsaa8",              "gpu", "api=vulkan,samples=8" }
+    { "vk",                    "gpu", "api=vulkan" },
+    { "vknostencils",          "gpu", "api=vulkan,stencils=false" },
+    { "vk1010102",             "gpu", "api=vulkan,color=1010102" },
+    { "vksrgb",                "gpu", "api=vulkan,color=srgb" },
+    { "vkesrgb",               "gpu", "api=vulkan,color=esrgb" },
+    { "vknarrow",              "gpu", "api=vulkan,color=narrow" },
+    { "vkenarrow",             "gpu", "api=vulkan,color=enarrow" },
+    { "vkf16",                 "gpu", "api=vulkan,color=f16" },
+    { "vkmsaa4",               "gpu", "api=vulkan,samples=4" },
+    { "vkmsaa8",               "gpu", "api=vulkan,samples=8" },
+    { "vkbetex",               "gpu", "api=vulkan,surf=betex" },
+    { "vkbert",                "gpu", "api=vulkan,surf=bert" },
+    { "vktestpersistentcache", "gpu", "api=vulkan,testPersistentCache=true" },
 #endif
 #ifdef SK_METAL
-    ,{ "mtl",                   "gpu", "api=metal" }
-    ,{ "mtl1010102",            "gpu", "api=metal,color=1010102" }
-    ,{ "mtlsrgb",               "gpu", "api=metal,color=srgb" }
-    ,{ "mtlwide",               "gpu", "api=metal,color=f16_wide" }
-    ,{ "mtlmsaa4",              "gpu", "api=metal,samples=4" }
-    ,{ "mtlmsaa8",              "gpu", "api=metal,samples=8" }
-#endif
-#else
-     { "", "", "" }
+    { "mtl",                   "gpu", "api=metal" },
+    { "mtl1010102",            "gpu", "api=metal,color=1010102" },
+    { "mtlmsaa4",              "gpu", "api=metal,samples=4" },
+    { "mtlmsaa8",              "gpu", "api=metal,samples=8" },
 #endif
 };
+// clang-format on
 
 static const char configHelp[] =
     "Options: 565 8888 srgb f16 nonrendering null pdf pdfa skp pipe svg xps";
@@ -113,60 +123,64 @@ static const char* config_help_fn() {
 }
 
 static const char configExtendedHelp[] =
-    "Extended form: 'backend(option=value,...)'\n\n"
-    "Possible backends and options:\n"
-#if SK_SUPPORT_GPU
-    "\n"
-    "gpu[api=string,color=string,dit=bool,nvpr=bool,inst=bool,samples=int]\n"
-    "\tapi\ttype: string\trequired\n"
-    "\t    Select graphics API to use with gpu backend.\n"
-    "\t    Options:\n"
-    "\t\tgl    \t\t\tUse OpenGL.\n"
-    "\t\tgles  \t\t\tUse OpenGL ES.\n"
-    "\t\tdebuggl \t\t\tUse debug OpenGL.\n"
-    "\t\tnullgl \t\t\tUse null OpenGL.\n"
-    "\t\tangle_d3d9_es2\t\t\tUse OpenGL ES2 on the ANGLE Direct3D9 backend.\n"
-    "\t\tangle_d3d11_es2\t\t\tUse OpenGL ES2 on the ANGLE Direct3D11 backend.\n"
-    "\t\tangle_d3d11_es3\t\t\tUse OpenGL ES3 on the ANGLE Direct3D11 backend.\n"
-    "\t\tangle_gl_es2\t\t\tUse OpenGL ES2 on the ANGLE OpenGL backend.\n"
-    "\t\tangle_gl_es3\t\t\tUse OpenGL ES3 on the ANGLE OpenGL backend.\n"
-    "\t\tcommandbuffer\t\tUse command buffer.\n"
-    "\t\tmock\t\tUse mock context.\n"
+        "Extended form: 'backend(option=value,...)'\n\n"
+        "Possible backends and options:\n"
+        "\n"
+        "gpu[api=string,color=string,dit=bool,nvpr=bool,inst=bool,samples=int]\n"
+        "\tapi\ttype: string\trequired\n"
+        "\t    Select graphics API to use with gpu backend.\n"
+        "\t    Options:\n"
+        "\t\tgl    \t\t\tUse OpenGL.\n"
+        "\t\tgles  \t\t\tUse OpenGL ES.\n"
+        "\t\tnullgl \t\t\tUse null OpenGL.\n"
+        "\t\tangle_d3d9_es2\t\tUse OpenGL ES2 on the ANGLE Direct3D9 backend.\n"
+        "\t\tangle_d3d11_es2\t\tUse OpenGL ES2 on the ANGLE Direct3D11 backend.\n"
+        "\t\tangle_d3d11_es3\t\tUse OpenGL ES3 on the ANGLE Direct3D11 backend.\n"
+        "\t\tangle_gl_es2\t\tUse OpenGL ES2 on the ANGLE OpenGL backend.\n"
+        "\t\tangle_gl_es3\t\tUse OpenGL ES3 on the ANGLE OpenGL backend.\n"
+        "\t\tcommandbuffer\t\tUse command buffer.\n"
+        "\t\tmock\t\t\tUse mock context.\n"
 #ifdef SK_VULKAN
-    "\t\tvulkan\t\t\tUse Vulkan.\n"
+        "\t\tvulkan\t\t\tUse Vulkan.\n"
 #endif
 #ifdef SK_METAL
-    "\t\tmetal\t\t\tUse Metal.\n"
+        "\t\tmetal\t\t\tUse Metal.\n"
 #endif
-    "\tcolor\ttype: string\tdefault: 8888.\n"
-    "\t    Select framebuffer color format.\n"
-    "\t    Options:\n"
-    "\t\t8888\t\t\tLinear 8888.\n"
-    "\t\t4444\t\t\tLinear 4444.\n"
-    "\t\t565\t\t\tLinear 565.\n"
-    "\t\tf16{_gamut}\t\tLinear 16-bit floating point.\n"
-    "\t\t1010102\t\tLinear 1010102.\n"
-    "\t\tsrgb{_gamut}\t\tsRGB 8888.\n"
-    "\t  gamut\ttype: string\tdefault: srgb.\n"
-    "\t    Select color gamut for f16 or sRGB format buffers.\n"
-    "\t    Options:\n"
-    "\t\tsrgb\t\t\tsRGB gamut.\n"
-    "\t\twide\t\t\tWide Gamut RGB.\n"
-    "\tdit\ttype: bool\tdefault: false.\n"
-    "\t    Use device independent text.\n"
-    "\tnvpr\ttype: bool\tdefault: false.\n"
-    "\t    Use NV_path_rendering OpenGL and OpenGL ES extension.\n"
-    "\tsamples\ttype: int\tdefault: 0.\n"
-    "\t    Use multisampling with N samples.\n"
-    "\tstencils\ttype: bool\tdefault: true.\n"
-    "\t    Allow the use of stencil buffers.\n"
-    "\ttestThreading\ttype: bool\tdefault: false.\n"
-    "\t    Run config with and without worker threads, check that results match.\n"
-    "\n"
-    "Predefined configs:\n\n"
-    // Help text for pre-defined configs is auto-generated from gPredefinedConfigs
-#endif
-    ;
+        "\tcolor\ttype: string\tdefault: 8888.\n"
+        "\t    Select framebuffer color format.\n"
+        "\t    Options:\n"
+        "\t\t8888\t\t\tLinear 8888.\n"
+        "\t\t888x\t\t\tLinear 888x.\n"
+        "\t\t4444\t\t\tLinear 4444.\n"
+        "\t\t565\t\t\tLinear 565.\n"
+        "\t\t1010102\t\t\tLinear 1010102.\n"
+        "\t\tsrgb\t\t\tsRGB 8888.\n"
+        "\t\tesrgb\t\t\tsRGB 16-bit floating point.\n"
+        "\t\tnarrow\t\t\tNarrow gamut 8888.\n"
+        "\t\tenarrow\t\t\tNarrow gamut 16-bit floating point.\n"
+        "\t\tf16\t\t\tLinearly blended 16-bit floating point.\n"
+        "\tdit\ttype: bool\tdefault: false.\n"
+        "\t    Use device independent text.\n"
+        "\tnvpr\ttype: bool\tdefault: false.\n"
+        "\t    Use NV_path_rendering OpenGL and OpenGL ES extension.\n"
+        "\tsamples\ttype: int\tdefault: 0.\n"
+        "\t    Use multisampling with N samples.\n"
+        "\tstencils\ttype: bool\tdefault: true.\n"
+        "\t    Allow the use of stencil buffers.\n"
+        "\ttestThreading\ttype: bool\tdefault: false.\n"
+        "\t    Run with and without worker threads, check that results match.\n"
+        "\ttestPersistentCache\ttype: bool\tdefault: false.\n"
+        "\t    Run using a pre-warmed GrContextOption::fPersistentCache.\n"
+        "\tsurf\ttype: string\tdefault: default.\n"
+        "\t    Controls the type of backing store for SkSurfaces.\n"
+        "\t    Options:\n"
+        "\t\tdefault\t\t\tA renderable texture created in Skia's resource cache.\n"
+        "\t\tbetex\t\t\tA wrapped backend texture.\n"
+        "\t\tbert\t\t\tA wrapped backend render target\n"
+        "\n"
+        "Predefined configs:\n\n"
+        // Help text for pre-defined configs is auto-generated from gPredefinedConfigs
+        ;
 
 static const char* config_extended_help_fn() {
     static SkString helpString;
@@ -211,7 +225,6 @@ static bool parse_option_bool(const SkString& value, bool* outBool) {
     }
     return false;
 }
-#if SK_SUPPORT_GPU
 static bool parse_option_gpu_api(const SkString& value,
                                  SkCommandLineConfigGpu::ContextType* outContextType) {
     if (value.equals("gl")) {
@@ -220,10 +233,6 @@ static bool parse_option_gpu_api(const SkString& value,
     }
     if (value.equals("gles")) {
         *outContextType = GrContextFactory::kGLES_ContextType;
-        return true;
-    }
-    if (value.equals("debuggl")) {
-        *outContextType = GrContextFactory::kDebugGL_ContextType;
         return true;
     }
     if (value.equals("nullgl")) {
@@ -272,6 +281,7 @@ static bool parse_option_gpu_api(const SkString& value,
 #endif
     return false;
 }
+
 static bool parse_option_gpu_color(const SkString& value,
                                    SkColorType* outColorType,
                                    SkAlphaType* alphaType,
@@ -282,76 +292,59 @@ static bool parse_option_gpu_color(const SkString& value,
     if (value.equals("8888")) {
         *outColorType = kRGBA_8888_SkColorType;
         *outColorSpace = nullptr;
-        return true;
+    } else if (value.equals("888x")) {
+        *outColorType = kRGB_888x_SkColorType;
+        *outColorSpace = nullptr;
     } else if (value.equals("4444")) {
         *outColorType = kARGB_4444_SkColorType;
         *outColorSpace = nullptr;
-        return true;
     } else if (value.equals("565")) {
         *outColorType = kRGB_565_SkColorType;
         *alphaType = kOpaque_SkAlphaType;
         *outColorSpace = nullptr;
-        return true;
     } else if (value.equals("1010102")) {
         *outColorType = kRGBA_1010102_SkColorType;
         *outColorSpace = nullptr;
-        return true;
-    }
-
-    SkTArray<SkString> commands;
-    SkStrSplit(value.c_str(), "_", &commands);
-    if (commands.count() < 1 || commands.count() > 2) {
+    } else if (value.equals("srgb")) {
+        *outColorType = kRGBA_8888_SkColorType;
+        *outColorSpace = SkColorSpace::MakeSRGB();
+    } else if (value.equals("p3")) {
+        *outColorType = kRGBA_8888_SkColorType;
+        *outColorSpace = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDCIP3);
+    } else if (value.equals("esrgb")) {
+        *outColorType = kRGBA_F16_SkColorType;
+        *outColorSpace = SkColorSpace::MakeSRGB();
+    } else if (value.equals("narrow") || value.equals("enarrow")) {
+        *outColorType = value.equals("narrow") ? kRGBA_8888_SkColorType : kRGBA_F16_SkColorType;
+        *outColorSpace = SkColorSpace::MakeRGB(SkNamedTransferFn::k2Dot2, gNarrow_toXYZD50);
+    } else if (value.equals("f16")) {
+        *outColorType = kRGBA_F16_SkColorType;
+        *outColorSpace = SkColorSpace::MakeSRGBLinear();
+    } else if (value.equals("f16norm")) {
+        *outColorType = kRGBA_F16Norm_SkColorType;
+        *outColorSpace = SkColorSpace::MakeSRGB();
+    } else {
         return false;
     }
+    return true;
+}
 
-    const bool linearGamma = commands[0].equals("f16");
-    SkColorSpace::Gamut gamut = SkColorSpace::kSRGB_Gamut;
-    SkColorSpace::RenderTargetGamma gamma = linearGamma ? SkColorSpace::kLinear_RenderTargetGamma
-                                                        : SkColorSpace::kSRGB_RenderTargetGamma;
-    *outColorSpace = SkColorSpace::MakeRGB(gamma, gamut);
-
-    if (commands.count() == 2) {
-        if (commands[1].equals("srgb")) {
-            // sRGB gamut (which is our default)
-        } else if (commands[1].equals("wide")) {
-            // WideGamut RGB
-            const float gWideGamutRGB_toXYZD50[]{
-                0.7161046f, 0.1009296f, 0.1471858f,  // -> X
-                0.2581874f, 0.7249378f, 0.0168748f,  // -> Y
-                0.0000000f, 0.0517813f, 0.7734287f,  // -> Z
-            };
-            SkMatrix44 wideGamutRGBMatrix(SkMatrix44::kUninitialized_Constructor);
-            wideGamutRGBMatrix.set3x3RowMajorf(gWideGamutRGB_toXYZD50);
-            *outColorSpace = SkColorSpace::MakeRGB(gamma, wideGamutRGBMatrix);
-        } else if (commands[1].equals("narrow")) {
-            // NarrowGamut RGB (an artifically smaller than sRGB gamut)
-            SkColorSpacePrimaries primaries ={
-                0.54f, 0.33f,     // Rx, Ry
-                0.33f, 0.50f,     // Gx, Gy
-                0.25f, 0.20f,     // Bx, By
-                0.3127f, 0.3290f, // Wx, Wy
-            };
-            SkMatrix44 narrowGamutRGBMatrix(SkMatrix44::kUninitialized_Constructor);
-            primaries.toXYZD50(&narrowGamutRGBMatrix);
-            *outColorSpace = SkColorSpace::MakeRGB(gamma, narrowGamutRGBMatrix);
-        } else {
-            // Unknown color gamut
-            return false;
-        }
-    }
-
-    // Now pick a color type
-    if (commands[0].equals("f16")) {
-        *outColorType = kRGBA_F16_SkColorType;
+static bool parse_option_gpu_surf_type(const SkString& value,
+                                       SkCommandLineConfigGpu::SurfType* surfType) {
+    if (value.equals("default")) {
+        *surfType = SkCommandLineConfigGpu::SurfType::kDefault;
         return true;
     }
-    if (commands[0].equals("srgb") || commands[0].equals("srgbnl")) {
-        *outColorType = kRGBA_8888_SkColorType;
+    if (value.equals("betex")) {
+        *surfType = SkCommandLineConfigGpu::SurfType::kBackendTexture;
+        return true;
+    }
+    if (value.equals("bert")) {
+        *surfType = SkCommandLineConfigGpu::SurfType::kBackendRenderTarget;
         return true;
     }
     return false;
 }
-#endif
 
 // Extended options take form --config item[key1=value1,key2=value2,...]
 // Example: --config gpu[api=gl,color=8888]
@@ -380,7 +373,6 @@ public:
         *outParseSucceeded = true;
     }
 
-#if SK_SUPPORT_GPU
     bool get_option_gpu_color(const char* optionKey,
                               SkColorType* outColorType,
                               SkAlphaType* alphaType,
@@ -402,7 +394,16 @@ public:
         }
         return parse_option_gpu_api(*optionValue, outContextType);
     }
-#endif
+
+    bool get_option_gpu_surf_type(const char* optionKey,
+                                  SkCommandLineConfigGpu::SurfType* outSurfType,
+                                  bool optional = true) const {
+        SkString* optionValue = fOptionsMap.find(SkString(optionKey));
+        if (optionValue == nullptr) {
+            return optional;
+        }
+        return parse_option_gpu_surf_type(*optionValue, outSurfType);
+    }
 
     bool get_option_int(const char* optionKey, int* outInt, bool optional = true) const {
         SkString* optionValue = fOptionsMap.find(SkString(optionKey));
@@ -424,11 +425,11 @@ private:
     SkTHashMap<SkString, SkString> fOptionsMap;
 };
 
-#if SK_SUPPORT_GPU
 SkCommandLineConfigGpu::SkCommandLineConfigGpu(
-    const SkString& tag, const SkTArray<SkString>& viaParts, ContextType contextType, bool useNVPR,
-    bool useDIText, int samples, SkColorType colorType, SkAlphaType alphaType,
-    sk_sp<SkColorSpace> colorSpace, bool useStencilBuffers, bool testThreading)
+        const SkString& tag, const SkTArray<SkString>& viaParts, ContextType contextType,
+        bool useNVPR, bool useDIText, int samples, SkColorType colorType, SkAlphaType alphaType,
+        sk_sp<SkColorSpace> colorSpace, bool useStencilBuffers, bool testThreading,
+        bool testPersistentCache, SurfType surfType)
         : SkCommandLineConfig(tag, SkString("gpu"), viaParts)
         , fContextType(contextType)
         , fContextOverrides(ContextOverrides::kNone)
@@ -437,24 +438,15 @@ SkCommandLineConfigGpu::SkCommandLineConfigGpu(
         , fColorType(colorType)
         , fAlphaType(alphaType)
         , fColorSpace(std::move(colorSpace))
-        , fTestThreading(testThreading) {
+        , fTestThreading(testThreading)
+        , fTestPersistentCache(testPersistentCache)
+        , fSurfType(surfType) {
     if (useNVPR) {
         fContextOverrides |= ContextOverrides::kRequireNVPRSupport;
     } else {
         // We don't disable NVPR for instanced configs. Otherwise the caps wouldn't use mixed
         // samples and we couldn't test the mixed samples backend for simple shapes.
         fContextOverrides |= ContextOverrides::kDisableNVPR;
-    }
-    // Subtle logic: If the config has a color space attached, we're going to be rendering to sRGB,
-    // so we need that capability. In addition, to get the widest test coverage, we DO NOT require
-    // that we can disable sRGB decode. (That's for rendering sRGB sources to legacy surfaces).
-    //
-    // If the config doesn't have a color space attached, we're going to be rendering in legacy
-    // mode. In that case, we don't require sRGB capability and we defer to the client to decide on
-    // sRGB decode control.
-    if (fColorSpace) {
-        fContextOverrides |= ContextOverrides::kRequireSRGBSupport;
-        fContextOverrides |= ContextOverrides::kAllowSRGBWithoutDecodeControl;
     }
     if (!useStencilBuffers) {
         fContextOverrides |= ContextOverrides::kAvoidStencilBuffers;
@@ -474,6 +466,8 @@ SkCommandLineConfigGpu* parse_command_line_config_gpu(const SkString& tag,
     sk_sp<SkColorSpace> colorSpace = nullptr;
     bool useStencils = true;
     bool testThreading = false;
+    bool testPersistentCache = false;
+    SkCommandLineConfigGpu::SurfType surfType = SkCommandLineConfigGpu::SurfType::kDefault;
 
     bool parseSucceeded = false;
     ExtendedOptions extendedOptions(options, &parseSucceeded);
@@ -488,17 +482,19 @@ SkCommandLineConfigGpu* parse_command_line_config_gpu(const SkString& tag,
             extendedOptions.get_option_int("samples", &samples) &&
             extendedOptions.get_option_gpu_color("color", &colorType, &alphaType, &colorSpace) &&
             extendedOptions.get_option_bool("stencils", &useStencils) &&
-            extendedOptions.get_option_bool("testThreading", &testThreading);
+            extendedOptions.get_option_bool("testThreading", &testThreading) &&
+            extendedOptions.get_option_bool("testPersistentCache", &testPersistentCache) &&
+            extendedOptions.get_option_gpu_surf_type("surf", &surfType);
 
-    if (!validOptions) {
+    // testing threading and the persistent cache are mutually exclusive.
+    if (!validOptions || (testThreading && testPersistentCache)) {
         return nullptr;
     }
 
-    return new SkCommandLineConfigGpu(tag, vias, contextType, useNVPR, useDIText,
-                                      samples, colorType, alphaType, colorSpace, useStencils,
-                                      testThreading);
+    return new SkCommandLineConfigGpu(tag, vias, contextType, useNVPR, useDIText, samples,
+                                      colorType, alphaType, colorSpace, useStencils, testThreading,
+                                      testPersistentCache, surfType);
 }
-#endif
 
 SkCommandLineConfigSvg::SkCommandLineConfigSvg(const SkString& tag,
                                                const SkTArray<SkString>& viaParts, int pageIndex)
@@ -569,11 +565,9 @@ void ParseConfigs(const SkCommandLineFlags::StringArray& configs,
             }
         }
         SkCommandLineConfig* parsedConfig = nullptr;
-#if SK_SUPPORT_GPU
         if (extendedBackend.equals("gpu")) {
             parsedConfig = parse_command_line_config_gpu(tag, vias, extendedOptions);
         }
-#endif
         if (extendedBackend.equals("svg")) {
             parsedConfig = parse_command_line_config_svg(tag, vias, extendedOptions);
         }

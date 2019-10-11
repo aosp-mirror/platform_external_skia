@@ -10,6 +10,7 @@
 #include "GrContext.h"
 #include "SDL.h"
 #include "SkCanvas.h"
+#include "SkFont.h"
 #include "SkRandom.h"
 #include "SkSurface.h"
 
@@ -208,11 +209,12 @@ int main(int argc, char** argv) {
     info.fFBOID = (GrGLuint) buffer;
     SkColorType colorType;
 
+    //SkDebugf("%s", SDL_GetPixelFormatName(windowFormat));
+    // TODO: the windowFormat is never any of these?
     if (SDL_PIXELFORMAT_RGBA8888 == windowFormat) {
         info.fFormat = GR_GL_RGBA8;
         colorType = kRGBA_8888_SkColorType;
     } else {
-        SkASSERT(SDL_PIXELFORMAT_BGRA8888);
         colorType = kBGRA_8888_SkColorType;
         if (SDL_GL_CONTEXT_PROFILE_ES == contextType) {
             info.fFormat = GR_GL_BGRA8;
@@ -255,14 +257,14 @@ int main(int argc, char** argv) {
     sk_sp<SkImage> image = cpuSurface->makeImageSnapshot();
 
     int rotation = 0;
+    SkFont font;
     while (!state.fQuit) { // Our application loop
         SkRandom rand;
         canvas->clear(SK_ColorWHITE);
         handle_events(&state, canvas);
 
         paint.setColor(SK_ColorBLACK);
-        canvas->drawText(helpMessage, strlen(helpMessage), SkIntToScalar(100),
-                         SkIntToScalar(100), paint);
+        canvas->drawString(helpMessage, 100.0f, 100.0f, font, paint);
         for (int i = 0; i < state.fRects.count(); i++) {
             paint.setColor(rand.nextU() | 0x44808080);
             canvas->drawRect(state.fRects[i], paint);

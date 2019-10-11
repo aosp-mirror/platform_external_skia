@@ -96,6 +96,8 @@ bool GrGLInterface::validate() const {
         !fFunctions.fStencilOp ||
         !fFunctions.fStencilOpSeparate ||
         !fFunctions.fTexImage2D ||
+        !fFunctions.fTexParameterf ||
+        !fFunctions.fTexParameterfv ||
         !fFunctions.fTexParameteri ||
         !fFunctions.fTexParameteriv ||
         !fFunctions.fTexSubImage2D ||
@@ -500,12 +502,6 @@ bool GrGLInterface::validate() const {
         }
     }
 
-    if (fExtensions.has("GL_EXT_raster_multisample")) {
-        if (!fFunctions.fRasterSamples) {
-            RETURN_FALSE_INTERFACE;
-        }
-    }
-
     if (fExtensions.has("GL_NV_framebuffer_mixed_samples") ||
         fExtensions.has("GL_CHROMIUM_framebuffer_mixed_samples")) {
         if (!fFunctions.fCoverageModulation) {
@@ -581,17 +577,6 @@ bool GrGLInterface::validate() const {
         }
     }
 
-    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,0)) ||
-        fExtensions.has("GL_ARB_sample_shading")) {
-        if (!fFunctions.fMinSampleShading) {
-            RETURN_FALSE_INTERFACE;
-        }
-    } else if (kGLES_GrGLStandard == fStandard && fExtensions.has("GL_OES_sample_shading")) {
-        if (!fFunctions.fMinSampleShading) {
-            RETURN_FALSE_INTERFACE;
-        }
-    }
-
     if (kGL_GrGLStandard == fStandard) {
         if (glVer >= GR_GL_VER(3, 2) || fExtensions.has("GL_ARB_sync")) {
             if (!fFunctions.fFenceSync ||
@@ -646,5 +631,25 @@ bool GrGLInterface::validate() const {
         }
     }
 
+    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,1)) ||
+        (kGLES_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,0))) {
+        if (!fFunctions.fBindSampler ||
+            !fFunctions.fDeleteSamplers  ||
+            !fFunctions.fGenSamplers ||
+            !fFunctions.fSamplerParameteri ||
+            !fFunctions.fSamplerParameteriv) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
     return true;
 }
+
+#if GR_TEST_UTILS
+
+void GrGLInterface::abandon() const {
+    const_cast<GrGLInterface*>(this)->fFunctions = GrGLInterface::Functions();
+}
+
+#endif // GR_TEST_UTILS
+

@@ -6,12 +6,27 @@
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
       "/path/to/tmp/json",
+      "ensure-directory",
+      "--mode",
+      "0777",
+      "[START_DIR]/tmp"
+    ],
+    "infra_step": true,
+    "name": "makedirs tmp_dir"
+  },
+  {
+    "cmd": [
+      "python",
+      "-u",
+      "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
+      "--json-output",
+      "/path/to/tmp/json",
       "copy",
       "[START_DIR]/skia/infra/bots/assets/skp/VERSION",
       "/path/to/tmp/"
     ],
     "infra_step": true,
-    "name": "Get downloaded SKP VERSION"
+    "name": "Get skp VERSION"
   },
   {
     "cmd": [
@@ -39,7 +54,7 @@
       "/path/to/tmp/"
     ],
     "infra_step": true,
-    "name": "Get downloaded skimage VERSION"
+    "name": "Get skimage VERSION"
   },
   {
     "cmd": [
@@ -67,7 +82,7 @@
       "/path/to/tmp/"
     ],
     "infra_step": true,
-    "name": "Get downloaded SVG VERSION"
+    "name": "Get svg VERSION"
   },
   {
     "cmd": [
@@ -120,7 +135,7 @@
       "--error-exitcode=1",
       "--num-callers=40",
       "--suppressions=[START_DIR]/skia/tools/valgrind.supp",
-      "[START_DIR]/out/Release/dm",
+      "[START_DIR]/build/dm",
       "--resourcePath",
       "[START_DIR]/skia/resources",
       "--skps",
@@ -137,6 +152,8 @@
       "Test-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release-All-Valgrind_PreAbandonGpuContext_SK_CPU_LIMIT_SSE41",
       "buildbucket_build_id",
       "123454321",
+      "task_id",
+      "task_12345",
       "swarming_bot_id",
       "skia-bot-123",
       "swarming_task_id",
@@ -160,6 +177,8 @@
       "Golo",
       "os",
       "Ubuntu17",
+      "style",
+      "default",
       "--dont_write",
       "pdf",
       "--randomProcessorTest",
@@ -169,7 +188,6 @@
       "gldft",
       "glsrgb",
       "glmsaa8",
-      "gl1010102",
       "--src",
       "tests",
       "gm",
@@ -177,10 +195,6 @@
       "colorImage",
       "svg",
       "--blacklist",
-      "gl1010102",
-      "image",
-      "_",
-      "_",
       "_",
       "svg",
       "_",
@@ -193,6 +207,10 @@
       "svg",
       "_",
       "_",
+      "_",
+      "image",
+      "gen_platf",
+      "error",
       "_",
       "image",
       "_",
@@ -289,21 +307,19 @@
       "~Threaded",
       "~multipicturedraw_",
       "--nonativeFonts",
+      "--reduceOpListSplitting",
       "--verbose",
       "--preAbandonGpuContext"
     ],
     "env": {
-      "BUILDTYPE": "Release",
       "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>:RECIPE_PACKAGE_REPO[depot_tools]",
-      "SKIA_OUT": "[START_DIR]/out",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]",
       "VALGRIND_LIB": "[START_DIR]/valgrind/lib/valgrind"
     },
     "name": "dm"
   },
   {
-    "name": "$result",
-    "recipe_result": null,
-    "status_code": 0
+    "jsonResult": null,
+    "name": "$result"
   }
 ]

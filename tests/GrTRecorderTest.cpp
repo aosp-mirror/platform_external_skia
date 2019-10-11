@@ -10,8 +10,6 @@
 #include "SkString.h"
 #include "Test.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrTRecorder.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,7 +196,9 @@ public:
     }
 
 private:
-    static int ValueAt(uint64_t i) { return static_cast<int>(123456789 + 987654321 * i); }
+    static int ValueAt(uint64_t i) {
+        return static_cast<int>((123456789 + 987654321 * i) & 0xFFFFFFFF);
+    }
     int fLength;
 };
 
@@ -292,5 +292,3 @@ DEF_GPUTEST(GrTRecorder, reporter, /* options */) {
     test_subclasses(reporter);
     REPORTER_ASSERT(reporter, 0 == activeRecorderItems); // Ensure ~GrTRecorder invokes dtors.
 }
-
-#endif

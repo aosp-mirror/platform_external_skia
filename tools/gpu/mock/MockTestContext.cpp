@@ -19,10 +19,8 @@ public:
     MockTestContext() {}
     ~MockTestContext() override {}
 
-    virtual GrBackend backend() override { return kMock_GrBackend; }
-    virtual GrBackendContext backendContext() override {
-        return reinterpret_cast<GrBackendContext>(nullptr);
-    }
+    virtual GrBackendApi backend() override { return GrBackendApi::kMock; }
+
     void testAbandon() override {}
     void submit() override {}
     void finish() override {}

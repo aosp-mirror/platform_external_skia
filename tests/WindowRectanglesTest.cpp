@@ -8,9 +8,8 @@
 #include "SkTypes.h"
 #include "Test.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrWindowRectangles.h"
+#include "SkRandom.h"
 #include "SkRectPriv.h"
 
 static SkIRect next_irect(SkRandom& r) {
@@ -73,5 +72,3 @@ DEF_TEST(WindowRectangles, reporter) {
                                           GrWindowRectangles::kMaxWindows * sizeof(SkIRect)));
     }
 }
-
-#endif
