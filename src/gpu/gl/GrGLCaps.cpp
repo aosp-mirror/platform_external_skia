@@ -2216,7 +2216,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         info.fInternalFormatForRenderbuffer = GR_GL_RGB8;
         info.fDefaultExternalFormat = GR_GL_RGB;
         info.fDefaultExternalType = GR_GL_UNSIGNED_BYTE;
-        info.fBytesPerPixel = 3;
+        info.fBytesPerPixel = 4; // We assume the GPU stores this format 4 byte aligned
         info.fFlags = FormatInfo::kTexturable_Flag;
         if (GR_IS_GR_GL(standard)) {
             // Even in OpenGL 4.6 GL_RGB8 is required to be color renderable but not required to be
@@ -3846,9 +3846,22 @@ bool GrGLCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format.asGLFormat() == GrGLFormat::kSRGB8_ALPHA8;
 }
 
-bool GrGLCaps::isFormatCompressed(const GrBackendFormat& format) const {
+bool GrGLCaps::isFormatCompressed(const GrBackendFormat& format,
+                                  SkImage::CompressionType* compressionType) const {
     auto fmt = format.asGLFormat();
-    return fmt == GrGLFormat::kCOMPRESSED_RGB8_ETC2 || fmt == GrGLFormat::kCOMPRESSED_ETC1_RGB8;
+
+    SkImage::CompressionType dummyType;
+    SkImage::CompressionType* compressionTypePtr = compressionType ? compressionType : &dummyType;
+
+    switch (fmt) {
+        case GrGLFormat::kCOMPRESSED_RGB8_ETC2: // fall through
+        case GrGLFormat::kCOMPRESSED_ETC1_RGB8:
+            // ETC2 uses the same compression layout as ETC1
+            *compressionTypePtr = SkImage::kETC1_CompressionType;
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool GrGLCaps::isFormatTexturableAndUploadable(GrColorType ct,
@@ -3920,6 +3933,15 @@ int GrGLCaps::maxRenderTargetSampleCount(GrGLFormat format) const {
         count = SkTMin(count, 4);
     }
     return count;
+}
+
+size_t GrGLCaps::bytesPerPixel(GrGLFormat format) const {
+    return this->getFormatInfo(format).fBytesPerPixel;
+}
+
+size_t GrGLCaps::bytesPerPixel(const GrBackendFormat& format) const {
+    auto glFormat = format.asGLFormat();
+    return this->bytesPerPixel(glFormat);
 }
 
 bool GrGLCaps::canFormatBeFBOColorAttachment(GrGLFormat format) const {

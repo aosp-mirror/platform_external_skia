@@ -813,43 +813,6 @@ static constexpr GrPixelConfig GrCompressionTypePixelConfig(SkImage::Compression
     SkUNREACHABLE;
 }
 
-static constexpr size_t GrBytesPerPixel(GrPixelConfig config) {
-    switch (config) {
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-            return 1;
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRG_88_GrPixelConfig:
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Lum_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-        case kAlpha_16_GrPixelConfig:
-            return 2;
-        case kRGBA_8888_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:  // Assuming GPUs store this 4-byte aligned.
-        case kRGB_888X_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kSRGBA_8888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-        case kRG_1616_GrPixelConfig:
-        case kRG_half_GrPixelConfig:
-            return 4;
-        case kRGBA_half_GrPixelConfig:
-        case kRGBA_half_Clamped_GrPixelConfig:
-        case kRGBA_16161616_GrPixelConfig:
-            return 8;
-        case kUnknown_GrPixelConfig:
-        case kRGB_ETC1_GrPixelConfig:
-            return 0;
-    }
-    SkUNREACHABLE;
-}
-
 static constexpr bool GrPixelConfigIsOpaque(GrPixelConfig config) {
     switch (config) {
         case kRGB_565_GrPixelConfig:
@@ -933,20 +896,15 @@ static constexpr bool GrPixelConfigIsCompressed(GrPixelConfig config) {
 }
 
 /**
- * Returns the data size for the given compressed pixel config
+ * Returns the data size for the given SkImage::CompressionType
  */
-static inline size_t GrCompressedFormatDataSize(GrPixelConfig config,
+static inline size_t GrCompressedFormatDataSize(SkImage::CompressionType compressionType,
                                                 int width, int height) {
-    SkASSERT(GrPixelConfigIsCompressed(config));
-
-    switch (config) {
-        case kRGB_ETC1_GrPixelConfig:
+    switch (compressionType) {
+        case SkImage::kETC1_CompressionType:
             SkASSERT((width & 3) == 0);
             SkASSERT((height & 3) == 0);
             return (width >> 2) * (height >> 2) * 8;
-
-        default:
-            SK_ABORT("Unknown compressed pixel config");
     }
 
     SK_ABORT("Invalid pixel config");

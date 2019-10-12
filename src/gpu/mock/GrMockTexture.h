@@ -102,7 +102,8 @@ public:
             // Add one to account for the resolve buffer.
             ++numColorSamples;
         }
-        return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
+        const GrCaps& caps = *this->getGpu()->caps();
+        return GrSurface::ComputeSize(caps, this->backendFormat(), this->width(), this->height(),
                                       numColorSamples, GrMipMapped::kNo);
     }
 
@@ -186,9 +187,9 @@ private:
             // Add one to account for the resolve buffer.
             ++numColorSamples;
         }
-        return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
-                                      numColorSamples,
-                                      this->texturePriv().mipMapped());
+        const GrCaps& caps = *this->getGpu()->caps();
+        return GrSurface::ComputeSize(caps, this->backendFormat(), this->width(), this->height(),
+                                      numColorSamples, this->texturePriv().mipMapped());
     }
 
     // This avoids an inherits via dominance warning on MSVC.

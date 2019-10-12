@@ -159,7 +159,11 @@ public:
     }
 
     virtual bool isFormatSRGB(const GrBackendFormat&) const = 0;
-    virtual bool isFormatCompressed(const GrBackendFormat&) const = 0;
+
+    // Callers can optionally pass in an SkImage::CompressionType which will be filled in with the
+    // correct type if the GrBackendFormat is compressed.
+    virtual bool isFormatCompressed(const GrBackendFormat&,
+                                    SkImage::CompressionType* compressionType = nullptr) const = 0;
 
     // TODO: Once we use the supportWritePixels call for uploads, we can remove this function and
     // instead only have the version that takes a GrBackendFormat.
@@ -192,6 +196,10 @@ public:
     // sample count is 1 then 1 will be returned if non-MSAA rendering is supported, otherwise 0.
     // For historical reasons requestedCount==0 is handled identically to requestedCount==1.
     virtual int getRenderTargetSampleCount(int requestedCount, const GrBackendFormat&) const = 0;
+
+    // Returns the number of bytes per pixel for the given GrBackendFormat. This is only supported
+    // for "normal" formats. For compressed formats this will return 0.
+    virtual size_t bytesPerPixel(const GrBackendFormat&) const = 0;
 
     /**
      * Backends may have restrictions on what types of surfaces support GrGpu::writePixels().

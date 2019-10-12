@@ -293,11 +293,22 @@ bool GrMtlCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format_is_srgb(GrBackendFormatAsMTLPixelFormat(format));
 }
 
-bool GrMtlCaps::isFormatCompressed(const GrBackendFormat& format) const {
+bool GrMtlCaps::isFormatCompressed(const GrBackendFormat& format,
+                                  SkImage::CompressionType* compressionType) const {
 #ifdef SK_BUILD_FOR_MAC
     return false;
 #else
-    return GrBackendFormatAsMTLPixelFormat(format) == MTLPixelFormatETC2_RGB8;
+    SkImage::CompressionType dummyType;
+    SkImage::CompressionType* compressionTypePtr = compressionType ? compressionType : &dummyType;
+
+    switch (GrBackendFormatAsMTLPixelFormat(format)) {
+        case MTLPixelFormatETC2_RGB8:
+            // ETC2 uses the same compression layout as ETC1
+            *compressionTypePtr = SkImage::kETC1_CompressionType;
+            return true;
+        default:
+            return false;
+    }
 #endif
 }
 
@@ -378,6 +389,11 @@ int GrMtlCaps::getRenderTargetSampleCount(int requestedCount, MTLPixelFormat for
         }
     }
     return 1 == requestedCount ? 1 : 0;
+}
+
+size_t GrMtlCaps::bytesPerPixel(const GrBackendFormat& format) const {
+    MTLPixelFormat mtlFormat = GrBackendFormatAsMTLPixelFormat(format);
+    return this->bytesPerPixel(mtlFormat);
 }
 
 size_t GrMtlCaps::bytesPerPixel(MTLPixelFormat format) const {
