@@ -48,6 +48,66 @@ static const union {
 } inf_ = { 0x7f800000 };
 #define INFINITY_ inf_.f
 
+#if defined(__clang__) || defined(__GNUC__)
+    #define small_memcpy __builtin_memcpy
+#else
+    #define small_memcpy memcpy
+#endif
+
+static float log2f_(float x) {
+    // The first approximation of log2(x) is its exponent 'e', minus 127.
+    int32_t bits;
+    small_memcpy(&bits, &x, sizeof(bits));
+
+    float e = (float)bits * (1.0f / (1<<23));
+
+    // If we use the mantissa too we can refine the error signficantly.
+    int32_t m_bits = (bits & 0x007fffff) | 0x3f000000;
+    float m;
+    small_memcpy(&m, &m_bits, sizeof(m));
+
+    return (e - 124.225514990f
+              -   1.498030302f*m
+              -   1.725879990f/(0.3520887068f + m));
+}
+static float logf_(float x) {
+    const float ln2 = 0.69314718f;
+    return ln2*log2f_(x);
+}
+
+static float exp2f_(float x) {
+    float fract = x - floorf_(x);
+
+    float fbits = (1.0f * (1<<23)) * (x + 121.274057500f
+                                        -   1.490129070f*fract
+                                        +  27.728023300f/(4.84252568f - fract));
+
+    // Before we cast fbits to int32_t, check for out of range values to pacify UBSAN.
+    // INT_MAX is not exactly representable as a float, so exclude it as effectively infinite.
+    // INT_MIN is a power of 2 and exactly representable as a float, so it's fine.
+    if (fbits >= (float)INT_MAX) {
+        return INFINITY_;
+    } else if (fbits < (float)INT_MIN) {
+        return -INFINITY_;
+    }
+
+    int32_t bits = (int32_t)fbits;
+    small_memcpy(&x, &bits, sizeof(x));
+    return x;
+}
+
+// Not static, as it's used by some test tools.
+float powf_(float x, float y) {
+    assert (x >= 0);
+    return (x == 0) || (x == 1) ? x
+                                : exp2f_(log2f_(x) * y);
+}
+
+static float expf_(float x) {
+    const float log2_e = 1.4426950408889634074f;
+    return exp2f_(log2_e * x);
+}
+
 static float fmaxf_(float x, float y) { return x > y ? x : y; }
 static float fminf_(float x, float y) { return x < y ? x : y; }
 
@@ -100,12 +160,6 @@ static TFKind classify(const skcms_TransferFunction& tf, TF_PQish*   pq = nullpt
     return Bad;
 }
 
-// TODO: temporary shim for old call sites
-static bool tf_is_valid(const skcms_TransferFunction* tf) {
-    return classify(*tf) == sRGBish;
-}
-
-
 bool skcms_TransferFunction_makePQish(skcms_TransferFunction* tf,
                                       float A, float B, float C,
                                       float D, float E, float F) {
@@ -114,15 +168,30 @@ bool skcms_TransferFunction_makePQish(skcms_TransferFunction* tf,
     return true;
 }
 
+bool skcms_TransferFunction_makeHLGish(skcms_TransferFunction* tf,
+                                       float R, float G,
+                                       float a, float b, float c) {
+    *tf = { TFKind_marker(HLGish), R,G, a,b,c, 0 };
+    assert(classify(*tf) == HLGish);
+    return true;
+}
+
 float skcms_TransferFunction_eval(const skcms_TransferFunction* tf, float x) {
     float sign = x < 0 ? -1.0f : 1.0f;
     x *= sign;
 
-    TF_PQish pq;
-    switch (classify(*tf, &pq)) {
+    TF_PQish  pq;
+    TF_HLGish hlg;
+    switch (classify(*tf, &pq, &hlg)) {
         case Bad:       break;
-        case HLGish:    break;
-        case HLGinvish: break;
+
+        case HLGish:    return sign * (x*hlg.R <= 1 ? powf_(x*hlg.R, hlg.G)
+                                                    : expf_((x-hlg.c)*hlg.a) + hlg.b);
+
+        // skcms_TransferFunction_invert() inverts R, G, and a for HLGinvish so this math is fast.
+        case HLGinvish: return sign * (x <= 1 ? hlg.R * powf_(x, hlg.G)
+                                              : hlg.a * logf_(x - hlg.b) + hlg.c);
+
 
         case sRGBish: return sign * (x < tf->d ?       tf->c * x + tf->f
                                                : powf_(tf->a * x + tf->b, tf->g) + tf->e);
@@ -403,7 +472,7 @@ static bool read_curve_para(const uint8_t* buf, uint32_t size,
             curve->parametric.f = read_big_fixed(paraTag->variable + 24);
             break;
     }
-    return tf_is_valid(&curve->parametric);
+    return classify(curve->parametric) == sRGBish;
 }
 
 typedef struct {
@@ -1424,63 +1493,33 @@ skcms_Matrix3x3 skcms_Matrix3x3_concat(const skcms_Matrix3x3* A, const skcms_Mat
     return m;
 }
 
-#if defined(__clang__) || defined(__GNUC__)
-    #define small_memcpy __builtin_memcpy
-#else
-    #define small_memcpy memcpy
-#endif
-
-static float log2f_(float x) {
-    // The first approximation of log2(x) is its exponent 'e', minus 127.
-    int32_t bits;
-    small_memcpy(&bits, &x, sizeof(bits));
-
-    float e = (float)bits * (1.0f / (1<<23));
-
-    // If we use the mantissa too we can refine the error signficantly.
-    int32_t m_bits = (bits & 0x007fffff) | 0x3f000000;
-    float m;
-    small_memcpy(&m, &m_bits, sizeof(m));
-
-    return (e - 124.225514990f
-              -   1.498030302f*m
-              -   1.725879990f/(0.3520887068f + m));
-}
-
-static float exp2f_(float x) {
-    float fract = x - floorf_(x);
-
-    float fbits = (1.0f * (1<<23)) * (x + 121.274057500f
-                                        -   1.490129070f*fract
-                                        +  27.728023300f/(4.84252568f - fract));
-
-    // Before we cast fbits to int32_t, check for out of range values to pacify UBSAN.
-    // INT_MAX is not exactly representable as a float, so exclude it as effectively infinite.
-    // INT_MIN is a power of 2 and exactly representable as a float, so it's fine.
-    if (fbits >= (float)INT_MAX) {
-        return INFINITY_;
-    } else if (fbits < (float)INT_MIN) {
-        return -INFINITY_;
-    }
-
-    int32_t bits = (int32_t)fbits;
-    small_memcpy(&x, &bits, sizeof(x));
-    return x;
-}
-
-float powf_(float x, float y) {
-    assert (x >= 0);
-    return (x == 0) || (x == 1) ? x
-                                : exp2f_(log2f_(x) * y);
-}
-
 #if defined(__clang__)
-    [[clang::no_sanitize("float-divide-by-zero")]]  // Checked for by tf_is_valid() on the way out.
+    [[clang::no_sanitize("float-divide-by-zero")]]  // Checked for by classify() on the way out.
 #endif
 bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_TransferFunction* dst) {
-    if (!tf_is_valid(src)) {
-        return false;
+    TF_PQish  pq;
+    TF_HLGish hlg;
+    switch (classify(*src, &pq, &hlg)) {
+        case Bad: return false;
+        case sRGBish: break;  // handled below
+
+        case PQish:
+            *dst = { TFKind_marker(PQish), -pq.A,  pq.D, 1.0f/pq.F
+                                         ,  pq.B, -pq.E, 1.0f/pq.C};
+            return true;
+
+        case HLGish:
+            *dst = { TFKind_marker(HLGinvish), 1.0f/hlg.R, 1.0f/hlg.G
+                                             , 1.0f/hlg.a, hlg.b, hlg.c, 0 };
+            return true;
+
+        case HLGinvish:
+            *dst = { TFKind_marker(HLGish), 1.0f/hlg.R, 1.0f/hlg.G
+                                          , 1.0f/hlg.a, hlg.b, hlg.c, 0 };
+            return true;
     }
+
+    assert (classify(*src) == sRGBish);
 
     // We're inverting this function, solving for x in terms of y.
     //   y = (cx + f)         x < d
@@ -1527,7 +1566,7 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
     inv.e = -src->b / src->a;
 
     // We need to enforce the same constraints here that we do when fitting a curve,
-    // a >= 0 and ad+b >= 0.  These constraints are checked by tf_is_valid(), so they're true
+    // a >= 0 and ad+b >= 0.  These constraints are checked by classify(), so they're true
     // of the source function if we're here.
 
     // Just like when fitting the curve, there's really no way to rescue a < 0.
@@ -1539,9 +1578,9 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
         inv.b = -inv.a * inv.d;
     }
 
-    // That should usually make tf_is_valid(&inv) true, but there are a couple situations
+    // That should usually make classify(inv) == sRGBish true, but there are a couple situations
     // where we might still fail here, like non-finite parameter values.
-    if (!tf_is_valid(&inv)) {
+    if (classify(inv) != sRGBish) {
         return false;
     }
 
@@ -1565,7 +1604,7 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
     }
 
     *dst = inv;
-    return tf_is_valid(dst);
+    return classify(*dst) == sRGBish;
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
@@ -1622,8 +1661,8 @@ static float rg_nonlinear(float x,
     assert (D >= 0);
 
     // The gradient.
-    dfdP[0] = 0.69314718f*log2f_(Y)*powf_(Y, g)
-            - 0.69314718f*log2f_(D)*powf_(D, g);
+    dfdP[0] = logf_(Y)*powf_(Y, g)
+            - logf_(D)*powf_(D, g);
     dfdP[1] = y*g*powf_(Y, g-1)
             - d*g*powf_(D, g-1);
     dfdP[2] =   g*powf_(Y, g-1)
@@ -1888,6 +1927,21 @@ typedef enum {
     Op_tf_b,
     Op_tf_a,
 
+    Op_pq_r,
+    Op_pq_g,
+    Op_pq_b,
+    Op_pq_a,
+
+    Op_hlg_r,
+    Op_hlg_g,
+    Op_hlg_b,
+    Op_hlg_a,
+
+    Op_hlginv_r,
+    Op_hlginv_g,
+    Op_hlginv_b,
+    Op_hlginv_a,
+
     Op_table_r,
     Op_table_g,
     Op_table_b,
@@ -2074,33 +2128,39 @@ namespace baseline {
 
 #endif
 
-static bool is_identity_tf(const skcms_TransferFunction* tf) {
-    return tf->g == 1 && tf->a == 1
-        && tf->b == 0 && tf->c == 0 && tf->d == 0 && tf->e == 0 && tf->f == 0;
-}
-
 typedef struct {
     Op          op;
     const void* arg;
 } OpAndArg;
 
 static OpAndArg select_curve_op(const skcms_Curve* curve, int channel) {
-    static const struct { Op parametric, table; } ops[] = {
-        { Op_tf_r, Op_table_r },
-        { Op_tf_g, Op_table_g },
-        { Op_tf_b, Op_table_b },
-        { Op_tf_a, Op_table_a },
+    static const struct { Op sRGBish, PQish, HLGish, HLGinvish, table; } ops[] = {
+        { Op_tf_r, Op_pq_r, Op_hlg_r, Op_hlginv_r, Op_table_r },
+        { Op_tf_g, Op_pq_g, Op_hlg_g, Op_hlginv_g, Op_table_g },
+        { Op_tf_b, Op_pq_b, Op_hlg_b, Op_hlginv_b, Op_table_b },
+        { Op_tf_a, Op_pq_a, Op_hlg_a, Op_hlginv_a, Op_table_a },
     };
-
-    const OpAndArg noop = { Op_load_a8/*doesn't matter*/, nullptr };
+    const auto& op = ops[channel];
 
     if (curve->table_entries == 0) {
-        return is_identity_tf(&curve->parametric)
-            ? noop
-            : OpAndArg{ ops[channel].parametric, &curve->parametric };
-    }
+        const OpAndArg noop = { Op_load_a8/*doesn't matter*/, nullptr };
 
-    return OpAndArg{ ops[channel].table, curve };
+        const skcms_TransferFunction& tf = curve->parametric;
+
+        if (tf.g == 1 && tf.a == 1 &&
+            tf.b == 0 && tf.c == 0 && tf.d == 0 && tf.e == 0 && tf.f == 0) {
+            return noop;
+        }
+
+        switch (classify(tf)) {
+            case Bad:        return noop;
+            case sRGBish:    return OpAndArg{op.sRGBish,   &tf};
+            case PQish:      return OpAndArg{op.PQish,     &tf};
+            case HLGish:     return OpAndArg{op.HLGish,    &tf};
+            case HLGinvish:  return OpAndArg{op.HLGinvish, &tf};
+        }
+    }
+    return OpAndArg{op.table, curve};
 }
 
 static size_t bytes_per_pixel(skcms_PixelFormat fmt) {
@@ -2202,7 +2262,12 @@ bool skcms_TransformWithPalette(const void*             src,
     Op*          ops  = program;
     const void** args = arguments;
 
-    skcms_TransferFunction inv_dst_tf_r, inv_dst_tf_g, inv_dst_tf_b;
+    // These are always parametric curves of some sort.
+    skcms_Curve dst_curves[3];
+    dst_curves[0].table_entries =
+    dst_curves[1].table_entries =
+    dst_curves[2].table_entries = 0;
+
     skcms_Matrix3x3        from_xyz;
 
     switch (srcFmt >> 1) {
@@ -2262,7 +2327,10 @@ bool skcms_TransformWithPalette(const void*             src,
     if (dstProfile != srcProfile) {
 
         if (!prep_for_destination(dstProfile,
-                                  &from_xyz, &inv_dst_tf_r, &inv_dst_tf_b, &inv_dst_tf_g)) {
+                                  &from_xyz,
+                                  &dst_curves[0].parametric,
+                                  &dst_curves[1].parametric,
+                                  &dst_curves[2].parametric)) {
             return false;
         }
 
@@ -2349,9 +2417,17 @@ bool skcms_TransformWithPalette(const void*             src,
         }
 
         // Encode back to dst RGB using its parametric transfer functions.
-        if (!is_identity_tf(&inv_dst_tf_r)) { *ops++ = Op_tf_r; *args++ = &inv_dst_tf_r; }
-        if (!is_identity_tf(&inv_dst_tf_g)) { *ops++ = Op_tf_g; *args++ = &inv_dst_tf_g; }
-        if (!is_identity_tf(&inv_dst_tf_b)) { *ops++ = Op_tf_b; *args++ = &inv_dst_tf_b; }
+        for (int i = 0; i < 3; i++) {
+            OpAndArg oa = select_curve_op(dst_curves+i, i);
+            if (oa.arg) {
+                assert (oa.op != Op_table_r &&
+                        oa.op != Op_table_g &&
+                        oa.op != Op_table_b &&
+                        oa.op != Op_table_a);
+                *ops++  = oa.op;
+                *args++ = oa.arg;
+            }
+        }
     }
 
     // Clamp here before premul to make sure we're clamping to normalized values _and_ gamut,
