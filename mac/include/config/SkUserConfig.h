@@ -11,6 +11,10 @@
 #define SK_CODEC_DECODES_RAW
 #endif
 
+#ifndef SK_ENABLE_SKSL_INTERPRETER
+#define SK_ENABLE_SKSL_INTERPRETER
+#endif
+
 #ifndef SK_GAMMA_APPLY_TO_A8
 #define SK_GAMMA_APPLY_TO_A8
 #endif
