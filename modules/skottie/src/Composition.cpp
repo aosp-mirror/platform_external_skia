@@ -8,6 +8,7 @@
 #include "modules/skottie/src/SkottiePriv.h"
 
 #include "include/core/SkCanvas.h"
+#include "modules/skottie/src/SkottieAdapter.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/sksg/include/SkSGGroup.h"
 #include "modules/sksg/include/SkSGTransform.h"
@@ -134,9 +135,45 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachComposition(
         layerCtx.fMotionBlurPhase = SkTPin(ParseDefault((*jmb)["sp"], 0.0f), -360.0f, 360.0f);
     }
 
-    layers.reserve(jlayers->size());
-    for (const auto& l : *jlayers) {
-        if (auto layer = this->attachLayer(l, &layerCtx)) {
+
+    // First pass: parse layer types and attach camera layers.
+    struct LayerRec {
+        const skjson::ObjectValue& jlayer;
+        size_t                     layer_type;
+    };
+    SkSTArray<64, LayerRec, true> layer_recs(jlayers->size());
+    static constexpr int kCameraLayerType = 13;
+    for (const skjson::ObjectValue* jlayer : *jlayers) {
+        if (!jlayer) {
+            continue;
+        }
+
+        const auto type = ParseDefault<int>((*jlayer)["ty"], -1);
+        if (type < 0) {
+            continue;
+        }
+
+        if (type == kCameraLayerType) {
+            // Cameras must be attached upfront because layer transforms
+            // are rooted in the camera transform.
+            this->attachLayer(*jlayer, kCameraLayerType, &layerCtx);
+            continue;
+        }
+
+        layer_recs.push_back({*jlayer, SkToSizeT(type)});
+    }
+
+    if (!layerCtx.fCameraTransform && ParseDefault<int>(jcomp["ddd"], 0)) {
+        // Instantiate a default camera when 3D layers are present.
+        layerCtx.fCameraTransform = CameraAdapter::MakeDefault(fSize)->refTransform();
+    }
+
+    // Second pass: attach all other layers.
+    layers.reserve(layer_recs.size());
+    for (const auto& rec : layer_recs) {
+        SkASSERT(rec.layer_type != kCameraLayerType);
+
+        if (auto layer = this->attachLayer(rec.jlayer, rec.layer_type, &layerCtx)) {
             layers.push_back(std::move(layer));
         }
     }
@@ -153,11 +190,6 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachComposition(
         std::reverse(layers.begin(), layers.end());
         layers.shrink_to_fit();
         comp = sksg::Group::Make(std::move(layers));
-    }
-
-    // Optional camera.
-    if (layerCtx.fCameraTransform) {
-        comp = sksg::TransformEffect::Make(std::move(comp), std::move(layerCtx.fCameraTransform));
     }
 
     return comp;

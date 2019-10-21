@@ -178,7 +178,7 @@ private:
     void dispatchMarkers(const skjson::ArrayValue*) const;
 
     sk_sp<sksg::RenderNode> attachComposition(const skjson::ObjectValue&) const;
-    sk_sp<sksg::RenderNode> attachLayer(const skjson::ObjectValue*,
+    sk_sp<sksg::RenderNode> attachLayer(const skjson::ObjectValue&, size_t type,
                                         AttachLayerContext*) const;
 
     sk_sp<sksg::RenderNode> attachBlendMode(const skjson::ObjectValue&,
@@ -275,14 +275,16 @@ struct AnimationBuilder::AttachLayerContext {
 
     TransformRec attachLayerTransform(const skjson::ObjectValue& jlayer,
                                       const AnimationBuilder* abuilder,
-                                      TransformType type = TransformType::kLayer);
+                                      TransformType type,
+                                      bool has_camera_root);
 
     bool hasMotionBlur(const skjson::ObjectValue& jlayer) const;
 
 private:
     sk_sp<sksg::Transform> attachParentLayerTransform(const skjson::ObjectValue& jlayer,
                                                       const AnimationBuilder* abuilder,
-                                                      int layer_index);
+                                                      int layer_index,
+                                                      bool has_camera_root);
 
     sk_sp<sksg::Transform> attachTransformNode(const skjson::ObjectValue& jlayer,
                                                const AnimationBuilder* abuilder,
@@ -291,7 +293,8 @@ private:
 
     TransformRec* attachLayerTransformImpl(const skjson::ObjectValue& jlayer,
                                            const AnimationBuilder* abuilder,
-                                           TransformType type, int layer_index);
+                                           TransformType type, int layer_index,
+                                           bool has_camera_root);
 };
 
 } // namespace internal
