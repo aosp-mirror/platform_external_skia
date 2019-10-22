@@ -59,6 +59,8 @@ var CanvasKit = {
 	/** @return {RadialCanvasGradient} */
 	MakeTwoPointConicalGradientShader: function() {},
 	MakeWebGLCanvasSurface: function() {},
+	/** @return {TypedArray} */
+	Malloc: function() {},
 	/** @return {TonalColors} */
 	computeTonalColors: function() {},
 	currentContext: function() {},
@@ -127,12 +129,14 @@ var CanvasKit = {
 		// public API (from C++ bindings)
 		clear: function() {},
 		clipPath: function() {},
+		clipRRect: function() {},
 		clipRect: function() {},
 		concat: function() {},
+		drawAnimatedImage: function() {},
 		drawArc: function() {},
 		drawCircle: function() {},
+		drawColor: function() {},
 		drawDRRect:  function() {},
-		drawAnimatedImage: function() {},
 		drawImage: function() {},
 		drawImageRect: function() {},
 		drawLine: function() {},
@@ -501,6 +505,38 @@ var CanvasKit = {
 		High: {},
 	},
 
+	FontSlant: {
+		Upright: {},
+		Italic: {},
+		Oblique: {},
+	},
+
+	FontWeight: {
+		Invisible: {},
+		Thin: {},
+		ExtraLight: {},
+		Light: {},
+		Normal: {},
+		Medium: {},
+		SemiBold: {},
+		Bold: {},
+		ExtraBold: {},
+		Black: {},
+		ExtraBlack: {},
+	},
+
+	FontWidth: {
+		UltraCondensed: {},
+		ExtraCondensed: {},
+		Condensed: {},
+		SemiCondensed: {},
+		Normal: {},
+		SemiExpanded: {},
+		Expanded: {},
+		ExtraExpanded: {},
+		UltraExpanded: {},
+	},
+
 	ImageFormat: {
 		PNG: {},
 		JPEG: {},
@@ -549,6 +585,11 @@ var CanvasKit = {
 		Justify: {},
 		Start: {},
 		End: {},
+	},
+
+	TextDirection: {
+		LTR: {},
+		RTL: {},
 	},
 
 	TextEncoding: {

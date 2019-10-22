@@ -18,6 +18,7 @@
 #include "src/gpu/GrPaint.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrSurfaceContext.h"
+#include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/geometry/GrQuad.h"
 #include "src/gpu/text/GrTextTarget.h"
@@ -480,9 +481,12 @@ public:
     int height() const { return fRenderTargetProxy->height(); }
     int numSamples() const { return fRenderTargetProxy->numSamples(); }
     const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }
-    GrSurfaceOrigin origin() const { return fRenderTargetProxy->origin(); }
     bool wrapsVkSecondaryCB() const { return fRenderTargetProxy->wrapsVkSecondaryCB(); }
     GrMipMapped mipMapped() const;
+
+    GrSurfaceProxyView outputSurfaceView() {
+        return { fRenderTargetProxy, fOrigin, fOutputSwizzle };
+    }
 
     // This entry point should only be called if the backing GPU object is known to be
     // instantiated.
@@ -512,12 +516,6 @@ public:
     void testingOnly_SetPreserveOpsOnFullClear() { fPreserveOpsOnFullClear_TestingOnly = true; }
     GrOpsTask* testingOnly_PeekLastOpsTask() { return fOpsTask.get(); }
 #endif
-
-protected:
-    GrRenderTargetContext(GrRecordingContext*, sk_sp<GrRenderTargetProxy>, GrColorType,
-                          sk_sp<SkColorSpace>, const SkSurfaceProps*, bool managedOpsTask = true);
-
-    SkDEBUGCODE(void validate() const override;)
 
 private:
     class TextTarget;
@@ -550,6 +548,13 @@ private:
                              std::unique_ptr<GrFragmentProcessor>,
                              sk_sp<GrTextureProxy>,
                              GrColorType);
+
+    GrRenderTargetContext(GrRecordingContext*, sk_sp<GrRenderTargetProxy>, GrColorType,
+                          GrSurfaceOrigin, GrSwizzle texSwizzle, GrSwizzle outSwizzle,
+                          sk_sp<SkColorSpace>, const SkSurfaceProps*, bool managedOpsTask = true);
+
+    SkDEBUGCODE(void validate() const override;)
+
 
     GrOpsTask::CanDiscardPreviousOps canDiscardPreviousOpsOnFullClear() const;
     void setNeedsStencil(bool useMixedSamplesIfNotMSAA);
@@ -637,7 +642,9 @@ private:
     GrOpsTask* getOpsTask();
 
     std::unique_ptr<GrTextTarget> fTextTarget;
+
     sk_sp<GrRenderTargetProxy> fRenderTargetProxy;
+    GrSwizzle fOutputSwizzle;
 
     // In MDB-mode the GrOpsTask can be closed by some other renderTargetContext that has picked
     // it up. For this reason, the GrOpsTask should only ever be accessed via 'getOpsTask'.
