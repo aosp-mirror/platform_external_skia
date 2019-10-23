@@ -83,12 +83,13 @@ private:
 
 class ManagedAnimation final : public SkRefCnt {
 public:
-    static sk_sp<ManagedAnimation> Make(const std::string& json, sk_sp<SkottieAssetProvider> ap) {
+    static sk_sp<ManagedAnimation> Make(const std::string& json,
+                                        sk_sp<skottie::ResourceProvider> rp) {
         auto mgr = skstd::make_unique<skottie_utils::CustomPropertyManager>();
         auto animation = skottie::Animation::Builder()
                             .setMarkerObserver(mgr->getMarkerObserver())
                             .setPropertyObserver(mgr->getPropertyObserver())
-                            .setResourceProvider(ap)
+                            .setResourceProvider(rp)
                             .make(json.c_str(), json.size());
 
         return animation
@@ -107,8 +108,15 @@ public:
         fAnimation->seek(t, &ic);
         return ic.bounds();
     }
-    SkScalar duration() const { return fAnimation->duration(); }
-    const SkSize&      size() const { return fAnimation->size(); }
+    // Returns a damage rect.
+    SkRect seekFrame(double t) {
+        sksg::InvalidationController ic;
+        fAnimation->seekFrame(t, &ic);
+        return ic.bounds();
+    }
+    double duration() const { return fAnimation->duration(); }
+    double fps() const { return fAnimation->fps(); }
+    const SkSize& size() const { return fAnimation->size(); }
     std::string version() const { return std::string(fAnimation->version().c_str()); }
 
     // CustomPropertyManager API
@@ -178,10 +186,14 @@ EMSCRIPTEN_BINDINGS(Skottie) {
         .function("version", optional_override([](skottie::Animation& self)->std::string {
             return std::string(self.version().c_str());
         }))
-        .function("size", &skottie::Animation::size)
+        .function("size"    , &skottie::Animation::size)
         .function("duration", &skottie::Animation::duration)
+        .function("fps"     , &skottie::Animation::fps)
         .function("seek", optional_override([](skottie::Animation& self, SkScalar t)->void {
             self.seek(t);
+        }))
+        .function("seekFrame", optional_override([](skottie::Animation& self, double t)->void {
+            self.seekFrame(t);
         }))
         .function("render", optional_override([](skottie::Animation& self, SkCanvas* canvas)->void {
             self.render(canvas, nullptr);
@@ -202,7 +214,9 @@ EMSCRIPTEN_BINDINGS(Skottie) {
         .function("version"   , &ManagedAnimation::version)
         .function("size"      , &ManagedAnimation::size)
         .function("duration"  , &ManagedAnimation::duration)
+        .function("fps"       , &ManagedAnimation::fps)
         .function("seek"      , &ManagedAnimation::seek)
+        .function("seekFrame" , &ManagedAnimation::seekFrame)
         .function("render"    , select_overload<void(SkCanvas*) const>(&ManagedAnimation::render), allow_raw_pointers())
         .function("render"    , select_overload<void(SkCanvas*, const SkRect&) const>
                                     (&ManagedAnimation::render), allow_raw_pointers())
@@ -231,7 +245,10 @@ EMSCRIPTEN_BINDINGS(Skottie) {
             assets.push_back(std::make_pair(std::move(name), std::move(bytes)));
         }
 
-        return ManagedAnimation::Make(json, SkottieAssetProvider::Make(std::move(assets)));
+        return ManagedAnimation::Make(json,
+                 skottie_utils::DataURIResourceProviderProxy::Make(
+                    SkottieAssetProvider::Make(std::move(assets)),
+                    /*predecode=*/true));
     }));
     constant("managed_skottie", true);
 #endif // SK_INCLUDE_MANAGED_SKOTTIE

@@ -581,6 +581,8 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
         renderTask->prePrepare(fContext);
     }
 
+    ddl->fOpPOD = fContext->priv().detachOpPOD();
+
     if (fPathRendererChain) {
         if (auto ccpr = fPathRendererChain->getCoverageCountingPathRenderer()) {
             ddl->fPendingPaths = ccpr->detachPendingPaths();
@@ -911,10 +913,17 @@ std::unique_ptr<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext
 
     sk_sp<GrRenderTargetProxy> renderTargetProxy(sk_ref_sp(sProxy->asRenderTargetProxy()));
 
+    GrSurfaceOrigin origin = renderTargetProxy->origin();
+    GrSwizzle texSwizzle = renderTargetProxy->textureSwizzle();
+    GrSwizzle outSwizzle = renderTargetProxy->outputSwizzle();
+
     return std::unique_ptr<GrRenderTargetContext>(
             new GrRenderTargetContext(fContext,
                                       std::move(renderTargetProxy),
                                       colorType,
+                                      origin,
+                                      texSwizzle,
+                                      outSwizzle,
                                       std::move(colorSpace),
                                       surfaceProps,
                                       managedOpsTask));
@@ -934,6 +943,10 @@ std::unique_ptr<GrTextureContext> GrDrawingManager::makeTextureContext(
 
     sk_sp<GrTextureProxy> textureProxy(sk_ref_sp(sProxy->asTextureProxy()));
 
+    GrSurfaceOrigin origin = textureProxy->origin();
+    GrSwizzle texSwizzle = textureProxy->textureSwizzle();
+
     return std::unique_ptr<GrTextureContext>(new GrTextureContext(
-            fContext, std::move(textureProxy), colorType, alphaType, std::move(colorSpace)));
+            fContext, std::move(textureProxy), colorType, alphaType, std::move(colorSpace), origin,
+            texSwizzle));
 }
