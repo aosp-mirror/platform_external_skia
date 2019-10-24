@@ -260,6 +260,7 @@ cc_library_static {
         "src/core/SkTSearch.cpp",
         "src/core/SkTaskGroup.cpp",
         "src/core/SkTextBlob.cpp",
+        "src/core/SkTextBlobTrace.cpp",
         "src/core/SkThreadID.cpp",
         "src/core/SkTime.cpp",
         "src/core/SkTypeface.cpp",
