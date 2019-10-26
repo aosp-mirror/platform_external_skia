@@ -61,6 +61,8 @@ enum GrGLRenderer {
     kAdreno430_GrGLRenderer,
     kAdreno4xx_other_GrGLRenderer,
     kAdreno5xx_GrGLRenderer,
+    kAdreno615_GrGLRenderer,  // Pixel3a
+    kAdreno630_GrGLRenderer,  // Pixel3
     kGoogleSwiftShader_GrGLRenderer,
 
     /** Intel GPU families, ordered by generation **/
@@ -93,6 +95,7 @@ enum GrGLRenderer {
     kANGLE_GrGLRenderer,
 
     kAMDRadeonHD7xxx_GrGLRenderer,  // AMD Radeon HD 7000 Series
+    kAMDRadeonR9M3xx_GrGLRenderer,  // AMD Radeon R9 M300 Series
     kAMDRadeonR9M4xx_GrGLRenderer,  // AMD Radeon R9 M400 Series
 
     kOther_GrGLRenderer

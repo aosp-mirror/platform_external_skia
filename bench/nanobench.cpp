@@ -626,21 +626,7 @@ static void collect_files(const CommandLineFlags::StringArray& paths,
 class BenchmarkStream {
 public:
     BenchmarkStream() : fBenches(BenchRegistry::Head())
-                      , fGMs(skiagm::GMRegistry::Head())
-                      , fCurrentRecording(0)
-                      , fCurrentDeserialPicture(0)
-                      , fCurrentScale(0)
-                      , fCurrentSKP(0)
-                      , fCurrentSVG(0)
-                      , fCurrentUseMPD(0)
-                      , fCurrentCodec(0)
-                      , fCurrentAndroidCodec(0)
-                      , fCurrentBRDImage(0)
-                      , fCurrentColorType(0)
-                      , fCurrentAlphaType(0)
-                      , fCurrentSubsetType(0)
-                      , fCurrentSampleSize(0)
-                      , fCurrentAnimSKP(0) {
+                      , fGMs(skiagm::GMRegistry::Head()) {
         collect_files(FLAGS_skps, ".skp", &fSKPs);
         collect_files(FLAGS_svgs, ".svg", &fSVGs);
 
@@ -1101,20 +1087,20 @@ private:
 
     const char* fSourceType;  // What we're benching: bench, GM, SKP, ...
     const char* fBenchType;   // How we bench it: micro, recording, playback, ...
-    int fCurrentRecording;
-    int fCurrentDeserialPicture;
-    int fCurrentScale;
-    int fCurrentSKP;
-    int fCurrentSVG;
-    int fCurrentUseMPD;
-    int fCurrentCodec;
-    int fCurrentAndroidCodec;
-    int fCurrentBRDImage;
-    int fCurrentColorType;
-    int fCurrentAlphaType;
-    int fCurrentSubsetType;
-    int fCurrentSampleSize;
-    int fCurrentAnimSKP;
+    int fCurrentRecording = 0;
+    int fCurrentDeserialPicture = 0;
+    int fCurrentScale = 0;
+    int fCurrentSKP = 0;
+    int fCurrentSVG = 0;
+    int fCurrentUseMPD = 0;
+    int fCurrentCodec = 0;
+    int fCurrentAndroidCodec = 0;
+    int fCurrentBRDImage = 0;
+    int fCurrentColorType = 0;
+    int fCurrentAlphaType = 0;
+    int fCurrentSubsetType = 0;
+    int fCurrentSampleSize = 0;
+    int fCurrentAnimSKP = 0;
 };
 
 // Some runs (mostly, Valgrind) are so slow that the bot framework thinks we've hung.
@@ -1164,7 +1150,9 @@ int main(int argc, char** argv) {
     std::unique_ptr<SkWStream> logStream(new SkNullWStream);
     if (!FLAGS_outResultsFile.isEmpty()) {
 #if defined(SK_RELEASE)
-        logStream.reset(new SkFILEWStream(FLAGS_outResultsFile[0]));
+        // SkJSONWriter uses a 32k in-memory cache, so it only flushes occasionally and is well
+        // equipped for a stream that re-opens, appends, and closes the file on every write.
+        logStream.reset(new NanoFILEAppendAndCloseStream(FLAGS_outResultsFile[0]));
 #else
         SkDebugf("I'm ignoring --outResultsFile because this is a Debug build.");
         return 1;

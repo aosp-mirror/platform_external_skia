@@ -144,20 +144,6 @@ private:
 };
 }
 
-static void check_refs(skiatest::Reporter* reporter,
-                       GrTextureProxy* proxy,
-                       int32_t expectedProxyRefs,
-                       int32_t expectedBackingRefs) {
-    int32_t actualProxyRefs = proxy->refCnt();
-    int32_t actualBackingRefs = proxy->testingOnly_getBackingRefCnt();
-
-    SkASSERT(actualProxyRefs == expectedProxyRefs);
-    SkASSERT(actualBackingRefs == expectedBackingRefs);
-
-    REPORTER_ASSERT(reporter, actualProxyRefs == expectedProxyRefs);
-    REPORTER_ASSERT(reporter, actualBackingRefs == expectedBackingRefs);
-}
-
 DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
@@ -203,11 +189,12 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
                 // If the fp is cloned the number of refs should increase by one (for the clone)
                 int expectedProxyRefs = makeClone ? 3 : 2;
 
-                check_refs(reporter, proxy.get(), expectedProxyRefs, -1);
+                CheckSingleThreadedProxyRefs(reporter, proxy.get(), expectedProxyRefs, -1);
 
                 context->flush();
 
-                check_refs(reporter, proxy.get(), 1, 1); // just one from the 'proxy' sk_sp
+                // just one from the 'proxy' sk_sp
+                CheckSingleThreadedProxyRefs(reporter, proxy.get(), 1, 1);
             }
         }
     }
@@ -344,7 +331,7 @@ bool log_pixels(GrColor* pixels, int widthHeight, SkString* dst) {
     auto info = SkImageInfo::Make(widthHeight, widthHeight, kRGBA_8888_SkColorType, kLogAlphaType);
     SkBitmap bmp;
     bmp.installPixels(info, pixels, widthHeight * sizeof(GrColor));
-    return bitmap_to_base64_data_uri(bmp, dst);
+    return BipmapToBase64DataURI(bmp, dst);
 }
 
 bool log_texture_proxy(GrContext* context, sk_sp<GrTextureProxy> src, SkString* dst) {
@@ -354,7 +341,7 @@ bool log_texture_proxy(GrContext* context, sk_sp<GrTextureProxy> src, SkString* 
     SkBitmap bm;
     SkAssertResult(bm.tryAllocPixels(ii));
     SkAssertResult(sContext->readPixels(ii, bm.getPixels(), bm.rowBytes(), {0, 0}));
-    return bitmap_to_base64_data_uri(bm, dst);
+    return BipmapToBase64DataURI(bm, dst);
 }
 
 bool fuzzy_color_equals(const SkPMColor4f& c1, const SkPMColor4f& c2) {
