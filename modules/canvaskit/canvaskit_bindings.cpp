@@ -20,6 +20,7 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageFilter.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMaskFilter.h"
 #include "include/core/SkPaint.h"
@@ -43,6 +44,7 @@
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkDiscretePathEffect.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/effects/SkImageFilters.h"
 #include "include/effects/SkTrimPathEffect.h"
 #include "include/pathops/SkPathOps.h"
 #include "include/utils/SkParsePath.h"
@@ -557,8 +559,18 @@ private:
 };
 
 void drawShapedText(SkCanvas& canvas, ShapedText st, SkScalar x,
-                     SkScalar y, SkPaint paint) {
+                    SkScalar y, SkPaint paint) {
     canvas.drawTextBlob(st.blob(), x, y, paint);
+}
+
+int saveLayerRec(SkCanvas& canvas, const SkPaint* paint,
+                 const SkImageFilter* backdrop, SkCanvas::SaveLayerFlags flags) {
+    return canvas.saveLayer(SkCanvas::SaveLayerRec(nullptr, paint, backdrop, flags));
+}
+
+int saveLayerRecBounds(SkCanvas& canvas, const SkPaint* paint, const SkImageFilter* backdrop,
+                       SkCanvas::SaveLayerFlags flags, const SkRect& bounds) {
+    return canvas.saveLayer(SkCanvas::SaveLayerRec(&bounds, paint, backdrop, flags));
 }
 
 // This is simpler than dealing with an SkPoint and SkVector
@@ -680,6 +692,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
     function("getSkDataBytes", &getSkDataBytes, allow_raw_pointers());
     function("MakeSkCornerPathEffect", &SkCornerPathEffect::Make, allow_raw_pointers());
     function("MakeSkDiscretePathEffect", &SkDiscretePathEffect::Make, allow_raw_pointers());
+    // Deprecated: use Canvaskit.SkMaskFilter.MakeBlur
     function("MakeBlurMaskFilter", optional_override([](SkBlurStyle style, SkScalar sigma, bool respectCTM)->sk_sp<SkMaskFilter> {
         // Adds a little helper because emscripten doesn't expose default params.
         return SkMaskFilter::MakeBlur(style, sigma, respectCTM);
@@ -910,8 +923,14 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("restoreToCount", &SkCanvas::restoreToCount)
         .function("rotate", select_overload<void (SkScalar, SkScalar, SkScalar)>(&SkCanvas::rotate))
         .function("save", &SkCanvas::save)
+         // 2 params
         .function("saveLayer", select_overload<int (const SkRect&, const SkPaint*)>(&SkCanvas::saveLayer),
                                allow_raw_pointers())
+         // 3 params (effectively with SaveLayerRec, but no bounds)
+        .function("saveLayer", saveLayerRec, allow_raw_pointers())
+         // 4 params (effectively with SaveLayerRec)
+        .function("saveLayer", saveLayerRecBounds, allow_raw_pointers())
+
         .function("scale", &SkCanvas::scale)
         .function("skew", &SkCanvas::skew)
         .function("translate", &SkCanvas::translate)
@@ -1050,8 +1069,26 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return self->readPixels(ii, pixels, dstRowBytes, srcX, srcY);
         }), allow_raw_pointers());
 
+    class_<SkImageFilter>("SkImageFilter")
+        .smart_ptr<sk_sp<SkImageFilter>>("sk_sp<SkImageFilter>")
+        .class_function("MakeBlur", optional_override([](SkScalar sigmaX, SkScalar sigmaY,
+                                                         SkTileMode tileMode, sk_sp<SkImageFilter> input)->sk_sp<SkImageFilter> {
+            // Emscripten does not like default args nor SkIRect* much
+            return SkImageFilters::Blur(sigmaX, sigmaY, tileMode, input);
+        }))
+        .class_function("MakeColorFilter", optional_override([](sk_sp<SkColorFilter> cf,
+                                                                  sk_sp<SkImageFilter> input)->sk_sp<SkImageFilter> {
+            // Emscripten does not like default args nor SkIRect* much
+            return SkImageFilters::ColorFilter(cf, input);
+        }))
+        .class_function("MakeCompose", &SkImageFilters::Compose);
+
     class_<SkMaskFilter>("SkMaskFilter")
-        .smart_ptr<sk_sp<SkMaskFilter>>("sk_sp<SkMaskFilter>");
+        .smart_ptr<sk_sp<SkMaskFilter>>("sk_sp<SkMaskFilter>")
+        .class_function("MakeBlur", optional_override([](SkBlurStyle style, SkScalar sigma, bool respectCTM)->sk_sp<SkMaskFilter> {
+        // Adds a little helper because emscripten doesn't expose default params.
+        return SkMaskFilter::MakeBlur(style, sigma, respectCTM);
+    }), allow_raw_pointers());
 
     class_<SkPaint>("SkPaint")
         .constructor<>()
@@ -1077,6 +1114,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         .function("setColorFilter", &SkPaint::setColorFilter)
         .function("setFilterQuality", &SkPaint::setFilterQuality)
+        .function("setImageFilter", &SkPaint::setImageFilter)
         .function("setMaskFilter", &SkPaint::setMaskFilter)
         .function("setPathEffect", &SkPaint::setPathEffect)
         .function("setShader", &SkPaint::setShader)
@@ -1502,4 +1540,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("CONIC_VERB", CONIC);
     constant("CUBIC_VERB", CUBIC);
     constant("CLOSE_VERB", CLOSE);
+
+    constant("SaveLayerInitWithPrevious", SkCanvas::SaveLayerFlagsSet::kInitWithPrevious_SaveLayerFlag);
+    constant("SaveLayerF16ColorType",     SkCanvas::SaveLayerFlagsSet::kF16ColorType);
+
 }

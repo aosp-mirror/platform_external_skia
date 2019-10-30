@@ -217,7 +217,7 @@ GrOpsTask* GrRenderTargetContext::getOpsTask() {
 
     if (!fOpsTask || fOpsTask->isClosed()) {
         sk_sp<GrOpsTask> newOpsTask =
-                this->drawingManager()->newOpsTask(fRenderTargetProxy, fManagedOpsTask);
+                this->drawingManager()->newOpsTask(this->outputSurfaceView(), fManagedOpsTask);
         if (fOpsTask && fNumStencilSamples > 0) {
             // Store the stencil values in memory upon completion of fOpsTask.
             fOpsTask->setMustPreserveStencil();
@@ -1693,6 +1693,11 @@ void GrRenderTargetContext::asyncReadPixels(const SkIRect& rect, SkColorType col
     SkASSERT(rect.fLeft >= 0 && rect.fRight <= this->width());
     SkASSERT(rect.fTop >= 0 && rect.fBottom <= this->height());
 
+    if (this->asSurfaceProxy()->isProtected()) {
+        callback(context, nullptr);
+        return;
+    }
+
     auto directContext = fContext->priv().asDirectContext();
     SkASSERT(directContext);
     auto mappedBufferManager = directContext->priv().clientMappedBufferManager();
@@ -1768,6 +1773,10 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
         return;
     }
     if (fRenderTargetProxy->wrapsVkSecondaryCB()) {
+        callback(context, nullptr);
+        return;
+    }
+    if (this->asSurfaceProxy()->isProtected()) {
         callback(context, nullptr);
         return;
     }

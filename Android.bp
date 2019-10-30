@@ -1891,6 +1891,7 @@ cc_test {
         "bench/BlurImageFilterBench.cpp",
         "bench/BlurRectBench.cpp",
         "bench/BlurRectsBench.cpp",
+        "bench/BulkRectBench.cpp",
         "bench/CTConvertBench.cpp",
         "bench/ChartBench.cpp",
         "bench/ChecksumBench.cpp",
