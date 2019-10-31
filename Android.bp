@@ -171,6 +171,7 @@ cc_library_static {
         "src/core/SkLineClipper.cpp",
         "src/core/SkLocalMatrixImageFilter.cpp",
         "src/core/SkMD5.cpp",
+        "src/core/SkMalloc.cpp",
         "src/core/SkMallocPixelRef.cpp",
         "src/core/SkMask.cpp",
         "src/core/SkMaskBlurFilter.cpp",
