@@ -32,9 +32,9 @@ struct SkPackedGlyphID {
         kSubPixelPosLen = 2u,
 
         // Bit positions
-        kGlyphID   = 0u,
-        kSubPixelY = kGlyphIDLen,
-        kSubPixelX = kGlyphIDLen + kSubPixelPosLen,
+        kSubPixelX = 0u,
+        kGlyphID   = kSubPixelPosLen,
+        kSubPixelY = kGlyphIDLen + kSubPixelPosLen,
         kEndData   = kGlyphIDLen + 2 * kSubPixelPosLen,
 
         // Masks
@@ -48,15 +48,15 @@ struct SkPackedGlyphID {
     };
 
     constexpr explicit SkPackedGlyphID(SkGlyphID glyphID)
-            : fID{glyphID} { }
+            : fID{(uint32_t)glyphID << kGlyphID} { }
 
     constexpr SkPackedGlyphID(SkGlyphID glyphID, SkFixed x, SkFixed y)
-            : fID {PackIDXY(glyphID, x, y)} {
-        SkASSERT(fID != kImpossibleID);
-    }
+            : fID {PackIDXY(glyphID, x, y)} { }
 
-    constexpr SkPackedGlyphID(SkGlyphID code, SkIPoint pt)
-        : SkPackedGlyphID(code, pt.fX, pt.fY) { }
+    constexpr SkPackedGlyphID(SkGlyphID glyphID, SkIPoint pt)
+        : SkPackedGlyphID(glyphID, pt.fX, pt.fY) { }
+
+    constexpr explicit SkPackedGlyphID(uint32_t v) : fID{v & kMaskAll} { }
 
     constexpr SkPackedGlyphID() : fID{kImpossibleID} {}
 
@@ -71,7 +71,7 @@ struct SkPackedGlyphID {
     }
 
     SkGlyphID glyphID() const {
-        return fID & kGlyphIDMask;
+        return (fID >> kGlyphID) & kGlyphIDMask;
     }
 
     uint32_t value() const {
@@ -92,15 +92,20 @@ struct SkPackedGlyphID {
 
     SkString dump() const {
         SkString str;
-        str.appendf("code: %d, x: %d, y:%d", glyphID(), getSubXFixed(), getSubYFixed());
+        str.appendf("glyphID: %d, x: %d, y:%d", glyphID(), getSubXFixed(), getSubYFixed());
         return str;
     }
 
 private:
+    static constexpr uint32_t PackIDSubXSubY(SkGlyphID glyphID, uint32_t x, uint32_t y) {
+        SkASSERT(x < 4);
+        SkASSERT(y < 4);
+
+        return (x << kSubPixelX) | (y << kSubPixelY) | (glyphID << kGlyphID);
+    }
+
     static constexpr uint32_t PackIDXY(SkGlyphID glyphID, SkFixed x, SkFixed y) {
-        return (FixedToSub(x) << kSubPixelX)
-             | (FixedToSub(y) << kSubPixelY)
-             | glyphID;
+        return PackIDSubXSubY(glyphID, FixedToSub(x), FixedToSub(y));
     }
 
     static constexpr uint32_t FixedToSub(SkFixed n) {
