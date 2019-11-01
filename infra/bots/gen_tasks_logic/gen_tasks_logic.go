@@ -268,14 +268,14 @@ type Config struct {
 	Project string `json:"project"`
 
 	// Service accounts.
-	ServiceAccountAndroidFrameworkCompile         string `json:"service_account_android_framework_compile"`
-	ServiceAccountCompile		string `json:"service_account_compile"`
-	ServiceAccountHousekeeper     string `json:"service_account_housekeeper"`
-	ServiceAccountRecreateSKPs    string `json:"service_account_recreate_skps"`
-	ServiceAccountUploadBinary    string `json:"service_account_upload_binary"`
-	ServiceAccountUploadCalmbench string `json:"service_account_upload_calmbench"`
-	ServiceAccountUploadGM        string `json:"service_account_upload_gm"`
-	ServiceAccountUploadNano      string `json:"service_account_upload_nano"`
+	ServiceAccountAndroidFrameworkCompile string `json:"service_account_android_framework_compile"`
+	ServiceAccountCompile                 string `json:"service_account_compile"`
+	ServiceAccountHousekeeper             string `json:"service_account_housekeeper"`
+	ServiceAccountRecreateSKPs            string `json:"service_account_recreate_skps"`
+	ServiceAccountUploadBinary            string `json:"service_account_upload_binary"`
+	ServiceAccountUploadCalmbench         string `json:"service_account_upload_calmbench"`
+	ServiceAccountUploadGM                string `json:"service_account_upload_gm"`
+	ServiceAccountUploadNano              string `json:"service_account_upload_nano"`
 
 	// Optional override function which derives Swarming bot dimensions
 	// from parts of task names.
@@ -601,6 +601,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"Mac":        DEFAULT_OS_MAC,
 			"Mac10.13":   "Mac-10.13.6",
 			"Mac10.14":   "Mac-10.14.3",
+			"Mac10.15":   "Mac-10.15.1",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-18362",
@@ -651,6 +652,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 				"Pixel2XL":        {"taimen", "PPR1.180610.009"},
 				"Pixel3":          {"blueline", "PQ1A.190105.004"},
 				"Pixel3a":         {"sargo", "QP1A.190711.020"},
+				"Pixel4":          {"flame", "QD1A.190821.011.C4"},
 				"TecnoSpark3Pro":  {"TECNO-KB8", "PPR1.180610.011"},
 			}[parts["model"]]
 			if !ok {
