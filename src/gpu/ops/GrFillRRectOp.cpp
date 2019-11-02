@@ -47,7 +47,8 @@ std::unique_ptr<GrFillRRectOp> GrFillRRectOp::Make(
         }
     } else {
         if (GrAAType::kMSAA == aaType) {
-            if (!caps.sampleLocationsSupport() || !caps.shaderCaps()->sampleVariablesSupport()) {
+            if (!caps.sampleLocationsSupport() || !caps.shaderCaps()->sampleMaskSupport() ||
+                caps.shaderCaps()->canOnlyUseSampleMaskWithStencil()) {
                 return nullptr;
             }
         }
@@ -742,7 +743,7 @@ void GrFillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBou
         initArgs.fInputFlags = GrPipeline::InputFlags::kHWAntialias;
     }
     initArgs.fCaps = &flushState->caps();
-    initArgs.fDstProxy = flushState->drawOpArgs().dstProxy();
+    initArgs.fDstProxyView = flushState->drawOpArgs().dstProxyView();
     initArgs.fOutputSwizzle = flushState->drawOpArgs().outputSwizzle();
     auto clip = flushState->detachAppliedClip();
     GrPipeline::FixedDynamicState* fixedDynamicState =

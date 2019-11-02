@@ -21,6 +21,7 @@
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRRectPriv.h"
 #include "src/core/SkSurfacePriv.h"
+#include "src/core/SkYUVMath.h"
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrBlurUtils.h"
@@ -609,7 +610,7 @@ void GrRenderTargetContext::drawFilledQuad(const GrClip& clip,
 }
 
 void GrRenderTargetContext::drawTexturedQuad(const GrClip& clip,
-                                             sk_sp<GrTextureProxy> proxy,
+                                             GrSurfaceProxyView proxyView,
                                              GrColorType srcColorType,
                                              sk_sp<GrColorSpaceXform> textureXform,
                                              GrSamplerState::Filter filter,
@@ -623,7 +624,7 @@ void GrRenderTargetContext::drawTexturedQuad(const GrClip& clip,
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
-    SkASSERT(proxy);
+    SkASSERT(proxyView.asTextureProxy());
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "drawTexturedQuad", fContext);
 
     AutoCheckFlush acf(this->drawingManager());
@@ -647,7 +648,7 @@ void GrRenderTargetContext::drawTexturedQuad(const GrClip& clip,
         // Use the provided domain, although hypothetically we could detect that the cropped local
         // quad is sufficiently inside the domain and the constraint could be dropped.
         this->addDrawOp(finalClip,
-                        GrTextureOp::Make(fContext, std::move(proxy), srcColorType,
+                        GrTextureOp::Make(fContext, std::move(proxyView), srcColorType,
                                           std::move(textureXform), filter, color, saturate,
                                           blendMode, aaType, edgeFlags, croppedDeviceQuad,
                                           croppedLocalQuad, domain));
@@ -897,9 +898,9 @@ void GrRenderTargetContext::drawTextureSet(const GrClip& clip, const TextureSetE
 
             const SkRect* domain = constraint == SkCanvas::kStrict_SrcRectConstraint
                     ? &set[i].fSrcRect : nullptr;
-            this->drawTexturedQuad(clip, set[i].fProxy, set[i].fSrcColorType, texXform, filter,
-                                   {alpha, alpha, alpha, alpha}, mode, aa, set[i].fAAFlags,
-                                   quad, srcQuad, domain);
+            this->drawTexturedQuad(clip, set[i].fProxyView, set[i].fSrcColorType, texXform, filter,
+                                   {alpha, alpha, alpha, alpha}, mode, aa, set[i].fAAFlags, quad,
+                                   srcQuad, domain);
         }
     } else {
         // Can use a single op, avoiding GrPaint creation, and can batch across proxies
@@ -1852,41 +1853,9 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
         return;
     }
 
-    static constexpr float kRec601M[] {
-             65.481f / 255, 128.553f / 255,  24.966f / 255,  16.f / 255,   // y
-            -37.797f / 255, -74.203f / 255, 112.0f   / 255, 128.f / 255,  // u
-            112.f    / 255, -93.786f / 255, -18.214f / 255, 128.f / 255,  // v
-    };
-    static constexpr float kRec709M[] {
-             45.5594f / 255,  156.6288f / 255,  15.8118f / 255,  16.f / 255, // y
-            -25.6642f / 255,  -86.3358f / 255, 112.f     / 255, 128.f / 255,  // u
-            112.f     / 255, -101.7303f / 255, -10.2697f / 255, 128.f / 255,  // v
-    };
-    static constexpr float kJpegM[] {
-             0.299f   ,  0.587f   ,  0.114f   ,   0.f / 255,  // y
-            -0.168736f, -0.331264f,  0.5f     , 128.f / 255,  // u
-             0.5f     , -0.418688f, -0.081312f, 128.f / 255,  // v
-    };
-    static constexpr float kIM[] {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
-    };
-    const float* baseM = kIM;
-    switch (yuvColorSpace) {
-        case kRec601_SkYUVColorSpace:
-            baseM = kRec601M;
-            break;
-        case kRec709_SkYUVColorSpace:
-            baseM = kRec709M;
-            break;
-        case kJPEG_SkYUVColorSpace:
-            baseM = kJpegM;
-            break;
-        case kIdentity_SkYUVColorSpace:
-            baseM = kIM;
-            break;
-    }
+    float baseM[20];
+    SkColorMatrix_RGB2YUV(yuvColorSpace, baseM);
+
     // TODO: Use one transfer buffer for all three planes to reduce map/unmap cost?
 
     auto texMatrix = SkMatrix::MakeTrans(x, y);
@@ -1897,7 +1866,7 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
     // This matrix generates (r,g,b,a) = (0, 0, 0, y)
     float yM[20];
     std::fill_n(yM, 15, 0.f);
-    yM[15] = baseM[0]; yM[16] = baseM[1]; yM[17] = baseM[2]; yM[18] = 0; yM[19] = baseM[3];
+    std::copy_n(baseM + 0, 5, yM + 15);
     GrPaint yPaint;
     yPaint.addColorTextureProcessor(srcProxy, srcColorType, texMatrix);
     auto yFP = GrColorMatrixFragmentProcessor::Make(yM, false, true, false);
@@ -1916,7 +1885,7 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
     // This matrix generates (r,g,b,a) = (0, 0, 0, u)
     float uM[20];
     std::fill_n(uM, 15, 0.f);
-    uM[15] = baseM[4]; uM[16] = baseM[5]; uM[17] = baseM[6]; uM[18] = 0; uM[19] = baseM[7];
+    std::copy_n(baseM + 5, 5, uM + 15);
     GrPaint uPaint;
     uPaint.addColorTextureProcessor(srcProxy, srcColorType, texMatrix,
                                     GrSamplerState::ClampBilerp());
@@ -1935,7 +1904,7 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
     // This matrix generates (r,g,b,a) = (0, 0, 0, v)
     float vM[20];
     std::fill_n(vM, 15, 0.f);
-    vM[15] = baseM[8]; vM[16] = baseM[9]; vM[17] = baseM[10]; vM[18] = 0; vM[19] = baseM[11];
+    std::copy_n(baseM + 10, 5, vM + 15);
     GrPaint vPaint;
     vPaint.addColorTextureProcessor(srcProxy, srcColorType, texMatrix,
                                     GrSamplerState::ClampBilerp());
@@ -2362,9 +2331,9 @@ void GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<GrDraw
     GrProcessorSet::Analysis analysis = op->finalize(
             *this->caps(), &appliedClip, hasMixedSampledCoverage, clampType);
 
-    GrXferProcessor::DstProxy dstProxy;
+    GrXferProcessor::DstProxyView dstProxyView;
     if (analysis.requiresDstTexture()) {
-        if (!this->setupDstProxy(clip, *op, &dstProxy)) {
+        if (!this->setupDstProxyView(clip, *op, &dstProxyView)) {
             fContext->priv().opMemoryPool()->release(std::move(op));
             return;
         }
@@ -2375,12 +2344,12 @@ void GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<GrDraw
     if (willAddFn) {
         willAddFn(op.get(), opsTask->uniqueID());
     }
-    opsTask->addDrawOp(std::move(op), analysis, std::move(appliedClip), dstProxy,
+    opsTask->addDrawOp(std::move(op), analysis, std::move(appliedClip), dstProxyView,
                        GrTextureResolveManager(this->drawingManager()), *this->caps());
 }
 
-bool GrRenderTargetContext::setupDstProxy(const GrClip& clip, const GrOp& op,
-                                          GrXferProcessor::DstProxy* dstProxy) {
+bool GrRenderTargetContext::setupDstProxyView(const GrClip& clip, const GrOp& op,
+                                              GrXferProcessor::DstProxyView* dstProxyView) {
     // If we are wrapping a vulkan secondary command buffer, we can't make a dst copy because we
     // don't actually have a VkImage to make a copy of. Additionally we don't have the power to
     // start and stop the render pass in order to make the copy.
@@ -2389,11 +2358,11 @@ bool GrRenderTargetContext::setupDstProxy(const GrClip& clip, const GrOp& op,
     }
 
     if (this->caps()->textureBarrierSupport() && !fRenderTargetProxy->requiresManualMSAAResolve()) {
-        if (GrTextureProxy* texProxy = fRenderTargetProxy->asTextureProxy()) {
+        if (fRenderTargetProxy->asTextureProxy()) {
             // The render target is a texture, so we can read from it directly in the shader. The XP
             // will be responsible to detect this situation and request a texture barrier.
-            dstProxy->setProxy(sk_ref_sp(texProxy));
-            dstProxy->setOffset(0, 0);
+            dstProxyView->setProxyView(this->textureSurfaceView());
+            dstProxyView->setOffset(0, 0);
             return true;
         }
     }
@@ -2446,8 +2415,8 @@ bool GrRenderTargetContext::setupDstProxy(const GrClip& clip, const GrOp& op,
             copyRect, fit, SkBudgeted::kYes, restrictions.fRectsMustMatch);
     SkASSERT(newProxy);
 
-    dstProxy->setProxy(std::move(newProxy));
-    dstProxy->setOffset(dstOffset);
+    dstProxyView->setProxyView({std::move(newProxy), this->origin(), this->textureSwizzle()});
+    dstProxyView->setOffset(dstOffset);
     return true;
 }
 

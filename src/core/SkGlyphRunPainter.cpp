@@ -82,6 +82,10 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
         const BitmapDevicePainter* bitmapDevice) {
     ScopedBuffers _ = this->ensureBuffers(glyphRunList);
 
+    // TODO: fStrikeCache is only used for GPU, and some compilers complain about it during the no
+    //  gpu build. Remove when SkGlyphRunListPainter is split into GPU and CPU version.
+    (void)fStrikeCache;
+
     const SkPaint& runPaint = glyphRunList.paint();
     // The bitmap blitters can only draw lcd text to a N32 bitmap in srcOver. Otherwise,
     // convert the lcd text into A8 text. The props communicates this to the scaler.
@@ -716,8 +720,16 @@ SkIPoint SkGlyphPositionRoundingSpec::IgnorePositionMask(
                           (!isSubpixel || axisAlignment == kX_SkAxisAlignment) ? 0 : ~0);
 }
 
-SkGlyphPositionRoundingSpec::SkGlyphPositionRoundingSpec(bool isSubpixel,
-                                                         SkAxisAlignment axisAlignment)
-        : halfAxisSampleFreq{HalfAxisSampleFreq(isSubpixel, axisAlignment)}
-        , ignorePositionMask{IgnorePositionMask(isSubpixel, axisAlignment)} {
+SkIPoint SkGlyphPositionRoundingSpec::IgnorePositionFieldMask(bool isSubpixel,
+                                                              SkAxisAlignment axisAlignment) {
+    SkIPoint ignoreMask = IgnorePositionMask(isSubpixel, axisAlignment);
+    SkIPoint answer{ignoreMask.x() & SkPackedGlyphID::kXYFieldMask.x(),
+                    ignoreMask.y() & SkPackedGlyphID::kXYFieldMask.y()};
+    return answer;
 }
+
+SkGlyphPositionRoundingSpec::SkGlyphPositionRoundingSpec(
+        bool isSubpixel,SkAxisAlignment axisAlignment)
+    : halfAxisSampleFreq{HalfAxisSampleFreq(isSubpixel, axisAlignment)}
+    , ignorePositionMask{IgnorePositionMask(isSubpixel, axisAlignment)}
+    , ignorePositionFieldMask {IgnorePositionFieldMask(isSubpixel, axisAlignment)}{ }

@@ -13,6 +13,7 @@
 #include "include/private/SkChecksum.h"
 #include "include/private/SkFixed.h"
 #include "include/private/SkTo.h"
+#include "include/private/SkVx.h"
 #include "src/core/SkMask.h"
 
 class SkArenaAlloc;
@@ -32,9 +33,9 @@ struct SkPackedGlyphID {
         kSubPixelPosLen = 2u,
 
         // Bit positions
-        kGlyphID   = 0u,
-        kSubPixelY = kGlyphIDLen,
-        kSubPixelX = kGlyphIDLen + kSubPixelPosLen,
+        kSubPixelX = 0u,
+        kGlyphID   = kSubPixelPosLen,
+        kSubPixelY = kGlyphIDLen + kSubPixelPosLen,
         kEndData   = kGlyphIDLen + 2 * kSubPixelPosLen,
 
         // Masks
@@ -47,16 +48,21 @@ struct SkPackedGlyphID {
         kFixedPointSubPixelPosBits = kFixedPointBinaryPointPos - kSubPixelPosLen,
     };
 
+    static constexpr SkIPoint kXYFieldMask{3u << kSubPixelX, 3u << kSubPixelY};
+
     constexpr explicit SkPackedGlyphID(SkGlyphID glyphID)
-            : fID{glyphID} { }
+            : fID{(uint32_t)glyphID << kGlyphID} { }
 
     constexpr SkPackedGlyphID(SkGlyphID glyphID, SkFixed x, SkFixed y)
-            : fID {PackIDXY(glyphID, x, y)} {
-        SkASSERT(fID != kImpossibleID);
-    }
+            : fID {PackIDXY(glyphID, x, y)} { }
 
-    constexpr SkPackedGlyphID(SkGlyphID code, SkIPoint pt)
-        : SkPackedGlyphID(code, pt.fX, pt.fY) { }
+    constexpr SkPackedGlyphID(SkGlyphID glyphID, uint32_t x, uint32_t y)
+            : fID {PackIDSubXSubY(glyphID, x, y)} { }
+
+    SkPackedGlyphID(SkGlyphID glyphID, SkPoint pt, SkIPoint mask)
+        : fID{PackIDSkPoint(glyphID, pt, mask)} { }
+
+    constexpr explicit SkPackedGlyphID(uint32_t v) : fID{v & kMaskAll} { }
 
     constexpr SkPackedGlyphID() : fID{kImpossibleID} {}
 
@@ -71,7 +77,7 @@ struct SkPackedGlyphID {
     }
 
     SkGlyphID glyphID() const {
-        return fID & kGlyphIDMask;
+        return (fID >> kGlyphID) & kGlyphIDMask;
     }
 
     uint32_t value() const {
@@ -92,15 +98,35 @@ struct SkPackedGlyphID {
 
     SkString dump() const {
         SkString str;
-        str.appendf("code: %d, x: %d, y:%d", glyphID(), getSubXFixed(), getSubYFixed());
+        str.appendf("glyphID: %d, x: %d, y:%d", glyphID(), getSubXFixed(), getSubYFixed());
         return str;
     }
 
 private:
+    static constexpr uint32_t PackIDSubXSubY(SkGlyphID glyphID, uint32_t x, uint32_t y) {
+        SkASSERT(x < 4);
+        SkASSERT(y < 4);
+
+        return (x << kSubPixelX) | (y << kSubPixelY) | (glyphID << kGlyphID);
+    }
+
+    // Assumptions: pt is properly rounded. mask is set for the x or y fields.
+    static uint32_t PackIDSkPoint(SkGlyphID glyphID, SkPoint pt, SkIPoint mask) {
+        using namespace skvx;
+        using XY = Vec<2, float>;
+        // The 4.f moves 1/2 bit and 1/4 bit into the 2 and 1 bits. The shift move those two bits
+        // into the right place in the masks.
+        const XY magic = {4.f * (1u << kSubPixelX), 4.f * (1u << kSubPixelY)};
+        XY pos{pt.x(), pt.y()};
+        Vec<2, int> sub = cast<int>(floor(pos * magic)) & Vec<2, int> {mask.x(), mask.y()};
+        SkASSERT(sub[0] / (1u << kSubPixelX) < 4);
+        SkASSERT(sub[1] / (1u << kSubPixelY) < 4);
+
+        return (glyphID << kGlyphID) | sub[0] | sub[1];
+    }
+
     static constexpr uint32_t PackIDXY(SkGlyphID glyphID, SkFixed x, SkFixed y) {
-        return (FixedToSub(x) << kSubPixelX)
-             | (FixedToSub(y) << kSubPixelY)
-             | glyphID;
+        return PackIDSubXSubY(glyphID, FixedToSub(x), FixedToSub(y));
     }
 
     static constexpr uint32_t FixedToSub(SkFixed n) {

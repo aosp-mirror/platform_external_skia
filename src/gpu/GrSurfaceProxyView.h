@@ -25,20 +25,30 @@ public:
             : fProxy(proxy), fOrigin(kTopLeft_GrSurfaceOrigin) {}
 
     GrSurfaceProxyView(GrSurfaceProxyView&& view) = default;
-    GrSurfaceProxyView(const GrSurfaceProxyView&) = delete;
+    GrSurfaceProxyView(const GrSurfaceProxyView&) = default;
 
-    GrSurfaceProxyView& operator=(const GrSurfaceProxyView& that) = default;
+    GrSurfaceProxyView& operator=(const GrSurfaceProxyView&) = default;
 
-    bool operator==(const GrSurfaceProxyView& view) {
-        return fProxy.get() == view.fProxy.get() &&
+    bool operator==(const GrSurfaceProxyView& view) const {
+        return fProxy->uniqueID() == view.fProxy->uniqueID() &&
                fOrigin == view.fOrigin &&
                fSwizzle == view.fSwizzle;
     }
-    bool operator!=(const GrSurfaceProxyView& other) { return !(*this == other); }
+    bool operator!=(const GrSurfaceProxyView& other) const { return !(*this == other); }
 
     GrSurfaceProxy* proxy() const { return fProxy.get(); }
-    GrTextureProxy* asTextureProxy() const { return fProxy->asTextureProxy(); }
-    GrRenderTargetProxy* asRenderTargetProxy() const { return fProxy->asRenderTargetProxy(); }
+    GrTextureProxy* asTextureProxy() const {
+        if (!fProxy) {
+            return nullptr;
+        }
+        return fProxy->asTextureProxy();
+    }
+    GrRenderTargetProxy* asRenderTargetProxy() const {
+        if (!fProxy) {
+            return nullptr;
+        }
+        return fProxy->asRenderTargetProxy();
+    }
 
     GrSurfaceOrigin origin() const { return fOrigin; }
     const GrSwizzle& swizzle() const { return fSwizzle; }

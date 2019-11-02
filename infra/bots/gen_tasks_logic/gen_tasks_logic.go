@@ -138,17 +138,17 @@ var (
 		&specs.CipdPackage{
 			Name:    "infra/git/${platform}",
 			Path:    "cipd_bin_packages",
-			Version: "version:2.17.1.chromium15",
+			Version: "version:2.23.0.chromium16",
 		},
 		&specs.CipdPackage{
 			Name:    "infra/tools/git/${platform}",
 			Path:    "cipd_bin_packages",
-			Version: "git_revision:c9c8a52bfeaf8bc00ece22fdfd447822c8fcad77",
+			Version: "git_revision:fd2f240a784d792a8690bb05abe7d40de50c84cd",
 		},
 		&specs.CipdPackage{
 			Name:    "infra/tools/luci/git-credential-luci/${platform}",
 			Path:    "cipd_bin_packages",
-			Version: "git_revision:2c805f1c716f6c5ad2126b27ec88b8585a09481e",
+			Version: "git_revision:fd2f240a784d792a8690bb05abe7d40de50c84cd",
 		},
 	}
 
@@ -268,14 +268,14 @@ type Config struct {
 	Project string `json:"project"`
 
 	// Service accounts.
-	ServiceAccountAndroidFrameworkCompile         string `json:"service_account_android_framework_compile"`
-	ServiceAccountCompile		string `json:"service_account_compile"`
-	ServiceAccountHousekeeper     string `json:"service_account_housekeeper"`
-	ServiceAccountRecreateSKPs    string `json:"service_account_recreate_skps"`
-	ServiceAccountUploadBinary    string `json:"service_account_upload_binary"`
-	ServiceAccountUploadCalmbench string `json:"service_account_upload_calmbench"`
-	ServiceAccountUploadGM        string `json:"service_account_upload_gm"`
-	ServiceAccountUploadNano      string `json:"service_account_upload_nano"`
+	ServiceAccountAndroidFrameworkCompile string `json:"service_account_android_framework_compile"`
+	ServiceAccountCompile                 string `json:"service_account_compile"`
+	ServiceAccountHousekeeper             string `json:"service_account_housekeeper"`
+	ServiceAccountRecreateSKPs            string `json:"service_account_recreate_skps"`
+	ServiceAccountUploadBinary            string `json:"service_account_upload_binary"`
+	ServiceAccountUploadCalmbench         string `json:"service_account_upload_calmbench"`
+	ServiceAccountUploadGM                string `json:"service_account_upload_gm"`
+	ServiceAccountUploadNano              string `json:"service_account_upload_nano"`
 
 	// Optional override function which derives Swarming bot dimensions
 	// from parts of task names.
@@ -601,6 +601,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"Mac":        DEFAULT_OS_MAC,
 			"Mac10.13":   "Mac-10.13.6",
 			"Mac10.14":   "Mac-10.14.3",
+			"Mac10.15":   "Mac-10.15.1",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-18362",
@@ -651,6 +652,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 				"Pixel2XL":        {"taimen", "PPR1.180610.009"},
 				"Pixel3":          {"blueline", "PQ1A.190105.004"},
 				"Pixel3a":         {"sargo", "QP1A.190711.020"},
+				"Pixel4":          {"flame", "QD1A.190821.011.C4"},
 				"TecnoSpark3Pro":  {"TECNO-KB8", "PPR1.180610.011"},
 			}[parts["model"]]
 			if !ok {
@@ -1124,7 +1126,7 @@ func (b *builder) recreateSKPs(name string) string {
 		fmt.Sprintf("os:%s", DEFAULT_OS_LINUX_GCE),
 	}
 	task := b.kitchenTask(name, "recreate_skps", "swarm_recipe.isolate", b.cfg.ServiceAccountRecreateSKPs, dims, EXTRA_PROPS, OUTPUT_NONE)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
+	b.usesGit(task, name)
 	b.usesGo(task, name)
 	timeout(task, 4*time.Hour)
 	b.MustAddTask(name, task)
@@ -1135,7 +1137,7 @@ func (b *builder) recreateSKPs(name string) string {
 // by hand.
 func (b *builder) checkGeneratedFiles(name string) string {
 	task := b.kitchenTask(name, "check_generated_files", "swarm_recipe.isolate", b.cfg.ServiceAccountCompile, b.linuxGceDimensions(MACHINE_TYPE_LARGE), EXTRA_PROPS, OUTPUT_NONE)
-	task.Caches = append(task.Caches, CACHES_WORKDIR...)
+	b.usesGit(task, name)
 	b.usesGo(task, name)
 	b.MustAddTask(name, task)
 	return name
@@ -1155,8 +1157,8 @@ func (b *builder) housekeeper(name string) string {
 // should add as a dependency.
 func (b *builder) androidFrameworkCompile(name string) string {
 	task := b.kitchenTask(name, "android_compile", "compile_android_framework.isolate", b.cfg.ServiceAccountAndroidFrameworkCompile, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	timeout(task, 2*time.Hour)
+	b.usesGit(task, name)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -1206,6 +1208,7 @@ func (b *builder) buildstats(name string, parts map[string]string, compileTaskNa
 	task := b.kitchenTask(name, "compute_buildstats", "swarm_recipe.isolate", "", b.swarmDimensions(parts), EXTRA_PROPS, OUTPUT_PERF)
 	task.Dependencies = append(task.Dependencies, compileTaskName)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("bloaty"))
+	b.usesGit(task, name)
 	b.MustAddTask(name, task)
 
 	// Upload release results (for tracking in perf)
@@ -1315,6 +1318,9 @@ func (b *builder) test(name string, parts map[string]string, compileTaskName str
 	}
 	task := b.kitchenTask(name, recipe, isolate, "", b.swarmDimensions(parts), extraProps, OUTPUT_TEST)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
+	if strings.Contains(name, "CanvasKit") || strings.Contains(name, "Emulator") || strings.Contains(name, "LottieWeb") || strings.Contains(name, "PathKit") {
+		b.usesGit(task, name)
+	}
 	if strings.Contains(name, "Lottie") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
 	}
@@ -1391,6 +1397,9 @@ func (b *builder) perf(name string, parts map[string]string, compileTaskName str
 	}
 	task := b.kitchenTask(name, recipe, isolate, "", b.swarmDimensions(parts), EXTRA_PROPS, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
+	if strings.Contains(name, "CanvasKit") || strings.Contains(name, "SkottieWasm") || strings.Contains(name, "PathKit") {
+		b.usesGit(task, name)
+	}
 	if !strings.Contains(name, "LottieWeb") {
 		// Perf.+LottieWeb doesn't require anything in Skia to be compiled.
 		task.Dependencies = append(task.Dependencies, compileTaskName)
@@ -1416,7 +1425,6 @@ func (b *builder) perf(name string, parts map[string]string, compileTaskName str
 	} else if strings.Contains(parts["extra_config"], "SkottieWASM") || strings.Contains(parts["extra_config"], "LottieWeb") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("node"))
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
-		task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	} else if strings.Contains(parts["extra_config"], "Skottie") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
 	}
