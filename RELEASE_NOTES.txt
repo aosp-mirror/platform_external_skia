@@ -8,11 +8,17 @@ Milestone 80
 
 <Insert new notes here- top is most recent.>
 
+  * Removed rotation and YUV support from SkColorMatrix
+    https://review.skia.org/252188
+
   * Added kBT2020_SkYUVColorSpace. This is BT.2020's YCbCr conversion (non-constant-luminance).
     https://review.skia.org/252160
 
   * Remove old async read pixels APIs
     https://review.skia.org/251198
+
+  * Expose SkBlendModeCoeff and SkBlendMode_AsCoeff for Porter-Duff blend modes.
+    https://review.skia.org/252600
 
 * * *
 

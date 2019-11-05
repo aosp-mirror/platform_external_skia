@@ -93,59 +93,52 @@ bool SkColor4Shader::onAppendStages(const SkStageRec& rec) const {
 static bool common_program(SkColor4f color, SkColorSpace* cs,
                            skvm::Builder* p,
                            SkColorSpace* dstCS,
-                           skvm::Arg uniforms, int offset,
+                           skvm::Arg uniforms, size_t offset,
                            skvm::I32* r, skvm::I32* g, skvm::I32* b, skvm::I32* a) {
     SkColorSpaceXformSteps(   cs, kUnpremul_SkAlphaType,
                            dstCS, kUnpremul_SkAlphaType).apply(color.vec());
 
     if (color.fitsInBytes()) {
-        if (p) {
-            skvm::I32 rgba = p->uniform32(uniforms, offset);
-            *r = p->extract(rgba,  0, p->splat(0xff));
-            *g = p->extract(rgba,  8, p->splat(0xff));
-            *b = p->extract(rgba, 16, p->splat(0xff));
-            *a = p->extract(rgba, 24, p->splat(0xff));
-        }
+        skvm::I32 rgba = p->uniform32(uniforms, offset);
+        *r = p->extract(rgba,  0, p->splat(0xff));
+        *g = p->extract(rgba,  8, p->splat(0xff));
+        *b = p->extract(rgba, 16, p->splat(0xff));
+        *a = p->extract(rgba, 24, p->splat(0xff));
         return true;
     }
     return false;
 }
-static size_t common_uniforms(SkColor4f color, SkColorSpace* cs,
-                              SkColorSpace* dstCS, uint8_t* uniform_buffer) {
+static void common_uniforms(SkColor4f color, SkColorSpace* cs,
+                            SkColorSpace* dstCS, std::vector<uint32_t>* buf) {
     SkColorSpaceXformSteps(   cs, kUnpremul_SkAlphaType,
                            dstCS, kUnpremul_SkAlphaType).apply(color.vec());
-
     SkASSERT(color.fitsInBytes());
 
-    uint32_t rgba = color.premul().toBytes_RGBA();
-    if (uniform_buffer) {
-        memcpy(uniform_buffer, &rgba, sizeof(rgba));
-    }
-    return sizeof(rgba);
+    buf->push_back(color.premul().toBytes_RGBA());
 }
 
 bool SkColorShader::onProgram(skvm::Builder* p,
                               SkColorSpace* dstCS,
-                              skvm::Arg uniforms, int offset,
+                              skvm::Arg uniforms, size_t offset,
+                              skvm::F32 /*x*/, skvm::F32 /*y*/,
                               skvm::I32* r, skvm::I32* g, skvm::I32* b, skvm::I32* a) const {
     return common_program(SkColor4f::FromColor(fColor), sk_srgb_singleton(),
                           p, dstCS, uniforms, offset, r,g,b,a);
 }
 bool SkColor4Shader::onProgram(skvm::Builder* p,
                                SkColorSpace* dstCS,
-                               skvm::Arg uniforms, int offset,
+                               skvm::Arg uniforms, size_t offset,
+                               skvm::F32 /*x*/, skvm::F32 /*y*/,
                                skvm::I32* r, skvm::I32* g, skvm::I32* b, skvm::I32* a) const {
     return common_program(fColor, fColorSpace.get(),
                           p, dstCS, uniforms, offset, r,g,b,a);
 }
 
-size_t SkColorShader::uniforms(SkColorSpace* dstCS, uint8_t* uniform_buffer) const {
-    return common_uniforms(SkColor4f::FromColor(fColor), sk_srgb_singleton(),
-                           dstCS, uniform_buffer);
+void SkColorShader::uniforms(SkColorSpace* dstCS, std::vector<uint32_t>* buf) const {
+    return common_uniforms(SkColor4f::FromColor(fColor), sk_srgb_singleton(), dstCS, buf);
 }
-size_t SkColor4Shader::uniforms(SkColorSpace* dstCS, uint8_t* uniform_buffer) const {
-    return common_uniforms(fColor, fColorSpace.get(),
-                           dstCS, uniform_buffer);
+void SkColor4Shader::uniforms(SkColorSpace* dstCS, std::vector<uint32_t>* buf) const {
+    return common_uniforms(fColor, fColorSpace.get(), dstCS, buf);
 }
 
 #if SK_SUPPORT_GPU

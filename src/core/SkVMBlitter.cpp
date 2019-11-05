@@ -16,6 +16,14 @@
 
 namespace {
 
+    // Uniforms set by the Blitter itself,
+    // rather than by the Shader, which follow this struct in the buffer.
+    struct Uniforms {
+        int right;  // First device x + blit run length n, used to get device x coordiate.
+        int y;      // Device y coordiate.
+    };
+    static_assert(SkIsAlign4(sizeof(Uniforms)), "");
+
     enum class Coverage { Full, UniformA8, MaskA8, MaskLCD16, Mask3D };
 
     struct Params {
@@ -58,28 +66,6 @@ namespace {
         }
     };
     SK_END_REQUIRE_DENSE;
-
-    static Key key(const Params& params) {
-        uint32_t shaderHash = 0;
-        if (const SkShaderBase* shader = as_SB(params.shader)) {
-            skvm::Builder p;
-            skvm::I32 r,g,b,a;
-            if (shader->program(&p,
-                                params.colorSpace.get(),
-                                skvm::Arg{0}, 0,
-                                &r,&g,&b,&a)) {
-                shaderHash = p.hash();
-            }
-        }
-        return {
-            params.colorSpace ? params.colorSpace->hash() : 0,
-            shaderHash,
-            SkToU8(params.colorType),
-            SkToU8(params.alphaType),
-            SkToU8(params.blendMode),
-            SkToU8(params.coverage),
-        };
-    }
 
     static SkString debug_name(const Key& key) {
         return SkStringPrintf("CT%d-AT%d-Cov%d-Blend%d-CS%llx-Shader%x",
@@ -178,41 +164,56 @@ namespace {
         skvm::I32 min(skvm::I32 x, skvm::I32 y) { return select(lt(x,y), x,y); }
         skvm::I32 max(skvm::I32 x, skvm::I32 y) { return select(gt(x,y), x,y); }
 
-        static bool CanBuild(const Params& params) {
-            // These checks parallel the TODOs in Builder::Builder().
+        // If Builder can't build this program, CacheKey() sets *ok to false.
+        static Key CacheKey(const Params& params, bool* ok) {
             SkASSERT(params.shader);
-            // TODO: probably want to pass all of the device's SkColorInfo?
-            if (!as_SB(params.shader)->program(nullptr,
-                                               params.colorSpace.get(),
-                                               skvm::Arg{0}, 0,
-                                               nullptr,nullptr,nullptr,nullptr)) {
-                if (debug_dump(key(params))) {
-                    SkDebugf("%s not yet supported\n", params.shader->getTypeName());
+            uint32_t shaderHash = 0;
+            {
+                const SkShaderBase* shader = as_SB(params.shader);
+                skvm::Builder p;
+                skvm::Arg uniforms = skvm::Arg{0};
+                skvm::F32 x = p.to_f32(p.sub(p.uniform32(uniforms, offsetof(Uniforms, right)),
+                                             p.index())),
+                          y = p.to_f32(p.uniform32(uniforms, offsetof(Uniforms, y)));
+                skvm::I32 r,g,b,a;
+                if (shader->program(&p,
+                                    params.colorSpace.get(),
+                                    uniforms, sizeof(Uniforms),
+                                    x,y, &r,&g,&b,&a)) {
+                    shaderHash = p.hash();
+                } else {
+                    *ok = false;
                 }
-                return false;
             }
 
             switch (params.colorType) {
-                default: return false;
+                default: *ok = false;        break;
                 case kRGB_565_SkColorType:   break;
                 case kRGBA_8888_SkColorType: break;
                 case kBGRA_8888_SkColorType: break;
             }
 
-            if (params.alphaType == kUnpremul_SkAlphaType) { return false; }
+            if (params.alphaType == kUnpremul_SkAlphaType) { *ok = false; }
 
             switch (params.blendMode) {
-                default: return false;
+                default: *ok = false;       break;
                 case SkBlendMode::kSrc:     break;
                 case SkBlendMode::kSrcOver: break;
             }
 
-            return true;
+            return {
+                params.colorSpace ? params.colorSpace->hash() : 0,
+                shaderHash,
+                SkToU8(params.colorType),
+                SkToU8(params.alphaType),
+                SkToU8(params.blendMode),
+                SkToU8(params.coverage),
+            };
         }
 
         explicit Builder(const Params& params) {
         #define TODO SkUNREACHABLE
-            SkASSERT(CanBuild(params));
+            SkDEBUGCODE(bool ok = true; (void)CacheKey(params, &ok); SkASSERT(ok);)
             skvm::Arg uniforms = uniform(),
                       dst_ptr  = arg(SkColorTypeBytesPerPixel(params.colorType));
             // If coverage is Mask3D there'll next come two varyings for mul and add planes,
@@ -220,10 +221,13 @@ namespace {
 
             Color src;
             SkASSERT(params.shader);
+            skvm::F32 x = to_f32(sub(uniform32(uniforms, offsetof(Uniforms, right)),
+                                     index())),
+                      y = to_f32(uniform32(uniforms, offsetof(Uniforms, y)));
             SkAssertResult(as_SB(params.shader)->program(this,
                                                          params.colorSpace.get(),
-                                                         uniforms, 0,
-                                                         &src.r, &src.g, &src.b, &src.a));
+                                                         uniforms, sizeof(Uniforms),
+                                                         x,y, &src.r, &src.g, &src.b, &src.a));
 
             if (params.coverage == Coverage::Mask3D) {
                 skvm::I32 M = load8(varying<uint8_t>()),
@@ -351,36 +355,34 @@ namespace {
 
         bool onProgram(skvm::Builder* p,
                        SkColorSpace* dstCS,
-                       skvm::Arg uniforms, int offset,
+                       skvm::Arg uniforms, size_t offset,
+                       skvm::F32 x, skvm::F32 y,
                        skvm::I32* r, skvm::I32* g, skvm::I32* b, skvm::I32* a) const override {
-            if (as_SB(fShader)->program(p, dstCS, uniforms, offset + sizeof(fAlpha), r,g,b,a)) {
-                if (p) {
-                    // TODO: move the helpers onto skvm::Builder so I don't have to duplicate?
-                    auto div255 = [&](skvm::I32 v) {
-                        skvm::I32 v128 = p->add(v, p->splat(128));
-                        return p->shr(p->add(v128, p->shr(v128, 8)), 8);
-                    };
-                    auto scale_unorm8 = [&](skvm::I32 x, skvm::I32 y) {
-                        return div255(p->mul(x,y));
-                    };
+            if (as_SB(fShader)->program(p, dstCS,
+                                        uniforms, offset + sizeof(fAlpha),
+                                        x,y, r,g,b,a)) {
+                // TODO: move the helpers onto skvm::Builder so I don't have to duplicate?
+                auto div255 = [&](skvm::I32 v) {
+                    skvm::I32 v128 = p->add(v, p->splat(128));
+                    return p->shr(p->add(v128, p->shr(v128, 8)), 8);
+                };
+                auto scale_unorm8 = [&](skvm::I32 x, skvm::I32 y) {
+                    return div255(p->mul(x,y));
+                };
 
-                    skvm::I32 A = p->uniform32(uniforms, offset);
-                    *r = scale_unorm8(*r, A);
-                    *g = scale_unorm8(*g, A);
-                    *b = scale_unorm8(*b, A);
-                    *a = scale_unorm8(*a, A);
-                }
+                skvm::I32 A = p->uniform32(uniforms, offset);
+                *r = scale_unorm8(*r, A);
+                *g = scale_unorm8(*g, A);
+                *b = scale_unorm8(*b, A);
+                *a = scale_unorm8(*a, A);
                 return true;
             }
             return false;
         }
 
-        size_t uniforms(SkColorSpace* dstCS, uint8_t* buf) const override {
-            if (buf) {
-                memcpy(buf, &fAlpha, sizeof(fAlpha));
-                return sizeof(fAlpha) + as_SB(fShader)->uniforms(dstCS, buf + sizeof(fAlpha));
-            }
-            return sizeof(fAlpha) + as_SB(fShader)->uniforms(dstCS, nullptr);
+        void uniforms(SkColorSpace* dstCS, std::vector<uint32_t>* buf) const override {
+            buf->push_back(fAlpha);
+            as_SB(fShader)->uniforms(dstCS, buf);
         }
 
         // Only created here, should never be flattened / unflattened.
@@ -431,14 +433,15 @@ namespace {
 
     class Blitter final : public SkBlitter {
     public:
-        bool ok = false;
-
-        Blitter(const SkPixmap& device, const SkPaint& paint)
+        Blitter(const SkPixmap& device, const SkPaint& paint, bool* ok)
             : fDevice(device)
             , fParams(effective_params(device, paint))
-            , fKey(key(fParams))
+            , fKey(Builder::CacheKey(fParams, ok))
+            , fUniforms(sizeof(Uniforms) / sizeof(fUniforms[0]))
         {
-            ok = Builder::CanBuild(fParams);
+            if (*ok) {
+                as_SB(fParams.shader)->uniforms(fParams.colorSpace.get(), &fUniforms);
+            }
         }
 
         ~Blitter() override {
@@ -464,10 +467,10 @@ namespace {
         }
 
     private:
-        SkPixmap             fDevice;  // TODO: can this be const&?
-        const Params         fParams;
-        const Key            fKey;
-        std::vector<uint8_t> fUniforms;
+        SkPixmap              fDevice;  // TODO: can this be const&?
+        const Params          fParams;
+        const Key             fKey;
+        std::vector<uint32_t> fUniforms;
         skvm::Program fBlitH,
                       fBlitAntiH,
                       fBlitMaskA8,
@@ -504,22 +507,16 @@ namespace {
             return program;
         }
 
-        void updateUniforms() {
-            if (const SkShaderBase* shader = as_SB(fParams.shader)) {
-                fUniforms.resize(shader->uniforms(fParams.colorSpace.get(), nullptr));
-                shader->uniforms(fParams.colorSpace.get(), fUniforms.data());
-
-                for (size_t i = 0; false && i < fUniforms.size(); i++) {
-                    SkDebugf("fUniforms[%d] = %02x\n", i, fUniforms[i]);
-                }
-            }
+        void updateUniforms(int right, int y) {
+            Uniforms uniforms{right, y};
+            memcpy(fUniforms.data(), &uniforms, sizeof(Uniforms));
         }
 
         void blitH(int x, int y, int w) override {
             if (fBlitH.empty()) {
                 fBlitH = this->buildProgram(Coverage::Full);
             }
-            this->updateUniforms();
+            this->updateUniforms(x+w, y);
             fBlitH.eval(w, fUniforms.data(), fDevice.addr(x,y));
         }
 
@@ -527,8 +524,8 @@ namespace {
             if (fBlitAntiH.empty()) {
                 fBlitAntiH = this->buildProgram(Coverage::UniformA8);
             }
-            this->updateUniforms();
             for (int16_t run = *runs; run > 0; run = *runs) {
+                this->updateUniforms(x+run, y);
                 fBlitAntiH.eval(run, fUniforms.data(), fDevice.addr(x,y), cov);
 
                 x    += run;
@@ -571,21 +568,20 @@ namespace {
 
             SkASSERT(program);
             if (program) {
-                this->updateUniforms();
                 for (int y = clip.top(); y < clip.bottom(); y++) {
-                    void* dptr =        fDevice.writable_addr(clip.left(), y);
-                    auto  mptr = (const uint8_t*)mask.getAddr(clip.left(), y);
+                    int x = clip.left(),
+                        w = clip.width();
+                    void* dptr =        fDevice.writable_addr(x,y);
+                    auto  mptr = (const uint8_t*)mask.getAddr(x,y);
+                    this->updateUniforms(x+w,y);
 
                     if (program == &fBlitMask3D) {
                         size_t plane = mask.computeImageSize();
-                        program->eval(clip.width(), fUniforms.data(),
-                                      dptr,
-                                      mptr + 1*plane,
-                                      mptr + 2*plane,
-                                      mptr + 0*plane);
+                        program->eval(w, fUniforms.data(), dptr, mptr + 1*plane
+                                                               , mptr + 2*plane
+                                                               , mptr + 0*plane);
                     } else {
-                        program->eval(clip.width(), fUniforms.data(),
-                                      dptr, mptr);
+                        program->eval(w, fUniforms.data(), dptr, mptr);
                     }
                 }
             }
@@ -599,7 +595,7 @@ SkBlitter* SkCreateSkVMBlitter(const SkPixmap& device,
                                const SkPaint& paint,
                                const SkMatrix& ctm,
                                SkArenaAlloc* alloc) {
-    auto blitter = alloc->make<Blitter>(device, paint);
-    return blitter->ok ? blitter
-                       : nullptr;
+    bool ok = true;
+    auto blitter = alloc->make<Blitter>(device, paint, &ok);
+    return ok ? blitter : nullptr;
 }
