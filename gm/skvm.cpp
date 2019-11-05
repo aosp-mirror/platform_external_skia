@@ -9,6 +9,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkShader.h"
+#include "include/effects/SkColorMatrix.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkShaderBase.h"
@@ -29,11 +30,11 @@ struct Fade : public SkShaderBase {
 
     bool onProgram(skvm::Builder* p,
                    SkColorSpace* dstCS,
-                   skvm::Arg uniforms, size_t offset,
+                   skvm::Arg uniforms, SkTDArray<uint32_t>* buf,
                    skvm::F32 x, skvm::F32 y,
                    skvm::I32* r, skvm::I32* g, skvm::I32* b, skvm::I32* a) const override {
         if (as_SB(fShader)->program(p, dstCS,
-                                    uniforms, offset,
+                                    uniforms, buf,
                                     x,y, r,g,b,a)) {
             // In this GM `y` will range over 0-50 and `x` over 50-100.
             *r = p->to_i32(p->mul(y, p->splat(255/ 50.0f)));
@@ -41,10 +42,6 @@ struct Fade : public SkShaderBase {
             return true;
         }
         return false;
-    }
-
-    void uniforms(SkColorSpace* dstCS, std::vector<uint32_t>* buf) const override {
-        as_SB(fShader)->uniforms(dstCS, buf);
     }
 
     // Flattening is not really necessary, just nice to make serialize-8888 etc. not crash.
@@ -60,7 +57,7 @@ static struct RegisterFade {
     RegisterFade() { SkFlattenable::Register("Fade", Fade::CreateProc); }
 } now;
 
-DEF_SIMPLE_GM(SkVMBlitter, canvas, 100, 100) {
+DEF_SIMPLE_GM(SkVMBlitter, canvas, 100, 150) {
     SkPaint p;
 
     // These draws are all supported by SkVMBlitter,
@@ -129,4 +126,17 @@ DEF_SIMPLE_GM(SkVMBlitter, canvas, 100, 100) {
     */
     p.setShader(sk_make_sp<Fade>(SkShaders::Color(SK_ColorYELLOW)));
     canvas->drawRect({50,0, 100,50}, p);
+
+    // Draw with color filter, w/ and w/o alpha modulation.
+    SkColorMatrix m;
+    m.setSaturation(0.3f);
+
+    p.setShader(SkShaders::Color(SK_ColorMAGENTA));
+    p.setColorFilter(SkColorFilters::Matrix(m));
+    canvas->drawRect({0,100, 50,150}, p);
+
+    p.setShader(SkShaders::Color(0xffffaa00));  // tan
+    p.setColorFilter(SkColorFilters::Matrix(m));
+    p.setAlphaf(0.5f);
+    canvas->drawRect({25,100, 75,150}, p); // overlap a bit with purple and white
 }
