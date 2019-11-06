@@ -767,6 +767,11 @@ namespace skvm {
     void Assembler::vpcmpeqd(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0x76, dst,x,y); }
     void Assembler::vpcmpgtd(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0x66, dst,x,y); }
 
+    void Assembler::vcmpps(Ymm dst, Ymm x, Ymm y, int imm) {
+        this->op(0,0x0f,0xc2, dst,x,y);
+        this->byte(imm);
+    }
+
     void Assembler::vpblendvb(Ymm dst, Ymm x, Ymm y, Ymm z) {
         int prefix = 0x66,
             map    = 0x3a0f,
@@ -1676,7 +1681,7 @@ namespace skvm {
             switch (op) {
                 default: break;
 
-                case Op::splat: if (!splats.find(imm)) { splats.set(imm, {}); }
+                case Op::splat: if (imm/*0 -> xor*/ && !splats.find(imm)) { splats.set(imm, {}); }
                                 break;
 
                 case Op::bytes: if (!bytes_masks.find(imm)) {
@@ -1855,7 +1860,8 @@ namespace skvm {
                                 a->vpsubd(dst(), tmp(), &iota.label);
                                 break;
 
-                case Op::splat: a->vbroadcastss(dst(), &splats.find(imm)->label);
+                case Op::splat: if (imm) { a->vbroadcastss(dst(), &splats.find(imm)->label); }
+                                else     { a->vpxor(dst(), dst(), dst()); }
                                 break;
                                 // TODO: many of these instructions have variants that
                                 // can read one of their arugments from 32-byte memory
@@ -1937,7 +1943,8 @@ namespace skvm {
                                  else        { a->ldrq(dst(), arg[imm]); }
                                                break;
 
-                case Op::splat: a->ldrq(dst(), &splats.find(imm)->label);
+                case Op::splat: if (imm) { a->ldrq(dst(), &splats.find(imm)->label); }
+                                else     { a->eor16b(dst(), dst(), dst()); }
                                 break;
                                 // TODO: If we hoist these, pack 4 values in each register
                                 // and use vector/lane operations, cutting the register
