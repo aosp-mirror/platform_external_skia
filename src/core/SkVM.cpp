@@ -106,6 +106,8 @@ namespace skvm {
                 case Op::store16: write(o, "store16", Arg{imm}, V{x}); break;
                 case Op::store32: write(o, "store32", Arg{imm}, V{x}); break;
 
+                case Op::index: write(o, V{id}, "= index"); break;
+
                 case Op::load8:  write(o, V{id}, "= load8" , Arg{imm}); break;
                 case Op::load16: write(o, V{id}, "= load16", Arg{imm}); break;
                 case Op::load32: write(o, V{id}, "= load32", Arg{imm}); break;
@@ -201,9 +203,8 @@ namespace skvm {
         o->writeDecAsText(fInstructions.size());
         o->writeText(" instructions:\n");
         for (int i = 0; i < (int)fInstructions.size(); i++) {
-            if (i == fLoop) {
-                write(o, "loop:\n");
-            }
+            if (i == fLoop) { write(o, "loop:\n"); }
+            if (i >= fLoop) { write(o, "    "); }
             const Program::Instruction& inst = fInstructions[i];
             Op   op = inst.op;
             Reg   d = inst.d,
@@ -215,6 +216,8 @@ namespace skvm {
                 case Op::store8:  write(o, "store8" , Arg{imm}, R{x}); break;
                 case Op::store16: write(o, "store16", Arg{imm}, R{x}); break;
                 case Op::store32: write(o, "store32", Arg{imm}, R{x}); break;
+
+                case Op::index: write(o, R{d}, "= index"); break;
 
                 case Op::load8:  write(o, R{d}, "= load8" , Arg{imm}); break;
                 case Op::load16: write(o, R{d}, "= load16", Arg{imm}); break;
@@ -456,6 +459,8 @@ namespace skvm {
     void Builder::store8 (Arg ptr, I32 val) { (void)this->push(Op::store8 , val.id,NA,NA, ptr.ix); }
     void Builder::store16(Arg ptr, I32 val) { (void)this->push(Op::store16, val.id,NA,NA, ptr.ix); }
     void Builder::store32(Arg ptr, I32 val) { (void)this->push(Op::store32, val.id,NA,NA, ptr.ix); }
+
+    I32 Builder::index() { return {this->push(Op::index , NA,NA,NA,0) }; }
 
     I32 Builder::load8 (Arg ptr) { return {this->push(Op::load8 , NA,NA,NA, ptr.ix) }; }
     I32 Builder::load16(Arg ptr) { return {this->push(Op::load16, NA,NA,NA, ptr.ix) }; }
@@ -836,6 +841,8 @@ namespace skvm {
     }
 
     void Assembler::vpshufb(Ymm dst, Ymm x, Label* l) { this->op(0x66,0x380f,0x00, dst,x,l); }
+    void Assembler::vpaddd (Ymm dst, Ymm x, Label* l) { this->op(0x66,  0x0f,0xfe, dst,x,l); }
+    void Assembler::vpsubd (Ymm dst, Ymm x, Label* l) { this->op(0x66,  0x0f,0xfa, dst,x,l); }
 
     void Assembler::vbroadcastss(Ymm dst, Label* l) { this->op(0x66,0x380f,0x18, dst, (Ymm)0, l); }
     void Assembler::vbroadcastss(Ymm dst, Xmm src)  { this->op(0x66,0x380f,0x18, dst, (Ymm)src); }
@@ -1328,6 +1335,10 @@ namespace skvm {
                     // Ops that don't interact with memory should never care about the stride.
                 #define CASE(op) case 2*(int)op: /*fallthrough*/ case 2*(int)op+1
 
+                    CASE(Op::index): static_assert(K == 16, "");
+                                     r(d).i32 = n - I32{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+                                     break;
+
                     CASE(Op::uniform8):
                         r(d).i32 = *(const uint8_t* )( (const char*)arg(imm&0xffff) + (imm>>16) );
                         break;
@@ -1654,6 +1665,7 @@ namespace skvm {
         };
         SkTHashMap<int, LabelAndReg> splats,
                                      bytes_masks;
+        LabelAndReg                  iota;
 
         auto warmup = [&](Val id) {
             const Builder::Instruction& inst = instructions[id];
@@ -1837,6 +1849,11 @@ namespace skvm {
 
                 case Op::uniform32: a->vbroadcastss(dst(), arg[imm&0xffff], imm>>16);
                                     break;
+
+                case Op::index: a->vmovd_direct((A::Xmm)tmp(), N);
+                                a->vbroadcastss(tmp(), (A::Xmm)tmp());
+                                a->vpsubd(dst(), tmp(), &iota.label);
+                                break;
 
                 case Op::splat: a->vbroadcastss(dst(), &splats.find(imm)->label);
                                 break;
@@ -2068,22 +2085,10 @@ namespace skvm {
             exit();
         }
 
-        bytes_masks.foreach([&](int imm, LabelAndReg* entry) {
-            // One 16-byte pattern for ARM tbl, that same pattern twice for x86-64 vpshufb.
-        #if defined(__x86_64__)
-            a->align(32);
-        #elif defined(__aarch64__)
-            a->align(4);
-        #endif
-
-            a->label(&entry->label);
-            int mask[4];
-            bytes_control(imm, mask);
-            a->bytes(mask, sizeof(mask));
-        #if defined(__x86_64__)
-            a->bytes(mask, sizeof(mask));
-        #endif
-        });
+        // Except for explicit aligned load and store instructions, AVX allows
+        // memory operands to be unaligned.  So even though bytes_masks and
+        // iota use 32-byte patterns on x86, we need only align them to 4
+        // bytes, the element size and required alignment on ARM.
 
         splats.foreach([&](int imm, LabelAndReg* entry) {
             // vbroadcastss 4 bytes on x86-64, or simply load 16-bytes on aarch64.
@@ -2096,6 +2101,27 @@ namespace skvm {
             a->word(imm);
         #endif
         });
+
+        bytes_masks.foreach([&](int imm, LabelAndReg* entry) {
+            // One 16-byte pattern for ARM tbl, that same pattern twice for x86-64 vpshufb.
+            a->align(4);
+            a->label(&entry->label);
+            int mask[4];
+            bytes_control(imm, mask);
+            a->bytes(mask, sizeof(mask));
+        #if defined(__x86_64__)
+            a->bytes(mask, sizeof(mask));
+        #endif
+        });
+
+        if (!iota.label.references.empty()) {
+            a->align(4);
+            a->label(&iota.label);
+            for (int i = 0; i < K; i++) {
+                a->word(i);
+            }
+        }
+
 
         return true;
     }

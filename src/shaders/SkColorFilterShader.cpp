@@ -37,6 +37,12 @@ sk_sp<SkFlattenable> SkColorFilterShader::CreateProc(SkReadBuffer& buffer) {
     return sk_make_sp<SkColorFilterShader>(shader, 1.0f, filter);
 }
 
+bool SkColorFilterShader::isOpaque() const {
+    return fShader->isOpaque()
+        && fAlpha == 1.0f
+        && (fFilter->getFlags() & SkColorFilter::kAlphaUnchanged_Flag) != 0;
+}
+
 void SkColorFilterShader::flatten(SkWriteBuffer& buffer) const {
     buffer.writeFlattenable(fShader.get());
     SkASSERT(fAlpha == 1.0f);  // Not exposed in public API SkShader::makeWithColorFilter().
@@ -51,6 +57,34 @@ bool SkColorFilterShader::onAppendStages(const SkStageRec& rec) const {
         rec.fPipeline->append(SkRasterPipeline::scale_1_float, rec.fAlloc->make<float>(fAlpha));
     }
     fFilter->appendStages(rec, fShader->isOpaque());
+    return true;
+}
+
+bool SkColorFilterShader::onProgram(skvm::Builder* p,
+                                    SkColorSpace* dstCS,
+                                    skvm::Uniforms* uniforms,
+                                    skvm::F32 x, skvm::F32 y,
+                                    skvm::I32* r, skvm::I32* g, skvm::I32* b, skvm::I32* a) const {
+    // Run the shader.
+    if (!as_SB(fShader)->program(p, dstCS, uniforms, x,y, r,g,b,a)) {
+        return false;
+    }
+
+    // Scale that by alpha.
+    if (fAlpha != 1.0f) {
+        int alpha = fAlpha*255 + 0.5f;
+        skvm::I32 A = p->uniform32(uniforms->push(alpha));
+        *r = p->scale_unorm8(*r, A);
+        *g = p->scale_unorm8(*g, A);
+        *b = p->scale_unorm8(*b, A);
+        *a = p->scale_unorm8(*a, A);
+    }
+
+    // Finally run that through the color filter.
+    if (!fFilter->program(p, dstCS, uniforms, r,g,b,a)) {
+        return false;
+    }
+
     return true;
 }
 

@@ -104,6 +104,8 @@ namespace skvm {
         void vbroadcastss(Ymm dst, GP64 ptr, int off);  // dst = *(ptr+off)
 
         void vpshufb(Ymm dst, Ymm x, Label*);
+        void vpaddd (Ymm dst, Ymm x, Label*);
+        void vpsubd (Ymm dst, Ymm x, Label*);
 
         void vmovups  (Ymm dst, GP64 ptr);   // dst = *ptr, 256-bit
         void vpmovzxwd(Ymm dst, GP64 ptr);   // dst = *ptr, 128-bit, each uint16_t expanded to int
@@ -236,7 +238,7 @@ namespace skvm {
     enum class Op : uint8_t {
           store8,   store16,   store32,
     // ↑ side effects / no side effects ↓
-
+           index,
            load8,    load16,    load32,
          gather8,  gather16,  gather32,
     // ↑ always varying / uniforms, constants, Just Math ↓
@@ -318,6 +320,9 @@ namespace skvm {
         void store16(Arg ptr, I32 val);
         void store32(Arg ptr, I32 val);
 
+        // Returns varying {n, n-1, n-2, ..., 1}, where n is the argument to Program::eval().
+        I32 index();
+
         // Load u8,u16,i32 varying.
         I32 load8 (Arg ptr);
         I32 load16(Arg ptr);
@@ -332,6 +337,14 @@ namespace skvm {
         I32 uniform8 (Arg ptr, int offset=0);
         I32 uniform16(Arg ptr, int offset=0);
         I32 uniform32(Arg ptr, int offset=0);
+
+        struct Uniform {
+            Arg ptr;
+            int offset;
+        };
+        I32 uniform8 (Uniform u) { return this->uniform8 (u.ptr, u.offset); }
+        I32 uniform16(Uniform u) { return this->uniform16(u.ptr, u.offset); }
+        I32 uniform32(Uniform u) { return this->uniform32(u.ptr, u.offset); }
 
         // Load an immediate constant.
         I32 splat(int      n);
@@ -432,6 +445,28 @@ namespace skvm {
 
         uint32_t hash() const;
 
+        // (v+127)/255, for v in [0, 255*255].
+        skvm::I32 div255(skvm::I32 v) {
+            // This should be a bit-perfect version of (v+127)/255,
+            // implemented as (v + ((v+128)>>8) + 128)>>8.
+            // TODO: can do this better on ARM, in ~2 insns.
+            skvm::I32 v128 = add(v, splat(128));
+            return shr(add(v128, shr(v128, 8)), 8);
+        }
+
+        skvm::I32 scale_unorm8(skvm::I32 x, skvm::I32 y) {
+            return div255(mul(x,y));
+        }
+
+        skvm::I32 lerp_unorm8(skvm::I32 x, skvm::I32 y, skvm::I32 t) {
+            return div255(add(mul(x, sub(splat(255), t)),
+                              mul(y,                 t )));
+        }
+
+        // TODO: native min/max ops
+        skvm::I32 min(skvm::I32 x, skvm::I32 y) { return select(lt(x,y), x,y); }
+        skvm::I32 max(skvm::I32 x, skvm::I32 y) { return select(gt(x,y), x,y); }
+
     private:
         struct InstructionHash {
             size_t operator()(const Instruction& inst) const;
@@ -445,6 +480,27 @@ namespace skvm {
         std::vector<int>                              fStrides;
         uint32_t                                      fHash{0};
     };
+
+    // Helper to streamline allocating and working with uniforms.
+    struct Uniforms {
+        Arg              ptr;
+        std::vector<int> buf;
+
+        explicit Uniforms(int init) : ptr(Arg{0}), buf(init) {}
+
+        Builder::Uniform push(const int* vals, int n) {
+            int offset = sizeof(int)*buf.size();
+            buf.insert(buf.end(), vals, vals+n);
+            return {ptr, offset};
+        }
+        Builder::Uniform pushF(const float* vals, int n) {
+            return this->push((const int*)vals, n);
+        }
+
+        Builder::Uniform push (int   val) { return this->push (&val, 1); }
+        Builder::Uniform pushF(float val) { return this->pushF(&val, 1); }
+    };
+
 
     using Reg = int;
 

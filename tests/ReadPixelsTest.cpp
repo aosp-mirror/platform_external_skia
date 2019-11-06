@@ -690,8 +690,8 @@ static void gpu_read_pixels_test_driver(skiatest::Reporter* reporter,
         } else if (!rules.fAllowUnpremulRead && readAT == kUnpremul_SkAlphaType) {
             REPORTER_ASSERT(reporter, !success);
         } else if (!success) {
-            // TODO: Support reading to kGray, support kRGB_101010x at all in GPU.
-            if (readCT != kGray_8_SkColorType && readCT != kRGB_101010x_SkColorType) {
+            // TODO: Support kRGB_101010x at all in GPU.
+            if (readCT != kRGB_101010x_SkColorType) {
                 ERRORF(reporter,
                        "Read failed. Src CT: %s, Src AT: %s Read CT: %s, Read AT: %s, "
                        "Rect [%d, %d, %d, %d], CS conversion: %d\n",
@@ -711,11 +711,15 @@ static void gpu_read_pixels_test_driver(skiatest::Reporter* reporter,
         if (success && srcReadRect.intersect(surfBounds, rect)) {
             SkIRect dstWriteRect = srcReadRect.makeOffset(-rect.fLeft, -rect.fTop);
 
-            // A CS conversion allows a 3 value difference and otherwise a 2 value difference. Note
-            // that sometimes read back on GPU can be lossy even when there no conversion at all
-            // because GPU->CPU read may go to a lower bit depth format and then be promoted back to
-            // the original type. For example, GL ES cannot read to 1010102, so we go through 8888.
-            float numer = (csConversion ? 3.f : 2.f);
+            const bool lumConversion =
+                    !(SkColorTypeComponentFlags(srcCT)  & kGray_SkColorTypeComponentFlag) &&
+                     (SkColorTypeComponentFlags(readCT) & kGray_SkColorTypeComponentFlag);
+            // A CS or luminance conversion allows a 3 value difference and otherwise a 2 value
+            // difference. Note that sometimes read back on GPU can be lossy even when there no
+            // conversion at allbecause GPU->CPU read may go to a lower bit depth format and then be
+            // promoted back to the original type. For example, GL ES cannot read to 1010102, so we
+            // go through 8888.
+            const float numer = (lumConversion || csConversion ? 3.f : 3.f);
             int rgbBits = std::min({min_rgb_channel_bits(readCT),
                                     min_rgb_channel_bits(srcCT),
                                     8});
