@@ -42,8 +42,6 @@ public:
     // Return a glyph. Create it if it doesn't exist, and initialize the glyph with metrics and
     // advances using a scaler.
     SkGlyph* glyph(SkPackedGlyphID packedID);
-    SkGlyph* glyph(SkGlyphID glyphID);
-    SkGlyph* glyph(SkGlyphID, SkPoint);
 
     // Return a glyph.  Create it if it doesn't exist, and initialize with the prototype.
     SkGlyph* glyphFromPrototype(const SkGlyphPrototype& p, void* image = nullptr);
@@ -64,10 +62,6 @@ public:
 
     // If the path has never been set, then add a path to glyph.
     const SkPath* preparePath(SkGlyph* glyph, const SkPath* path);
-
-    /** Returns the number of glyphs for this strike.
-    */
-    unsigned getGlyphCount() const;
 
     /** Return the number of glyphs currently cached. */
     int countCachedGlyphs() const;
@@ -91,10 +85,6 @@ public:
     */
     const SkFontMetrics& getFontMetrics() const {
         return fFontMetrics;
-    }
-
-    SkMask::Format getMaskFormat() const {
-        return fScalerContext->getMaskFormat();
     }
 
     const SkGlyphPositionRoundingSpec& roundingSpec() const override {
