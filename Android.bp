@@ -1535,6 +1535,7 @@ cc_test {
         "tests/FontHostTest.cpp",
         "tests/FontMgrTest.cpp",
         "tests/FontNamesTest.cpp",
+        "tests/FontTest.cpp",
         "tests/FrontBufferedStreamTest.cpp",
         "tests/GLBackendSurfaceTest.cpp",
         "tests/GeometryTest.cpp",
