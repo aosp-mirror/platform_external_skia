@@ -560,7 +560,7 @@ DEF_TEST(SkVM_mad, r) {
                   z = b.mad(y,y,x),   // y is needed in the future, but r[z] = r[x] is ok.
                   w = b.mad(z,z,y),   // w can alias z but not y.
                   v = b.mad(w,y,w);   // Got to stop somewhere.
-        b.store32(arg, b.to_i32(v));
+        b.store32(arg, b.trunc(v));
     }
 
     test_jit_and_interpreter(r, b.done(), [&](const skvm::Program& program) {
@@ -829,6 +829,14 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
+        a.vminps(A::ymm0, A::ymm1, A::ymm2);
+        a.vmaxps(A::ymm0, A::ymm1, A::ymm2);
+    },{
+        0xc5,0xf4,0x5d,0xc2,
+        0xc5,0xf4,0x5f,0xc2,
+    });
+
+    test_asm(r, [&](A& a) {
         a.vpblendvb(A::ymm0, A::ymm1, A::ymm2, A::ymm3);
     },{
         0xc4,0xe3,0x75, 0x4c, 0xc2, 0x30,
@@ -1033,10 +1041,12 @@ DEF_TEST(SkVM_Assembler, r) {
         a.vmovdqa   (A::ymm3, A::ymm2);
         a.vcvttps2dq(A::ymm3, A::ymm2);
         a.vcvtdq2ps (A::ymm3, A::ymm2);
+        a.vcvtps2dq (A::ymm3, A::ymm2);
     },{
         0xc5,0xfd,0x6f,0xda,
         0xc5,0xfe,0x5b,0xda,
         0xc5,0xfc,0x5b,0xda,
+        0xc5,0xfd,0x5b,0xda,
     });
 
     // echo "fmul v4.4s, v3.4s, v1.4s" | llvm-mc -show-encoding -arch arm64
@@ -1063,6 +1073,8 @@ DEF_TEST(SkVM_Assembler, r) {
         a.fsub4s(A::v4, A::v3, A::v1);
         a.fmul4s(A::v4, A::v3, A::v1);
         a.fdiv4s(A::v4, A::v3, A::v1);
+        a.fmin4s(A::v4, A::v3, A::v1);
+        a.fmax4s(A::v4, A::v3, A::v1);
 
         a.fmla4s(A::v4, A::v3, A::v1);
 
@@ -1091,6 +1103,8 @@ DEF_TEST(SkVM_Assembler, r) {
         0x64,0xd4,0xa1,0x4e,
         0x64,0xdc,0x21,0x6e,
         0x64,0xfc,0x21,0x6e,
+        0x64,0xf4,0xa1,0x4e,
+        0x64,0xf4,0x21,0x4e,
 
         0x64,0xcc,0x21,0x4e,
 
@@ -1154,9 +1168,11 @@ DEF_TEST(SkVM_Assembler, r) {
     test_asm(r, [&](A& a) {
         a.scvtf4s (A::v4, A::v3);
         a.fcvtzs4s(A::v4, A::v3);
+        a.fcvtns4s(A::v4, A::v3);
     },{
         0x64,0xd8,0x21,0x4e,
         0x64,0xb8,0xa1,0x4e,
+        0x64,0xa8,0x21,0x4e,
     });
 
     test_asm(r, [&](A& a) {
