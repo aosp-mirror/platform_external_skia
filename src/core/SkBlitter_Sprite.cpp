@@ -136,7 +136,6 @@ public:
             p.append(SkRasterPipeline::scale_1_float, &fPaintColor.fA);
         }
 
-        // TODO: use this knowledge when creating SkColorSpaceXformSteps above.
         bool is_opaque = fSource.isOpaque() && fPaintColor.fA == 1.0f;
         fBlitter = SkCreateRasterPipelineBlitter(fDst, paint, p, is_opaque, fAlloc);
     }

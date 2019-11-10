@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `SkCanvas.saveLayer` now takes 3 or 4 params to include up to bounds, paint, SkImageFilter, flags.
  - `SkPath.rArcTo`, `SkPath.rConicTo`, `SkPath.rCubicTo`, `SkPath.rLineTo`, `SkPath.rMoveTo`,
    `SkPath.rQuadTo`. Like their non-relative siblings, these are chainable.
+ - Add `width()`, `height()`, `reset()`, `getFrameCount()` to SkAnimatedImage.
 
 ### Deprecated
  - `CanvasKit.MakeBlurMaskFilter` will be renamed/moved soon to `CanvasKit.SkMaskFilter.MakeBlur`.
@@ -21,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
  - Use newer version of Freetype2 (Tracking Skia's DEPS now).
  - Use newer versions of libpng and zlib (Tracking Skia's DEPS now).
+
+### Fixed
+ - null dereference when sometimes falling back to CPU.
 
 ## [0.8.0] - 2019-10-21
 

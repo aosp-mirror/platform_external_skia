@@ -7,7 +7,7 @@
 
 #include "include/core/SkColorPriv.h"
 #include "include/private/SkColorData.h"
-#include "src/core/SkCpu.h"
+#include "src/core/SkMSAN.h"
 #include "src/core/SkVM.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
@@ -34,29 +34,26 @@ static void dump(skvm::Builder& builder, SkWStream* o) {
 // TODO: I'd like this to go away and have every test in here run both JIT and interpreter.
 template <typename Fn>
 static void test_interpreter_only(skiatest::Reporter* r, skvm::Program&& program, Fn&& test) {
-#if defined(SKVM_JIT)
     REPORTER_ASSERT(r, !program.hasJIT());
-#endif
     test((const skvm::Program&) program);
 }
 
 template <typename Fn>
 static void test_jit_and_interpreter(skiatest::Reporter* r, skvm::Program&& program, Fn&& test) {
-#if defined(SKVM_JIT)
-    const bool expect_jit
-    #if defined(SK_CPU_X86)
-        = SkCpu::Supports(SkCpu::HSW);
-    #elif defined(SK_CPU_ARM64)
-        = true;
-    #else
-        = false;
-    #endif
-    if (expect_jit) {
+    static const bool can_jit = []{
+        // This is about the simplest program we can write, setting an int buffer to a constant.
+        // If this can't JIT, the platform does not support JITing.
+        skvm::Builder b;
+        b.store32(b.varying<int>(), b.splat(42));
+        skvm::Program p = b.done();
+        return p.hasJIT();
+    }();
+
+    if (can_jit) {
         REPORTER_ASSERT(r, program.hasJIT());
         test((const skvm::Program&) program);
         program.dropJIT();
     }
-#endif
     test_interpreter_only(r, std::move(program), std::move(test));
 }
 
@@ -469,7 +466,7 @@ DEF_TEST(SkVM_cmp_f32, r) {
         b.store32(b.varying<int>(), m);
     }
 
-    test_interpreter_only(r, b.done(), [&](const skvm::Program& program) {
+    test_jit_and_interpreter(r, b.done(), [&](const skvm::Program& program) {
         float in[] = { 0,1,2,3,4,5,6,7,8,9 };
         int out[SK_ARRAY_COUNT(in)];
 
@@ -563,7 +560,7 @@ DEF_TEST(SkVM_mad, r) {
                   z = b.mad(y,y,x),   // y is needed in the future, but r[z] = r[x] is ok.
                   w = b.mad(z,z,y),   // w can alias z but not y.
                   v = b.mad(w,y,w);   // Got to stop somewhere.
-        b.store32(arg, b.to_i32(v));
+        b.store32(arg, b.trunc(v));
     }
 
     test_jit_and_interpreter(r, b.done(), [&](const skvm::Program& program) {
@@ -707,6 +704,24 @@ DEF_TEST(SkVM_NewOps, r) {
     });
 }
 
+DEF_TEST(SkVM_MSAN, r) {
+    // This little memset32() program should be able to JIT, but if we run that
+    // JIT code in an MSAN build, it won't see the writes initialize buf.  So
+    // this tests that we're using the interpreter instead.
+    skvm::Builder b;
+    b.store32(b.varying<int>(), b.splat(42));
+
+    test_jit_and_interpreter(r, b.done(), [&](const skvm::Program& program) {
+        constexpr int K = 17;
+        int buf[K];                 // Intentionally uninitialized.
+        program.eval(K, buf);
+        sk_msan_assert_initialized(buf, buf+K);
+        for (int x : buf) {
+            REPORTER_ASSERT(r, x == 42);
+        }
+    });
+}
+
 
 template <typename Fn>
 static void test_asm(skiatest::Reporter* r, Fn&& fn, std::initializer_list<uint8_t> expected) {
@@ -811,6 +826,14 @@ DEF_TEST(SkVM_Assembler, r) {
         0xc5,0xf4,0xc2,0xc2,0x01,
         0xc5,0xf4,0xc2,0xc2,0x02,
         0xc5,0xf4,0xc2,0xc2,0x04,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.vminps(A::ymm0, A::ymm1, A::ymm2);
+        a.vmaxps(A::ymm0, A::ymm1, A::ymm2);
+    },{
+        0xc5,0xf4,0x5d,0xc2,
+        0xc5,0xf4,0x5f,0xc2,
     });
 
     test_asm(r, [&](A& a) {
@@ -1018,10 +1041,12 @@ DEF_TEST(SkVM_Assembler, r) {
         a.vmovdqa   (A::ymm3, A::ymm2);
         a.vcvttps2dq(A::ymm3, A::ymm2);
         a.vcvtdq2ps (A::ymm3, A::ymm2);
+        a.vcvtps2dq (A::ymm3, A::ymm2);
     },{
         0xc5,0xfd,0x6f,0xda,
         0xc5,0xfe,0x5b,0xda,
         0xc5,0xfc,0x5b,0xda,
+        0xc5,0xfd,0x5b,0xda,
     });
 
     // echo "fmul v4.4s, v3.4s, v1.4s" | llvm-mc -show-encoding -arch arm64
@@ -1032,6 +1057,7 @@ DEF_TEST(SkVM_Assembler, r) {
         a.eor16b(A::v4, A::v3, A::v1);
         a.bic16b(A::v4, A::v3, A::v1);
         a.bsl16b(A::v4, A::v3, A::v1);
+        a.not16b(A::v4, A::v3);
 
         a.add4s(A::v4, A::v3, A::v1);
         a.sub4s(A::v4, A::v3, A::v1);
@@ -1047,14 +1073,21 @@ DEF_TEST(SkVM_Assembler, r) {
         a.fsub4s(A::v4, A::v3, A::v1);
         a.fmul4s(A::v4, A::v3, A::v1);
         a.fdiv4s(A::v4, A::v3, A::v1);
+        a.fmin4s(A::v4, A::v3, A::v1);
+        a.fmax4s(A::v4, A::v3, A::v1);
 
         a.fmla4s(A::v4, A::v3, A::v1);
+
+        a.fcmeq4s(A::v4, A::v3, A::v1);
+        a.fcmgt4s(A::v4, A::v3, A::v1);
+        a.fcmge4s(A::v4, A::v3, A::v1);
     },{
         0x64,0x1c,0x21,0x4e,
         0x64,0x1c,0xa1,0x4e,
         0x64,0x1c,0x21,0x6e,
         0x64,0x1c,0x61,0x4e,
         0x64,0x1c,0x61,0x6e,
+        0x64,0x58,0x20,0x6e,
 
         0x64,0x84,0xa1,0x4e,
         0x64,0x84,0xa1,0x6e,
@@ -1070,8 +1103,14 @@ DEF_TEST(SkVM_Assembler, r) {
         0x64,0xd4,0xa1,0x4e,
         0x64,0xdc,0x21,0x6e,
         0x64,0xfc,0x21,0x6e,
+        0x64,0xf4,0xa1,0x4e,
+        0x64,0xf4,0x21,0x4e,
 
         0x64,0xcc,0x21,0x4e,
+
+        0x64,0xe4,0x21,0x4e,
+        0x64,0xe4,0xa1,0x6e,
+        0x64,0xe4,0x21,0x6e,
     });
 
     test_asm(r, [&](A& a) {
@@ -1129,9 +1168,11 @@ DEF_TEST(SkVM_Assembler, r) {
     test_asm(r, [&](A& a) {
         a.scvtf4s (A::v4, A::v3);
         a.fcvtzs4s(A::v4, A::v3);
+        a.fcvtns4s(A::v4, A::v3);
     },{
         0x64,0xd8,0x21,0x4e,
         0x64,0xb8,0xa1,0x4e,
+        0x64,0xa8,0x21,0x4e,
     });
 
     test_asm(r, [&](A& a) {

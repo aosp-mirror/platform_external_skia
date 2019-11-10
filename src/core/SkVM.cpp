@@ -15,6 +15,17 @@
 #include "src/core/SkVM.h"
 #include <functional>  // std::hash
 #include <string.h>
+
+// JIT code isn't MSAN-instrumented, so we won't see when it uses
+// uninitialized memory, and we'll not see the writes it makes as properly
+// initializing memory.  Instead force the interpreter, which should let
+// MSAN see everything our programs do properly.
+#if defined(__has_feature)
+    #if __has_feature(memory_sanitizer)
+        #undef SKVM_JIT
+    #endif
+#endif
+
 #if defined(SKVM_JIT)
     #include <sys/mman.h>
 #endif
@@ -127,12 +138,12 @@ namespace skvm {
                 case Op::sub_f32: write(o, V{id}, "= sub_f32", V{x}, V{y}      ); break;
                 case Op::mul_f32: write(o, V{id}, "= mul_f32", V{x}, V{y}      ); break;
                 case Op::div_f32: write(o, V{id}, "= div_f32", V{x}, V{y}      ); break;
+                case Op::min_f32: write(o, V{id}, "= min_f32", V{x}, V{y}      ); break;
+                case Op::max_f32: write(o, V{id}, "= max_f32", V{x}, V{y}      ); break;
                 case Op::mad_f32: write(o, V{id}, "= mad_f32", V{x}, V{y}, V{z}); break;
 
                 case Op:: eq_f32: write(o, V{id}, "= eq_f32", V{x}, V{y}); break;
                 case Op::neq_f32: write(o, V{id}, "= neq_f32", V{x}, V{y}); break;
-                case Op:: lt_f32: write(o, V{id}, "= lt_f32", V{x}, V{y}); break;
-                case Op::lte_f32: write(o, V{id}, "= lte_f32", V{x}, V{y}); break;
                 case Op:: gt_f32: write(o, V{id}, "= gt_f32", V{x}, V{y}); break;
                 case Op::gte_f32: write(o, V{id}, "= gte_f32", V{x}, V{y}); break;
 
@@ -147,8 +158,6 @@ namespace skvm {
 
                 case Op:: eq_i32: write(o, V{id}, "= eq_i32", V{x}, V{y}); break;
                 case Op::neq_i32: write(o, V{id}, "= neq_i32", V{x}, V{y}); break;
-                case Op:: lt_i32: write(o, V{id}, "= lt_i32", V{x}, V{y}); break;
-                case Op::lte_i32: write(o, V{id}, "= lte_i32", V{x}, V{y}); break;
                 case Op:: gt_i32: write(o, V{id}, "= gt_i32", V{x}, V{y}); break;
                 case Op::gte_i32: write(o, V{id}, "= gte_i32", V{x}, V{y}); break;
 
@@ -162,8 +171,6 @@ namespace skvm {
 
                 case Op:: eq_i16x2: write(o, V{id}, "= eq_i16x2", V{x}, V{y}); break;
                 case Op::neq_i16x2: write(o, V{id}, "= neq_i16x2", V{x}, V{y}); break;
-                case Op:: lt_i16x2: write(o, V{id}, "= lt_i16x2", V{x}, V{y}); break;
-                case Op::lte_i16x2: write(o, V{id}, "= lte_i16x2", V{x}, V{y}); break;
                 case Op:: gt_i16x2: write(o, V{id}, "= gt_i16x2", V{x}, V{y}); break;
                 case Op::gte_i16x2: write(o, V{id}, "= gte_i16x2", V{x}, V{y}); break;
 
@@ -178,7 +185,8 @@ namespace skvm {
                 case Op::pack:    write(o, V{id}, "= pack",    V{x}, V{y}, Shift{imm}); break;
 
                 case Op::to_f32: write(o, V{id}, "= to_f32", V{x}); break;
-                case Op::to_i32: write(o, V{id}, "= to_i32", V{x}); break;
+                case Op::trunc:  write(o, V{id}, "= trunc",  V{x}); break;
+                case Op::round:  write(o, V{id}, "= round",  V{x}); break;
             }
 
             write(o, "\n");
@@ -238,12 +246,12 @@ namespace skvm {
                 case Op::sub_f32: write(o, R{d}, "= sub_f32", R{x}, R{y}      ); break;
                 case Op::mul_f32: write(o, R{d}, "= mul_f32", R{x}, R{y}      ); break;
                 case Op::div_f32: write(o, R{d}, "= div_f32", R{x}, R{y}      ); break;
+                case Op::min_f32: write(o, R{d}, "= min_f32", R{x}, R{y}      ); break;
+                case Op::max_f32: write(o, R{d}, "= max_f32", R{x}, R{y}      ); break;
                 case Op::mad_f32: write(o, R{d}, "= mad_f32", R{x}, R{y}, R{z}); break;
 
                 case Op:: eq_f32: write(o, R{d}, "= eq_f32", R{x}, R{y}); break;
                 case Op::neq_f32: write(o, R{d}, "= neq_f32", R{x}, R{y}); break;
-                case Op:: lt_f32: write(o, R{d}, "= lt_f32", R{x}, R{y}); break;
-                case Op::lte_f32: write(o, R{d}, "= lte_f32", R{x}, R{y}); break;
                 case Op:: gt_f32: write(o, R{d}, "= gt_f32", R{x}, R{y}); break;
                 case Op::gte_f32: write(o, R{d}, "= gte_f32", R{x}, R{y}); break;
 
@@ -258,8 +266,6 @@ namespace skvm {
 
                 case Op:: eq_i32: write(o, R{d}, "= eq_i32", R{x}, R{y}); break;
                 case Op::neq_i32: write(o, R{d}, "= neq_i32", R{x}, R{y}); break;
-                case Op:: lt_i32: write(o, R{d}, "= lt_i32", R{x}, R{y}); break;
-                case Op::lte_i32: write(o, R{d}, "= lte_i32", R{x}, R{y}); break;
                 case Op:: gt_i32: write(o, R{d}, "= gt_i32", R{x}, R{y}); break;
                 case Op::gte_i32: write(o, R{d}, "= gte_i32", R{x}, R{y}); break;
 
@@ -274,8 +280,6 @@ namespace skvm {
 
                 case Op:: eq_i16x2: write(o, R{d}, "= eq_i16x2", R{x}, R{y}); break;
                 case Op::neq_i16x2: write(o, R{d}, "= neq_i16x2", R{x}, R{y}); break;
-                case Op:: lt_i16x2: write(o, R{d}, "= lt_i16x2", R{x}, R{y}); break;
-                case Op::lte_i16x2: write(o, R{d}, "= lte_i16x2", R{x}, R{y}); break;
                 case Op:: gt_i16x2: write(o, R{d}, "= gt_i16x2", R{x}, R{y}); break;
                 case Op::gte_i16x2: write(o, R{d}, "= gte_i16x2", R{x}, R{y}); break;
 
@@ -291,7 +295,8 @@ namespace skvm {
                 case Op::pack:    write(o, R{d}, "= pack",    R{x}, R{y}, Shift{imm}); break;
 
                 case Op::to_f32: write(o, R{d}, "= to_f32", R{x}); break;
-                case Op::to_i32: write(o, R{d}, "= to_i32", R{x}); break;
+                case Op::trunc:  write(o, R{d}, "= trunc",  R{x}); break;
+                case Op::round:  write(o, R{d}, "= round",  R{x}); break;
             }
             write(o, "\n");
         }
@@ -498,6 +503,8 @@ namespace skvm {
     F32 Builder::sub(F32 x, F32 y       ) { return {this->push(Op::sub_f32, x.id, y.id)}; }
     F32 Builder::mul(F32 x, F32 y       ) { return {this->push(Op::mul_f32, x.id, y.id)}; }
     F32 Builder::div(F32 x, F32 y       ) { return {this->push(Op::div_f32, x.id, y.id)}; }
+    F32 Builder::min(F32 x, F32 y       ) { return {this->push(Op::min_f32, x.id, y.id)}; }
+    F32 Builder::max(F32 x, F32 y       ) { return {this->push(Op::max_f32, x.id, y.id)}; }
     F32 Builder::mad(F32 x, F32 y, F32 z) {
         if (this->isZero(z.id)) {
             return this->mul(x,y);
@@ -523,22 +530,22 @@ namespace skvm {
 
     I32 Builder:: eq(F32 x, F32 y) { return {this->push(Op:: eq_f32, x.id, y.id)}; }
     I32 Builder::neq(F32 x, F32 y) { return {this->push(Op::neq_f32, x.id, y.id)}; }
-    I32 Builder:: lt(F32 x, F32 y) { return {this->push(Op:: lt_f32, x.id, y.id)}; }
-    I32 Builder::lte(F32 x, F32 y) { return {this->push(Op::lte_f32, x.id, y.id)}; }
+    I32 Builder:: lt(F32 x, F32 y) { return {this->push(Op:: gt_f32, y.id, x.id)}; }
+    I32 Builder::lte(F32 x, F32 y) { return {this->push(Op::gte_f32, y.id, x.id)}; }
     I32 Builder:: gt(F32 x, F32 y) { return {this->push(Op:: gt_f32, x.id, y.id)}; }
     I32 Builder::gte(F32 x, F32 y) { return {this->push(Op::gte_f32, x.id, y.id)}; }
 
     I32 Builder:: eq(I32 x, I32 y) { return {this->push(Op:: eq_i32, x.id, y.id)}; }
     I32 Builder::neq(I32 x, I32 y) { return {this->push(Op::neq_i32, x.id, y.id)}; }
-    I32 Builder:: lt(I32 x, I32 y) { return {this->push(Op:: lt_i32, x.id, y.id)}; }
-    I32 Builder::lte(I32 x, I32 y) { return {this->push(Op::lte_i32, x.id, y.id)}; }
+    I32 Builder:: lt(I32 x, I32 y) { return {this->push(Op:: gt_i32, y.id, x.id)}; }
+    I32 Builder::lte(I32 x, I32 y) { return {this->push(Op::gte_i32, y.id, x.id)}; }
     I32 Builder:: gt(I32 x, I32 y) { return {this->push(Op:: gt_i32, x.id, y.id)}; }
     I32 Builder::gte(I32 x, I32 y) { return {this->push(Op::gte_i32, x.id, y.id)}; }
 
     I32 Builder:: eq_16x2(I32 x, I32 y) { return {this->push(Op:: eq_i16x2, x.id, y.id)}; }
     I32 Builder::neq_16x2(I32 x, I32 y) { return {this->push(Op::neq_i16x2, x.id, y.id)}; }
-    I32 Builder:: lt_16x2(I32 x, I32 y) { return {this->push(Op:: lt_i16x2, x.id, y.id)}; }
-    I32 Builder::lte_16x2(I32 x, I32 y) { return {this->push(Op::lte_i16x2, x.id, y.id)}; }
+    I32 Builder:: lt_16x2(I32 x, I32 y) { return {this->push(Op:: gt_i16x2, y.id, x.id)}; }
+    I32 Builder::lte_16x2(I32 x, I32 y) { return {this->push(Op::gte_i16x2, y.id, x.id)}; }
     I32 Builder:: gt_16x2(I32 x, I32 y) { return {this->push(Op:: gt_i16x2, x.id, y.id)}; }
     I32 Builder::gte_16x2(I32 x, I32 y) { return {this->push(Op::gte_i16x2, x.id, y.id)}; }
 
@@ -562,7 +569,8 @@ namespace skvm {
     }
 
     F32 Builder::to_f32(I32 x) { return {this->push(Op::to_f32, x.id)}; }
-    I32 Builder::to_i32(F32 x) { return {this->push(Op::to_i32, x.id)}; }
+    I32 Builder::trunc (F32 x) { return {this->push(Op::trunc,  x.id)}; }
+    I32 Builder::round (F32 x) { return {this->push(Op::round,  x.id)}; }
 
     // ~~~~ Program::eval() and co. ~~~~ //
 
@@ -756,6 +764,8 @@ namespace skvm {
     void Assembler::vsubps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5c, dst,x,y); }
     void Assembler::vmulps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x59, dst,x,y); }
     void Assembler::vdivps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5e, dst,x,y); }
+    void Assembler::vminps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5d, dst,x,y); }
+    void Assembler::vmaxps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5f, dst,x,y); }
 
     void Assembler::vfmadd132ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x98, dst,x,y); }
     void Assembler::vfmadd213ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xa8, dst,x,y); }
@@ -810,6 +820,7 @@ namespace skvm {
 
     void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(0,   0x0f,0x5b, dst,x); }
     void Assembler::vcvttps2dq(Ymm dst, Ymm x) { this->op(0xf3,0x0f,0x5b, dst,x); }
+    void Assembler::vcvtps2dq (Ymm dst, Ymm x) { this->op(0x66,0x0f,0x5b, dst,x); }
 
     Assembler::Label Assembler::here() {
         return { (int)this->size(), Label::NotYetSet, {} };
@@ -1048,6 +1059,7 @@ namespace skvm {
     void Assembler::eor16b(V d, V n, V m) { this->op(0b0'1'1'01110'00'1, m, 0b00011'1, n, d); }
     void Assembler::bic16b(V d, V n, V m) { this->op(0b0'1'0'01110'01'1, m, 0b00011'1, n, d); }
     void Assembler::bsl16b(V d, V n, V m) { this->op(0b0'1'1'01110'01'1, m, 0b00011'1, n, d); }
+    void Assembler::not16b(V d, V n)      { this->op(0b0'1'1'01110'00'10000'00101'10,  n, d); }
 
     void Assembler::add4s(V d, V n, V m) { this->op(0b0'1'0'01110'10'1, m, 0b10000'1, n, d); }
     void Assembler::sub4s(V d, V n, V m) { this->op(0b0'1'1'01110'10'1, m, 0b10000'1, n, d); }
@@ -1063,6 +1075,12 @@ namespace skvm {
     void Assembler::fsub4s(V d, V n, V m) { this->op(0b0'1'0'01110'1'0'1, m, 0b11010'1, n, d); }
     void Assembler::fmul4s(V d, V n, V m) { this->op(0b0'1'1'01110'0'0'1, m, 0b11011'1, n, d); }
     void Assembler::fdiv4s(V d, V n, V m) { this->op(0b0'1'1'01110'0'0'1, m, 0b11111'1, n, d); }
+    void Assembler::fmin4s(V d, V n, V m) { this->op(0b0'1'0'01110'1'0'1, m, 0b11110'1, n, d); }
+    void Assembler::fmax4s(V d, V n, V m) { this->op(0b0'1'0'01110'0'0'1, m, 0b11110'1, n, d); }
+
+    void Assembler::fcmeq4s(V d, V n, V m) { this->op(0b0'1'0'01110'0'0'1, m, 0b1110'0'1, n, d); }
+    void Assembler::fcmgt4s(V d, V n, V m) { this->op(0b0'1'1'01110'1'0'1, m, 0b1110'0'1, n, d); }
+    void Assembler::fcmge4s(V d, V n, V m) { this->op(0b0'1'1'01110'0'0'1, m, 0b1110'0'1, n, d); }
 
     void Assembler::fmla4s(V d, V n, V m) { this->op(0b0'1'0'01110'0'0'1, m, 0b11001'1, n, d); }
 
@@ -1093,6 +1111,7 @@ namespace skvm {
 
     void Assembler::scvtf4s (V d, V n) { this->op(0b0'1'0'01110'0'0'10000'11101'10, n,d); }
     void Assembler::fcvtzs4s(V d, V n) { this->op(0b0'1'0'01110'1'0'10000'1101'1'10, n,d); }
+    void Assembler::fcvtns4s(V d, V n) { this->op(0b0'1'0'01110'0'0'10000'1101'0'10, n,d); }
 
     void Assembler::xtns2h(V d, V n) { this->op(0b0'0'0'01110'01'10000'10010'10, n,d); }
     void Assembler::xtnh2b(V d, V n) { this->op(0b0'0'0'01110'00'10000'10010'10, n,d); }
@@ -1360,6 +1379,8 @@ namespace skvm {
                     CASE(Op::sub_f32): r(d).f32 = r(x).f32 - r(y).f32; break;
                     CASE(Op::mul_f32): r(d).f32 = r(x).f32 * r(y).f32; break;
                     CASE(Op::div_f32): r(d).f32 = r(x).f32 / r(y).f32; break;
+                    CASE(Op::min_f32): r(d).f32 = min(r(x).f32, r(y).f32); break;
+                    CASE(Op::max_f32): r(d).f32 = max(r(x).f32, r(y).f32); break;
 
                     CASE(Op::mad_f32): r(d).f32 = r(x).f32 * r(y).f32 + r(z).f32; break;
 
@@ -1381,22 +1402,16 @@ namespace skvm {
 
                     CASE(Op:: eq_f32): r(d).i32 = r(x).f32 == r(y).f32; break;
                     CASE(Op::neq_f32): r(d).i32 = r(x).f32 != r(y).f32; break;
-                    CASE(Op:: lt_f32): r(d).i32 = r(x).f32 <  r(y).f32; break;
-                    CASE(Op::lte_f32): r(d).i32 = r(x).f32 <= r(y).f32; break;
                     CASE(Op:: gt_f32): r(d).i32 = r(x).f32 >  r(y).f32; break;
                     CASE(Op::gte_f32): r(d).i32 = r(x).f32 >= r(y).f32; break;
 
                     CASE(Op:: eq_i32): r(d).i32 = r(x).i32 == r(y).i32; break;
                     CASE(Op::neq_i32): r(d).i32 = r(x).i32 != r(y).i32; break;
-                    CASE(Op:: lt_i32): r(d).i32 = r(x).i32 <  r(y).i32; break;
-                    CASE(Op::lte_i32): r(d).i32 = r(x).i32 <= r(y).i32; break;
                     CASE(Op:: gt_i32): r(d).i32 = r(x).i32 >  r(y).i32; break;
                     CASE(Op::gte_i32): r(d).i32 = r(x).i32 >= r(y).i32; break;
 
                     CASE(Op:: eq_i16x2): r(d).i16x2 = r(x).i16x2 == r(y).i16x2; break;
                     CASE(Op::neq_i16x2): r(d).i16x2 = r(x).i16x2 != r(y).i16x2; break;
-                    CASE(Op:: lt_i16x2): r(d).i16x2 = r(x).i16x2 <  r(y).i16x2; break;
-                    CASE(Op::lte_i16x2): r(d).i16x2 = r(x).i16x2 <= r(y).i16x2; break;
                     CASE(Op:: gt_i16x2): r(d).i16x2 = r(x).i16x2 >  r(y).i16x2; break;
                     CASE(Op::gte_i16x2): r(d).i16x2 = r(x).i16x2 >= r(y).i16x2; break;
 
@@ -1427,7 +1442,8 @@ namespace skvm {
                     } break;
 
                     CASE(Op::to_f32): r(d).f32 = skvx::cast<float>(r(x).i32); break;
-                    CASE(Op::to_i32): r(d).i32 = skvx::cast<int>  (r(x).f32); break;
+                    CASE(Op::trunc):  r(d).i32 = skvx::cast<int>  (r(x).f32); break;
+                    CASE(Op::round):  r(d).i32 = skvx::cast<int>  (r(x).f32 + 0.5f); break;
                 #undef CASE
                 }
             }
@@ -1874,6 +1890,8 @@ namespace skvm {
                 case Op::sub_f32: a->vsubps(dst(), r[x], r[y]); break;
                 case Op::mul_f32: a->vmulps(dst(), r[x], r[y]); break;
                 case Op::div_f32: a->vdivps(dst(), r[x], r[y]); break;
+                case Op::min_f32: a->vminps(dst(), r[x], r[y]); break;
+                case Op::max_f32: a->vmaxps(dst(), r[x], r[y]); break;
 
                 case Op::mad_f32:
                     if      (avail & (1<<r[x])) { set_dst(r[x]); a->vfmadd132ps(r[x], r[z], r[y]); }
@@ -1903,8 +1921,12 @@ namespace skvm {
                 case Op::sra_i32: a->vpsrad(dst(), r[x], imm); break;
 
                 case Op::eq_i32: a->vpcmpeqd(dst(), r[x], r[y]); break;
-                case Op::lt_i32: a->vpcmpgtd(dst(), r[y], r[x]); break;
                 case Op::gt_i32: a->vpcmpgtd(dst(), r[x], r[y]); break;
+
+                case Op:: eq_f32: a->vcmpeqps (dst(), r[x], r[y]); break;
+                case Op::neq_f32: a->vcmpneqps(dst(), r[x], r[y]); break;
+                case Op:: gt_f32: a->vcmpltps (dst(), r[y], r[x]); break;
+                case Op::gte_f32: a->vcmpleps (dst(), r[y], r[x]); break;
 
                 case Op::extract: if (imm == 0) { a->vpand (dst(),  r[x], r[y]); }
                                   else          { a->vpsrld(tmp(),  r[x], imm);
@@ -1916,7 +1938,8 @@ namespace skvm {
                                break;
 
                 case Op::to_f32: a->vcvtdq2ps (dst(), r[x]); break;
-                case Op::to_i32: a->vcvttps2dq(dst(), r[x]); break;
+                case Op::trunc : a->vcvttps2dq(dst(), r[x]); break;
+                case Op::round : a->vcvtps2dq (dst(), r[x]); break;
 
                 case Op::bytes: a->vpshufb(dst(), r[x], &bytes_masks.find(imm)->label);
                                 break;
@@ -1954,6 +1977,8 @@ namespace skvm {
                 case Op::sub_f32: a->fsub4s(dst(), r[x], r[y]); break;
                 case Op::mul_f32: a->fmul4s(dst(), r[x], r[y]); break;
                 case Op::div_f32: a->fdiv4s(dst(), r[x], r[y]); break;
+                case Op::min_f32: a->fmin4s(dst(), r[x], r[y]); break;
+                case Op::max_f32: a->fmax4s(dst(), r[x], r[y]); break;
 
                 case Op::mad_f32: // fmla4s is z += x*y
                     if (avail & (1<<r[z])) { set_dst(r[z]); a->fmla4s( r[z],  r[x],  r[y]);   }
@@ -1961,6 +1986,12 @@ namespace skvm {
                                                             a->fmla4s(tmp(),  r[x],  r[y]);
                                        if(dst() != tmp()) { a->orr16b(dst(), tmp(), tmp()); } }
                                                             break;
+
+                case Op:: gt_f32: a->fcmgt4s (dst(), r[x], r[y]); break;
+                case Op::gte_f32: a->fcmge4s (dst(), r[x], r[y]); break;
+                case Op:: eq_f32: a->fcmeq4s (dst(), r[x], r[y]); break;
+                case Op::neq_f32: a->fcmeq4s (tmp(), r[x], r[y]);
+                                  a->not16b  (dst(), tmp());      break;
 
 
                 case Op::add_i32: a->add4s(dst(), r[x], r[y]); break;
@@ -1988,7 +2019,6 @@ namespace skvm {
                 case Op::sra_i32: a->sshr4s(dst(), r[x], imm); break;
 
                 case Op::eq_i32: a->cmeq4s(dst(), r[x], r[y]); break;
-                case Op::lt_i32: a->cmgt4s(dst(), r[y], r[x]); break;
                 case Op::gt_i32: a->cmgt4s(dst(), r[x], r[y]); break;
 
                 case Op::extract: if (imm) { a->ushr4s(tmp(), r[x], imm);
@@ -2003,7 +2033,8 @@ namespace skvm {
                                                             break;
 
                 case Op::to_f32: a->scvtf4s (dst(), r[x]); break;
-                case Op::to_i32: a->fcvtzs4s(dst(), r[x]); break;
+                case Op::trunc:  a->fcvtzs4s(dst(), r[x]); break;
+                case Op::round:  a->fcvtns4s(dst(), r[x]); break;
 
                 case Op::bytes:
                     if (try_hoisting) { a->tbl (dst(), r[x], bytes_masks.find(imm)->reg); }
