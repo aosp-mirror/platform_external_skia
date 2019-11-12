@@ -72,9 +72,6 @@ public:
     void findIntercepts(const SkScalar bounds[2], SkScalar scale, SkScalar xPos,
                         SkGlyph* , SkScalar* array, int* count);
 
-    /** Fallback glyphs used during font remoting if the original glyph can't be found.
-     */
-    bool belongsToCache(const SkGlyph* glyph) const;
     /** Find any glyph in this cache with the given ID, regardless of subpixel positioning.
      *  If set and present, skip over the glyph with vetoID.
      */
@@ -179,7 +176,7 @@ private:
 
     const SkAutoDescriptor                 fDesc;
     const std::unique_ptr<SkScalerContext> fScalerContext;
-    SkFontMetrics                          fFontMetrics;
+    const SkFontMetrics                    fFontMetrics;
 
     // Map from a combined GlyphID and sub-pixel position to a SkGlyph*.
     // The actual glyph is stored in the fAlloc. This structure provides an

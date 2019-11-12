@@ -125,12 +125,7 @@ SkGlyph* SkStrike::mergeGlyphAndImage(SkPackedGlyphID toID, const SkGlyph& from)
     return glyph;
 }
 
-bool SkStrike::belongsToCache(const SkGlyph* glyph) const {
-    return glyph && fGlyphMap.findOrNull(glyph->getPackedID()) == glyph;
-}
-
-const SkGlyph* SkStrike::getCachedGlyphAnySubPix(SkGlyphID glyphID,
-                                                     SkPackedGlyphID vetoID) const {
+const SkGlyph* SkStrike::getCachedGlyphAnySubPix(SkGlyphID glyphID, SkPackedGlyphID vetoID) const {
     for (SkFixed subY = 0; subY < SK_Fixed1; subY += SK_FixedQuarter) {
         for (SkFixed subX = 0; subX < SK_Fixed1; subX += SK_FixedQuarter) {
             SkPackedGlyphID packedGlyphID{glyphID, subX, subY};
