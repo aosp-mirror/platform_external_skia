@@ -58,6 +58,7 @@ namespace skvm {
 
         void align(int mod);
 
+        void int3();
         void vzeroupper();
         void ret();
 
@@ -104,7 +105,10 @@ namespace skvm {
         void je (Label*);
         void jne(Label*);
         void jl (Label*);
+        void jc (Label*);
         void cmp(GP64, int imm);
+
+        void vptest(Ymm dst, Label*);
 
         void vbroadcastss(Ymm dst, Label*);
         void vbroadcastss(Ymm dst, Xmm src);
@@ -247,6 +251,7 @@ namespace skvm {
     };
 
     enum class Op : uint8_t {
+          assert_true,
           store8,   store16,   store32,
     // ↑ side effects / no side effects ↓
            index,
@@ -325,6 +330,8 @@ namespace skvm {
         // TODO: allow uniform (i.e. Arg) offsets to store* and load*?
         // TODO: sign extension (signed types) for <32-bit loads?
         // TODO: unsigned integer operations where relevant (just comparisons?)?
+
+        void assert_true(I32 val);
 
         // Store {8,16,32}-bit varying.
         void store8 (Arg ptr, I32 val);
