@@ -238,8 +238,11 @@ static void setup_stencil_op_state(
 }
 
 static void setup_depth_stencil_state(
-        const GrStencilSettings& stencilSettings, GrSurfaceOrigin origin,
+        const GrProgramInfo& programInfo,
         VkPipelineDepthStencilStateCreateInfo* stencilInfo) {
+    GrStencilSettings stencilSettings = programInfo.nonGLStencilSettings();
+    GrSurfaceOrigin origin = programInfo.origin();
+
     memset(stencilInfo, 0, sizeof(VkPipelineDepthStencilStateCreateInfo));
     stencilInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     stencilInfo->pNext = nullptr;
@@ -285,7 +288,7 @@ static void setup_multisample_state(const GrProgramInfo& programInfo,
     multisampleInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampleInfo->pNext = nullptr;
     multisampleInfo->flags = 0;
-    SkAssertResult(GrSampleCountToVkSampleCount(programInfo.numSamples(),
+    SkAssertResult(GrSampleCountToVkSampleCount(programInfo.numRasterSamples(),
                                                 &multisampleInfo->rasterizationSamples));
     multisampleInfo->sampleShadingEnable = VK_FALSE;
     multisampleInfo->minSampleShading = 0.0f;
@@ -307,13 +310,13 @@ static void setup_all_sample_locations_at_pixel_center(
     sampleLocations->sampleLocationsInfo.sType = VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT;
     sampleLocations->sampleLocationsInfo.pNext = nullptr;
     SkAssertResult(GrSampleCountToVkSampleCount(
-            programInfo.numSamples(),
+            programInfo.numRasterSamples(),
             &sampleLocations->sampleLocationsInfo.sampleLocationsPerPixel));
     sampleLocations->sampleLocationsInfo.sampleLocationGridSize.width = 1;
     sampleLocations->sampleLocationsInfo.sampleLocationGridSize.height = 1;
-    SkASSERT(programInfo.numSamples() < (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
+    SkASSERT(programInfo.numRasterSamples() < (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
     sampleLocations->sampleLocationsInfo.sampleLocationsCount = std::min(
-            programInfo.numSamples(), (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
+            programInfo.numRasterSamples(), (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
     sampleLocations->sampleLocationsInfo.pSampleLocations = kCenteredSampleLocations;
 }
 
@@ -521,7 +524,6 @@ static void setup_dynamic_state(VkPipelineDynamicStateCreateInfo* dynamicInfo,
 GrVkPipeline* GrVkPipeline::Create(
         GrVkGpu* gpu,
         const GrProgramInfo& programInfo,
-        const GrStencilSettings& stencil,
         VkPipelineShaderStageCreateInfo* shaderStageInfo, int shaderStageCount,
         VkRenderPass compatibleRenderPass, VkPipelineLayout layout,
         VkPipelineCache cache) {
@@ -538,7 +540,7 @@ GrVkPipeline* GrVkPipeline::Create(
     setup_input_assembly_state(programInfo.primitiveType(), &inputAssemblyInfo);
 
     VkPipelineDepthStencilStateCreateInfo depthStencilInfo;
-    setup_depth_stencil_state(stencil, programInfo.origin(), &depthStencilInfo);
+    setup_depth_stencil_state(programInfo, &depthStencilInfo);
 
     VkPipelineViewportStateCreateInfo viewportInfo;
     setup_viewport_scissor_state(&viewportInfo);
@@ -548,7 +550,7 @@ GrVkPipeline* GrVkPipeline::Create(
 
     VkPipelineSampleLocationsStateCreateInfoEXT sampleLocations;
     if (gpu->caps()->multisampleDisableSupport()) {
-        if (programInfo.numSamples() > 1 && !programInfo.pipeline().isHWAntialiasState()) {
+        if (programInfo.numRasterSamples() > 1 && !programInfo.pipeline().isHWAntialiasState()) {
             setup_all_sample_locations_at_pixel_center(programInfo, &sampleLocations);
             sampleLocations.pNext = multisampleInfo.pNext;
             multisampleInfo.pNext = &sampleLocations;
