@@ -393,7 +393,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTa
     pipelineDescriptor.vertexDescriptor = create_vertex_descriptor(programInfo.primProc());
     pipelineDescriptor.colorAttachments[0] = create_color_attachment(renderTarget->config(),
                                                                      programInfo.pipeline());
-    pipelineDescriptor.sampleCount = renderTarget->numSamples();
+    pipelineDescriptor.sampleCount = programInfo.numRasterSamples();
     bool hasStencilAttachment = SkToBool(renderTarget->renderTargetPriv().getStencilAttachment());
     GrMtlCaps* mtlCaps = (GrMtlCaps*)this->caps();
     pipelineDescriptor.stencilAttachmentPixelFormat =
@@ -456,12 +456,8 @@ bool GrMtlPipelineStateBuilder::Desc::Build(Desc* desc,
 
     GrProcessorKeyBuilder b(&desc->key());
 
-    int keyLength = desc->key().count();
-    SkASSERT(0 == (keyLength % 4));
-    desc->fShaderKeyLength = SkToU32(keyLength);
-
     b.add32(renderTarget->config());
-    b.add32(renderTarget->numSamples());
+    b.add32(programInfo.numRasterSamples());
 
     bool hasStencilAttachment = SkToBool(renderTarget->renderTargetPriv().getStencilAttachment());
     SkASSERT(!programInfo.pipeline().isStencilEnabled() || hasStencilAttachment);

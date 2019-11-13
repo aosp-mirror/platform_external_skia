@@ -37,7 +37,6 @@ public:
     virtual const GrCaps* caps() const = 0;
     const GrShaderCaps* shaderCaps() const { return this->caps()->shaderCaps(); }
 
-    int numSamples() const { return fProgramInfo.numSamples(); }
     GrSurfaceOrigin origin() const { return fProgramInfo.origin(); }
     const GrPipeline& pipeline() const { return fProgramInfo.pipeline(); }
     const GrPrimitiveProcessor& primitiveProcessor() const { return fProgramInfo.primProc(); }
@@ -47,8 +46,7 @@ public:
     bool snapVerticesToPixelCenters() const {
         return fProgramInfo.pipeline().snapVerticesToPixelCenters();
     }
-    // TODO: remove this usage of the descriptor's header
-    bool hasPointSize() const { return fDesc->hasPointSize(); }
+    bool hasPointSize() const { return fProgramInfo.primitiveType() == GrPrimitiveType::kPoints; }
 
     // TODO: stop passing in the renderTarget for just the sampleLocations
     int effectiveSampleCnt() const {
