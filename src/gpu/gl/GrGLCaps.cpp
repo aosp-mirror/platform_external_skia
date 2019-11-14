@@ -692,8 +692,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     // already been detected.
     this->initFormatTable(ctxInfo, gli, formatWorkarounds);
 
-    this->applyOptionsOverrides(contextOptions);
-    shaderCaps->applyOptionsOverrides(contextOptions);
+    this->finishInitialization(contextOptions);
 
     // For now these two are equivalent but we could have dst read in shader via some other method.
     shaderCaps->fDstReadInShaderSupport = shaderCaps->fFBFetchSupport;
@@ -942,13 +941,11 @@ bool GrGLCaps::hasPathRenderingSupport(const GrGLContextInfo& ctxInfo, const GrG
     return true;
 }
 
-void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrGLContextInfo& ctxInfo,
-                               const GrGLInterface* gli) {
-    // We need dual source blending and the ability to disable multisample in order to support mixed
-    // samples in every corner case.
-    if (fMultisampleDisableSupport && this->shaderCaps()->dualSourceBlendingSupport()) {
-        fMixedSamplesSupport = ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples") ||
-                               ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_mixed_samples");
+void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions,
+                               const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
+    if (ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples") ||
+        ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_mixed_samples")) {
+        fMixedSamplesSupport = true;
     }
 
     if (GR_IS_GR_GL(ctxInfo.standard())) {
@@ -1040,8 +1037,6 @@ void GrGLCaps::initStencilSupport(const GrGLContextInfo& ctxInfo) {
         gS8    = {GR_GL_STENCIL_INDEX8,   8,                8,                false},
         gS16   = {GR_GL_STENCIL_INDEX16,  16,               16,               false},
         gD24S8 = {GR_GL_DEPTH24_STENCIL8, 8,                32,               true },
-        gS4    = {GR_GL_STENCIL_INDEX4,   4,                4,                false},
-    //  gS     = {GR_GL_STENCIL_INDEX,    kUnknownBitCount, kUnknownBitCount, false},
         gDS    = {GR_GL_DEPTH_STENCIL,    kUnknownBitCount, kUnknownBitCount, true };
 
     if (GR_IS_GR_GL(ctxInfo.standard())) {
@@ -1057,9 +1052,6 @@ void GrGLCaps::initStencilSupport(const GrGLContextInfo& ctxInfo) {
         fStencilFormats.push_back() = gS16;
         if (supportsPackedDS) {
             fStencilFormats.push_back() = gD24S8;
-        }
-        fStencilFormats.push_back() = gS4;
-        if (supportsPackedDS) {
             fStencilFormats.push_back() = gDS;
         }
     } else if (GR_IS_GR_GL_ES(ctxInfo.standard())) {
@@ -1068,13 +1060,9 @@ void GrGLCaps::initStencilSupport(const GrGLContextInfo& ctxInfo) {
         // ES doesn't support using the unsized format.
 
         fStencilFormats.push_back() = gS8;
-        //fStencilFormats.push_back() = gS16;
         if (ctxInfo.version() >= GR_GL_VER(3,0) ||
             ctxInfo.hasExtension("GL_OES_packed_depth_stencil")) {
             fStencilFormats.push_back() = gD24S8;
-        }
-        if (ctxInfo.hasExtension("GL_OES_stencil4")) {
-            fStencilFormats.push_back() = gS4;
         }
     } else if (GR_IS_GR_WEBGL(ctxInfo.standard())) {
         fStencilFormats.push_back() = gS8;
