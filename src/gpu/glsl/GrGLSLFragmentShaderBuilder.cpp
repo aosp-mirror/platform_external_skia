@@ -170,7 +170,7 @@ SkString GrGLSLFPFragmentBuilder::writeProcessorFunction(GrGLSLFragmentProcessor
                                                           args.fTransformedCoords[0].fUniformMatrix;
         if (mat.isValid()) {
             args.fUniformHandler->updateUniformVisibility(mat, kFragment_GrShaderFlag);
-            this->codeAppendf("_coords = (float3(_coords, 1) * %s).xy;\n",
+            this->codeAppendf("_coords = (%s * float3(_coords, 1)).xy;\n",
                               args.fTransformedCoords[0].fMatrixCode.c_str());
         }
     }
@@ -294,8 +294,7 @@ void GrGLSLFragmentShaderBuilder::onFinalize() {
 
     if (CustomFeatures::kSampleLocations & fProgramBuilder->processorFeatures()) {
         const SkTArray<SkPoint>& sampleLocations = fProgramBuilder->getSampleLocations();
-        this->definitions().appendf("const float2 _sampleOffsets[%i] = float2[%i](",
-                                    sampleLocations.count(), sampleLocations.count());
+        this->definitions().append("const float2 _sampleOffsets[] = float2[](");
         for (int i = 0; i < sampleLocations.count(); ++i) {
             SkPoint offset = sampleLocations[i] - SkPoint::Make(.5f, .5f);
             if (kBottomLeft_GrSurfaceOrigin == this->getSurfaceOrigin()) {
