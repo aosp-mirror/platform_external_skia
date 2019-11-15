@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    TypedArray backed by the C++ WASM memory. This can save a copy in some cases
    (e.g. SkColorFilter.MakeMatrix). This is an advanced feature, so use it with care.
  - `SkCanvas.clipRRect`, `SkCanvas.drawColor`
- - Blur, ColorFilter, Compose SkImageFilters. Can be used with `SkPaint.setImageFilter`.
+ - Blur, ColorFilter, Compose, MatrixTransform SkImageFilters. Can be used with `SkPaint.setImageFilter`.
  - `SkCanvas.saveLayer` now takes 3 or 4 params to include up to bounds, paint, SkImageFilter, flags.
  - `SkPath.rArcTo`, `SkPath.rConicTo`, `SkPath.rCubicTo`, `SkPath.rLineTo`, `SkPath.rMoveTo`,
    `SkPath.rQuadTo`. Like their non-relative siblings, these are chainable.
@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `SkCanvas.drawImageNine`, `SkCanvas.drawPoints` and related `PointMode` enum.
  - `SkPath.addPoly`
  - `SkPathMeasure.getSegment`
+ - More information on SkParagraph API, eg. `getLongestLine()`, `getWordBoundary`, and others.
 
 ### Deprecated
  - `CanvasKit.MakeBlurMaskFilter` will be renamed/moved soon to `CanvasKit.SkMaskFilter.MakeBlur`.
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
  - null dereference when sometimes falling back to CPU.
+ - Actually ask WebGL for a stencil buffer.
 
 ## [0.8.0] - 2019-10-21
 
