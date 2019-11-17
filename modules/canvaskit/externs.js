@@ -100,7 +100,16 @@ var CanvasKit = {
 
 	Paragraph: {
 		// public API (from C++ bindings)
+		didExceedMaxLines: function() {},
+		getAlphabeticBaseline: function() {},
 		getGlyphPositionAtCoordinate: function() {},
+		getHeight: function() {},
+		getIdeographicBaseline: function() {},
+		getLongestLine: function() {},
+		getMaxIntrinsicWidth: function() {},
+		getMaxWidth: function() {},
+		getMinIntrinsicWidth: function() {},
+		getWordBoundary: function() {},
 		layout: function() {},
 
 		// private API
@@ -141,6 +150,7 @@ var CanvasKit = {
 		drawColor: function() {},
 		drawDRRect:  function() {},
 		drawImage: function() {},
+		drawImageNine: function() {},
 		drawImageRect: function() {},
 		drawLine: function() {},
 		drawOval: function() {},
@@ -170,6 +180,7 @@ var CanvasKit = {
 
 		// private API
 		_drawAtlas: function() {},
+		_drawPoints: function() {},
 		_drawSimpleText: function() {},
 		_readPixels: function() {},
 		_writePixels: function() {},
@@ -236,6 +247,7 @@ var CanvasKit = {
 		MakeBlur: function() {},
 		MakeColorFilter: function() {},
 		MakeCompose: function() {},
+		MakeMatrixTransform: function() {},
 	},
 
 	SkMatrix: {
@@ -306,6 +318,7 @@ var CanvasKit = {
 		_addOval: function() {},
 		_addPath: function() {},
 		_addRect: function() {},
+		_addPoly: function() {},
 		_addRoundRect: function() {},
 		_arc: function() {},
 		_arcTo: function() {},
@@ -335,6 +348,7 @@ var CanvasKit = {
 
 	SkPathMeasure: {
 		getLength: function() {},
+		getSegment: function() {},
 		getPosTan: function() {},
 		isClosed: function() {},
 		nextContour: function() {},
@@ -579,6 +593,12 @@ var CanvasKit = {
 		ReverseDifference: {},
 	},
 
+	PointMode: {
+		Points: {},
+		Lines: {},
+		Polygon: {},
+	},
+
 	RectHeightStyle: {
 		Tight: {},
 		Max: {},
@@ -683,6 +703,7 @@ CanvasKit.Paragraph.prototype.getRectsForRange = function() {};
 CanvasKit.SkPath.prototype.addArc = function() {};
 CanvasKit.SkPath.prototype.addOval = function() {};
 CanvasKit.SkPath.prototype.addPath = function() {};
+CanvasKit.SkPath.prototype.addPoly = function() {};
 CanvasKit.SkPath.prototype.addRect = function() {};
 CanvasKit.SkPath.prototype.addRoundRect = function() {};
 CanvasKit.SkPath.prototype.arc = function() {};
@@ -722,6 +743,7 @@ CanvasKit.SkImage.prototype.encodeToData = function() {};
 CanvasKit.SkImage.prototype.makeShader = function() {};
 
 CanvasKit.SkCanvas.prototype.drawAtlas = function() {};
+CanvasKit.SkCanvas.prototype.drawPoints = function() {};
 CanvasKit.SkCanvas.prototype.drawText = function() {};
 /** @return {Uint8Array} */
 CanvasKit.SkCanvas.prototype.readPixels = function() {};
