@@ -581,7 +581,7 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
         renderTask->prePrepare(fContext);
     }
 
-    ddl->fOpPOD = fContext->priv().detachOpPOD();
+    ddl->fRecordTimeData = fContext->priv().detachRecordTimeAllocator();
 
     if (fPathRendererChain) {
         if (auto ccpr = fPathRendererChain->getCoverageCountingPathRenderer()) {
@@ -709,7 +709,7 @@ GrTextureResolveRenderTask* GrDrawingManager::newTextureResolveRenderTask(const 
 }
 
 void GrDrawingManager::newWaitRenderTask(sk_sp<GrSurfaceProxy> proxy,
-                                         std::unique_ptr<sk_sp<GrSemaphore>[]> semaphores,
+                                         std::unique_ptr<std::unique_ptr<GrSemaphore>[]> semaphores,
                                          int numSemaphores) {
     SkDEBUGCODE(this->validate());
     SkASSERT(fContext);
