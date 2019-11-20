@@ -76,7 +76,7 @@ public:
     bool waitFence(GrFence, uint64_t timeout) override;
     void deleteFence(GrFence) const override;
 
-    std::unqiue_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned = true) override;
+    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned = true) override;
     std::unique_ptr<GrSemaphore> wrapBackendSemaphore(
             const GrBackendSemaphore& semaphore,
             GrResourceProvider::SemaphoreWrapType wrapType,
@@ -155,7 +155,7 @@ private:
     bool onCopySurface(GrSurface* dst, GrSurface* src,
                        const SkIRect& srcRect, const SkIPoint& dstPoint) override;
 
-    void onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
+    bool onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
                        const GrFlushInfo& info, const GrPrepareForExternalIORequests&) override;
 
     wgpu::Device                                    fDevice;
