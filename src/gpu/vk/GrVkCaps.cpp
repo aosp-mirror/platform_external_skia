@@ -441,20 +441,9 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // GrCaps workarounds
     ////////////////////////////////////////////////////////////////////////////
 
-    // The GTX660 bot experiences crashes and incorrect rendering with MSAA CCPR. Block this path
-    // renderer on non-mixed-sampled NVIDIA.
-    // NOTE: We may lose mixed samples support later if the context options suppress dual source
-    // blending, but that shouldn't be an issue because MSAA CCPR seems to work fine (even without
-    // mixed samples) on later NVIDIA hardware where mixed samples would be supported.
-    if ((kNvidia_VkVendor == properties.vendorID) && !fMixedSamplesSupport) {
-        fDriverBlacklistMSAACCPR = true;
-    }
-
-    if (fDriverBugWorkarounds.max_texture_size_limit_4096) {
-        fMaxTextureSize = SkTMin(fMaxTextureSize, 4096);
-        fMaxRenderTargetSize = SkTMin(fMaxRenderTargetSize, fMaxTextureSize);
-        fMaxPreferredRenderTargetSize = SkTMin(fMaxPreferredRenderTargetSize, fMaxRenderTargetSize);
-    }
+    // Temporarily disable the MSAA implementation of CCPR while we work out a crash on Win10
+    // GTX660 and incorrect rendring on Adreno.
+    fDriverBlacklistMSAACCPR = true;
 
     if (kARM_VkVendor == properties.vendorID) {
         fInstanceAttribSupport = false;
@@ -511,6 +500,9 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     // give the minimum max size across all configs. So for simplicity we will use that for now.
     fMaxRenderTargetSize = SkTMin(properties.limits.maxImageDimension2D, (uint32_t)INT_MAX);
     fMaxTextureSize = SkTMin(properties.limits.maxImageDimension2D, (uint32_t)INT_MAX);
+    if (fDriverBugWorkarounds.max_texture_size_limit_4096) {
+        fMaxTextureSize = SkTMin(fMaxTextureSize, 4096);
+    }
     // Our render targets are always created with textures as the color
     // attachment, hence this min:
     fMaxRenderTargetSize = SkTMin(fMaxTextureSize, fMaxRenderTargetSize);
