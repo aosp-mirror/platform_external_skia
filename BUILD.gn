@@ -1321,6 +1321,8 @@ if (skia_enable_tools) {
       "tools/gpu/MemoryCache.h",
       "tools/gpu/ProxyUtils.cpp",
       "tools/gpu/TestContext.cpp",
+      "tools/gpu/TestOps.cpp",
+      "tools/gpu/TestOps.h",
       "tools/gpu/YUVUtils.cpp",
       "tools/gpu/YUVUtils.h",
       "tools/gpu/mock/MockTestContext.cpp",
@@ -1755,6 +1757,7 @@ if (skia_enable_tools) {
     }
     test_app("fm") {
       sources = [
+        "dm/DMGpuTestProcs.cpp",  # blech
         "tools/fm/fm.cpp",
       ]
       deps = [
@@ -1766,6 +1769,7 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":hash_and_encode",
         ":skia",
+        ":tests",
         ":tool_utils",
         ":trace",
         "modules/skottie",
