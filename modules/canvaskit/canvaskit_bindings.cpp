@@ -193,7 +193,8 @@ void ApplyAddArc(SkPath& orig, const SkRect& oval, SkScalar startAngle, SkScalar
 }
 
 void ApplyAddOval(SkPath& orig, const SkRect& oval, bool ccw, unsigned start) {
-    orig.addOval(oval, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW, start);
+    orig.addOval(oval, ccw ? SkPath::Direction::kCCW_Direction :
+                             SkPath::Direction::kCW_Direction, start);
 }
 
 void ApplyAddPath(SkPath& orig, const SkPath& newPath,
@@ -210,7 +211,9 @@ void ApplyAddPath(SkPath& orig, const SkPath& newPath,
 
 void ApplyAddRect(SkPath& path, SkScalar left, SkScalar top,
                   SkScalar right, SkScalar bottom, bool ccw) {
-    path.addRect(left, top, right, bottom, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
+    path.addRect(left, top, right, bottom,
+                 ccw ? SkPath::Direction::kCCW_Direction :
+                 SkPath::Direction::kCW_Direction);
 }
 
 void ApplyAddRoundRect(SkPath& path, SkScalar left, SkScalar top,
@@ -219,7 +222,7 @@ void ApplyAddRoundRect(SkPath& path, SkScalar left, SkScalar top,
     // See comment below for uintptr_t explanation
     const SkScalar* radii = reinterpret_cast<const SkScalar*>(rPtr);
     path.addRoundRect(SkRect::MakeLTRB(left, top, right, bottom), radii,
-                      ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
+                      ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction);
 }
 
 
@@ -235,14 +238,14 @@ void ApplyArcToAngle(SkPath& p, SkRect& oval, SkScalar startAngle, SkScalar swee
 void ApplyArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
                        bool useSmallArc, bool ccw, SkScalar x, SkScalar y) {
     auto arcSize = useSmallArc ? SkPath::ArcSize::kSmall_ArcSize : SkPath::ArcSize::kLarge_ArcSize;
-    auto sweep = ccw ? SkPathDirection::kCCW : SkPathDirection::kCW;
+    auto sweep = ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction;
     orig.arcTo(rx, ry, xAxisRotate, arcSize, sweep, x, y);
 }
 
 void ApplyRArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
                         bool useSmallArc, bool ccw, SkScalar dx, SkScalar dy) {
     auto arcSize = useSmallArc ? SkPath::ArcSize::kSmall_ArcSize : SkPath::ArcSize::kLarge_ArcSize;
-    auto sweep = ccw ? SkPathDirection::kCCW : SkPathDirection::kCW;
+    auto sweep = ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction;
     orig.rArcTo(rx, ry, xAxisRotate, arcSize, sweep, dx, dy);
 }
 
@@ -649,6 +652,10 @@ namespace emscripten {
         void raw_destructor(ClassType *);
 
         template<>
+        void raw_destructor<SkContourMeasure>(SkContourMeasure *ptr) {
+        }
+
+        template<>
         void raw_destructor<SkData>(SkData *ptr) {
         }
 
@@ -1003,6 +1010,33 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return SkColorFilters::Matrix(twentyFloats);
         }))
         .class_function("MakeSRGBToLinearGamma", &SkColorFilters::SRGBToLinearGamma);
+
+    class_<SkContourMeasureIter>("SkContourMeasureIter")
+        .constructor<const SkPath&, bool, SkScalar>()
+        .function("next", &SkContourMeasureIter::next);
+
+    class_<SkContourMeasure>("SkContourMeasure")
+        .smart_ptr<sk_sp<SkContourMeasure>>("sk_sp<SkContourMeasure>>")
+        .function("getPosTan", optional_override([](SkContourMeasure& self,
+                                                    SkScalar distance) -> PosTan {
+            SkPoint p{0, 0};
+            SkVector v{0, 0};
+            if (!self.getPosTan(distance, &p, &v)) {
+                SkDebugf("zero-length path in getPosTan\n");
+            }
+            return PosTan{p.x(), p.y(), v.x(), v.y()};
+        }))
+        .function("getSegment", optional_override([](SkContourMeasure& self, SkScalar startD,
+                                                     SkScalar stopD, bool startWithMoveTo) -> SkPath {
+            SkPath p;
+            bool ok = self.getSegment(startD, stopD, &p, startWithMoveTo);
+            if (ok) {
+                return p;
+            }
+            return SkPath();
+        }))
+        .function("isClosed", &SkContourMeasure::isClosed)
+        .function("length", &SkContourMeasure::length);
 
     class_<SkData>("SkData")
         .smart_ptr<sk_sp<SkData>>("sk_sp<SkData>>")
