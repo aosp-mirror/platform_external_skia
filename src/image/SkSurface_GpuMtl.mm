@@ -56,6 +56,14 @@ sk_sp<SkSurface> SkSurface::MakeFromCAMetalLayer(GrContext* context,
     texInfo.fMipMapped = GrMipMapped::kNo;
     texInfo.fTextureType = GrTextureType::k2D;
 
+    GrInternalSurfaceFlags surfaceFlags = GrInternalSurfaceFlags::kNone;
+    if (sampleCnt > 1) {
+        surfaceFlags |= GrInternalSurfaceFlags::kRequiresManualMSAAResolve;
+    }
+    if (metalLayer.framebufferOnly) {
+        surfaceFlags |= GrInternalSurfaceFlags::kWrapsSwapchainSurface;
+    }
+
     sk_sp<GrRenderTargetProxy> proxy = proxyProvider->createLazyRenderTargetProxy(
             [layer, drawable, sampleCnt, config](GrResourceProvider* resourceProvider) {
                 CAMetalLayer* metalLayer = (__bridge CAMetalLayer*)layer;
@@ -68,16 +76,13 @@ sk_sp<SkSurface> SkSurface::MakeFromCAMetalLayer(GrContext* context,
 
                 GrMtlGpu* mtlGpu = (GrMtlGpu*) resourceProvider->priv().gpu();
                 sk_sp<GrRenderTarget> surface;
-                if (metalLayer.framebufferOnly && sampleCnt <= 1) {
+                if (metalLayer.framebufferOnly) {
                     surface = GrMtlRenderTarget::MakeWrappedRenderTarget(
                                       mtlGpu, desc, sampleCnt, currentDrawable.texture);
                 } else {
                     surface = GrMtlTextureRenderTarget::MakeWrappedTextureRenderTarget(
                                       mtlGpu, desc, sampleCnt, currentDrawable.texture,
                                       GrWrapCacheable::kNo);
-                }
-                if (surface && sampleCnt > 1) {
-                    surface->setRequiresManualMSAAResolve();
                 }
 
                 *drawable = (__bridge_retained GrMTLHandle) currentDrawable;
@@ -87,9 +92,8 @@ sk_sp<SkSurface> SkSurface::MakeFromCAMetalLayer(GrContext* context,
             desc,
             sampleCnt,
             origin,
-            sampleCnt > 1 ? GrInternalSurfaceFlags::kRequiresManualMSAAResolve
-                          : GrInternalSurfaceFlags::kNone,
-            metalLayer.framebufferOnly && sampleCnt <= 1 ? nullptr : &texInfo,
+            surfaceFlags,
+            metalLayer.framebufferOnly ? nullptr : &texInfo,
             GrMipMapsStatus::kNotAllocated,
             SkBackingFit::kExact,
             SkBudgeted::kYes,

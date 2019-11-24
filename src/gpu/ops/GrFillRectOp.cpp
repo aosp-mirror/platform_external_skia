@@ -200,7 +200,7 @@ private:
         // local coords.
         SkASSERT(!fHelper.isTrivial() || !fHelper.usesLocalCoords());
 
-        sk_sp<GrGeometryProcessor> gp = GrQuadPerEdgeAA::MakeProcessor(vertexSpec);
+        GrGeometryProcessor* gp = GrQuadPerEdgeAA::MakeProcessor(target->allocator(), vertexSpec);
         size_t vertexSize = gp->vertexStride();
 
         sk_sp<const GrBuffer> vertexBuffer;
@@ -216,16 +216,15 @@ private:
             return;
         }
 
-        // vertices pointer advances through vdata based on Tessellate's return value
-        void* vertices = vdata;
+        GrQuadPerEdgeAA::Tessellator tessellator(vertexSpec, (char*) vdata);
         auto iter = fQuads.iterator();
         while(iter.next()) {
             // All entries should have local coords, or no entries should have local coords,
             // matching !helper.isTrivial() (which is more conservative than helper.usesLocalCoords)
             SkASSERT(iter.isLocalValid() != fHelper.isTrivial());
             auto info = iter.metadata();
-            vertices = GrQuadPerEdgeAA::Tessellate(vertices, vertexSpec, iter.deviceQuad(),
-                    info.fColor, iter.localQuad(), kEmptyDomain, info.fAAFlags);
+            tessellator.append(iter.deviceQuad(), iter.localQuad(),
+                               info.fColor, kEmptyDomain, info.fAAFlags);
         }
 
         sk_sp<const GrBuffer> indexBuffer;
@@ -242,7 +241,7 @@ private:
         GrQuadPerEdgeAA::ConfigureMesh(mesh, vertexSpec, 0, fQuads.count(), totalNumVertices,
                                        std::move(vertexBuffer), std::move(indexBuffer),
                                        vertexOffsetInBuffer);
-        target->recordDraw(std::move(gp), mesh, 1, vertexSpec.primitiveType());
+        target->recordDraw(gp, mesh, 1, vertexSpec.primitiveType());
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {

@@ -211,6 +211,9 @@ template("optional") {
       if (defined(invoker.public_configs)) {
         configs = invoker.public_configs
       }
+      if (defined(invoker.public_include_dirs)) {
+        include_dirs = invoker.public_include_dirs
+      }
     }
     source_set(target_name) {
       check_includes = false
@@ -608,11 +611,23 @@ optional("gpu") {
 }
 
 optional("gif") {
-  enabled = !skia_use_wuffs
-  sources = [
-    "src/codec/SkGifCodec.cpp",
-    "third_party/gif/SkGifImageReader.cpp",
-  ]
+  enabled = !skia_use_wuffs && skia_use_libgifcodec
+  _libgifcodec_gni_path = "third_party/externals/libgifcodec/libgifcodec.gni"
+  if ("True" ==
+      exec_script("gn/checkpath.py",
+                  [ rebase_path(_libgifcodec_gni_path, root_build_dir) ],
+                  "trim string")) {
+    public_defines = [ "SK_USE_LIBGIFCODEC" ]
+    public_include_dirs = [
+      ".",
+      skia_libgifcodec_path,
+    ]
+    include_dirs = public_include_dirs
+    import(_libgifcodec_gni_path)
+    sources = rebase_path(libgifcodec_sources + libgifcodec_public,
+                          ".",
+                          skia_libgifcodec_path)
+  }
 }
 
 optional("heif") {
@@ -1306,6 +1321,8 @@ if (skia_enable_tools) {
       "tools/gpu/MemoryCache.h",
       "tools/gpu/ProxyUtils.cpp",
       "tools/gpu/TestContext.cpp",
+      "tools/gpu/TestOps.cpp",
+      "tools/gpu/TestOps.h",
       "tools/gpu/YUVUtils.cpp",
       "tools/gpu/YUVUtils.h",
       "tools/gpu/mock/MockTestContext.cpp",
@@ -1740,6 +1757,7 @@ if (skia_enable_tools) {
     }
     test_app("fm") {
       sources = [
+        "dm/DMGpuTestProcs.cpp",  # blech
         "tools/fm/fm.cpp",
       ]
       deps = [
@@ -1751,6 +1769,7 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":hash_and_encode",
         ":skia",
+        ":tests",
         ":tool_utils",
         ":trace",
         "modules/skottie",

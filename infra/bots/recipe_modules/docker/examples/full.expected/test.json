@@ -131,11 +131,15 @@
       "2",
       "my.docker.image",
       "/SRC/../do-stuff.sh",
-      "--key",
-      "value"
+      "--src",
+      "/SRC",
+      "--out",
+      "/OUT"
     ],
     "env": {
-      "DOCKER_CONFIG": "/home/chrome-bot/.docker"
+      "CHROME_HEADLESS": "1",
+      "DOCKER_CONFIG": "/home/chrome-bot/.docker",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "do Docker stuff"
   },

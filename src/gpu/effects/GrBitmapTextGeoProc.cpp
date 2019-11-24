@@ -164,6 +164,8 @@ void GrBitmapTextGeoProc::addNewProxies(const sk_sp<GrTextureProxy>* proxies,
                                         int numActiveProxies,
                                         const GrSamplerState& params) {
     SkASSERT(numActiveProxies <= kMaxTextures);
+    // Just to make sure we don't try to add too many proxies
+    numActiveProxies = SkTMin(numActiveProxies, kMaxTextures);
 
     if (!fTextureSamplers[0].isInitialized()) {
         fAtlasDimensions = proxies[0]->dimensions();
@@ -196,7 +198,7 @@ GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrBitmapTextGeoProc);
 
 #if GR_TEST_UTILS
 
-sk_sp<GrGeometryProcessor> GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* d) {
+GrGeometryProcessor* GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx
                                         : GrProcessorUnitTest::kAlphaTextureIdx;
     sk_sp<GrTextureProxy> proxies[kMaxTextures] = {
@@ -225,7 +227,7 @@ sk_sp<GrGeometryProcessor> GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* 
             break;
     }
 
-    return GrBitmapTextGeoProc::Make(*d->caps()->shaderCaps(),
+    return GrBitmapTextGeoProc::Make(d->allocator(), *d->caps()->shaderCaps(),
                                      SkPMColor4f::FromBytes_RGBA(GrRandomColor(d->fRandom)),
                                      d->fRandom->nextBool(),
                                      proxies, 1, samplerState, format,

@@ -207,7 +207,6 @@ type Config struct {
 	Project string `json:"project"`
 
 	// Service accounts.
-	ServiceAccountAndroidFrameworkCompile string `json:"service_account_android_framework_compile"`
 	ServiceAccountCompile                 string `json:"service_account_compile"`
 	ServiceAccountHousekeeper             string `json:"service_account_housekeeper"`
 	ServiceAccountRecreateSKPs            string `json:"service_account_recreate_skps"`
@@ -463,7 +462,7 @@ func (b *builder) deriveCompileTaskName(jobName string, parts map[string]string)
 				"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind",
 				"ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
 				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9",
-				"BonusConfigs", "SkottieTracing", "SkottieWASM", "NonNVPR", "Mskp"}
+				"BonusConfigs", "SkottieTracing", "SkottieWASM", "NonNVPR", "Mskp", "Docker"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -488,6 +487,11 @@ func (b *builder) deriveCompileTaskName(jobName string, parts map[string]string)
 			task_os = "Mac"
 		} else if strings.Contains(task_os, "Win") {
 			task_os = "Win"
+		} else if parts["compiler"] == "GCC" && task_os == "Debian10" {
+			// GCC compiles are now on a Docker container. We use the same OS and
+			// version to compile as to test.
+			// TODO(dogben): Remove Debian10 criteria above.
+			ec = append(ec, "Docker")
 		} else if strings.Contains(task_os, "Ubuntu") || strings.Contains(task_os, "Debian") {
 			task_os = "Debian9"
 		} else if strings.Contains(task_os, "Mac") {
@@ -542,7 +546,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 	d := map[string]string{
 		"pool": b.cfg.Pool,
 	}
-	if strings.Contains(parts["extra_config"], "Docker") && parts["role"] == "Build" {
+	if strings.Contains(parts["extra_config"], "Docker") && (parts["role"] == "Build" || (parts["cpu_or_gpu"] == "CPU" && parts["model"] == "GCE")) {
 		return b.dockerGceDimensions()
 	}
 	if os, ok := parts["os"]; ok {
@@ -1108,7 +1112,7 @@ func (b *builder) housekeeper(name string) string {
 // the name of the last task in the generated chain of tasks, which the Job
 // should add as a dependency.
 func (b *builder) androidFrameworkCompile(name string) string {
-	task := b.kitchenTask(name, "android_compile", "compile_android_framework.isolate", b.cfg.ServiceAccountAndroidFrameworkCompile, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
+	task := b.kitchenTask(name, "android_compile", "compile_android_framework.isolate", "skia-android-framework-compile@skia-swarming-bots.iam.gserviceaccount.com", b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
 	timeout(task, 2*time.Hour)
 	b.usesGit(task, name)
 	b.MustAddTask(name, task)
@@ -1119,8 +1123,9 @@ func (b *builder) androidFrameworkCompile(name string) string {
 // the name of the last task in the generated chain of tasks, which the Job
 // should add as a dependency.
 func (b *builder) g3FrameworkCompile(name string) string {
-	task := b.kitchenTask(name, "g3_compile", "compile_g3_framework.isolate", b.cfg.ServiceAccountCompile, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
+	task := b.kitchenTask(name, "g3_compile", "compile_g3_framework.isolate", "skia-g3-framework-compile@skia-swarming-bots.iam.gserviceaccount.com", b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
 	timeout(task, 3*time.Hour)
+	b.usesGit(task, name)
 	b.MustAddTask(name, task)
 	return name
 }

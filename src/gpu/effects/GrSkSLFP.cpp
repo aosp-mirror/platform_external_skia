@@ -157,6 +157,14 @@ public:
             return kFloat4_GrSLType;
         } else if (type == *fContext.fHalf4_Type) {
             return kHalf4_GrSLType;
+        } else if (type == *fContext.fFloat2x2_Type) {
+            return kFloat2x2_GrSLType;
+        } else if (type == *fContext.fHalf2x2_Type) {
+            return kHalf2x2_GrSLType;
+        } else if (type == *fContext.fFloat3x3_Type) {
+            return kFloat3x3_GrSLType;
+        } else if (type == *fContext.fHalf3x3_Type) {
+            return kHalf3x3_GrSLType;
         } else if (type == *fContext.fFloat4x4_Type) {
             return kFloat4x4_GrSLType;
         } else if (type == *fContext.fHalf4x4_Type) {
@@ -452,6 +460,19 @@ GrGLSLFragmentProcessor* GrSkSLFP::onCreateGLSLInstance() const {
                             formatArgs, functions);
 }
 
+static void copy_floats_key(char* inputs, GrProcessorKeyBuilder* b, bool isIn, int count,
+                            size_t* offset, SkSL::String* key) {
+    if (isIn) {
+        for (size_t i = 0; i < sizeof(float) * count; ++i) {
+            (*key) += inputs[*offset + i];
+            b->add32(*(int32_t*) (inputs + *offset));
+            (*offset) += sizeof(float);
+        }
+    } else {
+        (*offset) += sizeof(float) * count;
+    }
+}
+
 void GrSkSLFP::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                      GrProcessorKeyBuilder* b) const {
     this->createFactory();
@@ -460,8 +481,7 @@ void GrSkSLFP::onGetGLSLProcessorKey(const GrShaderCaps& caps,
     char* inputs = (char*) fInputs.get();
     const SkSL::Context& context = fFactory->fCompiler.context();
     for (const auto& v : fFactory->fInAndUniformVars) {
-        if (&v->fType == context.fFragmentProcessor_Type.get() ||
-            (v->fModifiers.fFlags & SkSL::Modifiers::kUniform_Flag)) {
+        if (&v->fType == context.fFragmentProcessor_Type.get()) {
             continue;
         }
         switch (get_ctype(context, *v)) {
@@ -496,24 +516,19 @@ void GrSkSLFP::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                 offset += sizeof(float);
                 break;
             }
+            case SkSL::Layout::CType::kFloat2:
+                copy_floats_key(inputs, b, v->fModifiers.fFlags & SkSL::Modifiers::kIn_Flag, 2,
+                                &offset, &fKey);
+                break;
+            case SkSL::Layout::CType::kFloat3:
+                copy_floats_key(inputs, b, v->fModifiers.fFlags & SkSL::Modifiers::kIn_Flag, 3,
+                                &offset, &fKey);
+                break;
             case SkSL::Layout::CType::kSkPMColor:
             case SkSL::Layout::CType::kSkPMColor4f:
             case SkSL::Layout::CType::kSkRect:
-                if (v->fModifiers.fFlags & SkSL::Modifiers::kIn_Flag) {
-                    for (size_t i = 0; i < sizeof(float) * 4; ++i) {
-                        fKey += inputs[offset + i];
-                    }
-                    b->add32(*(int32_t*) (inputs + offset));
-                    offset += sizeof(float);
-                    b->add32(*(int32_t*) (inputs + offset));
-                    offset += sizeof(float);
-                    b->add32(*(int32_t*) (inputs + offset));
-                    offset += sizeof(float);
-                    b->add32(*(int32_t*) (inputs + offset));
-                    offset += sizeof(float);
-                } else {
-                    offset += sizeof(float) * 4;
-                }
+                copy_floats_key(inputs, b, v->fModifiers.fFlags & SkSL::Modifiers::kIn_Flag, 4,
+                                &offset, &fKey);
                 break;
             default:
                 // unsupported input var type

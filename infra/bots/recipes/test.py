@@ -486,16 +486,6 @@ def dm_flags(api, bot):
     # Android and iOS. skia:5438
     blacklist('_ test _ GrShape')
 
-  if api.vars.internal_hardware_label == '2':
-    # skia:7160
-    blacklist('_ test _ SRGBReadWritePixels')
-    blacklist('_ test _ SRGBMipMap')
-    # skia:9517
-    blacklist('_ test _ CharacterizationBackendAllocationTest')
-    blacklist('_ test _ ColorTypeBackendAllocationTest')
-    blacklist('_ test _ GLBackendAllocationTest')
-    blacklist('_ test _ VKBackendAllocationTest')
-
   if api.vars.internal_hardware_label == '5':
     # http://b/118312149#comment9
     blacklist('_ test _ SRGBReadWritePixels')
@@ -1036,6 +1026,7 @@ TEST_BUILDERS = [
   'Test-Debian9-Clang-GCE-GPU-SwiftShader-x86_64-Release-All-SwiftShader',
   'Test-Debian9-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan',
   'Test-Debian9-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-Vulkan',
+  'Test-Debian10-GCC-GCE-CPU-AVX2-x86_64-Debug-All-Docker',
   'Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All-Metal',
   ('Test-Mac10.13-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Release-All'
    '-NativeFonts'),
@@ -1236,28 +1227,6 @@ def GenTests(api):
     api.step_data(retry_step_name, retcode=1) +
     api.step_data(retry_step_name + ' (attempt 2)', retcode=1) +
     api.step_data(retry_step_name + ' (attempt 3)', retcode=1)
-  )
-
-  yield (
-    api.test('internal_bot_2') +
-    api.properties(buildername=builder,
-                   buildbucket_build_id='123454321',
-                   revision='abc123',
-                   path_config='kitchen',
-                   swarm_out_dir='[SWARM_OUT_DIR]',
-                   gold_hashes_url='https://example.com/hashes.txt',
-                   internal_hardware_label='2',
-                   task_id='task_12345') +
-    api.path.exists(
-        api.path['start_dir'].join('skia'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skimage', 'VERSION'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skp', 'VERSION'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'svg', 'VERSION'),
-        api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-    )
   )
 
   yield (

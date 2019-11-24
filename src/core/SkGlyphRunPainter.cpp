@@ -572,7 +572,7 @@ void GrTextBlob::processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawab
     for (auto t : drawables) {
         const SkPath* path; SkPoint pos;
         std::tie(path, pos) = t;
-        run->appendPathGlyph(*path, pos, strikeSpec.strikeToSourceRatio(), false);
+        run->appendPathGlyph(*path, pos, strikeSpec.strikeToSourceRatio());
     }
 }
 
@@ -678,7 +678,7 @@ std::unique_ptr<GrDrawOp> GrTextContext::createOp_TestingOnly(GrRecordingContext
                 glyphRunList, rtc->textTarget()->glyphPainter());
     }
 
-    return blob->test_makeOp(textLen, 0, 0, viewMatrix, x, y, skPaint, filteredColor, surfaceProps,
+    return blob->test_makeOp(textLen, viewMatrix, x, y, skPaint, filteredColor, surfaceProps,
                              textContext->dfAdjustTable(), rtc->textTarget());
 }
 

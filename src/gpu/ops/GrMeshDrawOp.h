@@ -44,8 +44,8 @@ protected:
                       int indicesPerRepetition, int repeatCount, int maxRepetitions);
 
         /** Called to issue draws to the GrMeshDrawOp::Target.*/
-        void recordDraw(Target*, sk_sp<const GrGeometryProcessor>) const;
-        void recordDraw(Target*, sk_sp<const GrGeometryProcessor>,
+        void recordDraw(Target*, const GrGeometryProcessor*) const;
+        void recordDraw(Target*, const GrGeometryProcessor*,
                         const GrPipeline::FixedDynamicState*) const;
 
         void* vertices() const { return fVertices; }
@@ -89,15 +89,17 @@ protected:
 private:
     void onPrePrepare(GrRecordingContext* context,
                       const GrSurfaceProxyView* dstView,
-                      const GrAppliedClip* clip) final {
-        this->onPrePrepareDraws(context, dstView, clip);
+                      GrAppliedClip* clip,
+                      const GrXferProcessor::DstProxyView& dstProxyView) final {
+        this->onPrePrepareDraws(context, dstView, clip, dstProxyView);
     }
     void onPrepare(GrOpFlushState* state) final;
 
     // Only the GrTextureOp currently overrides this virtual
     virtual void onPrePrepareDraws(GrRecordingContext*,
                                    const GrSurfaceProxyView*,
-                                   const GrAppliedClip*) {}
+                                   GrAppliedClip*,
+                                   const GrXferProcessor::DstProxyView&) {}
 
     virtual void onPrepareDraws(Target*) = 0;
     typedef GrDrawOp INHERITED;
@@ -109,7 +111,7 @@ public:
 
     /** Adds a draw of a mesh. */
     virtual void recordDraw(
-            sk_sp<const GrGeometryProcessor>, const GrMesh[], int meshCnt,
+            const GrGeometryProcessor*, const GrMesh[], int meshCnt,
             const GrPipeline::FixedDynamicState*, const GrPipeline::DynamicStateArrays*,
             GrPrimitiveType) = 0;
 
@@ -117,11 +119,11 @@ public:
      * Helper for drawing GrMesh(es) with zero primProc textures and no dynamic state besides the
      * scissor clip.
      */
-    void recordDraw(sk_sp<const GrGeometryProcessor> gp, const GrMesh meshes[], int meshCnt,
+    void recordDraw(const GrGeometryProcessor* gp, const GrMesh meshes[], int meshCnt,
                     GrPrimitiveType primitiveType) {
         static constexpr int kZeroPrimProcTextures = 0;
         auto fixedDynamicState = this->makeFixedDynamicState(kZeroPrimProcTextures);
-        this->recordDraw(std::move(gp), meshes, meshCnt, fixedDynamicState, nullptr, primitiveType);
+        this->recordDraw(gp, meshes, meshCnt, fixedDynamicState, nullptr, primitiveType);
     }
 
     /**
@@ -186,7 +188,7 @@ public:
 
     virtual GrRenderTargetProxy* proxy() const = 0;
 
-    virtual const GrAppliedClip* appliedClip() = 0;
+    virtual const GrAppliedClip* appliedClip() const = 0;
     virtual GrAppliedClip detachAppliedClip() = 0;
 
     virtual const GrXferProcessor::DstProxyView& dstProxyView() const = 0;

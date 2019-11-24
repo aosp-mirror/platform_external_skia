@@ -47,6 +47,7 @@ cc_library_static {
     local_include_dirs: [
         "",
         "include/third_party/skcms",
+        "third_party/libgifcodec/",
     ],
 
     srcs: [
@@ -69,7 +70,6 @@ cc_library_static {
         "src/codec/SkCodecImageGenerator.cpp",
         "src/codec/SkColorTable.cpp",
         "src/codec/SkEncodedInfo.cpp",
-        "src/codec/SkGifCodec.cpp",
         "src/codec/SkIcoCodec.cpp",
         "src/codec/SkJpegCodec.cpp",
         "src/codec/SkJpegDecoderMgr.cpp",
@@ -476,7 +476,8 @@ cc_library_static {
         "src/xml/SkDOM.cpp",
         "src/xml/SkXMLParser.cpp",
         "src/xml/SkXMLWriter.cpp",
-        "third_party/gif/SkGifImageReader.cpp",
+        "third_party/libgifcodec/SkGifImageReader.cpp",
+        "third_party/libgifcodec/SkLibGifCodec.cpp",
         "third_party/skcms/skcms.cc",
     ],
 
@@ -798,7 +799,6 @@ cc_library_static {
           "src/gpu/text/GrTextContext.cpp",
           "src/gpu/vk/GrVkAMDMemoryAllocator.cpp",
           "src/gpu/vk/GrVkBuffer.cpp",
-          "src/gpu/vk/GrVkBufferView.cpp",
           "src/gpu/vk/GrVkCaps.cpp",
           "src/gpu/vk/GrVkCommandBuffer.cpp",
           "src/gpu/vk/GrVkCommandPool.cpp",
@@ -1050,6 +1050,7 @@ cc_test {
         "modules/skottie/include/",
         "modules/skottie/utils/",
         "modules/sksg/include/",
+        "third_party/libgifcodec/",
     ],
 
     srcs: [
@@ -1844,6 +1845,7 @@ cc_test {
         "tools/gpu/MemoryCache.cpp",
         "tools/gpu/ProxyUtils.cpp",
         "tools/gpu/TestContext.cpp",
+        "tools/gpu/TestOps.cpp",
         "tools/gpu/YUVUtils.cpp",
         "tools/gpu/atlastext/GLTestAtlasTextRenderer.cpp",
         "tools/gpu/gl/GLTestContext.cpp",
@@ -1877,6 +1879,7 @@ cc_test {
         "include/third_party/vulkan/",
         "modules/sksg/include/",
         "modules/skshaper/include/",
+        "third_party/libgifcodec/",
     ],
 
     srcs: [
@@ -2435,6 +2438,7 @@ cc_test {
         "tools/gpu/MemoryCache.cpp",
         "tools/gpu/ProxyUtils.cpp",
         "tools/gpu/TestContext.cpp",
+        "tools/gpu/TestOps.cpp",
         "tools/gpu/YUVUtils.cpp",
         "tools/gpu/atlastext/GLTestAtlasTextRenderer.cpp",
         "tools/gpu/gl/GLTestContext.cpp",

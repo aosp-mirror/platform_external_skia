@@ -47,6 +47,10 @@
 #define SK_SUPPORT_PDF
 #endif
 
+#ifndef SK_USE_LIBGIFCODEC
+#define SK_USE_LIBGIFCODEC
+#endif
+
 #ifndef SK_VULKAN
 #define SK_VULKAN
 #endif

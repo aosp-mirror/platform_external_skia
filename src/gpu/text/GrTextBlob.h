@@ -247,7 +247,7 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Internal test methods
-    std::unique_ptr<GrDrawOp> test_makeOp(int glyphCount, uint16_t run, uint16_t subRun,
+    std::unique_ptr<GrDrawOp> test_makeOp(int glyphCount,
                                           const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
                                           const SkPaint& paint, const SkPMColor4f& filteredColor,
                                           const SkSurfaceProps&, const GrDistanceFieldAdjustTable*,
@@ -422,8 +422,7 @@ public:
         }
 
         // Appends a glyph to the blob as a path only.
-        void appendPathGlyph(
-                const SkPath& path, SkPoint position, SkScalar scale, bool preTransformed);
+        void appendPathGlyph(const SkPath& path, SkPoint position, SkScalar scale);
 
         // Append a glyph to the sub run taking care to switch the glyph if needed.
         void switchSubRunIfNeededAndAppendGlyph(GrGlyph* glyph,
@@ -472,17 +471,15 @@ public:
         // Any glyphs that can't be rendered with the base or override descriptor
         // are rendered as paths
         struct PathGlyph {
-            PathGlyph(const SkPath& path, SkScalar x, SkScalar y, SkScalar scale, bool preXformed)
+            PathGlyph(const SkPath& path, SkScalar x, SkScalar y, SkScalar scale)
                 : fPath(path)
                 , fX(x)
                 , fY(y)
-                , fScale(scale)
-                , fPreTransformed(preXformed) {}
+                , fScale(scale) { }
             SkPath fPath;
             SkScalar fX;
             SkScalar fY;
             SkScalar fScale;
-            bool fPreTransformed;
         };
 
         SkSTArray<1, SubRun> fSubRunInfo;
@@ -505,7 +502,7 @@ public:
 
 private:
     std::unique_ptr<GrAtlasTextOp> makeOp(
-            SubRun& info, int glyphCount, uint16_t run, uint16_t subRun,
+            SubRun& info, int glyphCount,
             const SkMatrix& viewMatrix, SkScalar x, SkScalar y, const SkIRect& clipRect,
             const SkPaint& paint, const SkPMColor4f& filteredColor, const SkSurfaceProps&,
             const GrDistanceFieldAdjustTable*, GrTextTarget*);
