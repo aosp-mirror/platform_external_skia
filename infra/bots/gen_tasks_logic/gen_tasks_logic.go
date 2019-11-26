@@ -690,12 +690,12 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 					// At some point this might use the device ID, but for now it's like Chromebooks.
 					"Adreno630":     "Adreno630",
 					"GT610":         "10de:104a-23.21.13.9101",
-					"GTX660":        "10de:11c0-25.21.14.1634",
-					"GTX960":        "10de:1401-25.21.14.1634",
+					"GTX660":        "10de:11c0-26.21.14.4120",
+					"GTX960":        "10de:1401-26.21.14.4120",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
-					"IntelIris540":  "8086:1926-25.20.100.6519",
+					"IntelIris540":  "8086:1926-26.20.100.7463",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
-					"IntelIris655":  "8086:3ea5-25.20.100.6519",
+					"IntelIris655":  "8086:3ea5-26.20.100.7463",
 					"RadeonHD7770":  "1002:683d-24.20.13001.1010",
 					"RadeonR9M470X": "1002:6646-24.20.13001.1010",
 					"QuadroP400":    "10de:1cb3-25.21.14.1678",
@@ -1088,6 +1088,7 @@ func (b *builder) checkGeneratedFiles(name string) string {
 	task := b.kitchenTask(name, "check_generated_files", "swarm_recipe.isolate", b.cfg.ServiceAccountCompile, b.linuxGceDimensions(MACHINE_TYPE_LARGE), EXTRA_PROPS, OUTPUT_NONE)
 	b.usesGit(task, name)
 	b.usesGo(task, name)
+	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
 	b.MustAddTask(name, task)
 	return name
 }
