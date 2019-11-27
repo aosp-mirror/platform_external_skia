@@ -130,11 +130,6 @@ void GrTextureProxyPriv::resetDeferredUploader() {
     fTextureProxy->fDeferredUploader.reset();
 }
 
-GrSamplerState::Filter GrTextureProxy::highestFilterMode() const {
-    return this->hasRestrictedSampling() ? GrSamplerState::Filter::kBilerp
-                                         : GrSamplerState::Filter::kMipMap;
-}
-
 GrMipMapped GrTextureProxy::mipMapped() const {
     if (this->isInstantiated()) {
         return this->peekTexture()->texturePriv().mipMapped();
@@ -147,10 +142,16 @@ size_t GrTextureProxy::onUninstantiatedGpuMemorySize(const GrCaps& caps) const {
                                   this->proxyMipMapped(), !this->priv().isExact());
 }
 
-bool GrTextureProxy::ProxiesAreCompatibleAsDynamicState(const GrTextureProxy* first,
-                                                        const GrTextureProxy* second) {
+GrSamplerState::Filter GrTextureProxy::HighestFilterMode(GrTextureType textureType) {
+    return GrTextureTypeHasRestrictedSampling(textureType) ? GrSamplerState::Filter::kBilerp
+                                                           : GrSamplerState::Filter::kMipMap;
+}
+
+bool GrTextureProxy::ProxiesAreCompatibleAsDynamicState(const GrSurfaceProxy* first,
+                                                        const GrSurfaceProxy* second) {
+    // In order to be compatible, the proxies should also have the same texture type, but since
+    // that is owned by the backend format, the formats being equal is sufficient.
     return first->config() == second->config() &&
-           first->textureType() == second->textureType() &&
            first->backendFormat() == second->backendFormat();
 }
 

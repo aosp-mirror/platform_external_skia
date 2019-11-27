@@ -181,6 +181,11 @@ void GrVkOpsRenderPass::submit() {
 
     // We don't want to actually submit the secondary command buffer if it is wrapped.
     if (this->wrapsSecondaryCommandBuffer()) {
+        // We pass the ownership of the GrVkSecondaryCommandBuffer to the special wrapped
+        // GrVkRenderTarget since it's lifetime matches the lifetime we need to keep the
+        // GrVkResources on the GrVkSecondaryCommandBuffer alive.
+        static_cast<GrVkRenderTarget*>(fRenderTarget)->addWrappedGrSecondaryCommandBuffer(
+                std::move(fCurrentSecondaryCommandBuffer));
         return;
     }
 
@@ -193,7 +198,7 @@ void GrVkOpsRenderPass::submit() {
 bool GrVkOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const SkIRect& bounds,
                             const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
                             const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
-                            const SkTArray<GrTextureProxy*, true>& sampledProxies) {
+                            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
     SkASSERT(!fRenderTarget);
     SkASSERT(fGpu == rt->getContext()->priv().getGpu());
 
@@ -205,6 +210,7 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const Sk
 
     for (int i = 0; i < sampledProxies.count(); ++i) {
         if (sampledProxies[i]->isInstantiated()) {
+            SkASSERT(sampledProxies[i]->asTextureProxy());
             GrVkTexture* vkTex = static_cast<GrVkTexture*>(sampledProxies[i]->peekTexture());
             SkASSERT(vkTex);
             vkTex->setImageLayout(
@@ -226,7 +232,9 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const Sk
 
 void GrVkOpsRenderPass::reset() {
     if (fCurrentSecondaryCommandBuffer) {
-        fCurrentSecondaryCommandBuffer.release()->recycle(fGpu);
+        // The active GrVkCommandPool on the GrVkGpu should still be the same pool we got the
+        // secondary command buffer from since we haven't submitted any work yet.
+        fCurrentSecondaryCommandBuffer.release()->recycle(fGpu->cmdPool());
     }
     if (fCurrentRenderPass) {
         fCurrentRenderPass->unref(fGpu);

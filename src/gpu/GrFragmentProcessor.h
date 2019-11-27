@@ -282,17 +282,17 @@ protected:
      * callers must determine on their own if the sampling uses a decal strategy in any way, in
      * which case the texture may become transparent regardless of the color type.
      */
-    static OptimizationFlags ModulateForSamplerOptFlags(GrColorType colorType, bool samplingDecal) {
+    static OptimizationFlags ModulateForSamplerOptFlags(SkAlphaType alphaType, bool samplingDecal) {
         if (samplingDecal) {
             return kCompatibleWithCoverageAsAlpha_OptimizationFlag;
         } else {
-            return ModulateForClampedSamplerOptFlags(colorType);
+            return ModulateForClampedSamplerOptFlags(alphaType);
         }
     }
 
     // As above, but callers should somehow ensure or assert their sampler still uses clamping
-    static OptimizationFlags ModulateForClampedSamplerOptFlags(GrColorType colorType) {
-        if (!GrColorTypeHasAlpha(colorType)) {
+    static OptimizationFlags ModulateForClampedSamplerOptFlags(SkAlphaType alphaType) {
+        if (alphaType == kOpaque_SkAlphaType) {
             return kCompatibleWithCoverageAsAlpha_OptimizationFlag |
                    kPreservesOpaqueInput_OptimizationFlag;
         } else {
@@ -430,11 +430,11 @@ public:
             : fProxy(that.fProxy)
             , fSamplerState(that.fSamplerState) {}
 
-    TextureSampler(sk_sp<GrTextureProxy>, const GrSamplerState& = GrSamplerState::ClampNearest());
+    TextureSampler(sk_sp<GrSurfaceProxy>, const GrSamplerState& = GrSamplerState::ClampNearest());
 
     TextureSampler& operator=(const TextureSampler&) = delete;
 
-    void reset(sk_sp<GrTextureProxy>, const GrSamplerState&);
+    void reset(sk_sp<GrSurfaceProxy>, const GrSamplerState&);
 
     bool operator==(const TextureSampler& that) const {
         return this->proxy()->underlyingUniqueID() == that.proxy()->underlyingUniqueID() &&
@@ -451,14 +451,14 @@ public:
         return fProxy->peekTexture();
     }
 
-    GrTextureProxy* proxy() const { return fProxy.get(); }
+    GrSurfaceProxy* proxy() const { return fProxy.get(); }
     const GrSamplerState& samplerState() const { return fSamplerState; }
     const GrSwizzle& swizzle() const { return this->proxy()->textureSwizzle(); }
 
     bool isInitialized() const { return SkToBool(fProxy.get()); }
 
 private:
-    sk_sp<GrTextureProxy> fProxy;
+    sk_sp<GrSurfaceProxy> fProxy;
     GrSamplerState        fSamplerState;
 };
 
