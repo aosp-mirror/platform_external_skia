@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@f65b212492ec492756c5be216290dd886a991841",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@c373dfd84194eb79e8d1a03e6831741ad874d654",
   "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@3c086a0c2e1dc3e2e14aaa3d78c052c7e07274b4",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
@@ -37,7 +37,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@92fe999ae056b0d2a842f087ae176232d535241b",
+    "url": "https://chromium.googlesource.com/chromium/src.git@c493edcc78ba6d9cffe257db5f47eb39a29888ed",
     "condition": "checkout_chromium",
   },
 }
