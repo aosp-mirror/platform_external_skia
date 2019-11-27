@@ -465,7 +465,6 @@ cc_library_static {
         "src/utils/SkUTF.cpp",
         "src/utils/SkWhitelistTypefaces.cpp",
         "src/utils/mac/SkCreateCGImageRef.cpp",
-        "src/utils/mac/SkStream_mac.cpp",
         "src/utils/win/SkAutoCoInitialize.cpp",
         "src/utils/win/SkDWrite.cpp",
         "src/utils/win/SkDWriteFontFileStream.cpp",
