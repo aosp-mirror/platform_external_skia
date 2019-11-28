@@ -67,8 +67,8 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
     } else {
         localCoords.printf("float3(%s, 1)", localCoordsVar.c_str());
     }
-    int i = 0;
-    while (const GrCoordTransform* coordTransform = handler->nextCoordTransform()) {
+    for (int i = 0; *handler; ++*handler, ++i) {
+        auto [coordTransform, fp] = handler->get();
         SkString strUniName;
         strUniName.printf("CoordTransformMatrix_%d", i);
         const char* uniName;
@@ -77,14 +77,14 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
                                                                               strUniName.c_str(),
                                                                               &uniName).toIndex();
         GrSLType varyingType = kFloat2_GrSLType;
-        if (localMatrix.hasPerspective() || coordTransform->getMatrix().hasPerspective()
-            || threeComponentLocalCoords) {
+        if (localMatrix.hasPerspective() || coordTransform.matrix().hasPerspective() ||
+            threeComponentLocalCoords) {
             varyingType = kFloat3_GrSLType;
         }
         SkString strVaryingName;
         strVaryingName.printf("TransformedCoords_%d", i);
         GrGLSLVarying v(varyingType);
-        if (coordTransform->computeInVertexShader()) {
+        if (fp.coordTransformsApplyToLocalCoords()) {
             varyingHandler->addVarying(strVaryingName.c_str(), &v);
 
             if (kFloat2_GrSLType == varyingType) {
@@ -96,16 +96,15 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
         handler->specifyCoordsForCurrCoordTransform(SkString(uniName),
                                                     fInstalledTransforms.back().fHandle,
                                                     GrShaderVar(SkString(v.fsIn()), varyingType));
-        ++i;
     }
 }
 
 void GrGLSLGeometryProcessor::setTransformDataHelper(const SkMatrix& localMatrix,
                                                      const GrGLSLProgramDataManager& pdman,
-                                                     FPCoordTransformIter* transformIter) {
+                                                     const CoordTransformRange& transformRange) {
     int i = 0;
-    while (const GrCoordTransform* coordTransform = transformIter->next()) {
-        const SkMatrix& m = GetTransformMatrix(localMatrix, *coordTransform);
+    for (auto [transform, fp] : transformRange) {
+        const SkMatrix& m = GetTransformMatrix(localMatrix, transform);
         if (!fInstalledTransforms[i].fCurrentValue.cheapEqualTo(m)) {
             pdman.setSkMatrix(fInstalledTransforms[i].fHandle.toIndex(), m);
             fInstalledTransforms[i].fCurrentValue = m;

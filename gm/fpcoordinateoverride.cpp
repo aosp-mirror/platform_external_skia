@@ -26,6 +26,7 @@
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/effects/GrRRectEffect.h"
 #include "src/gpu/effects/GrSkSLFP.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ops/GrFillRectOp.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -36,7 +37,7 @@ public:
 
     SampleCoordEffect(std::unique_ptr<GrFragmentProcessor> child)
         : INHERITED(CLASS_ID, kNone_OptimizationFlags) {
-        child->setComputeLocalCoordsInVertexShader(false);
+        child->setSampledWithExplicitCoords(true);
         this->registerChildProcessor(std::move(child));
     }
 

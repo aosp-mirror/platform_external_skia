@@ -8,6 +8,7 @@
 #include "src/gpu/ccpr/GrGSCoverageProcessor.h"
 
 #include "src/gpu/GrMesh.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 
 using InputType = GrGLSLGeometryBuilder::InputType;
@@ -23,8 +24,8 @@ protected:
     virtual bool hasCoverage(const GrGSCoverageProcessor& proc) const { return false; }
 
     void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&,
-                 FPCoordTransformIter&& transformIter) final {
-        this->setTransformDataHelper(SkMatrix::I(), pdman, &transformIter);
+                 const CoordTransformRange& transformRange) final {
+        this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
     }
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) final {
@@ -39,7 +40,7 @@ protected:
         this->emitGeometryShader(proc, varyingHandler, args.fGeomBuilder, args.fRTAdjustName);
         varyingHandler->emitAttributes(proc);
         varyingHandler->setNoPerspective();
-        SkASSERT(!args.fFPCoordTransformHandler->nextCoordTransform());
+        SkASSERT(!*args.fFPCoordTransformHandler);
 
         // Fragment shader.
         GrGLSLFPFragmentBuilder* f = args.fFragBuilder;

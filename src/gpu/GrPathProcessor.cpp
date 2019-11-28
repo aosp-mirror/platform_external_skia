@@ -58,11 +58,10 @@ public:
 
     void emitTransforms(GrGLSLVaryingHandler* varyingHandler,
                         FPCoordTransformHandler* transformHandler) {
-        int i = 0;
-        while (const GrCoordTransform* coordTransform = transformHandler->nextCoordTransform()) {
+        for (int i = 0; *transformHandler; ++*transformHandler, ++i) {
+            auto [coordTransform, fp] = transformHandler->get();
             GrSLType varyingType =
-                    coordTransform->getMatrix().hasPerspective() ? kHalf3_GrSLType
-                                                                 : kHalf2_GrSLType;
+                    coordTransform.matrix().hasPerspective() ? kHalf3_GrSLType : kHalf2_GrSLType;
 
             SkString strVaryingName;
             strVaryingName.printf("TransformedCoord_%d", i);
@@ -75,17 +74,16 @@ public:
             fInstalledTransforms.back().fType = varyingType;
 
             transformHandler->specifyCoordsForCurrCoordTransform(
-                                                        matrix_to_sksl(coordTransform->getMatrix()),
-                                                        UniformHandle(),
-                                                        GrShaderVar(SkString(v.fsIn()),
-                                                                             varyingType));
+                    matrix_to_sksl(coordTransform.matrix()),
+                    UniformHandle(),
+                    GrShaderVar(SkString(v.fsIn()), varyingType));
             ++i;
         }
     }
 
     void setData(const GrGLSLProgramDataManager& pd,
                  const GrPrimitiveProcessor& primProc,
-                 FPCoordTransformIter&& transformIter) override {
+                 const CoordTransformRange& transformRange) override {
         const GrPathProcessor& pathProc = primProc.cast<GrPathProcessor>();
         if (pathProc.color() != fColor) {
             pd.set4fv(fColorUniform, 1, pathProc.color().vec());
@@ -93,9 +91,9 @@ public:
         }
 
         int t = 0;
-        while (const GrCoordTransform* coordTransform = transformIter.next()) {
+        for (auto [transform, fp] : transformRange) {
             SkASSERT(fInstalledTransforms[t].fHandle.isValid());
-            const SkMatrix& m = GetTransformMatrix(pathProc.localMatrix(), *coordTransform);
+            const SkMatrix& m = GetTransformMatrix(pathProc.localMatrix(), transform);
             if (fInstalledTransforms[t].fCurrentValue.cheapEqualTo(m)) {
                 continue;
             }
