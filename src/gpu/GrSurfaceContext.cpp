@@ -105,12 +105,10 @@ bool GrSurfaceContext::readPixels(const GrImageInfo& origDstInfo, void* dst, siz
     // Our tight row bytes may have been changed by clipping.
     tightRowBytes = dstInfo.minRowBytes();
 
-
     SkColorSpaceXformSteps::Flags flags = SkColorSpaceXformSteps{this->colorInfo(), dstInfo}.flags;
     bool unpremul            = flags.unpremul,
          needColorConversion = flags.linearize || flags.gamut_transform || flags.encode,
          premul              = flags.premul;
-
 
     const GrCaps* caps = direct->priv().caps();
     // This is the getImageData equivalent to the canvas2D putImageData fast path. We probably don't

@@ -209,17 +209,19 @@ void SkGlyphRunListPainter::processGlyphRunList(const SkGlyphRunList& glyphRunLi
             std::tie(strikeSpec, minScale, maxScale) =
                     SkStrikeSpec::MakeSDFT(runFont, runPaint, fDeviceProps, viewMatrix, options);
 
-            SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
+            if (!strikeSpec.isEmpty()) {
+                SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
 
-            fDrawable.startSource(fRejects.source(), origin);
-            strike->prepareForSDFTDrawing(&fDrawable, &fRejects);
-            fRejects.flipRejectsToSource();
+                fDrawable.startSource(fRejects.source(), origin);
+                strike->prepareForSDFTDrawing(&fDrawable, &fRejects);
+                fRejects.flipRejectsToSource();
 
-            if (process) {
-                // processSourceSDFT must be called even if there are no glyphs to make sure runs
-                // are set correctly.
-                process->processSourceSDFT(
-                        fDrawable.drawable(), strikeSpec, runFont, minScale, maxScale);
+                if (process) {
+                    // processSourceSDFT must be called even if there are no glyphs to make sure
+                    // runs are set correctly.
+                    process->processSourceSDFT(
+                            fDrawable.drawable(), strikeSpec, runFont, minScale, maxScale);
+                }
             }
         }
 
@@ -232,18 +234,20 @@ void SkGlyphRunListPainter::processGlyphRunList(const SkGlyphRunList& glyphRunLi
             SkStrikeSpec strikeSpec = SkStrikeSpec::MakePath(
                     runFont, runPaint, fDeviceProps, fScalerContextFlags);
 
-            SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
+            if (!strikeSpec.isEmpty()) {
+                SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
 
-            fDrawable.startSource(fRejects.source(), origin);
-            strike->prepareForPathDrawing(&fDrawable, &fRejects);
-            fRejects.flipRejectsToSource();
-            maxDimensionInSourceSpace =
-                    fRejects.rejectedMaxDimension() * strikeSpec.strikeToSourceRatio();
+                fDrawable.startSource(fRejects.source(), origin);
+                strike->prepareForPathDrawing(&fDrawable, &fRejects);
+                fRejects.flipRejectsToSource();
+                maxDimensionInSourceSpace =
+                        fRejects.rejectedMaxDimension() * strikeSpec.strikeToSourceRatio();
 
-            if (process) {
-                // processSourcePaths must be called even if there are no glyphs to make sure runs
-                // are set correctly.
-                process->processSourcePaths(fDrawable.drawable(), runFont, strikeSpec);
+                if (process) {
+                    // processSourcePaths must be called even if there are no glyphs to make sure
+                    // runs are set correctly.
+                    process->processSourcePaths(fDrawable.drawable(), runFont, strikeSpec);
+                }
             }
         }
 
@@ -315,15 +319,17 @@ void SkGlyphRunListPainter::processGlyphRunList(const SkGlyphRunList& glyphRunLi
                         runFont, runPaint, fDeviceProps,
                         fScalerContextFlags, maxDimensionInSourceSpace);
 
-                SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
+                if (!strikeSpec.isEmpty()) {
+                    SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
 
-                fDrawable.startSource(fRejects.source(), origin);
-                strike->prepareForMaskDrawing(&fDrawable, &fRejects);
-                fRejects.flipRejectsToSource();
-                SkASSERT(fRejects.source().empty());
+                    fDrawable.startSource(fRejects.source(), origin);
+                    strike->prepareForMaskDrawing(&fDrawable, &fRejects);
+                    fRejects.flipRejectsToSource();
+                    SkASSERT(fRejects.source().empty());
 
-                if (process) {
-                    process->processSourceMasks(fDrawable.drawable(), strikeSpec);
+                    if (process) {
+                        process->processSourceMasks(fDrawable.drawable(), strikeSpec);
+                    }
                 }
             }
         }
@@ -546,10 +552,8 @@ void GrTextBlob::SubRun::appendGlyphs(const SkZip<SkGlyphVariant, SkPoint>& draw
     // overwritten. Similarly, we always write the color and the blob will later overwrite it
     // with texture coords if it is unused.
     size_t colorOffset = hasW ? sizeof(SkPoint3) : sizeof(SkPoint);
-    for (auto t : drawables) {
-        SkGlyph* skGlyph; SkPoint pos;
-        std::tie(skGlyph, pos) = t;
-
+    for (auto [variant, pos] : drawables) {
+        SkGlyph* skGlyph = variant;
         GrGlyph* grGlyph = grStrike->getGlyph(*skGlyph);
         // Only floor the device coordinates.
         SkRect dstRect;
@@ -605,12 +609,12 @@ void GrTextBlob::addMultiMaskFormat(
     this->setHasBitmap();
     if (drawables.empty()) { return; }
 
-    SkGlyph* glyph;
-    std::tie(glyph, std::ignore) = drawables[0];
+    auto glyphSpan = drawables.get<0>();
+    SkGlyph* glyph = glyphSpan[0];
     GrMaskFormat format = GrGlyph::FormatFromSkGlyph(glyph->maskFormat());
     size_t startIndex = 0;
     for (size_t i = 1; i < drawables.size(); i++) {
-        std::tie(glyph, std::ignore) = drawables[i];
+        glyph = glyphSpan[i];
         GrMaskFormat nextFormat = GrGlyph::FormatFromSkGlyph(glyph->maskFormat());
         if (format != nextFormat) {
             auto sameFormat = drawables.subspan(startIndex, i - startIndex);
@@ -647,10 +651,8 @@ void GrTextBlob::processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawab
     this->setHasBitmap();
     SubRun& subRun = fSubRuns.emplace_back(this, strikeSpec);
     subRun.setAntiAliased(runFont.hasSomeAntiAliasing());
-    for (auto t : drawables) {
-        const SkPath* path; SkPoint pos;
-        std::tie(path, pos) = t;
-        subRun.fPaths.emplace_back(*path, pos);
+    for (auto [variant, pos] : drawables) {
+        subRun.fPaths.emplace_back(*variant.path(), pos);
     }
 }
 

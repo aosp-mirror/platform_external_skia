@@ -56,7 +56,8 @@ void SkSpriteBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {
 class SkSpriteBlitter_Memcpy final : public SkSpriteBlitter {
 public:
     static bool Supports(const SkPixmap& dst, const SkPixmap& src, const SkPaint& paint) {
-        SkASSERT(0 == SkColorSpaceXformSteps(src, dst).flags.mask());
+        // the caller has already inspected the colorspace on src and dst
+        SkASSERT(0 == SkColorSpaceXformSteps(src,dst).flags.mask());
 
         if (dst.colorType() != src.colorType()) {
             return false;
