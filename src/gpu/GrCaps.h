@@ -39,6 +39,7 @@ public:
     void dumpJSON(SkJSONWriter*) const;
 
     const GrShaderCaps* shaderCaps() const { return fShaderCaps.get(); }
+    sk_sp<const GrShaderCaps> refShaderCaps() const { return fShaderCaps; }
 
     bool npotTextureTileSupport() const { return fNPOTTextureTileSupport; }
     /** To avoid as-yet-unnecessary complexity we don't allow any partial support of MIP Maps (e.g.
@@ -523,7 +524,7 @@ protected:
 
     BlendEquationSupport fBlendEquationSupport;
     uint32_t fAdvBlendEqBlacklist;
-    GR_STATIC_ASSERT(kLast_GrBlendEquation < 32);
+    static_assert(kLast_GrBlendEquation < 32);
 
     uint32_t fMapBufferFlags;
     int fBufferMapThreshold;
