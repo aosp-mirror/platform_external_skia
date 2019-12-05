@@ -96,34 +96,7 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
     SkPoint origin = glyphRunList.origin();
     for (auto& glyphRun : glyphRunList) {
         const SkFont& runFont = glyphRun.font();
-#ifdef SK_SUPPORT_LEGACY_CPU_EMOJI
-        if (SkStrikeSpec::ShouldDrawAsPath(runPaint, runFont, deviceMatrix)) {
 
-            SkStrikeSpec strikeSpec = SkStrikeSpec::MakePath(
-                    runFont, runPaint, props, fScalerContextFlags);
-
-            auto strike = strikeSpec.findOrCreateExclusiveStrike();
-
-            fDrawable.startSource(glyphRun.source(), origin);
-            strike->prepareForDrawingPathsCPU(&fDrawable);
-
-            // The paint we draw paths with must have the same anti-aliasing state as the runFont
-            // allowing the paths to have the same edging as the glyph masks.
-            SkPaint pathPaint = runPaint;
-            pathPaint.setAntiAlias(runFont.hasSomeAntiAliasing());
-
-            bitmapDevice->paintPaths(&fDrawable, strikeSpec.strikeToSourceRatio(), pathPaint);
-        } else {
-            SkStrikeSpec strikeSpec = SkStrikeSpec::MakeMask(
-                    runFont, runPaint, props, fScalerContextFlags, deviceMatrix);
-
-            auto strike = strikeSpec.findOrCreateExclusiveStrike();
-
-            fDrawable.startDevice(glyphRun.source(), origin, deviceMatrix, strike->roundingSpec());
-            strike->prepareForDrawingMasksCPU(&fDrawable);
-            bitmapDevice->paintMasks(&fDrawable, runPaint);
-        }
-#else
         fRejects.setSource(glyphRun.source());
 
         if (SkStrikeSpec::ShouldDrawAsPath(runPaint, runFont, deviceMatrix)) {
@@ -157,8 +130,6 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
 
         // TODO: have the mask stage above reject the glyphs that are too big, and handle the
         //  rejects in a more sophisticated stage.
-#endif
-
     }
 }
 
@@ -425,7 +396,7 @@ void GrTextContext::drawGlyphRunList(
             // but we'd have to clear the subrun information
             textBlobCache->remove(cacheBlob.get());
             cacheBlob = textBlobCache->makeCachedBlob(
-                    glyphRunList, grStrikeCache, key, blurRec, color, forceW);
+                    glyphRunList, grStrikeCache, key, blurRec, viewMatrix, color, forceW);
             cacheBlob->generateFromGlyphRunList(
                     *context->priv().caps()->shaderCaps(), fOptions,
                     listPaint, viewMatrix, props,
@@ -435,7 +406,7 @@ void GrTextContext::drawGlyphRunList(
 
             if (CACHE_SANITY_CHECK) {
                 sk_sp<GrTextBlob> sanityBlob(textBlobCache->makeBlob(
-                        glyphRunList, grStrikeCache, color, forceW));
+                        glyphRunList, grStrikeCache, viewMatrix, color, forceW));
                 sanityBlob->setupKey(key, blurRec, listPaint);
                 cacheBlob->generateFromGlyphRunList(
                         *context->priv().caps()->shaderCaps(), fOptions,
@@ -447,9 +418,10 @@ void GrTextContext::drawGlyphRunList(
     } else {
         if (canCache) {
             cacheBlob = textBlobCache->makeCachedBlob(
-                    glyphRunList, grStrikeCache, key, blurRec, color, forceW);
+                    glyphRunList, grStrikeCache, key, blurRec, viewMatrix, color, forceW);
         } else {
-            cacheBlob = textBlobCache->makeBlob(glyphRunList, grStrikeCache, color, forceW);
+            cacheBlob = textBlobCache->makeBlob(
+                    glyphRunList, grStrikeCache, viewMatrix, color, forceW);
         }
         cacheBlob->generateFromGlyphRunList(
                 *context->priv().caps()->shaderCaps(), fOptions, listPaint,
@@ -469,7 +441,7 @@ void GrTextBlob::generateFromGlyphRunList(const GrShaderCaps& shaderCaps,
                                           const SkGlyphRunList& glyphRunList,
                                           SkGlyphRunListPainter* glyphPainter) {
     const SkPaint& runPaint = glyphRunList.paint();
-    this->initReusableBlob(SkPaintPriv::ComputeLuminanceColor(runPaint), viewMatrix);
+    this->initReusableBlob(SkPaintPriv::ComputeLuminanceColor(runPaint));
 
     glyphPainter->processGlyphRunList(glyphRunList,
                                       viewMatrix,
@@ -702,7 +674,8 @@ std::unique_ptr<GrDrawOp> GrTextContext::createOp_TestingOnly(GrRecordingContext
     auto glyphRunList = builder.useGlyphRunList();
     sk_sp<GrTextBlob> blob;
     if (!glyphRunList.empty()) {
-        blob = direct->priv().getTextBlobCache()->makeBlob(glyphRunList, strikeCache, color, false);
+        blob = direct->priv().getTextBlobCache()->makeBlob(
+                glyphRunList, strikeCache, viewMatrix, color, false);
         blob->generateFromGlyphRunList(
                 *context->priv().caps()->shaderCaps(), textContext->fOptions,
                 skPaint, viewMatrix, surfaceProps,
