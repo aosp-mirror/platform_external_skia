@@ -271,16 +271,18 @@ AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> 
                                    sk_sp<PropertyObserver> pobserver, sk_sp<Logger> logger,
                                    sk_sp<MarkerObserver> mobserver,
                                    Animation::Builder::Stats* stats,
-                                   const SkSize& size, float duration, float framerate)
+                                   const SkSize& comp_size, float duration, float framerate,
+                                   uint32_t flags)
     : fResourceProvider(std::move(rp))
     , fLazyFontMgr(std::move(fontmgr))
     , fPropertyObserver(std::move(pobserver))
     , fLogger(std::move(logger))
     , fMarkerObserver(std::move(mobserver))
     , fStats(stats)
-    , fSize(size)
+    , fCompSize(comp_size)
     , fDuration(duration)
     , fFrameRate(framerate)
+    , fFlags(flags)
     , fHasNontrivialBlending(false) {}
 
 std::unique_ptr<sksg::Scene> AnimationBuilder::parse(const skjson::ObjectValue& jroot) {
@@ -290,7 +292,7 @@ std::unique_ptr<sksg::Scene> AnimationBuilder::parse(const skjson::ObjectValue& 
     this->parseFonts(jroot["fonts"], jroot["chars"]);
 
     AutoScope ascope(this);
-    auto root = CompositionBuilder(*this, jroot).build(*this);
+    auto root = CompositionBuilder(*this, fCompSize, jroot).build(*this);
 
     auto animators = ascope.release();
     fStats->fAnimatorCount = animators.size();
@@ -407,7 +409,7 @@ void AnimationBuilder::AutoPropertyTracker::updateContext(PropertyObserver* obse
 
 void Logger::log(Level, const char[], const char*) {}
 
-Animation::Builder::Builder()  = default;
+Animation::Builder::Builder(uint32_t flags) : fFlags(flags) {}
 Animation::Builder::~Builder() = default;
 
 Animation::Builder& Animation::Builder::setResourceProvider(sk_sp<ResourceProvider> rp) {
@@ -508,7 +510,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
                                        std::move(fPropertyObserver),
                                        std::move(fLogger),
                                        std::move(fMarkerObserver),
-                                       &fStats, size, duration, fps);
+                                       &fStats, size, duration, fps, fFlags);
     auto scene = builder.parse(json);
 
     const auto t2 = std::chrono::steady_clock::now();
@@ -521,7 +523,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
 
     uint32_t flags = 0;
     if (builder.hasNontrivialBlending()) {
-        flags |= Flags::kRequiresTopLevelIsolation;
+        flags |= Animation::Flags::kRequiresTopLevelIsolation;
     }
 
     return sk_sp<Animation>(new Animation(std::move(scene),

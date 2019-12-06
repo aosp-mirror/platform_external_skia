@@ -26,6 +26,7 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrShaderUtils.h"
+#include "src/gpu/GrSkSLFPFactoryCache.h"
 #include "src/gpu/GrSoftwarePathRenderer.h"
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/SkGr.h"
@@ -550,7 +551,9 @@ GrBackendTexture GrContext::createBackendTexture(const SkPixmap srcData[], int n
 
 void GrContext::deleteBackendTexture(GrBackendTexture backendTex) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    if (this->abandoned() || !backendTex.isValid()) {
+    // For the Vulkan backend we still must destroy the backend texture when the context is
+    // abandoned.
+    if ((this->abandoned() && this->backend() != GrBackendApi::kVulkan) || !backendTex.isValid()) {
         return;
     }
 

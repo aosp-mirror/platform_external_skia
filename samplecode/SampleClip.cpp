@@ -13,6 +13,7 @@
 #include "include/utils/SkRandom.h"
 #include "samplecode/Sample.h"
 #include "src/core/SkClipOpPriv.h"
+#include "src/core/SkPathPriv.h"
 
 constexpr int W = 150;
 constexpr int H = 200;
@@ -270,26 +271,6 @@ static void clip(const SkPath& path, SkPoint p0, SkPoint p1, SkPath* clippedPath
     rec.fResult->transform(mx);
 }
 
-// true means use clippedPath.
-// false means there was no clipping -- use the original path
-static bool clip(const SkPath& path, const SkHalfPlane& plane, SkPath* clippedPath) {
-    switch (plane.test(path.getBounds())) {
-        case SkHalfPlane::kAllPositive:
-            return false;
-        case SkHalfPlane::kMixed: {
-            SkPoint pts[2];
-            if (plane.twoPts(pts)) {
-                clip(path, pts[0], pts[1], clippedPath);
-                return true;
-            }
-        } break;
-        default: break; // handled outside of the switch
-    }
-    // clipped out (or failed)
-    clippedPath->reset();
-    return true;
-}
-
 static void draw_halfplane(SkCanvas* canvas, SkPoint p0, SkPoint p1, SkColor c) {
     SkVector v = p1 - p0;
     p0 = p0 - v * 1000;
@@ -302,12 +283,19 @@ static void draw_halfplane(SkCanvas* canvas, SkPoint p0, SkPoint p1, SkColor c) 
 
 static SkPath make_path() {
     SkRandom rand;
-    auto rand_pt = [&rand]() { return SkPoint{rand.nextF() * 400, rand.nextF() * 400}; };
+    auto rand_pt = [&rand]() {
+        auto x = rand.nextF();
+        auto y = rand.nextF();
+        return SkPoint{x * 400, y * 400};
+    };
 
     SkPath path;
     for (int i = 0; i < 4; ++i) {
-        path.moveTo(rand_pt()).quadTo(rand_pt(), rand_pt())
-            .quadTo(rand_pt(), rand_pt()).lineTo(rand_pt());
+        SkPoint pts[6];
+        for (auto& p : pts) {
+            p = rand_pt();
+        }
+        path.moveTo(pts[0]).quadTo(pts[1], pts[2]).quadTo(pts[3], pts[4]).lineTo(pts[5]);
     }
     return path;
 }
@@ -540,11 +528,10 @@ class HalfPlaneView3 : public Sample {
             canvas->restore();
         }
 
-        SkHalfPlane hpw = half_plane_w0(mx);
 
         SkColor planeColor = SK_ColorBLUE;
         SkPath clippedPath, *path = &fPath;
-        if (clip(fPath, hpw, &clippedPath)) {
+        if (SkPathPriv::PerspectiveClip(fPath, mx, &clippedPath)) {
             path = &clippedPath;
             planeColor = SK_ColorRED;
         }
@@ -553,6 +540,7 @@ class HalfPlaneView3 : public Sample {
         canvas->drawPath(*path, paint);
         canvas->restore();
 
+        SkHalfPlane hpw = half_plane_w0(mx);
         draw_halfplane(canvas, hpw, planeColor);
     }
 

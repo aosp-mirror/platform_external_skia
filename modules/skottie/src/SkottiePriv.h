@@ -50,8 +50,8 @@ class AnimationBuilder final : public SkNoncopyable {
 public:
     AnimationBuilder(sk_sp<ResourceProvider>, sk_sp<SkFontMgr>, sk_sp<PropertyObserver>,
                      sk_sp<Logger>, sk_sp<MarkerObserver>,
-                     Animation::Builder::Stats*, const SkSize& size,
-                     float duration, float framerate);
+                     Animation::Builder::Stats*, const SkSize& comp_size,
+                     float duration, float framerate, uint32_t flags);
 
     std::unique_ptr<sksg::Scene> parse(const skjson::ObjectValue&);
 
@@ -222,9 +222,10 @@ private:
     sk_sp<Logger>              fLogger;
     sk_sp<MarkerObserver>      fMarkerObserver;
     Animation::Builder::Stats* fStats;
-    const SkSize               fSize;
+    const SkSize               fCompSize;
     const float                fDuration,
                                fFrameRate;
+    const uint32_t             fFlags;
     mutable AnimatorScope*     fCurrentAnimatorScope;
     mutable const char*        fPropertyObserverContext;
     mutable bool               fHasNontrivialBlending : 1;

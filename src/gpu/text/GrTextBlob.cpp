@@ -25,12 +25,24 @@ template <size_t N> static size_t sk_align(size_t s) {
 
 sk_sp<GrTextBlob> GrTextBlob::Make(int glyphCount,
                                    GrStrikeCache* strikeCache,
+                                   const SkMatrix& viewMatrix,
                                    SkPoint origin,
                                    GrColor color,
                                    bool forceWForDistanceFields) {
+    // Default to no perspective. Implies one of the following vertex formats: kColorTextVASize,
+    // kGrayTextVASize, kLCDTextVASize.
+    static_assert(kColorTextVASize <= kGrayTextVASize && kLCDTextVASize <= kGrayTextVASize);
+    size_t quadSize = kVerticesPerGlyph * kGrayTextVASize;
+    if (viewMatrix.hasPerspective() || forceWForDistanceFields) {
+        // Perspective. Implies one of the following vertex formats: kColorTextPerspectiveVASize,
+        // kGrayTextDFPerspectiveVASize.
+        static_assert(kColorTextPerspectiveVASize <= kGrayTextDFPerspectiveVASize);
+        quadSize = kVerticesPerGlyph * kGrayTextDFPerspectiveVASize;
+    }
+
     // We allocate size for the GrTextBlob itself, plus size for the vertices array,
     // and size for the glyphIds array.
-    size_t verticesCount = glyphCount * kVerticesPerGlyph * kMaxVASize;
+    size_t verticesCount = glyphCount * quadSize;
 
     size_t blobStart = 0;
     size_t vertex = sk_align<alignof(char)>     (blobStart + sizeof(GrTextBlob) * 1);
@@ -44,7 +56,7 @@ sk_sp<GrTextBlob> GrTextBlob::Make(int glyphCount,
     }
 
     sk_sp<GrTextBlob> blob{new (allocation) GrTextBlob{
-        size, strikeCache, origin, color, forceWForDistanceFields}};
+        size, strikeCache, viewMatrix, origin, color, forceWForDistanceFields}};
 
     // setup offsets for vertices / glyphs
     blob->fVertices = SkTAddOffset<char>(blob.get(), vertex);
@@ -352,13 +364,24 @@ void GrTextBlob::AssertEqual(const GrTextBlob& l, const GrTextBlob& r) {
     }
 }
 
+static SkMatrix make_inverse(const SkMatrix& matrix) {
+    SkMatrix inverseMatrix;
+    if (!matrix.invert(&inverseMatrix)) {
+        inverseMatrix = SkMatrix::I();
+    }
+    return inverseMatrix;
+}
+
 GrTextBlob::GrTextBlob(size_t size,
                        GrStrikeCache* strikeCache,
+                       const SkMatrix& viewMatrix,
                        SkPoint origin,
                        GrColor color,
                        bool forceWForDistanceFields)
         : fSize{size}
         , fStrikeCache{strikeCache}
+        , fInitialViewMatrix{viewMatrix}
+        , fInitialViewMatrixInverse{make_inverse(viewMatrix)}
         , fInitialOrigin{origin}
         , fForceWForDistanceFields{forceWForDistanceFields}
         , fColor{color} { }
