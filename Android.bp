@@ -794,7 +794,6 @@ cc_library_static {
           "src/gpu/text/GrStrikeCache.cpp",
           "src/gpu/text/GrTextBlob.cpp",
           "src/gpu/text/GrTextBlobCache.cpp",
-          "src/gpu/text/GrTextBlobVertexRegenerator.cpp",
           "src/gpu/text/GrTextContext.cpp",
           "src/gpu/vk/GrVkAMDMemoryAllocator.cpp",
           "src/gpu/vk/GrVkBuffer.cpp",

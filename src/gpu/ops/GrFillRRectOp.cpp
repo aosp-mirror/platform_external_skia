@@ -143,9 +143,7 @@ GrProcessorSet::Analysis GrFillRRectOp::finalize(
     SkPMColor4f finalColor = analysis.inputColorIsOverridden() ? overrideColor : fOriginalColor;
     if (!SkPMColor4fFitsInBytes(finalColor)) {
         fFlags |= Flags::kWideColor;
-        uint32_t halfColor[2];
-        SkFloatToHalf_finite_ftz(Sk4f::Load(finalColor.vec())).store(&halfColor);
-        this->writeInstanceData(halfColor[0], halfColor[1]);
+        this->writeInstanceData(finalColor);
     } else {
         this->writeInstanceData(finalColor.toBytes_RGBA());
     }
@@ -458,9 +456,10 @@ void GrFillRRectOp::onPrePrepare(GrRecordingContext* context,
     // This is equivalent to a GrOpFlushState::detachAppliedClip
     GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip();
 
-    // TODO: need to also give this to the recording context
     fProgramInfo = this->createProgramInfo(context->priv().caps(), arena, dstView,
                                            std::move(appliedClip), dstProxyView);
+
+    context->priv().recordProgramInfo(fProgramInfo);
 }
 
 void GrFillRRectOp::onPrepare(GrOpFlushState* flushState) {

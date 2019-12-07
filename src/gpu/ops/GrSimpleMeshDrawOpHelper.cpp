@@ -74,7 +74,7 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
             caps, clip, hasMixedSampledCoverage, clampType, geometryCoverage, &color);
     color.isConstant(geometryColor);
     if (wideColor) {
-        *wideColor = SkPMColor4fNeedsWideColor(*geometryColor, clampType, caps);
+        *wideColor = !geometryColor->fitsInBytes();
     }
     return result;
 }
@@ -106,15 +106,22 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
     return analysis;
 }
 
-void GrSimpleMeshDrawOpHelper::executeDrawsAndUploads(
-        const GrOp* op, GrOpFlushState* flushState, const SkRect& chainBounds) {
-    if (fProcessors) {
-        flushState->executeDrawsAndUploadsForMeshDrawOp(
-                op, chainBounds, std::move(*fProcessors), fPipelineFlags);
-    } else {
-        flushState->executeDrawsAndUploadsForMeshDrawOp(
-                op, chainBounds, GrProcessorSet::MakeEmptySet(), fPipelineFlags);
-    }
+const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(
+                                                    GrOpFlushState* flushState,
+                                                    GrProcessorSet&& processorSet,
+                                                    GrPipeline::InputFlags pipelineFlags,
+                                                    const GrUserStencilSettings* stencilSettings) {
+    GrPipeline::InitArgs pipelineArgs;
+
+    pipelineArgs.fInputFlags = pipelineFlags;
+    pipelineArgs.fDstProxyView = flushState->dstProxyView();
+    pipelineArgs.fCaps = &flushState->caps();
+    pipelineArgs.fUserStencil = stencilSettings;
+    pipelineArgs.fOutputSwizzle = flushState->view()->swizzle();
+
+    return flushState->allocator()->make<GrPipeline>(pipelineArgs,
+                                                     std::move(processorSet),
+                                                     flushState->detachAppliedClip());
 }
 
 #ifdef SK_DEBUG
@@ -174,7 +181,7 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelperWithStencil::finalizeProcessors
             caps, clip, hasMixedSampledCoverage, clampType, geometryCoverage, &color);
     color.isConstant(geometryColor);
     if (wideColor) {
-        *wideColor = SkPMColor4fNeedsWideColor(*geometryColor, clampType, caps);
+        *wideColor = !geometryColor->fitsInBytes();
     }
     return result;
 }
@@ -184,17 +191,6 @@ bool GrSimpleMeshDrawOpHelperWithStencil::isCompatible(
         const SkRect& thisBounds, const SkRect& thatBounds, bool ignoreAAType) const {
     return INHERITED::isCompatible(that, caps, thisBounds, thatBounds, ignoreAAType) &&
            fStencilSettings == that.fStencilSettings;
-}
-
-void GrSimpleMeshDrawOpHelperWithStencil::executeDrawsAndUploads(
-        const GrOp* op, GrOpFlushState* flushState, const SkRect& chainBounds) {
-    if (fProcessors) {
-        flushState->executeDrawsAndUploadsForMeshDrawOp(
-                op, chainBounds, std::move(*fProcessors), fPipelineFlags, fStencilSettings);
-    } else {
-        flushState->executeDrawsAndUploadsForMeshDrawOp(
-                op, chainBounds, GrProcessorSet::MakeEmptySet(), fPipelineFlags, fStencilSettings);
-    }
 }
 
 #ifdef SK_DEBUG
