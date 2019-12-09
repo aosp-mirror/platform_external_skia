@@ -35,6 +35,22 @@
 
 #define SK_WUFFS_CODEC_BUFFER_SIZE 4096
 
+// Configuring a Skia build with
+// SK_WUFFS_FAVORS_PERFORMANCE_OVER_ADDITIONAL_MEMORY_SAFETY can improve decode
+// performance by some fixed amount (independent of the image size), which can
+// be a noticeable proportional improvement if the input is relatively small.
+//
+// The Wuffs library is still memory-safe either way, in that there are no
+// out-of-bounds reads or writes, and the library endeavours not to read
+// uninitialized memory. There are just fewer compiler-enforced guarantees
+// against reading uninitialized memory. For more detail, see
+// https://github.com/google/wuffs/blob/master/doc/note/initialization.md#partial-zero-initialization
+#if defined(SK_WUFFS_FAVORS_PERFORMANCE_OVER_ADDITIONAL_MEMORY_SAFETY)
+#define SK_WUFFS_INITIALIZE_FLAGS WUFFS_INITIALIZE__LEAVE_INTERNAL_BUFFERS_UNINITIALIZED
+#else
+#define SK_WUFFS_INITIALIZE_FLAGS WUFFS_INITIALIZE__DEFAULT_OPTIONS
+#endif
+
 static bool fill_buffer(wuffs_base__io_buffer* b, SkStream* s) {
     b->compact();
     size_t num_read = s->read(b->data.ptr + b->meta.wi, b->data.len - b->meta.wi);
@@ -91,8 +107,10 @@ static SkCodec::Result reset_and_decode_image_config(wuffs_gif__decoder*       d
                                                      wuffs_base__image_config* imgcfg,
                                                      wuffs_base__io_buffer*    b,
                                                      SkStream*                 s) {
-    // Calling decoder->initialize will memset it to zero.
-    const char* status = decoder->initialize(sizeof__wuffs_gif__decoder(), WUFFS_VERSION, 0);
+    // Calling decoder->initialize will memset most or all of it to zero,
+    // depending on SK_WUFFS_INITIALIZE_FLAGS.
+    const char* status =
+        decoder->initialize(sizeof__wuffs_gif__decoder(), WUFFS_VERSION, SK_WUFFS_INITIALIZE_FLAGS);
     if (status != nullptr) {
         SkCodecPrintf("initialize: %s", status);
         return SkCodec::kInternalError;
@@ -732,6 +750,39 @@ SkCodec::Result SkWuffsCodec::onIncrementalDecodeTwoPass() {
         SkMatrix translate = SkMatrix::MakeTrans(dirty_rect.min_incl_x, dirty_rect.min_incl_y);
         draw.drawBitmap(src, translate, nullptr, paint);
     }
+
+    if (result == SkCodec::kSuccess) {
+        // On success, we are done using the "two pass" pixel buffer for this
+        // frame. We have the option of releasing its memory, but there is a
+        // trade-off. If decoding a subsequent frame will also need "two pass"
+        // decoding, it would have to re-allocate the buffer instead of just
+        // re-using it. On the other hand, if there is no subsequent frame, and
+        // the SkWuffsCodec object isn't deleted soon, then we are holding
+        // megabytes of memory longer than we need to.
+        //
+        // For example, when the Chromium web browser decodes the <img> tags in
+        // a HTML page, the SkCodec object can live until navigating away from
+        // the page, which can be much longer than when the pixels are fully
+        // decoded, especially for a still (non-animated) image. Even for
+        // looping animations, caching the decoded frames (at the higher HTML
+        // renderer layer) may mean that each frame is only decoded once (at
+        // the lower SkCodec layer), in sequence.
+        //
+        // The heuristic we use here is to free the memory if we have decoded
+        // the last frame of the animation (or, for still images, the only
+        // frame). The output of the next decode request (if any) should be the
+        // same either way, but the steady state memory use should hopefully be
+        // lower than always keeping the fTwoPassPixbufPtr buffer up until the
+        // SkWuffsCodec destructor runs.
+        //
+        // This only applies to "two pass" decoding. "One pass" decoding does
+        // not allocate, free or otherwise use fTwoPassPixbufPtr.
+        if (fFramesComplete && (static_cast<size_t>(options().fFrameIndex) == fFrames.size() - 1)) {
+            fTwoPassPixbufPtr.reset(nullptr);
+            fTwoPassPixbufLen = 0;
+        }
+    }
+
     return result;
 }
 
