@@ -55,31 +55,34 @@ GrTextureDomain::GrTextureDomain(const SkRect& domain, Mode modeX, Mode modeY, i
 
 //////////////////////////////////////////////////////////////////////////////
 
-static SkString clamp_expression(GrTextureDomain::Mode mode, const char* inCoord,
-                                 const char* coordSwizzle, const char* domain,
-                                 const char* minSwizzle, const char* maxSwizzle) {
-    SkString clampedExpr;
+static void append_wrap(GrGLSLShaderBuilder* builder, GrTextureDomain::Mode mode,
+                        const char* inCoord, const char* domainStart, const char* domainEnd,
+                        bool is2D, const char* out) {
     switch(mode) {
         case GrTextureDomain::kIgnore_Mode:
-            clampedExpr.printf("%s.%s\n", inCoord, coordSwizzle);
+            builder->codeAppendf("%s = %s;\n", out, inCoord);
             break;
         case GrTextureDomain::kDecal_Mode:
             // The lookup coordinate to use for decal will be clamped just like kClamp_Mode,
             // it's just that the post-processing will be different, so fall through
         case GrTextureDomain::kClamp_Mode:
-            clampedExpr.printf("clamp(%s.%s, %s.%s, %s.%s)",
-                               inCoord, coordSwizzle, domain, minSwizzle, domain, maxSwizzle);
+            builder->codeAppendf("%s = clamp(%s, %s, %s);", out, inCoord, domainStart, domainEnd);
             break;
         case GrTextureDomain::kRepeat_Mode:
-            clampedExpr.printf("mod(%s.%s - %s.%s, %s.%s - %s.%s) + %s.%s",
-                               inCoord, coordSwizzle, domain, minSwizzle, domain, maxSwizzle,
-                               domain, minSwizzle, domain, minSwizzle);
+            builder->codeAppendf("%s = mod(%s - %s, %s - %s) + %s;", out, inCoord, domainStart,
+                                 domainEnd, domainStart, domainStart);
             break;
-        default:
-            SkASSERTF(false, "Unknown texture domain mode: %u\n", (uint32_t) mode);
+        case GrTextureDomain::kMirrorRepeat_Mode: {
+            const char* type = is2D ? "float2" : "float";
+            builder->codeAppend("{");
+            builder->codeAppendf("%s w = %s - %s;", type, domainEnd, domainStart);
+            builder->codeAppendf("%s w2 = 2 * w;", type);
+            builder->codeAppendf("%s m = mod(%s - %s, w2);", type, inCoord, domainStart);
+            builder->codeAppendf("%s = mix(m, w2 - m, step(w, m)) + %s;", out, domainStart);
+            builder->codeAppend("}");
             break;
+        }
     }
-    return clampedExpr;
 }
 
 void GrTextureDomain::GLDomain::sampleProcessor(const GrTextureDomain& textureDomain,
@@ -158,24 +161,30 @@ void GrTextureDomain::GLDomain::sample(GrGLSLShaderBuilder* builder,
     // Always use a local variable for the input coordinates; often callers pass in an expression
     // and we want to cache it across all of its references in the code below
     builder->codeAppendf("float2 origCoord = %s;", inCoords.c_str());
-    builder->codeAppend("float2 clampedCoord = ");
-    if (textureDomain.modeX() != textureDomain.modeY()) {
-        // The wrap modes differ on the two axes, so build up a coordinate that respects each axis'
-        // domain rule independently before sampling the texture.
-        SkString tcX = clamp_expression(textureDomain.modeX(), "origCoord", "x",
-                                        fDomainName.c_str(), "x", "z");
-        SkString tcY = clamp_expression(textureDomain.modeY(), "origCoord", "y",
-                                        fDomainName.c_str(), "y", "w");
-        builder->codeAppendf("float2(%s, %s)", tcX.c_str(), tcY.c_str());
+    builder->codeAppend("float2 clampedCoord;");
+    SkString start;
+    SkString end;
+    bool is2D = textureDomain.modeX() == textureDomain.modeY();
+    if (is2D) {
+        // Doing the domain setup using vectors seems to avoid shader compilation issues on
+        // Chromecast, possibly due to reducing shader length.
+        start.printf("%s.xy", fDomainName.c_str());
+        end.printf("%s.zw", fDomainName.c_str());
+        append_wrap(builder, textureDomain.modeX(), "origCoord", start.c_str(), end.c_str(),
+                    true, "clampedCoord");
     } else {
-        // Since the x and y axis wrap modes are the same, they can be calculated together using
-        // more efficient vector operations
-        SkString tc = clamp_expression(textureDomain.modeX(), "origCoord", "xy",
-                                       fDomainName.c_str(), "xy", "zw");
-        builder->codeAppend(tc.c_str());
+        // Apply x mode to the x coordinate using the left and right edges of the domain rect
+        // (stored as the x and z components of the domain uniform).
+        start.printf("%s.x", fDomainName.c_str());
+        end.printf("%s.z", fDomainName.c_str());
+        append_wrap(builder, textureDomain.modeX(), "origCoord.x", start.c_str(), end.c_str(),
+                    false, "clampedCoord.x");
+        // Repeat the same logic for y.
+        start.printf("%s.y", fDomainName.c_str());
+        end.printf("%s.w", fDomainName.c_str());
+        append_wrap(builder, textureDomain.modeY(), "origCoord.y", start.c_str(), end.c_str(),
+                    false, "clampedCoord.y");
     }
-    builder->codeAppend(";");
-
     // Sample 'appendSample' at the clamped coordinate location.
     SkString color = appendSample("clampedCoord");
 
