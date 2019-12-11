@@ -138,6 +138,7 @@ public:
 
         const SkStrikeSpec& strikeSpec() const;
 
+        SubRun* fNextSubRun{nullptr};
         const SubRunType fType;
         GrTextBlob* const fBlob;
         const GrMaskFormat fMaskFormat;
@@ -178,14 +179,6 @@ public:
                                   const SkMatrix& viewMatrix,
                                   GrColor color,
                                   bool forceWForDistanceFields);
-
-    void generateFromGlyphRunList(const GrShaderCaps& shaderCaps,
-                                  const GrTextContext::Options& options,
-                                  const SkPaint& paint,
-                                  const SkMatrix& viewMatrix,
-                                  const SkSurfaceProps& props,
-                                  const SkGlyphRunList& glyphRunList,
-                                  SkGlyphRunListPainter* glyphPainter);
 
     // Key manipulation functions
     void setupKey(const GrTextBlob::Key& key,
@@ -240,12 +233,6 @@ public:
 
     static const int kVerticesPerGlyph = 4;
 
-    // This function will only be called when we are generating a blob from scratch.
-    // The color here is the GrPaint color, and it is used to determine whether we
-    // have to regenerate LCD text blobs.
-    // We use this color vs the SkPaint color because it has the color filter applied.
-    void initReusableBlob(SkColor luminanceColor);
-
     const Key& key() const;
     size_t size() const;
 
@@ -292,12 +279,15 @@ private:
         SkPaint::Join fJoin;
     };
 
-    GrTextBlob(size_t size,
+    GrTextBlob(size_t allocSize,
                GrStrikeCache* strikeCache,
                const SkMatrix& viewMatrix,
                SkPoint origin,
                GrColor color,
+               SkColor initialLuminance,
                bool forceWForDistanceFields);
+
+    void insertSubRun(SubRun* subRun);
 
     std::unique_ptr<GrAtlasTextOp> makeOp(
             SubRun& info, int glyphCount,
@@ -342,6 +332,7 @@ private:
 
     // The color of the text to draw for solid colors.
     const GrColor fColor;
+    const SkColor fInitialLuminance;
 
     // Pool of bytes for vertex data.
     char* fVertices;
@@ -352,13 +343,9 @@ private:
     // Number of glyphs stored in fGlyphs while accumulating SubRuns.
     uint32_t fGlyphsCursor{0};
 
-    // Assume one run per text blob.
-    SkSTArray<1, SubRun> fSubRuns;
-
     SkMaskFilterBase::BlurRec fBlurRec;
     StrokeInfo fStrokeInfo;
     Key fKey;
-    SkColor fLuminanceColor;
 
     // We can reuse distance field text, but only if the new view matrix would not result in
     // a mip change.  Because there can be multiple runs in a blob, we track the overall
@@ -367,6 +354,10 @@ private:
     SkScalar fMinMaxScale{SK_ScalarMax};
 
     uint8_t fTextType{0};
+
+    SubRun* fFirstSubRun{nullptr};
+    SubRun* fLastSubRun{nullptr};
+    SkArenaAlloc fAlloc;
 };
 
 /**
