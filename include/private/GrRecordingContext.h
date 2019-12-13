@@ -37,6 +37,12 @@ public:
     GrRecordingContextPriv priv();
     const GrRecordingContextPriv priv() const;
 
+#if GR_TEST_UTILS
+    // Used by tests that induce intentional allocation failures, in order to keep the output clean.
+    void testingOnly_setSuppressAllocationWarnings() { fSuppressAllocationWarnings = true; }
+    bool testingOnly_getSuppressAllocationWarnings() const { return fSuppressAllocationWarnings; }
+#endif
+
 protected:
     friend class GrRecordingContextPriv; // for hidden functions
 
@@ -48,8 +54,10 @@ protected:
 
     GrDrawingManager* drawingManager();
 
-    sk_sp<GrOpMemoryPool> refOpMemoryPool();
     GrOpMemoryPool* opMemoryPool();
+    // This entry point should only be used for DDL creation where we want the ops' lifetime to
+    // match that of the DDL.
+    std::unique_ptr<GrOpMemoryPool> detachOpMemoryPool();
 
     SkArenaAlloc* recordTimeAllocator();
     // This entry point should only be used for DDL creation where we want the ops' data's lifetime
@@ -142,13 +150,17 @@ protected:
 private:
     std::unique_ptr<GrDrawingManager> fDrawingManager;
     // All the GrOp-derived classes use this pool.
-    sk_sp<GrOpMemoryPool>             fOpMemoryPool;
+    std::unique_ptr<GrOpMemoryPool>   fOpMemoryPool;
     std::unique_ptr<SkArenaAlloc>     fRecordTimeAllocator;
 
     std::unique_ptr<GrStrikeCache>    fStrikeCache;
     std::unique_ptr<GrTextBlobCache>  fTextBlobCache;
 
     std::unique_ptr<GrAuditTrail>     fAuditTrail;
+
+#ifdef GR_TEST_UTILS
+    bool fSuppressAllocationWarnings = false;
+#endif
 
     typedef GrImageContext INHERITED;
 };

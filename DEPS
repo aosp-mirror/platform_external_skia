@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@d6053daa6203bd9ab467711662652368f5f28cc8",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@6381d7f14805c1c9c56f35e043c6dd33ef9624ad",
   "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@3c086a0c2e1dc3e2e14aaa3d78c052c7e07274b4",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
@@ -16,7 +16,7 @@ deps = {
   "third_party/externals/harfbuzz"        : "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git@1bada656a86e9cb27d4a6b9fcc50748f0bd9c1d9",
   "third_party/externals/icu"             : "https://chromium.googlesource.com/chromium/deps/icu.git@407b39301e71006b68bd38e770f35d32398a7b14",
   "third_party/externals/imgui"           : "https://skia.googlesource.com/external/github.com/ocornut/imgui.git@d38d7c6628bebd02692cfdd6fa76b4d992a35b75",
-  "third_party/externals/libgifcodec"     : "https://skia.googlesource.com/libgifcodec@ed218be1ba3de964c186ceac8e1e344853530edf",
+  "third_party/externals/libgifcodec"     : "https://skia.googlesource.com/libgifcodec@38d9c73f49b861bb4a9829371ac311544b120023",
   "third_party/externals/libjpeg-turbo"   : "https://skia.googlesource.com/external/github.com/libjpeg-turbo/libjpeg-turbo.git@574f3a772c96dc9db2c98ef24706feb3f6dbda9a",
   "third_party/externals/libpng"          : "https://skia.googlesource.com/third_party/libpng.git@386707c6d19b974ca2e3db7f5c61873813c6fe44",
   "third_party/externals/libwebp"         : "https://chromium.googlesource.com/webm/libwebp.git@0fe1a89dbf1930fc2554dbe76adad5d962054ead",
@@ -31,13 +31,13 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@53ab2144b90abede33be5161aec5dfc94ddc3caf",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@29c11140baaf9f7fdaa39a583672c556bf1795a1",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@0c4feb643b89d1792b02f7cbef315e9d95633bd7",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@50211670b4bf3d72fe54a4db0d0a81b1c6211139",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@07958d452f93b6513ebf5cbae64a1325c1755dbf",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@4080840928c0b05a80cda0d14ac2e2615f679f1a",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@cf2545c5111bc7b24b0e244eddf13ec047359bc3",
+    "url": "https://chromium.googlesource.com/chromium/src.git@63613892851688fb154a61b252bd74e7df632d16",
     "condition": "checkout_chromium",
   },
 }

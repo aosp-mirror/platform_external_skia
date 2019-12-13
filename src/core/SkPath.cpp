@@ -1542,7 +1542,7 @@ static void subdivide_cubic_to(SkPath* path, const SkPoint pts[4],
     }
 }
 
-void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
+void SkPath::transform(const SkMatrix& matrix, SkPath* dst, SkApplyPerspectiveClip pc) const {
     if (matrix.isIdentity()) {
         if (dst != nullptr && dst != this) {
             *dst = *this;
@@ -1559,7 +1559,15 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
         SkPath  tmp;
         tmp.fFillType = fFillType;
 
-        SkPath::Iter    iter(*this, false);
+        SkPath clipped;
+        const SkPath* src = this;
+        if (pc == SkApplyPerspectiveClip::kYes &&
+            SkPathPriv::PerspectiveClip(*this, matrix, &clipped))
+        {
+            src = &clipped;
+        }
+
+        SkPath::Iter    iter(*src, false);
         SkPoint         pts[4];
         SkPath::Verb    verb;
 
@@ -3463,31 +3471,31 @@ struct SkHalfPlane {
     }
     SkScalar operator()(SkScalar x, SkScalar y) const { return this->eval(x, y); }
 
-    bool twoPts(SkPoint pts[2]) const {
-        // normalize plane to help with the perpendicular step, below
-        SkScalar len = SkScalarSqrt(fA*fA + fB*fB);
-        if (!len) {
+    bool normalize() {
+        double a = fA;
+        double b = fB;
+        double c = fC;
+        double dmag = sqrt(a * a + b * b);
+        // length of initial plane normal is zero
+        if (dmag == 0) {
+           fA = fB = 0;
+           fC = SK_Scalar1;
+           return true;
+        }
+        double dscale = sk_ieee_double_divide(1.0, dmag);
+        a *= dscale;
+        b *= dscale;
+        c *= dscale;
+        // check if we're not finite, or normal is zero-length
+        if (!sk_float_isfinite(a) || !sk_float_isfinite(b) || !sk_float_isfinite(c) ||
+            (a == 0 && b == 0)) {
+            fA = fB = 0;
+            fC = SK_Scalar1;
             return false;
         }
-        SkScalar denom = SkScalarInvert(len);
-        SkScalar a = fA * denom;
-        SkScalar b = fB * denom;
-        SkScalar c = fC * denom;
-
-        // We compute p0 on the half-plane by setting one of the components to 0
-        // We compute p1 by stepping from p0 along a perpendicular to the normal
-        if (b) {
-            pts[0] = { 0, -c / b };
-            pts[1] = { b, pts[0].fY - a};
-        } else if (a) {
-            pts[0] = { -c / a,        0 };
-            pts[1] = { pts[0].fX + b, -a };
-        } else {
-            return false;
-        }
-
-        SkASSERT(SkScalarNearlyZero(this->operator()(pts[0].fX, pts[0].fY)));
-        SkASSERT(SkScalarNearlyZero(this->operator()(pts[1].fX, pts[1].fY)));
+        fA = a;
+        fB = b;
+        fC = c;
         return true;
     }
 
@@ -3527,18 +3535,27 @@ struct SkHalfPlane {
     }
 };
 
-static void clip(const SkPath& path, SkPoint p0, SkPoint p1, SkPath* clippedPath) {
+// assumes plane is pre-normalized
+// If we fail in our calculations, we return the empty path
+static void clip(const SkPath& path, const SkHalfPlane& plane, SkPath* clippedPath) {
     SkMatrix mx, inv;
-    SkVector v = p1 - p0;
-    mx.setAll(v.fX, -v.fY, p0.fX,
-              v.fY,  v.fX, p0.fY,
-                 0,     0,     1);
-    SkAssertResult(mx.invert(&inv));
+    SkPoint p0 = { -plane.fA*plane.fC, -plane.fB*plane.fC };
+    mx.setAll( plane.fB, plane.fA, p0.fX,
+              -plane.fA, plane.fB, p0.fY,
+                      0,        0,     1);
+    if (!mx.invert(&inv)) {
+        clippedPath->reset();
+        return;
+    }
 
     SkPath rotated;
     path.transform(inv, &rotated);
+    if (!rotated.isFinite()) {
+        clippedPath->reset();
+        return;
+    }
 
-    SkScalar big = 1e28f;
+    SkScalar big = SK_ScalarMax;
     SkRect clip = {-big, 0, big, big };
 
     struct Rec {
@@ -3583,7 +3600,11 @@ static void clip(const SkPath& path, SkPoint p0, SkPoint p1, SkPath* clippedPath
         }
     }, &rec);
 
-    rec.fResult->transform(mx);
+    clippedPath->setFillType(path.getFillType());
+    clippedPath->transform(mx);
+    if (!path.isFinite()) {
+        clippedPath->reset();
+    }
 }
 
 // true means we have written to clippedPath
@@ -3593,23 +3614,21 @@ bool SkPathPriv::PerspectiveClip(const SkPath& path, const SkMatrix& matrix, SkP
     }
 
     constexpr SkScalar kW0PlaneDistance = 0.05f;
-    const SkHalfPlane plane {
+    SkHalfPlane plane {
         matrix[SkMatrix::kMPersp0],
         matrix[SkMatrix::kMPersp1],
         matrix[SkMatrix::kMPersp2] - kW0PlaneDistance
     };
-
-    switch (plane.test(path.getBounds())) {
-        case SkHalfPlane::kAllPositive:
-            return false;
-        case SkHalfPlane::kMixed: {
-            SkPoint pts[2];
-            if (plane.twoPts(pts)) {
-                clip(path, pts[0], pts[1], clippedPath);
+    if (plane.normalize()) {
+        switch (plane.test(path.getBounds())) {
+            case SkHalfPlane::kAllPositive:
+                return false;
+            case SkHalfPlane::kMixed: {
+                clip(path, plane, clippedPath);
                 return true;
-            }
-        } break;
-        default: break; // handled outside of the switch
+            } break;
+            default: break; // handled outside of the switch
+        }
     }
     // clipped out (or failed)
     clippedPath->reset();

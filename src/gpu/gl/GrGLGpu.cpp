@@ -16,7 +16,6 @@
 #include "include/private/SkTo.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkConvertPixels.h"
-#include "src/core/SkMakeUnique.h"
 #include "src/core/SkMipMap.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrContextPriv.h"
@@ -1333,7 +1332,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(int width, int height,
     GrGLTexture::Desc desc;
     desc.fSize = {width, height};
     desc.fTarget = GR_GL_TEXTURE_2D;
-    desc.fConfig = GrCompressionTypePixelConfig(compression);
+    desc.fConfig = GrCompressionTypeToPixelConfig(compression);
     desc.fOwnership = GrBackendObjectOwnership::kOwned;
     desc.fFormat = format.asGLFormat();
     desc.fID = this->createCompressedTexture2D(desc.fSize, desc.fFormat, compression, &initialState,

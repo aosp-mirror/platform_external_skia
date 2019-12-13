@@ -14,7 +14,6 @@
 #include "src/core/SkDraw.h"
 #include "src/core/SkDrawProcs.h"
 #include "src/core/SkGlyphRun.h"
-#include "src/core/SkMakeUnique.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/gpu/GrCaps.h"
@@ -74,17 +73,6 @@ SkColor GrTextContext::ComputeCanonicalColor(const SkPaint& paint, bool lcd) {
         canonicalColor = SkMaskGamma::CanonicalColor(SkColorSetRGB(lum, lum, lum));
     }
     return canonicalColor;
-}
-
-SkScalerContextFlags GrTextContext::ComputeScalerContextFlags(const GrColorInfo& colorInfo) {
-    // If we're doing linear blending, then we can disable the gamma hacks.
-    // Otherwise, leave them on. In either case, we still want the contrast boost:
-    // TODO: Can we be even smarter about mask gamma based on the dest transfer function?
-    if (colorInfo.isLinearlyBlended()) {
-        return SkScalerContextFlags::kBoostContrast;
-    } else {
-        return SkScalerContextFlags::kFakeGammaAndBoostContrast;
-    }
 }
 
 void GrTextContext::SanitizeOptions(Options* options) {

@@ -1034,6 +1034,7 @@ if (target_cpu == "wasm") {
       "tools/SkSharingProc.cpp",
       "tools/UrlDataManager.cpp",
       "tools/debugger/DebugCanvas.cpp",
+      "tools/debugger/DebugLayerManager.cpp",
       "tools/debugger/DrawCommand.cpp",
       "tools/debugger/JsonWriteBuffer.cpp",
     ]
@@ -1455,6 +1456,7 @@ if (skia_enable_tools) {
       "tools/ToolUtils.cpp",
       "tools/UrlDataManager.cpp",
       "tools/debugger/DebugCanvas.cpp",
+      "tools/debugger/DebugLayerManager.cpp",
       "tools/debugger/DrawCommand.cpp",
       "tools/debugger/JsonWriteBuffer.cpp",
       "tools/fonts/RandomScalerContext.cpp",
@@ -1998,6 +2000,7 @@ if (skia_enable_tools) {
       "fuzz/oss_fuzz/FuzzTextBlobDeserialize.cpp",
       "tools/UrlDataManager.cpp",
       "tools/debugger/DebugCanvas.cpp",
+      "tools/debugger/DebugLayerManager.cpp",
       "tools/debugger/DrawCommand.cpp",
       "tools/debugger/JsonWriteBuffer.cpp",
     ]
@@ -2416,6 +2419,7 @@ if (skia_enable_tools) {
       sources = [
         "tools/UrlDataManager.cpp",
         "tools/debugger/DebugCanvas.cpp",
+        "tools/debugger/DebugLayerManager.cpp",
         "tools/debugger/DrawCommand.cpp",
         "tools/debugger/JsonWriteBuffer.cpp",
         "tools/mdbviz/MainWindow.cpp",
@@ -2502,6 +2506,9 @@ if (is_ios && skia_use_metal && !skia_enable_flutter_defines) {
       "experimental/minimal_ios_mtl_skia_app",
     ]
   }
+}
+
+if (is_ios && !skia_enable_flutter_defines) {
   group("skottie_ios") {
     deps = [
       "experimental/skottie_ios",
