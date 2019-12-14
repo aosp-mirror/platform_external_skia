@@ -43,6 +43,17 @@ class SkTextBlobRunIterator;
 //
 //  GrGlyph*... | vertexData... | SubRun | GrGlyph*... | vertexData... | SubRun  etc.
 //
+// In these classes, I'm trying to follow the convention about matrices and origins.
+// * draw Matrix|Origin    - describes the current draw command.
+// * initial Matrix|Origin - describes the matrix and origin the GrTextBlob was created with.
+// * current Matrix|Origin - describes the matrix and origin that are currently in the SubRun's
+//                           vertex data.
+//
+// When handling repeated drawing using the same GrTextBlob initial data are compared to drawing
+// data to see if this blob can service this drawing. If it can, but small changes are needed to
+// the vertex data, the current data of the SubRuns is adjusted to conform to the drawing data
+// from the op using the VertexRegenerator.
+//
 class GrTextBlob final : public SkNVRefCnt<GrTextBlob>, public SkGlyphRunPainterInterface {
 public:
     class SubRun;
@@ -91,7 +102,7 @@ public:
     // adding SubRuns.
     static sk_sp<GrTextBlob> Make(const SkGlyphRunList& glyphRunList,
                                   GrStrikeCache* strikeCache,
-                                  const SkMatrix& viewMatrix,
+                                  const SkMatrix& drawMatrix,
                                   GrColor color,
                                   bool forceWForDistanceFields);
 
@@ -113,15 +124,15 @@ public:
     static size_t GetVertexStride(GrMaskFormat maskFormat, bool hasWCoord);
 
     bool mustRegenerate(const SkPaint&, bool, const SkMaskFilterBase::BlurRec& blurRec,
-                        const SkMatrix& viewMatrix, SkScalar x, SkScalar y);
+                        const SkMatrix& drawMatrix, SkPoint drawOrigin);
 
     void flush(GrTextTarget*, const SkSurfaceProps& props,
                const GrDistanceFieldAdjustTable* distanceAdjustTable,
                const SkPaint& paint, const SkPMColor4f& filteredColor, const GrClip& clip,
-               const SkMatrix& viewMatrix, SkScalar x, SkScalar y);
+               const SkMatrix& drawMatrix, SkPoint drawOrigin);
 
     void computeSubRunBounds(SkRect* outBounds, const SubRun& subRun,
-                             const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
+                             const SkMatrix& drawMatrix, SkPoint drawOrigin,
                              bool needsGlyphTransform);
 
     // Normal text mask, SDFT, or color.
@@ -153,7 +164,7 @@ public:
 
     // Internal test methods
     std::unique_ptr<GrDrawOp> test_makeOp(int glyphCount,
-                                          const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
+                                          const SkMatrix& drawMatrix, SkPoint drawOrigin,
                                           const SkPaint& paint, const SkPMColor4f& filteredColor,
                                           const SkSurfaceProps&, const GrDistanceFieldAdjustTable*,
                                           GrTextTarget*);
@@ -196,7 +207,7 @@ private:
 
     GrTextBlob(size_t allocSize,
                GrStrikeCache* strikeCache,
-               const SkMatrix& viewMatrix,
+               const SkMatrix& drawMatrix,
                SkPoint origin,
                GrColor color,
                SkColor initialLuminance,
@@ -206,7 +217,7 @@ private:
 
     std::unique_ptr<GrAtlasTextOp> makeOp(
             SubRun& info, int glyphCount,
-            const SkMatrix& viewMatrix, SkScalar x, SkScalar y, const SkIRect& clipRect,
+            const SkMatrix& drawMatrix, SkPoint drawOrigin, const SkIRect& clipRect,
             const SkPaint& paint, const SkPMColor4f& filteredColor, const SkSurfaceProps&,
             const GrDistanceFieldAdjustTable*, GrTextTarget*);
 
@@ -235,8 +246,8 @@ private:
     // same text blob. We record the initial view matrix and initial offsets(x,y), because we
     // record vertex bounds relative to these numbers.  When blobs are reused with new matrices,
     // we need to return to source space so we can update the vertex bounds appropriately.
-    const SkMatrix fInitialViewMatrix;
-    const SkMatrix fInitialViewMatrixInverse;
+    const SkMatrix fInitialMatrix;
+    const SkMatrix fInitialMatrixInverse;
 
     // Initial position of this blob. Used for calculating position differences when reusing this
     // blob.
@@ -282,7 +293,7 @@ public:
      * SkGlyphCache.
      */
     VertexRegenerator(GrResourceProvider*, GrTextBlob::SubRun* subRun,
-                      const SkMatrix& viewMatrix, SkScalar x, SkScalar y, GrColor color,
+                      const SkMatrix& drawMatrix, SkPoint drawOrigin, GrColor color,
                       GrDeferredUploadTarget*, GrStrikeCache*, GrAtlasManager*);
 
     struct Result {
@@ -310,15 +321,14 @@ private:
     bool doRegen(Result*, bool regenPos, bool regenCol, bool regenTexCoords, bool regenGlyphs);
 
     GrResourceProvider* fResourceProvider;
-    const SkMatrix& fViewMatrix;
+    const SkMatrix& fDrawMatrix;
     GrDeferredUploadTarget* fUploadTarget;
     GrStrikeCache* fGrStrikeCache;
     GrAtlasManager* fFullAtlasManager;
     SkTLazy<SkBulkGlyphMetricsAndImages> fMetricsAndImages;
     SubRun* fSubRun;
     GrColor fColor;
-    SkScalar fTransX;
-    SkScalar fTransY;
+    SkVector fDrawTranslation;
 
     uint32_t fRegenFlags = 0;
     int fCurrGlyph = 0;

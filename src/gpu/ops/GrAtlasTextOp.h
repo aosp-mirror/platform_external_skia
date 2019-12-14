@@ -29,11 +29,10 @@ public:
     static const int kIndicesPerGlyph = 6;
 
     struct Geometry {
-        SkMatrix    fViewMatrix;
+        SkMatrix    fDrawMatrix;
         SkIRect     fClipRect;
         GrTextBlob* fBlob;
-        SkScalar    fX;
-        SkScalar    fY;
+        SkPoint     fDrawOrigin;
         GrTextBlob::SubRun* fSubRunPtr;
         SkPMColor4f fColor;
     };
@@ -149,7 +148,7 @@ private:
     bool usesLocalCoords() const { return fUsesLocalCoords; }
     int numGlyphs() const { return fNumGlyphs; }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override;
+    CombineResult onCombineIfPossible(GrOp* t, SkArenaAlloc*, const GrCaps& caps) override;
 
     GrGeometryProcessor* setupDfProcessor(SkArenaAlloc* arena,
                                           const GrShaderCaps& caps,
