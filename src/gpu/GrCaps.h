@@ -53,6 +53,7 @@ public:
     bool multisampleDisableSupport() const { return fMultisampleDisableSupport; }
     bool instanceAttribSupport() const { return fInstanceAttribSupport; }
     bool mixedSamplesSupport() const { return fMixedSamplesSupport; }
+    bool conservativeRasterSupport() const { return fConservativeRasterSupport; }
     // This flag indicates that we never have to resolve MSAA. In practice, it means that we have
     // an MSAA-render-to-texture extension: Any render target we create internally will use the
     // extension, and any wrapped render target is the client's responsibility.
@@ -165,10 +166,12 @@ public:
 
     virtual bool isFormatSRGB(const GrBackendFormat&) const = 0;
 
-    // Callers can optionally pass in an SkImage::CompressionType which will be filled in with the
-    // correct type if the GrBackendFormat is compressed.
-    virtual bool isFormatCompressed(const GrBackendFormat&,
-                                    SkImage::CompressionType* compressionType = nullptr) const = 0;
+    // This will return SkImage::CompressionType::kNone if the backend format is not compressed.
+    virtual SkImage::CompressionType compressionType(const GrBackendFormat&) const = 0;
+
+    bool isFormatCompressed(const GrBackendFormat& format) const {
+        return this->compressionType(format) != SkImage::CompressionType::kNone;
+    }
 
     // TODO: Once we use the supportWritePixels call for uploads, we can remove this function and
     // instead only have the version that takes a GrBackendFormat.
@@ -483,6 +486,7 @@ protected:
     bool fMultisampleDisableSupport                  : 1;
     bool fInstanceAttribSupport                      : 1;
     bool fMixedSamplesSupport                        : 1;
+    bool fConservativeRasterSupport                  : 1;
     bool fMSAAResolvesAutomatically                  : 1;
     bool fUsePrimitiveRestart                        : 1;
     bool fPreferClientSideDynamicBuffers             : 1;
