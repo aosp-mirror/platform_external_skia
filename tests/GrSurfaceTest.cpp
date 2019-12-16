@@ -82,7 +82,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
 
     // TODO: Should only need format here but need to determine compression type from format
     // without config.
-    auto createTexture = [](int width, int height, GrColorType colorType,
+    auto createTexture = [](SkISize dimensions, GrColorType colorType,
                             const GrBackendFormat& format, GrRenderable renderable,
                             GrResourceProvider* rp) -> sk_sp<GrTexture> {
         SkImage::CompressionType compression = rp->caps()->compressionType(format);
@@ -90,19 +90,20 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
             if (renderable == GrRenderable::kYes) {
                 return nullptr;
             }
-
-            auto size = GrCompressedDataSize(compression, width, height);
+            auto size = GrCompressedDataSize(compression, dimensions, GrMipMapped::kNo);
             auto data = SkData::MakeUninitialized(size);
             SkColor4f color = {0, 0, 0, 0};
-            GrFillInCompressedData(compression, width, height, (char*)data->writable_data(), color);
-            return rp->createCompressedTexture(width, height, format, compression,
+            GrFillInCompressedData(compression, dimensions, GrMipMapped::kNo,
+                                   (char*)data->writable_data(), color);
+            return rp->createCompressedTexture(dimensions.width(), dimensions.height(),
+                                               format, compression,
                                                SkBudgeted::kNo, data.get());
         } else {
             GrPixelConfig config = rp->caps()->getConfigFromBackendFormat(format, colorType);
 
             GrSurfaceDesc desc;
-            desc.fWidth = width;
-            desc.fHeight = height;
+            desc.fWidth = dimensions.width();
+            desc.fHeight = dimensions.height();
             desc.fConfig = config;
             return rp->createTexture(desc, format, renderable, 1, GrMipMapped::kNo, SkBudgeted::kNo,
                                      GrProtected::kNo);
@@ -131,7 +132,12 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
             GrSurfaceDesc desc;
             desc.fWidth = kW;
             desc.fHeight = kH;
-            desc.fConfig = caps->getConfigFromBackendFormat(combo.fFormat, combo.fColorType);
+
+            if (caps->isFormatCompressed(combo.fFormat)) {
+                desc.fConfig = caps->getConfigFromCompressedBackendFormat(combo.fFormat);
+            } else {
+                desc.fConfig = caps->getConfigFromBackendFormat(combo.fFormat, combo.fColorType);
+            }
             SkASSERT(desc.fConfig != kUnknown_GrPixelConfig);
 
             // Check if 'isFormatTexturable' agrees with 'createTexture' and that the mipmap
@@ -147,7 +153,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
                                                                          combo.fFormat);
                 }
 
-                sk_sp<GrSurface> tex = createTexture(kW, kH, combo.fColorType, combo.fFormat,
+                sk_sp<GrSurface> tex = createTexture({kW, kH}, combo.fColorType, combo.fFormat,
                                                      GrRenderable::kNo, resourceProvider);
                 REPORTER_ASSERT(reporter, SkToBool(tex) == isTexturable,
                                 "ct:%s format:%s, tex:%d, isTexturable:%d",
@@ -203,7 +209,6 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
 
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrSurfaceProxy.h"
-#include "src/gpu/GrTextureContext.h"
 
 // For each context, set it to always clear the textures and then run through all the
 // supported formats checking that the textures are actually cleared
@@ -323,7 +328,7 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                                     fit, desc.fWidth, desc.fHeight, combo.fColorType, nullptr,
                                     1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin, nullptr);
                         } else {
-                            surfCtx = context->priv().makeDeferredTextureContext(
+                            surfCtx = context->priv().makeDeferredSurfaceContext(
                                     fit, desc.fWidth, desc.fHeight, combo.fColorType,
                                     kUnknown_SkAlphaType, nullptr, GrMipMapped::kNo,
                                     kTopLeft_GrSurfaceOrigin);
