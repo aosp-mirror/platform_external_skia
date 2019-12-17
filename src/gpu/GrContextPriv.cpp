@@ -15,10 +15,9 @@
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrRenderTargetContext.h"
-#include "src/gpu/GrSkSLFPFactoryCache.h"
+#include "src/gpu/GrSurfaceContext.h"
 #include "src/gpu/GrSurfaceContextPriv.h"
 #include "src/gpu/GrSurfacePriv.h"
-#include "src/gpu/GrTextureContext.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/effects/generated/GrConfigConversionEffect.h"
@@ -37,10 +36,6 @@ sk_sp<const GrCaps> GrContextPriv::refCaps() const {
     return fContext->refCaps();
 }
 
-sk_sp<GrSkSLFPFactoryCache> GrContextPriv::fpFactoryCache() {
-    return fContext->fpFactoryCache();
-}
-
 void GrContextPriv::addOnFlushCallbackObject(GrOnFlushCallbackObject* onFlushCBObject) {
     fContext->addOnFlushCallbackObject(onFlushCBObject);
 }
@@ -55,7 +50,7 @@ std::unique_ptr<GrSurfaceContext> GrContextPriv::makeWrappedSurfaceContext(
                                                std::move(colorSpace), props);
 }
 
-std::unique_ptr<GrTextureContext> GrContextPriv::makeDeferredTextureContext(
+std::unique_ptr<GrSurfaceContext> GrContextPriv::makeDeferredSurfaceContext(
         SkBackingFit fit,
         int width,
         int height,
@@ -66,7 +61,7 @@ std::unique_ptr<GrTextureContext> GrContextPriv::makeDeferredTextureContext(
         GrSurfaceOrigin origin,
         SkBudgeted budgeted,
         GrProtected isProtected) {
-    return fContext->makeDeferredTextureContext(fit, width, height, colorType, alphaType,
+    return fContext->makeDeferredSurfaceContext(fit, width, height, colorType, alphaType,
                                                 std::move(colorSpace), mipMapped, origin, budgeted,
                                                 isProtected);
 }
@@ -98,7 +93,7 @@ std::unique_ptr<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetCo
             surfaceProps, budgeted, isProtected);
 }
 
-std::unique_ptr<GrTextureContext> GrContextPriv::makeBackendTextureContext(
+std::unique_ptr<GrSurfaceContext> GrContextPriv::makeBackendTextureContext(
         const GrBackendTexture& tex,
         GrSurfaceOrigin origin,
         GrColorType colorType,
@@ -112,7 +107,7 @@ std::unique_ptr<GrTextureContext> GrContextPriv::makeBackendTextureContext(
         return nullptr;
     }
 
-    return this->drawingManager()->makeTextureContext(std::move(proxy), colorType, alphaType,
+    return this->drawingManager()->makeSurfaceContext(std::move(proxy), colorType, alphaType,
                                                       std::move(colorSpace));
 }
 

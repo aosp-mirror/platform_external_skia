@@ -170,8 +170,6 @@ public:
 
     void deleteSync(GrGLsync) const;
 
-    void insertEventMarker(const char*);
-
     void bindFramebuffer(GrGLenum fboTarget, GrGLuint fboid);
     void deleteFramebuffer(GrGLuint fboid);
 
@@ -367,6 +365,8 @@ private:
 
     // rt is used only if useHWAA is true.
     void flushHWAAState(GrRenderTarget* rt, bool useHWAA);
+
+    void flushConservativeRasterState(bool enable);
 
     void flushFramebufferSRGB(bool enable);
 
@@ -579,6 +579,7 @@ private:
     }                                       fHWBlendState;
 
     TriState                                fMSAAEnabled;
+    TriState                                fHWConservativeRasterEnabled;
 
     GrStencilSettings                       fHWStencilSettings;
     GrSurfaceOrigin                         fHWStencilOrigin;

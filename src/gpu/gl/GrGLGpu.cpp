@@ -585,6 +585,8 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
             // modulation. This state has no effect when not rendering to a mixed sampled target.
             GL_CALL(CoverageModulation(GR_GL_RGBA));
         }
+
+        fHWConservativeRasterEnabled = kUnknown_TriState;
     }
 
     fHWActiveTextureUnitIdx = -1; // invalid
@@ -1037,8 +1039,7 @@ bool GrGLGpu::uploadCompressedTexData(GrGLFormat format,
 
     // Make sure that the width and height that we pass to OpenGL
     // is a multiple of the block size.
-    size_t dataSize =
-            GrCompressedDataSize(compressionType, dimensions.width(), dimensions.height());
+    size_t dataSize = GrCompressedDataSize(compressionType, dimensions, GrMipMapped::kNo);
 
     if (useTexStorage) {
         // We never resize or change formats of textures.
@@ -1058,6 +1059,11 @@ bool GrGLGpu::uploadCompressedTexData(GrGLFormat format,
                                         internalFormat,
                                         SkToInt(dataSize),
                                         data));
+
+        error = CHECK_ALLOC_ERROR(this->glInterface());
+        if (error != GR_GL_NO_ERROR) {
+            return false;
+        }
     } else {
         GL_ALLOC_CALL(this->glInterface(), CompressedTexImage2D(target,
                                                                 0,  // level
@@ -1470,10 +1476,14 @@ GrGLuint GrGLGpu::createCompressedTexture2D(
 
     *initialState = set_initial_texture_params(this->glInterface(), GR_GL_TEXTURE_2D);
 
-    if (!this->uploadCompressedTexData(format, compression, dimensions, GR_GL_TEXTURE_2D, data)) {
-        GL_CALL(DeleteTextures(1, &id));
-        return 0;
+    if (data) {
+        if (!this->uploadCompressedTexData(format, compression, dimensions,
+                                           GR_GL_TEXTURE_2D, data)) {
+            GL_CALL(DeleteTextures(1, &id));
+            return 0;
+        }
     }
+
     return id;
 }
 
@@ -1695,6 +1705,7 @@ bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget, const GrProgramInfo& pr
     this->flushWindowRectangles(programInfo.pipeline().getWindowRectsState(),
                                 glRT, programInfo.origin());
     this->flushHWAAState(glRT, programInfo.pipeline().isHWAntialiasState());
+    this->flushConservativeRasterState(programInfo.pipeline().usesConservativeRaster());
 
     // This must come after textures are flushed because a texture may need
     // to be msaa-resolved (which will modify bound FBO state).
@@ -2487,6 +2498,22 @@ void GrGLGpu::flushHWAAState(GrRenderTarget* rt, bool useHWAA) {
             if (kNo_TriState != fMSAAEnabled) {
                 GL_CALL(Disable(GR_GL_MULTISAMPLE));
                 fMSAAEnabled = kNo_TriState;
+            }
+        }
+    }
+}
+
+void GrGLGpu::flushConservativeRasterState(bool enabled) {
+    if (this->caps()->conservativeRasterSupport()) {
+        if (enabled) {
+            if (kYes_TriState != fHWConservativeRasterEnabled) {
+                GL_CALL(Enable(GR_GL_CONSERVATIVE_RASTERIZATION));
+                fHWConservativeRasterEnabled = kYes_TriState;
+            }
+        } else {
+            if (kNo_TriState != fHWConservativeRasterEnabled) {
+                GL_CALL(Disable(GR_GL_CONSERVATIVE_RASTERIZATION));
+                fHWConservativeRasterEnabled = kNo_TriState;
             }
         }
     }
@@ -3323,6 +3350,7 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst, GrSurface* src, const SkIRect& s
     GL_CALL(Uniform1i(fCopyPrograms[progIdx].fTextureUniform, 0));
     this->flushBlendAndColorWrite(GrXferProcessor::BlendInfo(), GrSwizzle::RGBA());
     this->flushHWAAState(nullptr, false);
+    this->flushConservativeRasterState(false);
     this->disableScissor();
     this->disableWindowRectangles();
     this->disableStencil();
@@ -3587,11 +3615,16 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
                                                  const BackendTextureData* data,
                                                  int numMipLevels,
                                                  GrProtected isProtected) {
+    // We don't support protected textures in GL.
+    if (isProtected == GrProtected::kYes) {
+        return {};
+    }
+
     this->handleDirtyContext();
 
     GrGLFormat glFormat = format.asGLFormat();
     if (glFormat == GrGLFormat::kUnknown) {
-        return GrBackendTexture();  // invalid
+        return {};
     }
 
     // Compressed formats go through onCreateCompressedBackendTexture
@@ -3605,7 +3638,7 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
     desc.fHeight = dimensions.height();
     desc.fConfig = gl_format_to_pixel_config(glFormat);
     if (desc.fConfig == kUnknown_GrPixelConfig) {
-        return GrBackendTexture();  // invalid
+        return {};
     }
 
     info.fTarget = GR_GL_TEXTURE_2D;
@@ -3615,6 +3648,7 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
         return {};
     }
 
+    SkASSERT(!data || data->type() != BackendTextureData::Type::kCompressed);
     if (data && data->type() == BackendTextureData::Type::kPixmaps) {
         SkTDArray<GrMipLevel> texels;
         GrColorType colorType = SkColorTypeToGrColorType(data->pixmap(0).colorType());
@@ -3665,6 +3699,7 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
     this->bindTextureToScratchUnit(GR_GL_TEXTURE_2D, 0);
 
     auto parameters = sk_make_sp<GrGLTextureParameters>();
+    // The non-sampler params are still at their default values.
     parameters->set(&initialState, GrGLTextureParameters::NonsamplerState(),
                     fResetTimestampForTextureParameters);
 
@@ -3954,10 +3989,6 @@ void GrGLGpu::checkFinishProcs() {
 
 void GrGLGpu::deleteSync(GrGLsync sync) const {
     GL_CALL(DeleteSync(sync));
-}
-
-void GrGLGpu::insertEventMarker(const char* msg) {
-    GL_CALL(InsertEventMarker(strlen(msg), msg));
 }
 
 std::unique_ptr<GrSemaphore> GrGLGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {

@@ -402,6 +402,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
                                                ctxInfo.hasExtension("OES_standard_derivatives");
     }
 
+    if (ctxInfo.hasExtension("GL_NV_conservative_raster")) {
+        fConservativeRasterSupport = true;
+    }
+
     // Protect ourselves against tracking huge amounts of texture state.
     static const uint8_t kMaxSaneSamplers = 32;
     GrGLint maxSamplers;
@@ -3906,22 +3910,18 @@ bool GrGLCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format.asGLFormat() == GrGLFormat::kSRGB8_ALPHA8;
 }
 
-bool GrGLCaps::isFormatCompressed(const GrBackendFormat& format,
-                                  SkImage::CompressionType* compressionType) const {
+SkImage::CompressionType GrGLCaps::compressionType(const GrBackendFormat& format) const {
     auto fmt = format.asGLFormat();
 
-    SkImage::CompressionType dummyType;
-    SkImage::CompressionType* compressionTypePtr = compressionType ? compressionType : &dummyType;
-
     switch (fmt) {
-        case GrGLFormat::kCOMPRESSED_RGB8_ETC2: // fall through
-        case GrGLFormat::kCOMPRESSED_ETC1_RGB8:
-            // ETC2 uses the same compression layout as ETC1
-            *compressionTypePtr = SkImage::CompressionType::kETC1;
-            return true;
+        case GrGLFormat::kCOMPRESSED_ETC1_RGB8: // same compression layout as RGB8_ETC2
+        case GrGLFormat::kCOMPRESSED_RGB8_ETC2:
+            return SkImage::CompressionType::kETC1;
         default:
-            return false;
+            return SkImage::CompressionType::kNone;
     }
+
+    SkUNREACHABLE;
 }
 
 bool GrGLCaps::isFormatTexturableAndUploadable(GrColorType ct,
@@ -4163,6 +4163,17 @@ GrPixelConfig GrGLCaps::onGetConfigFromBackendFormat(const GrBackendFormat& form
     return validate_sized_format(format.asGLFormat(), ct, fStandard);
 }
 
+GrPixelConfig GrGLCaps::onGetConfigFromCompressedBackendFormat(const GrBackendFormat& f) const {
+    GrGLFormat glFormat = f.asGLFormat();
+
+    if (glFormat == GrGLFormat::kCOMPRESSED_RGB8_ETC2 ||
+        glFormat == GrGLFormat::kCOMPRESSED_ETC1_RGB8) {
+        return kRGB_ETC1_GrPixelConfig;
+    }
+
+    return kUnknown_GrPixelConfig;
+}
+
 GrColorType GrGLCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& format,
                                                         bool isAlphaChannel) const {
     switch (format.asGLFormat()) {
@@ -4208,7 +4219,10 @@ GrBackendFormat GrGLCaps::getBackendFormatFromCompressionType(
             if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_RGB8_ETC2)) {
                 return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB8_ETC2, GR_GL_TEXTURE_2D);
             }
-            return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D);
+            if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_ETC1_RGB8)) {
+                return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D);
+            }
+            return {};
     }
 
     SkUNREACHABLE;

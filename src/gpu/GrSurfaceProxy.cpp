@@ -21,7 +21,6 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrStencilAttachment.h"
 #include "src/gpu/GrSurfacePriv.h"
-#include "src/gpu/GrTextureContext.h"
 #include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/GrTextureRenderTargetProxy.h"
 
@@ -268,6 +267,12 @@ SkISize GrSurfaceProxy::backingStoreDimensions() const {
     return GrResourceProvider::MakeApprox(fDimensions);
 }
 
+bool GrSurfaceProxy::isFunctionallyExact() const {
+    SkASSERT(!this->isFullyLazy());
+    return fFit == SkBackingFit::kExact ||
+           fDimensions == GrResourceProvider::MakeApprox(fDimensions);
+}
+
 #ifdef SK_DEBUG
 void GrSurfaceProxy::validate(GrContext_Base* context) const {
     if (fTarget) {
@@ -304,7 +309,7 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrRecordingContext* context,
     }
     auto colorType = GrPixelConfigToColorType(src->config());
     if (src->backendFormat().textureType() != GrTextureType::kExternal) {
-        auto dstContext = context->priv().makeDeferredTextureContext(
+        auto dstContext = context->priv().makeDeferredSurfaceContext(
                 fit, width, height, colorType, kUnknown_SkAlphaType, nullptr, mipMapped,
                 src->origin(), budgeted, isProtected);
         if (!dstContext) {

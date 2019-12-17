@@ -311,22 +311,19 @@ bool GrMtlCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format_is_srgb(GrBackendFormatAsMTLPixelFormat(format));
 }
 
-bool GrMtlCaps::isFormatCompressed(const GrBackendFormat& format,
-                                  SkImage::CompressionType* compressionType) const {
+SkImage::CompressionType GrMtlCaps::compressionType(const GrBackendFormat& format) const {
 #ifdef SK_BUILD_FOR_MAC
-    return false;
+    return SkImage::CompressionType::kNone;
 #else
-    SkImage::CompressionType dummyType;
-    SkImage::CompressionType* compressionTypePtr = compressionType ? compressionType : &dummyType;
-
     switch (GrBackendFormatAsMTLPixelFormat(format)) {
         case MTLPixelFormatETC2_RGB8:
             // ETC2 uses the same compression layout as ETC1
-            *compressionTypePtr = SkImage::kETC1_CompressionType;
-            return true;
+            return SkImage::CompressionType::kETC1;
         default:
-            return false;
+            return SkImage::CompressionType::kNone;
     }
+
+    SkUNREACHABLE;
 #endif
 }
 
@@ -995,6 +992,18 @@ bool GrMtlCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
 GrPixelConfig GrMtlCaps::onGetConfigFromBackendFormat(const GrBackendFormat& format,
                                                       GrColorType ct) const {
     return validate_sized_format(GrBackendFormatAsMTLPixelFormat(format), ct);
+}
+
+GrPixelConfig GrMtlCaps::onGetConfigFromCompressedBackendFormat(const GrBackendFormat& f) const {
+
+    switch (GrBackendFormatAsMTLPixelFormat(f)) {
+#ifdef SK_BUILD_FOR_IOS
+        case MTLPixelFormatETC2_RGB8: return kRGB_ETC1_GrPixelConfig;
+#endif
+        default:                      return kUnknown_GrPixelConfig;
+    }
+
+    SkUNREACHABLE;
 }
 
 GrColorType GrMtlCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& format,

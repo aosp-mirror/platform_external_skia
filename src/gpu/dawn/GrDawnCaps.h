@@ -18,8 +18,7 @@ public:
     GrDawnCaps(const GrContextOptions& contextOptions);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
-    bool isFormatCompressed(const GrBackendFormat&,
-                            SkImage::CompressionType* compressionType = nullptr) const override;
+    SkImage::CompressionType compressionType(const GrBackendFormat&) const override;
 
     bool isFormatTexturableAndUploadable(GrColorType, const GrBackendFormat& format) const override;
     bool isFormatRenderable(const GrBackendFormat& format,
@@ -75,6 +74,7 @@ private:
     GrBackendFormat onGetDefaultBackendFormat(GrColorType, GrRenderable) const override;
 
     GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
+    GrPixelConfig onGetConfigFromCompressedBackendFormat(const GrBackendFormat&) const override;
 
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
