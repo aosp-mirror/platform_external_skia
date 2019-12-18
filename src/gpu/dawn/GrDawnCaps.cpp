@@ -188,7 +188,7 @@ GrBackendFormat GrDawnCaps::getBackendFormatFromCompressionType(SkImage::Compres
     return GrBackendFormat();
 }
 
-GrSwizzle GrDawnCaps::getTextureSwizzle(const GrBackendFormat& format, GrColorType colorType) const
+GrSwizzle GrDawnCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const
 {
     return get_swizzle(format, colorType, false);
 }
@@ -224,8 +224,8 @@ static uint32_t get_blend_info_key(const GrPipeline& pipeline) {
 
     static const uint32_t kBlendWriteShift = 1;
     static const uint32_t kBlendCoeffShift = 5;
-    static_assert(kLast_GrBlendCoeff < (1 << kBlendCoeffShift));
-    static_assert(kFirstAdvancedGrBlendEquation - 1 < 4);
+    GR_STATIC_ASSERT(kLast_GrBlendCoeff < (1 << kBlendCoeffShift));
+    GR_STATIC_ASSERT(kFirstAdvancedGrBlendEquation - 1 < 4);
 
     uint32_t key = blendInfo.fWriteColor;
     key |= (blendInfo.fSrcBlend << kBlendWriteShift);

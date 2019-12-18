@@ -419,10 +419,10 @@ public:
     bool clampToBorderSupport() const { return fClampToBorderSupport; }
 
     /**
-     * Returns the GrSwizzle to use when sampling from a texture with the passed in GrBackendFormat
-     * and GrColorType.
+     * Returns the GrSwizzle to use when sampling or reading back from a texture with the passed in
+     * GrBackendFormat and GrColorType.
      */
-    virtual GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const = 0;
+    virtual GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const = 0;
 
     /**
      * Returns the GrSwizzle to use when outputting to a render target with the passed in
@@ -531,7 +531,7 @@ protected:
 
     BlendEquationSupport fBlendEquationSupport;
     uint32_t fAdvBlendEqBlacklist;
-    static_assert(kLast_GrBlendEquation < 32);
+    GR_STATIC_ASSERT(kLast_GrBlendEquation < 32);
 
     uint32_t fMapBufferFlags;
     int fBufferMapThreshold;
