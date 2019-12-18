@@ -16,6 +16,8 @@
 #include "tools/ToolUtils.h"
 
 #ifdef SK_GL
+#include "src/gpu/gl/GrGLCaps.h"
+#include "src/gpu/gl/GrGLDefines.h"
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/gl/GrGLUtil.h"
 #endif
@@ -373,8 +375,11 @@ static void check_mipmaps(GrContext* context, const GrBackendTexture& backendTex
         bool result = surf->readPixels(actual2, 0, 0);
         REPORTER_ASSERT(reporter, result);
 
+        SkString str;
+        str.appendf("mip-level %d", i);
+
         check_solid_pixmap(reporter, expectedColors[i], actual2, skColorType,
-                           label, "mip-level failure");
+                           label, str.c_str());
     }
 }
 
@@ -603,7 +608,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ColorTypeBackendAllocationTest, reporter, ctx
         { kR16G16B16A16_unorm_SkColorType,{ .25f, .5f, .75f, 1 }   },
     };
 
-    GR_STATIC_ASSERT(kLastEnum_SkColorType == SK_ARRAY_COUNT(combinations));
+    static_assert(kLastEnum_SkColorType == SK_ARRAY_COUNT(combinations));
 
     for (auto combo : combinations) {
         SkColorType colorType = combo.fColorType;
@@ -724,10 +729,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ColorTypeBackendAllocationTest, reporter, ctx
 
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef SK_GL
-
-#include "src/gpu/gl/GrGLCaps.h"
-#include "src/gpu/gl/GrGLDefines.h"
-#include "src/gpu/gl/GrGLUtil.h"
 
 DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLBackendAllocationTest, reporter, ctxInfo) {
     sk_gpu_test::GLTestContext* glCtx = ctxInfo.glContext();
