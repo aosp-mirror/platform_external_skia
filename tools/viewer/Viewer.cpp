@@ -38,6 +38,7 @@
 #include "tools/viewer/ParticlesSlide.h"
 #include "tools/viewer/SKPSlide.h"
 #include "tools/viewer/SampleSlide.h"
+#include "tools/viewer/SkSLSlide.h"
 #include "tools/viewer/SlideDir.h"
 #include "tools/viewer/SvgSlide.h"
 #include "tools/viewer/Viewer.h"
@@ -392,6 +393,12 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
                 break;
         }
     });
+    fCommands.addCommand('w', "Modes", "Toggle wireframe", [this]() {
+        DisplayParams params = fWindow->getRequestedDisplayParams();
+        params.fGrContextOptions.fWireframeMode = !params.fGrContextOptions.fWireframeMode;
+        fWindow->setRequestedDisplayParams(params);
+        fWindow->inval();
+    });
     fCommands.addCommand(skui::Key::kRight, "Right", "Navigation", "Next slide", [this]() {
         this->setCurrentSlide(fCurrentSlide < fSlides.count() - 1 ? fCurrentSlide + 1 : 0);
     });
@@ -721,6 +728,14 @@ void Viewer::initSlides() {
     {
         // TODO: Convert this to a sample
         sk_sp<Slide> slide(new ParticlesSlide());
+        if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
+            fSlides.push_back(std::move(slide));
+        }
+    }
+
+    // Runtime shader editor
+    {
+        sk_sp<Slide> slide(new SkSLSlide());
         if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
             fSlides.push_back(std::move(slide));
         }

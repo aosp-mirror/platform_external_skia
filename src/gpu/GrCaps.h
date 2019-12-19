@@ -54,6 +54,7 @@ public:
     bool instanceAttribSupport() const { return fInstanceAttribSupport; }
     bool mixedSamplesSupport() const { return fMixedSamplesSupport; }
     bool conservativeRasterSupport() const { return fConservativeRasterSupport; }
+    bool wireframeSupport() const { return fWireframeSupport; }
     // This flag indicates that we never have to resolve MSAA. In practice, it means that we have
     // an MSAA-render-to-texture extension: Any render target we create internally will use the
     // extension, and any wrapped render target is the client's responsibility.
@@ -419,10 +420,10 @@ public:
     bool clampToBorderSupport() const { return fClampToBorderSupport; }
 
     /**
-     * Returns the GrSwizzle to use when sampling from a texture with the passed in GrBackendFormat
-     * and GrColorType.
+     * Returns the GrSwizzle to use when sampling or reading back from a texture with the passed in
+     * GrBackendFormat and GrColorType.
      */
-    virtual GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const = 0;
+    virtual GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const = 0;
 
     /**
      * Returns the GrSwizzle to use when outputting to a render target with the passed in
@@ -490,6 +491,7 @@ protected:
     bool fInstanceAttribSupport                      : 1;
     bool fMixedSamplesSupport                        : 1;
     bool fConservativeRasterSupport                  : 1;
+    bool fWireframeSupport                           : 1;
     bool fMSAAResolvesAutomatically                  : 1;
     bool fUsePrimitiveRestart                        : 1;
     bool fPreferClientSideDynamicBuffers             : 1;

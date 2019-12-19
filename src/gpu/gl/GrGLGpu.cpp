@@ -551,11 +551,7 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
             }
             GL_CALL(Disable(GR_GL_POLYGON_OFFSET_FILL));
 
-            if (this->caps()->wireframeMode()) {
-                GL_CALL(PolygonMode(GR_GL_FRONT_AND_BACK, GR_GL_LINE));
-            } else {
-                GL_CALL(PolygonMode(GR_GL_FRONT_AND_BACK, GR_GL_FILL));
-            }
+            fHWWireframeEnabled = kUnknown_TriState;
 #endif
             // Since ES doesn't support glPointSize at all we always use the VS to
             // set the point size
@@ -1353,6 +1349,9 @@ sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(int width, int height,
         return nullptr;
     }
 
+    // Unbind this texture from the scratch texture unit.
+    this->bindTextureToScratchUnit(GR_GL_TEXTURE_2D, 0);
+
     auto tex = sk_make_sp<GrGLTexture>(this, budgeted, desc, GrMipMapsStatus::kNotAllocated);
     // The non-sampler params are still at their default values.
     tex->parameters()->set(&initialState, GrGLTextureParameters::NonsamplerState(),
@@ -1721,6 +1720,7 @@ bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget, const GrProgramInfo& pr
                                 glRT, programInfo.origin());
     this->flushHWAAState(glRT, programInfo.pipeline().isHWAntialiasState());
     this->flushConservativeRasterState(programInfo.pipeline().usesConservativeRaster());
+    this->flushWireframeState(programInfo.pipeline().isWireframe());
 
     // This must come after textures are flushed because a texture may need
     // to be msaa-resolved (which will modify bound FBO state).
@@ -2529,6 +2529,22 @@ void GrGLGpu::flushConservativeRasterState(bool enabled) {
             if (kNo_TriState != fHWConservativeRasterEnabled) {
                 GL_CALL(Disable(GR_GL_CONSERVATIVE_RASTERIZATION));
                 fHWConservativeRasterEnabled = kNo_TriState;
+            }
+        }
+    }
+}
+
+void GrGLGpu::flushWireframeState(bool enabled) {
+    if (this->caps()->wireframeSupport()) {
+        if (this->caps()->wireframeMode() || enabled) {
+            if (kYes_TriState != fHWWireframeEnabled) {
+                GL_CALL(PolygonMode(GR_GL_FRONT_AND_BACK, GR_GL_LINE));
+                fHWWireframeEnabled = kYes_TriState;
+            }
+        } else {
+            if (kNo_TriState != fHWWireframeEnabled) {
+                GL_CALL(PolygonMode(GR_GL_FRONT_AND_BACK, GR_GL_FILL));
+                fHWWireframeEnabled = kNo_TriState;
             }
         }
     }
@@ -3366,6 +3382,7 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst, GrSurface* src, const SkIRect& s
     this->flushBlendAndColorWrite(GrXferProcessor::BlendInfo(), GrSwizzle::RGBA());
     this->flushHWAAState(nullptr, false);
     this->flushConservativeRasterState(false);
+    this->flushWireframeState(false);
     this->disableScissor();
     this->disableWindowRectangles();
     this->disableStencil();
