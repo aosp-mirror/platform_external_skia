@@ -1751,6 +1751,7 @@ cc_test {
         "tests/SkRasterPipelineTest.cpp",
         "tests/SkRemoteGlyphCacheTest.cpp",
         "tests/SkResourceCacheTest.cpp",
+        "tests/SkRuntimeEffectTest.cpp",
         "tests/SkSLErrorTest.cpp",
         "tests/SkSLFPTest.cpp",
         "tests/SkSLGLSLTest.cpp",
