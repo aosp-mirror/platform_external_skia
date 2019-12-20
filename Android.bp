@@ -1500,6 +1500,7 @@ cc_test {
         "tests/ColorPrivTest.cpp",
         "tests/ColorSpaceTest.cpp",
         "tests/ColorTest.cpp",
+        "tests/CompressedBackendAllocationTest.cpp",
         "tests/CopySurfaceTest.cpp",
         "tests/CubicMapTest.cpp",
         "tests/DashPathEffectTest.cpp",

@@ -63,6 +63,7 @@ enum GrGLRenderer {
     kAdreno5xx_GrGLRenderer,
     kAdreno615_GrGLRenderer,  // Pixel3a
     kAdreno630_GrGLRenderer,  // Pixel3
+    kAdreno640_GrGLRenderer,  // Pixel4
     kGoogleSwiftShader_GrGLRenderer,
 
     /** Intel GPU families, ordered by generation **/
@@ -372,5 +373,10 @@ GrGLenum GrToGLStencilFunc(GrStencilTest test);
  * Returns true if the format is compressed.
  */
 bool GrGLFormatIsCompressed(GrGLFormat);
+
+/**
+ * This will return CompressionType::kNone if the format is uncompressed.
+ */
+SkImage::CompressionType GrGLFormatToCompressionType(GrGLFormat);
 
 #endif
