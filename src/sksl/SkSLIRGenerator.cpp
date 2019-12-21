@@ -271,6 +271,11 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
             baseType->kind() == Type::Kind::kMatrix_Kind) {
             fErrors.error(decls.fOffset, "'in' variables may not have matrix type");
         }
+        if ((modifiers.fFlags & Modifiers::kIn_Flag) &&
+            (modifiers.fFlags & Modifiers::kUniform_Flag)) {
+            fErrors.error(decls.fOffset,
+                          "'in uniform' variables only permitted within fragment processors");
+        }
         if (modifiers.fLayout.fWhen.fLength) {
             fErrors.error(decls.fOffset, "'when' is only permitted within fragment processors");
         }
@@ -1490,8 +1495,12 @@ static std::unique_ptr<Expression> short_circuit_boolean(const Context& context,
         // (true || expr) -> (true) and (false || expr) -> (expr)
         return leftVal ? std::unique_ptr<Expression>(new BoolLiteral(context, left.fOffset, true))
                        : right.clone();
+    } else if (op == Token::LOGICALXOR) {
+        // (true ^^ expr) -> !(expr) and (false ^^ expr) -> (expr)
+        return leftVal ? std::unique_ptr<Expression>(new PrefixExpression(Token::LOGICALNOT,
+                                                                          right.clone()))
+                       : right.clone();
     } else {
-        // Can't short circuit XOR
         return nullptr;
     }
 }

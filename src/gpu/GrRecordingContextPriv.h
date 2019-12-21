@@ -41,11 +41,11 @@ public:
     // from GrRecordingContext
     GrDrawingManager* drawingManager() { return fContext->drawingManager(); }
 
-    GrOpMemoryPool* opMemoryPool() { return fContext->opMemoryPool(); }
-    std::unique_ptr<GrOpMemoryPool> detachOpMemoryPool();
+    GrOpMemoryPool* opMemoryPool() { return fContext->arenas().opMemoryPool(); }
+    SkArenaAlloc* recordTimeAllocator() { return fContext->arenas().recordTimeAllocator(); }
+    GrRecordingContext::Arenas arenas() { return fContext->arenas(); }
 
-    SkArenaAlloc* recordTimeAllocator() { return fContext->recordTimeAllocator(); }
-    std::unique_ptr<SkArenaAlloc> detachRecordTimeAllocator();
+    GrRecordingContext::OwnedArenas&& detachArenas() { return fContext->detachArenas(); }
 
     void recordProgramInfo(const GrProgramInfo* programInfo) {
         fContext->recordProgramInfo(programInfo);
@@ -65,25 +65,6 @@ public:
      * ensure its lifetime is tied to that of the context.
      */
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
-
-    std::unique_ptr<GrSurfaceContext> makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy>,
-                                                                GrColorType,
-                                                                SkAlphaType,
-                                                                sk_sp<SkColorSpace> = nullptr,
-                                                                const SkSurfaceProps* = nullptr);
-
-    /** Create a new texture context backed by a deferred-style GrTextureProxy. */
-    std::unique_ptr<GrSurfaceContext> makeDeferredSurfaceContext(
-            SkBackingFit,
-            int width,
-            int height,
-            GrColorType,
-            SkAlphaType,
-            sk_sp<SkColorSpace>,
-            GrMipMapped = GrMipMapped::kNo,
-            GrSurfaceOrigin = kTopLeft_GrSurfaceOrigin,
-            SkBudgeted = SkBudgeted::kYes,
-            GrProtected = GrProtected::kNo);
 
     /*
      * Create a new render target context backed by a deferred-style

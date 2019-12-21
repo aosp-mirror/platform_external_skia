@@ -352,9 +352,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 
     // Enable supported shader-related caps
     if (GR_IS_GR_GL(standard)) {
-        shaderCaps->fDualSourceBlendingSupport = (version >= GR_GL_VER(3, 3) ||
-            ctxInfo.hasExtension("GL_ARB_blend_func_extended")) &&
-            ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
+        shaderCaps->fDualSourceBlendingSupport =
+                (version >= GR_GL_VER(3, 3) ||
+                 ctxInfo.hasExtension("GL_ARB_blend_func_extended")) &&
+                ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
 
         shaderCaps->fShaderDerivativeSupport = true;
 
@@ -2616,6 +2617,20 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         }
     }
 
+    // Format: COMPRESSED_RGB8_BC1
+    {
+        FormatInfo& info = this->getFormatInfo(GrGLFormat::kCOMPRESSED_RGB8_BC1);
+        info.fFormatType = FormatType::kNormalizedFixedPoint;
+        info.fInternalFormatForTexImageOrStorage = GR_GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+        if (GR_IS_GR_GL(standard) || GR_IS_GR_GL_ES(standard)) {
+            if (ctxInfo.hasExtension("GL_EXT_texture_compression_s3tc")) {
+                info.fFlags = FormatInfo::kTexturable_Flag;
+            }
+        } // No WebGL support
+
+        // There are no support GrColorTypes for this format
+    }
+
     // Format: COMPRESSED_RGB8_ETC2
     {
         FormatInfo& info = this->getFormatInfo(GrGLFormat::kCOMPRESSED_RGB8_ETC2);
@@ -3569,6 +3584,10 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         shaderCaps->fRemovePowWithConstantExponent = true;
     }
 
+    if (fDriverBugWorkarounds.disable_dual_source_blending_support) {
+        shaderCaps->fDualSourceBlendingSupport = false;
+    }
+
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() ||
         kAdreno4xx_other_GrGLRenderer == ctxInfo.renderer()) {
         shaderCaps->fMustWriteToFragColor = true;
@@ -3589,6 +3608,20 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (kNVIDIA_GrGLDriver == ctxInfo.driver() &&
         ctxInfo.driverVersion() < GR_GL_DRIVER_VER(337, 00, 0) &&
         kAdvanced_BlendEquationSupport == fBlendEquationSupport) {
+        fBlendEquationSupport = kBasic_BlendEquationSupport;
+        shaderCaps->fAdvBlendEqInteraction = GrShaderCaps::kNotSupported_AdvBlendEqInteraction;
+    }
+
+    // Advanced blending can cause shader compilation to fail with message
+    // "Interface block type in this shader".
+    // on some shaders that use advanced blending on the line:
+    // "layout (blend_support_all_equations) out;"
+    // It has been triggered multiple times in the random Programs test, particularly on longer
+    // shaders. This was seen on a Tecno Spark 3 Pro with a PowerVR Rogue GE8300 running Android P
+    // driver version "1.10@5130912". It's unknown if it is fixed on later driver versions.
+    if (ctxInfo.vendor() == kImagination_GrGLVendor &&
+        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(1, 11, 0) &&
+        fBlendEquationSupport != kBasic_BlendEquationSupport) {
         fBlendEquationSupport = kBasic_BlendEquationSupport;
         shaderCaps->fAdvBlendEqInteraction = GrShaderCaps::kNotSupported_AdvBlendEqInteraction;
     }
@@ -3927,6 +3960,8 @@ SkImage::CompressionType GrGLCaps::compressionType(const GrBackendFormat& format
         case GrGLFormat::kCOMPRESSED_ETC1_RGB8: // same compression layout as RGB8_ETC2
         case GrGLFormat::kCOMPRESSED_RGB8_ETC2:
             return SkImage::CompressionType::kETC1;
+        case GrGLFormat::kCOMPRESSED_RGB8_BC1:
+            return SkImage::CompressionType::kBC1_RGB8_UNORM;
         default:
             return SkImage::CompressionType::kNone;
     }
@@ -4071,6 +4106,8 @@ static GrPixelConfig validate_sized_format(GrGLFormat format,
             } else if (format == GrGLFormat::kCOMPRESSED_RGB8_ETC2 ||
                        format == GrGLFormat::kCOMPRESSED_ETC1_RGB8) {
                 return kRGB_ETC1_GrPixelConfig;
+            } else if (format == GrGLFormat::kCOMPRESSED_RGB8_BC1) {
+                return kRGB_BC1_GrPixelConfig;
             }
             break;
         case GrColorType::kRG_88:
@@ -4179,6 +4216,8 @@ GrPixelConfig GrGLCaps::onGetConfigFromCompressedBackendFormat(const GrBackendFo
     if (glFormat == GrGLFormat::kCOMPRESSED_RGB8_ETC2 ||
         glFormat == GrGLFormat::kCOMPRESSED_ETC1_RGB8) {
         return kRGB_ETC1_GrPixelConfig;
+    } else if (glFormat == GrGLFormat::kCOMPRESSED_RGB8_BC1) {
+        return kRGB_BC1_GrPixelConfig;
     }
 
     return kUnknown_GrPixelConfig;
@@ -4231,6 +4270,12 @@ GrBackendFormat GrGLCaps::getBackendFormatFromCompressionType(
             }
             if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_ETC1_RGB8)) {
                 return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D);
+            }
+            return {};
+        case SkImage::CompressionType::kBC1_RGB8_UNORM:
+            if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_RGB8_BC1)) {
+                return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                                               GR_GL_TEXTURE_2D);
             }
             return {};
     }

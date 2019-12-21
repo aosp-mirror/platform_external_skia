@@ -581,8 +581,7 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
         renderTask->prePrepare(fContext);
     }
 
-    ddl->fOpMemoryPool = fContext->priv().detachOpMemoryPool();
-    ddl->fRecordTimeData = fContext->priv().detachRecordTimeAllocator();
+    ddl->fArenas = std::move(fContext->priv().detachArenas());
 
     fContext->priv().detachProgramInfos(&ddl->fProgramInfos);
 
@@ -681,8 +680,7 @@ sk_sp<GrOpsTask> GrDrawingManager::newOpsTask(GrSurfaceProxyView surfaceView,
     GrSurfaceProxy* proxy = surfaceView.proxy();
     this->closeRenderTasksForNewRenderTask(proxy);
 
-    sk_sp<GrOpsTask> opsTask(new GrOpsTask(fContext->priv().opMemoryPool(),
-                                           fContext->priv().recordTimeAllocator(),
+    sk_sp<GrOpsTask> opsTask(new GrOpsTask(fContext->priv().arenas(),
                                            std::move(surfaceView),
                                            fContext->priv().auditTrail()));
     SkASSERT(proxy->getLastRenderTask() == opsTask.get());
@@ -941,22 +939,3 @@ std::unique_ptr<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext
                                       managedOpsTask));
 }
 
-std::unique_ptr<GrSurfaceContext> GrDrawingManager::makeSurfaceContext(
-        sk_sp<GrSurfaceProxy> sProxy,
-        GrColorType colorType,
-        SkAlphaType alphaType,
-        sk_sp<SkColorSpace> colorSpace) {
-    if (this->wasAbandoned() || !sProxy->asTextureProxy()) {
-        return nullptr;
-    }
-
-    // GrTextureRenderTargets should always be using a GrRenderTargetContext
-    SkASSERT(!sProxy->asRenderTargetProxy());
-
-    GrSurfaceOrigin origin = sProxy->origin();
-    GrSwizzle readSwizzle = sProxy->textureSwizzle();
-
-    return std::unique_ptr<GrSurfaceContext>(new GrSurfaceContext(
-            fContext, std::move(sProxy), colorType, alphaType, std::move(colorSpace), origin,
-            readSwizzle));
-}

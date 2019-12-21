@@ -80,22 +80,13 @@ public:
 
     // GrMesh::SendToGpuImpl methods. These issue the actual GL draw calls.
     // Marked final as a hint to the compiler to not use virtual dispatch.
-    void sendMeshToGpu(GrPrimitiveType, const GrBuffer* vertexBuffer, int vertexCount,
-                       int baseVertex) final;
-
-    void sendIndexedMeshToGpu(GrPrimitiveType, const GrBuffer* indexBuffer, int indexCount,
-                              int baseIndex, uint16_t minIndexValue, uint16_t maxIndexValue,
-                              const GrBuffer* vertexBuffer, int baseVertex,
-                              GrPrimitiveRestart) final;
-
-    void sendInstancedMeshToGpu(GrPrimitiveType, const GrBuffer* vertexBuffer, int vertexCount,
-                                int baseVertex, const GrBuffer* instanceBuffer, int instanceCount,
+    void sendArrayMeshToGpu(const GrMesh&, int vertexCount, int baseVertex) final;
+    void sendIndexedMeshToGpu(const GrMesh&, int indexCount, int baseIndex, uint16_t minIndexValue,
+                              uint16_t maxIndexValue, int baseVertex) final;
+    void sendInstancedMeshToGpu(const GrMesh&, int vertexCount, int baseVertex, int instanceCount,
                                 int baseInstance) final;
-
-    void sendIndexedInstancedMeshToGpu(GrPrimitiveType, const GrBuffer* indexBuffer, int indexCount,
-                                       int baseIndex, const GrBuffer* vertexBuffer, int baseVertex,
-                                       const GrBuffer* instanceBuffer, int instanceCount,
-                                       int baseInstance, GrPrimitiveRestart) final;
+    void sendIndexedInstancedMeshToGpu(const GrMesh&, int indexCount, int baseIndex, int baseVertex,
+                                       int instanceCount, int baseInstance) final;
 
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
@@ -206,9 +197,10 @@ private:
                                      GrProtected,
                                      int mipLevelCount,
                                      uint32_t levelClearMask) override;
-    sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
-                                               SkImage::CompressionType compression, SkBudgeted,
-                                               const void* data) override;
+    sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
+                                               const GrBackendFormat&,
+                                               SkBudgeted,
+                                               const void* data, size_t dataSize) override;
 
     sk_sp<GrGpuBuffer> onCreateBuffer(size_t size, GrGpuBufferType intendedType, GrAccessPattern,
                                       const void* data) override;
@@ -242,9 +234,9 @@ private:
                              int mipLevelCount);
 
     GrGLuint createCompressedTexture2D(const SkISize& dimensions, GrGLFormat,
-                                       SkImage::CompressionType, GrMipMapped,
+                                       GrMipMapped,
                                        GrGLTextureParameters::SamplerOverriddenState* initialState,
-                                       const void* data);
+                                       const void* data, size_t dataSize);
 
     bool onReadPixels(GrSurface*, int left, int top, int width, int height,
                       GrColorType surfaceColorType, GrColorType dstColorType, void* buffer,
@@ -388,11 +380,10 @@ private:
     // Helper for onCreateCompressedTexture. Compressed textures are read-only so we only use this
     // to populate a new texture. Returns false if we failed to create and upload the texture.
     bool uploadCompressedTexData(GrGLFormat,
-                                 SkImage::CompressionType,
                                  SkISize dimensions,
                                  GrMipMapped,
                                  GrGLenum target,
-                                 const void* data);
+                                 const void* data, size_t dataSize);
 
     bool createRenderTargetObjects(const GrGLTexture::Desc&,
                                    int sampleCount,
