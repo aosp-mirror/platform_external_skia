@@ -84,7 +84,6 @@ public:
     GrDrawOpAtlas::BulkUseTokenUpdater* bulkUseToken();
     void setStrike(sk_sp<GrTextStrike> strike);
     GrTextStrike* strike() const;
-    sk_sp<GrTextStrike> refStrike() const;
 
     void setAtlasGeneration(uint64_t atlasGeneration);
     uint64_t atlasGeneration() const;
@@ -93,6 +92,8 @@ public:
     GrColor color() const;
 
     GrMaskFormat maskFormat() const;
+
+    size_t vertexStride() const;
 
     const SkRect& vertexBounds() const;
     void joinGlyphBounds(const SkRect& glyphBounds);
@@ -174,7 +175,7 @@ void GrTextBlob::SubRun::appendGlyphs(const SkZip<SkGlyphVariant, SkPoint>& draw
     GrColor color = this->color();
     // glyphs drawn in perspective must always have a w coord.
     SkASSERT(hasW || !fBlob->fInitialMatrix.hasPerspective());
-    size_t vertexStride = GetVertexStride(fMaskFormat, hasW);
+    size_t vertexStride = this->vertexStride();
     // We always write the third position component used by SDFs. If it is unused it gets
     // overwritten. Similarly, we always write the color and the blob will later overwrite it
     // with texture coords if it is unused.
@@ -222,12 +223,15 @@ void GrTextBlob::SubRun::resetBulkUseToken() { fBulkUseToken.reset(); }
 GrDrawOpAtlas::BulkUseTokenUpdater* GrTextBlob::SubRun::bulkUseToken() { return &fBulkUseToken; }
 void GrTextBlob::SubRun::setStrike(sk_sp<GrTextStrike> strike) { fStrike = std::move(strike); }
 GrTextStrike* GrTextBlob::SubRun::strike() const { return fStrike.get(); }
-sk_sp<GrTextStrike> GrTextBlob::SubRun::refStrike() const { return fStrike; }
 void GrTextBlob::SubRun::setAtlasGeneration(uint64_t atlasGeneration) { fAtlasGeneration = atlasGeneration;}
 uint64_t GrTextBlob::SubRun::atlasGeneration() const { return fAtlasGeneration; }
 void GrTextBlob::SubRun::setColor(GrColor color) { fColor = color; }
 GrColor GrTextBlob::SubRun::color() const { return fColor; }
 GrMaskFormat GrTextBlob::SubRun::maskFormat() const { return fMaskFormat; }
+size_t GrTextBlob::SubRun::vertexStride() const {
+    return GetVertexStride(this->maskFormat(), this->hasW());
+}
+
 const SkRect& GrTextBlob::SubRun::vertexBounds() const { return fVertexBounds; }
 void GrTextBlob::SubRun::joinGlyphBounds(const SkRect& glyphBounds) {
     fVertexBounds.joinNonEmptyArg(glyphBounds);
@@ -911,9 +915,8 @@ bool GrTextBlob::VertexRegenerator::doRegen(GrTextBlob::VertexRegenerator::Resul
         }
     }
 
-    sk_sp<GrTextStrike> grStrike = fSubRun->refStrike();
-    bool hasW = fSubRun->hasW();
-    auto vertexStride = GetVertexStride(fSubRun->maskFormat(), hasW);
+    GrTextStrike* grStrike = fSubRun->strike();
+    auto vertexStride = fSubRun->vertexStride();
     char* currVertex = fSubRun->fVertexData.data() + fCurrGlyph * kVerticesPerGlyph * vertexStride;
     result->fFirstVertex = currVertex;
 
@@ -924,11 +927,9 @@ bool GrTextBlob::VertexRegenerator::doRegen(GrTextBlob::VertexRegenerator::Resul
             SkASSERT(glyph && glyph->fMaskFormat == fSubRun->maskFormat());
 
             if (!fFullAtlasManager->hasGlyph(glyph)) {
-                GrDrawOpAtlas::ErrorCode code;
-                code = grStrike->addGlyphToAtlas(fResourceProvider, fUploadTarget, fGrStrikeCache,
-                                                 fFullAtlasManager, glyph,
-                                                 fMetricsAndImages.get(), fSubRun->maskFormat(),
-                                                 fSubRun->needsTransform());
+                GrDrawOpAtlas::ErrorCode code = grStrike->addGlyphToAtlas(
+                        fResourceProvider, fUploadTarget, fGrStrikeCache, fFullAtlasManager, glyph,
+                        fMetricsAndImages.get(), fSubRun->maskFormat(), fSubRun->needsTransform());
                 if (GrDrawOpAtlas::ErrorCode::kError == code) {
                     // Something horrible has happened - drop the op
                     return false;
@@ -986,8 +987,7 @@ bool GrTextBlob::VertexRegenerator::regenerate(GrTextBlob::VertexRegenerator::Re
        |fActions.regenPositions) {
             return this->doRegen(result);
     } else {
-        bool hasW = fSubRun->hasW();
-        auto vertexStride = GetVertexStride(fSubRun->maskFormat(), hasW);
+        auto vertexStride = fSubRun->vertexStride();
         result->fFinished = true;
         result->fGlyphsRegenerated = fSubRun->fGlyphs.size() - fCurrGlyph;
         result->fFirstVertex = fSubRun->fVertexData.data() +
