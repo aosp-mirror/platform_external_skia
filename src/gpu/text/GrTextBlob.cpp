@@ -18,6 +18,7 @@
 #include "src/gpu/text/GrTextBlob.h"
 #include "src/gpu/text/GrTextTarget.h"
 
+#include <cstddef>
 #include <new>
 
 static SkVector calculate_translation(bool applyVM,
@@ -94,6 +95,7 @@ public:
     GrMaskFormat maskFormat() const;
 
     size_t vertexStride() const;
+    size_t colorOffset() const;
 
     const SkRect& vertexBounds() const;
     void joinGlyphBounds(const SkRect& glyphBounds);
@@ -104,7 +106,6 @@ public:
     bool drawAsDistanceFields() const;
     bool drawAsPaths() const;
     bool needsTransform() const;
-    bool hasW() const;
 
     // df properties
     void setUseLCDText(bool useLCDText);
@@ -133,6 +134,10 @@ public:
     SkPoint fCurrentOrigin;
     SkMatrix fCurrentMatrix;
     std::vector<PathGlyph> fPaths;
+
+private:
+    bool hasW() const;
+
 };  // SubRun
 
 GrTextBlob::SubRun::SubRun(SubRunType type, GrTextBlob* textBlob, const SkStrikeSpec& strikeSpec,
@@ -171,15 +176,12 @@ void GrTextBlob::SubRun::appendGlyphs(const SkZip<SkGlyphVariant, SkPoint>& draw
     SkScalar strikeToSource = fStrikeSpec.strikeToSourceRatio();
     GrGlyph** glyphCursor = fGlyphs.data();
     char* vertexCursor = fVertexData.data();
-    bool hasW = this->hasW();
     GrColor color = this->color();
-    // glyphs drawn in perspective must always have a w coord.
-    SkASSERT(hasW || !fBlob->fInitialMatrix.hasPerspective());
     size_t vertexStride = this->vertexStride();
     // We always write the third position component used by SDFs. If it is unused it gets
     // overwritten. Similarly, we always write the color and the blob will later overwrite it
     // with texture coords if it is unused.
-    size_t colorOffset = hasW ? sizeof(SkPoint3) : sizeof(SkPoint);
+    size_t colorOffset = this->colorOffset();
     for (auto [variant, pos] : drawables) {
         SkGlyph* skGlyph = variant;
         GrGlyph* grGlyph = grStrike->getGlyph(*skGlyph);
@@ -230,6 +232,9 @@ GrColor GrTextBlob::SubRun::color() const { return fColor; }
 GrMaskFormat GrTextBlob::SubRun::maskFormat() const { return fMaskFormat; }
 size_t GrTextBlob::SubRun::vertexStride() const {
     return GetVertexStride(this->maskFormat(), this->hasW());
+}
+size_t GrTextBlob::SubRun::colorOffset() const {
+    return this->hasW() ? offsetof(SDFT3DVertex, color) : offsetof(Mask2DVertex, color);
 }
 
 const SkRect& GrTextBlob::SubRun::vertexBounds() const { return fVertexBounds; }
@@ -612,6 +617,9 @@ GrTextBlob::SubRun* GrTextBlob::makeSubRun(SubRunType type,
                                            GrMaskFormat format) {
     SkSpan<GrGlyph*> glyphs{fAlloc.makeArrayDefault<GrGlyph*>(drawables.size()), drawables.size()};
     bool hasW = this->hasW(type);
+
+    SkASSERT(!fInitialMatrix.hasPerspective() || hasW);
+
     size_t vertexDataSize = drawables.size() * GetVertexStride(format, hasW) * kVerticesPerGlyph;
     SkSpan<char> vertexData{fAlloc.makeArrayDefault<char>(vertexDataSize), vertexDataSize};
 
