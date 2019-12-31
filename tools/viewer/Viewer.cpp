@@ -96,9 +96,6 @@ static DEFINE_string2(backend, b, "sw", "Backend to use. Allowed values are " BA
 
 static DEFINE_int(msaa, 1, "Number of subpixel samples. 0 for no HW antialiasing.");
 
-static DEFINE_int(internalSamples, 4,
-                  "Number of samples for internal draws that use MSAA or mixed samples.");
-
 static DEFINE_string(bisect, "", "Path to a .skp or .svg file to bisect.");
 
 static DEFINE_string2(file, f, "", "Open a single file for viewing.");
@@ -278,7 +275,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
 {
     SkGraphics::Init();
 
-    gPathRendererNames[GpuPathRenderers::kAll] = "All Path Renderers";
+    gPathRendererNames[GpuPathRenderers::kDefault] = "Default Path Renderers";
     gPathRendererNames[GpuPathRenderers::kStencilAndCover] = "NV_path_rendering";
     gPathRendererNames[GpuPathRenderers::kSmall] = "Small paths (cached sdf or alpha masks)";
     gPathRendererNames[GpuPathRenderers::kCoverageCounting] = "CCPR";
@@ -312,7 +309,6 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
             GrContextOptions::ShaderCacheStrategy::kBackendSource;
     displayParams.fGrContextOptions.fShaderErrorHandler = &gShaderErrorHandler;
     displayParams.fGrContextOptions.fSuppressPrints = true;
-    displayParams.fGrContextOptions.fInternalMultisampleCount = FLAGS_internalSamples;
     fWindow->setRequestedDisplayParams(displayParams);
     fRefresh = FLAGS_redraw;
 
@@ -955,7 +951,7 @@ void Viewer::updateTitle() {
     title.append("]");
 
     GpuPathRenderers pr = fWindow->getRequestedDisplayParams().fGrContextOptions.fGpuPathRenderers;
-    if (GpuPathRenderers::kAll != pr) {
+    if (GpuPathRenderers::kDefault != pr) {
         title.appendf(" [Path renderer: %s]", gPathRendererNames[pr].c_str());
     }
 
@@ -1708,20 +1704,20 @@ void Viewer::drawImGui() {
 
                     if (!ctx) {
                         ImGui::RadioButton("Software", true);
-                    } else if (fWindow->sampleCount() > 1) {
-                        prButton(GpuPathRenderers::kAll);
-                        if (ctx->priv().caps()->shaderCaps()->pathRenderingSupport()) {
-                            prButton(GpuPathRenderers::kStencilAndCover);
-                        }
-                        prButton(GpuPathRenderers::kTessellating);
-                        prButton(GpuPathRenderers::kNone);
                     } else {
-                        prButton(GpuPathRenderers::kAll);
-                        if (GrCoverageCountingPathRenderer::IsSupported(
-                                    *ctx->priv().caps())) {
-                            prButton(GpuPathRenderers::kCoverageCounting);
+                        const auto* caps = ctx->priv().caps();
+                        prButton(GpuPathRenderers::kDefault);
+                        if (fWindow->sampleCount() > 1 || caps->mixedSamplesSupport()) {
+                            if (caps->shaderCaps()->pathRenderingSupport()) {
+                                prButton(GpuPathRenderers::kStencilAndCover);
+                            }
                         }
-                        prButton(GpuPathRenderers::kSmall);
+                        if (1 == fWindow->sampleCount()) {
+                            if (GrCoverageCountingPathRenderer::IsSupported(*caps)) {
+                                prButton(GpuPathRenderers::kCoverageCounting);
+                            }
+                            prButton(GpuPathRenderers::kSmall);
+                        }
                         prButton(GpuPathRenderers::kTessellating);
                         prButton(GpuPathRenderers::kNone);
                     }
@@ -2373,23 +2369,22 @@ void Viewer::updateUIState() {
                 writer.appendString("Software");
             } else {
                 const auto* caps = ctx->priv().caps();
-
-                writer.appendString(gPathRendererNames[GpuPathRenderers::kAll].c_str());
-                if (fWindow->sampleCount() > 1) {
+                writer.appendString(gPathRendererNames[GpuPathRenderers::kDefault].c_str());
+                if (fWindow->sampleCount() > 1 || caps->mixedSamplesSupport()) {
                     if (caps->shaderCaps()->pathRenderingSupport()) {
                         writer.appendString(
-                            gPathRendererNames[GpuPathRenderers::kStencilAndCover].c_str());
+                                gPathRendererNames[GpuPathRenderers::kStencilAndCover].c_str());
                     }
-                } else {
+                }
+                if (1 == fWindow->sampleCount()) {
                     if(GrCoverageCountingPathRenderer::IsSupported(*caps)) {
                         writer.appendString(
                             gPathRendererNames[GpuPathRenderers::kCoverageCounting].c_str());
                     }
                     writer.appendString(gPathRendererNames[GpuPathRenderers::kSmall].c_str());
                 }
-                    writer.appendString(
-                        gPathRendererNames[GpuPathRenderers::kTessellating].c_str());
-                    writer.appendString(gPathRendererNames[GpuPathRenderers::kNone].c_str());
+                writer.appendString(gPathRendererNames[GpuPathRenderers::kTessellating].c_str());
+                writer.appendString(gPathRendererNames[GpuPathRenderers::kNone].c_str());
             }
         });
 
