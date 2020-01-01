@@ -164,6 +164,8 @@ public:
     void bindFramebuffer(GrGLenum fboTarget, GrGLuint fboid);
     void deleteFramebuffer(GrGLuint fboid);
 
+    void insertManualFramebufferBarrier() override;
+
 private:
     GrGLGpu(std::unique_ptr<GrGLContext>, GrContext*);
 
@@ -327,6 +329,8 @@ private:
 
         GrGLGpu* fGpu;
     };
+
+    void flushPatchVertexCount(uint8_t count);
 
     void flushColorWrite(bool writeColor);
     void flushClearColor(const SkPMColor4f&);
@@ -544,7 +548,9 @@ private:
 
         // This is used when we're using a core profile.
         GrGLVertexArray*     fCoreProfileVertexArray;
-    }                                       fHWVertexArrayState;
+    } fHWVertexArrayState;
+
+    uint8_t fHWPatchVertexCount;
 
     struct {
         GrGLenum                fGLTarget;

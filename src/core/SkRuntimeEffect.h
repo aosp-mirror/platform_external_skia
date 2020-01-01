@@ -9,14 +9,21 @@
 #define SkRuntimeEffect_DEFINED
 
 #include "include/core/SkString.h"
-#include "src/sksl/SkSLCompiler.h"
 
 #include <vector>
 
+#if SK_SUPPORT_GPU
+#include "include/private/GrTypesPriv.h"
+#endif
+
 class GrShaderCaps;
+class SkMatrix;
+class SkShader;
 
 namespace SkSL {
 class ByteCode;
+class Compiler;
+struct PipelineStageArgs;
 struct Program;
 }
 
@@ -65,6 +72,9 @@ public:
 
     static EffectResult Make(SkString sksl);
 
+    sk_sp<SkShader> makeShader(sk_sp<SkData> inputs, sk_sp<SkShader> children[], size_t childCount,
+                               const SkMatrix* localMatrix, bool isOpaque);
+
     const SkString& source() const { return fSkSL; }
     int index() const { return fIndex; }
     size_t inputSize() const;
@@ -74,9 +84,7 @@ public:
     // This re-compiles the program from scratch, using the supplied shader caps.
     // This is necessary to get the correct values of settings.
     bool toPipelineStage(const void* inputs, const GrShaderCaps* shaderCaps,
-                         SkSL::String* outCode,
-                         std::vector<SkSL::Compiler::FormatArg>* outFormatArgs,
-                         std::vector<SkSL::Compiler::GLSLFunction>* outFunctions);
+                         SkSL::PipelineStageArgs* outArgs);
 #endif
 
     // [ByteCode, ErrorText]
@@ -87,7 +95,8 @@ public:
 
 private:
     SkRuntimeEffect(SkString sksl, std::unique_ptr<SkSL::Compiler> compiler,
-                    std::unique_ptr<SkSL::Program> baseProgram);
+                    std::unique_ptr<SkSL::Program> baseProgram,
+                    std::vector<Variable>&& inAndUniformVars, std::vector<SkString>&& children);
 
     int fIndex;
     SkString fSkSL;

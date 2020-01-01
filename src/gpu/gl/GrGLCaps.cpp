@@ -865,6 +865,19 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
         }
     }
 
+    if (GR_IS_GR_GL(standard)) {
+        shaderCaps->fTessellationSupport =
+                version >= GR_GL_VER(4,0) ||
+                ctxInfo.hasExtension("GL_ARB_tessellation_shader");
+    } else {
+        if (version >= GR_GL_VER(3,2)) {
+            shaderCaps->fTessellationSupport = true;
+        } else if (ctxInfo.hasExtension("GL_OES_tessellation_shader")) {
+            shaderCaps->fTessellationSupport = true;
+            shaderCaps->fTessellationExtensionString = "GL_OES_tessellation_shader";
+        }
+    }
+
     shaderCaps->fVersionDeclString = get_glsl_version_decl_string(standard,
                                                                   shaderCaps->fGLSLGeneration,
                                                                   fIsCoreProfile);
@@ -3612,20 +3625,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         shaderCaps->fAdvBlendEqInteraction = GrShaderCaps::kNotSupported_AdvBlendEqInteraction;
     }
 
-    // Advanced blending can cause shader compilation to fail with message
-    // "Interface block type in this shader".
-    // on some shaders that use advanced blending on the line:
-    // "layout (blend_support_all_equations) out;"
-    // It has been triggered multiple times in the random Programs test, particularly on longer
-    // shaders. This was seen on a Tecno Spark 3 Pro with a PowerVR Rogue GE8300 running Android P
-    // driver version "1.10@5130912". It's unknown if it is fixed on later driver versions.
-    if (ctxInfo.vendor() == kImagination_GrGLVendor &&
-        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(1, 11, 0) &&
-        fBlendEquationSupport != kBasic_BlendEquationSupport) {
-        fBlendEquationSupport = kBasic_BlendEquationSupport;
-        shaderCaps->fAdvBlendEqInteraction = GrShaderCaps::kNotSupported_AdvBlendEqInteraction;
-    }
-
     if (fDriverBugWorkarounds.disable_blend_equation_advanced) {
         fBlendEquationSupport = kBasic_BlendEquationSupport;
         shaderCaps->fAdvBlendEqInteraction = GrShaderCaps::kNotSupported_AdvBlendEqInteraction;
@@ -3692,6 +3691,28 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (kATI_GrGLVendor == ctxInfo.vendor() ||  // Radeon drops stencil draws that use sample mask.
         kImagination_GrGLVendor == ctxInfo.vendor() /* PowerVR produces flaky results on Gold. */) {
         fDriverBlacklistMSAACCPR = true;
+    }
+
+    if (shaderCaps->fTessellationSupport && kNVIDIA_GrGLDriver == ctxInfo.driver()) {
+        if (GR_IS_GR_GL(ctxInfo.standard())) {
+            if (ctxInfo.version() >= GR_GL_VER(4,2)) {
+                fRequiresManualFBBarrierAfterTessellatedStencilDraw = true;
+            } else {
+                shaderCaps->fTessellationSupport = false;
+            }
+        } else {
+            if (ctxInfo.version() >= GR_GL_VER(3,1)) {
+                fRequiresManualFBBarrierAfterTessellatedStencilDraw = true;
+            } else {
+                shaderCaps->fTessellationSupport = false;
+            }
+        }
+    }
+
+    if (kQualcomm_GrGLDriver == ctxInfo.driver()) {
+        // Qualcomm fails to link programs with tessellation and does not give an error message.
+        // http://skbug.com/9740
+        shaderCaps->fTessellationSupport = false;
     }
 
 #ifdef SK_BUILD_FOR_ANDROID
