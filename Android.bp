@@ -1600,6 +1600,7 @@ cc_test {
         "tests/MathTest.cpp",
         "tests/Matrix44Test.cpp",
         "tests/MatrixClipCollapseTest.cpp",
+        "tests/MatrixColorFilterTest.cpp",
         "tests/MatrixTest.cpp",
         "tests/MemoryTest.cpp",
         "tests/MemsetTest.cpp",

@@ -6,7 +6,8 @@
  */
 
 #include "include/core/SkData.h"
-#include "src/core/SkRuntimeEffect.h"
+#include "include/effects/SkRuntimeEffect.h"
+#include "src/core/SkColorFilterPriv.h"
 #include "src/shaders/SkRTShader.h"
 #include "src/sksl/SkSLByteCode.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -252,5 +253,11 @@ sk_sp<SkShader> SkRuntimeEffect::makeShader(sk_sp<SkData> inputs,
     return inputs->size() >= this->inputSize() && childCount >= this->childCount()
         ? sk_sp<SkShader>(new SkRTShader(sk_ref_sp(this), std::move(inputs), localMatrix,
                                          children, childCount, isOpaque))
+        : nullptr;
+}
+
+sk_sp<SkColorFilter> SkRuntimeEffect::makeColorFilter(sk_sp<SkData> inputs) {
+    return inputs->size() >= this->inputSize()
+        ? SkMakeRuntimeColorFilter(sk_ref_sp(this), std::move(inputs))
         : nullptr;
 }

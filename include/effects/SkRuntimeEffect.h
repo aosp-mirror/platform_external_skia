@@ -17,6 +17,7 @@
 #endif
 
 class GrShaderCaps;
+class SkColorFilter;
 class SkMatrix;
 class SkShader;
 
@@ -27,7 +28,13 @@ struct PipelineStageArgs;
 struct Program;
 }
 
-class SkRuntimeEffect : public SkRefCnt {
+/*
+ * SkRuntimeEffect supports creating custom SkShader and SkColorFilter objects using Skia's SkSL
+ * shading language.
+ * *
+ * This API is experimental and subject to change.
+ */
+class SK_API SkRuntimeEffect : public SkRefCnt {
 public:
     struct Variable {
         enum class Qualifier {
@@ -74,6 +81,8 @@ public:
 
     sk_sp<SkShader> makeShader(sk_sp<SkData> inputs, sk_sp<SkShader> children[], size_t childCount,
                                const SkMatrix* localMatrix, bool isOpaque);
+
+    sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> inputs);
 
     const SkString& source() const { return fSkSL; }
     int index() const { return fIndex; }
