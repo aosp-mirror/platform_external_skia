@@ -490,7 +490,7 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
             p->append(SkRasterPipeline::premul);
         }
 
-        if (quality > kLow_SkFilterQuality) {
+        if (quality == kHigh_SkFilterQuality) {
             // Bicubic filtering naturally produces out of range values on both sides.
             p->append(SkRasterPipeline::clamp_0);
             p->append(fClampAsIfUnpremul ? SkRasterPipeline::clamp_1
@@ -596,6 +596,7 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
         p->append(SkRasterPipeline::move_dst_src);
 
     } else {
+        SkASSERT(quality == kHigh_SkFilterQuality);
         p->append(SkRasterPipeline::save_xy, sampler);
 
         sample(SkRasterPipeline::bicubic_n3x, SkRasterPipeline::bicubic_n3y);
@@ -632,5 +633,27 @@ SkStageUpdater* SkImageShader::onAppendUpdatableStages(const SkStageRec& rec) co
     bool usePersp = rec.fCTM.hasPerspective();
     auto updater = rec.fAlloc->make<SkImageStageUpdater>(this, usePersp);
     return this->doStages(rec, updater) ? updater : nullptr;
+}
+
+bool SkImageShader::onProgram(skvm::Builder* p,
+                              const SkMatrix& ctm, const SkMatrix* localM,
+                              SkFilterQuality quality, SkColorSpace* dstCS,
+                              skvm::Uniforms* uniforms,
+                              skvm::F32 x, skvm::F32 y,
+                              skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const {
+    SkMatrix inv;
+    if (!this->computeTotalInverse(ctm, localM, &inv)) {
+        return false;
+    }
+
+    SkBitmapController::State state{as_IB(fImage.get()), inv, quality};
+    const SkPixmap& pm = state.pixmap();
+    if (!pm.addr()) {
+        return false;
+    }
+    inv     = state.invMatrix();
+    quality = state.quality();
+
+    return false;
 }
 
