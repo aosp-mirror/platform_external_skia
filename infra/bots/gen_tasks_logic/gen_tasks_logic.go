@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -40,7 +41,7 @@ const (
 	DEFAULT_OS_DEBIAN    = "Debian-9.4"
 	DEFAULT_OS_LINUX_GCE = "Debian-9.8"
 	DEFAULT_OS_MAC       = "Mac-10.14.6"
-	DEFAULT_OS_WIN       = "Windows-Server-14393"
+	DEFAULT_OS_WIN       = "Windows-Server-17763"
 
 	// Small is a 2-core machine.
 	// TODO(dogben): Would n1-standard-1 or n1-standard-2 be sufficient?
@@ -564,7 +565,8 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-18363",
-			"Win2016":    DEFAULT_OS_WIN,
+			"Win2016":    "Windows-Server-14393",
+			"Win2019":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
 			"Win8":       "Windows-8.1-SP0",
 			"iOS":        "iOS-11.4.1",
@@ -579,10 +581,6 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 		if os == "Mac10.14" && parts["model"] == "VMware7.1" {
 			// ChOps VMs are at a newer version of MacOS.
 			d["os"] = "Mac-10.14.6"
-		}
-		if d["os"] == DEFAULT_OS_WIN {
-			// Upgrades result in a new image but not a new OS version.
-			d["image"] = "windows-server-2016-dc-v20190108"
 		}
 		if parts["model"] == "LenovoYogaC630" {
 			// This is currently a unique snowflake.
@@ -944,7 +942,7 @@ func (b *builder) createPushAppsFromSkiaDockerImage(name string) string {
 		},
 		Dependencies: []string{
 			BUILD_TASK_DRIVERS_NAME,
-			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_Release", "skia-release", filepath.Join("docker", "skia-release")),
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_Release", "skia-release", path.Join("docker", "skia-release")),
 		},
 		Dimensions: b.dockerGceDimensions(),
 		EnvPrefixes: map[string][]string{
@@ -984,7 +982,7 @@ func (b *builder) createPushAppsFromWASMDockerImage(name string) string {
 		},
 		Dependencies: []string{
 			BUILD_TASK_DRIVERS_NAME,
-			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_WASM_Release", "skia-wasm-release", filepath.Join("docker", "skia-wasm-release")),
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_WASM_Release", "skia-wasm-release", path.Join("docker", "skia-wasm-release")),
 		},
 		Dimensions: b.dockerGceDimensions(),
 		EnvPrefixes: map[string][]string{
@@ -1025,8 +1023,8 @@ func (b *builder) createPushAppsFromSkiaWASMDockerImages(name string) string {
 		},
 		Dependencies: []string{
 			BUILD_TASK_DRIVERS_NAME,
-			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_Release", "skia-release", filepath.Join("docker", "skia-release")),
-			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_WASM_Release", "skia-wasm-release", filepath.Join("docker", "skia-wasm-release")),
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_Release", "skia-release", path.Join("docker", "skia-release")),
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_WASM_Release", "skia-wasm-release", path.Join("docker", "skia-wasm-release")),
 		},
 		Dimensions: b.dockerGceDimensions(),
 		EnvPrefixes: map[string][]string{
@@ -1607,9 +1605,9 @@ func (b *builder) process(name string) {
 	// Create docker image.
 	if strings.Contains(name, "CreateDockerImage") {
 		if strings.Contains(parts["extra_config"], "Skia_Release") {
-			deps = append(deps, b.createDockerImage(name, "skia-release", filepath.Join("docker", "skia-release")))
+			deps = append(deps, b.createDockerImage(name, "skia-release", path.Join("docker", "skia-release")))
 		} else if strings.Contains(parts["extra_config"], "Skia_WASM_Release") {
-			deps = append(deps, b.createDockerImage(name, "skia-wasm-release", filepath.Join("docker", "skia-wasm-release")))
+			deps = append(deps, b.createDockerImage(name, "skia-wasm-release", path.Join("docker", "skia-wasm-release")))
 		}
 	}
 
