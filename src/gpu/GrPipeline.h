@@ -21,7 +21,7 @@
 #include "src/gpu/effects/GrCoverageSetOpXP.h"
 #include "src/gpu/effects/GrDisableColorXP.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
-#include "src/gpu/effects/GrSimpleTextureEffect.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/geometry/GrRect.h"
 
 class GrAppliedClip;
@@ -83,7 +83,7 @@ public:
     struct FixedDynamicState {
         explicit FixedDynamicState(const SkIRect& scissorRect) : fScissorRect(scissorRect) {}
         FixedDynamicState() = default;
-        SkIRect fScissorRect = SkIRect::EmptyIRect();
+        SkIRect fScissorRect = SkIRect::MakeEmpty();
         // Must have GrPrimitiveProcessor::numTextureSamplers() entries. Can be null if no samplers
         // or textures are passed using DynamicStateArrays.
         GrSurfaceProxy** fPrimitiveProcessorTextures = nullptr;

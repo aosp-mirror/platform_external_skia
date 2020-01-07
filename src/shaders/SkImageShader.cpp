@@ -176,7 +176,7 @@ sk_sp<SkShader> SkImageShader::Make(sk_sp<SkImage> image,
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
-#include "src/gpu/effects/GrSimpleTextureEffect.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 
 static GrSamplerState::WrapMode tile_mode_to_wrap_mode(const SkTileMode tileMode) {
     switch (tileMode) {
@@ -248,8 +248,7 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
                                       kDir, srcAlphaType);
     } else {
         auto dimensions = proxy->dimensions();
-        inner = GrSimpleTextureEffect::Make(std::move(proxy), srcAlphaType, lmInverse,
-                                            samplerState);
+        inner = GrTextureEffect::Make(std::move(proxy), srcAlphaType, lmInverse, samplerState);
         if (domainX != GrTextureDomain::kIgnore_Mode || domainY != GrTextureDomain::kIgnore_Mode) {
             SkRect domain = GrTextureDomain::MakeTexelDomain(SkIRect::MakeSize(dimensions),
                                                              domainX, domainY);
@@ -339,6 +338,28 @@ public:
     }
 };
 
+static void tweak_quality_and_inv_matrix(SkFilterQuality* quality, SkMatrix* matrix) {
+    // When the matrix is just an integer translate, bilerp == nearest neighbor.
+    if (*quality == kLow_SkFilterQuality &&
+            matrix->getType() <= SkMatrix::kTranslate_Mask &&
+            matrix->getTranslateX() == (int)matrix->getTranslateX() &&
+            matrix->getTranslateY() == (int)matrix->getTranslateY()) {
+        *quality = kNone_SkFilterQuality;
+    }
+
+    // See skia:4649 and the GM image_scale_aligned.
+    if (*quality == kNone_SkFilterQuality) {
+        if (matrix->getScaleX() >= 0) {
+            matrix->setTranslateX(nextafterf(matrix->getTranslateX(),
+                                             floorf(matrix->getTranslateX())));
+        }
+        if (matrix->getScaleY() >= 0) {
+            matrix->setTranslateY(nextafterf(matrix->getTranslateY(),
+                                             floorf(matrix->getTranslateY())));
+        }
+    }
+}
+
 bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater) const {
     if (updater && rec.fPaint.getFilterQuality() == kMedium_SkFilterQuality) {
         // TODO: medium: recall RequestBitmap and update width/height accordingly
@@ -370,25 +391,7 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
     if (updater) {
         updater->append_matrix_stage(p);
     } else {
-        // When the matrix is just an integer translate, bilerp == nearest neighbor.
-        if (quality == kLow_SkFilterQuality &&
-            matrix.getType() <= SkMatrix::kTranslate_Mask &&
-            matrix.getTranslateX() == (int)matrix.getTranslateX() &&
-            matrix.getTranslateY() == (int)matrix.getTranslateY()) {
-            quality = kNone_SkFilterQuality;
-        }
-
-        // See skia:4649 and the GM image_scale_aligned.
-        if (quality == kNone_SkFilterQuality) {
-            if (matrix.getScaleX() >= 0) {
-                matrix.setTranslateX(nextafterf(matrix.getTranslateX(),
-                                                floorf(matrix.getTranslateX())));
-            }
-            if (matrix.getScaleY() >= 0) {
-                matrix.setTranslateY(nextafterf(matrix.getTranslateY(),
-                                                floorf(matrix.getTranslateY())));
-            }
-        }
+        tweak_quality_and_inv_matrix(&quality, &matrix);
         p->append_matrix(alloc, matrix);
     }
 
@@ -650,6 +653,7 @@ bool SkImageShader::onProgram(skvm::Builder* p,
         return false;
     }
 
+    // TODO: need to extend lifetime of this once we start supporting kMedium_SkFilterQuality.
     SkBitmapController::State state{as_IB(fImage.get()), inv, quality};
     const SkPixmap& pm = state.pixmap();
     if (!pm.addr()) {
@@ -657,7 +661,114 @@ bool SkImageShader::onProgram(skvm::Builder* p,
     }
     inv     = state.invMatrix();
     quality = state.quality();
+    tweak_quality_and_inv_matrix(&quality, &inv);
 
-    return false;
+    // TODO: and need to extend lifetime of this too once supporting steps.flags.mask() != 0.
+    SkColorSpaceXformSteps steps{pm.colorSpace(), pm.alphaType(),
+                                 dstCS, kPremul_SkAlphaType};
+
+    if (steps.flags.mask() != 0)          { return false; }
+    if (quality != kNone_SkFilterQuality) { return false; }
+
+    // Apply matrix to convert dst coords to sample coords.
+    inv.normalizePerspective();
+    if (inv.isIdentity()) {
+        // That was easy.
+    } else if (inv.isTranslate()) {
+        x = p->add(x, p->uniformF(uniforms->pushF(inv[2])));
+        y = p->add(y, p->uniformF(uniforms->pushF(inv[5])));
+    } else if (inv.isScaleTranslate()) {
+        x = p->mad(x, p->uniformF(uniforms->pushF(inv[0])), p->uniformF(uniforms->pushF(inv[2])));
+        y = p->mad(y, p->uniformF(uniforms->pushF(inv[4])), p->uniformF(uniforms->pushF(inv[5])));
+    } else {  // Affine or perspective.
+        auto dot = [&,x,y](int row) {
+            return p->mad(x, p->uniformF(uniforms->pushF(inv[3*row+0])),
+                   p->mad(y, p->uniformF(uniforms->pushF(inv[3*row+1])),
+                             p->uniformF(uniforms->pushF(inv[3*row+2]))));
+        };
+        x = dot(0);
+        y = dot(1);
+        if (inv.hasPerspective()) {
+            x = p->div(x, dot(2));
+            y = p->div(y, dot(2));
+        }
+    }
+
+    // Apply tile mode.
+    // repeat() and mirror() are written assuming they'll be followed by a [0,scale) clamp.
+    auto repeat = [&](skvm::F32 v, float scale) {
+        skvm::F32 S = p->uniformF(uniforms->pushF(     scale)),
+                  I = p->uniformF(uniforms->pushF(1.0f/scale));
+        // v - floor(v/scale)*scale
+        return p->sub(v, p->mul(p->floor(p->mul(v,I)), S));
+    };
+    auto mirror = [&](skvm::F32 v, float scale) {
+        skvm::F32 S  = p->uniformF(uniforms->pushF(     scale)),
+                  I2 = p->uniformF(uniforms->pushF(0.5f/scale));
+        // abs( (v-scale) - (2*scale)*floor((v-scale)*(0.5f/scale)) - scale )
+        //      {---A---}   {------------------B------------------}
+        skvm::F32 A = p->sub(v,S),
+                  B = p->mul(p->add(S,S), p->floor(p->mul(A,I2)));
+        return p->abs(p->sub(p->sub(A,B), S));
+    };
+    switch (fTileModeX) {
+        case SkTileMode::kDecal:  /* handled after gather */ break;
+        case SkTileMode::kClamp:  /*    we always clamp   */ break;
+        case SkTileMode::kRepeat: x = repeat(x, pm.width()); break;
+        case SkTileMode::kMirror: x = mirror(x, pm.width()); break;
+    }
+    switch (fTileModeY) {
+        case SkTileMode::kDecal:  /* handled after gather */  break;
+        case SkTileMode::kClamp:  /*    we always clamp   */  break;
+        case SkTileMode::kRepeat: y = repeat(y, pm.height()); break;
+        case SkTileMode::kMirror: y = mirror(y, pm.height()); break;
+    }
+
+    // Clamp sample coordinates to [0,width), [0,height),
+    // both for memory safety and to handle the clamps still needed by kClamp, kRepeat, and kMirror.
+    auto clamp = [&](skvm::F32 v, float limit) {
+        // Subtract one ulp to make an exclusive limit inclusive.
+        int bits;
+        memcpy(&bits, &limit, 4);
+        bits--;
+        memcpy(&limit, &bits, 4);
+        return p->max(p->splat(0.0f), p->min(v, p->uniformF(uniforms->pushF(limit))));
+    };
+    skvm::F32 clamped_x = clamp(x, pm. width()),
+              clamped_y = clamp(y, pm.height());
+
+    // Load pixels from pm.addr()[(int)x + (int)y*stride].
+    skvm::Builder::Uniform img = uniforms->pushPtr(pm.addr());
+    skvm::I32 index = p->add(p->trunc(clamped_x),
+                      p->mul(p->trunc(clamped_y),
+                             p->uniform32(uniforms->push(pm.rowBytesAsPixels()))));
+    skvm::Color c;
+    switch (pm.colorType()) {
+        default: return false;
+
+        case kRGB_565_SkColorType: c = p->unpack_565(p->gather16(img, index)); break;
+
+        case kRGBA_8888_SkColorType: c = p->unpack_8888(p->gather32(img, index)); break;
+        case kBGRA_8888_SkColorType: c = p->unpack_8888(p->gather32(img, index));
+                                     std::swap(c.r, c.b);
+                                     break;
+    }
+
+    // Mask away any pixels that we tried to sample outside the bounds in kDecal.
+    if (fTileModeX == SkTileMode::kDecal || fTileModeY == SkTileMode::kDecal) {
+        skvm::I32 mask = p->splat(~0);
+        if (fTileModeX == SkTileMode::kDecal) { mask = p->bit_and(mask, p->eq(x, clamped_x)); }
+        if (fTileModeY == SkTileMode::kDecal) { mask = p->bit_and(mask, p->eq(y, clamped_y)); }
+        c.r = p->bit_cast(p->bit_and(mask, p->bit_cast(c.r)));
+        c.g = p->bit_cast(p->bit_and(mask, p->bit_cast(c.g)));
+        c.b = p->bit_cast(p->bit_and(mask, p->bit_cast(c.b)));
+        c.a = p->bit_cast(p->bit_and(mask, p->bit_cast(c.a)));
+    }
+
+    *r = c.r;
+    *g = c.g;
+    *b = c.b;
+    *a = c.a;
+    return true;
 }
 

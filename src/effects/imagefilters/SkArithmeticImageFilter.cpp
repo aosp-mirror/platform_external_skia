@@ -211,13 +211,13 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::onFilterImage(const Context& ct
     SkIPoint foregroundOffset = SkIPoint::Make(0, 0);
     sk_sp<SkSpecialImage> foreground(this->filterInput(1, ctx, &foregroundOffset));
 
-    SkIRect foregroundBounds = SkIRect::EmptyIRect();
+    SkIRect foregroundBounds = SkIRect::MakeEmpty();
     if (foreground) {
         foregroundBounds = SkIRect::MakeXYWH(foregroundOffset.x(), foregroundOffset.y(),
                                              foreground->width(), foreground->height());
     }
 
-    SkIRect srcBounds = SkIRect::EmptyIRect();
+    SkIRect srcBounds = SkIRect::MakeEmpty();
     if (background) {
         srcBounds = SkIRect::MakeXYWH(backgroundOffset.x(), backgroundOffset.y(),
                                       background->width(), background->height());
@@ -354,8 +354,8 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
         SkMatrix backgroundMatrix = SkMatrix::MakeTrans(
                 SkIntToScalar(bgSubset.left() - backgroundOffset.fX),
                 SkIntToScalar(bgSubset.top()  - backgroundOffset.fY));
-        bgFP = GrSimpleTextureEffect::Make(std::move(backgroundProxy), background->alphaType(),
-                                           backgroundMatrix, GrSamplerState::Filter::kNearest);
+        bgFP = GrTextureEffect::Make(std::move(backgroundProxy), background->alphaType(),
+                                     backgroundMatrix, GrSamplerState::Filter::kNearest);
         bgFP = GrDomainEffect::Make(
                 std::move(bgFP),
                 GrTextureDomain::MakeTexelDomain(bgSubset, GrTextureDomain::kDecal_Mode),
@@ -374,8 +374,8 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
                 SkIntToScalar(fgSubset.left() - foregroundOffset.fX),
                 SkIntToScalar(fgSubset.top()  - foregroundOffset.fY));
         auto foregroundFP =
-                GrSimpleTextureEffect::Make(std::move(foregroundProxy), foreground->alphaType(),
-                                            foregroundMatrix, GrSamplerState::Filter::kNearest);
+                GrTextureEffect::Make(std::move(foregroundProxy), foreground->alphaType(),
+                                      foregroundMatrix, GrSamplerState::Filter::kNearest);
         foregroundFP = GrDomainEffect::Make(
                 std::move(foregroundFP),
                 GrTextureDomain::MakeTexelDomain(fgSubset, GrTextureDomain::kDecal_Mode),

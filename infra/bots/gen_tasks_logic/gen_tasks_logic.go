@@ -382,8 +382,6 @@ func (b *builder) kitchenTask(name, recipe, isolate, serviceAccount string, dime
 	cipd := append([]*specs.CipdPackage{}, CIPD_PKGS_KITCHEN...)
 	if strings.Contains(name, "Win") && !strings.Contains(name, "LenovoYogaC630") {
 		cipd = append(cipd, CIPD_PKG_CPYTHON)
-	} else if strings.Contains(name, "P30") {
-		cipd = append(cipd, CIPD_PKG_CPYTHON)
 	}
 	properties := map[string]string{
 		"buildername":   name,
@@ -565,7 +563,6 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-18363",
-			"Win2016":    "Windows-Server-14393",
 			"Win2019":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
 			"Win8":       "Windows-8.1-SP0",
