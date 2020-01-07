@@ -12,6 +12,7 @@
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
+#include "src/core/SkVM.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/image/SkImage_Base.h"
 #include "src/shaders/SkBitmapProcShader.h"
@@ -176,7 +177,7 @@ sk_sp<SkShader> SkImageShader::Make(sk_sp<SkImage> image,
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
-#include "src/gpu/effects/GrSimpleTextureEffect.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 
 static GrSamplerState::WrapMode tile_mode_to_wrap_mode(const SkTileMode tileMode) {
     switch (tileMode) {
@@ -248,8 +249,7 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
                                       kDir, srcAlphaType);
     } else {
         auto dimensions = proxy->dimensions();
-        inner = GrSimpleTextureEffect::Make(std::move(proxy), srcAlphaType, lmInverse,
-                                            samplerState);
+        inner = GrTextureEffect::Make(std::move(proxy), srcAlphaType, lmInverse, samplerState);
         if (domainX != GrTextureDomain::kIgnore_Mode || domainY != GrTextureDomain::kIgnore_Mode) {
             SkRect domain = GrTextureDomain::MakeTexelDomain(SkIRect::MakeSize(dimensions),
                                                              domainX, domainY);
@@ -791,9 +791,31 @@ bool SkImageShader::onProgram(skvm::Builder* p,
             wy[1] = fy;
             D = 2;
         } else {
-            // TODO: bicubic weights
+            // See GrCubicEffect for details of these weights.
+            auto near = [&](skvm::F32 t) {
+                // 1/18 + 9/18t + 27/18t^2 - 21/18t^3 == t ( t ( -21/18t + 27/18) + 9/18) + 1/18
+                return p->mad(t,
+                       p->mad(t,
+                       p->mad(t, p->splat(-21/18.0f),
+                                 p->splat( 27/18.0f)),
+                                 p->splat(  9/18.0f)),
+                                 p->splat(  1/18.0f));
+            };
+            auto far = [&](skvm::F32 t) {
+                // 0/18 + 0/18*t - 6/18t^2 + 7/18t^3 == t^2 (7/18t - 6/18)
+                return p->mul(p->mul(t,t), p->mad(t, p->splat( 7/18.0f),
+                                                     p->splat(-6/18.0f)));
+            };
+            wx[0] = far (p->sub(p->splat(1.0f), fx));
+            wx[1] = near(p->sub(p->splat(1.0f), fx));
+            wx[2] = near(                       fx );
+            wx[3] = far (                       fx );
+
+            wy[0] = far (p->sub(p->splat(1.0f), fy));
+            wy[1] = near(p->sub(p->splat(1.0f), fy));
+            wy[2] = near(                       fy );
+            wy[3] = far (                       fy );
             D = 4;
-            return false;
         }
 
         *r = *g = *b = *a = p->splat(0.0f);
@@ -815,16 +837,15 @@ bool SkImageShader::onProgram(skvm::Builder* p,
     }
 
     // Bicubic filtering naturally produces out of range values on both sides of [0,1].
-    // TODO: should be no need to clamp bilerp!
-    if (quality > kNone_SkFilterQuality) {
-        skvm::F32 limit = *a;
-        if (pm.alphaType() == kUnpremul_SkAlphaType || fClampAsIfUnpremul) {
-            limit = p->splat(1.0f);
-        }
+    if (quality == kHigh_SkFilterQuality) {
+        *a = p->clamp(*a, p->splat(0.0f), p->splat(1.0f));
+
+        skvm::F32 limit = (pm.alphaType() == kUnpremul_SkAlphaType || fClampAsIfUnpremul)
+                        ? p->splat(1.0f)
+                        : *a;
         *r = p->clamp(*r, p->splat(0.0f), limit);
         *g = p->clamp(*g, p->splat(0.0f), limit);
         *b = p->clamp(*b, p->splat(0.0f), limit);
-        *a = p->clamp(*a, p->splat(0.0f), p->splat(1.0f));
     }
 
     // Follow SkColorSpaceXformSteps to match shader output convention (dstCS, premul).

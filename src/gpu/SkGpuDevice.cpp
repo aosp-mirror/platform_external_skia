@@ -148,10 +148,10 @@ std::unique_ptr<GrRenderTargetContext> SkGpuDevice::MakeRenderTargetContext(
 
     // This method is used to create SkGpuDevice's for SkSurface_Gpus. In this case
     // they need to be exact.
-    return context->priv().makeDeferredRenderTargetContext(
-            SkBackingFit::kExact, origInfo.width(), origInfo.height(),
-            SkColorTypeToGrColorType(origInfo.colorType()), origInfo.refColorSpace(), sampleCount,
-            mipMapped, origin, surfaceProps, budgeted);
+    return GrRenderTargetContext::Make(
+            context, SkColorTypeToGrColorType(origInfo.colorType()), origInfo.refColorSpace(),
+            SkBackingFit::kExact, origInfo.dimensions(), sampleCount, mipMapped, GrProtected::kNo,
+            origin, budgeted, surfaceProps);
 }
 
 sk_sp<SkSpecialImage> SkGpuDevice::filterTexture(SkSpecialImage* srcImg,
@@ -955,8 +955,7 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
             static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
             fp = GrBicubicEffect::Make(std::move(proxy), texMatrix, domain, kDir, srcAlphaType);
         } else {
-            fp = GrSimpleTextureEffect::Make(std::move(proxy), srcAlphaType, texMatrix,
-                                             samplerState);
+            fp = GrTextureEffect::Make(std::move(proxy), srcAlphaType, texMatrix, samplerState);
             fp = GrDomainEffect::Make(std::move(fp), domain, GrTextureDomain::kClamp_Mode,
                                       samplerState.filter());
         }
@@ -966,7 +965,7 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
         static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
         fp = GrBicubicEffect::Make(std::move(proxy), texMatrix, wrapMode, kDir, srcAlphaType);
     } else {
-        fp = GrSimpleTextureEffect::Make(std::move(proxy), srcAlphaType, texMatrix, samplerState);
+        fp = GrTextureEffect::Make(std::move(proxy), srcAlphaType, texMatrix, samplerState);
     }
 
     fp = GrColorSpaceXformEffect::Make(std::move(fp), bitmap.colorSpace(), bitmap.alphaType(),
@@ -1037,7 +1036,7 @@ void SkGpuDevice::drawSpecial(SkSpecialImage* special, int left, int top, const 
 
     tmpUnfiltered.setImageFilter(nullptr);
 
-    auto fp = GrSimpleTextureEffect::Make(std::move(proxy), special->alphaType(), SkMatrix::I());
+    auto fp = GrTextureEffect::Make(std::move(proxy), special->alphaType(), SkMatrix::I());
     fp = GrColorSpaceXformEffect::Make(std::move(fp), result->getColorSpace(), result->alphaType(),
                                        fRenderTargetContext->colorInfo().colorSpace());
     if (GrColorTypeIsAlphaOnly(SkColorTypeToGrColorType(result->colorType()))) {
@@ -1075,8 +1074,8 @@ void SkGpuDevice::drawSpecial(SkSpecialImage* special, int left, int top, const 
         std::unique_ptr<GrFragmentProcessor> cfp;
         if (clipProxy && ctm.invert(&inverseClipMatrix)) {
             GrColorType srcColorType = SkColorTypeToGrColorType(clipImage->colorType());
-            cfp = GrSimpleTextureEffect::Make(std::move(clipProxy), clipImage->alphaType(),
-                                              inverseClipMatrix, sampler);
+            cfp = GrTextureEffect::Make(std::move(clipProxy), clipImage->alphaType(),
+                                        inverseClipMatrix, sampler);
             if (srcColorType != GrColorType::kAlpha_8) {
                 cfp = GrFragmentProcessor::SwizzleOutput(std::move(cfp), GrSwizzle::AAAA());
             }
@@ -1628,18 +1627,12 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
 
     SkASSERT(cinfo.fInfo.colorType() != kRGBA_1010102_SkColorType);
 
-    auto rtc = fContext->priv().makeDeferredRenderTargetContextWithFallback(
-            fit,
-            cinfo.fInfo.width(),
-            cinfo.fInfo.height(),
-            SkColorTypeToGrColorType(cinfo.fInfo.colorType()),
-            fRenderTargetContext->colorInfo().refColorSpace(),
-            fRenderTargetContext->numSamples(),
-            GrMipMapped::kNo,
-            kBottomLeft_GrSurfaceOrigin,
-            &props,
-            SkBudgeted::kYes,
-            fRenderTargetContext->asSurfaceProxy()->isProtected());
+    auto rtc = GrRenderTargetContext::MakeWithFallback(
+            fContext.get(), SkColorTypeToGrColorType(cinfo.fInfo.colorType()),
+            fRenderTargetContext->colorInfo().refColorSpace(), fit, cinfo.fInfo.dimensions(),
+            fRenderTargetContext->numSamples(), GrMipMapped::kNo,
+            fRenderTargetContext->asSurfaceProxy()->isProtected(), kBottomLeft_GrSurfaceOrigin,
+            SkBudgeted::kYes, &props);
     if (!rtc) {
         return nullptr;
     }

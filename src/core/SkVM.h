@@ -10,6 +10,7 @@
 
 #include "include/core/SkTypes.h"
 #include "include/private/SkTHash.h"
+#include "src/core/SkVM_fwd.h"
 #include <vector>      // std::vector
 
 class SkWStream;
@@ -305,8 +306,6 @@ namespace skvm {
 
     struct Color { skvm::F32 r,g,b,a; };
 
-    class Program;
-
     class Builder {
     public:
         struct Instruction {
@@ -339,7 +338,10 @@ namespace skvm {
         // TODO: sign extension (signed types) for <32-bit loads?
         // TODO: unsigned integer operations where relevant (just comparisons?)?
 
-        void assert_true(I32 val);
+        // Assert cond is true, printing debug when not.
+        void assert_true(I32 cond, I32 debug);
+        void assert_true(I32 cond, F32 debug) { this->assert_true(cond, this->bit_cast(debug)); }
+        void assert_true(I32 cond)            { this->assert_true(cond, cond); }
 
         // Store {8,16,32}-bit varying.
         void store8 (Arg ptr, I32 val);
