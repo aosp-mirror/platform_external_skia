@@ -10,6 +10,7 @@
 
 #include "include/core/SkTypes.h"
 #include "include/private/SkTHash.h"
+#include "src/core/SkVM_fwd.h"
 #include <vector>      // std::vector
 
 class SkWStream;
@@ -305,8 +306,6 @@ namespace skvm {
 
     struct Color { skvm::F32 r,g,b,a; };
 
-    class Program;
-
     class Builder {
     public:
         struct Instruction {
@@ -339,7 +338,10 @@ namespace skvm {
         // TODO: sign extension (signed types) for <32-bit loads?
         // TODO: unsigned integer operations where relevant (just comparisons?)?
 
-        void assert_true(I32 val);
+        // Assert cond is true, printing debug when not.
+        void assert_true(I32 cond, I32 debug);
+        void assert_true(I32 cond, F32 debug) { this->assert_true(cond, this->bit_cast(debug)); }
+        void assert_true(I32 cond)            { this->assert_true(cond, cond); }
 
         // Store {8,16,32}-bit varying.
         void store8 (Arg ptr, I32 val);
@@ -392,6 +394,10 @@ namespace skvm {
         F32 max(F32 x, F32 y);
         F32 mad(F32 x, F32 y, F32 z);  //  x*y+z, often an FMA
 
+        F32 clamp(F32 x, F32 lo, F32 hi) {
+            return max(lo, min(x, hi));
+        }
+
         I32 eq (F32 x, F32 y);
         I32 neq(F32 x, F32 y);
         I32 lt (F32 x, F32 y);
@@ -407,6 +413,10 @@ namespace skvm {
         F32 abs(F32 x) {
             return bit_cast(bit_and(bit_cast(x),
                                     splat(0x7fffffff)));
+        }
+
+        F32 fract(F32 x) {
+            return sub(x, floor(x));
         }
 
         // int math, comparisons, etc.
@@ -488,6 +498,9 @@ namespace skvm {
 
         Color unpack_8888(I32 rgba);
         Color unpack_565 (I32 bgr );  // bottom 16 bits
+
+        void   premul(F32* r, F32* g, F32* b, F32 a);
+        void unpremul(F32* r, F32* g, F32* b, F32 a);
 
         void dump(SkWStream* = nullptr) const;
 

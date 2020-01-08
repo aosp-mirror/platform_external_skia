@@ -127,10 +127,12 @@ namespace {
                 x = p.add(x, p.splat(0.5f));
                 y = p.add(y, p.splat(0.5f));
                 skvm::F32 r,g,b,a;
+
+                SkSTArenaAlloc<2*sizeof(void*)> tmp;
                 if (shader->program(&p,
                                     params.ctm, /*localM=*/nullptr,
                                     params.quality, params.colorSpace.get(),
-                                    uniforms,
+                                    uniforms,&tmp,
                                     x,y, &r,&g,&b,&a)) {
                     shaderHash = p.hash();
                 } else {
@@ -144,8 +146,6 @@ namespace {
                 case kRGBA_8888_SkColorType: break;
                 case kBGRA_8888_SkColorType: break;
             }
-
-            if (params.alphaType == kUnpremul_SkAlphaType) { *ok = false; }
 
             if (!skvm::BlendModeSupported(params.blendMode)) {
                 *ok = false;
@@ -161,7 +161,7 @@ namespace {
             };
         }
 
-        Builder(const Params& params, skvm::Uniforms* uniforms) {
+        Builder(const Params& params, skvm::Uniforms* uniforms, SkArenaAlloc* alloc) {
             // First two arguments are always uniforms and the destination buffer.
             uniforms->ptr     = uniform();
             skvm::Arg dst_ptr = arg(SkColorTypeBytesPerPixel(params.colorType));
@@ -184,11 +184,8 @@ namespace {
             SkAssertResult(as_SB(params.shader)->program(this,
                                                          params.ctm, /*localM=*/nullptr,
                                                          params.quality, params.colorSpace.get(),
-                                                         uniforms,
+                                                         uniforms, alloc,
                                                          x,y, &src.r, &src.g, &src.b, &src.a));
-            // We don't know if the src color is normalized (logical [0,1], premul [0,a]) or not.
-            bool src_is_normalized = false;
-
             if (params.coverage == Coverage::Mask3D) {
                 skvm::F32 M = unorm(8, load8(varying<uint8_t>())),
                           A = unorm(8, load8(varying<uint8_t>()));
@@ -204,17 +201,9 @@ namespace {
             // So we clamp the shader to gamut here before blending and coverage.
             if (params.alphaType == kPremul_SkAlphaType
                     && SkColorTypeIsNormalized(params.colorType)) {
-                src.r = min(max(splat(0.0f), src.r), src.a);
-                src.g = min(max(splat(0.0f), src.g), src.a);
-                src.b = min(max(splat(0.0f), src.b), src.a);
-
-                assert_true(gte(src.a, splat(0.0f)));
-                assert_true(lte(src.a, splat(1.0f)));
-
-                // Knowing that we're normalizing here and that blending and coverage
-                // won't affect that when the destination is normalized, we can avoid
-                // avoid a redundant clamp just before storing.
-                src_is_normalized = true;
+                src.r = clamp(src.r, splat(0.0f), src.a);
+                src.g = clamp(src.g, splat(0.0f), src.a);
+                src.b = clamp(src.b, splat(0.0f), src.a);
             }
 
             // There are several orderings here of when we load dst and coverage
@@ -279,10 +268,11 @@ namespace {
             // opaque, ignoring any math that disagrees.  So anything involving force_opaque is
             // optional, and sometimes helps cut a small amount of work in these programs.
             const bool force_opaque = true && params.alphaType == kOpaque_SkAlphaType;
-            if (force_opaque) { dst.a = splat(1.0f); }
-
-            // We'd need to premul dst after loading and unpremul before storing.
-            if (params.alphaType == kUnpremul_SkAlphaType) { SkUNREACHABLE; }
+            if (force_opaque) {
+                dst.a = splat(1.0f);
+            } else if (params.alphaType == kUnpremul_SkAlphaType) {
+                premul(&dst.r, &dst.g, &dst.b, dst.a);
+            }
 
             src = skvm::BlendModeProgram(this, params.blendMode, src, dst);
 
@@ -296,15 +286,17 @@ namespace {
             }
 
             // Clamp to fit destination color format if needed.
-            if (!src_is_normalized && SkColorTypeIsNormalized(params.colorType)) {
-                src.r = min(max(splat(0.0f), src.r), splat(1.0f));
-                src.g = min(max(splat(0.0f), src.g), splat(1.0f));
-                src.b = min(max(splat(0.0f), src.b), splat(1.0f));
-
-                assert_true(gte(src.a, splat(0.0f)));
-                assert_true(lte(src.a, splat(1.0f)));
+            if (SkColorTypeIsNormalized(params.colorType)) {
+                src.r = clamp(src.r, splat(0.0f), splat(1.0f));
+                src.g = clamp(src.g, splat(0.0f), splat(1.0f));
+                src.b = clamp(src.b, splat(0.0f), splat(1.0f));
+                src.a = clamp(src.a, splat(0.0f), splat(1.0f));
             }
-            if (force_opaque) { src.a = splat(1.0f); }
+            if (force_opaque) {
+                src.a = splat(1.0f);
+            } else if (params.alphaType == kUnpremul_SkAlphaType) {
+                unpremul(&src.r, &src.g, &src.b, src.a);
+            }
 
             // Store back to the destination.
             switch (params.colorType) {
@@ -422,7 +414,8 @@ namespace {
 
     private:
         SkPixmap       fDevice;
-        skvm::Uniforms fUniforms;
+        skvm::Uniforms fUniforms;                // Most data is copied directly into fUniforms,
+        SkArenaAlloc   fAlloc{2*sizeof(void*)};  // but a few effects need to ref large content.
         const Params   fParams;
         const Key      fKey;
         skvm::Program  fBlitH,
@@ -451,7 +444,7 @@ namespace {
             // fUniforms should reuse the exact same memory, so this is very cheap.
             SkDEBUGCODE(size_t prev = fUniforms.buf.size();)
             fUniforms.buf.resize(kBlitterUniformsCount);
-            Builder builder{fParams.withCoverage(coverage), &fUniforms};
+            Builder builder{fParams.withCoverage(coverage), &fUniforms, &fAlloc};
             SkASSERT(fUniforms.buf.size() == prev);
 
             skvm::Program program = builder.done(debug_name(key).c_str());
