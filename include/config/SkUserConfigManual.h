@@ -30,7 +30,4 @@
 
   #define SK_DISABLE_DAA  // skbug.com/6886
 
-  // b/145995037
-  #define SK_LEGACY_WEBP_LOOP_COUNT
-
 #endif // SkUserConfigManual_DEFINED
