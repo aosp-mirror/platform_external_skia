@@ -32,6 +32,13 @@ std::unique_ptr<GrSurfaceContext> GrSurfaceContext::Make(GrRecordingContext* con
                                                          GrColorType colorType,
                                                          SkAlphaType alphaType,
                                                          sk_sp<SkColorSpace> colorSpace) {
+    // It is probably not necessary to check if the context is abandoned here since uses of the
+    // GrSurfaceContext which need the context will mostly likely fail later on without an issue.
+    // However having this hear adds some reassurance in case there is a path doesn't handle an
+    // abandoned context correctly. It also lets us early out of some extra work.
+    if (context->priv().abandoned()) {
+        return nullptr;
+    }
     SkASSERT(proxy && proxy->asTextureProxy());
 
     // TODO: These should be passed in directly or as GrSurfaceProxyView
@@ -105,7 +112,9 @@ GrSurfaceContext::GrSurfaceContext(GrRecordingContext* context,
         , fSurfaceProxy(std::move(proxy))
         , fOrigin(origin)
         , fColorInfo(colorType, alphaType, std::move(colorSpace))
-        , fReadSwizzle(readSwizzle) {}
+        , fReadSwizzle(readSwizzle) {
+    SkASSERT(!context->priv().abandoned());
+}
 
 const GrCaps* GrSurfaceContext::caps() const { return fContext->priv().caps(); }
 

@@ -39,10 +39,10 @@ public:
     bool mapRect(SkRect* dst, const SkRect& src) { return fM.mapRect(dst, src); }
 #else
     operator SkMatrix() const { return fM.asM33(); }
+    // the legacy check was just for the 3x3 portion, so we only check those
     bool isScaleTranslate() const {
-        return fM.atColMajor(1) == 0 && fM.atColMajor(2) == 0 && fM.atColMajor(3) == 0 && fM.atColMajor(4) == 0 &&
-               fM.atColMajor(6) == 0 && fM.atColMajor(7) == 0 && fM.atColMajor(8) == 0 && fM.atColMajor(9) == 0 &&
-               fM.atColMajor(11) == 0 && fM.atColMajor(15) == 1;
+        return fM.atColMajor(1) == 0 && fM.atColMajor(3) == 0 &&
+               fM.atColMajor(4) == 0 && fM.atColMajor(7) == 0 && fM.atColMajor(15) == 1;
     }
     bool rectStaysRect() const { return fM.asM33().rectStaysRect(); }
 

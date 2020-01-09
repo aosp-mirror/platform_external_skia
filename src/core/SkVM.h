@@ -66,15 +66,34 @@ namespace skvm {
         void add(GP64, int imm);
         void sub(GP64, int imm);
 
+        struct Label {
+            int                                      offset = 0;
+            enum { NotYetSet, ARMDisp19, X86Disp32 } kind = NotYetSet;
+            std::vector<int>                         references;
+        };
+
+        struct YmmOrLabel {
+            Ymm    ymm   = ymm0;
+            Label* label = nullptr;
+
+            /*implicit*/ YmmOrLabel(Ymm    y) : ymm  (y) { SkASSERT(!label); }
+            /*implicit*/ YmmOrLabel(Label* l) : label(l) { SkASSERT( label); }
+        };
+
         // All dst = x op y.
         using DstEqXOpY = void(Ymm dst, Ymm x, Ymm y);
-        DstEqXOpY vpand, vpor, vpxor, vpandn,
-                  vpaddd, vpsubd, vpmulld,
-                          vpsubw, vpmullw,
-                  vaddps, vsubps, vmulps, vdivps, vminps, vmaxps,
+        DstEqXOpY vpandn,
+                  vpmulld,
+                  vpsubw, vpmullw,
+                  vdivps,
                   vfmadd132ps, vfmadd213ps, vfmadd231ps,
                   vpackusdw, vpackuswb,
                   vpcmpeqd, vpcmpgtd;
+
+        using DstEqXOpYOrLabel = void(Ymm dst, Ymm x, YmmOrLabel y);
+        DstEqXOpYOrLabel vpand, vpor, vpxor,
+                         vpaddd, vpsubd,
+                         vaddps, vsubps, vmulps, vminps, vmaxps;
 
         // Floating point comparisons are all the same instruction with varying imm.
         void vcmpps(Ymm dst, Ymm x, Ymm y, int imm);
@@ -93,12 +112,6 @@ namespace skvm {
 
         void vpblendvb(Ymm dst, Ymm x, Ymm y, Ymm z);
 
-        struct Label {
-            int                                      offset = 0;
-            enum { NotYetSet, ARMDisp19, X86Disp32 } kind = NotYetSet;
-            std::vector<int>                         references;
-        };
-
         Label here();
         void label(Label*);
 
@@ -109,16 +122,12 @@ namespace skvm {
         void jc (Label*);
         void cmp(GP64, int imm);
 
+        void vpshufb(Ymm dst, Ymm x, Label*);
         void vptest(Ymm dst, Label*);
 
         void vbroadcastss(Ymm dst, Label*);
         void vbroadcastss(Ymm dst, Xmm src);
         void vbroadcastss(Ymm dst, GP64 ptr, int off);  // dst = *(ptr+off)
-
-        void vpshufb(Ymm dst, Ymm x, Label*);
-        void vpaddd (Ymm dst, Ymm x, Label*);
-        void vpsubd (Ymm dst, Ymm x, Label*);
-        void vmulps (Ymm dst, Ymm x, Label*);
 
         void vmovups  (Ymm dst, GP64 ptr);   // dst = *ptr, 256-bit
         void vpmovzxwd(Ymm dst, GP64 ptr);   // dst = *ptr, 128-bit, each uint16_t expanded to int
@@ -229,6 +238,7 @@ namespace skvm {
 
         // dst = op(x,label) or op(label)
         void op(int prefix, int map, int opcode, Ymm dst, Ymm x, Label* l);
+        void op(int prefix, int map, int opcode, Ymm dst, Ymm x, YmmOrLabel);
 
         // *ptr = ymm or ymm = *ptr, depending on opcode.
         void load_store(int prefix, int map, int opcode, Ymm ymm, GP64 ptr);
@@ -278,7 +288,12 @@ namespace skvm {
                  shl_i32, shl_i16x2,
                  shr_i32, shr_i16x2,
                  sra_i32, sra_i16x2,
+
+        add_f32_imm,
+        sub_f32_imm,
         mul_f32_imm,
+        min_f32_imm,
+        max_f32_imm,
 
         floor, trunc, round, to_f32,
 
@@ -291,9 +306,12 @@ namespace skvm {
         bit_or,
         bit_xor,
         bit_clear,
-        select,
 
-        bytes, extract, pack,
+        bit_and_imm,
+        bit_or_imm,
+        bit_xor_imm,
+
+        select, bytes, pack,
     };
 
     using Val = int;
@@ -394,6 +412,10 @@ namespace skvm {
         F32 max(F32 x, F32 y);
         F32 mad(F32 x, F32 y, F32 z);  //  x*y+z, often an FMA
 
+        F32 lerp(F32 lo, F32 hi, F32 t) {
+            return mad(sub(hi,lo), t, lo);
+        }
+
         F32 clamp(F32 x, F32 lo, F32 hi) {
             return max(lo, min(x, hi));
         }
@@ -489,7 +511,7 @@ namespace skvm {
         //    - bytes(x, 0x0404) transforms an RGBA pixel into an A0A0 bit pattern.
         I32 bytes  (I32 x, int control);
 
-        I32 extract(I32 x, int bits, I32 z);   // (x >> bits) & z
+        I32 extract(I32 x, int bits, I32 z);   // (x>>bits) & z
         I32 pack   (I32 x, I32 y, int bits);   // x | (y << bits), assuming (x & (y << bits)) == 0
 
         // Common idioms used in several places, worth centralizing for consistency.
@@ -501,6 +523,8 @@ namespace skvm {
 
         void   premul(F32* r, F32* g, F32* b, F32 a);
         void unpremul(F32* r, F32* g, F32* b, F32 a);
+
+        Color lerp(Color lo, Color hi, F32 t);
 
         void dump(SkWStream* = nullptr) const;
 

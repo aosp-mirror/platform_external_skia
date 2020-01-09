@@ -1429,7 +1429,9 @@ void SkCanvas::translate(SkScalar dx, SkScalar dy) {
         fMCRec->fMatrix.preTranslate(dx,dy);
 
         // Translate shouldn't affect the is-scale-translateness of the matrix.
-        SkASSERT(fIsScaleTranslate == fMCRec->fMatrix.isScaleTranslate());
+        // However, if either is non-finite, we might still complicate the matrix type,
+        // so we still have to compute this.
+        fIsScaleTranslate = fMCRec->fMatrix.isScaleTranslate();
 
         FOR_EACH_TOP_DEVICE(device->setGlobalCTM(fMCRec->fMatrix));
 
