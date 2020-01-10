@@ -175,7 +175,11 @@ namespace skvm {
                 case Op::max_f32: write(o, V{id}, "= max_f32", V{x}, V{y}      ); break;
                 case Op::mad_f32: write(o, V{id}, "= mad_f32", V{x}, V{y}, V{z}); break;
 
+                case Op::add_f32_imm: write(o, V{id}, "= add_f32", V{x}, Splat{immy}); break;
+                case Op::sub_f32_imm: write(o, V{id}, "= sub_f32", V{x}, Splat{immy}); break;
                 case Op::mul_f32_imm: write(o, V{id}, "= mul_f32", V{x}, Splat{immy}); break;
+                case Op::min_f32_imm: write(o, V{id}, "= min_f32", V{x}, Splat{immy}); break;
+                case Op::max_f32_imm: write(o, V{id}, "= max_f32", V{x}, Splat{immy}); break;
 
                 case Op:: eq_f32: write(o, V{id}, "= eq_f32", V{x}, V{y}); break;
                 case Op::neq_f32: write(o, V{id}, "= neq_f32", V{x}, V{y}); break;
@@ -213,11 +217,14 @@ namespace skvm {
                 case Op::bit_or   : write(o, V{id}, "= bit_or"   , V{x}, V{y}      ); break;
                 case Op::bit_xor  : write(o, V{id}, "= bit_xor"  , V{x}, V{y}      ); break;
                 case Op::bit_clear: write(o, V{id}, "= bit_clear", V{x}, V{y}      ); break;
-                case Op::select   : write(o, V{id}, "= select"   , V{x}, V{y}, V{z}); break;
 
-                case Op::bytes:   write(o, V{id}, "= bytes",   V{x}, Hex{immy}); break;
-                case Op::extract: write(o, V{id}, "= extract", V{x}, Shift{immy}, V{z}); break;
-                case Op::pack:    write(o, V{id}, "= pack",    V{x}, V{y}, Shift{immz}); break;
+                case Op::bit_and_imm: write(o, V{id}, "= bit_and"  , V{x}, Hex{immy}); break;
+                case Op::bit_or_imm : write(o, V{id}, "= bit_or"   , V{x}, Hex{immy}); break;
+                case Op::bit_xor_imm: write(o, V{id}, "= bit_xor"  , V{x}, Hex{immy}); break;
+
+                case Op::select:  write(o, V{id}, "= select", V{x}, V{y}, V{z}); break;
+                case Op::bytes:   write(o, V{id}, "= bytes",  V{x}, Hex{immy}); break;
+                case Op::pack:    write(o, V{id}, "= pack",   V{x}, V{y}, Shift{immz}); break;
 
                 case Op::floor:  write(o, V{id}, "= floor",  V{x}); break;
                 case Op::to_f32: write(o, V{id}, "= to_f32", V{x}); break;
@@ -291,7 +298,11 @@ namespace skvm {
                 case Op::max_f32: write(o, R{d}, "= max_f32", R{x}, R{y}      ); break;
                 case Op::mad_f32: write(o, R{d}, "= mad_f32", R{x}, R{y}, R{z}); break;
 
+                case Op::add_f32_imm: write(o, R{d}, "= add_f32", R{x}, Splat{immy}); break;
+                case Op::sub_f32_imm: write(o, R{d}, "= sub_f32", R{x}, Splat{immy}); break;
                 case Op::mul_f32_imm: write(o, R{d}, "= mul_f32", R{x}, Splat{immy}); break;
+                case Op::min_f32_imm: write(o, R{d}, "= min_f32", R{x}, Splat{immy}); break;
+                case Op::max_f32_imm: write(o, R{d}, "= max_f32", R{x}, Splat{immy}); break;
 
                 case Op:: eq_f32: write(o, R{d}, "= eq_f32", R{x}, R{y}); break;
                 case Op::neq_f32: write(o, R{d}, "= neq_f32", R{x}, R{y}); break;
@@ -331,11 +342,14 @@ namespace skvm {
                 case Op::bit_or   : write(o, R{d}, "= bit_or"   , R{x}, R{y}      ); break;
                 case Op::bit_xor  : write(o, R{d}, "= bit_xor"  , R{x}, R{y}      ); break;
                 case Op::bit_clear: write(o, R{d}, "= bit_clear", R{x}, R{y}      ); break;
-                case Op::select   : write(o, R{d}, "= select"   , R{x}, R{y}, R{z}); break;
 
-                case Op::bytes:   write(o, R{d}, "= bytes", R{x}, Hex{immy}); break;
-                case Op::extract: write(o, R{d}, "= extract", R{x}, Shift{immy}, R{z}); break;
-                case Op::pack:    write(o, R{d}, "= pack",    R{x}, R{y}, Shift{immz}); break;
+                case Op::bit_and_imm: write(o, R{d}, "= bit_and"  , R{x}, Hex{immy}); break;
+                case Op::bit_or_imm : write(o, R{d}, "= bit_or"   , R{x}, Hex{immy}); break;
+                case Op::bit_xor_imm: write(o, R{d}, "= bit_xor"  , R{x}, Hex{immy}); break;
+
+                case Op::select:  write(o, R{d}, "= select", R{x}, R{y}, R{z}); break;
+                case Op::bytes:   write(o, R{d}, "= bytes",  R{x}, Hex{immy}); break;
+                case Op::pack:    write(o, R{d}, "= pack",   R{x}, R{y}, Shift{immz}); break;
 
                 case Op::floor:  write(o, R{d}, "= floor",  R{x}); break;
                 case Op::to_f32: write(o, R{d}, "= to_f32", R{x}); break;
@@ -586,6 +600,11 @@ namespace skvm {
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X+Y); }
         if (this->isImm(y.id, 0.0f)) { return x; }   // x+0 == x
         if (this->isImm(x.id, 0.0f)) { return y; }   // 0+y == y
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return {this->push(Op::add_f32_imm, x.id,NA,NA, imm)}; }
+        if (this->allImm(x.id, &imm)) { return {this->push(Op::add_f32_imm, y.id,NA,NA, imm)}; }
+    #endif
         return {this->push(Op::add_f32, x.id, y.id)};
     }
 
@@ -593,6 +612,10 @@ namespace skvm {
         float X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X-Y); }
         if (this->isImm(y.id, 0.0f)) { return x; }   // x-0 == x
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return {this->push(Op::sub_f32_imm, x.id,NA,NA, imm)}; }
+    #endif
         return {this->push(Op::sub_f32, x.id, y.id)};
     }
 
@@ -628,11 +651,21 @@ namespace skvm {
     F32 Builder::min(F32 x, F32 y) {
         float X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(std::min(X,Y)); }
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return {this->push(Op::min_f32_imm, x.id,NA,NA, imm)}; }
+        if (this->allImm(x.id, &imm)) { return {this->push(Op::min_f32_imm, y.id,NA,NA, imm)}; }
+    #endif
         return {this->push(Op::min_f32, x.id, y.id)};
     }
     F32 Builder::max(F32 x, F32 y) {
         float X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(std::max(X,Y)); }
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return {this->push(Op::max_f32_imm, x.id,NA,NA, imm)}; }
+        if (this->allImm(x.id, &imm)) { return {this->push(Op::max_f32_imm, y.id,NA,NA, imm)}; }
+    #endif
         return {this->push(Op::max_f32, x.id, y.id)};
     }
 
@@ -645,16 +678,19 @@ namespace skvm {
     I32 Builder::mul_16x2(I32 x, I32 y) { return {this->push(Op::mul_i16x2, x.id, y.id)}; }
 
     I32 Builder::shl(I32 x, int bits) {
+        if (bits == 0) { return x; }
         int X;
         if (this->allImm(x.id,&X)) { return this->splat(X << bits); }
         return {this->push(Op::shl_i32, x.id,NA,NA, bits)};
     }
     I32 Builder::shr(I32 x, int bits) {
+        if (bits == 0) { return x; }
         int X;
         if (this->allImm(x.id,&X)) { return this->splat(unsigned(X) >> bits); }
         return {this->push(Op::shr_i32, x.id,NA,NA, bits)};
     }
     I32 Builder::sra(I32 x, int bits) {
+        if (bits == 0) { return x; }
         int X;
         if (this->allImm(x.id,&X)) { return this->splat(X >> bits); }
         return {this->push(Op::sra_i32, x.id,NA,NA, bits)};
@@ -712,34 +748,53 @@ namespace skvm {
     I32 Builder::bit_and(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X&Y); }
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_and_imm, x.id,NA,NA, imm)}; }
+        if (this->allImm(x.id, &imm)) { return {this->push(Op::bit_and_imm, y.id,NA,NA, imm)}; }
+    #endif
         return {this->push(Op::bit_and, x.id, y.id)};
     }
     I32 Builder::bit_or(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X|Y); }
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_or_imm, x.id,NA,NA, imm)}; }
+        if (this->allImm(x.id, &imm)) { return {this->push(Op::bit_or_imm, y.id,NA,NA, imm)}; }
+    #endif
         return {this->push(Op::bit_or, x.id, y.id)};
     }
     I32 Builder::bit_xor(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X^Y); }
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_xor_imm, x.id,NA,NA, imm)}; }
+        if (this->allImm(x.id, &imm)) { return {this->push(Op::bit_xor_imm, y.id,NA,NA, imm)}; }
+    #endif
         return {this->push(Op::bit_xor, x.id, y.id)};
     }
     I32 Builder::bit_clear(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X&~Y); }
+    #if defined(SK_CPU_X86)
+        int imm;
+        if (this->allImm(y.id, &imm)) { return this->bit_and(x, this->splat(~imm)); }
+    #endif
         return {this->push(Op::bit_clear, x.id, y.id)};
     }
+
     I32 Builder::select(I32 x, I32 y, I32 z) {
         int X,Y,Z;
         if (this->allImm(x.id,&X, y.id,&Y, z.id,&Z)) { return this->splat(X?Y:Z); }
         return {this->push(Op::select, x.id, y.id, z.id)};
     }
 
-
     I32 Builder::extract(I32 x, int bits, I32 z) {
-        int X,Z;
-        if (this->allImm(x.id,&X, z.id,&Z)) { return this->splat( (unsigned(X)>>bits)&Z ); }
-        return {this->push(Op::extract, x.id,NA,z.id, bits,0)};
+        int Z;
+        if (this->allImm(z.id,&Z) && (~0u>>bits) == (unsigned)Z) { return this->shr(x, bits); }
+        return this->bit_and(z, this->shr(x, bits));
     }
 
     I32 Builder::pack(I32 x, I32 y, int bits) {
@@ -814,6 +869,15 @@ namespace skvm {
         *r = mul(*r, a);
         *g = mul(*g, a);
         *b = mul(*b, a);
+    }
+
+    Color Builder::lerp(Color lo, Color hi, F32 t) {
+        return {
+            lerp(lo.r, hi.r, t),
+            lerp(lo.g, hi.g, t),
+            lerp(lo.b, hi.b, t),
+            lerp(lo.a, hi.a, t),
+        };
     }
 
     // ~~~~ Program::eval() and co. ~~~~ //
@@ -996,24 +1060,24 @@ namespace skvm {
         this->byte(mod_rm(Mod::Direct, dst&7, y&7));
     }
 
-    void Assembler::vpaddd (Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0xfe, dst,x,y); }
-    void Assembler::vpsubd (Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0xfa, dst,x,y); }
-    void Assembler::vpmulld(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x40, dst,x,y); }
+    void Assembler::vpaddd (Ymm dst, Ymm x, YmmOrLabel y) { this->op(0x66,  0x0f,0xfe, dst,x,y); }
+    void Assembler::vpsubd (Ymm dst, Ymm x, YmmOrLabel y) { this->op(0x66,  0x0f,0xfa, dst,x,y); }
+    void Assembler::vpmulld(Ymm dst, Ymm x, Ymm        y) { this->op(0x66,0x380f,0x40, dst,x,y); }
 
     void Assembler::vpsubw (Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xf9, dst,x,y); }
     void Assembler::vpmullw(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xd5, dst,x,y); }
 
-    void Assembler::vpand (Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xdb, dst,x,y); }
-    void Assembler::vpor  (Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xeb, dst,x,y); }
-    void Assembler::vpxor (Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xef, dst,x,y); }
-    void Assembler::vpandn(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x0f,0xdf, dst,x,y); }
+    void Assembler::vpand (Ymm dst, Ymm x, YmmOrLabel y) { this->op(0x66,0x0f,0xdb, dst,x,y); }
+    void Assembler::vpor  (Ymm dst, Ymm x, YmmOrLabel y) { this->op(0x66,0x0f,0xeb, dst,x,y); }
+    void Assembler::vpxor (Ymm dst, Ymm x, YmmOrLabel y) { this->op(0x66,0x0f,0xef, dst,x,y); }
+    void Assembler::vpandn(Ymm dst, Ymm x, Ymm        y) { this->op(0x66,0x0f,0xdf, dst,x,y); }
 
-    void Assembler::vaddps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x58, dst,x,y); }
-    void Assembler::vsubps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5c, dst,x,y); }
-    void Assembler::vmulps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x59, dst,x,y); }
-    void Assembler::vdivps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5e, dst,x,y); }
-    void Assembler::vminps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5d, dst,x,y); }
-    void Assembler::vmaxps(Ymm dst, Ymm x, Ymm y) { this->op(0,0x0f,0x5f, dst,x,y); }
+    void Assembler::vaddps(Ymm dst, Ymm x, YmmOrLabel y) { this->op(0,0x0f,0x58, dst,x,y); }
+    void Assembler::vsubps(Ymm dst, Ymm x, YmmOrLabel y) { this->op(0,0x0f,0x5c, dst,x,y); }
+    void Assembler::vmulps(Ymm dst, Ymm x, YmmOrLabel y) { this->op(0,0x0f,0x59, dst,x,y); }
+    void Assembler::vdivps(Ymm dst, Ymm x, Ymm        y) { this->op(0,0x0f,0x5e, dst,x,y); }
+    void Assembler::vminps(Ymm dst, Ymm x, YmmOrLabel y) { this->op(0,0x0f,0x5d, dst,x,y); }
+    void Assembler::vmaxps(Ymm dst, Ymm x, YmmOrLabel y) { this->op(0,0x0f,0x5f, dst,x,y); }
 
     void Assembler::vfmadd132ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x98, dst,x,y); }
     void Assembler::vfmadd213ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xa8, dst,x,y); }
@@ -1104,11 +1168,12 @@ namespace skvm {
         this->word(this->disp32(l));
     }
 
-    void Assembler::vpshufb(Ymm dst, Ymm x, Label* l) { this->op(0x66,0x380f,0x00, dst,x,l); }
-    void Assembler::vpaddd (Ymm dst, Ymm x, Label* l) { this->op(0x66,  0x0f,0xfe, dst,x,l); }
-    void Assembler::vpsubd (Ymm dst, Ymm x, Label* l) { this->op(0x66,  0x0f,0xfa, dst,x,l); }
-    void Assembler::vmulps (Ymm dst, Ymm x, Label* l) { this->op(   0,  0x0f,0x59, dst,x,l); }
+    void Assembler::op(int prefix, int map, int opcode, Ymm dst, Ymm x, YmmOrLabel y) {
+        y.label ? this->op(prefix,map,opcode,dst,x, y.label)
+                : this->op(prefix,map,opcode,dst,x, y.ymm  );
+    }
 
+    void Assembler::vpshufb(Ymm dst, Ymm x, Label* l) { this->op(0x66,0x380f,0x00, dst,x,l); }
     void Assembler::vptest(Ymm dst, Label* l) { this->op(0x66, 0x380f, 0x17, dst, (Ymm)0, l); }
 
     void Assembler::vbroadcastss(Ymm dst, Label* l) { this->op(0x66,0x380f,0x18, dst, (Ymm)0, l); }
@@ -1673,10 +1738,30 @@ namespace skvm {
                     CASE(Op::min_f32): r(d).f32 = min(r(x).f32, r(y).f32); break;
                     CASE(Op::max_f32): r(d).f32 = max(r(x).f32, r(y).f32); break;
 
+                    CASE(Op::add_f32_imm): {
+                        Slot tmp;
+                        tmp.i32 = immy;
+                        r(d).f32 = r(x).f32 + tmp.f32;
+                    } break;
+                    CASE(Op::sub_f32_imm): {
+                        Slot tmp;
+                        tmp.i32 = immy;
+                        r(d).f32 = r(x).f32 - tmp.f32;
+                    } break;
                     CASE(Op::mul_f32_imm): {
                         Slot tmp;
                         tmp.i32 = immy;
                         r(d).f32 = r(x).f32 * tmp.f32;
+                    } break;
+                    CASE(Op::min_f32_imm): {
+                        Slot tmp;
+                        tmp.i32 = immy;
+                        r(d).f32 = min(r(x).f32, tmp.f32);
+                    } break;
+                    CASE(Op::max_f32_imm): {
+                        Slot tmp;
+                        tmp.i32 = immy;
+                        r(d).f32 = max(r(x).f32, tmp.f32);
                     } break;
 
                     CASE(Op::mad_f32): r(d).f32 = r(x).f32 * r(y).f32 + r(z).f32; break;
@@ -1717,11 +1802,13 @@ namespace skvm {
                     CASE(Op::bit_xor  ): r(d).i32 = r(x).i32 ^  r(y).i32; break;
                     CASE(Op::bit_clear): r(d).i32 = r(x).i32 & ~r(y).i32; break;
 
+                    CASE(Op::bit_and_imm): r(d).i32 = r(x).i32 & immy; break;
+                    CASE(Op::bit_or_imm ): r(d).i32 = r(x).i32 | immy; break;
+                    CASE(Op::bit_xor_imm): r(d).i32 = r(x).i32 ^ immy; break;
+
                     CASE(Op::select): r(d).i32 = skvx::if_then_else(r(x).i32, r(y).i32, r(z).i32);
                                       break;
 
-
-                    CASE(Op::extract): r(d).u32 = (r(x).u32 >> immy) & r(z).u32; break;
                     CASE(Op::pack):    r(d).u32 = r(x).u32 | (r(y).u32 << immz); break;
 
                     CASE(Op::bytes): {
@@ -2210,7 +2297,11 @@ namespace skvm {
                                                                  a->vfmadd132ps(dst(),r[z], r[y]); }
                                                                  break;
 
+                case Op::add_f32_imm: a->vaddps(dst(), r[x], &constants[immy].label); break;
+                case Op::sub_f32_imm: a->vsubps(dst(), r[x], &constants[immy].label); break;
                 case Op::mul_f32_imm: a->vmulps(dst(), r[x], &constants[immy].label); break;
+                case Op::min_f32_imm: a->vminps(dst(), r[x], &constants[immy].label); break;
+                case Op::max_f32_imm: a->vmaxps(dst(), r[x], &constants[immy].label); break;
 
                 case Op::add_i32: a->vpaddd (dst(), r[x], r[y]); break;
                 case Op::sub_i32: a->vpsubd (dst(), r[x], r[y]); break;
@@ -2226,6 +2317,10 @@ namespace skvm {
                 case Op::bit_clear: a->vpandn(dst(), r[y], r[x]); break;  // N.B. Y then X.
                 case Op::select   : a->vpblendvb(dst(), r[z], r[y], r[x]); break;
 
+                case Op::bit_and_imm: a->vpand (dst(), r[x], &constants[immy].label); break;
+                case Op::bit_or_imm : a->vpor  (dst(), r[x], &constants[immy].label); break;
+                case Op::bit_xor_imm: a->vpxor (dst(), r[x], &constants[immy].label); break;
+
                 case Op::shl_i32: a->vpslld(dst(), r[x], immy); break;
                 case Op::shr_i32: a->vpsrld(dst(), r[x], immy); break;
                 case Op::sra_i32: a->vpsrad(dst(), r[x], immy); break;
@@ -2237,11 +2332,6 @@ namespace skvm {
                 case Op::neq_f32: a->vcmpneqps(dst(), r[x], r[y]); break;
                 case Op:: gt_f32: a->vcmpltps (dst(), r[y], r[x]); break;
                 case Op::gte_f32: a->vcmpleps (dst(), r[y], r[x]); break;
-
-                case Op::extract: if (immy == 0) { a->vpand (dst(),  r[x], r[z]); }
-                                  else           { a->vpsrld(tmp(),  r[x], immy);
-                                                   a->vpand (dst(), tmp(), r[z]); }
-                                  break;
 
                 case Op::pack: a->vpslld(tmp(),  r[y], immz);
                                a->vpor  (dst(), tmp(), r[x]);
@@ -2342,11 +2432,6 @@ namespace skvm {
 
                 case Op::eq_i32: a->cmeq4s(dst(), r[x], r[y]); break;
                 case Op::gt_i32: a->cmgt4s(dst(), r[x], r[y]); break;
-
-                case Op::extract: if (immy) { a->ushr4s(tmp(),  r[x], immy);
-                                              a->and16b(dst(), tmp(), r[z]); }
-                                  else      { a->and16b(dst(),  r[x], r[z]); }
-                                              break;
 
                 case Op::pack:
                     if (avail & (1<<r[x])) { set_dst(r[x]); a->sli4s ( r[x],  r[y],  immz); }
