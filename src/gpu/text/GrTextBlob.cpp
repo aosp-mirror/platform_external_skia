@@ -43,80 +43,6 @@ GrTextBlob::PathGlyph::PathGlyph(const SkPath& path, SkPoint origin)
         , fOrigin(origin) {}
 
 // -- GrTextBlob::SubRun ---------------------------------------------------------------------------
-// Hold data to draw the different types of sub run. SubRuns are produced knowing all the
-// glyphs that are included in them.
-class GrTextBlob::SubRun {
-public:
-    // SubRun for masks
-    SubRun(SubRunType type,
-           GrTextBlob* textBlob,
-           const SkStrikeSpec& strikeSpec,
-           GrMaskFormat format,
-           const SkSpan<GrGlyph*>& glyphs, const SkSpan<char>& vertexData,
-           sk_sp<GrTextStrike>&& grStrike);
-
-    // SubRun for paths
-    SubRun(GrTextBlob* textBlob, const SkStrikeSpec& strikeSpec);
-
-    void appendGlyphs(const SkZip<SkGlyphVariant, SkPoint>& drawables);
-
-    // TODO when this object is more internal, drop the privacy
-    void resetBulkUseToken();
-    GrDrawOpAtlas::BulkUseTokenUpdater* bulkUseToken();
-    void setStrike(sk_sp<GrTextStrike> strike);
-    GrTextStrike* strike() const;
-
-    GrMaskFormat maskFormat() const;
-
-    size_t vertexStride() const;
-    size_t colorOffset() const;
-    size_t texCoordOffset() const;
-    char* quadStart(size_t index) const;
-
-    const SkRect& vertexBounds() const;
-    void joinGlyphBounds(const SkRect& glyphBounds);
-
-    bool drawAsDistanceFields() const;
-    bool drawAsPaths() const;
-    bool needsTransform() const;
-
-    void translateVerticesIfNeeded(const SkMatrix& drawMatrix, SkPoint drawOrigin);
-    void updateVerticesColorIfNeeded(GrColor newColor);
-    void updateTexCoords(int begin, int end);
-
-    // df properties
-    void setUseLCDText(bool useLCDText);
-    bool hasUseLCDText() const;
-    void setAntiAliased(bool antiAliased);
-    bool isAntiAliased() const;
-
-    const SkStrikeSpec& strikeSpec() const;
-
-    SubRun* fNextSubRun{nullptr};
-    const SubRunType fType;
-    GrTextBlob* const fBlob;
-    const GrMaskFormat fMaskFormat;
-    const SkSpan<GrGlyph*> fGlyphs;
-    const SkSpan<char> fVertexData;
-    const SkStrikeSpec fStrikeSpec;
-    sk_sp<GrTextStrike> fStrike;
-    struct {
-        bool useLCDText:1;
-        bool antiAliased:1;
-    } fFlags{false, false};
-    GrDrawOpAtlas::BulkUseTokenUpdater fBulkUseToken;
-    SkRect fVertexBounds = SkRectPriv::MakeLargestInverted();
-    uint64_t fAtlasGeneration{GrDrawOpAtlas::kInvalidAtlasGeneration};
-    GrColor fCurrentColor;
-    SkPoint fCurrentOrigin;
-    SkMatrix fCurrentMatrix;
-    std::vector<PathGlyph> fPaths;
-
-private:
-    bool hasW() const;
-
-};  // SubRun
-
 GrTextBlob::SubRun::SubRun(SubRunType type, GrTextBlob* textBlob, const SkStrikeSpec& strikeSpec,
                            GrMaskFormat format,
                            const SkSpan<GrGlyph*>& glyphs, const SkSpan<char>& vertexData,
@@ -948,41 +874,30 @@ bool GrTextBlob::VertexRegenerator::regenerate(GrTextBlob::VertexRegenerator::Re
     // If regenerate() is called multiple times then the atlas gen may have changed. So we check
     // this each time.
     fActions.regenTextureCoordinates |= fSubRun->fAtlasGeneration != currentAtlasGen;
-
     if (fActions.regenStrike) { SkASSERT(fActions.regenTextureCoordinates); }
-    if (fActions.regenStrike || fActions.regenTextureCoordinates) {
-        const int begin = fCurrGlyph;
-        const int end = std::min((int)fSubRun->fGlyphs.size(), begin + maxGlyphs);
-        auto [isOk, firstGlyphNotInAtlas] = this->updateTextureCoordinatesMaybeStrike(begin, end);
-        fCurrGlyph = firstGlyphNotInAtlas;
-        if (isOk) {
-            result->fFinished = fCurrGlyph == (int) fSubRun->fGlyphs.size();
-            result->fGlyphsRegenerated += fCurrGlyph - begin;
-            result->fFirstVertex = fSubRun->quadStart(begin);
-        }
-        return isOk;
-    } else {
-        auto vertexStride = fSubRun->vertexStride();
-        int glyphsLeft = fSubRun->fGlyphs.size() - fCurrGlyph;
-        if (glyphsLeft <= maxGlyphs) {
-            result->fFinished = true;
-            result->fGlyphsRegenerated = glyphsLeft;
-        } else {
-            result->fFinished = false;
-            result->fGlyphsRegenerated = maxGlyphs;
-        }
-        result->fFirstVertex = fSubRun->fVertexData.data() +
-                fCurrGlyph * kVerticesPerGlyph * vertexStride;
-        fCurrGlyph += result->fGlyphsRegenerated;
 
-        if (result->fFinished) {
-            // set use tokens for all of the glyphs in our subrun.  This is only valid if we
+    bool ok = true;
+    const int begin = fCurrGlyph;
+    const int end = std::min((int)fSubRun->fGlyphs.size(), begin + maxGlyphs);
+    if (fActions.regenStrike || fActions.regenTextureCoordinates) {
+        int firstGlyphNotInAtlas;
+        std::tie(ok, firstGlyphNotInAtlas) = this->updateTextureCoordinatesMaybeStrike(begin, end);
+        fCurrGlyph = firstGlyphNotInAtlas;
+    } else {
+        fCurrGlyph = end;
+        // All glyphs are inserted into the atlas if fCurrGlyph is at the end of fGlyphs.
+        if (fCurrGlyph == (int)fSubRun->fGlyphs.size()) {
+            // Set use tokens for all of the glyphs in our SubRun.  This is only valid if we
             // have a valid atlas generation
             fFullAtlasManager->setUseTokenBulk(*fSubRun->bulkUseToken(),
                                                fUploadTarget->tokenTracker()->nextDrawToken(),
                                                fSubRun->maskFormat());
         }
-        return true;
     }
-    SK_ABORT("Should not get here");
+    if (ok) {
+        result->fFinished = fCurrGlyph == (int)fSubRun->fGlyphs.size();
+        result->fGlyphsRegenerated += fCurrGlyph - begin;
+        result->fFirstVertex = fSubRun->quadStart(begin);
+    }
+    return ok;
 }

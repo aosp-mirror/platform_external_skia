@@ -875,9 +875,8 @@ public:
     */
     void concat(const SkMatrix& matrix);
 
-#ifndef SK_SUPPORT_LEGACY_CANVAS_MATRIX_33
     void concat(const SkMatrix44&);
-#endif
+    void concat44(const SkScalar[]); // column-major
 
     /** Replaces SkMatrix with matrix.
         Unlike concat(), any prior matrix state is overwritten.
@@ -1018,13 +1017,6 @@ public:
     */
     void clipPath(const SkPath& path, bool doAntiAlias = false) {
         this->clipPath(path, SkClipOp::kIntersect, doAntiAlias);
-    }
-
-    /** Experimental. For testing only.
-        Set to simplify clip stack using PathOps.
-    */
-    void setAllowSimplifyClip(bool allow) {
-        fAllowSimplifyClip = allow;
     }
 
     /** Replaces clip with the intersection or difference of clip and SkRegion deviceRgn.
@@ -2755,7 +2747,6 @@ private:
     friend class SkCanvasPriv;      // needs kDontClipToLayer_PrivateSaveLayerFlag
     friend class SkDrawIter;        // needs setupDrawForLayerDevice()
     friend class AutoLayerForImageFilter;
-    friend class DebugCanvas;       // needs experimental fAllowSimplifyClip
     friend class SkSurface_Raster;  // needs getDevice()
     friend class SkNoDrawCanvas;    // needs resetForNextPicture()
     friend class SkPictureRecord;   // predrawNotify (why does it need it? <reed>)
@@ -2846,9 +2837,6 @@ private:
      */
     bool   fIsScaleTranslate;
     SkRect fDeviceClipBounds;
-
-    bool fAllowSoftClip;
-    bool fAllowSimplifyClip;
 
     class AutoValidateClip {
     public:
