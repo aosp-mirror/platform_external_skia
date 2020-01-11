@@ -51,7 +51,8 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
     fReadPixelsRowBytesSupport = true;
     fWritePixelsRowBytesSupport = true;
 
-    fTransferBufferSupport = true;
+    fTransferFromBufferToTextureSupport = true;
+    fTransferFromSurfaceToBufferSupport = true;
 
     fMaxRenderTargetSize = 4096; // minimum required by spec
     fMaxTextureSize = 4096; // minimum required by spec
@@ -403,7 +404,7 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     if (kQualcomm_VkVendor == properties.vendorID) {
         fMustDoCopiesFromOrigin = true;
         // Transfer doesn't support this workaround.
-        fTransferBufferSupport = false;
+        fTransferFromSurfaceToBufferSupport = false;
     }
 
 #if defined(SK_BUILD_FOR_WIN)
@@ -1774,7 +1775,7 @@ int GrVkCaps::getFragmentUniformSet() const {
 }
 
 void GrVkCaps::addExtraSamplerKey(GrProcessorKeyBuilder* b,
-                                  const GrSamplerState& samplerState,
+                                  GrSamplerState samplerState,
                                   const GrBackendFormat& format) const {
     const GrVkYcbcrConversionInfo* ycbcrInfo = format.getVkYcbcrConversionInfo();
     if (!ycbcrInfo) {

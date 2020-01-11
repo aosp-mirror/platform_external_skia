@@ -494,7 +494,6 @@ void SkCanvas::resetForNextPicture(const SkIRect& bounds) {
 }
 
 void SkCanvas::init(sk_sp<SkBaseDevice> device) {
-    fAllowSimplifyClip = false;
     fSaveCount = 1;
 
     fMCRec = (MCRec*)fMCStack.push_back();
@@ -1477,16 +1476,10 @@ void SkCanvas::concat(const SkMatrix& matrix) {
     this->didConcat(matrix);
 }
 
-#ifndef SK_SUPPORT_LEGACY_CANVAS_MATRIX_33
-// inefficient, just wanted something so we can test with for now
-void SkCanvas::concat(const SkMatrix44& matrix) {
+void SkCanvas::concat44(const SkScalar m[16]) {
     this->checkForDeferredSave();
 
-    SkScalar m[16];
-    matrix.asColMajorf(m);
-    SkM44 m44;
-    m44.setColMajor(m);
-    fMCRec->fMatrix.preConcat(m44);
+    fMCRec->fMatrix.preConcat44(m);
 
     fIsScaleTranslate = fMCRec->fMatrix.isScaleTranslate();
 
@@ -1494,7 +1487,10 @@ void SkCanvas::concat(const SkMatrix44& matrix) {
 
     this->didConcat44(m);
 }
-#endif
+
+void SkCanvas::concat(const SkMatrix44& m) {
+    this->concat44(m.values());
+}
 
 void SkCanvas::internalSetMatrix(const SkMatrix& matrix) {
     fMCRec->fMatrix = matrix;
