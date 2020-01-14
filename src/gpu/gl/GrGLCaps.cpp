@@ -703,6 +703,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     //     fTiledRenderingSupport = ctxInfo.hasExtension("GL_QCOM_tiled_rendering");
     // }
 
+    if (kARM_GrGLVendor == ctxInfo.vendor()) {
+        fShouldCollapseSrcOverToSrcWhenAble = true;
+    }
+
     FormatWorkarounds formatWorkarounds;
 
     if (!contextOptions.fDisableDriverCorrectnessWorkarounds) {
@@ -3984,9 +3988,9 @@ SkImage::CompressionType GrGLCaps::compressionType(const GrBackendFormat& format
     auto fmt = format.asGLFormat();
 
     switch (fmt) {
-        case GrGLFormat::kCOMPRESSED_ETC1_RGB8: // same compression layout as RGB8_ETC2
+        case GrGLFormat::kCOMPRESSED_ETC1_RGB8: // same compression layout as ETC2_RGB8_UNORM
         case GrGLFormat::kCOMPRESSED_RGB8_ETC2:
-            return SkImage::CompressionType::kETC1;
+            return SkImage::CompressionType::kETC2_RGB8_UNORM;
         case GrGLFormat::kCOMPRESSED_RGB8_BC1:
             return SkImage::CompressionType::kBC1_RGB8_UNORM;
         default:
@@ -4291,7 +4295,7 @@ GrBackendFormat GrGLCaps::getBackendFormatFromCompressionType(
     switch (compressionType) {
         case SkImage::CompressionType::kNone:
             return {};
-        case SkImage::CompressionType::kETC1:
+        case SkImage::CompressionType::kETC2_RGB8_UNORM:
             // if ETC2 is available default to that format
             if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_RGB8_ETC2)) {
                 return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB8_ETC2, GR_GL_TEXTURE_2D);
