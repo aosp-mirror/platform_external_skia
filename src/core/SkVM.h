@@ -66,6 +66,8 @@ namespace skvm {
         void add(GP64, int imm);
         void sub(GP64, int imm);
 
+        void movq(GP64 dst, GP64 src, int off);  // dst = *(src+off)
+
         struct Label {
             int                                      offset = 0;
             enum { NotYetSet, ARMDisp19, X86Disp32 } kind = NotYetSet;
@@ -153,6 +155,13 @@ namespace skvm {
 
         void vpextrw(GP64 ptr, Xmm src, int imm);           // *dst = src[imm]           , 16-bit
         void vpextrb(GP64 ptr, Xmm src, int imm);           // *dst = src[imm]           ,  8-bit
+
+        // if (mask & 0x8000'0000) {
+        //     dst = base[scale*ix];
+        // }
+        // mask = 0;
+        enum Scale { ONE, TWO, FOUR, EIGHT };
+        void vgatherdps(Ymm dst, Scale scale, Ymm ix, GP64 base, Ymm mask);
 
         // aarch64
 

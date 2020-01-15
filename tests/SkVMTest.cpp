@@ -1114,6 +1114,40 @@ DEF_TEST(SkVM_Assembler, r) {
         0xc5,0xfd,0x5b,0xda,
     });
 
+    test_asm(r, [&](A& a) {
+        a.vgatherdps(A::ymm1 , A::FOUR , A::ymm0 , A::rdi, A::ymm2 );
+        a.vgatherdps(A::ymm0 , A::ONE  , A::ymm2 , A::rax, A::ymm1 );
+        a.vgatherdps(A::ymm10, A::ONE  , A::ymm2 , A::rax, A::ymm1 );
+        a.vgatherdps(A::ymm0 , A::ONE  , A::ymm12, A::rax, A::ymm1 );
+        a.vgatherdps(A::ymm0 , A::ONE  , A::ymm2 , A::r9 , A::ymm1 );
+        a.vgatherdps(A::ymm0 , A::ONE  , A::ymm2 , A::rax, A::ymm12);
+        a.vgatherdps(A::ymm0 , A::EIGHT, A::ymm2 , A::rax, A::ymm12);
+    },{
+        0xc4,0xe2,0x6d,0x92,0x0c,0x87,
+        0xc4,0xe2,0x75,0x92,0x04,0x10,
+        0xc4,0x62,0x75,0x92,0x14,0x10,
+        0xc4,0xa2,0x75,0x92,0x04,0x20,
+        0xc4,0xc2,0x75,0x92,0x04,0x11,
+        0xc4,0xe2,0x1d,0x92,0x04,0x10,
+        0xc4,0xe2,0x1d,0x92,0x04,0xd0,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.movq(A::rax, A::rdi, 0);
+        a.movq(A::rax, A::rdi, 1);
+        a.movq(A::rax, A::rdi, 512);
+        a.movq(A::r15, A::r13, 42);
+        a.movq(A::rax, A::r13, 42);
+        a.movq(A::r15, A::rax, 42);
+    },{
+        0x48, 0x8b, 0x07,
+        0x48, 0x8b, 0x47, 0x01,
+        0x48, 0x8b, 0x87, 0x00,0x02,0x00,0x00,
+        0x4d, 0x8b, 0x7d, 0x2a,
+        0x49, 0x8b, 0x45, 0x2a,
+        0x4c, 0x8b, 0x78, 0x2a,
+    });
+
     // echo "fmul v4.4s, v3.4s, v1.4s" | llvm-mc -show-encoding -arch arm64
 
     test_asm(r, [&](A& a) {
