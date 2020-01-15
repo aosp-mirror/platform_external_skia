@@ -150,8 +150,11 @@ size_t GrTextBlob::SubRun::texCoordOffset() const {
 }
 
 char* GrTextBlob::SubRun::quadStart(size_t index) const {
-    return SkTAddOffset<char>(
-            fVertexData.data(), index * kVerticesPerGlyph * this->vertexStride());
+    return SkTAddOffset<char>(fVertexData.data(), this->quadOffset(index));
+}
+
+size_t GrTextBlob::SubRun::quadOffset(size_t index) const {
+    return index * kVerticesPerGlyph * this->vertexStride();
 }
 
 const SkRect& GrTextBlob::SubRun::vertexBounds() const { return fVertexBounds; }
@@ -228,14 +231,14 @@ void GrTextBlob::SubRun::updateTexCoords(int begin, int end) {
     const size_t vertexStride = this->vertexStride();
     const size_t texCoordOffset = this->texCoordOffset();
     char* vertex = this->quadStart(begin);
-    uint16_t* textureCoords = reinterpret_cast<uint16_t*>(vertex + texCoordOffset);
+    int16_t* textureCoords = reinterpret_cast<int16_t*>(vertex + texCoordOffset);
     for (int i = begin; i < end; i++) {
         GrGlyph* glyph = this->fGlyphs[i];
         SkASSERT(glyph != nullptr);
 
         int width = glyph->fBounds.width();
         int height = glyph->fBounds.height();
-        uint16_t u0, v0, u1, v1;
+        int16_t u0, v0, u1, v1;
         if (this->drawAsDistanceFields()) {
             u0 = glyph->fAtlasLocation.fX + SK_DistanceFieldInset;
             v0 = glyph->fAtlasLocation.fY + SK_DistanceFieldInset;
@@ -248,32 +251,23 @@ void GrTextBlob::SubRun::updateTexCoords(int begin, int end) {
             v1 = v0 + height;
         }
 
-        // We pack the 2bit page index in the low bit of the u and v texture coords
+        // We pack the 2bit page index as the sign bit of the u and v texture coords
         uint32_t pageIndex = glyph->pageIndex();
-        SkASSERT(pageIndex < 4);
-        uint16_t uBit = (pageIndex >> 1u) & 0x1u;
-        uint16_t vBit = pageIndex & 0x1u;
-        u0 <<= 1u;
-        u0 |= uBit;
-        v0 <<= 1u;
-        v0 |= vBit;
-        u1 <<= 1u;
-        u1 |= uBit;
-        v1 <<= 1u;
-        v1 |= vBit;
+        std::tie(u0, v0) = GrDrawOpAtlas::PackIndexInTexCoords(u0, v0, pageIndex);
+        std::tie(u1, v1) = GrDrawOpAtlas::PackIndexInTexCoords(u1, v1, pageIndex);
 
         textureCoords[0] = u0;
         textureCoords[1] = v0;
-        textureCoords = SkTAddOffset<uint16_t>(textureCoords, vertexStride);
+        textureCoords = SkTAddOffset<int16_t>(textureCoords, vertexStride);
         textureCoords[0] = u0;
         textureCoords[1] = v1;
-        textureCoords = SkTAddOffset<uint16_t>(textureCoords, vertexStride);
+        textureCoords = SkTAddOffset<int16_t>(textureCoords, vertexStride);
         textureCoords[0] = u1;
         textureCoords[1] = v0;
-        textureCoords = SkTAddOffset<uint16_t>(textureCoords, vertexStride);
+        textureCoords = SkTAddOffset<int16_t>(textureCoords, vertexStride);
         textureCoords[0] = u1;
         textureCoords[1] = v1;
-        textureCoords = SkTAddOffset<uint16_t>(textureCoords, vertexStride);
+        textureCoords = SkTAddOffset<int16_t>(textureCoords, vertexStride);
     }
 }
 
@@ -428,18 +422,19 @@ bool GrTextBlob::mustRegenerate(const SkPaint& paint, bool anyRunHasSubpixelPosi
 
         // We can update the positions in the text blob without regenerating the whole
         // blob, but only for integer translations.
-        // This cool bit of math will determine the necessary translation to apply to the
-        // already generated vertex coordinates to move them to the correct position.
-        // Figure out the translation in view space given a translation in source space.
-        SkScalar transX = drawMatrix.getTranslateX() +
-                          drawMatrix.getScaleX() * (drawOrigin.x() - fInitialOrigin.x()) +
-                          drawMatrix.getSkewX() * (drawOrigin.y() - fInitialOrigin.y()) -
-                          fInitialMatrix.getTranslateX();
-        SkScalar transY = drawMatrix.getTranslateY() +
-                          drawMatrix.getSkewY() * (drawOrigin.x() - fInitialOrigin.x()) +
-                          drawMatrix.getScaleY() * (drawOrigin.y() - fInitialOrigin.y()) -
-                          fInitialMatrix.getTranslateY();
-        if (!SkScalarIsInt(transX) || !SkScalarIsInt(transY)) {
+        // Calculate the translation in source space to a translation in device space by mapping
+        // (0, 0) through both the initial matrix and the draw matrix; take the difference.
+        SkMatrix initialMatrix{fInitialMatrix};
+        initialMatrix.preTranslate(fInitialOrigin.x(), fInitialOrigin.y());
+        SkPoint initialDeviceOrigin{0, 0};
+        initialMatrix.mapPoints(&initialDeviceOrigin, 1);
+        SkMatrix completeDrawMatrix{drawMatrix};
+        completeDrawMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
+        SkPoint drawDeviceOrigin{0, 0};
+        completeDrawMatrix.mapPoints(&drawDeviceOrigin, 1);
+        SkPoint translation = drawDeviceOrigin - initialDeviceOrigin;
+
+        if (!SkScalarIsInt(translation.x()) || !SkScalarIsInt(translation.y())) {
             return true;
         }
     } else if (this->hasDistanceField()) {
@@ -851,10 +846,10 @@ std::tuple<bool, int> GrTextBlob::VertexRegenerator::updateTextureCoordinatesMay
         fFullAtlasManager->addGlyphToBulkAndSetUseToken(
                 fSubRun->bulkUseToken(), glyph, tokenTracker->nextDrawToken());
     }
-    int firstNotInAtlas = i;
+    int glyphsPlacedInAtlas = i - begin;
 
     // Update the quads with the new atlas coordinates.
-    fSubRun->updateTexCoords(begin, firstNotInAtlas);
+    fSubRun->updateTexCoords(begin, begin + glyphsPlacedInAtlas);
 
     if (code == GrDrawOpAtlas::ErrorCode::kSucceeded) {
         // If we reach here with begin > 0, some earlier call to regenerate() exhausted the atlas
@@ -865,39 +860,27 @@ std::tuple<bool, int> GrTextBlob::VertexRegenerator::updateTextureCoordinatesMay
                           : fFullAtlasManager->atlasGeneration(fSubRun->maskFormat());
     }
 
-    return {code != GrDrawOpAtlas::ErrorCode::kError, firstNotInAtlas};
+    return {code != GrDrawOpAtlas::ErrorCode::kError, glyphsPlacedInAtlas};
 }
 
-bool GrTextBlob::VertexRegenerator::regenerate(GrTextBlob::VertexRegenerator::Result* result,
-                                               int maxGlyphs) {
+std::tuple<bool, int> GrTextBlob::VertexRegenerator::regenerate(int begin, int end) {
     uint64_t currentAtlasGen = fFullAtlasManager->atlasGeneration(fSubRun->maskFormat());
     // If regenerate() is called multiple times then the atlas gen may have changed. So we check
     // this each time.
     fActions.regenTextureCoordinates |= fSubRun->fAtlasGeneration != currentAtlasGen;
     if (fActions.regenStrike) { SkASSERT(fActions.regenTextureCoordinates); }
 
-    bool ok = true;
-    const int begin = fCurrGlyph;
-    const int end = std::min((int)fSubRun->fGlyphs.size(), begin + maxGlyphs);
     if (fActions.regenStrike || fActions.regenTextureCoordinates) {
-        int firstGlyphNotInAtlas;
-        std::tie(ok, firstGlyphNotInAtlas) = this->updateTextureCoordinatesMaybeStrike(begin, end);
-        fCurrGlyph = firstGlyphNotInAtlas;
+        return this->updateTextureCoordinatesMaybeStrike(begin, end);
     } else {
-        fCurrGlyph = end;
         // All glyphs are inserted into the atlas if fCurrGlyph is at the end of fGlyphs.
-        if (fCurrGlyph == (int)fSubRun->fGlyphs.size()) {
+        if (end == (int)fSubRun->fGlyphs.size()) {
             // Set use tokens for all of the glyphs in our SubRun.  This is only valid if we
             // have a valid atlas generation
             fFullAtlasManager->setUseTokenBulk(*fSubRun->bulkUseToken(),
                                                fUploadTarget->tokenTracker()->nextDrawToken(),
                                                fSubRun->maskFormat());
         }
+        return {true, end - begin};
     }
-    if (ok) {
-        result->fFinished = fCurrGlyph == (int)fSubRun->fGlyphs.size();
-        result->fGlyphsRegenerated += fCurrGlyph - begin;
-        result->fFirstVertex = fSubRun->quadStart(begin);
-    }
-    return ok;
 }
