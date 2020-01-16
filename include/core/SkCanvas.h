@@ -42,6 +42,7 @@ class SkFont;
 class SkGlyphRunBuilder;
 class SkImage;
 class SkImageFilter;
+class SkM44;
 class SkPaintFilterCanvas;
 class SkPath;
 class SkPicture;
@@ -752,6 +753,8 @@ public:
         example: https://fiddle.skia.org/c/@Canvas_saveLayer_3
     */
     int saveLayer(const SaveLayerRec& layerRec);
+
+    int saveCamera(const SkMatrix44& projection, const SkMatrix44& camera);
 
     /** Removes changes to SkMatrix and clip since SkCanvas state was
         last saved. The state is removed from the stack.
@@ -2502,6 +2505,8 @@ public:
         example: https://fiddle.skia.org/c/@Clip
     */
     SkMatrix getTotalMatrix() const;
+
+    SkM44 getTotalM44() const;
 
     ///////////////////////////////////////////////////////////////////////////
 
