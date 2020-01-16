@@ -697,11 +697,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fSamplerObjectSupport = version >= GR_GL_VER(2,0);
     }
 
-    // https://github.com/flutter/flutter/issues/47164
-    // https://github.com/flutter/flutter/issues/47804
-    // if (GR_IS_GR_GL_ES(standard)) {
-    //     fTiledRenderingSupport = ctxInfo.hasExtension("GL_QCOM_tiled_rendering");
-    // }
+    if (GR_IS_GR_GL_ES(standard)) {
+        fTiledRenderingSupport = ctxInfo.hasExtension("GL_QCOM_tiled_rendering");
+    }
 
     if (kARM_GrGLVendor == ctxInfo.vendor()) {
         fShouldCollapseSrcOverToSrcWhenAble = true;
@@ -710,7 +708,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     FormatWorkarounds formatWorkarounds;
 
     if (!contextOptions.fDisableDriverCorrectnessWorkarounds) {
-        this->applyDriverCorrectnessWorkarounds(ctxInfo, contextOptions, shaderCaps,
+        this->applyDriverCorrectnessWorkarounds(ctxInfo, contextOptions, gli, shaderCaps,
                                                 &formatWorkarounds);
     }
 
@@ -2653,6 +2651,20 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         // There are no support GrColorTypes for this format
     }
 
+    // Format: COMPRESSED_RGBA8_BC1
+    {
+        FormatInfo& info = this->getFormatInfo(GrGLFormat::kCOMPRESSED_RGBA8_BC1);
+        info.fFormatType = FormatType::kNormalizedFixedPoint;
+        info.fInternalFormatForTexImageOrStorage = GR_GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        if (GR_IS_GR_GL(standard) || GR_IS_GR_GL_ES(standard)) {
+            if (ctxInfo.hasExtension("GL_EXT_texture_compression_s3tc")) {
+                info.fFlags = FormatInfo::kTexturable_Flag;
+            }
+        } // No WebGL support
+
+          // There are no support GrColorTypes for this format
+    }
+
     // Format: COMPRESSED_RGB8_ETC2
     {
         FormatInfo& info = this->getFormatInfo(GrGLFormat::kCOMPRESSED_RGB8_ETC2);
@@ -3284,6 +3296,7 @@ GrCaps::DstCopyRestrictions GrGLCaps::getDstCopyRestrictions(const GrRenderTarge
 
 void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
                                                  const GrContextOptions& contextOptions,
+                                                 const GrGLInterface* glInterface,
                                                  GrShaderCaps* shaderCaps,
                                                  FormatWorkarounds* formatWorkarounds) {
     // A driver but on the nexus 6 causes incorrect dst copies when invalidate is called beforehand.
@@ -3813,6 +3826,17 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer()) {
         fTiledRenderingSupport = false;
     }
+    // https://github.com/flutter/flutter/issues/47164
+    // https://github.com/flutter/flutter/issues/47804
+    if (fTiledRenderingSupport && (!glInterface->fFunctions.fStartTiling ||
+                                   !glInterface->fFunctions.fEndTiling)) {
+        // Some devices expose the QCOM tiled memory extension string but don't actually provide the
+        // start and end tiling functions (see above flutter bugs). To work around this, the funcs
+        // are marked optional in the interface generator, but we turn off the tiled rendering cap
+        // if they aren't provided. This disabling is in driver workarounds so that SKQP will still
+        // fail on devices that advertise the extension w/o the functions.
+        fTiledRenderingSupport = false;
+    }
 
     if (kQualcomm_GrGLVendor == ctxInfo.vendor() || kATI_GrGLVendor == ctxInfo.vendor()) {
         // The sample mask round rect op draws nothing on several Adreno and Radeon bots. Other ops
@@ -3993,6 +4017,8 @@ SkImage::CompressionType GrGLCaps::compressionType(const GrBackendFormat& format
             return SkImage::CompressionType::kETC2_RGB8_UNORM;
         case GrGLFormat::kCOMPRESSED_RGB8_BC1:
             return SkImage::CompressionType::kBC1_RGB8_UNORM;
+        case GrGLFormat::kCOMPRESSED_RGBA8_BC1:
+            return SkImage::CompressionType::kBC1_RGBA8_UNORM;
         default:
             return SkImage::CompressionType::kNone;
     }
@@ -4122,6 +4148,8 @@ static GrPixelConfig validate_sized_format(GrGLFormat format,
         case GrColorType::kRGBA_8888:
             if (format == GrGLFormat::kRGBA8) {
                 return kRGBA_8888_GrPixelConfig;
+            } else if (format == GrGLFormat::kCOMPRESSED_RGBA8_BC1) {
+                return kBC1_RGBA8_UNORM_GrPixelConfig;
             }
             break;
         case GrColorType::kRGBA_8888_SRGB:
@@ -4138,7 +4166,7 @@ static GrPixelConfig validate_sized_format(GrGLFormat format,
                        format == GrGLFormat::kCOMPRESSED_ETC1_RGB8) {
                 return kRGB_ETC1_GrPixelConfig;
             } else if (format == GrGLFormat::kCOMPRESSED_RGB8_BC1) {
-                return kRGB_BC1_GrPixelConfig;
+                return kBC1_RGB8_UNORM_GrPixelConfig;
             }
             break;
         case GrColorType::kRG_88:
@@ -4249,7 +4277,9 @@ GrPixelConfig GrGLCaps::onGetConfigFromCompressedBackendFormat(const GrBackendFo
         glFormat == GrGLFormat::kCOMPRESSED_ETC1_RGB8) {
         return kRGB_ETC1_GrPixelConfig;
     } else if (glFormat == GrGLFormat::kCOMPRESSED_RGB8_BC1) {
-        return kRGB_BC1_GrPixelConfig;
+        return kBC1_RGB8_UNORM_GrPixelConfig;
+    } else if (glFormat == GrGLFormat::kCOMPRESSED_RGBA8_BC1) {
+        return kBC1_RGBA8_UNORM_GrPixelConfig;
     }
 
     return kUnknown_GrPixelConfig;
@@ -4310,6 +4340,12 @@ GrBackendFormat GrGLCaps::getBackendFormatFromCompressionType(
                                                GR_GL_TEXTURE_2D);
             }
             return {};
+        case SkImage::CompressionType::kBC1_RGBA8_UNORM:
+            if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_RGBA8_BC1)) {
+                return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,
+                                               GR_GL_TEXTURE_2D);
+            }
+            return {};
     }
 
     SkUNREACHABLE;
@@ -4366,6 +4402,10 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrGLCaps::getTestingCombinat
           GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB8_ETC2, GR_GL_TEXTURE_2D) },
         { GrColorType::kRGB_888x,
           GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D) },
+        { GrColorType::kRGB_888x,
+          GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB_S3TC_DXT1_EXT, GR_GL_TEXTURE_2D) },
+        { GrColorType::kRGBA_8888,
+          GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, GR_GL_TEXTURE_2D) },
         { GrColorType::kRG_88,
           GrBackendFormat::MakeGL(GR_GL_RG8, GR_GL_TEXTURE_2D) },
         { GrColorType::kRGBA_1010102,
