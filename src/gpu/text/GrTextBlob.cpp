@@ -481,17 +481,13 @@ void GrTextBlob::flush(GrTextTarget* target, const SkSurfaceProps& props,
                              || style.applies()
                              || runPaint.getMaskFilter();
 
-            // The origin for the blob may have changed, so figure out the delta.
-            SkVector originShift = drawOrigin - fInitialOrigin;
 
             for (const auto& pathGlyph : subRun->fPaths) {
                 SkMatrix ctm{drawMatrix};
+                ctm.preTranslate(drawOrigin.x(), drawOrigin.y());
                 SkMatrix pathMatrix = SkMatrix::MakeScale(
                         subRun->fStrikeSpec.strikeToSourceRatio());
-                // Shift the original glyph location in source space to the position of the new
-                // blob.
-                pathMatrix.postTranslate(originShift.x() + pathGlyph.fOrigin.x(),
-                                         originShift.y() + pathGlyph.fOrigin.y());
+                pathMatrix.postTranslate(pathGlyph.fOrigin.x(), pathGlyph.fOrigin.y());
 
                 // TmpPath must be in the same scope as GrShape shape below.
                 SkTLazy<SkPath> tmpPath;
@@ -779,9 +775,6 @@ void GrTextBlob::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawab
 // -- GrTextBlob::VertexRegenerator ----------------------------------------------------------------
 GrTextBlob::VertexRegenerator::VertexRegenerator(GrResourceProvider* resourceProvider,
                                                  GrTextBlob::SubRun* subRun,
-                                                 const SkMatrix& drawMatrix,
-                                                 SkPoint drawOrigin,
-                                                 GrColor color,
                                                  GrDeferredUploadTarget* uploadTarget,
                                                  GrStrikeCache* grStrikeCache,
                                                  GrAtlasManager* fullAtlasManager)
@@ -800,9 +793,6 @@ GrTextBlob::VertexRegenerator::VertexRegenerator(GrResourceProvider* resourcePro
     // updating our cache of the GrGlyph*s, we drop our ref on the old strike
     fActions.regenTextureCoordinates = fSubRun->strike()->isAbandoned();
     fActions.regenStrike = fSubRun->strike()->isAbandoned();
-
-    fSubRun->updateVerticesColorIfNeeded(color);
-    fSubRun->translateVerticesIfNeeded(drawMatrix, drawOrigin);
 }
 
 std::tuple<bool, int> GrTextBlob::VertexRegenerator::updateTextureCoordinatesMaybeStrike(
