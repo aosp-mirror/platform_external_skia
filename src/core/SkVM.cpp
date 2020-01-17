@@ -15,7 +15,8 @@
 #include "src/core/SkCpu.h"
 #include "src/core/SkVM.h"
 #include <functional>  // std::hash
-#include <string.h>
+
+bool gSkVMJITViaDylib{false};
 
 // JIT code isn't MSAN-instrumented, so we won't see when it uses
 // uninitialized memory, and we'll not see the writes it makes as properly
@@ -28,42 +29,9 @@
 #endif
 
 #if defined(SKVM_JIT)
-    #include <sys/mman.h>
-
-    #if defined(SKVM_PERF_DUMPS)
-        #include <stdio.h>
-        #include <time.h>
-    #endif
-
-    #if defined(SKVM_JIT_VTUNE)
-        #include <jitprofiling.h>
-        static void notify_vtune(const char* name, void* addr, size_t len,
-                                 const std::vector<skvm::LineTableEntry>& lines) {
-            if (iJIT_IsProfilingActive() != iJIT_SAMPLING_ON) {
-                return;
-            }
-
-            std::vector<LineNumberInfo> table;
-            for (auto& entry : lines) {
-                table.push_back({ (unsigned)entry.offset, (unsigned)entry.line });
-            }
-
-            iJIT_Method_Load event;
-            memset(&event, 0, sizeof(event));
-            event.method_id           = iJIT_GetNewMethodID();
-            event.method_name         = const_cast<char*>(name);  // wtf?
-            event.method_load_address = addr;
-            event.method_size         = len;
-            event.line_number_table   = table.data();
-            event.line_number_size    = table.size();
-            iJIT_NotifyEvent(iJVM_EVENT_TYPE_METHOD_LOAD_FINISHED, &event);
-        }
-    #else
-        static void notify_vtune(const char* name, void* addr, size_t len,
-                                 const std::vector<skvm::LineTableEntry>& lines) {}
-    #endif
+    #include <dlfcn.h>      // dlopen, dlsym
+    #include <sys/mman.h>   // mmap, mprotect
 #endif
-
 
 namespace skvm {
 
@@ -375,23 +343,6 @@ namespace skvm {
             }
             write(o, "\n");
         }
-    }
-
-    void Program::dumpJIT() const {
-    #if !defined(SK_BUILD_FOR_WIN)
-        // Disassemble up through vzeroupper, retq exit.  No need for constants or zero padding.
-        const uint8_t vzeroupper_retq[] = { 0xc5, 0xf8, 0x77, 0xc3 };
-        auto end = (const uint8_t*)memmem(fJITBuf, fJITSize,
-                                          vzeroupper_retq, SK_ARRAY_COUNT(vzeroupper_retq));
-        SkASSERT(end);
-        end += SK_ARRAY_COUNT(vzeroupper_retq);
-
-        FILE* p = popen("llvm-mc --disassemble --no-warn", "w");
-        for (auto buf = (const uint8_t*)fJITBuf; buf != end; buf++) {
-            fprintf(p, "0x%02x\n", *buf);
-        }
-        pclose(p);
-    #endif
     }
 
     // Builder -> Program, with liveness and loop hoisting analysis.
@@ -1622,9 +1573,9 @@ namespace skvm {
     void Program::eval(int n, void* args[]) const {
         const int nargs = (int)fStrides.size();
 
-        if (fJITBuf) {
+        if (const void* b = fDylibEntry ? fDylibEntry
+                                        : fJITBuf) {
             void** a = args;
-            const void* b = fJITBuf;
             switch (nargs) {
                 case 0: return ((void(*)(int                        ))b)(n                    );
                 case 1: return ((void(*)(int,void*                  ))b)(n,a[0]               );
@@ -1916,12 +1867,17 @@ namespace skvm {
         if (fJITBuf) {
             munmap(fJITBuf, fJITSize);
         }
+        if (fDylibHandle) {
+            dlclose(fDylibHandle);
+        }
     #else
         SkASSERT(!this->hasJIT());
     #endif
 
-        fJITBuf   = nullptr;
-        fJITSize  = 0;
+        fJITBuf      = nullptr;
+        fJITSize     = 0;
+        fDylibHandle = nullptr;
+        fDylibEntry  = nullptr;
     }
 
     Program::~Program() { this->dropJIT(); }
@@ -1933,8 +1889,10 @@ namespace skvm {
         fStrides         = std::move(other.fStrides);
         fOriginalProgram = std::move(other.fOriginalProgram);
 
-        std::swap(fJITBuf  , other.fJITBuf);
-        std::swap(fJITSize , other.fJITSize);
+        std::swap(fJITBuf     , other.fJITBuf);
+        std::swap(fJITSize    , other.fJITSize);
+        std::swap(fDylibHandle, other.fDylibHandle);
+        std::swap(fDylibEntry , other.fDylibEntry);
     }
 
     Program& Program::operator=(Program&& other) {
@@ -1944,8 +1902,10 @@ namespace skvm {
         fStrides         = std::move(other.fStrides);
         fOriginalProgram = std::move(other.fOriginalProgram);
 
-        std::swap(fJITBuf  , other.fJITBuf);
-        std::swap(fJITSize , other.fJITSize);
+        std::swap(fJITBuf     , other.fJITBuf);
+        std::swap(fJITSize    , other.fJITSize);
+        std::swap(fDylibHandle, other.fDylibHandle);
+        std::swap(fDylibEntry , other.fDylibEntry);
         return *this;
     }
 
@@ -2099,7 +2059,6 @@ namespace skvm {
 
     bool Program::jit(const std::vector<Builder::Instruction>& instructions,
                       const bool try_hoisting,
-                      std::vector<LineTableEntry>* line_table,
                       Assembler* a) const {
         using A = Assembler;
 
@@ -2152,12 +2111,6 @@ namespace skvm {
         SkTHashMap<int, LabelAndReg> constants,    // All constants share the same pool.
                                      bytes_masks;  // These vary per-lane.
         LabelAndReg                  iota;         // Exists _only_ to vary per-lane.
-
-        auto mark_line = [&](int line) {
-            if (line_table) {
-                line_table->push_back({line, a->size()});
-            }
-        };
 
         auto warmup = [&](Val id) {
             const Builder::Instruction& inst = instructions[id];
@@ -2572,9 +2525,6 @@ namespace skvm {
             #endif
             }
 
-            // Leave plenty of room for loop overhead and constant "line" markers.
-            mark_line(id+1000);
-
             // Calls to tmp() or dst() might have flipped this false from its default true state.
             return ok;
         };
@@ -2613,12 +2563,10 @@ namespace skvm {
             }
         }
 
-        int line = 1;  // All loop overhead is marked as "line 1".
         a->label(&body);
         {
             a->cmp(N, K);
             jump_if_less(&tail);
-            mark_line(line);
             for (Val id = 0; id < (Val)instructions.size(); id++) {
                 if (!hoisted(id) && !emit(id, /*scalar=*/false)) {
                     return false;
@@ -2631,14 +2579,12 @@ namespace skvm {
             }
             sub(N, K);
             jump(&body);
-            mark_line(line);
         }
 
         a->label(&tail);
         {
             a->cmp(N, 1);
             jump_if_less(&done);
-            mark_line(line);
             for (Val id = 0; id < (Val)instructions.size(); id++) {
                 if (!hoisted(id) && !emit(id, /*scalar=*/true)) {
                     return false;
@@ -2651,13 +2597,11 @@ namespace skvm {
             }
             sub(N, 1);
             jump(&tail);
-            mark_line(line);
         }
 
         a->label(&done);
         {
             exit();
-            mark_line(line);
         }
 
         // Except for explicit aligned load and store instructions, AVX allows
@@ -2671,7 +2615,6 @@ namespace skvm {
             for (int i = 0; i < K; i++) {
                 a->word(imm);
             }
-            mark_line(++line);   // 2,3,4...
         });
 
         bytes_masks.foreach([&](int imm, LabelAndReg* entry) {
@@ -2684,7 +2627,6 @@ namespace skvm {
         #if defined(__x86_64__)
             a->bytes(mask, sizeof(mask));
         #endif
-            mark_line(++line);
         });
 
         if (!iota.label.references.empty()) {
@@ -2693,7 +2635,6 @@ namespace skvm {
             for (int i = 0; i < K; i++) {
                 a->word(i);
             }
-            mark_line(++line);
         }
 
         return true;
@@ -2707,9 +2648,9 @@ namespace skvm {
         // First try allowing code hoisting (faster code)
         // then again without if that fails (lower register pressure).
         bool try_hoisting = true;
-        if (!this->jit(instructions, try_hoisting, nullptr, &a)) {
+        if (!this->jit(instructions, try_hoisting, &a)) {
             try_hoisting = false;
-            if (!this->jit(instructions, try_hoisting, nullptr, &a)) {
+            if (!this->jit(instructions, try_hoisting, &a)) {
                 return;
             }
         }
@@ -2720,9 +2661,8 @@ namespace skvm {
         fJITBuf = mmap(nullptr,fJITSize, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1,0);
 
         // Assemble the program for real.
-        std::vector<LineTableEntry> line_table;
         a = Assembler{fJITBuf};
-        SkAssertResult(this->jit(instructions, try_hoisting, &line_table, &a));
+        SkAssertResult(this->jit(instructions, try_hoisting, &a));
         SkASSERT(a.size() <= fJITSize);
 
         // Remap as executable, and flush caches on platforms that need that.
@@ -2730,120 +2670,28 @@ namespace skvm {
         __builtin___clear_cache((char*)fJITBuf,
                                 (char*)fJITBuf + fJITSize);
 
-        // Hook into profilers and such for debugging and development.
-        notify_vtune(debug_name, fJITBuf, a.size(), line_table);
-    #if defined(SKVM_PERF_DUMPS)
-        this->dumpJIT(debug_name, a.size());
-    #endif
-    }
-#endif
+        // For profiling and debugging, it's helpful to have this code loaded
+        // dynamically rather than just jumping info fJITBuf.
+        if (gSkVMJITViaDylib) {
+            // Dump the raw program binary.
+            SkString path = SkStringPrintf("/tmp/%s.XXXXXX", debug_name);
+            int fd = mkstemp(path.writable_str());
+            ::write(fd, fJITBuf, a.size());
+            close(fd);
 
-#if defined(SKVM_PERF_DUMPS)
-    void Program::dumpJIT(const char* debug_name, size_t size) const {
-        SkASSERT(debug_name);
-    #if 0 && defined(__aarch64__)
-        SkDebugf("\n%s:", debug_name);
-        // cat | llvm-mc -arch aarch64 -disassemble
-        auto cur = (const uint8_t*)fJITBuf;
-        for (int i = 0; i < (int)size; i++) {
-            if (i % 4 == 0) {
-                SkDebugf("\n");
-            }
-            SkDebugf("0x%02x ", *cur++);
+            // Convert it to an shared library with a single symbol "skvm_jit":
+            SkString cmd = SkStringPrintf(
+                    "echo '.global _skvm_jit\n_skvm_jit: .incbin \"%s\"'"
+                    " | clang -x assembler -shared - -o %s.lib",
+                    path.c_str(), path.c_str());
+            system(cmd.c_str());
+
+            // Load that dynamic library and look up skvm_jit().
+            path += ".lib";
+            fDylibHandle = dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
+            fDylibEntry = dlsym(fDylibHandle, "skvm_jit");
         }
-        SkDebugf("\n");
-    #endif
-
-        // We're doing some really stateful things below so one thread at a time please...
-        static SkSpinlock dump_lock;
-        SkAutoSpinlock lock(dump_lock);
-
-        // Create a jit-<pid>.dump file that we can `perf inject -j` into a
-        // perf.data captured with `perf record -k 1`, letting us see each
-        // JIT'd Program as if a function named skvm-jit-<hash>.   E.g.
-        //
-        //   ninja -C out nanobench
-        //   perf record -k 1 out/nanobench -m SkVM_4096_I32\$
-        //   perf inject -j -i perf.data -o perf.data.jit
-        //   perf report -i perf.data.jit
-        //
-        // Running `perf inject -j` will also dump an .so for each JIT'd
-        // program, named jitted-<pid>-<hash>.so.
-        //
-        //    https://lwn.net/Articles/638566/
-        //    https://v8.dev/docs/linux-perf
-        //    https://cs.chromium.org/chromium/src/v8/src/diagnostics/perf-jit.cc
-        //    https://lore.kernel.org/patchwork/patch/622240/
-
-
-        auto timestamp_ns = []() -> uint64_t {
-            // It's important to use CLOCK_MONOTONIC here so that perf can
-            // correlate our timestamps with those captured by `perf record
-            // -k 1`.  That's also what `-k 1` does, by the way, tell perf
-            // record to use CLOCK_MONOTONIC.
-            struct timespec ts;
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            return ts.tv_sec * (uint64_t)1e9 + ts.tv_nsec;
-        };
-
-        // We'll open the jit-<pid>.dump file and write a small header once,
-        // and just leave it open forever because we're lazy.
-        static FILE* jitdump = [&]{
-            // Must map as w+ for the mmap() call below to work.
-            char path[64];
-            sprintf(path, "jit-%d.dump", getpid());
-            FILE* f = fopen(path, "w+");
-
-            // Calling mmap() on the file adds a "hey they mmap()'d this" record to
-            // the perf.data file that will point `perf inject -j` at this log file.
-            // Kind of a strange way to tell `perf inject` where the file is...
-            void* marker = mmap(nullptr, sysconf(_SC_PAGESIZE),
-                                PROT_READ|PROT_EXEC, MAP_PRIVATE,
-                                fileno(f), /*offset=*/0);
-            SkASSERT_RELEASE(marker != MAP_FAILED);
-            // Like never calling fclose(f), we'll also just always leave marker mmap()'d.
-
-        #if defined(__x86_64__)
-            const uint32_t elf_mach = 62;
-        #elif defined(__aarch64__)
-            const uint32_t elf_mach = 183;
-        #endif
-
-            struct Header {
-                uint32_t magic, version, header_size, elf_mach, reserved, pid;
-                uint64_t timestamp_us, flags;
-            } header = {
-                0x4A695444, 1, sizeof(Header), elf_mach, 0, (uint32_t)getpid(),
-                timestamp_ns() / 1000, 0,
-            };
-            fwrite(&header, sizeof(header), 1, f);
-
-            return f;
-        }();
-
-        static uint64_t next_id = 1;
-
-        struct CodeLoad {
-            uint32_t event_type, event_size;
-            uint64_t timestamp_ns;
-
-            uint32_t pid, tid;
-            uint64_t vma/*???*/, code_addr, code_size, id;
-        } load = {
-            0/*code load*/, (uint32_t)(sizeof(CodeLoad) + strlen(debug_name) + 1 + size),
-            timestamp_ns(),
-
-            (uint32_t)getpid(), (uint32_t)SkGetThreadID(),
-            (uint64_t)fJITBuf, (uint64_t)fJITBuf, size, next_id++,
-        };
-
-        // Write the header, the JIT'd function name, and the JIT'd code itself.
-        fwrite(&load, sizeof(load), 1, jitdump);
-        fwrite(debug_name, 1, strlen(debug_name), jitdump);
-        fwrite("\0", 1, 1, jitdump);
-        fwrite(fJITBuf, 1, size, jitdump);
     }
 #endif
-
 
 }  // namespace skvm

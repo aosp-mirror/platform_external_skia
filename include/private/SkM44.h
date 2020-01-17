@@ -11,6 +11,43 @@
 #include "include/core/SkScalar.h"
 
 class SkMatrix;
+class SkMatrix44;
+
+struct SkV3 {
+    float x, y, z;
+
+    bool operator==(const SkV3& v) const {
+        return x == v.x && y == v.y && z == v.z;
+    }
+
+    static SkScalar Dot(const SkV3& a, const SkV3& b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+    static SkV3   Cross(const SkV3& a, const SkV3& b) {
+        return { a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x };
+    }
+
+    SkV3 operator-() const { return {-x, -y, -z}; }
+    SkV3 operator+(const SkV3& v) const { return { x + v.x, y + v.y, z + v.z }; }
+    SkV3 operator-(const SkV3& v) const { return { x - v.x, y - v.y, z - v.z }; }
+
+    friend SkV3 operator*(const SkV3& v, SkScalar s) {
+        return { v.x*s, v.y*s, v.z*s };
+    }
+    friend SkV3 operator*(SkScalar s, const SkV3& v) { return v*s; }
+
+    SkScalar operator*(const SkV3& v) const { return   Dot(*this, v); }
+    SkV3     operator%(const SkV3& v) const { return Cross(*this, v); }
+
+    SkScalar lengthSquared() const { return Dot(*this, *this); }
+    SkScalar length() const { return SkScalarSqrt(Dot(*this, *this)); }
+};
+
+struct SkV4 {
+    float x, y, z, w;
+
+    bool operator==(const SkV4& v) const {
+        return x == v.x && y == v.y && z == v.z && w == v.w;
+    }
+};
 
 class SkM44 {
 public:
@@ -41,6 +78,9 @@ public:
         fMat[2] = m2; fMat[6] = m6; fMat[10] = m10; fMat[14] = m14;
         fMat[3] = m3; fMat[7] = m7; fMat[11] = m11; fMat[15] = m15;
     }
+
+    SkM44(const SkMatrix44&);
+    SkM44& operator=(const SkMatrix44&);
 
     static SkM44 Translate(SkScalar x, SkScalar y, SkScalar z = 0) {
         return SkM44(1, 0, 0, x,
@@ -111,14 +151,18 @@ public:
                                  0, 0, 0, 1);
     }
 
-    SkM44& setConcat(const SkM44& a, const SkScalar colMajor[16]);
+    SkM44& setConcat16(const SkM44& a, const SkScalar colMajor[16]);
 
     SkM44& setConcat(const SkM44& a, const SkM44& b) {
-        return this->setConcat(a, b.fMat);
+        return this->setConcat16(a, b.fMat);
     }
 
     friend SkM44 operator*(const SkM44& a, const SkM44& b) {
         return SkM44(a, b);
+    }
+
+    SkM44& preConcat16(const SkScalar colMajor[16]) {
+        return this->setConcat16(*this, colMajor);
     }
 
     /** If this is invertible, return that in inverse and return true. If it is
@@ -127,6 +171,17 @@ public:
     bool invert(SkM44* inverse) const;
 
     void dump() const;
+
+    ////////////
+
+    SkV4 map(float x, float y, float z, float w) const;
+    SkV4 operator*(const SkV4& v) const {
+        return this->map(v.x, v.y, v.z, v.z);
+    }
+    SkV3 operator*(const SkV3& v) const {
+        auto v4 = this->map(v.x, v.y, v.z, 0);
+        return {v4.x, v4.y, v4.z};
+    }
 
     ////////////////////// Converting to/from SkMatrix
 
