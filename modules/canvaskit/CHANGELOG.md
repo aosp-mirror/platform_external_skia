@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2020-01-22
+
 ### Added
  - `SkFontMgr.countFamilies` and `SkFontMgr.getFamilyName` to expose the parsed font names.
 
@@ -17,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
  - Bug that sometimes resulted in 'Cannot perform Construct on a neutered ArrayBuffer'
+ - Bug with SkImage.readPixels (skbug.com/9788)
+ - Bug with transparent colors in Canvas2d mode (skbug.com/9800)
 
 ## [0.11.0] - 2020-01-10
 
