@@ -683,19 +683,20 @@ struct CountingBBH : public SkBBoxHierarchy {
 
 class SpoonFedBBHFactory : public SkBBHFactory {
 public:
-    explicit SpoonFedBBHFactory(SkBBoxHierarchy* bbh) : fBBH(bbh) {}
-    SkBBoxHierarchy* operator()() const override {
-        return SkRef(fBBH);
+    explicit SpoonFedBBHFactory(sk_sp<SkBBoxHierarchy> bbh) : fBBH(bbh) {}
+    sk_sp<SkBBoxHierarchy> operator()() const override {
+        return fBBH;
     }
 private:
-    SkBBoxHierarchy* fBBH;
+    sk_sp<SkBBoxHierarchy> fBBH;
 };
 
 // When the canvas clip covers the full picture, we don't need to call the BBH.
 DEF_TEST(Picture_SkipBBH, r) {
     SkRect bound = SkRect::MakeWH(320, 240);
-    CountingBBH bbh(bound);
-    SpoonFedBBHFactory factory(&bbh);
+
+    auto bbh = sk_make_sp<CountingBBH>(bound);
+    SpoonFedBBHFactory factory(bbh);
 
     SkPictureRecorder recorder;
     SkCanvas* c = recorder.beginRecording(bound, &factory);
@@ -707,10 +708,10 @@ DEF_TEST(Picture_SkipBBH, r) {
     SkCanvas big(640, 480), small(300, 200);
 
     picture->playback(&big);
-    REPORTER_ASSERT(r, bbh.searchCalls == 0);
+    REPORTER_ASSERT(r, bbh->searchCalls == 0);
 
     picture->playback(&small);
-    REPORTER_ASSERT(r, bbh.searchCalls == 1);
+    REPORTER_ASSERT(r, bbh->searchCalls == 1);
 }
 
 DEF_TEST(Picture_BitmapLeak, r) {
@@ -950,4 +951,30 @@ DEF_TEST(Picture_emptyNestedPictureBug, r) {
     REPORTER_ASSERT(r, (inner ->cullRect() == SkRect{-100,-100, -50,-50}));
     REPORTER_ASSERT(r, (middle->cullRect() == SkRect{-100,-100, -50,-50}));
     REPORTER_ASSERT(r, (outer ->cullRect() == SkRect{-100,-100, -50,-50}));   // Used to fail.
+}
+
+DEF_TEST(Picture_fillsBBH, r) {
+    // Test empty (0 draws), mini (1 draw), and big (2+) pictures, making sure they fill the BBH.
+    const SkRect rects[] = {
+        { 0, 0, 20,20},
+        {20,20, 40,40},
+    };
+
+    for (int n = 0; n <= 2; n++) {
+        SkRTreeFactory factory;
+        SkPictureRecorder rec;
+
+        sk_sp<SkBBoxHierarchy> bbh = factory();
+
+        SkCanvas* c = rec.beginRecording({0,0, 100,100}, bbh);
+        for (int i = 0; i < n; i++) {
+            c->drawRect(rects[i], SkPaint{});
+        }
+        sk_sp<SkPicture> pic = rec.finishRecordingAsPicture();
+
+        SkTDArray<int> results;
+        bbh->search({0,0, 100,100}, &results);
+        REPORTER_ASSERT(r, results.count() == n,
+                        "results.count() == %d, want %d\n", results.count(), n);
+    }
 }

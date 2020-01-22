@@ -40,7 +40,7 @@ bool SkM44::operator==(const SkM44& other) const {
     return (eq[0] & eq[1] & eq[2] & eq[3]) == ~0;
 }
 
-static void transpose(SkScalar dst[], const SkScalar src[]) {
+static void transpose_arrays(SkScalar dst[], const SkScalar src[]) {
     dst[0]  = src[0]; dst[1]  = src[4]; dst[2]  = src[8];  dst[3]  = src[12];
     dst[4]  = src[1]; dst[5]  = src[5]; dst[6]  = src[9];  dst[7]  = src[13];
     dst[8]  = src[2]; dst[9]  = src[6]; dst[10] = src[10]; dst[11] = src[14];
@@ -48,11 +48,11 @@ static void transpose(SkScalar dst[], const SkScalar src[]) {
 }
 
 void SkM44::getRowMajor(SkScalar v[]) const {
-    transpose(v, fMat);
+    transpose_arrays(v, fMat);
 }
 
 SkM44& SkM44::setRowMajor(const SkScalar v[]) {
-    transpose(fMat, v);
+    transpose_arrays(fMat, v);
     return *this;
 }
 
@@ -131,7 +131,7 @@ SkV4 SkM44::map(float x, float y, float z, float w) const {
 
 /** We always perform the calculation in doubles, to avoid prematurely losing
     precision along the way. This relies on the compiler automatically
-    promoting our SkMScalar values to double (if needed).
+    promoting our SkScalar values to double (if needed).
  */
 double SkM44::determinant() const {
     double a00 = fMat[0];
@@ -226,28 +226,34 @@ bool SkM44::invert(SkM44* inverse) const {
     b11 *= invdet;
 
     SkScalar tmp[16] = {
-        SkScalar(a11 * b11 - a12 * b10 + a13 * b09),
-        SkScalar(a02 * b10 - a01 * b11 - a03 * b09),
-        SkScalar(a31 * b05 - a32 * b04 + a33 * b03),
-        SkScalar(a22 * b04 - a21 * b05 - a23 * b03),
-        SkScalar(a12 * b08 - a10 * b11 - a13 * b07),
-        SkScalar(a00 * b11 - a02 * b08 + a03 * b07),
-        SkScalar(a32 * b02 - a30 * b05 - a33 * b01),
-        SkScalar(a20 * b05 - a22 * b02 + a23 * b01),
-        SkScalar(a10 * b10 - a11 * b08 + a13 * b06),
-        SkScalar(a01 * b08 - a00 * b10 - a03 * b06),
-        SkScalar(a30 * b04 - a31 * b02 + a33 * b00),
-        SkScalar(a21 * b02 - a20 * b04 - a23 * b00),
-        SkScalar(a11 * b07 - a10 * b09 - a12 * b06),
-        SkScalar(a00 * b09 - a01 * b07 + a02 * b06),
-        SkScalar(a31 * b01 - a30 * b03 - a32 * b00),
-        SkScalar(a20 * b03 - a21 * b01 + a22 * b00),
+        SkDoubleToScalar(a11 * b11 - a12 * b10 + a13 * b09),
+        SkDoubleToScalar(a02 * b10 - a01 * b11 - a03 * b09),
+        SkDoubleToScalar(a31 * b05 - a32 * b04 + a33 * b03),
+        SkDoubleToScalar(a22 * b04 - a21 * b05 - a23 * b03),
+        SkDoubleToScalar(a12 * b08 - a10 * b11 - a13 * b07),
+        SkDoubleToScalar(a00 * b11 - a02 * b08 + a03 * b07),
+        SkDoubleToScalar(a32 * b02 - a30 * b05 - a33 * b01),
+        SkDoubleToScalar(a20 * b05 - a22 * b02 + a23 * b01),
+        SkDoubleToScalar(a10 * b10 - a11 * b08 + a13 * b06),
+        SkDoubleToScalar(a01 * b08 - a00 * b10 - a03 * b06),
+        SkDoubleToScalar(a30 * b04 - a31 * b02 + a33 * b00),
+        SkDoubleToScalar(a21 * b02 - a20 * b04 - a23 * b00),
+        SkDoubleToScalar(a11 * b07 - a10 * b09 - a12 * b06),
+        SkDoubleToScalar(a00 * b09 - a01 * b07 + a02 * b06),
+        SkDoubleToScalar(a31 * b01 - a30 * b03 - a32 * b00),
+        SkDoubleToScalar(a20 * b03 - a21 * b01 + a22 * b00),
     };
     if (!SkScalarsAreFinite(tmp, 16)) {
         return false;
     }
     memcpy(inverse->fMat, tmp, sizeof(tmp));
     return true;
+}
+
+SkM44 SkM44::transpose() const {
+    SkM44 trans(SkM44::kUninitialized_Constructor);
+    transpose_arrays(trans.fMat, fMat);
+    return trans;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

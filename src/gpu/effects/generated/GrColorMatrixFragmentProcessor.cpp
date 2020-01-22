@@ -68,7 +68,7 @@ private:
         }
     }
     SkMatrix44 mPrev = SkMatrix44(SkMatrix44::kNaN_Constructor);
-    SkVector4 vPrev = SkVector4(SK_MScalarNaN, SK_MScalarNaN, SK_MScalarNaN, SK_MScalarNaN);
+    SkVector4 vPrev = SkVector4(SK_FloatNaN, SK_FloatNaN, SK_FloatNaN, SK_FloatNaN);
     UniformHandle mVar;
     UniformHandle vVar;
 };

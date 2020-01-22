@@ -11,6 +11,7 @@
 #ifndef GrRectBlurEffect_DEFINED
 #define GrRectBlurEffect_DEFINED
 #include "include/core/SkTypes.h"
+#include "include/core/SkMatrix44.h"
 
 #include <cmath>
 #include "include/core/SkRect.h"
@@ -57,6 +58,9 @@ public:
             }
             *bitmap.getAddr8(width - 1, 0) = 0;
             bitmap.setImmutable();
+            // We directly call the proxyProvider instead of going through GrBitmapTextureMaker.
+            // This means we won't fall back to RGBA_8888. But we should have support for a single
+            // channel unorm format so we shouldn't need the fallback.
             proxy = proxyProvider->createProxyFromBitmap(bitmap, GrMipMapped::kNo);
             if (!proxy) {
                 return nullptr;

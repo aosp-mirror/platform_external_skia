@@ -129,15 +129,15 @@ private:
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            const BackendTextureData*,
                                             GrMipMapped,
-                                            GrProtected) override;
+                                            GrProtected,
+                                            const BackendTextureData*) override;
 
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
-                                                      const BackendTextureData*,
                                                       GrMipMapped,
-                                                      GrProtected) override;
+                                                      GrProtected,
+                                                      const BackendTextureData*) override;
 
     sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc& desc,
                                      const GrBackendFormat& format,
@@ -210,11 +210,11 @@ private:
 
     bool createMtlTextureForBackendSurface(MTLPixelFormat,
                                            SkISize dimensions,
-                                           bool texturable,
+                                           GrTexturable,
                                            GrRenderable,
-                                           const BackendTextureData*,
                                            GrMipMapped,
-                                           GrMtlTextureInfo*);
+                                           GrMtlTextureInfo*,
+                                           const BackendTextureData*);
 
 #if GR_TEST_UTILS
     void testingOnly_startCapture() override;
