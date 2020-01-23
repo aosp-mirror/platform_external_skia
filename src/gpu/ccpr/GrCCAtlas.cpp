@@ -13,7 +13,7 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrOnFlushResourceProvider.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRectanizer_skyline.h"
+#include "src/gpu/GrRectanizerSkyline.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrTextureProxy.h"
@@ -78,9 +78,12 @@ sk_sp<GrTextureProxy> GrCCAtlas::MakeLazyAtlasProxy(const LazyInstantiateAtlasCa
                         sampleCount](GrResourceProvider* rp) {
         return cb(rp, pixelConfig, format, sampleCount);
     };
+
+    GrSwizzle readSwizzle = caps.getReadSwizzle(format, colorType);
+
     sk_sp<GrTextureProxy> proxy = GrProxyProvider::MakeFullyLazyProxy(
-            std::move(instantiate), format, GrRenderable::kYes, sampleCount, GrProtected::kNo,
-            kTextureOrigin, pixelConfig, caps, useAllocator);
+            std::move(instantiate), format, readSwizzle, GrRenderable::kYes, sampleCount,
+            GrProtected::kNo, kTextureOrigin, pixelConfig, caps, useAllocator);
 
     return proxy;
 }
