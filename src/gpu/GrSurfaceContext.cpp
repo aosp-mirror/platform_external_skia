@@ -75,14 +75,9 @@ std::unique_ptr<GrSurfaceContext> GrSurfaceContext::Make(
         sk_sp<SkColorSpace> colorSpace,
         SkBackingFit fit,
         SkBudgeted budgeted) {
-    auto config = context->priv().caps()->getConfigFromBackendFormat(format, colorType);
-    if (config == kUnknown_GrPixelConfig) {
-        return nullptr;
-    }
     GrSurfaceDesc desc;
     desc.fWidth = dimensions.width();
     desc.fHeight = dimensions.height();
-    desc.fConfig = config;
 
     GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, colorType);
 
@@ -161,6 +156,10 @@ bool GrSurfaceContext::readPixels(const GrImageInfo& origDstInfo, void* dst, siz
     }
 
     GrSurfaceProxy* srcProxy = this->asSurfaceProxy();
+
+    if (srcProxy->framebufferOnly()) {
+        return false;
+    }
 
     // MDB TODO: delay this instantiation until later in the method
     if (!srcProxy->instantiate(direct->priv().resourceProvider())) {
@@ -320,6 +319,11 @@ bool GrSurfaceContext::writePixels(const GrImageInfo& origSrcInfo, const void* s
     }
 
     GrSurfaceProxy* dstProxy = this->asSurfaceProxy();
+
+    if (dstProxy->framebufferOnly()) {
+        return false;
+    }
+
     if (!dstProxy->instantiate(direct->priv().resourceProvider())) {
         return false;
     }
@@ -365,14 +369,10 @@ bool GrSurfaceContext::writePixels(const GrImageInfo& origSrcInfo, const void* s
         SkAlphaType alphaType;
         GrSwizzle tempReadSwizzle;
         if (canvas2DFastPath) {
-            desc.fConfig = kRGBA_8888_GrPixelConfig;
             colorType = GrColorType::kRGBA_8888;
             format = rgbaDefaultFormat;
             alphaType = kUnpremul_SkAlphaType;
         } else {
-            // This isn't actually used anywhere so just setting to unknown which should trigger
-            // asserts and failures if it is read.
-            desc.fConfig =  kUnknown_GrPixelConfig;
             colorType = this->colorInfo().colorType();
             format = dstProxy->backendFormat().makeTexture2D();
             if (!format.isValid()) {
@@ -493,6 +493,10 @@ bool GrSurfaceContext::copy(GrSurfaceProxy* src, const SkIRect& srcRect, const S
     SkASSERT(src->textureSwizzle() == this->asSurfaceProxy()->textureSwizzle());
     SkASSERT(src->backendFormat() == this->asSurfaceProxy()->backendFormat());
 
+    if (this->asSurfaceProxy()->framebufferOnly()) {
+        return false;
+    }
+
     if (!caps->canCopySurface(this->asSurfaceProxy(), src, srcRect, dstPoint)) {
         return false;
     }
@@ -514,6 +518,10 @@ std::unique_ptr<GrRenderTargetContext> GrSurfaceContext::rescale(
     }
     auto rtProxy = this->asRenderTargetProxy();
     if (rtProxy && rtProxy->wrapsVkSecondaryCB()) {
+        return nullptr;
+    }
+
+    if (this->asSurfaceProxy()->framebufferOnly()) {
         return nullptr;
     }
 

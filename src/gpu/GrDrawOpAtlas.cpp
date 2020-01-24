@@ -15,7 +15,6 @@
 #include "src/gpu/GrOnFlushResourceProvider.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRectanizer.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrResourceProviderPriv.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
@@ -45,7 +44,7 @@ std::unique_ptr<GrDrawOpAtlas> GrDrawOpAtlas::Make(GrProxyProvider* proxyProvide
                                                    GrColorType colorType, int width,
                                                    int height, int plotWidth, int plotHeight,
                                                    AllowMultitexturing allowMultitexturing,
-                                                   GrDrawOpAtlas::EvictionFunc func, void* data) {
+                                                   EvictionCallback* evictor) {
     if (!format.isValid()) {
         return nullptr;
     }
@@ -57,7 +56,7 @@ std::unique_ptr<GrDrawOpAtlas> GrDrawOpAtlas::Make(GrProxyProvider* proxyProvide
         return nullptr;
     }
 
-    atlas->registerEvictionCallback(func, data);
+    atlas->fEvictionCallbacks.emplace_back(evictor);
     return atlas;
 }
 
@@ -103,7 +102,7 @@ GrDrawOpAtlas::Plot::Plot(int pageIndex, int plotIndex, uint64_t genID, int offX
         , fHeight(height)
         , fX(offX)
         , fY(offY)
-        , fRects(nullptr)
+        , fRectanizer(width, height)
         , fOffset(SkIPoint16::Make(fX * fWidth, fY * fHeight))
         , fColorType(colorType)
         , fBytesPerPixel(GrColorTypeBytesPerPixel(colorType))
@@ -120,17 +119,12 @@ GrDrawOpAtlas::Plot::Plot(int pageIndex, int plotIndex, uint64_t genID, int offX
 
 GrDrawOpAtlas::Plot::~Plot() {
     sk_free(fData);
-    delete fRects;
 }
 
 bool GrDrawOpAtlas::Plot::addSubImage(int width, int height, const void* image, SkIPoint16* loc) {
     SkASSERT(width <= fWidth && height <= fHeight);
 
-    if (!fRects) {
-        fRects = GrRectanizer::Factory(fWidth, fHeight);
-    }
-
-    if (!fRects->addRect(width, height, loc)) {
+    if (!fRectanizer.addRect(width, height, loc)) {
         return false;
     }
 
@@ -145,7 +139,7 @@ bool GrDrawOpAtlas::Plot::addSubImage(int width, int height, const void* image, 
     dataPtr += fBytesPerPixel * fWidth * loc->fY;
     dataPtr += fBytesPerPixel * loc->fX;
     // copy into the data buffer, swizzling as we go if this is ARGB data
-    if (4 == fBytesPerPixel && kSkia8888_GrPixelConfig == kBGRA_8888_GrPixelConfig) {
+    if (4 == fBytesPerPixel && kN32_SkColorType == kBGRA_8888_SkColorType) {
         for (int i = 0; i < height; ++i) {
             SkOpts::RGBA_to_BGRA((uint32_t*)dataPtr, (const uint32_t*)imagePtr, width);
             dataPtr += fBytesPerPixel * fWidth;
@@ -192,9 +186,7 @@ void GrDrawOpAtlas::Plot::uploadToTexture(GrDeferredTextureUploadWritePixelsFn& 
 }
 
 void GrDrawOpAtlas::Plot::resetRects() {
-    if (fRects) {
-        fRects->reset();
-    }
+    fRectanizer.reset();
 
     fGenID++;
     fID = CreateId(fPageIndex, fPlotIndex, fGenID);
@@ -237,9 +229,10 @@ GrDrawOpAtlas::GrDrawOpAtlas(GrProxyProvider* proxyProvider, const GrBackendForm
 }
 
 inline void GrDrawOpAtlas::processEviction(AtlasID id) {
-    for (int i = 0; i < fEvictionCallbacks.count(); i++) {
-        (*fEvictionCallbacks[i].fFunc)(id, fEvictionCallbacks[i].fData);
+    for (auto evictor : fEvictionCallbacks) {
+        evictor->evict(id);
     }
+
     ++fAtlasGeneration;
 }
 
@@ -554,7 +547,6 @@ bool GrDrawOpAtlas::createPages(GrProxyProvider* proxyProvider) {
     GrSurfaceDesc desc;
     desc.fWidth = fTextureWidth;
     desc.fHeight = fTextureHeight;
-    desc.fConfig = GrColorTypeToPixelConfig(fColorType);
 
     int numPlotsX = fTextureWidth/fPlotWidth;
     int numPlotsY = fTextureHeight/fPlotHeight;
