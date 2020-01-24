@@ -148,7 +148,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest, reporter, ctxInfo) {
     bool kConditionallyShare = resourceProvider->caps()->reuseScratchTextures();
 
     const GrColorType kRGBA = GrColorType::kRGBA_8888;
-    const GrColorType kBGRA = GrColorType::kBGRA_8888;
+    const GrColorType kAlpha = GrColorType::kAlpha_8;
 
     const SkBackingFit kE = SkBackingFit::kExact;
     const SkBackingFit kA = SkBackingFit::kApprox;
@@ -199,7 +199,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest, reporter, ctxInfo) {
         // Two non-overlapping intervals w/ different MSAA sample counts should not share
         { { 64,    kRT, kRGBA, kA, k2, kTL, kNotB },{ 64,    kRT, kRGBA, kA, k4,kTL, kNotB}, k2 == k4 },
         // Two non-overlapping intervals w/ different configs should not share
-        { { 64,    kRT, kRGBA, kA, 1, kTL, kNotB }, { 64,    kRT, kBGRA, kA, 1, kTL, kNotB }, kDontShare },
+        { { 64,    kRT, kRGBA, kA, 1, kTL, kNotB }, { 64,    kRT, kAlpha, kA, 1, kTL, kNotB }, kDontShare },
         // Two non-overlapping intervals w/ different RT classifications should never share
         { { 64,    kRT, kRGBA, kA, 1, kTL, kNotB }, { 64, kNotRT, kRGBA, kA, 1, kTL, kNotB }, kDontShare },
         { { 64, kNotRT, kRGBA, kA, 1, kTL, kNotB }, { 64,    kRT, kRGBA, kA, 1, kTL, kNotB }, kDontShare },
@@ -288,10 +288,11 @@ sk_sp<GrSurfaceProxy> make_lazy(GrProxyProvider* proxyProvider, const GrCaps* ca
         return GrSurfaceProxy::LazyCallbackResult(std::move(texture));
     };
     GrInternalSurfaceFlags flags = GrInternalSurfaceFlags::kNone;
+    GrSwizzle readSwizzle = caps->getReadSwizzle(format, p.fColorType);
     return proxyProvider->createLazyProxy(
-            callback, format, desc, p.fRenderable, p.fSampleCnt, p.fOrigin, GrMipMapped::kNo,
-            GrMipMapsStatus::kNotAllocated, flags, p.fFit, p.fBudgeted, GrProtected::kNo,
-            GrSurfaceProxy::UseAllocator::kYes);
+            callback, format, desc, readSwizzle, p.fRenderable, p.fSampleCnt, p.fOrigin,
+            GrMipMapped::kNo, GrMipMapsStatus::kNotAllocated, flags, p.fFit, p.fBudgeted,
+            GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
 }
 
 // Set up so there are two opsTasks that need to be flushed but the resource allocator thinks

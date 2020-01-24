@@ -93,12 +93,11 @@ public:
         kLast_MapBufferType = kChromium_MapBufferType,
     };
 
-    enum TransferBufferType {
-        kNone_TransferBufferType,
-        kPBO_TransferBufferType,          // ARB_pixel_buffer_object
-        kChromium_TransferBufferType,     // CHROMIUM_pixel_transfer_buffer_object
-
-        kLast_TransferBufferType = kChromium_TransferBufferType,
+    enum class TransferBufferType {
+        kNone,
+        kNV_PBO,    // NV__pixel_buffer_object
+        kARB_PBO,   // ARB_pixel_buffer_object
+        kChromium,  // CHROMIUM_pixel_transfer_buffer_object
     };
 
     /**
@@ -423,6 +422,8 @@ public:
 
     GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const override;
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
+
+    uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
     GrProgramDesc makeDesc(const GrRenderTarget*, const GrProgramInfo&) const override;
 
