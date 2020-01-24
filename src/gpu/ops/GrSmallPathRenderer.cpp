@@ -626,8 +626,7 @@ private:
 
         // Pack the page index into the u and v texture coords
         uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
-        SkASSERT(pageIndex < 4);
-        int16_t left, top, right, bottom;
+        uint16_t left, top, right, bottom;
         std::tie(left, top, right, bottom) =
                 std::make_tuple(atlasLocation.fX + SK_DistanceFieldPad,
                                 atlasLocation.fY + SK_DistanceFieldPad,
@@ -727,8 +726,7 @@ private:
 
         // Pack the page index into the u and v texture coords
         uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
-        SkASSERT(pageIndex < 4);
-        int16_t left, top, right, bottom;
+        uint16_t left, top, right, bottom;
         std::tie(left, top, right, bottom) = std::make_tuple(atlasLocation.fX, atlasLocation.fY,
                                                              atlasLocation.fX+width,
                                                              atlasLocation.fY+height);

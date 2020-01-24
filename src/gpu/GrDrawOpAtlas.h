@@ -102,26 +102,22 @@ public:
                                                EvictionCallback* evictor);
 
     /**
-     * Packs a texture atlas index into the signed int16 texture coordinates.
+     * Packs a texture atlas page index into the uint16 texture coordinates.
      *  @param u      U texture coordinate
      *  @param v      V texture coordinate
-     *  @param texIndex           index of the texture these coordinates apply to. Must be in the range [0, 3].
-     *  @return                 The new u and v coordinates with the packed value
+     *  @param pageIndex   index of the texture these coordinates apply to.
+                           Must be in the range [0, 3].
+     *  @return    The new u and v coordinates with the packed value
      */
-    static std::pair<int16_t, int16_t> PackIndexInTexCoords(int16_t u, int16_t v, int texIndex);
-
+    static std::pair<uint16_t, uint16_t> PackIndexInTexCoords(uint16_t u, uint16_t v,
+                                                              int pageIndex);
     /**
-     * Unpacks a texture atlas index from signed int16 texture coordinates.
+     * Unpacks a texture atlas page index from uint16 texture coordinates.
      *  @param u      Packed U texture coordinate
      *  @param v      Packed V texture coordinate
-     *  @return    The unpacked u and v coordinates with the texture index.
+     *  @return    The unpacked u and v coordinates with the page index.
      */
-    static std::tuple<int16_t, int16_t, int> UnpackIndexFromTexCoords(int16_t u, int16_t v);
-
-    // Maximum texture size that can be used for atlases.
-    // On lower-end GPUs texture coordinates end up being half floats, which means we only
-    // have enough precision to represent 2048 texels.
-    static constexpr int kMaxTextureSize = 2048;
+    static std::tuple<uint16_t, uint16_t, int> UnpackIndexFromTexCoords(uint16_t u, uint16_t v);
 
     /**
      * Adds a width x height subimage to the atlas. Upon success it returns 'kSucceeded' and returns

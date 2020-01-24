@@ -60,31 +60,30 @@ std::unique_ptr<GrDrawOpAtlas> GrDrawOpAtlas::Make(GrProxyProvider* proxyProvide
     return atlas;
 }
 
-// The two bits that make up the texture index are packed into the u and v coordinate
-// respectively. To represent a '1', we negate the coordinate and subtract 1 (to handle 0).
-std::pair<int16_t, int16_t> GrDrawOpAtlas::PackIndexInTexCoords(int16_t u, int16_t v,
-                                                                int texIndex) {
-    SkASSERT(texIndex >= 0 && texIndex < 4);
-    if (texIndex & 0x2) {
-        u = -u-1;
-    }
-    if (texIndex & 0x1) {
-        v = -v-1;
-    }
+// The two bits that make up the texture index are packed into the lower bits of the u and v
+// coordinate respectively.
+std::pair<uint16_t, uint16_t> GrDrawOpAtlas::PackIndexInTexCoords(uint16_t u, uint16_t v,
+                                                                  int pageIndex) {
+    SkASSERT(pageIndex >= 0 && pageIndex < 4);
+    uint16_t uBit = (pageIndex >> 1u) & 0x1u;
+    uint16_t vBit = pageIndex & 0x1u;
+    u <<= 1u;
+    u |= uBit;
+    v <<= 1u;
+    v |= vBit;
     return std::make_pair(u, v);
 }
 
-std::tuple<int16_t, int16_t, int> GrDrawOpAtlas::UnpackIndexFromTexCoords(int16_t u, int16_t v) {
-    int texIndex = 0;
-    if (u < 0) {
-        u = -u-1;
-        texIndex |= 0x2;
+std::tuple<uint16_t, uint16_t, int> GrDrawOpAtlas::UnpackIndexFromTexCoords(uint16_t u,
+                                                                            uint16_t v) {
+    int pageIndex = 0;
+    if (u & 0x1) {
+        pageIndex |= 0x2;
     }
-    if (v < 0) {
-        v = -v-1;
-        texIndex |= 0x1;
+    if (v & 0x1) {
+        pageIndex |= 0x1;
     }
-    return std::make_tuple(u, v, texIndex);
+    return std::make_tuple(u >> 1, v >> 1, pageIndex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -146,8 +146,8 @@ GrBitmapTextGeoProc::GrBitmapTextGeoProc(const GrShaderCaps& caps,
         fInColor = MakeColorAttribute("inColor", wideColor);
     }
 
-    fInTextureCoords = {"inTextureCoords", kShort2_GrVertexAttribType,
-                        caps.integerSupport() ? kShort2_GrSLType : kFloat2_GrSLType};
+    fInTextureCoords = {"inTextureCoords", kUShort2_GrVertexAttribType,
+                        caps.integerSupport() ? kUShort2_GrSLType : kFloat2_GrSLType};
     this->setVertexAttributes(&fInPosition, 3);
 
     if (numActiveViews) {
