@@ -204,22 +204,6 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
     GrSamplerState::WrapMode wrapModes[] = {tile_mode_to_wrap_mode(fTileModeX),
                                             tile_mode_to_wrap_mode(fTileModeY)};
 
-    // If either domainX or domainY are un-ignored, a texture domain effect has to be used to
-    // implement the decal mode (while leaving non-decal axes alone). The wrap mode originally
-    // clamp-to-border is reset to clamp since the hw cannot implement it directly.
-    GrTextureDomain::Mode domainX = GrTextureDomain::kIgnore_Mode;
-    GrTextureDomain::Mode domainY = GrTextureDomain::kIgnore_Mode;
-    if (!args.fContext->priv().caps()->clampToBorderSupport()) {
-        if (wrapModes[0] == GrSamplerState::WrapMode::kClampToBorder) {
-            domainX = GrTextureDomain::kDecal_Mode;
-            wrapModes[0] = GrSamplerState::WrapMode::kClamp;
-        }
-        if (wrapModes[1] == GrSamplerState::WrapMode::kClampToBorder) {
-            domainY = GrTextureDomain::kDecal_Mode;
-            wrapModes[1] = GrSamplerState::WrapMode::kClamp;
-        }
-    }
-
     // Must set wrap and filter on the sampler before requesting a texture. In two places below
     // we check the matrix scale factors to determine how to interpret the filter quality setting.
     // This completely ignores the complexity of the drawVertices case where explicit local coords
@@ -240,22 +224,31 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
 
     lmInverse.postScale(scaleAdjust[0], scaleAdjust[1]);
 
+    const auto& caps = *args.fContext->priv().caps();
+
     std::unique_ptr<GrFragmentProcessor> inner;
     if (doBicubic) {
-        // domainX and domainY will properly apply the decal effect with the texture domain used in
-        // the bicubic filter if clamp to border was unsupported in hardware
+        // If either domainX or domainY are un-ignored, a texture domain effect has to be used to
+        // implement the decal mode (while leaving non-decal axes alone). The wrap mode originally
+        // clamp-to-border is reset to clamp since the hw cannot implement it directly.
+        GrTextureDomain::Mode domainX = GrTextureDomain::kIgnore_Mode;
+        GrTextureDomain::Mode domainY = GrTextureDomain::kIgnore_Mode;
+        if (!caps.clampToBorderSupport()) {
+            if (wrapModes[0] == GrSamplerState::WrapMode::kClampToBorder) {
+                domainX = GrTextureDomain::kDecal_Mode;
+                wrapModes[0] = GrSamplerState::WrapMode::kClamp;
+            }
+            if (wrapModes[1] == GrSamplerState::WrapMode::kClampToBorder) {
+                domainY = GrTextureDomain::kDecal_Mode;
+                wrapModes[1] = GrSamplerState::WrapMode::kClamp;
+            }
+        }
         static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
         inner = GrBicubicEffect::Make(std::move(proxy), lmInverse, wrapModes, domainX, domainY,
                                       kDir, srcAlphaType);
     } else {
-        auto dimensions = proxy->dimensions();
-        inner = GrTextureEffect::Make(std::move(proxy), srcAlphaType, lmInverse, samplerState);
-        if (domainX != GrTextureDomain::kIgnore_Mode || domainY != GrTextureDomain::kIgnore_Mode) {
-            SkRect domain = GrTextureDomain::MakeTexelDomain(SkIRect::MakeSize(dimensions),
-                                                             domainX, domainY);
-            inner = GrDomainEffect::Make(std::move(inner), domain, domainX, domainY,
-                                         samplerState.filter());
-        }
+        inner = GrTextureEffect::Make(std::move(proxy), srcAlphaType, lmInverse, samplerState,
+                                      caps);
     }
     inner = GrColorSpaceXformEffect::Make(std::move(inner), fImage->colorSpace(), srcAlphaType,
                                           args.fDstColorInfo->colorSpace());
@@ -664,30 +657,10 @@ bool SkImageShader::onProgram(skvm::Builder* p,
     inv     = state->invMatrix();
     quality = state->quality();
     tweak_quality_and_inv_matrix(&quality, &inv);
+    inv.normalizePerspective();
 
     // Apply matrix to convert dst coords to sample center coords.
-    inv.normalizePerspective();
-    if (inv.isIdentity()) {
-        // That was easy.
-    } else if (inv.isTranslate()) {
-        x = p->add(x, p->uniformF(uniforms->pushF(inv[2])));
-        y = p->add(y, p->uniformF(uniforms->pushF(inv[5])));
-    } else if (inv.isScaleTranslate()) {
-        x = p->mad(x, p->uniformF(uniforms->pushF(inv[0])), p->uniformF(uniforms->pushF(inv[2])));
-        y = p->mad(y, p->uniformF(uniforms->pushF(inv[4])), p->uniformF(uniforms->pushF(inv[5])));
-    } else {  // Affine or perspective.
-        auto dot = [&,x,y](int row) {
-            return p->mad(x, p->uniformF(uniforms->pushF(inv[3*row+0])),
-                   p->mad(y, p->uniformF(uniforms->pushF(inv[3*row+1])),
-                             p->uniformF(uniforms->pushF(inv[3*row+2]))));
-        };
-        x = dot(0);
-        y = dot(1);
-        if (inv.hasPerspective()) {
-            x = p->div(x, dot(2));
-            y = p->div(y, dot(2));
-        }
-    }
+    SkShaderBase::ApplyMatrix(p, inv, &x,&y,uniforms);
 
     // Bail out if sample() can't yet handle our image's color type.
     switch (pm.colorType()) {

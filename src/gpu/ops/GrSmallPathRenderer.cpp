@@ -138,17 +138,16 @@ public:
 
 
 // Callback to clear out internal path cache when eviction occurs
-void GrSmallPathRenderer::HandleEviction(GrDrawOpAtlas::AtlasID id, void* pr) {
-    GrSmallPathRenderer* dfpr = (GrSmallPathRenderer*)pr;
+void GrSmallPathRenderer::evict(GrDrawOpAtlas::AtlasID id) {
     // remove any paths that use this plot
     ShapeDataList::Iter iter;
-    iter.init(dfpr->fShapeList, ShapeDataList::Iter::kHead_IterStart);
+    iter.init(fShapeList, ShapeDataList::Iter::kHead_IterStart);
     ShapeData* shapeData;
     while ((shapeData = iter.get())) {
         iter.next();
         if (id == shapeData->fID) {
-            dfpr->fShapeCache.remove(shapeData->fKey);
-            dfpr->fShapeList.remove(shapeData);
+            fShapeCache.remove(shapeData->fKey);
+            fShapeList.remove(shapeData);
             delete shapeData;
 #ifdef DF_PATH_TRACKING
             ++g_NumFreedPaths;
@@ -627,8 +626,7 @@ private:
 
         // Pack the page index into the u and v texture coords
         uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
-        SkASSERT(pageIndex < 4);
-        int16_t left, top, right, bottom;
+        uint16_t left, top, right, bottom;
         std::tie(left, top, right, bottom) =
                 std::make_tuple(atlasLocation.fX + SK_DistanceFieldPad,
                                 atlasLocation.fY + SK_DistanceFieldPad,
@@ -728,8 +726,7 @@ private:
 
         // Pack the page index into the u and v texture coords
         uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
-        SkASSERT(pageIndex < 4);
-        int16_t left, top, right, bottom;
+        uint16_t left, top, right, bottom;
         std::tie(left, top, right, bottom) = std::make_tuple(atlasLocation.fX, atlasLocation.fY,
                                                              atlasLocation.fX+width,
                                                              atlasLocation.fY+height);
@@ -902,8 +899,7 @@ bool GrSmallPathRenderer::onDrawPath(const DrawPathArgs& args) {
                                      ATLAS_TEXTURE_WIDTH, ATLAS_TEXTURE_HEIGHT,
                                      PLOT_WIDTH, PLOT_HEIGHT,
                                      GrDrawOpAtlas::AllowMultitexturing::kYes,
-                                     &GrSmallPathRenderer::HandleEviction,
-                                     (void*)this);
+                                     this);
         if (!fAtlas) {
             return false;
         }
@@ -921,9 +917,9 @@ bool GrSmallPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #if GR_TEST_UTILS
 
-struct GrSmallPathRenderer::PathTestStruct {
+struct GrSmallPathRenderer::PathTestStruct : public GrDrawOpAtlas::EvictionCallback {
     PathTestStruct() : fContextID(SK_InvalidGenID), fAtlas(nullptr) {}
-    ~PathTestStruct() { this->reset(); }
+    ~PathTestStruct() override { this->reset(); }
 
     void reset() {
         ShapeDataList::Iter iter;
@@ -938,17 +934,16 @@ struct GrSmallPathRenderer::PathTestStruct {
         fShapeCache.reset();
     }
 
-    static void HandleEviction(GrDrawOpAtlas::AtlasID id, void* pr) {
-        PathTestStruct* dfpr = (PathTestStruct*)pr;
+    void evict(GrDrawOpAtlas::AtlasID id) override {
         // remove any paths that use this plot
         ShapeDataList::Iter iter;
-        iter.init(dfpr->fShapeList, ShapeDataList::Iter::kHead_IterStart);
+        iter.init(fShapeList, ShapeDataList::Iter::kHead_IterStart);
         ShapeData* shapeData;
         while ((shapeData = iter.get())) {
             iter.next();
             if (id == shapeData->fID) {
-                dfpr->fShapeCache.remove(shapeData->fKey);
-                dfpr->fShapeList.remove(shapeData);
+                fShapeCache.remove(shapeData->fKey);
+                fShapeList.remove(shapeData);
                 delete shapeData;
             }
         }
@@ -991,8 +986,7 @@ GR_DRAW_OP_TEST_DEFINE(SmallPathOp) {
                                                  ATLAS_TEXTURE_WIDTH, ATLAS_TEXTURE_HEIGHT,
                                                  PLOT_WIDTH, PLOT_HEIGHT,
                                                  GrDrawOpAtlas::AllowMultitexturing::kYes,
-                                                 &PathTestStruct::HandleEviction,
-                                                 (void*)&gTestStruct);
+                                                 &gTestStruct);
     }
 
     SkMatrix viewMatrix = GrTest::TestMatrix(random);

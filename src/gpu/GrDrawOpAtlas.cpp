@@ -15,7 +15,6 @@
 #include "src/gpu/GrOnFlushResourceProvider.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRectanizer.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrResourceProviderPriv.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
@@ -45,7 +44,7 @@ std::unique_ptr<GrDrawOpAtlas> GrDrawOpAtlas::Make(GrProxyProvider* proxyProvide
                                                    GrColorType colorType, int width,
                                                    int height, int plotWidth, int plotHeight,
                                                    AllowMultitexturing allowMultitexturing,
-                                                   GrDrawOpAtlas::EvictionFunc func, void* data) {
+                                                   EvictionCallback* evictor) {
     if (!format.isValid()) {
         return nullptr;
     }
@@ -57,35 +56,34 @@ std::unique_ptr<GrDrawOpAtlas> GrDrawOpAtlas::Make(GrProxyProvider* proxyProvide
         return nullptr;
     }
 
-    atlas->registerEvictionCallback(func, data);
+    atlas->fEvictionCallbacks.emplace_back(evictor);
     return atlas;
 }
 
-// The two bits that make up the texture index are packed into the u and v coordinate
-// respectively. To represent a '1', we negate the coordinate and subtract 1 (to handle 0).
-std::pair<int16_t, int16_t> GrDrawOpAtlas::PackIndexInTexCoords(int16_t u, int16_t v,
-                                                                int texIndex) {
-    SkASSERT(texIndex >= 0 && texIndex < 4);
-    if (texIndex & 0x2) {
-        u = -u-1;
-    }
-    if (texIndex & 0x1) {
-        v = -v-1;
-    }
+// The two bits that make up the texture index are packed into the lower bits of the u and v
+// coordinate respectively.
+std::pair<uint16_t, uint16_t> GrDrawOpAtlas::PackIndexInTexCoords(uint16_t u, uint16_t v,
+                                                                  int pageIndex) {
+    SkASSERT(pageIndex >= 0 && pageIndex < 4);
+    uint16_t uBit = (pageIndex >> 1u) & 0x1u;
+    uint16_t vBit = pageIndex & 0x1u;
+    u <<= 1u;
+    u |= uBit;
+    v <<= 1u;
+    v |= vBit;
     return std::make_pair(u, v);
 }
 
-std::tuple<int16_t, int16_t, int> GrDrawOpAtlas::UnpackIndexFromTexCoords(int16_t u, int16_t v) {
-    int texIndex = 0;
-    if (u < 0) {
-        u = -u-1;
-        texIndex |= 0x2;
+std::tuple<uint16_t, uint16_t, int> GrDrawOpAtlas::UnpackIndexFromTexCoords(uint16_t u,
+                                                                            uint16_t v) {
+    int pageIndex = 0;
+    if (u & 0x1) {
+        pageIndex |= 0x2;
     }
-    if (v < 0) {
-        v = -v-1;
-        texIndex |= 0x1;
+    if (v & 0x1) {
+        pageIndex |= 0x1;
     }
-    return std::make_tuple(u, v, texIndex);
+    return std::make_tuple(u >> 1, v >> 1, pageIndex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,7 +101,7 @@ GrDrawOpAtlas::Plot::Plot(int pageIndex, int plotIndex, uint64_t genID, int offX
         , fHeight(height)
         , fX(offX)
         , fY(offY)
-        , fRects(nullptr)
+        , fRectanizer(width, height)
         , fOffset(SkIPoint16::Make(fX * fWidth, fY * fHeight))
         , fColorType(colorType)
         , fBytesPerPixel(GrColorTypeBytesPerPixel(colorType))
@@ -120,17 +118,12 @@ GrDrawOpAtlas::Plot::Plot(int pageIndex, int plotIndex, uint64_t genID, int offX
 
 GrDrawOpAtlas::Plot::~Plot() {
     sk_free(fData);
-    delete fRects;
 }
 
 bool GrDrawOpAtlas::Plot::addSubImage(int width, int height, const void* image, SkIPoint16* loc) {
     SkASSERT(width <= fWidth && height <= fHeight);
 
-    if (!fRects) {
-        fRects = GrRectanizer::Factory(fWidth, fHeight);
-    }
-
-    if (!fRects->addRect(width, height, loc)) {
+    if (!fRectanizer.addRect(width, height, loc)) {
         return false;
     }
 
@@ -145,7 +138,7 @@ bool GrDrawOpAtlas::Plot::addSubImage(int width, int height, const void* image, 
     dataPtr += fBytesPerPixel * fWidth * loc->fY;
     dataPtr += fBytesPerPixel * loc->fX;
     // copy into the data buffer, swizzling as we go if this is ARGB data
-    if (4 == fBytesPerPixel && kSkia8888_GrPixelConfig == kBGRA_8888_GrPixelConfig) {
+    if (4 == fBytesPerPixel && kN32_SkColorType == kBGRA_8888_SkColorType) {
         for (int i = 0; i < height; ++i) {
             SkOpts::RGBA_to_BGRA((uint32_t*)dataPtr, (const uint32_t*)imagePtr, width);
             dataPtr += fBytesPerPixel * fWidth;
@@ -192,9 +185,7 @@ void GrDrawOpAtlas::Plot::uploadToTexture(GrDeferredTextureUploadWritePixelsFn& 
 }
 
 void GrDrawOpAtlas::Plot::resetRects() {
-    if (fRects) {
-        fRects->reset();
-    }
+    fRectanizer.reset();
 
     fGenID++;
     fID = CreateId(fPageIndex, fPlotIndex, fGenID);
@@ -237,9 +228,10 @@ GrDrawOpAtlas::GrDrawOpAtlas(GrProxyProvider* proxyProvider, const GrBackendForm
 }
 
 inline void GrDrawOpAtlas::processEviction(AtlasID id) {
-    for (int i = 0; i < fEvictionCallbacks.count(); i++) {
-        (*fEvictionCallbacks[i].fFunc)(id, fEvictionCallbacks[i].fData);
+    for (auto evictor : fEvictionCallbacks) {
+        evictor->evict(id);
     }
+
     ++fAtlasGeneration;
 }
 
@@ -554,7 +546,6 @@ bool GrDrawOpAtlas::createPages(GrProxyProvider* proxyProvider) {
     GrSurfaceDesc desc;
     desc.fWidth = fTextureWidth;
     desc.fHeight = fTextureHeight;
-    desc.fConfig = GrColorTypeToPixelConfig(fColorType);
 
     int numPlotsX = fTextureWidth/fPlotWidth;
     int numPlotsY = fTextureHeight/fPlotHeight;

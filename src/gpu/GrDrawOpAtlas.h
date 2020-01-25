@@ -9,17 +9,17 @@
 #define GrDrawOpAtlas_DEFINED
 
 #include <cmath>
+#include <vector>
 
 #include "include/core/SkSize.h"
-#include "include/private/SkTDArray.h"
 #include "src/core/SkGlyphRunPainter.h"
 #include "src/core/SkIPoint16.h"
 #include "src/core/SkTInternalLList.h"
 
+#include "src/gpu/GrRectanizerSkyline.h"
 #include "src/gpu/ops/GrDrawOp.h"
 
 class GrOnFlushResourceProvider;
-class GrRectanizer;
 
 
 /**
@@ -68,11 +68,15 @@ public:
     static const uint64_t kInvalidAtlasGeneration = 0;
 
     /**
-     * A function pointer for use as a callback during eviction. Whenever GrDrawOpAtlas evicts a
+     * An interface for eviction callbacks. Whenever GrDrawOpAtlas evicts a
      * specific AtlasID, it will call all of the registered listeners so they can process the
      * eviction.
      */
-    typedef void (*EvictionFunc)(GrDrawOpAtlas::AtlasID, void*);
+    class EvictionCallback {
+    public:
+        virtual ~EvictionCallback() = default;
+        virtual void evict(AtlasID id) = 0;
+    };
 
     /**
      * Returns a GrDrawOpAtlas. This function can be called anywhere, but the returned atlas
@@ -85,10 +89,8 @@ public:
      *  @param numPlotsY        The number of plots the atlas should be broken up into in the Y
      *                          direction
      *  @param allowMultitexturing Can the atlas use more than one texture.
-     *  @param func             An eviction function which will be called whenever the atlas has to
-     *                          evict data
-     *  @param data             User supplied data which will be passed into func whenever an
-     *                          eviction occurs
+     *  @param evictor          A pointer to an eviction callback class.
+     *
      *  @return                 An initialized GrDrawOpAtlas, or nullptr if creation fails
      */
     static std::unique_ptr<GrDrawOpAtlas> Make(GrProxyProvider*,
@@ -97,29 +99,25 @@ public:
                                                int width, int height,
                                                int plotWidth, int plotHeight,
                                                AllowMultitexturing allowMultitexturing,
-                                               GrDrawOpAtlas::EvictionFunc func, void* data);
+                                               EvictionCallback* evictor);
 
     /**
-     * Packs a texture atlas index into the signed int16 texture coordinates.
+     * Packs a texture atlas page index into the uint16 texture coordinates.
      *  @param u      U texture coordinate
      *  @param v      V texture coordinate
-     *  @param texIndex           index of the texture these coordinates apply to. Must be in the range [0, 3].
-     *  @return                 The new u and v coordinates with the packed value
+     *  @param pageIndex   index of the texture these coordinates apply to.
+                           Must be in the range [0, 3].
+     *  @return    The new u and v coordinates with the packed value
      */
-    static std::pair<int16_t, int16_t> PackIndexInTexCoords(int16_t u, int16_t v, int texIndex);
-
+    static std::pair<uint16_t, uint16_t> PackIndexInTexCoords(uint16_t u, uint16_t v,
+                                                              int pageIndex);
     /**
-     * Unpacks a texture atlas index from signed int16 texture coordinates.
+     * Unpacks a texture atlas page index from uint16 texture coordinates.
      *  @param u      Packed U texture coordinate
      *  @param v      Packed V texture coordinate
-     *  @return    The unpacked u and v coordinates with the texture index.
+     *  @return    The unpacked u and v coordinates with the page index.
      */
-    static std::tuple<int16_t, int16_t, int> UnpackIndexFromTexCoords(int16_t u, int16_t v);
-
-    // Maximum texture size that can be used for atlases.
-    // On lower-end GPUs texture coordinates end up being half floats, which means we only
-    // have enough precision to represent 2048 texels.
-    static constexpr int kMaxTextureSize = 2048;
+    static std::tuple<uint16_t, uint16_t, int> UnpackIndexFromTexCoords(uint16_t u, uint16_t v);
 
     /**
      * Adds a width x height subimage to the atlas. Upon success it returns 'kSucceeded' and returns
@@ -151,7 +149,7 @@ public:
 
     uint64_t atlasGeneration() const { return fAtlasGeneration; }
 
-    inline bool hasID(AtlasID id) {
+    bool hasID(AtlasID id) {
         if (kInvalidAtlasID == id) {
             return false;
         }
@@ -163,7 +161,7 @@ public:
     }
 
     /** To ensure the atlas does not evict a given entry, the client must set the last use token. */
-    inline void setLastUseToken(AtlasID id, GrDeferredUploadToken token) {
+    void setLastUseToken(AtlasID id, GrDeferredUploadToken token) {
         SkASSERT(this->hasID(id));
         uint32_t plotIdx = GetPlotIndexFromID(id);
         SkASSERT(plotIdx < fNumPlots);
@@ -172,12 +170,6 @@ public:
         Plot* plot = fPages[pageIdx].fPlotArray[plotIdx].get();
         this->makeMRU(plot, pageIdx);
         plot->setLastUseToken(token);
-    }
-
-    inline void registerEvictionCallback(EvictionFunc func, void* userData) {
-        EvictionData* data = fEvictionCallbacks.append();
-        data->fFunc = func;
-        data->fData = userData;
     }
 
     uint32_t numActivePages() { return fNumActivePages; }
@@ -357,7 +349,7 @@ private:
         const int fHeight;
         const int fX;
         const int fY;
-        GrRectanizer* fRects;
+        GrRectanizerSkyline fRectanizer;
         const SkIPoint16 fOffset;  // the offset of the plot in the backing texture
         const GrColorType fColorType;
         const size_t fBytesPerPixel;
@@ -420,12 +412,7 @@ private:
     // nextTokenToFlush() value at the end of the previous flush
     GrDeferredUploadToken fPrevFlushToken;
 
-    struct EvictionData {
-        EvictionFunc fFunc;
-        void* fData;
-    };
-
-    SkTDArray<EvictionData> fEvictionCallbacks;
+    std::vector<EvictionCallback*> fEvictionCallbacks;
 
     struct Page {
         // allocated array of Plots

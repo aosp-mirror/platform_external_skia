@@ -50,11 +50,12 @@ namespace {
     SK_BEGIN_REQUIRE_DENSE;
     struct Key {
         uint64_t colorSpace;
-        uint32_t shader;
+        uint64_t shader;
         uint8_t  colorType,
                  alphaType,
                  blendMode,
                  coverage;
+        uint32_t padding{0};
         // Params::quality and Params::ctm are only passed to shader->program(),
         // not used here by the blitter itself.  No need to include them in the key;
         // they'll be folded into the shader key if used.
@@ -77,7 +78,7 @@ namespace {
     SK_END_REQUIRE_DENSE;
 
     static SkString debug_name(const Key& key) {
-        return SkStringPrintf("CT%d-AT%d-Cov%d-Blend%d-CS%llx-Shader%x",
+        return SkStringPrintf("CT%d-AT%d-Cov%d-Blend%d-CS%llx-Shader%llx",
                               key.colorType,
                               key.alphaType,
                               key.coverage,
@@ -93,8 +94,8 @@ namespace {
         // and tryAcquire()/release(), or...
         return nullptr;  // ... we could just not cache programs on those platforms.
     #else
-        thread_local static auto* cache = new SkLRUCache<Key, skvm::Program>{8};
-        return cache;
+        thread_local static SkLRUCache<Key, skvm::Program> cache{8};
+        return &cache;
     #endif
     }
 
@@ -104,9 +105,12 @@ namespace {
     struct Builder : public skvm::Builder {
 
         // If Builder can't build this program, CacheKey() sets *ok to false.
-        static Key CacheKey(const Params& params, skvm::Uniforms* uniforms, bool* ok) {
+        static Key CacheKey(const Params& params,
+                            skvm::Uniforms* uniforms,
+                            SkArenaAlloc* alloc,
+                            bool* ok) {
             SkASSERT(params.shader);
-            uint32_t shaderHash = 0;
+            uint64_t shaderHash = 0;
             {
                 const SkShaderBase* shader = as_SB(params.shader);
                 skvm::Builder p;
@@ -119,11 +123,10 @@ namespace {
                 y = p.add(y, p.splat(0.5f));
                 skvm::F32 r,g,b,a;
 
-                SkSTArenaAlloc<2*sizeof(void*)> tmp;
                 if (shader->program(&p,
                                     params.ctm, /*localM=*/nullptr,
                                     params.quality, params.colorSpace.get(),
-                                    uniforms,&tmp,
+                                    uniforms,alloc,
                                     x,y, &r,&g,&b,&a)) {
                     shaderHash = p.hash();
                 } else {
@@ -395,7 +398,7 @@ namespace {
             : fDevice(device)
             , fUniforms(kBlitterUniformsCount)
             , fParams(effective_params(device, paint, ctm))
-            , fKey(Builder::CacheKey(fParams, &fUniforms, ok))
+            , fKey(Builder::CacheKey(fParams, &fUniforms, &fAlloc, ok))
         {}
 
         ~Blitter() override {

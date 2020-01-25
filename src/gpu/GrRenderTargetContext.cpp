@@ -45,7 +45,6 @@
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
 #include "src/gpu/effects/GrRRectEffect.h"
-#include "src/gpu/effects/GrTextureDomain.h"
 #include "src/gpu/effects/generated/GrColorMatrixFragmentProcessor.h"
 #include "src/gpu/geometry/GrQuad.h"
 #include "src/gpu/geometry/GrQuadUtils.h"
@@ -181,14 +180,9 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
     if (context->priv().abandoned()) {
         return nullptr;
     }
-    auto config = context->priv().caps()->getConfigFromBackendFormat(format, colorType);
-    if (config == kUnknown_GrPixelConfig) {
-        return nullptr;
-    }
     GrSurfaceDesc desc;
     desc.fWidth = dimensions.width();
     desc.fHeight = dimensions.height();
-    desc.fConfig = config;
 
     GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, colorType);
 
@@ -1693,6 +1687,10 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
         callback(context, nullptr);
         return;
     }
+    if (this->asRenderTargetProxy()->framebufferOnly()) {
+        callback(context, nullptr);
+        return;
+    }
     auto dstCT = SkColorTypeToGrColorType(info.colorType());
     if (dstCT == GrColorType::kUnknown) {
         callback(context, nullptr);
@@ -1935,6 +1933,10 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
         return;
     }
     if (this->asRenderTargetProxy()->wrapsVkSecondaryCB()) {
+        callback(context, nullptr);
+        return;
+    }
+    if (this->asRenderTargetProxy()->framebufferOnly()) {
         callback(context, nullptr);
         return;
     }

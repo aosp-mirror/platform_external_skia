@@ -33,6 +33,7 @@
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkMSAN.h"
+#include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixUtils.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkRasterClip.h"
@@ -1452,11 +1453,6 @@ void SkCanvas::translate(SkScalar dx, SkScalar dy) {
 }
 
 void SkCanvas::scale(SkScalar sx, SkScalar sy) {
-#ifdef SK_SUPPORT_LEGACY_CANVAS_MATRIX_VIRTUALS
-    SkMatrix m;
-    m.setScale(sx, sy);
-    this->concat(m);
-#else
     if (sx != 1 || sy != 1) {
         this->checkForDeferredSave();
         fMCRec->fMatrix.preScale(sx, sy);
@@ -1469,7 +1465,6 @@ void SkCanvas::scale(SkScalar sx, SkScalar sy) {
 
         this->didScale(sx, sy);
     }
-#endif
 }
 
 void SkCanvas::rotate(SkScalar degrees) {
@@ -1522,7 +1517,7 @@ void SkCanvas::experimental_concat44(const SkMatrix44& m) {
 }
 
 void SkCanvas::experimental_concat44(const SkM44& m) {
-    this->experimental_concat44(m.asColMajor());
+    this->experimental_concat44(SkMatrixPriv::M44ColMajor(m));
 }
 
 void SkCanvas::internalSetMatrix(const SkMatrix& matrix) {
