@@ -16,7 +16,12 @@ static SkM44 rotate_axis_angle(SkScalar x, SkScalar y, SkScalar z, SkScalar radi
     // SkM44 doesn't expose any rotation factories yet
     SkMatrix44 m;
     m.setRotateAboutUnit(x, y, z, radians);
-    return SkM44(m);
+
+    float a[16];
+    m.asColMajorf(a);
+    SkM44 m4;
+    m4.setColMajor(a);
+    return m4;
 }
 
 // Adapted from https://codepen.io/adamdupuis/pen/qLYzqB
