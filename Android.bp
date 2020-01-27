@@ -119,7 +119,6 @@ cc_library_static {
         "src/core/SkColorFilter_Matrix.cpp",
         "src/core/SkColorSpace.cpp",
         "src/core/SkColorSpaceXformSteps.cpp",
-        "src/core/SkCompressedDataUtils.cpp",
         "src/core/SkContourMeasure.cpp",
         "src/core/SkConvertPixels.cpp",
         "src/core/SkCpu.cpp",
