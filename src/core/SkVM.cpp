@@ -162,6 +162,8 @@ namespace skvm {
                 case Op::max_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::mad_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
 
+                case Op::sqrt_f32: write(o, V{id}, "=", op, V{x}); break;
+
                 case Op::add_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}); break;
                 case Op::sub_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}); break;
                 case Op::mul_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}); break;
@@ -284,6 +286,8 @@ namespace skvm {
                 case Op::min_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::max_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::mad_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
+
+                case Op::sqrt_f32: write(o, R{d}, "=", op, R{x}); break;
 
                 case Op::add_f32_imm: write(o, R{d}, "=", op, R{x}, Splat{immy}); break;
                 case Op::sub_f32_imm: write(o, R{d}, "=", op, R{x}, Splat{immy}); break;
@@ -620,6 +624,12 @@ namespace skvm {
         return {this->push(Op::mad_f32, x.id, y.id, z.id)};
     }
 
+    F32 Builder::sqrt(F32 x) {
+        float X;
+        if (this->allImm(x.id,&X)) { return this->splat(std::sqrt(X)); }
+        return {this->push(Op::sqrt_f32, x.id,NA,NA)};
+    }
+
     F32 Builder::min(F32 x, F32 y) {
         float X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(std::min(X,Y)); }
@@ -720,6 +730,10 @@ namespace skvm {
     I32 Builder::bit_and(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X&Y); }
+        if (this->isImm(y.id, 0)) { return this->splat(0); }   // (x & false) == false
+        if (this->isImm(x.id, 0)) { return this->splat(0); }   // (false & y) == false
+        if (this->isImm(y.id,~0)) { return x; }                // (x & true) == x
+        if (this->isImm(x.id,~0)) { return y; }                // (true & y) == y
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_and_imm, x.id,NA,NA, imm)}; }
@@ -730,6 +744,10 @@ namespace skvm {
     I32 Builder::bit_or(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X|Y); }
+        if (this->isImm(y.id, 0)) { return x; }                 // (x | false) == x
+        if (this->isImm(x.id, 0)) { return y; }                 // (false | y) == y
+        if (this->isImm(y.id,~0)) { return this->splat(~0); }   // (x | true) == true
+        if (this->isImm(x.id,~0)) { return this->splat(~0); }   // (true | y) == true
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_or_imm, x.id,NA,NA, imm)}; }
@@ -740,6 +758,8 @@ namespace skvm {
     I32 Builder::bit_xor(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X^Y); }
+        if (this->isImm(y.id, 0)) { return x; }   // (x ^ false) == x
+        if (this->isImm(x.id, 0)) { return y; }   // (false ^ y) == y
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_xor_imm, x.id,NA,NA, imm)}; }
@@ -750,6 +770,9 @@ namespace skvm {
     I32 Builder::bit_clear(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X&~Y); }
+        if (this->isImm(y.id, 0)) { return x; }                // (x & ~false) == x
+        if (this->isImm(y.id,~0)) { return this->splat(0); }   // (x & ~true) == false
+        if (this->isImm(x.id, 0)) { return this->splat(0); }   // (false & ~y) == false
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return this->bit_and(x, this->splat(~imm)); }
@@ -760,6 +783,7 @@ namespace skvm {
     I32 Builder::select(I32 x, I32 y, I32 z) {
         int X,Y,Z;
         if (this->allImm(x.id,&X, y.id,&Y, z.id,&Z)) { return this->splat(X?Y:Z); }
+        // TODO: some cases to reduce to bit_and when y == 0 or z == 0?
         return {this->push(Op::select, x.id, y.id, z.id)};
     }
 
@@ -1111,9 +1135,10 @@ namespace skvm {
 
     void Assembler::vmovdqa(Ymm dst, Ymm src) { this->op(0x66,0x0f,0x6f, dst,src); }
 
-    void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(0,   0x0f,0x5b, dst,x); }
+    void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(   0,0x0f,0x5b, dst,x); }
     void Assembler::vcvttps2dq(Ymm dst, Ymm x) { this->op(0xf3,0x0f,0x5b, dst,x); }
     void Assembler::vcvtps2dq (Ymm dst, Ymm x) { this->op(0x66,0x0f,0x5b, dst,x); }
+    void Assembler::vsqrtps   (Ymm dst, Ymm x) { this->op(   0,0x0f,0x51, dst,x); }
 
     Assembler::Label Assembler::here() {
         return { (int)this->size(), Label::NotYetSet, {} };
@@ -1777,6 +1802,8 @@ namespace skvm {
 
                     CASE(Op::mad_f32): r(d).f32 = r(x).f32 * r(y).f32 + r(z).f32; break;
 
+                    CASE(Op::sqrt_f32): r(d).f32 = sqrt(r(x).f32); break;
+
                     CASE(Op::add_i32): r(d).i32 = r(x).i32 + r(y).i32; break;
                     CASE(Op::sub_i32): r(d).i32 = r(x).i32 - r(y).i32; break;
                     CASE(Op::mul_i32): r(d).i32 = r(x).i32 * r(y).i32; break;
@@ -2349,6 +2376,7 @@ namespace skvm {
                                                                  a->vmovdqa    (dst(),r[x]);
                                                                  a->vfmadd132ps(dst(),r[z], r[y]); }
                                                                  break;
+                case Op::sqrt_f32: a->vsqrtps(dst(), r[x]); break;
 
                 case Op::add_f32_imm: a->vaddps(dst(), r[x], &constants[immy].label); break;
                 case Op::sub_f32_imm: a->vsubps(dst(), r[x], &constants[immy].label); break;
