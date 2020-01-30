@@ -71,10 +71,10 @@ static void test_image(const sk_sp<SkSpecialImage>& img, skiatest::Reporter* rep
     REPORTER_ASSERT(reporter, isGPUBacked == img->isTextureBacked());
 
     //--------------
-    // Test asTextureProxyRef - as long as there is a context this should succeed
+    // Test asSurfaceProxyViewRef - as long as there is a context this should succeed
     if (context) {
-        sk_sp<GrTextureProxy> proxy(img->asTextureProxyRef(context));
-        REPORTER_ASSERT(reporter, proxy);
+        GrSurfaceProxyView view = img->asSurfaceProxyViewRef(context);
+        REPORTER_ASSERT(reporter, view.asTextureProxy());
     }
 
     //--------------
@@ -229,11 +229,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_MakeTexture, reporter, ctxInfo) 
             return;
         }
 
+        GrSurfaceOrigin origin = proxy->origin();
+        GrSwizzle swizzle = proxy->textureSwizzle();
+        GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
+
         sk_sp<SkSpecialImage> gpuImage(SkSpecialImage::MakeDeferredFromGpu(
                                                             context,
                                                             SkIRect::MakeWH(kFullSize, kFullSize),
                                                             kNeedNewImageUniqueID_SpecialImage,
-                                                            std::move(proxy),
+                                                            std::move(view),
                                                             grCT,
                                                             nullptr));
 
@@ -260,11 +264,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_Gpu, reporter, ctxInfo) {
         return;
     }
 
+    GrSurfaceOrigin origin = proxy->origin();
+    GrSwizzle swizzle = proxy->textureSwizzle();
+    GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
+
     sk_sp<SkSpecialImage> fullSImg(SkSpecialImage::MakeDeferredFromGpu(
                                                             context,
                                                             SkIRect::MakeWH(kFullSize, kFullSize),
                                                             kNeedNewImageUniqueID_SpecialImage,
-                                                            proxy,
+                                                            view,
                                                             grCT,
                                                             nullptr));
 
@@ -274,7 +282,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_Gpu, reporter, ctxInfo) {
         sk_sp<SkSpecialImage> subSImg1(SkSpecialImage::MakeDeferredFromGpu(
                                                                context, subset,
                                                                kNeedNewImageUniqueID_SpecialImage,
-                                                               std::move(proxy),
+                                                               std::move(view),
                                                                grCT,
                                                                nullptr));
         test_image(subSImg1, reporter, context, true);
