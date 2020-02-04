@@ -378,7 +378,7 @@ DEF_TEST(SkVM_gathers, r) {
         b.store8 (buf8 , b.gather8 (uniforms,0, b.bit_and(x, b.splat(31))));
     }
 
-    test_interpreter_only(r, b.done(), [&](const skvm::Program& program) {
+    test_jit_and_interpreter(r, b.done(), [&](const skvm::Program& program) {
         const int img[] = {12,34,56,78, 90,98,76,54};
 
         constexpr int N = 20;
@@ -816,6 +816,75 @@ DEF_TEST(SkVM_assert, r) {
     });
 }
 
+DEF_TEST(SkVM_premul, reporter) {
+    // Test that premul is short-circuited when alpha is known opaque.
+    {
+        skvm::Builder p;
+        auto rptr = p.varying<int>(),
+             aptr = p.varying<int>();
+
+        skvm::F32 r = p.bit_cast(p.load32(rptr)),
+                  g = p.splat(0.0f),
+                  b = p.splat(0.0f),
+                  a = p.bit_cast(p.load32(aptr));
+
+        p.premul(&r, &g, &b, a);
+        p.store32(rptr, p.bit_cast(r));
+
+        // load red, load alpha, red *= alpha, store red
+        REPORTER_ASSERT(reporter, p.done().instructions().size() == 4);
+    }
+
+    {
+        skvm::Builder p;
+        auto rptr = p.varying<int>();
+
+        skvm::F32 r = p.bit_cast(p.load32(rptr)),
+                  g = p.splat(0.0f),
+                  b = p.splat(0.0f),
+                  a = p.splat(1.0f);
+
+        p.premul(&r, &g, &b, a);
+        p.store32(rptr, p.bit_cast(r));
+
+        // load red, store red
+        REPORTER_ASSERT(reporter, p.done().instructions().size() == 2);
+    }
+
+    // Same deal for unpremul.
+    {
+        skvm::Builder p;
+        auto rptr = p.varying<int>(),
+             aptr = p.varying<int>();
+
+        skvm::F32 r = p.bit_cast(p.load32(rptr)),
+                  g = p.splat(0.0f),
+                  b = p.splat(0.0f),
+                  a = p.bit_cast(p.load32(aptr));
+
+        p.unpremul(&r, &g, &b, a);
+        p.store32(rptr, p.bit_cast(r));
+
+        // load red, load alpha, a bunch of unpremul instructions, store red
+        REPORTER_ASSERT(reporter, p.done().instructions().size() >= 4);
+    }
+
+    {
+        skvm::Builder p;
+        auto rptr = p.varying<int>();
+
+        skvm::F32 r = p.bit_cast(p.load32(rptr)),
+                  g = p.splat(0.0f),
+                  b = p.splat(0.0f),
+                  a = p.splat(1.0f);
+
+        p.unpremul(&r, &g, &b, a);
+        p.store32(rptr, p.bit_cast(r));
+
+        // load red, store red
+        REPORTER_ASSERT(reporter, p.done().instructions().size() == 2);
+    }
+}
 
 template <typename Fn>
 static void test_asm(skiatest::Reporter* r, Fn&& fn, std::initializer_list<uint8_t> expected) {

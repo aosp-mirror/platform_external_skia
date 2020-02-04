@@ -286,7 +286,7 @@ namespace skvm {
         M(store8)   M(store16)   M(store32)   \
         M(index)                              \
         M(load8)    M(load16)    M(load32)    \
-        M(gather8)  M(gather16)  M(gather32)  \
+                                 M(gather32)  \
         M(uniform8) M(uniform16) M(uniform32) \
         M(splat)                              \
         M(add_f32) M(add_i32) M(add_i16x2)    \
@@ -533,8 +533,8 @@ namespace skvm {
         I32 pack   (I32 x, I32 y, int bits);   // x | (y << bits), assuming (x & (y << bits)) == 0
 
         // Common idioms used in several places, worth centralizing for consistency.
-        F32 unorm(int bits, I32);   // E.g. unorm(8, x) -> x * (1/255.0f)
-        I32 unorm(int bits, F32);   // E.g. unorm(8, f) -> round(x * 255)
+        F32 from_unorm(int bits, I32);   // E.g. from_unorm(8, x) -> x * (1/255.0f)
+        I32   to_unorm(int bits, F32);   // E.g.   to_unorm(8, x) -> round(x * 255)
 
         Color unpack_8888(I32 rgba);
         Color unpack_565 (I32 bgr );  // bottom 16 bits
