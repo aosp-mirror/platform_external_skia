@@ -120,9 +120,9 @@ namespace {
                 const SkShaderBase* shader = as_SB(params.shader);
                 skvm::Builder p;
 
-                skvm::I32 dx = p.sub(p.uniform32(uniforms->ptr, offsetof(BlitterUniforms, right)),
+                skvm::I32 dx = p.sub(p.uniform32(uniforms->base, offsetof(BlitterUniforms, right)),
                                      p.index()),
-                          dy = p.uniform32(uniforms->ptr, offsetof(BlitterUniforms, y));
+                          dy = p.uniform32(uniforms->base, offsetof(BlitterUniforms, y));
                 skvm::F32 x = p.add(p.to_f32(dx), p.splat(0.5f)),
                           y = p.add(p.to_f32(dy), p.splat(0.5f));
 
@@ -167,7 +167,7 @@ namespace {
 
         Builder(const Params& params, skvm::Uniforms* uniforms, SkArenaAlloc* alloc) {
             // First two arguments are always uniforms and the destination buffer.
-            uniforms->ptr     = uniform();
+            uniforms->base    = uniform();
             skvm::Arg dst_ptr = arg(SkColorTypeBytesPerPixel(params.colorType));
             // Other arguments depend on params.coverage:
             //    - Full:      (no more arguments)
@@ -176,9 +176,9 @@ namespace {
             //    - MaskLCD16: 565 coverage varying
             //    - UniformA8: 8-bit coverage uniform
 
-            skvm::I32 dx = sub(uniform32(uniforms->ptr, offsetof(BlitterUniforms, right)),
+            skvm::I32 dx = sub(uniform32(uniforms->base, offsetof(BlitterUniforms, right)),
                                index()),
-                      dy = uniform32(uniforms->ptr, offsetof(BlitterUniforms, y));
+                      dy = uniform32(uniforms->base, offsetof(BlitterUniforms, y));
             skvm::F32 x = add(to_f32(dx), splat(0.5f)),
                       y = add(to_f32(dy), splat(0.5f));
 
@@ -386,7 +386,7 @@ namespace {
     struct NoopColorFilter : public SkColorFilter {
         bool onProgram(skvm::Builder*,
                        SkColorSpace*,
-                       skvm::Uniforms*,
+                       skvm::Uniforms*, SkArenaAlloc*,
                        skvm::F32*, skvm::F32*, skvm::F32*, skvm::F32*) const override {
             return true;
         }
@@ -695,10 +695,12 @@ skvm::Color skvm::BlendModeProgram(skvm::Builder* p,
         };
 
         case SkBlendMode::kScreen: return {
-            p->sub(p->add(src.r, dst.r), p->mul(src.r, dst.r)),
-            p->sub(p->add(src.g, dst.g), p->mul(src.g, dst.g)),
-            p->sub(p->add(src.b, dst.b), p->mul(src.b, dst.b)),
-            p->sub(p->add(src.a, dst.a), p->mul(src.a, dst.a)),
+            // (s+d)-(s*d) gave us trouble with our "r,g,b <= after blending" asserts.
+            // It's kind of plausible that s + (d - sd) keeps more precision?
+            p->add(src.r, p->sub(dst.r, p->mul(src.r, dst.r))),
+            p->add(src.g, p->sub(dst.g, p->mul(src.g, dst.g))),
+            p->add(src.b, p->sub(dst.b, p->mul(src.b, dst.b))),
+            p->add(src.a, p->sub(dst.a, p->mul(src.a, dst.a))),
         };
     }
 }
