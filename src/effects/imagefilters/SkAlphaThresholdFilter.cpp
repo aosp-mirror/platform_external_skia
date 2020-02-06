@@ -149,7 +149,7 @@ sk_sp<SkSpecialImage> SkAlphaThresholdFilterImpl::onFilterImage(const Context& c
     if (ctx.gpuBacked()) {
         auto context = ctx.getContext();
 
-        GrSurfaceProxyView inputView = (input->asSurfaceProxyViewRef(context));
+        GrSurfaceProxyView inputView = (input->view(context));
         SkASSERT(inputView.asTextureProxy());
         const GrProtected isProtected = inputView.proxy()->isProtected();
 
@@ -167,7 +167,7 @@ sk_sp<SkSpecialImage> SkAlphaThresholdFilterImpl::onFilterImage(const Context& c
         }
 
         auto textureFP = GrTextureEffect::Make(
-                inputView.detachProxy(), input->alphaType(),
+                std::move(inputView), input->alphaType(),
                 SkMatrix::MakeTrans(input->subset().x(), input->subset().y()));
         textureFP = GrColorSpaceXformEffect::Make(std::move(textureFP), input->getColorSpace(),
                                                   input->alphaType(), ctx.colorSpace());

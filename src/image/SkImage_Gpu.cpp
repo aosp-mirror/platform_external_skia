@@ -94,8 +94,7 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(GrRecordingContext* con
 
     GrPaint paint;
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    sk_sp<GrTextureProxy> proxy = this->asTextureProxyRef(context);
-    paint.addColorFragmentProcessor(GrTextureEffect::Make(std::move(proxy), this->alphaType()));
+    paint.addColorFragmentProcessor(GrTextureEffect::Make(*this->view(context), this->alphaType()));
     if (xform) {
         paint.addColorFragmentProcessor(std::move(xform));
     }
@@ -434,13 +433,12 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, GrMipMapped mipMapp
             return nullptr;
         }
 
-        GrSurfaceProxyView view = as_IB(this)->asSurfaceProxyViewRef(context);
-        SkASSERT(view.asTextureProxy());
-        if (GrMipMapped::kNo == mipMapped || view.asTextureProxy()->mipMapped() == mipMapped) {
+        const GrSurfaceProxyView* view = as_IB(this)->view(context);
+        SkASSERT(view && view->asTextureProxy());
+        if (GrMipMapped::kNo == mipMapped || view->asTextureProxy()->mipMapped() == mipMapped) {
             return sk_ref_sp(const_cast<SkImage*>(this));
         }
-        GrTextureAdjuster adjuster(context, std::move(view), this->imageInfo().colorInfo(),
-                                   this->uniqueID());
+        GrTextureAdjuster adjuster(context, *view, this->imageInfo().colorInfo(), this->uniqueID());
         return create_image_from_producer(context, &adjuster, this->uniqueID(), mipMapped);
     }
 

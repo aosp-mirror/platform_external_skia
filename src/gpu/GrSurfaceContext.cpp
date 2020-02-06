@@ -218,8 +218,8 @@ bool GrSurfaceContext::readPixels(const GrImageInfo& origDstInfo, void* dst, siz
 
         std::unique_ptr<GrFragmentProcessor> fp;
         if (canvas2DFastPath) {
-            fp = direct->priv().createPMToUPMEffect(GrTextureEffect::Make(
-                    sk_ref_sp(srcProxy->asTextureProxy()), this->colorInfo().alphaType()));
+            fp = direct->priv().createPMToUPMEffect(
+                    GrTextureEffect::Make(this->readSurfaceView(), this->colorInfo().alphaType()));
             if (dstInfo.colorType() == GrColorType::kBGRA_8888) {
                 fp = GrFragmentProcessor::SwizzleOutput(std::move(fp), GrSwizzle::BGRA());
                 dstInfo = dstInfo.makeColorType(GrColorType::kRGBA_8888);
@@ -229,8 +229,7 @@ bool GrSurfaceContext::readPixels(const GrImageInfo& origDstInfo, void* dst, siz
             // double unpremul.
             dstInfo = dstInfo.makeAlphaType(kPremul_SkAlphaType);
         } else {
-            fp = GrTextureEffect::Make(sk_ref_sp(srcProxy->asTextureProxy()),
-                                       this->colorInfo().alphaType());
+            fp = GrTextureEffect::Make(this->readSurfaceView(), this->colorInfo().alphaType());
         }
         if (!fp) {
             return false;
@@ -397,7 +396,7 @@ bool GrSurfaceContext::writePixels(const GrImageInfo& origSrcInfo, const void* s
         }
         SkASSERT(tempProxy->textureSwizzle() == tempReadSwizzle);
         GrSurfaceProxyView tempView(tempProxy, tempOrigin, tempReadSwizzle);
-        GrSurfaceContext tempCtx(direct, std::move(tempView), colorType, alphaType,
+        GrSurfaceContext tempCtx(direct, tempView, colorType, alphaType,
                                  this->colorInfo().refColorSpace());
 
         // In the fast path we always write the srcData to the temp context as though it were RGBA.
@@ -415,13 +414,13 @@ bool GrSurfaceContext::writePixels(const GrImageInfo& origSrcInfo, const void* s
             std::unique_ptr<GrFragmentProcessor> fp;
             if (canvas2DFastPath) {
                 fp = direct->priv().createUPMToPMEffect(
-                        GrTextureEffect::Make(std::move(tempProxy), alphaType));
+                        GrTextureEffect::Make(std::move(tempView), alphaType));
                 // Important: check the original src color type here!
                 if (origSrcInfo.colorType() == GrColorType::kBGRA_8888) {
                     fp = GrFragmentProcessor::SwizzleOutput(std::move(fp), GrSwizzle::BGRA());
                 }
             } else {
-                fp = GrTextureEffect::Make(std::move(tempProxy), alphaType);
+                fp = GrTextureEffect::Make(std::move(tempView), alphaType);
             }
             if (!fp) {
                 return false;
@@ -651,10 +650,9 @@ std::unique_ptr<GrRenderTargetContext> GrSurfaceContext::rescale(
             if (srcW != texView.proxy()->width() || srcH != texView.proxy()->height()) {
                 auto domain = GrTextureDomain::MakeTexelDomain(
                         SkIRect::MakeXYWH(srcX, srcY, srcW, srcH), GrTextureDomain::kClamp_Mode);
-                fp = GrBicubicEffect::Make(texView.detachProxy(), matrix, domain, dir,
-                                           prevAlphaType);
+                fp = GrBicubicEffect::Make(std::move(texView), matrix, domain, dir, prevAlphaType);
             } else {
-                fp = GrBicubicEffect::Make(texView.detachProxy(), matrix, dir, prevAlphaType);
+                fp = GrBicubicEffect::Make(std::move(texView), matrix, dir, prevAlphaType);
             }
             if (xform) {
                 fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(xform));
