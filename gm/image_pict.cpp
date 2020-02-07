@@ -176,7 +176,10 @@ public:
             surface->getCanvas()->translate(-100, -100);
             surface->getCanvas()->drawPicture(pic);
             sk_sp<SkImage> image(surface->makeImageSnapshot());
-            fView = as_IB(image)->asSurfaceProxyViewRef(fCtx.get());
+            const GrSurfaceProxyView* view = as_IB(image)->view(fCtx.get());
+            if (view) {
+                fView = *view;
+            }
         }
     }
 protected:
@@ -186,7 +189,7 @@ protected:
         SkASSERT(ctx);
         SkASSERT(ctx == fCtx.get());
 
-        if (!fView.proxy()) {
+        if (!fView) {
             return {};
         }
 
@@ -270,9 +273,9 @@ protected:
     }
 
     static void draw_as_tex(SkCanvas* canvas, SkImage* image, SkScalar x, SkScalar y) {
-        sk_sp<GrTextureProxy> proxy(as_IB(image)->asTextureProxyRef(
-                canvas->getGrContext(), GrSamplerState::Filter::kBilerp, nullptr));
-        if (!proxy) {
+        GrSurfaceProxyView view = as_IB(image)->refView(canvas->getGrContext(),
+                                                        GrSamplerState::Filter::kBilerp, nullptr);
+        if (!view) {
             // show placeholder if we have no texture
             SkPaint paint;
             paint.setStyle(SkPaint::kStroke_Style);
@@ -283,12 +286,6 @@ protected:
             canvas->drawLine(r.left(), r.bottom(), r.right(), r.top(), paint);
             return;
         }
-
-        // TODO: The asTextureProxyRef which takes a sampler and adjust needs to return a
-        // GrSurfaceProxyView instead. For now we just grab the info off the proxy.
-        GrSurfaceOrigin origin = proxy->origin();
-        const GrSwizzle& swizzle = proxy->textureSwizzle();
-        GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
 
         // No API to draw a GrTexture directly, so we cheat and create a private image subclass
         sk_sp<SkImage> texImage(new SkImage_Gpu(sk_ref_sp(canvas->getGrContext()),

@@ -53,10 +53,10 @@ static float poly_eval(float A, float B, float C, float D, float t) {
  *  our promise. Hence we have a custom joiner that doesn't look at emptiness
  */
 static void joinNoEmptyChecks(SkRect* dst, const SkRect& src) {
-    dst->fLeft = SkMinScalar(dst->fLeft, src.fLeft);
-    dst->fTop = SkMinScalar(dst->fTop, src.fTop);
-    dst->fRight = SkMaxScalar(dst->fRight, src.fRight);
-    dst->fBottom = SkMaxScalar(dst->fBottom, src.fBottom);
+    dst->fLeft = std::min(dst->fLeft, src.fLeft);
+    dst->fTop = std::min(dst->fTop, src.fTop);
+    dst->fRight = std::max(dst->fRight, src.fRight);
+    dst->fBottom = std::max(dst->fBottom, src.fBottom);
 }
 
 static bool is_degenerate(const SkPath& path) {
@@ -479,7 +479,7 @@ int SkPath::getPoints(SkPoint dst[], int max) const {
 
     SkASSERT(max >= 0);
     SkASSERT(!max || dst);
-    int count = SkMin32(max, fPathRef->countPoints());
+    int count = std::min(max, fPathRef->countPoints());
     sk_careful_memcpy(dst, fPathRef->points(), count * sizeof(SkPoint));
     return fPathRef->countPoints();
 }
@@ -500,7 +500,7 @@ int SkPath::getVerbs(uint8_t dst[], int max) const {
 
     SkASSERT(max >= 0);
     SkASSERT(!max || dst);
-    int count = SkMin32(max, fPathRef->countVerbs());
+    int count = std::min(max, fPathRef->countVerbs());
     if (count) {
         memcpy(dst, fPathRef->verbsBegin(), count);
     }
@@ -577,11 +577,11 @@ uint8_t SkPath::getFirstDirection() const {
 //////////////////////////////////////////////////////////////////////////////
 //  Construction methods
 
-#define DIRTY_AFTER_EDIT                                               \
-    do {                                                               \
-        this->setConvexityType(SkPathConvexityType::kUnknown);         \
-        this->setFirstDirection(SkPathPriv::kUnknown_FirstDirection);  \
-    } while (0)
+SkPath& SkPath::dirtyAfterEdit() {
+    this->setConvexityType(SkPathConvexityType::kUnknown);
+    this->setFirstDirection(SkPathPriv::kUnknown_FirstDirection);
+    return *this;
+}
 
 void SkPath::incReserve(int inc) {
     SkDEBUGCODE(this->validate();)
@@ -601,8 +601,7 @@ SkPath& SkPath::moveTo(SkScalar x, SkScalar y) {
 
     ed.growForVerb(kMove_Verb)->set(x, y);
 
-    DIRTY_AFTER_EDIT;
-    return *this;
+    return this->dirtyAfterEdit();
 }
 
 SkPath& SkPath::rMoveTo(SkScalar x, SkScalar y) {
@@ -633,8 +632,7 @@ SkPath& SkPath::lineTo(SkScalar x, SkScalar y) {
     SkPathRef::Editor ed(&fPathRef);
     ed.growForVerb(kLine_Verb)->set(x, y);
 
-    DIRTY_AFTER_EDIT;
-    return *this;
+    return this->dirtyAfterEdit();
 }
 
 SkPath& SkPath::rLineTo(SkScalar x, SkScalar y) {
@@ -654,8 +652,7 @@ SkPath& SkPath::quadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
     pts[0].set(x1, y1);
     pts[1].set(x2, y2);
 
-    DIRTY_AFTER_EDIT;
-    return *this;
+    return this->dirtyAfterEdit();
 }
 
 SkPath& SkPath::rQuadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
@@ -685,7 +682,7 @@ SkPath& SkPath::conicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
         pts[0].set(x1, y1);
         pts[1].set(x2, y2);
 
-        DIRTY_AFTER_EDIT;
+        (void)this->dirtyAfterEdit();
     }
     return *this;
 }
@@ -710,8 +707,7 @@ SkPath& SkPath::cubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
     pts[1].set(x2, y2);
     pts[2].set(x3, y3);
 
-    DIRTY_AFTER_EDIT;
-    return *this;
+    return this->dirtyAfterEdit();
 }
 
 SkPath& SkPath::rCubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
@@ -819,7 +815,7 @@ SkPath& SkPath::addPoly(const SkPoint pts[], int count, bool close) {
         fLastMoveToIndex ^= ~fLastMoveToIndex >> (8 * sizeof(fLastMoveToIndex) - 1);
     }
 
-    DIRTY_AFTER_EDIT;
+    (void)this->dirtyAfterEdit();
     SkDEBUGCODE(this->validate();)
     return *this;
 }
@@ -2529,8 +2525,8 @@ template <size_t N> static void find_minmax(const SkPoint pts[],
     SkScalar min, max;
     min = max = pts[0].fX;
     for (size_t i = 1; i < N; ++i) {
-        min = SkMinScalar(min, pts[i].fX);
-        max = SkMaxScalar(max, pts[i].fX);
+        min = std::min(min, pts[i].fX);
+        max = std::max(max, pts[i].fX);
     }
     *minPtr = min;
     *maxPtr = max;

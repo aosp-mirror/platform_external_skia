@@ -71,9 +71,9 @@ static void test_image(const sk_sp<SkSpecialImage>& img, skiatest::Reporter* rep
     REPORTER_ASSERT(reporter, isGPUBacked == img->isTextureBacked());
 
     //--------------
-    // Test asSurfaceProxyViewRef - as long as there is a context this should succeed
+    // Test view - as long as there is a context this should succeed
     if (context) {
-        GrSurfaceProxyView view = img->asSurfaceProxyViewRef(context);
+        GrSurfaceProxyView view = img->view(context);
         REPORTER_ASSERT(reporter, view.asTextureProxy());
     }
 
@@ -224,7 +224,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_MakeTexture, reporter, ctxInfo) 
     {
         // gpu
         GrBitmapTextureMaker maker(context, bm);
-        auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+        auto[view, grCT] = maker.view(GrMipMapped::kNo);
         if (!view.proxy()) {
             return;
         }
@@ -255,7 +255,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_Gpu, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
     SkBitmap bm = create_bm();
     GrBitmapTextureMaker maker(context, bm);
-    auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+    auto[view, grCT] = maker.view(GrMipMapped::kNo);
     if (!view.proxy()) {
         return;
     }

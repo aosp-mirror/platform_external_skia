@@ -65,9 +65,13 @@ GrSurfaceProxyView GrYUVAImageTextureMaker::refOriginalTextureProxyView(
     }
 
     if (willBeMipped) {
-        return fImage->asMippedTextureProxyViewRef(this->context());
+        return fImage->refMippedView(this->context());
     } else {
-        return fImage->asSurfaceProxyViewRef(this->context());
+        if (const GrSurfaceProxyView* view = fImage->view(this->context())) {
+            return *view;
+        } else {
+            return {};
+        }
     }
 }
 
@@ -115,7 +119,7 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProc
     }
 
     const auto& caps = *fImage->context()->priv().caps();
-    auto fp = GrYUVtoRGBEffect::Make(fImage->fProxies, fImage->fYUVAIndices, fImage->fYUVColorSpace,
+    auto fp = GrYUVtoRGBEffect::Make(fImage->fViews, fImage->fYUVAIndices, fImage->fYUVColorSpace,
                                      filter, caps, textureMatrix, domain);
     if (fImage->fFromColorSpace) {
         fp = GrColorSpaceXformEffect::Make(std::move(fp), fImage->fFromColorSpace.get(),
