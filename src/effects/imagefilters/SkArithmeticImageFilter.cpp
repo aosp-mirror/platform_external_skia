@@ -36,8 +36,8 @@ uniform float4 k;
 in bool enforcePMColor;
 in fragmentProcessor child;
 
-void main(inout half4 color) {
-    half4 dst = sample(child);
+void main(float x, float y, inout half4 color) {
+    half4 dst = sample(child, float2(x, y));
     color = saturate(half(k.x) * color * dst + half(k.y) * color + half(k.z) * dst + half(k.w));
     @if (enforcePMColor) {
         color.rgb = min(color.rgb, color.a);
@@ -196,7 +196,7 @@ static bool intersect(SkPixmap* dst, SkPixmap* src, int srcDx, int srcDy) {
                     dst->addr(sect.fLeft, sect.fTop),
                     dst->rowBytes());
     *src = SkPixmap(src->info().makeDimensions(sect.size()),
-                    src->addr(SkTMax(0, -srcDx), SkTMax(0, -srcDy)),
+                    src->addr(std::max(0, -srcDx), std::max(0, -srcDy)),
                     src->rowBytes());
     return true;
 }
