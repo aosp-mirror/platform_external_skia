@@ -555,7 +555,7 @@ static void apply_morphology_pass(GrRenderTargetContext* renderTargetContext,
 static sk_sp<SkSpecialImage> apply_morphology(
         GrRecordingContext* context, SkSpecialImage* input, const SkIRect& rect,
         MorphType morphType, SkISize radius, const SkImageFilter_Base::Context& ctx) {
-    GrSurfaceProxyView srcView = input->asSurfaceProxyViewRef(context);
+    GrSurfaceProxyView srcView = input->view(context);
     SkAlphaType srcAlphaType = input->alphaType();
     SkASSERT(srcView.asTextureProxy());
     sk_sp<SkColorSpace> colorSpace = ctx.refColorSpace();
@@ -624,7 +624,7 @@ namespace {
         const int dstStrideX = direction == MorphDirection::kX ? 1 : dstStride;
         const int srcStrideY = direction == MorphDirection::kX ? srcStride : 1;
         const int dstStrideY = direction == MorphDirection::kX ? dstStride : 1;
-        radius = SkMin32(radius, width - 1);
+        radius = std::min(radius, width - 1);
         const SkPMColor* upperSrc = src + radius * srcStrideX;
         for (int x = 0; x < width; ++x) {
             const SkPMColor* lp = src;
@@ -657,7 +657,7 @@ namespace {
         const int dstStrideX = direction == MorphDirection::kX ? 1 : dstStride;
         const int srcStrideY = direction == MorphDirection::kX ? srcStride : 1;
         const int dstStrideY = direction == MorphDirection::kX ? dstStride : 1;
-        radius = SkMin32(radius, width - 1);
+        radius = std::min(radius, width - 1);
         const SkPMColor* upperSrc = src + radius * srcStrideX;
         for (int x = 0; x < width; ++x) {
             const SkPMColor* lp = src;
@@ -689,7 +689,7 @@ namespace {
         const int dstStrideX = direction == MorphDirection::kX ? 1 : dstStride;
         const int srcStrideY = direction == MorphDirection::kX ? srcStride : 1;
         const int dstStrideY = direction == MorphDirection::kX ? dstStride : 1;
-        radius = SkMin32(radius, width - 1);
+        radius = std::min(radius, width - 1);
         const SkPMColor* upperSrc = src + radius * srcStrideX;
         for (int x = 0; x < width; ++x) {
             const SkPMColor* lp = src;

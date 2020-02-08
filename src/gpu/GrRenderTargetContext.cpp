@@ -685,7 +685,8 @@ GrRenderTargetContext::QuadOptimization GrRenderTargetContext::attemptQuadOptimi
         if (clipRRect.isRect()) {
             // No rounded corners, so the kClear and kExplicitClip optimizations are possible
             if (GrQuadUtils::CropToRect(clipBounds, clipAA, &newFlags, deviceQuad, localQuad)) {
-                if (constColor && deviceQuad->quadType() == GrQuad::Type::kAxisAligned) {
+                if (!stencilSettings && constColor &&
+                    deviceQuad->quadType() == GrQuad::Type::kAxisAligned) {
                     // Clear optimization is possible
                     drawBounds = deviceQuad->bounds();
                     if (drawBounds.contains(rtRect)) {
@@ -722,7 +723,7 @@ GrRenderTargetContext::QuadOptimization GrRenderTargetContext::attemptQuadOptimi
                 // the clip entirely
                 return QuadOptimization::kCropped;
             }
-        } else if (constColor) {
+        } else if (!stencilSettings && constColor) {
             // Rounded corners and constant filled color (limit ourselves to solid colors because
             // there is no way to use custom local coordinates with drawRRect).
             if (GrQuadUtils::CropToRect(clipBounds, clipAA, &newFlags, deviceQuad, localQuad) &&
@@ -1876,6 +1877,7 @@ void GrRenderTargetContext::asyncReadPixels(const SkIRect& rect, SkColorType col
 
         if (!this->readPixels(ii, pm.writable_addr(), pm.rowBytes(), {rect.fLeft, rect.fTop})) {
             callback(context, nullptr);
+            return;
         }
         callback(context, std::move(result));
         return;
@@ -2035,7 +2037,7 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
     std::copy_n(baseM + 0, 5, yM + 15);
     GrPaint yPaint;
     yPaint.addColorFragmentProcessor(
-            GrTextureEffect::Make(srcView.proxyRef(), this->colorInfo().alphaType(), texMatrix));
+            GrTextureEffect::Make(srcView, this->colorInfo().alphaType(), texMatrix));
     auto yFP = GrColorMatrixFragmentProcessor::Make(yM, false, true, false);
     yPaint.addColorFragmentProcessor(std::move(yFP));
     yPaint.setPorterDuffXPFactory(SkBlendMode::kSrc);
@@ -2057,8 +2059,7 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
     std::copy_n(baseM + 5, 5, uM + 15);
     GrPaint uPaint;
     uPaint.addColorFragmentProcessor(GrTextureEffect::Make(
-            srcView.proxyRef(), this->colorInfo().alphaType(), texMatrix,
-            GrSamplerState::Filter::kBilerp));
+            srcView, this->colorInfo().alphaType(), texMatrix, GrSamplerState::Filter::kBilerp));
     auto uFP = GrColorMatrixFragmentProcessor::Make(uM, false, true, false);
     uPaint.addColorFragmentProcessor(std::move(uFP));
     uPaint.setPorterDuffXPFactory(SkBlendMode::kSrc);
@@ -2078,9 +2079,9 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
     std::fill_n(vM, 15, 0.f);
     std::copy_n(baseM + 10, 5, vM + 15);
     GrPaint vPaint;
-    vPaint.addColorFragmentProcessor(GrTextureEffect::Make(
-            srcView.detachProxy(), this->colorInfo().alphaType(), texMatrix,
-            GrSamplerState::Filter::kBilerp));
+    vPaint.addColorFragmentProcessor(GrTextureEffect::Make(std::move(srcView),
+                                                           this->colorInfo().alphaType(), texMatrix,
+                                                           GrSamplerState::Filter::kBilerp));
     auto vFP = GrColorMatrixFragmentProcessor::Make(vM, false, true, false);
     vPaint.addColorFragmentProcessor(std::move(vFP));
     vPaint.setPorterDuffXPFactory(SkBlendMode::kSrc);
@@ -2627,7 +2628,11 @@ bool GrRenderTargetContext::blitTexture(GrTextureProxy* src, const SkIRect& srcR
 
     GrPaint paint;
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    auto fp = GrTextureEffect::Make(sk_ref_sp(src), kUnknown_SkAlphaType);
+
+    GrSurfaceOrigin origin = src->origin();
+    GrSwizzle swizzle = src->textureSwizzle();
+    GrSurfaceProxyView view(sk_ref_sp(src), origin, swizzle);
+    auto fp = GrTextureEffect::Make(std::move(view), kUnknown_SkAlphaType);
     if (!fp) {
         return false;
     }

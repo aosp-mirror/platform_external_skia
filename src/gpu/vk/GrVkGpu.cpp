@@ -2166,17 +2166,17 @@ bool GrVkGpu::onFinishFlush(GrSurfaceProxy* proxies[], int n,
             continue;
         }
         SkImage_GpuBase* gpuImage = static_cast<SkImage_GpuBase*>(as_IB(image));
-        sk_sp<GrTextureProxy> proxy = gpuImage->asTextureProxyRef(this->getContext());
-        SkASSERT(proxy);
+        const GrSurfaceProxyView* view = gpuImage->view(this->getContext());
+        SkASSERT(view && *view);
 
-        if (!proxy->isInstantiated()) {
+        if (!view->proxy()->isInstantiated()) {
             auto resourceProvider = this->getContext()->priv().resourceProvider();
-            if (!proxy->instantiate(resourceProvider)) {
+            if (!view->proxy()->instantiate(resourceProvider)) {
                 continue;
             }
         }
 
-        GrTexture* tex = proxy->peekTexture();
+        GrTexture* tex = view->proxy()->peekTexture();
         if (!tex) {
             continue;
         }
@@ -2561,8 +2561,6 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
         return false;
     }
     void* mappedMemory = transferBuffer->map();
-    const GrVkAlloc& transAlloc = transferBuffer->alloc();
-    GrVkMemory::InvalidateMappedAlloc(this, transAlloc, 0, transAlloc.fSize);
 
     if (copyFromOrigin) {
         uint32_t skipRows = region.imageExtent.height - height;

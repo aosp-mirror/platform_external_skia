@@ -238,15 +238,14 @@ bool SkImage_Lazy::onIsValid(GrContext* context) const {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
-sk_sp<GrTextureProxy> SkImage_Lazy::asTextureProxyRef(GrRecordingContext* context,
-                                                      GrSamplerState params,
-                                                      SkScalar scaleAdjust[2]) const {
+GrSurfaceProxyView SkImage_Lazy::refView(GrRecordingContext* context, GrSamplerState params,
+                                         SkScalar scaleAdjust[2]) const {
     if (!context) {
-        return nullptr;
+        return {};
     }
 
     GrImageTextureMaker textureMaker(context, this, kAllow_CachingHint);
-    return textureMaker.refTextureProxyViewForParams(params, scaleAdjust).asTextureProxyRef();
+    return textureMaker.viewForParams(params, scaleAdjust);
 }
 #endif
 
@@ -530,8 +529,7 @@ GrSurfaceProxyView SkImage_Lazy::lockTextureProxyView(
     if (!view.proxy() && this->getROPixels(&bitmap, chint)) {
         GrBitmapTextureMaker bitmapMaker(ctx, bitmap);
         std::tie(view, std::ignore) =
-                bitmapMaker.refTextureProxyView(willBeMipped ? GrMipMapped::kYes
-                                                             : GrMipMapped::kNo);
+                bitmapMaker.view(willBeMipped ? GrMipMapped::kYes : GrMipMapped::kNo);
         GrTextureProxy* proxy = view.asTextureProxy();
         if (proxy && (!willBeMipped || GrMipMapped::kYes == proxy->mipMapped())) {
             SK_HISTOGRAM_ENUMERATION("LockTexturePath", kRGBA_LockTexturePath,

@@ -61,7 +61,7 @@ GrSurfaceProxyView GrTextureProducer::CopyOnGpu(GrRecordingContext* context,
 
     GrSamplerState sampler(GrSamplerState::WrapMode::kClamp, copyParams.fFilter);
     auto boundsRect = SkIRect::MakeSize(proxy->dimensions());
-    auto fp = GrTextureEffect::MakeTexelSubset(inputView.detachProxy(), kUnknown_SkAlphaType,
+    auto fp = GrTextureEffect::MakeTexelSubset(std::move(inputView), kUnknown_SkAlphaType,
                                                SkMatrix::I(), sampler, boundsRect, localRect, caps);
     paint.addColorFragmentProcessor(std::move(fp));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
@@ -110,7 +110,9 @@ GrTextureProducer::DomainMode GrTextureProducer::DetermineDomainMode(
         return kNoDomain_DomainMode;
     }
 
-    // Get the domain inset based on sampling mode (or bail if mipped)
+    // Get the domain inset based on sampling mode (or bail if mipped). This is used
+    // to evaluate whether we will read outside a non-exact proxy's dimensions.
+    // TODO: Let GrTextureEffect handle this.
     SkScalar filterHalfWidth = 0.f;
     if (filterModeOrNullForBicubic) {
         switch (*filterModeOrNullForBicubic) {
@@ -136,15 +138,8 @@ GrTextureProducer::DomainMode GrTextureProducer::DetermineDomainMode(
         filterHalfWidth = 1.5f;
     }
 
-    // Both bilerp and bicubic use bilinear filtering and so need to be clamped to the center
-    // of the edge texel. Pinning to the texel center has no impact on nearest mode and MIP-maps
-
-    static const SkScalar kDomainInset = 0.5f;
-    // Figure out the limits of pixels we're allowed to sample from.
-    // Unless we know the amount of outset and the texture matrix we have to conservatively enforce
-    // the domain.
     if (restrictFilterToRect) {
-        *domainRect = constraintRect.makeInset(kDomainInset, kDomainInset);
+        *domainRect = constraintRect;
     } else if (!proxyIsExact) {
         // If we got here then: proxy is not exact, the coords are limited to the
         // constraint rect, and we're allowed to filter across the constraint rect boundary. So
@@ -157,32 +152,34 @@ GrTextureProducer::DomainMode GrTextureProducer::DetermineDomainMode(
             // rect in order to avoid having to add a domain.
             bool needContentAreaConstraint = false;
             if (proxyBounds.fRight - filterHalfWidth < constraintRect.fRight) {
-                domainRect->fRight = proxyBounds.fRight - kDomainInset;
+                domainRect->fRight = proxyBounds.fRight;
                 needContentAreaConstraint = true;
             }
             if (proxyBounds.fBottom - filterHalfWidth < constraintRect.fBottom) {
-                domainRect->fBottom = proxyBounds.fBottom - kDomainInset;
+                domainRect->fBottom = proxyBounds.fBottom;
                 needContentAreaConstraint = true;
             }
             if (!needContentAreaConstraint) {
                 return kNoDomain_DomainMode;
             }
-        } else {
-            // Our sample coords for the texture are allowed to be outside the constraintRect so we
-            // don't consider it when computing the domain.
-            domainRect->fRight = proxyBounds.fRight - kDomainInset;
-            domainRect->fBottom = proxyBounds.fBottom - kDomainInset;
         }
     } else {
         return kNoDomain_DomainMode;
     }
 
-    if (domainRect->fLeft > domainRect->fRight) {
-        domainRect->fLeft = domainRect->fRight = SkScalarAve(domainRect->fLeft, domainRect->fRight);
+    if (!filterModeOrNullForBicubic) {
+        // Bicubic doesn't yet rely on GrTextureEffect to do this insetting.
+        domainRect->inset(0.5f, 0.5f);
+        if (domainRect->fLeft > domainRect->fRight) {
+            domainRect->fLeft = domainRect->fRight =
+                    SkScalarAve(domainRect->fLeft, domainRect->fRight);
+        }
+        if (domainRect->fTop > domainRect->fBottom) {
+            domainRect->fTop = domainRect->fBottom =
+                    SkScalarAve(domainRect->fTop, domainRect->fBottom);
+        }
     }
-    if (domainRect->fTop > domainRect->fBottom) {
-        domainRect->fTop = domainRect->fBottom = SkScalarAve(domainRect->fTop, domainRect->fBottom);
-    }
+
     return kDomain_DomainMode;
 }
 
@@ -202,10 +199,10 @@ std::unique_ptr<GrFragmentProcessor> GrTextureProducer::createFragmentProcessorF
                                                     : GrSamplerState::WrapMode::kClamp;
         GrSamplerState samplerState(wrapMode, *filterOrNullForBicubic);
         if (kNoDomain_DomainMode == domainMode) {
-            return GrTextureEffect::Make(view.detachProxy(), srcAlphaType, textureMatrix,
-                                         samplerState, caps);
+            return GrTextureEffect::Make(std::move(view), srcAlphaType, textureMatrix, samplerState,
+                                         caps);
         }
-        return GrTextureEffect::MakeSubset(view.detachProxy(), srcAlphaType, textureMatrix,
+        return GrTextureEffect::MakeSubset(std::move(view), srcAlphaType, textureMatrix,
                                            samplerState, domain, caps);
     } else {
         static const GrSamplerState::WrapMode kClampClamp[] = {
@@ -218,20 +215,19 @@ std::unique_ptr<GrFragmentProcessor> GrTextureProducer::createFragmentProcessorF
         if (kDomain_DomainMode == domainMode || (fDomainNeedsDecal && !clampToBorderSupport)) {
             GrTextureDomain::Mode wrapMode = fDomainNeedsDecal ? GrTextureDomain::kDecal_Mode
                                          : GrTextureDomain::kClamp_Mode;
-            return GrBicubicEffect::Make(view.detachProxy(), textureMatrix, kClampClamp, wrapMode,
+            return GrBicubicEffect::Make(std::move(view), textureMatrix, kClampClamp, wrapMode,
                                          wrapMode, kDir, srcAlphaType,
                                          kDomain_DomainMode == domainMode ? &domain : nullptr);
         } else {
-            return GrBicubicEffect::Make(view.detachProxy(), textureMatrix,
+            return GrBicubicEffect::Make(std::move(view), textureMatrix,
                                          fDomainNeedsDecal ? kDecalDecal : kClampClamp, kDir,
                                          srcAlphaType);
         }
     }
 }
 
-GrSurfaceProxyView GrTextureProducer::refTextureProxyViewForParams(
-        const GrSamplerState::Filter* filterOrNullForBicubic,
-        SkScalar scaleAdjust[2]) {
+GrSurfaceProxyView GrTextureProducer::viewForParams(
+        const GrSamplerState::Filter* filterOrNullForBicubic, SkScalar scaleAdjust[2]) {
     GrSamplerState sampler; // Default is nearest + clamp
     if (filterOrNullForBicubic) {
         sampler.setFilterMode(*filterOrNullForBicubic);
@@ -243,11 +239,11 @@ GrSurfaceProxyView GrTextureProducer::refTextureProxyViewForParams(
             sampler.setWrapModeY(GrSamplerState::WrapMode::kClampToBorder);
         }
     }
-    return this->refTextureProxyViewForParams(sampler, scaleAdjust);
+    return this->viewForParams(sampler, scaleAdjust);
 }
 
-GrSurfaceProxyView GrTextureProducer::refTextureProxyViewForParams(GrSamplerState sampler,
-                                                                   SkScalar scaleAdjust[2]) {
+GrSurfaceProxyView GrTextureProducer::viewForParams(GrSamplerState sampler,
+                                                    SkScalar scaleAdjust[2]) {
     // Check that the caller pre-initialized scaleAdjust
     SkASSERT(!scaleAdjust || (scaleAdjust[0] == 1 && scaleAdjust[1] == 1));
 
@@ -277,14 +273,13 @@ GrSurfaceProxyView GrTextureProducer::refTextureProxyViewForParams(GrSamplerStat
     return result;
 }
 
-std::pair<GrSurfaceProxyView, GrColorType> GrTextureProducer::refTextureProxyView(
-        GrMipMapped willNeedMips) {
+std::pair<GrSurfaceProxyView, GrColorType> GrTextureProducer::view(GrMipMapped willNeedMips) {
     GrSamplerState::Filter filter =
             GrMipMapped::kNo == willNeedMips ? GrSamplerState::Filter::kNearest
                                              : GrSamplerState::Filter::kMipMap;
     GrSamplerState sampler(GrSamplerState::WrapMode::kClamp, filter);
 
-    auto result = this->refTextureProxyViewForParams(sampler, nullptr);
+    auto result = this->viewForParams(sampler, nullptr);
 
 #ifdef SK_DEBUG
     const GrCaps* caps = this->context()->priv().caps();

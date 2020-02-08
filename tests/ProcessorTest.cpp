@@ -237,8 +237,10 @@ void test_draw_op(GrContext* context,
                   sk_sp<GrTextureProxy> inputDataProxy,
                   SkAlphaType inputAlphaType) {
     GrPaint paint;
-    paint.addColorFragmentProcessor(
-            GrTextureEffect::Make(std::move(inputDataProxy), inputAlphaType));
+    GrSurfaceOrigin origin = inputDataProxy->origin();
+    GrSwizzle swizzle = inputDataProxy->textureSwizzle();
+    GrSurfaceProxyView view(std::move(inputDataProxy), origin, swizzle);
+    paint.addColorFragmentProcessor(GrTextureEffect::Make(std::move(view), inputAlphaType));
     paint.addColorFragmentProcessor(std::move(fp));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
@@ -282,7 +284,7 @@ bool init_test_textures(GrResourceProvider* resourceProvider,
                              [](void* addr, void* context) { delete[] (GrColor*)addr; }, nullptr);
         bitmap.setImmutable();
         GrBitmapTextureMaker maker(context, bitmap);
-        auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+        auto[view, grCT] = maker.view(GrMipMapped::kNo);
         if (!view.proxy() || !view.proxy()->instantiate(resourceProvider)) {
             return false;
         }
@@ -305,7 +307,7 @@ bool init_test_textures(GrResourceProvider* resourceProvider,
                              [](void* addr, void* context) { delete[] (uint8_t*)addr; }, nullptr);
         bitmap.setImmutable();
         GrBitmapTextureMaker maker(context, bitmap);
-        auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+        auto[view, grCT] = maker.view(GrMipMapped::kNo);
         if (!view.proxy() || !view.proxy()->instantiate(resourceProvider)) {
             return false;
         }
@@ -332,7 +334,7 @@ sk_sp<GrTextureProxy> make_input_texture(GrRecordingContext* context, int width,
                          [](void* addr, void* context) { delete[] (GrColor*)addr; }, nullptr);
     bitmap.setImmutable();
     GrBitmapTextureMaker maker(context, bitmap);
-    auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+    auto[view, grCT] = maker.view(GrMipMapped::kNo);
     return view.asTextureProxyRef();
 }
 

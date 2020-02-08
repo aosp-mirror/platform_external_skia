@@ -140,12 +140,10 @@ GrSurfaceProxyView GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
     return view;
 }
 
-sk_sp<GrTextureProxy> GrRefCachedBitmapTextureProxy(GrRecordingContext* ctx,
-                                                    const SkBitmap& bitmap,
-                                                    GrSamplerState params,
-                                                    SkScalar scaleAdjust[2]) {
+GrSurfaceProxyView GrRefCachedBitmapView(GrRecordingContext* ctx, const SkBitmap& bitmap,
+                                         GrSamplerState params, SkScalar scaleAdjust[2]) {
     GrBitmapTextureMaker maker(ctx, bitmap, GrBitmapTextureMaker::Cached::kYes);
-    return maker.refTextureProxyViewForParams(params, scaleAdjust).asTextureProxyRef();
+    return maker.viewForParams(params, scaleAdjust);
 }
 
 GrSurfaceProxyView GrMakeCachedBitmapProxyView(GrRecordingContext* context, const SkBitmap& bitmap,
@@ -155,7 +153,7 @@ GrSurfaceProxyView GrMakeCachedBitmapProxyView(GrRecordingContext* context, cons
     }
 
     GrBitmapTextureMaker maker(context, bitmap, GrBitmapTextureMaker::Cached::kYes, fit);
-    auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+    auto[view, grCT] = maker.view(GrMipMapped::kNo);
     return view;
 }
 
@@ -355,7 +353,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
         if (ditherRange >= 0) {
             static auto effect = std::get<0>(SkRuntimeEffect::Make(SkString(SKSL_DITHER_SRC)));
             auto ditherFP = GrSkSLFP::Make(context, effect, "Dither",
-                                           &ditherRange, sizeof(ditherRange));
+                                           SkData::MakeWithCopy(&ditherRange, sizeof(ditherRange)));
             if (ditherFP) {
                 grPaint->addColorFragmentProcessor(std::move(ditherFP));
             }
