@@ -358,7 +358,7 @@ void GrCCDrawPathsOp::SingleDraw::setupResources(
                               == fCacheEntry->cachedAtlas()->coverageType())
                     ? SkPMColor4f{0,0,.25,.25} : SkPMColor4f{0,.25,0,.25};
 #endif
-            auto coverageMode = GrCCPathProcessor::GetCoverageMode(
+            auto coverageMode = GrCCAtlas::CoverageTypeToPathCoverageMode(
                     fCacheEntry->cachedAtlas()->coverageType());
             op->recordInstance(coverageMode, fCacheEntry->cachedAtlas()->getOnFlushProxy(),
                                resources->nextPathInstanceIdx());
@@ -386,7 +386,7 @@ void GrCCDrawPathsOp::SingleDraw::setupResources(
     if (auto atlas = resources->renderShapeInAtlas(
                 fMaskDevIBounds, fMatrix, fShape, fStrokeDevWidth, &octoBounds, &devIBounds,
                 &devToAtlasOffset)) {
-        auto coverageMode = GrCCPathProcessor::GetCoverageMode(
+        auto coverageMode = GrCCAtlas::CoverageTypeToPathCoverageMode(
                 resources->renderedPathCoverageType());
         op->recordInstance(coverageMode, atlas->textureProxy(), resources->nextPathInstanceIdx());
         resources->appendDrawPathInstance().set(
@@ -450,9 +450,10 @@ void GrCCDrawPathsOp::onExecute(GrOpFlushState* flushState, const SkRect& chainB
 
         GrSurfaceProxy* atlas = range.fAtlasProxy;
         if (atlas->isInstantiated()) {  // Instantiation can fail in exceptional circumstances.
-            GrCCPathProcessor pathProc(range.fCoverageMode, atlas->peekTexture(),
-                                       atlas->textureSwizzle(), atlas->origin(),
-                                       fViewMatrixIfUsingLocalCoords);
+            GrColorType ct = GrCCPathProcessor::GetColorTypeFromCoverageMode(range.fCoverageMode);
+            GrSwizzle swizzle = flushState->caps().getReadSwizzle(atlas->backendFormat(), ct);
+            GrCCPathProcessor pathProc(range.fCoverageMode, atlas->peekTexture(), swizzle,
+                                       GrCCAtlas::kTextureOrigin, fViewMatrixIfUsingLocalCoords);
             fixedDynamicState.fPrimitiveProcessorTextures = &atlas;
             pathProc.drawPaths(flushState, pipeline, &fixedDynamicState, *resources, baseInstance,
                                range.fEndInstanceIdx, this->bounds());
