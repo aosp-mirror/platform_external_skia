@@ -789,6 +789,7 @@ cc_library_static {
           "src/gpu/ops/GrStrokeRectOp.cpp",
           "src/gpu/ops/GrTessellatingPathRenderer.cpp",
           "src/gpu/ops/GrTextureOp.cpp",
+          "src/gpu/tessellate/GrDrawAtlasPathOp.cpp",
           "src/gpu/tessellate/GrFillPathShader.cpp",
           "src/gpu/tessellate/GrGpuTessellationPathRenderer.cpp",
           "src/gpu/tessellate/GrPathParser.cpp",
