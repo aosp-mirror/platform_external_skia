@@ -1778,6 +1778,7 @@ cc_test {
         "tests/SkSLSPIRVTest.cpp",
         "tests/SkShaperJSONWriterTest.cpp",
         "tests/SkSharedMutexTest.cpp",
+        "tests/SkStrikeTest.cpp",
         "tests/SkUTFTest.cpp",
         "tests/SkVMTest.cpp",
         "tests/SkVxTest.cpp",

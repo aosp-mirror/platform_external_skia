@@ -71,7 +71,7 @@ const GrFragmentProcessor::TextureSampler& GrFragmentProcessor::textureSampler(i
 
 void GrFragmentProcessor::addCoordTransform(GrCoordTransform* transform) {
     fCoordTransforms.push_back(transform);
-    fFlags |= kHasCoordTranforms_Flag;
+    fFlags |= kHasCoordTransforms_Flag;
 }
 
 #ifdef SK_DEBUG
@@ -93,8 +93,8 @@ bool GrFragmentProcessor::isInstantiated() const {
 #endif
 
 int GrFragmentProcessor::registerChildProcessor(std::unique_ptr<GrFragmentProcessor> child) {
-    if (child->fFlags & kHasCoordTranforms_Flag) {
-        fFlags |= kHasCoordTranforms_Flag;
+    if (child->fFlags & kHasCoordTransforms_Flag) {
+        fFlags |= kHasCoordTransforms_Flag;
     }
     fRequestedFeatures |= child->fRequestedFeatures;
 
@@ -429,20 +429,6 @@ GrFragmentProcessor::TextureSampler::TextureSampler(GrSurfaceProxyView view,
     fSamplerState.setFilterMode(
             std::min(samplerState.filter(),
                    GrTextureProxy::HighestFilterMode(proxy->backendFormat().textureType())));
-}
-
-GrFragmentProcessor::TextureSampler::TextureSampler(sk_sp<GrSurfaceProxy> proxy,
-                                                    GrSamplerState samplerState) {
-    SkASSERT(proxy->asTextureProxy());
-    GrSurfaceOrigin origin = proxy->origin();
-    GrSwizzle swizzle = proxy->textureSwizzle();
-    fView = GrSurfaceProxyView(std::move(proxy), origin, swizzle);
-
-    fSamplerState = samplerState;
-    GrSurfaceProxy* surfProxy = this->proxy();
-    fSamplerState.setFilterMode(
-            std::min(samplerState.filter(),
-                   GrTextureProxy::HighestFilterMode(surfProxy->backendFormat().textureType())));
 }
 
 #if GR_TEST_UTILS
