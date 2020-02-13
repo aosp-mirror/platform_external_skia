@@ -103,19 +103,10 @@ void TextWrapper::trimEndSpaces(TextAlign align) {
     // Remember the breaking position
     fEndLine.saveBreak();
     // Skip all space cluster at the end
-    //bool left = align == TextAlign::kStart || align == TextAlign::kLeft;
-    bool right = align == TextAlign::kRight || align == TextAlign::kEnd;
     for (auto cluster = fEndLine.endCluster();
          cluster >= fEndLine.startCluster() && cluster->isWhitespaces();
          --cluster) {
-        if ((cluster->run()->leftToRight()) ||
-            (right && !cluster->run()->leftToRight()) ||
-             align == TextAlign::kJustify || align == TextAlign::kCenter) {
-            fEndLine.trim(cluster);
-            continue;
-        } else {
-            break;
-        }
+        fEndLine.trim(cluster);
     }
     fEndLine.trim();
 }
@@ -229,7 +220,7 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
                 continue;
             }
             lastRun = cluster->run();
-            if (lastRun->placeholder() != nullptr) {
+            if (lastRun->placeholderStyle() != nullptr) {
                 SkASSERT(lastRun->size() == 1);
                 // Update the placeholder metrics so we can get the placeholder positions later
                 // and the line metrics (to make sure the placeholder fits)
@@ -264,7 +255,7 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
                 needEllipsis && !fHardLineBreak);
 
         softLineMaxIntrinsicWidth += widthWithSpaces;
-        fMaxIntrinsicWidth = SkMaxScalar(fMaxIntrinsicWidth, softLineMaxIntrinsicWidth);
+        fMaxIntrinsicWidth = std::max(fMaxIntrinsicWidth, softLineMaxIntrinsicWidth);
         if (fHardLineBreak) {
             softLineMaxIntrinsicWidth = 0;
         }
@@ -274,7 +265,7 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
             fEndLine.clean();
         }
         fEndLine.startFrom(startLine, pos);
-        parent->fMaxWidthWithTrailingSpaces = SkMaxScalar(parent->fMaxWidthWithTrailingSpaces, widthWithSpaces);
+        parent->fMaxWidthWithTrailingSpaces = std::max(parent->fMaxWidthWithTrailingSpaces, widthWithSpaces);
 
         if (hasEllipsis && unlimitedLines) {
             // There is one case when we need an ellipsis on a separate line

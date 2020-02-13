@@ -56,7 +56,7 @@
 #endif
 
 // Correct SK_BUILD_FOR flags that may have been set by
-// SkPreConfig.h/Android.bp
+// SkTypes.h/Android.bp
 #ifndef SK_BUILD_FOR_MAC
     #define SK_BUILD_FOR_MAC
 #endif
