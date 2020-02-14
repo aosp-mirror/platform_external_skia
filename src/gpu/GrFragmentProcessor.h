@@ -137,7 +137,7 @@ public:
     bool usesLocalCoords() const {
         // If the processor is sampled with explicit coords then we do not need to apply the
         // coord transforms in the vertex shader to the local coords.
-        return SkToBool(fFlags & kHasCoordTranforms_Flag) &&
+        return SkToBool(fFlags & kHasCoordTransforms_Flag) &&
                SkToBool(fFlags & kCoordTransformsApplyToLocalCoords_Flag);
     }
 
@@ -455,7 +455,7 @@ private:
 
     enum PrivateFlags {
         kFirstPrivateFlag = kAll_OptimizationFlags + 1,
-        kHasCoordTranforms_Flag = kFirstPrivateFlag,
+        kHasCoordTransforms_Flag = kFirstPrivateFlag,
         kCoordTransformsApplyToLocalCoords_Flag = kFirstPrivateFlag << 1,
     };
 
@@ -485,8 +485,6 @@ public:
     explicit TextureSampler(const TextureSampler&) = default;
 
     TextureSampler(GrSurfaceProxyView, GrSamplerState = {});
-    // TODO: Remove this ctor once all uses have been updated to pass in a GrSurfaceProxyView
-    TextureSampler(sk_sp<GrSurfaceProxy>, GrSamplerState = {});
 
     TextureSampler& operator=(const TextureSampler&) = delete;
 
