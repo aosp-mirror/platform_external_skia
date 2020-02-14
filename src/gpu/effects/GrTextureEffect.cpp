@@ -136,29 +136,6 @@ std::unique_ptr<GrFragmentProcessor> GrTextureEffect::Make(GrSurfaceProxyView vi
             new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
 }
 
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeTexelSubset(GrSurfaceProxyView view,
-                                                                      SkAlphaType alphaType,
-                                                                      const SkMatrix& matrix,
-                                                                      GrSamplerState sampler,
-                                                                      const SkIRect& subset,
-                                                                      const GrCaps& caps) {
-    Sampling sampling(*view.proxy(), sampler, SkRect::Make(subset), nullptr, caps);
-    return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
-}
-
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeTexelSubset(GrSurfaceProxyView view,
-                                                                      SkAlphaType alphaType,
-                                                                      const SkMatrix& matrix,
-                                                                      GrSamplerState sampler,
-                                                                      const SkIRect& subset,
-                                                                      const SkRect& domain,
-                                                                      const GrCaps& caps) {
-    Sampling sampling(*view.proxy(), sampler, SkRect::Make(subset), &domain, caps);
-    return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
-}
-
 std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeSubset(GrSurfaceProxyView view,
                                                                  SkAlphaType alphaType,
                                                                  const SkMatrix& matrix,
@@ -607,7 +584,7 @@ void GrTextureEffect::onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyB
 
 bool GrTextureEffect::onIsEqual(const GrFragmentProcessor& other) const {
     auto that = other.cast<GrTextureEffect>();
-    return fShaderModes[0] == that.fShaderModes[1] && fShaderModes[1] == that.fShaderModes[1] &&
+    return fShaderModes[0] == that.fShaderModes[0] && fShaderModes[1] == that.fShaderModes[1] &&
            fSubset == that.fSubset;
 }
 
@@ -633,6 +610,7 @@ GrTextureEffect::GrTextureEffect(const GrTextureEffect& src)
         , fCoordTransform(src.fCoordTransform)
         , fSampler(src.fSampler)
         , fSubset(src.fSubset)
+        , fClamp(src.fClamp)
         , fShaderModes{src.fShaderModes[0], src.fShaderModes[1]} {
     this->setTextureSamplerCnt(1);
     this->addCoordTransform(&fCoordTransform);
