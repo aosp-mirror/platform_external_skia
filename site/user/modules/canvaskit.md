@@ -98,7 +98,7 @@ Samples
   </figure>
 
   <h3>SKSL for writing custom shaders</h3>
-  <a href="https://jsfiddle.skia.org/canvaskit/7572cf75c7669d074b9ae5e168e18a204c4efcfca23edd4bd8460b6bd2c3e72c"
+  <a href="https://jsfiddle.skia.org/canvaskit/33ff9bed883cd5742b4770169da0b36fb0cbc18fd395ddd9563213e178362d30"
     target=_blank rel=noopener>
     <canvas id=shader1 width=512 height=512></canvas>
   </a>
@@ -473,12 +473,11 @@ uniform float2 in_center;
 uniform float4 in_colors0;
 uniform float4 in_colors1;
 
-void main(float x, float y, inout half4 color) {
-    float xx = x - in_center.x;
-    float yy = y - in_center.y;
-    float radius = sqrt(xx*xx + yy*yy);
+void main(float2 p, inout half4 color) {
+    float2 pp = p - in_center;
+    float radius = sqrt(dot(pp, pp));
     radius = sqrt(radius);
-    float angle = atan(yy / xx);
+    float angle = atan(pp.y / pp.x);
     float t = (angle + 3.1415926/2) / (3.1415926);
     t += radius * rad_scale;
     t = fract(t);

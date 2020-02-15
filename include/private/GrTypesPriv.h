@@ -109,16 +109,6 @@ static inline int GrMaskFormatBytesPerPixel(GrMaskFormat format) {
     return sBytesPerPixel[(int)format];
 }
 
-/**
- * Describes a surface to be created.
- */
-struct GrSurfaceDesc {
-    GrSurfaceDesc() : fWidth(0), fHeight(0) {}
-
-    int                    fWidth;  //!< Width of the texture
-    int                    fHeight; //!< Height of the texture
-};
-
 /** Ownership rules for external GPU resources imported into Skia. */
 enum GrWrapOwnership {
     /** Skia will assume the client will keep the resource alive and Skia will not free it. */
@@ -737,12 +727,6 @@ enum class GrBackendObjectOwnership : bool {
     kOwned = true
 };
 
-template <typename T>
-T* const* unique_ptr_address_as_pointer_address(std::unique_ptr<T> const* up) {
-    static_assert(sizeof(T*) == sizeof(std::unique_ptr<T>), "unique_ptr not expected size.");
-    return reinterpret_cast<T* const*>(up);
-}
-
 /*
  * Object for CPU-GPU synchronization
  */
@@ -875,6 +859,8 @@ static constexpr GrColorType SkColorTypeToGrColorType(SkColorType ct) {
         case kRGBA_F16_SkColorType:           return GrColorType::kRGBA_F16;
         case kRGBA_1010102_SkColorType:       return GrColorType::kRGBA_1010102;
         case kRGB_101010x_SkColorType:        return GrColorType::kUnknown;
+        case kBGRA_1010102_SkColorType:       return GrColorType::kUnknown;
+        case kBGR_101010x_SkColorType:        return GrColorType::kUnknown;
         case kRGBA_F32_SkColorType:           return GrColorType::kRGBA_F32;
         case kR8G8_unorm_SkColorType:         return GrColorType::kRG_88;
         case kA16_unorm_SkColorType:          return GrColorType::kAlpha_16;

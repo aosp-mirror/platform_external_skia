@@ -42,12 +42,11 @@ GrSurfaceProxyView GrTextureAdjuster::copy(const CopyParams& copyParams, bool wi
     sk_sp<GrTextureProxy> cachedCopy;
     const GrSurfaceProxyView& originalView = this->originalProxyView();
     if (key.isValid()) {
-        cachedCopy = proxyProvider->findOrCreateProxyByUniqueKey(key, this->colorType(),
-                                                                 originalView.origin());
+        cachedCopy = proxyProvider->findOrCreateProxyByUniqueKey(key, this->colorType());
         if (cachedCopy && (!willBeMipped || GrMipMapped::kYes == cachedCopy->mipMapped())) {
             // TODO: Once we no longer use CopyOnGpu which can fallback to arbitrary formats and
             // colorTypes, we can use the swizzle of the originalView.
-            GrSwizzle swizzle = cachedCopy->textureSwizzle();
+            GrSwizzle swizzle = cachedCopy->textureSwizzleDoNotUse();
             return GrSurfaceProxyView(std::move(cachedCopy), originalView.origin(), swizzle);
         }
     }

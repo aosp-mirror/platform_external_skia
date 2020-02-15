@@ -167,7 +167,7 @@ void GrBitmapTextGeoProc::addNewViews(const GrSurfaceProxyView* views,
                                       GrSamplerState params) {
     SkASSERT(numActiveViews <= kMaxTextures);
     // Just to make sure we don't try to add too many proxies
-    numActiveViews = SkTMin(numActiveViews, kMaxTextures);
+    numActiveViews = std::min(numActiveViews, kMaxTextures);
 
     if (!fTextureSamplers[0].isInitialized()) {
         fAtlasDimensions = views[0].proxy()->dimensions();
@@ -201,7 +201,7 @@ GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrBitmapTextGeoProc);
 #if GR_TEST_UTILS
 
 GrGeometryProcessor* GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* d) {
-    auto [proxy, ct, at] = d->randomProxy();
+    auto [view, ct, at] = d->randomView();
 
     GrSamplerState::WrapMode wrapModes[2];
     GrTest::TestWrapModes(d->fRandom, wrapModes);
@@ -222,9 +222,6 @@ GrGeometryProcessor* GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* d) {
             format = kARGB_GrMaskFormat;
             break;
     }
-    GrSurfaceOrigin origin = proxy->origin();
-    const GrSwizzle& swizzle = proxy->textureSwizzle();
-    GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
 
     return GrBitmapTextGeoProc::Make(d->allocator(), *d->caps()->shaderCaps(),
                                      SkPMColor4f::FromBytes_RGBA(GrRandomColor(d->fRandom)),

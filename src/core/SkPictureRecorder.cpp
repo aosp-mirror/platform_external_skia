@@ -61,9 +61,9 @@ sk_sp<SkPicture> SkPictureRecorder::finishRecordingAsPicture(uint32_t finishFlag
 
     if (fRecord->count() == 0) {
         auto pic = fMiniRecorder->detachAsPicture(fBBH ? nullptr : &fCullRect);
-        if (auto bbh = (SkBBoxHierarchy_Base*)fBBH.get()) {
+        if (fBBH) {
             SkRect bounds = pic->cullRect();  // actually the computed bounds, not fCullRect.
-            bbh->insert(&bounds, 1);
+            fBBH->insert(&bounds, 1);
         }
         fBBH.reset(nullptr);
         return pic;
@@ -81,14 +81,15 @@ sk_sp<SkPicture> SkPictureRecorder::finishRecordingAsPicture(uint32_t finishFlag
         SkAutoTMalloc<SkRect> bounds(fRecord->count());
         SkRecordFillBounds(fCullRect, *fRecord, bounds);
 
-        auto bbh = static_cast<SkBBoxHierarchy_Base*>(fBBH.get());
-        bbh->insert(bounds, fRecord->count());
+        fBBH->insert(bounds, fRecord->count());
 
         // Now that we've calculated content bounds, we can update fCullRect, often trimming it.
-        // TODO: get updated fCullRect from bounds instead of forcing the BBH to return it?
-        SkRect bbhBound = bbh->getRootBound();
+        SkRect bbhBound = SkRect::MakeEmpty();
+        for (int i = 0; i < fRecord->count(); i++) {
+            bbhBound.join(bounds[i]);
+        }
         SkASSERT((bbhBound.isEmpty() || fCullRect.contains(bbhBound))
-            || (bbhBound.isEmpty() && fCullRect.isEmpty()));
+              || (bbhBound.isEmpty() && fCullRect.isEmpty()));
         fCullRect = bbhBound;
     }
 
@@ -135,7 +136,7 @@ sk_sp<SkDrawable> SkPictureRecorder::finishRecordingAsDrawable(uint32_t finishFl
     if (fBBH.get()) {
         SkAutoTMalloc<SkRect> bounds(fRecord->count());
         SkRecordFillBounds(fCullRect, *fRecord, bounds);
-        static_cast<SkBBoxHierarchy_Base*>(fBBH.get())->insert(bounds, fRecord->count());
+        fBBH->insert(bounds, fRecord->count());
     }
 
     sk_sp<SkDrawable> drawable =

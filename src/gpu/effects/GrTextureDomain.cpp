@@ -318,19 +318,19 @@ void GrTextureDomain::GLDomain::setData(const GrGLSLProgramDataManager& pdman,
 ///////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<GrFragmentProcessor> GrDeviceSpaceTextureDecalFragmentProcessor::Make(
-        sk_sp<GrSurfaceProxy> proxy, const SkIRect& subset, const SkIPoint& deviceSpaceOffset) {
+        GrSurfaceProxyView view, const SkIRect& subset, const SkIPoint& deviceSpaceOffset) {
     return std::unique_ptr<GrFragmentProcessor>(new GrDeviceSpaceTextureDecalFragmentProcessor(
-            std::move(proxy), subset, deviceSpaceOffset));
+            std::move(view), subset, deviceSpaceOffset));
 }
 
 GrDeviceSpaceTextureDecalFragmentProcessor::GrDeviceSpaceTextureDecalFragmentProcessor(
-        sk_sp<GrSurfaceProxy> proxy, const SkIRect& subset, const SkIPoint& deviceSpaceOffset)
+        GrSurfaceProxyView view, const SkIRect& subset, const SkIPoint& deviceSpaceOffset)
         : INHERITED(kGrDeviceSpaceTextureDecalFragmentProcessor_ClassID,
                     kCompatibleWithCoverageAsAlpha_OptimizationFlag)
-        , fTextureSampler(proxy, GrSamplerState::Filter::kNearest)
-        , fTextureDomain(proxy.get(),
+        , fTextureDomain(view.proxy(),
                          GrTextureDomain::MakeTexelDomain(subset, GrTextureDomain::kDecal_Mode),
-                         GrTextureDomain::kDecal_Mode, GrTextureDomain::kDecal_Mode) {
+                         GrTextureDomain::kDecal_Mode, GrTextureDomain::kDecal_Mode)
+        , fTextureSampler(std::move(view), GrSamplerState::Filter::kNearest) {
     this->setTextureSamplerCnt(1);
     fDeviceSpaceOffset.fX = deviceSpaceOffset.fX - subset.fLeft;
     fDeviceSpaceOffset.fY = deviceSpaceOffset.fY - subset.fTop;
@@ -340,8 +340,8 @@ GrDeviceSpaceTextureDecalFragmentProcessor::GrDeviceSpaceTextureDecalFragmentPro
         const GrDeviceSpaceTextureDecalFragmentProcessor& that)
         : INHERITED(kGrDeviceSpaceTextureDecalFragmentProcessor_ClassID,
                     kCompatibleWithCoverageAsAlpha_OptimizationFlag)
-        , fTextureSampler(that.fTextureSampler)
         , fTextureDomain(that.fTextureDomain)
+        , fTextureSampler(that.fTextureSampler)
         , fDeviceSpaceOffset(that.fDeviceSpaceOffset) {
     this->setTextureSamplerCnt(1);
 }
@@ -421,15 +421,16 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrDeviceSpaceTextureDecalFragmentProcessor);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrDeviceSpaceTextureDecalFragmentProcessor::TestCreate(
         GrProcessorTestData* d) {
-    auto [proxy, at, ct] = d->randomProxy();
+    auto [view, at, ct] = d->randomView();
     SkIRect subset;
-    subset.fLeft = d->fRandom->nextULessThan(proxy->width() - 1);
-    subset.fRight = d->fRandom->nextRangeU(subset.fLeft, proxy->width());
-    subset.fTop = d->fRandom->nextULessThan(proxy->height() - 1);
-    subset.fBottom = d->fRandom->nextRangeU(subset.fTop, proxy->height());
+    subset.fLeft = d->fRandom->nextULessThan(view.width() - 1);
+    subset.fRight = d->fRandom->nextRangeU(subset.fLeft, view.width());
+    subset.fTop = d->fRandom->nextULessThan(view.height() - 1);
+    subset.fBottom = d->fRandom->nextRangeU(subset.fTop, view.height());
     SkIPoint pt;
     pt.fX = d->fRandom->nextULessThan(2048);
     pt.fY = d->fRandom->nextULessThan(2048);
-    return GrDeviceSpaceTextureDecalFragmentProcessor::Make(std::move(proxy), subset, pt);
+
+    return GrDeviceSpaceTextureDecalFragmentProcessor::Make(std::move(view), subset, pt);
 }
 #endif

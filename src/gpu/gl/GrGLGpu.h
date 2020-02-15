@@ -80,13 +80,15 @@ public:
 
     // GrMesh::SendToGpuImpl methods. These issue the actual GL draw calls.
     // Marked final as a hint to the compiler to not use virtual dispatch.
-    void sendArrayMeshToGpu(const GrMesh&, int vertexCount, int baseVertex) final;
-    void sendIndexedMeshToGpu(const GrMesh&, int indexCount, int baseIndex, uint16_t minIndexValue,
-                              uint16_t maxIndexValue, int baseVertex) final;
-    void sendInstancedMeshToGpu(const GrMesh&, int vertexCount, int baseVertex, int instanceCount,
-                                int baseInstance) final;
-    void sendIndexedInstancedMeshToGpu(const GrMesh&, int indexCount, int baseIndex, int baseVertex,
-                                       int instanceCount, int baseInstance) final;
+    void sendArrayMeshToGpu(GrPrimitiveType primitiveType, const GrMesh&, int vertexCount,
+                            int baseVertex) final;
+    void sendIndexedMeshToGpu(GrPrimitiveType, const GrMesh&, int indexCount, int baseIndex,
+                              uint16_t minIndexValue, uint16_t maxIndexValue, int baseVertex) final;
+    void sendInstancedMeshToGpu(GrPrimitiveType, const GrMesh&, int vertexCount, int baseVertex,
+                                int instanceCount, int baseInstance) final;
+    void sendIndexedInstancedMeshToGpu(GrPrimitiveType, const GrMesh&, int indexCount,
+                                       int baseIndex, int baseVertex, int instanceCount,
+                                       int baseInstance) final;
 
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
@@ -191,7 +193,7 @@ private:
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
 
-    sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
+    sk_sp<GrTexture> onCreateTexture(SkISize dimensions,
                                      const GrBackendFormat&,
                                      GrRenderable,
                                      int renderTargetSampleCnt,
@@ -267,7 +269,7 @@ private:
     void unbindCpuToGpuXferBuffer();
 
     void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                               GrSurfaceOrigin resolveOrigin, ForExternalIO) override;
+                               ForExternalIO) override;
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 

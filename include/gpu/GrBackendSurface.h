@@ -36,6 +36,12 @@ class SkString;
 
 #if !SK_SUPPORT_GPU
 
+// SkSurfaceCharacterization always needs a minimal version of this
+class SK_API GrBackendFormat {
+public:
+    bool isValid() const { return false; }
+};
+
 // SkSurface and SkImage rely on a minimal version of these always being available
 class SK_API GrBackendTexture {
 public:
@@ -220,6 +226,7 @@ public:
 
     GrBackendTexture& operator=(const GrBackendTexture& that);
 
+    SkISize dimensions() const { return {fWidth, fHeight}; }
     int width() const { return fWidth; }
     int height() const { return fHeight; }
     bool hasMipMaps() const { return GrMipMapped::kYes == fMipMapped; }
@@ -367,6 +374,7 @@ public:
     GrBackendRenderTarget(const GrBackendRenderTarget& that);
     GrBackendRenderTarget& operator=(const GrBackendRenderTarget&);
 
+    SkISize dimensions() const { return {fWidth, fHeight}; }
     int width() const { return fWidth; }
     int height() const { return fHeight; }
     int sampleCnt() const { return fSampleCnt; }

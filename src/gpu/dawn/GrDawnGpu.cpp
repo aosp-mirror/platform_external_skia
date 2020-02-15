@@ -148,7 +148,7 @@ bool GrDawnGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-sk_sp<GrTexture> GrDawnGpu::onCreateTexture(const GrSurfaceDesc& desc,
+sk_sp<GrTexture> GrDawnGpu::onCreateTexture(SkISize dimensions,
                                             const GrBackendFormat& backendFormat,
                                             GrRenderable renderable,
                                             int renderTargetSampleCnt,
@@ -165,10 +165,8 @@ sk_sp<GrTexture> GrDawnGpu::onCreateTexture(const GrSurfaceDesc& desc,
     GrMipMapsStatus mipMapsStatus =
         mipLevelCount > 1 ? GrMipMapsStatus::kDirty : GrMipMapsStatus::kNotAllocated;
 
-    return GrDawnTexture::Make(this, { desc.fWidth, desc.fHeight },
-                                       format, renderable,
-                                       renderTargetSampleCnt, budgeted, mipLevelCount,
-                                       mipMapsStatus);
+    return GrDawnTexture::Make(this, dimensions, format, renderable, renderTargetSampleCnt,
+                               budgeted, mipLevelCount, mipMapsStatus);
 }
 
 sk_sp<GrTexture> GrDawnGpu::onCreateCompressedTexture(SkISize dimensions, const GrBackendFormat&,
@@ -345,8 +343,8 @@ GrBackendTexture GrDawnGpu::onCreateBackendTexture(SkISize dimensions,
         dstTexture.origin = {0, 0, 0};
         wgpu::Extent3D copySize = {(uint32_t) w, (uint32_t) h, 1};
         copyEncoder.CopyBufferToTexture(&srcBuffer, &dstTexture, &copySize);
-        w = SkTMax(1, w / 2);
-        h = SkTMax(1, h / 2);
+        w = std::max(1, w / 2);
+        h = std::max(1, h / 2);
     }
     wgpu::CommandBuffer cmdBuf = copyEncoder.Finish();
     fQueue.Submit(1, &cmdBuf);

@@ -394,7 +394,7 @@ int GrMtlCaps::getRenderTargetSampleCount(int requestedCount,
 }
 
 int GrMtlCaps::getRenderTargetSampleCount(int requestedCount, MTLPixelFormat format) const {
-    requestedCount = SkTMax(requestedCount, 1);
+    requestedCount = std::max(requestedCount, 1);
     const FormatInfo& formatInfo = this->getFormatInfo(format);
     if (!(formatInfo.fFlags & FormatInfo::kRenderable_Flag)) {
         return 0;
@@ -1057,7 +1057,7 @@ GrProgramDesc GrMtlCaps::makeDesc(const GrRenderTarget* rt,
     }
 #endif
 
-    b.add32(programInfo.pipeline().isStencilEnabled()
+    b.add32(rt->renderTargetPriv().getStencilAttachment()
                                  ? this->preferredStencilFormat().fInternalFormat
                                  : MTLPixelFormatInvalid);
     b.add32((uint32_t)programInfo.pipeline().isStencilEnabled());

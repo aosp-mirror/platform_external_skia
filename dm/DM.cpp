@@ -902,9 +902,9 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
 
     // Try a simple Src as a canary.  If it fails, skip this sink.
     struct : public Src {
-        Error draw(SkCanvas* c) const override {
+        Result draw(SkCanvas* c) const override {
             c->drawRect(SkRect::MakeWH(1,1), SkPaint());
-            return "";
+            return Result::Ok();
         }
         SkISize size() const override { return SkISize::Make(16, 16); }
         Name name() const override { return "justOneRect"; }
@@ -913,9 +913,9 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
     SkBitmap bitmap;
     SkDynamicMemoryWStream stream;
     SkString log;
-    Error err = sink->draw(justOneRect, &bitmap, &stream, &log);
-    if (err.isFatal()) {
-        info("Could not run %s: %s\n", config.getTag().c_str(), err.c_str());
+    Result result = sink->draw(justOneRect, &bitmap, &stream, &log);
+    if (result.isFatal()) {
+        info("Could not run %s: %s\n", config.getTag().c_str(), result.c_str());
         exit(1);
     }
 
@@ -957,23 +957,25 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
 #define SINK(t, sink, ...) if (config->getBackend().equals(t)) return new sink(__VA_ARGS__)
 
     if (FLAGS_cpu) {
-        SINK("g8",      RasterSink, kGray_8_SkColorType);
-        SINK("565",     RasterSink, kRGB_565_SkColorType);
-        SINK("4444",    RasterSink, kARGB_4444_SkColorType);
-        SINK("8888",    RasterSink, kN32_SkColorType);
-        SINK("rgba",    RasterSink, kRGBA_8888_SkColorType);
-        SINK("bgra",    RasterSink, kBGRA_8888_SkColorType);
-        SINK("rgbx",    RasterSink, kRGB_888x_SkColorType);
-        SINK("1010102", RasterSink, kRGBA_1010102_SkColorType);
-        SINK("101010x", RasterSink, kRGB_101010x_SkColorType);
-        SINK("pdf",     PDFSink, false, SK_ScalarDefaultRasterDPI);
-        SINK("skp",     SKPSink);
-        SINK("svg",     SVGSink);
-        SINK("null",    NullSink);
-        SINK("xps",     XPSSink);
-        SINK("pdfa",    PDFSink, true,  SK_ScalarDefaultRasterDPI);
-        SINK("pdf300",  PDFSink, false, 300);
-        SINK("jsdebug", DebugSink);
+        SINK("g8",          RasterSink, kGray_8_SkColorType);
+        SINK("565",         RasterSink, kRGB_565_SkColorType);
+        SINK("4444",        RasterSink, kARGB_4444_SkColorType);
+        SINK("8888",        RasterSink, kN32_SkColorType);
+        SINK("rgba",        RasterSink, kRGBA_8888_SkColorType);
+        SINK("bgra",        RasterSink, kBGRA_8888_SkColorType);
+        SINK("rgbx",        RasterSink, kRGB_888x_SkColorType);
+        SINK("1010102",     RasterSink, kRGBA_1010102_SkColorType);
+        SINK("101010x",     RasterSink, kRGB_101010x_SkColorType);
+        SINK("bgra1010102", RasterSink, kBGRA_1010102_SkColorType);
+        SINK("bgr101010x",  RasterSink, kBGR_101010x_SkColorType);
+        SINK("pdf",         PDFSink, false, SK_ScalarDefaultRasterDPI);
+        SINK("skp",         SKPSink);
+        SINK("svg",         SVGSink);
+        SINK("null",        NullSink);
+        SINK("xps",         XPSSink);
+        SINK("pdfa",        PDFSink, true,  SK_ScalarDefaultRasterDPI);
+        SINK("pdf300",      PDFSink, false, 300);
+        SINK("jsdebug",     DebugSink);
 
         // Configs relevant to color management testing (and 8888 for reference).
 
@@ -1113,7 +1115,7 @@ struct Task {
             SkDynamicMemoryWStream stream;
             start(task.sink.tag.c_str(), task.src.tag.c_str(),
                   task.src.options.c_str(), name.c_str());
-            Error err = task.sink->draw(*task.src, &bitmap, &stream, &log);
+            Result result = task.sink->draw(*task.src, &bitmap, &stream, &log);
             if (!log.isEmpty()) {
                 info("%s %s %s %s:\n%s\n", task.sink.tag.c_str()
                                          , task.src.tag.c_str()
@@ -1121,19 +1123,18 @@ struct Task {
                                          , name.c_str()
                                          , log.c_str());
             }
-            if (!err.isEmpty()) {
-                if (err.isFatal()) {
-                    fail(SkStringPrintf("%s %s %s %s: %s",
-                                        task.sink.tag.c_str(),
-                                        task.src.tag.c_str(),
-                                        task.src.options.c_str(),
-                                        name.c_str(),
-                                        err.c_str()));
-                } else {
-                    done(task.sink.tag.c_str(), task.src.tag.c_str(),
-                         task.src.options.c_str(), name.c_str());
-                    return;
-                }
+            if (result.isSkip()) {
+                done(task.sink.tag.c_str(), task.src.tag.c_str(),
+                     task.src.options.c_str(), name.c_str());
+                return;
+            }
+            if (result.isFatal()) {
+                fail(SkStringPrintf("%s %s %s %s: %s",
+                                    task.sink.tag.c_str(),
+                                    task.src.tag.c_str(),
+                                    task.src.options.c_str(),
+                                    name.c_str(),
+                                    result.c_str()));
             }
 
             // Run verifiers if specified

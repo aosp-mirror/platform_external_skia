@@ -226,7 +226,7 @@ static int num_quad_subdivs(const SkPoint p[3]) {
 
         // +1 since we're ignoring the mantissa contribution.
         int log = get_float_exp(dsqd/(gSubdivTol*gSubdivTol)) + 1;
-        log = SkTMin(SkTMax(0, log), kMaxSub);
+        log = std::min(std::max(0, log), kMaxSub);
         return log;
     }
 }
@@ -1084,7 +1084,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) {
                                                            geometryProcessorViewM,
                                                            geometryProcessorLocalM);
 
-            GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
+            GrMesh* mesh = target->allocMesh();
             mesh->setIndexedPatterned(quadsIndexBuffer, kIdxsPerQuad, kQuadNumVertices, quadCount,
                                       kQuadsNumInIdxBuffer);
             mesh->setVertexData(vertexBuffer, firstVertex);
@@ -1097,7 +1097,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) {
                                                              geometryProcessorViewM,
                                                              geometryProcessorLocalM);
 
-            GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
+            GrMesh* mesh = target->allocMesh();
             mesh->setIndexedPatterned(std::move(quadsIndexBuffer), kIdxsPerQuad, kQuadNumVertices,
                                       conicCount, kQuadsNumInIdxBuffer);
             mesh->setVertexData(std::move(vertexBuffer), firstVertex);

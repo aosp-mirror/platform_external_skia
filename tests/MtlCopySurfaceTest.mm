@@ -42,8 +42,7 @@ DEF_GPUTEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
 
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     sk_sp<GrSurfaceProxy> srcProxy = proxyProvider->wrapBackendRenderTarget(
-                                             backendRT, GrColorType::kBGRA_8888,
-                                             kTopLeft_GrSurfaceOrigin);
+                                             backendRT, GrColorType::kBGRA_8888);
 
     GrSurfaceProxyView dstView = GrSurfaceProxy::Copy(context, srcProxy.get(),
                                                       kTopLeft_GrSurfaceOrigin,
@@ -59,14 +58,11 @@ DEF_GPUTEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
     }
 
     // Try direct copy via GPU (should fail)
-    GrSurfaceDesc desc;
-    desc.fWidth = kWidth;
-    desc.fHeight = kHeight;
     GrBackendFormat backendFormat = GrBackendFormat::MakeMtl(drawable.texture.pixelFormat);
     GrSurface* src = srcProxy->peekSurface();
-    sk_sp<GrTexture> dst = gpu->createTexture(desc, backendFormat, GrRenderable::kNo,
-                                              1, GrMipMapped::kNo, SkBudgeted::kNo,
-                                              GrProtected::kNo);
+    sk_sp<GrTexture> dst =
+            gpu->createTexture({kWidth, kHeight}, backendFormat, GrRenderable::kNo, 1,
+                               GrMipMapped::kNo, SkBudgeted::kNo, GrProtected::kNo);
 
     bool result = gpu->copySurface(dst.get(), src, SkIRect::MakeXYWH(0, 0, kWidth, kHeight),
                                    SkIPoint::Make(0, 0));

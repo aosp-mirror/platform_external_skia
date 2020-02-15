@@ -16,13 +16,24 @@
 #include "src/core/SkEnumerate.h"
 #include <cctype>
 
+static SkFontMetrics use_or_generate_metrics(
+        const SkFontMetrics* metrics, SkScalerContext* context) {
+    SkFontMetrics answer;
+    if (metrics) {
+        answer = *metrics;
+    } else {
+        context->getFontMetrics(&answer);
+    }
+    return answer;
+}
+
 SkStrike::SkStrike(
     const SkDescriptor& desc,
     std::unique_ptr<SkScalerContext> scaler,
-    const SkFontMetrics& fontMetrics)
+    const SkFontMetrics* fontMetrics)
         : fDesc{desc}
         , fScalerContext{std::move(scaler)}
-        , fFontMetrics{fontMetrics}
+        , fFontMetrics{use_or_generate_metrics(fontMetrics, fScalerContext.get())}
         , fRoundingSpec{fScalerContext->isSubpixel(),
                         fScalerContext->computeAxisAlignmentForHText()} {
     SkASSERT(fScalerContext != nullptr);
@@ -50,25 +61,6 @@ SkGlyph* SkStrike::glyph(SkPackedGlyphID packedGlyphID) {
         fScalerContext->getMetrics(glyph);
     }
     return glyph;
-}
-
-SkGlyph* SkStrike::glyphFromPrototype(const SkGlyphPrototype& p, void* image) {
-    SkAutoMutexExclusive lock{fMu};
-    SkGlyph* glyph = fGlyphMap.findOrNull(p.id);
-    if (glyph == nullptr) {
-        fMemoryUsed += sizeof(SkGlyph);
-        glyph = fAlloc.make<SkGlyph>(p);
-        fGlyphMap.set(glyph);
-    }
-    if (glyph->setImage(&fAlloc, image)) {
-        fMemoryUsed += glyph->imageSize();
-    }
-    return glyph;
-}
-
-SkGlyph* SkStrike::glyphOrNull(SkPackedGlyphID id) const {
-    SkAutoMutexExclusive lock{fMu};
-    return this->internalGlyphOrNull(id);
 }
 
 const SkPath* SkStrike::preparePath(SkGlyph* glyph) {
@@ -176,18 +168,6 @@ void SkStrike::prepareForDrawingMasksCPU(SkDrawableGlyphBuffer* drawables) {
             // If the glyph is too large, then no image is created.
             if (this->prepareImage(glyph) != nullptr) {
                 drawables->push_back(glyph, i);
-            }
-        });
-}
-
-void SkStrike::prepareForDrawingPathsCPU(SkDrawableGlyphBuffer* drawables) {
-    SkAutoMutexExclusive lock{fMu};
-    this->commonFilterLoop(drawables,
-        [&](size_t i, SkGlyph* glyph, SkPoint pos) SK_REQUIRES(fMu) {
-            const SkPath* path = this->preparePath(glyph);
-            // The glyph my not have a path.
-            if (path != nullptr) {
-                drawables->push_back(path, i);
             }
         });
 }

@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkBBHFactory.h"
 #include "include/core/SkImage.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkRecordDraw.h"
@@ -27,11 +28,11 @@ void SkRecordDraw(const SkRecord& record,
         // lets us query the BBH.
         SkRect query = canvas->getLocalClipBounds();
 
-        SkTDArray<int> ops;
-        static_cast<const SkBBoxHierarchy_Base*>(bbh)->search(query, &ops);
+        std::vector<int> ops;
+        bbh->search(query, &ops);
 
         SkRecords::Draw draw(canvas, drawablePicts, drawables, drawableCount);
-        for (int i = 0; i < ops.count(); i++) {
+        for (int i = 0; i < (int)ops.size(); i++) {
             if (callback && callback->abort()) {
                 return;
             }
@@ -61,7 +62,7 @@ void SkRecordPartialDraw(const SkRecord& record, SkCanvas* canvas,
                          const SkMatrix& initialCTM) {
     SkAutoCanvasRestore saveRestore(canvas, true /*save now, restore at exit*/);
 
-    stop = SkTMin(stop, record.count());
+    stop = std::min(stop, record.count());
     SkRecords::Draw draw(canvas, drawablePicts, nullptr, drawableCount, &initialCTM);
     for (int i = start; i < stop; i++) {
         record.visit(i, draw);

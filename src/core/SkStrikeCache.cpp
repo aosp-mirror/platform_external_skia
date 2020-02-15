@@ -10,6 +10,7 @@
 #include <cctype>
 
 #include "include/core/SkGraphics.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkTraceMemoryDump.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/SkMutex.h"
@@ -17,12 +18,12 @@
 #include "src/core/SkGlyphRunPainter.h"
 #include "src/core/SkStrike.h"
 
-class SkStrikeCache::Node final : public SkStrikeForGPU {
+class SkStrikeCache::Node final : public SkRefCnt, public SkStrikeForGPU {
 public:
     Node(SkStrikeCache* strikeCache,
          const SkDescriptor& desc,
          std::unique_ptr<SkScalerContext> scaler,
-         const SkFontMetrics& metrics,
+         const SkFontMetrics* metrics,
          std::unique_ptr<SkStrikePinner> pinner)
             : fStrikeCache{strikeCache}
             , fStrike{desc, std::move(scaler), metrics}
@@ -135,26 +136,9 @@ SkStrikeCache::~SkStrikeCache() {
     Node* node = fHead;
     while (node) {
         Node* next = node->fNext;
-        delete node;
+        node->unref();
         node = next;
     }
-}
-
-std::unique_ptr<SkScalerContext> SkStrikeCache::CreateScalerContext(
-        const SkDescriptor& desc,
-        const SkScalerContextEffects& effects,
-        const SkTypeface& typeface) {
-    auto scaler = typeface.createScalerContext(effects, &desc, true /* can fail */);
-
-    // Check if we can create a scaler-context before creating the glyphcache.
-    // If not, we may have exhausted OS/font resources, so try purging the
-    // cache once and try again
-    // pass true the first time, to notice if the scalercontext failed,
-    if (scaler == nullptr) {
-        PurgeAll();
-        scaler = typeface.createScalerContext(effects, &desc, false /* must succeed */);
-    }
-    return scaler;
 }
 
 SkExclusiveStrikePtr SkStrikeCache::findOrCreateStrikeExclusive(
@@ -168,7 +152,7 @@ auto SkStrikeCache::findOrCreateStrike(const SkDescriptor& desc,
                                        const SkTypeface& typeface) -> Node* {
     Node* node = this->findAndDetachStrike(desc);
     if (node == nullptr) {
-        auto scaler = CreateScalerContext(desc, effects, typeface);
+        auto scaler = typeface.createScalerContext(effects, &desc);
         node = this->createStrike(desc, std::move(scaler));
     }
     return node;
@@ -294,14 +278,7 @@ auto SkStrikeCache::createStrike(
         std::unique_ptr<SkScalerContext> scaler,
         SkFontMetrics* maybeMetrics,
         std::unique_ptr<SkStrikePinner> pinner) -> Node* {
-    SkFontMetrics fontMetrics;
-    if (maybeMetrics != nullptr) {
-        fontMetrics = *maybeMetrics;
-    } else {
-        scaler->getFontMetrics(&fontMetrics);
-    }
-
-    return new Node{this, desc, std::move(scaler), fontMetrics, std::move(pinner)};
+    return new Node{this, desc, std::move(scaler), maybeMetrics, std::move(pinner)};
 }
 
 void SkStrikeCache::purgeAll() {
@@ -390,10 +367,10 @@ size_t SkStrikeCache::internalPurge(size_t minBytesNeeded) {
     if (fTotalMemoryUsed > fCacheSizeLimit) {
         bytesNeeded = fTotalMemoryUsed - fCacheSizeLimit;
     }
-    bytesNeeded = SkTMax(bytesNeeded, minBytesNeeded);
+    bytesNeeded = std::max(bytesNeeded, minBytesNeeded);
     if (bytesNeeded) {
         // no small purges!
-        bytesNeeded = SkTMax(bytesNeeded, fTotalMemoryUsed >> 2);
+        bytesNeeded = std::max(bytesNeeded, fTotalMemoryUsed >> 2);
     }
 
     int countNeeded = 0;
@@ -422,7 +399,7 @@ size_t SkStrikeCache::internalPurge(size_t minBytesNeeded) {
             bytesFreed += node->fStrike.getMemoryUsed();
             countFreed += 1;
             this->internalDetachCache(node);
-            delete node;
+            node->unref();
         }
         node = prev;
     }

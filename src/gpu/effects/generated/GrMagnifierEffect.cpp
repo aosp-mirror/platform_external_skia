@@ -178,7 +178,7 @@ const GrFragmentProcessor::TextureSampler& GrMagnifierEffect::onTextureSampler(i
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMagnifierEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrMagnifierEffect::TestCreate(GrProcessorTestData* d) {
-    auto[proxy, ct, at] = d->randomProxy();
+    auto[view, ct, at] = d->randomView();
     const int kMaxWidth = 200;
     const int kMaxHeight = 200;
     const SkScalar kMaxInset = 20.0f;
@@ -189,7 +189,7 @@ std::unique_ptr<GrFragmentProcessor> GrMagnifierEffect::TestCreate(GrProcessorTe
     SkIRect bounds = SkIRect::MakeWH(SkIntToScalar(kMaxWidth), SkIntToScalar(kMaxHeight));
     SkRect srcRect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
 
-    auto effect = GrMagnifierEffect::Make(std::move(proxy),
+    auto effect = GrMagnifierEffect::Make(std::move(view),
                                           bounds,
                                           srcRect,
                                           srcRect.width() / bounds.width(),

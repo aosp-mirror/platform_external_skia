@@ -81,9 +81,9 @@ public:
     static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> child) {
         return std::unique_ptr<GrFragmentProcessor>(new TestFP(std::move(child)));
     }
-    static std::unique_ptr<GrFragmentProcessor> Make(const SkTArray<sk_sp<GrTextureProxy>>& proxies,
+    static std::unique_ptr<GrFragmentProcessor> Make(const SkTArray<GrSurfaceProxyView>& views,
                                                      const SkTArray<sk_sp<GrGpuBuffer>>& buffers) {
-        return std::unique_ptr<GrFragmentProcessor>(new TestFP(proxies, buffers));
+        return std::unique_ptr<GrFragmentProcessor>(new TestFP(views, buffers));
     }
 
     const char* name() const override { return "test"; }
@@ -98,11 +98,11 @@ public:
     }
 
 private:
-    TestFP(const SkTArray<sk_sp<GrTextureProxy>>& proxies,
+    TestFP(const SkTArray<GrSurfaceProxyView>& views,
            const SkTArray<sk_sp<GrGpuBuffer>>& buffers)
             : INHERITED(kTestFP_ClassID, kNone_OptimizationFlags), fSamplers(4) {
-        for (const auto& proxy : proxies) {
-            fSamplers.emplace_back(proxy);
+        for (const auto& view : views) {
+            fSamplers.emplace_back(view);
         }
         this->setTextureSamplerCnt(fSamplers.count());
     }
@@ -149,9 +149,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
 
-    GrSurfaceDesc desc;
-    desc.fWidth = 10;
-    desc.fHeight = 10;
+    static constexpr SkISize kDims = {10, 10};
 
     const GrBackendFormat format =
         context->priv().caps()->getDefaultBackendFormat(GrColorType::kRGBA_8888,
@@ -164,14 +162,14 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
                     context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1});
             {
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                        format, desc, swizzle, GrRenderable::kNo, 1, kTopLeft_GrSurfaceOrigin,
-                        GrMipMapped::kNo, SkBackingFit::kExact, SkBudgeted::kYes, GrProtected::kNo);
+                        format, kDims, swizzle, GrRenderable::kNo, 1, GrMipMapped::kNo,
+                        SkBackingFit::kExact, SkBudgeted::kYes, GrProtected::kNo);
 
                 {
-                    SkTArray<sk_sp<GrTextureProxy>> proxies;
+                    SkTArray<GrSurfaceProxyView> views;
                     SkTArray<sk_sp<GrGpuBuffer>> buffers;
-                    proxies.push_back(proxy);
-                    auto fp = TestFP::Make(std::move(proxies), std::move(buffers));
+                    views.push_back({proxy, kTopLeft_GrSurfaceOrigin, swizzle});
+                    auto fp = TestFP::Make(std::move(views), std::move(buffers));
                     for (int i = 0; i < parentCnt; ++i) {
                         fp = TestFP::Make(std::move(fp));
                     }
@@ -234,13 +232,11 @@ static GrColor input_texel_color(int i, int j, SkScalar delta) {
 void test_draw_op(GrContext* context,
                   GrRenderTargetContext* rtc,
                   std::unique_ptr<GrFragmentProcessor> fp,
-                  sk_sp<GrTextureProxy> inputDataProxy,
+                  GrSurfaceProxyView inputDataView,
                   SkAlphaType inputAlphaType) {
     GrPaint paint;
-    GrSurfaceOrigin origin = inputDataProxy->origin();
-    GrSwizzle swizzle = inputDataProxy->textureSwizzle();
-    GrSurfaceProxyView view(std::move(inputDataProxy), origin, swizzle);
-    paint.addColorFragmentProcessor(GrTextureEffect::Make(std::move(view), inputAlphaType));
+    paint.addColorFragmentProcessor(GrTextureEffect::Make(std::move(inputDataView),
+                                                          inputAlphaType));
     paint.addColorFragmentProcessor(std::move(fp));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
@@ -249,13 +245,14 @@ void test_draw_op(GrContext* context,
     rtc->priv().testingOnly_addDrawOp(std::move(op));
 }
 
-// This assumes that the output buffer will be the same size as inputDataProxy
+// This assumes that the output buffer will be the same size as inputDataView
 void render_fp(GrContext* context, GrRenderTargetContext* rtc, GrFragmentProcessor* fp,
-               sk_sp<GrTextureProxy> inputDataProxy, SkAlphaType inputAlphaType, GrColor* buffer) {
+               GrSurfaceProxyView inputDataView, SkAlphaType inputAlphaType, GrColor* buffer) {
     // test_draw_op needs to take ownership of an FP, so give it a clone that it can own
-    test_draw_op(context, rtc, fp->clone(), inputDataProxy, inputAlphaType);
-    memset(buffer, 0x0, sizeof(GrColor) * inputDataProxy->width() * inputDataProxy->height());
-    rtc->readPixels(SkImageInfo::Make(inputDataProxy->dimensions(), kRGBA_8888_SkColorType,
+    test_draw_op(context, rtc, fp->clone(), inputDataView, inputAlphaType);
+    memset(buffer, 0x0,
+           sizeof(GrColor) * inputDataView.proxy()->width() * inputDataView.proxy()->height());
+    rtc->readPixels(SkImageInfo::Make(inputDataView.proxy()->dimensions(), kRGBA_8888_SkColorType,
                                       kPremul_SkAlphaType),
                     buffer, 0, {0, 0});
 }
@@ -264,7 +261,7 @@ void render_fp(GrContext* context, GrRenderTargetContext* rtc, GrFragmentProcess
 bool init_test_textures(GrResourceProvider* resourceProvider,
                         GrRecordingContext* context,
                         SkRandom* random,
-                        GrProcessorTestData::ProxyInfo proxies[2]) {
+                        GrProcessorTestData::ViewInfo views[2]) {
     static const int kTestTextureSize = 256;
 
     {
@@ -288,7 +285,7 @@ bool init_test_textures(GrResourceProvider* resourceProvider,
         if (!view.proxy() || !view.proxy()->instantiate(resourceProvider)) {
             return false;
         }
-        proxies[0] = {view.asTextureProxyRef(), GrColorType::kRGBA_8888, kPremul_SkAlphaType};
+        views[0] = {view, GrColorType::kRGBA_8888, kPremul_SkAlphaType};
     }
 
     {
@@ -311,7 +308,7 @@ bool init_test_textures(GrResourceProvider* resourceProvider,
         if (!view.proxy() || !view.proxy()->instantiate(resourceProvider)) {
             return false;
         }
-        proxies[1] = {view.asTextureProxyRef(), GrColorType::kAlpha_8, kPremul_SkAlphaType};
+        views[1] = {view, GrColorType::kAlpha_8, kPremul_SkAlphaType};
     }
 
     return true;
@@ -319,8 +316,8 @@ bool init_test_textures(GrResourceProvider* resourceProvider,
 
 // Creates a texture of premul colors used as the output of the fragment processor that precedes
 // the fragment processor under test. Color values are those provided by input_texel_color().
-sk_sp<GrTextureProxy> make_input_texture(GrRecordingContext* context, int width, int height,
-                                         SkScalar delta) {
+GrSurfaceProxyView make_input_texture(GrRecordingContext* context, int width, int height,
+                                      SkScalar delta) {
     GrColor* data = new GrColor[width * height];
     for (int y = 0; y < width; ++y) {
         for (int x = 0; x < height; ++x) {
@@ -335,7 +332,7 @@ sk_sp<GrTextureProxy> make_input_texture(GrRecordingContext* context, int width,
     bitmap.setImmutable();
     GrBitmapTextureMaker maker(context, bitmap);
     auto[view, grCT] = maker.view(GrMipMapped::kNo);
-    return view.asTextureProxyRef();
+    return view;
 }
 
 // We tag logged  data as unpremul to avoid conversion when encoding as  PNG. The input texture
@@ -352,14 +349,11 @@ bool log_pixels(GrColor* pixels, int widthHeight, SkString* dst) {
     return BipmapToBase64DataURI(bmp, dst);
 }
 
-bool log_texture_proxy(GrContext* context, sk_sp<GrTextureProxy> src, SkString* dst) {
-    SkImageInfo ii = SkImageInfo::Make(src->dimensions(), kRGBA_8888_SkColorType, kLogAlphaType);
+bool log_texture_view(GrContext* context, GrSurfaceProxyView src, SkString* dst) {
+    SkImageInfo ii = SkImageInfo::Make(src.proxy()->dimensions(), kRGBA_8888_SkColorType,
+                                       kLogAlphaType);
 
-    GrSurfaceOrigin origin = src->origin();
-    GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(src->backendFormat(),
-                                                               GrColorType::kRGBA_8888);
-    GrSurfaceProxyView view(std::move(src), origin, swizzle);
-    auto sContext = GrSurfaceContext::Make(context, std::move(view), GrColorType::kRGBA_8888,
+    auto sContext = GrSurfaceContext::Make(context, std::move(src), GrColorType::kRGBA_8888,
                                            kLogAlphaType, nullptr);
     SkBitmap bm;
     SkAssertResult(bm.tryAllocPixels(ii));
@@ -502,12 +496,12 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kRenderSize, kRenderSize});
 
-    GrProcessorTestData::ProxyInfo proxies[2];
-    if (!init_test_textures(resourceProvider, context, &random, proxies)) {
+    GrProcessorTestData::ViewInfo views[2];
+    if (!init_test_textures(resourceProvider, context, &random, views)) {
         ERRORF(reporter, "Could not create test textures");
         return;
     }
-    GrProcessorTestData testData(&random, context, 2, proxies);
+    GrProcessorTestData testData(&random, context, 2, views);
 
     // Coverage optimization uses three frames with a linearly transformed input texture.  The first
     // frame has no offset, second frames add .2 and .4, which should then be present as a fixed
@@ -638,7 +632,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
                                         "doesn't match actual output. Error: %f, Tolerance: %f, "
                                         "input: (%f, %f, %f, %f), actual: (%f, %f, %f, %f), "
                                         "expected(%f, %f, %f, %f)", fp->name(),
-                                        SkTMax(rDiff, SkTMax(gDiff, SkTMax(bDiff, aDiff))), kTol,
+                                        std::max(rDiff, std::max(gDiff, std::max(bDiff, aDiff))), kTol,
                                         input4f.fR, input4f.fG, input4f.fB, input4f.fA,
                                         output4f.fR, output4f.fG, output4f.fB, output4f.fA,
                                         expected4f.fR, expected4f.fG, expected4f.fB, expected4f.fA);
@@ -685,7 +679,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
                 if (!loggedFirstFailure) {
                     // Print with ERRORF to make sure the encoded image is output
                     SkString input;
-                    log_texture_proxy(context, inputTexture1, &input);
+                    log_texture_view(context, inputTexture1, &input);
                     SkString output;
                     log_pixels(readData1.get(), kRenderSize, &output);
                     ERRORF(reporter, "Input image: %s\n\n"
@@ -709,7 +703,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
                 }
                 if (!loggedFirstWarning) {
                     SkString input;
-                    log_texture_proxy(context, inputTexture1, &input);
+                    log_texture_view(context, inputTexture1, &input);
                     SkString output;
                     log_pixels(readData1.get(), kRenderSize, &output);
                     INFOF(reporter, "Input image: %s\n\n"
@@ -736,12 +730,12 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kRenderSize, kRenderSize});
 
-    GrProcessorTestData::ProxyInfo proxies[2];
-    if (!init_test_textures(resourceProvider, context, &random, proxies)) {
+    GrProcessorTestData::ViewInfo views[2];
+    if (!init_test_textures(resourceProvider, context, &random, views)) {
         ERRORF(reporter, "Could not create test textures");
         return;
     }
-    GrProcessorTestData testData(&random, context, 2, proxies);
+    GrProcessorTestData testData(&random, context, 2, views);
 
     auto inputTexture = make_input_texture(context, kRenderSize, kRenderSize, 0.0f);
     std::unique_ptr<GrColor[]> readData1(new GrColor[kRenderSize * kRenderSize]);
@@ -823,7 +817,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
                                                           kRGBA_8888_SkColorType,
                                                           kUnpremul_SkAlphaType);
                             SkString input, orig, clone;
-                            if (log_texture_proxy(context, inputTexture, &input) &&
+                            if (log_texture_view(context, inputTexture, &input) &&
                                 log_pixels(readData1.get(), kRenderSize, &orig) &&
                                 log_pixels(readData2.get(), kRenderSize, &clone)) {
                                 ERRORF(reporter,

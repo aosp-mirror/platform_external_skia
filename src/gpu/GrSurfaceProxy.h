@@ -133,12 +133,9 @@ public:
         return SkRect::Make(this->backingStoreDimensions());
     }
 
-    GrSurfaceOrigin origin() const {
-        SkASSERT(kTopLeft_GrSurfaceOrigin == fOrigin || kBottomLeft_GrSurfaceOrigin == fOrigin);
-        return fOrigin;
-    }
-
-    const GrSwizzle& textureSwizzle() const { return fTextureSwizzle; }
+    // Do not call this. It will shortly be removed and is just needed for a couple cases where we
+    // are getting a proxy from the cache and cannot be certain what the GrColorType of the proxy.
+    const GrSwizzle& textureSwizzleDoNotUse() const { return fTextureSwizzle; }
 
     const GrBackendFormat& backendFormat() const { return fFormat; }
 
@@ -327,9 +324,8 @@ public:
 protected:
     // Deferred version - takes a new UniqueID from the shared resource/proxy pool.
     GrSurfaceProxy(const GrBackendFormat&,
-                   const GrSurfaceDesc&,
+                   SkISize,
                    GrRenderable,
-                   GrSurfaceOrigin,
                    const GrSwizzle& textureSwizzle,
                    SkBackingFit,
                    SkBudgeted,
@@ -339,9 +335,8 @@ protected:
     // Lazy-callback version - takes a new UniqueID from the shared resource/proxy pool.
     GrSurfaceProxy(LazyInstantiateCallback&&,
                    const GrBackendFormat&,
-                   const GrSurfaceDesc&,
+                   SkISize,
                    GrRenderable,
-                   GrSurfaceOrigin,
                    const GrSwizzle& textureSwizzle,
                    SkBackingFit,
                    SkBudgeted,
@@ -354,7 +349,6 @@ protected:
     // in allocation by having its backing resource recycled to other uninstantiated proxies or
     // not depending on UseAllocator.
     GrSurfaceProxy(sk_sp<GrSurface>,
-                   GrSurfaceOrigin,
                    const GrSwizzle& textureSwizzle,
                    SkBackingFit,
                    UseAllocator);
@@ -399,11 +393,10 @@ protected:
     GrInternalSurfaceFlags fSurfaceFlags;
 
 private:
-    // For wrapped resources, 'fFormat', 'fWidth', 'fHeight', and 'fOrigin; will always
-    // be filled in from the wrapped resource.
+    // For wrapped resources, 'fFormat', 'fWidth', and 'fHeight'; will always be filled in from the
+    // wrapped resource.
     const GrBackendFormat  fFormat;
     SkISize                fDimensions;
-    const GrSurfaceOrigin  fOrigin;
     const GrSwizzle        fTextureSwizzle;
 
     SkBackingFit           fFit;      // always kApprox for lazy-callback resources

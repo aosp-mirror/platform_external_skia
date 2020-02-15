@@ -131,10 +131,6 @@ bool SkDeferredDisplayListRecorder::init() {
 
     GrColorType grColorType = SkColorTypeToGrColorType(fCharacterization.colorType());
 
-    GrSurfaceDesc desc;
-    desc.fWidth = fCharacterization.width();
-    desc.fHeight = fCharacterization.height();
-
     sk_sp<SkDeferredDisplayList::LazyProxyData> lazyProxyData = fLazyProxyData;
 
     // What we're doing here is we're creating a lazy proxy to back the SkSurface. The lazy
@@ -164,10 +160,9 @@ bool SkDeferredDisplayListRecorder::init() {
                 return GrSurfaceProxy::LazyCallbackResult(std::move(surface));
             },
             fCharacterization.backendFormat(),
-            desc,
+            fCharacterization.dimensions(),
             readSwizzle,
             fCharacterization.sampleCount(),
-            fCharacterization.origin(),
             surfaceFlags,
             optionalTextureInfo,
             GrMipMapsStatus::kNotAllocated,
@@ -183,7 +178,6 @@ bool SkDeferredDisplayListRecorder::init() {
 
     GrSwizzle outputSwizzle = caps->getOutputSwizzle(fCharacterization.backendFormat(),
                                                      grColorType);
-    SkASSERT(readSwizzle == proxy->textureSwizzle());
 
     GrSurfaceProxyView readView(proxy, fCharacterization.origin(), readSwizzle);
     GrSurfaceProxyView outputView(std::move(proxy), fCharacterization.origin(), outputSwizzle);

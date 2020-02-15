@@ -224,13 +224,13 @@ static void ddl_sample(GrContext* context, DDLTileHelper* tiles, GpuSync* gpuSyn
 }
 
 static void run_ddl_benchmark(const sk_gpu_test::FenceSync* fenceSync,
-                              GrContext* context, SkCanvas* finalCanvas,
+                              GrContext* context, sk_sp<SkSurface> surface,
                               SkPicture* inputPicture, std::vector<Sample>* samples) {
     using clock = std::chrono::high_resolution_clock;
     const Sample::duration sampleDuration = std::chrono::milliseconds(FLAGS_sampleMs);
     const clock::duration benchDuration = std::chrono::milliseconds(FLAGS_duration);
 
-    SkIRect viewport = finalCanvas->imageInfo().bounds();
+    SkIRect viewport = surface->imageInfo().bounds();
 
     DDLPromiseImageHelper promiseImageHelper;
     sk_sp<SkData> compressedPictureData = promiseImageHelper.deflateSKP(inputPicture);
@@ -238,9 +238,11 @@ static void run_ddl_benchmark(const sk_gpu_test::FenceSync* fenceSync,
         exitf(ExitErr::kUnavailable, "DDL: conversion of skp failed");
     }
 
-    promiseImageHelper.uploadAllToGPU(context);
+    promiseImageHelper.createCallbackContexts(context);
 
-    DDLTileHelper tiles(finalCanvas, viewport, FLAGS_ddlTilingWidthHeight);
+    promiseImageHelper.uploadAllToGPU(nullptr, context);
+
+    DDLTileHelper tiles(surface, viewport, FLAGS_ddlTilingWidthHeight);
 
     tiles.createSKPPerTile(compressedPictureData.get(), promiseImageHelper);
 
@@ -267,7 +269,7 @@ static void run_ddl_benchmark(const sk_gpu_test::FenceSync* fenceSync,
 
     if (!FLAGS_png.isEmpty()) {
         // The user wants to see the final result
-        tiles.composeAllTiles(finalCanvas);
+        tiles.composeAllTiles();
     }
 
     // Make sure the gpu has finished all its work before we exit this function and delete the
@@ -469,8 +471,8 @@ int main(int argc, char** argv) {
         }
         srcname = SkOSPath::Basename(srcfile.c_str());
     }
-    int width = SkTMin(SkScalarCeilToInt(skp->cullRect().width()), 2048),
-        height = SkTMin(SkScalarCeilToInt(skp->cullRect().height()), 2048);
+    int width = std::min(SkScalarCeilToInt(skp->cullRect().width()), 2048),
+        height = std::min(SkScalarCeilToInt(skp->cullRect().height()), 2048);
     if (FLAGS_verbosity >= 3 &&
         (width != skp->cullRect().width() || height != skp->cullRect().height())) {
         fprintf(stderr, "%s is too large (%ix%i), cropping to %ix%i.\n",
@@ -502,7 +504,7 @@ int main(int argc, char** argv) {
         exitf(ExitErr::kUnavailable, "failed to create context for config %s",
                                      config->getTag().c_str());
     }
-    if (ctx->maxRenderTargetSize() < SkTMax(width, height)) {
+    if (ctx->maxRenderTargetSize() < std::max(width, height)) {
         exitf(ExitErr::kUnavailable, "render target size %ix%i not supported by platform (max: %i)",
               width, height, ctx->maxRenderTargetSize());
     }
@@ -553,7 +555,7 @@ int main(int argc, char** argv) {
     }
     if (!FLAGS_gpuClock) {
         if (FLAGS_ddl) {
-            run_ddl_benchmark(testCtx->fenceSync(), ctx, canvas, skp.get(), &samples);
+            run_ddl_benchmark(testCtx->fenceSync(), ctx, surface, skp.get(), &samples);
         } else if (!mskp) {
             auto s = std::make_unique<StaticSkp>(skp);
             run_benchmark(testCtx->fenceSync(), surface.get(), s.get(), &samples);

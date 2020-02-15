@@ -31,7 +31,6 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTime.h"
 #include "src/core/SkAutoMalloc.h"
-#include "src/core/SkBBoxHierarchy.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkLeanWindows.h"
 #include "src/core/SkOSFile.h"
@@ -956,7 +955,7 @@ public:
             while (fCurrentSampleSize < (int) SK_ARRAY_COUNT(sampleSizes)) {
                 int sampleSize = sampleSizes[fCurrentSampleSize];
                 fCurrentSampleSize++;
-                if (10 * sampleSize > SkTMin(codec->getInfo().width(), codec->getInfo().height())) {
+                if (10 * sampleSize > std::min(codec->getInfo().width(), codec->getInfo().height())) {
                     // Avoid benchmarking scaled decodes of already small images.
                     break;
                 }

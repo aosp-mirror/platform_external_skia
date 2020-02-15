@@ -68,18 +68,6 @@ static size_t format_rowbytes(int width, SkMask::Format format) {
                                         : width * format_alignment(format);
 }
 
-SkGlyph::SkGlyph(const SkGlyphPrototype& p)
-    : fWidth{p.width}
-    , fHeight{p.height}
-    , fTop{p.top}
-    , fLeft{p.left}
-    , fAdvanceX{p.advanceX}
-    , fAdvanceY{p.advanceY}
-    , fMaskFormat{(uint8_t)p.maskFormat}
-    , fForceBW{p.forceBW}
-    , fID{p.id}
-    {}
-
 size_t SkGlyph::formatAlignment() const {
     return format_alignment(this->maskFormat());
 }
@@ -201,8 +189,8 @@ static std::tuple<SkScalar, SkScalar> calculate_path_gap(
     SkScalar left  = SK_ScalarMax,
              right = SK_ScalarMin;
     auto expandGap = [&left, &right](SkScalar v) {
-        left  = SkTMin(left, v);
-        right = SkTMax(right, v);
+        left  = std::min(left, v);
+        right = std::max(right, v);
     };
 
     // Handle all the different verbs for the path.
@@ -257,9 +245,9 @@ static std::tuple<SkScalar, SkScalar> calculate_path_gap(
                 break;
             }
             case SkPath::kQuad_Verb: {
-                SkScalar quadTop = SkTMin(SkTMin(pts[0].fY, pts[1].fY), pts[2].fY);
+                SkScalar quadTop = std::min(std::min(pts[0].fY, pts[1].fY), pts[2].fY);
                 if (bottomOffset < quadTop) { break; }
-                SkScalar quadBottom = SkTMax(SkTMax(pts[0].fY, pts[1].fY), pts[2].fY);
+                SkScalar quadBottom = std::max(std::max(pts[0].fY, pts[1].fY), pts[2].fY);
                 if (topOffset > quadBottom) { break; }
                 addQuad(topOffset);
                 addQuad(bottomOffset);
@@ -272,10 +260,10 @@ static std::tuple<SkScalar, SkScalar> calculate_path_gap(
             }
             case SkPath::kCubic_Verb: {
                 SkScalar quadTop =
-                        SkTMin(SkTMin(SkTMin(pts[0].fY, pts[1].fY), pts[2].fY), pts[3].fY);
+                        std::min(std::min(std::min(pts[0].fY, pts[1].fY), pts[2].fY), pts[3].fY);
                 if (bottomOffset < quadTop) { break; }
                 SkScalar quadBottom =
-                        SkTMax(SkTMax(SkTMax(pts[0].fY, pts[1].fY), pts[2].fY), pts[3].fY);
+                        std::max(std::max(std::max(pts[0].fY, pts[1].fY), pts[2].fY), pts[3].fY);
                 if (topOffset > quadBottom) { break; }
                 addCubic(topOffset);
                 addCubic(bottomOffset);

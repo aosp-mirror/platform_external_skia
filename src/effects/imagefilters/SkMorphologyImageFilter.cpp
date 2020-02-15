@@ -400,7 +400,7 @@ GrMorphologyEffect::GrMorphologyEffect(GrSurfaceProxyView view,
                                        MorphType type,
                                        const float range[2])
         : INHERITED(kGrMorphologyEffect_ClassID, ModulateForClampedSamplerOptFlags(srcAlphaType))
-        , fCoordTransform(view.proxy())
+        , fCoordTransform(view.proxy(), view.origin())
         , fTextureSampler(std::move(view))
         , fDirection(direction)
         , fRadius(radius)
@@ -455,11 +455,7 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMorphologyEffect);
 
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrMorphologyEffect::TestCreate(GrProcessorTestData* d) {
-    auto [proxy, ct, at] = d->randomProxy();
-
-    GrSurfaceOrigin origin = proxy->origin();
-    GrSwizzle swizzle = proxy->textureSwizzle();
-    GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
+    auto [view, ct, at] = d->randomView();
 
     MorphDirection dir = d->fRandom->nextBool() ? MorphDirection::kX : MorphDirection::kY;
     static const int kMaxRadius = 10;
@@ -705,15 +701,15 @@ namespace {
                         r = SkGetPackedR32(*p),
                         a = SkGetPackedA32(*p);
                     if (type == MorphType::kDilate) {
-                        B = SkTMax(b, B);
-                        G = SkTMax(g, G);
-                        R = SkTMax(r, R);
-                        A = SkTMax(a, A);
+                        B = std::max(b, B);
+                        G = std::max(g, G);
+                        R = std::max(r, R);
+                        A = std::max(a, A);
                     } else {
-                        B = SkTMin(b, B);
-                        G = SkTMin(g, G);
-                        R = SkTMin(r, R);
-                        A = SkTMin(a, A);
+                        B = std::min(b, B);
+                        G = std::min(g, G);
+                        R = std::min(r, R);
+                        A = std::min(a, A);
                     }
                 }
                 *dptr = SkPackARGB32(A, R, G, B);
