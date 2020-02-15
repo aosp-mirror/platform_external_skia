@@ -851,6 +851,14 @@ namespace skvm {
         return round(mul(x, splat(limit)));
     }
 
+    Color Builder::unpack_1010102(I32 rgba) {
+        return {
+            from_unorm(10, extract(rgba,  0, splat(0x3ff))),
+            from_unorm(10, extract(rgba, 10, splat(0x3ff))),
+            from_unorm(10, extract(rgba, 20, splat(0x3ff))),
+            from_unorm( 2, extract(rgba, 30, splat(0x3  ))),
+        };
+    }
     Color Builder::unpack_8888(I32 rgba) {
         return {
             from_unorm(8, extract(rgba,  0, splat(0xff))),
@@ -1453,6 +1461,7 @@ namespace skvm {
     void Assembler::fcmge4s(V d, V n, V m) { this->op(0b0'1'1'01110'0'0'1, m, 0b1110'0'1, n, d); }
 
     void Assembler::fmla4s(V d, V n, V m) { this->op(0b0'1'0'01110'0'0'1, m, 0b11001'1, n, d); }
+    void Assembler::fmls4s(V d, V n, V m) { this->op(0b0'1'0'01110'1'0'1, m, 0b11001'1, n, d); }
 
     void Assembler::tbl(V d, V n, V m) { this->op(0b0'1'001110'00'0, m, 0b0'00'0'00, n, d); }
 

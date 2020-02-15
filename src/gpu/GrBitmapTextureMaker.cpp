@@ -51,8 +51,7 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
 
     if (fOriginalKey.isValid()) {
         auto colorType = SkColorTypeToGrColorType(fBitmap.colorType());
-        proxy = proxyProvider->findOrCreateProxyByUniqueKey(fOriginalKey, colorType,
-                                                            kTopLeft_GrSurfaceOrigin);
+        proxy = proxyProvider->findOrCreateProxyByUniqueKey(fOriginalKey, colorType);
         if (proxy) {
             swizzle = this->context()->priv().caps()->getReadSwizzle(proxy->backendFormat(),
                                                                      this->colorType());
@@ -81,7 +80,6 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
             swizzle = this->context()->priv().caps()->getReadSwizzle(proxy->backendFormat(),
                                                                      this->colorType());
             SkASSERT(!willBeMipped || GrMipMapped::kYes == proxy->mipMapped());
-            SkASSERT(proxy->origin() == kTopLeft_GrSurfaceOrigin);
             if (fOriginalKey.isValid()) {
                 proxyProvider->assignUniqueKeyToProxy(fOriginalKey, proxy.get());
                 GrInstallBitmapUniqueKeyInvalidator(

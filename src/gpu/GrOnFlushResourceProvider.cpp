@@ -57,8 +57,7 @@ void GrOnFlushResourceProvider::addTextureResolveTask(sk_sp<GrTextureProxy> text
     }
     auto task = static_cast<GrTextureResolveRenderTask*>(fDrawingMgr->fOnFlushRenderTasks.push_back(
             sk_make_sp<GrTextureResolveRenderTask>()).get());
-    task->addProxy(GrSurfaceProxyView(textureProxy, textureProxy->origin(), GrSwizzle()),
-                   resolveFlags, *this->caps());
+    task->addProxy(std::move(textureProxy), resolveFlags, *this->caps());
     task->makeClosed(*this->caps());
 }
 
@@ -82,10 +81,9 @@ void GrOnFlushResourceProvider::processInvalidUniqueKey(const GrUniqueKey& key) 
 sk_sp<GrTextureProxy> GrOnFlushResourceProvider::findOrCreateProxyByUniqueKey(
         const GrUniqueKey& key,
         GrColorType colorType,
-        GrSurfaceOrigin origin,
         UseAllocator useAllocator) {
     auto proxyProvider = fDrawingMgr->getContext()->priv().proxyProvider();
-    return proxyProvider->findOrCreateProxyByUniqueKey(key, colorType, origin, useAllocator);
+    return proxyProvider->findOrCreateProxyByUniqueKey(key, colorType, useAllocator);
 }
 
 bool GrOnFlushResourceProvider::instatiateProxy(GrSurfaceProxy* proxy) {

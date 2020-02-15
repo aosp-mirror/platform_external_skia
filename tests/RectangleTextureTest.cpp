@@ -108,7 +108,7 @@ static void test_copy_to_surface(skiatest::Reporter* reporter,
     }
 
     for (auto renderable : {GrRenderable::kNo, GrRenderable::kYes}) {
-        auto origin = dstContext->asSurfaceProxy()->origin();
+        auto origin = dstContext->origin();
         auto src = sk_gpu_test::MakeTextureProxyFromData(
                 context, renderable, origin,
                 {GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr, dstContext->width(),
@@ -167,8 +167,8 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(RectangleTexture, reporter, ctxInfo) {
         }
 
         sk_sp<GrTextureProxy> rectProxy = proxyProvider->wrapBackendTexture(
-                rectangleTex, GrColorType::kRGBA_8888, origin,
-                kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, kRW_GrIOType);
+                rectangleTex, GrColorType::kRGBA_8888, kBorrow_GrWrapOwnership,
+                GrWrapCacheable::kNo, kRW_GrIOType);
 
         if (!rectProxy) {
             ERRORF(reporter, "Error creating proxy for rectangle texture.");

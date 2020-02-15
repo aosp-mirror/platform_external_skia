@@ -131,10 +131,9 @@ static sk_sp<SkImage> new_wrapped_texture_common(GrContext* ctx,
     }
 
     GrProxyProvider* proxyProvider = ctx->priv().proxyProvider();
-    sk_sp<GrTextureProxy> proxy =
-            proxyProvider->wrapBackendTexture(backendTex, colorType, origin, ownership,
-                                              GrWrapCacheable::kNo, kRead_GrIOType,
-                                              releaseProc, releaseCtx);
+    sk_sp<GrTextureProxy> proxy = proxyProvider->wrapBackendTexture(
+            backendTex, colorType, ownership, GrWrapCacheable::kNo, kRead_GrIOType, releaseProc,
+            releaseCtx);
     if (!proxy) {
         return nullptr;
     }
@@ -163,9 +162,8 @@ sk_sp<SkImage> SkImage::MakeFromCompressedTexture(GrContext* ctx,
     }
 
     GrProxyProvider* proxyProvider = ctx->priv().proxyProvider();
-    sk_sp<GrTextureProxy> proxy =
-        proxyProvider->wrapCompressedBackendTexture(tex, origin, kBorrow_GrWrapOwnership,
-                                                    GrWrapCacheable::kNo, releaseP, releaseC);
+    sk_sp<GrTextureProxy> proxy = proxyProvider->wrapCompressedBackendTexture(
+            tex, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, releaseP, releaseC);
     if (!proxy) {
         return nullptr;
     }
@@ -248,8 +246,6 @@ sk_sp<SkImage> SkImage::MakeTextureFromCompressed(GrContext* context, sk_sp<SkDa
     if (!proxy) {
         return nullptr;
     }
-    // TODO: remove asserts when proxy doesn't hold origin or swizzle
-    SkASSERT(proxy->origin() == kTopLeft_GrSurfaceOrigin);
     GrSurfaceProxyView view(std::move(proxy));
 
     SkColorType colorType = GrCompressionTypeToSkColorType(type);
@@ -498,8 +494,7 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
     }
 
     callDone.clear();
-    auto proxy = MakePromiseImageLazyProxy(context, width, height, origin,
-                                           grColorType, backendFormat,
+    auto proxy = MakePromiseImageLazyProxy(context, width, height, grColorType, backendFormat,
                                            mipMapped, textureFulfillProc, textureReleaseProc,
                                            textureDoneProc, textureContext, version);
     if (!proxy) {
@@ -627,9 +622,9 @@ sk_sp<SkImage> SkImage::MakeFromAHardwareBufferWithData(GrContext* context,
     }
 
     sk_sp<GrTextureProxy> proxy =
-            proxyProvider->wrapBackendTexture(backendTexture, grColorType, surfaceOrigin,
-                                              kBorrow_GrWrapOwnership, GrWrapCacheable::kNo,
-                                              kRW_GrIOType, deleteImageProc, deleteImageCtx);
+            proxyProvider->wrapBackendTexture(backendTexture, grColorType, kBorrow_GrWrapOwnership,
+                                              GrWrapCacheable::kNo, kRW_GrIOType, deleteImageProc,
+                                              deleteImageCtx);
     if (!proxy) {
         deleteImageProc(deleteImageCtx);
         return nullptr;
