@@ -1635,6 +1635,7 @@ cc_test {
         "tests/PDFMetadataAttributeTest.cpp",
         "tests/PDFOpaqueSrcModeToSrcOverTest.cpp",
         "tests/PDFPrimitivesTest.cpp",
+        "tests/PDFTaggedTableTest.cpp",
         "tests/PDFTaggedTest.cpp",
         "tests/PackBitsTest.cpp",
         "tests/PackedConfigsTextureTest.cpp",
