@@ -2097,6 +2097,133 @@ private:
     typedef Sample INHERITED;
 };
 
+class ParagraphView28 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("Paragraph28"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+
+        const char* text = "AAAAA BBBBB CCCCC DDDDD EEEEE FFFFF GGGGG HHHHH IIIII JJJJJ KKKKK LLLLL MMMMM NNNNN OOOOO PPPPP QQQQQ";
+
+        canvas->drawColor(SK_ColorWHITE);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextAlign(TextAlign::kJustify);
+        auto collection = getFontCollection();
+        ParagraphBuilderImpl builder(paragraph_style, collection);
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(40);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+        auto paragraph = builder.Build();
+        auto s = 186;
+        paragraph->layout(360 - s);
+        paragraph->paint(canvas, 0, 0);
+        /*
+        paragraph->layout(360);
+        paragraph->paint(canvas, 0, 0);
+        canvas->translate(0, 400);
+        paragraph->layout(354.333);
+        paragraph->paint(canvas, 0, 0);
+        */
+    }
+
+private:
+    typedef Sample INHERITED;
+};
+
+class ParagraphView29 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("Paragraph29"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+
+        const char* text = "PESTO";
+        canvas->drawColor(SK_ColorWHITE);
+
+        SkPaint paint;
+        paint.setColor(SK_ColorRED);
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setAntiAlias(true);
+        paint.setStrokeWidth(1);
+
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextAlign(TextAlign::kCenter);
+        auto collection = getFontCollection();
+        ParagraphBuilderImpl builder(paragraph_style, collection);
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(48);
+        text_style.setFontStyle(SkFontStyle::Bold());
+        text_style.setLetterSpacing(3);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+        auto paragraph = builder.Build();
+        auto w = width() / 2;
+        paragraph->layout(w);
+        paragraph->paint(canvas, 0, 0);
+        canvas->drawRect(SkRect::MakeXYWH(0, 0, width() / 2, paragraph->getHeight()), paint);
+    }
+
+private:
+    typedef Sample INHERITED;
+};
+
+class ParagraphView30 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("Paragraph30"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+
+        /*
+         *     text: TextSpan(
+      text: 'aaaa bbbb ',
+      style: TextStyle(fontSize: 48.0),
+      children: <TextSpan>[
+        TextSpan(text: 'cc dd', style:TextStyle(fontFamily: 'serif', fontSize: 64.0)),
+      ],
+    ),
+    textDirection: TextDirection.ltr,
+    textAlign: TextAlign.justify,
+
+         */
+
+        const char* text1 = "aaaa bbbb ";
+        const char* text2 = "cc dd";
+
+        canvas->drawColor(SK_ColorWHITE);
+
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextAlign(TextAlign::kJustify);
+        auto collection = getFontCollection();
+        SkPaint red;
+        red.setColor(SK_ColorRED);
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+
+        ParagraphBuilderImpl builder(paragraph_style, collection);
+
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(48);
+        builder.pushStyle(text_style);
+        builder.addText(text1);
+
+        text_style.setFontFamilies({SkString("Google Sans")});
+        text_style.setFontSize(64);
+        builder.pushStyle(text_style);
+        builder.addText(text2);
+
+        auto paragraph = builder.Build();
+
+        paragraph->layout(310);
+        paragraph->paint(canvas, 0, 0);
+    }
+
+private:
+    typedef Sample INHERITED;
+};
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_SAMPLE(return new ParagraphView1();)
@@ -2123,5 +2250,8 @@ DEF_SAMPLE(return new ParagraphView22();)
 DEF_SAMPLE(return new ParagraphView23();)
 DEF_SAMPLE(return new ParagraphView24();)
 DEF_SAMPLE(return new ParagraphView25();)
-//DEF_SAMPLE(return new ParagraphView26();)
-//DEF_SAMPLE(return new ParagraphView27();)
+DEF_SAMPLE(return new ParagraphView26();)
+DEF_SAMPLE(return new ParagraphView27();)
+DEF_SAMPLE(return new ParagraphView28();)
+DEF_SAMPLE(return new ParagraphView29();)
+DEF_SAMPLE(return new ParagraphView30();)
