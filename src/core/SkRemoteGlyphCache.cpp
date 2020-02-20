@@ -993,7 +993,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
                 pathPtr = &path;
             }
 
-            strike->preparePath(allocatedGlyph, pathPtr);
+            strike->mergePath(allocatedGlyph, pathPtr);
         }
     }
 
@@ -1015,5 +1015,5 @@ sk_sp<SkTypeface> SkStrikeClient::addTypeface(const WireTypeface& wire) {
             wire.typefaceID, wire.glyphCount, wire.style, wire.isFixed,
             fDiscardableHandleManager, fIsLogging);
     fRemoteFontIdToTypeface.set(wire.typefaceID, newTypeface);
-    return newTypeface;
+    return std::move(newTypeface);
 }

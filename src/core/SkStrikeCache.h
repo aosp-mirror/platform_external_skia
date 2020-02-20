@@ -55,19 +55,21 @@ public:
                 , fPinner{std::move(pinner)} {}
 
         SkGlyph* mergeGlyphAndImage(SkPackedGlyphID toID, const SkGlyph& from) {
-            return fScalerCache.mergeGlyphAndImage(toID, from);
+            auto [glyph, delta] = fScalerCache.mergeGlyphAndImage(toID, from);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
+            return glyph;
         }
 
-        const SkPath* preparePath(SkGlyph* glyph, const SkPath* path) {
-            return fScalerCache.preparePath(glyph, path);
+        const SkPath* mergePath(SkGlyph* glyph, const SkPath* path) {
+            auto [glyphPath, delta] = fScalerCache.mergePath(glyph, path);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
+            return glyphPath;
         }
 
         SkScalerContext* getScalerContext() const {
             return fScalerCache.getScalerContext();
-        }
-
-        int countCachedGlyphs() {
-            return fScalerCache.countCachedGlyphs();
         }
 
         void findIntercepts(const SkScalar bounds[2], SkScalar scale, SkScalar xPos,
@@ -81,21 +83,32 @@ public:
 
         SkSpan<const SkGlyph*> metrics(SkSpan<const SkGlyphID> glyphIDs,
                                        const SkGlyph* results[]) {
-            return fScalerCache.metrics(glyphIDs, results);
+            auto [glyphs, delta] = fScalerCache.metrics(glyphIDs, results);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
+            return glyphs;
         }
 
         SkSpan<const SkGlyph*> preparePaths(SkSpan<const SkGlyphID> glyphIDs,
                                             const SkGlyph* results[]) {
-            return fScalerCache.preparePaths(glyphIDs, results);
+            auto [glyphs, delta] = fScalerCache.preparePaths(glyphIDs, results);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
+            return glyphs;
         }
 
         SkSpan<const SkGlyph*> prepareImages(SkSpan<const SkPackedGlyphID> glyphIDs,
                                              const SkGlyph* results[]) {
-            return fScalerCache.prepareImages(glyphIDs, results);
+            auto [glyphs, delta] = fScalerCache.prepareImages(glyphIDs, results);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
+            return glyphs;
         }
 
         void prepareForDrawingMasksCPU(SkDrawableGlyphBuffer* drawables) {
-            return fScalerCache.prepareForDrawingMasksCPU(drawables);
+            size_t delta = fScalerCache.prepareForDrawingMasksCPU(drawables);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
         }
 
         const SkGlyphPositionRoundingSpec& roundingSpec() const override {
@@ -108,17 +121,23 @@ public:
 
         void prepareForMaskDrawing(
                 SkDrawableGlyphBuffer* drawbles, SkSourceGlyphBuffer* rejects) override {
-            fScalerCache.prepareForMaskDrawing(drawbles, rejects);
+            size_t delta = fScalerCache.prepareForMaskDrawing(drawbles, rejects);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
         }
 
         void prepareForSDFTDrawing(
                 SkDrawableGlyphBuffer* drawbles, SkSourceGlyphBuffer* rejects) override {
-            fScalerCache.prepareForSDFTDrawing(drawbles, rejects);
+            size_t delta = fScalerCache.prepareForSDFTDrawing(drawbles, rejects);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
         }
 
         void prepareForPathDrawing(
                 SkDrawableGlyphBuffer* drawbles, SkSourceGlyphBuffer* rejects) override {
-            fScalerCache.prepareForPathDrawing(drawbles, rejects);
+            size_t delta = fScalerCache.prepareForPathDrawing(drawbles, rejects);
+            fMemoryUsed += delta;
+            SkASSERT(fMemoryUsed = fScalerCache.getMemoryUsed());
         }
 
         void onAboutToExitScope() override {
@@ -130,6 +149,7 @@ public:
         Strike*                         fPrev{nullptr};
         SkScalerCache                   fScalerCache;
         std::unique_ptr<SkStrikePinner> fPinner;
+        size_t                          fMemoryUsed{0};
     };  // Strike
 
     class ExclusiveStrikePtr {
