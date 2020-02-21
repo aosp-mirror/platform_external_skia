@@ -2097,6 +2097,92 @@ private:
     typedef Sample INHERITED;
 };
 
+class ParagraphView28 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("Paragraph28"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+
+        const char* text = "AAAAA BBBBB CCCCC DDDDD EEEEE FFFFF GGGGG HHHHH IIIII JJJJJ KKKKK LLLLL MMMMM NNNNN OOOOO PPPPP QQQQQ";
+
+        canvas->drawColor(SK_ColorWHITE);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextAlign(TextAlign::kJustify);
+        auto collection = getFontCollection();
+        ParagraphBuilderImpl builder(paragraph_style, collection);
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(40);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+        auto paragraph = builder.Build();
+        auto s = 186;
+        paragraph->layout(360 - s);
+        paragraph->paint(canvas, 0, 0);
+        /*
+        paragraph->layout(360);
+        paragraph->paint(canvas, 0, 0);
+        canvas->translate(0, 400);
+        paragraph->layout(354.333);
+        paragraph->paint(canvas, 0, 0);
+        */
+    }
+
+private:
+    typedef Sample INHERITED;
+};
+
+class ParagraphView29 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("Paragraph29"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+
+        const char* text = "ffi";
+        canvas->drawColor(SK_ColorWHITE);
+
+        auto collection = getFontCollection();
+
+        ParagraphStyle paragraph_style;
+        ParagraphBuilderImpl builder(paragraph_style, collection);
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(60);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+        auto paragraph = builder.Build();
+        paragraph->layout(width());
+        paragraph->paint(canvas, 0, 0);
+        auto width = paragraph->getLongestLine();
+        auto height = paragraph->getHeight();
+
+        auto f1 = paragraph->getGlyphPositionAtCoordinate(width/6, height/2);
+        auto f2 = paragraph->getGlyphPositionAtCoordinate(width/2, height/2);
+        auto i = paragraph->getGlyphPositionAtCoordinate(width*5/6, height/2);
+
+        SkDebugf("%d(%s) %d(%s) %d(%s)\n",
+                f1.position, f1.affinity == Affinity::kUpstream ? "up" : "down",
+                f2.position, f2.affinity == Affinity::kUpstream ? "up" : "down",
+                i.position, i.affinity == Affinity::kUpstream ? "up" : "down");
+
+        auto rf1 = paragraph->getRectsForRange(0, 1, RectHeightStyle::kTight, RectWidthStyle::kTight)[0];
+        auto rf2 = paragraph->getRectsForRange(1, 2, RectHeightStyle::kTight, RectWidthStyle::kTight)[0];
+        auto rfi = paragraph->getRectsForRange(2, 3, RectHeightStyle::kTight, RectWidthStyle::kTight)[0];
+
+        SkDebugf("f1: [%f:%f] %s\n",
+                rf1.rect.fLeft, rf1.rect.fRight, rf1.direction == TextDirection::kRtl ? "rtl" : "ltr");
+        SkDebugf("f2: [%f:%f] %s\n",
+                rf2.rect.fLeft, rf2.rect.fRight, rf2.direction == TextDirection::kRtl ? "rtl" : "ltr");
+        SkDebugf("i:  [%f:%f] %s\n",
+                rfi.rect.fLeft, rfi.rect.fRight, rfi.direction == TextDirection::kRtl ? "rtl" : "ltr");
+    }
+
+private:
+    typedef Sample INHERITED;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_SAMPLE(return new ParagraphView1();)
@@ -2123,5 +2209,7 @@ DEF_SAMPLE(return new ParagraphView22();)
 DEF_SAMPLE(return new ParagraphView23();)
 DEF_SAMPLE(return new ParagraphView24();)
 DEF_SAMPLE(return new ParagraphView25();)
-//DEF_SAMPLE(return new ParagraphView26();)
-//DEF_SAMPLE(return new ParagraphView27();)
+DEF_SAMPLE(return new ParagraphView26();)
+DEF_SAMPLE(return new ParagraphView27();)
+DEF_SAMPLE(return new ParagraphView28();)
+DEF_SAMPLE(return new ParagraphView29();)

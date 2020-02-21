@@ -1753,19 +1753,15 @@ void GrGLGpu::flushScissor(const GrScissorState& scissorState, int rtWidth, int 
                            GrSurfaceOrigin rtOrigin) {
     if (scissorState.enabled()) {
         auto scissor = GrNativeRect::MakeRelativeTo(rtOrigin, rtHeight, scissorState.rect());
-        // if the scissor fully contains the viewport then we fall through and
-        // disable the scissor test.
-        if (!scissor.contains(rtWidth, rtHeight)) {
-            if (fHWScissorSettings.fRect != scissor) {
-                GL_CALL(Scissor(scissor.fX, scissor.fY, scissor.fWidth, scissor.fHeight));
-                fHWScissorSettings.fRect = scissor;
-            }
-            if (kYes_TriState != fHWScissorSettings.fEnabled) {
-                GL_CALL(Enable(GR_GL_SCISSOR_TEST));
-                fHWScissorSettings.fEnabled = kYes_TriState;
-            }
-            return;
+        if (fHWScissorSettings.fRect != scissor) {
+            GL_CALL(Scissor(scissor.fX, scissor.fY, scissor.fWidth, scissor.fHeight));
+            fHWScissorSettings.fRect = scissor;
         }
+        if (kYes_TriState != fHWScissorSettings.fEnabled) {
+            GL_CALL(Enable(GR_GL_SCISSOR_TEST));
+            fHWScissorSettings.fEnabled = kYes_TriState;
+        }
+        return;
     }
 
     // See fall through note above
@@ -1813,6 +1809,11 @@ void GrGLGpu::disableWindowRectangles() {
 }
 
 bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget, const GrProgramInfo& programInfo) {
+    this->handleDirtyContext();
+
+    if (GrPrimitiveType::kPatches == programInfo.primitiveType()) {
+        this->flushPatchVertexCount(programInfo.tessellationPatchVertexCount());
+    }
 
     sk_sp<GrGLProgram> program(fProgramCache->findOrCreateProgram(renderTarget, programInfo));
     if (!program) {
@@ -2354,21 +2355,9 @@ void GrGLGpu::flushViewport(int width, int height) {
     #endif
 #endif
 
-void GrGLGpu::draw(GrRenderTarget* renderTarget,
-                   const GrProgramInfo& programInfo,
-                   const GrMesh meshes[],
-                   int meshCount) {
-    this->handleDirtyContext();
-
+void GrGLGpu::drawMeshes(GrRenderTarget* renderTarget, const GrProgramInfo& programInfo,
+                         const GrMesh meshes[], int meshCount) {
     SkASSERT(meshCount); // guaranteed by GrOpsRenderPass::draw
-
-    if (!this->flushGLState(renderTarget, programInfo)) {
-        return;
-    }
-
-    if (GrPrimitiveType::kPatches == programInfo.primitiveType()) {
-        this->flushPatchVertexCount(programInfo.tessellationPatchVertexCount());
-    }
 
     bool hasDynamicScissors = programInfo.hasDynamicScissors();
     bool hasDynamicPrimProcTextures = programInfo.hasDynamicPrimProcTextures();

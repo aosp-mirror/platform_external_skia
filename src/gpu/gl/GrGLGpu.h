@@ -73,10 +73,15 @@ public:
     // If the caller wishes to bind an index buffer to a specific VAO, it can call glBind directly.
     GrGLenum bindBuffer(GrGpuBufferType type, const GrBuffer*);
 
+    // Flushes state from GrProgramInfo to GL. Returns false if the state couldn't be set.
+    bool flushGLState(GrRenderTarget*, const GrProgramInfo&);
+
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the draw call for the corresponding passthrough function
     // on GrGLOpsRenderPass.
-    void draw(GrRenderTarget*, const GrProgramInfo&, const GrMesh[], int meshCount);
+    //
+    // The client must call flushGLState before this method.
+    void drawMeshes(GrRenderTarget*, const GrProgramInfo&, const GrMesh[], int meshCount);
 
     // GrMesh::SendToGpuImpl methods. These issue the actual GL draw calls.
     // Marked final as a hint to the compiler to not use virtual dispatch.
@@ -125,6 +130,11 @@ public:
     GrStencilAttachment* createStencilAttachmentForRenderTarget(
             const GrRenderTarget* rt, int width, int height, int numStencilSamples) override;
     void deleteBackendTexture(const GrBackendTexture&) override;
+
+    bool compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) override {
+        sk_sp<GrGLProgram> tmp = fProgramCache->findOrCreateProgram(desc, programInfo);
+        return SkToBool(tmp);
+    }
 
     bool precompileShader(const SkData& key, const SkData& data) override {
         return fProgramCache->precompileShader(key, data);
@@ -279,9 +289,6 @@ private:
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
 
-    // Flushes state from GrPipeline to GL. Returns false if the state couldn't be set.
-    bool flushGLState(GrRenderTarget*, const GrProgramInfo&);
-
     void flushProgram(sk_sp<GrGLProgram>);
 
     // Version for programs that aren't GrGLProgram.
@@ -319,10 +326,18 @@ private:
         void abandon();
         void reset();
         sk_sp<GrGLProgram> findOrCreateProgram(GrRenderTarget*, const GrProgramInfo&);
+        sk_sp<GrGLProgram> findOrCreateProgram(const GrProgramDesc& desc,
+                                               const GrProgramInfo& programInfo) {
+            return this->findOrCreateProgram(nullptr, desc, programInfo);
+        }
         bool precompileShader(const SkData& key, const SkData& data);
 
     private:
         struct Entry;
+
+        sk_sp<GrGLProgram> findOrCreateProgram(GrRenderTarget*,
+                                               const GrProgramDesc&,
+                                               const GrProgramInfo&);
 
         struct DescHash {
             uint32_t operator()(const GrProgramDesc& desc) const {

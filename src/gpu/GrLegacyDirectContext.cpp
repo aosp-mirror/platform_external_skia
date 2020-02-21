@@ -23,6 +23,9 @@
 #ifdef SK_VULKAN
 #include "src/gpu/vk/GrVkGpu.h"
 #endif
+#ifdef SK_DIRECT3D
+#include "src/gpu/d3d/GrD3DGpu.h"
+#endif
 #ifdef SK_DAWN
 #include "src/gpu/dawn/GrDawnGpu.h"
 #endif
@@ -170,12 +173,6 @@ sk_sp<GrContext> GrContext::MakeMock(const GrMockOptions* mockOptions,
         return nullptr;
     }
 
-#if GR_TEST_UTILS
-    if (mockOptions && mockOptions->fFailTextureAllocations) {
-        context->testingOnly_setSuppressAllocationWarnings();
-    }
-#endif
-
     return context;
 }
 
@@ -236,18 +233,17 @@ sk_sp<GrContext> GrContext::MakeDirect3D(const GrD3DBackendContext& backendConte
 
 sk_sp<GrContext> GrContext::MakeDirect3D(const GrD3DBackendContext& backendContext,
                                          const GrContextOptions& options) {
-    return nullptr;
-    //sk_sp<GrContext> context(new GrLegacyDirectContext(GrBackendApi::kDirect3D, options));
+    sk_sp<GrContext> context(new GrLegacyDirectContext(GrBackendApi::kDirect3D, options));
 
-    //context->fGpu = GrD3DGpu::Make(backendContext, options, context.get());
-    //if (!context->fGpu) {
-    //    return nullptr;
-    //}
+    context->fGpu = GrD3DGpu::Make(backendContext, options, context.get());
+    if (!context->fGpu) {
+        return nullptr;
+    }
 
-    //if (!context->init(context->fGpu->refCaps())) {
-    //    return nullptr;
-    //}
-    //return context;
+    if (!context->init(context->fGpu->refCaps())) {
+        return nullptr;
+    }
+    return context;
 }
 #endif
 
