@@ -552,6 +552,11 @@ public:
      */
     virtual void deleteBackendTexture(const GrBackendTexture&) = 0;
 
+    /**
+     * In this case we have a program descriptor and a program info but no render target.
+     */
+    virtual bool compile(const GrProgramDesc&, const GrProgramInfo&) = 0;
+
     virtual bool precompileShader(const SkData& key, const SkData& data) { return false; }
 
 #if GR_TEST_UTILS
@@ -589,22 +594,12 @@ public:
     virtual GrStencilAttachment* createStencilAttachmentForRenderTarget(
             const GrRenderTarget*, int width, int height, int numStencilSamples) = 0;
 
-    // Determines whether a texture will need to be rescaled in order to be used with the
-    // GrSamplerState.
-    static bool IsACopyNeededForRepeatWrapMode(const GrCaps*,
-                                               GrTextureProxy* texProxy,
-                                               SkISize dimensions,
-                                               GrSamplerState::Filter,
-                                               GrTextureProducer::CopyParams*,
-                                               SkScalar scaleAdjust[2]);
-
     // Determines whether a texture will need to be copied because the draw requires mips but the
     // texutre doesn't have any. This call should be only checked if IsACopyNeededForTextureParams
     // fails. If the previous call succeeds, then a copy should be done using those params and the
     // mip mapping requirements will be handled there.
     static bool IsACopyNeededForMips(const GrCaps* caps, const GrTextureProxy* texProxy,
-                                     GrSamplerState::Filter filter,
-                                     GrTextureProducer::CopyParams* copyParams);
+                                     GrSamplerState::Filter filter);
 
     void handleDirtyContext() {
         if (fResetBits) {
