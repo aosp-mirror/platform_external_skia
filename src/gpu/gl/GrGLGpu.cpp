@@ -453,6 +453,12 @@ GrGLGpu::~GrGLGpu() {
     }
 
     fSamplerObjectCache.reset();
+
+    while (!fFinishCallbacks.empty()) {
+        fFinishCallbacks.front().fCallback(fFinishCallbacks.front().fContext);
+        this->deleteSync(fFinishCallbacks.front().fSync);
+        fFinishCallbacks.pop_front();
+    }
 }
 
 void GrGLGpu::disconnect(DisconnectType type) {
@@ -511,6 +517,14 @@ void GrGLGpu::disconnect(DisconnectType type) {
 
     if (this->glCaps().shaderCaps()->pathRenderingSupport()) {
         this->glPathRendering()->disconnect(type);
+    }
+
+    while (!fFinishCallbacks.empty()) {
+        fFinishCallbacks.front().fCallback(fFinishCallbacks.front().fContext);
+        if (DisconnectType::kCleanup == type) {
+            this->deleteSync(fFinishCallbacks.front().fSync);
+        }
+        fFinishCallbacks.pop_front();
     }
 }
 
@@ -1153,36 +1167,36 @@ static bool renderbuffer_storage_msaa(const GrGLContext& ctx,
                                       int sampleCount,
                                       GrGLenum format,
                                       int width, int height) {
-    CLEAR_ERROR_BEFORE_ALLOC(ctx.interface());
+    CLEAR_ERROR_BEFORE_ALLOC(ctx.glInterface());
     SkASSERT(GrGLCaps::kNone_MSFBOType != ctx.caps()->msFBOType());
     switch (ctx.caps()->msFBOType()) {
         case GrGLCaps::kStandard_MSFBOType:
-            GL_ALLOC_CALL(ctx.interface(),
-                            RenderbufferStorageMultisample(GR_GL_RENDERBUFFER,
-                                                            sampleCount,
-                                                            format,
-                                                            width, height));
+            GL_ALLOC_CALL(ctx.glInterface(),
+                          RenderbufferStorageMultisample(GR_GL_RENDERBUFFER,
+                                                         sampleCount,
+                                                         format,
+                                                         width, height));
             break;
         case GrGLCaps::kES_Apple_MSFBOType:
-            GL_ALLOC_CALL(ctx.interface(),
-                            RenderbufferStorageMultisampleES2APPLE(GR_GL_RENDERBUFFER,
-                                                                    sampleCount,
-                                                                    format,
-                                                                    width, height));
+            GL_ALLOC_CALL(ctx.glInterface(),
+                          RenderbufferStorageMultisampleES2APPLE(GR_GL_RENDERBUFFER,
+                                                                 sampleCount,
+                                                                 format,
+                                                                 width, height));
             break;
         case GrGLCaps::kES_EXT_MsToTexture_MSFBOType:
         case GrGLCaps::kES_IMG_MsToTexture_MSFBOType:
-            GL_ALLOC_CALL(ctx.interface(),
-                            RenderbufferStorageMultisampleES2EXT(GR_GL_RENDERBUFFER,
-                                                                sampleCount,
-                                                                format,
-                                                                width, height));
+            GL_ALLOC_CALL(ctx.glInterface(),
+                          RenderbufferStorageMultisampleES2EXT(GR_GL_RENDERBUFFER,
+                                                               sampleCount,
+                                                               format,
+                                                               width, height));
             break;
         case GrGLCaps::kNone_MSFBOType:
             SK_ABORT("Shouldn't be here if we don't support multisampled renderbuffers.");
             break;
     }
-    return (GR_GL_NO_ERROR == CHECK_ALLOC_ERROR(ctx.interface()));
+    return (GR_GL_NO_ERROR == CHECK_ALLOC_ERROR(ctx.glInterface()));
 }
 
 bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
@@ -1827,7 +1841,12 @@ bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget, const GrProgramInfo& pr
     this->flushBlendAndColorWrite(programInfo.pipeline().getXferProcessor().getBlendInfo(),
                                   programInfo.pipeline().outputSwizzle());
 
-    fHWProgram->updateUniformsAndTextureBindings(renderTarget, programInfo);
+    fHWProgram->updateUniforms(renderTarget, programInfo);
+    if (!programInfo.hasDynamicPrimProcTextures()) {
+        auto* primProcTextures = (programInfo.hasFixedPrimProcTextures())
+                ? programInfo.fixedPrimProcTextures() : nullptr;
+        fHWProgram->bindTextures(programInfo.primProc(), programInfo.pipeline(), primProcTextures);
+    }
 
     GrGLRenderTarget* glRT = static_cast<GrGLRenderTarget*>(renderTarget);
     GrStencilSettings stencil;
@@ -2374,9 +2393,8 @@ void GrGLGpu::drawMeshes(GrRenderTarget* renderTarget, const GrProgramInfo& prog
                                glRT->width(), glRT->height(), programInfo.origin());
         }
         if (hasDynamicPrimProcTextures) {
-            auto texProxyArray = programInfo.dynamicPrimProcTextures(m);
-            fHWProgram->updatePrimitiveProcessorTextureBindings(programInfo.primProc(),
-                                                                texProxyArray);
+            fHWProgram->bindTextures(programInfo.primProc(), programInfo.pipeline(),
+                                     programInfo.dynamicPrimProcTextures(m));
         }
         if (this->glCaps().requiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines() &&
             GrIsPrimTypeLines(programInfo.primitiveType()) &&
