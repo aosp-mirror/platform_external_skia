@@ -6,24 +6,24 @@
  */
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkM44.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRRect.h"
-#include "include/private/SkM44.h"
 #include "include/utils/SkRandom.h"
 #include "samplecode/Sample.h"
 #include "tools/Resources.h"
 
 struct VSphere {
-    SkVec2   fCenter;
+    SkV2     fCenter;
     SkScalar fRadius;
 
-    VSphere(SkVec2 center, SkScalar radius) : fCenter(center), fRadius(radius) {}
+    VSphere(SkV2 center, SkScalar radius) : fCenter(center), fRadius(radius) {}
 
-    bool contains(SkVec2 v) const {
+    bool contains(SkV2 v) const {
         return (v - fCenter).length() <= fRadius;
     }
 
-    SkVec2 pinLoc(SkVec2 p) const {
+    SkV2 pinLoc(SkV2 p) const {
         auto v = p - fCenter;
         if (v.length() > fRadius) {
             v *= (fRadius / v.length());
@@ -31,7 +31,7 @@ struct VSphere {
         return fCenter + v;
     }
 
-    SkV3 computeUnitV3(SkVec2 v) const {
+    SkV3 computeUnitV3(SkV2 v) const {
         v = (v - fCenter) * (1 / fRadius);
         SkScalar len2 = v.lengthSquared();
         if (len2 > 1) {
@@ -47,7 +47,7 @@ struct VSphere {
         SkScalar fAngle;
     };
 
-    RotateInfo computeRotationInfo(SkVec2 a, SkVec2 b) const {
+    RotateInfo computeRotationInfo(SkV2 a, SkV2 b) const {
         SkV3 u = this->computeUnitV3(a);
         SkV3 v = this->computeUnitV3(b);
         SkV3 axis = u.cross(v);
@@ -59,7 +59,7 @@ struct VSphere {
         return {{0, 0, 0}, 0};
     }
 
-    SkM44 computeRotation(SkVec2 a, SkVec2 b) const {
+    SkM44 computeRotation(SkV2 a, SkV2 b) const {
         auto [axis, angle] = this->computeRotationInfo(a, b);
         return SkM44::Rotate(axis, angle);
     }
@@ -139,7 +139,7 @@ const Face faces[] = {
 #include "include/effects/SkRuntimeEffect.h"
 
 struct LightOnSphere {
-    SkVec2   fLoc;
+    SkV2     fLoc;
     SkScalar fDistance;
     SkScalar fRadius;
 
@@ -218,6 +218,8 @@ public:
         fAngle = 0;
         fPrevAngle = 1234567;
     }
+
+    bool isAnimating() const { return fAngleSpeed != 0; }
 };
 
 class SampleCubeBase : public Sample3DView {
@@ -261,7 +263,7 @@ public:
     virtual void drawContent(SkCanvas* canvas, SkColor, int index, bool drawFront) = 0;
 
     void setClickToWorld(SkCanvas* canvas, const SkM44& clickM) {
-        auto l2d = canvas->experimental_getLocalToDevice();
+        auto l2d = canvas->getLocalToDevice();
         fWorldToClick = inv(clickM) * l2d;
         fClickToWorld = inv(fWorldToClick);
     }
@@ -270,7 +272,7 @@ public:
         if (!canvas->getGrContext() && !(fFlags & kCanRunOnCPU)) {
             return;
         }
-        SkM44 clickM = canvas->experimental_getLocalToDevice();
+        SkM44 clickM = canvas->getLocalToDevice();
 
         canvas->save();
         canvas->translate(DX, DY);
@@ -287,7 +289,7 @@ public:
                 SkM44 trans = SkM44::Translate(200, 200, 0);   // center of the rotation
                 SkM44 m = fRotateAnimator.rotation() * fRotation * f.asM44(200);
 
-                canvas->experimental_concat44(trans * m * inv(trans));
+                canvas->concat44(trans * m * inv(trans));
                 this->drawContent(canvas, f.fColor, index++, drawFront);
             }
         }
@@ -311,7 +313,7 @@ public:
     }
 
     Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
-        SkVec2 p = fLight.fLoc - SkVec2{x, y};
+        SkV2 p = fLight.fLoc - SkV2{x, y};
         if (p.length() <= fLight.fRadius) {
             Click* c = new Click();
             c->fMeta.setS32("type", 0);
@@ -353,8 +355,7 @@ public:
     }
 
     bool onAnimate(double nanos) override {
-        // handle fling
-        return this->INHERITED::onAnimate(nanos);
+        return fRotateAnimator.isAnimating();
     }
 
 private:
@@ -414,7 +415,7 @@ public:
     }
 
     void drawContent(SkCanvas* canvas, SkColor color, int index, bool drawFront) override {
-        if (!drawFront || !front(canvas->experimental_getLocalToDevice())) {
+        if (!drawFront || !front(canvas->getLocalToDevice())) {
             return;
         }
 
@@ -473,7 +474,7 @@ public:
     }
 
     void drawContent(SkCanvas* canvas, SkColor color, int index, bool drawFront) override {
-        if (!drawFront || !front(canvas->experimental_getLocalToDevice())) {
+        if (!drawFront || !front(canvas->getLocalToDevice())) {
             return;
         }
 
