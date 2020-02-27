@@ -227,6 +227,9 @@ def nanobench_flags(api, bot):
     # skia:9413
     match.append('~^path_text$')
     match.append('~^path_text_clipped_uncached$')
+  if 'Perf-Android-Clang-Pixel3-GPU-Adreno630-arm64-Release-All-Android_Vulkan' in bot:
+    # skia:9972
+    match.append('~^path_text_clipped_uncached$')
 
   # We do not need or want to benchmark the decodes of incomplete images.
   # In fact, in nanobench we assert that the full image decode succeeds.
@@ -327,24 +330,18 @@ def perf_steps(api):
 def RunSteps(api):
   api.vars.setup()
   api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
-  api.flavor.setup()
+  api.flavor.setup('nanobench')
 
-  env = {}
-  if 'iOS' in api.vars.builder_name:
-    env['IOS_BUNDLE_ID'] = 'com.google.nanobench'
-    env['IOS_MOUNT_POINT'] = api.vars.slave_dir.join('mnt_iosdevice')
-  with api.env(env):
-    try:
-      if all(v in api.vars.builder_name for v in ['Android', 'CPU']):
-        api.flavor.install('nanobench', skps=True, images=True, svgs=True,
-                           resources=True, texttraces=True)
-      else:
-        api.flavor.install('nanobench', skps=True, images=True, svgs=True,
-                           resources=True)
-      perf_steps(api)
-    finally:
-      api.flavor.cleanup_steps()
-    api.run.check_failure()
+  try:
+    if all(v in api.vars.builder_name for v in ['Android', 'CPU']):
+      api.flavor.install(skps=True, images=True, svgs=True, resources=True,
+                         texttraces=True)
+    else:
+      api.flavor.install(skps=True, images=True, svgs=True, resources=True)
+    perf_steps(api)
+  finally:
+    api.flavor.cleanup_steps()
+  api.run.check_failure()
 
 
 TEST_BUILDERS = [
@@ -354,6 +351,7 @@ TEST_BUILDERS = [
    'Android_NoGPUThreads'),
   'Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Release-All-Android',
   'Perf-Android-Clang-P30-GPU-MaliG76-arm64-Release-All-Android_Vulkan',
+  'Perf-Android-Clang-Pixel3-GPU-Adreno630-arm64-Release-All-Android_Vulkan',
   'Perf-Android-Clang-Pixel3a-GPU-Adreno615-arm64-Release-All-Android',
   'Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All',
   'Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All',

@@ -17,8 +17,11 @@
 #include "src/core/SkVM.h"
 
 #if defined(SKVM_LLVM)
+    #include <llvm/Bitcode/BitcodeWriter.h>
+    #include <llvm/ExecutionEngine/ExecutionEngine.h>
     #include <llvm/IR/IRBuilder.h>
     #include <llvm/IR/Verifier.h>
+    #include <llvm/Support/TargetSelect.h>
 #endif
 
 bool gSkVMJITViaDylib{false};
@@ -515,7 +518,7 @@ namespace skvm {
             debug_name = buf;
         }
 
-    #if defined(SKVM_JIT)
+    #if defined(SKVM_LLVM) || defined(SKVM_JIT)
         return {this->optimize(false), this->optimize(true), fStrides, debug_name};
     #else
         return {this->optimize(false), fStrides};
@@ -1892,26 +1895,39 @@ namespace skvm {
     }
 
 #if defined(SKVM_LLVM)
-    // Smallest program:
-    // b.store32(b.varying<int>(), b.splat(42));
-    static bool try_llvm(const std::vector<OptimizedInstruction>& instructions,
-                         const std::vector<int>& strides) {
-        llvm::LLVMContext ctx;
-        llvm::Module mod("", ctx);
+    void Program::setupLLVM(const std::vector<OptimizedInstruction>& instructions,
+                            const char* debug_name) {
+        thread_local static llvm::LLVMContext ctx;
+        auto mod = std::make_unique<llvm::Module>("", ctx);
         // All the scary bare pointers from here on are owned by ctx or mod, I think.
 
-        llvm::IntegerType* i64 = llvm::Type::getInt64Ty(ctx);
-        llvm::Type* ptr = llvm::Type::getInt8Ty(ctx)->getPointerTo();
+        const char* mcpu = "x86-64";
+        int K = 4;
+        if (true && SkCpu::Supports(SkCpu::HSW)) {
+            mcpu = "haswell";
+            K    = 8;
+        }
+        if (true && SkCpu::Supports(SkCpu::SKX)) {
+            mcpu = "skylake-avx512";
+            K    = 16;
+        }
+
+        llvm::Type *ptr = llvm::Type::getInt8Ty(ctx)->getPointerTo(),
+                   *i64 = llvm::Type::getInt64Ty(ctx),
+      //           *f32 = llvm::Type::getFloatTy(ctx),
+      //           *F32 = llvm::VectorType::get(f32, K),
+                   *i32 = llvm::Type::getInt32Ty(ctx),
+                   *I32 = llvm::VectorType::get(i32, K);
 
         std::vector<llvm::Type*> arg_types = { i64 };
-        for (size_t i = 0; i < strides.size(); i++) {
+        for (size_t i = 0; i < fStrides.size(); i++) {
             arg_types.push_back(ptr);
         }
 
         llvm::FunctionType* fn_type = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
                                                               arg_types, /*vararg?=*/false);
         llvm::Function* fn
-            = llvm::Function::Create(fn_type, llvm::GlobalValue::ExternalLinkage, "", mod);
+            = llvm::Function::Create(fn_type, llvm::GlobalValue::ExternalLinkage, debug_name, *mod);
 
         llvm::BasicBlock *enter = llvm::BasicBlock::Create(ctx, "enter", fn),
                          *testK = llvm::BasicBlock::Create(ctx, "testK", fn),
@@ -1922,75 +1938,126 @@ namespace skvm {
 
         using IRBuilder = llvm::IRBuilder<>;
 
+        // `n` won't be used in emit, but `args` will be and they're clearest kept together.
+        llvm::PHINode*                 n;
+        std::vector<llvm::PHINode*> args;
+        std::vector<llvm::Value*> vals(instructions.size());
+
         auto emit = [&](size_t i, bool scalar, IRBuilder* b) {
-            const OptimizedInstruction& insn = instructions[i];
-            switch (insn.op) {
-                default: return false;
+            auto [op, x,y,z, immy,immz, death,can_hoist,used_in_loop] = instructions[i];
+            switch (op) {
+                default:
+                    SkDebugf("can't llvm %s (%d)\n", name(op), op);
+                    return false;
+
+                case Op::load32: {
+                    llvm::Value* ptr = b->CreateBitCast(args[immy],
+                                                        (scalar ? i32 : I32)->getPointerTo());
+                    vals[i] = b->CreateAlignedLoad(ptr, 1);
+                } break;
+
+                case Op::splat: {
+                    llvm::ConstantInt* imm = b->getInt32(immy);
+                    vals[i] = scalar ? imm
+                                     : llvm::ConstantVector::getSplat(K, imm);
+                    break;
+                }
+
+                case Op::store32: {
+                    llvm::Value* ptr = b->CreateBitCast(args[immy],
+                                                        vals[x]->getType()->getPointerTo());
+                    vals[i] = b->CreateAlignedStore(vals[x], ptr, 1);
+                } break;
+
+
+
+                // Ops below this line shouldn't need to consider `scalar`... they're Just Math.
+
             }
             return true;
         };
 
-        // enter:  set up stack homes for N and each pointer arg
-        llvm::Value* n;
-        std::vector<llvm::Value*> args;
+        // We can't jump to the first basic block or this would be testK directly.
         {
             IRBuilder b(enter);
-
-            llvm::Argument* arg = fn->arg_begin();
-
-            n = b.CreateAlloca(arg->getType());
-            b.CreateStore(arg++, n);
-
-            for (size_t i = 0; i < strides.size(); i++) {
-                args.push_back(b.CreateAlloca(arg->getType()));
-                b.CreateStore(arg++, args.back());
-            }
             b.CreateBr(testK);
         }
 
         // testK:  if (N >= K) goto loopK; else goto test1;
-        const int K = 8;
-        llvm::ConstantInt* i64_K = llvm::ConstantInt::get(i64, K);
         {
             IRBuilder b(testK);
-            b.CreateCondBr(b.CreateICmpUGE(b.CreateLoad(n), i64_K), loopK, test1);
+
+            // Set up phi nodes for `n` and each pointer argument from enter; later we'll add loopK.
+            llvm::Argument* arg = fn->arg_begin();
+
+            n = b.CreatePHI(arg->getType(), 2);
+            n->addIncoming(arg++, enter);
+
+            for (size_t i = 0; i < fStrides.size(); i++) {
+                args.push_back(b.CreatePHI(arg->getType(), 2));
+                args.back()->addIncoming(arg++, enter);
+            }
+
+            b.CreateCondBr(b.CreateICmpUGE(n, b.getInt64(K)), loopK, test1);
         }
 
-        // loopK:  ... insns on K x T vectors; N -= K, args += K*stride; goto testK;
+        // loopK:  ... insts on K x T vectors; N -= K, args += K*stride; goto testK;
         {
             IRBuilder b(loopK);
             for (size_t i = 0; i < instructions.size(); i++) {
                 if (!emit(i, false, &b)) {
-                    return false;
+                    return;
                 }
             }
-            b.CreateStore(b.CreateSub(b.CreateLoad(n), i64_K), n);
-            for (size_t i = 0; i < strides.size(); i++) {
-                b.CreateStore(b.CreateGEP(b.CreateLoad(args[i]),
-                                          llvm::ConstantInt::get(i64, K * strides[i])), args[i]);
+
+            // n -= K
+            llvm::Value* n_next = b.CreateSub(n, b.getInt64(K));
+            n->addIncoming(n_next, loopK);
+
+            // Each arg ptr += K
+            for (size_t i = 0; i < fStrides.size(); i++) {
+                llvm::Value* arg_next = b.CreateGEP(args[i], b.getInt64(K*fStrides[i]));
+                args[i]->addIncoming(arg_next, loopK);
             }
             b.CreateBr(testK);
         }
 
         // test1:  if (N >= 1) goto loop1; else goto leave;
-        llvm::ConstantInt* i64_1 = llvm::ConstantInt::get(i64, 1);
         {
             IRBuilder b(test1);
-            b.CreateCondBr(b.CreateICmpUGE(b.CreateLoad(n), i64_1), loop1, leave);
+
+            // Set up new phi nodes for `n` and each pointer argument, now from testK and loop1.
+
+            llvm::PHINode* n_new = b.CreatePHI(n->getType(), 2);
+            n_new->addIncoming(n, testK);
+            n = n_new;
+
+            for (size_t i = 0; i < fStrides.size(); i++) {
+                llvm::PHINode* arg_new = b.CreatePHI(args[i]->getType(), 2);
+                arg_new->addIncoming(args[i], testK);
+                args[i] = arg_new;
+            }
+
+            b.CreateCondBr(b.CreateICmpUGE(n, b.getInt64(1)), loop1, leave);
         }
 
-        // loop1:  ... insns on scalars; N -= 1, args += stride; goto test1;
+        // loop1:  ... insts on scalars; N -= 1, args += stride; goto test1;
         {
             IRBuilder b(loop1);
             for (size_t i = 0; i < instructions.size(); i++) {
                 if (!emit(i, true, &b)) {
-                    return false;
+                    return;
                 }
             }
-            b.CreateStore(b.CreateSub(b.CreateLoad(n), i64_1), n);
-            for (size_t i = 0; i < strides.size(); i++) {
-                b.CreateStore(b.CreateGEP(b.CreateLoad(args[i]),
-                                          llvm::ConstantInt::get(i64, strides[i])), args[i]);
+
+            // n -= 1
+            llvm::Value* n_next = b.CreateSub(n, b.getInt64(1));
+            n->addIncoming(n_next, loop1);
+
+            // Each arg ptr += K
+            for (size_t i = 0; i < fStrides.size(); i++) {
+                llvm::Value* arg_next = b.CreateGEP(args[i], b.getInt64(fStrides[i]));
+                args[i]->addIncoming(arg_next, loop1);
             }
             b.CreateBr(test1);
         }
@@ -2001,8 +2068,28 @@ namespace skvm {
             b.CreateRetVoid();
         }
 
-        SkASSERT(false == llvm::verifyModule(mod));
-        return true;
+        SkASSERT(false == llvm::verifyModule(*mod, &llvm::outs()));
+
+        if (false) {
+            SkString path = SkStringPrintf("/tmp/%s.bc", debug_name);
+            std::error_code err;
+            llvm::raw_fd_ostream os(path.c_str(), err);
+            if (err) {
+                return;
+            }
+            llvm::WriteBitcodeToFile(*mod, os);
+        }
+
+        SkAssertResult(false == llvm::InitializeNativeTarget());
+        SkAssertResult(false == llvm::InitializeNativeTargetAsmPrinter());
+
+        fEE = llvm::EngineBuilder(std::move(mod))
+                    .setEngineKind(llvm::EngineKind::JIT)
+                    .setMCPU(mcpu)
+                    .create();
+        if (fEE) {
+            fJITEntry = (void*)fEE->getFunctionAddress(debug_name);
+        }
     }
 #endif
 
@@ -2011,7 +2098,9 @@ namespace skvm {
     }
 
     void Program::dropJIT() {
-    #if defined(SKVM_JIT)
+    #if defined(SKVM_LLVM)
+        delete fEE;
+    #elif defined(SKVM_JIT)
         if (fDylib) {
             dlclose(fDylib);
         } else if (fJITEntry) {
@@ -2024,6 +2113,7 @@ namespace skvm {
         fJITEntry = nullptr;
         fJITSize  = 0;
         fDylib    = nullptr;
+        fEE       = nullptr;
     }
 
     Program::~Program() { this->dropJIT(); }
@@ -2037,6 +2127,7 @@ namespace skvm {
         std::swap(fJITEntry, other.fJITEntry);
         std::swap(fJITSize , other.fJITSize);
         std::swap(fDylib   , other.fDylib);
+        std::swap(fEE      , other.fEE);
     }
 
     Program& Program::operator=(Program&& other) {
@@ -2048,6 +2139,7 @@ namespace skvm {
         std::swap(fJITEntry, other.fJITEntry);
         std::swap(fJITSize , other.fJITSize);
         std::swap(fDylib   , other.fDylib);
+        std::swap(fEE      , other.fEE);
         return *this;
     }
 
@@ -2056,20 +2148,15 @@ namespace skvm {
     Program::Program(const std::vector<OptimizedInstruction>& interpreter,
                      const std::vector<int>& strides) : fStrides(strides) {
         this->setupInterpreter(interpreter);
-    #if defined(SKVM_LLVM)
-        if (try_llvm(interpreter, fStrides)) {
-            SkDebugf("hey, neat!  that might work\n");
-        } else {
-            SkDebugf("bummer\n");
-        }
-    #endif
     }
 
     Program::Program(const std::vector<OptimizedInstruction>& interpreter,
                      const std::vector<OptimizedInstruction>& jit,
                      const std::vector<int>& strides,
                      const char* debug_name) : Program(interpreter, strides) {
-    #if 1 && defined(SKVM_JIT)
+    #if 1 && defined(SKVM_LLVM)
+        this->setupLLVM(interpreter, debug_name);
+    #elif 1 && defined(SKVM_JIT)
         this->setupJIT(jit, debug_name);
     #endif
     }
