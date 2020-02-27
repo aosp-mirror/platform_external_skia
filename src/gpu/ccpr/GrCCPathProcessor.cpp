@@ -133,9 +133,9 @@ void GrCCPathProcessor::drawPaths(GrOpFlushState* flushState, const GrPipeline& 
     int numIndicesPerInstance = caps.usePrimitiveRestart()
                                         ? SK_ARRAY_COUNT(kOctoIndicesAsStrips)
                                         : SK_ARRAY_COUNT(kOctoIndicesAsTris);
-    GrMesh mesh(primitiveType);
     auto enablePrimitiveRestart = GrPrimitiveRestart(flushState->caps().usePrimitiveRestart());
 
+    GrMesh mesh;
     mesh.setIndexedInstanced(resources.refIndexBuffer(), numIndicesPerInstance,
                              resources.refInstanceBuffer(), endInstance - baseInstance,
                              baseInstance, enablePrimitiveRestart);
@@ -150,7 +150,8 @@ void GrCCPathProcessor::drawPaths(GrOpFlushState* flushState, const GrPipeline& 
                               fixedDynamicState,
                               nullptr, 0, primitiveType);
 
-    flushState->opsRenderPass()->draw(programInfo, &mesh, 1, bounds);
+    flushState->opsRenderPass()->bindPipeline(programInfo, bounds);
+    flushState->opsRenderPass()->drawMeshes(programInfo, &mesh, 1);
 }
 
 void GrCCPathProcessor::Impl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {

@@ -216,18 +216,18 @@ void SkGpuDevice::clearAll() {
 }
 
 void SkGpuDevice::replaceRenderTargetContext(std::unique_ptr<GrRenderTargetContext> rtc,
-                                             bool shouldRetainContent) {
+                                             SkSurface::ContentChangeMode mode) {
     SkASSERT(rtc->width() == this->width());
     SkASSERT(rtc->height() == this->height());
     SkASSERT(rtc->numSamples() == fRenderTargetContext->numSamples());
     SkASSERT(rtc->asSurfaceProxy()->priv().isExact());
-    if (shouldRetainContent) {
+    if (mode == SkSurface::kRetain_ContentChangeMode) {
         if (this->context()->abandoned()) {
             return;
         }
 
         SkASSERT(fRenderTargetContext->asTextureProxy());
-        SkAssertResult(rtc->blitTexture(fRenderTargetContext->asTextureProxy(),
+        SkAssertResult(rtc->blitTexture(fRenderTargetContext->readSurfaceView(),
                                         SkIRect::MakeWH(this->width(), this->height()),
                                         SkIPoint::Make(0,0)));
     }
@@ -235,7 +235,7 @@ void SkGpuDevice::replaceRenderTargetContext(std::unique_ptr<GrRenderTargetConte
     fRenderTargetContext = std::move(rtc);
 }
 
-void SkGpuDevice::replaceRenderTargetContext(bool shouldRetainContent) {
+void SkGpuDevice::replaceRenderTargetContext(SkSurface::ContentChangeMode mode) {
     ASSERT_SINGLE_OWNER
 
     SkBudgeted budgeted = fRenderTargetContext->priv().isBudgeted();
@@ -252,7 +252,7 @@ void SkGpuDevice::replaceRenderTargetContext(bool shouldRetainContent) {
     if (!newRTC) {
         return;
     }
-    this->replaceRenderTargetContext(std::move(newRTC), shouldRetainContent);
+    this->replaceRenderTargetContext(std::move(newRTC), mode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -918,15 +918,13 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
              bitmap.height() <= this->caps()->maxTileSize());
     SkASSERT(!samplerState.isRepeated());
 
-    SkScalar scales[2] = {1.f, 1.f};
-    GrSurfaceProxyView view = GrRefCachedBitmapView(fContext.get(), bitmap, samplerState, scales);
+    GrSurfaceProxyView view = GrRefCachedBitmapView(fContext.get(), bitmap, samplerState);
     if (!view) {
         return;
     }
 
     // Compute a matrix that maps the rect we will draw to the src rect.
     SkMatrix texMatrix = SkMatrix::MakeRectToRect(dstRect, srcRect, SkMatrix::kFill_ScaleToFit);
-    texMatrix.postScale(scales[0], scales[1]);
 
     SkAlphaType srcAlphaType = bitmap.alphaType();
 
@@ -938,16 +936,18 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
     if (needsTextureDomain && (SkCanvas::kStrict_SrcRectConstraint == constraint)) {
         if (bicubic) {
             static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
-            fp = GrBicubicEffect::Make(std::move(view), texMatrix, srcRect, kDir, srcAlphaType);
+            fp = GrBicubicEffect::MakeSubset(std::move(view), srcAlphaType, texMatrix,
+                                             samplerState.wrapModeX(), samplerState.wrapModeY(),
+                                             srcRect, kDir, caps);
         } else {
             fp = GrTextureEffect::MakeSubset(std::move(view), srcAlphaType, texMatrix,
                                              samplerState, srcRect, caps);
         }
     } else if (bicubic) {
         SkASSERT(GrSamplerState::Filter::kNearest == samplerState.filter());
-        GrSamplerState::WrapMode wrapMode[2] = {samplerState.wrapModeX(), samplerState.wrapModeY()};
         static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
-        fp = GrBicubicEffect::Make(std::move(view), texMatrix, wrapMode, kDir, srcAlphaType);
+        fp = GrBicubicEffect::Make(std::move(view), srcAlphaType, texMatrix,
+                                   samplerState.wrapModeX(), samplerState.wrapModeY(), kDir, caps);
     } else {
         fp = GrTextureEffect::Make(std::move(view), srcAlphaType, texMatrix, samplerState, caps);
     }
@@ -1050,7 +1050,7 @@ void SkGpuDevice::drawSpecial(SkSpecialImage* special, int left, int top, const 
         auto filter = paint.getFilterQuality() > kNone_SkFilterQuality
                               ? GrSamplerState::Filter::kBilerp
                               : GrSamplerState::Filter::kNearest;
-        GrSurfaceProxyView clipView = as_IB(clipImage)->refView(this->context(), filter, nullptr);
+        GrSurfaceProxyView clipView = as_IB(clipImage)->refView(this->context(), filter);
         // Fold clip matrix into ctm
         ctm.preConcat(clipMatrix);
         SkMatrix inverseClipMatrix;
@@ -1343,7 +1343,7 @@ void SkGpuDevice::drawProducerLattice(GrTextureProducer* producer,
 
     auto dstColorSpace = fRenderTargetContext->colorInfo().colorSpace();
     const GrSamplerState::Filter filter = compute_lattice_filter_mode(*paint);
-    auto view = producer->viewForParams(&filter, nullptr);
+    auto view = producer->viewForParams(&filter);
     if (!view) {
         return;
     }

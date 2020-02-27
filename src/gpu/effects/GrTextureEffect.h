@@ -39,29 +39,6 @@ public:
      * outside the window. More specifically, we treat the MIP map case exactly like the
      * bilerp case in terms of how the final texture coords are computed.
      */
-    static std::unique_ptr<GrFragmentProcessor> MakeTexelSubset(GrSurfaceProxyView,
-                                                                SkAlphaType,
-                                                                const SkMatrix&,
-                                                                GrSamplerState,
-                                                                const SkIRect& subset,
-                                                                const GrCaps& caps);
-    /**
-     * The same as above but also takes a 'domain' that specifies any known limit on the post-
-     * matrix texture coords that will be used to sample the texture. Specifying this requires
-     * knowledge of how this effect will be nested into a paint, the local coords used with the
-     * draw, etc. It is only used to attempt to optimize away the shader subset calculations.
-     */
-    static std::unique_ptr<GrFragmentProcessor> MakeTexelSubset(GrSurfaceProxyView,
-                                                                SkAlphaType,
-                                                                const SkMatrix&,
-                                                                GrSamplerState,
-                                                                const SkIRect& subset,
-                                                                const SkRect& domain,
-                                                                const GrCaps& caps);
-
-    /**
-     * This is similar to MakeTexelSubset but takes a float rather than integer subset rect.
-     */
     static std::unique_ptr<GrFragmentProcessor> MakeSubset(GrSurfaceProxyView,
                                                            SkAlphaType,
                                                            const SkMatrix&,
@@ -100,8 +77,8 @@ private:
         GrSamplerState fHWSampler;
         ShaderMode fShaderModes[2] = {ShaderMode::kNone, ShaderMode::kNone};
         SkRect fShaderSubset = {0, 0, 0, 0};
+        SkRect fShaderClamp  = {0, 0, 0, 0};
         Sampling(GrSamplerState::Filter filter) : fHWSampler(filter) {}
-        Sampling(GrSamplerState, SkISize, const GrCaps&);
         Sampling(const GrSurfaceProxy& proxy,
                  GrSamplerState sampler,
                  const SkRect&,
@@ -110,9 +87,23 @@ private:
         inline bool usesDecal() const;
     };
 
+    /**
+     * Sometimes the implementation of a ShaderMode depends on which GrSamplerState::Filter is
+     * used.
+     */
+    enum class FilterLogic {
+        kNone,          // The shader isn't specialized for the filter.
+        kRepeatBilerp,  // Filter across the subset boundary for kRepeat mode
+        kRepeatMipMap,  // Logic for LOD selection with kRepeat mode.
+        kDecalFilter,   // Logic for fading to transparent black when filtering with kDecal.
+        kDecalNearest,  // Logic for hard transition to transparent black when not filtering.
+    };
+    static FilterLogic GetFilterLogic(ShaderMode mode, GrSamplerState::Filter filter);
+
     GrCoordTransform fCoordTransform;
     TextureSampler fSampler;
     SkRect fSubset;
+    SkRect fClamp;
     ShaderMode fShaderModes[2];
 
     inline GrTextureEffect(GrSurfaceProxyView, SkAlphaType, const SkMatrix&, const Sampling&);

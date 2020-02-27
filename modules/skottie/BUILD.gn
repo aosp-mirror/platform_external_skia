@@ -56,6 +56,7 @@ if (skia_enable_skottie) {
         ]
         sources = [
           "src/SkottieTest.cpp",
+          "tests/Keyframe.cpp",
         ]
 
         deps = [
@@ -127,7 +128,6 @@ if (skia_enable_skottie) {
 
         configs += [ "../..:skia_private" ]
         sources = [
-          "gm/3dgm.cpp",
           "gm/ExternalProperties.cpp",
           "gm/SkottieGM.cpp",
         ]

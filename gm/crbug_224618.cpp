@@ -7,22 +7,12 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkM44.h"
 #include "include/core/SkMatrix.h"
-#include "include/core/SkMatrix44.h"
-#include "include/private/SkM44.h"
+#include "include/core/SkSurface.h"
+#include "include/effects/SkGradientShader.h"
 #include "tools/timer/TimeUtils.h"
-
-static SkM44 rotate_axis_angle(SkScalar x, SkScalar y, SkScalar z, SkScalar radians) {
-    // SkM44 doesn't expose any rotation factories yet
-    SkMatrix44 m;
-    m.setRotateAboutUnit(x, y, z, radians);
-
-    float a[16];
-    m.asColMajorf(a);
-    SkM44 m4;
-    m4.setColMajor(a);
-    return m4;
-}
 
 // Adapted from https://codepen.io/adamdupuis/pen/qLYzqB
 class CrBug224618GM : public skiagm::GM {
@@ -45,6 +35,21 @@ protected:
         return true;
     }
 
+    void onOnceBeforeDraw() override {
+        static const SkColor kColors[2] = {SK_ColorTRANSPARENT, SkColorSetARGB(128, 255, 255, 255)};
+        sk_sp<SkShader> gradient = SkGradientShader::MakeRadial(
+                {200.f, 200.f}, 25.f, kColors, nullptr, 2, SkTileMode::kMirror,
+                SkGradientShader::kInterpolateColorsInPremul_Flag, nullptr);
+
+        sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(400, 400);
+
+        SkPaint bgPaint;
+        bgPaint.setShader(gradient);
+        surface->getCanvas()->drawPaint(bgPaint);
+
+        fCubeImage = surface->makeImageSnapshot();
+    }
+
     void onDraw(SkCanvas* canvas) override {
         SkScalar viewportWidth = SkScalarMod(fTime, 10.f) / 10.f * (kMaxVW - kMinVW) + kMinVW;
         SkScalar radius = viewportWidth / 2.f; // round?
@@ -55,7 +60,7 @@ protected:
                    0.f, 0.f, -1.f / radius, 1.f};
         SkM44 zoom             = SkM44::Translate(0.f, 0.f, radius);
         SkM44 postZoom         = SkM44::Translate(0.f, 0.f, -radius - 1.f);
-        SkM44 rotateHorizontal = rotate_axis_angle(0.f, 1.f, 0.f, 2.356194490192345f);
+        SkM44 rotateHorizontal = SkM44::Rotate({0, 1, 0}, 2.356194490192345f);
 
         // w in degrees will need to be converted to radians
         SkV4 axisAngles[6] = {
@@ -74,28 +79,40 @@ protected:
             SkColorSetARGB(0xFF, 0xFF, 0xA5, 0x00), // orange css
             SkColorSetARGB(0xFF, 0x80, 0x00, 0x80)  // purple css
         };
+
         for (int i = 0; i < 6; ++i) {
-            SkM44 model = rotate_axis_angle(axisAngles[i].x, axisAngles[i].y, axisAngles[i].z,
+            SkM44 model = SkM44::Rotate({axisAngles[i].x, axisAngles[i].y, axisAngles[i].z},
                                             SkDegreesToRadians(axisAngles[i].w));
             model = SkM44::Translate(radius, radius) * proj *    // project and place content
                     zoom * rotateHorizontal * model * postZoom * // main model matrix
                     SkM44::Translate(-radius, -radius);          // center content
 
             canvas->save();
-            canvas->experimental_concat44(model);
+            canvas->concat44(model);
 
             SkPaint fillPaint;
             fillPaint.setAntiAlias(true);
+            fillPaint.setFilterQuality(kLow_SkFilterQuality);
             fillPaint.setColor(faceColors[i]);
 
+            // Leverages GrFillRectOp on GPU backend
             canvas->drawRect(SkRect::MakeWH(viewportWidth, viewportWidth), fillPaint);
+
+            // Leverages GrTextureOp on GPU backend, to ensure sure both quad paths handle clipping
+            canvas->drawImageRect(fCubeImage.get(),
+                                  SkRect::MakeWH(fCubeImage->width(), fCubeImage->height()),
+                                  SkRect::MakeWH(viewportWidth, viewportWidth), &fillPaint,
+                                  SkCanvas::kFast_SrcRectConstraint);
+
             canvas->restore();
         }
     }
 private:
     static const int kMaxVW = 800;
     static const int kMinVW = 300;
+
     SkScalar fTime;
+    sk_sp<SkImage> fCubeImage;
 };
 
 DEF_GM(return new CrBug224618GM();)

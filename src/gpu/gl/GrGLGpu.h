@@ -40,7 +40,7 @@ public:
 
     const GrGLContext& glContext() const { return *fGLContext; }
 
-    const GrGLInterface* glInterface() const { return fGLContext->interface(); }
+    const GrGLInterface* glInterface() const { return fGLContext->glInterface(); }
     const GrGLContextInfo& ctxInfo() const { return *fGLContext; }
     GrGLStandard glStandard() const { return fGLContext->standard(); }
     GrGLVersion glVersion() const { return fGLContext->version(); }
@@ -73,20 +73,32 @@ public:
     // If the caller wishes to bind an index buffer to a specific VAO, it can call glBind directly.
     GrGLenum bindBuffer(GrGpuBufferType type, const GrBuffer*);
 
+    // Flushes state from GrProgramInfo to GL. Returns false if the state couldn't be set.
+    bool flushGLState(GrRenderTarget*, const GrProgramInfo&);
+    void flushScissorRect(const SkIRect&, int rtWidth, int rtHeight, GrSurfaceOrigin);
+    void bindTextures(const GrPrimitiveProcessor& primProc, const GrPipeline& pipeline,
+                      const GrSurfaceProxy* const primProcTextures[] = nullptr) {
+        fHWProgram->bindTextures(primProc, pipeline, primProcTextures);
+    }
+
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the draw call for the corresponding passthrough function
     // on GrGLOpsRenderPass.
-    void draw(GrRenderTarget*, const GrProgramInfo&, const GrMesh[], int meshCount);
+    //
+    // The client must call flushGLState before this method.
+    void drawMesh(GrRenderTarget*, GrPrimitiveType, const GrMesh&);
 
     // GrMesh::SendToGpuImpl methods. These issue the actual GL draw calls.
     // Marked final as a hint to the compiler to not use virtual dispatch.
-    void sendArrayMeshToGpu(const GrMesh&, int vertexCount, int baseVertex) final;
-    void sendIndexedMeshToGpu(const GrMesh&, int indexCount, int baseIndex, uint16_t minIndexValue,
-                              uint16_t maxIndexValue, int baseVertex) final;
-    void sendInstancedMeshToGpu(const GrMesh&, int vertexCount, int baseVertex, int instanceCount,
-                                int baseInstance) final;
-    void sendIndexedInstancedMeshToGpu(const GrMesh&, int indexCount, int baseIndex, int baseVertex,
-                                       int instanceCount, int baseInstance) final;
+    void sendArrayMeshToGpu(GrPrimitiveType primitiveType, const GrMesh&, int vertexCount,
+                            int baseVertex) final;
+    void sendIndexedMeshToGpu(GrPrimitiveType, const GrMesh&, int indexCount, int baseIndex,
+                              uint16_t minIndexValue, uint16_t maxIndexValue, int baseVertex) final;
+    void sendInstancedMeshToGpu(GrPrimitiveType, const GrMesh&, int vertexCount, int baseVertex,
+                                int instanceCount, int baseInstance) final;
+    void sendIndexedInstancedMeshToGpu(GrPrimitiveType, const GrMesh&, int indexCount,
+                                       int baseIndex, int baseVertex, int instanceCount,
+                                       int baseInstance) final;
 
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
@@ -123,6 +135,11 @@ public:
     GrStencilAttachment* createStencilAttachmentForRenderTarget(
             const GrRenderTarget* rt, int width, int height, int numStencilSamples) override;
     void deleteBackendTexture(const GrBackendTexture&) override;
+
+    bool compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) override {
+        sk_sp<GrGLProgram> tmp = fProgramCache->findOrCreateProgram(desc, programInfo);
+        return SkToBool(tmp);
+    }
 
     bool precompileShader(const SkData& key, const SkData& data) override {
         return fProgramCache->precompileShader(key, data);
@@ -191,7 +208,7 @@ private:
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
 
-    sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
+    sk_sp<GrTexture> onCreateTexture(SkISize dimensions,
                                      const GrBackendFormat&,
                                      GrRenderable,
                                      int renderTargetSampleCnt,
@@ -267,7 +284,7 @@ private:
     void unbindCpuToGpuXferBuffer();
 
     void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                               GrSurfaceOrigin resolveOrigin, ForExternalIO) override;
+                               ForExternalIO) override;
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 
@@ -276,9 +293,6 @@ private:
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
-
-    // Flushes state from GrPipeline to GL. Returns false if the state couldn't be set.
-    bool flushGLState(GrRenderTarget*, const GrProgramInfo&);
 
     void flushProgram(sk_sp<GrGLProgram>);
 
@@ -317,10 +331,27 @@ private:
         void abandon();
         void reset();
         sk_sp<GrGLProgram> findOrCreateProgram(GrRenderTarget*, const GrProgramInfo&);
+        sk_sp<GrGLProgram> findOrCreateProgram(const GrProgramDesc& desc,
+                                               const GrProgramInfo& programInfo) {
+            Stats::ProgramCacheResult stat;
+            sk_sp<GrGLProgram> tmp = this->findOrCreateProgram(nullptr, desc, programInfo, &stat);
+            if (!tmp) {
+                fGpu->fStats.incNumPreCompilationFailures();
+            } else {
+                fGpu->fStats.incNumPreProgramCacheResult(stat);
+            }
+
+            return tmp;
+        }
         bool precompileShader(const SkData& key, const SkData& data);
 
     private:
         struct Entry;
+
+        sk_sp<GrGLProgram> findOrCreateProgram(GrRenderTarget*,
+                                               const GrProgramDesc&,
+                                               const GrProgramInfo&,
+                                               Stats::ProgramCacheResult*);
 
         struct DescHash {
             uint32_t operator()(const GrProgramDesc& desc) const {
@@ -340,10 +371,14 @@ private:
 
     // flushes the scissor. see the note on flushBoundTextureAndParams about
     // flushing the scissor after that function is called.
-    void flushScissor(const GrScissorState&, int rtWidth, int rtHeight, GrSurfaceOrigin rtOrigin);
-
-    // disables the scissor
-    void disableScissor();
+    void flushScissor(const GrScissorState& scissorState, int rtWidth, int rtHeight,
+                      GrSurfaceOrigin rtOrigin) {
+        this->flushScissorTest(GrScissorTest(scissorState.enabled()));
+        if (scissorState.enabled()) {
+            this->flushScissorRect(scissorState.rect(), rtWidth, rtHeight, rtOrigin);
+        }
+    }
+    void flushScissorTest(GrScissorTest);
 
     void flushWindowRectangles(const GrWindowRectsState&, const GrGLRenderTarget*, GrSurfaceOrigin);
     void disableWindowRectangles();
@@ -392,10 +427,13 @@ private:
                                  GrGLenum target,
                                  const void* data, size_t dataSize);
 
+    // Calls one of various versions of renderBufferStorageMultisample.
+    bool renderbufferStorageMSAA(const GrGLContext& ctx, int sampleCount, GrGLenum format,
+                                 int width, int height);
+
     bool createRenderTargetObjects(const GrGLTexture::Desc&,
                                    int sampleCount,
                                    GrGLRenderTarget::IDs*);
-
     enum TempFBOTarget {
         kSrc_TempFBOTarget,
         kDst_TempFBOTarget
@@ -420,7 +458,7 @@ private:
     std::unique_ptr<GrGLContext> fGLContext;
 
     // GL program-related state
-    ProgramCache*               fProgramCache;
+    std::unique_ptr<ProgramCache> fProgramCache;
 
     ///////////////////////////////////////////////////////////////////////////
     ///@name Caching of GL State

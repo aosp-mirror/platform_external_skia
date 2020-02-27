@@ -89,6 +89,8 @@ skia_gpu_sources = [
   "$_src/gpu/GrDrawOpTest.cpp",
   "$_src/gpu/GrDrawOpTest.h",
   "$_src/gpu/GrDriverBugWorkarounds.cpp",
+  "$_src/gpu/GrDynamicAtlas.cpp",
+  "$_src/gpu/GrDynamicAtlas.h",
   "$_src/gpu/GrEagerVertexAllocator.h",
   "$_src/gpu/GrFixedClip.cpp",
   "$_src/gpu/GrFixedClip.h",
@@ -418,6 +420,8 @@ skia_gpu_sources = [
   "$_src/gpu/gradients/generated/GrTiledGradientEffect.cpp",
   "$_src/gpu/gradients/generated/GrTiledGradientEffect.h",
 
+  "$_src/gpu/tessellate/GrDrawAtlasPathOp.cpp",
+  "$_src/gpu/tessellate/GrDrawAtlasPathOp.h",
   "$_src/gpu/tessellate/GrFillPathShader.cpp",
   "$_src/gpu/tessellate/GrFillPathShader.h",
   "$_src/gpu/tessellate/GrGpuTessellationPathRenderer.cpp",
@@ -720,6 +724,15 @@ skia_vk_sources = [
   "$_src/gpu/vk/GrVkVaryingHandler.h",
   "$_src/gpu/vk/GrVkVertexBuffer.cpp",
   "$_src/gpu/vk/GrVkVertexBuffer.h",
+]
+
+skia_direct3d_sources = [
+  "$_include/gpu/d3d/GrD3DBackendContext.h",
+  "$_include/gpu/d3d/GrD3D12.h",
+  "$_src/gpu/d3d/GrD3DCaps.cpp",
+  "$_src/gpu/d3d/GrD3DCaps.h",
+  "$_src/gpu/d3d/GrD3DGpu.cpp",
+  "$_src/gpu/d3d/GrD3DGpu.h",
 ]
 
 skia_dawn_sources = [

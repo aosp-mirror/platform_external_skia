@@ -21,56 +21,6 @@
 #include "src/gpu/effects/GrTextureDomain.h"
 #include "src/gpu/effects/GrTextureEffect.h"
 
-GrSurfaceProxyView GrTextureProducer::CopyOnGpu(GrRecordingContext* context,
-                                                GrSurfaceProxyView inputView,
-                                                GrColorType colorType,
-                                                const CopyParams& copyParams,
-                                                bool dstWillRequireMipMaps) {
-    SkASSERT(context);
-    SkASSERT(inputView.asTextureProxy());
-
-    const SkRect dstRect = SkRect::Make(copyParams.fDimensions);
-    GrMipMapped mipMapped = dstWillRequireMipMaps ? GrMipMapped::kYes : GrMipMapped::kNo;
-
-    GrSurfaceProxy* proxy = inputView.proxy();
-    SkRect localRect = proxy->getBoundsRect();
-
-    bool resizing = false;
-    if (copyParams.fFilter != GrSamplerState::Filter::kNearest) {
-        resizing = localRect.width() != dstRect.width() || localRect.height() != dstRect.height();
-    }
-
-    if (copyParams.fFilter == GrSamplerState::Filter::kNearest && !resizing &&
-        dstWillRequireMipMaps) {
-        GrSurfaceProxyView view = GrCopyBaseMipMapToTextureProxy(context, proxy, inputView.origin(),
-                                                                 colorType);
-        if (view.proxy()) {
-            return view;
-        }
-    }
-
-    auto copyRTC = GrRenderTargetContext::MakeWithFallback(
-            context, colorType, nullptr, SkBackingFit::kExact, copyParams.fDimensions, 1,
-            mipMapped, proxy->isProtected(), inputView.origin());
-    if (!copyRTC) {
-        return {};
-    }
-
-    const auto& caps = *context->priv().caps();
-    GrPaint paint;
-
-    GrSamplerState sampler(GrSamplerState::WrapMode::kClamp, copyParams.fFilter);
-    auto boundsRect = SkIRect::MakeSize(proxy->dimensions());
-    auto fp = GrTextureEffect::MakeTexelSubset(std::move(inputView), kUnknown_SkAlphaType,
-                                               SkMatrix::I(), sampler, boundsRect, localRect, caps);
-    paint.addColorFragmentProcessor(std::move(fp));
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-
-    copyRTC->fillRectToRect(GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(), dstRect,
-                            localRect);
-    return copyRTC->readSurfaceView();
-}
-
 /** Determines whether a texture domain is necessary and if so what domain to use. There are two
  *  rectangles to consider:
  *  - The first is the content area specified by the texture adjuster (i.e., textureContentArea).
@@ -193,11 +143,10 @@ std::unique_ptr<GrFragmentProcessor> GrTextureProducer::createFragmentProcessorF
     SkASSERT(view.asTextureProxy());
     const auto& caps = *fContext->priv().caps();
     SkAlphaType srcAlphaType = this->alphaType();
+    auto wm = fDomainNeedsDecal ? GrSamplerState::WrapMode::kClampToBorder
+                                : GrSamplerState::WrapMode::kClamp;
     if (filterOrNullForBicubic) {
-        GrSamplerState::WrapMode wrapMode = fDomainNeedsDecal
-                                                    ? GrSamplerState::WrapMode::kClampToBorder
-                                                    : GrSamplerState::WrapMode::kClamp;
-        GrSamplerState samplerState(wrapMode, *filterOrNullForBicubic);
+        GrSamplerState samplerState(wm, *filterOrNullForBicubic);
         if (kNoDomain_DomainMode == domainMode) {
             return GrTextureEffect::Make(std::move(view), srcAlphaType, textureMatrix, samplerState,
                                          caps);
@@ -205,29 +154,21 @@ std::unique_ptr<GrFragmentProcessor> GrTextureProducer::createFragmentProcessorF
         return GrTextureEffect::MakeSubset(std::move(view), srcAlphaType, textureMatrix,
                                            samplerState, domain, caps);
     } else {
-        static const GrSamplerState::WrapMode kClampClamp[] = {
-                GrSamplerState::WrapMode::kClamp, GrSamplerState::WrapMode::kClamp};
-        static const GrSamplerState::WrapMode kDecalDecal[] = {
-                GrSamplerState::WrapMode::kClampToBorder, GrSamplerState::WrapMode::kClampToBorder};
 
         static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
-        bool clampToBorderSupport = caps.clampToBorderSupport();
-        if (kDomain_DomainMode == domainMode || (fDomainNeedsDecal && !clampToBorderSupport)) {
-            GrTextureDomain::Mode wrapMode = fDomainNeedsDecal ? GrTextureDomain::kDecal_Mode
-                                         : GrTextureDomain::kClamp_Mode;
-            return GrBicubicEffect::Make(std::move(view), textureMatrix, kClampClamp, wrapMode,
-                                         wrapMode, kDir, srcAlphaType,
-                                         kDomain_DomainMode == domainMode ? &domain : nullptr);
+        const auto& caps = *fContext->priv().caps();
+        if (kDomain_DomainMode == domainMode) {
+            return GrBicubicEffect::MakeSubset(std::move(view), srcAlphaType, textureMatrix, wm, wm,
+                                               domain, kDir, caps);
         } else {
-            return GrBicubicEffect::Make(std::move(view), textureMatrix,
-                                         fDomainNeedsDecal ? kDecalDecal : kClampClamp, kDir,
-                                         srcAlphaType);
+            return GrBicubicEffect::Make(std::move(view), srcAlphaType, textureMatrix, wm, wm, kDir,
+                                         caps);
         }
     }
 }
 
 GrSurfaceProxyView GrTextureProducer::viewForParams(
-        const GrSamplerState::Filter* filterOrNullForBicubic, SkScalar scaleAdjust[2]) {
+        const GrSamplerState::Filter* filterOrNullForBicubic) {
     GrSamplerState sampler; // Default is nearest + clamp
     if (filterOrNullForBicubic) {
         sampler.setFilterMode(*filterOrNullForBicubic);
@@ -239,36 +180,29 @@ GrSurfaceProxyView GrTextureProducer::viewForParams(
             sampler.setWrapModeY(GrSamplerState::WrapMode::kClampToBorder);
         }
     }
-    return this->viewForParams(sampler, scaleAdjust);
+    return this->viewForParams(sampler);
 }
 
-GrSurfaceProxyView GrTextureProducer::viewForParams(GrSamplerState sampler,
-                                                    SkScalar scaleAdjust[2]) {
-    // Check that the caller pre-initialized scaleAdjust
-    SkASSERT(!scaleAdjust || (scaleAdjust[0] == 1 && scaleAdjust[1] == 1));
-
+GrSurfaceProxyView GrTextureProducer::viewForParams(GrSamplerState sampler) {
     const GrCaps* caps = this->context()->priv().caps();
 
     int mipCount = SkMipMap::ComputeLevelCount(this->width(), this->height());
     bool willBeMipped = GrSamplerState::Filter::kMipMap == sampler.filter() && mipCount &&
                         caps->mipMapSupport();
 
-    auto result = this->onRefTextureProxyViewForParams(sampler, willBeMipped, scaleAdjust);
+    auto result = this->onRefTextureProxyViewForParams(sampler, willBeMipped);
+    if (!result) {
+        return {};
+    }
+
+    SkASSERT(result.asTextureProxy());
 
     // Check to make sure that if we say the texture willBeMipped that the returned texture has mip
     // maps, unless the config is not copyable.
-    SkASSERT(!result.proxy() || !willBeMipped ||
-             result.asTextureProxy()->mipMapped() == GrMipMapped::kYes ||
+    SkASSERT(!willBeMipped || result.asTextureProxy()->mipMapped() == GrMipMapped::kYes ||
              !caps->isFormatCopyable(result.proxy()->backendFormat()));
 
-    SkASSERT(!result.proxy() || result.asTextureProxy());
-
-    SkDEBUGCODE(bool expectNoScale = (sampler.filter() != GrSamplerState::Filter::kMipMap &&
-                                      !sampler.isRepeated()));
-    // Check that the "no scaling expected" case always returns a proxy of the same size as the
-    // producer.
-    SkASSERT(!result.proxy() || !expectNoScale ||
-             result.proxy()->dimensions() == this->dimensions());
+    SkASSERT(result.proxy()->dimensions() == this->dimensions());
 
     return result;
 }
@@ -279,7 +213,7 @@ std::pair<GrSurfaceProxyView, GrColorType> GrTextureProducer::view(GrMipMapped w
                                              : GrSamplerState::Filter::kMipMap;
     GrSamplerState sampler(GrSamplerState::WrapMode::kClamp, filter);
 
-    auto result = this->viewForParams(sampler, nullptr);
+    auto result = this->viewForParams(sampler);
 
 #ifdef SK_DEBUG
     const GrCaps* caps = this->context()->priv().caps();

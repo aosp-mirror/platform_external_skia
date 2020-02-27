@@ -151,7 +151,7 @@ private:
                             flushState->drawOpArgs().outputSwizzle());
         SkSTArray<kNumMeshes, GrMesh> meshes;
         for (int i = 0; i < kNumMeshes; ++i) {
-            GrMesh& mesh = meshes.emplace_back(GrPrimitiveType::kTriangleStrip);
+            GrMesh& mesh = meshes.push_back();
             mesh.setNonIndexedNonInstanced(4);
             mesh.setVertexData(fVertexBuffer, 4 * i);
         }
@@ -169,8 +169,9 @@ private:
                                   nullptr,
                                   &dynamicState, 0, GrPrimitiveType::kTriangleStrip);
 
-        flushState->opsRenderPass()->draw(programInfo, meshes.begin(), 4,
-                                          SkRect::MakeIWH(kScreenSize, kScreenSize));
+        flushState->opsRenderPass()->bindPipeline(programInfo,
+                                                  SkRect::MakeIWH(kScreenSize, kScreenSize));
+        flushState->opsRenderPass()->drawMeshes(programInfo, meshes.begin(), 4);
     }
 
     GrScissorTest               fScissorTest;

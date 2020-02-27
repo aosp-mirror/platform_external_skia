@@ -51,8 +51,7 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
 
     if (fOriginalKey.isValid()) {
         auto colorType = SkColorTypeToGrColorType(fBitmap.colorType());
-        proxy = proxyProvider->findOrCreateProxyByUniqueKey(fOriginalKey, colorType,
-                                                            kTopLeft_GrSurfaceOrigin);
+        proxy = proxyProvider->findOrCreateProxyByUniqueKey(fOriginalKey, colorType);
         if (proxy) {
             swizzle = this->context()->priv().caps()->getReadSwizzle(proxy->backendFormat(),
                                                                      this->colorType());
@@ -81,7 +80,6 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
             swizzle = this->context()->priv().caps()->getReadSwizzle(proxy->backendFormat(),
                                                                      this->colorType());
             SkASSERT(!willBeMipped || GrMipMapped::kYes == proxy->mipMapped());
-            SkASSERT(proxy->origin() == kTopLeft_GrSurfaceOrigin);
             if (fOriginalKey.isValid()) {
                 proxyProvider->assignUniqueKeyToProxy(fOriginalKey, proxy.get());
                 GrInstallBitmapUniqueKeyInvalidator(
@@ -124,13 +122,14 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
     return {};
 }
 
-void GrBitmapTextureMaker::makeCopyKey(const CopyParams& copyParams, GrUniqueKey* copyKey) {
+void GrBitmapTextureMaker::makeMipMappedKey(GrUniqueKey* mipMappedKey) {
     // Destination color space is irrelevant - we always upload the bitmap's contents as-is
     if (fOriginalKey.isValid()) {
-        MakeCopyKeyFromOrigKey(fOriginalKey, copyParams, copyKey);
+        MakeMipMappedKeyFromOriginalKey(fOriginalKey, mipMappedKey);
     }
 }
 
-void GrBitmapTextureMaker::didCacheCopy(const GrUniqueKey& copyKey, uint32_t contextUniqueID) {
-    GrInstallBitmapUniqueKeyInvalidator(copyKey, contextUniqueID, fBitmap.pixelRef());
+void GrBitmapTextureMaker::didCacheMipMappedCopy(const GrUniqueKey& mipMappedKey,
+                                                 uint32_t contextUniqueID) {
+    GrInstallBitmapUniqueKeyInvalidator(mipMappedKey, contextUniqueID, fBitmap.pixelRef());
 }

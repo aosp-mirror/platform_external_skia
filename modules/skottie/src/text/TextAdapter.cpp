@@ -8,6 +8,7 @@
 #include "modules/skottie/src/text/TextAdapter.h"
 
 #include "include/core/SkFontMgr.h"
+#include "include/core/SkM44.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/text/RangeSelector.h"
 #include "modules/skottie/src/text/TextAnimator.h"
@@ -15,6 +16,7 @@
 #include "modules/sksg/include/SkSGGroup.h"
 #include "modules/sksg/include/SkSGPaint.h"
 #include "modules/sksg/include/SkSGRect.h"
+#include "modules/sksg/include/SkSGRenderEffect.h"
 #include "modules/sksg/include/SkSGText.h"
 #include "modules/sksg/include/SkSGTransform.h"
 
@@ -68,6 +70,7 @@ sk_sp<TextAdapter> TextAdapter::Make(const skjson::ObjectValue& jlayer,
 
         for (const skjson::ObjectValue* janimator : *janimators) {
             if (auto animator = TextAnimator::Make(janimator, abuilder, adapter.get())) {
+                adapter->fHasBlur |= animator->hasBlur();
                 adapter->fAnimators.push_back(std::move(animator));
             }
         }
@@ -99,8 +102,7 @@ void TextAdapter::addFragment(const Shaper::Fragment& frag) {
 
     FragmentRec rec;
     rec.fOrigin = frag.fPos;
-    rec.fMatrixNode = sksg::Matrix<SkMatrix>::Make(SkMatrix::MakeTrans(frag.fPos.x(),
-                                                                       frag.fPos.y()));
+    rec.fMatrixNode = sksg::Matrix<SkM44>::Make(SkM44::Translate(frag.fPos.x(), frag.fPos.y()));
 
     std::vector<sk_sp<sksg::RenderNode>> draws;
     draws.reserve(static_cast<size_t>(fText->fHasFill) + static_cast<size_t>(fText->fHasStroke));
@@ -124,6 +126,12 @@ void TextAdapter::addFragment(const Shaper::Fragment& frag) {
     auto draws_node = (draws.size() > 1)
             ? sksg::Group::Make(std::move(draws))
             : std::move(draws[0]);
+
+    if (fHasBlur) {
+        // Optional blur effect.
+        rec.fBlur = sksg::BlurImageFilter::Make();
+        draws_node = sksg::ImageFilterEffect::Make(std::move(draws_node), rec.fBlur);
+    }
 
     fRoot->addChild(sksg::TransformEffect::Make(std::move(draws_node), rec.fMatrixNode));
     fFragments.push_back(std::move(rec));
@@ -288,12 +296,14 @@ void TextAdapter::onSync() {
 
 void TextAdapter::pushPropsToFragment(const TextAnimator::ResolvedProps& props,
                                       const FragmentRec& rec) const {
-    // TODO: share this with TransformAdapter2D?
-    auto t = SkMatrix::MakeTrans(rec.fOrigin.x() + props.position.x(),
-                                 rec.fOrigin.y() + props.position.y());
-    t.preRotate(props.rotation);
-    t.preScale(props.scale, props.scale);
-    rec.fMatrixNode->setMatrix(t);
+    rec.fMatrixNode->setMatrix(
+                SkM44::Translate(rec.fOrigin.x() + props.position.x,
+                                 rec.fOrigin.y() + props.position.y,
+                                                   props.position.z)
+              * SkM44::Rotate({ 1, 0, 0 }, SkDegreesToRadians(props.rotation.x))
+              * SkM44::Rotate({ 0, 1, 0 }, SkDegreesToRadians(props.rotation.y))
+              * SkM44::Rotate({ 0, 0, 1 }, SkDegreesToRadians(props.rotation.z))
+              * SkM44::Scale(props.scale.x, props.scale.y, props.scale.z));
 
     const auto scale_alpha = [](SkColor c, float o) {
         return SkColorSetA(c, SkScalarRoundToInt(o * SkColorGetA(c)));
@@ -304,6 +314,9 @@ void TextAdapter::pushPropsToFragment(const TextAnimator::ResolvedProps& props,
     }
     if (rec.fStrokeColorNode) {
         rec.fStrokeColorNode->setColor(scale_alpha(props.stroke_color, props.opacity));
+    }
+    if (rec.fBlur) {
+        rec.fBlur->setSigma(props.blur * kBlurSizeToSigma);
     }
 }
 
@@ -348,8 +361,7 @@ void TextAdapter::adjustLineTracking(const TextAnimator::ModulatorBuffer& buf,
                 fragment_offset = align_offset + tracking_acc + track_before;
 
         const auto& frag = fFragments[i];
-        const auto m = SkMatrix::Concat(SkMatrix::MakeTrans(fragment_offset, 0),
-                                        frag.fMatrixNode->getMatrix());
+        const auto m = SkM44::Translate(fragment_offset, 0) * frag.fMatrixNode->getMatrix();
         frag.fMatrixNode->setMatrix(m);
 
         tracking_acc += track_before + track_after;

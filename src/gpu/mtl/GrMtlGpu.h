@@ -59,6 +59,8 @@ public:
 
     void deleteBackendTexture(const GrBackendTexture&) override;
 
+    bool compile(const GrProgramDesc&, const GrProgramInfo&) override;
+
 #if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
@@ -139,7 +141,7 @@ private:
                                                       GrProtected,
                                                       const BackendTextureData*) override;
 
-    sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
+    sk_sp<GrTexture> onCreateTexture(SkISize,
                                      const GrBackendFormat&,
                                      GrRenderable,
                                      int renderTargetSampleCnt,
@@ -192,7 +194,7 @@ private:
     bool onRegenerateMipMapLevels(GrTexture*) override;
 
     void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                               GrSurfaceOrigin resolveOrigin, ForExternalIO) override;
+                               ForExternalIO) override;
 
     void resolveTexture(id<MTLTexture> colorTexture, id<MTLTexture> resolveTexture);
 

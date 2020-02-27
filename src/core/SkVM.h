@@ -184,6 +184,9 @@ namespace skvm {
         // d += n*m
         void fmla4s(V d, V n, V m);
 
+        // d -= n*m
+        void fmls4s(V d, V n, V m);
+
         // d = op(n,imm)
         using DOpNImm = void(V d, V n, int imm);
         DOpNImm sli4s,
@@ -361,7 +364,7 @@ namespace skvm {
 
         // Mostly for debugging, tests, etc.
         std::vector<Instruction> program() const { return fProgram; }
-        std::vector<OptimizedInstruction> optimize() const;
+        std::vector<OptimizedInstruction> optimize(bool for_jit=false) const;
 
         // Declare an argument with given stride (use stride=0 for uniforms).
         // TODO: different types for varying and uniforms?
@@ -542,8 +545,9 @@ namespace skvm {
         F32 from_unorm(int bits, I32);   // E.g. from_unorm(8, x) -> x * (1/255.0f)
         I32   to_unorm(int bits, F32);   // E.g.   to_unorm(8, x) -> round(x * 255)
 
-        Color unpack_8888(I32 rgba);
-        Color unpack_565 (I32 bgr );  // bottom 16 bits
+        Color unpack_1010102(I32 rgba);
+        Color unpack_8888   (I32 rgba);
+        Color unpack_565    (I32 bgr );  // bottom 16 bits
 
         void   premul(F32* r, F32* g, F32* b, F32 a);
         void unpremul(F32* r, F32* g, F32* b, F32 a);
@@ -617,8 +621,12 @@ namespace skvm {
             union { Reg z; int immz; };
         };
 
-        Program(const std::vector<OptimizedInstruction>& instructions,
-                const std::vector<int>                 & strides,
+        Program(const std::vector<OptimizedInstruction>& interpreter,
+                const std::vector<int>& strides);
+
+        Program(const std::vector<OptimizedInstruction>& interpreter,
+                const std::vector<OptimizedInstruction>& jit,
+                const std::vector<int>& strides,
                 const char* debug_name);
 
         Program();

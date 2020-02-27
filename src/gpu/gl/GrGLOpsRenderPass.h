@@ -49,9 +49,22 @@ public:
 private:
     GrGpu* gpu() override { return fGpu; }
 
-    void onDraw(const GrProgramInfo& programInfo, const GrMesh mesh[], int meshCount,
-                const SkRect& bounds) override {
-        fGpu->draw(fRenderTarget, programInfo, mesh, meshCount);
+    bool onBindPipeline(const GrProgramInfo& programInfo, const SkRect& drawBounds) override {
+        return fGpu->flushGLState(fRenderTarget, programInfo);
+    }
+
+    void onSetScissorRect(const SkIRect& scissor) override {
+        fGpu->flushScissorRect(scissor, fRenderTarget->width(), fRenderTarget->height(), fOrigin);
+    }
+
+    bool onBindTextures(const GrPrimitiveProcessor& primProc, const GrPipeline& pipeline,
+                        const GrSurfaceProxy* const primProcTextures[]) override {
+        fGpu->bindTextures(primProc, pipeline, primProcTextures);
+        return true;
+    }
+
+    void onDrawMesh(GrPrimitiveType primitiveType, const GrMesh& mesh) override {
+        fGpu->drawMesh(fRenderTarget, primitiveType, mesh);
     }
 
     void onClear(const GrFixedClip& clip, const SkPMColor4f& color) override {

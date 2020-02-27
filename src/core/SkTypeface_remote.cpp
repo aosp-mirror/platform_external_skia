@@ -7,7 +7,7 @@
 
 #include "include/core/SkPaint.h"
 #include "src/core/SkRemoteGlyphCache.h"
-#include "src/core/SkStrike.h"
+#include "src/core/SkScalerCache.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/core/SkTypeface_remote.h"
@@ -18,14 +18,6 @@ SkScalerContextProxy::SkScalerContextProxy(sk_sp<SkTypeface> tf,
                                            sk_sp<SkStrikeClient::DiscardableHandleManager> manager)
         : SkScalerContext{std::move(tf), effects, desc}
         , fDiscardableManager{std::move(manager)} {}
-
-void SkScalerContextProxy::initCache(SkStrike* cache, SkStrikeCache* strikeCache) {
-    SkASSERT(fCache == nullptr);
-    SkASSERT(cache != nullptr);
-
-    fCache = cache;
-    fStrikeCache = strikeCache;
-}
 
 unsigned SkScalerContextProxy::generateGlyphCount()  {
     SK_ABORT("Should never be called.");

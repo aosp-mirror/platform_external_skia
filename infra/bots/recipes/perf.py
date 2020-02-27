@@ -159,7 +159,7 @@ def nanobench_flags(api, bot):
     args.extend(['--keepAlive', 'true'])
 
   # skia:9036
-  if 'NVIDIA_Shield' in bot or 'Chorizo' in bot:
+  if 'NVIDIA_Shield' in bot:
     args.extend(['--dontReduceOpsTaskSplitting'])
 
   # Some people don't like verbose output.
@@ -180,6 +180,9 @@ def nanobench_flags(api, bot):
     match.append('~keymobi')
     match.append('~path_hairline')
     match.append('~GLInstancedArraysBench') # skia:4714
+  if 'iOS' in bot and 'Metal' in bot:
+    # skia:9799
+    match.append('~compositing_images_tile_size')
   if ('Intel' in bot and api.vars.is_linux and not 'Vulkan' in bot):
     # TODO(dogben): Track down what's causing bots to die.
     verbose = True
@@ -293,35 +296,6 @@ def perf_steps(api):
 
   args.extend(nanobench_flags(api, api.vars.builder_name))
 
-  if 'Chromecast' in api.vars.builder_cfg.get('os', ''):
-    # Due to limited disk space, run a watered down perf run on Chromecast.
-    args = [target]
-    if api.vars.builder_cfg.get('cpu_or_gpu') == 'CPU':
-      args.extend(['--nogpu', '--config', '8888'])
-    elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
-      args.extend(['--nocpu', '--config', 'gles'])
-    args.extend([
-      '-i', api.flavor.device_dirs.resource_dir,
-      '--images', api.flavor.device_path_join(
-          api.flavor.device_dirs.resource_dir, 'images', 'color_wheel.jpg'),
-      '--skps',  api.flavor.device_dirs.skp_dir,
-      '--pre_log',
-      '--dontReduceOpsTaskSplitting',
-      '--match', # skia:6687
-      '~matrixconvolution',
-      '~blur_image_filter',
-      '~blur_0.01',
-      '~GM_animated-image-blurs',
-      '~blendmode_mask_',
-      '~desk_carsvg.skp',
-      '~^path_text_clipped', # Bot times out; skia:7190
-      '~shapes_rrect_inner_rrect_50_500x500', # skia:7551
-      '~compositing_images',
-      '~bulkrect'
-    ])
-    if 'Debug' in api.vars.builder_name:
-      args.extend(['--loops', '1'])
-
   if upload_perf_results(b):
     now = api.time.utcnow()
     ts = int(calendar.timegm(now.utctimetuple()))
@@ -361,12 +335,12 @@ def RunSteps(api):
     env['IOS_MOUNT_POINT'] = api.vars.slave_dir.join('mnt_iosdevice')
   with api.env(env):
     try:
-      if 'Chromecast' in api.vars.builder_name:
-        api.flavor.install(resources=True, skps=True)
-      elif all(v in api.vars.builder_name for v in ['Android', 'CPU']):
-        api.flavor.install(skps=True, images=True, svgs=True, resources=True, texttraces=True)
+      if all(v in api.vars.builder_name for v in ['Android', 'CPU']):
+        api.flavor.install('nanobench', skps=True, images=True, svgs=True,
+                           resources=True, texttraces=True)
       else:
-        api.flavor.install(skps=True, images=True, svgs=True, resources=True)
+        api.flavor.install('nanobench', skps=True, images=True, svgs=True,
+                           resources=True)
       perf_steps(api)
     finally:
       api.flavor.cleanup_steps()
@@ -383,8 +357,6 @@ TEST_BUILDERS = [
   'Perf-Android-Clang-Pixel3a-GPU-Adreno615-arm64-Release-All-Android',
   'Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All',
   'Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All',
-  'Perf-Chromecast-Clang-Chorizo-CPU-Cortex_A7-arm-Debug-All',
-  'Perf-Chromecast-Clang-Chorizo-GPU-Cortex_A7-arm-Release-All',
   'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All',
   'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-ASAN',
   'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-BonusConfigs',
@@ -428,11 +400,6 @@ def GenTests(api):
     )
     if 'Win' in builder:
       test += api.platform('win', 64)
-
-    if 'Chromecast' in builder:
-      test += api.step_data(
-          'read chromecast ip',
-          stdout=api.raw_io.output('192.168.1.2:5555'))
 
     yield test
 

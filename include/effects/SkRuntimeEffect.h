@@ -23,9 +23,9 @@ class SkShader;
 
 namespace SkSL {
 class ByteCode;
-class Compiler;
 struct PipelineStageArgs;
 struct Program;
+class SharedCompiler;
 }
 
 /*
@@ -82,6 +82,8 @@ public:
     sk_sp<SkShader> makeShader(sk_sp<SkData> inputs, sk_sp<SkShader> children[], size_t childCount,
                                const SkMatrix* localMatrix, bool isOpaque);
 
+    sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> inputs, sk_sp<SkColorFilter> children[],
+                                         size_t childCount);
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> inputs);
 
     const SkString& source() const { return fSkSL; }
@@ -125,19 +127,22 @@ public:
 
     ByteCodeResult toByteCode(const void* inputs);
 
+    static void RegisterFlattenables();
+
+    ~SkRuntimeEffect();
+
 private:
-    SkRuntimeEffect(SkString sksl, std::unique_ptr<SkSL::Compiler> compiler,
-                    std::unique_ptr<SkSL::Program> baseProgram,
+    SkRuntimeEffect(SkString sksl, std::unique_ptr<SkSL::Program> baseProgram,
                     std::vector<Variable>&& inAndUniformVars, std::vector<SkString>&& children,
                     size_t uniformSize);
 
     using SpecializeResult = std::tuple<std::unique_ptr<SkSL::Program>, SkString>;
-    SpecializeResult specialize(SkSL::Program& baseProgram, const void* inputs);
+    SpecializeResult specialize(SkSL::Program& baseProgram, const void* inputs,
+                                const SkSL::SharedCompiler&);
 
     uint32_t fHash;
     SkString fSkSL;
 
-    std::unique_ptr<SkSL::Compiler> fCompiler;
     std::unique_ptr<SkSL::Program> fBaseProgram;
     std::vector<Variable> fInAndUniformVars;
     std::vector<SkString> fChildren;

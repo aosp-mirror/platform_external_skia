@@ -11,7 +11,7 @@
 #ifndef GrConfigConversionEffect_DEFINED
 #define GrConfigConversionEffect_DEFINED
 #include "include/core/SkTypes.h"
-#include "include/private/SkM44.h"
+#include "include/core/SkM44.h"
 
 #include "include/gpu/GrContext.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
@@ -39,9 +39,9 @@ public:
             for (int x = 0; x < kSize; ++x) {
                 uint8_t* color = reinterpret_cast<uint8_t*>(&srcData[kSize * y + x]);
                 color[3] = y;
-                color[2] = SkTMin(x, y);
-                color[1] = SkTMin(x, y);
-                color[0] = SkTMin(x, y);
+                color[2] = std::min(x, y);
+                color[1] = std::min(x, y);
+                color[0] = std::min(x, y);
             }
         }
         memset(firstRead, 0, kSize * kSize * sizeof(uint32_t));

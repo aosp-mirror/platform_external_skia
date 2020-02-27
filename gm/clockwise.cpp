@@ -209,12 +209,12 @@ private:
                                                           GrPrimitiveType::kTriangleStrip);
         }
 
-        GrMesh mesh(GrPrimitiveType::kTriangleStrip);
+        GrMesh mesh;
         mesh.setNonIndexedNonInstanced(4);
         mesh.setVertexData(std::move(fVertexBuffer));
 
-        flushState->opsRenderPass()->draw(*fProgramInfo, &mesh, 1,
-                                          SkRect::MakeXYWH(0, fY, 100, 100));
+        flushState->opsRenderPass()->bindPipeline(*fProgramInfo, SkRect::MakeXYWH(0, fY, 100, 100));
+        flushState->opsRenderPass()->drawMeshes(*fProgramInfo, &mesh, 1);
     }
 
     sk_sp<GrBuffer> fVertexBuffer;

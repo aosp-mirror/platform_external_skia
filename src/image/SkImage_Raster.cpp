@@ -38,6 +38,12 @@ public:
     static bool ValidArgs(const SkImageInfo& info, size_t rowBytes, size_t* minSize) {
         const int maxDimension = SK_MaxS32 >> 2;
 
+        // TODO(mtklein): eliminate anything here that setInfo() has already checked.
+        SkBitmap dummy;
+        if (!dummy.setInfo(info, rowBytes)) {
+            return false;
+        }
+
         if (info.width() <= 0 || info.height() <= 0) {
             return false;
         }
@@ -79,8 +85,7 @@ public:
     const SkBitmap* onPeekBitmap() const override { return &fBitmap; }
 
 #if SK_SUPPORT_GPU
-    GrSurfaceProxyView refView(GrRecordingContext*, GrSamplerState,
-                               SkScalar scaleAdjust[2]) const override;
+    GrSurfaceProxyView refView(GrRecordingContext*, GrSamplerState) const override;
 #endif
 
     bool getROPixels(SkBitmap*, CachingHint) const override;
@@ -168,8 +173,8 @@ bool SkImage_Raster::getROPixels(SkBitmap* dst, CachingHint) const {
 }
 
 #if SK_SUPPORT_GPU
-GrSurfaceProxyView SkImage_Raster::refView(GrRecordingContext* context, GrSamplerState params,
-                                           SkScalar scaleAdjust[2]) const {
+GrSurfaceProxyView SkImage_Raster::refView(GrRecordingContext* context,
+                                           GrSamplerState params) const {
     if (!context) {
         return {};
     }
@@ -178,10 +183,10 @@ GrSurfaceProxyView SkImage_Raster::refView(GrRecordingContext* context, GrSample
     if (GrSurfaceProxyView view = this->refPinnedView(context, &uniqueID)) {
         GrTextureAdjuster adjuster(context, std::move(view), fBitmap.info().colorInfo(),
                                    fPinnedUniqueID);
-        return adjuster.viewForParams(params, scaleAdjust);
+        return adjuster.viewForParams(params);
     }
 
-    return GrRefCachedBitmapView(context, fBitmap, params, scaleAdjust);
+    return GrRefCachedBitmapView(context, fBitmap, params);
 }
 #endif
 
@@ -204,8 +209,7 @@ bool SkImage_Raster::onPinAsTexture(GrContext* ctx) const {
     } else {
         SkASSERT(fPinnedCount == 0);
         SkASSERT(fPinnedUniqueID == 0);
-        fPinnedView =
-                GrRefCachedBitmapView(ctx, fBitmap, GrSamplerState::Filter::kNearest, nullptr);
+        fPinnedView = GrRefCachedBitmapView(ctx, fBitmap, GrSamplerState::Filter::kNearest);
         if (!fPinnedView) {
             return false;
         }

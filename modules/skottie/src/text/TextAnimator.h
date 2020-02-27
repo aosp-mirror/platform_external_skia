@@ -8,6 +8,7 @@
 #ifndef SkottieTextAnimator_DEFINED
 #define SkottieTextAnimator_DEFINED
 
+#include "include/core/SkM44.h"
 #include "include/core/SkRefCnt.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
@@ -32,22 +33,25 @@ public:
     // Direct mapping of AE properties.
     struct AnimatedProps {
         VectorValue position,
+                    scale    = { 100, 100, 100 },
                     fill_color,
-                    stroke_color;
+                    stroke_color,
+                    blur;
+        // unlike pos/scale which are animated vectors, rotation is separated in each dimension.
+        SkV3        rotation = { 0, 0, 0 };
         ScalarValue opacity  = 100,
-                    scale    = 100,
-                    rotation = 0,
                     tracking = 0;
     };
 
     struct ResolvedProps {
-        SkPoint   position = { 0, 0 };
+        SkV3      position = { 0, 0, 0 },
+                     scale = { 1, 1, 1 },
+                  rotation = { 0, 0, 0 };
         float      opacity = 1,
-                     scale = 1,
-                  rotation = 0,
                   tracking = 0;
         SkColor fill_color = SK_ColorTRANSPARENT,
               stroke_color = SK_ColorTRANSPARENT;
+        SkVector      blur = { 0, 0 };
     };
 
     struct AnimatedPropsModulator {
@@ -74,6 +78,8 @@ public:
 
     void modulateProps(const DomainMaps&, ModulatorBuffer&) const;
 
+    bool hasBlur() const { return fHasBlur; }
+
 private:
     TextAnimator(std::vector<sk_sp<RangeSelector>>&&,
                  const skjson::ObjectValue&,
@@ -86,7 +92,8 @@ private:
 
     AnimatedProps fTextProps;
     bool          fHasFillColor   : 1,
-                  fHasStrokeColor : 1;
+                  fHasStrokeColor : 1,
+                  fHasBlur        : 1;
 };
 
 } // namespace internal

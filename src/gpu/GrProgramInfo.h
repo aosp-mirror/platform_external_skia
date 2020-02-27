@@ -62,9 +62,10 @@ public:
     const GrPipeline& pipeline() const { return *fPipeline; }
     const GrPrimitiveProcessor& primProc() const { return *fPrimProc; }
     const GrPipeline::FixedDynamicState* fixedDynamicState() const { return fFixedDynamicState; }
+    int numDynamicStateArrays() const { return fNumDynamicStateArrays; }
 
     bool hasDynamicScissors() const {
-        return fPipeline->isScissorEnabled() &&
+        return fPipeline->isScissorTestEnabled() &&
                fDynamicStateArrays && fDynamicStateArrays->fScissorRects;
     }
 
@@ -74,7 +75,7 @@ public:
         return fDynamicStateArrays->fScissorRects[i];
     }
 
-    bool hasFixedScissor() const { return fPipeline->isScissorEnabled() && fFixedDynamicState; }
+    bool hasFixedScissor() const { return fPipeline->isScissorTestEnabled() && fFixedDynamicState; }
 
     const SkIRect& fixedScissor() const {
         SkASSERT(this->hasFixedScissor());
@@ -126,7 +127,6 @@ public:
     void validate(bool flushTime) const;
     void checkAllInstantiated() const;
     void checkMSAAAndMIPSAreResolved() const;
-    void compatibleWithMeshes(const GrMesh meshes[], int meshCount, const GrCaps&) const;
 
     bool isNVPR() const {
         return fPrimProc->isPathRendering() && !fPrimProc->willUseGeoShader() &&

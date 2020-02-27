@@ -282,10 +282,11 @@ private:
                                                           &gStencilWrite);
         }
 
-        GrMesh mesh(GrPrimitiveType::kTriangleStrip);
+        GrMesh mesh;
         mesh.setInstanced(nullptr, 200*200, 0, 4);
 
-        flushState->opsRenderPass()->draw(*fProgramInfo, &mesh, 1, SkRect::MakeIWH(200, 200));
+        flushState->opsRenderPass()->bindPipeline(*fProgramInfo, SkRect::MakeIWH(200, 200));
+        flushState->opsRenderPass()->drawMeshes(*fProgramInfo, &mesh, 1);
     }
 
     const GradType fGradType;

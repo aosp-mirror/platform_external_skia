@@ -7,6 +7,19 @@ This file includes a list of high level updates for each milestone release.
 Milestone 82
 
 <Insert new notes here- top is most recent.>
+  * Added a field to GrContextOptions that controls whether GL errors are checked after
+    GL calls that allocate textures, etc. It also controls checking for shader compile
+    success, and program linking success.
+
+  * Made SkDeferredDisplayList.h officially part of the public API (i.e., moved it to
+    include/core). Also added a ProgramIterator to SkDeferredDisplayList which allows
+    clients to pre-compile some of the shaders the DDL requires.
+
+  * Added two new helper methods to SkSurfaceCharacterization: createBackendFormat and
+    createFBO0. These make it easier for clients to create new surface characterizations that
+    differ only a little from an existing surface characterization.
+
+  * Removed SkTMax and SkTMin.
   * Removed SkTClamp and SkClampMax.
   * Removed SkScalarClampMax and SkScalarPin.
   * Removed SkMax32 and SkMin32.
@@ -18,12 +31,18 @@ Milestone 82
     related calls is treated as a request to do no color correction at decode
     time.
 
+  * Add new APIs to add attributes to document structure node when
+    creating a tagged PDF.
+
   * Remove CGFontRef parameter from SkCreateTypefaceFromCTFont.
     Use CTFontManagerCreateFontDescriptorFromData instead of
     CGFontCreateWithDataProvider to create CTFonts to avoid memory use issues.
 
-  * Added SkAndroidCodec::getICCProfile for reporting the native ICC profile of
-    an encoded image, even if it doesn't map to an SkColorSpace.
+  * Added SkCodec:: and SkAndroidCodec::getICCProfile for reporting the native
+    ICC profile of an encoded image, even if it doesn't map to an SkColorSpace.
+
+  * SkSurface::ReplaceBackendTexture takes ContentChangeMode as a parameter,
+    which allow callers to specify whether retain a copy of the current content.
 
 * * *
 

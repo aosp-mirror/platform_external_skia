@@ -44,17 +44,25 @@ link Skia against the headers and libaries found on the system paths.
 use `extra_cflags` and `extra_ldflags` to add include or library paths if
 needed.
 
-<span id="performance">A note on software backend performance</span>
---------------------------------------------------------------------
+<span id="compilers">Supported and Preferred Compilers</span>
+-------------------------------------------------------------
 
-A number of routines in Skia's software backend have been written to run
-fastest when compiled by Clang.  If you depend on software rasterization, image
-decoding, or color space conversion and compile Skia with GCC, MSVC or another
-compiler, you will see dramatically worse performance than if you use Clang.
+While Skia should compile with GCC, MSVC, and other compilers, a number of
+routines in Skia's software backend have been written to run fastest when
+compiled with Clang.  If you depend on software rasterization, image decoding,
+or color space conversion and compile Skia with a compiler other than Clang, you
+will see dramatically worse performance.  This choice was only a matter of
+prioritization; there is nothing fundamentally wrong with non-Clang compilers.
+So if this is a serious issue for you, please let us know on the mailing list.
 
-This choice was only a matter of prioritization; there is nothing fundamentally
-wrong with non-Clang compilers.  So if this is a serious issue for you, please
-let us know on the mailing list.
+Skia makes use of C++17 language features (compiles with `-std=c++17` flag) and
+thus requires a C++17 compatible compiler.  Clang 5 and later implement all of
+the features of the c++17 standard.  Older compilers that lack C++17 support may
+produce non-obvious compilation errors.  You can configure your build to use
+specific executables for `cc` and `cxx` invocations using e.g.
+`--args='cc="clang-6.0" cxx="clang++6.0"'` GN build arguments, as illustrated in
+[Quickstart](#quick).  This can be useful for building Skia without needing to
+modify your machine's default compiler toolchain.
 
 <span id="quick">Quickstart</span>
 ----------------------------------
@@ -93,6 +101,12 @@ Having generated your build files, run Ninja to compile and link Skia.
 If some header files are missing, install the corresponding dependencies
 
     tools/install_dependencies.sh
+
+To pull new changes and rebuild:
+
+    git pull
+    python tools/git-sync-deps
+    ninja -C out/Static
 
 <span id="android">Android</span>
 ---------------------------------
@@ -234,11 +248,15 @@ This defaults to `target_cpu="arm64"`.  Choosing `x64` targets the iOS simulator
     bin/gn gen out/iossim --args='target_os="ios" target_cpu="x64"'
 
 This will also package (and for devices, sign) iOS test binaries. This defaults to a
-Google signing identity and provisioning profile. To use a different one set `skia_ios_identity`
-to match your code signing identity and `skia_ios_profile` to the name of your provisioning
-profile, e.g. `skia_ios_identity=".*Jane Doe.*" skia_ios_profile="iPad Profile"`. A list of
-identities can be found by typing `security find-identity` on the command line. The name of the
-provisioning profile should be available on the Apple Developer site. Alternatively,
+Google signing identity and provisioning profile. To use a different one set the GN args
+`skia_ios_identity` to match your code signing identity and `skia_ios_profile` to the name
+of your provisioning profile, e.g.
+
+    skia_ios_identity=".*Jane Doe.*"
+    skia_ios_profile="iPad Profile"`
+
+A list of identities can be found by typing `security find-identity` on the command line. The
+name of the provisioning profile should be available on the Apple Developer site. Alternatively,
 `skia_ios_profile` can be the absolute path to the mobileprovision file.
 
 For signed packages `ios-deploy` makes installing and running them on a device easy:
@@ -262,7 +280,7 @@ but can be done by setting the following as GN args:
     extra_asmflags=["-miphoneos-version-min=<major>.<minor>"]
     extra_ldflags =["-miphoneos-version-min=<major>.<minor>"]
 
-where <major>.<minor> is the iOS version on the device, e.g., 12.0 or 11.4.
+where `<major>.<minor>` is the iOS version on the device, e.g., 12.0 or 11.4.
 
 <span id="windows">Windows</span>
 ---------------------------------

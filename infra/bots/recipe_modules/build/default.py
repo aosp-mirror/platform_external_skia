@@ -6,18 +6,6 @@
 from . import util
 
 
-# XCode build is listed in parentheses after the version at
-# https://developer.apple.com/news/releases/, or on Wikipedia here:
-# https://en.wikipedia.org/wiki/Xcode#Version_comparison_table
-# Use lowercase letters.
-# When updating XCODE_BUILD_VERSION, you will also need to update
-# XCODE_CLANG_VERSION.
-XCODE_BUILD_VERSION = '10g8'
-# Wikipedia lists the Clang version here:
-# https://en.wikipedia.org/wiki/Xcode#Toolchain_versions
-XCODE_CLANG_VERSION = '10.0.1'
-
-
 def build_command_buffer(api, chrome_dir, skia_dir, out):
   api.run(api.python, 'build command_buffer',
       script=skia_dir.join('tools', 'build_command_buffer.py'),
@@ -50,22 +38,29 @@ def compile_swiftshader(api, extra_tokens, swiftshader_root, cc, cxx, out):
       'PATH': '%%(PATH)s:%s' % cmake_bin
   }
 
-  # Extra flags for MSAN, if necessary.
+  # Extra flags for MSAN/TSAN, if necessary.
+  san = None
   if 'MSAN' in extra_tokens:
+    san = ('msan','memory')
+  elif 'TSAN' in extra_tokens:
+    san = ('tsan','thread')
+
+  if san:
+    short,full = san
     clang_linux = str(api.vars.slave_dir.join('clang_linux'))
-    libcxx_msan = clang_linux + '/msan'
-    msan_cflags = ' '.join([
-      '-fsanitize=memory',
+    libcxx = clang_linux + '/' + short
+    cflags = ' '.join([
+      '-fsanitize=' + full,
       '-stdlib=libc++',
-      '-L%s/lib' % libcxx_msan,
+      '-L%s/lib' % libcxx,
       '-lc++abi',
-      '-I%s/include' % libcxx_msan,
-      '-I%s/include/c++/v1' % libcxx_msan,
+      '-I%s/include' % libcxx,
+      '-I%s/include/c++/v1' % libcxx,
     ])
     swiftshader_opts.extend([
-      '-DSWIFTSHADER_MSAN=ON',
-      '-DCMAKE_C_FLAGS=%s' % msan_cflags,
-      '-DCMAKE_CXX_FLAGS=%s' % msan_cflags,
+      '-DSWIFTSHADER_{}=ON'.format(short.upper()),
+      '-DCMAKE_C_FLAGS=%s' % cflags,
+      '-DCMAKE_CXX_FLAGS=%s' % cflags,
     ])
 
   # Build SwiftShader.
@@ -89,13 +84,18 @@ def compile_fn(api, checkout_root, out_dir):
   win_toolchain    = str(api.vars.slave_dir.join('win_toolchain'))
   moltenvk         = str(api.vars.slave_dir.join('moltenvk'))
 
-  cc, cxx = None, None
+  cc, cxx, ccache = None, None, None
   extra_cflags = []
   extra_ldflags = []
   args = {'werror': 'true'}
   env = {}
 
   if os == 'Mac':
+    # XCode build is listed in parentheses after the version at
+    # https://developer.apple.com/news/releases/, or on Wikipedia here:
+    # https://en.wikipedia.org/wiki/Xcode#Version_comparison_table
+    # Use lowercase letters.
+    XCODE_BUILD_VERSION = '11c29'
     extra_cflags.append(
         '-DDUMMY_xcode_build_version=%s' % XCODE_BUILD_VERSION)
     mac_toolchain_cmd = api.vars.slave_dir.join(
@@ -134,6 +134,28 @@ def compile_fn(api, checkout_root, out_dir):
     compiler = 'Clang'
     args['skia_compile_processors'] = 'true'
     args['skia_generate_workarounds'] = 'true'
+
+  # ccache + clang-tidy.sh chokes on the argument list.
+  if (api.vars.is_linux or os == 'Mac') and 'Tidy' not in extra_tokens:
+    if api.vars.is_linux:
+      ccache = api.vars.slave_dir.join('ccache_linux', 'bin', 'ccache')
+      # As of 2020-02-07, the sum of each Debian9-Clang-x86
+      # non-flutter/android/chromebook build takes less than 75G cache space.
+      env['CCACHE_MAXSIZE'] = '75G'
+    else:
+      ccache = api.vars.slave_dir.join('ccache_mac', 'bin', 'ccache')
+      # As of 2020-02-10, the sum of each Build-Mac-Clang- non-android build
+      # takes ~30G cache space.
+      env['CCACHE_MAXSIZE'] = '50G'
+
+    args['cc_wrapper'] = '"%s"' % ccache
+
+    env['CCACHE_DIR'] = api.vars.cache_dir.join('ccache')
+    env['CCACHE_MAXFILES'] = '0'
+    # Compilers are unpacked from cipd with bogus timestamps, only contribute
+    # compiler content to hashes. If Ninja ever uses absolute paths to changing
+    # directories we'll also need to set a CCACHE_BASEDIR.
+    env['CCACHE_COMPILERCHECK'] = 'content'
 
   if compiler == 'Clang' and api.vars.is_linux:
     cc  = clang_linux + '/bin/clang'
@@ -182,6 +204,8 @@ def compile_fn(api, checkout_root, out_dir):
 
   if 'MSAN' in extra_tokens:
     extra_ldflags.append('-L' + clang_linux + '/msan')
+  elif 'TSAN' in extra_tokens:
+    extra_ldflags.append('-L' + clang_linux + '/tsan')
   elif api.vars.is_linux:
     extra_ldflags.append('-L' + clang_linux + '/lib')
 
@@ -313,9 +337,13 @@ def compile_fn(api, checkout_root, out_dir):
               infra_step=True)
 
     with api.env(env):
+      if ccache:
+        api.run(api.step, 'ccache stats-start', cmd=[ccache, '-s'])
       api.run(api.step, 'gn gen',
               cmd=[gn, 'gen', out_dir, '--args=' + gn_args])
       api.run(api.step, 'ninja', cmd=['ninja', '-C', out_dir])
+      if ccache:
+        api.run(api.step, 'ccache stats-end', cmd=[ccache, '-s'])
 
 
 def copy_build_products(api, src, dst):
@@ -330,13 +358,18 @@ def copy_build_products(api, src, dst):
         util.DEFAULT_BUILD_PRODUCTS)
 
   if os == 'Mac' and any('SAN' in t for t in extra_tokens):
-    # Hardcoding this path because it should only change when we upgrade to a
-    # new Xcode.
-    lib_dir = api.vars.cache_dir.join(
-        'Xcode.app', 'Contents', 'Developer', 'Toolchains',
-        'XcodeDefault.xctoolchain', 'usr', 'lib', 'clang', XCODE_CLANG_VERSION,
-        'lib', 'darwin')
-    dylibs = api.file.glob_paths('find xSAN dylibs', lib_dir,
+    # The XSAN dylibs are in
+    # Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
+    # /clang/11.0.0/lib/darwin, where 11.0.0 could change in future versions.
+    xcode_clang_ver_dirs = api.file.listdir(
+        'find XCode Clang version',
+        api.vars.cache_dir.join(
+            'Xcode.app', 'Contents', 'Developer', 'Toolchains',
+            'XcodeDefault.xctoolchain', 'usr', 'lib', 'clang'),
+        test_data=['11.0.0'])
+    assert len(xcode_clang_ver_dirs) == 1
+    dylib_dir = xcode_clang_ver_dirs[0].join('lib', 'darwin')
+    dylibs = api.file.glob_paths('find xSAN dylibs', dylib_dir,
                                  'libclang_rt.*san_osx_dynamic.dylib',
                                  test_data=[
                                      'libclang_rt.asan_osx_dynamic.dylib',

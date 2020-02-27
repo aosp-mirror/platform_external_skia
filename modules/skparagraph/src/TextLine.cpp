@@ -16,8 +16,8 @@ namespace {
 // TODO: deal with all the intersection functionality
 TextRange intersected(const TextRange& a, const TextRange& b) {
     if (a.start == b.start && a.end == b.end) return a;
-    auto begin = SkTMax(a.start, b.start);
-    auto end = SkTMin(a.end, b.end);
+    auto begin = std::max(a.start, b.start);
+    auto end = std::min(a.end, b.end);
     return end >= begin ? TextRange(begin, end) : EMPTY_TEXT;
 }
 
@@ -32,7 +32,7 @@ int compareRound(SkScalar a, SkScalar b) {
     // Canvas scaling affects it
     // Letter spacing affects it
     // It has to be relative to be useful
-    auto base = SkTMax(SkScalarAbs(a), SkScalarAbs(b));
+    auto base = std::max(SkScalarAbs(a), SkScalarAbs(b));
     auto diff = SkScalarAbs(a - b);
     if (nearlyZero(base) || diff / base < 0.001f) {
         return 0;
@@ -123,7 +123,7 @@ TextLine::TextLine(ParagraphImpl* master,
 
 SkRect TextLine::calculateBoundaries() {
 
-    auto boundaries = SkRect::MakeEmpty();
+    auto boundaries = SkRect::MakeIWH(fAdvance.fX, fAdvance.fY);
     auto clusters = fMaster->clusters(fClusterRange);
     Run* run = nullptr;
     auto runShift = 0.0f;
@@ -136,7 +136,7 @@ SkRect TextLine::calculateBoundaries() {
         }
         clusterShift += cluster->width();
         for (auto i = cluster->startPos(); i < cluster->endPos(); ++i) {
-            auto posX = run->posX(i);
+            auto posX = run->positionX(i);
             auto posY = run->posY(i);
             auto bounds = run->getBounds(i);
             bounds.offset(posX + runShift, posY);
@@ -294,7 +294,7 @@ void TextLine::scanStyles(StyleType styleType, const RunStyleVisitor& visitor) {
 
 SkRect TextLine::extendHeight(const ClipContext& context) const {
     SkRect result = context.clip;
-    result.fBottom += SkTMax(this->fMaxRunMetrics.height() - this->height(), 0.0f);
+    result.fBottom += std::max(this->fMaxRunMetrics.height() - this->height(), 0.0f);
     return result;
 }
 
@@ -724,6 +724,9 @@ TextLine::ClipContext TextLine::measureTextInsideOneRun(TextRange textRange,
     result.clip.offset(textStartInLine, 0);
 
     if (compareRound(result.clip.fRight, fAdvance.fX) > 0 && !includeGhostSpaces) {
+        // There are few cases when we need it.
+        // The most important one: we measure the text with spaces at the end
+        // and we should ignore these spaces
         result.clippingNeeded = true;
         result.clip.fRight = fAdvance.fX;
     }
@@ -741,9 +744,9 @@ void TextLine::iterateThroughClustersInGlyphsOrder(bool reverse,
     for (size_t r = 0; r != fRunsInVisualOrder.size(); ++r) {
         auto& runIndex = fRunsInVisualOrder[reverse ? fRunsInVisualOrder.size() - r - 1 : r];
         auto run = this->fMaster->runs().begin() + runIndex;
-        auto start = SkTMax(run->clusterRange().start, fClusterRange.start);
-        auto end = SkTMin(run->clusterRange().end, fClusterRange.end);
-        auto ghosts = SkTMin(run->clusterRange().end, fGhostClusterRange.end);
+        auto start = std::max(run->clusterRange().start, fClusterRange.start);
+        auto end = std::min(run->clusterRange().end, fClusterRange.end);
+        auto ghosts = std::min(run->clusterRange().end, fGhostClusterRange.end);
 
         if (run->leftToRight() != reverse) {
             for (auto index = start; index < ghosts; ++index) {

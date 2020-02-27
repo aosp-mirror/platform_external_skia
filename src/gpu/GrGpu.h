@@ -84,7 +84,7 @@ public:
      * pixel configs can be used as render targets. Support for configs as textures
      * or render targets can be checked using GrCaps.
      *
-     * @param desc           describes the texture to be created.
+     * @param dimensions     dimensions of the texture to be created.
      * @param format         the format for the texture (not currently used).
      * @param renderable     should the resulting texture be renderable
      * @param renderTargetSampleCnt The number of samples to use for rendering if renderable is
@@ -93,7 +93,8 @@ public:
      * @param isProtected    should the texture be created as protected.
      * @param texels         array of mipmap levels containing texel data to load.
      *                       If level i has pixels then it is assumed that its dimensions are
-     *                       max(1, floor(desc.fWidth / 2)) by max(1, floor(desc.fHeight / 2)).
+     *                       max(1, floor(dimensions.fWidth / 2)) by
+     *                       max(1, floor(dimensions.fHeight / 2)).
      *                       If texels[i].fPixels == nullptr for all i <= mipLevelCount or
      *                       mipLevelCount is 0 then the texture's contents are uninitialized.
      *                       If a level has non-null pixels, its row bytes must be a multiple of the
@@ -106,11 +107,12 @@ public:
      *                       of uploading texel data.
      * @param srcColorType   The color type of data in texels[].
      * @param texelLevelCount the number of levels in 'texels'. May be 0, 1, or
-     *                       floor(max((log2(desc.fWidth), log2(desc.fHeight)))). It must be the
-     *                       latter if GrCaps::createTextureMustSpecifyAllLevels() is true.
+     *                       floor(max((log2(dimensions.fWidth), log2(dimensions.fHeight)))). It
+     *                       must be the latter if GrCaps::createTextureMustSpecifyAllLevels() is
+     *                       true.
      * @return  The texture object if successful, otherwise nullptr.
      */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc,
+    sk_sp<GrTexture> createTexture(SkISize dimensions,
                                    const GrBackendFormat& format,
                                    GrRenderable renderable,
                                    int renderTargetSampleCnt,
@@ -124,7 +126,7 @@ public:
     /**
      * Simplified createTexture() interface for when there is no initial texel data to upload.
      */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc,
+    sk_sp<GrTexture> createTexture(SkISize dimensions,
                                    const GrBackendFormat& format,
                                    GrRenderable renderable,
                                    int renderTargetSampleCnt,
@@ -193,10 +195,9 @@ public:
     };
 
     /**
-     * Resolves MSAA.
+     * Resolves MSAA. The resolveRect must already be in the native destination space.
      */
-    void resolveRenderTarget(GrRenderTarget*, const SkIRect& resolveRect, GrSurfaceOrigin,
-                             ForExternalIO);
+    void resolveRenderTarget(GrRenderTarget*, const SkIRect& resolveRect, ForExternalIO);
 
     /**
      * Uses the base of the texture to recompute the contents of the other levels.
@@ -385,6 +386,16 @@ public:
 
     class Stats {
     public:
+        enum class ProgramCacheResult {
+            kHit,       // the program was found in the cache
+            kMiss,      // the program was not found in the cache (and was, thus, compiled)
+            kPartial,   // a precompiled version was found in the persistent cache
+
+            kLast = kPartial
+        };
+
+        static const int kNumProgramCacheResults = (int)ProgramCacheResult::kLast + 1;
+
 #if GR_GPU_STATS
         Stats() = default;
 
@@ -423,6 +434,35 @@ public:
         int numScratchTexturesReused() const { return fNumScratchTexturesReused; }
         void incNumScratchTexturesReused() { ++fNumScratchTexturesReused; }
 
+        int numInlineCompilationFailures() const { return fNumInlineCompilationFailures; }
+        void incNumInlineCompilationFailures() { ++fNumInlineCompilationFailures; }
+
+        int numInlineProgramCacheResult(ProgramCacheResult stat) const {
+            return fInlineProgramCacheStats[(int) stat];
+        }
+        void incNumInlineProgramCacheResult(ProgramCacheResult stat) {
+            ++fInlineProgramCacheStats[(int) stat];
+        }
+
+        int numPreCompilationFailures() const { return fNumPreCompilationFailures; }
+        void incNumPreCompilationFailures() { ++fNumPreCompilationFailures; }
+
+        int numPreProgramCacheResult(ProgramCacheResult stat) const {
+            return fPreProgramCacheStats[(int) stat];
+        }
+        void incNumPreProgramCacheResult(ProgramCacheResult stat) {
+            ++fPreProgramCacheStats[(int) stat];
+        }
+
+        int numCompilationFailures() const { return fNumCompilationFailures; }
+        void incNumCompilationFailures() { ++fNumCompilationFailures; }
+
+        int numPartialCompilationSuccesses() const { return fNumPartialCompilationSuccesses; }
+        void incNumPartialCompilationSuccesses() { ++fNumPartialCompilationSuccesses; }
+
+        int numCompilationSuccesses() const { return fNumCompilationSuccesses; }
+        void incNumCompilationSuccesses() { ++fNumCompilationSuccesses; }
+
 #if GR_TEST_UTILS
         void dump(SkString*);
         void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
@@ -439,6 +479,17 @@ public:
         int fNumFailedDraws = 0;
         int fNumFinishFlushes = 0;
         int fNumScratchTexturesReused = 0;
+
+        int fNumInlineCompilationFailures = 0;
+        int fInlineProgramCacheStats[kNumProgramCacheResults] = { 0 };
+
+        int fNumPreCompilationFailures = 0;
+        int fPreProgramCacheStats[kNumProgramCacheResults] = { 0 };
+
+        int fNumCompilationFailures = 0;
+        int fNumPartialCompilationSuccesses = 0;
+        int fNumCompilationSuccesses = 0;
+
 #else
 
 #if GR_TEST_UTILS
@@ -454,6 +505,13 @@ public:
         void incNumDraws() {}
         void incNumFailedDraws() {}
         void incNumFinishFlushes() {}
+        void incNumInlineCompilationFailures() {}
+        void incNumInlineProgramCacheResult(ProgramCacheResult stat) {}
+        void incNumPreCompilationFailures() {}
+        void incNumPreProgramCacheResult(ProgramCacheResult stat) {}
+        void incNumCompilationFailures() {}
+        void incNumPartialCompilationSuccesses() {}
+        void incNumCompilationSuccesses() {}
 #endif
     };
 
@@ -551,6 +609,11 @@ public:
      */
     virtual void deleteBackendTexture(const GrBackendTexture&) = 0;
 
+    /**
+     * In this case we have a program descriptor and a program info but no render target.
+     */
+    virtual bool compile(const GrProgramDesc&, const GrProgramInfo&) = 0;
+
     virtual bool precompileShader(const SkData& key, const SkData& data) { return false; }
 
 #if GR_TEST_UTILS
@@ -588,22 +651,12 @@ public:
     virtual GrStencilAttachment* createStencilAttachmentForRenderTarget(
             const GrRenderTarget*, int width, int height, int numStencilSamples) = 0;
 
-    // Determines whether a texture will need to be rescaled in order to be used with the
-    // GrSamplerState.
-    static bool IsACopyNeededForRepeatWrapMode(const GrCaps*,
-                                               GrTextureProxy* texProxy,
-                                               SkISize dimensions,
-                                               GrSamplerState::Filter,
-                                               GrTextureProducer::CopyParams*,
-                                               SkScalar scaleAdjust[2]);
-
     // Determines whether a texture will need to be copied because the draw requires mips but the
     // texutre doesn't have any. This call should be only checked if IsACopyNeededForTextureParams
     // fails. If the previous call succeeds, then a copy should be done using those params and the
     // mip mapping requirements will be handled there.
     static bool IsACopyNeededForMips(const GrCaps* caps, const GrTextureProxy* texProxy,
-                                     GrSamplerState::Filter filter,
-                                     GrTextureProducer::CopyParams* copyParams);
+                                     GrSamplerState::Filter filter);
 
     void handleDirtyContext() {
         if (fResetBits) {
@@ -618,6 +671,9 @@ public:
         SkASSERT(!this->caps()->requiresManualFBBarrierAfterTessellatedStencilDraw());
         SK_ABORT("Manual framebuffer barrier not supported.");
     }
+
+    // Called before certain draws in order to guarantee coherent results from dst reads.
+    virtual void xferBarrier(GrRenderTarget*, GrXferBarrierType) = 0;
 
 protected:
     static bool MipMapsAreCorrect(SkISize dimensions, GrMipMapped, const BackendTextureData*);
@@ -658,14 +714,11 @@ private:
     // and queries the individual sample locations.
     virtual void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) = 0;
 
-    // Called before certain draws in order to guarantee coherent results from dst reads.
-    virtual void xferBarrier(GrRenderTarget*, GrXferBarrierType) = 0;
-
     // overridden by backend-specific derived class to create objects.
     // Texture size, renderablility, format support, sample count will have already been validated
     // in base class before onCreateTexture is called.
     // If the ith bit is set in levelClearMask then the ith MIP level should be cleared.
-    virtual sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
+    virtual sk_sp<GrTexture> onCreateTexture(SkISize dimensions,
                                              const GrBackendFormat&,
                                              GrRenderable,
                                              int renderTargetSampleCnt,
@@ -723,7 +776,7 @@ private:
 
     // overridden by backend-specific derived class to perform the resolve
     virtual void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                                       GrSurfaceOrigin resolveOrigin, ForExternalIO) = 0;
+                                       ForExternalIO) = 0;
 
     // overridden by backend specific derived class to perform mip map level regeneration.
     virtual bool onRegenerateMipMapLevels(GrTexture*) = 0;
@@ -739,7 +792,7 @@ private:
     virtual void onDumpJSON(SkJSONWriter*) const {}
 #endif
 
-    sk_sp<GrTexture> createTextureCommon(const GrSurfaceDesc&,
+    sk_sp<GrTexture> createTextureCommon(SkISize,
                                          const GrBackendFormat&,
                                          GrRenderable,
                                          int renderTargetSampleCnt,

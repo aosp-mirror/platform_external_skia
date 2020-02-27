@@ -210,7 +210,7 @@ GrCCFiller::BatchID GrCCFiller::closeCurrentBatch() {
 
     const auto& lastBatch = fBatches.back();
     int maxMeshes = 1 + fScissorSubBatches.count() - lastBatch.fEndScissorSubBatchIdx;
-    fMaxMeshesPerDraw = SkTMax(fMaxMeshesPerDraw, maxMeshes);
+    fMaxMeshesPerDraw = std::max(fMaxMeshesPerDraw, maxMeshes);
 
     const auto& lastScissorSubBatch = fScissorSubBatches[lastBatch.fEndScissorSubBatchIdx - 1];
     PrimitiveTallies batchTotalCounts = fTotalPrimitiveCounts[(int)GrScissorTest::kDisabled] -
@@ -519,7 +519,7 @@ void GrCCFiller::drawFills(
 void GrCCFiller::drawPrimitives(
         GrOpFlushState* flushState, const GrCCCoverageProcessor& proc, const GrPipeline& pipeline,
         BatchID batchID, int PrimitiveTallies::*instanceType, const SkIRect& drawBounds) const {
-    SkASSERT(pipeline.isScissorEnabled());
+    SkASSERT(pipeline.isScissorTestEnabled());
 
     // Don't call reset(), as that also resets the reserve count.
     fMeshesScratchBuffer.pop_back_n(fMeshesScratchBuffer.count());

@@ -9,6 +9,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkDeferredDisplayListRecorder.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
@@ -26,7 +27,6 @@
 #include "include/gpu/GrTypes.h"
 #include "include/gpu/gl/GrGLTypes.h"
 #include "include/private/GrTypesPriv.h"
-#include "include/private/SkDeferredDisplayList.h"
 #include "src/core/SkDeferredDisplayListPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
@@ -541,6 +541,78 @@ void DDLSurfaceCharacterizationTestImpl(GrContext* context, skiatest::Reporter* 
             SkSurfaceCharacterization invalid;
             REPORTER_ASSERT(reporter, !invalid.isValid());
             SkSurfaceCharacterization stillInvalid = invalid.createColorSpace(std::move(newCS));
+            REPORTER_ASSERT(reporter, !stillInvalid.isValid());
+        }
+
+        s = nullptr;
+        params.cleanUpBackEnd(context, backend);
+    }
+
+    // Exercise the createBackendFormat method
+    {
+        SurfaceParameters params(context);
+        GrBackendTexture backend;
+
+        sk_sp<SkSurface> s = params.make(context, &backend);
+        if (!s) {
+            return;
+        }
+
+        SkSurfaceCharacterization char0;
+        SkAssertResult(s->characterize(&char0));
+
+        // The default params create a renderable RGBA8 surface
+        auto originalBackendFormat = context->defaultBackendFormat(kRGBA_8888_SkColorType,
+                                                                   GrRenderable::kYes);
+        REPORTER_ASSERT(reporter, originalBackendFormat.isValid());
+        REPORTER_ASSERT(reporter, char0.backendFormat() == originalBackendFormat);
+
+        auto newBackendFormat = context->defaultBackendFormat(kRGB_565_SkColorType,
+                                                              GrRenderable::kYes);
+
+        if (newBackendFormat.isValid()) {
+            SkSurfaceCharacterization char1 = char0.createBackendFormat(kRGB_565_SkColorType,
+                                                                        newBackendFormat);
+            REPORTER_ASSERT(reporter, char1.isValid());
+            REPORTER_ASSERT(reporter, char1.backendFormat() == newBackendFormat);
+
+            SkSurfaceCharacterization invalid;
+            REPORTER_ASSERT(reporter, !invalid.isValid());
+            auto stillInvalid = invalid.createBackendFormat(kRGB_565_SkColorType,
+                                                            newBackendFormat);
+            REPORTER_ASSERT(reporter, !stillInvalid.isValid());
+        }
+
+        s = nullptr;
+        params.cleanUpBackEnd(context, backend);
+    }
+
+    // Exercise the createFBO0 method
+    if (context->backend() == GrBackendApi::kOpenGL) {
+        SurfaceParameters params(context);
+        GrBackendTexture backend;
+
+        sk_sp<SkSurface> s = params.make(context, &backend);
+        if (!s) {
+            return;
+        }
+
+        SkSurfaceCharacterization char0;
+        SkAssertResult(s->characterize(&char0));
+
+        // The default params create a non-FBO0 surface
+        REPORTER_ASSERT(reporter, !char0.usesGLFBO0());
+
+        {
+            SkSurfaceCharacterization char1 = char0.createFBO0(true);
+            REPORTER_ASSERT(reporter, char1.isValid());
+            REPORTER_ASSERT(reporter, char1.usesGLFBO0());
+        }
+
+        {
+            SkSurfaceCharacterization invalid;
+            REPORTER_ASSERT(reporter, !invalid.isValid());
+            SkSurfaceCharacterization stillInvalid = invalid.createFBO0(true);
             REPORTER_ASSERT(reporter, !stillInvalid.isValid());
         }
 

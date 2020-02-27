@@ -23,7 +23,7 @@
  */
 
 var CanvasKit = {
-	// public API (i.e. things we declare in the pre-js file)
+	// public API (i.e. things we declare in the pre-js file or in the cpp bindings)
 	Color: function() {},
 	/** @return {CanvasKit.SkRect} */
 	LTRBRect: function() {},
@@ -73,6 +73,7 @@ var CanvasKit = {
 	getDecodeCacheUsageBytes: function() {},
 	getSkDataBytes: function() {},
 	multiplyByAlpha: function() {},
+	parseColorString: function() {},
 	setCurrentContext: function() {},
 	setDecodeCacheLimitBytes: function() {},
 
@@ -104,6 +105,7 @@ var CanvasKit = {
 		// public API (from C++ bindings)
 		getResourceCacheLimitBytes: function() {},
 		getResourceCacheUsageBytes: function() {},
+		releaseResourcesAndAbandonContext: function() {},
 		setResourceCacheLimitBytes: function() {},
 	},
 
@@ -132,6 +134,7 @@ var CanvasKit = {
 
 		// private API
 		_makeShader: function() {},
+		_makeShaderWithChildren: function() {},
 	},
 
 	ParagraphStyle: function() {},
@@ -279,6 +282,21 @@ var CanvasKit = {
 		MakeMatrixTransform: function() {},
 	},
 
+	// These are defined in interface.js
+	SkM44: {
+		identity: function() {},
+		invert: function() {},
+		multiply: function() {},
+		rotatedUnitSinCos: function() {},
+		rotated: function() {},
+		scaled: function() {},
+		translated: function() {},
+		lookat: function() {},
+		perspective: function() {},
+		rc: function() {},
+		transpose: function() {},
+	},
+
 	SkMatrix: {
 		identity: function() {},
 		invert: function() {},
@@ -319,8 +337,29 @@ var CanvasKit = {
 		setStrokeWidth: function() {},
 		setStyle: function() {},
 
-		//private API
+		// Private API
 		delete: function() {},
+	},
+
+	SkParticleEffect: {
+		// public API (from C++ bindings)
+		draw: function() {},
+		getEffectUniform: function() {},
+		getEffectUniformCount: function() {},
+		getEffectUniformFloatCount: function() {},
+		getEffectUniformName: function() {},
+		getParticleUniformCount: function() {},
+		getParticleUniformFloatCount: function() {},
+		getParticleUniformName: function() {},
+		getParticleUniform: function() {},
+		setPosition: function() {},
+		setRate: function() {},
+		start: function() {},
+		update: function() {},
+
+		// private API (from C++ bindings)
+		_effectUniformPtr: function() {},
+		_particleUniformPtr: function() {},
 	},
 
 	SkPath: {
@@ -444,6 +483,19 @@ var CanvasKit = {
 		// private API (from C++ bindings)
 		_MakeFromRSXform: function() {},
 		_MakeFromText: function() {},
+	},
+
+	// These are defined in interface.js
+	SkVector: {
+		add: function() {},
+		sub: function() {},
+		dot: function() {},
+		cross: function() {},
+		normalize: function() {},
+		mulScalar: function() {},
+		length: function() {},
+		lengthSquared: function() {},
+		dist: function() {},
 	},
 
 	SkVertices: {
@@ -807,6 +859,10 @@ CanvasKit.SkColorBuilder.prototype.push = function() {};
 CanvasKit.SkColorBuilder.prototype.set = function() {};
 
 CanvasKit.SkRuntimeEffect.prototype.makeShader = function() {};
+CanvasKit.SkRuntimeEffect.prototype.makeShaderWithChildren = function() {};
+
+CanvasKit.SkParticleEffect.prototype.effectUniforms = function() {};
+CanvasKit.SkParticleEffect.prototype.particleUniforms = function() {};
 
 // Define StrokeOpts object
 var StrokeOpts = {};

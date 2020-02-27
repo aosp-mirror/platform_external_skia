@@ -457,6 +457,10 @@ void GrFillRRectOp::onPrePrepare(GrRecordingContext* context,
     // This is equivalent to a GrOpFlushState::detachAppliedClip
     GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip();
 
+    // TODO: it would be cool if, right here, we created both the program info and desc
+    // in the record-time arena. Then, if the program info had already been seen, we could
+    // get pointers back to the prior versions and be able to return the allocated space
+    // back to the arena.
     fProgramInfo = this->createProgramInfo(context->priv().caps(), arena, dstView,
                                            std::move(appliedClip), dstProxyView);
 
@@ -805,13 +809,14 @@ void GrFillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBou
                                                flushState->dstProxyView());
     }
 
-    GrMesh* mesh = flushState->allocator()->make<GrMesh>(GrPrimitiveType::kTriangles);
+    GrMesh* mesh = flushState->allocator()->make<GrMesh>();
     mesh->setIndexedInstanced(std::move(fIndexBuffer), fIndexCount,
                               std::move(fInstanceBuffer), fInstanceCount,
                               fBaseInstance, GrPrimitiveRestart::kNo);
     mesh->setVertexData(std::move(fVertexBuffer));
 
-    flushState->opsRenderPass()->draw(*fProgramInfo, mesh, 1, this->bounds());
+    flushState->opsRenderPass()->bindPipeline(*fProgramInfo, this->bounds());
+    flushState->opsRenderPass()->drawMeshes(*fProgramInfo, mesh, 1);
 }
 
 // Will the given corner look good if we use HW derivatives?
@@ -820,7 +825,7 @@ static bool can_use_hw_derivatives_with_coverage(const Sk2f& devScale, const Sk2
     if (devRadii[1] < devRadii[0]) {
         devRadii = SkNx_shuffle<1,0>(devRadii);
     }
-    float minDevRadius = SkTMax(devRadii[0], 1.f);  // Shader clamps radius at a minimum of 1.
+    float minDevRadius = std::max(devRadii[0], 1.f);  // Shader clamps radius at a minimum of 1.
     // Is the gradient smooth enough for this corner look ok if we use hardware derivatives?
     // This threshold was arrived at subjevtively on an NVIDIA chip.
     return minDevRadius * minDevRadius * 5 > devRadii[1];

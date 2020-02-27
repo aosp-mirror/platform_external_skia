@@ -6,11 +6,11 @@
  */
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkSurfaceCharacterization.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrTexture.h"
 #include "include/private/GrRecordingContext.h"
-#include "include/private/SkDeferredDisplayList.h"
 #include "src/core/SkImagePriv.h"
 #include "src/gpu/GrAHardwareBufferUtils.h"
 #include "src/gpu/GrCaps.h"
@@ -177,7 +177,7 @@ void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
     SkASSERT(imageProxy);
 
     if (rtc->asSurfaceProxy()->underlyingUniqueID() == imageProxy->underlyingUniqueID()) {
-        fDevice->replaceRenderTargetContext(SkSurface::kRetain_ContentChangeMode == mode);
+        fDevice->replaceRenderTargetContext(mode);
     } else if (kDiscard_ContentChangeMode == mode) {
         this->SkSurface_Gpu::onDiscard();
     }
@@ -467,7 +467,7 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrContext* ctx, SkBudgeted budgeted
     if (!ctx) {
         return nullptr;
     }
-    sampleCount = SkTMax(1, sampleCount);
+    sampleCount = std::max(1, sampleCount);
     GrMipMapped mipMapped = shouldCreateWithMips ? GrMipMapped::kYes : GrMipMapped::kNo;
 
     if (!ctx->priv().caps()->mipMapSupport()) {
@@ -507,7 +507,7 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrContext* context, const GrB
     if (!context) {
         return nullptr;
     }
-    sampleCnt = SkTMax(1, sampleCnt);
+    sampleCnt = std::max(1, sampleCnt);
 
     GrColorType grColorType = SkColorTypeAndFormatToGrColorType(context->priv().caps(), colorType,
                                                                 tex.getBackendFormat());
@@ -534,7 +534,7 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrContext* context, const GrB
 }
 
 bool SkSurface_Gpu::onReplaceBackendTexture(const GrBackendTexture& backendTexture,
-                                            GrSurfaceOrigin origin, TextureReleaseProc releaseProc,
+                                            GrSurfaceOrigin origin, ContentChangeMode mode, TextureReleaseProc releaseProc,
                                             ReleaseContext releaseContext) {
     auto context = this->fDevice->context();
     if (context->abandoned()) {
@@ -578,7 +578,7 @@ bool SkSurface_Gpu::onReplaceBackendTexture(const GrBackendTexture& backendTextu
     if (!rtc) {
         return false;
     }
-    fDevice->replaceRenderTargetContext(std::move(rtc), true);
+    fDevice->replaceRenderTargetContext(std::move(rtc), mode);
     return true;
 }
 
@@ -642,7 +642,7 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTextureAsRenderTarget(GrContext* cont
         return nullptr;
     }
 
-    sampleCnt = SkTMax(1, sampleCnt);
+    sampleCnt = std::max(1, sampleCnt);
     GrColorType grColorType = SkColorTypeAndFormatToGrColorType(context->priv().caps(), colorType,
                                                                 tex.getBackendFormat());
     if (grColorType == GrColorType::kUnknown) {

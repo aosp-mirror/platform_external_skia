@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@e9dc0201af3af167d21bc0f26bc763e18e82f994",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@4dc19c38c0c5e307350ecd8b9f80d59573161df9",
   "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@604072bc2ed01018eb03bcbbf9d94042f679af63",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
@@ -16,7 +16,7 @@ deps = {
   "third_party/externals/harfbuzz"        : "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git@3a74ee528255cc027d84b204a87b5c25e47bff79",
   "third_party/externals/icu"             : "https://chromium.googlesource.com/chromium/deps/icu.git@dbd3825b31041d782c5b504c59dcfb5ac7dda08c",
   "third_party/externals/imgui"           : "https://skia.googlesource.com/external/github.com/ocornut/imgui.git@d38d7c6628bebd02692cfdd6fa76b4d992a35b75",
-  "third_party/externals/libgifcodec"     : "https://skia.googlesource.com/libgifcodec@38d9c73f49b861bb4a9829371ac311544b120023",
+  "third_party/externals/libgifcodec"     : "https://skia.googlesource.com/libgifcodec@d06d2a6d42baf6c0c91cacc28df2542a911d05fe",
   "third_party/externals/libjpeg-turbo"   : "https://skia.googlesource.com/external/github.com/libjpeg-turbo/libjpeg-turbo.git@574f3a772c96dc9db2c98ef24706feb3f6dbda9a",
   "third_party/externals/libpng"          : "https://skia.googlesource.com/third_party/libpng.git@386707c6d19b974ca2e3db7f5c61873813c6fe44",
   "third_party/externals/libwebp"         : "https://chromium.googlesource.com/webm/libwebp.git@0fe1a89dbf1930fc2554dbe76adad5d962054ead",
@@ -28,16 +28,16 @@ deps = {
   "third_party/externals/piex"            : "https://android.googlesource.com/platform/external/piex.git@bb217acdca1cc0c16b704669dd6f91a1b509c406",
   "third_party/externals/sdl"             : "https://skia.googlesource.com/third_party/sdl@5d7cfcca344034aff9327f77fc181ae3754e7a90",
   "third_party/externals/sfntly"          : "https://chromium.googlesource.com/external/github.com/googlei18n/sfntly.git@b55ff303ea2f9e26702b514cf6a3196a2e3e2974",
-  "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@53ab2144b90abede33be5161aec5dfc94ddc3caf",
+  "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@dffd33dd9d19c798ffecc10f50e551b42d282628",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@29c11140baaf9f7fdaa39a583672c556bf1795a1",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@0c4feb643b89d1792b02f7cbef315e9d95633bd7",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@dd48b7e2d06e74e1d20da5f43224b4ae99873e64",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@da659b3741132fe6a6904e45d96112eef776bc28",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@4080840928c0b05a80cda0d14ac2e2615f679f1a",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@fbfe7df1b1d42c3b640852e4afa9ba732e12a20d",
+    "url": "https://chromium.googlesource.com/chromium/src.git@04383ff221c4307b775791f08adec921f06f9492",
     "condition": "checkout_chromium",
   },
 }

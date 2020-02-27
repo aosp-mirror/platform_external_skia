@@ -75,6 +75,9 @@ public:
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
     void deleteBackendTexture(const GrBackendTexture&) override;
+
+    bool compile(const GrProgramDesc&, const GrProgramInfo&) override;
+
 #if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
@@ -115,7 +118,7 @@ public:
     bool onRegenerateMipMapLevels(GrTexture* tex) override;
 
     void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                               GrSurfaceOrigin resolveOrigin, ForExternalIO) override;
+                               ForExternalIO) override;
 
     void submitSecondaryCommandBuffer(std::unique_ptr<GrVkSecondaryCommandBuffer>);
 
@@ -185,7 +188,7 @@ private:
                                                       GrProtected,
                                                       const BackendTextureData*) override;
 
-    sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
+    sk_sp<GrTexture> onCreateTexture(SkISize,
                                      const GrBackendFormat&,
                                      GrRenderable,
                                      int renderTargetSampleCnt,

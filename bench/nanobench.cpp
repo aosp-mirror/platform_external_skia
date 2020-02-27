@@ -31,7 +31,6 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTime.h"
 #include "src/core/SkAutoMalloc.h"
-#include "src/core/SkBBoxHierarchy.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkLeanWindows.h"
 #include "src/core/SkOSFile.h"
@@ -219,7 +218,7 @@ struct GPUTarget : public Target {
     }
     void endTiming() override {
         if (this->contextInfo.testContext()) {
-            this->contextInfo.testContext()->waitOnSyncOrSwap();
+            this->contextInfo.testContext()->flushAndWaitOnSync(contextInfo.grContext());
         }
     }
     void fence() override { this->contextInfo.testContext()->finish(); }
@@ -287,9 +286,6 @@ static double time(int loops, Benchmark* bench, Target* target) {
     double start = now_ms();
     canvas = target->beginTiming(canvas);
     bench->draw(loops, canvas);
-    if (canvas) {
-        canvas->flush();
-    }
     target->endTiming();
     double elapsed = now_ms() - start;
     bench->postDraw(canvas);
@@ -956,7 +952,7 @@ public:
             while (fCurrentSampleSize < (int) SK_ARRAY_COUNT(sampleSizes)) {
                 int sampleSize = sampleSizes[fCurrentSampleSize];
                 fCurrentSampleSize++;
-                if (10 * sampleSize > SkTMin(codec->getInfo().width(), codec->getInfo().height())) {
+                if (10 * sampleSize > std::min(codec->getInfo().width(), codec->getInfo().height())) {
                     // Avoid benchmarking scaled decodes of already small images.
                     break;
                 }

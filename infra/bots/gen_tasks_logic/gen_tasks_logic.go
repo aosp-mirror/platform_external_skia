@@ -92,6 +92,12 @@ var (
 			Path: "cache/work",
 		},
 	}
+	CACHES_CCACHE = []*specs.Cache{
+		&specs.Cache{
+			Name: "ccache",
+			Path: "cache/ccache",
+		},
+	}
 	CACHES_DOCKER = []*specs.Cache{
 		&specs.Cache{
 			Name: "docker",
@@ -481,9 +487,6 @@ func (b *builder) deriveCompileTaskName(jobName string, parts map[string]string)
 				ec = append([]string{"Android"}, ec...)
 			}
 			task_os = "Debian9"
-		} else if task_os == "Chromecast" {
-			task_os = "Debian9"
-			ec = append([]string{"Chromecast"}, ec...)
 		} else if strings.Contains(task_os, "ChromeOS") {
 			ec = append([]string{"Chromebook", "GLES"}, ec...)
 			task_os = "Debian9"
@@ -555,21 +558,20 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 	}
 	if os, ok := parts["os"]; ok {
 		d["os"], ok = map[string]string{
-			"Android":    "Android",
-			"Chromecast": "Android",
-			"ChromeOS":   "ChromeOS",
-			"Debian9":    DEFAULT_OS_DEBIAN,
-			"Mac":        DEFAULT_OS_MAC,
-			"Mac10.13":   "Mac-10.13.6",
-			"Mac10.14":   "Mac-10.14.3",
-			"Mac10.15":   "Mac-10.15.1",
-			"Ubuntu18":   "Ubuntu-18.04",
-			"Win":        DEFAULT_OS_WIN,
-			"Win10":      "Windows-10-18363",
-			"Win2019":    DEFAULT_OS_WIN,
-			"Win7":       "Windows-7-SP1",
-			"Win8":       "Windows-8.1-SP0",
-			"iOS":        "iOS-11.4.1",
+			"Android":  "Android",
+			"ChromeOS": "ChromeOS",
+			"Debian9":  DEFAULT_OS_DEBIAN,
+			"Mac":      DEFAULT_OS_MAC,
+			"Mac10.13": "Mac-10.13.6",
+			"Mac10.14": "Mac-10.14.3",
+			"Mac10.15": "Mac-10.15.1",
+			"Ubuntu18": "Ubuntu-18.04",
+			"Win":      DEFAULT_OS_WIN,
+			"Win10":    "Windows-10-18363",
+			"Win2019":  DEFAULT_OS_WIN,
+			"Win7":     "Windows-7-SP1",
+			"Win8":     "Windows-8.1-SP0",
+			"iOS":      "iOS-11.4.1",
 		}[os]
 		if !ok {
 			glog.Fatalf("Entry %q not found in OS mapping.", os)
@@ -590,12 +592,11 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 		d["os"] = DEFAULT_OS_DEBIAN
 	}
 	if parts["role"] == "Test" || parts["role"] == "Perf" {
-		if strings.Contains(parts["os"], "Android") || strings.Contains(parts["os"], "Chromecast") {
+		if strings.Contains(parts["os"], "Android") {
 			// For Android, the device type is a better dimension
 			// than CPU or GPU.
 			deviceInfo, ok := map[string][]string{
 				"AndroidOne":      {"sprout", "MOB30Q"},
-				"Chorizo":         {"chorizo", "1.30_109591"},
 				"GalaxyS6":        {"zerofltetmo", "NRD90M_G920TUVS6FRC1"},
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
 				"GalaxyS9":        {"starlte", "R16NW_G960FXXU2BRJ8"}, // This is Oreo.
@@ -629,13 +630,9 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 				glog.Fatalf("Entry %q not found in iOS mapping.", parts["model"])
 			}
 			d["device_type"] = device
-		} else if strings.Contains(parts["extra_config"], "SwiftShader") {
-			if parts["model"] != "GCE" || d["os"] != DEFAULT_OS_DEBIAN || parts["cpu_or_gpu_value"] != "SwiftShader" {
-				glog.Fatalf("Please update defaultSwarmDimensions for SwiftShader %s %s %s.", parts["os"], parts["model"], parts["cpu_or_gpu_value"])
-			}
-			d["cpu"] = "x86-64-Haswell_GCE"
-			d["os"] = DEFAULT_OS_LINUX_GCE
-			d["machine_type"] = MACHINE_TYPE_SMALL
+			// Temporarily use this dimension to ensure we only use the new libimobiledevice, since the
+			// old version won't work with current recipes.
+			d["libimobiledevice"] = "1582155448"
 		} else if strings.Contains(parts["extra_config"], "SKQP") && parts["cpu_or_gpu_value"] == "Emulator" {
 			if parts["model"] != "NUC7i5BNK" || d["os"] != DEFAULT_OS_DEBIAN {
 				glog.Fatalf("Please update defaultSwarmDimensions for SKQP::Emulator %s %s.", parts["os"], parts["model"])
@@ -648,7 +645,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			// So, we run on bare metal machines in the Skolo (that should also have KVM).
 			d["kvm"] = "1"
 			d["docker_installed"] = "true"
-		} else if parts["cpu_or_gpu"] == "CPU" {
+		} else if parts["cpu_or_gpu"] == "CPU" || strings.Contains(parts["extra_config"], "SwiftShader") {
 			modelMapping, ok := map[string]map[string]string{
 				"AVX": {
 					"Golo":      "x86-64-E5-2670",
@@ -665,6 +662,9 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 				},
 				"Snapdragon850": {
 					"LenovoYogaC630": "arm64-64-Snapdragon850",
+				},
+				"SwiftShader": {
+					"GCE": "x86-64-Haswell_GCE",
 				},
 			}[parts["cpu_or_gpu_value"]]
 			if !ok {
@@ -1059,21 +1059,22 @@ func getIsolatedCIPDDeps(parts map[string]string) []string {
 	// benefit and we don't need the extra complexity, for now
 	rpiOS := []string{"Android", "ChromeOS", "iOS"}
 
-	if o := parts["os"]; strings.Contains(o, "Chromecast") {
-		// Chromecasts don't have enough disk space to fit all of the content,
-		// so we do a subset of the skps.
-		deps = append(deps, ISOLATE_SKP_NAME)
-	} else if e := parts["extra_config"]; strings.Contains(e, "Skpbench") {
+	if e := parts["extra_config"]; strings.Contains(e, "Skpbench") {
 		// Skpbench only needs skps
 		deps = append(deps, ISOLATE_SKP_NAME)
 		deps = append(deps, ISOLATE_MSKP_NAME)
-	} else if In(o, rpiOS) {
+	} else if o := parts["os"]; In(o, rpiOS) {
 		deps = append(deps, ISOLATE_SKP_NAME)
 		deps = append(deps, ISOLATE_SVG_NAME)
 		deps = append(deps, ISOLATE_SKIMAGE_NAME)
 	}
 
 	return deps
+}
+
+// usesCCache adds attributes to tasks which use ccache.
+func (b *builder) usesCCache(t *specs.TaskSpec, name string) {
+	t.Caches = append(t.Caches, CACHES_CCACHE...)
 }
 
 // usesGit adds attributes to tasks which use git.
@@ -1101,6 +1102,27 @@ func (b *builder) usesGo(t *specs.TaskSpec, name string) {
 func usesDocker(t *specs.TaskSpec, name string) {
 	if strings.Contains(name, "EMCC") || strings.Contains(name, "SKQP") || strings.Contains(name, "LottieWeb") || strings.Contains(name, "CMake") || strings.Contains(name, "Docker") {
 		t.Caches = append(t.Caches, CACHES_DOCKER...)
+	}
+}
+
+var iosRegex = regexp.MustCompile(`os:iOS-(.*)`)
+
+func (b *builder) maybeAddIosDevImage(name string, t *specs.TaskSpec) {
+	for _, dim := range t.Dimensions {
+		if m := iosRegex.FindStringSubmatch(dim); len(m) >= 2 {
+			var asset string
+			switch m[1] {
+			// Other patch versions for 11.4 can be added here.
+			case "11.4.1":
+				asset = "ios-dev-image-11.4"
+			default:
+				glog.Fatalf("Unable to determine correct ios-dev-image asset for %s. If %s is a new iOS release, you must add a CIPD package containing the corresponding iOS dev image; see ios-dev-image-11.4 for an example.", name, m[1])
+			}
+			t.CipdPackages = append(t.CipdPackages, b.MustGetCipdPackageFromAsset(asset))
+			break
+		} else if strings.Contains(dim, "iOS") {
+			glog.Fatalf("Must specify iOS version for %s to obtain correct dev image; os dimension is missing version: %s", name, dim)
+		}
 	}
 }
 
@@ -1164,9 +1186,6 @@ func (b *builder) compile(name string, parts map[string]string) string {
 		} else if !strings.Contains(name, "SKQP") {
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("android_ndk_linux"))
 		}
-	} else if strings.Contains(name, "Chromecast") {
-		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("cast_toolchain"))
-		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("chromebook_arm_gles"))
 	} else if strings.Contains(name, "Chromebook") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
 		if parts["target_arch"] == "x86_64" {
@@ -1188,6 +1207,8 @@ func (b *builder) compile(name string, parts map[string]string) string {
 				b.MustGetCipdPackageFromAsset("opencl_ocl_icd_linux"),
 			)
 		}
+		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("ccache_linux"))
+		b.usesCCache(task, name)
 	} else if strings.Contains(name, "Win") {
 		task.Dependencies = append(task.Dependencies, b.isolateCIPDAsset(ISOLATE_WIN_TOOLCHAIN_NAME))
 		if strings.Contains(name, "Clang") {
@@ -1204,6 +1225,8 @@ func (b *builder) compile(name string, parts map[string]string) string {
 			Name: "xcode",
 			Path: "cache/Xcode.app",
 		})
+		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("ccache_mac"))
+		b.usesCCache(task, name)
 		if strings.Contains(name, "CommandBuffer") {
 			timeout(task, 2*time.Hour)
 		}
@@ -1250,6 +1273,8 @@ func (b *builder) checkGeneratedFiles(name string) string {
 	b.usesGit(task, name)
 	b.usesGo(task, name)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
+	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("ccache_linux"))
+	b.usesCCache(task, name)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -1429,6 +1454,7 @@ func (b *builder) test(name string, parts map[string]string, compileTaskName str
 		// skia:6737
 		timeout(task, 6*time.Hour)
 	}
+	b.maybeAddIosDevImage(name, task)
 	b.MustAddTask(name, task)
 
 	// Upload results if necessary. TODO(kjlubick): If we do coverage analysis at the same
@@ -1508,6 +1534,7 @@ func (b *builder) perf(name string, parts map[string]string, compileTaskName str
 	if strings.Contains(name, "Android") && strings.Contains(name, "CPU") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("text_blob_traces"))
 	}
+	b.maybeAddIosDevImage(name, task)
 
 	iid := b.internalHardwareLabel(parts)
 	if iid != nil {

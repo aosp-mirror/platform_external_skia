@@ -102,14 +102,6 @@ void test_wrapping(GrContext* context, skiatest::Reporter* reporter,
 
 static bool isBGRA(const GrBackendFormat& format) {
     switch (format.backend()) {
-        case GrBackendApi::kMetal:
-#ifdef SK_METAL
-            return GrMtlFormatIsBGRA(format.asMtlFormat());
-#else
-            return false;
-#endif
-        case GrBackendApi::kDawn:
-            return false;
         case GrBackendApi::kOpenGL:
 #ifdef SK_GL
             return format.asGLFormat() == GrGLFormat::kBGRA8;
@@ -125,6 +117,20 @@ static bool isBGRA(const GrBackendFormat& format) {
             return false;
 #endif
         }
+        case GrBackendApi::kMetal:
+#ifdef SK_METAL
+            return GrMtlFormatIsBGRA(format.asMtlFormat());
+#else
+            return false;
+#endif
+        case GrBackendApi::kDirect3D:
+#ifdef SK_DIRECT3D
+            return false; // TODO
+#else
+            return false;
+#endif
+        case GrBackendApi::kDawn:
+            return false;
         case GrBackendApi::kMock: {
             SkImage::CompressionType compression = format.asMockCompressionType();
             if (compression != SkImage::CompressionType::kNone) {
@@ -139,10 +145,6 @@ static bool isBGRA(const GrBackendFormat& format) {
 
 static bool isRGB(const GrBackendFormat& format) {
     switch (format.backend()) {
-        case GrBackendApi::kMetal:
-            return false;  // Metal doesn't even pretend to support this
-        case GrBackendApi::kDawn:
-            return false;
         case GrBackendApi::kOpenGL:
 #ifdef SK_GL
             return format.asGLFormat() == GrGLFormat::kRGB8;
@@ -158,6 +160,12 @@ static bool isRGB(const GrBackendFormat& format) {
             return false;
 #endif
         }
+        case GrBackendApi::kMetal:
+            return false;  // Metal doesn't even pretend to support this
+        case GrBackendApi::kDirect3D:
+            return false;  // Not supported in Direct3D 12
+        case GrBackendApi::kDawn:
+            return false;
         case GrBackendApi::kMock:
             return false;  // No GrColorType::kRGB_888
     }
@@ -594,8 +602,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ColorTypeBackendAllocationTest, reporter, ctx
         { kBGRA_8888_SkColorType,         { 1, 0, 0, 1.0f }        },
         // TODO: readback is busted when alpha = 0.5f (perhaps premul vs. unpremul)
         { kRGBA_1010102_SkColorType,      { .25f, .5f, .75f, 1.0f }},
-        // The kRGB_101010x_SkColorType has no Ganesh correlate
+        // RGB/BGR 101010x and BGRA 1010102 have no Ganesh correlate
         { kRGB_101010x_SkColorType,       { 0, 0.5f, 0, 0.5f }     },
+        { kBGRA_1010102_SkColorType,      { 0, 0.5f, 0, 0.5f }     },
+        { kBGR_101010x_SkColorType,       { 0, 0.5f, 0, 0.5f }     },
         { kGray_8_SkColorType,            kGrayCol                 },
         { kRGBA_F16Norm_SkColorType,      SkColors::kLtGray        },
         { kRGBA_F16_SkColorType,          SkColors::kYellow        },

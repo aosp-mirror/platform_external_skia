@@ -238,14 +238,13 @@ bool SkImage_Lazy::onIsValid(GrContext* context) const {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
-GrSurfaceProxyView SkImage_Lazy::refView(GrRecordingContext* context, GrSamplerState params,
-                                         SkScalar scaleAdjust[2]) const {
+GrSurfaceProxyView SkImage_Lazy::refView(GrRecordingContext* context, GrSamplerState params) const {
     if (!context) {
         return {};
     }
 
     GrImageTextureMaker textureMaker(context, this, kAllow_CachingHint);
-    return textureMaker.viewForParams(params, scaleAdjust);
+    return textureMaker.viewForParams(params);
 }
 #endif
 
@@ -455,7 +454,7 @@ GrSurfaceProxyView SkImage_Lazy::lockTextureProxyView(
 
     // 1. Check the cache for a pre-existing one
     if (key.isValid()) {
-        auto proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, ct, kTopLeft_GrSurfaceOrigin);
+        auto proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, ct);
         if (proxy) {
             SK_HISTOGRAM_ENUMERATION("LockTexturePath", kPreExisting_LockTexturePath,
                                      kLockTexturePathCount);
@@ -494,8 +493,6 @@ GrSurfaceProxyView SkImage_Lazy::lockTextureProxyView(
     // 3. Ask the generator to return YUV planes, which the GPU can convert. If we will be mipping
     //    the texture we fall through here and have the CPU generate the mip maps for us.
     if (!view.proxy() && !willBeMipped && !ctx->priv().options().fDisableGpuYUVConversion) {
-        const GrSurfaceDesc desc = GrImageInfoToSurfaceDesc(this->imageInfo());
-
         SkColorType colorType = this->colorType();
 
         ScopedGenerator generator(fSharedGenerator);
@@ -510,8 +507,9 @@ GrSurfaceProxyView SkImage_Lazy::lockTextureProxyView(
 
         // TODO: Update to create the mipped surface in the YUV generator and draw the base
         // layer directly into the mipped surface.
-        view = provider.refAsTextureProxyView(ctx, desc, SkColorTypeToGrColorType(colorType),
-                                               generatorColorSpace, thisColorSpace);
+        view = provider.refAsTextureProxyView(ctx, this->imageInfo().dimensions(),
+                                              SkColorTypeToGrColorType(colorType),
+                                              generatorColorSpace, thisColorSpace);
         if (view.proxy()) {
             SK_HISTOGRAM_ENUMERATION("LockTexturePath", kYUV_LockTexturePath,
                                      kLockTexturePathCount);

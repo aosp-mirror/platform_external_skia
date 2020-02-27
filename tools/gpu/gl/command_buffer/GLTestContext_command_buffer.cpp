@@ -337,6 +337,15 @@ void CommandBufferGLTestContext::destroyGLContext() {
     fDisplay = EGL_NO_DISPLAY;
 }
 
+void CommandBufferGLTestContext::onPlatformMakeNotCurrent() const {
+    if (!gfFunctionsLoadedSuccessfully) {
+        return;
+    }
+    if (!TLSCurrentObjects::MakeCurrent(fDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT)) {
+        SkDebugf("Command Buffer: Could not null out current EGL context.\n");
+    }
+}
+
 void CommandBufferGLTestContext::onPlatformMakeCurrent() const {
     if (!gfFunctionsLoadedSuccessfully) {
         return;
@@ -353,15 +362,6 @@ std::function<void()> CommandBufferGLTestContext::onPlatformGetAutoContextRestor
     return context_restorer();
 }
 
-void CommandBufferGLTestContext::onPlatformSwapBuffers() const {
-    if (!gfFunctionsLoadedSuccessfully) {
-        return;
-    }
-    if (!gfSwapBuffers(fDisplay, fSurface)) {
-        SkDebugf("Command Buffer: Could not complete gfSwapBuffers.\n");
-    }
-}
-
 GrGLFuncPtr CommandBufferGLTestContext::onPlatformGetProcAddress(const char *name) const {
     if (!gfFunctionsLoadedSuccessfully) {
         return nullptr;
@@ -374,7 +374,12 @@ void CommandBufferGLTestContext::presentCommandBuffer() {
         this->gl()->fFunctions.fFlush();
     }
 
-    this->onPlatformSwapBuffers();
+    if (!gfFunctionsLoadedSuccessfully) {
+        return;
+    }
+    if (!gfSwapBuffers(fDisplay, fSurface)) {
+        SkDebugf("Command Buffer: Could not complete gfSwapBuffers.\n");
+    }
 }
 
 bool CommandBufferGLTestContext::makeCurrent() {

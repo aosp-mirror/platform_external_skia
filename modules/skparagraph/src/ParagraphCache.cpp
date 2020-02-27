@@ -35,15 +35,13 @@ class ParagraphCacheValue {
 public:
     ParagraphCacheValue(const ParagraphImpl* paragraph)
         : fKey(ParagraphCacheKey(paragraph))
-        , fRuns(paragraph->fRuns)
-        , fClusters(paragraph->fClusters) { }
+        , fRuns(paragraph->fRuns) { }
 
     // Input == key
     ParagraphCacheKey fKey;
 
     // Shaped results
     SkTArray<Run, false> fRuns;
-    SkTArray<Cluster, true> fClusters;
 };
 
 uint32_t ParagraphCache::KeyHash::mix(uint32_t hash, uint32_t data) const {
@@ -208,14 +206,6 @@ void ParagraphCache::updateTo(ParagraphImpl* paragraph, const Entry* entry) {
     for (auto& run : paragraph->fRuns) {
         run.setMaster(paragraph);
     }
-
-    paragraph->fClusters.reset();
-    paragraph->fClusters = entry->fValue->fClusters;
-    for (auto& cluster : paragraph->fClusters) {
-        cluster.setMaster(paragraph);
-    }
-
-    paragraph->fState = kMarked;
 }
 
 void ParagraphCache::printStatistics() {
@@ -230,7 +220,7 @@ void ParagraphCache::printStatistics() {
 
 void ParagraphCache::abandon() {
     SkAutoMutexExclusive lock(fParagraphMutex);
-    fLRUCacheMap.foreach([](std::unique_ptr<Entry>* e) {
+    fLRUCacheMap.foreach([](ParagraphCacheKey*, std::unique_ptr<Entry>* e) {
     });
 
     this->reset();

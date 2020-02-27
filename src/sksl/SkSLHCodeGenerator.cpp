@@ -66,7 +66,7 @@ Layout::CType HCodeGenerator::ParameterCType(const Context& context, const Type&
     } else if (type == *context.fFloat4x4_Type || type == *context.fHalf4x4_Type) {
         return Layout::CType::kSkM44;
     } else if (type.kind() == Type::kSampler_Kind) {
-        return Layout::CType::kGrSurfaceProxy;
+        return Layout::CType::kGrSurfaceProxyView;
     } else if (type == *context.fFragmentProcessor_Type) {
         return Layout::CType::kGrFragmentProcessor;
     }
@@ -191,7 +191,8 @@ void HCodeGenerator::writeMake() {
                      fFullName.c_str());
         separator = "";
         for (const auto& param : fSectionAndParameterHelper.getParameters()) {
-            if (param->fType.nonnullable() == *fContext.fFragmentProcessor_Type) {
+            if (param->fType.nonnullable() == *fContext.fFragmentProcessor_Type ||
+                param->fType.nonnullable().kind() == Type::kSampler_Kind) {
                 this->writef("%sstd::move(%s)", separator, String(param->fName).c_str());
             } else {
                 this->writef("%s%s", separator, String(param->fName).c_str());
@@ -241,7 +242,8 @@ void HCodeGenerator::writeConstructor() {
         const Section& s = *transforms[i];
         String field = CoordTransformName(s.fArgument.c_str(), i);
         if (s.fArgument.size()) {
-            this->writef("\n    , %s(%s, %s.get())", field.c_str(), s.fText.c_str(),
+            this->writef("\n    , %s(%s, %s.proxy(), %s.origin())", field.c_str(), s.fText.c_str(),
+                         FieldName(s.fArgument.c_str()).c_str(),
                          FieldName(s.fArgument.c_str()).c_str());
         }
         else {
@@ -347,7 +349,7 @@ bool HCodeGenerator::generateCode() {
                  fFullName.c_str(),
                  fFullName.c_str());
     this->writef("#include \"include/core/SkTypes.h\"\n");
-    this->writef("#include \"include/private/SkM44.h\"\n");
+    this->writef("#include \"include/core/SkM44.h\"\n");
     this->writeSection(HEADER_SECTION);
     this->writef("\n"
                  "#include \"src/gpu/GrCoordTransform.h\"\n"

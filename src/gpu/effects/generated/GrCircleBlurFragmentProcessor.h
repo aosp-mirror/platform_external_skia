@@ -11,7 +11,7 @@
 #ifndef GrCircleBlurFragmentProcessor_DEFINED
 #define GrCircleBlurFragmentProcessor_DEFINED
 #include "include/core/SkTypes.h"
-#include "include/private/SkM44.h"
+#include "include/core/SkM44.h"
 
 #include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
@@ -29,7 +29,7 @@ public:
 
 private:
     GrCircleBlurFragmentProcessor(SkRect circleRect, float textureRadius, float solidRadius,
-                                  sk_sp<GrSurfaceProxy> blurProfileSampler)
+                                  GrSurfaceProxyView blurProfileSampler)
             : INHERITED(kGrCircleBlurFragmentProcessor_ClassID,
                         (OptimizationFlags)kCompatibleWithCoverageAsAlpha_OptimizationFlag)
             , circleRect(circleRect)

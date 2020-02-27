@@ -34,8 +34,15 @@ public:
     int numDraws() const { return fNumDraws; }
 
 private:
-    void onDraw(const GrProgramInfo&, const GrMesh[], int meshCount,
-                const SkRect& bounds) override {
+    bool onBindPipeline(const GrProgramInfo&, const SkRect&) override {
+        return true;
+    }
+    void onSetScissorRect(const SkIRect&) override {}
+    bool onBindTextures(const GrPrimitiveProcessor&, const GrPipeline&,
+                        const GrSurfaceProxy* const primProcTextures[]) override {
+        return true;
+    }
+    void onDrawMesh(GrPrimitiveType, const GrMesh&) override {
         this->markRenderTargetDirty();
         ++fNumDraws;
     }
@@ -43,7 +50,6 @@ private:
         this->markRenderTargetDirty();
     }
     void onClearStencilClip(const GrFixedClip&, bool insideStencilMask) override {}
-
     void markRenderTargetDirty() {
         if (auto* tex = fRenderTarget->asTexture()) {
             tex->texturePriv().markMipMapsDirty();

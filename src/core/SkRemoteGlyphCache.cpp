@@ -19,8 +19,8 @@
 #include "src/core/SkDraw.h"
 #include "src/core/SkEnumerate.h"
 #include "src/core/SkGlyphRun.h"
+#include "src/core/SkScalerCache.h"
 #include "src/core/SkSpan.h"
-#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTLazy.h"
 #include "src/core/SkTraceEvent.h"
@@ -943,7 +943,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
         SkAutoDescriptor ad;
         auto* client_desc = auto_descriptor_from_desc(sourceAd.getDesc(), tf->uniqueID(), &ad);
 
-        auto strike = fStrikeCache->findStrikeExclusive(*client_desc);
+        auto strike = fStrikeCache->findStrike(*client_desc);
         // Metrics are only sent the first time. If the metrics are not initialized, there must
         // be an existing strike.
         if (fontMetricsInitialized && strike == nullptr) READ_FAILURE
@@ -952,13 +952,11 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             // glyphs here anyway, and the desc is still correct since it includes the serialized
             // effects.
             SkScalerContextEffects effects;
-            auto scaler = SkStrikeCache::CreateScalerContext(*client_desc, effects, *tf);
-            strike = fStrikeCache->createStrikeExclusive(
+            auto scaler = tf->createScalerContext(effects, client_desc);
+            strike = fStrikeCache->createStrike(
                     *client_desc, std::move(scaler), &fontMetrics,
-                    std::make_unique<DiscardableStrikePinner>(spec.discardableHandleId,
-                                                                fDiscardableHandleManager));
-            auto proxyContext = static_cast<SkScalerContextProxy*>(strike->getScalerContext());
-            proxyContext->initCache(strike.get(), fStrikeCache);
+                    std::make_unique<DiscardableStrikePinner>(
+                            spec.discardableHandleId, fDiscardableHandleManager));
         }
 
         if (!deserializer.read<uint64_t>(&glyphImagesCount)) READ_FAILURE
@@ -995,7 +993,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
                 pathPtr = &path;
             }
 
-            strike->preparePath(allocatedGlyph, pathPtr);
+            strike->mergePath(allocatedGlyph, pathPtr);
         }
     }
 
@@ -1017,5 +1015,5 @@ sk_sp<SkTypeface> SkStrikeClient::addTypeface(const WireTypeface& wire) {
             wire.typefaceID, wire.glyphCount, wire.style, wire.isFixed,
             fDiscardableHandleManager, fIsLogging);
     fRemoteFontIdToTypeface.set(wire.typefaceID, newTypeface);
-    return newTypeface;
+    return std::move(newTypeface);
 }

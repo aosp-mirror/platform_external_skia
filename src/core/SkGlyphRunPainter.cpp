@@ -29,7 +29,7 @@
 #include "src/core/SkEnumerate.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkRasterClip.h"
-#include "src/core/SkStrike.h"
+#include "src/core/SkScalerCache.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkStrikeForGPU.h"
 #include "src/core/SkStrikeSpec.h"
@@ -104,7 +104,7 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
             SkStrikeSpec strikeSpec = SkStrikeSpec::MakePath(
                     runFont, runPaint, props, fScalerContextFlags);
 
-            auto strike = strikeSpec.findOrCreateExclusiveStrike();
+            auto strike = strikeSpec.findOrCreateStrike();
 
             fDrawable.startSource(fRejects.source(), drawOrigin);
             strike->prepareForPathDrawing(&fDrawable, &fRejects);
@@ -121,7 +121,7 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
             SkStrikeSpec strikeSpec = SkStrikeSpec::MakeMask(
                     runFont, runPaint, props, fScalerContextFlags, deviceMatrix);
 
-            auto strike = strikeSpec.findOrCreateExclusiveStrike();
+            auto strike = strikeSpec.findOrCreateStrike();
 
             fDrawable.startDevice(
                     fRejects.source(), drawOrigin, deviceMatrix, strike->roundingSpec());

@@ -9,9 +9,10 @@
 #define GrDawnGpu_DEFINED
 
 #include "src/gpu/GrGpu.h"
-#include "src/gpu/GrProgramDesc.h"
+
 #include "dawn/webgpu_cpp.h"
 #include "src/core/SkLRUCache.h"
+#include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/dawn/GrDawnRingBuffer.h"
 #include "src/gpu/dawn/GrDawnStagingManager.h"
 
@@ -52,6 +53,9 @@ public:
                                                       const BackendTextureData*) override;
 
     void deleteBackendTexture(const GrBackendTexture&) override;
+
+    bool compile(const GrProgramDesc&, const GrProgramInfo&) override;
+
 #if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
@@ -110,7 +114,7 @@ private:
 
     virtual void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override {}
 
-    sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
+    sk_sp<GrTexture> onCreateTexture(SkISize,
                                      const GrBackendFormat&,
                                      GrRenderable,
                                      int renderTargetSampleCnt,
@@ -159,8 +163,7 @@ private:
                               GrColorType surfaceColorType, GrColorType bufferColorType,
                               GrGpuBuffer* transferBuffer, size_t offset) override;
 
-    void onResolveRenderTarget(GrRenderTarget*, const SkIRect&, GrSurfaceOrigin,
-                               ForExternalIO) override {}
+    void onResolveRenderTarget(GrRenderTarget*, const SkIRect&, ForExternalIO) override {}
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 

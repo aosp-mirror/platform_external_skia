@@ -38,6 +38,9 @@ class Transform;
 namespace skottie {
 namespace internal {
 
+// Close-enough to AE.
+static constexpr float kBlurSizeToSigma = 0.3f;
+
 class TextAdapter;
 class TransformAdapter2D;
 class TransformAdapter3D;
@@ -121,7 +124,7 @@ public:
             auto node = adapter->node();
             this->attachDiscardableAdapter(std::move(adapter));
 
-            return node;
+            return std::move(node);
         }
 
         return nullptr;
@@ -133,12 +136,15 @@ public:
             : fBuilder(builder)
             , fPrevContext(builder->fPropertyObserverContext) {
             if (fBuilder->fPropertyObserver) {
-                this->updateContext(builder->fPropertyObserver.get(), obj);
+                auto observer = builder->fPropertyObserver.get();
+                this->updateContext(observer, obj);
+                observer->onEnterNode(fBuilder->fPropertyObserverContext);
             }
         }
 
         ~AutoPropertyTracker() {
             if (fBuilder->fPropertyObserver) {
+                fBuilder->fPropertyObserver->onLeavingNode(fBuilder->fPropertyObserverContext);
                 fBuilder->fPropertyObserverContext = fPrevContext;
             }
         }
