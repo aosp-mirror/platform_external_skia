@@ -109,7 +109,7 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
 const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(
                                                 const GrCaps* caps,
                                                 SkArenaAlloc* arena,
-                                                const GrSurfaceProxyView* dstView,
+                                                const GrSurfaceProxyView* outputView,
                                                 GrAppliedClip&& appliedClip,
                                                 const GrXferProcessor::DstProxyView& dstProxyView,
                                                 GrProcessorSet&& processorSet,
@@ -121,7 +121,7 @@ const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(
     pipelineArgs.fDstProxyView = dstProxyView;
     pipelineArgs.fCaps = caps;
     pipelineArgs.fUserStencil = stencilSettings;
-    pipelineArgs.fOutputSwizzle = dstView->swizzle();
+    pipelineArgs.fOutputSwizzle = outputView->swizzle();
 
     return arena->make<GrPipeline>(pipelineArgs,
                                    std::move(processorSet),
@@ -183,61 +183,6 @@ SkString GrSimpleMeshDrawOpHelper::dumpInfo() const {
             break;
     }
     dump_pipeline_flags(fPipelineFlags, &result);
-    return result;
-}
-#endif
-
-const GrPipeline* GrSimpleMeshDrawOpHelperWithStencil::createPipelineWithStencil(
-        GrOpFlushState* flushState) {
-    return GrSimpleMeshDrawOpHelper::CreatePipeline(&flushState->caps(),
-                                                    flushState->allocator(),
-                                                    flushState->view(),
-                                                    flushState->detachAppliedClip(),
-                                                    flushState->dstProxyView(),
-                                                    this->detachProcessorSet(),
-                                                    this->pipelineFlags(),
-                                                    this->stencilSettings());
-}
-
-GrSimpleMeshDrawOpHelperWithStencil::GrSimpleMeshDrawOpHelperWithStencil(
-        const MakeArgs& args, GrAAType aaType, const GrUserStencilSettings* stencilSettings,
-        InputFlags inputFlags)
-        : INHERITED(args, aaType, inputFlags)
-        , fStencilSettings(stencilSettings ? stencilSettings : &GrUserStencilSettings::kUnused) {}
-
-GrDrawOp::FixedFunctionFlags GrSimpleMeshDrawOpHelperWithStencil::fixedFunctionFlags() const {
-    GrDrawOp::FixedFunctionFlags flags = INHERITED::fixedFunctionFlags();
-    if (fStencilSettings != &GrUserStencilSettings::kUnused) {
-        flags |= GrDrawOp::FixedFunctionFlags::kUsesStencil;
-    }
-    return flags;
-}
-
-GrProcessorSet::Analysis GrSimpleMeshDrawOpHelperWithStencil::finalizeProcessors(
-        const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
-        GrClampType clampType, GrProcessorAnalysisCoverage geometryCoverage,
-        SkPMColor4f* geometryColor, bool* wideColor) {
-    GrProcessorAnalysisColor color = *geometryColor;
-    auto result = this->finalizeProcessors(
-            caps, clip, hasMixedSampledCoverage, clampType, geometryCoverage, &color);
-    color.isConstant(geometryColor);
-    if (wideColor) {
-        *wideColor = !geometryColor->fitsInBytes();
-    }
-    return result;
-}
-
-bool GrSimpleMeshDrawOpHelperWithStencil::isCompatible(
-        const GrSimpleMeshDrawOpHelperWithStencil& that, const GrCaps& caps,
-        const SkRect& thisBounds, const SkRect& thatBounds, bool ignoreAAType) const {
-    return INHERITED::isCompatible(that, caps, thisBounds, thatBounds, ignoreAAType) &&
-           fStencilSettings == that.fStencilSettings;
-}
-
-#ifdef SK_DEBUG
-SkString GrSimpleMeshDrawOpHelperWithStencil::dumpInfo() const {
-    SkString result = INHERITED::dumpInfo();
-    result.appendf("Stencil settings: %s\n", (fStencilSettings ? "yes" : "no"));
     return result;
 }
 #endif
