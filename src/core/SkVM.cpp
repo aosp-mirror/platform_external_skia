@@ -1913,9 +1913,9 @@ namespace skvm {
         }
 
         llvm::Type *ptr = llvm::Type::getInt8Ty(ctx)->getPointerTo(),
-                   *i64 = llvm::Type::getInt64Ty(ctx);
+                   *i32 = llvm::Type::getInt32Ty(ctx);
 
-        std::vector<llvm::Type*> arg_types = { i64 };
+        std::vector<llvm::Type*> arg_types = { i32 };
         for (size_t i = 0; i < fStrides.size(); i++) {
             arg_types.push_back(ptr);
         }
@@ -1934,7 +1934,6 @@ namespace skvm {
 
         using IRBuilder = llvm::IRBuilder<>;
 
-        // `n` won't be used in emit, but `args` will be and they're clearest kept together.
         llvm::PHINode*                 n;
         std::vector<llvm::PHINode*> args;
         std::vector<llvm::Value*> vals(instructions.size());
@@ -1944,12 +1943,13 @@ namespace skvm {
 
             llvm::Type *i1    = llvm::Type::getInt1Ty (ctx),
                        *i8    = llvm::Type::getInt8Ty (ctx),
+                       *i8x4  = llvm::VectorType::get(i8, 4),
                        *i16   = llvm::Type::getInt16Ty(ctx),
-                       *i32   = llvm::Type::getInt32Ty(ctx),
                        *i16x2 = llvm::VectorType::get(i16, 2),
                        *f32   = llvm::Type::getFloatTy(ctx),
                        *I1    = scalar ? i1    : llvm::VectorType::get(i1 , K  ),
                        *I8    = scalar ? i8    : llvm::VectorType::get(i8 , K  ),
+                       *I8x4  = scalar ? i8x4  : llvm::VectorType::get(i8 , K*4),
                        *I16   = scalar ? i16   : llvm::VectorType::get(i16, K  ),
                        *I16x2 = scalar ? i16x2 : llvm::VectorType::get(i16, K*2),
                        *I32   = scalar ? i32   : llvm::VectorType::get(i32, K  ),
@@ -1967,6 +1967,18 @@ namespace skvm {
                     return false;
 
                 case Op::assert_true: /*TODO*/ break;
+
+                case Op::index:
+                    if (I32->isVectorTy()) {
+                        std::vector<llvm::Constant*> iota(K);
+                        for (int j = 0; j < K; j++) {
+                            iota[j] = b->getInt32(j);
+                        }
+                        vals[i] = b->CreateSub(b->CreateVectorSplat(K, n),
+                                               llvm::ConstantVector::get(iota));
+                    } else {
+                        vals[i] = n;
+                    } break;
 
                 case Op::load8:  t = I8 ; goto load;
                 case Op::load16: t = I16; goto load;
@@ -2062,6 +2074,19 @@ namespace skvm {
                     vals[i] = I(b->CreateUnaryIntrinsic(llvm::Intrinsic::floor, F(vals[x])));
                     break;
 
+                case Op::max_f32:
+                    vals[i] = I(b->CreateSelect(b->CreateFCmpOLT(F(vals[x]), F(vals[y])),
+                                                F(vals[y]), F(vals[x])));
+                    break;
+                case Op::min_f32:
+                    vals[i] = I(b->CreateSelect(b->CreateFCmpOLT(F(vals[y]), F(vals[x])),
+                                                F(vals[y]), F(vals[x])));
+                    break;
+
+                case Op::sqrt_f32:
+                    vals[i] = I(b->CreateUnaryIntrinsic(llvm::Intrinsic::sqrt, F(vals[x])));
+                    break;
+
                 case Op::to_f32: vals[i] = I(b->CreateSIToFP(  vals[x] , F32)); break;
                 case Op::trunc : vals[i] =   b->CreateFPToSI(F(vals[x]), I32) ; break;
 
@@ -2091,6 +2116,36 @@ namespace skvm {
                 case Op::gte_i16x2:
                     vals[i] = I(S(I16x2, b->CreateICmpSGE(x2(vals[x]), x2(vals[y]))));
                     break;
+
+                case Op::bytes: {
+                    int N = vals[x]->getType()->isVectorTy() ? K : 1;
+
+                    uint32_t off = 0;
+                    auto nibble_to_mask = [&](uint8_t n) -> uint32_t {
+                        switch (n) {
+                            case 0: return       4*N;   // Select any byte in the second (zero) arg.
+                            case 1: return off +   0;   // 1st byte in this arg.
+                            case 2: return off +   1;   // 2nd ...
+                            case 3: return off +   2;   // 3rd ...
+                            case 4: return off +   3;   // 4th byte in this arg.
+                        }
+                        SkUNREACHABLE;
+                        return 0;
+                    };
+
+                    std::vector<uint32_t> mask(N*4);
+                    for (int i = 0; i < N; i++) {
+                        mask[4*i+0] = nibble_to_mask( (immy >>  0) & 0xf );
+                        mask[4*i+1] = nibble_to_mask( (immy >>  4) & 0xf );
+                        mask[4*i+2] = nibble_to_mask( (immy >>  8) & 0xf );
+                        mask[4*i+3] = nibble_to_mask( (immy >> 12) & 0xf );
+                        off += 4;
+                    }
+
+                    llvm::Value* input =  b->CreateBitCast(vals[x], I8x4);
+                    llvm::Value* zero  = llvm::Constant::getNullValue(I8x4);
+                    vals[i] = I(b->CreateShuffleVector(input, zero, mask));
+                } break;
             }
             return true;
         };
@@ -2116,7 +2171,7 @@ namespace skvm {
                 args.back()->addIncoming(arg++, enter);
             }
 
-            b.CreateCondBr(b.CreateICmpUGE(n, b.getInt64(K)), loopK, test1);
+            b.CreateCondBr(b.CreateICmpSGE(n, b.getInt32(K)), loopK, test1);
         }
 
         // loopK:  ... insts on K x T vectors; N -= K, args += K*stride; goto testK;
@@ -2129,12 +2184,12 @@ namespace skvm {
             }
 
             // n -= K
-            llvm::Value* n_next = b.CreateSub(n, b.getInt64(K));
+            llvm::Value* n_next = b.CreateSub(n, b.getInt32(K));
             n->addIncoming(n_next, loopK);
 
             // Each arg ptr += K
             for (size_t i = 0; i < fStrides.size(); i++) {
-                llvm::Value* arg_next = b.CreateGEP(args[i], b.getInt64(K*fStrides[i]));
+                llvm::Value* arg_next = b.CreateGEP(args[i], b.getInt32(K*fStrides[i]));
                 args[i]->addIncoming(arg_next, loopK);
             }
             b.CreateBr(testK);
@@ -2156,7 +2211,7 @@ namespace skvm {
                 args[i] = arg_new;
             }
 
-            b.CreateCondBr(b.CreateICmpUGE(n, b.getInt64(1)), loop1, leave);
+            b.CreateCondBr(b.CreateICmpSGE(n, b.getInt32(1)), loop1, leave);
         }
 
         // loop1:  ... insts on scalars; N -= 1, args += stride; goto test1;
@@ -2169,12 +2224,12 @@ namespace skvm {
             }
 
             // n -= 1
-            llvm::Value* n_next = b.CreateSub(n, b.getInt64(1));
+            llvm::Value* n_next = b.CreateSub(n, b.getInt32(1));
             n->addIncoming(n_next, loop1);
 
             // Each arg ptr += K
             for (size_t i = 0; i < fStrides.size(); i++) {
-                llvm::Value* arg_next = b.CreateGEP(args[i], b.getInt64(fStrides[i]));
+                llvm::Value* arg_next = b.CreateGEP(args[i], b.getInt32(fStrides[i]));
                 args[i]->addIncoming(arg_next, loop1);
             }
             b.CreateBr(test1);
