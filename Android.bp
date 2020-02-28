@@ -1791,6 +1791,7 @@ cc_test {
         "tests/SpecialImageTest.cpp",
         "tests/SpecialSurfaceTest.cpp",
         "tests/SrcOverTest.cpp",
+        "tests/SrcSrcOverBatchTest.cpp",
         "tests/StreamBufferTest.cpp",
         "tests/StreamTest.cpp",
         "tests/StringTest.cpp",
