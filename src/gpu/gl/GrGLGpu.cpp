@@ -638,6 +638,7 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
     if (resetBits & kRenderTarget_GrGLBackendState) {
         fHWBoundRenderTargetUniqueID.makeInvalid();
         fHWSRGBFramebuffer = kUnknown_TriState;
+        fBoundDrawFramebuffer = 0;
     }
 
     if (resetBits & kPathRendering_GrGLBackendState) {
@@ -3064,6 +3065,9 @@ void GrGLGpu::bindFramebuffer(GrGLenum target, GrGLuint fboid) {
 }
 
 void GrGLGpu::deleteFramebuffer(GrGLuint fboid) {
+    // We're relying on the GL state shadowing being correct in the workaround code below so we
+    // need to handle a dirty context.
+    this->handleDirtyContext();
     if (fboid == fBoundDrawFramebuffer &&
         this->caps()->workarounds().unbind_attachments_on_bound_render_fbo_delete) {
         // This workaround only applies to deleting currently bound framebuffers
