@@ -25,7 +25,7 @@
 #include "src/gpu/ops/GrAAConvexTessellator.h"
 #include "src/gpu/ops/GrAALinearizingConvexPathRenderer.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 
 static const int DEFAULT_BUFFER_SIZE = 100;
 
@@ -304,10 +304,7 @@ private:
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
-                                                                 fHelper.detachProcessorSet(),
-                                                                 fHelper.pipelineFlags(),
-                                                                 fHelper.stencilSettings());
+        auto pipeline = fHelper.createPipelineWithStencil(flushState);
 
         flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }

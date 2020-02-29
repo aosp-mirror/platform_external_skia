@@ -23,7 +23,7 @@
 #include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/geometry/GrShape.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 
 #ifndef GR_AA_TESSELLATOR_MAX_VERB_COUNT
 #define GR_AA_TESSELLATOR_MAX_VERB_COUNT 10
@@ -371,10 +371,7 @@ private:
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
-                                                                 fHelper.detachProcessorSet(),
-                                                                 fHelper.pipelineFlags(),
-                                                                 fHelper.stencilSettings());
+        auto pipeline = fHelper.createPipelineWithStencil(flushState);
 
         flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }

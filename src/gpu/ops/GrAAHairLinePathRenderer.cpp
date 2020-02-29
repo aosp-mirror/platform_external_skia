@@ -27,7 +27,7 @@
 #include "src/gpu/geometry/GrShape.h"
 #include "src/gpu/ops/GrAAHairLinePathRenderer.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 
 #define PREALLOC_PTARRAY(N) SkSTArray<(N),SkPoint, true>
 
@@ -1107,10 +1107,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) {
 }
 
 void AAHairlineOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {
-    auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
-                                                             fHelper.detachProcessorSet(),
-                                                             fHelper.pipelineFlags(),
-                                                             fHelper.stencilSettings());
+    auto pipeline = fHelper.createPipelineWithStencil(flushState);
 
     flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
 }

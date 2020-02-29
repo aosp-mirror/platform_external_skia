@@ -289,6 +289,8 @@ skia_gpu_sources = [
   "$_src/gpu/ops/GrShadowRRectOp.h",
   "$_src/gpu/ops/GrSimpleMeshDrawOpHelper.cpp",
   "$_src/gpu/ops/GrSimpleMeshDrawOpHelper.h",
+  "$_src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.cpp",
+  "$_src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.h",
   "$_src/gpu/ops/GrSmallPathRenderer.cpp",
   "$_src/gpu/ops/GrSmallPathRenderer.h",
   "$_src/gpu/ops/GrStrokeRectOp.cpp",
@@ -737,6 +739,8 @@ skia_direct3d_sources = [
   "$_src/gpu/d3d/GrD3DGpu.h",
   "$_src/gpu/d3d/GrD3DOpsRenderPass.cpp",
   "$_src/gpu/d3d/GrD3DOpsRenderPass.h",
+  "$_src/gpu/d3d/GrD3DUtil.cpp",
+  "$_src/gpu/d3d/GrD3DUtil.h",
 ]
 
 skia_dawn_sources = [

@@ -14,6 +14,8 @@
 #include "src/core/SkVM_fwd.h"
 #include <vector>      // std::vector
 
+namespace llvm { class ExecutionEngine; }
+
 class SkWStream;
 
 namespace skvm {
@@ -659,6 +661,7 @@ namespace skvm {
     private:
         void setupInterpreter(const std::vector<OptimizedInstruction>&);
         void setupJIT        (const std::vector<OptimizedInstruction>&, const char* debug_name);
+        void setupLLVM       (const std::vector<OptimizedInstruction>&, const char* debug_name);
 
         void interpret(int n, void* args[]) const;
 
@@ -671,9 +674,10 @@ namespace skvm {
         int                      fLoop = 0;
         std::vector<int>         fStrides;
 
-        void*  fJITEntry = nullptr;
-        size_t fJITSize  = 0;
-        void*  fDylib    = nullptr;
+        void*  fJITEntry           = nullptr;
+        size_t fJITSize            = 0;
+        void*  fDylib              = nullptr;
+        llvm::ExecutionEngine* fEE = nullptr;
     };
 
     // TODO: control flow

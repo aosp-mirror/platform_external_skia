@@ -582,6 +582,7 @@ Uint8Array getSkDataBytes(const SkData *data) {
 
 // Text Shaping abstraction
 
+#ifndef SK_NO_FONTS
 struct ShapedTextOpts {
     SkFont font;
     bool leftToRight;
@@ -604,7 +605,7 @@ static sk_sp<SkTextBlob> do_shaping(const ShapedTextOpts& opts, SkPoint* pt) {
 }
 
 class ShapedText {
-public:
+ public:
     ShapedText(ShapedTextOpts opts) : fOpts(opts) {}
 
     SkRect getBounds() {
@@ -616,7 +617,7 @@ public:
         this->init();
         return fBlob.get();
     }
-private:
+ private:
     const ShapedTextOpts fOpts;
     SkPoint fPoint;
     sk_sp<SkTextBlob> fBlob;
@@ -632,6 +633,7 @@ void drawShapedText(SkCanvas& canvas, ShapedText st, SkScalar x,
                     SkScalar y, SkPaint paint) {
     canvas.drawTextBlob(st.blob(), x, y, paint);
 }
+#endif //SK_NO_FONTS
 
 int saveLayerRec(SkCanvas& canvas, const SkPaint* paint,
                  const SkImageFilter* backdrop, SkCanvas::SaveLayerFlags flags) {
@@ -1158,9 +1160,12 @@ EMSCRIPTEN_BINDINGS(Skia) {
             // Otherwise, go with std::wstring and set UTF-32 encoding.
             return self.measureText(text.c_str(), text.length(), SkTextEncoding::kUTF8);
         }))
+        .function("setHinting", &SkFont::setHinting)
+        .function("setLinearMetrics", &SkFont::setLinearMetrics)
         .function("setScaleX", &SkFont::setScaleX)
         .function("setSize", &SkFont::setSize)
         .function("setSkewX", &SkFont::setSkewX)
+        .function("setSubpixel", &SkFont::setSubpixel)
         .function("setTypeface", &SkFont::setTypeface, allow_raw_pointers());
 
     class_<ShapedText>("ShapedText")
@@ -1699,11 +1704,19 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("Round", SkPaint::Join::kRound_Join)
         .value("Bevel", SkPaint::Join::kBevel_Join);
 
+#ifndef SK_NO_FONTS
+    enum_<SkFontHinting>("FontHinting")
+        .value("None",   SkFontHinting::kNone)
+        .value("Slight", SkFontHinting::kSlight)
+        .value("Normal", SkFontHinting::kNormal)
+        .value("Full",   SkFontHinting::kFull);
+
     enum_<SkTextEncoding>("TextEncoding")
         .value("UTF8",    SkTextEncoding::kUTF8)
         .value("UTF16",   SkTextEncoding::kUTF16)
         .value("UTF32",   SkTextEncoding::kUTF32)
         .value("GlyphID", SkTextEncoding::kGlyphID);
+#endif
 
     enum_<SkTileMode>("TileMode")
         .value("Clamp",    SkTileMode::kClamp)

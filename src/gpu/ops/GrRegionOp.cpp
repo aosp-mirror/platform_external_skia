@@ -16,7 +16,7 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrVertexWriter.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 
 static GrGeometryProcessor* make_gp(SkArenaAlloc* arena,
                                     const GrShaderCaps* shaderCaps,
@@ -133,10 +133,7 @@ private:
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
-                                                                 fHelper.detachProcessorSet(),
-                                                                 fHelper.pipelineFlags(),
-                                                                 fHelper.stencilSettings());
+        auto pipeline = fHelper.createPipelineWithStencil(flushState);
 
         flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }

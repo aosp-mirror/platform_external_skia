@@ -8,7 +8,11 @@ deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
   "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@4dc19c38c0c5e307350ecd8b9f80d59573161df9",
+  # Dawn requires jinja2 and markupsafe for the code generator.
+  # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
   "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@604072bc2ed01018eb03bcbbf9d94042f679af63",
+  "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@b41863e42637544c2941b574c7877d3e1f663e25",
+  "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@8f45f5cfa0009d2a70589bcda0349b8cb2b72783",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
   "third_party/externals/expat"           : "https://android.googlesource.com/platform/external/expat.git@e5aa0a2cb0a5f759ef31c0819dc67d9b14246a4a",
@@ -31,7 +35,7 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@dffd33dd9d19c798ffecc10f50e551b42d282628",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@29c11140baaf9f7fdaa39a583672c556bf1795a1",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@0c4feb643b89d1792b02f7cbef315e9d95633bd7",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@4d40271e3f09de5e6734b4223ea15b4faf758d2a",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@05f5e0b34ac8d98d093a6dd271fb0ef3535fff02",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@4080840928c0b05a80cda0d14ac2e2615f679f1a",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
