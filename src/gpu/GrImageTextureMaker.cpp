@@ -30,11 +30,10 @@ GrImageTextureMaker::GrImageTextureMaker(GrRecordingContext* context, const SkIm
         , fImage(static_cast<const SkImage_Lazy*>(client))
         , fCachingHint(chint) {
     SkASSERT(client->isLazyGenerated());
-    GrMakeKeyFromImageID(&fOriginalKey, client->uniqueID(), SkIRect::MakeSize(this->dimensions()));
 }
 
-GrSurfaceProxyView GrImageTextureMaker::refOriginalTextureProxyView(bool willBeMipped) {
-    return fImage->lockTextureProxyView(this->context(), fOriginalKey, fCachingHint, willBeMipped);
+GrSurfaceProxyView GrImageTextureMaker::refOriginalTextureProxyView(GrMipMapped mipMapped) {
+    return fImage->lockTextureProxyView(this->context(), fCachingHint, mipMapped);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -44,11 +43,10 @@ GrYUVAImageTextureMaker::GrYUVAImageTextureMaker(GrContext* context, const SkIma
         : INHERITED(context, client->imageInfo(), useDecal)
         , fImage(static_cast<const SkImage_GpuYUVA*>(client)) {
     SkASSERT(as_IB(client)->isYUVA());
-    GrMakeKeyFromImageID(&fOriginalKey, client->uniqueID(), SkIRect::MakeSize(this->dimensions()));
 }
 
-GrSurfaceProxyView GrYUVAImageTextureMaker::refOriginalTextureProxyView(bool willBeMipped) {
-    if (willBeMipped) {
+GrSurfaceProxyView GrYUVAImageTextureMaker::refOriginalTextureProxyView(GrMipMapped mipMapped) {
+    if (mipMapped == GrMipMapped::kYes) {
         return fImage->refMippedView(this->context());
     } else {
         if (const GrSurfaceProxyView* view = fImage->view(this->context())) {

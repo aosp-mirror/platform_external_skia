@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -571,7 +572,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"Win2019":  DEFAULT_OS_WIN,
 			"Win7":     "Windows-7-SP1",
 			"Win8":     "Windows-8.1-SP0",
-			"iOS":      "iOS-11.4.1",
+			"iOS":      "iOS-13.3.1",
 		}[os]
 		if !ok {
 			glog.Fatalf("Entry %q not found in OS mapping.", os)
@@ -587,6 +588,10 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 		if parts["model"] == "LenovoYogaC630" {
 			// This is currently a unique snowflake.
 			d["os"] = "Windows-10"
+		}
+		if parts["model"] == "iPhone6" {
+			// Not ready to upgrade iPhone6 yet.
+			d["os"] = "iOS-11.4.1"
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -1112,9 +1117,11 @@ func (b *builder) maybeAddIosDevImage(name string, t *specs.TaskSpec) {
 		if m := iosRegex.FindStringSubmatch(dim); len(m) >= 2 {
 			var asset string
 			switch m[1] {
-			// Other patch versions for 11.4 can be added here.
+			// Other patch versions can be added to the same case.
 			case "11.4.1":
 				asset = "ios-dev-image-11.4"
+			case "13.3.1":
+				asset = "ios-dev-image-13.3"
 			default:
 				glog.Fatalf("Unable to determine correct ios-dev-image asset for %s. If %s is a new iOS release, you must add a CIPD package containing the corresponding iOS dev image; see ios-dev-image-11.4 for an example.", name, m[1])
 			}
@@ -1414,8 +1421,34 @@ func (b *builder) test(name string, parts map[string]string, compileTaskName str
 		extraProps[k] = v
 	}
 	iid := b.internalHardwareLabel(parts)
+	iidStr := ""
 	if iid != nil {
-		extraProps["internal_hardware_label"] = strconv.Itoa(*iid)
+		iidStr = strconv.Itoa(*iid)
+	}
+	if recipe == "test" {
+		partsJson, err := json.Marshal(parts)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		dmFlagsScript := filepath.Join(CheckoutRoot(), "infra", "bots", "recipe_modules", "vars", "resources", "dm_flags.py")
+		out, err := exec.Command(
+			"python", dmFlagsScript,
+			"--bot", name,
+			"--parts", string(partsJson),
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--issue", specs.PLACEHOLDER_ISSUE,
+			"--patchset", specs.PLACEHOLDER_PATCHSET,
+			"--patch_storage", specs.PLACEHOLDER_PATCH_STORAGE,
+			"--buildbucket_build_id", specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID,
+			"--swarming_bot_id", "${SWARMING_BOT_ID}",
+			"--swarming_task_id", "${SWARMING_TASK_ID}",
+			"--internal_hardware_label", iidStr,
+		).CombinedOutput()
+		if err != nil {
+			glog.Fatal(err)
+		}
+		extraProps["dm_flags"] = strings.TrimSpace(string(out))
 	}
 	task := b.kitchenTask(name, recipe, isolate, "", b.swarmDimensions(parts), extraProps, OUTPUT_TEST)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
