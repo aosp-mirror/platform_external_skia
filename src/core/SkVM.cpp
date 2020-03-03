@@ -1901,16 +1901,8 @@ namespace skvm {
         auto mod = std::make_unique<llvm::Module>("", ctx);
         // All the scary bare pointers from here on are owned by ctx or mod, I think.
 
-        const char* mcpu = "x86-64";
-        int K = 4;
-        if (true && SkCpu::Supports(SkCpu::HSW)) {
-            mcpu = "haswell";
-            K    = 8;
-        }
-        if (true && SkCpu::Supports(SkCpu::SKX)) {
-            mcpu = "skylake-avx512";
-            K    = 16;
-        }
+        // Everything I've tested runs faster at K=8 (using ymm) than K=16 (zmm) on SKX machines.
+        const int K = (true && SkCpu::Supports(SkCpu::HSW)) ? 8 : 4;
 
         llvm::Type *ptr = llvm::Type::getInt8Ty(ctx)->getPointerTo(),
                    *i32 = llvm::Type::getInt32Ty(ctx);
@@ -1928,12 +1920,14 @@ namespace skvm {
             fn->addParamAttr(i+1, llvm::Attribute::NoAlias);
         }
 
-        llvm::BasicBlock *enter = llvm::BasicBlock::Create(ctx, "enter", fn),
-                         *testK = llvm::BasicBlock::Create(ctx, "testK", fn),
-                         *loopK = llvm::BasicBlock::Create(ctx, "loopK", fn),
-                         *test1 = llvm::BasicBlock::Create(ctx, "test1", fn),
-                         *loop1 = llvm::BasicBlock::Create(ctx, "loop1", fn),
-                         *leave = llvm::BasicBlock::Create(ctx, "leave", fn);
+        llvm::BasicBlock *enter  = llvm::BasicBlock::Create(ctx, "enter" , fn),
+                         *hoistK = llvm::BasicBlock::Create(ctx, "hoistK", fn),
+                         *testK  = llvm::BasicBlock::Create(ctx, "testK" , fn),
+                         *loopK  = llvm::BasicBlock::Create(ctx, "loopK" , fn),
+                         *hoist1 = llvm::BasicBlock::Create(ctx, "hoist1", fn),
+                         *test1  = llvm::BasicBlock::Create(ctx, "test1" , fn),
+                         *loop1  = llvm::BasicBlock::Create(ctx, "loop1" , fn),
+                         *leave  = llvm::BasicBlock::Create(ctx, "leave" , fn);
 
         using IRBuilder = llvm::IRBuilder<>;
 
@@ -2157,35 +2151,60 @@ namespace skvm {
             return true;
         };
 
-        // We can't jump to the first basic block or this would be testK directly.
         {
             IRBuilder b(enter);
-            b.CreateBr(testK);
+            b.CreateBr(hoistK);
         }
 
-        // testK:  if (N >= K) goto loopK; else goto test1;
+        // hoistK: emit each hoistable vector instruction; goto testK;
+        // LLVM can do this sort of thing itself, but we've got the information cheap,
+        // and pointer aliasing makes it easier to manually hoist than teach LLVM it's safe.
         {
-            IRBuilder b(testK);
+            IRBuilder b(hoistK);
 
-            // Set up phi nodes for `n` and each pointer argument from enter; later we'll add loopK.
+            // Hoisted instructions will need args (think, uniforms), so set that up now.
+            // These phi nodes are degenerate... they'll always be the passed-in args from enter.
+            // Later on when we start looping the phi nodes will start looking useful.
             llvm::Argument* arg = fn->arg_begin();
-
-            n = b.CreatePHI(arg->getType(), 2);
-            n->addIncoming(arg++, enter);
-
+            (void)arg++;  // Leave n as nullptr... it'd be a bug to use n in a hoisted instruction.
             for (size_t i = 0; i < fStrides.size(); i++) {
-                args.push_back(b.CreatePHI(arg->getType(), 2));
+                args.push_back(b.CreatePHI(arg->getType(), 1));
                 args.back()->addIncoming(arg++, enter);
             }
 
-            b.CreateCondBr(b.CreateICmpSGE(n, b.getInt32(K)), loopK, test1);
+            for (size_t i = 0; i < instructions.size(); i++) {
+                if (instructions[i].can_hoist && !emit(i, false, &b)) {
+                    return;
+                }
+            }
+
+            b.CreateBr(testK);
+        }
+
+        // testK:  if (N >= K) goto loopK; else goto hoist1;
+        {
+            IRBuilder b(testK);
+
+            // New phi nodes for `n` and each pointer argument from hoistK; later we'll add loopK.
+            // These also start as the initial function arguments; hoistK can't have changed them.
+            llvm::Argument* arg = fn->arg_begin();
+
+            n = b.CreatePHI(arg->getType(), 2);
+            n->addIncoming(arg++, hoistK);
+
+            for (size_t i = 0; i < fStrides.size(); i++) {
+                args[i] = b.CreatePHI(arg->getType(), 2);
+                args[i]->addIncoming(arg++, hoistK);
+            }
+
+            b.CreateCondBr(b.CreateICmpSGE(n, b.getInt32(K)), loopK, hoist1);
         }
 
         // loopK:  ... insts on K x T vectors; N -= K, args += K*stride; goto testK;
         {
             IRBuilder b(loopK);
             for (size_t i = 0; i < instructions.size(); i++) {
-                if (!emit(i, false, &b)) {
+                if (!instructions[i].can_hoist && !emit(i, false, &b)) {
                     return;
                 }
             }
@@ -2203,19 +2222,29 @@ namespace skvm {
             b.CreateBr(testK);
         }
 
+        // hoist1: emit each hoistable scalar instruction; goto test1;
+        {
+            IRBuilder b(hoist1);
+            for (size_t i = 0; i < instructions.size(); i++) {
+                if (instructions[i].can_hoist && !emit(i, true, &b)) {
+                    return;
+                }
+            }
+            b.CreateBr(test1);
+        }
+
         // test1:  if (N >= 1) goto loop1; else goto leave;
         {
             IRBuilder b(test1);
 
-            // Set up new phi nodes for `n` and each pointer argument, now from testK and loop1.
-
+            // Set up new phi nodes for `n` and each pointer argument, now from hoist1 and loop1.
             llvm::PHINode* n_new = b.CreatePHI(n->getType(), 2);
-            n_new->addIncoming(n, testK);
+            n_new->addIncoming(n, hoist1);
             n = n_new;
 
             for (size_t i = 0; i < fStrides.size(); i++) {
                 llvm::PHINode* arg_new = b.CreatePHI(args[i]->getType(), 2);
-                arg_new->addIncoming(args[i], testK);
+                arg_new->addIncoming(args[i], hoist1);
                 args[i] = arg_new;
             }
 
@@ -2226,7 +2255,7 @@ namespace skvm {
         {
             IRBuilder b(loop1);
             for (size_t i = 0; i < instructions.size(); i++) {
-                if (!emit(i, true, &b)) {
+                if (!instructions[i].can_hoist && !emit(i, true, &b)) {
                     return;
                 }
             }
@@ -2268,9 +2297,12 @@ namespace skvm {
             SkAssertResult(false == llvm::InitializeNativeTargetAsmPrinter());
         });
 
+        llvm::TargetOptions options;
+        options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
         fEE = llvm::EngineBuilder(std::move(mod))
                     .setEngineKind(llvm::EngineKind::JIT)
-                    .setMCPU(mcpu)
+                    .setMCPU(llvm::sys::getHostCPUName())
+                    .setTargetOptions(options)
                     .create();
         if (fEE) {
             fJITEntry = (void*)fEE->getFunctionAddress(debug_name);
