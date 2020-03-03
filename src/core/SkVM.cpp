@@ -1894,25 +1894,33 @@ namespace skvm {
         }
     }
 
+    struct Program::LLVMState {
+    #if defined(SKVM_LLVM)
+        std::unique_ptr<llvm::LLVMContext>     ctx;
+        std::unique_ptr<llvm::ExecutionEngine> ee;
+    #endif
+    };
+
 #if defined(SKVM_LLVM)
     void Program::setupLLVM(const std::vector<OptimizedInstruction>& instructions,
                             const char* debug_name) {
-        thread_local static llvm::LLVMContext& ctx = *(new llvm::LLVMContext);
-        auto mod = std::make_unique<llvm::Module>("", ctx);
+        auto ctx = std::make_unique<llvm::LLVMContext>();
+
+        auto mod = std::make_unique<llvm::Module>("", *ctx);
         // All the scary bare pointers from here on are owned by ctx or mod, I think.
 
         // Everything I've tested runs faster at K=8 (using ymm) than K=16 (zmm) on SKX machines.
         const int K = (true && SkCpu::Supports(SkCpu::HSW)) ? 8 : 4;
 
-        llvm::Type *ptr = llvm::Type::getInt8Ty(ctx)->getPointerTo(),
-                   *i32 = llvm::Type::getInt32Ty(ctx);
+        llvm::Type *ptr = llvm::Type::getInt8Ty(*ctx)->getPointerTo(),
+                   *i32 = llvm::Type::getInt32Ty(*ctx);
 
         std::vector<llvm::Type*> arg_types = { i32 };
         for (size_t i = 0; i < fStrides.size(); i++) {
             arg_types.push_back(ptr);
         }
 
-        llvm::FunctionType* fn_type = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
+        llvm::FunctionType* fn_type = llvm::FunctionType::get(llvm::Type::getVoidTy(*ctx),
                                                               arg_types, /*vararg?=*/false);
         llvm::Function* fn
             = llvm::Function::Create(fn_type, llvm::GlobalValue::ExternalLinkage, debug_name, *mod);
@@ -1920,14 +1928,14 @@ namespace skvm {
             fn->addParamAttr(i+1, llvm::Attribute::NoAlias);
         }
 
-        llvm::BasicBlock *enter  = llvm::BasicBlock::Create(ctx, "enter" , fn),
-                         *hoistK = llvm::BasicBlock::Create(ctx, "hoistK", fn),
-                         *testK  = llvm::BasicBlock::Create(ctx, "testK" , fn),
-                         *loopK  = llvm::BasicBlock::Create(ctx, "loopK" , fn),
-                         *hoist1 = llvm::BasicBlock::Create(ctx, "hoist1", fn),
-                         *test1  = llvm::BasicBlock::Create(ctx, "test1" , fn),
-                         *loop1  = llvm::BasicBlock::Create(ctx, "loop1" , fn),
-                         *leave  = llvm::BasicBlock::Create(ctx, "leave" , fn);
+        llvm::BasicBlock *enter  = llvm::BasicBlock::Create(*ctx, "enter" , fn),
+                         *hoistK = llvm::BasicBlock::Create(*ctx, "hoistK", fn),
+                         *testK  = llvm::BasicBlock::Create(*ctx, "testK" , fn),
+                         *loopK  = llvm::BasicBlock::Create(*ctx, "loopK" , fn),
+                         *hoist1 = llvm::BasicBlock::Create(*ctx, "hoist1", fn),
+                         *test1  = llvm::BasicBlock::Create(*ctx, "test1" , fn),
+                         *loop1  = llvm::BasicBlock::Create(*ctx, "loop1" , fn),
+                         *leave  = llvm::BasicBlock::Create(*ctx, "leave" , fn);
 
         using IRBuilder = llvm::IRBuilder<>;
 
@@ -1938,12 +1946,12 @@ namespace skvm {
         auto emit = [&](size_t i, bool scalar, IRBuilder* b) {
             auto [op, x,y,z, immy,immz, death,can_hoist,used_in_loop] = instructions[i];
 
-            llvm::Type *i1    = llvm::Type::getInt1Ty (ctx),
-                       *i8    = llvm::Type::getInt8Ty (ctx),
+            llvm::Type *i1    = llvm::Type::getInt1Ty (*ctx),
+                       *i8    = llvm::Type::getInt8Ty (*ctx),
                        *i8x4  = llvm::VectorType::get(i8, 4),
-                       *i16   = llvm::Type::getInt16Ty(ctx),
+                       *i16   = llvm::Type::getInt16Ty(*ctx),
                        *i16x2 = llvm::VectorType::get(i16, 2),
-                       *f32   = llvm::Type::getFloatTy(ctx),
+                       *f32   = llvm::Type::getFloatTy(*ctx),
                        *I1    = scalar ? i1    : llvm::VectorType::get(i1 , K  ),
                        *I8    = scalar ? i8    : llvm::VectorType::get(i8 , K  ),
                        *I8x4  = scalar ? i8x4  : llvm::VectorType::get(i8 , K*4),
@@ -2299,13 +2307,16 @@ namespace skvm {
 
         llvm::TargetOptions options;
         options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
-        fEE = llvm::EngineBuilder(std::move(mod))
-                    .setEngineKind(llvm::EngineKind::JIT)
-                    .setMCPU(llvm::sys::getHostCPUName())
-                    .setTargetOptions(options)
-                    .create();
-        if (fEE) {
-            fJITEntry = (void*)fEE->getFunctionAddress(debug_name);
+
+        if (llvm::ExecutionEngine* ee = llvm::EngineBuilder(std::move(mod))
+                                            .setEngineKind(llvm::EngineKind::JIT)
+                                            .setMCPU(llvm::sys::getHostCPUName())
+                                            .setTargetOptions(options)
+                                            .create()) {
+            fLLVMState = std::make_unique<LLVMState>();
+            fLLVMState->ctx = std::move(ctx);
+            fLLVMState->ee.reset(ee);
+            fJITEntry = (void*)fLLVMState->ee->getFunctionAddress(debug_name);
         }
     }
 #endif
@@ -2316,7 +2327,7 @@ namespace skvm {
 
     void Program::dropJIT() {
     #if defined(SKVM_LLVM)
-        delete fEE;
+        fLLVMState.reset(nullptr);
     #elif defined(SKVM_JIT)
         if (fDylib) {
             dlclose(fDylib);
@@ -2330,7 +2341,6 @@ namespace skvm {
         fJITEntry = nullptr;
         fJITSize  = 0;
         fDylib    = nullptr;
-        fEE       = nullptr;
     }
 
     Program::~Program() { this->dropJIT(); }
@@ -2341,10 +2351,10 @@ namespace skvm {
         fLoop            = other.fLoop;
         fStrides         = std::move(other.fStrides);
 
-        std::swap(fJITEntry, other.fJITEntry);
-        std::swap(fJITSize , other.fJITSize);
-        std::swap(fDylib   , other.fDylib);
-        std::swap(fEE      , other.fEE);
+        std::swap(fJITEntry , other.fJITEntry);
+        std::swap(fJITSize  , other.fJITSize);
+        std::swap(fDylib    , other.fDylib);
+        std::swap(fLLVMState, other.fLLVMState);
     }
 
     Program& Program::operator=(Program&& other) {
@@ -2353,10 +2363,10 @@ namespace skvm {
         fLoop            = other.fLoop;
         fStrides         = std::move(other.fStrides);
 
-        std::swap(fJITEntry, other.fJITEntry);
-        std::swap(fJITSize , other.fJITSize);
-        std::swap(fDylib   , other.fDylib);
-        std::swap(fEE      , other.fEE);
+        std::swap(fJITEntry , other.fJITEntry);
+        std::swap(fJITSize  , other.fJITSize);
+        std::swap(fDylib    , other.fDylib);
+        std::swap(fLLVMState, other.fLLVMState);
         return *this;
     }
 
