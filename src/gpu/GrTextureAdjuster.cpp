@@ -16,9 +16,8 @@
 GrTextureAdjuster::GrTextureAdjuster(GrRecordingContext* context,
                                      GrSurfaceProxyView original,
                                      const GrColorInfo& colorInfo,
-                                     uint32_t uniqueID,
-                                     bool useDecal)
-        : INHERITED(context, {colorInfo, original.proxy()->dimensions()}, useDecal)
+                                     uint32_t uniqueID)
+        : INHERITED(context, {colorInfo, original.proxy()->dimensions()})
         , fOriginal(std::move(original))
         , fUniqueID(uniqueID) {}
 
@@ -52,8 +51,7 @@ GrSurfaceProxyView GrTextureAdjuster::makeMippedCopy() {
     return copyView;
 }
 
-GrSurfaceProxyView GrTextureAdjuster::onRefTextureProxyViewForParams(GrSamplerState params,
-                                                                     bool willBeMipped) {
+GrSurfaceProxyView GrTextureAdjuster::onView(GrMipMapped mipMapped) {
     if (this->context()->priv().abandoned()) {
         // The texture was abandoned.
         return {};
@@ -64,7 +62,7 @@ GrSurfaceProxyView GrTextureAdjuster::onRefTextureProxyViewForParams(GrSamplerSt
 
     GrTextureProxy* texProxy = fOriginal.asTextureProxy();
     SkASSERT(texProxy);
-    if (!GrGpu::IsACopyNeededForMips(this->context()->priv().caps(), texProxy, params.filter())) {
+    if (mipMapped == GrMipMapped::kNo || texProxy->mipMapped() == GrMipMapped::kYes) {
         return fOriginal;
     }
 
@@ -84,8 +82,15 @@ std::unique_ptr<GrFragmentProcessor> GrTextureAdjuster::createFragmentProcessor(
         const SkRect& constraintRect,
         FilterConstraint filterConstraint,
         bool coordsLimitedToConstraintRect,
+        GrSamplerState::WrapMode wrapX,
+        GrSamplerState::WrapMode wrapY,
         const GrSamplerState::Filter* filterOrNullForBicubic) {
-    GrSurfaceProxyView view = this->viewForParams(filterOrNullForBicubic);
+    GrSurfaceProxyView view;
+    if (filterOrNullForBicubic) {
+        view = this->view(*filterOrNullForBicubic);
+    } else {
+        view = this->view(GrMipMapped::kNo);
+    }
     if (!view) {
         return nullptr;
     }
@@ -111,6 +116,7 @@ std::unique_ptr<GrFragmentProcessor> GrTextureAdjuster::createFragmentProcessor(
     }
     SkASSERT(kNoDomain_DomainMode == domainMode ||
              (domain.fLeft <= domain.fRight && domain.fTop <= domain.fBottom));
-    return this->createFragmentProcessorForDomainAndFilter(
-            std::move(view), textureMatrix, domainMode, domain, filterOrNullForBicubic);
+    return this->createFragmentProcessorForSubsetAndFilter(std::move(view), textureMatrix,
+                                                           domainMode, domain, wrapX, wrapY,
+                                                           filterOrNullForBicubic);
 }

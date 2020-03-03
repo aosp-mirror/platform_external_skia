@@ -20,6 +20,7 @@
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkBlendModePriv.h"
 #include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkIDChangeListener.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMessageBus.h"
@@ -117,6 +118,35 @@ void GrInstallBitmapUniqueKeyInvalidator(const GrUniqueKey& key, uint32_t contex
     pixelRef->addGenIDChangeListener(new Invalidator(key, contextUniqueID));
 }
 
+sk_sp<SkIDChangeListener> GrMakeUniqueKeyInvalidationListener(GrUniqueKey* key,
+                                                              uint32_t contextID) {
+    class Listener : public SkIDChangeListener {
+    public:
+        Listener(const GrUniqueKey& key, uint32_t contextUniqueID) : fMsg(key, contextUniqueID) {}
+
+        void changed() override { SkMessageBus<GrUniqueKeyInvalidatedMessage>::Post(fMsg); }
+
+    private:
+        GrUniqueKeyInvalidatedMessage fMsg;
+    };
+
+    auto listener = sk_make_sp<Listener>(*key, contextID);
+
+    // We stick a SkData on the key that calls invalidateListener in its destructor.
+    auto invalidateListener = [](const void* ptr, void* /*context*/) {
+        auto listener = reinterpret_cast<const sk_sp<Listener>*>(ptr);
+        (*listener)->markShouldDeregister();
+        delete listener;
+    };
+    auto data = SkData::MakeWithProc(new sk_sp<Listener>(listener),
+                                     sizeof(sk_sp<Listener>),
+                                     invalidateListener,
+                                     nullptr);
+    SkASSERT(!key->getCustomData());
+    key->setCustomData(std::move(data));
+    return std::move(listener);
+}
+
 GrSurfaceProxyView GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
                                                   GrSurfaceProxy* baseProxy,
                                                   GrSurfaceOrigin origin,
@@ -134,9 +164,9 @@ GrSurfaceProxyView GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
 }
 
 GrSurfaceProxyView GrRefCachedBitmapView(GrRecordingContext* ctx, const SkBitmap& bitmap,
-                                         GrSamplerState params) {
+                                         GrMipMapped mipMapped) {
     GrBitmapTextureMaker maker(ctx, bitmap, GrBitmapTextureMaker::Cached::kYes);
-    return maker.viewForParams(params);
+    return maker.view(mipMapped);
 }
 
 GrSurfaceProxyView GrMakeCachedBitmapProxyView(GrRecordingContext* context, const SkBitmap& bitmap,
@@ -146,8 +176,7 @@ GrSurfaceProxyView GrMakeCachedBitmapProxyView(GrRecordingContext* context, cons
     }
 
     GrBitmapTextureMaker maker(context, bitmap, GrBitmapTextureMaker::Cached::kYes, fit);
-    auto[view, grCT] = maker.view(GrMipMapped::kNo);
-    return view;
+    return maker.view(GrMipMapped::kNo);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

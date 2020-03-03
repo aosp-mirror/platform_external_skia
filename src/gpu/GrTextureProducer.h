@@ -32,6 +32,8 @@ struct SkRect;
  */
 class GrTextureProducer : public SkNoncopyable {
 public:
+    virtual ~GrTextureProducer() {}
+
     enum FilterConstraint {
         kYes_FilterConstraint,
         kNo_FilterConstraint,
@@ -62,47 +64,35 @@ public:
             const SkRect& constraintRect,
             FilterConstraint filterConstraint,
             bool coordsLimitedToConstraintRect,
+            GrSamplerState::WrapMode wrapX,
+            GrSamplerState::WrapMode wrapY,
             const GrSamplerState::Filter* filterOrNullForBicubic) = 0;
 
     /**
-     *  Returns a texture that is safe for use with the params.
+     * Returns a texture view, possibly with MIP maps. The request for MIP maps may not be honored
+     * base on caps, format, and whether the texture is 1x1. A non-MIP mapped request may still
+     * receive a MIP mapped texture (if that is what is available in the cache).
      */
-    GrSurfaceProxyView viewForParams(GrSamplerState);
+    GrSurfaceProxyView view(GrMipMapped);
 
-    GrSurfaceProxyView viewForParams(const GrSamplerState::Filter* filterOrNullForBicubic);
-
-    /**
-     * Returns a texture. If willNeedMips is true then the returned texture is guaranteed to have
-     * allocated mip map levels. This can be a performance win if future draws with the texture
-     * require mip maps.
-     */
-    // TODO: Once we remove support for npot textures, we should add a flag for must support repeat
-    // wrap mode. To support that flag now would require us to support scaleAdjust array like in
-    // refTextureProxyForParams, however the current public API that uses this call does not expose
-    // that array.
-    std::pair<GrSurfaceProxyView, GrColorType> view(GrMipMapped willNeedMips);
-
-    virtual ~GrTextureProducer() {}
+    /** Helper version of above that determines MIP mapping requirement from Filter. */
+    GrSurfaceProxyView view(GrSamplerState::Filter);
 
     int width() const { return fImageInfo.width(); }
     int height() const { return fImageInfo.height(); }
     SkISize dimensions() const { return fImageInfo.dimensions(); }
+    GrColorType colorType() const { return fImageInfo.colorType(); }
     SkAlphaType alphaType() const { return fImageInfo.alphaType(); }
     SkColorSpace* colorSpace() const { return fImageInfo.colorSpace(); }
     bool isAlphaOnly() const { return GrColorTypeIsAlphaOnly(fImageInfo.colorType()); }
-    bool domainNeedsDecal() const { return fDomainNeedsDecal; }
-    // If the "texture" samples multiple images that have different resolutions (e.g. YUV420)
-    virtual bool hasMixedResolutions() const { return false; }
+    /* Is it a planar image consisting of multiple textures that may have different resolutions? */
+    virtual bool isPlanar() const { return false; }
 
 protected:
     friend class GrTextureProducer_TestAccess;
 
-    GrTextureProducer(GrRecordingContext* context,
-                      const GrImageInfo& imageInfo,
-                      bool domainNeedsDecal)
-            : fContext(context), fImageInfo(imageInfo), fDomainNeedsDecal(domainNeedsDecal) {}
-
-    GrColorType colorType() const { return fImageInfo.colorType(); }
+    GrTextureProducer(GrRecordingContext* context, const GrImageInfo& imageInfo)
+            : fContext(context), fImageInfo(imageInfo) {}
 
     enum DomainMode {
         kNoDomain_DomainMode,
@@ -117,24 +107,22 @@ protected:
                                           const GrSamplerState::Filter* filterModeOrNullForBicubic,
                                           SkRect* domainRect);
 
-    std::unique_ptr<GrFragmentProcessor> createFragmentProcessorForDomainAndFilter(
+    std::unique_ptr<GrFragmentProcessor> createFragmentProcessorForSubsetAndFilter(
             GrSurfaceProxyView view,
             const SkMatrix& textureMatrix,
             DomainMode,
             const SkRect& domain,
+            GrSamplerState::WrapMode wrapX,
+            GrSamplerState::WrapMode wrapY,
             const GrSamplerState::Filter* filterOrNullForBicubic);
 
     GrRecordingContext* context() const { return fContext; }
 
 private:
-    virtual GrSurfaceProxyView onRefTextureProxyViewForParams(GrSamplerState,
-                                                              bool willBeMipped) = 0;
+    virtual GrSurfaceProxyView onView(GrMipMapped) = 0;
 
     GrRecordingContext* fContext;
     const GrImageInfo fImageInfo;
-    // If true, any domain effect uses kDecal instead of kClamp, and sampler filter uses
-    // kClampToBorder instead of kClamp.
-    const bool  fDomainNeedsDecal;
 
     typedef SkNoncopyable INHERITED;
 };

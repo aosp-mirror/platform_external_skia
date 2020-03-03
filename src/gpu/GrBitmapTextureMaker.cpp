@@ -27,10 +27,8 @@ static GrImageInfo get_image_info(GrRecordingContext* context, const SkBitmap& b
 }
 
 GrBitmapTextureMaker::GrBitmapTextureMaker(GrRecordingContext* context, const SkBitmap& bitmap,
-                                           Cached cached, SkBackingFit fit, bool useDecal)
-        : INHERITED(context, get_image_info(context, bitmap), useDecal)
-        , fBitmap(bitmap)
-        , fFit(fit) {
+                                           Cached cached, SkBackingFit fit)
+        : INHERITED(context, get_image_info(context, bitmap)), fBitmap(bitmap), fFit(fit) {
     if (!bitmap.isVolatile() && cached == Cached::kYes) {
         SkIPoint origin = bitmap.pixelRefOrigin();
         SkIRect subset = SkIRect::MakeXYWH(origin.fX, origin.fY, bitmap.width(),
@@ -39,7 +37,7 @@ GrBitmapTextureMaker::GrBitmapTextureMaker(GrRecordingContext* context, const Sk
     }
 }
 
-GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBeMipped) {
+GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(GrMipMapped mipMapped) {
     GrProxyProvider* proxyProvider = this->context()->priv().proxyProvider();
     sk_sp<GrTextureProxy> proxy;
     GrSwizzle swizzle;
@@ -50,7 +48,7 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
         if (proxy) {
             swizzle = this->context()->priv().caps()->getReadSwizzle(proxy->backendFormat(),
                                                                      this->colorType());
-            if (!willBeMipped || GrMipMapped::kYes == proxy->mipMapped()) {
+            if (mipMapped == GrMipMapped::kNo || proxy->mipMapped() == GrMipMapped::kYes) {
                 return GrSurfaceProxyView(std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle);
             }
         }
@@ -65,16 +63,14 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
                 return {};
             }
             copy8888.setImmutable();
-            proxy = proxyProvider->createProxyFromBitmap(
-                    copy8888, willBeMipped ? GrMipMapped::kYes : GrMipMapped::kNo, fFit);
+            proxy = proxyProvider->createProxyFromBitmap(copy8888, mipMapped, fFit);
         } else {
-            proxy = proxyProvider->createProxyFromBitmap(
-                    fBitmap, willBeMipped ? GrMipMapped::kYes : GrMipMapped::kNo, fFit);
+            proxy = proxyProvider->createProxyFromBitmap(fBitmap, mipMapped, fFit);
         }
         if (proxy) {
             swizzle = this->context()->priv().caps()->getReadSwizzle(proxy->backendFormat(),
                                                                      this->colorType());
-            SkASSERT(!willBeMipped || GrMipMapped::kYes == proxy->mipMapped());
+            SkASSERT(mipMapped == GrMipMapped::kNo || proxy->mipMapped() == GrMipMapped::kYes);
             if (fOriginalKey.isValid()) {
                 proxyProvider->assignUniqueKeyToProxy(fOriginalKey, proxy.get());
                 GrInstallBitmapUniqueKeyInvalidator(
@@ -85,8 +81,8 @@ GrSurfaceProxyView GrBitmapTextureMaker::refOriginalTextureProxyView(bool willBe
     }
 
     if (proxy) {
-        SkASSERT(willBeMipped);
-        SkASSERT(GrMipMapped::kNo == proxy->mipMapped());
+        SkASSERT(mipMapped == GrMipMapped::kYes);
+        SkASSERT(proxy->mipMapped() == GrMipMapped::kNo);
         SkASSERT(fOriginalKey.isValid());
         // We need a mipped proxy, but we found a proxy earlier that wasn't mipped. Thus we generate
         // a new mipped surface and copy the original proxy into the base layer. We will then let

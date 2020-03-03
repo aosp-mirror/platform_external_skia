@@ -391,6 +391,8 @@ PORTS_SRCS_WASM = struct(
         "src/ports/**/*.h",
     ],
     exclude = [
+        # commented lines below left in because they indicate specifically what is
+        # included here and not in other PORTS_SRCS lists.
         "src/ports/*FontConfig*",
         "src/ports/*FreeType*",
         "src/ports/*WIC*",
@@ -402,6 +404,7 @@ PORTS_SRCS_WASM = struct(
         "src/ports/*mozalloc*",
         "src/ports/*nacl*",
         "src/ports/*win*",
+        #"src/ports/SkDebug_stdio.cpp",
         "src/ports/SkFontMgr_custom.cpp",
         "src/ports/SkFontMgr_custom_directory.cpp",
         "src/ports/SkFontMgr_custom_directory_factory.cpp",
@@ -409,11 +412,12 @@ PORTS_SRCS_WASM = struct(
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_custom_empty.cpp",
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
+        # "src/ports/SkFontMgr_empty_factory.cpp",
         "src/ports/SkFontMgr_fontconfig_factory.cpp",
         "src/ports/SkFontMgr_fuchsia.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
-    ]
+    ],
 )
 
 def base_srcs():
@@ -738,10 +742,9 @@ def base_linkopts(os_conditions):
                 "-framework ImageIO",
                 "-framework MobileCoreServices",
             ],
+            # WASM
+            [],
         ],
-        # WASM # these are very specific to the target being built, you'll find them in
-        # google3/third_party/skia/HEAD/modules/canvaskit/BUILD
-        [],
     )
 
 ################################################################################

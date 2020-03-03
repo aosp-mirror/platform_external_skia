@@ -38,36 +38,121 @@ void GrGLOpsRenderPass::onSetScissorRect(const SkIRect& scissor) {
 bool GrGLOpsRenderPass::onBindTextures(const GrPrimitiveProcessor& primProc,
                                        const GrPipeline& pipeline,
                                        const GrSurfaceProxy* const primProcTextures[]) {
-    fGpu->bindTextures(primProc, pipeline, primProcTextures);
+    GrGLProgram* program = fGpu->currentProgram();
+    if (!program) {
+        return false;
+    }
+    program->bindTextures(primProc, pipeline, primProcTextures);
     return true;
 }
 
-void GrGLOpsRenderPass::onDraw(const GrBuffer* vertexBuffer, int vertexCount, int baseVertex) {
-    fGpu->draw(fPrimitiveType, vertexBuffer, vertexCount, baseVertex);
+void GrGLOpsRenderPass::onBindBuffers(const GrBuffer* indexBuffer, const GrBuffer* instanceBuffer,
+                                      const GrBuffer* vertexBuffer,
+                                      GrPrimitiveRestart primitiveRestart) {
+    SkASSERT((primitiveRestart == GrPrimitiveRestart::kNo) || indexBuffer);
+    GrGLProgram* program = fGpu->currentProgram();
+    if (!program) {
+        return;
+    }
+
+    int numAttribs = program->numVertexAttributes() + program->numInstanceAttributes();
+    fAttribArrayState = fGpu->bindInternalVertexArray(indexBuffer, numAttribs, primitiveRestart);
+
+    if (indexBuffer) {
+        if (indexBuffer->isCpuBuffer()) {
+            auto* cpuIndexBuffer = static_cast<const GrCpuBuffer*>(indexBuffer);
+            fIndexPointer = reinterpret_cast<const uint16_t*>(cpuIndexBuffer->data());
+        } else {
+            fIndexPointer = nullptr;
+        }
+    }
+
+    // We defer binding of instance and vertex buffers because GL does not (always) support base
+    // instance and/or base vertex.
+    fDeferredInstanceBuffer = sk_ref_sp(instanceBuffer);
+    fDeferredVertexBuffer = sk_ref_sp(vertexBuffer);
 }
 
-void GrGLOpsRenderPass::onDrawIndexed(const GrBuffer* indexBuffer, int indexCount, int baseIndex,
-                                      GrPrimitiveRestart primitiveRestart, uint16_t minIndexValue,
-                                      uint16_t maxIndexValue, const GrBuffer* vertexBuffer,
-                                      int baseVertex) {
-    fGpu->drawIndexed(fPrimitiveType, indexBuffer, indexCount, baseIndex, primitiveRestart,
-                      minIndexValue, maxIndexValue, vertexBuffer, baseVertex);
+void GrGLOpsRenderPass::setupGeometry(const GrBuffer* vertexBuffer, int baseVertex,
+                                      const GrBuffer* instanceBuffer, int baseInstance) {
+    GrGLProgram* program = fGpu->currentProgram();
+    if (!program) {
+        return;
+    }
+
+    if (int vertexStride = program->vertexStride()) {
+        SkASSERT(vertexBuffer);
+        SkASSERT(vertexBuffer->isCpuBuffer() ||
+                 !static_cast<const GrGpuBuffer*>(vertexBuffer)->isMapped());
+        size_t bufferOffset = baseVertex * static_cast<size_t>(vertexStride);
+        for (int i = 0; i < program->numVertexAttributes(); ++i) {
+            const auto& attrib = program->vertexAttribute(i);
+            static constexpr int kDivisor = 0;
+            fAttribArrayState->set(fGpu, attrib.fLocation, vertexBuffer, attrib.fCPUType,
+                                   attrib.fGPUType, vertexStride, bufferOffset + attrib.fOffset,
+                                   kDivisor);
+        }
+    }
+    if (int instanceStride = program->instanceStride()) {
+        SkASSERT(instanceBuffer);
+        SkASSERT(instanceBuffer->isCpuBuffer() ||
+                 !static_cast<const GrGpuBuffer*>(instanceBuffer)->isMapped());
+        size_t bufferOffset = baseInstance * static_cast<size_t>(instanceStride);
+        int attribIdx = program->numVertexAttributes();
+        for (int i = 0; i < program->numInstanceAttributes(); ++i, ++attribIdx) {
+            const auto& attrib = program->instanceAttribute(i);
+            static constexpr int kDivisor = 1;
+            fAttribArrayState->set(fGpu, attrib.fLocation, instanceBuffer, attrib.fCPUType,
+                                   attrib.fGPUType, instanceStride, bufferOffset + attrib.fOffset,
+                                   kDivisor);
+        }
+    }
 }
 
-void GrGLOpsRenderPass::onDrawInstanced(const GrBuffer* instanceBuffer, int instanceCount,
-                                        int baseInstance, const GrBuffer* vertexBuffer,
-                                        int vertexCount, int baseVertex) {
-    fGpu->drawInstanced(fPrimitiveType, instanceBuffer, instanceCount, baseInstance, vertexBuffer,
-                      vertexCount, baseVertex);
+void GrGLOpsRenderPass::onDraw(int vertexCount, int baseVertex) {
+    if (fGpu->glCaps().drawArraysBaseVertexIsBroken()) {
+        this->setupGeometry(fDeferredVertexBuffer.get(), baseVertex, nullptr, 0);
+        fGpu->drawArrays(fPrimitiveType, 0, vertexCount);
+        return;
+    }
+
+    this->setupGeometry(fDeferredVertexBuffer.get(), 0, nullptr, 0);
+    fGpu->drawArrays(fPrimitiveType, baseVertex, vertexCount);
 }
 
-void GrGLOpsRenderPass::onDrawIndexedInstanced(
-        const GrBuffer* indexBuffer, int indexCount, int baseIndex,
-        GrPrimitiveRestart primitiveRestart, const GrBuffer* instanceBuffer, int instanceCount,
-        int baseInstance, const GrBuffer* vertexBuffer, int baseVertex) {
-    fGpu->drawIndexedInstanced(fPrimitiveType, indexBuffer, indexCount, baseIndex, primitiveRestart,
-                               instanceBuffer, instanceCount, baseInstance, vertexBuffer,
-                               baseVertex);
+void GrGLOpsRenderPass::onDrawIndexed(int indexCount, int baseIndex, uint16_t minIndexValue,
+                                      uint16_t maxIndexValue, int baseVertex) {
+    this->setupGeometry(fDeferredVertexBuffer.get(), baseVertex, nullptr, 0);
+    if (fGpu->glCaps().drawRangeElementsSupport()) {
+        fGpu->drawRangeElements(fPrimitiveType, minIndexValue, maxIndexValue, indexCount,
+                                GR_GL_UNSIGNED_SHORT, fIndexPointer + baseIndex);
+    } else {
+        fGpu->drawElements(fPrimitiveType, indexCount, GR_GL_UNSIGNED_SHORT,
+                           fIndexPointer + baseIndex);
+    }
+}
+
+void GrGLOpsRenderPass::onDrawInstanced(int instanceCount, int baseInstance, int vertexCount,
+                                        int baseVertex) {
+    int maxInstances = fGpu->glCaps().maxInstancesPerDrawWithoutCrashing(instanceCount);
+    for (int i = 0; i < instanceCount; i += maxInstances) {
+        this->setupGeometry(fDeferredVertexBuffer.get(), 0, fDeferredInstanceBuffer.get(),
+                            baseInstance + i);
+        fGpu->drawArraysInstanced(fPrimitiveType, baseVertex, vertexCount,
+                                  std::min(instanceCount - i, maxInstances));
+    }
+}
+
+void GrGLOpsRenderPass::onDrawIndexedInstanced(int indexCount, int baseIndex, int instanceCount,
+                                               int baseInstance, int baseVertex) {
+    int maxInstances = fGpu->glCaps().maxInstancesPerDrawWithoutCrashing(instanceCount);
+    for (int i = 0; i < instanceCount; i += maxInstances) {
+        this->setupGeometry(fDeferredVertexBuffer.get(), baseVertex, fDeferredInstanceBuffer.get(),
+                            baseInstance + i);
+        fGpu->drawElementsInstanced(fPrimitiveType, indexCount, GR_GL_UNSIGNED_SHORT,
+                                    fIndexPointer + baseIndex,
+                                    std::min(instanceCount - i, maxInstances));
+    }
 }
 
 void GrGLOpsRenderPass::onClear(const GrFixedClip& clip, const SkPMColor4f& color) {

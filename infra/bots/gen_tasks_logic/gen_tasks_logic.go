@@ -361,6 +361,16 @@ func (b *builder) logdogAnnotationUrl() string {
 	return fmt.Sprintf("logdog://logs.chromium.org/%s/${SWARMING_TASK_ID}/+/annotations", b.cfg.Project)
 }
 
+// marshalJson encodes the given data as JSON and fixes escaping of '<' which Go
+// does by default.
+func marshalJson(data interface{}) string {
+	j, err := json.Marshal(data)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	return strings.Replace(string(j), "\\u003c", "<", -1)
+}
+
 // props creates a properties JSON string.
 func props(p map[string]string) string {
 	d := make(map[string]interface{}, len(p)+1)
@@ -374,12 +384,7 @@ func props(p map[string]string) string {
 		DevShell: true,
 		GitAuth:  true,
 	}
-
-	j, err := json.Marshal(d)
-	if err != nil {
-		glog.Fatal(err)
-	}
-	return strings.Replace(string(j), "\\u003c", "<", -1)
+	return marshalJson(d)
 }
 
 // kitchenTask returns a specs.TaskSpec instance which uses Kitchen to run a
@@ -571,7 +576,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"Win2019":  DEFAULT_OS_WIN,
 			"Win7":     "Windows-7-SP1",
 			"Win8":     "Windows-8.1-SP0",
-			"iOS":      "iOS-11.4.1",
+			"iOS":      "iOS-13.3.1",
 		}[os]
 		if !ok {
 			glog.Fatalf("Entry %q not found in OS mapping.", os)
@@ -587,6 +592,10 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 		if parts["model"] == "LenovoYogaC630" {
 			// This is currently a unique snowflake.
 			d["os"] = "Windows-10"
+		}
+		if parts["model"] == "iPhone6" {
+			// Not ready to upgrade iPhone6 yet.
+			d["os"] = "iOS-11.4.1"
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -1112,9 +1121,11 @@ func (b *builder) maybeAddIosDevImage(name string, t *specs.TaskSpec) {
 		if m := iosRegex.FindStringSubmatch(dim); len(m) >= 2 {
 			var asset string
 			switch m[1] {
-			// Other patch versions for 11.4 can be added here.
+			// Other patch versions can be added to the same case.
 			case "11.4.1":
 				asset = "ios-dev-image-11.4"
+			case "13.3.1":
+				asset = "ios-dev-image-13.3"
 			default:
 				glog.Fatalf("Unable to determine correct ios-dev-image asset for %s. If %s is a new iOS release, you must add a CIPD package containing the corresponding iOS dev image; see ios-dev-image-11.4 for an example.", name, m[1])
 			}
@@ -1414,8 +1425,14 @@ func (b *builder) test(name string, parts map[string]string, compileTaskName str
 		extraProps[k] = v
 	}
 	iid := b.internalHardwareLabel(parts)
+	iidStr := ""
 	if iid != nil {
-		extraProps["internal_hardware_label"] = strconv.Itoa(*iid)
+		iidStr = strconv.Itoa(*iid)
+	}
+	if recipe == "test" {
+		flags, props := dmFlags(name, parts, b.doUpload(name), iidStr)
+		extraProps["dm_flags"] = marshalJson(flags)
+		extraProps["dm_properties"] = marshalJson(props)
 	}
 	task := b.kitchenTask(name, recipe, isolate, "", b.swarmDimensions(parts), extraProps, OUTPUT_TEST)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)

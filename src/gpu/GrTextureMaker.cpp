@@ -14,13 +14,12 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/SkGr.h"
 
-GrSurfaceProxyView GrTextureMaker::onRefTextureProxyViewForParams(GrSamplerState params,
-                                                                  bool willBeMipped) {
+GrSurfaceProxyView GrTextureMaker::onView(GrMipMapped mipMapped) {
     if (this->width() > this->context()->priv().caps()->maxTextureSize() ||
         this->height() > this->context()->priv().caps()->maxTextureSize()) {
         return {};
     }
-    return this->refOriginalTextureProxyView(willBeMipped);
+    return this->refOriginalTextureProxyView(mipMapped);
 }
 
 std::unique_ptr<GrFragmentProcessor> GrTextureMaker::createFragmentProcessor(
@@ -28,6 +27,8 @@ std::unique_ptr<GrFragmentProcessor> GrTextureMaker::createFragmentProcessor(
         const SkRect& constraintRect,
         FilterConstraint filterConstraint,
         bool coordsLimitedToConstraintRect,
+        GrSamplerState::WrapMode wrapX,
+        GrSamplerState::WrapMode wrapY,
         const GrSamplerState::Filter* filterOrNullForBicubic) {
     const GrSamplerState::Filter* fmForDetermineDomain = filterOrNullForBicubic;
     if (filterOrNullForBicubic && GrSamplerState::Filter::kMipMap == *filterOrNullForBicubic &&
@@ -41,7 +42,12 @@ std::unique_ptr<GrFragmentProcessor> GrTextureMaker::createFragmentProcessor(
         fmForDetermineDomain = &kBilerp;
     }
 
-    GrSurfaceProxyView view = this->viewForParams(filterOrNullForBicubic);
+    GrSurfaceProxyView view;
+    if (filterOrNullForBicubic) {
+        view = this->view(*filterOrNullForBicubic);
+    } else {
+        view = this->view(GrMipMapped::kNo);
+    }
     if (!view) {
         return nullptr;
     }
@@ -51,6 +57,7 @@ std::unique_ptr<GrFragmentProcessor> GrTextureMaker::createFragmentProcessor(
         DetermineDomainMode(constraintRect, filterConstraint, coordsLimitedToConstraintRect,
                             view.proxy(), fmForDetermineDomain, &domain);
     SkASSERT(kTightCopy_DomainMode != domainMode);
-    return this->createFragmentProcessorForDomainAndFilter(
-            std::move(view), textureMatrix, domainMode, domain, filterOrNullForBicubic);
+    return this->createFragmentProcessorForSubsetAndFilter(std::move(view), textureMatrix,
+                                                           domainMode, domain, wrapX, wrapY,
+                                                           filterOrNullForBicubic);
 }

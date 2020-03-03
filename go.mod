@@ -16,13 +16,11 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rogpeppe/go-internal v1.5.0 // indirect
 	go.chromium.org/gae v0.0.0-20190826183307-50a499513efa // indirect
-	go.chromium.org/luci v0.0.0-20200228043145-19c3fe58384c // indirect
-	go.skia.org/infra v0.0.0-20200228015416-23ac381019e1
+	go.skia.org/infra v0.0.0-20200302052213-5f2f3e5ddd66
 	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect
 	golang.org/x/mobile v0.0.0-20191002175909-6d0d39b2ca82 // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/tools v0.0.0-20200227222343-706bc42d1f0d // indirect
+	golang.org/x/sys v0.0.0-20200302083256-062a44052db1 // indirect
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 	google.golang.org/api v0.19.0
-	google.golang.org/genproto v0.0.0-20200227132054-3f1135a288c9 // indirect
 )

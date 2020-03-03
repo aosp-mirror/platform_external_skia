@@ -21,23 +21,22 @@ public:
             const SkRect& constraintRect,
             FilterConstraint filterConstraint,
             bool coordsLimitedToConstraintRect,
+            GrSamplerState::WrapMode wrapX,
+            GrSamplerState::WrapMode wrapY,
             const GrSamplerState::Filter* filterOrNullForBicubic) override;
 
 protected:
-    GrTextureMaker(GrRecordingContext* context, const GrImageInfo& info, bool domainNeedsLocal)
-            : INHERITED(context, info, domainNeedsLocal) {}
+    GrTextureMaker(GrRecordingContext* context, const GrImageInfo& info)
+            : INHERITED(context, info) {}
 
 private:
     /**
      *  Return the maker's "original" texture. It is the responsibility of the maker to handle any
      *  caching of the original if desired.
-     *  If "genType" argument equals AllowedTexGenType::kCheap and the texture is not trivial to
-     *  construct then refOriginalTextureProxy should return nullptr (for example if texture is made
-     *  by drawing into a render target).
      */
-    virtual GrSurfaceProxyView refOriginalTextureProxyView(bool willBeMipped) = 0;
+    virtual GrSurfaceProxyView refOriginalTextureProxyView(GrMipMapped) = 0;
 
-    GrSurfaceProxyView onRefTextureProxyViewForParams(GrSamplerState, bool willBeMipped) final;
+    GrSurfaceProxyView onView(GrMipMapped) final;
 
     typedef GrTextureProducer INHERITED;
 };

@@ -19,11 +19,10 @@ public:
     enum class Cached { kNo, kYes };
 
     GrBitmapTextureMaker(GrRecordingContext* context, const SkBitmap& bitmap,
-                         Cached cached = Cached::kNo, SkBackingFit = SkBackingFit::kExact,
-                         bool useDecal = false);
+                         Cached cached = Cached::kNo, SkBackingFit = SkBackingFit::kExact);
 
 private:
-    GrSurfaceProxyView refOriginalTextureProxyView(bool willBeMipped) override;
+    GrSurfaceProxyView refOriginalTextureProxyView(GrMipMapped) override;
 
     const SkBitmap     fBitmap;
     const SkBackingFit fFit;
