@@ -165,6 +165,7 @@ cc_library_static {
         "src/core/SkGraphics.cpp",
         "src/core/SkHalf.cpp",
         "src/core/SkICC.cpp",
+        "src/core/SkIDChangeListener.cpp",
         "src/core/SkImageFilter.cpp",
         "src/core/SkImageFilterCache.cpp",
         "src/core/SkImageFilterTypes.cpp",
