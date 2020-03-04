@@ -594,8 +594,8 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			d["os"] = "Windows-10"
 		}
 		if parts["model"] == "iPhone6" {
-			// Not ready to upgrade iPhone6 yet.
-			d["os"] = "iOS-11.4.1"
+			// This is the latest iOS that supports iPhone6.
+			d["os"] = "iOS-12.4.5"
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -1124,6 +1124,8 @@ func (b *builder) maybeAddIosDevImage(name string, t *specs.TaskSpec) {
 			// Other patch versions can be added to the same case.
 			case "11.4.1":
 				asset = "ios-dev-image-11.4"
+			case "12.4.5":
+				asset = "ios-dev-image-12.4"
 			case "13.3.1":
 				asset = "ios-dev-image-13.3"
 			default:
@@ -1517,7 +1519,17 @@ func (b *builder) perf(name string, parts map[string]string, compileTaskName str
 		recipe = "perf_skottiewasm_lottieweb"
 		isolate = "lottie_web.isolate"
 	}
-	task := b.kitchenTask(name, recipe, isolate, "", b.swarmDimensions(parts), EXTRA_PROPS, OUTPUT_PERF)
+	doUpload := strings.Contains(name, "Release") && b.doUpload(name)
+	extraProps := map[string]string{}
+	for k, v := range EXTRA_PROPS {
+		extraProps[k] = v
+	}
+	if recipe == "perf" {
+		flags, props := nanobenchFlags(name, parts, doUpload)
+		extraProps["nanobench_flags"] = marshalJson(flags)
+		extraProps["nanobench_properties"] = marshalJson(props)
+	}
+	task := b.kitchenTask(name, recipe, isolate, "", b.swarmDimensions(parts), extraProps, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
 	if !strings.Contains(name, "LottieWeb") {
 		// Perf.+LottieWeb doesn't require anything in Skia to be compiled.
@@ -1560,7 +1572,7 @@ func (b *builder) perf(name string, parts map[string]string, compileTaskName str
 	b.MustAddTask(name, task)
 
 	// Upload results if necessary.
-	if strings.Contains(name, "Release") && b.doUpload(name) {
+	if doUpload {
 		uploadName := fmt.Sprintf("%s%s%s", PREFIX_UPLOAD, b.jobNameSchema.Sep, name)
 		extraProps := map[string]string{
 			"gs_bucket": b.cfg.GsBucketNano,
