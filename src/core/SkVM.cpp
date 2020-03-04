@@ -15,8 +15,10 @@
 #include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkVM.h"
+#include <atomic>
 
 #if defined(SKVM_LLVM)
+    #include <future>
     #include <llvm/Bitcode/BitcodeWriter.h>
     #include <llvm/ExecutionEngine/ExecutionEngine.h>
     #include <llvm/IR/IRBuilder.h>
@@ -51,13 +53,14 @@ namespace skvm {
         int                      loop = 0;
         std::vector<int>         strides;
 
-        void*  jit_entry = nullptr;
-        size_t jit_size  = 0;
-        void*  dylib     = nullptr;
+        std::atomic<void*> jit_entry{nullptr};   // TODO: minimal std::memory_orders
+        size_t jit_size = 0;
+        void*  dylib    = nullptr;
 
     #if defined(SKVM_LLVM)
         std::unique_ptr<llvm::LLVMContext>     llvm_ctx;
         std::unique_ptr<llvm::ExecutionEngine> llvm_ee;
+        std::future<void>                      llvm_compiling;
     #endif
     };
 
@@ -192,7 +195,7 @@ namespace skvm {
                 case Op::div_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::min_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::max_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
-                case Op::mad_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
+                case Op::fma_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
 
                 case Op::sqrt_f32: write(o, V{id}, "=", op, V{x}); break;
 
@@ -250,7 +253,6 @@ namespace skvm {
                 case Op::floor:  write(o, V{id}, "=", op, V{x}); break;
                 case Op::to_f32: write(o, V{id}, "=", op, V{x}); break;
                 case Op::trunc:  write(o, V{id}, "=", op, V{x}); break;
-                case Op::round:  write(o, V{id}, "=", op, V{x}); break;
             }
 
             write(o, "\n");
@@ -308,7 +310,7 @@ namespace skvm {
                 case Op::div_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::min_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::max_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
-                case Op::mad_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
+                case Op::fma_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
 
                 case Op::sqrt_f32: write(o, R{d}, "=", op, R{x}); break;
 
@@ -368,7 +370,6 @@ namespace skvm {
                 case Op::floor:  write(o, R{d}, "=", op,  R{x}); break;
                 case Op::to_f32: write(o, R{d}, "=", op, R{x}); break;
                 case Op::trunc:  write(o, R{d}, "=", op,  R{x}); break;
-                case Op::round:  write(o, R{d}, "=", op,  R{x}); break;
             }
             write(o, "\n");
         }
@@ -641,6 +642,18 @@ namespace skvm {
         return {this->push(Op::splat, NA,NA,NA, bits)};
     }
 
+    static bool fma_supported() {
+        static const bool supported =
+     #if defined(SK_CPU_X86)
+         SkCpu::Supports(SkCpu::HSW);
+     #elif defined(SK_CPU_ARM64)
+         true;
+     #else
+         false;
+     #endif
+         return supported;
+    }
+
     // Be careful peepholing float math!  Transformations you might expect to
     // be legal can fail in the face of NaN/Inf, e.g. 0*x is not always 0.
     // Float peepholes must pass this equivalence test for all ~4B floats:
@@ -661,6 +674,15 @@ namespace skvm {
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X+Y); }
         if (this->isImm(y.id, 0.0f)) { return x; }   // x+0 == x
         if (this->isImm(x.id, 0.0f)) { return y; }   // 0+y == y
+
+        if (fma_supported()) {
+            if (fProgram[x.id].op == Op::mul_f32) {
+                return {this->push(Op::fma_f32, fProgram[x.id].x, fProgram[x.id].y, y.id)};
+            }
+            if (fProgram[y.id].op == Op::mul_f32) {
+                return {this->push(Op::fma_f32, fProgram[y.id].x, fProgram[y.id].y, x.id)};
+            }
+        }
         return {this->push(Op::add_f32, x.id, y.id)};
     }
 
@@ -684,15 +706,6 @@ namespace skvm {
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X/Y); }
         if (this->isImm(y.id, 1.0f)) { return x; }  // x/1 == x
         return {this->push(Op::div_f32, x.id, y.id)};
-    }
-
-    F32 Builder::mad(F32 x, F32 y, F32 z) {
-        float X,Y,Z;
-        if (this->allImm(x.id,&X, y.id,&Y, z.id,&Z)) { return this->splat(X*Y+Z); }
-        if (this->isImm(y.id, 1.0f)) { return this->add(x,z); }  // x*1+z == x+z
-        if (this->isImm(x.id, 1.0f)) { return this->add(y,z); }  // 1*y+z == y+z
-        if (this->isImm(z.id, 0.0f)) { return this->mul(x,y); }  // x*y+0 == x*y
-        return {this->push(Op::mad_f32, x.id, y.id, z.id)};
     }
 
     F32 Builder::sqrt(F32 x) {
@@ -860,19 +873,13 @@ namespace skvm {
         if (this->allImm(x.id,&X)) { return this->splat((int)X); }
         return {this->push(Op::trunc, x.id)};
     }
-    I32 Builder::round(F32 x) {
-        float X;
-        if (this->allImm(x.id,&X)) { return this->splat((int)lrintf(X)); }
-        return {this->push(Op::round, x.id)};
-    }
-
     F32 Builder::from_unorm(int bits, I32 x) {
-        float limit = (1<<bits)-1.0f;
-        return mul(to_f32(x), splat(1/limit));
+        F32 limit = splat(1 / ((1<<bits)-1.0f));
+        return mul(to_f32(x), limit);
     }
     I32 Builder::to_unorm(int bits, F32 x) {
-        float limit = (1<<bits)-1.0f;
-        return round(mul(x, splat(limit)));
+        F32 limit = splat((1<<bits)-1.0f);
+        return trunc(mad(x, limit, splat(0.5f)));
     }
 
     Color Builder::unpack_1010102(I32 rgba) {
@@ -1634,7 +1641,21 @@ namespace skvm {
     }
 
     void Program::eval(int n, void* args[]) const {
-        if (const void* b = fImpl->jit_entry) {
+    #define SKVM_JIT_STATS 0
+    #if SKVM_JIT_STATS
+        static std::atomic<int> calls{0}, jits{0};
+        if (0 == calls++) {
+            atexit([]{
+                SkDebugf("%d of %d calls to eval() went through JIT.\n", jits.load(), calls.load());
+            });
+        }
+    #endif
+        // This may fail either simply because we can't JIT, or when using LLVM,
+        // because the work represented by fImpl->llvm_compiling hasn't finished yet.
+        if (const void* b = fImpl->jit_entry.load()) {
+    #if SKVM_JIT_STATS
+            jits++;
+    #endif
             void** a = args;
             switch (fImpl->strides.size()) {
                 case 0: return ((void(*)(int                        ))b)(n                    );
@@ -1648,6 +1669,7 @@ namespace skvm {
             }
         }
 
+        // So we'll sometimes use the interpreter here even if later calls will use the JIT.
         this->interpret(n, args);
     }
 
@@ -1841,7 +1863,12 @@ namespace skvm {
                     CASE(Op::bit_or_imm ):
                     CASE(Op::bit_xor_imm): SkUNREACHABLE; break;
 
-                    CASE(Op::mad_f32): r(d).f32 = r(x).f32 * r(y).f32 + r(z).f32; break;
+                    CASE(Op::fma_f32): {
+                        // TODO: vectorized skvx calls
+                        for (int i = 0; i < K; i++) {
+                            r(d).f32[i] = std::fma(r(x).f32[i], r(y).f32[i], r(z).f32[i]);
+                        }
+                    } break;
 
                     CASE(Op::sqrt_f32): r(d).f32 = sqrt(r(x).f32); break;
 
@@ -1903,7 +1930,6 @@ namespace skvm {
                     CASE(Op::floor):  r(d).f32 = skvx::floor(r(x).f32); break;
                     CASE(Op::to_f32): r(d).f32 = skvx::cast<float>(r(x).i32); break;
                     CASE(Op::trunc):  r(d).i32 = skvx::cast<int>  (r(x).f32); break;
-                    CASE(Op::round):  r(d).i32 = skvx::cast<int>  (r(x).f32 + 0.5f); break;
                 #undef CASE
                 }
             }
@@ -2083,8 +2109,8 @@ namespace skvm {
                 case Op:: gt_f32: vals[i] = S(I32, b->CreateFCmpOGT(F(vals[x]), F(vals[y]))); break;
                 case Op::gte_f32: vals[i] = S(I32, b->CreateFCmpOGE(F(vals[x]), F(vals[y]))); break;
 
-                case Op::mad_f32:
-                    vals[i] = I(b->CreateIntrinsic(llvm::Intrinsic::fmuladd, {F32},
+                case Op::fma_f32:
+                    vals[i] = I(b->CreateIntrinsic(llvm::Intrinsic::fma, {F32},
                                                    {F(vals[x]), F(vals[y]), F(vals[z])}));
                     break;
 
@@ -2107,12 +2133,6 @@ namespace skvm {
 
                 case Op::to_f32: vals[i] = I(b->CreateSIToFP(  vals[x] , F32)); break;
                 case Op::trunc : vals[i] =   b->CreateFPToSI(F(vals[x]), I32) ; break;
-
-                case Op::round:
-                    // TODO: cvtps2dq, lround, etc. ?
-                    vals[i] = b->CreateFPToSI(b->CreateFAdd(F(vals[x]),
-                                                            llvm::ConstantFP::get(F32, 0.5)), I32);
-                    break;
 
                 case Op::add_i16x2: vals[i] = I(b->CreateAdd(x2(vals[x]), x2(vals[y]))); break;
                 case Op::sub_i16x2: vals[i] = I(b->CreateSub(x2(vals[x]), x2(vals[y]))); break;
@@ -2314,40 +2334,60 @@ namespace skvm {
             SkAssertResult(false == llvm::InitializeNativeTargetAsmPrinter());
         });
 
-        llvm::TargetOptions options;
-        options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
-
         if (llvm::ExecutionEngine* ee = llvm::EngineBuilder(std::move(mod))
                                             .setEngineKind(llvm::EngineKind::JIT)
                                             .setMCPU(llvm::sys::getHostCPUName())
-                                            .setTargetOptions(options)
                                             .create()) {
             fImpl->llvm_ctx = std::move(ctx);
             fImpl->llvm_ee.reset(ee);
-            fImpl->jit_entry = (void*)fImpl->llvm_ee->getFunctionAddress(debug_name);
+
+            // We have to be careful here about what we close over and how, in case fImpl moves.
+            // fImpl itself may change, but its pointee fields won't, so close over them by value.
+            // Also, debug_name will almost certainly leave scope, so copy it.
+            fImpl->llvm_compiling = std::async(std::launch::async, [dst  = &fImpl->jit_entry,
+                                                                    ee   =  fImpl->llvm_ee.get(),
+                                                                    name = std::string(debug_name)]{
+                // std::atomic<void*>*    dst;
+                // llvm::ExecutionEngine* ee;
+                // std::string            name;
+                dst->store( (void*)ee->getFunctionAddress(name.c_str()) );
+            });
         }
     }
 #endif
 
+    void Program::waitForLLVM() const {
+    #if defined(SKVM_LLVM)
+        if (fImpl->llvm_compiling.valid()) {
+            fImpl->llvm_compiling.wait();
+        }
+    #endif
+    }
+
     bool Program::hasJIT() const {
-        return fImpl->jit_entry != nullptr;
+        // Program::hasJIT() is really just a debugging / test aid,
+        // so we don't mind adding a sync point here to wait for compilation.
+        this->waitForLLVM();
+
+        return fImpl->jit_entry.load() != nullptr;
     }
 
     void Program::dropJIT() {
     #if defined(SKVM_LLVM)
+        this->waitForLLVM();
         fImpl->llvm_ee .reset(nullptr);
         fImpl->llvm_ctx.reset(nullptr);
     #elif defined(SKVM_JIT)
         if (fImpl->dylib) {
             dlclose(fImpl->dylib);
-        } else if (fImpl->jit_entry) {
-            munmap(fImpl->jit_entry, fImpl->jit_size);
+        } else if (auto jit_entry = fImpl->jit_entry.load()) {
+            munmap(jit_entry, fImpl->jit_size);
         }
     #else
         SkASSERT(!this->hasJIT());
     #endif
 
-        fImpl->jit_entry = nullptr;
+        fImpl->jit_entry.store(nullptr);
         fImpl->jit_size  = 0;
         fImpl->dylib     = nullptr;
     }
@@ -2669,7 +2709,7 @@ namespace skvm {
             maybe_recycle_register(z);
             // set_dst() and dst() will work read/write with this perhaps-just-updated avail.
 
-            // Some ops may decide dst on their own to best fit the instruction (see Op::mad_f32).
+            // Some ops may decide dst on their own to best fit the instruction (see Op::fma_f32).
             auto set_dst = [&](Reg reg){
                 SkASSERT(dst_is_set == false);
                 dst_is_set = true;
@@ -2828,7 +2868,7 @@ namespace skvm {
                 case Op::min_f32: a->vminps(dst(), r[x], r[y]); break;
                 case Op::max_f32: a->vmaxps(dst(), r[x], r[y]); break;
 
-                case Op::mad_f32:
+                case Op::fma_f32:
                     if      (avail & (1<<r[x])) { set_dst(r[x]); a->vfmadd132ps(r[x], r[z], r[y]); }
                     else if (avail & (1<<r[y])) { set_dst(r[y]); a->vfmadd213ps(r[y], r[x], r[z]); }
                     else if (avail & (1<<r[z])) { set_dst(r[z]); a->vfmadd231ps(r[z], r[x], r[y]); }
@@ -2836,6 +2876,7 @@ namespace skvm {
                                                                  a->vmovdqa    (dst(),r[x]);
                                                                  a->vfmadd132ps(dst(),r[z], r[y]); }
                                                                  break;
+
                 case Op::sqrt_f32: a->vsqrtps(dst(), r[x]); break;
 
                 case Op::add_f32_imm: a->vaddps(dst(), r[x], &constants[immy].label); break;
@@ -2881,7 +2922,6 @@ namespace skvm {
                 case Op::floor : a->vroundps  (dst(), r[x], Assembler::FLOOR); break;
                 case Op::to_f32: a->vcvtdq2ps (dst(), r[x]); break;
                 case Op::trunc : a->vcvttps2dq(dst(), r[x]); break;
-                case Op::round : a->vcvtps2dq (dst(), r[x]); break;
 
                 case Op::bytes: a->vpshufb(dst(), r[x], &bytes_masks.find(immy)->label);
                                 break;
@@ -2931,7 +2971,7 @@ namespace skvm {
                 case Op::min_f32: a->fmin4s(dst(), r[x], r[y]); break;
                 case Op::max_f32: a->fmax4s(dst(), r[x], r[y]); break;
 
-                case Op::mad_f32: // fmla4s is z += x*y
+                case Op::fma_f32: // fmla4s is z += x*y
                     if (avail & (1<<r[z])) { set_dst(r[z]); a->fmla4s( r[z],  r[x],  r[y]);   }
                     else {                                  a->orr16b(tmp(),  r[z],  r[z]);
                                                             a->fmla4s(tmp(),  r[x],  r[y]);
@@ -2990,7 +3030,6 @@ namespace skvm {
 
                 case Op::to_f32: a->scvtf4s (dst(), r[x]); break;
                 case Op::trunc:  a->fcvtzs4s(dst(), r[x]); break;
-                case Op::round:  a->fcvtns4s(dst(), r[x]); break;
 
                 case Op::bytes:
                     if (try_hoisting) { a->tbl (dst(), r[x], bytes_masks.find(immy)->reg); }
@@ -3135,18 +3174,20 @@ namespace skvm {
 
         // mprotect works at page granularity.
         fImpl->jit_size = ((a.size() + page - 1) / page) * page;
-        fImpl->jit_entry
-            = mmap(nullptr,fImpl->jit_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1,0);
+
+        void* jit_entry
+             = mmap(nullptr,fImpl->jit_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1,0);
+        fImpl->jit_entry.store(jit_entry);
 
         // Assemble the program for real.
-        a = Assembler{fImpl->jit_entry};
+        a = Assembler{jit_entry};
         SkAssertResult(this->jit(instructions, try_hoisting, &a));
         SkASSERT(a.size() <= fImpl->jit_size);
 
         // Remap as executable, and flush caches on platforms that need that.
-        mprotect(fImpl->jit_entry, fImpl->jit_size, PROT_READ|PROT_EXEC);
-        __builtin___clear_cache((char*)fImpl->jit_entry,
-                                (char*)fImpl->jit_entry + fImpl->jit_size);
+        mprotect(jit_entry, fImpl->jit_size, PROT_READ|PROT_EXEC);
+        __builtin___clear_cache((char*)jit_entry,
+                                (char*)jit_entry + fImpl->jit_size);
 
         // For profiling and debugging, it's helpful to have this code loaded
         // dynamically rather than just jumping info fImpl->jit_entry.
@@ -3154,7 +3195,7 @@ namespace skvm {
             // Dump the raw program binary.
             SkString path = SkStringPrintf("/tmp/%s.XXXXXX", debug_name);
             int fd = mkstemp(path.writable_str());
-            ::write(fd, fImpl->jit_entry, a.size());
+            ::write(fd, jit_entry, a.size());
             close(fd);
 
             this->dropJIT();  // (unmap and null out fImpl->jit_entry.)
@@ -3168,7 +3209,7 @@ namespace skvm {
 
             // Load that dynamic library and look up skvm_jit().
             fImpl->dylib = dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
-            fImpl->jit_entry = dlsym(fImpl->dylib, "skvm_jit");
+            fImpl->jit_entry.store(dlsym(fImpl->dylib, "skvm_jit"));
         }
     }
 #endif
