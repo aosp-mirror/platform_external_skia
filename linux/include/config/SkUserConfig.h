@@ -3,12 +3,36 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef SK_CODEC_DECODES_JPEG
+#define SK_CODEC_DECODES_JPEG
+#endif
+
+#ifndef SK_CODEC_DECODES_PNG
+#define SK_CODEC_DECODES_PNG
+#endif
+
 #ifndef SK_CODEC_DECODES_RAW
 #define SK_CODEC_DECODES_RAW
 #endif
 
+#ifndef SK_CODEC_DECODES_WEBP
+#define SK_CODEC_DECODES_WEBP
+#endif
+
 #ifndef SK_ENABLE_SKSL_INTERPRETER
 #define SK_ENABLE_SKSL_INTERPRETER
+#endif
+
+#ifndef SK_ENCODE_JPEG
+#define SK_ENCODE_JPEG
+#endif
+
+#ifndef SK_ENCODE_PNG
+#define SK_ENCODE_PNG
+#endif
+
+#ifndef SK_ENCODE_WEBP
+#define SK_ENCODE_WEBP
 #endif
 
 #ifndef SK_GAMMA_APPLY_TO_A8
@@ -21,18 +45,6 @@
 
 #ifndef SK_GAMMA_EXPONENT
 #define SK_GAMMA_EXPONENT 1.4
-#endif
-
-#ifndef SK_HAS_JPEG_LIBRARY
-#define SK_HAS_JPEG_LIBRARY
-#endif
-
-#ifndef SK_HAS_PNG_LIBRARY
-#define SK_HAS_PNG_LIBRARY
-#endif
-
-#ifndef SK_HAS_WEBP_LIBRARY
-#define SK_HAS_WEBP_LIBRARY
 #endif
 
 #ifndef SK_R32_SHIFT
