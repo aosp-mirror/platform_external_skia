@@ -7,7 +7,7 @@
 
 #include "src/gpu/effects/GrTextureEffect.h"
 
-#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -265,8 +265,8 @@ GrGLSLFragmentProcessor* GrTextureEffect::onCreateGLSLInstance() const {
                         fb->ensureCoords2D(args.fTransformedCoords[0].fVaryingPoint).c_str());
 
                 const auto& m = te.fShaderModes;
-                const auto* texture = te.fSampler.proxy()->peekTexture();
-                bool normCoords = texture->texturePriv().textureType() != GrTextureType::kRectangle;
+                GrTextureType textureType = te.fSampler.proxy()->backendFormat().textureType();
+                bool normCoords = textureType != GrTextureType::kRectangle;
                 auto filter = te.fSampler.samplerState().filter();
                 FilterLogic filterLogic[2] = {GetFilterLogic(m[0], filter),
                                               GetFilterLogic(m[1], filter)};

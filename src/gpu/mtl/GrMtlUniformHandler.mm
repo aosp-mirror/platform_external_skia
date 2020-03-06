@@ -5,7 +5,7 @@
 * found in the LICENSE file.
 */
 
-#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
 #include "src/gpu/mtl/GrMtlUniformHandler.h"
@@ -242,17 +242,15 @@ GrGLSLUniformHandler::UniformHandle GrMtlUniformHandler::internalAddUniformArray
     return GrGLSLUniformHandler::UniformHandle(fUniforms.count() - 1);
 }
 
-GrGLSLUniformHandler::SamplerHandle GrMtlUniformHandler::addSampler(const GrSurfaceProxy* texture,
-                                                                    GrSamplerState,
-                                                                    const GrSwizzle& swizzle,
-                                                                    const char* name,
-                                                                    const GrShaderCaps* caps) {
+GrGLSLUniformHandler::SamplerHandle GrMtlUniformHandler::addSampler(
+        const GrBackendFormat& backendFormat, GrSamplerState, const GrSwizzle& swizzle,
+        const char* name, const GrShaderCaps* caps) {
     SkASSERT(name && strlen(name));
     SkString mangleName;
     char prefix = 'u';
     fProgramBuilder->nameVariable(&mangleName, prefix, name, true);
 
-    GrTextureType type = texture->backendFormat().textureType();
+    GrTextureType type = backendFormat.textureType();
 
     UniformInfo& info = fSamplers.push_back();
     info.fVariable.setType(GrSLCombinedSamplerTypeForTextureType(type));

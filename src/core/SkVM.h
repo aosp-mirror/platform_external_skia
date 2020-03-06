@@ -90,6 +90,8 @@ namespace skvm {
                   vpsubw, vpmullw,
                   vdivps,
                   vfmadd132ps, vfmadd213ps, vfmadd231ps,
+                  vfmsub132ps, vfmsub213ps, vfmsub231ps,
+                  vfnmadd132ps, vfnmadd213ps, vfnmadd231ps,
                   vpackusdw, vpackuswb,
                   vpcmpeqd, vpcmpgtd;
 
@@ -299,7 +301,7 @@ namespace skvm {
         M(div_f32)                            \
         M(min_f32)                            \
         M(max_f32)                            \
-        M(mad_f32)                            \
+        M(fma_f32) M(fms_f32) M(fnma_f32)     \
         M(sqrt_f32)                           \
                    M(shl_i32) M(shl_i16x2)    \
                    M(shr_i32) M(shr_i16x2)    \
@@ -309,7 +311,7 @@ namespace skvm {
         M(mul_f32_imm)                        \
         M(min_f32_imm)                        \
         M(max_f32_imm)                        \
-        M(floor) M(trunc) M(round) M(to_f32)  \
+        M(floor) M(trunc)          M(to_f32)  \
         M( eq_f32) M( eq_i32) M( eq_i16x2)    \
         M(neq_f32) M(neq_i32) M(neq_i16x2)    \
         M( gt_f32) M( gt_i32) M( gt_i16x2)    \
@@ -433,7 +435,7 @@ namespace skvm {
         F32 div(F32 x, F32 y);
         F32 min(F32 x, F32 y);
         F32 max(F32 x, F32 y);
-        F32 mad(F32 x, F32 y, F32 z);  //  x*y+z, often an FMA
+        F32 mad(F32 x, F32 y, F32 z) { return this->add(this->mul(x,y), z); }
         F32 sqrt(F32 x);
 
         F32 negate(F32 x) {
@@ -465,7 +467,6 @@ namespace skvm {
 
         F32 floor(F32);
         I32 trunc(F32 x);
-        I32 round(F32 x);
         I32 bit_cast(F32 x) { return {x.id}; }
 
         // int math, comparisons, etc.
@@ -543,7 +544,7 @@ namespace skvm {
 
         // Common idioms used in several places, worth centralizing for consistency.
         F32 from_unorm(int bits, I32);   // E.g. from_unorm(8, x) -> x * (1/255.0f)
-        I32   to_unorm(int bits, F32);   // E.g.   to_unorm(8, x) -> round(x * 255)
+        I32   to_unorm(int bits, F32);   // E.g.   to_unorm(8, x) -> trunc(mad(x, 255, 0.5))
 
         Color unpack_1010102(I32 rgba);
         Color unpack_8888   (I32 rgba);
@@ -612,15 +613,16 @@ namespace skvm {
 
     using Reg = int;
 
+    // d = op(x, y/imm, z/imm)
+    struct InterpreterInstruction {
+        Op  op;
+        Reg d,x;
+        union { Reg y; int immy; };
+        union { Reg z; int immz; };
+    };
+
     class Program {
     public:
-        struct Instruction {   // d = op(x, y/imm, z/imm)
-            Op  op;
-            Reg d,x;
-            union { Reg y; int immy; };
-            union { Reg z; int immz; };
-        };
-
         Program(const std::vector<OptimizedInstruction>& interpreter,
                 const std::vector<int>& strides);
 
@@ -648,7 +650,7 @@ namespace skvm {
             this->eval(n, args);
         }
 
-        std::vector<Instruction> instructions() const;
+        std::vector<InterpreterInstruction> instructions() const;
         int  nargs() const;
         int  nregs() const;
         int  loop () const;
@@ -664,11 +666,11 @@ namespace skvm {
         void setupJIT        (const std::vector<OptimizedInstruction>&, const char* debug_name);
         void setupLLVM       (const std::vector<OptimizedInstruction>&, const char* debug_name);
 
-        void interpret(int n, void* args[]) const;
-
         bool jit(const std::vector<OptimizedInstruction>&,
                  bool try_hoisting,
                  Assembler*) const;
+
+        void waitForLLVM() const;
 
         struct Impl;
         std::unique_ptr<Impl> fImpl;

@@ -15,8 +15,10 @@
 #include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkVM.h"
+#include <atomic>
 
 #if defined(SKVM_LLVM)
+    #include <future>
     #include <llvm/Bitcode/BitcodeWriter.h>
     #include <llvm/ExecutionEngine/ExecutionEngine.h>
     #include <llvm/IR/IRBuilder.h>
@@ -46,18 +48,19 @@ bool gSkVMJITViaDylib{false};
 namespace skvm {
 
     struct Program::Impl {
-        std::vector<Instruction> instructions;
-        int                      regs = 0;
-        int                      loop = 0;
-        std::vector<int>         strides;
+        std::vector<InterpreterInstruction> instructions;
+        int regs = 0;
+        int loop = 0;
+        std::vector<int> strides;
 
-        void*  jit_entry = nullptr;
-        size_t jit_size  = 0;
-        void*  dylib     = nullptr;
+        std::atomic<void*> jit_entry{nullptr};   // TODO: minimal std::memory_orders
+        size_t jit_size = 0;
+        void*  dylib    = nullptr;
 
     #if defined(SKVM_LLVM)
         std::unique_ptr<llvm::LLVMContext>     llvm_ctx;
         std::unique_ptr<llvm::ExecutionEngine> llvm_ee;
+        std::future<void>                      llvm_compiling;
     #endif
     };
 
@@ -192,7 +195,10 @@ namespace skvm {
                 case Op::div_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::min_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::max_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
-                case Op::mad_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
+                case Op::fma_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
+                case Op::fms_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
+                case Op::fnma_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
+
 
                 case Op::sqrt_f32: write(o, V{id}, "=", op, V{x}); break;
 
@@ -250,7 +256,6 @@ namespace skvm {
                 case Op::floor:  write(o, V{id}, "=", op, V{x}); break;
                 case Op::to_f32: write(o, V{id}, "=", op, V{x}); break;
                 case Op::trunc:  write(o, V{id}, "=", op, V{x}); break;
-                case Op::round:  write(o, V{id}, "=", op, V{x}); break;
             }
 
             write(o, "\n");
@@ -270,7 +275,7 @@ namespace skvm {
             o->writeDecAsText(i);
             o->writeText("\t");
             if (i >= fImpl->loop) { write(o, "    "); }
-            const Program::Instruction& inst = fImpl->instructions[i];
+            const InterpreterInstruction& inst = fImpl->instructions[i];
             Op   op = inst.op;
             Reg   d = inst.d,
                   x = inst.x,
@@ -308,7 +313,9 @@ namespace skvm {
                 case Op::div_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::min_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::max_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
-                case Op::mad_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
+                case Op::fma_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
+                case Op::fms_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
+                case Op::fnma_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
 
                 case Op::sqrt_f32: write(o, R{d}, "=", op, R{x}); break;
 
@@ -368,7 +375,6 @@ namespace skvm {
                 case Op::floor:  write(o, R{d}, "=", op,  R{x}); break;
                 case Op::to_f32: write(o, R{d}, "=", op, R{x}); break;
                 case Op::trunc:  write(o, R{d}, "=", op,  R{x}); break;
-                case Op::round:  write(o, R{d}, "=", op,  R{x}); break;
             }
             write(o, "\n");
         }
@@ -376,7 +382,7 @@ namespace skvm {
 
     std::vector<OptimizedInstruction> Builder::optimize(bool for_jit) const {
         // If requested, first specialize for our JIT backend.
-        auto specialize_for_jit = [&]() -> std::vector<Instruction> {
+        auto specialize_for_jit = [&]() -> std::vector<Builder::Instruction> {
             Builder specialized;
             for (int i = 0; i < (int)fProgram.size(); i++) {
                 Builder::Instruction inst = fProgram[i];
@@ -641,6 +647,18 @@ namespace skvm {
         return {this->push(Op::splat, NA,NA,NA, bits)};
     }
 
+    static bool fma_supported() {
+        static const bool supported =
+     #if defined(SK_CPU_X86)
+         SkCpu::Supports(SkCpu::HSW);
+     #elif defined(SK_CPU_ARM64)
+         true;
+     #else
+         false;
+     #endif
+         return supported;
+    }
+
     // Be careful peepholing float math!  Transformations you might expect to
     // be legal can fail in the face of NaN/Inf, e.g. 0*x is not always 0.
     // Float peepholes must pass this equivalence test for all ~4B floats:
@@ -661,6 +679,15 @@ namespace skvm {
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X+Y); }
         if (this->isImm(y.id, 0.0f)) { return x; }   // x+0 == x
         if (this->isImm(x.id, 0.0f)) { return y; }   // 0+y == y
+
+        if (fma_supported()) {
+            if (fProgram[x.id].op == Op::mul_f32) {
+                return {this->push(Op::fma_f32, fProgram[x.id].x, fProgram[x.id].y, y.id)};
+            }
+            if (fProgram[y.id].op == Op::mul_f32) {
+                return {this->push(Op::fma_f32, fProgram[y.id].x, fProgram[y.id].y, x.id)};
+            }
+        }
         return {this->push(Op::add_f32, x.id, y.id)};
     }
 
@@ -668,6 +695,16 @@ namespace skvm {
         float X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X-Y); }
         if (this->isImm(y.id, 0.0f)) { return x; }   // x-0 == x
+        if (fma_supported()) {
+            if (fProgram[x.id].op == Op::mul_f32) {
+                return {this->push(Op::fms_f32, fProgram[x.id].x, fProgram[x.id].y, y.id)};
+            }
+
+            // TODO: why does this lead to negative colors?
+            if (false && fProgram[y.id].op == Op::mul_f32) {
+                return {this->push(Op::fnma_f32, fProgram[y.id].x, fProgram[y.id].y, x.id)};
+            }
+        }
         return {this->push(Op::sub_f32, x.id, y.id)};
     }
 
@@ -684,15 +721,6 @@ namespace skvm {
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X/Y); }
         if (this->isImm(y.id, 1.0f)) { return x; }  // x/1 == x
         return {this->push(Op::div_f32, x.id, y.id)};
-    }
-
-    F32 Builder::mad(F32 x, F32 y, F32 z) {
-        float X,Y,Z;
-        if (this->allImm(x.id,&X, y.id,&Y, z.id,&Z)) { return this->splat(X*Y+Z); }
-        if (this->isImm(y.id, 1.0f)) { return this->add(x,z); }  // x*1+z == x+z
-        if (this->isImm(x.id, 1.0f)) { return this->add(y,z); }  // 1*y+z == y+z
-        if (this->isImm(z.id, 0.0f)) { return this->mul(x,y); }  // x*y+0 == x*y
-        return {this->push(Op::mad_f32, x.id, y.id, z.id)};
     }
 
     F32 Builder::sqrt(F32 x) {
@@ -860,19 +888,13 @@ namespace skvm {
         if (this->allImm(x.id,&X)) { return this->splat((int)X); }
         return {this->push(Op::trunc, x.id)};
     }
-    I32 Builder::round(F32 x) {
-        float X;
-        if (this->allImm(x.id,&X)) { return this->splat((int)lrintf(X)); }
-        return {this->push(Op::round, x.id)};
-    }
-
     F32 Builder::from_unorm(int bits, I32 x) {
-        float limit = (1<<bits)-1.0f;
-        return mul(to_f32(x), splat(1/limit));
+        F32 limit = splat(1 / ((1<<bits)-1.0f));
+        return mul(to_f32(x), limit);
     }
     I32 Builder::to_unorm(int bits, F32 x) {
-        float limit = (1<<bits)-1.0f;
-        return round(mul(x, splat(limit)));
+        F32 limit = splat((1<<bits)-1.0f);
+        return trunc(mad(x, limit, splat(0.5f)));
     }
 
     Color Builder::unpack_1010102(I32 rgba) {
@@ -1132,6 +1154,14 @@ namespace skvm {
     void Assembler::vfmadd132ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x98, dst,x,y); }
     void Assembler::vfmadd213ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xa8, dst,x,y); }
     void Assembler::vfmadd231ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xb8, dst,x,y); }
+
+    void Assembler::vfmsub132ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x9a, dst,x,y); }
+    void Assembler::vfmsub213ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xaa, dst,x,y); }
+    void Assembler::vfmsub231ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xba, dst,x,y); }
+
+    void Assembler::vfnmadd132ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x9c, dst,x,y); }
+    void Assembler::vfnmadd213ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xac, dst,x,y); }
+    void Assembler::vfnmadd231ps(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0xbc, dst,x,y); }
 
     void Assembler::vpackusdw(Ymm dst, Ymm x, Ymm y) { this->op(0x66,0x380f,0x2b, dst,x,y); }
     void Assembler::vpackuswb(Ymm dst, Ymm x, Ymm y) { this->op(0x66,  0x0f,0x67, dst,x,y); }
@@ -1484,6 +1514,7 @@ namespace skvm {
     void Assembler::fcmgt4s(V d, V n, V m) { this->op(0b0'1'1'01110'1'0'1, m, 0b1110'0'1, n, d); }
     void Assembler::fcmge4s(V d, V n, V m) { this->op(0b0'1'1'01110'0'0'1, m, 0b1110'0'1, n, d); }
 
+    // TODO: add x*y - z
     void Assembler::fmla4s(V d, V n, V m) { this->op(0b0'1'0'01110'0'0'1, m, 0b11001'1, n, d); }
     void Assembler::fmls4s(V d, V n, V m) { this->op(0b0'1'0'01110'1'0'1, m, 0b11001'1, n, d); }
 
@@ -1634,7 +1665,29 @@ namespace skvm {
     }
 
     void Program::eval(int n, void* args[]) const {
-        if (const void* b = fImpl->jit_entry) {
+    #define SKVM_JIT_STATS 0
+    #if SKVM_JIT_STATS
+        static std::atomic<int64_t>  calls{0}, jits{0},
+                                    pixels{0}, fast{0};
+        pixels += n;
+        if (0 == calls++) {
+            atexit([]{
+                int64_t num = jits .load(),
+                        den = calls.load();
+                SkDebugf("%.3g%% of %lld eval() calls went through JIT.\n", (100.0 * num)/den, den);
+                num = fast  .load();
+                den = pixels.load();
+                SkDebugf("%.3g%% of %lld pixels went through JIT.\n", (100.0 * num)/den, den);
+            });
+        }
+    #endif
+        // This may fail either simply because we can't JIT, or when using LLVM,
+        // because the work represented by fImpl->llvm_compiling hasn't finished yet.
+        if (const void* b = fImpl->jit_entry.load()) {
+    #if SKVM_JIT_STATS
+            jits++;
+            fast += n;
+    #endif
             void** a = args;
             switch (fImpl->strides.size()) {
                 case 0: return ((void(*)(int                        ))b)(n                    );
@@ -1648,266 +1701,10 @@ namespace skvm {
             }
         }
 
-        this->interpret(n, args);
-    }
-
-    void Program::interpret(int n, void* args[]) const {
-        // We'll operate in SIMT style, knocking off K-size chunks from n while possible.
-        constexpr int K = 16;
-        using I32 = skvx::Vec<K, int>;
-        using F32 = skvx::Vec<K, float>;
-        using U32 = skvx::Vec<K, uint32_t>;
-        using U16 = skvx::Vec<K, uint16_t>;
-        using  U8 = skvx::Vec<K, uint8_t>;
-
-        using I16x2 = skvx::Vec<2*K,  int16_t>;
-        using U16x2 = skvx::Vec<2*K, uint16_t>;
-
-        union Slot {
-            F32   f32;
-            I32   i32;
-            U32   u32;
-            I16x2 i16x2;
-            U16x2 u16x2;
-        };
-
-        Slot                     few_regs[16];
-        std::unique_ptr<char[]> many_regs;
-
-        Slot* regs = few_regs;
-
-        if (fImpl->regs > (int)SK_ARRAY_COUNT(few_regs)) {
-            // Annoyingly we can't trust that malloc() or new will work with Slot because
-            // the skvx::Vec types may have alignment greater than what they provide.
-            // We'll overallocate one extra register so we can align manually.
-            many_regs.reset(new char[ sizeof(Slot) * (fImpl->regs + 1) ]);
-
-            uintptr_t addr = (uintptr_t)many_regs.get();
-            addr += alignof(Slot) -
-                     (addr & (alignof(Slot) - 1));
-            SkASSERT((addr & (alignof(Slot) - 1)) == 0);
-            regs = (Slot*)addr;
-        }
-
-
-        auto r = [&](Reg id) -> Slot& {
-            SkASSERT(0 <= id && id < fImpl->regs);
-            return regs[id];
-        };
-        auto arg = [&](int ix) {
-            SkASSERT(0 <= ix && ix < (int)fImpl->strides.size());
-            return args[ix];
-        };
-
-        // Step each argument pointer ahead by its stride a number of times.
-        auto step_args = [&](int times) {
-            for (int i = 0; i < (int)fImpl->strides.size(); i++) {
-                args[i] = (void*)( (char*)args[i] + times * fImpl->strides[i] );
-            }
-        };
-
-        int start = 0,
-            stride;
-        for ( ; n > 0; start = fImpl->loop, n -= stride, step_args(stride)) {
-            stride = n >= K ? K : 1;
-
-            for (int i = start; i < (int)fImpl->instructions.size(); i++) {
-                Instruction inst = fImpl->instructions[i];
-
-                // d = op(x,y/imm,z/imm)
-                Reg   d = inst.d,
-                      x = inst.x,
-                      y = inst.y,
-                      z = inst.z;
-                int immy = inst.immy,
-                    immz = inst.immz;
-
-                // Ops that interact with memory need to know whether we're stride=1 or K,
-                // but all non-memory ops can run the same code no matter the stride.
-                switch (2*(int)inst.op + (stride == K ? 1 : 0)) {
-                    default: SkUNREACHABLE;
-
-                #define STRIDE_1(op) case 2*(int)op
-                #define STRIDE_K(op) case 2*(int)op + 1
-                    STRIDE_1(Op::store8 ): memcpy(arg(immy), &r(x).i32, 1); break;
-                    STRIDE_1(Op::store16): memcpy(arg(immy), &r(x).i32, 2); break;
-                    STRIDE_1(Op::store32): memcpy(arg(immy), &r(x).i32, 4); break;
-
-                    STRIDE_K(Op::store8 ): skvx::cast<uint8_t> (r(x).i32).store(arg(immy)); break;
-                    STRIDE_K(Op::store16): skvx::cast<uint16_t>(r(x).i32).store(arg(immy)); break;
-                    STRIDE_K(Op::store32):                     (r(x).i32).store(arg(immy)); break;
-
-                    STRIDE_1(Op::load8 ): r(d).i32 = 0; memcpy(&r(d).i32, arg(immy), 1); break;
-                    STRIDE_1(Op::load16): r(d).i32 = 0; memcpy(&r(d).i32, arg(immy), 2); break;
-                    STRIDE_1(Op::load32): r(d).i32 = 0; memcpy(&r(d).i32, arg(immy), 4); break;
-
-                    STRIDE_K(Op::load8 ): r(d).i32= skvx::cast<int>(U8 ::Load(arg(immy))); break;
-                    STRIDE_K(Op::load16): r(d).i32= skvx::cast<int>(U16::Load(arg(immy))); break;
-                    STRIDE_K(Op::load32): r(d).i32=                 I32::Load(arg(immy)) ; break;
-
-                    // The pointer we base our gather on is loaded indirectly from a uniform:
-                    //     - arg(immy) is the uniform holding our gather base pointer somewhere;
-                    //     - (const uint8_t*)arg(immy) + immz points to the gather base pointer;
-                    //     - memcpy() loads the gather base and into a pointer of the right type.
-                    // After all that we have an ordinary (uniform) pointer `ptr` to load from,
-                    // and we then gather from it using the varying indices in r(x).
-                    STRIDE_1(Op::gather8):
-                        for (int i = 0; i < K; i++) {
-                            const uint8_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)arg(immy) + immz, sizeof(ptr));
-                            r(d).i32[i] = (i==0) ? ptr[ r(x).i32[i] ] : 0;
-                        } break;
-                    STRIDE_1(Op::gather16):
-                        for (int i = 0; i < K; i++) {
-                            const uint16_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)arg(immy) + immz, sizeof(ptr));
-                            r(d).i32[i] = (i==0) ? ptr[ r(x).i32[i] ] : 0;
-                        } break;
-                    STRIDE_1(Op::gather32):
-                        for (int i = 0; i < K; i++) {
-                            const int* ptr;
-                            memcpy(&ptr, (const uint8_t*)arg(immy) + immz, sizeof(ptr));
-                            r(d).i32[i] = (i==0) ? ptr[ r(x).i32[i] ] : 0;
-                        } break;
-
-                    STRIDE_K(Op::gather8):
-                        for (int i = 0; i < K; i++) {
-                            const uint8_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)arg(immy) + immz, sizeof(ptr));
-                            r(d).i32[i] = ptr[ r(x).i32[i] ];
-                        } break;
-                    STRIDE_K(Op::gather16):
-                        for (int i = 0; i < K; i++) {
-                            const uint16_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)arg(immy) + immz, sizeof(ptr));
-                            r(d).i32[i] = ptr[ r(x).i32[i] ];
-                        } break;
-                    STRIDE_K(Op::gather32):
-                        for (int i = 0; i < K; i++) {
-                            const int* ptr;
-                            memcpy(&ptr, (const uint8_t*)arg(immy) + immz, sizeof(ptr));
-                            r(d).i32[i] = ptr[ r(x).i32[i] ];
-                        } break;
-
-                #undef STRIDE_1
-                #undef STRIDE_K
-
-                    // Ops that don't interact with memory should never care about the stride.
-                #define CASE(op) case 2*(int)op: /*fallthrough*/ case 2*(int)op+1
-
-                    CASE(Op::assert_true):
-                    #ifdef SK_DEBUG
-                        if (!all(r(x).i32)) {
-                            this->dump();
-                            SkDebugf("inst %d, register %d\n", i, y);
-                            for (int i = 0; i < K; i++) {
-                                SkDebugf("\t%2d: %08x (%g)\n", i, r(y).i32[i], r(y).f32[i]);
-                            }
-                        }
-                        SkASSERT(all(r(x).i32));
-                    #endif
-                    break;
-
-                    CASE(Op::index): static_assert(K == 16, "");
-                                     r(d).i32 = n - I32{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
-                                     break;
-
-                    CASE(Op::uniform8):
-                        r(d).i32 = *(const uint8_t* )( (const char*)arg(immy) + immz );
-                        break;
-                    CASE(Op::uniform16):
-                        r(d).i32 = *(const uint16_t*)( (const char*)arg(immy) + immz );
-                        break;
-                    CASE(Op::uniform32):
-                        r(d).i32 = *(const int*     )( (const char*)arg(immy) + immz );
-                        break;
-
-                    CASE(Op::splat): r(d).i32 = immy; break;
-
-                    CASE(Op::add_f32): r(d).f32 = r(x).f32 + r(y).f32; break;
-                    CASE(Op::sub_f32): r(d).f32 = r(x).f32 - r(y).f32; break;
-                    CASE(Op::mul_f32): r(d).f32 = r(x).f32 * r(y).f32; break;
-                    CASE(Op::div_f32): r(d).f32 = r(x).f32 / r(y).f32; break;
-                    CASE(Op::min_f32): r(d).f32 = min(r(x).f32, r(y).f32); break;
-                    CASE(Op::max_f32): r(d).f32 = max(r(x).f32, r(y).f32); break;
-
-                    // These _imm instructions are all x86/JIT only.
-                    CASE(Op::add_f32_imm):
-                    CASE(Op::sub_f32_imm):
-                    CASE(Op::mul_f32_imm):
-                    CASE(Op::min_f32_imm):
-                    CASE(Op::max_f32_imm):
-                    CASE(Op::bit_and_imm):
-                    CASE(Op::bit_or_imm ):
-                    CASE(Op::bit_xor_imm): SkUNREACHABLE; break;
-
-                    CASE(Op::mad_f32): r(d).f32 = r(x).f32 * r(y).f32 + r(z).f32; break;
-
-                    CASE(Op::sqrt_f32): r(d).f32 = sqrt(r(x).f32); break;
-
-                    CASE(Op::add_i32): r(d).i32 = r(x).i32 + r(y).i32; break;
-                    CASE(Op::sub_i32): r(d).i32 = r(x).i32 - r(y).i32; break;
-                    CASE(Op::mul_i32): r(d).i32 = r(x).i32 * r(y).i32; break;
-
-                    CASE(Op::add_i16x2): r(d).i16x2 = r(x).i16x2 + r(y).i16x2; break;
-                    CASE(Op::sub_i16x2): r(d).i16x2 = r(x).i16x2 - r(y).i16x2; break;
-                    CASE(Op::mul_i16x2): r(d).i16x2 = r(x).i16x2 * r(y).i16x2; break;
-
-                    CASE(Op::shl_i32): r(d).i32 = r(x).i32 << immy; break;
-                    CASE(Op::sra_i32): r(d).i32 = r(x).i32 >> immy; break;
-                    CASE(Op::shr_i32): r(d).u32 = r(x).u32 >> immy; break;
-
-                    CASE(Op::shl_i16x2): r(d).i16x2 = r(x).i16x2 << immy; break;
-                    CASE(Op::sra_i16x2): r(d).i16x2 = r(x).i16x2 >> immy; break;
-                    CASE(Op::shr_i16x2): r(d).u16x2 = r(x).u16x2 >> immy; break;
-
-                    CASE(Op:: eq_f32): r(d).i32 = r(x).f32 == r(y).f32; break;
-                    CASE(Op::neq_f32): r(d).i32 = r(x).f32 != r(y).f32; break;
-                    CASE(Op:: gt_f32): r(d).i32 = r(x).f32 >  r(y).f32; break;
-                    CASE(Op::gte_f32): r(d).i32 = r(x).f32 >= r(y).f32; break;
-
-                    CASE(Op:: eq_i32): r(d).i32 = r(x).i32 == r(y).i32; break;
-                    CASE(Op::neq_i32): r(d).i32 = r(x).i32 != r(y).i32; break;
-                    CASE(Op:: gt_i32): r(d).i32 = r(x).i32 >  r(y).i32; break;
-                    CASE(Op::gte_i32): r(d).i32 = r(x).i32 >= r(y).i32; break;
-
-                    CASE(Op:: eq_i16x2): r(d).i16x2 = r(x).i16x2 == r(y).i16x2; break;
-                    CASE(Op::neq_i16x2): r(d).i16x2 = r(x).i16x2 != r(y).i16x2; break;
-                    CASE(Op:: gt_i16x2): r(d).i16x2 = r(x).i16x2 >  r(y).i16x2; break;
-                    CASE(Op::gte_i16x2): r(d).i16x2 = r(x).i16x2 >= r(y).i16x2; break;
-
-                    CASE(Op::bit_and  ): r(d).i32 = r(x).i32 &  r(y).i32; break;
-                    CASE(Op::bit_or   ): r(d).i32 = r(x).i32 |  r(y).i32; break;
-                    CASE(Op::bit_xor  ): r(d).i32 = r(x).i32 ^  r(y).i32; break;
-                    CASE(Op::bit_clear): r(d).i32 = r(x).i32 & ~r(y).i32; break;
-
-                    CASE(Op::select): r(d).i32 = skvx::if_then_else(r(x).i32, r(y).i32, r(z).i32);
-                                      break;
-
-                    CASE(Op::pack):    r(d).u32 = r(x).u32 | (r(y).u32 << immz); break;
-
-                    CASE(Op::bytes): {
-                        const U32 table[] = {
-                            0,
-                            (r(x).u32      ) & 0xff,
-                            (r(x).u32 >>  8) & 0xff,
-                            (r(x).u32 >> 16) & 0xff,
-                            (r(x).u32 >> 24) & 0xff,
-                        };
-                        r(d).u32 = table[(immy >>  0) & 0xf] <<  0
-                                 | table[(immy >>  4) & 0xf] <<  8
-                                 | table[(immy >>  8) & 0xf] << 16
-                                 | table[(immy >> 12) & 0xf] << 24;
-                    } break;
-
-                    CASE(Op::floor):  r(d).f32 = skvx::floor(r(x).f32); break;
-                    CASE(Op::to_f32): r(d).f32 = skvx::cast<float>(r(x).i32); break;
-                    CASE(Op::trunc):  r(d).i32 = skvx::cast<int>  (r(x).f32); break;
-                    CASE(Op::round):  r(d).i32 = skvx::cast<int>  (r(x).f32 + 0.5f); break;
-                #undef CASE
-                }
-            }
-        }
+        // So we'll sometimes use the interpreter here even if later calls will use the JIT.
+        SkOpts::interpret_skvm(fImpl->instructions.data(), (int)fImpl->instructions.size(),
+                               this->nregs(), this->loop(), fImpl->strides.data(), this->nargs(),
+                               n, args);
     }
 
 #if defined(SKVM_LLVM)
@@ -2083,9 +1880,21 @@ namespace skvm {
                 case Op:: gt_f32: vals[i] = S(I32, b->CreateFCmpOGT(F(vals[x]), F(vals[y]))); break;
                 case Op::gte_f32: vals[i] = S(I32, b->CreateFCmpOGE(F(vals[x]), F(vals[y]))); break;
 
-                case Op::mad_f32:
-                    vals[i] = I(b->CreateIntrinsic(llvm::Intrinsic::fmuladd, {F32},
+                case Op::fma_f32:
+                    vals[i] = I(b->CreateIntrinsic(llvm::Intrinsic::fma, {F32},
                                                    {F(vals[x]), F(vals[y]), F(vals[z])}));
+                    break;
+
+                case Op::fms_f32:
+                    vals[i] = I(b->CreateIntrinsic(llvm::Intrinsic::fma, {F32},
+                                                   {F(vals[x]), F(vals[y]),
+                                                    b->CreateFNeg(F(vals[z]))}));
+                    break;
+
+                case Op::fnma_f32:
+                    vals[i] = I(b->CreateIntrinsic(llvm::Intrinsic::fma, {F32},
+                                                   {b->CreateFNeg(F(vals[x])), F(vals[y]),
+                                                    F(vals[z])}));
                     break;
 
                 case Op::floor:
@@ -2107,12 +1916,6 @@ namespace skvm {
 
                 case Op::to_f32: vals[i] = I(b->CreateSIToFP(  vals[x] , F32)); break;
                 case Op::trunc : vals[i] =   b->CreateFPToSI(F(vals[x]), I32) ; break;
-
-                case Op::round:
-                    // TODO: cvtps2dq, lround, etc. ?
-                    vals[i] = b->CreateFPToSI(b->CreateFAdd(F(vals[x]),
-                                                            llvm::ConstantFP::get(F32, 0.5)), I32);
-                    break;
 
                 case Op::add_i16x2: vals[i] = I(b->CreateAdd(x2(vals[x]), x2(vals[y]))); break;
                 case Op::sub_i16x2: vals[i] = I(b->CreateSub(x2(vals[x]), x2(vals[y]))); break;
@@ -2314,40 +2117,60 @@ namespace skvm {
             SkAssertResult(false == llvm::InitializeNativeTargetAsmPrinter());
         });
 
-        llvm::TargetOptions options;
-        options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
-
         if (llvm::ExecutionEngine* ee = llvm::EngineBuilder(std::move(mod))
                                             .setEngineKind(llvm::EngineKind::JIT)
                                             .setMCPU(llvm::sys::getHostCPUName())
-                                            .setTargetOptions(options)
                                             .create()) {
             fImpl->llvm_ctx = std::move(ctx);
             fImpl->llvm_ee.reset(ee);
-            fImpl->jit_entry = (void*)fImpl->llvm_ee->getFunctionAddress(debug_name);
+
+            // We have to be careful here about what we close over and how, in case fImpl moves.
+            // fImpl itself may change, but its pointee fields won't, so close over them by value.
+            // Also, debug_name will almost certainly leave scope, so copy it.
+            fImpl->llvm_compiling = std::async(std::launch::async, [dst  = &fImpl->jit_entry,
+                                                                    ee   =  fImpl->llvm_ee.get(),
+                                                                    name = std::string(debug_name)]{
+                // std::atomic<void*>*    dst;
+                // llvm::ExecutionEngine* ee;
+                // std::string            name;
+                dst->store( (void*)ee->getFunctionAddress(name.c_str()) );
+            });
         }
     }
 #endif
 
+    void Program::waitForLLVM() const {
+    #if defined(SKVM_LLVM)
+        if (fImpl->llvm_compiling.valid()) {
+            fImpl->llvm_compiling.wait();
+        }
+    #endif
+    }
+
     bool Program::hasJIT() const {
-        return fImpl->jit_entry != nullptr;
+        // Program::hasJIT() is really just a debugging / test aid,
+        // so we don't mind adding a sync point here to wait for compilation.
+        this->waitForLLVM();
+
+        return fImpl->jit_entry.load() != nullptr;
     }
 
     void Program::dropJIT() {
     #if defined(SKVM_LLVM)
+        this->waitForLLVM();
         fImpl->llvm_ee .reset(nullptr);
         fImpl->llvm_ctx.reset(nullptr);
     #elif defined(SKVM_JIT)
         if (fImpl->dylib) {
             dlclose(fImpl->dylib);
-        } else if (fImpl->jit_entry) {
-            munmap(fImpl->jit_entry, fImpl->jit_size);
+        } else if (auto jit_entry = fImpl->jit_entry.load()) {
+            munmap(jit_entry, fImpl->jit_size);
         }
     #else
         SkASSERT(!this->hasJIT());
     #endif
 
-        fImpl->jit_entry = nullptr;
+        fImpl->jit_entry.store(nullptr);
         fImpl->jit_size  = 0;
         fImpl->dylib     = nullptr;
     }
@@ -2385,13 +2208,13 @@ namespace skvm {
     #endif
     }
 
-    std::vector<Program::Instruction> Program::instructions() const { return fImpl->instructions; }
+    std::vector<InterpreterInstruction> Program::instructions() const { return fImpl->instructions; }
     int  Program::nargs() const { return (int)fImpl->strides.size(); }
     int  Program::nregs() const { return fImpl->regs; }
     int  Program::loop () const { return fImpl->loop; }
     bool Program::empty() const { return fImpl->instructions.empty(); }
 
-    // Translate OptimizedInstructions to Program::Instructions used by the interpreter.
+    // Translate OptimizedInstructions to InterpreterInstructions.
     void Program::setupInterpreter(const std::vector<OptimizedInstruction>& instructions) {
         // Register each instruction is assigned to.
         std::vector<Reg> reg(instructions.size());
@@ -2448,7 +2271,7 @@ namespace skvm {
             if (!hoisted(id)) { assign_register(id); }
         }
 
-        // Translate OptimizedInstructions to Program::Instructions by mapping values to
+        // Translate OptimizedInstructions to InterpreterIstructions by mapping values to
         // registers.  This will be two passes, first hoisted instructions, then inside the loop.
 
         // The loop begins at the fImpl->loop'th Instruction.
@@ -2463,7 +2286,7 @@ namespace skvm {
         };
 
         auto push_instruction = [&](Val id, const OptimizedInstruction& inst) {
-            Program::Instruction pinst{
+            InterpreterInstruction pinst{
                 inst.op,
                 lookup_register(id),
                 lookup_register(inst.x),
@@ -2669,7 +2492,7 @@ namespace skvm {
             maybe_recycle_register(z);
             // set_dst() and dst() will work read/write with this perhaps-just-updated avail.
 
-            // Some ops may decide dst on their own to best fit the instruction (see Op::mad_f32).
+            // Some ops may decide dst on their own to best fit the instruction (see Op::fma_f32).
             auto set_dst = [&](Reg reg){
                 SkASSERT(dst_is_set == false);
                 dst_is_set = true;
@@ -2828,7 +2651,7 @@ namespace skvm {
                 case Op::min_f32: a->vminps(dst(), r[x], r[y]); break;
                 case Op::max_f32: a->vmaxps(dst(), r[x], r[y]); break;
 
-                case Op::mad_f32:
+                case Op::fma_f32:
                     if      (avail & (1<<r[x])) { set_dst(r[x]); a->vfmadd132ps(r[x], r[z], r[y]); }
                     else if (avail & (1<<r[y])) { set_dst(r[y]); a->vfmadd213ps(r[y], r[x], r[z]); }
                     else if (avail & (1<<r[z])) { set_dst(r[z]); a->vfmadd231ps(r[z], r[x], r[y]); }
@@ -2836,6 +2659,25 @@ namespace skvm {
                                                                  a->vmovdqa    (dst(),r[x]);
                                                                  a->vfmadd132ps(dst(),r[z], r[y]); }
                                                                  break;
+
+                case Op::fms_f32:
+                    if      (avail & (1<<r[x])) { set_dst(r[x]); a->vfmsub132ps(r[x], r[z], r[y]); }
+                    else if (avail & (1<<r[y])) { set_dst(r[y]); a->vfmsub213ps(r[y], r[x], r[z]); }
+                    else if (avail & (1<<r[z])) { set_dst(r[z]); a->vfmsub231ps(r[z], r[x], r[y]); }
+                    else                        {                SkASSERT(dst() == tmp());
+                                                                 a->vmovdqa    (dst(),r[x]);
+                                                                 a->vfmsub132ps(dst(),r[z], r[y]); }
+                                                                 break;
+
+                case Op::fnma_f32:
+                    if      (avail & (1<<r[x])) { set_dst(r[x]); a->vfnmadd132ps(r[x],r[z], r[y]); }
+                    else if (avail & (1<<r[y])) { set_dst(r[y]); a->vfnmadd213ps(r[y],r[x], r[z]); }
+                    else if (avail & (1<<r[z])) { set_dst(r[z]); a->vfnmadd231ps(r[z],r[x], r[y]); }
+                    else                        {                SkASSERT(dst() == tmp());
+                                                                 a->vmovdqa    (dst(),r[x]);
+                                                                 a->vfnmadd132ps(dst(),r[z],r[y]); }
+                                                                 break;
+
                 case Op::sqrt_f32: a->vsqrtps(dst(), r[x]); break;
 
                 case Op::add_f32_imm: a->vaddps(dst(), r[x], &constants[immy].label); break;
@@ -2881,7 +2723,6 @@ namespace skvm {
                 case Op::floor : a->vroundps  (dst(), r[x], Assembler::FLOOR); break;
                 case Op::to_f32: a->vcvtdq2ps (dst(), r[x]); break;
                 case Op::trunc : a->vcvttps2dq(dst(), r[x]); break;
-                case Op::round : a->vcvtps2dq (dst(), r[x]); break;
 
                 case Op::bytes: a->vpshufb(dst(), r[x], &bytes_masks.find(immy)->label);
                                 break;
@@ -2931,7 +2772,8 @@ namespace skvm {
                 case Op::min_f32: a->fmin4s(dst(), r[x], r[y]); break;
                 case Op::max_f32: a->fmax4s(dst(), r[x], r[y]); break;
 
-                case Op::mad_f32: // fmla4s is z += x*y
+                // TODO: add fms_f32 and fnma_f32
+                case Op::fma_f32: // fmla4s is z += x*y
                     if (avail & (1<<r[z])) { set_dst(r[z]); a->fmla4s( r[z],  r[x],  r[y]);   }
                     else {                                  a->orr16b(tmp(),  r[z],  r[z]);
                                                             a->fmla4s(tmp(),  r[x],  r[y]);
@@ -2990,7 +2832,6 @@ namespace skvm {
 
                 case Op::to_f32: a->scvtf4s (dst(), r[x]); break;
                 case Op::trunc:  a->fcvtzs4s(dst(), r[x]); break;
-                case Op::round:  a->fcvtns4s(dst(), r[x]); break;
 
                 case Op::bytes:
                     if (try_hoisting) { a->tbl (dst(), r[x], bytes_masks.find(immy)->reg); }
@@ -3135,18 +2976,20 @@ namespace skvm {
 
         // mprotect works at page granularity.
         fImpl->jit_size = ((a.size() + page - 1) / page) * page;
-        fImpl->jit_entry
-            = mmap(nullptr,fImpl->jit_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1,0);
+
+        void* jit_entry
+             = mmap(nullptr,fImpl->jit_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1,0);
+        fImpl->jit_entry.store(jit_entry);
 
         // Assemble the program for real.
-        a = Assembler{fImpl->jit_entry};
+        a = Assembler{jit_entry};
         SkAssertResult(this->jit(instructions, try_hoisting, &a));
         SkASSERT(a.size() <= fImpl->jit_size);
 
         // Remap as executable, and flush caches on platforms that need that.
-        mprotect(fImpl->jit_entry, fImpl->jit_size, PROT_READ|PROT_EXEC);
-        __builtin___clear_cache((char*)fImpl->jit_entry,
-                                (char*)fImpl->jit_entry + fImpl->jit_size);
+        mprotect(jit_entry, fImpl->jit_size, PROT_READ|PROT_EXEC);
+        __builtin___clear_cache((char*)jit_entry,
+                                (char*)jit_entry + fImpl->jit_size);
 
         // For profiling and debugging, it's helpful to have this code loaded
         // dynamically rather than just jumping info fImpl->jit_entry.
@@ -3154,7 +2997,7 @@ namespace skvm {
             // Dump the raw program binary.
             SkString path = SkStringPrintf("/tmp/%s.XXXXXX", debug_name);
             int fd = mkstemp(path.writable_str());
-            ::write(fd, fImpl->jit_entry, a.size());
+            ::write(fd, jit_entry, a.size());
             close(fd);
 
             this->dropJIT();  // (unmap and null out fImpl->jit_entry.)
@@ -3168,7 +3011,7 @@ namespace skvm {
 
             // Load that dynamic library and look up skvm_jit().
             fImpl->dylib = dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
-            fImpl->jit_entry = dlsym(fImpl->dylib, "skvm_jit");
+            fImpl->jit_entry.store(dlsym(fImpl->dylib, "skvm_jit"));
         }
     }
 #endif
