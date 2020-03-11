@@ -574,6 +574,7 @@ cc_library_static {
           "src/gpu/GrImageContext.cpp",
           "src/gpu/GrImageTextureMaker.cpp",
           "src/gpu/GrLegacyDirectContext.cpp",
+          "src/gpu/GrManagedResource.cpp",
           "src/gpu/GrMemoryPool.cpp",
           "src/gpu/GrOnFlushResourceProvider.cpp",
           "src/gpu/GrOpFlushState.cpp",

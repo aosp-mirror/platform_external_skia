@@ -1649,6 +1649,30 @@ void SkCanvas::onClipPath(const SkPath& path, SkClipOp op, ClipEdgeStyle edgeSty
     fDeviceClipBounds = qr_clip_bounds(fMCRec->fRasterClip.getBounds());
 }
 
+void SkCanvas::clipShader(sk_sp<SkShader> sh, SkClipOp op) {
+    if (sh) {
+        if (sh->isOpaque()) {
+            if (op == SkClipOp::kIntersect) {
+                // we don't occlude anything, so skip this call
+            } else {
+                SkASSERT(op == SkClipOp::kDifference);
+                // we occlude everything, so set the clip to empty
+                this->clipRect({0,0,0,0});
+            }
+        } else {
+            this->onClipShader(std::move(sh), op);
+        }
+    }
+}
+
+void SkCanvas::onClipShader(sk_sp<SkShader> sh, SkClipOp op) {
+    AutoValidateClip avc(this);
+
+    FOR_EACH_TOP_DEVICE(device->clipShader(sh, op));
+
+    // we don't know how to mutate our conservative bounds, so we don't
+}
+
 void SkCanvas::clipRegion(const SkRegion& rgn, SkClipOp op) {
     this->checkForDeferredSave();
     this->onClipRegion(rgn, op);
