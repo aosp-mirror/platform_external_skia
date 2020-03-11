@@ -6,6 +6,7 @@
  */
 
 #include "src/core/SkTLazy.h"
+#include "src/core/SkVM.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 
 #if SK_SUPPORT_GPU
@@ -73,6 +74,21 @@ bool SkLocalMatrixShader::onAppendStages(const SkStageRec& rec) const {
     return as_SB(fProxyShader)->appendStages(newRec);
 }
 
+
+bool SkLocalMatrixShader::onProgram(skvm::Builder* p,
+                                    const SkMatrix& ctm, const SkMatrix* localM,
+                                    SkFilterQuality quality, SkColorSpace* dstCS,
+                                    skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
+                                    skvm::F32 x, skvm::F32 y,
+                                    skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const {
+    SkTCopyOnFirstWrite<SkMatrix> lm(this->getLocalMatrix());
+    if (localM) {
+        lm.writable()->preConcat(*localM);
+    }
+    return as_SB(fProxyShader)
+        ->program(p, ctm,lm.get(), quality,dstCS, uniforms,alloc, x,y, r,g,b,a);
+}
+
 sk_sp<SkShader> SkShader::makeWithLocalMatrix(const SkMatrix& localMatrix) const {
     if (localMatrix.isIdentity()) {
         return sk_ref_sp(const_cast<SkShader*>(this));
@@ -123,7 +139,28 @@ protected:
     Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override { return nullptr; }
 #endif
 
-    bool onAppendStages(const SkStageRec&) const override;
+    bool onAppendStages(const SkStageRec& rec) const override {
+        SkStageRec newRec = {
+            rec.fPipeline,
+            rec.fAlloc,
+            rec.fDstColorType,
+            rec.fDstCS,
+            rec.fPaint,
+            rec.fLocalM,
+            fCTM,
+        };
+        return as_SB(fProxyShader)->appendStages(newRec);
+    }
+
+    bool onProgram(skvm::Builder* p,
+                   const SkMatrix& ctm, const SkMatrix* localM,
+                   SkFilterQuality quality, SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
+                   skvm::F32 x, skvm::F32 y,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override {
+        return as_SB(fProxyShader)
+            ->program(p, fCTM,localM, quality,dstCS, uniforms,alloc, x,y, r,g,b,a);
+    }
 
 private:
     SK_FLATTENABLE_HOOKS(SkCTMShader)
@@ -146,19 +183,6 @@ std::unique_ptr<GrFragmentProcessor> SkCTMShader::asFragmentProcessor(
 sk_sp<SkFlattenable> SkCTMShader::CreateProc(SkReadBuffer& buffer) {
     SkASSERT(false);
     return nullptr;
-}
-
-bool SkCTMShader::onAppendStages(const SkStageRec& rec) const {
-    SkStageRec newRec = {
-        rec.fPipeline,
-        rec.fAlloc,
-        rec.fDstColorType,
-        rec.fDstCS,
-        rec.fPaint,
-        rec.fLocalM,
-        fCTM,
-    };
-    return as_SB(fProxyShader)->appendStages(newRec);
 }
 
 sk_sp<SkShader> SkShaderBase::makeWithCTM(const SkMatrix& postM) const {
