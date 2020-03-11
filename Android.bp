@@ -1940,7 +1940,6 @@ cc_test {
         "bench/DashBench.cpp",
         "bench/DisplacementBench.cpp",
         "bench/DrawBitmapAABench.cpp",
-        "bench/DrawLatticeBench.cpp",
         "bench/EncodeBench.cpp",
         "bench/FSRectBench.cpp",
         "bench/FontCacheBench.cpp",
