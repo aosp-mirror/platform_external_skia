@@ -321,11 +321,11 @@ private:
         this->createMesh(target, std::move(vertexBuffer), firstVertex, count);
     }
 
-    GrProgramInfo* createProgramInfo(const GrCaps* caps,
-                                     SkArenaAlloc* arena,
-                                     const GrSurfaceProxyView* outputView,
-                                     GrAppliedClip&& appliedClip,
-                                     const GrXferProcessor::DstProxyView& dstProxyView) {
+    void onCreateProgramInfo(const GrCaps* caps,
+                             SkArenaAlloc* arena,
+                             const GrSurfaceProxyView* outputView,
+                             GrAppliedClip&& appliedClip,
+                             const GrXferProcessor::DstProxyView& dstProxyView) override {
         GrGeometryProcessor* gp;
         {
             using namespace GrDefaultGeoProcFactory;
@@ -345,17 +345,15 @@ private:
                 coverageType = Coverage::kSolid_Type;
             }
             if (fAntiAlias) {
-                gp = GrDefaultGeoProcFactory::MakeForDeviceSpace(arena, caps->shaderCaps(),
-                                                                 color, coverageType,
+                gp = GrDefaultGeoProcFactory::MakeForDeviceSpace(arena, color, coverageType,
                                                                  localCoordsType, fViewMatrix);
             } else {
-                gp = GrDefaultGeoProcFactory::Make(arena, caps->shaderCaps(),
-                                                   color, coverageType, localCoordsType,
+                gp = GrDefaultGeoProcFactory::Make(arena, color, coverageType, localCoordsType,
                                                    fViewMatrix);
             }
         }
         if (!gp) {
-            return nullptr;
+            return;
         }
 
 #ifdef SK_DEBUG
@@ -367,17 +365,9 @@ private:
         GrPrimitiveType primitiveType = TESSELLATOR_WIREFRAME ? GrPrimitiveType::kLines
                                                               : GrPrimitiveType::kTriangles;
 
-        return fHelper.createProgramInfoWithStencil(caps, arena, outputView,
-                                                    std::move(appliedClip), dstProxyView,
-                                                    gp, primitiveType);
-    }
-
-    GrProgramInfo* createProgramInfo(Target* target) {
-        return this->createProgramInfo(&target->caps(),
-                                       target->allocator(),
-                                       target->outputView(),
-                                       target->detachAppliedClip(),
-                                       target->dstProxyView());
+        fProgramInfo =  fHelper.createProgramInfoWithStencil(caps, arena, outputView,
+                                                             std::move(appliedClip), dstProxyView,
+                                                             gp, primitiveType);
     }
 
     void onPrePrepareDraws(GrRecordingContext* context,
@@ -389,8 +379,8 @@ private:
         // This is equivalent to a GrOpFlushState::detachAppliedClip
         GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip();
 
-        fProgramInfo = this->createProgramInfo(context->priv().caps(), arena, outputView,
-                                               std::move(appliedClip), dstProxyView);
+        this->createProgramInfo(context->priv().caps(), arena, outputView,
+                                std::move(appliedClip), dstProxyView);
 
         context->priv().recordProgramInfo(fProgramInfo);
     }
@@ -411,7 +401,7 @@ private:
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
         if (!fProgramInfo) {
-            fProgramInfo = this->createProgramInfo(flushState);
+            this->createProgramInfo(flushState);
         }
 
         if (!fProgramInfo || !fMesh) {
