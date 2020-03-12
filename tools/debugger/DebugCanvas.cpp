@@ -318,6 +318,10 @@ void DebugCanvas::onClipRegion(const SkRegion& region, SkClipOp op) {
     this->addDrawCommand(new ClipRegionCommand(region, op));
 }
 
+void DebugCanvas::onClipShader(sk_sp<SkShader> cs, SkClipOp op) {
+    this->addDrawCommand(new ClipShaderCommand(std::move(cs), op));
+}
+
 void DebugCanvas::didConcat44(const SkScalar m[16]) {
     // TODO
     this->INHERITED::didConcat44(m);
@@ -370,13 +374,6 @@ void DebugCanvas::onDrawBitmap(const SkBitmap& bitmap,
     this->addDrawCommand(new DrawBitmapCommand(bitmap, left, top, paint));
 }
 
-void DebugCanvas::onDrawBitmapLattice(const SkBitmap& bitmap,
-                                      const Lattice&  lattice,
-                                      const SkRect&   dst,
-                                      const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapLatticeCommand(bitmap, lattice, dst, paint));
-}
-
 void DebugCanvas::onDrawBitmapRect(const SkBitmap&   bitmap,
                                    const SkRect*     src,
                                    const SkRect&     dst,
@@ -384,13 +381,6 @@ void DebugCanvas::onDrawBitmapRect(const SkBitmap&   bitmap,
                                    SrcRectConstraint constraint) {
     this->addDrawCommand(
             new DrawBitmapRectCommand(bitmap, src, dst, paint, (SrcRectConstraint)constraint));
-}
-
-void DebugCanvas::onDrawBitmapNine(const SkBitmap& bitmap,
-                                   const SkIRect&  center,
-                                   const SkRect&   dst,
-                                   const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapNineCommand(bitmap, center, dst, paint));
 }
 
 void DebugCanvas::onDrawImage(const SkImage* image,

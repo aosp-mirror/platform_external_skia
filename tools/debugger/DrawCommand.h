@@ -34,11 +34,10 @@ public:
         kClipRegion_OpType,
         kClipRect_OpType,
         kClipRRect_OpType,
+        kClipShader_OpType,
         kConcat_OpType,
         kDrawAnnotation_OpType,
         kDrawBitmap_OpType,
-        kDrawBitmapLattice_OpType,
-        kDrawBitmapNine_OpType,
         kDrawBitmapRect_OpType,
         kDrawDRRect_OpType,
         kDrawImage_OpType,
@@ -196,6 +195,20 @@ private:
     typedef DrawCommand INHERITED;
 };
 
+class ClipShaderCommand : public DrawCommand {
+public:
+    ClipShaderCommand(sk_sp<SkShader>, SkClipOp);
+    void execute(SkCanvas* canvas) const override;
+    bool render(SkCanvas* canvas) const override;
+    void toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const override;
+
+private:
+    sk_sp<SkShader> fShader;
+    SkClipOp fOp;
+
+    typedef DrawCommand INHERITED;
+};
+
 class ConcatCommand : public DrawCommand {
 public:
     ConcatCommand(const SkMatrix& matrix);
@@ -233,44 +246,6 @@ private:
     SkBitmap         fBitmap;
     SkScalar         fLeft;
     SkScalar         fTop;
-    SkTLazy<SkPaint> fPaint;
-
-    typedef DrawCommand INHERITED;
-};
-
-class DrawBitmapLatticeCommand : public DrawCommand {
-public:
-    DrawBitmapLatticeCommand(const SkBitmap&          bitmap,
-                             const SkCanvas::Lattice& lattice,
-                             const SkRect&            dst,
-                             const SkPaint*           paint);
-    void execute(SkCanvas* canvas) const override;
-    bool render(SkCanvas* canvas) const override;
-    void toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const override;
-
-private:
-    SkBitmap          fBitmap;
-    SkCanvas::Lattice fLattice;
-    SkRect            fDst;
-    SkTLazy<SkPaint>  fPaint;
-
-    typedef DrawCommand INHERITED;
-};
-
-class DrawBitmapNineCommand : public DrawCommand {
-public:
-    DrawBitmapNineCommand(const SkBitmap& bitmap,
-                          const SkIRect&  center,
-                          const SkRect&   dst,
-                          const SkPaint*  paint);
-    void execute(SkCanvas* canvas) const override;
-    bool render(SkCanvas* canvas) const override;
-    void toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const override;
-
-private:
-    SkBitmap         fBitmap;
-    SkIRect          fCenter;
-    SkRect           fDst;
     SkTLazy<SkPaint> fPaint;
 
     typedef DrawCommand INHERITED;

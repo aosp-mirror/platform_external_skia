@@ -117,6 +117,11 @@ public:
         this->validate();
     }
 
+    void clipShader(sk_sp<SkShader> sh) {
+        this->writable_rc().op(std::move(sh));
+        this->validate();
+    }
+
     void clipRegion(const SkRegion& rgn, SkClipOp op) {
         this->writable_rc().op(rgn, (SkRegion::Op)op);
         this->trimIfExpanding(op);

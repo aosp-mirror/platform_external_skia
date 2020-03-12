@@ -347,6 +347,17 @@ bool SkRasterClip::op(const SkRasterClip& clip, SkRegion::Op op) {
     return this->updateCacheAndReturnNonEmpty();
 }
 
+bool SkRasterClip::op(sk_sp<SkShader> sh) {
+    AUTO_RASTERCLIP_VALIDATE(*this);
+
+    if (!fShader) {
+        fShader = sh;
+    } else {
+        fShader = SkShaders::Blend(SkBlendMode::kSrcIn, sh, fShader);
+    }
+    return !this->isEmpty();
+}
+
 /**
  *  Our antialiasing currently has a granularity of 1/4 of a pixel along each
  *  axis. Thus we can treat an axis coordinate as an integer if it differs

@@ -687,7 +687,8 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
                              const SkMatrix& matrix,
                              const SkPaint& origPaint,
                              SkArenaAlloc* alloc,
-                             bool drawCoverage) {
+                             bool drawCoverage,
+                             sk_sp<SkShader> clipShader) {
     SkASSERT(alloc);
 
     if (kUnknown_SkColorType == device.colorType()) {
@@ -744,14 +745,14 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
     try_skvm_blitter = true;
 #endif
     if (try_skvm_blitter) {
-        if (auto blitter = SkCreateSkVMBlitter(device, *paint, matrix, alloc)) {
+        if (auto blitter = SkCreateSkVMBlitter(device, *paint, matrix, alloc, clipShader)) {
             return blitter;
         }
     }
 
     // We'll end here for many interesting cases: color spaces, color filters, most color types.
-    if (UseRasterPipelineBlitter(device, *paint, matrix)) {
-        auto blitter = SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc);
+    if (UseRasterPipelineBlitter(device, *paint, matrix) || clipShader) {
+        auto blitter = SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc, clipShader);
         SkASSERT(blitter);
         return blitter;
     }
@@ -772,7 +773,7 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
 
         // Creating the context isn't always possible... we'll just fall back to raster pipeline.
         if (!shaderContext) {
-            auto blitter = SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc);
+            auto blitter = SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc, clipShader);
             SkASSERT(blitter);
             return blitter;
         }
@@ -794,7 +795,7 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
             if (shaderContext && SkRGB565_Shader_Blitter::Supports(device, *paint)) {
                 return alloc->make<SkRGB565_Shader_Blitter>(device, *paint, shaderContext);
             } else {
-                return SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc);
+                return SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc, clipShader);
             }
 
         default:
