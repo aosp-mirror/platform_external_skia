@@ -29,6 +29,7 @@
 #include "src/core/SkStroke.h"
 #include "src/core/SkTLazy.h"
 #include "src/core/SkVertState.h"
+#include "src/core/SkVerticesPriv.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrBlurUtils.h"
 #include "src/gpu/GrContextPriv.h"
@@ -632,23 +633,6 @@ void SkGpuDevice::drawPath(const SkPath& origSrcPath, const SkPaint& paint, bool
                                          paint, this->localToDevice(), shape);
 }
 
-void SkGpuDevice::drawSprite(const SkBitmap& bitmap,
-                             int left, int top, const SkPaint& paint) {
-    ASSERT_SINGLE_OWNER
-    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawSprite", fContext.get());
-
-    if (fContext->priv().abandoned()) {
-        return;
-    }
-
-    sk_sp<SkSpecialImage> srcImg = this->makeSpecial(bitmap);
-    if (!srcImg) {
-        return;
-    }
-
-    this->drawSpecial(srcImg.get(), left, top, paint, nullptr, SkMatrix::I());
-}
-
 void SkGpuDevice::drawSpecial(SkSpecialImage* special, int left, int top, const SkPaint& paint,
                               SkImage* clipImage, const SkMatrix& clipMatrix) {
     SkASSERT(!paint.getMaskFilter());
@@ -757,13 +741,6 @@ void SkGpuDevice::drawSpecial(SkSpecialImage* special, int left, int top, const 
     // Draw directly in screen space, possibly with an extra coverage processor
     fRenderTargetContext->fillRectToRect(this->clip(), std::move(grPaint),
             GrAA(paint.isAntiAlias()), SkMatrix::I(), dstRect, srcRect);
-}
-
-void SkGpuDevice::drawBitmapRect(const SkBitmap& bitmap,
-                                 const SkRect* src, const SkRect& origDst,
-                                 const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
-    sk_sp<SkImage> asImage = SkMakeImageFromRasterBitmap(bitmap, kNever_SkCopyPixelsMode);
-    this->drawImageRect(asImage.get(), src, origDst, paint, constraint);
 }
 
 sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkBitmap& bitmap) {
@@ -913,14 +890,6 @@ void SkGpuDevice::drawImageNine(const SkImage* image,
     }
 }
 
-void SkGpuDevice::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
-                                 const SkRect& dst, const SkPaint& paint) {
-    ASSERT_SINGLE_OWNER
-    auto iter = std::make_unique<SkLatticeIter>(bitmap.width(), bitmap.height(), center, dst);
-    GrBitmapTextureMaker maker(fContext.get(), bitmap, GrBitmapTextureMaker::Cached::kYes);
-    this->drawProducerLattice(&maker, std::move(iter), dst, paint);
-}
-
 void SkGpuDevice::drawProducerLattice(GrTextureProducer* producer,
                                       std::unique_ptr<SkLatticeIter> iter, const SkRect& dst,
                                       const SkPaint& origPaint) {
@@ -970,15 +939,6 @@ void SkGpuDevice::drawImageLattice(const SkImage* image,
             this->drawProducerLattice(&maker, std::move(iter), dst, paint);
         }
     }
-}
-
-void SkGpuDevice::drawBitmapLattice(const SkBitmap& bitmap,
-                                    const SkCanvas::Lattice& lattice, const SkRect& dst,
-                                    const SkPaint& paint) {
-    ASSERT_SINGLE_OWNER
-    auto iter = std::make_unique<SkLatticeIter>(lattice, dst);
-    GrBitmapTextureMaker maker(fContext.get(), bitmap, GrBitmapTextureMaker::Cached::kYes);
-    this->drawProducerLattice(&maker, std::move(iter), dst, paint);
 }
 
 static bool init_vertices_paint(GrContext* context, const GrColorInfo& colorInfo,
@@ -1072,10 +1032,13 @@ void SkGpuDevice::drawVertices(const SkVertices* vertices, SkBlendMode mode, con
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawVertices", fContext.get());
 
+    SkVertices::Info info;
+    vertices->getInfo(&info);
+
     SkASSERT(vertices);
     GrPaint grPaint;
-    bool hasColors = vertices->hasColors();
-    bool hasTexs = vertices->hasTexCoords();
+    bool hasColors = info.hasColors();
+    bool hasTexs = info.hasTexCoords();
     if ((!hasTexs || !paint.getShader()) && !hasColors) {
         // The dreaded wireframe mode. Fallback to drawVertices and go so slooooooow.
         this->wireframeVertices(vertices->mode(), vertices->vertexCount(), vertices->positions(),
