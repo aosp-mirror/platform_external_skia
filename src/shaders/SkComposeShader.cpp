@@ -12,6 +12,7 @@
 #include "src/core/SkBlendModePriv.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
+#include "src/core/SkVM.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkColorShader.h"
 #include "src/shaders/SkComposeShader.h"
@@ -132,6 +133,21 @@ bool SkShader_Blend::onAppendStages(const SkStageRec& orig_rec) const {
     return true;
 }
 
+skvm::Color SkShader_Blend::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y,
+                                      const SkMatrix& ctm, const SkMatrix* localM,
+                                      SkFilterQuality q, SkColorSpace* cs,
+                                      skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
+    skvm::Color dst, src;
+    if (skvm::BlendModeSupported(fMode) &&
+        (dst = as_SB(fDst)->program(p, x,y, ctm,localM, q, cs, uniforms, alloc)) &&
+        (src = as_SB(fSrc)->program(p, x,y, ctm,localM, q, cs, uniforms, alloc)))
+    {
+        return skvm::BlendModeProgram(p, fMode, src, dst);
+    }
+    return {};
+}
+
+
 sk_sp<SkFlattenable> SkShader_Lerp::CreateProc(SkReadBuffer& buffer) {
     sk_sp<SkShader> dst(buffer.readShader());
     sk_sp<SkShader> src(buffer.readShader());
@@ -156,6 +172,25 @@ bool SkShader_Lerp::onAppendStages(const SkStageRec& orig_rec) const {
     rec.fPipeline->append(SkRasterPipeline::load_dst, res0);
     rec.fPipeline->append(SkRasterPipeline::lerp_1_float, &fWeight);
     return true;
+}
+
+skvm::Color SkShader_Lerp::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y,
+                                     const SkMatrix& ctm, const SkMatrix* localM,
+                                     SkFilterQuality q, SkColorSpace* cs,
+                                     skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
+    skvm::Color dst, src;
+    if ((dst = as_SB(fDst)->program(p, x,y, ctm,localM, q, cs, uniforms, alloc)) &&
+        (src = as_SB(fSrc)->program(p, x,y, ctm,localM, q, cs, uniforms, alloc)))
+    {
+        auto t = p->uniformF(uniforms->pushF(fWeight));
+        return {
+            p->lerp(dst.r, src.r, t),
+            p->lerp(dst.g, src.g, t),
+            p->lerp(dst.b, src.b, t),
+            p->lerp(dst.a, src.a, t),
+        };
+    }
+    return {};
 }
 
 #if SK_SUPPORT_GPU

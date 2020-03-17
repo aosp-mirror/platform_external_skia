@@ -1420,8 +1420,7 @@ private:
 
         fMesh = target->allocMesh();
         fMesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertCount - 1,
-                         GrPrimitiveRestart::kNo);
-        fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
+                         GrPrimitiveRestart::kNo, std::move(vertexBuffer), firstVertex);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -1491,7 +1490,7 @@ private:
     bool fRoundCaps;
     bool fWideColor;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
@@ -1743,8 +1742,7 @@ private:
 
         fMesh = target->allocMesh();
         fMesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertCount - 1,
-                          GrPrimitiveRestart::kNo);
-        fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
+                          GrPrimitiveRestart::kNo, std::move(vertexBuffer), firstVertex);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -1800,7 +1798,7 @@ private:
     int fIndexCount;
     bool fWideColor;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
@@ -2082,7 +2080,7 @@ private:
     bool fUseScale;
     SkSTArray<1, Ellipse, true> fEllipses;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
@@ -2350,7 +2348,7 @@ private:
     bool fUseScale;
     SkSTArray<1, Ellipse, true> fEllipses;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
@@ -2755,8 +2753,7 @@ private:
 
         fMesh = target->allocMesh();
         fMesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertCount - 1,
-                          GrPrimitiveRestart::kNo);
-        fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
+                          GrPrimitiveRestart::kNo, std::move(vertexBuffer), firstVertex);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -2811,7 +2808,7 @@ private:
     bool fWideColor;
     SkSTArray<1, RRect, true> fRRects;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
@@ -3120,7 +3117,7 @@ private:
     bool fUseScale;
     SkSTArray<1, RRect, true> fRRects;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;

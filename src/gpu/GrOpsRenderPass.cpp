@@ -13,11 +13,11 @@
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrFixedClip.h"
 #include "src/gpu/GrGpu.h"
-#include "src/gpu/GrMesh.h"
 #include "src/gpu/GrPrimitiveProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrSimpleMesh.h"
 #include "src/gpu/GrTexturePriv.h"
 
 void GrOpsRenderPass::clear(const GrFixedClip& clip, const SkPMColor4f& color) {
@@ -45,6 +45,9 @@ void GrOpsRenderPass::executeDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler
 void GrOpsRenderPass::bindPipeline(const GrProgramInfo& programInfo, const SkRect& drawBounds,
                                    const SkIRect* optionalScissorRect) {
 #ifdef SK_DEBUG
+    // Both the 'programInfo' and this renderPass have an origin. Since they come from the same
+    // place (i.e., the target renderTargetProxy) they had best agree.
+    SkASSERT(programInfo.origin() == fOrigin);
     if (programInfo.primProc().hasInstanceAttributes()) {
          SkASSERT(this->gpu()->caps()->instanceAttribSupport());
     }
@@ -154,7 +157,7 @@ void GrOpsRenderPass::bindTextures(const GrPrimitiveProcessor& primProc,
     this->bindTextures(primProc, &ptr, pipeline);
 }
 
-void GrOpsRenderPass::drawMeshes(const GrProgramInfo& programInfo, const GrMesh meshes[],
+void GrOpsRenderPass::drawMeshes(const GrProgramInfo& programInfo, const GrSimpleMesh meshes[],
                                  int meshCount) {
     if (programInfo.hasFixedScissor()) {
         this->setScissorRect(programInfo.fixedScissor());

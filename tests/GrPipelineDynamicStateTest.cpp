@@ -149,11 +149,10 @@ private:
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
         GrPipeline pipeline(fScissorTest, SkBlendMode::kSrc,
                             flushState->drawOpArgs().outputSwizzle());
-        SkSTArray<kNumMeshes, GrMesh> meshes;
+        SkSTArray<kNumMeshes, GrSimpleMesh> meshes;
         for (int i = 0; i < kNumMeshes; ++i) {
-            GrMesh& mesh = meshes.push_back();
-            mesh.setNonIndexedNonInstanced(4);
-            mesh.setVertexData(fVertexBuffer, 4 * i);
+            GrSimpleMesh& mesh = meshes.push_back();
+            mesh.set(fVertexBuffer, 4, 4 * i);
         }
         GrPipeline::DynamicStateArrays dynamicState;
         dynamicState.fScissorRects = kDynamicScissors;

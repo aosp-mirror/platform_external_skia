@@ -242,8 +242,7 @@ private:
         }
 
         fMesh = target->allocMesh();
-        fMesh->setNonIndexedNonInstanced(vertexCount);
-        fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
+        fMesh->set(std::move(vertexBuffer), vertexCount, firstVertex);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -262,7 +261,7 @@ private:
     SkMatrix       fViewMatrix;
     SkRect         fRect;
     SkScalar       fStrokeWidth;
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     const static int kVertsPerHairlineRect = 5;
@@ -508,7 +507,7 @@ private:
     Helper         fHelper;
     SkSTArray<1, RectInfo, true> fRects;
     SkMatrix       fViewMatrix;
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
     bool           fMiterStroke;
     bool           fWideColor;

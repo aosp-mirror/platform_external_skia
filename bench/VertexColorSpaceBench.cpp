@@ -253,8 +253,7 @@ private:
         }
 
         fMesh = target->allocMesh();
-        fMesh->setNonIndexedNonInstanced(kVertexCount);
-        fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
+        fMesh->set(std::move(vertexBuffer), kVertexCount, firstVertex);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -271,7 +270,7 @@ private:
     SkColor4f fColor4f;
     sk_sp<GrColorSpaceXform> fColorSpaceXform;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;

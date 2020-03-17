@@ -149,7 +149,7 @@ private:
     ColorArrayType fColorArrayType;
     sk_sp<GrColorSpaceXform> fColorSpaceXform;
 
-    GrMesh*        fMesh = nullptr;
+    GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
@@ -342,11 +342,10 @@ void DrawVerticesOp::onPrepareDraws(Target* target) {
     fMesh = target->allocMesh();
     if (this->isIndexed()) {
         fMesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertexCount - 1,
-                         GrPrimitiveRestart::kNo);
+                         GrPrimitiveRestart::kNo, std::move(vertexBuffer), firstVertex);
     } else {
-        fMesh->setNonIndexedNonInstanced(fVertexCount);
+        fMesh->set(std::move(vertexBuffer), fVertexCount, firstVertex);
     }
-    fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
 }
 
 void DrawVerticesOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {

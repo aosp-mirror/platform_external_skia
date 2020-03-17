@@ -616,8 +616,7 @@ private:
 
         fMesh = target->allocMesh();
         fMesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertCount - 1,
-                          GrPrimitiveRestart::kNo);
-        fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
+                          GrPrimitiveRestart::kNo, std::move(vertexBuffer), firstVertex);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
@@ -655,7 +654,7 @@ private:
     int fIndexCount;
     GrSurfaceProxyView fFalloffView;
 
-    GrMesh*            fMesh = nullptr;
+    GrSimpleMesh*      fMesh = nullptr;
     GrProgramInfo*     fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;

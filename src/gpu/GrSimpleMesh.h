@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrMesh_DEFINED
-#define GrMesh_DEFINED
+#ifndef GrSimpleMesh_DEFINED
+#define GrSimpleMesh_DEFINED
 
 #include "src/gpu/GrBuffer.h"
 #include "src/gpu/GrGpuBuffer.h"
@@ -15,25 +15,22 @@
 class GrPrimitiveProcessor;
 
 /**
- * Used to communicate index and vertex buffers, counts, and offsets for a draw from GrOp to
- * GrGpu. It also holds the primitive type for the draw. TODO: Consider moving ownership of this
- * and draw-issuing responsibility to GrPrimitiveProcessor. The rest of the vertex info lives there
- * already (stride, attribute mappings).
+ * Used to communicate simple (non-instanced, direct) draws from GrOp to GrOpsRenderPass.
+ * TODO: Consider migrating every Op to make the appropriate draw directly on GrOpsRenderPass.
  */
-class GrMesh {
+class GrSimpleMesh {
 public:
     const GrBuffer* indexBuffer() const { return fIndexBuffer.get(); }
-    GrPrimitiveRestart primitiveRestart() const { return fPrimitiveRestart; }
     const GrBuffer* vertexBuffer() const { return fVertexBuffer.get(); }
 
-    void setNonIndexedNonInstanced(int vertexCount);
-
+    void set(sk_sp<const GrBuffer> vertexBuffer, int vertexCount, int baseVertex);
     void setIndexed(sk_sp<const GrBuffer> indexBuffer, int indexCount, int baseIndex,
-                    uint16_t minIndexValue, uint16_t maxIndexValue, GrPrimitiveRestart);
-    void setIndexedPatterned(sk_sp<const GrBuffer> indexBuffer, int indexCount, int vertexCount,
-                             int patternRepeatCount, int maxPatternRepetitionsInIndexBuffer);
-
-    void setVertexData(sk_sp<const GrBuffer> vertexBuffer, int baseVertex = 0);
+                    uint16_t minIndexValue, uint16_t maxIndexValue, GrPrimitiveRestart,
+                    sk_sp<const GrBuffer> vertexBuffer, int baseVertex);
+    void setIndexedPatterned(sk_sp<const GrBuffer> indexBuffer, int indexCount,
+                             int patternRepeatCount, int maxPatternRepetitionsInIndexBuffer,
+                             sk_sp<const GrBuffer> vertexBuffer, int patternVertexCount,
+                             int baseVertex);
 
     void draw(GrOpsRenderPass*) const;
 
@@ -54,20 +51,24 @@ private:
     SkDEBUGCODE(bool fIsInitialized = false;)
 };
 
-inline void GrMesh::setNonIndexedNonInstanced(int vertexCount) {
+inline void GrSimpleMesh::set(sk_sp<const GrBuffer> vertexBuffer, int vertexCount, int baseVertex) {
+    SkASSERT(baseVertex >= 0);
     fIndexBuffer.reset();
+    fVertexBuffer = std::move(vertexBuffer);
     fVertexCount = vertexCount;
-    fPrimitiveRestart = GrPrimitiveRestart::kNo;
+    fBaseVertex = baseVertex;
     SkDEBUGCODE(fIsInitialized = true;)
 }
 
-inline void GrMesh::setIndexed(sk_sp<const GrBuffer> indexBuffer, int indexCount, int baseIndex,
-                               uint16_t minIndexValue, uint16_t maxIndexValue,
-                               GrPrimitiveRestart primitiveRestart) {
+inline void GrSimpleMesh::setIndexed(sk_sp<const GrBuffer> indexBuffer, int indexCount,
+                                     int baseIndex, uint16_t minIndexValue, uint16_t maxIndexValue,
+                                     GrPrimitiveRestart primitiveRestart,
+                                     sk_sp<const GrBuffer> vertexBuffer, int baseVertex) {
     SkASSERT(indexBuffer);
     SkASSERT(indexCount >= 1);
     SkASSERT(baseIndex >= 0);
     SkASSERT(maxIndexValue >= minIndexValue);
+    SkASSERT(baseVertex >= 0);
     fIndexBuffer = std::move(indexBuffer);
     fIndexCount = indexCount;
     fPatternRepeatCount = 0;
@@ -75,33 +76,33 @@ inline void GrMesh::setIndexed(sk_sp<const GrBuffer> indexBuffer, int indexCount
     fMinIndexValue = minIndexValue;
     fMaxIndexValue = maxIndexValue;
     fPrimitiveRestart = primitiveRestart;
+    fVertexBuffer = std::move(vertexBuffer);
+    fBaseVertex = baseVertex;
     SkDEBUGCODE(fIsInitialized = true;)
 }
 
-inline void GrMesh::setIndexedPatterned(sk_sp<const GrBuffer> indexBuffer, int indexCount,
-                                        int vertexCount, int patternRepeatCount,
-                                        int maxPatternRepetitionsInIndexBuffer) {
+inline void GrSimpleMesh::setIndexedPatterned(
+        sk_sp<const GrBuffer> indexBuffer, int indexCount, int patternRepeatCount,
+        int maxPatternRepetitionsInIndexBuffer, sk_sp<const GrBuffer> vertexBuffer,
+        int patternVertexCount, int baseVertex) {
     SkASSERT(indexBuffer);
     SkASSERT(indexCount >= 1);
-    SkASSERT(vertexCount >= 1);
+    SkASSERT(patternVertexCount >= 1);
     SkASSERT(patternRepeatCount >= 1);
     SkASSERT(maxPatternRepetitionsInIndexBuffer >= 1);
+    SkASSERT(baseVertex >= 0);
     fIndexBuffer = std::move(indexBuffer);
     fIndexCount = indexCount;
     fPatternRepeatCount = patternRepeatCount;
-    fVertexCount = vertexCount;
+    fVertexCount = patternVertexCount;
     fMaxPatternRepetitionsInIndexBuffer = maxPatternRepetitionsInIndexBuffer;
     fPrimitiveRestart = GrPrimitiveRestart::kNo;
+    fVertexBuffer = std::move(vertexBuffer);
+    fBaseVertex = baseVertex;
     SkDEBUGCODE(fIsInitialized = true;)
 }
 
-inline void GrMesh::setVertexData(sk_sp<const GrBuffer> vertexBuffer, int baseVertex) {
-    SkASSERT(baseVertex >= 0);
-    fVertexBuffer = std::move(vertexBuffer);
-    fBaseVertex = baseVertex;
-}
-
-inline void GrMesh::draw(GrOpsRenderPass* opsRenderPass) const {
+inline void GrSimpleMesh::draw(GrOpsRenderPass* opsRenderPass) const {
     SkASSERT(fIsInitialized);
 
     if (!fIndexBuffer) {
@@ -109,7 +110,7 @@ inline void GrMesh::draw(GrOpsRenderPass* opsRenderPass) const {
         opsRenderPass->draw(fVertexCount, fBaseVertex);
     } else {
         opsRenderPass->bindBuffers(fIndexBuffer.get(), nullptr, fVertexBuffer.get(),
-                                   this->primitiveRestart());
+                                   fPrimitiveRestart);
         if (0 == fPatternRepeatCount) {
             opsRenderPass->drawIndexed(fIndexCount, fBaseIndex, fMinIndexValue, fMaxIndexValue,
                                        fBaseVertex);

@@ -249,10 +249,9 @@ private:
             return;
         }
         memcpy(idxs, indices, indexCount * sizeof(uint16_t));
-        GrMesh* mesh = target->allocMesh();
+        GrSimpleMesh* mesh = target->allocMesh();
         mesh->setIndexed(std::move(indexBuffer), indexCount, firstIndex, 0, vertexCount - 1,
-                         GrPrimitiveRestart::kNo);
-        mesh->setVertexData(std::move(vertexBuffer), firstVertex);
+                         GrPrimitiveRestart::kNo, std::move(vertexBuffer), firstVertex);
         fMeshes.push_back(mesh);
     }
 
@@ -362,8 +361,8 @@ private:
     Helper fHelper;
     bool fWideColor;
 
-    SkTDArray<GrMesh*> fMeshes;
-    GrProgramInfo*     fProgramInfo = nullptr;
+    SkTDArray<GrSimpleMesh*> fMeshes;
+    GrProgramInfo*           fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
 };
