@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@cb9a86a9d8677909988c83ab4076287a96b4d513",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@d24752e63ae4ae541cd6089541235200421c1780",
   # Dawn requires jinja2 and markupsafe for the code generator.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
   "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@604072bc2ed01018eb03bcbbf9d94042f679af63",
@@ -41,7 +41,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@6d7621abf90d31c0ced0a7b211f15f8180834737",
+    "url": "https://chromium.googlesource.com/chromium/src.git@21cbc653d60009af52a042e1641d44439364ba99",
     "condition": "checkout_chromium",
   },
 }
