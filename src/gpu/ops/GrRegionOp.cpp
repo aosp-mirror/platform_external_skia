@@ -66,7 +66,7 @@ public:
 
     void visitProxies(const VisitProxyFunc& func) const override {
         if (fProgramInfo) {
-            fProgramInfo->visitProxies(func);
+            fProgramInfo->visitFPProxies(func);
         } else {
             fHelper.visitProxies(func);
         }
@@ -160,8 +160,9 @@ private:
             return;
         }
 
-        flushState->bindPipeline(*fProgramInfo, chainBounds);
-        flushState->opsRenderPass()->drawMeshes(*fProgramInfo, fMesh, 1);
+        flushState->bindPipelineAndScissorClip(*fProgramInfo, chainBounds);
+        flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
+        flushState->drawMesh(*fMesh);
     }
 
     CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
