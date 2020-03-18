@@ -59,7 +59,7 @@
 #include <emscripten.h>
 #include <emscripten/bind.h>
 
-#if SK_SUPPORT_GPU
+#ifdef SK_GL
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
@@ -147,7 +147,7 @@ SkImageInfo toSkImageInfo(const SimpleImageInfo& sii) {
     return SkImageInfo::Make(sii.width, sii.height, sii.colorType, sii.alphaType);
 }
 
-#if SK_SUPPORT_GPU
+#ifdef SK_GL
 sk_sp<GrContext> MakeGrContext(EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context)
 {
     EMSCRIPTEN_RESULT r = emscripten_webgl_make_context_current(context);
@@ -722,7 +722,7 @@ namespace emscripten {
 // types Pi, Pf").  But, we can just pretend they are numbers and cast them to be pointers and
 // the compiler is happy.
 EMSCRIPTEN_BINDINGS(Skia) {
-#if SK_SUPPORT_GPU
+#ifdef SK_GL
     function("currentContext", &emscripten_webgl_get_current_context);
     function("setCurrentContext", &emscripten_webgl_make_context_current);
     function("MakeGrContext", &MakeGrContext);
@@ -780,12 +780,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
 #endif
     function("MakePathFromSVGString", &MakePathFromSVGString);
 
-    // These won't be called directly, there's a JS helper to deal with typed arrays.
-    function("_MakeSkDashPathEffect", optional_override([](uintptr_t /* float* */ cptr, int count, SkScalar phase)->sk_sp<SkPathEffect> {
-        // See comment above for uintptr_t explanation
-        const float* intervals = reinterpret_cast<const float*>(cptr);
-        return SkDashPathEffect::Make(intervals, count, phase);
-    }), allow_raw_pointers());
+    // These won't be called directly, there are corresponding JS helpers to deal with arrays.
     function("_MakeImage", optional_override([](SimpleImageInfo ii,
                                                 uintptr_t /* uint8_t*  */ pPtr, int plen,
                                                 size_t rowBytes)->sk_sp<SkImage> {
@@ -918,7 +913,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                      flags, &localMatrix);
     }), allow_raw_pointers());
 
-#if SK_SUPPORT_GPU
+#ifdef SK_GL
     class_<GrContext>("GrContext")
         .smart_ptr<sk_sp<GrContext>>("sk_sp<GrContext>")
         .function("getResourceCacheLimitBytes", optional_override([](GrContext& self)->size_t {
@@ -1341,6 +1336,12 @@ EMSCRIPTEN_BINDINGS(Skia) {
     class_<SkPathEffect>("SkPathEffect")
         .smart_ptr<sk_sp<SkPathEffect>>("sk_sp<SkPathEffect>")
         .class_function("MakeCorner", &SkCornerPathEffect::Make)
+        .class_function("_MakeDash", optional_override([](uintptr_t /* float* */ cptr, int count,
+                                                          SkScalar phase)->sk_sp<SkPathEffect> {
+            // See comment above for uintptr_t explanation
+            const float* intervals = reinterpret_cast<const float*>(cptr);
+            return SkDashPathEffect::Make(intervals, count, phase);
+        }), allow_raw_pointers())
         .class_function("MakeDiscrete", &SkDiscretePathEffect::Make);
 
     class_<SkPath>("SkPath")
@@ -1681,9 +1682,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("High",   SkFilterQuality::kHigh_SkFilterQuality);
 
     // Only used to control the encode function.
+    // TODO(kjlubick): compile these out when the appropriate encoder is disabled.
     enum_<SkEncodedImageFormat>("ImageFormat")
         .value("PNG",  SkEncodedImageFormat::kPNG)
-        .value("JPEG", SkEncodedImageFormat::kJPEG);
+        .value("JPEG",  SkEncodedImageFormat::kJPEG)
+        .value("WEBP",  SkEncodedImageFormat::kWEBP);
 
     enum_<SkPaint::Style>("PaintStyle")
         .value("Fill",            SkPaint::Style::kFill_Style)
