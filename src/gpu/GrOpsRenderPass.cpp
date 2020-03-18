@@ -42,8 +42,7 @@ void GrOpsRenderPass::executeDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler
     this->onExecuteDrawable(std::move(drawable));
 }
 
-void GrOpsRenderPass::bindPipeline(const GrProgramInfo& programInfo, const SkRect& drawBounds,
-                                   const SkIRect* optionalScissorRect) {
+void GrOpsRenderPass::bindPipeline(const GrProgramInfo& programInfo, const SkRect& drawBounds) {
 #ifdef SK_DEBUG
     // Both the 'programInfo' and this renderPass have an origin. Since they come from the same
     // place (i.e., the target renderTargetProxy) they had best agree.
@@ -105,11 +104,6 @@ void GrOpsRenderPass::bindPipeline(const GrProgramInfo& programInfo, const SkRec
     fDrawPipelineStatus = DrawPipelineStatus::kOk;
     fXferBarrierType = programInfo.pipeline().xferBarrierType(fRenderTarget->asTexture(),
                                                               *this->gpu()->caps());
-
-    if (optionalScissorRect) {
-        SkASSERT(programInfo.pipeline().isScissorTestEnabled());
-        this->setScissorRect(*optionalScissorRect);
-    }
 }
 
 void GrOpsRenderPass::setScissorRect(const SkIRect& scissor) {
@@ -128,8 +122,21 @@ void GrOpsRenderPass::bindTextures(const GrPrimitiveProcessor& primProc,
 #ifdef SK_DEBUG
     SkASSERT((primProc.numTextureSamplers() > 0) == SkToBool(primProcTextures));
     for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
-        SkASSERT(primProcTextures[i]->backendFormat() ==
-                 primProc.textureSampler(i).backendFormat());
+        const auto& sampler = primProc.textureSampler(i);
+        const GrSurfaceProxy* proxy = primProcTextures[i];
+        SkASSERT(proxy);
+        SkASSERT(proxy->backendFormat() == sampler.backendFormat());
+        SkASSERT(proxy->backendFormat().textureType() == sampler.backendFormat().textureType());
+
+        const GrTexture* tex = proxy->peekTexture();
+        SkASSERT(tex);
+        if (GrSamplerState::Filter::kMipMap == sampler.samplerState().filter() &&
+            (tex->width() != 1 || tex->height() != 1)) {
+            // There are some cases where we might be given a non-mipmapped texture with a mipmap
+            // filter. See skbug.com/7094.
+            SkASSERT(tex->texturePriv().mipMapped() != GrMipMapped::kYes ||
+                     !tex->texturePriv().mipMapsAreDirty());
+        }
     }
 #endif
 
@@ -147,36 +154,6 @@ void GrOpsRenderPass::bindTextures(const GrPrimitiveProcessor& primProc,
     }
 
     SkDEBUGCODE(fTextureBindingStatus = DynamicStateStatus::kConfigured);
-}
-
-void GrOpsRenderPass::bindTextures(const GrPrimitiveProcessor& primProc,
-                                   const GrSurfaceProxy& singlePrimProcTexture,
-                                   const GrPipeline& pipeline) {
-    SkASSERT(primProc.numTextureSamplers() == 1);
-    const GrSurfaceProxy* ptr = &singlePrimProcTexture;
-    this->bindTextures(primProc, &ptr, pipeline);
-}
-
-void GrOpsRenderPass::drawMeshes(const GrProgramInfo& programInfo, const GrSimpleMesh meshes[],
-                                 int meshCount) {
-    if (programInfo.hasFixedScissor()) {
-        this->setScissorRect(programInfo.fixedScissor());
-    }
-    if (!programInfo.hasDynamicPrimProcTextures()) {
-        auto primProcTextures = (programInfo.hasFixedPrimProcTextures()) ?
-                programInfo.fixedPrimProcTextures() : nullptr;
-        this->bindTextures(programInfo.primProc(), primProcTextures, programInfo.pipeline());
-    }
-    for (int i = 0; i < meshCount; ++i) {
-        if (programInfo.hasDynamicScissors()) {
-            this->setScissorRect(programInfo.dynamicScissor(i));
-        }
-        if (programInfo.hasDynamicPrimProcTextures()) {
-            this->bindTextures(programInfo.primProc(), programInfo.dynamicPrimProcTextures(i),
-                               programInfo.pipeline());
-        }
-        meshes[i].draw(this);
-    }
 }
 
 void GrOpsRenderPass::bindBuffers(const GrBuffer* indexBuffer, const GrBuffer* instanceBuffer,

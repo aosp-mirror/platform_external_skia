@@ -32,7 +32,7 @@ public:
 
     void visitProxies(const VisitProxyFunc& func) const override {
         if (fProgramInfo) {
-            fProgramInfo->visitProxies(func);
+            fProgramInfo->visitFPProxies(func);
         } else {
             fHelper.visitProxies(func);
         }
@@ -357,8 +357,9 @@ void DrawVerticesOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBo
         return;
     }
 
-    flushState->opsRenderPass()->bindPipeline(*fProgramInfo, chainBounds);
-    flushState->opsRenderPass()->drawMeshes(*fProgramInfo, fMesh, 1);
+    flushState->bindPipelineAndScissorClip(*fProgramInfo, chainBounds);
+    flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
+    flushState->drawMesh(*fMesh);
 }
 
 GrOp::CombineResult DrawVerticesOp::onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,

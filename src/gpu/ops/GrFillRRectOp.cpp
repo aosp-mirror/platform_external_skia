@@ -46,7 +46,7 @@ public:
     CombineResult onCombineIfPossible(GrOp*, GrRecordingContext::Arenas*, const GrCaps&) final;
     void visitProxies(const VisitProxyFunc& fn) const override {
         if (fProgramInfo) {
-            fProgramInfo->visitProxies(fn);
+            fProgramInfo->visitFPProxies(fn);
         } else {
             fProcessors.visitProxies(fn);
         }
@@ -900,11 +900,10 @@ void FillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBound
         fProgramInfo = this->createProgramInfo(flushState);
     }
 
-    GrOpsRenderPass* renderPass = flushState->opsRenderPass();
-    renderPass->bindPipeline(*fProgramInfo, this->bounds(), flushState->scissorRectIfEnabled());
-    renderPass->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
-    renderPass->bindBuffers(fIndexBuffer.get(), fInstanceBuffer.get(), fVertexBuffer.get());
-    renderPass->drawIndexedInstanced(fIndexCount, 0, fInstanceCount, fBaseInstance, 0);
+    flushState->bindPipelineAndScissorClip(*fProgramInfo, this->bounds());
+    flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
+    flushState->bindBuffers(fIndexBuffer.get(), fInstanceBuffer.get(), fVertexBuffer.get());
+    flushState->drawIndexedInstanced(fIndexCount, 0, fInstanceCount, fBaseInstance, 0);
 }
 
 // Will the given corner look good if we use HW derivatives?

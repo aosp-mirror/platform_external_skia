@@ -50,12 +50,20 @@ void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
                                   pipeline,
                                   fCurrDraw->fGeometryProcessor,
                                   fCurrDraw->fFixedDynamicState,
-                                  fCurrDraw->fDynamicStateArrays,
-                                  fCurrDraw->fMeshCnt,
                                   fCurrDraw->fPrimitiveType);
 
-        this->opsRenderPass()->bindPipeline(programInfo, chainBounds);
-        this->opsRenderPass()->drawMeshes(programInfo, fCurrDraw->fMeshes, fCurrDraw->fMeshCnt);
+        fOpsRenderPass->bindPipeline(programInfo, chainBounds);
+        if (programInfo.hasFixedScissor()) {
+            fOpsRenderPass->setScissorRect(programInfo.fixedScissor());
+        }
+        auto primProcTextures = (programInfo.hasFixedPrimProcTextures()) ?
+                programInfo.fixedPrimProcTextures() : nullptr;
+        fOpsRenderPass->bindTextures(programInfo.primProc(), primProcTextures,
+                                     programInfo.pipeline());
+        for (int i = 0; i < fCurrDraw->fMeshCnt; ++i) {
+            this->drawMesh(fCurrDraw->fMeshes[i]);
+        }
+
         fTokenTracker->flushToken();
         ++fCurrDraw;
     }
@@ -134,7 +142,6 @@ void GrOpFlushState::recordDraw(
         const GrSimpleMesh meshes[],
         int meshCnt,
         const GrPipeline::FixedDynamicState* fixedDynamicState,
-        const GrPipeline::DynamicStateArrays* dynamicStateArrays,
         GrPrimitiveType primitiveType) {
     SkASSERT(fOpArgs);
     SkDEBUGCODE(fOpArgs->validate());
@@ -146,15 +153,8 @@ void GrOpFlushState::recordDraw(
             fixedDynamicState->fPrimitiveProcessorTextures[i]->ref();
         }
     }
-    if (dynamicStateArrays && dynamicStateArrays->fPrimitiveProcessorTextures) {
-        int n = gp->numTextureSamplers() * meshCnt;
-        for (int i = 0; i < n; ++i) {
-            dynamicStateArrays->fPrimitiveProcessorTextures[i]->ref();
-        }
-    }
     draw.fGeometryProcessor = gp;
     draw.fFixedDynamicState = fixedDynamicState;
-    draw.fDynamicStateArrays = dynamicStateArrays;
     draw.fMeshes = meshes;
     draw.fMeshCnt = meshCnt;
     draw.fOp = fOpArgs->op();
@@ -208,19 +208,31 @@ GrAtlasManager* GrOpFlushState::atlasManager() const {
     return fGpu->getContext()->priv().getAtlasManager();
 }
 
+void GrOpFlushState::drawMesh(const GrSimpleMesh& mesh) {
+    SkASSERT(mesh.fIsInitialized);
+    if (!mesh.fIndexBuffer) {
+        this->bindBuffers(nullptr, nullptr, mesh.fVertexBuffer.get());
+        this->draw(mesh.fVertexCount, mesh.fBaseVertex);
+    } else {
+        this->bindBuffers(mesh.fIndexBuffer.get(), nullptr, mesh.fVertexBuffer.get(),
+                          mesh.fPrimitiveRestart);
+        if (0 == mesh.fPatternRepeatCount) {
+            this->drawIndexed(mesh.fIndexCount, mesh.fBaseIndex, mesh.fMinIndexValue,
+                              mesh.fMaxIndexValue, mesh.fBaseVertex);
+        } else {
+            this->drawIndexPattern(mesh.fIndexCount, mesh.fPatternRepeatCount,
+                                   mesh.fMaxPatternRepetitionsInIndexBuffer, mesh.fVertexCount,
+                                   mesh.fBaseVertex);
+        }
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 GrOpFlushState::Draw::~Draw() {
     if (fFixedDynamicState && fFixedDynamicState->fPrimitiveProcessorTextures) {
         for (int i = 0; i < fGeometryProcessor->numTextureSamplers(); ++i) {
             fFixedDynamicState->fPrimitiveProcessorTextures[i]->unref();
-        }
-    }
-    if (fDynamicStateArrays && fDynamicStateArrays->fPrimitiveProcessorTextures) {
-        int n = fGeometryProcessor->numTextureSamplers() * fMeshCnt;
-        const auto* textures = fDynamicStateArrays->fPrimitiveProcessorTextures;
-        for (int i = 0; i < n; ++i) {
-            textures[i]->unref();
         }
     }
 }

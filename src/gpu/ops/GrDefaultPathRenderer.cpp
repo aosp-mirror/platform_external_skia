@@ -362,7 +362,7 @@ public:
 
     void visitProxies(const VisitProxyFunc& func) const override {
         if (fProgramInfo) {
-            fProgramInfo->visitProxies(func);
+            fProgramInfo->visitFPProxies(func);
         } else {
             fHelper.visitProxies(func);
         }
@@ -474,9 +474,10 @@ private:
             return;
         }
 
-        flushState->opsRenderPass()->bindPipeline(*fProgramInfo, chainBounds);
+        flushState->bindPipelineAndScissorClip(*fProgramInfo, chainBounds);
+        flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
         for (int i = 0; i < fMeshes.count(); ++i) {
-            flushState->opsRenderPass()->drawMeshes(*fProgramInfo, fMeshes[i], 1);
+            flushState->drawMesh(*fMeshes[i]);
         }
     }
 

@@ -550,19 +550,13 @@ private:
         GrGeometryProcessor* gp = GrRRectShadowGeoProc::Make(arena, fFalloffView);
         SkASSERT(sizeof(CircleVertex) == gp->vertexStride());
 
-        static constexpr int kOnePrimProcTexture = 1;
-        auto fixedDynamicState = GrMeshDrawOp::Target::MakeFixedDynamicState(arena, &appliedClip,
-                                                                             kOnePrimProcTexture);
-        fixedDynamicState->fPrimitiveProcessorTextures[0] = fFalloffView.proxy();
-
         fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps, arena, outputView,
                                                                    std::move(appliedClip),
                                                                    dstProxyView, gp,
                                                                    GrProcessorSet::MakeEmptySet(),
                                                                    GrPrimitiveType::kTriangles,
                                                                    GrPipeline::InputFlags::kNone,
-                                                                   &GrUserStencilSettings::kUnused,
-                                                                   fixedDynamicState);
+                                                                   &GrUserStencilSettings::kUnused);
     }
 
     void onPrepareDraws(Target* target) override {
@@ -628,8 +622,10 @@ private:
             return;
         }
 
-        flushState->opsRenderPass()->bindPipeline(*fProgramInfo, chainBounds);
-        flushState->opsRenderPass()->drawMeshes(*fProgramInfo, fMesh, 1);
+        flushState->bindPipelineAndScissorClip(*fProgramInfo, chainBounds);
+        flushState->bindTextures(fProgramInfo->primProc(), *fFalloffView.proxy(),
+                                 fProgramInfo->pipeline());
+        flushState->drawMesh(*fMesh);
     }
 
     CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
@@ -642,10 +638,9 @@ private:
     }
 
     void visitProxies(const VisitProxyFunc& func) const override {
+        func(fFalloffView.proxy(), GrMipMapped(false));
         if (fProgramInfo) {
-            fProgramInfo->visitProxies(func);
-        } else {
-            func(fFalloffView.proxy(), GrMipMapped(false));
+            fProgramInfo->visitFPProxies(func);
         }
     }
 

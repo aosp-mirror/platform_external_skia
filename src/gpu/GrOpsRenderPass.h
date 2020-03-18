@@ -15,7 +15,6 @@
 class GrOpFlushState;
 class GrFixedClip;
 class GrGpu;
-class GrSimpleMesh;
 class GrPipeline;
 class GrPrimitiveProcessor;
 class GrProgramInfo;
@@ -50,11 +49,9 @@ public:
     // Signals the end of recording to the GrOpsRenderPass and that it can now be submitted.
     virtual void end() = 0;
 
-    // Updates the internal pipeline state for drawing with the provided GrProgramInfo. If an
-    // optional scissor rect is provided, then this method calls setScissor for convenience after
-    // binding the pipeline. Enters an internal "bad" state if the pipeline could not be set.
-    void bindPipeline(const GrProgramInfo&, const SkRect& drawBounds,
-                      const SkIRect* optionalScissorRect = nullptr);
+    // Updates the internal pipeline state for drawing with the provided GrProgramInfo. Enters an
+    // internal "bad" state if the pipeline could not be set.
+    void bindPipeline(const GrProgramInfo&, const SkRect& drawBounds);
 
     // The scissor rect is always dynamic state and therefore not stored on GrPipeline. If scissor
     // test is enabled on the current pipeline, then the client must call setScissorRect() before
@@ -74,20 +71,8 @@ public:
     void bindTextures(const GrPrimitiveProcessor&, const GrSurfaceProxy* const primProcTextures[],
                       const GrPipeline&);
 
-    // This is a convenience overload for when the primitive processor has exactly one texture. It
-    // binds one texture for the primitive processor, and any others for FPs on the pipeline.
-    void bindTextures(const GrPrimitiveProcessor&, const GrSurfaceProxy& singlePrimProcTexture,
-                      const GrPipeline&);
-
     void bindBuffers(const GrBuffer* indexBuffer, const GrBuffer* instanceBuffer,
                      const GrBuffer* vertexBuffer, GrPrimitiveRestart = GrPrimitiveRestart::kNo);
-
-    // Draws the given array of meshes using the current pipeline state. The client must call
-    // bindPipeline() before using this method.
-    //
-    // NOTE: This method will soon be deleted. While it continues to exist, it takes care of calling
-    // setScissor() and bindTextures() on the client's behalf.
-    void drawMeshes(const GrProgramInfo&, const GrSimpleMesh[], int meshCount);
 
     // These methods issue draws using the current pipeline state. Before drawing, the caller must
     // configure the pipeline and dynamic state:

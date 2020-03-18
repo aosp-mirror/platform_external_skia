@@ -99,6 +99,11 @@ protected:
                                              : GrResourceProvider::MaxNumNonAAQuads());
     }
 
+    virtual void onPrePrepareDraws(GrRecordingContext*,
+                                   const GrSurfaceProxyView* outputView,
+                                   GrAppliedClip*,
+                                   const GrXferProcessor::DstProxyView&);
+
 private:
     virtual GrProgramInfo* programInfo() = 0;
     // This method is responsible for creating all the programInfos required
@@ -117,11 +122,6 @@ private:
     }
     void onPrepare(GrOpFlushState* state) final;
 
-    virtual void onPrePrepareDraws(GrRecordingContext*,
-                                   const GrSurfaceProxyView* outputView,
-                                   GrAppliedClip*,
-                                   const GrXferProcessor::DstProxyView&);
-
     virtual void onPrepareDraws(Target*) = 0;
     typedef GrDrawOp INHERITED;
 };
@@ -135,7 +135,6 @@ public:
                             const GrSimpleMesh[],
                             int meshCnt,
                             const GrPipeline::FixedDynamicState*,
-                            const GrPipeline::DynamicStateArrays*,
                             GrPrimitiveType) = 0;
 
     /**
@@ -148,7 +147,7 @@ public:
                     GrPrimitiveType primitiveType) {
         static constexpr int kZeroPrimProcTextures = 0;
         auto fixedDynamicState = this->makeFixedDynamicState(kZeroPrimProcTextures);
-        this->recordDraw(gp, meshes, meshCnt, fixedDynamicState, nullptr, primitiveType);
+        this->recordDraw(gp, meshes, meshCnt, fixedDynamicState, primitiveType);
     }
 
     /**
@@ -192,11 +191,6 @@ public:
 
     GrSimpleMesh* allocMesh() { return this->allocator()->make<GrSimpleMesh>(); }
     GrSimpleMesh* allocMeshes(int n) { return this->allocator()->makeArray<GrSimpleMesh>(n); }
-
-    static GrPipeline::DynamicStateArrays* AllocDynamicStateArrays(SkArenaAlloc*,
-                                                                   int numMeshes,
-                                                                   int numPrimitiveProcTextures,
-                                                                   bool allocScissors);
 
     static GrPipeline::FixedDynamicState* MakeFixedDynamicState(SkArenaAlloc*,
                                                                 const GrAppliedClip* clip,

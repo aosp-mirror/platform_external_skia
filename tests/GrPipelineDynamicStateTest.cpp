@@ -154,8 +154,6 @@ private:
             GrSimpleMesh& mesh = meshes.push_back();
             mesh.set(fVertexBuffer, 4, 4 * i);
         }
-        GrPipeline::DynamicStateArrays dynamicState;
-        dynamicState.fScissorRects = kDynamicScissors;
 
         auto geomProc = GrPipelineDynamicStateTestProcessor::Make(flushState->allocator());
 
@@ -166,11 +164,15 @@ private:
                                   &pipeline,
                                   geomProc,
                                   nullptr,
-                                  &dynamicState, 0, GrPrimitiveType::kTriangleStrip);
+                                  GrPrimitiveType::kTriangleStrip);
 
-        flushState->opsRenderPass()->bindPipeline(programInfo,
-                                                  SkRect::MakeIWH(kScreenSize, kScreenSize));
-        flushState->opsRenderPass()->drawMeshes(programInfo, meshes.begin(), 4);
+        flushState->bindPipeline(programInfo, SkRect::MakeIWH(kScreenSize, kScreenSize));
+        for (int i = 0; i < 4; ++i) {
+            if (fScissorTest == GrScissorTest::kEnabled) {
+                flushState->setScissorRect(kDynamicScissors[i]);
+            }
+            flushState->drawMesh(meshes[i]);
+        }
     }
 
     GrScissorTest               fScissorTest;

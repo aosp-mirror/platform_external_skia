@@ -329,13 +329,12 @@ private:
 
         GrProgramInfo programInfo(state->proxy()->numSamples(), state->proxy()->numStencilSamples(),
                                   state->proxy()->backendFormat(), state->outputView()->origin(),
-                                  &pipeline, shader.get(), &fixedDynamicState, nullptr, 0,
+                                  &pipeline, shader.get(), &fixedDynamicState,
                                   GrPrimitiveType::kPatches, tessellationPatchVertexCount);
 
-        GrOpsRenderPass* renderPass = state->opsRenderPass();
-        renderPass->bindPipeline(programInfo, SkRect::MakeIWH(kWidth, kHeight));
-        renderPass->bindBuffers(nullptr, nullptr, fVertexBuffer.get());
-        renderPass->draw(tessellationPatchVertexCount, fBaseVertex);
+        state->bindPipeline(programInfo, SkRect::MakeIWH(kWidth, kHeight));
+        state->bindBuffers(nullptr, nullptr, fVertexBuffer.get());
+        state->draw(tessellationPatchVertexCount, fBaseVertex);
     }
 
     const SkMatrix fViewMatrix;
