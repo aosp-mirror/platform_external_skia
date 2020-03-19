@@ -883,15 +883,6 @@ public:
     void concat44(const SkM44&);
     void concat44(const SkScalar[]); // column-major
 
-#ifdef SK_SUPPORT_EXPERIMENTAL_CANVAS44
-    void experimental_concat44(const SkM44& m) {
-        this->concat44(m);
-    }
-    void experimental_concat44(const SkScalar colMajor[]) {
-        this->concat44(colMajor);
-    }
-#endif
-
     /** Replaces SkMatrix with matrix.
         Unlike concat(), any prior matrix state is overwritten.
 
@@ -2439,15 +2430,6 @@ public:
     SkM44 getLocalToDevice() const; // entire matrix stack
     void getLocalToDevice(SkScalar colMajor[16]) const;
 
-#ifdef SK_SUPPORT_EXPERIMENTAL_CANVAS44
-    SkM44 experimental_getLocalToDevice() const {
-        return this->getLocalToDevice();
-    }
-    void experimental_getLocalToDevice(SkScalar colMajor[16]) const {
-        this->getLocalToDevice(colMajor);
-    }
-#endif
-
     SkM44 experimental_getLocalToWorld() const;  // up to but not including top-most camera
     SkM44 experimental_getLocalToCamera() const; // up to and including top-most camera
 
@@ -2553,14 +2535,15 @@ protected:
     virtual void onDrawImageLattice(const SkImage* image, const Lattice& lattice, const SkRect& dst,
                                     const SkPaint* paint);
 
-    // REMOVE ME - SkCanvasVirtualEnforcer no longer requires the on DrawBitmapX functions
-    // to be implemented and these will be removed from SkCanvas at a later date.
+#ifdef SK_SUPPORT_LEGACY_ONDRAWBITMAP_VIRTUALS
+    // these are no longer called, so clients should stop overriding them
     virtual void onDrawBitmap(const SkBitmap&, SkScalar, SkScalar, const SkPaint*) {}
     virtual void onDrawBitmapRect(const SkBitmap&, const SkRect*, const SkRect&, const SkPaint*,
                                   SkCanvas::SrcRectConstraint) {}
     virtual void onDrawBitmapNine(const SkBitmap&, const SkIRect&, const SkRect&, const SkPaint*) {}
     virtual void onDrawBitmapLattice(const SkBitmap&, const SkCanvas::Lattice&, const SkRect&,
                                      const SkPaint*) {}
+#endif
 
     virtual void onDrawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect rect[],
                              const SkColor colors[], int count, SkBlendMode mode,
