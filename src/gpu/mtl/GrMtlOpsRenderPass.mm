@@ -254,46 +254,46 @@ void GrMtlOpsRenderPass::onBindBuffers(const GrBuffer* indexBuffer, const GrBuff
     if (vertexBuffer) {
         SkASSERT(!vertexBuffer->isCpuBuffer());
         SkASSERT(!static_cast<const GrGpuBuffer*>(vertexBuffer)->isMapped());
-        fDeferredVertexBuffer = sk_ref_sp(static_cast<const GrMtlBuffer*>(vertexBuffer));
+        fActiveVertexBuffer = sk_ref_sp(static_cast<const GrMtlBuffer*>(vertexBuffer));
         ++inputBufferIndex;
     }
     if (instanceBuffer) {
         SkASSERT(!instanceBuffer->isCpuBuffer());
         SkASSERT(!static_cast<const GrGpuBuffer*>(instanceBuffer)->isMapped());
-
-        const GrMtlBuffer* grMtlBuffer = static_cast<const GrMtlBuffer*>(instanceBuffer);
-        this->setVertexBuffer(fActiveRenderCmdEncoder, grMtlBuffer, 0, inputBufferIndex++);
+        this->setVertexBuffer(fActiveRenderCmdEncoder, instanceBuffer, 0, inputBufferIndex++);
     }
     if (indexBuffer) {
         SkASSERT(!indexBuffer->isCpuBuffer());
         SkASSERT(!static_cast<const GrGpuBuffer*>(indexBuffer)->isMapped());
-        fIndexBuffer = sk_ref_sp(static_cast<const GrMtlBuffer*>(indexBuffer));
+        fActiveIndexBuffer = sk_ref_sp(static_cast<const GrMtlBuffer*>(indexBuffer));
     }
 }
 
 void GrMtlOpsRenderPass::onDraw(int vertexCount, int baseVertex) {
     SkASSERT(fActivePipelineState);
     SkASSERT(nil != fActiveRenderCmdEncoder);
-    this->setVertexBuffer(fActiveRenderCmdEncoder, fDeferredVertexBuffer.get(), 0, 0);
+    this->setVertexBuffer(fActiveRenderCmdEncoder, fActiveVertexBuffer.get(), 0, 0);
 
     [fActiveRenderCmdEncoder drawPrimitives:fActivePrimitiveType
                                 vertexStart:baseVertex
                                 vertexCount:vertexCount];
+    fGpu->stats()->incNumDraws();
 }
 
 void GrMtlOpsRenderPass::onDrawIndexed(int indexCount, int baseIndex, uint16_t minIndexValue,
                                        uint16_t maxIndexValue, int baseVertex) {
     SkASSERT(fActivePipelineState);
     SkASSERT(nil != fActiveRenderCmdEncoder);
-    SkASSERT(fIndexBuffer);
-    this->setVertexBuffer(fActiveRenderCmdEncoder, fDeferredVertexBuffer.get(),
+    SkASSERT(fActiveIndexBuffer);
+    this->setVertexBuffer(fActiveRenderCmdEncoder, fActiveVertexBuffer.get(),
                           fCurrentVertexStride * baseVertex, 0);
 
-    size_t indexOffset = fIndexBuffer->offset() + sizeof(uint16_t) * baseIndex;
+    auto mtlIndexBufer = static_cast<const GrMtlBuffer*>(fActiveIndexBuffer.get());
+    size_t indexOffset = mtlIndexBufer->offset() + sizeof(uint16_t) * baseIndex;
     [fActiveRenderCmdEncoder drawIndexedPrimitives:fActivePrimitiveType
                                         indexCount:indexCount
                                          indexType:MTLIndexTypeUInt16
-                                       indexBuffer:fIndexBuffer->mtlBuffer()
+                                       indexBuffer:mtlIndexBufer->mtlBuffer()
                                  indexBufferOffset:indexOffset];
     fGpu->stats()->incNumDraws();
 }
@@ -302,7 +302,7 @@ void GrMtlOpsRenderPass::onDrawInstanced(int instanceCount, int baseInstance, in
                                          int baseVertex) {
     SkASSERT(fActivePipelineState);
     SkASSERT(nil != fActiveRenderCmdEncoder);
-    this->setVertexBuffer(fActiveRenderCmdEncoder, fDeferredVertexBuffer.get(), 0, 0);
+    this->setVertexBuffer(fActiveRenderCmdEncoder, fActiveVertexBuffer.get(), 0, 0);
 
     if (@available(macOS 10.11, iOS 9.0, *)) {
         [fActiveRenderCmdEncoder drawPrimitives:fActivePrimitiveType
@@ -313,21 +313,23 @@ void GrMtlOpsRenderPass::onDrawInstanced(int instanceCount, int baseInstance, in
     } else {
         SkASSERT(false);
     }
+    fGpu->stats()->incNumDraws();
 }
 
 void GrMtlOpsRenderPass::onDrawIndexedInstanced(
         int indexCount, int baseIndex, int instanceCount, int baseInstance, int baseVertex) {
     SkASSERT(fActivePipelineState);
     SkASSERT(nil != fActiveRenderCmdEncoder);
-    SkASSERT(fIndexBuffer);
-    this->setVertexBuffer(fActiveRenderCmdEncoder, fDeferredVertexBuffer.get(), 0, 0);
+    SkASSERT(fActiveIndexBuffer);
+    this->setVertexBuffer(fActiveRenderCmdEncoder, fActiveVertexBuffer.get(), 0, 0);
 
-    size_t indexOffset = fIndexBuffer->offset() + sizeof(uint16_t) * baseIndex;
+    auto mtlIndexBufer = static_cast<const GrMtlBuffer*>(fActiveIndexBuffer.get());
+    size_t indexOffset = mtlIndexBufer->offset() + sizeof(uint16_t) * baseIndex;
     if (@available(macOS 10.11, iOS 9.0, *)) {
         [fActiveRenderCmdEncoder drawIndexedPrimitives:fActivePrimitiveType
                                             indexCount:indexCount
                                              indexType:MTLIndexTypeUInt16
-                                           indexBuffer:fIndexBuffer->mtlBuffer()
+                                           indexBuffer:mtlIndexBufer->mtlBuffer()
                                      indexBufferOffset:indexOffset
                                          instanceCount:instanceCount
                                             baseVertex:baseVertex
@@ -339,17 +341,18 @@ void GrMtlOpsRenderPass::onDrawIndexedInstanced(
 }
 
 void GrMtlOpsRenderPass::setVertexBuffer(id<MTLRenderCommandEncoder> encoder,
-                                         const GrMtlBuffer* buffer,
+                                         const GrBuffer* buffer,
                                          size_t vertexOffset,
                                          size_t inputBufferIndex) {
     constexpr static int kFirstBufferBindingIdx = GrMtlUniformHandler::kLastUniformBinding + 1;
     int index = inputBufferIndex + kFirstBufferBindingIdx;
     SkASSERT(index < 4);
-    id<MTLBuffer> mtlVertexBuffer = buffer->mtlBuffer();
+    auto mtlBuffer = static_cast<const GrMtlBuffer*>(buffer);
+    id<MTLBuffer> mtlVertexBuffer = mtlBuffer->mtlBuffer();
     SkASSERT(mtlVertexBuffer);
     // Apple recommends using setVertexBufferOffset: when changing the offset
     // for a currently bound vertex buffer, rather than setVertexBuffer:
-    size_t offset = buffer->offset() + vertexOffset;
+    size_t offset = mtlBuffer->offset() + vertexOffset;
     if (fBufferBindings[index].fBuffer != mtlVertexBuffer) {
         [encoder setVertexBuffer: mtlVertexBuffer
                           offset: offset
