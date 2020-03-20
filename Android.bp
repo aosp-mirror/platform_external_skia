@@ -512,18 +512,6 @@ cc_library_static {
             ],
         },
 
-        mips: {
-            srcs: [
-                
-            ],
-        },
-
-        mips64: {
-            srcs: [
-                
-            ],
-        },
-
         x86: {
             srcs: [
                 "src/opts/SkOpts_avx.cpp",
