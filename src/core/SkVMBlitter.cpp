@@ -166,10 +166,6 @@ namespace {
                 case kBGR_101010x_SkColorType:  break;
             }
 
-            if (!skvm::BlendModeSupported(params.blendMode)) {
-                *ok = false;
-            }
-
             return {
                 params.colorSpace ? params.colorSpace->hash() : 0,
                 shaderHash,
@@ -332,7 +328,7 @@ namespace {
                 premul(&dst.r, &dst.g, &dst.b, dst.a);
             }
 
-            src = skvm::BlendModeProgram(this, params.blendMode, src, dst);
+            src = this->blend(params.blendMode, src, dst);
 
             // Lerp with coverage post-blend if needed.
             if (skvm::Color cov; lerp_coverage_post_blend && load_coverage(&cov)) {
@@ -727,97 +723,6 @@ namespace {
     };
 
 }  // namespace
-
-bool skvm::BlendModeSupported(SkBlendMode mode) {
-    return mode <= SkBlendMode::kScreen;
-}
-
-skvm::Color skvm::BlendModeProgram(skvm::Builder* p,
-                                   SkBlendMode mode, skvm::Color src, skvm::Color dst) {
-    auto mma = [&](skvm::F32 x, skvm::F32 y, skvm::F32 z, skvm::F32 w) {
-        return p->mad(x,y, p->mul(z,w));
-    };
-
-    auto inv = [&](skvm::F32 x) {
-        return p->sub(p->splat(1.0f), x);
-    };
-
-    switch (mode) {
-        default: SkASSERT(false); /*but also, for safety, fallthrough*/
-
-        case SkBlendMode::kClear: return {
-            p->splat(0.0f),
-            p->splat(0.0f),
-            p->splat(0.0f),
-            p->splat(0.0f),
-        };
-
-        case SkBlendMode::kSrc: return src;
-        case SkBlendMode::kDst: return dst;
-
-        case SkBlendMode::kDstOver: std::swap(src, dst); // fall-through
-        case SkBlendMode::kSrcOver: return {
-            p->mad(dst.r, inv(src.a), src.r),
-            p->mad(dst.g, inv(src.a), src.g),
-            p->mad(dst.b, inv(src.a), src.b),
-            p->mad(dst.a, inv(src.a), src.a),
-        };
-
-        case SkBlendMode::kDstIn: std::swap(src, dst); // fall-through
-        case SkBlendMode::kSrcIn: return {
-            p->mul(src.r, dst.a),
-            p->mul(src.g, dst.a),
-            p->mul(src.b, dst.a),
-            p->mul(src.a, dst.a),
-        };
-
-        case SkBlendMode::kDstOut: std::swap(src, dst); // fall-through
-        case SkBlendMode::kSrcOut: return {
-            p->mul(src.r, inv(dst.a)),
-            p->mul(src.g, inv(dst.a)),
-            p->mul(src.b, inv(dst.a)),
-            p->mul(src.a, inv(dst.a)),
-        };
-
-        case SkBlendMode::kDstATop: std::swap(src, dst); // fall-through
-        case SkBlendMode::kSrcATop: return {
-            mma(src.r, dst.a,  dst.r, inv(src.a)),
-            mma(src.g, dst.a,  dst.g, inv(src.a)),
-            mma(src.b, dst.a,  dst.b, inv(src.a)),
-            mma(src.a, dst.a,  dst.a, inv(src.a)),
-        };
-
-        case SkBlendMode::kXor: return {
-            mma(src.r, inv(dst.a),  dst.r, inv(src.a)),
-            mma(src.g, inv(dst.a),  dst.g, inv(src.a)),
-            mma(src.b, inv(dst.a),  dst.b, inv(src.a)),
-            mma(src.a, inv(dst.a),  dst.a, inv(src.a)),
-        };
-
-        case SkBlendMode::kPlus: return {
-            p->min(p->add(src.r, dst.r), p->splat(1.0f)),
-            p->min(p->add(src.g, dst.g), p->splat(1.0f)),
-            p->min(p->add(src.b, dst.b), p->splat(1.0f)),
-            p->min(p->add(src.a, dst.a), p->splat(1.0f)),
-        };
-
-        case SkBlendMode::kModulate: return {
-            p->mul(src.r, dst.r),
-            p->mul(src.g, dst.g),
-            p->mul(src.b, dst.b),
-            p->mul(src.a, dst.a),
-        };
-
-        case SkBlendMode::kScreen: return {
-            // (s+d)-(s*d) gave us trouble with our "r,g,b <= after blending" asserts.
-            // It's kind of plausible that s + (d - sd) keeps more precision?
-            p->add(src.r, p->sub(dst.r, p->mul(src.r, dst.r))),
-            p->add(src.g, p->sub(dst.g, p->mul(src.g, dst.g))),
-            p->add(src.b, p->sub(dst.b, p->mul(src.b, dst.b))),
-            p->add(src.a, p->sub(dst.a, p->mul(src.a, dst.a))),
-        };
-    }
-}
 
 SkBlitter* SkCreateSkVMBlitter(const SkPixmap& device,
                                const SkPaint& paint,
