@@ -41,7 +41,6 @@ cc_library_static {
         "include/utils/",
         "include/utils/mac/",
         "modules/skottie/include/",
-        "modules/sksg/include/",
         "modules/skshaper/include/",
     ],
 
@@ -1038,7 +1037,6 @@ cc_test {
         "include/third_party/vulkan/",
         "modules/skottie/include/",
         "modules/skottie/utils/",
-        "modules/sksg/include/",
         "third_party/libgifcodec/",
     ],
 
@@ -1886,7 +1884,6 @@ cc_test {
     local_include_dirs: [
         "",
         "include/third_party/vulkan/",
-        "modules/sksg/include/",
         "modules/skshaper/include/",
         "third_party/libgifcodec/",
     ],
