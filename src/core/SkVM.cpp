@@ -12,6 +12,7 @@
 #include "include/private/SkTFitsIn.h"
 #include "include/private/SkThreadID.h"
 #include "include/private/SkVx.h"
+#include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkVM.h"
@@ -925,6 +926,35 @@ namespace skvm {
         return {this->push(Op::sqrt_f32, x.id,NA,NA)};
     }
 
+    // See http://www.machinedlearnings.com/2011/06/fast-approximate-logarithm-exponential.html.
+    F32 Builder::approx_log2(F32 x) {
+        // e - 127 is a fair approximation of log2(x) in its own right...
+        F32 e = mul(to_f32(bit_cast(x)), splat(1.0f / (1<<23)));
+
+        // ... but using the mantissa to refine its error is _much_ better.
+        F32 m = bit_cast(bit_or(bit_and(bit_cast(x), splat(0x007fffff)), splat(0x3f000000)));
+        F32 approx = sub(e,      splat(124.225514990f));
+            approx = sub(approx, mul(splat(1.498030302f), m));
+            approx = sub(approx, div(splat(1.725879990f), add(splat(0.3520887068f), m)));
+
+        return approx;
+    }
+
+    F32 Builder::approx_pow2(F32 x) {
+        F32 f = fract(x);
+        F32 approx = add(x, splat(121.274057500f));
+            approx = sub(approx, mul(splat( 1.490129070f), f));
+            approx = add(approx, div(splat(27.728023300f), sub(splat(4.84252568f), f)));
+
+        return bit_cast(round(mul(splat(1.0f * (1<<23)), approx)));
+    }
+
+    F32 Builder::approx_powf(F32 x, F32 y) {
+        auto is_x = bit_or(eq(x, splat(0.0f)),
+                           eq(x, splat(1.0f)));
+        return select(is_x, x, approx_pow2(mul(approx_log2(x), y)));
+    }
+
     F32 Builder::min(F32 x, F32 y) {
         float X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(std::min(X,Y)); }
@@ -1139,6 +1169,18 @@ namespace skvm {
         *r = mul(*r, a);
         *g = mul(*g, a);
         *b = mul(*b, a);
+    }
+
+    Color Builder::uniformPremul(SkColor4f color,    SkColorSpace* src,
+                                 Uniforms* uniforms, SkColorSpace* dst) {
+        SkColorSpaceXformSteps(src, kUnpremul_SkAlphaType,
+                               dst,   kPremul_SkAlphaType).apply(color.vec());
+        return {
+            uniformF(uniforms->pushF(color.fR)),
+            uniformF(uniforms->pushF(color.fG)),
+            uniformF(uniforms->pushF(color.fB)),
+            uniformF(uniforms->pushF(color.fA)),
+        };
     }
 
     Color Builder::lerp(Color lo, Color hi, F32 t) {

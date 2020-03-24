@@ -638,9 +638,9 @@ SkStageUpdater* SkImageShader::onAppendUpdatableStages(const SkStageRec& rec) co
     return this->doStages(rec, updater) ? updater : nullptr;
 }
 
-skvm::Color SkImageShader::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y,
+skvm::Color SkImageShader::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y, skvm::Color paint,
                                      const SkMatrix& ctm, const SkMatrix* localM,
-                                     SkFilterQuality quality, SkColorSpace* dstCS,
+                                     SkFilterQuality quality, const SkColorInfo& dst,
                                      skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
     SkMatrix inv;
     if (!this->computeTotalInverse(ctm, localM, &inv)) {
@@ -665,6 +665,8 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y,
     // Bail out if sample() can't yet handle our image's color type.
     switch (pm.colorType()) {
         default: return {};
+        case    kGray_8_SkColorType:
+        case   kAlpha_8_SkColorType:
         case   kRGB_565_SkColorType:
         case  kRGB_888x_SkColorType:
         case kRGBA_8888_SkColorType:
@@ -735,6 +737,15 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y,
         skvm::Color c;
         switch (pm.colorType()) {
             default: SkUNREACHABLE;
+
+            case kGray_8_SkColorType: c.r = c.g = c.b = p->from_unorm(8, p->gather8(img, index));
+                                      c.a = p->splat(1.0f);
+                                      break;
+
+            case kAlpha_8_SkColorType: c.r = c.g = c.b = p->splat(0.0f);
+                                       c.a = p->from_unorm(8, p->gather8(img, index));
+                                       break;
+
             case   kRGB_565_SkColorType: c = p->unpack_565 (p->gather16(img, index)); break;
 
             case  kRGB_888x_SkColorType: [[fallthrough]];
@@ -853,11 +864,23 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y,
         c.a = p->splat(1.0f);
     }
 
+    // Alpha-only images get their color from the paint (already converted to dst color space).
+    SkColorSpace* cs = pm.colorSpace();
+    SkAlphaType   at = pm.alphaType();
+    if (SkColorTypeIsAlphaOnly(pm.colorType())) {
+        c.r = paint.r;
+        c.g = paint.g;
+        c.b = paint.b;
+
+        cs = dst.colorSpace();
+        at = kUnpremul_SkAlphaType;
+    }
+
     if (quality == kHigh_SkFilterQuality) {
         // Bicubic filtering naturally produces out of range values on both sides of [0,1].
         c.a = p->clamp(c.a, p->splat(0.0f), p->splat(1.0f));
 
-        skvm::F32 limit = (pm.alphaType() == kUnpremul_SkAlphaType || fClampAsIfUnpremul)
+        skvm::F32 limit = (at == kUnpremul_SkAlphaType || fClampAsIfUnpremul)
                         ? p->splat(1.0f)
                         : c.a;
         c.r = p->clamp(c.r, p->splat(0.0f), limit);
@@ -865,10 +888,9 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y,
         c.b = p->clamp(c.b, p->splat(0.0f), limit);
     }
 
-    // Follow SkColorSpaceXformSteps to match shader output convention (dstCS, premul).
+    // Follow SkColorSpaceXformSteps to match shader output convention (dst.colorSpace(), premul).
     // TODO: may need to extend lifetime once doing actual transforms?  maybe all in uniforms.
-    auto flags = SkColorSpaceXformSteps{pm.colorSpace(), pm.alphaType(),
-                                        dstCS, kPremul_SkAlphaType}.flags;
+    auto flags = SkColorSpaceXformSteps{cs,at, dst.colorSpace(),kPremul_SkAlphaType}.flags;
 
     // TODO: once this all works, move it to SkColorSpaceXformSteps
     if (flags.unpremul)        { c = p->unpremul(c); }

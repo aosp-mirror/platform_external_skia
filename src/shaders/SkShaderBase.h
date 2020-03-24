@@ -29,6 +29,7 @@ class SkImage;
 struct SkImageInfo;
 class SkPaint;
 class SkRasterPipeline;
+class SkRuntimeEffect;
 
 /**
  *  Shaders can optionally return a subclass of this when appending their stages.
@@ -188,6 +189,8 @@ public:
         return nullptr;
     }
 
+    virtual SkRuntimeEffect* asRuntimeEffect() const { return nullptr; }
+
     static Type GetFlattenableType() { return kSkShaderBase_Type; }
     Type getFlattenableType() const override { return GetFlattenableType(); }
 
@@ -208,9 +211,9 @@ public:
         return this->onAppendUpdatableStages(rec);
     }
 
-    skvm::Color program(skvm::Builder*, skvm::F32 x, skvm::F32 y,
+    skvm::Color program(skvm::Builder*, skvm::F32 x, skvm::F32 y, skvm::Color paint,
                         const SkMatrix& ctm, const SkMatrix* localM,
-                        SkFilterQuality quality, SkColorSpace* dstCS,
+                        SkFilterQuality quality, const SkColorInfo& dst,
                         skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const;
 
 protected:
@@ -244,9 +247,9 @@ private:
     // This is essentially const, but not officially so it can be modified in constructors.
     SkMatrix fLocalMatrix;
 
-    virtual skvm::Color onProgram(skvm::Builder*, skvm::F32 x, skvm::F32 y,
+    virtual skvm::Color onProgram(skvm::Builder*, skvm::F32 x, skvm::F32 y, skvm::Color paint,
                                   const SkMatrix& ctm, const SkMatrix* localM,
-                                  SkFilterQuality quality, SkColorSpace* dstCS,
+                                  SkFilterQuality quality, const SkColorInfo& dst,
                                   skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const;
 
     typedef SkShader INHERITED;

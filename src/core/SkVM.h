@@ -9,6 +9,7 @@
 #define SkVM_DEFINED
 
 #include "include/core/SkBlendMode.h"
+#include "include/core/SkColor.h"
 #include "include/private/SkMacros.h"
 #include "include/private/SkTHash.h"
 #include "src/core/SkVM_fwd.h"
@@ -399,6 +400,7 @@ namespace skvm {
         void store8 (Arg ptr, I32 val);
         void store16(Arg ptr, I32 val);
         void store32(Arg ptr, I32 val);
+        void storeF (Arg ptr, F32 val) { store32(ptr, bit_cast(val)); }
 
         // Returns varying {n, n-1, n-2, ..., 1}, where n is the argument to Program::eval().
         I32 index();
@@ -407,12 +409,17 @@ namespace skvm {
         I32 load8 (Arg ptr);
         I32 load16(Arg ptr);
         I32 load32(Arg ptr);
+        F32 loadF (Arg ptr) { return bit_cast(load32(ptr)); }
 
         // Load u8,u16,i32 uniform with byte-count offset.
         I32 uniform8 (Arg ptr, int offset);
         I32 uniform16(Arg ptr, int offset);
         I32 uniform32(Arg ptr, int offset);
         F32 uniformF (Arg ptr, int offset) { return this->bit_cast(this->uniform32(ptr,offset)); }
+
+        // Load this color as a uniform, premultiplied and converted to dst SkColorSpace.
+        Color uniformPremul(SkColor4f, SkColorSpace* src,
+                            Uniforms*, SkColorSpace* dst);
 
         // Gather u8,u16,i32 with varying element-count index from *(ptr + byte-count offset).
         I32 gather8 (Arg ptr, int offset, I32 index);
@@ -446,6 +453,10 @@ namespace skvm {
         F32 max(F32 x, F32 y);
         F32 mad(F32 x, F32 y, F32 z) { return this->add(this->mul(x,y), z); }
         F32 sqrt(F32 x);
+
+        F32 approx_log2(F32);
+        F32 approx_pow2(F32);
+        F32 approx_powf(F32 base, F32 exp);
 
         F32 negate(F32 x) {
             return sub(splat(0.0f), x);
