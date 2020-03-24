@@ -845,8 +845,6 @@ cc_library_static {
           "src/sksl/SkSLPipelineStageCodeGenerator.cpp",
           "src/sksl/SkSLSPIRVCodeGenerator.cpp",
           "src/sksl/SkSLSPIRVtoHLSL.cpp",
-          "src/xps/SkXPSDevice.cpp",
-          "src/xps/SkXPSDocument.cpp",
           "tools/SkSharingProc.cpp",
           "third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
         ],
@@ -867,8 +865,6 @@ cc_library_static {
           "src/ports/SkDebug_stdio.cpp",
           "src/ports/SkOSFile_posix.cpp",
           "src/ports/SkOSLibrary_posix.cpp",
-          "src/xps/SkXPSDevice.cpp",
-          "src/xps/SkXPSDocument.cpp",
         ],
         local_include_dirs: [
           "linux",
@@ -888,8 +884,6 @@ cc_library_static {
           "src/ports/SkImageGeneratorCG.cpp",
           "src/ports/SkOSFile_posix.cpp",
           "src/ports/SkOSLibrary_posix.cpp",
-          "src/xps/SkXPSDevice.cpp",
-          "src/xps/SkXPSDocument.cpp",
         ],
         local_include_dirs: [
           "mac",
