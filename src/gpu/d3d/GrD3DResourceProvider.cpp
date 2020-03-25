@@ -11,11 +11,20 @@
 #include "src/gpu/d3d/GrD3DGpu.h"
 
 GrD3DResourceProvider::GrD3DResourceProvider(GrD3DGpu* gpu) : fGpu(gpu) {
-    SkDEBUGCODE(HRESULT hr = ) gpu->device()->CreateCommandAllocator(
-        D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&fDirectCommandAllocator));
-    SkASSERT(SUCCEEDED(hr));
 }
 
 std::unique_ptr<GrD3DDirectCommandList> GrD3DResourceProvider::findOrCreateDirectCommandList() {
-    return GrD3DDirectCommandList::Make(fGpu->device(), fDirectCommandAllocator.Get());
+    if (fAvailableDirectCommandLists.count()) {
+        std::unique_ptr<GrD3DDirectCommandList> list =
+                std::move(fAvailableDirectCommandLists.back());
+        fAvailableDirectCommandLists.pop_back();
+        return list;
+    }
+    return GrD3DDirectCommandList::Make(fGpu->device());
+}
+
+void GrD3DResourceProvider::recycleDirectCommandList(
+        std::unique_ptr<GrD3DDirectCommandList> commandList) {
+    commandList.reset();
+    fAvailableDirectCommandLists.push_back(std::move(commandList));
 }
