@@ -17,11 +17,11 @@
 GrD3DTexture::GrD3DTexture(GrD3DGpu* gpu,
                            SkBudgeted budgeted,
                            SkISize dimensions,
-                           const GrD3DTextureInfo& info,
+                           const GrD3DTextureResourceInfo& info,
                            sk_sp<GrD3DResourceState> state,
                            GrMipMapsStatus mipMapsStatus)
         : GrSurface(gpu, dimensions, info.fProtected)
-        , GrD3DSurfaceResource(info, std::move(state), GrBackendObjectOwnership::kOwned)
+        , GrD3DTextureResource(info, std::move(state), GrBackendObjectOwnership::kOwned)
         , INHERITED(gpu, dimensions, info.fProtected, GrTextureType::k2D, mipMapsStatus) {
     SkASSERT((GrMipMapsStatus::kNotAllocated == mipMapsStatus) == (1 == info.fLevelCount));
     this->registerWithCache(budgeted);
@@ -30,12 +30,12 @@ GrD3DTexture::GrD3DTexture(GrD3DGpu* gpu,
     }
 }
 
-GrD3DTexture::GrD3DTexture(GrD3DGpu* gpu, SkISize dimensions, const GrD3DTextureInfo& info,
+GrD3DTexture::GrD3DTexture(GrD3DGpu* gpu, SkISize dimensions, const GrD3DTextureResourceInfo& info,
                            sk_sp<GrD3DResourceState> state, GrMipMapsStatus mipMapsStatus,
                            GrBackendObjectOwnership ownership, GrWrapCacheable cacheable,
                            GrIOType ioType)
         : GrSurface(gpu, dimensions, info.fProtected)
-        , GrD3DSurfaceResource(info, std::move(state), ownership)
+        , GrD3DTextureResource(info, std::move(state), ownership)
         , INHERITED(gpu, dimensions, info.fProtected, GrTextureType::k2D, mipMapsStatus) {
     SkASSERT((GrMipMapsStatus::kNotAllocated == mipMapsStatus) == (1 == info.fLevelCount));
     if (ioType == kRead_GrIOType) {
@@ -47,12 +47,12 @@ GrD3DTexture::GrD3DTexture(GrD3DGpu* gpu, SkISize dimensions, const GrD3DTexture
 // Because this class is virtually derived from GrSurface we must explicitly call its constructor.
 GrD3DTexture::GrD3DTexture(GrD3DGpu* gpu,
                            SkISize dimensions,
-                           const GrD3DTextureInfo& info,
+                           const GrD3DTextureResourceInfo& info,
                            sk_sp<GrD3DResourceState> state,
                            GrMipMapsStatus mipMapsStatus,
                            GrBackendObjectOwnership ownership)
         : GrSurface(gpu, dimensions, info.fProtected)
-        , GrD3DSurfaceResource(info, state, ownership)
+        , GrD3DTextureResource(info, state, ownership)
         , INHERITED(gpu, dimensions, info.fProtected, GrTextureType::k2D, mipMapsStatus) {
     SkASSERT((GrMipMapsStatus::kNotAllocated == mipMapsStatus) == (1 == info.fLevelCount));
 }
@@ -62,8 +62,8 @@ sk_sp<GrD3DTexture> GrD3DTexture::MakeNewTexture(GrD3DGpu* gpu, SkBudgeted budge
                                                  const D3D12_RESOURCE_DESC& desc,
                                                  GrProtected isProtected,
                                                  GrMipMapsStatus mipMapsStatus) {
-    GrD3DTextureInfo info;
-    if (!GrD3DSurfaceResource::InitTextureInfo(gpu, desc, isProtected, &info)) {
+    GrD3DTextureResourceInfo info;
+    if (!GrD3DTextureResource::InitTextureResourceInfo(gpu, desc, isProtected, &info)) {
         return nullptr;
     }
 
@@ -79,7 +79,7 @@ sk_sp<GrD3DTexture> GrD3DTexture::MakeWrappedTexture(GrD3DGpu* gpu,
                                                      GrWrapOwnership wrapOwnership,
                                                      GrWrapCacheable cacheable,
                                                      GrIOType ioType,
-                                                     const GrD3DTextureInfo& info,
+                                                     const GrD3DTextureResourceInfo& info,
                                                      sk_sp<GrD3DResourceState> state) {
     // TODO: If a client uses their own heap to allocate, how do we manage that?
     // Adopted textures require both image and allocation because we're responsible for freeing
@@ -99,11 +99,12 @@ void GrD3DTexture::onRelease() {
     // We're about to be severed from our GrManagedResource. If there are "finish" idle procs we
     // have to decide who will handle them. If the resource is still tied to a command buffer we let
     // it handle them. Otherwise, we handle them.
-    if (this->hasResource() && this->resource()->isQueuedForWorkOnGpu()) {
+    SkASSERT(this->resource());
+    if (this->resource()->isQueuedForWorkOnGpu()) {
         this->removeFinishIdleProcs();
     }
 
-    this->releaseTexture(this->getD3DGpu());
+    this->releaseResource(this->getD3DGpu());
 
     INHERITED::onRelease();
 }
@@ -112,11 +113,12 @@ void GrD3DTexture::onAbandon() {
     // We're about to be severed from our GrManagedResource. If there are "finish" idle procs we
     // have to decide who will handle them. If the resource is still tied to a command buffer we let
     // it handle them. Otherwise, we handle them.
-    if (this->hasResource() && this->resource()->isQueuedForWorkOnGpu()) {
+    SkASSERT(this->resource());
+    if (this->resource()->isQueuedForWorkOnGpu()) {
         this->removeFinishIdleProcs();
     }
 
-    this->releaseTexture(this->getD3DGpu());
+    this->releaseResource(this->getD3DGpu());
     INHERITED::onAbandon();
 }
 
@@ -159,9 +161,9 @@ void GrD3DTexture::willRemoveLastRef() {
     }
     // This is called when the GrTexture is purgeable. However, we need to check whether the
     // Resource is still owned by any command buffers. If it is then it will call the proc.
-    auto* resource = this->hasResource() ? this->resource() : nullptr;
-    bool callFinishProcs = !resource || !resource->isQueuedForWorkOnGpu();
-    if (callFinishProcs) {
+    auto* resource = this->resource();
+    SkASSERT(resource);
+    if (!resource->isQueuedForWorkOnGpu()) {
         // Everything must go!
         fIdleProcs.reset();
         resource->resetIdleProcs();
@@ -169,7 +171,6 @@ void GrD3DTexture::willRemoveLastRef() {
         // The procs that should be called on flush but not finish are those that are owned
         // by the GrD3DTexture and not the Resource. We do this by copying the resource's array
         // and thereby dropping refs to procs we own but the resource does not.
-        SkASSERT(resource);
         fIdleProcs.reset(resource->idleProcCnt());
         for (int i = 0; i < fIdleProcs.count(); ++i) {
             fIdleProcs[i] = resource->idleProc(i);
