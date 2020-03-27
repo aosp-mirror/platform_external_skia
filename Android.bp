@@ -656,7 +656,6 @@ cc_library_static {
           "src/gpu/effects/GrOvalEffect.cpp",
           "src/gpu/effects/GrPorterDuffXferProcessor.cpp",
           "src/gpu/effects/GrRRectEffect.cpp",
-          "src/gpu/effects/GrSRGBEffect.cpp",
           "src/gpu/effects/GrShadowGeoProc.cpp",
           "src/gpu/effects/GrSkSLFP.cpp",
           "src/gpu/effects/GrTextureDomain.cpp",
