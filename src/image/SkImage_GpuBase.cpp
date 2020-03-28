@@ -44,10 +44,8 @@ bool SkImage_GpuBase::ValidateBackendTexture(const GrCaps* caps, const GrBackend
     if (!tex.isValid()) {
         return false;
     }
-    // TODO: Create a SkImageColorInfo struct for color, alpha, and color space so we don't need to
-    // create a fake image info here.
-    SkImageInfo info = SkImageInfo::Make(1, 1, ct, at, cs);
-    if (!SkImageInfoIsValid(info)) {
+    SkColorInfo info(ct, at, cs);
+    if (!SkColorInfoIsValid(info)) {
         return false;
     }
     GrBackendFormat backendFormat = tex.getBackendFormat();
@@ -297,29 +295,29 @@ bool SkImage_GpuBase::MakeTempTextureProxies(GrContext* ctx, const GrBackendText
         tempViews[textureIndex] = GrSurfaceProxyView(std::move(proxy), imageOrigin, swizzle);
 
         // Check that each texture contains the channel data for the corresponding YUVA index
-        auto componentFlags = GrColorTypeComponentFlags(grColorType);
+        auto channelFlags = GrColorTypeChannelFlags(grColorType);
         for (int yuvaIndex = 0; yuvaIndex < SkYUVAIndex::kIndexCount; ++yuvaIndex) {
             if (yuvaIndices[yuvaIndex].fIndex == textureIndex) {
                 switch (yuvaIndices[yuvaIndex].fChannel) {
                     case SkColorChannel::kR:
                         // TODO: Chrome needs to be patched before this can be
                         // enforced.
-                        // if (!(kRed_SkColorTypeComponentFlag & componentFlags)) {
+                        // if (!(kRed_SkColorChannelFlag & channelFlags)) {
                         //     return false;
                         // }
                         break;
                     case SkColorChannel::kG:
-                        if (!(kGreen_SkColorTypeComponentFlag & componentFlags)) {
+                        if (!(kGreen_SkColorChannelFlag & channelFlags)) {
                             return false;
                         }
                         break;
                     case SkColorChannel::kB:
-                        if (!(kBlue_SkColorTypeComponentFlag & componentFlags)) {
+                        if (!(kBlue_SkColorChannelFlag & channelFlags)) {
                             return false;
                         }
                         break;
                     case SkColorChannel::kA:
-                        if (!(kAlpha_SkColorTypeComponentFlag & componentFlags)) {
+                        if (!(kAlpha_SkColorChannelFlag & channelFlags)) {
                             return false;
                         }
                         break;
@@ -527,12 +525,10 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
     GrMipMapsStatus mipMapsStatus = (GrMipMapped::kYes == mipMapped)
             ? GrMipMapsStatus::kValid : GrMipMapsStatus::kNotAllocated;
 
-    GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(backendFormat, colorType);
-
     // We pass kReadOnly here since we should treat content of the client's texture as immutable.
     // The promise API provides no way for the client to indicated that the texture is protected.
     return proxyProvider->createLazyProxy(
-            std::move(callback), backendFormat, {width, height}, readSwizzle, GrRenderable::kNo, 1,
-            mipMapped, mipMapsStatus, GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact,
-            SkBudgeted::kNo, GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
+            std::move(callback), backendFormat, {width, height}, GrRenderable::kNo, 1, mipMapped,
+            mipMapsStatus, GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kNo,
+            GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
 }
