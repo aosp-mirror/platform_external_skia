@@ -12,6 +12,7 @@
 #include "include/private/SkColorData.h"
 #include "include/private/SkNx.h"
 #include "src/core/SkColorFilter_Matrix.h"
+#include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkVM.h"
@@ -80,26 +81,46 @@ bool SkColorFilter_Matrix::onAppendStages(const SkStageRec& rec, bool shaderIsOp
     return true;
 }
 
+
 skvm::Color SkColorFilter_Matrix::onProgram(skvm::Builder* p, skvm::Color c,
                                             SkColorSpace* /*dstCS*/,
                                             skvm::Uniforms* uniforms, SkArenaAlloc*) const {
-    // TODO: specialize generated code on the 0/1 values of fMatrix?
-    if (fDomain == Domain::kRGBA) {
-        c = p->unpremul(c);
+    auto apply_matrix = [&](auto xyzw) {
+        auto dot = [&](int j) {
+            auto mad = [&](float f, skvm::F32 m, skvm::F32 a) {
+                // skvm::Builder won't fold f*0 == 0, but we shouldn't encounter NaN here.
+                // While looking, also simplify f == ±1.  Anything else becomes a uniform.
+                return f ==  0.0f ? a
+                     : f == +1.0f ? p->add(m,a)
+                     : f == -1.0f ? p->sub(a,m)
+                     : p->mad(p->uniformF(uniforms->pushF(f)), m, a);
+            };
 
-        auto m = [&](int i) { return p->uniformF(uniforms->pushF(fMatrix[i])); };
+            // Similarly, let skvm::Builder fold away the additive bias when zero.
+            const float b = fMatrix[4+j*5];
+            skvm::F32 bias = b == 0.0f ? p->splat(0.0f)
+                                       : p->uniformF(uniforms->pushF(b));
 
-        skvm::F32 rgba[4];
-        for (int j = 0; j < 4; j++) {
-            rgba[j] =        m(4+j*5);
-            rgba[j] = p->mad(m(3+j*5), c.a, rgba[j]);
-            rgba[j] = p->mad(m(2+j*5), c.b, rgba[j]);
-            rgba[j] = p->mad(m(1+j*5), c.g, rgba[j]);
-            rgba[j] = p->mad(m(0+j*5), c.r, rgba[j]);
-        }
-        return p->premul({rgba[0], rgba[1], rgba[2], rgba[3]});
+            auto [x,y,z,w] = xyzw;
+            return mad(fMatrix[0+j*5], x,
+                   mad(fMatrix[1+j*5], y,
+                   mad(fMatrix[2+j*5], z,
+                   mad(fMatrix[3+j*5], w, bias))));
+        };
+        return std::make_tuple(dot(0), dot(1), dot(2), dot(3));
+    };
+
+    c = p->unpremul(c);
+
+    if (fDomain == Domain::kHSLA) {
+        auto [h,s,l,a] = apply_matrix(p->to_hsla(c));
+        c = p->to_rgba({h,s,l,a});
+    } else {
+        auto [r,g,b,a] = apply_matrix(c);
+        c = {r,g,b,a};
     }
-    return {};
+
+    return p->premul(c);    // note: rasterpipeline version does clamp01 first
 }
 
 #if SK_SUPPORT_GPU
