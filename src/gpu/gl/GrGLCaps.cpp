@@ -635,8 +635,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fDrawIndirectSupport = version >= GR_GL_VER(3,1);
         fMultiDrawIndirectSupport = fDrawIndirectSupport &&
                                     ctxInfo.hasExtension("GL_EXT_multi_draw_indirect");
-        fBaseInstanceSupport = fDrawIndirectSupport &&
-                               ctxInfo.hasExtension("GL_EXT_base_instance");
+        fBaseInstanceSupport = ctxInfo.hasExtension("GL_EXT_base_instance") ||
+                               ctxInfo.hasExtension("GL_ANGLE_base_vertex_base_instance");
         fDrawRangeElementsSupport = version >= GR_GL_VER(3,0);
     } else if (GR_IS_GR_WEBGL(standard)) {
         // WebGL lacks indirect support, but drawRange was added in WebGL 2.0
@@ -4111,6 +4111,15 @@ SkImage::CompressionType GrGLCaps::compressionType(const GrBackendFormat& format
     SkUNREACHABLE;
 }
 
+bool GrGLCaps::isFormatTexturableAndUploadable(GrColorType ct,
+                                               const GrBackendFormat& format) const {
+    auto glFormat = format.asGLFormat();
+    const FormatInfo& info = this->getFormatInfo(glFormat);
+
+    return this->isFormatTexturable(glFormat) &&
+           SkToBool(info.colorTypeFlags(ct) & ColorTypeInfo::kUploadData_Flag);
+}
+
 bool GrGLCaps::isFormatTexturable(const GrBackendFormat& format) const {
     return this->isFormatTexturable(format.asGLFormat());
 }
@@ -4284,10 +4293,12 @@ GrColorType GrGLCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& f
     SkUNREACHABLE;
 }
 
-GrBackendFormat GrGLCaps::onGetDefaultBackendFormat(GrColorType ct) const {
+GrBackendFormat GrGLCaps::onGetDefaultBackendFormat(GrColorType ct,
+                                                    GrRenderable renderable) const {
+    // TODO: make use of renderable.
     auto format = this->getFormatFromColorType(ct);
     if (format == GrGLFormat::kUnknown) {
-        return {};
+        return GrBackendFormat();
     }
     return GrBackendFormat::MakeGL(GrGLFormatToEnum(format), GR_GL_TEXTURE_2D);
 }
