@@ -12,6 +12,7 @@
 #include "include/core/SkColor.h"
 #include "include/private/SkMacros.h"
 #include "include/private/SkTHash.h"
+#include "src/core/SkSpan.h"
 #include "src/core/SkVM_fwd.h"
 #include <vector>      // std::vector
 
@@ -399,25 +400,63 @@ namespace skvm {
         explicit operator bool() const { return h && s && l && a; }
     };
 
+    struct Uniform {
+        Arg ptr;
+        int offset;
+    };
+    struct Uniforms {
+        Arg              base;
+        std::vector<int> buf;
+
+        explicit Uniforms(int init) : base(Arg{0}), buf(init) {}
+
+        Uniform push(int val) {
+            buf.push_back(val);
+            return {base, (int)( sizeof(int)*(buf.size() - 1) )};
+        }
+
+        Uniform pushF(float val) {
+            int bits;
+            memcpy(&bits, &val, sizeof(int));
+            return this->push(bits);
+        }
+
+        Uniform pushPtr(const void* ptr) {
+            // Jam the pointer into 1 or 2 ints.
+            int ints[sizeof(ptr) / sizeof(int)];
+            memcpy(ints, &ptr, sizeof(ptr));
+            for (int bits : ints) {
+                buf.push_back(bits);
+            }
+            return {base, (int)( sizeof(int)*(buf.size() - SK_ARRAY_COUNT(ints)) )};
+        }
+    };
+
+    SK_BEGIN_REQUIRE_DENSE
+    struct Instruction {
+        Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
+        Val x,y,z;      // Enough arguments for mad().
+        int immy,immz;  // Immediate bit pattern, shift count, argument index, etc.
+    };
+    SK_END_REQUIRE_DENSE
+
+    bool operator==(const Instruction&, const Instruction&);
+    struct InstructionHash {
+        uint32_t operator()(const Instruction&, uint32_t seed=0) const;
+    };
+
     struct OptimizedInstruction {
         Op op;
         Val x,y,z;
         int immy,immz;
 
-        int  death;
+        Val  death;
         bool can_hoist;
         bool used_in_loop;
     };
 
     class Builder {
     public:
-        SK_BEGIN_REQUIRE_DENSE
-        struct Instruction {
-            Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
-            Val x,y,z;      // Enough arguments for mad().
-            int immy,immz;  // Immediate bit pattern, shift count, argument index, etc.
-        };
-        SK_END_REQUIRE_DENSE
 
         Program done(const char* debug_name = nullptr) const;
 
@@ -476,11 +515,7 @@ namespace skvm {
             return bit_cast(gather32(ptr, offset, index));
         }
 
-        // Convenience methods for working with skvm::Uniforms.
-        struct Uniform {
-            Arg ptr;
-            int offset;
-        };
+        // Convenience methods for working with skvm::Uniform(s).
         I32 uniform8 (Uniform u)            { return this->uniform8 (u.ptr, u.offset); }
         I32 uniform16(Uniform u)            { return this->uniform16(u.ptr, u.offset); }
         I32 uniform32(Uniform u)            { return this->uniform32(u.ptr, u.offset); }
@@ -654,10 +689,6 @@ namespace skvm {
         uint64_t hash() const;
 
     private:
-        struct InstructionHash {
-            uint32_t operator()(const Instruction& inst, uint32_t seed=0) const;
-        };
-
         Val push(Op, Val x, Val y=NA, Val z=NA, int immy=0, int immz=0);
 
         I32 _(I32a x) {
@@ -692,33 +723,25 @@ namespace skvm {
         std::vector<int>                              fStrides;
     };
 
-    // Helper to streamline allocating and working with uniforms.
-    struct Uniforms {
-        Arg              base;
-        std::vector<int> buf;
+    // Fill live and sinks each if non-null:
+    //    - (*live)[id]: notes whether each input instruction is live
+    //    - *sinks:      an unsorted set of live instructions with side effects (stores, assert_true)
+    // Returns the number of live instructions.
+    int liveness_analysis(const std::vector<Instruction>&,
+                          std::vector<bool>* live,
+                          std::vector<Val>*  sinks);
 
-        explicit Uniforms(int init) : base(Arg{0}), buf(init) {}
+    class Uses {
+    public:
+        Uses(const std::vector<Instruction>&, const std::vector<bool>&);
 
-        Builder::Uniform push(int val) {
-            buf.push_back(val);
-            return {base, (int)( sizeof(int)*(buf.size() - 1) )};
-        }
+        // Return an unordered span of Vals which use result of Instruction id.
+        SkSpan<const Val> users(Val id) const;
 
-        Builder::Uniform pushF(float val) {
-            int bits;
-            memcpy(&bits, &val, sizeof(int));
-            return this->push(bits);
-        }
-
-        Builder::Uniform pushPtr(const void* ptr) {
-            // Jam the pointer into 1 or 2 ints.
-            int ints[sizeof(ptr) / sizeof(int)];
-            memcpy(ints, &ptr, sizeof(ptr));
-            for (int bits : ints) {
-                buf.push_back(bits);
-            }
-            return {base, (int)( sizeof(int)*(buf.size() - SK_ARRAY_COUNT(ints)) )};
-        }
+    private:
+        // The start of use edges for each instruction
+        std::vector<int> fIndex;
+        std::vector<Val> fTable;
     };
 
     using Reg = int;
@@ -885,10 +908,10 @@ namespace skvm {
     static inline I32 gather32(Arg ptr, int off, I32 ix) { return ix->gather32(ptr, off, ix); }
     static inline F32 gatherF (Arg ptr, int off, I32 ix) { return ix->gatherF (ptr, off, ix); }
 
-    static inline I32 gather8 (Builder::Uniform u, I32 ix) { return ix->gather8 (u, ix); }
-    static inline I32 gather16(Builder::Uniform u, I32 ix) { return ix->gather16(u, ix); }
-    static inline I32 gather32(Builder::Uniform u, I32 ix) { return ix->gather32(u, ix); }
-    static inline F32 gatherF (Builder::Uniform u, I32 ix) { return ix->gatherF (u, ix); }
+    static inline I32 gather8 (Uniform u, I32 ix) { return ix->gather8 (u, ix); }
+    static inline I32 gather16(Uniform u, I32 ix) { return ix->gather16(u, ix); }
+    static inline I32 gather32(Uniform u, I32 ix) { return ix->gather32(u, ix); }
+    static inline F32 gatherF (Uniform u, I32 ix) { return ix->gatherF (u, ix); }
 
     static inline F32        sqrt(F32 x) { return x->       sqrt(x); }
     static inline F32 approx_log2(F32 x) { return x->approx_log2(x); }

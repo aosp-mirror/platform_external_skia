@@ -23,6 +23,7 @@
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
+#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
@@ -227,6 +228,24 @@ sk_sp<GrTextureProxy> GrProxyProvider::findOrCreateProxyByUniqueKey(const GrUniq
     // createWrapped should've added this for us
     SkASSERT(fUniquelyKeyedProxies.find(key));
     return result;
+}
+
+GrSurfaceProxyView GrProxyProvider::findCachedProxyWithColorTypeFallback(const GrUniqueKey& key,
+                                                                         GrSurfaceOrigin origin,
+                                                                         GrColorType ct) {
+    auto proxy = this->findOrCreateProxyByUniqueKey(key);
+    if (!proxy) {
+        return {};
+    }
+    // Assume that we used a fallback color type if and only if the proxy is renderable.
+    if (proxy->asRenderTargetProxy()) {
+        GrBackendFormat expectedFormat;
+        std::tie(ct, expectedFormat) =
+                GrRenderTargetContext::GetFallbackColorTypeAndFormat(fImageContext, ct);
+        SkASSERT(expectedFormat == proxy->backendFormat());
+    }
+    GrSwizzle swizzle = fImageContext->priv().caps()->getReadSwizzle(proxy->backendFormat(), ct);
+    return {std::move(proxy), origin, swizzle};
 }
 
 sk_sp<GrTextureProxy> GrProxyProvider::createProxyFromBitmap(const SkBitmap& bitmap,
@@ -463,7 +482,6 @@ sk_sp<GrTextureProxy> GrProxyProvider::createCompressedTextureProxy(
 }
 
 sk_sp<GrTextureProxy> GrProxyProvider::wrapBackendTexture(const GrBackendTexture& backendTex,
-                                                          GrColorType grColorType,
                                                           GrWrapOwnership ownership,
                                                           GrWrapCacheable cacheable,
                                                           GrIOType ioType,
@@ -483,8 +501,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::wrapBackendTexture(const GrBackendTexture
     GrResourceProvider* resourceProvider = direct->priv().resourceProvider();
 
     sk_sp<GrTexture> tex =
-            resourceProvider->wrapBackendTexture(backendTex, grColorType,
-                                                 ownership, cacheable, ioType);
+            resourceProvider->wrapBackendTexture(backendTex, ownership, cacheable, ioType);
     if (!tex) {
         return nullptr;
     }
@@ -535,8 +552,11 @@ sk_sp<GrTextureProxy> GrProxyProvider::wrapCompressedBackendTexture(const GrBack
 }
 
 sk_sp<GrTextureProxy> GrProxyProvider::wrapRenderableBackendTexture(
-        const GrBackendTexture& backendTex, int sampleCnt, GrColorType colorType,
-        GrWrapOwnership ownership, GrWrapCacheable cacheable, ReleaseProc releaseProc,
+        const GrBackendTexture& backendTex,
+        int sampleCnt,
+        GrWrapOwnership ownership,
+        GrWrapCacheable cacheable,
+        ReleaseProc releaseProc,
         ReleaseContext releaseCtx) {
     if (this->isAbandoned()) {
         return nullptr;
@@ -552,17 +572,11 @@ sk_sp<GrTextureProxy> GrProxyProvider::wrapRenderableBackendTexture(
 
     GrResourceProvider* resourceProvider = direct->priv().resourceProvider();
 
-    // TODO: This should have been checked and validated before getting into GrProxyProvider.
-    if (!caps->isFormatAsColorTypeRenderable(colorType, backendTex.getBackendFormat(), sampleCnt)) {
-        return nullptr;
-    }
-
     sampleCnt = caps->getRenderTargetSampleCount(sampleCnt, backendTex.getBackendFormat());
     SkASSERT(sampleCnt);
 
-    sk_sp<GrTexture> tex = resourceProvider->wrapRenderableBackendTexture(backendTex, sampleCnt,
-                                                                          colorType, ownership,
-                                                                          cacheable);
+    sk_sp<GrTexture> tex = resourceProvider->wrapRenderableBackendTexture(
+            backendTex, sampleCnt, ownership, cacheable);
     if (!tex) {
         return nullptr;
     }
@@ -579,7 +593,8 @@ sk_sp<GrTextureProxy> GrProxyProvider::wrapRenderableBackendTexture(
 }
 
 sk_sp<GrSurfaceProxy> GrProxyProvider::wrapBackendRenderTarget(
-        const GrBackendRenderTarget& backendRT, GrColorType grColorType, ReleaseProc releaseProc,
+        const GrBackendRenderTarget& backendRT,
+        ReleaseProc releaseProc,
         ReleaseContext releaseCtx) {
     if (this->isAbandoned()) {
         return nullptr;
@@ -593,7 +608,7 @@ sk_sp<GrSurfaceProxy> GrProxyProvider::wrapBackendRenderTarget(
 
     GrResourceProvider* resourceProvider = direct->priv().resourceProvider();
 
-    sk_sp<GrRenderTarget> rt = resourceProvider->wrapBackendRenderTarget(backendRT, grColorType);
+    sk_sp<GrRenderTarget> rt = resourceProvider->wrapBackendRenderTarget(backendRT);
     if (!rt) {
         return nullptr;
     }
@@ -611,7 +626,7 @@ sk_sp<GrSurfaceProxy> GrProxyProvider::wrapBackendRenderTarget(
 }
 
 sk_sp<GrSurfaceProxy> GrProxyProvider::wrapBackendTextureAsRenderTarget(
-        const GrBackendTexture& backendTex, GrColorType grColorType, int sampleCnt) {
+        const GrBackendTexture& backendTex, int sampleCnt) {
     if (this->isAbandoned()) {
         return nullptr;
     }
@@ -625,7 +640,7 @@ sk_sp<GrSurfaceProxy> GrProxyProvider::wrapBackendTextureAsRenderTarget(
     GrResourceProvider* resourceProvider = direct->priv().resourceProvider();
 
     sk_sp<GrRenderTarget> rt =
-            resourceProvider->wrapBackendTextureAsRenderTarget(backendTex, sampleCnt, grColorType);
+            resourceProvider->wrapBackendTextureAsRenderTarget(backendTex, sampleCnt);
     if (!rt) {
         return nullptr;
     }
