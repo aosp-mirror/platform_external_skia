@@ -181,10 +181,8 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
         return nullptr;
     }
 
-    GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, colorType);
-
     sk_sp<GrTextureProxy> proxy = context->priv().proxyProvider()->createProxy(
-            format, dimensions, swizzle, GrRenderable::kYes, sampleCnt, mipMapped, fit, budgeted,
+            format, dimensions, GrRenderable::kYes, sampleCnt, mipMapped, fit, budgeted,
             isProtected);
     if (!proxy) {
         return nullptr;
@@ -1698,10 +1696,10 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
     }
     // Fail if read color type does not have all of dstCT's color channels and those missing color
     // channels are in the src.
-    uint32_t dstComponents = GrColorTypeComponentFlags(dstCT);
-    uint32_t legalReadComponents = GrColorTypeComponentFlags(readInfo.fColorType);
-    uint32_t srcComponents = GrColorTypeComponentFlags(this->colorInfo().colorType());
-    if ((~legalReadComponents & dstComponents) & srcComponents) {
+    uint32_t dstChannels = GrColorTypeChannelFlags(dstCT);
+    uint32_t legalReadChannels = GrColorTypeChannelFlags(readInfo.fColorType);
+    uint32_t srcChannels = GrColorTypeChannelFlags(this->colorInfo().colorType());
+    if ((~legalReadChannels & dstChannels) & srcChannels) {
         callback(context, nullptr);
         return;
     }

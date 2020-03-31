@@ -141,8 +141,6 @@ static inline MTLVertexFormat attribute_type_to_mtlformat(GrVertexAttribType typ
             }
         case kHalf2_GrVertexAttribType:
             return MTLVertexFormatHalf2;
-        case kHalf3_GrVertexAttribType:
-            return MTLVertexFormatHalf3;
         case kHalf4_GrVertexAttribType:
             return MTLVertexFormatHalf4;
         case kInt2_GrVertexAttribType:
@@ -159,8 +157,6 @@ static inline MTLVertexFormat attribute_type_to_mtlformat(GrVertexAttribType typ
             }
         case kByte2_GrVertexAttribType:
             return MTLVertexFormatChar2;
-        case kByte3_GrVertexAttribType:
-            return MTLVertexFormatChar3;
         case kByte4_GrVertexAttribType:
             return MTLVertexFormatChar4;
         case kUByte_GrVertexAttribType:
@@ -171,8 +167,6 @@ static inline MTLVertexFormat attribute_type_to_mtlformat(GrVertexAttribType typ
             }
         case kUByte2_GrVertexAttribType:
             return MTLVertexFormatUChar2;
-        case kUByte3_GrVertexAttribType:
-            return MTLVertexFormatUChar3;
         case kUByte4_GrVertexAttribType:
             return MTLVertexFormatUChar4;
         case kUByte_norm_GrVertexAttribType:
@@ -293,10 +287,6 @@ static MTLBlendFactor blend_coeff_to_mtl_blend(GrBlendCoeff coeff) {
             return MTLBlendFactorBlendColor;
         case kIConstC_GrBlendCoeff:
             return MTLBlendFactorOneMinusBlendColor;
-        case kConstA_GrBlendCoeff:
-            return MTLBlendFactorBlendAlpha;
-        case kIConstA_GrBlendCoeff:
-            return MTLBlendFactorOneMinusBlendAlpha;
         case kS2C_GrBlendCoeff:
             if (@available(macOS 10.12, iOS 11.0, *)) {
                 return MTLBlendFactorSource1Color;

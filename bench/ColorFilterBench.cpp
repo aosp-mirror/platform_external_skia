@@ -11,7 +11,9 @@
 #include "include/core/SkSurface.h"
 #include "include/effects/SkHighContrastFilter.h"
 #include "include/effects/SkImageFilters.h"
+#include "include/effects/SkOverdrawColorFilter.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "src/core/SkColorFilterPriv.h"
 #include "tools/Resources.h"
 
 // Just need an interesting filter, nothing to special about colormatrix
@@ -188,6 +190,15 @@ DEF_BENCH( return new ColorFilterBench("highcontrast", []() {
     return SkHighContrastFilter::Make({
         false, SkHighContrastConfig::InvertStyle::kInvertLightness, 0.2f
     });
+}); )
+DEF_BENCH( return new ColorFilterBench("overdraw", []() {
+    const SkColor colors[SkOverdrawColorFilter::kNumColors] = {
+            0x80FF0000, 0x8000FF00, 0x800000FF, 0x80FFFF00, 0x8000FFFF, 0x80FF00FF,
+    };
+    return SkOverdrawColorFilter::MakeWithSkColors(colors);
+}); )
+DEF_BENCH( return new ColorFilterBench("gaussian", []() {
+    return SkColorFilterPriv::MakeGaussian();
 }); )
 
 #ifdef SK_SUPPORT_GPU
