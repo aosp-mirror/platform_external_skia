@@ -7,11 +7,11 @@
 
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/d3d/GrD3DBackendContext.h"
+#include "include/gpu/d3d/GrD3DTypes.h"
 
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrShaderCaps.h"
-#include "src/gpu/d3d/GrD3D12.h"
 #include "src/gpu/d3d/GrD3DCaps.h"
 #include "src/gpu/d3d/GrD3DGpu.h"
 #include "src/gpu/d3d/GrD3DUtil.h"
@@ -944,8 +944,7 @@ GrSwizzle GrD3DCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType c
             return ctInfo.fReadSwizzle;
         }
     }
-    SkDEBUGFAIL("Illegal color type/format combination.");
-    return {};
+    return GrSwizzle::RGBA();
 }
 
 GrSwizzle GrD3DCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
@@ -958,8 +957,7 @@ GrSwizzle GrD3DCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType 
             return ctInfo.fWriteSwizzle;
         }
     }
-    SkDEBUGFAIL("Illegal color type/format combination.");
-    return {};
+    return GrSwizzle::RGBA();
 }
 
 uint64_t GrD3DCaps::computeFormatKey(const GrBackendFormat& format) const {
