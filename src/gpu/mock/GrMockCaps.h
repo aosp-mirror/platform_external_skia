@@ -167,7 +167,7 @@ public:
     GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const override {
         return GrSwizzle();
     }
-    GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override {
+    GrSwizzle getWriteSwizzle(const GrBackendFormat& format, GrColorType ct) const override {
         return GrSwizzle();
     }
 

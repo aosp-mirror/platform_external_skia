@@ -9,7 +9,8 @@
 #define GrD3DCaps_DEFINED
 
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/d3d/GrD3D12.h"
+
+#include "include/gpu/d3d/GrD3DTypes.h"
 
 class GrShaderCaps;
 
@@ -63,7 +64,7 @@ public:
     }
 
     GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const override;
-    GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
@@ -122,7 +123,7 @@ private:
         uint32_t fFlags = 0;
 
         GrSwizzle fReadSwizzle;
-        GrSwizzle fOutputSwizzle;
+        GrSwizzle fWriteSwizzle;
     };
 
     struct FormatInfo {

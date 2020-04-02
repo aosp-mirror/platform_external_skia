@@ -9,10 +9,12 @@
 #define SkVertices_DEFINED
 
 #include "include/core/SkColor.h"
-#include "include/core/SkData.h"
-#include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
+
+class SkData;
+struct SkPoint;
+class SkVerticesPriv;
 
 /**
  * An immutable set of vertex data that can be used with SkCanvas::drawVertices.
@@ -120,41 +122,20 @@ public:
      */
     sk_sp<SkData> encode() const;
 
-    struct Info;
-    void getInfo(Info*) const;
+    // Provides access to functions that aren't part of the public API.
+    SkVerticesPriv priv();
+    const SkVerticesPriv priv() const;
 
 private:
     SkVertices() {}
 
     friend class SkVerticesPriv;
-    friend class SkDraw;
-    friend class SkGpuDevice;
 
     // these are needed since we've manually sized our allocation (see Builder::init)
     friend class SkNVRefCnt<SkVertices>;
     void operator delete(void* p);
 
-    static sk_sp<SkVertices> Alloc(int vCount, int iCount, uint32_t builderFlags,
-                                   size_t* arraySize);
-
     Sizes getSizes() const;
-
-    VertexMode mode() const { return fMode; }
-
-    bool hasPerVertexData() const { return SkToBool(this->perVertexData()); }
-    bool hasColors() const { return SkToBool(this->colors()); }
-    bool hasTexCoords() const { return SkToBool(this->texCoords()); }
-    bool hasIndices() const { return SkToBool(this->indices()); }
-
-    int vertexCount() const { return fVertexCount; }
-    int indexCount() const { return fIndexCount; }
-    int perVertexDataCount() const { return fPerVertexDataCount; }
-
-    const SkPoint* positions() const { return fPositions; }
-    const float* perVertexData() const { return fPerVertexData; }
-    const SkPoint* texCoords() const { return fTexs; }
-    const SkColor* colors() const { return fColors; }
-    const uint16_t* indices() const { return fIndices; }
 
     // we store this first, to pair with the refcnt in our base-class, so we don't have an
     // unnecessary pad between it and the (possibly 8-byte aligned) ptrs.

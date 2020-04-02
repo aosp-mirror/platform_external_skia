@@ -312,7 +312,7 @@ namespace skvm {
         o->writeText(" registers, ");
         o->writeDecAsText(fImpl->instructions.size());
         o->writeText(" instructions:\n");
-        for (int i = 0; i < (int)fImpl->instructions.size(); i++) {
+        for (Val i = 0; i < (Val)fImpl->instructions.size(); i++) {
             if (i == fImpl->loop) { write(o, "loop:\n"); }
             o->writeDecAsText(i);
             o->writeText("\t");
@@ -425,10 +425,10 @@ namespace skvm {
 
     std::vector<OptimizedInstruction> Builder::optimize(bool for_jit) const {
         // If requested, first specialize for our JIT backend.
-        auto specialize_for_jit = [&]() -> std::vector<Builder::Instruction> {
+        auto specialize_for_jit = [&]() -> std::vector<Instruction> {
             Builder specialized;
-            for (int i = 0; i < (int)fProgram.size(); i++) {
-                Builder::Instruction inst = fProgram[i];
+            for (Val i = 0; i < (Val)fProgram.size(); i++) {
+                Instruction inst = fProgram[i];
 
                 #if defined(SK_CPU_X86)
                 switch (Op imm_op; inst.op) {
@@ -478,45 +478,16 @@ namespace skvm {
             }
             return specialized.fProgram;
         };
-        const std::vector<Builder::Instruction>& program = for_jit ? specialize_for_jit()
-                                                                   : fProgram;
+        const std::vector<Instruction>& program = for_jit ? specialize_for_jit() : fProgram;
 
-        struct UseCount {
-            int total = 0;
-            int remaining_uses = 0;
-            bool visited = false;
-        };
+        std::vector<bool> live_instructions;
+        std::vector<Val> frontier;
+        int liveInstructionCount = liveness_analysis(program, &live_instructions, &frontier);
+        skvm::Usage usage{program, live_instructions};
 
-        std::vector<UseCount> use_counts(program.size());
-
-        int live_instructions = 0;
-        auto count_uses = [&](Val id, auto& recurse) -> void {
-            Builder::Instruction inst = program[id];
-            if (!use_counts[id].visited) {
-                use_counts[id].visited = true;
-                live_instructions += 1;
-                if (inst.x != NA) {
-                    use_counts[inst.x].total += 1;
-                    use_counts[inst.x].remaining_uses += 1;
-                    recurse(inst.x, recurse);
-                }
-                if (inst.y != NA) {
-                    use_counts[inst.y].total += 1;
-                    use_counts[inst.y].remaining_uses += 1;
-                    recurse(inst.y, recurse);
-                }
-                if (inst.z != NA) {
-                    use_counts[inst.z].total += 1;
-                    use_counts[inst.z].remaining_uses += 1;
-                    recurse(inst.z, recurse);
-                }
-            }
-        };
-
+        std::vector<int> remaining_uses;
         for (Val id = 0; id < (Val)program.size(); id++) {
-            if (program[id].op <= Op::store32) {
-                count_uses(id, count_uses);
-            }
+            remaining_uses.push_back((int)usage.users(id).size());
         }
 
         // Map old Val index to rewritten index in optimized.
@@ -524,19 +495,19 @@ namespace skvm {
 
         auto pressure_change = [&](Val id) -> int {
             int pressure = 0;
-            Builder::Instruction inst = program[id];
+            Instruction inst = program[id];
 
             // If this is not a sink, then it takes up a register
             if (inst.op > Op::store32) { pressure += 1; }
 
             // If this is the last use of the value, then that register will be free.
-            if (inst.x != NA && use_counts[inst.x].remaining_uses == 1) { pressure -= 1; }
-            if (inst.y != NA && use_counts[inst.y].remaining_uses == 1) { pressure -= 1; }
-            if (inst.z != NA && use_counts[inst.z].remaining_uses == 1) { pressure -= 1; }
+            if (inst.x != NA && remaining_uses[inst.x] == 1) { pressure -= 1; }
+            if (inst.y != NA && remaining_uses[inst.y] == 1) { pressure -= 1; }
+            if (inst.z != NA && remaining_uses[inst.z] == 1) { pressure -= 1; }
             return pressure;
         };
 
-        auto compare = [&](const Val& lhs, const Val& rhs) {
+        auto compare = [&](Val lhs, Val rhs) {
             SkASSERT(lhs != rhs);
             int lhs_change = pressure_change(lhs);
             int rhs_change = pressure_change(rhs);
@@ -564,14 +535,6 @@ namespace skvm {
             return lhs_change < rhs_change || (lhs_change == rhs_change && lhs > rhs);
         };
 
-        std::vector<Val> frontier;
-
-        for (Val id = 0; id < (Val)program.size(); id++) {
-            if (program[id].op <= Op::store32) {
-                frontier.push_back(id);
-            }
-        }
-
         // Order the instructions.
         std::make_heap(frontier.begin(), frontier.end(), compare);
 
@@ -579,42 +542,34 @@ namespace skvm {
         // instructions that reduce register pressure before ones that increase register
         // pressure.
         std::vector<OptimizedInstruction> optimized;
-        optimized.resize(live_instructions);
-        for (int i = live_instructions; i-- > 0;) {
+        optimized.resize(liveInstructionCount);
+        for (int i = liveInstructionCount; i-- > 0;) {
             SkASSERT(!frontier.empty());
             std::pop_heap(frontier.begin(), frontier.end(), compare);
             Val id = frontier.back();
             frontier.pop_back();
             new_index[id] = i;
-            Builder::Instruction inst = program[id];
-            SkASSERT(use_counts[id].remaining_uses == 0);
+            Instruction inst = program[id];
+            SkASSERT(remaining_uses[id] == 0);
 
             // Use the old indices, and fix them up later.
             optimized[i] = {inst.op,
                             inst.x, inst.y, inst.z,
                             inst.immy, inst.immz,
                              /*death=*/0, /*can_hoist=*/true, /*used_in_loop=*/false};
-            if (inst.x != NA) {
-                use_counts[inst.x].remaining_uses--;
-                if (use_counts[inst.x].remaining_uses == 0) {
-                    frontier.push_back(inst.x);
-                    std::push_heap(frontier.begin(), frontier.end(), compare);
-                }
-            }
-            if (inst.y != NA) {
-                use_counts[inst.y].remaining_uses--;
-                if (use_counts[inst.y].remaining_uses == 0) {
-                    frontier.push_back(inst.y);
-                    std::push_heap(frontier.begin(), frontier.end(), compare);
-                }
-            }
-            if (inst.z != NA) {
-                use_counts[inst.z].remaining_uses--;
-                if (use_counts[inst.z].remaining_uses == 0) {
-                    frontier.push_back(inst.z);
-                    std::push_heap(frontier.begin(), frontier.end(), compare);
-                }
-            }
+
+            auto maybe_issue = [&](Val input) {
+              if (input != NA) {
+                  if (remaining_uses[input] == 1) {
+                      frontier.push_back(input);
+                      std::push_heap(frontier.begin(), frontier.end(), compare);
+                  }
+                  remaining_uses[input]--;
+              }
+            };
+            maybe_issue(inst.x);
+            maybe_issue(inst.y);
+            maybe_issue(inst.z);
         }
 
         // Fix up the optimized program to use the optimized indices.
@@ -692,7 +647,7 @@ namespace skvm {
         return (uint64_t)lo | (uint64_t)hi << 32;
     }
 
-    static bool operator==(const Builder::Instruction& a, const Builder::Instruction& b) {
+    bool operator==(const Instruction& a, const Instruction& b) {
         return a.op   == b.op
             && a.x    == b.x
             && a.y    == b.y
@@ -701,7 +656,7 @@ namespace skvm {
             && a.immz == b.immz;
     }
 
-    uint32_t Builder::InstructionHash::operator()(const Instruction& inst, uint32_t seed) const {
+    uint32_t InstructionHash::operator()(const Instruction& inst, uint32_t seed) const {
         return SkOpts::hash(&inst, sizeof(inst), seed);
     }
 
@@ -1464,6 +1419,102 @@ namespace skvm {
                 return non_sep(R, G, B);
             }
         }
+    }
+
+    // Fill live and sinks each if non-null:
+    //    - (*live)[id]: notes whether each input instruction is live
+    //    - *sinks: an unsorted set of live instructions with side effects (stores, assert_true)
+    // Returns the number of live instructions.
+    int liveness_analysis(const std::vector<Instruction>& instructions,
+                          std::vector<bool>* live,
+                          std::vector<Val>*  sinks) {
+        int instruction_count = instructions.size();
+        live->resize(instruction_count, false);
+        int liveInstructionCount = 0;
+        auto trace = [&](Val id, auto& recurse) -> void {
+          if (!(*live)[id]) {
+              (*live)[id] = true;
+              liveInstructionCount++;
+              Instruction inst = instructions[id];
+              if (inst.x != NA) { recurse(inst.x, recurse); }
+              if (inst.y != NA) { recurse(inst.y, recurse); }
+              if (inst.z != NA) { recurse(inst.z, recurse); }
+          }
+        };
+
+        // For all the sink instructions.
+        for (Val id = 0; id < instruction_count; id++) {
+            if (instructions[id].op <= skvm::Op::store32) {
+                sinks->push_back(id);
+                trace(id, trace);
+            }
+        }
+        return liveInstructionCount;
+    }
+
+    // For a given program we'll store each Instruction's users contiguously in a table,
+    // and track where each Instruction's span of users starts and ends in another index.
+    // Here's a simple program that loads x and stores kx+k:
+    //
+    //  v0 = splat(k)
+    //  v1 = load(...)
+    //  v2 = mul(v1, v0)
+    //  v3 = add(v2, v0)
+    //  v4 = store(..., v3)
+    //
+    // This program has 5 instructions v0-v4.
+    //    - v0 is used by v2 and v3
+    //    - v1 is used by v2
+    //    - v2 is used by v3
+    //    - v3 is used by v4
+    //    - v4 has a side-effect
+    //
+    // For this program we fill out these two arrays:
+    //     table:  [v2,v3, v2, v3, v4]
+    //     index:  [0,     2,  3,  4,  5]
+    //
+    // The table is just those "is used by ..." I wrote out above in order,
+    // and the index tracks where an Instruction's span of users starts, table[index[id]].
+    // The span continues up until the start of the next Instruction, table[index[id+1]].
+    SkSpan<const Val> Usage::users(Val id) const {
+        int begin = fIndex[id];
+        int end   = fIndex[id + 1];
+        return SkMakeSpan(fTable.data() + begin, end - begin);
+    }
+
+    Usage::Usage(const std::vector<Instruction>& program, const std::vector<bool>& live) {
+        // uses[id] counts the number of times each Instruction is used.
+        std::vector<int> uses(program.size(), 0);
+        for (Val id = 0; id < (Val)program.size(); id++) {
+            if (live[id]) {
+                Instruction inst = program[id];
+                if (inst.x != NA) { ++uses[inst.x]; }
+                if (inst.y != NA) { ++uses[inst.y]; }
+                if (inst.z != NA) { ++uses[inst.z]; }
+            }
+        }
+
+        // Build our index into fTable, with an extra entry marking the final Instruction's end.
+        fIndex.reserve(program.size() + 1);
+        int total_uses = 0;
+        for (int n : uses) {
+            fIndex.push_back(total_uses);
+            total_uses += n;
+        }
+        fIndex.push_back(total_uses);
+
+        // Tick down each Instruction's uses to fill in fTable.
+        fTable.resize(total_uses, NA);
+        for (Val id = (Val)program.size(); id --> 0; ) {
+            if (live[id]) {
+                Instruction inst = program[id];
+                if (inst.x != NA) { fTable[fIndex[inst.x] + --uses[inst.x]] = id; }
+                if (inst.y != NA) { fTable[fIndex[inst.y] + --uses[inst.y]] = id; }
+                if (inst.z != NA) { fTable[fIndex[inst.z] + --uses[inst.z]] = id; }
+            }
+        }
+        for (int n  : uses  ) { (void)n;  SkASSERT(n  == 0 ); }
+        for (Val id : fTable) { (void)id; SkASSERT(id != NA); }
     }
 
     // ~~~~ Program::eval() and co. ~~~~ //

@@ -150,7 +150,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
 
     const GrBackendFormat& format = proxy->backendFormat();
     GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(format, colorType);
-    GrSwizzle outSwizzle = context->priv().caps()->getOutputSwizzle(format, colorType);
+    GrSwizzle outSwizzle = context->priv().caps()->getWriteSwizzle(format, colorType);
 
     GrSurfaceProxyView readView(proxy, origin, readSwizzle);
     GrSurfaceProxyView outputView(std::move(proxy), origin, outSwizzle);
@@ -274,7 +274,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::MakeFromBackendTex
         ReleaseContext releaseCtx) {
     SkASSERT(sampleCnt > 0);
     sk_sp<GrTextureProxy> proxy(context->priv().proxyProvider()->wrapRenderableBackendTexture(
-            tex, sampleCnt, colorType, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, releaseProc,
+            tex, sampleCnt, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, releaseProc,
             releaseCtx));
     if (!proxy) {
         return nullptr;
@@ -293,8 +293,8 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::MakeFromBackendTex
         GrSurfaceOrigin origin,
         const SkSurfaceProps* surfaceProps) {
     SkASSERT(sampleCnt > 0);
-    sk_sp<GrSurfaceProxy> proxy(context->priv().proxyProvider()->wrapBackendTextureAsRenderTarget(
-            tex, colorType, sampleCnt));
+    sk_sp<GrSurfaceProxy> proxy(
+            context->priv().proxyProvider()->wrapBackendTextureAsRenderTarget(tex, sampleCnt));
     if (!proxy) {
         return nullptr;
     }
@@ -312,8 +312,8 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::MakeFromBackendRen
         const SkSurfaceProps* surfaceProps,
         ReleaseProc releaseProc,
         ReleaseContext releaseCtx) {
-    sk_sp<GrSurfaceProxy> proxy(context->priv().proxyProvider()->wrapBackendRenderTarget(
-            rt, colorType, releaseProc, releaseCtx));
+    sk_sp<GrSurfaceProxy> proxy(
+            context->priv().proxyProvider()->wrapBackendRenderTarget(rt, releaseProc, releaseCtx));
     if (!proxy) {
         return nullptr;
     }
