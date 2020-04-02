@@ -423,15 +423,19 @@ namespace skvm {
         }
     }
 
-    void specialize_for_jit(std::vector<Instruction>* program) {
+    std::vector<Instruction> specialize(const std::vector<Instruction> program, bool for_jit) {
+        if (!for_jit) {
+            return program;
+        }
+
         Builder b;
-        for (Val i = 0; i < (Val)program->size(); i++) {
-            Instruction inst = (*program)[i];
+        for (Val i = 0; i < (Val)program.size(); i++) {
+            Instruction inst = program[i];
 
             #if defined(SK_CPU_X86)
             auto is_imm = [&](Val id, int* bits) {
-                *bits = (*program)[id].immy;
-                return  (*program)[id].op == Op::splat;
+                *bits = program[id].immy;
+                return  program[id].op == Op::splat;
             };
 
             switch (Op imm_op; inst.op) {
@@ -478,78 +482,61 @@ namespace skvm {
             SkASSERT(id == i);
         }
 
-        *program = b.program();
+        return b.program();
     }
 
-    void eliminate_dead_code(std::vector<Instruction>* program) {
+    std::vector<Instruction> eliminate_dead_code(const std::vector<Instruction> program) {
         // Determine which Instructions are live by working back from side effects.
-        std::vector<bool> live(program->size(), false);
+        std::vector<bool> live(program.size(), false);
         auto mark_live = [&](Val id, auto& recurse) -> void {
             if (live[id] == false) {
                 live[id] =  true;
-                Instruction inst = (*program)[id];
+                Instruction inst = program[id];
                 if (inst.x != NA) { recurse(inst.x, recurse); }
                 if (inst.y != NA) { recurse(inst.y, recurse); }
                 if (inst.z != NA) { recurse(inst.z, recurse); }
             }
         };
-        for (Val id = 0; id < (Val)program->size(); id++) {
-            if (has_side_effect((*program)[id].op)) {
+        for (Val id = 0; id < (Val)program.size(); id++) {
+            if (has_side_effect(program[id].op)) {
                 mark_live(id, mark_live);
             }
         }
 
         // Construct a new program with only live Instructions.
         Builder b;
-        std::vector<Val> new_id(program->size(), NA);
-        for (Val id = 0; id < (Val)program->size(); id++) {
+        std::vector<Val> new_id(program.size(), NA);
+        for (Val id = 0; id < (Val)program.size(); id++) {
             if (live[id]) {
-                Instruction inst = (*program)[id];
+                Instruction inst = program[id];
                 if (inst.x != NA) { inst.x = new_id[inst.x]; SkASSERT(inst.x != NA); }
                 if (inst.y != NA) { inst.y = new_id[inst.y]; SkASSERT(inst.y != NA); }
                 if (inst.z != NA) { inst.z = new_id[inst.z]; SkASSERT(inst.z != NA); }
                 new_id[id] = b.push(inst);
             }
         }
-        *program = b.program();
+        return b.program();
     }
 
-    std::vector<OptimizedInstruction> Builder::optimize(bool for_jit) const {
-        std::vector<Instruction> program = this->program();
-        if (for_jit) {
-            specialize_for_jit(&program);
-        }
-        eliminate_dead_code(&program);
+    std::vector<Instruction> schedule(const std::vector<Instruction> program) {
+        Usage usage{program};
 
-        skvm::Usage usage{program};
-
-        std::vector<int> remaining_uses;
+        std::vector<int> uses(program.size());
         for (Val id = 0; id < (Val)program.size(); id++) {
-            remaining_uses.push_back((int)usage.users(id).size());
+            uses[id] = (int)usage[id].size();
         }
-
-        std::vector<Val> frontier;
-        for (Val id = 0; id < (Val)program.size(); id++) {
-            if (has_side_effect(program[id].op)) {
-                frontier.push_back(id);
-            }
-        }
-
-        // Map old Val index to rewritten index in optimized.
-        std::vector<Val> new_index(program.size(), NA);
 
         auto pressure_change = [&](Val id) -> int {
-            int pressure = 0;
             Instruction inst = program[id];
 
-            // If this is not a sink, then it takes up a register
-            if (!has_side_effect(inst.op)) { pressure += 1; }
+            // If this Instruction is not a sink, its result needs a register.
+            int change = has_side_effect(inst.op) ? 0 : 1;
 
-            // If this is the last use of the value, then that register will be free.
-            if (inst.x != NA && remaining_uses[inst.x] == 1) { pressure -= 1; }
-            if (inst.y != NA && remaining_uses[inst.y] == 1) { pressure -= 1; }
-            if (inst.z != NA && remaining_uses[inst.z] == 1) { pressure -= 1; }
-            return pressure;
+            // If this is the final user of an argument, the argument's register becomes free.
+            for (Val arg : {inst.x, inst.y, inst.z}) {
+                if (arg != NA && uses[arg] == 1) { change -= 1; }
+            }
+            return change;
         };
 
         auto compare = [&](Val lhs, Val rhs) {
@@ -580,67 +567,71 @@ namespace skvm {
             return lhs_change < rhs_change || (lhs_change == rhs_change && lhs > rhs);
         };
 
-        // Order the instructions.
+        auto ready_to_schedule = [&](Val id) { return uses[id] == 0; };
+
+        std::vector<Val> frontier;
+        for (Val id = 0; id < (Val)program.size(); id++) {
+            Instruction inst = program[id];
+            if (has_side_effect(inst.op)) {
+                frontier.push_back(id);
+            }
+            // Having eliminated dead code, the only Instructions that should start
+            // with no users remaining to schedule are those with side effects.
+            SkASSERT(has_side_effect(inst.op) == usage[id].empty());
+        }
         std::make_heap(frontier.begin(), frontier.end(), compare);
 
-        // Schedule the instructions last to first from the DAG. Produce a schedule that executes
-        // instructions that reduce register pressure before ones that increase register
-        // pressure.
-        std::vector<OptimizedInstruction> optimized(program.size());
-        for (int i = (int)program.size(); i-- > 0;) {
+        std::vector<Instruction> scheduled(program.size());
+        std::vector<Val> new_id(program.size(), NA);
+
+        for (Val n = (Val)program.size(); n --> 0;) {
             SkASSERT(!frontier.empty());
             std::pop_heap(frontier.begin(), frontier.end(), compare);
             Val id = frontier.back();
             frontier.pop_back();
-            new_index[id] = i;
+
+            SkASSERT(ready_to_schedule(id));
+
             Instruction inst = program[id];
-            SkASSERT(remaining_uses[id] == 0);
+            scheduled[n] = inst;
+            new_id[id] = n;
 
-            // Use the old indices, and fix them up later.
-            optimized[i] = {inst.op,
-                            inst.x, inst.y, inst.z,
-                            inst.immy, inst.immz,
-                             /*death=*/0, /*can_hoist=*/true, /*used_in_loop=*/false};
-
-            auto maybe_issue = [&](Val input) {
-              if (input != NA) {
-                  if (remaining_uses[input] == 1) {
-                      frontier.push_back(input);
-                      std::push_heap(frontier.begin(), frontier.end(), compare);
-                  }
-                  remaining_uses[input]--;
-              }
-            };
-            maybe_issue(inst.x);
-            maybe_issue(inst.y);
-            maybe_issue(inst.z);
+            for (Val arg : {inst.x, inst.y, inst.z}) {
+                if (arg != NA) {
+                    uses[arg]--;
+                    if (ready_to_schedule(arg)) {
+                        frontier.push_back(arg);
+                        std::push_heap(frontier.begin(), frontier.end(), compare);
+                    }
+                }
+            }
         }
-
-        // Fix up the optimized program to use the optimized indices.
-        for (Val id = 0; id < (Val)optimized.size(); id++) {
-            OptimizedInstruction& inst = optimized[id];
-            if (inst.x != NA ) { inst.x = new_index[inst.x]; }
-            if (inst.y != NA ) { inst.y = new_index[inst.y]; }
-            if (inst.z != NA ) { inst.z = new_index[inst.z]; }
-        }
-
         SkASSERT(frontier.empty());
 
-        // We're done with `program` now... everything below will analyze `optimized`.
+        for (Val id = 0; id < (Val)scheduled.size(); id++) {
+            Instruction& inst = scheduled[id];
+            if (inst.x != NA) { inst.x = new_id[inst.x]; SkASSERT(inst.x != NA); }
+            if (inst.y != NA) { inst.y = new_id[inst.y]; SkASSERT(inst.y != NA); }
+            if (inst.z != NA) { inst.z = new_id[inst.z]; SkASSERT(inst.y != NA); }
+        }
 
-        // We'll want to know when it's safe to recycle registers holding the values
-        // produced by each instruction, that is, when no future instruction needs it.
-        for (Val id = 0; id < (Val)optimized.size(); id++) {
-            OptimizedInstruction& inst = optimized[id];
-            // Stores don't really produce values.  Just mark them as dying on issue.
-            if (has_side_effect(inst.op)) {
-                inst.death = id;
-            }
-            // Extend the lifetime of this instruction's inputs to live until it issues.
-            // (We're walking in order, so this is the same as max()ing.)
-            if (inst.x != NA) { optimized[inst.x].death = id; }
-            if (inst.y != NA) { optimized[inst.y].death = id; }
-            if (inst.z != NA) { optimized[inst.z].death = id; }
+        return scheduled;
+    }
+
+    std::vector<OptimizedInstruction> finalize(const std::vector<Instruction> program) {
+        Usage usage{program};
+
+        std::vector<OptimizedInstruction> optimized(program.size());
+        for (Val id = 0; id < (Val)program.size(); id++) {
+            Instruction inst = program[id];
+
+            // Instructions with side effects don't produce values; just mark them dying on issue.
+            SkASSERT(has_side_effect(inst.op) == usage[id].empty());
+            Val death = has_side_effect(inst.op) ? id
+                                                 : usage[id].back();
+
+            optimized[id] = {inst.op, inst.x,inst.y,inst.z, inst.immy,inst.immz,
+                             death, /*can_hoist=*/true, /*used_in_loop=*/false};
         }
 
         // Mark which values don't depend on the loop and can be hoisted.
@@ -648,7 +639,7 @@ namespace skvm {
             OptimizedInstruction& inst = optimized[id];
 
             // Varying loads (and gathers) and stores cannot be hoisted out of the loop.
-            if (inst.op <= Op::gather32 && inst.op != Op::assert_true) {
+            if (is_always_varying(inst.op)) {
                 inst.can_hoist = false;
             }
 
@@ -669,6 +660,14 @@ namespace skvm {
         }
 
         return optimized;
+    }
+
+    std::vector<OptimizedInstruction> Builder::optimize(bool for_jit) const {
+        std::vector<Instruction> program = this->program();
+        program = specialize         (std::move(program), for_jit);
+        program = eliminate_dead_code(std::move(program));
+        program = schedule           (std::move(program));
+        return    finalize           (std::move(program));
     }
 
     Program Builder::done(const char* debug_name) const {
@@ -1487,7 +1486,7 @@ namespace skvm {
     // The table is just those "is used by ..." I wrote out above in order,
     // and the index tracks where an Instruction's span of users starts, table[index[id]].
     // The span continues up until the start of the next Instruction, table[index[id+1]].
-    SkSpan<const Val> Usage::users(Val id) const {
+    SkSpan<const Val> Usage::operator[](Val id) const {
         int begin = fIndex[id];
         int end   = fIndex[id + 1];
         return SkMakeSpan(fTable.data() + begin, end - begin);
