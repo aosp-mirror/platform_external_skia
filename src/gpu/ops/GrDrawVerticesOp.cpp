@@ -295,7 +295,7 @@ private:
 
     void onCreateProgramInfo(const GrCaps*,
                              SkArenaAlloc*,
-                             const GrSurfaceProxyView* outputView,
+                             const GrSurfaceProxyView* writeView,
                              GrAppliedClip&&,
                              const GrXferProcessor::DstProxyView&) override;
 
@@ -453,11 +453,11 @@ GrGeometryProcessor* DrawVerticesOp::makeGP(SkArenaAlloc* arena) {
 
 void DrawVerticesOp::onCreateProgramInfo(const GrCaps* caps,
                                          SkArenaAlloc* arena,
-                                         const GrSurfaceProxyView* outputView,
+                                         const GrSurfaceProxyView* writeView,
                                          GrAppliedClip&& appliedClip,
                                          const GrXferProcessor::DstProxyView& dstProxyView) {
     GrGeometryProcessor* gp = this->makeGP(arena);
-    fProgramInfo = fHelper.createProgramInfo(caps, arena, outputView, std::move(appliedClip),
+    fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
                                              dstProxyView, gp, this->primitiveType());
 }
 
@@ -645,6 +645,18 @@ GrOp::CombineResult DrawVerticesOp::onCombineIfPossible(GrOp* t, GrRecordingCont
 }
 
 } // anonymous namespace
+
+static GrPrimitiveType SkVertexModeToGrPrimitiveType(SkVertices::VertexMode mode) {
+    switch (mode) {
+        case SkVertices::kTriangles_VertexMode:
+            return GrPrimitiveType::kTriangles;
+        case SkVertices::kTriangleStrip_VertexMode:
+            return GrPrimitiveType::kTriangleStrip;
+        case SkVertices::kTriangleFan_VertexMode:
+            break;
+    }
+    SK_ABORT("Invalid mode");
+}
 
 std::unique_ptr<GrDrawOp> GrDrawVerticesOp::Make(GrRecordingContext* context,
                                                  GrPaint&& paint,
