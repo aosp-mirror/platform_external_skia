@@ -423,16 +423,14 @@ namespace skvm {
         }
     }
 
-    std::vector<Instruction> specialize(const std::vector<Instruction> program, bool for_jit) {
-        if (!for_jit) {
-            return program;
-        }
-
-        Builder b;
+    std::vector<Instruction> specialize_for_jit(std::vector<Instruction> program) {
+        // We could use a temporary Builder to let new Instructions participate in common
+        // sub-expression elimination, but there's only a tiny chance of hitting anything valuable
+        // with the specializations we've got today.  Worth keeping in mind for the future though.
         for (Val i = 0; i < (Val)program.size(); i++) {
-            Instruction inst = program[i];
+        #if defined(SK_CPU_X86)
+            Instruction& inst = program[i];
 
-            #if defined(SK_CPU_X86)
             auto is_imm = [&](Val id, int* bits) {
                 *bits = program[id].immy;
                 return  program[id].op == Op::splat;
@@ -475,26 +473,21 @@ namespace skvm {
                         inst.immy = ~bits;
                     } break;
             }
-            #endif
-            SkDEBUGCODE(Val id =) b.push(inst);
-            // If we replace single instructions with multiple, this will start breaking,
-            // and we'll need a table to remap them like we have in optimize().
-            SkASSERT(id == i);
+        #endif
         }
-
-        return b.program();
+        return program;
     }
 
-    std::vector<Instruction> eliminate_dead_code(const std::vector<Instruction> program) {
+    std::vector<Instruction> eliminate_dead_code(std::vector<Instruction> program) {
         // Determine which Instructions are live by working back from side effects.
         std::vector<bool> live(program.size(), false);
         auto mark_live = [&](Val id, auto& recurse) -> void {
             if (live[id] == false) {
                 live[id] =  true;
                 Instruction inst = program[id];
-                if (inst.x != NA) { recurse(inst.x, recurse); }
-                if (inst.y != NA) { recurse(inst.y, recurse); }
-                if (inst.z != NA) { recurse(inst.z, recurse); }
+                for (Val arg : {inst.x, inst.y, inst.z}) {
+                    if (arg != NA) { recurse(arg, recurse); }
+                }
             }
         };
         for (Val id = 0; id < (Val)program.size(); id++) {
@@ -503,19 +496,29 @@ namespace skvm {
             }
         }
 
-        // Construct a new program with only live Instructions.
-        Builder b;
+        // Rewrite the program with only live Instructions:
+        //   - remap IDs in live Instructions to what they'll be once dead Instructions are removed;
+        //   - then actually remove the dead Instructions.
         std::vector<Val> new_id(program.size(), NA);
-        for (Val id = 0; id < (Val)program.size(); id++) {
+        for (Val id = 0, next = 0; id < (Val)program.size(); id++) {
             if (live[id]) {
-                Instruction inst = program[id];
-                if (inst.x != NA) { inst.x = new_id[inst.x]; SkASSERT(inst.x != NA); }
-                if (inst.y != NA) { inst.y = new_id[inst.y]; SkASSERT(inst.y != NA); }
-                if (inst.z != NA) { inst.z = new_id[inst.z]; SkASSERT(inst.z != NA); }
-                new_id[id] = b.push(inst);
+                Instruction& inst = program[id];
+                for (Val* arg : {&inst.x, &inst.y, &inst.z}) {
+                    if (*arg != NA) {
+                        *arg = new_id[*arg];
+                        SkASSERT(*arg != NA);
+                    }
+                }
+                new_id[id] = next++;
             }
         }
-        return b.program();
+        auto it = std::remove_if(program.begin(), program.end(), [&](const Instruction& inst) {
+            Val id = (Val)(&inst - program.data());
+            return !live[id];
+        });
+        program.erase(it, program.end());
+
+        return program;
     }
 
     std::vector<Instruction> schedule(const std::vector<Instruction> program) {
@@ -664,7 +667,9 @@ namespace skvm {
 
     std::vector<OptimizedInstruction> Builder::optimize(bool for_jit) const {
         std::vector<Instruction> program = this->program();
-        program = specialize         (std::move(program), for_jit);
+        if (for_jit) {
+            program = specialize_for_jit(std::move(program));
+        }
         program = eliminate_dead_code(std::move(program));
         program = schedule           (std::move(program));
         return    finalize           (std::move(program));
