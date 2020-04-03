@@ -339,6 +339,13 @@ namespace skvm {
     #undef M
     };
 
+    static inline bool has_side_effect(Op op) {
+        return op <= Op::store32;
+    }
+    static inline bool is_always_varying(Op op) {
+        return op <= Op::gather32 && op != Op::assert_true;
+    }
+
     using Val = int;
     // We reserve an impossibe Val ID as a sentinel
     // NA meaning none, n/a, null, nil, etc.
@@ -690,8 +697,11 @@ namespace skvm {
 
         uint64_t hash() const;
 
+        Val push(Instruction);
     private:
-        Val push(Op, Val x, Val y=NA, Val z=NA, int immy=0, int immz=0);
+        Val push(Op op, Val x, Val y=NA, Val z=NA, int immy=0, int immz=0) {
+            return this->push(Instruction{op, x,y,z, immy,immz});
+        }
 
         I32 _(I32a x) {
             if (x.id != NA) {
@@ -725,20 +735,19 @@ namespace skvm {
         std::vector<int>                              fStrides;
     };
 
-    // Fill live and sinks each if non-null:
-    //    - (*live)[id]: notes whether each input instruction is live
-    //    - *sinks:      an unsorted set of live instructions with side effects (stores, assert_true)
-    // Returns the number of live instructions.
-    int liveness_analysis(const std::vector<Instruction>&,
-                          std::vector<bool>* live,
-                          std::vector<Val>*  sinks);
+    // Optimization passes and data structures normally used by Builder::optimize(),
+    // extracted here so they can be unit tested.
+    std::vector<Instruction>          specialize_for_jit (std::vector<Instruction>);
+    std::vector<Instruction>          eliminate_dead_code(std::vector<Instruction>);
+    std::vector<Instruction>          schedule           (std::vector<Instruction>);
+    std::vector<OptimizedInstruction> finalize           (std::vector<Instruction>);
 
     class Usage {
     public:
-        Usage(const std::vector<Instruction>&, const std::vector<bool>&);
+        Usage(const std::vector<Instruction>&);
 
         // Return a sorted span of Vals which use result of Instruction id.
-        SkSpan<const Val> users(Val id) const;
+        SkSpan<const Val> operator[](Val id) const;
 
     private:
         std::vector<int> fIndex;
