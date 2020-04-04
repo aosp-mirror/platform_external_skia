@@ -152,8 +152,11 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
     }
 
     const GrBackendFormat& format = proxy->backendFormat();
-    GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(format, colorType);
-    GrSwizzle writeSwizzle = context->priv().caps()->getWriteSwizzle(format, colorType);
+    GrSwizzle readSwizzle, writeSwizzle;
+    if (colorType != GrColorType::kUnknown) {
+        readSwizzle = context->priv().caps()->getReadSwizzle(format, colorType);
+        writeSwizzle = context->priv().caps()->getWriteSwizzle(format, colorType);
+    }
 
     GrSurfaceProxyView readView(proxy, origin, readSwizzle);
     GrSurfaceProxyView writeView(std::move(proxy), origin, writeSwizzle);
@@ -244,11 +247,13 @@ static inline GrColorType color_type_fallback(GrColorType ct) {
 }
 
 std::tuple<GrColorType, GrBackendFormat> GrRenderTargetContext::GetFallbackColorTypeAndFormat(
-        GrImageContext* context, GrColorType colorType) {
+        GrImageContext* context, GrColorType colorType, int sampleCnt) {
+    auto caps = context->priv().caps();
     do {
-        auto format =
-                context->priv().caps()->getDefaultBackendFormat(colorType, GrRenderable::kYes);
-        if (format.isValid()) {
+        auto format = caps->getDefaultBackendFormat(colorType, GrRenderable::kYes);
+        // We continue to the fallback color type if there no default renderable format or we
+        // requested msaa and the format doesn't support msaa.
+        if (format.isValid() && caps->isFormatRenderable(format, sampleCnt)) {
             return {colorType, format};
         }
         colorType = color_type_fallback(colorType);
@@ -268,7 +273,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::MakeWithFallback(
         GrSurfaceOrigin origin,
         SkBudgeted budgeted,
         const SkSurfaceProps* surfaceProps) {
-    auto [ct, format] = GetFallbackColorTypeAndFormat(context, colorType);
+    auto [ct, format] = GetFallbackColorTypeAndFormat(context, colorType, sampleCnt);
     if (ct == GrColorType::kUnknown) {
         return nullptr;
     }
@@ -1747,14 +1752,14 @@ void GrRenderTargetContext::asyncRescaleAndReadPixels(
             SkRect srcRectToDraw = SkRect::Make(srcRect);
             // If the src is not texturable first try to make a copy to a texture.
             if (!texProxyView.asTextureProxy()) {
-                texProxyView = GrSurfaceProxy::Copy(fContext, this->asSurfaceProxy(),
-                                                    this->origin(), this->colorInfo().colorType(),
-                                                    GrMipMapped::kNo, srcRect,
-                                                    SkBackingFit::kApprox, SkBudgeted::kNo);
-                if (!texProxyView.asTextureProxy()) {
+                texProxyView =
+                        GrSurfaceProxyView::Copy(fContext, texProxyView, GrMipMapped::kNo, srcRect,
+                                                 SkBackingFit::kApprox, SkBudgeted::kNo);
+                if (!texProxyView) {
                     callback(context, nullptr);
                     return;
                 }
+                SkASSERT(texProxyView.asTextureProxy());
                 srcRectToDraw = SkRect::MakeWH(srcRect.width(), srcRect.height());
             }
             tempRTC = GrRenderTargetContext::Make(
@@ -1964,14 +1969,14 @@ void GrRenderTargetContext::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvC
     } else {
         srcView = this->readSurfaceView();
         if (!srcView.asTextureProxy()) {
-            srcView = GrSurfaceProxy::Copy(fContext, fReadView.proxy(), this->origin(),
-                                           this->colorInfo().colorType(), GrMipMapped::kNo,
-                                           srcRect, SkBackingFit::kApprox, SkBudgeted::kYes);
-            if (!srcView.asTextureProxy()) {
+            srcView = GrSurfaceProxyView::Copy(fContext, std::move(srcView), GrMipMapped::kNo,
+                                               srcRect, SkBackingFit::kApprox, SkBudgeted::kYes);
+            if (!srcView) {
                 // If we can't get a texture copy of the contents then give up.
                 callback(context, nullptr);
                 return;
             }
+            SkASSERT(srcView.asTextureProxy());
             x = y = 0;
         }
         // We assume the caller wants kPremul. There is no way to indicate a preference.
@@ -2602,13 +2607,12 @@ bool GrRenderTargetContext::setupDstProxyView(const GrClip& clip, const GrOp& op
         dstOffset = {copyRect.fLeft, copyRect.fTop};
         fit = SkBackingFit::kApprox;
     }
-    GrSurfaceProxyView newProxyView =
-            GrSurfaceProxy::Copy(fContext, this->asSurfaceProxy(), this->origin(), colorType,
-                                 GrMipMapped::kNo, copyRect, fit, SkBudgeted::kYes,
-                                 restrictions.fRectsMustMatch);
-    SkASSERT(newProxyView.proxy());
+    auto copy =
+            GrSurfaceProxy::Copy(fContext, this->asSurfaceProxy(), this->origin(), GrMipMapped::kNo,
+                                 copyRect, fit, SkBudgeted::kYes, restrictions.fRectsMustMatch);
+    SkASSERT(copy);
 
-    dstProxyView->setProxyView(std::move(newProxyView));
+    dstProxyView->setProxyView({std::move(copy), this->origin(), this->readSwizzle()});
     dstProxyView->setOffset(dstOffset);
     return true;
 }
