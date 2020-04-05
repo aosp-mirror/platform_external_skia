@@ -327,6 +327,7 @@ namespace skvm {
         M(bit_and)                            \
         M(bit_or)                             \
         M(bit_xor)                            \
+        M(bit_clear)                          \
         M(bit_and_imm)                        \
         M(bit_or_imm)                         \
         M(bit_xor_imm)                        \
@@ -536,7 +537,7 @@ namespace skvm {
 
         // Load an immediate constant.
         I32 splat(int      n);
-        I32 splat(unsigned u) { return this->splat((int)u); }
+        I32 splat(unsigned u) { return splat((int)u); }
         F32 splat(float    f);
 
         // float math, comparisons, etc.
@@ -566,9 +567,10 @@ namespace skvm {
         F32 clamp(F32a x, F32a lo, F32a hi) { return clamp(_(x), _(lo), _(hi)); }
         F32 clamp01(F32 x) { return clamp(x, 0.0f, 1.0f); }
 
-        F32   abs(F32 x) { return bit_cast(bit_and(bit_cast(x), 0x7fff'ffff)); }
-        F32 fract(F32 x) { return sub(x, floor(x)); }
-        F32 floor(F32);
+        F32    abs(F32 x) { return bit_cast(bit_and(bit_cast(x), 0x7fff'ffff)); }
+        F32  fract(F32 x) { return sub(x, floor(x)); }
+        F32  floor(F32);
+        I32 is_NaN(F32 x) { return neq(x,x); }
 
         I32 trunc(F32 x);
         I32 round(F32 x);  // Round to int using current rounding mode (as if lrintf()).
@@ -626,17 +628,18 @@ namespace skvm {
         I32 bit_and  (I32, I32);  I32 bit_and  (I32a x, I32a y) { return bit_and  (_(x), _(y)); }
         I32 bit_or   (I32, I32);  I32 bit_or   (I32a x, I32a y) { return bit_or   (_(x), _(y)); }
         I32 bit_xor  (I32, I32);  I32 bit_xor  (I32a x, I32a y) { return bit_xor  (_(x), _(y)); }
+        I32 bit_clear(I32, I32);  I32 bit_clear(I32a x, I32a y) { return bit_clear(_(x), _(y)); }
 
-        I32 min(I32 x, I32 y) { return select(lt(x,y), x, y); }
-        I32 max(I32 x, I32 y) { return select(gt(x,y), x, y); }
+        I32 min(I32 x, I32 y) { return select(lte(x,y), x, y); }
+        I32 max(I32 x, I32 y) { return select(gte(x,y), x, y); }
 
         I32 min(I32a x, I32a y) { return min(_(x), _(y)); }
         I32 max(I32a x, I32a y) { return max(_(x), _(y)); }
 
         I32 select(I32 cond, I32 t, I32 f);  // cond ? t : f
         F32 select(I32 cond, F32 t, F32 f) {
-            return this->bit_cast(this->select(cond, this->bit_cast(t)
-                                                   , this->bit_cast(f)));
+            return bit_cast(select(cond, bit_cast(t)
+                                       , bit_cast(f)));
         }
 
         I32 select(I32a cond, I32a t, I32a f) { return select(_(cond), _(t), _(f)); }
@@ -684,7 +687,7 @@ namespace skvm {
                 SkASSERT(x.builder == this);
                 return {this, x.id};
             }
-            return this->splat(x.imm);
+            return splat(x.imm);
         }
 
         F32 _(F32a x) {
@@ -692,7 +695,7 @@ namespace skvm {
                 SkASSERT(x.builder == this);
                 return {this, x.id};
             }
-            return this->splat(x.imm);
+            return splat(x.imm);
         }
 
         bool allImm() const;
@@ -912,6 +915,7 @@ namespace skvm {
     static inline F32     abs(F32 x) { return x->    abs(x); }
     static inline F32   fract(F32 x) { return x->  fract(x); }
     static inline F32   floor(F32 x) { return x->  floor(x); }
+    static inline I32  is_NaN(F32 x) { return x-> is_NaN(x); }
 
     static inline I32    trunc(F32 x) { return x->   trunc(x); }
     static inline I32    round(F32 x) { return x->   round(x); }
@@ -975,6 +979,16 @@ namespace skvm {
 
     static inline HSLA  to_hsla(Color c) { return c->to_hsla(c); }
     static inline Color to_rgba(HSLA  c) { return c->to_rgba(c); }
+
+    // Evaluate polynomials: ax^n + bx^(n-1) + ... for n >= 1
+    template <typename... Rest>
+    static inline F32 poly(F32 x, F32a a, F32a b, Rest... rest) {
+        if constexpr (sizeof...(rest) == 0) {
+            return x*a+b;
+        } else {
+            return poly(x, x*a+b, rest...);
+        }
+    }
 }
 
 #endif//SkVM_DEFINED

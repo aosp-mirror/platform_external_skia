@@ -94,41 +94,6 @@ DEF_TEST(SkVM, r) {
     }
 
     {
-        skvm::Builder b;
-        skvm::Arg arg = b.varying<int>();
-
-        // x and y can both be hoisted,
-        // and x can die at y, while y must live for the loop.
-        skvm::I32 x = b.splat(1),
-                  y = b.add(x, b.splat(2));
-        b.store32(arg, b.mul(b.load32(arg), y));
-
-        skvm::Program program = b.done();
-        REPORTER_ASSERT(r, program.nregs() == 2);
-
-        std::vector<skvm::OptimizedInstruction> insts = b.optimize();
-        REPORTER_ASSERT(r, insts.size() == 6);
-        REPORTER_ASSERT(r,  insts[0].can_hoist && insts[0].death == 2 && !insts[0].used_in_loop);
-        REPORTER_ASSERT(r,  insts[1].can_hoist && insts[1].death == 2 && !insts[1].used_in_loop);
-        REPORTER_ASSERT(r,  insts[2].can_hoist && insts[2].death == 4 &&  insts[2].used_in_loop);
-        REPORTER_ASSERT(r, !insts[3].can_hoist);
-        REPORTER_ASSERT(r, !insts[4].can_hoist);
-        REPORTER_ASSERT(r, !insts[5].can_hoist);
-
-        dump(b, &buf);
-
-        test_jit_and_interpreter(r, std::move(program), [&](const skvm::Program& program) {
-            int arg[] = {0,1,2,3,4,5,6,7,8,9};
-
-            program.eval(SK_ARRAY_COUNT(arg), arg);
-
-            for (int i = 0; i < (int)SK_ARRAY_COUNT(arg); i++) {
-                REPORTER_ASSERT(r, arg[i] == i*3);
-            }
-        });
-    }
-
-    {
         // Demonstrate the value of program reordering.
         skvm::Builder b;
         skvm::Arg sp = b.varying<int>(),
@@ -522,10 +487,10 @@ DEF_TEST(SkVM_bitops, r) {
 
         skvm::I32 x = b.load32(ptr);
 
-        x = b.bit_and  (x, b.splat( 0xf1));  // 0x40
-        x = b.bit_or   (x, b.splat( 0x80));  // 0xc0
-        x = b.bit_xor  (x, b.splat( 0xfe));  // 0x3e
-        x = b.bit_and  (x, b.splat(~0x30));  // 0x0e
+        x = b.bit_and  (x, b.splat(0xf1));  // 0x40
+        x = b.bit_or   (x, b.splat(0x80));  // 0xc0
+        x = b.bit_xor  (x, b.splat(0xfe));  // 0x3e
+        x = b.bit_clear(x, b.splat(0x30));  // 0x0e
 
         x = b.shl(x, 28);  // 0xe000'0000
         x = b.sra(x, 28);  // 0xffff'fffe
@@ -538,6 +503,38 @@ DEF_TEST(SkVM_bitops, r) {
         int x = 0x42;
         program.eval(1, &x);
         REPORTER_ASSERT(r, x == 0x7fff'ffff);
+    });
+}
+
+DEF_TEST(SkVM_select_is_NaN, r) {
+    skvm::Builder b;
+    {
+        skvm::Arg src = b.varying<float>(),
+                  dst = b.varying<float>();
+
+        skvm::F32 x = b.loadF(src);
+        x = select(is_NaN(x), b.splat(0.0f)
+                            , x);
+        b.storeF(dst, x);
+    }
+
+    std::vector<skvm::OptimizedInstruction> program = b.optimize();
+    REPORTER_ASSERT(r, program.size() == 4);
+    REPORTER_ASSERT(r, program[0].op == skvm::Op::load32);
+    REPORTER_ASSERT(r, program[1].op == skvm::Op::neq_f32);
+    REPORTER_ASSERT(r, program[2].op == skvm::Op::bit_clear);
+    REPORTER_ASSERT(r, program[3].op == skvm::Op::store32);
+
+    test_jit_and_interpreter(r, b.done(), [&](const skvm::Program& program) {
+        // ±NaN, ±0, ±1, ±inf
+        uint32_t src[] = {0x7f80'0001, 0xff80'0001, 0x0000'0000, 0x8000'0000,
+                          0x3f80'0000, 0xbf80'0000, 0x7f80'0000, 0xff80'0000};
+        uint32_t dst[SK_ARRAY_COUNT(src)];
+        program.eval(SK_ARRAY_COUNT(src), src, dst);
+
+        for (int i = 0; i < (int)SK_ARRAY_COUNT(src); i++) {
+            REPORTER_ASSERT(r, dst[i] == (i < 2 ? 0 : src[i]));
+        }
     });
 }
 
