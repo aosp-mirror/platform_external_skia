@@ -99,22 +99,8 @@ public:
     }
     GrGLAttribArrayState* bindInternalVertexArray(const GrBuffer* indexBuffer, GrPrimitiveRestart);
 
-    // These methods invoke their GL namesakes, with added bookkeeping and assertions. The caller is
-    // responsible to ensure the desired GL state is configured before calling:
-    //
-    //   - Call flushGLState()
-    //   - If scissor test got enabled, call flushScissorRect()
-    //   - If the pipeline has textures, call currentProgram()->bindTextures()
-    //   - Setup index and attrib arrays via currentProgram()
-    void drawArrays(GrPrimitiveType, GrGLint baseVertex, GrGLsizei vertexCount);
-    void drawElements(GrPrimitiveType, GrGLsizei indexCount, GrGLenum indexType,
-                      const void* indices);
-    void drawRangeElements(GrPrimitiveType, GrGLuint minIndexValue, GrGLuint maxIndexValue,
-                           GrGLsizei indexCount, GrGLenum indexType, const void* indices);
-    void drawArraysInstanced(GrPrimitiveType, GrGLint baseVertex, GrGLsizei vertexCount,
-                             GrGLsizei instanceCount);
-    void drawElementsInstanced(GrPrimitiveType, GrGLsizei indexCount, GrGLenum indexType,
-                               const void* indices, GrGLsizei instanceCount);
+    // Applies any necessary workarounds and returns the GL primitive type to use in draw calls.
+    GrGLenum prepareToDraw(GrPrimitiveType primitiveType);
 
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
@@ -317,9 +303,6 @@ private:
 
     // Version for programs that aren't GrGLProgram.
     void flushProgram(GrGLuint);
-
-    // Applies any necessary workarounds and returns the GL primitive type to use in draw calls.
-    GrGLenum prepareToDraw(GrPrimitiveType primitiveType);
 
     void flushBlendAndColorWrite(const GrXferProcessor::BlendInfo& blendInfo, const GrSwizzle&);
 
