@@ -7,7 +7,7 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@1cc49bb2e230555fb3dc33d3400a5f7a0cefe943",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@1c95795f1fb368de0c21df819f5ca6e5e2c9c0dc",
   # Dawn requires jinja2 and markupsafe for the code generator, and glslang and shaderc for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
   "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@11652ff8f8b3c3104eb2627717fa652d432d5b84",
@@ -37,7 +37,7 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@871c85d7f0edc6b613e3959bc51d13bfbc2fe2df",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@f8bf11a0253a32375c32cad92c841237b96696c0",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@1c8bda3721e6b9302f694b58c26d32eff341b126",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@f99302c4efe6f32297a619d407b4410ec3ee6412",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@b8d47928094f55a5166ac18c4451d59e4b48b907",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@4080840928c0b05a80cda0d14ac2e2615f679f1a",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@47af7c547f8551bd25424e56354a2ae1e9062859",
