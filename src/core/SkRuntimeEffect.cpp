@@ -12,6 +12,7 @@
 #include "include/private/SkMutex.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
+#include "src/core/SkUtils.h"
 #include "src/core/SkVM.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/sksl/SkSLByteCode.h"
@@ -268,9 +269,10 @@ size_t SkRuntimeEffect::inputSize() const {
                                                 fInAndUniformVars.back().sizeInBytes());
 }
 
-SkRuntimeEffect::SpecializeResult SkRuntimeEffect::specialize(SkSL::Program& baseProgram,
-                                                              const void* inputs,
-                                                              const SkSL::SharedCompiler& compiler) {
+SkRuntimeEffect::SpecializeResult
+SkRuntimeEffect::specialize(SkSL::Program& baseProgram,
+                            const void* inputs,
+                            const SkSL::SharedCompiler& compiler) const {
     std::unordered_map<SkSL::String, SkSL::Program::Settings::Value> inputMap;
     for (const auto& v : fInAndUniformVars) {
         if (v.fQualifier != Variable::Qualifier::kIn) {
@@ -343,7 +345,7 @@ bool SkRuntimeEffect::toPipelineStage(const void* inputs, const GrShaderCaps* sh
 }
 #endif
 
-SkRuntimeEffect::ByteCodeResult SkRuntimeEffect::toByteCode(const void* inputs) {
+SkRuntimeEffect::ByteCodeResult SkRuntimeEffect::toByteCode(const void* inputs) const {
     SkSL::SharedCompiler compiler;
 
     auto [specialized, errorText] = this->specialize(*fBaseProgram, inputs, compiler);
@@ -355,6 +357,111 @@ SkRuntimeEffect::ByteCodeResult SkRuntimeEffect::toByteCode(const void* inputs) 
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+static std::vector<skvm::F32> program_fn(skvm::Builder* p,
+                                         const SkSL::ByteCodeFunction& fn,
+                                         const std::vector<skvm::F32>& uniform,
+                                         std::vector<skvm::F32> stack) {
+    auto push = [&](skvm::F32 x) { stack.push_back(x); };
+    auto pop  = [&]{ skvm::F32 x = stack.back(); stack.pop_back(); return x; };
+
+    for (const uint8_t *ip = fn.code(), *end = ip + fn.size(); ip != end; ) {
+        using Inst = SkSL::ByteCodeInstruction;
+
+        auto inst = (Inst)(uintptr_t)sk_unaligned_load<SkSL::instruction>(ip);
+        ip += sizeof(SkSL::instruction);
+
+        auto u8  = [&]{ auto x = sk_unaligned_load<uint8_t >(ip); ip += sizeof(x); return x; };
+      //auto u16 = [&]{ auto x = sk_unaligned_load<uint16_t>(ip); ip += sizeof(x); return x; };
+        auto u32 = [&]{ auto x = sk_unaligned_load<uint32_t>(ip); ip += sizeof(x); return x; };
+
+        switch (inst) {
+            default:
+                #if 0
+                    fn.disassemble();
+                    SkDebugf("inst %04x unimplemented\n", inst);
+                    __builtin_debugtrap();
+                #endif
+                return {};
+
+            case Inst::kLoad: {
+                SkAssertResult(u8() == 1);
+                int ix = u8();
+                push(stack[ix + 0]);
+            } break;
+
+            case Inst::kLoad2: {
+                SkAssertResult(u8() == 2);
+                int ix = u8();
+                push(stack[ix + 0]);
+                push(stack[ix + 1]);
+            } break;
+
+            case Inst::kPushImmediate: {
+                push(bit_cast(p->splat(u32())));
+            } break;
+
+            case Inst::kDup: {
+                int off = u8();
+                push(stack[stack.size() - off]);
+            } break;
+
+            case Inst::kAddF: {
+                SkAssertResult(u8() == 1);
+                skvm::F32 x = pop(),
+                          a = pop();
+                push(x+a);
+            } break;
+
+            case Inst::kMultiplyF: {
+                SkAssertResult(u8() == 1);
+                skvm::F32 x = pop(),
+                          a = pop();
+                push(x*a);
+            } break;
+
+            case Inst::kMultiplyF2: {
+                SkAssertResult(u8() == 2);
+                skvm::F32 x = pop(), y = pop(),
+                          a = pop(), b = pop();
+                push(y*b);
+                push(x*a);
+            } break;
+
+            case Inst::kLoadUniform: {
+                SkAssertResult(u8() == 1);
+                int ix = u8();
+                push(uniform[ix]);
+            } break;
+
+            case Inst::kStore: {
+                int ix = u8();
+                stack[ix + 0] = pop();
+            } break;
+
+            case Inst::kStore2: {
+                int ix = u8();
+                stack[ix + 1] = pop();
+                stack[ix + 0] = pop();
+            } break;
+
+            case Inst::kStore4: {
+                int ix = u8();
+                stack[ix + 3] = pop();
+                stack[ix + 2] = pop();
+                stack[ix + 1] = pop();
+                stack[ix + 0] = pop();
+            } break;
+
+            case Inst::kReturn: {
+                SkAssertResult(u8() == 0);
+                SkASSERT(ip == end);
+            } break;
+        }
+    }
+    return stack;
+}
+
 
 class SkRuntimeColorFilter : public SkColorFilter {
 public:
@@ -380,6 +487,19 @@ public:
     }
 #endif
 
+    const SkSL::ByteCode* byteCode() const {
+        SkAutoMutexExclusive ama(fByteCodeMutex);
+        if (!fByteCode) {
+            auto [byteCode, errorText] = fEffect->toByteCode(fInputs->data());
+            if (!byteCode) {
+                SkDebugf("%s\n", errorText.c_str());
+                return nullptr;
+            }
+            fByteCode = std::move(byteCode);
+        }
+        return fByteCode.get();
+    }
+
     bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
         auto ctx = rec.fAlloc->make<SkRasterPipeline_InterpreterCtx>();
         // don't need to set ctx->paintColor
@@ -387,24 +507,43 @@ public:
         ctx->ninputs = fEffect->uniformSize() / 4;
         ctx->shaderConvention = false;
 
-        SkAutoMutexExclusive ama(fByteCodeMutex);
-        if (!fByteCode) {
-            auto [byteCode, errorText] = fEffect->toByteCode(fInputs->data());
-            if (!byteCode) {
-                SkDebugf("%s\n", errorText.c_str());
-                return false;
-            }
-            fByteCode = std::move(byteCode);
+        ctx->byteCode = this->byteCode();
+        if (!ctx->byteCode) {
+            return false;
         }
-        ctx->byteCode = fByteCode.get();
+
         ctx->fn = ctx->byteCode->getFunction("main");
         rec.fPipeline->append(SkRasterPipeline::interpreter, ctx);
         return true;
     }
 
-    skvm::Color onProgram(skvm::Builder*, skvm::Color, SkColorSpace* dstCS, skvm::Uniforms*,
-                          SkArenaAlloc*) const override {
-        return {};  // <-- this signals failure -- TODO
+    skvm::Color onProgram(skvm::Builder* p, skvm::Color c,
+                          SkColorSpace* /*dstCS*/,
+                          skvm::Uniforms* uniforms, SkArenaAlloc*) const override {
+        const SkSL::ByteCode* bc = this->byteCode();
+        if (!bc) {
+            return {};
+        }
+
+        const SkSL::ByteCodeFunction* fn = bc->getFunction("main");
+        if (!fn) {
+            return {};
+        }
+
+        std::vector<skvm::F32> uniform;
+        for (int i = 0; i < (int)fEffect->uniformSize() / 4; i++) {
+            float f;
+            memcpy(&f, (const char*)fInputs->data() + 4*i, 4);
+            uniform.push_back(p->uniformF(uniforms->pushF(f)));
+        }
+
+        std::vector<skvm::F32> stack =
+            program_fn(p, *fn, uniform, {c.r, c.g, c.b, c.a});
+
+        if (stack.size() == 4) {
+            return {stack[0], stack[1], stack[2], stack[3]};
+        }
+        return {};
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
@@ -494,6 +633,19 @@ public:
     }
 #endif
 
+    const SkSL::ByteCode* byteCode() const {
+        SkAutoMutexExclusive ama(fByteCodeMutex);
+        if (!fByteCode) {
+            auto [byteCode, errorText] = fEffect->toByteCode(fInputs->data());
+            if (!byteCode) {
+                SkDebugf("%s\n", errorText.c_str());
+                return nullptr;
+            }
+            fByteCode = std::move(byteCode);
+        }
+        return fByteCode.get();
+    }
+
     bool onAppendStages(const SkStageRec& rec) const override {
         SkMatrix inverse;
         if (!this->computeTotalInverse(rec.fCTM, rec.fLocalM, &inverse)) {
@@ -506,22 +658,51 @@ public:
         ctx->ninputs = fEffect->uniformSize() / 4;
         ctx->shaderConvention = true;
 
-        SkAutoMutexExclusive ama(fByteCodeMutex);
-        if (!fByteCode) {
-            auto[byteCode, errorText] = fEffect->toByteCode(fInputs->data());
-            if (!byteCode) {
-                SkDebugf("%s\n", errorText.c_str());
-                return false;
-            }
-            fByteCode = std::move(byteCode);
+        ctx->byteCode = this->byteCode();
+        if (!ctx->byteCode) {
+            return false;
         }
-        ctx->byteCode = fByteCode.get();
         ctx->fn = ctx->byteCode->getFunction("main");
-
         rec.fPipeline->append(SkRasterPipeline::seed_shader);
         rec.fPipeline->append_matrix(rec.fAlloc, inverse);
         rec.fPipeline->append(SkRasterPipeline::interpreter, ctx);
         return true;
+    }
+
+    skvm::Color onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y, skvm::Color paint,
+                          const SkMatrix& ctm, const SkMatrix* localM,
+                          SkFilterQuality, const SkColorInfo& /*dst*/,
+                          skvm::Uniforms* uniforms, SkArenaAlloc*) const override {
+        const SkSL::ByteCode* bc = this->byteCode();
+        if (!bc) {
+            return {};
+        }
+
+        const SkSL::ByteCodeFunction* fn = bc->getFunction("main");
+        if (!fn) {
+            return {};
+        }
+
+        std::vector<skvm::F32> uniform;
+        for (int i = 0; i < (int)fEffect->uniformSize() / 4; i++) {
+            float f;
+            memcpy(&f, (const char*)fInputs->data() + 4*i, 4);
+            uniform.push_back(p->uniformF(uniforms->pushF(f)));
+        }
+
+        SkMatrix inv;
+        if (!this->computeTotalInverse(ctm, localM, &inv)) {
+            return {};
+        }
+        SkShaderBase::ApplyMatrix(p,inv, &x,&y,uniforms);
+
+        std::vector<skvm::F32> stack =
+            program_fn(p, *fn, uniform, {x,y, paint.r, paint.g, paint.b, paint.a});
+
+        if (stack.size() == 6) {
+            return {stack[2], stack[3], stack[4], stack[5]};
+        }
+        return {};
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
