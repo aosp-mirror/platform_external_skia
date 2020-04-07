@@ -2251,6 +2251,42 @@ GrGLenum GrGLGpu::prepareToDraw(GrPrimitiveType primitiveType) {
     SK_ABORT("invalid GrPrimitiveType");
 }
 
+void GrGLGpu::drawArrays(GrPrimitiveType primitiveType, GrGLint baseVertex, GrGLsizei vertexCount) {
+    SkASSERT(!this->glCaps().drawArraysBaseVertexIsBroken() || 0 == baseVertex);
+    GrGLenum glPrimType = this->prepareToDraw(primitiveType);
+    GL_CALL(DrawArrays(glPrimType, baseVertex, vertexCount));
+}
+
+void GrGLGpu::drawElements(GrPrimitiveType primitiveType, GrGLsizei indexCount, GrGLenum indexType,
+                           const void* indices) {
+    GrGLenum glPrimType = this->prepareToDraw(primitiveType);
+    GL_CALL(DrawElements(glPrimType, indexCount, indexType, indices));
+}
+
+void GrGLGpu::drawRangeElements(GrPrimitiveType primitiveType, GrGLuint minIndexValue,
+                                GrGLuint maxIndexValue, GrGLsizei indexCount, GrGLenum indexType,
+                                const void* indices) {
+    SkASSERT(this->glCaps().drawRangeElementsSupport());
+    GrGLenum glPrimType = this->prepareToDraw(primitiveType);
+    GL_CALL(DrawRangeElements(glPrimType, minIndexValue, maxIndexValue, indexCount, indexType,
+                              indices));
+}
+
+void GrGLGpu::drawArraysInstanced(GrPrimitiveType primitiveType, GrGLint baseVertex,
+                                  GrGLsizei vertexCount, GrGLsizei instanceCount) {
+    SkASSERT(instanceCount <= this->glCaps().maxInstancesPerDrawWithoutCrashing(instanceCount));
+    GrGLenum glPrimType = this->prepareToDraw(primitiveType);
+    GL_CALL(DrawArraysInstanced(glPrimType, baseVertex, vertexCount, instanceCount));
+}
+
+void GrGLGpu::drawElementsInstanced(GrPrimitiveType primitiveType, GrGLsizei indexCount,
+                                    GrGLenum indexType, const void* indices,
+                                    GrGLsizei instanceCount) {
+    SkASSERT(instanceCount <= this->glCaps().maxInstancesPerDrawWithoutCrashing(instanceCount));
+    GrGLenum glPrimType = this->prepareToDraw(primitiveType);
+    GL_CALL(DrawElementsInstanced(glPrimType, indexCount, indexType, indices, instanceCount));
+}
+
 void GrGLGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
                                     ForExternalIO) {
     // Some extensions automatically resolves the texture when it is read.
