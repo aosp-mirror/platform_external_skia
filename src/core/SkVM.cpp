@@ -1934,6 +1934,18 @@ namespace skvm {
         this->byte(mod_rm(Mod::Indirect, src&7, dst&7));
     }
 
+    void Assembler::stack_load_store(int prefix, int map, int opcode, Ymm ymm, int off) {
+        VEX v = vex(0, ymm>>3, 0, rsp>>3/*i.e. 0*/,
+                    map, 0, /*ymm?*/1, prefix);
+        this->bytes(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(mod(off), ymm&7, rsp/*use SIB*/));
+        this->byte(sib(ONE, rsp/*no index*/, rsp));
+        this->bytes(&off, imm_bytes(mod(off)));
+    }
+    void Assembler::vmovups(Ymm dst, int off) { this->stack_load_store(0, 0x0f, 0x10, dst,off); }
+    void Assembler::vmovups(int off, Ymm src) { this->stack_load_store(0, 0x0f, 0x11, src,off); }
+
     void Assembler::vmovq(GP64 dst, Xmm src) {
         int prefix = 0x66,
             map    = 0x0f,
@@ -1986,7 +1998,7 @@ namespace skvm {
                     map, 0, /*ymm?*/0, prefix);
         this->bytes(v.bytes, v.len);
         this->byte(opcode);
-        this->byte(mod_rm(Mod::Indirect, dst&7, rsp));
+        this->byte(mod_rm(Mod::Indirect, dst&7, rsp/*use SIB*/));
         this->byte(sib(scale, index&7, base&7));
     }
 
@@ -2082,7 +2094,7 @@ namespace skvm {
                     map, mask, /*ymm?*/1, prefix);
         this->bytes(v.bytes, v.len);
         this->byte(opcode);
-        this->byte(mod_rm(Mod::Indirect, dst&7, rsp));
+        this->byte(mod_rm(Mod::Indirect, dst&7, rsp/*use SIB*/));
         this->byte(sib(scale, ix&7, base&7));
     }
 
@@ -3409,7 +3421,8 @@ namespace skvm {
             auto add = [&](A::GP64 gp, int imm) { a->add(gp, imm); };
             auto sub = [&](A::GP64 gp, int imm) { a->sub(gp, imm); };
 
-            auto exit = [&]{ a->vzeroupper(); a->ret(); };
+            auto enter = [&]{ a->sub(A::rsp, instructions.size()*K*4); };
+            auto exit  = [&]{ a->add(A::rsp, instructions.size()*K*4); a->vzeroupper(); a->ret(); };
         #elif defined(__aarch64__)
             const int K = 4;
             auto jump_if_less = [&](A::Label* l) { a->blt(l); };
@@ -3418,13 +3431,15 @@ namespace skvm {
             auto add = [&](A::X gp, int imm) { a->add(gp, gp, imm); };
             auto sub = [&](A::X gp, int imm) { a->sub(gp, gp, imm); };
 
-            auto exit = [&]{ a->ret(A::x30); };
+            auto enter = [&]{};
+            auto exit  = [&]{ a->ret(A::x30); };
         #endif
 
         A::Label body,
                  tail,
                  done;
 
+        enter();
         for (Val id = 0; id < (Val)instructions.size(); id++) {
             if (hoisted(id) && !emit(id, /*scalar=*/false)) {
                 return false;
