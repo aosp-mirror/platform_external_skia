@@ -901,6 +901,27 @@ namespace skvm {
         return select(is_x, x, approx_pow2(mul(approx_log2(x), y)));
     }
 
+    // Bhaskara I's sine approximation
+    // 16x(pi - x) / (5*pi^2 - 4x(pi - x)
+    // ... divide by 4
+    // 4x(pi - x) / 5*pi^2/4 - x(pi - x)
+    //
+    // This is a good approximation only for 0 <= x <= pi, so we use symmetries to get
+    // radians into that range first.
+    //
+    F32 Builder::approx_sin(F32 radians) {
+        constexpr float Pi = SK_ScalarPI;
+        // x = radians mod 2pi
+        F32 x = fract(radians * (0.5f/Pi)) * (2*Pi);
+        I32 neg = x > Pi;   // are we pi < x < 2pi --> need to negate result
+        x = select(neg, x - Pi, x);
+
+        F32 pair = x * (Pi - x);
+        x = 4.0f * pair / ((5*Pi*Pi/4) - pair);
+        x = select(neg, -x, x);
+        return x;
+    }
+
     F32 Builder::min(F32 x, F32 y) {
         if (float X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(std::min(X,Y)); }
         return {this, this->push(Op::min_f32, x.id, y.id)};
@@ -1199,16 +1220,16 @@ namespace skvm {
     //
     // Anything extra we add beyond that is to make the math work with premul inputs.
 
-    static skvm::F32 saturation(skvm::Builder* p, skvm::F32 r, skvm::F32 g, skvm::F32 b) {
+    static skvm::F32 saturation(skvm::F32 r, skvm::F32 g, skvm::F32 b) {
         return max(r, max(g, b))
              - min(r, min(g, b));
     }
 
-    static skvm::F32 luminance(skvm::Builder* p, skvm::F32 r, skvm::F32 g, skvm::F32 b) {
-        return r*0.30f + (g*0.59f + b*0.11f);
+    static skvm::F32 luminance(skvm::F32 r, skvm::F32 g, skvm::F32 b) {
+        return r*0.30f + g*0.59f + b*0.11f;
     }
 
-    static void set_sat(skvm::Builder* p, skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32 s) {
+    static void set_sat(skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32 s) {
         F32 mn  = min(*r, min(*g, *b)),
             mx  = max(*r, max(*g, *b)),
             sat = mx - mn;
@@ -1224,26 +1245,24 @@ namespace skvm {
         *b = scale(*b);
     }
 
-    static void set_lum(skvm::Builder* p, skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32 lu) {
-        auto diff = lu - luminance(p, *r, *g, *b);
+    static void set_lum(skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32 lu) {
+        auto diff = lu - luminance(*r, *g, *b);
         *r += diff;
         *g += diff;
         *b += diff;
     }
 
-    static void clip_color(skvm::Builder* p,
-                           skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32 a) {
+    static void clip_color(skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32 a) {
         F32 mn  = min(*r, min(*g, *b)),
             mx  = max(*r, max(*g, *b)),
-            lu = luminance(p, *r, *g, *b);
+            lu = luminance(*r, *g, *b);
 
         auto clip = [&](auto c) {
             c = select(mn >= 0, c
                               , lu + ((c-lu)*(  lu)) / (lu-mn));
             c = select(mx >  a, lu + ((c-lu)*(a-lu)) / (mx-lu)
                               , c);
-            // Sometimes without this we may dip just a little negative.
-            return max(c, 0.0f);
+            return clamp01(c);  // May be a little negative, or worse, NaN.
         };
         *r = clip(*r);
         *g = clip(*g);
@@ -1433,47 +1452,47 @@ namespace skvm {
                 });
 
             case SkBlendMode::kHue: {
-                skvm::F32 R = mul(src.r, src.a),
-                          G = mul(src.g, src.a),
-                          B = mul(src.b, src.a);
+                skvm::F32 R = src.r * src.a,
+                          G = src.g * src.a,
+                          B = src.b * src.a;
 
-                set_sat(this, &R, &G, &B, mul(saturation(this, dst.r, dst.g, dst.b), src.a));
-                set_lum(this, &R, &G, &B, mul( luminance(this, dst.r, dst.g, dst.b), src.a));
-                clip_color(this, &R, &G, &B, mul(src.a, dst.a));
+                set_sat   (&R, &G, &B, src.a * saturation(dst.r, dst.g, dst.b));
+                set_lum   (&R, &G, &B, src.a * luminance (dst.r, dst.g, dst.b));
+                clip_color(&R, &G, &B, src.a * dst.a);
 
                 return non_sep(R, G, B);
             }
 
             case SkBlendMode::kSaturation: {
-                skvm::F32 R = mul(dst.r, src.a),
-                          G = mul(dst.g, src.a),
-                          B = mul(dst.b, src.a);
+                skvm::F32 R = dst.r * src.a,
+                          G = dst.g * src.a,
+                          B = dst.b * src.a;
 
-                set_sat(this, &R, &G, &B, mul(saturation(this, src.r, src.g, src.b), dst.a));
-                set_lum(this, &R, &G, &B, mul( luminance(this, dst.r, dst.g, dst.b), src.a));
-                clip_color(this, &R, &G, &B, mul(src.a, dst.a));
+                set_sat   (&R, &G, &B, dst.a * saturation(src.r, src.g, src.b));
+                set_lum   (&R, &G, &B, src.a * luminance (dst.r, dst.g, dst.b));
+                clip_color(&R, &G, &B, src.a * dst.a);
 
                 return non_sep(R, G, B);
             }
 
             case SkBlendMode::kColor: {
-                skvm::F32 R = mul(src.r, dst.a),
-                          G = mul(src.g, dst.a),
-                          B = mul(src.b, dst.a);
+                skvm::F32 R = src.r * dst.a,
+                          G = src.g * dst.a,
+                          B = src.b * dst.a;
 
-                set_lum(this, &R, &G, &B, mul(luminance(this, dst.r, dst.g, dst.b), src.a));
-                clip_color(this, &R, &G, &B, mul(src.a, dst.a));
+                set_lum   (&R, &G, &B, src.a * luminance(dst.r, dst.g, dst.b));
+                clip_color(&R, &G, &B, src.a * dst.a);
 
                 return non_sep(R, G, B);
             }
 
             case SkBlendMode::kLuminosity: {
-                skvm::F32 R = mul(dst.r, src.a),
-                          G = mul(dst.g, src.a),
-                          B = mul(dst.b, src.a);
+                skvm::F32 R = dst.r * src.a,
+                          G = dst.g * src.a,
+                          B = dst.b * src.a;
 
-                set_lum(this, &R, &G, &B, mul(luminance(this, src.r, src.g, src.b), dst.a));
-                clip_color(this, &R, &G, &B, mul(src.a, dst.a));
+                set_lum   (&R, &G, &B, dst.a * luminance(src.r, src.g, src.b));
+                clip_color(&R, &G, &B, dst.a * src.a);
 
                 return non_sep(R, G, B);
             }

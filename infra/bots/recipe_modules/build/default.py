@@ -138,7 +138,7 @@ def compile_fn(api, checkout_root, out_dir):
   if (api.vars.is_linux or os == 'Mac') and 'Tidy' not in extra_tokens:
     if api.vars.is_linux:
       ccache = api.vars.slave_dir.join('ccache_linux', 'bin', 'ccache')
-      # As of 2020-02-07, the sum of each Debian9-Clang-x86
+      # As of 2020-02-07, the sum of each Debian10-Clang-x86
       # non-flutter/android/chromebook build takes less than 75G cache space.
       env['CCACHE_MAXSIZE'] = '75G'
     else:
@@ -197,9 +197,6 @@ def compile_fn(api, checkout_root, out_dir):
     # If we're limiting Skia at all, drop skcms to portable code.
     if 'SK_CPU_LIMIT' in extra_tokens[0]:
       extra_cflags.append('-DSKCMS_PORTABLE')
-
-  if 'SkVM' in extra_tokens:
-    extra_cflags.append('-DSK_USE_SKVM_BLITTER')
 
   if 'MSAN' in extra_tokens:
     extra_ldflags.append('-L' + clang_linux + '/msan')

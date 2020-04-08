@@ -63,6 +63,20 @@ void SkPictureRecord::recordSave() {
     this->validate(initialOffset, size);
 }
 
+void SkPictureRecord::onSaveCamera(const SkM44& proj, const SkM44& camera) {
+    fRestoreOffsetStack.push_back(-(int32_t)fWriter.bytesWritten());
+
+    size_t size = sizeof(kUInt32Size) + 32 * sizeof(float); // op + proj + camera
+    size_t initialOffset = this->addDraw(SAVE_CAMERA, &size);
+
+    fWriter.write(SkMatrixPriv::M44ColMajor(proj),   16 * sizeof(float));
+    fWriter.write(SkMatrixPriv::M44ColMajor(camera), 16 * sizeof(float));
+
+    this->validate(initialOffset, size);
+
+    this->INHERITED::onSaveCamera(proj, camera);
+}
+
 SkCanvas::SaveLayerStrategy SkPictureRecord::getSaveLayerStrategy(const SaveLayerRec& rec) {
     // record the offset to us, making it non-positive to distinguish a save
     // from a clip entry.
@@ -219,6 +233,7 @@ void SkPictureRecord::recordScale(const SkMatrix& m) {
     this->validate(initialOffset, size);
 }
 
+#ifdef SK_SUPPORT_LEGACY_DIDCONCAT44
 void SkPictureRecord::didConcat44(const SkScalar m[16]) {
     this->validate(fWriter.bytesWritten(), 0);
     // op + matrix
@@ -229,6 +244,18 @@ void SkPictureRecord::didConcat44(const SkScalar m[16]) {
 
     this->INHERITED::didConcat44(m);
 }
+#else
+void SkPictureRecord::didConcat44(const SkM44& m) {
+    this->validate(fWriter.bytesWritten(), 0);
+    // op + matrix
+    size_t size = kUInt32Size + 16 * sizeof(SkScalar);
+    size_t initialOffset = this->addDraw(CONCAT44, &size);
+    fWriter.write(SkMatrixPriv::M44ColMajor(m), 16 * sizeof(SkScalar));
+    this->validate(initialOffset, size);
+
+    this->INHERITED::didConcat44(m);
+}
+#endif
 
 void SkPictureRecord::didScale(SkScalar x, SkScalar y) {
     this->didConcat(SkMatrix::MakeScale(x, y));
