@@ -79,13 +79,17 @@ void SkSVGNode::setClipRule(const SkSVGFillRule& clipRule) {
     SetInheritedByDefault(fPresentationAttributes.fClipRule, clipRule);
 }
 
+void SkSVGNode::setColor(const SkSVGColorType& color) {
+    // TODO: Color should be inherited by default
+    fPresentationAttributes.fColor.set(color);
+}
+
 void SkSVGNode::setFill(const SkSVGPaint& svgPaint) {
     SetInheritedByDefault(fPresentationAttributes.fFill, svgPaint);
 }
 
 void SkSVGNode::setFillOpacity(const SkSVGNumberType& opacity) {
-    fPresentationAttributes.fFillOpacity.set(
-        SkSVGNumberType(SkTPin<SkScalar>(opacity.value(), 0, 1)));
+    fPresentationAttributes.fFillOpacity.set(SkSVGNumberType(SkTPin<SkScalar>(opacity, 0, 1)));
 }
 
 void SkSVGNode::setFillRule(const SkSVGFillRule& fillRule) {
@@ -93,8 +97,7 @@ void SkSVGNode::setFillRule(const SkSVGFillRule& fillRule) {
 }
 
 void SkSVGNode::setOpacity(const SkSVGNumberType& opacity) {
-    fPresentationAttributes.fOpacity.set(
-        SkSVGNumberType(SkTPin<SkScalar>(opacity.value(), 0, 1)));
+    fPresentationAttributes.fOpacity.set(SkSVGNumberType(SkTPin<SkScalar>(opacity, 0, 1)));
 }
 
 void SkSVGNode::setStroke(const SkSVGPaint& svgPaint) {
@@ -110,8 +113,7 @@ void SkSVGNode::setStrokeDashOffset(const SkSVGLength& dashOffset) {
 }
 
 void SkSVGNode::setStrokeOpacity(const SkSVGNumberType& opacity) {
-    fPresentationAttributes.fStrokeOpacity.set(
-        SkSVGNumberType(SkTPin<SkScalar>(opacity.value(), 0, 1)));
+    fPresentationAttributes.fStrokeOpacity.set(SkSVGNumberType(SkTPin<SkScalar>(opacity, 0, 1)));
 }
 
 void SkSVGNode::setStrokeLineCap(const SkSVGLineCap& lc) {
@@ -144,6 +146,11 @@ void SkSVGNode::onSetAttribute(SkSVGAttribute attr, const SkSVGValue& v) {
     case SkSVGAttribute::kClipRule:
         if (const SkSVGFillRuleValue* clipRule = v.as<SkSVGFillRuleValue>()) {
             this->setClipRule(*clipRule);
+        }
+        break;
+    case SkSVGAttribute::kColor:
+        if (const SkSVGColorValue* color = v.as<SkSVGColorValue>()) {
+            this->setColor(*color);
         }
         break;
     case SkSVGAttribute::kFill:
