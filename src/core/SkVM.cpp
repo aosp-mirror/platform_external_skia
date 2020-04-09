@@ -27,6 +27,11 @@
     #include <llvm/IR/IRBuilder.h>
     #include <llvm/IR/Verifier.h>
     #include <llvm/Support/TargetSelect.h>
+
+    // Platform-specific intrinsics got their own files in LLVM 10.
+    #if __has_include(<llvm/IR/IntrinsicsX86.h>)
+        #include <llvm/IR/IntrinsicsX86.h>
+    #endif
 #endif
 
 bool gSkVMJITViaDylib{false};
@@ -922,13 +927,29 @@ namespace skvm {
         return x;
     }
 
+    // We want all our implementations to behave the same with regard to NaN,
+    // and std::min() and std::max() are spec'd to work the way SKVM_PORTABLE_MIN_MAX defines.
+    // Our interpreter and LLVM backends already work exactly likes std::min()/std::max(),
+    // but our JIT backend does not, at least not on x86.
+    // TODO: test, fix, and re-enable backend-specific implementations.
+    // Need to test NaN on both sides of each, including splats() to test {min,max}_f32_imm.
+    #define SKVM_PORTABLE_MIN_MAX
+
     F32 Builder::min(F32 x, F32 y) {
+    #if defined(SKVM_PORTABLE_MIN_MAX)
+        return select(y<x, y,x);
+    #else
         if (float X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(std::min(X,Y)); }
         return {this, this->push(Op::min_f32, x.id, y.id)};
+    #endif
     }
     F32 Builder::max(F32 x, F32 y) {
+    #if defined(SKVM_PORTABLE_MIN_MAX)
+        return select(x<y, y,x);
+    #else
         if (float X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(std::max(X,Y)); }
         return {this, this->push(Op::max_f32, x.id, y.id)};
+    #endif
     }
 
     I32 Builder::add(I32 x, I32 y) {
@@ -1131,20 +1152,20 @@ namespace skvm {
     }
 
     void Builder::unpremul(F32* r, F32* g, F32* b, F32 a) {
-        skvm::F32 invA = div(1.0f, a),
+        skvm::F32 invA = 1.0f / a,
                   inf  = bit_cast(splat(0x7f800000));
         // If a is 0, so are *r,*g,*b, so set invA to 0 to avoid 0*inf=NaN (instead 0*0 = 0).
-        invA = select(lt(invA, inf), invA
-                                   , splat(0.0f));
-        *r = mul(*r, invA);
-        *g = mul(*g, invA);
-        *b = mul(*b, invA);
+        invA = select(invA < inf, invA
+                                , 0.0f);
+        *r *= invA;
+        *g *= invA;
+        *b *= invA;
     }
 
     void Builder::premul(F32* r, F32* g, F32* b, F32 a) {
-        *r = mul(*r, a);
-        *g = mul(*g, a);
-        *b = mul(*b, a);
+        *r *= a;
+        *g *= a;
+        *b *= a;
     }
 
     Color Builder::uniformPremul(SkColor4f color,    SkColorSpace* src,
@@ -1172,24 +1193,20 @@ namespace skvm {
         F32 mx = max(max(c.r,c.g),c.b),
             mn = min(min(c.r,c.g),c.b),
              d = mx - mn,
+          invd = 1.0f / d,
         g_lt_b = select(c.g < c.b, splat(6.0f)
                                  , splat(0.0f));
 
-        auto diffm = [&](auto a, auto b) {
-            return (a - b) * (1 / d);
-        };
+        F32 h = (1/6.0f) * select(mx == mn,  0.0f,
+                           select(mx == c.r, invd * (c.g - c.b) + g_lt_b,
+                           select(mx == c.g, invd * (c.b - c.r) + 2.0f
+                                           , invd * (c.r - c.g) + 4.0f)));
 
-        F32 h = mul(1/6.0f,
-                        select(eq(mx,  mn), 0.0f,
-                        select(eq(mx, c.r), add(diffm(c.g,c.b), g_lt_b),
-                        select(eq(mx, c.g), add(diffm(c.b,c.r), 2.0f)
-                                          , add(diffm(c.r,c.g), 4.0f)))));
-
-        F32 sum = add(mx,mn);
-        F32   l = mul(sum, 0.5f);
-        F32   s = select(eq(mx,mn), 0.0f
-                                  , div(d, select(gt(l,0.5f), sub(2.0f,sum)
-                                                            , sum)));
+        F32 sum = mx + mn,
+              l = sum * 0.5f,
+              s = select(mx == mn, 0.0f
+                                 , d / select(l > 0.5f, 2.0f - sum
+                                                      , sum));
         return {h, s, l, c.a};
     }
 
@@ -1197,17 +1214,17 @@ namespace skvm {
         // See GrRGBToHSLFilterEffect.fp
 
         auto [h,s,l,a] = c;
-        F32 x = mul(sub(1.0f, abs(sub(add(l,l), 1.0f))), s);
+        F32 x = s * (1.0f - abs(l + l - 1.0f));
 
         auto hue_to_rgb = [&,l=l](auto hue) {
-            auto q = sub(abs(mad(fract(hue), 6.0f, -3.0f)), 1.0f);
-            return mad(sub(clamp01(q), 0.5f), x, l);
+            auto q = abs(6.0f * fract(hue) - 3.0f) - 1.0f;
+            return x * (clamp01(q) - 0.5f) + l;
         };
 
         return {
-            hue_to_rgb(add(h, 0/3.0f)),
-            hue_to_rgb(add(h, 2/3.0f)),
-            hue_to_rgb(add(h, 1/3.0f)),
+            hue_to_rgb(h + 0/3.0f),
+            hue_to_rgb(h + 2/3.0f),
+            hue_to_rgb(h + 1/3.0f),
             c.a,
         };
     }
@@ -1270,11 +1287,11 @@ namespace skvm {
     }
 
     Color Builder::blend(SkBlendMode mode, Color src, Color dst) {
-        auto mma = [this](skvm::F32 x, skvm::F32 y, skvm::F32 z, skvm::F32 w) {
-            return mad(x,y, mul(z,w));
+        auto mma = [](skvm::F32 x, skvm::F32 y, skvm::F32 z, skvm::F32 w) {
+            return x*y + z*w;
         };
 
-        auto two = [this](skvm::F32 x) { return add(x, x); };
+        auto two = [](skvm::F32 x) { return x+x; };
 
         auto apply_rgba = [&](auto fn) {
             return Color {
@@ -1296,10 +1313,10 @@ namespace skvm {
 
         auto non_sep = [&](auto R, auto G, auto B) {
             return Color{
-                add(mma(src.r, 1-dst.a,  dst.r, 1-src.a), R),
-                add(mma(src.g, 1-dst.a,  dst.g, 1-src.a), G),
-                add(mma(src.b, 1-dst.a,  dst.b, 1-src.a), B),
-                mad(dst.a,1-src.a, src.a),  // srcover
+                R + mma(src.r, 1-dst.a,  dst.r, 1-src.a),
+                G + mma(src.g, 1-dst.a,  dst.g, 1-src.a),
+                B + mma(src.b, 1-dst.a,  dst.b, 1-src.a),
+                mad(dst.a, 1-src.a, src.a),   // srcover for alpha
             };
         };
 
@@ -1320,13 +1337,13 @@ namespace skvm {
             case SkBlendMode::kDstIn: std::swap(src, dst); // fall-through
             case SkBlendMode::kSrcIn:
                 return apply_rgba([&](auto s, auto d) {
-                    return mul(s, dst.a);
+                    return s * dst.a;
                 });
 
             case SkBlendMode::kDstOut: std::swap(src, dst); // fall-through
             case SkBlendMode::kSrcOut:
                 return apply_rgba([&](auto s, auto d) {
-                    return mul(s, 1-dst.a);
+                    return s * (1-dst.a);
                 });
 
             case SkBlendMode::kDstATop: std::swap(src, dst); // fall-through
@@ -1342,92 +1359,93 @@ namespace skvm {
 
             case SkBlendMode::kPlus:
                 return apply_rgba([&](auto s, auto d) {
-                    return min(add(s, d), 1.0f);
+                    return min(s+d, 1.0f);
                 });
 
             case SkBlendMode::kModulate:
                 return apply_rgba([&](auto s, auto d) {
-                    return mul(s, d);
+                    return s * d;
                 });
 
             case SkBlendMode::kScreen:
                 // (s+d)-(s*d) gave us trouble with our "r,g,b <= after blending" asserts.
                 // It's kind of plausible that s + (d - sd) keeps more precision?
                 return apply_rgba([&](auto s, auto d) {
-                    return add(s, sub(d, mul(s, d)));
+                    return s + (d - s*d);
                 });
 
             case SkBlendMode::kDarken:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
-                    return add(s, sub(d, max(mul(s, dst.a),
-                                             mul(d, src.a))));
+                    return s + (d - max(s * dst.a,
+                                        d * src.a));
                 });
 
             case SkBlendMode::kLighten:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
-                    return add(s, sub(d, min(mul(s, dst.a),
-                                             mul(d, src.a))));
+                    return s + (d - min(s * dst.a,
+                                        d * src.a));
                 });
 
             case SkBlendMode::kDifference:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
-                    return add(s, sub(d, two(min(mul(s, dst.a),
-                                                 mul(d, src.a)))));
+                    return s + (d - two(min(s * dst.a,
+                                            d * src.a)));
                 });
 
             case SkBlendMode::kExclusion:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
-                    return add(s, sub(d, two(mul(s, d))));
+                    return s + (d - two(s * d));
                 });
 
             case SkBlendMode::kColorBurn:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
                     // TODO: divide and check for non-finite result instead of checking for s == 0.
                     auto mn   = min(dst.a,
-                                    div(mul(sub(dst.a, d), src.a), s)),
-                         burn = mad(src.a, sub(dst.a, mn), mma(s, 1-dst.a, d, 1-src.a));
-                    return select(eq(d, dst.a), mad(s, 1-dst.a, d),
-                           select(eq(s,  0.0f), mul(d, 1-src.a)
-                                              , burn));
+                                    src.a * (dst.a - d) / s),
+                         burn = src.a * (dst.a - mn) + mma(s, 1-dst.a, d, 1-src.a);
+                    return select(d == dst.a, s * (1-dst.a) + d,
+                           select(s == 0.0f , d * (1-src.a)
+                                            , burn));
                 });
 
             case SkBlendMode::kColorDodge:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
                     // TODO: divide and check for non-finite result instead of checking for s == sa.
-                    auto dodge = mad(src.a, min(dst.a,
-                                                div(mul(d, src.a), sub(src.a, s))),
-                                     mma(s, 1-dst.a, d, 1-src.a));
-                    return select(eq(d,  0.0f), mul(s, 1-dst.a),
-                           select(eq(s, src.a), mad(d, 1-src.a, s)
-                                              , dodge));
+                    auto dodge = src.a * min(dst.a,
+                                             d * src.a / (src.a - s))
+                                       + mma(s, 1-dst.a, d, 1-src.a);
+                    return select(d == 0.0f , s * (1-dst.a),
+                           select(s == src.a, d * (1-src.a) + s
+                                            , dodge));
                 });
 
             case SkBlendMode::kHardLight:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
-                    return add(mma(s, 1-dst.a, d, 1-src.a),
-                               select(lte(two(s), src.a),
-                                      two(mul(s, d)),
-                                      sub(mul(src.a, dst.a), two(mul(sub(dst.a, d), sub(src.a, s))))));
+                    return mma(s, 1-dst.a, d, 1-src.a) +
+                           select(two(s) <= src.a,
+                                  two(s * d),
+                                  src.a * dst.a - two((dst.a - d) * (src.a - s)));
                 });
 
             case SkBlendMode::kOverlay:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
-                    return add(mma(s, 1-dst.a, d, 1-src.a),
-                               select(lte(two(d), dst.a),
-                                      two(mul(s, d)),
-                                      sub(mul(src.a, dst.a), two(mul(sub(dst.a, d), sub(src.a, s))))));
+                    return mma(s, 1-dst.a, d, 1-src.a) +
+                           select(two(d) <= dst.a,
+                                  two(s * d),
+                                  src.a * dst.a - two((dst.a - d) * (src.a - s)));
                 });
 
             case SkBlendMode::kMultiply:
                 return apply_rgba([&](auto s, auto d) {
-                    return add(mma(s, 1-dst.a, d, 1-src.a), mul(s, d));
+                    return mma(s, 1-dst.a, d, 1-src.a) + s * d;
                 });
 
             case SkBlendMode::kSoftLight:
                 return apply_rgb_srcover_a([&](auto s, auto d) {
-                    auto  m = select(gt(dst.a, 0.0f), div(d, dst.a), 0.0f),
+                    auto  m = select(dst.a > 0.0f, d / dst.a
+                                                 , 0.0f),
                          s2 = two(s),
-                         m4 = two(two(m));
+                         m4 = 4*m;
 
                          // The logic forks three ways:
                          //    1. dark src?
@@ -1435,20 +1453,17 @@ namespace skvm {
                          //    3. light src, light dst?
 
                          // Used in case 1
-                    auto darkSrc = mul(d, mad(sub(s2, src.a), 1-m, src.a)),
+                    auto darkSrc = d * ((s2-src.a) * (1-m) + src.a),
                          // Used in case 2
-                         darkDst = mad(mad(m4, m4, m4), sub(m, 1.0f), mul(7.0f, m)),
+                         darkDst = (m4 * m4 + m4) * (m-1) + 7*m,
                          // Used in case 3.
-                         liteDst = sub(sqrt(m), m),
+                         liteDst = sqrt(m) - m,
                          // Used in 2 or 3?
-                         liteSrc = mad(mul(dst.a, sub(s2, src.a)),
-                                       select(lte(two(two(d)), dst.a), darkDst, liteDst),
-                                       mul(d, src.a));
-                    return mad(s, 1-dst.a, mad(d,
-                                               1-src.a,
-                                               select(lte(s2, src.a), darkSrc, liteSrc)));
-
-
+                         liteSrc = dst.a * (s2 - src.a) * select(4*d <= dst.a, darkDst
+                                                                             , liteDst)
+                                   + d * src.a;
+                    return s * (1-dst.a) + d * (1-src.a) + select(s2 <= src.a, darkSrc
+                                                                             , liteSrc);
                 });
 
             case SkBlendMode::kHue: {
@@ -1934,6 +1949,18 @@ namespace skvm {
         this->byte(mod_rm(Mod::Indirect, src&7, dst&7));
     }
 
+    void Assembler::stack_load_store(int prefix, int map, int opcode, Ymm ymm, int off) {
+        VEX v = vex(0, ymm>>3, 0, rsp>>3/*i.e. 0*/,
+                    map, 0, /*ymm?*/1, prefix);
+        this->bytes(v.bytes, v.len);
+        this->byte(opcode);
+        this->byte(mod_rm(mod(off), ymm&7, rsp/*use SIB*/));
+        this->byte(sib(ONE, rsp/*no index*/, rsp));
+        this->bytes(&off, imm_bytes(mod(off)));
+    }
+    void Assembler::vmovups(Ymm dst, int off) { this->stack_load_store(0, 0x0f, 0x10, dst,off); }
+    void Assembler::vmovups(int off, Ymm src) { this->stack_load_store(0, 0x0f, 0x11, src,off); }
+
     void Assembler::vmovq(GP64 dst, Xmm src) {
         int prefix = 0x66,
             map    = 0x0f,
@@ -1986,7 +2013,7 @@ namespace skvm {
                     map, 0, /*ymm?*/0, prefix);
         this->bytes(v.bytes, v.len);
         this->byte(opcode);
-        this->byte(mod_rm(Mod::Indirect, dst&7, rsp));
+        this->byte(mod_rm(Mod::Indirect, dst&7, rsp/*use SIB*/));
         this->byte(sib(scale, index&7, base&7));
     }
 
@@ -2082,7 +2109,7 @@ namespace skvm {
                     map, mask, /*ymm?*/1, prefix);
         this->bytes(v.bytes, v.len);
         this->byte(opcode);
-        this->byte(mod_rm(Mod::Indirect, dst&7, rsp));
+        this->byte(mod_rm(Mod::Indirect, dst&7, rsp/*use SIB*/));
         this->byte(sib(scale, ix&7, base&7));
     }
 
@@ -2366,13 +2393,11 @@ namespace skvm {
 
             llvm::Type *i1    = llvm::Type::getInt1Ty (*ctx),
                        *i8    = llvm::Type::getInt8Ty (*ctx),
-                       *i8x4  = llvm::VectorType::get(i8, 4),
                        *i16   = llvm::Type::getInt16Ty(*ctx),
                        *i16x2 = llvm::VectorType::get(i16, 2),
                        *f32   = llvm::Type::getFloatTy(*ctx),
                        *I1    = scalar ? i1    : llvm::VectorType::get(i1 , K  ),
                        *I8    = scalar ? i8    : llvm::VectorType::get(i8 , K  ),
-                       *I8x4  = scalar ? i8x4  : llvm::VectorType::get(i8 , K*4),
                        *I16   = scalar ? i16   : llvm::VectorType::get(i16, K  ),
                        *I16x2 = scalar ? i16x2 : llvm::VectorType::get(i16, K*2),
                        *I32   = scalar ? i32   : llvm::VectorType::get(i32, K  ),
@@ -2922,9 +2947,10 @@ namespace skvm {
 #if defined(SKVM_JIT)
 
     bool Program::jit(const std::vector<OptimizedInstruction>& instructions,
-                      const bool try_hoisting,
+                      const JITMode mode,
                       Assembler* a) const {
         using A = Assembler;
+        const bool try_hoisting = mode != JITMode::RegisterNoHoist;
 
         auto debug_dump = [&] {
         #if 0
@@ -2940,6 +2966,8 @@ namespace skvm {
         if (!SkCpu::Supports(SkCpu::HSW)) {
             return false;
         }
+        const int K = 8;
+        const bool stack_only = mode == JITMode::Stack;
         A::GP64 N        = A::rdi,
                 scratch  = A::rax,
                 scratch2 = A::r11,
@@ -2947,16 +2975,20 @@ namespace skvm {
 
         // All 16 ymm registers are available to use.
         using Reg = A::Ymm;
-        uint32_t avail = 0xffff;
+        const uint32_t all_regs = 0xffff;
+        uint32_t avail = all_regs;
 
     #elif defined(__aarch64__)
+        const int K = 4;
+        const bool stack_only = false;  // TODO
         A::X N       = A::x0,
              scratch = A::x8,
              arg[]   = { A::x1, A::x2, A::x3, A::x4, A::x5, A::x6, A::x7 };
 
         // We can use v0-v7 and v16-v31 freely; we'd need to preserve v8-v15.
         using Reg = A::V;
-        uint32_t avail = 0xffff00ff;
+        const uint32_t all_regs = 0xffff00ff;
+        uint32_t avail = all_regs;
     #endif
 
         if (SK_ARRAY_COUNT(arg) < fImpl->strides.size()) {
@@ -2975,8 +3007,11 @@ namespace skvm {
         LabelAndReg                  iota;         // Exists _only_ to vary per-lane.
 
         auto emit = [&](Val id, bool scalar) {
-            const OptimizedInstruction& inst = instructions[id];
+            if (stack_only) {
+                SkASSERT(avail == all_regs);
+            }
 
+            const OptimizedInstruction& inst = instructions[id];
             Op op = inst.op;
             Val x = inst.x,
                 y = inst.y,
@@ -3000,6 +3035,30 @@ namespace skvm {
             Reg tmp_reg = (Reg)0;  // This initial value won't matter... anything legal is fine.
 
             bool ok = true;   // Set to false if we need to assign a register and none's available.
+
+            if (stack_only) {
+                // Move each unique argument into a temporary register.
+                auto load_from_stack = [&](Val arg) {
+                    if (int found = __builtin_ffs(avail)) {
+                        Reg reg = (Reg)(found - 1);
+                        avail ^= 1 << reg;
+                        r[arg] = reg;
+                    #if defined(__x86_64__)
+                        a->vmovups(r[arg], arg*K*4);
+                    #else
+                        SkASSERT(false); // TODO
+                    #endif
+                    } else {
+                        if (debug_dump()) {
+                            SkDebugf("\nCould not find temporary register for %d\n", arg);
+                        }
+                        ok = false;
+                    }
+                };
+                if (x != NA                    ) { load_from_stack(x); }
+                if (y != NA && y != x          ) { load_from_stack(y); }
+                if (z != NA && z != x && z != y) { load_from_stack(z); }
+            }
 
             // First lock in how to choose tmp if we need to based on the registers
             // available before this instruction, not including any of its input registers.
@@ -3396,35 +3455,53 @@ namespace skvm {
             #endif
             }
 
+            if (stack_only) {
+                if (dst_is_set) {
+                #if defined(__x86_64__)
+                    a->vmovups(id*K*4, r[id]);
+                #else
+                    SkASSERT(false);  // TODO
+                #endif
+                    avail |= 1 << r[id];
+                }
+                for (Val arg : {x,y,z}) {
+                    if (arg != NA) {
+                        avail |= 1 << r[arg];
+                    }
+                }
+                SkASSERT(avail == all_regs);
+            }
+
             // Calls to tmp() or dst() might have flipped this false from its default true state.
             return ok;
         };
 
 
         #if defined(__x86_64__)
-            const int K = 8;
             auto jump_if_less = [&](A::Label* l) { a->jl (l); };
             auto jump         = [&](A::Label* l) { a->jmp(l); };
 
             auto add = [&](A::GP64 gp, int imm) { a->add(gp, imm); };
             auto sub = [&](A::GP64 gp, int imm) { a->sub(gp, imm); };
 
-            auto exit = [&]{ a->vzeroupper(); a->ret(); };
+            auto enter = [&]{ a->sub(A::rsp, instructions.size()*K*4); };
+            auto exit  = [&]{ a->add(A::rsp, instructions.size()*K*4); a->vzeroupper(); a->ret(); };
         #elif defined(__aarch64__)
-            const int K = 4;
             auto jump_if_less = [&](A::Label* l) { a->blt(l); };
             auto jump         = [&](A::Label* l) { a->b  (l); };
 
             auto add = [&](A::X gp, int imm) { a->add(gp, gp, imm); };
             auto sub = [&](A::X gp, int imm) { a->sub(gp, gp, imm); };
 
-            auto exit = [&]{ a->ret(A::x30); };
+            auto enter = [&]{};
+            auto exit  = [&]{ a->ret(A::x30); };
         #endif
 
         A::Label body,
                  tail,
                  done;
 
+        enter();
         for (Val id = 0; id < (Val)instructions.size(); id++) {
             if (hoisted(id) && !emit(id, /*scalar=*/false)) {
                 return false;
@@ -3503,13 +3580,16 @@ namespace skvm {
 
         // First try allowing code hoisting (faster code)
         // then again without if that fails (lower register pressure).
-        bool try_hoisting = true;
-        if (!this->jit(instructions, try_hoisting, &a)) {
-            try_hoisting = false;
-            if (!this->jit(instructions, try_hoisting, &a)) {
-                return;
+        JITMode mode = JITMode::Register;
+        bool ok = false;
+        for (JITMode m : {JITMode::Register, JITMode::RegisterNoHoist, JITMode::Stack}) {
+            if (this->jit(instructions, m, &a)) {
+                ok = true;
+                mode = m;
+                break;
             }
         }
+        if (!ok) { return; }
 
         // Allocate space that we can remap as executable.
         const size_t page = sysconf(_SC_PAGESIZE);
@@ -3523,7 +3603,7 @@ namespace skvm {
 
         // Assemble the program for real.
         a = Assembler{jit_entry};
-        SkAssertResult(this->jit(instructions, try_hoisting, &a));
+        SkAssertResult(this->jit(instructions, mode, &a));
         SkASSERT(a.size() <= fImpl->jit_size);
 
         // Remap as executable, and flush caches on platforms that need that.
