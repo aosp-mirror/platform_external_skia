@@ -65,11 +65,11 @@ void SkSVGGradient::collectColorStops(const SkSVGRenderContext& ctx,
 
     SkASSERT(colors->count() == pos->count());
 
-    if (pos->empty() && !fHref.value().isEmpty()) {
-        const auto* ref = ctx.findNodeById(fHref);
+    if (pos->empty() && !fHref.isEmpty()) {
+        const auto ref = ctx.findNodeById(fHref);
         if (ref && (ref->tag() == SkSVGTag::kLinearGradient ||
                     ref->tag() == SkSVGTag::kRadialGradient)) {
-            static_cast<const SkSVGGradient*>(ref)->collectColorStops(ctx, pos, colors);
+            static_cast<const SkSVGGradient*>(ref.get())->collectColorStops(ctx, pos, colors);
         }
     }
 }
@@ -95,6 +95,6 @@ bool SkSVGGradient::onAsPaint(const SkSVGRenderContext& ctx, SkPaint* paint) con
     const auto tileMode = static_cast<SkTileMode>(fSpreadMethod.type());
 
     paint->setShader(this->onMakeShader(ctx, colors.begin(), pos.begin(), colors.count(), tileMode,
-                                        fGradientTransform.value()));
+                                        fGradientTransform));
     return true;
 }

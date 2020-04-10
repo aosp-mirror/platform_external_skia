@@ -5,16 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrColor.h"
-#include "src/gpu/GrDistanceFieldGenFromVector.h"
-#include "src/gpu/text/GrAtlasManager.h"
-#include "src/gpu/text/GrStrikeCache.h"
-
+#include "src/codec/SkMasks.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkDistanceFieldGen.h"
 #include "src/core/SkStrikeSpec.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrColor.h"
+#include "src/gpu/GrDistanceFieldGenFromVector.h"
+#include "src/gpu/text/GrAtlasManager.h"
 #include "src/gpu/text/GrStrikeCache.h"
 
 GrStrikeCache::~GrStrikeCache() {
@@ -177,10 +176,10 @@ GrDrawOpAtlas::ErrorCode GrTextStrike::addGlyphToAtlas(const SkGlyph& skGlyph,
                                         storage.get(), &grGlyph->fAtlasLocator);
 }
 
-GrGlyph* GrTextStrike::getGlyph(const SkGlyph& skGlyph) {
-    GrGlyph* grGlyph = fCache.findOrNull(skGlyph.getPackedID());
+GrGlyph* GrTextStrike::getGlyph(SkPackedGlyphID packedGlyphID) {
+    GrGlyph* grGlyph = fCache.findOrNull(packedGlyphID);
     if (grGlyph == nullptr) {
-        grGlyph = fAlloc.make<GrGlyph>(skGlyph);
+        grGlyph = fAlloc.make<GrGlyph>(packedGlyphID);
         fCache.set(grGlyph);
     }
     return grGlyph;

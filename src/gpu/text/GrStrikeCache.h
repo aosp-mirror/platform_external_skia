@@ -9,9 +9,7 @@
 #define GrStrikeCache_DEFINED
 
 #include "include/private/SkTHash.h"
-#include "src/codec/SkMasks.h"
 #include "src/core/SkDescriptor.h"
-#include "src/core/SkTDynamicHash.h"
 #include "src/gpu/GrDrawOpAtlas.h"
 #include "src/gpu/GrGlyph.h"
 
@@ -31,7 +29,7 @@ class GrTextStrike : public SkNVRefCnt<GrTextStrike> {
 public:
     GrTextStrike(const SkDescriptor& fontScalerKey);
 
-    GrGlyph* getGlyph(const SkGlyph& skGlyph);
+    GrGlyph* getGlyph(SkPackedGlyphID);
 
     // returns true if glyph successfully added to texture atlas, false otherwise.  If the glyph's
     // mask format has changed, then addGlyphToAtlas will draw a clear box.  This will almost never

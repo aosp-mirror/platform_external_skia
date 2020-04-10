@@ -76,16 +76,16 @@ void SkSVGPattern::onSetAttribute(SkSVGAttribute attr, const SkSVGValue& v) {
 }
 
 const SkSVGPattern* SkSVGPattern::hrefTarget(const SkSVGRenderContext& ctx) const {
-    if (fHref.value().isEmpty()) {
+    if (fHref.isEmpty()) {
         return nullptr;
     }
 
-    const auto* href = ctx.findNodeById(fHref);
+    const auto href = ctx.findNodeById(fHref);
     if (!href || href->tag() != SkSVGTag::kPattern) {
         return nullptr;
     }
 
-    return static_cast<const SkSVGPattern*>(href);
+    return static_cast<const SkSVGPattern*>(href.get());
 }
 
 template <typename T>
@@ -152,7 +152,7 @@ bool SkSVGPattern::onAsPaint(const SkSVGRenderContext& ctx, SkPaint* paint) cons
     }
 
     const SkMatrix* patternTransform = attrs.fPatternTransform.isValid()
-            ? &attrs.fPatternTransform.get()->value()
+            ? attrs.fPatternTransform.get()
             : nullptr;
 
     SkPictureRecorder recorder;
