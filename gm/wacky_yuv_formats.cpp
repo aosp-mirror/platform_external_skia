@@ -101,7 +101,7 @@ public:
 
     enum class YUVAChannel { kY, kU, kV, kA };
 
-    explicit constexpr YUVAPlanarConfig(const std::initializer_list<YUVALocation>& yuvaLocations);
+    explicit YUVAPlanarConfig(const std::initializer_list<YUVALocation>& yuvaLocations);
 
     constexpr int numPlanes() const { return fNumPlanes; }
 
@@ -150,8 +150,7 @@ private:
     int fNumPlanes = 0;
 };
 
-constexpr YUVAPlanarConfig::YUVAPlanarConfig(
-        const std::initializer_list<YUVALocation>& yuvaLocations) {
+YUVAPlanarConfig::YUVAPlanarConfig(const std::initializer_list<YUVALocation>& yuvaLocations) {
     SkASSERT(yuvaLocations.size() == 3 || yuvaLocations.size() == 4);
     uint32_t planeMask[5] = {};
     int l = 0;
@@ -255,6 +254,7 @@ bool YUVAPlanarConfig::getYUVAIndices(const uint32_t planeChannelMasks[],
         int plane = fLocations[i].fPlaneIdx;
         if (plane < 0) {
             indices[i].fIndex = -1;
+            indices[i].fChannel = SkColorChannel::kR;
         } else {
             indices[i].fIndex = plane;
             if (!ChannelIndexToChannel(planeChannelMasks[plane], fLocations[i].fChannelIdx,
