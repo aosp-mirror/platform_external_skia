@@ -269,22 +269,7 @@ namespace skvm {
                 case Op::sra_i32: write(o, V{id}, "=", op, V{x}, Shift{immy}); break;
 
                 case Op:: eq_i32: write(o, V{id}, "=", op, V{x}, V{y}); break;
-                case Op::neq_i32: write(o, V{id}, "=", op, V{x}, V{y}); break;
                 case Op:: gt_i32: write(o, V{id}, "=", op, V{x}, V{y}); break;
-                case Op::gte_i32: write(o, V{id}, "=", op, V{x}, V{y}); break;
-
-                case Op::add_i16x2: write(o, V{id}, "=", op, V{x}, V{y}); break;
-                case Op::sub_i16x2: write(o, V{id}, "=", op, V{x}, V{y}); break;
-                case Op::mul_i16x2: write(o, V{id}, "=", op, V{x}, V{y}); break;
-
-                case Op::shl_i16x2: write(o, V{id}, "=", op, V{x}, Shift{immy}); break;
-                case Op::shr_i16x2: write(o, V{id}, "=", op, V{x}, Shift{immy}); break;
-                case Op::sra_i16x2: write(o, V{id}, "=", op, V{x}, Shift{immy}); break;
-
-                case Op:: eq_i16x2: write(o, V{id}, "=", op, V{x}, V{y}); break;
-                case Op::neq_i16x2: write(o, V{id}, "=", op, V{x}, V{y}); break;
-                case Op:: gt_i16x2: write(o, V{id}, "=", op, V{x}, V{y}); break;
-                case Op::gte_i16x2: write(o, V{id}, "=", op, V{x}, V{y}); break;
 
                 case Op::bit_and  : write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::bit_or   : write(o, V{id}, "=", op, V{x}, V{y}      ); break;
@@ -386,24 +371,7 @@ namespace skvm {
                 case Op::sra_i32: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
 
                 case Op:: eq_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op::neq_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
                 case Op:: gt_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op::gte_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
-
-
-                case Op::add_i16x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op::sub_i16x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op::mul_i16x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
-
-                case Op::shl_i16x2: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
-                case Op::shr_i16x2: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
-                case Op::sra_i16x2: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
-
-                case Op:: eq_i16x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op::neq_i16x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op:: gt_i16x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op::gte_i16x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
-
 
                 case Op::bit_and  : write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::bit_or   : write(o, R{d}, "=", op, R{x}, R{y}      ); break;
@@ -810,7 +778,7 @@ namespace skvm {
         return {this, push(Op::splat, NA,NA,NA, bits)};
     }
 
-    static bool fma_supported() {
+    bool fma_supported() {
         static const bool supported =
      #if defined(SK_CPU_X86)
          SkCpu::Supports(SkCpu::HSW);
@@ -977,6 +945,37 @@ namespace skvm {
         return x;
     }
 
+     // http://mathforum.org/library/drmath/view/54137.html
+     // referencing Handbook of Mathematical Functions,
+     //             by Milton Abramowitz and Irene Stegun
+     F32 Builder::approx_asin(F32 x) {
+         I32 neg = (x < 0.0f);
+         x = select(neg, -x, x);
+         x = SK_ScalarPI/2 - sqrt(1-x) * poly(x, -0.0187293f, 0.0742610f, -0.2121144f, 1.5707288f);
+         x = select(neg, -x, x);
+         return x;
+     }
+
+    /*  Use symmetry (atan is odd)
+     *  Use identity atan(x) = pi/2 - atan(1/x) for x > 1
+     *  Use 4th order polynomial approximation from https://arachnoid.com/polysolve/
+     *      with 129 values of x,atan(x) for x:[0...1]
+     */
+    F32 Builder::approx_atan(F32 x) {
+        I32 neg = (x < 0.0f);
+        x = select(neg, -x, x);
+        I32 flip = (x > 1.0f);
+        x = select(flip, 1/x, x);
+        x = poly(x, 0.14130025741326729f,
+                   -0.34312835980675116f,
+                   -0.016172900528248768f,
+                    1.0037696976200385f,
+                   -0.00014758242182738969f);
+        x = select(flip, SK_ScalarPI/2 - x, x);
+        x = select(neg, -x, x);
+        return x;
+    }
+
     F32 Builder::min(F32 x, F32 y) {
         if (float X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(std::min(X,Y)); }
         return {this, this->push(Op::min_f32, x.id, y.id)};
@@ -1006,10 +1005,6 @@ namespace skvm {
         return {this, this->push(Op::mul_i32, x.id, y.id)};
     }
 
-    I32 Builder::add_16x2(I32 x, I32 y) { return {this, this->push(Op::add_i16x2, x.id, y.id)}; }
-    I32 Builder::sub_16x2(I32 x, I32 y) { return {this, this->push(Op::sub_i16x2, x.id, y.id)}; }
-    I32 Builder::mul_16x2(I32 x, I32 y) { return {this, this->push(Op::mul_i16x2, x.id, y.id)}; }
-
     I32 Builder::shl(I32 x, int bits) {
         if (bits == 0) { return x; }
         if (int X; this->allImm(x.id,&X)) { return splat(X << bits); }
@@ -1025,10 +1020,6 @@ namespace skvm {
         if (int X; this->allImm(x.id,&X)) { return splat(X >> bits); }
         return {this, this->push(Op::sra_i32, x.id,NA,NA, bits)};
     }
-
-    I32 Builder::shl_16x2(I32 x, int k) { return {this, this->push(Op::shl_i16x2, x.id,NA,NA, k)}; }
-    I32 Builder::shr_16x2(I32 x, int k) { return {this, this->push(Op::shr_i16x2, x.id,NA,NA, k)}; }
-    I32 Builder::sra_16x2(I32 x, int k) { return {this, this->push(Op::sra_i16x2, x.id,NA,NA, k)}; }
 
     I32 Builder:: eq(F32 x, F32 y) {
         if (float X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(X==Y ? ~0 : 0); }
@@ -1060,24 +1051,17 @@ namespace skvm {
         return {this, this->push(Op:: eq_i32, x.id, y.id)};
     }
     I32 Builder::neq(I32 x, I32 y) {
-        return {this, this->push(Op::neq_i32, x.id, y.id)};
+        return ~(x == y);
     }
     I32 Builder:: gt(I32 x, I32 y) {
         return {this, this->push(Op:: gt_i32, x.id, y.id)};
     }
     I32 Builder::gte(I32 x, I32 y) {
         if (x.id == y.id) { return splat(~0); }
-        return {this, this->push(Op::gte_i32, x.id, y.id)};
+        return ~(x < y);
     }
     I32 Builder:: lt(I32 x, I32 y) { return y>x; }
     I32 Builder::lte(I32 x, I32 y) { return y>=x; }
-
-    I32 Builder:: eq_16x2(I32 x, I32 y) { return {this, this->push(Op:: eq_i16x2, x.id, y.id)}; }
-    I32 Builder::neq_16x2(I32 x, I32 y) { return {this, this->push(Op::neq_i16x2, x.id, y.id)}; }
-    I32 Builder:: lt_16x2(I32 x, I32 y) { return {this, this->push(Op:: gt_i16x2, y.id, x.id)}; }
-    I32 Builder::lte_16x2(I32 x, I32 y) { return {this, this->push(Op::gte_i16x2, y.id, x.id)}; }
-    I32 Builder:: gt_16x2(I32 x, I32 y) { return {this, this->push(Op:: gt_i16x2, x.id, y.id)}; }
-    I32 Builder::gte_16x2(I32 x, I32 y) { return {this, this->push(Op::gte_i16x2, x.id, y.id)}; }
 
     I32 Builder::bit_and(I32 x, I32 y) {
         if (x.id == y.id) { return x; }
@@ -2071,6 +2055,15 @@ namespace skvm {
         this->byte(mod_rm(mod(off), dst&7, src&7));
         this->bytes(&off, imm_bytes(mod(off)));
     }
+    void Assembler::movzwl(GP64 dst, GP64 src, int off) {
+        if ((dst>>3) || (src>>3)) {
+            this->byte(rex(0,dst>>3,0,src>>3));
+        }
+        this->byte(0x0f);
+        this->byte(0xb7);
+        this->byte(mod_rm(mod(off), dst&7, src&7));
+        this->bytes(&off, imm_bytes(mod(off)));
+    }
 
 
     void Assembler::movb(GP64 dst, GP64 src) {
@@ -2428,18 +2421,15 @@ namespace skvm {
             llvm::Type *i1    = llvm::Type::getInt1Ty (*ctx),
                        *i8    = llvm::Type::getInt8Ty (*ctx),
                        *i16   = llvm::Type::getInt16Ty(*ctx),
-                       *i16x2 = llvm::VectorType::get(i16, 2),
                        *f32   = llvm::Type::getFloatTy(*ctx),
                        *I1    = scalar ? i1    : llvm::VectorType::get(i1 , K  ),
                        *I8    = scalar ? i8    : llvm::VectorType::get(i8 , K  ),
                        *I16   = scalar ? i16   : llvm::VectorType::get(i16, K  ),
-                       *I16x2 = scalar ? i16x2 : llvm::VectorType::get(i16, K*2),
                        *I32   = scalar ? i32   : llvm::VectorType::get(i32, K  ),
                        *F32   = scalar ? f32   : llvm::VectorType::get(f32, K  );
 
             auto I  = [&](llvm::Value* v) { return b->CreateBitCast(v, I32  ); };
             auto F  = [&](llvm::Value* v) { return b->CreateBitCast(v, F32  ); };
-            auto x2 = [&](llvm::Value* v) { return b->CreateBitCast(v, I16x2); };
 
             auto S = [&](llvm::Type* dst, llvm::Value* v) { return b->CreateSExt(v, dst); };
 
@@ -2537,9 +2527,7 @@ namespace skvm {
                 case Op::shr_i32: vals[i] = b->CreateLShr(vals[x], immy); break;
 
                 case Op:: eq_i32: vals[i] = S(I32, b->CreateICmpEQ (vals[x], vals[y])); break;
-                case Op::neq_i32: vals[i] = S(I32, b->CreateICmpNE (vals[x], vals[y])); break;
                 case Op:: gt_i32: vals[i] = S(I32, b->CreateICmpSGT(vals[x], vals[y])); break;
-                case Op::gte_i32: vals[i] = S(I32, b->CreateICmpSGE(vals[x], vals[y])); break;
 
                 case Op::add_f32: vals[i] = I(b->CreateFAdd(F(vals[x]), F(vals[y]))); break;
                 case Op::sub_f32: vals[i] = I(b->CreateFSub(F(vals[x]), F(vals[y]))); break;
@@ -2608,26 +2596,6 @@ namespace skvm {
                 #endif
                 } break;
 
-                case Op::add_i16x2: vals[i] = I(b->CreateAdd(x2(vals[x]), x2(vals[y]))); break;
-                case Op::sub_i16x2: vals[i] = I(b->CreateSub(x2(vals[x]), x2(vals[y]))); break;
-                case Op::mul_i16x2: vals[i] = I(b->CreateMul(x2(vals[x]), x2(vals[y]))); break;
-
-                case Op::shl_i16x2: vals[i] = I(b->CreateShl (x2(vals[x]), immy)); break;
-                case Op::sra_i16x2: vals[i] = I(b->CreateAShr(x2(vals[x]), immy)); break;
-                case Op::shr_i16x2: vals[i] = I(b->CreateLShr(x2(vals[x]), immy)); break;
-
-                case Op:: eq_i16x2:
-                    vals[i] = I(S(I16x2, b->CreateICmpEQ (x2(vals[x]), x2(vals[y]))));
-                    break;
-                case Op::neq_i16x2:
-                    vals[i] = I(S(I16x2, b->CreateICmpNE (x2(vals[x]), x2(vals[y]))));
-                    break;
-                case Op:: gt_i16x2:
-                    vals[i] = I(S(I16x2, b->CreateICmpSGT(x2(vals[x]), x2(vals[y]))));
-                    break;
-                case Op::gte_i16x2:
-                    vals[i] = I(S(I16x2, b->CreateICmpSGE(x2(vals[x]), x2(vals[y]))));
-                    break;
             }
             return true;
         };
@@ -3269,6 +3237,11 @@ namespace skvm {
                                    a->vbroadcastss(dst(), (A::Xmm)dst());
                                    break;
 
+                case Op::uniform16: a->movzwl(scratch, arg[immy], immz);
+                                    a->vmovd_direct((A::Xmm)dst(), scratch);
+                                    a->vbroadcastss(dst(), (A::Xmm)dst());
+                                    break;
+
                 case Op::uniform32: a->vbroadcastss(dst(), arg[immy], immz);
                                     break;
 
@@ -3326,10 +3299,6 @@ namespace skvm {
                 case Op::add_i32: a->vpaddd (dst(), r[x], r[y]); break;
                 case Op::sub_i32: a->vpsubd (dst(), r[x], r[y]); break;
                 case Op::mul_i32: a->vpmulld(dst(), r[x], r[y]); break;
-
-                case Op::sub_i16x2: a->vpsubw (dst(), r[x], r[y]); break;
-                case Op::mul_i16x2: a->vpmullw(dst(), r[x], r[y]); break;
-                case Op::shr_i16x2: a->vpsrlw (dst(), r[x], immy); break;
 
                 case Op::bit_and  : a->vpand (dst(), r[x], r[y]); break;
                 case Op::bit_or   : a->vpor  (dst(), r[x], r[y]); break;
@@ -3449,10 +3418,6 @@ namespace skvm {
                 case Op::add_i32: a->add4s(dst(), r[x], r[y]); break;
                 case Op::sub_i32: a->sub4s(dst(), r[x], r[y]); break;
                 case Op::mul_i32: a->mul4s(dst(), r[x], r[y]); break;
-
-                case Op::sub_i16x2: a->sub8h (dst(), r[x], r[y]); break;
-                case Op::mul_i16x2: a->mul8h (dst(), r[x], r[y]); break;
-                case Op::shr_i16x2: a->ushr8h(dst(), r[x], immy); break;
 
                 case Op::bit_and  : a->and16b(dst(), r[x], r[y]); break;
                 case Op::bit_or   : a->orr16b(dst(), r[x], r[y]); break;
