@@ -89,7 +89,7 @@ sk_sp<GrD3DRenderTarget> GrD3DRenderTarget::MakeWrappedRenderTarget(
     // create msaa surface if necessary
     GrD3DRenderTarget* d3dRT;
     if (sampleCnt > 1) {
-        D3D12_RESOURCE_DESC msTextureDesc;
+        D3D12_RESOURCE_DESC msTextureDesc = {};
         msTextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
         msTextureDesc.Alignment = 0;  // Default alignment (64KB)
         msTextureDesc.Width = dimensions.fWidth;
@@ -98,14 +98,16 @@ sk_sp<GrD3DRenderTarget> GrD3DRenderTarget::MakeWrappedRenderTarget(
         msTextureDesc.MipLevels = 1;
         msTextureDesc.Format = dxgiFormat;
         msTextureDesc.SampleDesc.Count = sampleCnt;
-        msTextureDesc.SampleDesc.Quality = 0;  // TODO: only valid for tiled renderers
+        // quality levels are only supported for tiled resources so ignore for now
+        msTextureDesc.SampleDesc.Quality = GrD3DTextureResource::kDefaultQualityLevel;
         msTextureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  // Use default for dxgi format
         msTextureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
         GrD3DTextureResourceInfo msInfo;
         sk_sp<GrD3DResourceState> msState;
-        if (!GrD3DTextureResource::InitTextureResourceInfo(gpu, msTextureDesc, info.fProtected,
-                                                           &msInfo)) {
+        if (!GrD3DTextureResource::InitTextureResourceInfo(gpu, msTextureDesc,
+                                                           D3D12_RESOURCE_STATE_RENDER_TARGET,
+                                                           info.fProtected, &msInfo)) {
             return nullptr;
         }
 

@@ -94,6 +94,7 @@ namespace skvm {
         struct Shift { int bits; };
         struct Splat { int bits; };
         struct Hex   { int bits; };
+        struct Attr  { const char* label; int v; };
 
         static void write(SkWStream* o, const char* s) {
             o->writeText(s);
@@ -142,6 +143,11 @@ namespace skvm {
         }
         static void write(SkWStream* o, Hex h) {
             o->writeHexAsText(h.bits);
+        }
+        [[maybe_unused]] static void write(SkWStream* o, Attr a) {
+            write(o, a.label);
+            write(o, " ");
+            o->writeDecAsText(a.v);
         }
 
         template <typename T, typename... Ts>
@@ -287,6 +293,105 @@ namespace skvm {
                 case Op::to_f32: write(o, V{id}, "=", op, V{x}); break;
                 case Op::trunc:  write(o, V{id}, "=", op, V{x}); break;
                 case Op::round:  write(o, V{id}, "=", op, V{x}); break;
+            }
+
+            write(o, "\n");
+        }
+    }
+
+    template <typename... Fs>
+    void dump_instructions(const std::vector<Instruction>& instructions, SkWStream* o, Fs... fs)  {
+        SkDebugfStream debug;
+        if (o == nullptr) {
+            o = &debug;
+        }
+
+        o->writeDecAsText(instructions.size());
+        o->writeText("\n");
+        for (Val id = 0; id < (Val)instructions.size(); id++) {
+            const Instruction& inst = instructions[id];
+            Op  op = inst.op;
+            Val  x = inst.x,
+                 y = inst.y,
+                 z = inst.z;
+            int immy = inst.immy,
+                immz = inst.immz;
+            switch (op) {
+                case Op::assert_true: write(o, op, V{x}, V{y}, fs(id)...); break;
+
+                case Op::store8:  write(o, op, Arg{immy}, V{x}, fs(id)...); break;
+                case Op::store16: write(o, op, Arg{immy}, V{x}, fs(id)...); break;
+                case Op::store32: write(o, op, Arg{immy}, V{x}, fs(id)...); break;
+
+                case Op::index: write(o, V{id}, "=", op, fs(id)...); break;
+
+                case Op::load8:  write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+                case Op::load16: write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+                case Op::load32: write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+
+                case Op::gather8:  write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}, fs(id)...); break;
+                case Op::gather16: write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}, fs(id)...); break;
+                case Op::gather32: write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}, fs(id)...); break;
+
+                case Op::uniform8:  write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, fs(id)...); break;
+                case Op::uniform16: write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, fs(id)...); break;
+                case Op::uniform32: write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, fs(id)...); break;
+
+                case Op::splat:  write(o, V{id}, "=", op, Splat{immy}, fs(id)...); break;
+
+
+                case Op::add_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::sub_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::mul_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::div_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::min_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::max_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::fma_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}, fs(id)...); break;
+                case Op::fms_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}, fs(id)...); break;
+                case Op::fnma_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}, fs(id)...); break;
+
+
+                case Op::sqrt_f32: write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+
+                case Op::add_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}, fs(id)...); break;
+                case Op::sub_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}, fs(id)...); break;
+                case Op::mul_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}, fs(id)...); break;
+                case Op::min_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}, fs(id)...); break;
+                case Op::max_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}, fs(id)...); break;
+
+                case Op:: eq_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+                case Op::neq_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+                case Op:: gt_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+                case Op::gte_f32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+
+
+                case Op::add_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+                case Op::sub_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+                case Op::mul_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+
+                case Op::shl_i32: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
+                case Op::shr_i32: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
+                case Op::sra_i32: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
+
+                case Op:: eq_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+                case Op:: gt_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+
+                case Op::bit_and  : write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::bit_or   : write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::bit_xor  : write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+                case Op::bit_clear: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
+
+                case Op::bit_and_imm: write(o, V{id}, "=", op, V{x}, Hex{immy}, fs(id)...); break;
+                case Op::bit_or_imm : write(o, V{id}, "=", op, V{x}, Hex{immy}, fs(id)...); break;
+                case Op::bit_xor_imm: write(o, V{id}, "=", op, V{x}, Hex{immy}, fs(id)...); break;
+
+                case Op::select:  write(o, V{id}, "=", op, V{x}, V{y}, V{z}, fs(id)...); break;
+                case Op::pack:    write(o, V{id}, "=", op, V{x}, V{y}, Shift{immz}, fs(id)...); break;
+
+                case Op::floor:  write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+                case Op::to_f32: write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+                case Op::trunc:  write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+                case Op::round:  write(o, V{id}, "=", op, V{x}, fs(id)...); break;
             }
 
             write(o, "\n");
@@ -608,6 +713,8 @@ namespace skvm {
                 std::swap( new_id[id],  new_id[new_id[id]]);
             }
         }
+
+        dump_instructions(program);
         return program;
     }
 
@@ -956,24 +1063,56 @@ namespace skvm {
          return x;
      }
 
-    /*  Use symmetry (atan is odd)
-     *  Use identity atan(x) = pi/2 - atan(1/x) for x > 1
-     *  Use 4th order polynomial approximation from https://arachnoid.com/polysolve/
+    /*  Use 4th order polynomial approximation from https://arachnoid.com/polysolve/
      *      with 129 values of x,atan(x) for x:[0...1]
+     *  This only works for 0 <= x <= 1
+     */
+    static F32 approx_atan_unit(F32 x) {
+        // for now we might be given NaN... let that through
+        x->assert_true((x != x) | ((x >= 0) & (x <= 1)));
+        return poly(x, 0.14130025741326729f,
+                      -0.34312835980675116f,
+                      -0.016172900528248768f,
+                       1.0037696976200385f,
+                      -0.00014758242182738969f);
+    }
+
+    /*  Use identity atan(x) = pi/2 - atan(1/x) for x > 1
      */
     F32 Builder::approx_atan(F32 x) {
         I32 neg = (x < 0.0f);
         x = select(neg, -x, x);
         I32 flip = (x > 1.0f);
         x = select(flip, 1/x, x);
-        x = poly(x, 0.14130025741326729f,
-                   -0.34312835980675116f,
-                   -0.016172900528248768f,
-                    1.0037696976200385f,
-                   -0.00014758242182738969f);
+        x = approx_atan_unit(x);
         x = select(flip, SK_ScalarPI/2 - x, x);
         x = select(neg, -x, x);
         return x;
+    }
+
+    /*  Use identity atan(x) = pi/2 - atan(1/x) for x > 1
+     *  By swapping y,x to ensure the ratio is <= 1, we can safely call atan_unit()
+     *  which avoids a 2nd divide instruction if we had instead called atan().
+     */
+    F32 Builder::approx_atan(F32 y0, F32 x0) {
+
+        I32 flip = (abs(y0) > abs(x0));
+        F32 y = select(flip, x0, y0);
+        F32 x = select(flip, y0, x0);
+        F32 arg = y/x;
+
+        I32 neg = (arg < 0.0f);
+        arg = select(neg, -arg, arg);
+
+        F32 r = approx_atan_unit(arg);
+        r = select(flip, SK_ScalarPI/2 - r, r);
+        r = select(neg, -r, r);
+
+        // handle quadrant distinctions
+        r = select((y0 >= 0) & (x0  < 0), r + SK_ScalarPI, r);
+        r = select((y0  < 0) & (x0 <= 0), r - SK_ScalarPI, r);
+        // Note: we don't try to handle 0,0 or infinities (yet)
+        return r;
     }
 
     F32 Builder::min(F32 x, F32 y) {

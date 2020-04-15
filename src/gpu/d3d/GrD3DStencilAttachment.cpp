@@ -25,9 +25,7 @@ GrD3DStencilAttachment* GrD3DStencilAttachment::Make(GrD3DGpu* gpu,
                                                      int height,
                                                      int sampleCnt,
                                                      const Format& format) {
-
-
-    D3D12_RESOURCE_DESC resourceDesc;
+    D3D12_RESOURCE_DESC resourceDesc = {};
     resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     resourceDesc.Alignment = 0;  // default alignment
     resourceDesc.Width = width;
@@ -36,14 +34,15 @@ GrD3DStencilAttachment* GrD3DStencilAttachment::Make(GrD3DGpu* gpu,
     resourceDesc.MipLevels = 1;
     resourceDesc.Format = format.fInternalFormat;
     resourceDesc.SampleDesc.Count = sampleCnt;
-    resourceDesc.SampleDesc.Quality = 0; // quality levels are only supported for tiled resources
-                                         // so ignore for now
+    // quality levels are only supported for tiled resources so ignore for now
+    resourceDesc.SampleDesc.Quality = GrD3DTextureResource::kDefaultQualityLevel;
     resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  // use driver-selected swizzle
     resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
     GrD3DTextureResourceInfo info;
-    // TODO: it'd be better if we initialized the resource in DEPTH_WRITE state instead of COMMON
-    if (!GrD3DTextureResource::InitTextureResourceInfo(gpu, resourceDesc, GrProtected::kNo, &info)) {
+    if (!GrD3DTextureResource::InitTextureResourceInfo(gpu, resourceDesc,
+                                                       D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                                                       GrProtected::kNo, &info)) {
         return nullptr;
     }
 
