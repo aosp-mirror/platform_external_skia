@@ -552,6 +552,7 @@ cc_library_static {
           "src/gpu/GrDrawingManager.cpp",
           "src/gpu/GrDriverBugWorkarounds.cpp",
           "src/gpu/GrDynamicAtlas.cpp",
+          "src/gpu/GrFinishCallbacks.cpp",
           "src/gpu/GrFixedClip.cpp",
           "src/gpu/GrFragmentProcessor.cpp",
           "src/gpu/GrGpu.cpp",
