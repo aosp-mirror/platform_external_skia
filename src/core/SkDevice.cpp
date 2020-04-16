@@ -90,9 +90,17 @@ SkMatrix SkBaseDevice::getRelativeTransform(const SkBaseDevice& inputDevice) con
     return SkMatrix::Concat(fGlobalToDevice, inputDevice.fDeviceToGlobal);
 }
 
-SkM44 SkBaseDevice::localToWorld() const {
-    // fInvCamera == GlobalToWorld
-    return fInvCamera * SkMatrix::Concat(fDeviceToGlobal, fLocalToDevice);
+bool SkBaseDevice::getLocalToMarker(uint32_t id, SkM44* localToMarker) const {
+    // The marker stack stores CTM snapshots, which are "marker to global" matrices.
+    // We ask for the (cached) inverse, which is a "global to marker" matrix.
+    SkM44 globalToMarker;
+    if (fMarkerStack && fMarkerStack->findMarkerInverse(id, &globalToMarker)) {
+        if (localToMarker) {
+            *localToMarker = globalToMarker * SkMatrix::Concat(fDeviceToGlobal, fLocalToDevice);
+        }
+        return true;
+    }
+    return false;
 }
 
 SkPixelGeometry SkBaseDevice::CreateInfo::AdjustGeometry(TileUsage tileUsage, SkPixelGeometry geo) {
