@@ -1582,6 +1582,7 @@ cc_test {
         "tests/LRUCacheTest.cpp",
         "tests/LayerDrawLooperTest.cpp",
         "tests/LazyProxyTest.cpp",
+        "tests/M44Test.cpp",
         "tests/MD5Test.cpp",
         "tests/MallocPixelRefTest.cpp",
         "tests/MaskCacheTest.cpp",
