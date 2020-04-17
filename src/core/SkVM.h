@@ -52,7 +52,7 @@ namespace skvm {
             x0 , x1 , x2 , x3 , x4 , x5 , x6 , x7 ,
             x8 , x9 , x10, x11, x12, x13, x14, x15,
             x16, x17, x18, x19, x20, x21, x22, x23,
-            x24, x25, x26, x27, x28, x29, x30, xzr,
+            x24, x25, x26, x27, x28, x29, x30, xzr, sp=xzr,
         };
         enum V {
             v0 , v1 , v2 , v3 , v4 , v5 , v6 , v7 ,
@@ -298,13 +298,13 @@ namespace skvm {
 
         void ldrq(V dst, Label*);  // 128-bit PC-relative load
 
-        void ldrq(V dst, X src);  // 128-bit dst = *src
-        void ldrs(V dst, X src);  //  32-bit dst = *src
-        void ldrb(V dst, X src);  //   8-bit dst = *src
+        void ldrq(V dst, X src, int imm12=0);  // 128-bit dst = *(src+imm12*16)
+        void ldrs(V dst, X src, int imm12=0);  //  32-bit dst = *(src+imm12*4)
+        void ldrb(V dst, X src, int imm12=0);  //   8-bit dst = *(src+imm12)
 
-        void strq(V src, X dst);  // 128-bit *dst = src
-        void strs(V src, X dst);  //  32-bit *dst = src
-        void strb(V src, X dst);  //   8-bit *dst = src
+        void strq(V src, X dst, int imm12=0);  // 128-bit *(dst+imm12*16) = src
+        void strs(V src, X dst, int imm12=0);  //  32-bit *(dst+imm12*4)  = src
+        void strb(V src, X dst, int imm12=0);  //   8-bit *(dst+imm12)    = src
 
         void fmovs(X dst, V src); // dst = 32-bit src[0]
 
@@ -338,10 +338,16 @@ namespace skvm {
         //    [11 bits hi] [5 bits m] [6 bits lo] [5 bits n] [5 bits d]
         void op(uint32_t hi, V m, uint32_t lo, V n, V d);
 
-        // 2-argument ops, with or without an immediate.
-        void op(uint32_t op22, int imm, V n, V d);
-        void op(uint32_t op22, V n, V d) { this->op(op22,0,   n,d); }
-        void op(uint32_t op22, X x, V v) { this->op(op22,0,(V)x,v); }
+        // 0,1,2-argument ops, with or without an immediate:
+        //    [ 22 bits op ] [5 bits n] [5 bits d]
+        // Any immediate falls in the middle somewhere overlapping with either op, n, or both.
+        void op(uint32_t op22, V n, V d, int imm=0);
+        void op(uint32_t op22, X n, V d, int imm=0) { this->op(op22,(V)n,   d,imm); }
+        void op(uint32_t op22, V n, X d, int imm=0) { this->op(op22,   n,(V)d,imm); }
+        void op(uint32_t op22, X n, X d, int imm=0) { this->op(op22,(V)n,(V)d,imm); }
+        void op(uint32_t op22,           int imm=0) { this->op(op22,(V)0,(V)0,imm); }
+        // (1-argument ops don't seem to have a consistent convention of passing as n or d.)
+
 
         // Order matters... value is 4-bit encoding for condition code.
         enum class Condition { eq,ne,cs,cc,mi,pl,vs,vc,hi,ls,ge,lt,gt,le,al };
