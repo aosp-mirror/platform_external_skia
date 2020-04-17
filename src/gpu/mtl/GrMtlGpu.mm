@@ -119,7 +119,8 @@ GrMtlGpu::GrMtlGpu(GrContext* context, const GrContextOptions& options,
         , fCmdBuffer(nullptr)
         , fCompiler(new SkSL::Compiler())
         , fResourceProvider(this)
-        , fDisconnected(false) {
+        , fDisconnected(false)
+        , fFinishCallbacks(this) {
     fMtlCaps.reset(new GrMtlCaps(options, fDevice, featureSet));
     fCaps = fMtlCaps;
 }
@@ -189,23 +190,13 @@ void GrMtlGpu::submitCommandBuffer(SyncQueue sync) {
 
 void GrMtlGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
                                GrGpuFinishedContext finishedContext) {
-    SkASSERT(finishedProc);
-    SkASSERT(this->caps()->fenceSyncSupport());
-    FinishCallback callback;
-    callback.fCallback = finishedProc;
-    callback.fContext = finishedContext;
-    callback.fFence = this->insertFence();
-    fFinishCallbacks.push_back(callback);
+    fFinishCallbacks.add(finishedProc, finishedContext);
 }
 
 bool GrMtlGpu::onSubmitToGpu(bool syncCpu) {
     if (syncCpu) {
         this->submitCommandBuffer(kForce_SyncQueue);
-        for (const auto& cb : fFinishCallbacks) {
-            cb.fCallback(cb.fContext);
-            this->deleteFence(cb.fFence);
-        }
-        fFinishCallbacks.clear();
+        fFinishCallbacks.callAll(true);
     } else {
         this->submitCommandBuffer(kSkip_SyncQueue);
     }
@@ -213,13 +204,7 @@ bool GrMtlGpu::onSubmitToGpu(bool syncCpu) {
 }
 
 void GrMtlGpu::checkFinishProcs() {
-    // Bail after the first unfinished sync since we expect they signal in the order inserted.
-    while (!fFinishCallbacks.empty() && this->waitFence(fFinishCallbacks.front().fFence,
-                                                       /* timeout = */ 0)) {
-        fFinishCallbacks.front().fCallback(fFinishCallbacks.front().fContext);
-        this->deleteFence(fFinishCallbacks.front().fFence);
-        fFinishCallbacks.pop_front();
-    }
+    fFinishCallbacks.check();
 }
 
 std::unique_ptr<GrSemaphore> GrMtlGpu::prepareTextureForCrossContextUsage(GrTexture*) {
@@ -1324,11 +1309,11 @@ GrFence SK_WARN_UNUSED_RESULT GrMtlGpu::insertFence() {
     return (GrFence) cfFence;
 }
 
-bool GrMtlGpu::waitFence(GrFence fence, uint64_t timeout) {
+bool GrMtlGpu::waitFence(GrFence fence) {
     const void* cfFence = (const void*) fence;
     dispatch_semaphore_t semaphore = (__bridge dispatch_semaphore_t)cfFence;
 
-    long result = dispatch_semaphore_wait(semaphore, timeout);
+    long result = dispatch_semaphore_wait(semaphore, 0);
 
     return !result;
 }
@@ -1436,7 +1421,7 @@ void GrMtlGpu::onDumpJSON(SkJSONWriter* writer) const {
     if (@available(macOS 10.13, iOS 11.0, *)) {
         writer->appendU64("registryID", fDevice.registryID);
     }
-#ifdef SK_BUILD_FOR_MAC
+#if defined(SK_BUILD_FOR_MAC) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 101500
     if (@available(macOS 10.15, *)) {
         switch (fDevice.location) {
             case MTLDeviceLocationBuiltIn:
@@ -1459,15 +1444,19 @@ void GrMtlGpu::onDumpJSON(SkJSONWriter* writer) const {
         writer->appendU64("maxTransferRate", fDevice.maxTransferRate);
     }
 #endif  // SK_BUILD_FOR_MAC
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101500 || __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
     if (@available(macOS 10.15, iOS 13.0, *)) {
         writer->appendBool("hasUnifiedMemory", fDevice.hasUnifiedMemory);
     }
+#endif
 #ifdef SK_BUILD_FOR_MAC
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101500
     if (@available(macOS 10.15, *)) {
         writer->appendU64("peerGroupID", fDevice.peerGroupID);
         writer->appendU32("peerCount", fDevice.peerCount);
         writer->appendU32("peerIndex", fDevice.peerIndex);
     }
+#endif
     if (@available(macOS 10.12, *)) {
         writer->appendU64("recommendedMaxWorkingSetSize", fDevice.recommendedMaxWorkingSetSize);
     }
@@ -1497,12 +1486,14 @@ void GrMtlGpu::onDumpJSON(SkJSONWriter* writer) const {
                            fDevice.isDepth24Stencil8PixelFormatSupported);
 
     }
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101500
     if (@available(macOS 10.15, *)) {
         writer->appendBool("areBarycentricCoordsSupported",
                            fDevice.areBarycentricCoordsSupported);
         writer->appendBool("supportsShaderBarycentricCoordinates",
                            fDevice.supportsShaderBarycentricCoordinates);
     }
+#endif
 #endif  // SK_BUILD_FOR_MAC
     if (@available(macOS 10.14, iOS 12.0, *)) {
         writer->appendU64("maxBufferLength", fDevice.maxBufferLength);

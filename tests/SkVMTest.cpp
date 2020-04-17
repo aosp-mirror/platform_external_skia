@@ -1196,10 +1196,10 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
-        a.vbroadcastss(A::ymm0,  A::rdi,   0);
-        a.vbroadcastss(A::ymm13, A::r14,   7);
-        a.vbroadcastss(A::ymm8,  A::rdx, -12);
-        a.vbroadcastss(A::ymm8,  A::rdx, 400);
+        a.vbroadcastss(A::ymm0,  A::Mem{A::rdi,   0});
+        a.vbroadcastss(A::ymm13, A::Mem{A::r14,   7});
+        a.vbroadcastss(A::ymm8,  A::Mem{A::rdx, -12});
+        a.vbroadcastss(A::ymm8,  A::Mem{A::rdx, 400});
 
         a.vbroadcastss(A::ymm8,  A::xmm0);
         a.vbroadcastss(A::ymm0,  A::xmm13);
@@ -1240,15 +1240,15 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
-        a.vmovups(A::ymm5, A::rsi);
-        a.vmovups(A::rsi, A::ymm5);
+        a.vmovups(A::ymm5, A::Mem{A::rsi});
+        a.vmovups(A::Mem{A::rsi}, A::ymm5);
 
-        a.vmovups(A::rsi, A::xmm5);
+        a.vmovups(A::Mem{A::rsi}, A::xmm5);
 
-        a.vpmovzxwd(A::ymm4, A::rsi);
-        a.vpmovzxbd(A::ymm4, A::rsi);
+        a.vpmovzxwd(A::ymm4, A::Mem{A::rsi});
+        a.vpmovzxbd(A::ymm4, A::Mem{A::rsi});
 
-        a.vmovq(A::rdx, A::xmm15);
+        a.vmovq(A::Mem{A::rdx}, A::xmm15);
     },{
         /*    VEX    */  /*Op*/  /*  ModRM  */
         0xc5,     0xfc,   0x10,  0b00'101'110,
@@ -1263,13 +1263,13 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
-        a.vmovups(A::ymm5,   0);
-        a.vmovups(A::ymm5,  64);
-        a.vmovups(A::ymm5, 128);
+        a.vmovups(A::ymm5, A::Mem{A::rsp,  0});
+        a.vmovups(A::ymm5, A::Mem{A::rsp, 64});
+        a.vmovups(A::ymm5, A::Mem{A::rsp,128});
 
-        a.vmovups(  0, A::ymm5);
-        a.vmovups( 64, A::ymm5);
-        a.vmovups(128, A::ymm5);
+        a.vmovups(A::Mem{A::rsp,  0}, A::ymm5);
+        a.vmovups(A::Mem{A::rsp, 64}, A::ymm5);
+        a.vmovups(A::Mem{A::rsp,128}, A::ymm5);
     },{
         0xc5,0xfc,0x10,0x2c,0x24,
         0xc5,0xfc,0x10,0x6c,0x24,0x40,
@@ -1293,25 +1293,25 @@ DEF_TEST(SkVM_Assembler, r) {
         a.movzwl(A::r8,  A::rsi, 12);
         a.movzwl(A::r8,  A::rsi, 400);
 
+        a.vmovd(A::Mem{A::rax}, A::xmm0);
+        a.vmovd(A::Mem{A::rax}, A::xmm8);
+        a.vmovd(A::Mem{A::r8 }, A::xmm0);
+
+        a.vmovd(A::xmm0, A::Mem{A::rax});
+        a.vmovd(A::xmm8, A::Mem{A::rax});
+        a.vmovd(A::xmm0, A::Mem{A::r8 });
+
+        a.vmovd(A::xmm0 , A::Mem{A::rax, 0, A::rcx, A::FOUR});
+        a.vmovd(A::xmm15, A::Mem{A::rax, 0, A::r8,  A::TWO });
+        a.vmovd(A::xmm0 , A::Mem{A::r8 , 0, A::rcx});
+
         a.vmovd(A::rax, A::xmm0);
         a.vmovd(A::rax, A::xmm8);
-        a.vmovd(A::r8,  A::xmm0);
+        a.vmovd(A::r8 ,  A::xmm0);
 
         a.vmovd(A::xmm0, A::rax);
         a.vmovd(A::xmm8, A::rax);
-        a.vmovd(A::xmm0, A::r8);
-
-        a.vmovd(A::xmm0 , A::FOUR, A::rcx, A::rax);
-        a.vmovd(A::xmm15, A::TWO,  A::r8,  A::rax);
-        a.vmovd(A::xmm0 , A::ONE,  A::rcx, A::r8);
-
-        a.vmovd_direct(A::rax, A::xmm0);
-        a.vmovd_direct(A::rax, A::xmm8);
-        a.vmovd_direct(A::r8,  A::xmm0);
-
-        a.vmovd_direct(A::xmm0, A::rax);
-        a.vmovd_direct(A::xmm8, A::rax);
-        a.vmovd_direct(A::xmm0, A::r8);
+        a.vmovd(A::xmm0, A::r8 );
 
         a.movb(A::rdx, A::rax);
         a.movb(A::rdx, A::r8);
@@ -1355,17 +1355,17 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
-        a.vpinsrw(A::xmm1, A::xmm8, A::rsi, 4);
-        a.vpinsrw(A::xmm8, A::xmm1, A::r8, 12);
+        a.vpinsrw(A::xmm1, A::xmm8, A::Mem{A::rsi}, 4);   // vpinsrw $4, (%rsi), %xmm8, %xmm1
+        a.vpinsrw(A::xmm8, A::xmm1, A::Mem{A::r8 }, 12);  // vpinrsw $12, (%r8), %xmm1, %xmm8
 
-        a.vpinsrb(A::xmm1, A::xmm8, A::rsi, 4);
-        a.vpinsrb(A::xmm8, A::xmm1, A::r8, 12);
+        a.vpinsrb(A::xmm1, A::xmm8, A::Mem{A::rsi}, 4);   // vpinsrb $4, (%rsi), %xmm8, %xmm1
+        a.vpinsrb(A::xmm8, A::xmm1, A::Mem{A::r8 }, 12);  // vpinsrb $4, (%rsi), %xmm8, %xmm1
 
-        a.vpextrw(A::rsi, A::xmm8, 7);
-        a.vpextrw(A::r8,  A::xmm1, 15);
+        a.vpextrw(A::Mem{A::rsi}, A::xmm8, 7);
+        a.vpextrw(A::Mem{A::r8 }, A::xmm1, 15);
 
-        a.vpextrb(A::rsi, A::xmm8, 7);
-        a.vpextrb(A::r8,  A::xmm1, 15);
+        a.vpextrb(A::Mem{A::rsi}, A::xmm8, 7);
+        a.vpextrb(A::Mem{A::r8 }, A::xmm1, 15);
     },{
         0xc5,0xb9,      0xc4, 0x0e,  4,
         0xc4,0x41,0x71, 0xc4, 0x00, 12,
@@ -1387,13 +1387,52 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
-        a.vmovdqa   (A::ymm3, A::ymm2);
+        A::Label l;
+        a.vmovdqa(A::ymm3, A::ymm2);                                // vmovdqa %ymm2         , %ymm3
+
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi});                         // vmovdqa  (%rsi)       , %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::rsp});                         // vmovdqa  (%rsp)       , %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::r11});                         // vmovdqa  (%r11)       , %ymm3
+
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi,  4});                     // vmovdqa 4(%rsi)       , %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::rsp,  4});                     // vmovdqa 4(%rsp)       , %ymm3
+
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi,  4, A::rax, A::EIGHT});   // vmovdqa 4(%rsi,%rax,8), %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::r11,  4, A::rax, A::TWO  });   // vmovdqa 4(%r11,%rax,2), %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi,  4, A::r11, A::FOUR });   // vmovdqa 4(%rsi,%r11,4), %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi,  4, A::r11, A::ONE  });   // vmovdqa 4(%rsi,%r11,1), %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi,  4, A::r11});             // vmovdqa 4(%rsi,%r11)  , %ymm3
+
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi,  64, A::r11});            // vmovdqa  64(%rsi,%r11), %ymm3
+        a.vmovdqa(A::ymm3, A::Mem{A::rsi, 128, A::r11});            // vmovdqa 128(%rsi,%r11), %ymm3
+        a.vmovdqa(A::ymm3, &l);                                     // vmovdqa  16(%rip)     , %ymm3
+
         a.vcvttps2dq(A::ymm3, A::ymm2);
         a.vcvtdq2ps (A::ymm3, A::ymm2);
         a.vcvtps2dq (A::ymm3, A::ymm2);
         a.vsqrtps   (A::ymm3, A::ymm2);
+        a.label(&l);
     },{
         0xc5,0xfd,0x6f,0xda,
+
+        0xc5,0xfd,0x6f,0x1e,
+        0xc5,0xfd,0x6f,0x1c,0x24,
+        0xc4,0xc1,0x7d,0x6f,0x1b,
+
+        0xc5,0xfd,0x6f,0x5e,0x04,
+        0xc5,0xfd,0x6f,0x5c,0x24,0x04,
+
+        0xc5,0xfd,0x6f,0x5c,0xc6,0x04,
+        0xc4,0xc1,0x7d,0x6f,0x5c,0x43,0x04,
+        0xc4,0xa1,0x7d,0x6f,0x5c,0x9e,0x04,
+        0xc4,0xa1,0x7d,0x6f,0x5c,0x1e,0x04,
+        0xc4,0xa1,0x7d,0x6f,0x5c,0x1e,0x04,
+
+        0xc4,0xa1,0x7d,0x6f,0x5c,0x1e,0x40,
+        0xc4,0xa1,0x7d,0x6f,0x9c,0x1e,0x80,0x00,0x00,0x00,
+
+        0xc5,0xfd,0x6f,0x1d,0x10,0x00,0x00,0x00,
+
         0xc5,0xfe,0x5b,0xda,
         0xc5,0xfc,0x5b,0xda,
         0xc5,0xfd,0x5b,0xda,

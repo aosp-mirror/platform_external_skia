@@ -5,12 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkM44.h"
 #include "include/core/SkMatrix44.h"
 #include "include/core/SkPoint3.h"
 #include "tests/Test.h"
-
-#ifdef SK_SUPPORT_LEGACY_MATRIX44
 
 static bool nearly_equal_double(double a, double b) {
     const double tolerance = 1e-7;
@@ -927,5 +924,3 @@ DEF_TEST(Matrix44, reporter) {
     test_preserves_2d_axis_alignment(reporter);
     test_toint(reporter);
 }
-
-#endif
