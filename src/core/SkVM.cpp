@@ -1741,9 +1741,28 @@ namespace skvm {
     }
     void Assembler::ret() { this->byte(0xc3); }
 
-    // Common instruction building for 64-bit opcodes with an immediate argument.
-    void Assembler::op(int opcode, int opcode_ext, GP64 dst, int imm) {
-        opcode |= 0b0000'0001;   // low bit set for 64-bit operands
+    void Assembler::op(int opcode, Operand dst, GP64 x) {
+        if (dst.kind == Operand::REG) {
+            this->byte(rex(W1,x>>3,0,dst.reg>>3));
+            this->bytes(&opcode, SkTFitsIn<uint8_t>(opcode) ? 1 : 2);
+            this->byte(mod_rm(Mod::Direct, x, dst.reg&7));
+        } else {
+            SkASSERT(dst.kind == Operand::MEM);
+            const Mem& m = dst.mem;
+            const bool need_SIB = m.base  == rsp
+                               || m.index != rsp;
+
+            this->byte(rex(W1,x>>3,m.index>>3,m.base>>3));
+            this->bytes(&opcode, SkTFitsIn<uint8_t>(opcode) ? 1 : 2);
+            this->byte(mod_rm(mod(m.disp), x&7, (need_SIB ? rsp : m.base)&7));
+            if (need_SIB) {
+                this->byte(sib(m.scale, m.index&7, m.base&7));
+            }
+            this->bytes(&m.disp, imm_bytes(mod(m.disp)));
+        }
+    }
+
+    void Assembler::op(int opcode, int opcode_ext, Operand dst, int imm) {
         opcode |= 0b1000'0000;   // top bit set for instructions with any immediate
 
         int imm_bytes = 4;
@@ -1752,22 +1771,39 @@ namespace skvm {
             opcode |= 0b0000'0010;  // second bit set for 8-bit immediate, else 32-bit.
         }
 
-        this->byte(rex(1,0,0,dst>>3));
-        this->byte(opcode);
-        this->byte(mod_rm(Mod::Direct, opcode_ext, dst&7));
+        this->op(opcode, dst, (GP64)opcode_ext);
         this->bytes(&imm, imm_bytes);
     }
 
-    void Assembler::add(GP64 dst, int imm) { this->op(0,0b000, dst,imm); }
-    void Assembler::sub(GP64 dst, int imm) { this->op(0,0b101, dst,imm); }
-    void Assembler::cmp(GP64 reg, int imm) { this->op(0,0b111, reg,imm); }
+    void Assembler::add(Operand dst, int imm) { this->op(0x01,0b000, dst,imm); }
+    void Assembler::sub(Operand dst, int imm) { this->op(0x01,0b101, dst,imm); }
+    void Assembler::cmp(Operand dst, int imm) { this->op(0x01,0b111, dst,imm); }
 
-    void Assembler::movq(GP64 dst, GP64 src, int off) {
-        this->byte(rex(1,dst>>3,0,src>>3));
-        this->byte(0x8b);
-        this->byte(mod_rm(mod(off), dst&7, src&7));
-        this->bytes(&off, imm_bytes(mod(off)));
+    // These don't work quite like the other instructions with immediates:
+    // these immediates are always fixed size at 4 bytes or 1 byte.
+    void Assembler::mov(Operand dst, int imm) {
+        this->op(0xC7,dst,(GP64)0b000);
+        this->word(imm);
     }
+    void Assembler::movb(Operand dst, int imm) {
+        this->op(0xC6,dst,(GP64)0b000);
+        this->byte(imm);
+    }
+
+    void Assembler::add (Operand dst, GP64 x) { this->op(0x01, dst,x); }
+    void Assembler::sub (Operand dst, GP64 x) { this->op(0x29, dst,x); }
+    void Assembler::cmp (Operand dst, GP64 x) { this->op(0x39, dst,x); }
+    void Assembler::mov (Operand dst, GP64 x) { this->op(0x89, dst,x); }
+    void Assembler::movb(Operand dst, GP64 x) { this->op(0x88, dst,x); }
+
+    void Assembler::add (GP64 dst, Operand x) { this->op(0x03, x,dst); }
+    void Assembler::sub (GP64 dst, Operand x) { this->op(0x2B, x,dst); }
+    void Assembler::cmp (GP64 dst, Operand x) { this->op(0x3B, x,dst); }
+    void Assembler::mov (GP64 dst, Operand x) { this->op(0x8B, x,dst); }
+    void Assembler::movb(GP64 dst, Operand x) { this->op(0x8A, x,dst); }
+
+    void Assembler::movzbq(GP64 dst, Operand x) { this->op(0xB60F, x,dst); }
+    void Assembler::movzwq(GP64 dst, Operand x) { this->op(0xB70F, x,dst); }
 
     void Assembler::vpaddd (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xfe, dst,x,y); }
     void Assembler::vpsubd (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xfa, dst,x,y); }
@@ -1954,34 +1990,6 @@ namespace skvm {
     void Assembler::vmovd(Operand dst, Xmm src) { this->op(0x66,0x0f,0x7e, src,dst); }
     void Assembler::vmovd(Xmm dst, Operand src) { this->op(0x66,0x0f,0x6e, dst,src); }
 
-    void Assembler::movzbl(GP64 dst, GP64 src, int off) {
-        if ((dst>>3) || (src>>3)) {
-            this->byte(rex(0,dst>>3,0,src>>3));
-        }
-        this->byte(0x0f);
-        this->byte(0xb6);
-        this->byte(mod_rm(mod(off), dst&7, src&7));
-        this->bytes(&off, imm_bytes(mod(off)));
-    }
-    void Assembler::movzwl(GP64 dst, GP64 src, int off) {
-        if ((dst>>3) || (src>>3)) {
-            this->byte(rex(0,dst>>3,0,src>>3));
-        }
-        this->byte(0x0f);
-        this->byte(0xb7);
-        this->byte(mod_rm(mod(off), dst&7, src&7));
-        this->bytes(&off, imm_bytes(mod(off)));
-    }
-
-
-    void Assembler::movb(GP64 dst, GP64 src) {
-        if ((dst>>3) || (src>>3)) {
-            this->byte(rex(0,src>>3,0,dst>>3));
-        }
-        this->byte(0x88);
-        this->byte(mod_rm(Mod::Indirect, src&7, dst&7));
-    }
-
     void Assembler::vpinsrw(Xmm dst, Xmm src, Operand y, int imm) {
         this->op(0x66,0x0f,0xc4, dst,src,y);
         this->byte(imm);
@@ -2028,6 +2036,12 @@ namespace skvm {
                   | (n  &  5_mask) <<  5
                   | (d  &  5_mask) <<  0);
     }
+    void Assembler::op(uint32_t op22, V n, V d, int imm) {
+        this->word( (op22 & 22_mask) << 10
+                  | imm  // size and location depends on the instruction
+                  | (n    &  5_mask) <<  5
+                  | (d    &  5_mask) <<  0);
+    }
 
     void Assembler::and16b(V d, V n, V m) { this->op(0b0'1'0'01110'00'1, m, 0b00011'1, n, d); }
     void Assembler::orr16b(V d, V n, V m) { this->op(0b0'1'0'01110'10'1, m, 0b00011'1, n, d); }
@@ -2063,27 +2077,20 @@ namespace skvm {
 
     void Assembler::tbl(V d, V n, V m) { this->op(0b0'1'001110'00'0, m, 0b0'00'0'00, n, d); }
 
-    void Assembler::op(uint32_t op22, int imm, V n, V d) {
-        this->word( (op22 & 22_mask) << 10
-                  | imm              << 16   // imm is embedded inside op, bit size depends on op
-                  | (n    &  5_mask) <<  5
-                  | (d    &  5_mask) <<  0);
+    void Assembler::sli4s(V d, V n, int imm5) {
+        this->op(0b0'1'1'011110'0100'000'01010'1,    n, d, ( imm5 & 5_mask)<<16);
     }
-
-    void Assembler::sli4s(V d, V n, int imm) {
-        this->op(0b0'1'1'011110'0100'000'01010'1,    ( imm&31), n, d);
+    void Assembler::shl4s(V d, V n, int imm5) {
+        this->op(0b0'1'0'011110'0100'000'01010'1,    n, d, ( imm5 & 5_mask)<<16);
     }
-    void Assembler::shl4s(V d, V n, int imm) {
-        this->op(0b0'1'0'011110'0100'000'01010'1,    ( imm&31), n, d);
+    void Assembler::sshr4s(V d, V n, int imm5) {
+        this->op(0b0'1'0'011110'0100'000'00'0'0'0'1, n, d, (-imm5 & 5_mask)<<16);
     }
-    void Assembler::sshr4s(V d, V n, int imm) {
-        this->op(0b0'1'0'011110'0100'000'00'0'0'0'1, (-imm&31), n, d);
+    void Assembler::ushr4s(V d, V n, int imm5) {
+        this->op(0b0'1'1'011110'0100'000'00'0'0'0'1, n, d, (-imm5 & 5_mask)<<16);
     }
-    void Assembler::ushr4s(V d, V n, int imm) {
-        this->op(0b0'1'1'011110'0100'000'00'0'0'0'1, (-imm&31), n, d);
-    }
-    void Assembler::ushr8h(V d, V n, int imm) {
-        this->op(0b0'1'1'011110'0010'000'00'0'0'0'1, (-imm&15), n, d);
+    void Assembler::ushr8h(V d, V n, int imm4) {
+        this->op(0b0'1'1'011110'0010'000'00'0'0'0'1, n, d, (-imm4 & 4_mask)<<16);
     }
 
     void Assembler::scvtf4s (V d, V n) { this->op(0b0'1'0'01110'0'0'10000'11101'10, n,d); }
@@ -2099,72 +2106,61 @@ namespace skvm {
     void Assembler::uminv4s(V d, V n) { this->op(0b0'1'1'01110'10'11000'1'1010'10, n,d); }
 
     void Assembler::brk(int imm16) {
-        this->word(0b11010100'001'0000000000000000'000'00
-                  | (imm16 & 16_mask) << 5);
+        this->op(0b11010100'001'00000000000, (imm16 & 16_mask) << 5);
     }
 
-    void Assembler::ret(X n) {
-        this->word(0b1101011'0'0'10'11111'0000'0'0 << 10
-                  | (n & 5_mask) << 5);
-    }
+    void Assembler::ret(X n) { this->op(0b1101011'0'0'10'11111'0000'0'0, n, (X)0); }
 
     void Assembler::add(X d, X n, int imm12) {
-        this->word(0b1'0'0'10001'00   << 22
-                  | (imm12 & 12_mask) << 10
-                  | (n     &  5_mask) <<  5
-                  | (d     &  5_mask) <<  0);
+        this->op(0b1'0'0'10001'00'000000000000, n,d, (imm12 & 12_mask) << 10);
     }
     void Assembler::sub(X d, X n, int imm12) {
-        this->word( 0b1'1'0'10001'00  << 22
-                  | (imm12 & 12_mask) << 10
-                  | (n     &  5_mask) <<  5
-                  | (d     &  5_mask) <<  0);
+        this->op(0b1'1'0'10001'00'000000000000, n,d, (imm12 & 12_mask) << 10);
     }
     void Assembler::subs(X d, X n, int imm12) {
-        this->word( 0b1'1'1'10001'00  << 22
-                  | (imm12 & 12_mask) << 10
-                  | (n     &  5_mask) <<  5
-                  | (d     &  5_mask) <<  0);
+        this->op(0b1'1'1'10001'00'000000000000, n,d, (imm12 & 12_mask) << 10);
     }
 
     void Assembler::b(Condition cond, Label* l) {
         const int imm19 = this->disp19(l);
-        this->word( 0b0101010'0           << 24
-                  | (imm19     & 19_mask) <<  5
-                  | ((int)cond &  4_mask) <<  0);
+        this->op(0b0101010'0'00000000000000, (X)0, (V)cond, (imm19 & 19_mask) << 5);
     }
     void Assembler::cbz(X t, Label* l) {
         const int imm19 = this->disp19(l);
-        this->word( 0b1'011010'0      << 24
-                  | (imm19 & 19_mask) <<  5
-                  | (t     &  5_mask) <<  0);
+        this->op(0b1'011010'0'00000000000000, (X)0, t, (imm19 & 19_mask) << 5);
     }
     void Assembler::cbnz(X t, Label* l) {
         const int imm19 = this->disp19(l);
-        this->word( 0b1'011010'1      << 24
-                  | (imm19 & 19_mask) <<  5
-                  | (t     &  5_mask) <<  0);
+        this->op(0b1'011010'1'00000000000000, (X)0, t, (imm19 & 19_mask) << 5);
     }
 
-    void Assembler::ldrq(V dst, X src) { this->op(0b00'111'1'01'11'000000000000, src, dst); }
-    void Assembler::ldrs(V dst, X src) { this->op(0b10'111'1'01'01'000000000000, src, dst); }
-    void Assembler::ldrb(V dst, X src) { this->op(0b00'111'1'01'01'000000000000, src, dst); }
+    void Assembler::ldrq(V dst, X src, int imm12) {
+        this->op(0b00'111'1'01'11'000000000000, src, dst, (imm12 & 12_mask) << 10);
+    }
+    void Assembler::ldrs(V dst, X src, int imm12) {
+        this->op(0b10'111'1'01'01'000000000000, src, dst, (imm12 & 12_mask) << 10);
+    }
+    void Assembler::ldrb(V dst, X src, int imm12) {
+        this->op(0b00'111'1'01'01'000000000000, src, dst, (imm12 & 12_mask) << 10);
+    }
 
-    void Assembler::strq(V src, X dst) { this->op(0b00'111'1'01'10'000000000000, dst, src); }
-    void Assembler::strs(V src, X dst) { this->op(0b10'111'1'01'00'000000000000, dst, src); }
-    void Assembler::strb(V src, X dst) { this->op(0b00'111'1'01'00'000000000000, dst, src); }
+    void Assembler::strq(V src, X dst, int imm12) {
+        this->op(0b00'111'1'01'10'000000000000, dst, src, (imm12 & 12_mask) << 10);
+    }
+    void Assembler::strs(V src, X dst, int imm12) {
+        this->op(0b10'111'1'01'00'000000000000, dst, src, (imm12 & 12_mask) << 10);
+    }
+    void Assembler::strb(V src, X dst, int imm12) {
+        this->op(0b00'111'1'01'00'000000000000, dst, src, (imm12 & 12_mask) << 10);
+    }
 
     void Assembler::fmovs(X dst, V src) {
-        this->word(0b0'0'0'11110'00'1'00'110'000000 << 10
-                  | (src & 5_mask)                  << 5
-                  | (dst & 5_mask)                  << 0);
+        this->op(0b0'0'0'11110'00'1'00'110'000000, src, dst);
     }
 
     void Assembler::ldrq(V dst, Label* l) {
         const int imm19 = this->disp19(l);
-        this->word( 0b10'011'1'00     << 24
-                  | (imm19 & 19_mask) << 5
-                  | (dst   &  5_mask) << 0);
+        this->op(0b10'011'1'00'00000000000000, (V)0, dst, (imm19 & 19_mask) << 5);
     }
 
     void Assembler::label(Label* l) {
@@ -2829,7 +2825,8 @@ namespace skvm {
                       const JITMode mode,
                       Assembler* a) const {
         using A = Assembler;
-        const bool try_hoisting = mode != JITMode::RegisterNoHoist;
+        const bool try_hoisting = mode != JITMode::RegisterNoHoist,
+                   stack_only   = mode == JITMode::Stack;
 
         auto debug_dump = [&] {
         #if 0
@@ -2846,7 +2843,6 @@ namespace skvm {
             return false;
         }
         const int K = 8;
-        const bool stack_only = mode == JITMode::Stack;
         A::GP64 N        = A::rdi,
                 scratch  = A::rax,
                 scratch2 = A::r11,
@@ -2859,7 +2855,6 @@ namespace skvm {
 
     #elif defined(__aarch64__)
         const int K = 4;
-        const bool stack_only = false;  // TODO
         A::X N       = A::x0,
              scratch = A::x8,
              arg[]   = { A::x1, A::x2, A::x3, A::x4, A::x5, A::x6, A::x7 };
@@ -2877,6 +2872,13 @@ namespace skvm {
         auto hoisted = [&](Val id) { return try_hoisting && instructions[id].can_hoist; };
 
         std::vector<Reg> r(instructions.size());
+    #if defined(__x86_64__)
+        auto load_from_stack = [&](Val id) { a->vmovups(r[id], A::Mem{A::rsp, id*K*4}); };
+        auto  store_to_stack = [&](Val id) { a->vmovups(A::Mem{A::rsp, id*K*4}, r[id]); };
+    #elif defined(__aarch64__)
+        auto load_from_stack = [&](Val id) { a->ldrq(r[id], A::sp, id); };
+        auto  store_to_stack = [&](Val id) { a->strq(r[id], A::sp, id); };
+    #endif
 
         struct LabelAndReg {
             A::Label label;
@@ -2917,16 +2919,12 @@ namespace skvm {
 
             if (stack_only) {
                 // Move each unique argument into a temporary register.
-                auto load_from_stack = [&](Val arg) {
+                auto assign_temporary_register = [&](Val arg) {
                     if (int found = __builtin_ffs(avail)) {
                         Reg reg = (Reg)(found - 1);
                         avail ^= 1 << reg;
                         r[arg] = reg;
-                    #if defined(__x86_64__)
-                        a->vmovups(r[arg], A::Mem{A::rsp, arg*K*4});
-                    #else
-                        SkASSERT(false); // TODO
-                    #endif
+                        load_from_stack(arg);
                     } else {
                         if (debug_dump()) {
                             SkDebugf("\nCould not find temporary register for %d\n", arg);
@@ -2934,9 +2932,9 @@ namespace skvm {
                         ok = false;
                     }
                 };
-                if (x != NA                    ) { load_from_stack(x); }
-                if (y != NA && y != x          ) { load_from_stack(y); }
-                if (z != NA && z != x && z != y) { load_from_stack(z); }
+                if (x != NA                    ) { assign_temporary_register(x); }
+                if (y != NA && y != x          ) { assign_temporary_register(y); }
+                if (z != NA && z != x && z != y) { assign_temporary_register(z); }
             }
 
             // First lock in how to choose tmp if we need to based on the registers
@@ -3067,7 +3065,7 @@ namespace skvm {
                     auto base  = scratch,
                          index = scratch2;
                     // Our gather base pointer is immz bytes off of uniform immy.
-                    a->movq(base, arg[immy], immz);
+                    a->mov(base, A::Mem{arg[immy], immz});
 
                     // Grab our index from lane 0 of the index argument.
                     a->vmovd(index, (A::Xmm)r[x]);
@@ -3103,18 +3101,18 @@ namespace skvm {
 
                     // Our gather base pointer is immz bytes off of uniform immy.
                     auto base = scratch;
-                    a->movq(base, arg[immy], immz);
+                    a->mov(base, A::Mem{arg[immy], immz});
                     a->vpcmpeqd(mask, mask, mask);   // (All lanes enabled.)
                     a->vgatherdps(dst(), A::FOUR, index, base, mask);
                 }
                 break;
 
-                case Op::uniform8: a->movzbl(scratch, arg[immy], immz);
+                case Op::uniform8: a->movzbq(scratch, A::Mem{arg[immy], immz});
                                    a->vmovd((A::Xmm)dst(), scratch);
                                    a->vbroadcastss(dst(), dst());
                                    break;
 
-                case Op::uniform16: a->movzwl(scratch, arg[immy], immz);
+                case Op::uniform16: a->movzwq(scratch, A::Mem{arg[immy], immz});
                                     a->vmovd((A::Xmm)dst(), scratch);
                                     a->vbroadcastss(dst(), dst());
                                     break;
@@ -3345,11 +3343,7 @@ namespace skvm {
 
             if (stack_only) {
                 if (dst_is_set) {
-                #if defined(__x86_64__)
-                    a->vmovups(A::Mem{A::rsp, id*K*4}, r[id]);
-                #else
-                    SkASSERT(false);  // TODO
-                #endif
+                    store_to_stack(id);
                     avail |= 1 << r[id];
                 }
                 for (Val arg : {x,y,z}) {
@@ -3373,7 +3367,9 @@ namespace skvm {
             auto sub = [&](A::GP64 gp, int imm) { a->sub(gp, imm); };
 
             auto enter = [&]{ a->sub(A::rsp, instructions.size()*K*4); };
-            auto exit  = [&]{ a->add(A::rsp, instructions.size()*K*4); a->vzeroupper(); a->ret(); };
+            auto exit  = [&]{ a->add(A::rsp, instructions.size()*K*4);
+                              a->vzeroupper();
+                              a->ret(); };
         #elif defined(__aarch64__)
             auto jump_if_less = [&](A::Label* l) { a->blt(l); };
             auto jump         = [&](A::Label* l) { a->b  (l); };
@@ -3381,8 +3377,9 @@ namespace skvm {
             auto add = [&](A::X gp, int imm) { a->add(gp, gp, imm); };
             auto sub = [&](A::X gp, int imm) { a->sub(gp, gp, imm); };
 
-            auto enter = [&]{};
-            auto exit  = [&]{ a->ret(A::x30); };
+            auto enter = [&]{ a->sub(A::sp, A::sp, instructions.size()*K*4); };
+            auto exit  = [&]{ a->add(A::sp, A::sp, instructions.size()*K*4);
+                              a->ret(A::x30); };
         #endif
 
         A::Label body,
