@@ -1493,6 +1493,7 @@ cc_test {
         "tests/ColorTest.cpp",
         "tests/CompressedBackendAllocationTest.cpp",
         "tests/CopySurfaceTest.cpp",
+        "tests/CrbugOssfuzz21688.cpp",
         "tests/CubicMapTest.cpp",
         "tests/DashPathEffectTest.cpp",
         "tests/DataRefTest.cpp",
