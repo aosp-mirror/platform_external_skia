@@ -598,6 +598,8 @@ cc_library_static {
           "src/gpu/GrShaderUtils.cpp",
           "src/gpu/GrShaderVar.cpp",
           "src/gpu/GrSoftwarePathRenderer.cpp",
+          "src/gpu/GrSpirvUniformHandler.cpp",
+          "src/gpu/GrSpirvVaryingHandler.cpp",
           "src/gpu/GrStagingBuffer.cpp",
           "src/gpu/GrStencilAttachment.cpp",
           "src/gpu/GrStencilSettings.cpp",
