@@ -660,7 +660,6 @@ cc_library_static {
           "src/gpu/effects/GrRRectEffect.cpp",
           "src/gpu/effects/GrShadowGeoProc.cpp",
           "src/gpu/effects/GrSkSLFP.cpp",
-          "src/gpu/effects/GrTextureDomain.cpp",
           "src/gpu/effects/GrTextureEffect.cpp",
           "src/gpu/effects/GrXfermodeFragmentProcessor.cpp",
           "src/gpu/effects/GrYUVtoRGBEffect.cpp",
