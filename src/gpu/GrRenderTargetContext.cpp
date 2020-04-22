@@ -381,6 +381,9 @@ GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
         , fOpsTask(sk_ref_sp(this->asSurfaceProxy()->getLastOpsTask()))
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
         , fManagedOpsTask(managedOpsTask) {
+    if (fOpsTask) {
+        fOpsTask->setClosedObserver(this);
+    }
     SkASSERT(this->asSurfaceProxy() == fWriteView.proxy());
     SkASSERT(this->origin() == fWriteView.origin());
 
@@ -398,6 +401,9 @@ void GrRenderTargetContext::onValidate() const {
 
 GrRenderTargetContext::~GrRenderTargetContext() {
     ASSERT_SINGLE_OWNER
+    if (fOpsTask) {
+        fOpsTask->setClosedObserver(nullptr);
+    }
 }
 
 inline GrAAType GrRenderTargetContext::chooseAAType(GrAA aa) {
@@ -423,7 +429,7 @@ GrOpsTask* GrRenderTargetContext::getOpsTask() {
     ASSERT_SINGLE_OWNER
     SkDEBUGCODE(this->validate();)
 
-    if (!fOpsTask || fOpsTask->isClosed()) {
+    if (!fOpsTask) {
         sk_sp<GrOpsTask> newOpsTask =
                 this->drawingManager()->newOpsTask(this->writeSurfaceView(), fManagedOpsTask);
         if (fOpsTask && fNumStencilSamples > 0) {
@@ -434,9 +440,10 @@ GrOpsTask* GrRenderTargetContext::getOpsTask() {
             // values?
             newOpsTask->setInitialStencilContent(GrOpsTask::StencilContent::kPreserved);
         }
+        newOpsTask->setClosedObserver(this);
         fOpsTask = std::move(newOpsTask);
     }
-
+    SkASSERT(!fOpsTask->isClosed());
     return fOpsTask.get();
 }
 
@@ -822,7 +829,7 @@ void GrRenderTargetContext::drawTexturedQuad(const GrClip& clip,
                                              SkBlendMode blendMode,
                                              GrAA aa,
                                              DrawQuad* quad,
-                                             const SkRect* domain) {
+                                             const SkRect* subset) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
@@ -844,12 +851,12 @@ void GrRenderTargetContext::drawTexturedQuad(const GrClip& clip,
         auto clampType = GrColorTypeClampType(this->colorInfo().colorType());
         auto saturate = clampType == GrClampType::kManual ? GrTextureOp::Saturate::kYes
                                                           : GrTextureOp::Saturate::kNo;
-        // Use the provided domain, although hypothetically we could detect that the cropped local
-        // quad is sufficiently inside the domain and the constraint could be dropped.
+        // Use the provided subset, although hypothetically we could detect that the cropped local
+        // quad is sufficiently inside the subset and the constraint could be dropped.
         this->addDrawOp(finalClip,
                         GrTextureOp::Make(fContext, std::move(proxyView), srcAlphaType,
                                           std::move(textureXform), filter, color, saturate,
-                                          blendMode, aaType, quad, domain));
+                                          blendMode, aaType, quad, subset));
     }
 }
 
@@ -2437,6 +2444,9 @@ void GrRenderTargetContext::drawShapeUsingPathRenderer(const GrClip& clip,
             pr = this->drawingManager()->getPathRenderer(canDrawArgs, true, kType);
         } else {
             pr = this->drawingManager()->getSoftwarePathRenderer();
+#if GR_PATH_RENDERER_SPEW
+            SkDebugf("falling back to: %s\n", pr->name());
+#endif
         }
     }
 
@@ -2650,4 +2660,9 @@ bool GrRenderTargetContext::blitTexture(GrSurfaceProxyView view, const SkIRect& 
                              clippedSrcRect.height()),
             SkRect::Make(clippedSrcRect));
     return true;
+}
+
+void GrRenderTargetContext::wasClosed(const GrOpsTask& task) {
+    SkASSERT(&task == fOpsTask.get());
+    fOpsTask.reset();
 }
