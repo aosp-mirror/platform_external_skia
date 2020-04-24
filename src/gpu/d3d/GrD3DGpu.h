@@ -24,6 +24,10 @@ class GrPipeline;
 struct IDXGraphicsAnalysis;
 #endif
 
+namespace SkSL {
+    class Compiler;
+}
+
 class GrD3DGpu : public GrGpu {
 public:
     static sk_sp<GrGpu> Make(const GrD3DBackendContext& backendContext, const GrContextOptions&,
@@ -33,8 +37,12 @@ public:
 
     const GrD3DCaps& d3dCaps() const { return static_cast<const GrD3DCaps&>(*fCaps); }
 
+    GrD3DResourceProvider& resourceProvider() { return fResourceProvider; }
+
     ID3D12Device* device() const { return fDevice.get(); }
     ID3D12CommandQueue* queue() const { return fQueue.get(); }
+
+    GrD3DDirectCommandList* currentCommandList() const { return fCurrentDirectCommandList.get(); }
 
     bool protectedContext() const { return false; }
 
@@ -67,7 +75,7 @@ public:
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
             const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
 
-    void addResourceBarriers(const GrManagedResource* resource,
+    void addResourceBarriers(sk_sp<GrManagedResource> resource,
                              int numBarriers,
                              D3D12_RESOURCE_TRANSITION_BARRIER* barriers) const;
 
@@ -93,6 +101,10 @@ public:
     void submit(GrOpsRenderPass* renderPass) override;
 
     void checkFinishProcs() override {}
+
+    SkSL::Compiler* shaderCompiler() const {
+        return fCompiler.get();
+    }
 
 private:
     enum class SyncQueue {
@@ -235,6 +247,8 @@ private:
 #if GR_TEST_UTILS
     IDXGraphicsAnalysis* fGraphicsAnalysis;
 #endif
+
+    std::unique_ptr<SkSL::Compiler> fCompiler;
 
     typedef GrGpu INHERITED;
 };
