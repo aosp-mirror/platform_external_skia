@@ -25,6 +25,7 @@ cc_library_static {
 
     export_include_dirs: [
         "",
+        "client_utils/android/",
         "include/android/",
         "include/atlastext/",
         "include/c/",
@@ -51,6 +52,7 @@ cc_library_static {
     ],
 
     srcs: [
+        "client_utils/android/FrontBufferedStream.cpp",
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
         "src/android/SkBitmapRegionCodec.cpp",
@@ -441,7 +443,6 @@ cc_library_static {
         "src/utils/SkDashPath.cpp",
         "src/utils/SkEventTracer.cpp",
         "src/utils/SkFloatToDecimal.cpp",
-        "src/utils/SkFrontBufferedStream.cpp",
         "src/utils/SkInterpolator.cpp",
         "src/utils/SkJSON.cpp",
         "src/utils/SkJSONWriter.cpp",

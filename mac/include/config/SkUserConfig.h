@@ -23,6 +23,10 @@
 #define SK_CODEC_DECODES_WEBP
 #endif
 
+#ifndef SK_ENABLE_ANDROID_UTILS
+#define SK_ENABLE_ANDROID_UTILS
+#endif
+
 #ifndef SK_ENABLE_API_AVAILABLE
 #define SK_ENABLE_API_AVAILABLE
 #endif
