@@ -9,6 +9,7 @@
 
 #include "src/gpu/d3d/GrD3DBuffer.h"
 #include "src/gpu/d3d/GrD3DGpu.h"
+#include "src/gpu/d3d/GrD3DPipelineState.h"
 #include "src/gpu/d3d/GrD3DTextureResource.h"
 
 GrD3DCommandList::GrD3DCommandList(gr_cp<ID3D12CommandAllocator> allocator,
@@ -62,30 +63,22 @@ void GrD3DCommandList::releaseResources() {
     SkASSERT(!fIsActive);
     for (int i = 0; i < fTrackedResources.count(); ++i) {
         fTrackedResources[i]->notifyFinishedWithWorkOnGpu();
-        fTrackedResources[i]->unref();
     }
     for (int i = 0; i < fTrackedRecycledResources.count(); ++i) {
         fTrackedRecycledResources[i]->notifyFinishedWithWorkOnGpu();
-        fTrackedRecycledResources[i]->recycle();
+        auto resource = fTrackedRecycledResources[i].release();
+        resource->recycle();
     }
 
-    if (++fNumResets > kNumRewindResetsBeforeFullReset) {
-        fTrackedResources.reset();
-        fTrackedRecycledResources.reset();
-        fTrackedResources.setReserve(kInitialTrackedResourcesCount);
-        fTrackedRecycledResources.setReserve(kInitialTrackedResourcesCount);
-        fNumResets = 0;
-    } else {
-        fTrackedResources.rewind();
-        fTrackedRecycledResources.rewind();
-    }
+    fTrackedResources.reset();
+    fTrackedRecycledResources.reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // GraphicsCommandList commands
 ////////////////////////////////////////////////////////////////////////////////
 
-void GrD3DCommandList::resourceBarrier(const GrManagedResource* resource,
+void GrD3DCommandList::resourceBarrier(sk_sp<GrManagedResource> resource,
                                        int numBarriers,
                                        D3D12_RESOURCE_TRANSITION_BARRIER* barriers) {
     SkASSERT(fIsActive);
@@ -100,7 +93,7 @@ void GrD3DCommandList::resourceBarrier(const GrManagedResource* resource,
 
     fHasWork = true;
     if (resource) {
-        this->addResource(resource);
+        this->addResource(std::move(resource));
     }
 }
 
@@ -140,17 +133,17 @@ void GrD3DCommandList::copyBufferToTexture(GrD3DBuffer* srcBuffer,
     }
 }
 
-void GrD3DCommandList::copyTextureRegion(const GrManagedResource* dst,
+void GrD3DCommandList::copyTextureRegion(sk_sp<GrManagedResource> dst,
                                          const D3D12_TEXTURE_COPY_LOCATION* dstLocation,
                                          UINT dstX, UINT dstY,
-                                         const GrManagedResource* src,
+                                         sk_sp<GrManagedResource> src,
                                          const D3D12_TEXTURE_COPY_LOCATION* srcLocation,
                                          const D3D12_BOX* srcBox) {
     SkASSERT(fIsActive);
 
     this->addingWork();
-    this->addResource(dst);
-    this->addResource(src);
+    this->addResource(std::move(dst));
+    this->addResource(std::move(src));
     fCommandList->CopyTextureRegion(dstLocation, dstX, dstY, 0, srcLocation, srcBox);
 }
 
@@ -180,6 +173,38 @@ std::unique_ptr<GrD3DDirectCommandList> GrD3DDirectCommandList::Make(ID3D12Devic
 GrD3DDirectCommandList::GrD3DDirectCommandList(gr_cp<ID3D12CommandAllocator> allocator,
                                                gr_cp<ID3D12GraphicsCommandList> commandList)
     : GrD3DCommandList(std::move(allocator), std::move(commandList)) {
+}
+
+void GrD3DDirectCommandList::setPipelineState(sk_sp<GrD3DPipelineState> pipelineState) {
+    SkASSERT(fIsActive);
+    fCommandList->SetPipelineState(pipelineState->pipelineState());
+    this->addResource(std::move(pipelineState));
+}
+
+void GrD3DDirectCommandList::setStencilRef(unsigned int stencilRef) {
+    SkASSERT(fIsActive);
+    fCommandList->OMSetStencilRef(stencilRef);
+}
+
+void GrD3DDirectCommandList::setBlendFactor(const float blendFactor[4]) {
+    SkASSERT(fIsActive);
+    fCommandList->OMSetBlendFactor(blendFactor);
+}
+
+void GrD3DDirectCommandList::setPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY primitiveTopology) {
+    SkASSERT(fIsActive);
+    fCommandList->IASetPrimitiveTopology(primitiveTopology);
+}
+
+void GrD3DDirectCommandList::setScissorRects(unsigned int numRects, const D3D12_RECT* rects) {
+    SkASSERT(fIsActive);
+    fCommandList->RSSetScissorRects(numRects, rects);
+}
+
+void GrD3DDirectCommandList::setViewports(unsigned int numViewports,
+                                          const D3D12_VIEWPORT* viewports) {
+    SkASSERT(fIsActive);
+    fCommandList->RSSetViewports(numViewports, viewports);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

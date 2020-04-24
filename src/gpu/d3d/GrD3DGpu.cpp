@@ -20,6 +20,7 @@
 #include "src/gpu/d3d/GrD3DTexture.h"
 #include "src/gpu/d3d/GrD3DTextureRenderTarget.h"
 #include "src/gpu/d3d/GrD3DUtil.h"
+#include "src/sksl/SkSLCompiler.h"
 
 #if GR_TEST_UTILS
 #include <DXProgrammableCapture.h>
@@ -43,7 +44,8 @@ GrD3DGpu::GrD3DGpu(GrContext* context, const GrContextOptions& contextOptions,
 
         , fQueue(backendContext.fQueue)
         , fResourceProvider(this)
-        , fOutstandingCommandLists(sizeof(OutstandingCommandList), kDefaultOutstandingAllocCnt) {
+        , fOutstandingCommandLists(sizeof(OutstandingCommandList), kDefaultOutstandingAllocCnt)
+        , fCompiler(new SkSL::Compiler()) {
     fCaps.reset(new GrD3DCaps(contextOptions,
                               backendContext.fAdapter.get(),
                               backendContext.fDevice.get()));
@@ -863,13 +865,13 @@ void GrD3DGpu::testingOnly_endCapture() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void GrD3DGpu::addResourceBarriers(const GrManagedResource* resource,
+void GrD3DGpu::addResourceBarriers(sk_sp<GrManagedResource> resource,
                                    int numBarriers,
                                    D3D12_RESOURCE_TRANSITION_BARRIER* barriers) const {
     SkASSERT(fCurrentDirectCommandList);
     SkASSERT(resource);
 
-    fCurrentDirectCommandList->resourceBarrier(resource, numBarriers, barriers);
+    fCurrentDirectCommandList->resourceBarrier(std::move(resource), numBarriers, barriers);
 }
 
 bool GrD3DGpu::onSubmitToGpu(bool syncCpu) {
