@@ -19,6 +19,10 @@
 #define SK_CODEC_DECODES_WEBP
 #endif
 
+#ifndef SK_ENABLE_ANDROID_UTILS
+#define SK_ENABLE_ANDROID_UTILS
+#endif
+
 #ifndef SK_ENABLE_SKSL_INTERPRETER
 #define SK_ENABLE_SKSL_INTERPRETER
 #endif
@@ -61,6 +65,10 @@
 
 #ifndef SK_USE_LIBGIFCODEC
 #define SK_USE_LIBGIFCODEC
+#endif
+
+#ifndef SK_USE_VMA
+#define SK_USE_VMA
 #endif
 
 #ifndef SK_VULKAN

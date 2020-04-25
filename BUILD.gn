@@ -89,6 +89,9 @@ config("skia_private") {
   if (skia_use_gl && skia_use_angle) {
     defines += [ "SK_ANGLE" ]
   }
+  if (skia_use_vma) {
+    defines += [ "SK_USE_VMA" ]
+  }
 }
 
 # Any code that's linked into Skia-the-library should use this config via += skia_library_configs.
@@ -267,6 +270,14 @@ template("optional") {
       configs += skia_library_configs
     }
   }
+}
+
+optional("android_utils") {
+  enabled = skia_enable_android_utils
+
+  public = [ "client_utils/android/FrontBufferedStream.h" ]
+  public_defines = [ "SK_ENABLE_ANDROID_UTILS" ]
+  sources = [ "client_utils/android/FrontBufferedStream.cpp" ]
 }
 
 optional("fontmgr_android") {
@@ -554,7 +565,9 @@ optional("gpu") {
 
   if (skia_use_vulkan) {
     public_defines += [ "SK_VULKAN" ]
-    deps += [ "third_party/vulkanmemoryallocator" ]
+    if (skia_use_vma) {
+      deps += [ "third_party/vulkanmemoryallocator" ]
+    }
     sources += skia_vk_sources
     if (skia_enable_vulkan_debug_layers) {
       public_defines += [ "SK_ENABLE_VK_LAYERS" ]
@@ -854,6 +867,7 @@ component("skia") {
   ]
 
   deps = [
+    ":android_utils",
     ":arm64",
     ":armv7",
     ":avx",
@@ -1138,6 +1152,7 @@ group("modules") {
 # Targets guarded by skia_enable_tools may use //third_party freely.
 if (skia_enable_tools) {
   skia_public_includes = [
+    "client_utils/android",
     "include/android",
     "include/atlastext",
     "include/c",
@@ -1499,23 +1514,6 @@ if (skia_enable_tools) {
     sources = [ "third_party/etc1/etc1.cpp" ]
   }
 
-  if (skia_use_ffmpeg) {
-    test_lib("video_decoder") {
-      sources = [
-        "experimental/ffmpeg/SkVideoDecoder.cpp",
-        "experimental/ffmpeg/SkVideoDecoder.h",
-        "experimental/ffmpeg/SkVideoEncoder.cpp",
-        "experimental/ffmpeg/SkVideoEncoder.h",
-      ]
-      libs = [
-        "swscale",
-        "avcodec",
-        "avformat",
-        "avutil",
-      ]
-    }
-  }
-
   import("gn/gm.gni")
   test_lib("gm") {
     sources = gm_sources
@@ -1538,7 +1536,7 @@ if (skia_enable_tools) {
     public_deps = [ ":gpu_tool_utils" ]
 
     if (skia_use_ffmpeg) {
-      deps += [ ":video_decoder" ]
+      deps += [ "experimental/ffmpeg:video_decoder" ]
       sources += [ "gm/video_decoder.cpp" ]
     }
   }
@@ -1828,7 +1826,7 @@ if (skia_enable_tools) {
         ":flags",
         ":gpu_tool_utils",
         ":skia",
-        ":video_decoder",
+        "experimental/ffmpeg:video_encoder",
         "modules/skottie",
         "modules/skottie:utils",
       ]
