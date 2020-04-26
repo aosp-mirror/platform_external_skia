@@ -17,7 +17,7 @@ namespace SK_OPTS_NS {
 
         // We'll operate in SIMT style, knocking off K-size chunks from n while possible.
         // We noticed quad-pumping is slower than single-pumping and both were slower than double.
-    #if defined(__AVX2__)
+    #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_AVX2
         constexpr int K = 16;
     #else
         constexpr int K = 8;
@@ -196,16 +196,6 @@ namespace SK_OPTS_NS {
                     CASE(Op::div_f32): r(d).f32 = r(x).f32 / r(y).f32; break;
                     CASE(Op::min_f32): r(d).f32 = min(r(x).f32, r(y).f32); break;
                     CASE(Op::max_f32): r(d).f32 = max(r(x).f32, r(y).f32); break;
-
-                    // These _imm instructions are all x86/JIT only.
-                    CASE(Op::add_f32_imm):
-                    CASE(Op::sub_f32_imm):
-                    CASE(Op::mul_f32_imm):
-                    CASE(Op::min_f32_imm):
-                    CASE(Op::max_f32_imm):
-                    CASE(Op::bit_and_imm):
-                    CASE(Op::bit_or_imm ):
-                    CASE(Op::bit_xor_imm): SkUNREACHABLE; break;
 
                     CASE(Op::fma_f32): r(d).f32 = fma(r(x).f32, r(y).f32, r(z).f32); break;
                     CASE(Op::fms_f32): r(d).f32 = fma(r(x).f32, r(y).f32, -r(z).f32); break;
