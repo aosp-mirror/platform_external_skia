@@ -152,22 +152,20 @@ sk_sp<GrTextureProxy> GrAHardwareBufferImageGenerator::makeProxy(GrRecordingCont
             [direct, buffer = AutoAHBRelease(hardwareBuffer), width, height, pixelConfig,
              isProtectedContent, backendFormat](GrResourceProvider* resourceProvider) {
                 GrAHardwareBufferUtils::DeleteImageProc deleteImageProc = nullptr;
-                GrAHardwareBufferUtils::UpdateImageProc updateImageProc = nullptr;
-                GrAHardwareBufferUtils::TexImageCtx texImageCtx = nullptr;
+                GrAHardwareBufferUtils::DeleteImageCtx deleteImageCtx = nullptr;
 
                 GrBackendTexture backendTex =
                         GrAHardwareBufferUtils::MakeBackendTexture(direct, buffer.get(),
                                                                    width, height,
                                                                    &deleteImageProc,
-                                                                   &updateImageProc,
-                                                                   &texImageCtx,
+                                                                   &deleteImageCtx,
                                                                    isProtectedContent,
                                                                    backendFormat,
                                                                    false);
                 if (!backendTex.isValid()) {
                     return sk_sp<GrTexture>();
                 }
-                SkASSERT(deleteImageProc && texImageCtx);
+                SkASSERT(deleteImageProc && deleteImageCtx);
 
                 backendTex.fConfig = pixelConfig;
                 // We make this texture cacheable to avoid recreating a GrTexture every time this
@@ -176,12 +174,12 @@ sk_sp<GrTextureProxy> GrAHardwareBufferImageGenerator::makeProxy(GrRecordingCont
                 sk_sp<GrTexture> tex = resourceProvider->wrapBackendTexture(
                         backendTex, kBorrow_GrWrapOwnership, GrWrapCacheable::kYes, kRead_GrIOType);
                 if (!tex) {
-                    deleteImageProc(texImageCtx);
+                    deleteImageProc(deleteImageCtx);
                     return sk_sp<GrTexture>();
                 }
 
                 if (deleteImageProc) {
-                    tex->setRelease(deleteImageProc, texImageCtx);
+                    tex->setRelease(deleteImageProc, deleteImageCtx);
                 }
 
                 return tex;

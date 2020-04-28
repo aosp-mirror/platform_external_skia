@@ -617,15 +617,14 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrContext* context,
 
     if (isTextureable) {
         GrAHardwareBufferUtils::DeleteImageProc deleteImageProc = nullptr;
-        GrAHardwareBufferUtils::UpdateImageProc updateImageProc = nullptr;
-        GrAHardwareBufferUtils::TexImageCtx deleteImageCtx = nullptr;
+        GrAHardwareBufferUtils::DeleteImageCtx deleteImageCtx = nullptr;
 
         GrBackendTexture backendTexture =
                 GrAHardwareBufferUtils::MakeBackendTexture(context, hardwareBuffer,
                                                            bufferDesc.width, bufferDesc.height,
-                                                           &deleteImageProc, &updateImageProc,
-                                                           &deleteImageCtx, isProtectedContent,
-                                                           backendFormat, true);
+                                                           &deleteImageProc, &deleteImageCtx,
+                                                           isProtectedContent, backendFormat,
+                                                           true);
         if (!backendTexture.isValid()) {
             return nullptr;
         }

@@ -157,59 +157,33 @@ GrBackendFormat GetBackendFormat(GrContext* context, AHardwareBuffer* hardwareBu
     return GrBackendFormat();
 }
 
-class GLTextureHelper {
+class GLCleanupHelper {
 public:
-    GLTextureHelper(GrGLuint texID, EGLImageKHR image, EGLDisplay display, GrGLuint texTarget)
+    GLCleanupHelper(GrGLuint texID, EGLImageKHR image, EGLDisplay display)
         : fTexID(texID)
         , fImage(image)
-        , fDisplay(display)
-        , fTexTarget(texTarget) { }
-    ~GLTextureHelper() {
+        , fDisplay(display) { }
+    ~GLCleanupHelper() {
         glDeleteTextures(1, &fTexID);
         // eglDestroyImageKHR will remove a ref from the AHardwareBuffer
         eglDestroyImageKHR(fDisplay, fImage);
     }
-    void rebind(GrContext* grContext);
-
 private:
     GrGLuint    fTexID;
     EGLImageKHR fImage;
     EGLDisplay  fDisplay;
-    GrGLuint    fTexTarget;
 };
 
-void GLTextureHelper::rebind(GrContext* grContext) {
-    glBindTexture(fTexTarget, fTexID);
-    GLenum status = GL_NO_ERROR;
-    if ((status = glGetError()) != GL_NO_ERROR) {
-        SkDebugf("glBindTexture(%#x, %d) failed (%#x)", (int) fTexTarget,
-            (int) fTexID, (int) status);
-        return;
-    }
-    glEGLImageTargetTexture2DOES(fTexTarget, fImage);
-    if ((status = glGetError()) != GL_NO_ERROR) {
-        SkDebugf("glEGLImageTargetTexture2DOES failed (%#x)", (int) status);
-        return;
-    }
-    grContext->resetContext(kTextureBinding_GrGLBackendState);
-}
-
 void delete_gl_texture(void* context) {
-    GLTextureHelper* cleanupHelper = static_cast<GLTextureHelper*>(context);
+    GLCleanupHelper* cleanupHelper = static_cast<GLCleanupHelper*>(context);
     delete cleanupHelper;
-}
-
-void update_gl_texture(void* context, GrContext* grContext) {
-    GLTextureHelper* cleanupHelper = static_cast<GLTextureHelper*>(context);
-    cleanupHelper->rebind(grContext);
 }
 
 static GrBackendTexture make_gl_backend_texture(
         GrContext* context, AHardwareBuffer* hardwareBuffer,
         int width, int height,
         DeleteImageProc* deleteProc,
-        UpdateImageProc* updateProc,
-        TexImageCtx* imageCtx,
+        DeleteImageCtx* deleteCtx,
         bool isProtectedContent,
         const GrBackendFormat& backendFormat,
         bool isRenderable) {
@@ -262,8 +236,7 @@ static GrBackendTexture make_gl_backend_texture(
     textureInfo.fFormat = *backendFormat.getGLFormat();
 
     *deleteProc = delete_gl_texture;
-    *updateProc = update_gl_texture;
-    *imageCtx = new GLTextureHelper(texID, image, display, target);
+    *deleteCtx = new GLCleanupHelper(texID, image, display);
 
     return GrBackendTexture(width, height, GrMipMapped::kNo, textureInfo);
 }
@@ -294,16 +267,11 @@ void delete_vk_image(void* context) {
     delete cleanupHelper;
 }
 
-void update_vk_image(void* context, GrContext* grContext) {
-    // no op
-}
-
 static GrBackendTexture make_vk_backend_texture(
         GrContext* context, AHardwareBuffer* hardwareBuffer,
         int width, int height,
         DeleteImageProc* deleteProc,
-        UpdateImageProc* updateProc,
-        TexImageCtx* imageCtx,
+        DeleteImageCtx* deleteCtx,
         bool isProtectedContent,
         const GrBackendFormat& backendFormat,
         bool isRenderable) {
@@ -488,8 +456,7 @@ static GrBackendTexture make_vk_backend_texture(
     imageInfo.fYcbcrConversionInfo = *ycbcrConversion;
 
     *deleteProc = delete_vk_image;
-    *updateProc = update_vk_image;
-    *imageCtx = new VulkanCleanupHelper(gpu, image, memory);
+    *deleteCtx = new VulkanCleanupHelper(gpu, image, memory);
 
     return GrBackendTexture(width, height, imageInfo);
 }
@@ -522,8 +489,7 @@ static bool can_import_protected_content(GrContext* context) {
 GrBackendTexture MakeBackendTexture(GrContext* context, AHardwareBuffer* hardwareBuffer,
                                     int width, int height,
                                     DeleteImageProc* deleteProc,
-                                    UpdateImageProc* updateProc,
-                                    TexImageCtx* imageCtx,
+                                    DeleteImageCtx* deleteCtx,
                                     bool isProtectedContent,
                                     const GrBackendFormat& backendFormat,
                                     bool isRenderable) {
@@ -534,7 +500,7 @@ GrBackendTexture MakeBackendTexture(GrContext* context, AHardwareBuffer* hardwar
 
     if (GrBackendApi::kOpenGL == context->backend()) {
         return make_gl_backend_texture(context, hardwareBuffer, width, height, deleteProc,
-                                       updateProc, imageCtx, createProtectedImage, backendFormat,
+                                       deleteCtx, createProtectedImage, backendFormat,
                                        isRenderable);
     } else {
         SkASSERT(GrBackendApi::kVulkan == context->backend());
@@ -542,24 +508,12 @@ GrBackendTexture MakeBackendTexture(GrContext* context, AHardwareBuffer* hardwar
         // Currently we don't support protected images on vulkan
         SkASSERT(!createProtectedImage);
         return make_vk_backend_texture(context, hardwareBuffer, width, height, deleteProc,
-                                       updateProc, imageCtx, createProtectedImage, backendFormat,
+                                       deleteCtx, createProtectedImage, backendFormat,
                                        isRenderable);
 #else
         return GrBackendTexture();
 #endif
     }
-}
-
-GrBackendTexture MakeBackendTexture(GrContext* context, AHardwareBuffer* hardwareBuffer,
-                                    int width, int height,
-                                    DeleteImageProc* deleteProc,
-                                    TexImageCtx* imageCtx,
-                                    bool isProtectedContent,
-                                    const GrBackendFormat& backendFormat,
-                                    bool isRenderable) {
-    UpdateImageProc updateProc;
-    return MakeBackendTexture(context, hardwareBuffer, width, height, deleteProc, &updateProc,
-                              imageCtx, isProtectedContent, backendFormat, isRenderable);
 }
 
 } // GrAHardwareBufferUtils
