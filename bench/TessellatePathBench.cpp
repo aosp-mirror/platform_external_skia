@@ -84,7 +84,6 @@ public:
     void runBench(GrOpFlushState* flushState, GrTessellatePathOp* op) override {
         int numBeziers;
         op->prepareMiddleOutInnerTriangles(flushState, &numBeziers);
-        SkASSERT(numBeziers == kNumCubicsInChalkboard);
     }
 };
 
