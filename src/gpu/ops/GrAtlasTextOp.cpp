@@ -73,6 +73,7 @@ std::unique_ptr<GrAtlasTextOp> GrAtlasTextOp::MakeDistanceField(
                                                : kGrayscaleDistanceField_MaskType;
         op->fUseGammaCorrectDistanceTable = useGammaCorrectDistanceTable;
         op->fLuminanceColor = luminanceColor;
+        op->fNeedsGlyphTransform = true;
         op->fNumGlyphs = glyphCount;
         op->fGeoCount = 1;
         return op;
@@ -100,13 +101,9 @@ void GrAtlasTextOp::init() {
             fDFGPFlags |=
                     (kLCDBGRDistanceField_MaskType == fMaskType) ? kBGR_DistanceFieldEffectFlag : 0;
         }
-
-        fNeedsGlyphTransform = true;
     }
 
-    SkRect bounds;
-    geo.fBlob->computeSubRunBounds(
-            &bounds, *geo.fSubRunPtr, geo.fDrawMatrix, geo.fDrawOrigin, fNeedsGlyphTransform);
+    SkRect bounds = geo.fSubRunPtr->deviceRect(geo.fDrawMatrix, geo.fDrawOrigin);
     // We don't have tight bounds on the glyph paths in device space. For the purposes of bounds
     // we treat this as a set of non-AA rects rendered with a texture.
     this->setBounds(bounds, HasAABloat::kNo, IsHairline::kNo);
