@@ -10,6 +10,8 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/SkChecksum.h"
 #include "include/private/SkMutex.h"
+#include "src/core/SkCanvasPriv.h"
+#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkUtils.h"
@@ -50,6 +52,20 @@ private:
     static SkSL::Compiler* gCompiler;
 };
 SkSL::Compiler* SharedCompiler::gCompiler = nullptr;
+}
+
+// Accepts a valid marker, or "normals(<marker>)"
+static bool parse_marker(const SkSL::StringFragment& marker, uint32_t* id, uint32_t* flags) {
+    SkString s = marker;
+    if (s.startsWith("normals(") && s.endsWith(')')) {
+        *flags |= SkRuntimeEffect::Variable::kMarkerNormals_Flag;
+        s.set(marker.fChars + 8, marker.fLength - 9);
+    }
+    if (!SkCanvasPriv::ValidateMarker(s.c_str())) {
+        return false;
+    }
+    *id = SkOpts::hash_fn(s.c_str(), s.size(), 0);
+    return true;
 }
 
 SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
@@ -200,6 +216,18 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
                                                    type->displayName().c_str());
                                 }
                                 break;
+                        }
+
+                        const SkSL::StringFragment& marker(var.fModifiers.fLayout.fMarker);
+                        if (marker.fLength) {
+                            // Rules that should be enforced by the IR generator:
+                            SkASSERT(v.fQualifier == Variable::Qualifier::kUniform);
+                            SkASSERT(v.fType == Variable::Type::kFloat4x4);
+                            v.fFlags |= Variable::kMarker_Flag;
+                            if (!parse_marker(marker, &v.fMarker, &v.fFlags)) {
+                                RETURN_FAILURE("Invalid 'marker' string: '%.*s'",
+                                               (int)marker.fLength, marker.fChars);
+                            }
                         }
 
                         if (v.fType != Variable::Type::kBool) {
@@ -380,6 +408,18 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
       //auto u16 = [&]{ auto x = sk_unaligned_load<uint16_t>(ip); ip += sizeof(x); return x; };
         auto u32 = [&]{ auto x = sk_unaligned_load<uint32_t>(ip); ip += sizeof(x); return x; };
 
+        auto apply = [&](SkSL::ByteCodeInstruction instBase, skvm::F32 (*func)(skvm::F32)) {
+            const int N = (int)inst - (int)instBase + 1;
+            SkASSERT(N <= 4);
+            skvm::F32 args[4];
+            for (int i = 0; i < N; ++i) {
+                args[i] = pop();
+            }
+            for (int i = N; i --> 0;) {
+                push(func(args[i]));
+            }
+        };
+
         switch (inst) {
             default:
                 #if 0
@@ -418,6 +458,19 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
             case Inst::kLoadUniform: {
                 int ix = u8();
                 push(uniform[ix]);
+            } break;
+
+            case Inst::kLoadUniform2: {
+                int ix = u8();
+                push(uniform[ix + 0]);
+                push(uniform[ix + 1]);
+            } break;
+
+            case Inst::kLoadUniform3: {
+                int ix = u8();
+                push(uniform[ix + 0]);
+                push(uniform[ix + 1]);
+                push(uniform[ix + 2]);
             } break;
 
             case Inst::kLoadUniform4: {
@@ -493,6 +546,36 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
                 push(a+x);
             } break;
 
+            case Inst::kSubtractF: {
+                skvm::F32 x = pop(),
+                          a = pop();
+                push(a-x);
+            } break;
+
+            case Inst::kSubtractF2: {
+                skvm::F32 x = pop(), y = pop(),
+                          a = pop(), b = pop();
+                push(b-y);
+                push(a-x);
+            } break;
+
+            case Inst::kSubtractF3: {
+                skvm::F32 x = pop(), y = pop(), z = pop(),
+                          a = pop(), b = pop(), c = pop();
+                push(c-z);
+                push(b-y);
+                push(a-x);
+            } break;
+
+            case Inst::kSubtractF4: {
+                skvm::F32 x = pop(), y = pop(), z = pop(), w = pop(),
+                          a = pop(), b = pop(), c = pop(), d = pop();
+                push(d-w);
+                push(c-z);
+                push(b-y);
+                push(a-x);
+            } break;
+
             case Inst::kMultiplyF: {
                 skvm::F32 x = pop(),
                           a = pop();
@@ -523,31 +606,55 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
                 push(a*x);
             } break;
 
-            case Inst::kSin: {
-                skvm::F32 x = pop();
-                push(approx_sin(x));
+            case Inst::kDivideF: {
+                skvm::F32 x = pop(),
+                          a = pop();
+                push(a/x);
             } break;
 
-            case Inst::kSin2: {
-                skvm::F32 x = pop(), y = pop();
-                push(approx_sin(y));
-                push(approx_sin(x));
+            case Inst::kDivideF2: {
+                skvm::F32 x = pop(), y = pop(),
+                          a = pop(), b = pop();
+                push(b/y);
+                push(a/x);
             } break;
 
-            case Inst::kSin3: {
-                skvm::F32 x = pop(), y = pop(), z = pop();
-                push(approx_sin(z));
-                push(approx_sin(y));
-                push(approx_sin(x));
+            case Inst::kDivideF3: {
+                skvm::F32 x = pop(), y = pop(), z = pop(),
+                          a = pop(), b = pop(), c = pop();
+                push(c/z);
+                push(b/y);
+                push(a/x);
             } break;
 
-            case Inst::kSin4: {
-                skvm::F32 x = pop(), y = pop(), z = pop(), w = pop();
-                push(approx_sin(w));
-                push(approx_sin(z));
-                push(approx_sin(y));
-                push(approx_sin(x));
+            case Inst::kDivideF4: {
+                skvm::F32 x = pop(), y = pop(), z = pop(), w = pop(),
+                          a = pop(), b = pop(), c = pop(), d = pop();
+                push(d/w);
+                push(c/z);
+                push(b/y);
+                push(a/x);
             } break;
+
+            case Inst::kATan:
+            case Inst::kATan2:
+            case Inst::kATan3:
+            case Inst::kATan4: apply(Inst::kATan, skvm::approx_atan); break;
+
+            case Inst::kFract:
+            case Inst::kFract2:
+            case Inst::kFract3:
+            case Inst::kFract4: apply(Inst::kFract, skvm::fract); break;
+
+            case Inst::kSqrt:
+            case Inst::kSqrt2:
+            case Inst::kSqrt3:
+            case Inst::kSqrt4: apply(Inst::kSqrt, skvm::sqrt); break;
+
+            case Inst::kSin:
+            case Inst::kSin2:
+            case Inst::kSin3:
+            case Inst::kSin4: apply(Inst::kSin, skvm::approx_sin); break;
 
             // Baby steps... just leaving test conditions on the stack for now.
             case Inst::kMaskPush:   break;
@@ -738,7 +845,35 @@ public:
         if (!this->totalLocalMatrix(args.fPreLocalMatrix)->invert(&matrix)) {
             return nullptr;
         }
-        auto fp = GrSkSLFP::Make(args.fContext, fEffect, "runtime_shader", fInputs);
+        // If any of our uniforms are late-bound (eg, layout(marker)), we need to clone the blob
+        sk_sp<SkData> inputs = fInputs;
+
+        for (const auto& v : fEffect->inputs()) {
+            if (v.hasMarker()) {
+                if (inputs == fInputs) {
+                    inputs = SkData::MakeWithCopy(fInputs->data(), fInputs->size());
+                }
+                SkASSERT(v.fType == SkRuntimeEffect::Variable::Type::kFloat4x4);
+                SkM44* localToMarker = SkTAddOffset<SkM44>(inputs->writable_data(), v.fOffset);
+                if (!args.fMatrixProvider.getLocalToMarker(v.fMarker, localToMarker)) {
+                    // We couldn't provide a matrix that was requested by the SkSL
+                    SkDebugf("Failed to get marked matrix %u\n", v.fMarker);
+                    return nullptr;
+                }
+                if (v.hasNormalsMarker()) {
+                    // Normals need to be transformed by the inverse-transpose of the upper-left
+                    // 3x3 portion (scale + rotate) of the matrix.
+                    localToMarker->setRow(3, {0, 0, 0, 1});
+                    localToMarker->setCol(3, {0, 0, 0, 1});
+                    if (!localToMarker->invert(localToMarker)) {
+                        return nullptr;
+                    }
+                    *localToMarker = localToMarker->transpose();
+                }
+            }
+        }
+
+        auto fp = GrSkSLFP::Make(args.fContext, fEffect, "runtime_shader", std::move(inputs));
         for (const auto& child : fChildren) {
             auto childFP = child ? as_SB(child)->asFragmentProcessor(args) : nullptr;
             if (!childFP) {
