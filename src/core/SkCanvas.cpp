@@ -1167,12 +1167,17 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
     sk_sp<SkBaseDevice> newDevice;
     {
         SkASSERT(info.alphaType() != kOpaque_SkAlphaType);
-        const SkBaseDevice::TileUsage usage = SkBaseDevice::kNever_TileUsage;
+
+        // TODO: reinstate kPreserveLCDText_SaveLayerFlag
+        geo = kUnknown_SkPixelGeometry;
+
         const bool trackCoverage =
                 SkToBool(saveLayerFlags & kMaskAgainstCoverage_EXPERIMENTAL_DONT_USE_SaveLayerFlag);
-        const SkBaseDevice::CreateInfo createInfo = SkBaseDevice::CreateInfo(info, usage, geo,
-                                                                             trackCoverage,
-                                                                             fAllocator.get());
+        const auto createInfo = SkBaseDevice::CreateInfo(info,
+                                                         geo,
+                                                         SkBaseDevice::kNever_TileUsage,
+                                                         trackCoverage,
+                                                         fAllocator.get());
         newDevice.reset(priorDevice->onCreateDevice(createInfo, paint));
         if (!newDevice) {
             return;
@@ -1542,7 +1547,7 @@ void SkCanvas::resetMatrix() {
 }
 
 void SkCanvas::markCTM(const char* name) {
-    if (name && name[0]) {
+    if (SkCanvasPriv::ValidateMarker(name)) {
         fMarkerStack->setMarker(SkOpts::hash_fn(name, strlen(name), 0),
                                 this->getLocalToDevice(), fMCRec);
         this->onMarkCTM(name);
@@ -1550,7 +1555,8 @@ void SkCanvas::markCTM(const char* name) {
 }
 
 bool SkCanvas::findMarkedCTM(const char* name, SkM44* mx) const {
-    return name && name[0] && fMarkerStack->findMarker(SkOpts::hash_fn(name, strlen(name), 0), mx);
+    return SkCanvasPriv::ValidateMarker(name) &&
+           fMarkerStack->findMarker(SkOpts::hash_fn(name, strlen(name), 0), mx);
 }
 
 //////////////////////////////////////////////////////////////////////////////
