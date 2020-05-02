@@ -44,7 +44,14 @@ public:
 
     GrBackendRenderTarget getBackendRenderTarget() const override;
 
+    D3D12_CPU_DESCRIPTOR_HANDLE colorRenderTargetView() {
+        return fColorRenderTargetView;
+    }
+
     DXGI_FORMAT stencilDxgiFormat() const;
+
+    // Key used for the program desc
+    void genKey(GrProcessorKeyBuilder* b) const;
 
 protected:
     GrD3DRenderTarget(GrD3DGpu* gpu,
@@ -53,12 +60,15 @@ protected:
                       const GrD3DTextureResourceInfo& info,
                       sk_sp<GrD3DResourceState> state,
                       const GrD3DTextureResourceInfo& msaaInfo,
-                      sk_sp<GrD3DResourceState> msaaState);
+                      sk_sp<GrD3DResourceState> msaaState,
+                      const D3D12_CPU_DESCRIPTOR_HANDLE& colorRenderTargetView,
+                      const D3D12_CPU_DESCRIPTOR_HANDLE& resolveRenderTargetView);
 
     GrD3DRenderTarget(GrD3DGpu* gpu,
                       SkISize dimensions,
                       const GrD3DTextureResourceInfo& info,
-                      sk_sp<GrD3DResourceState> state);
+                      sk_sp<GrD3DResourceState> state,
+                      const D3D12_CPU_DESCRIPTOR_HANDLE& renderTargetView);
 
     void onAbandon() override;
     void onRelease() override;
@@ -85,12 +95,15 @@ private:
                       sk_sp<GrD3DResourceState> state,
                       const GrD3DTextureResourceInfo& msaaInfo,
                       sk_sp<GrD3DResourceState> msaaState,
+                      const D3D12_CPU_DESCRIPTOR_HANDLE& colorRenderTargetView,
+                      const D3D12_CPU_DESCRIPTOR_HANDLE& resolveRenderTargetView,
                       Wrapped);
 
     GrD3DRenderTarget(GrD3DGpu* gpu,
                       SkISize dimensions,
                       const GrD3DTextureResourceInfo& info,
                       sk_sp<GrD3DResourceState> state,
+                      const D3D12_CPU_DESCRIPTOR_HANDLE& renderTargetView,
                       Wrapped);
 
     GrD3DGpu* getD3DGpu() const;
@@ -107,6 +120,9 @@ private:
     void releaseInternalObjects();
 
     std::unique_ptr<GrD3DTextureResource> fMSAATextureResource;
+
+    D3D12_CPU_DESCRIPTOR_HANDLE fColorRenderTargetView;
+    D3D12_CPU_DESCRIPTOR_HANDLE fResolveRenderTargetView;
 };
 
 #endif
