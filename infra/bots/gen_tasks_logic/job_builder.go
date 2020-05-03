@@ -180,7 +180,17 @@ func (b *jobBuilder) genTasksForJob() {
 
 	// Test bots.
 	if b.role("Test") {
-		b.test()
+		b.dm()
+		return
+	}
+	if b.role("FM") {
+		b.fm()
+		return
+	}
+
+	if b.extraConfig("Puppeteer") {
+		// TODO(kjlubick) make this a new role
+		b.puppeteer()
 		return
 	}
 

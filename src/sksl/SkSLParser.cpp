@@ -85,9 +85,11 @@ void Parser::InitLayoutMap() {
     TOKEN(TRIANGLES_ADJACENCY,          "triangles_adjacency");
     TOKEN(MAX_VERTICES,                 "max_vertices");
     TOKEN(INVOCATIONS,                  "invocations");
+    TOKEN(MARKER,                       "marker");
     TOKEN(WHEN,                         "when");
     TOKEN(KEY,                          "key");
     TOKEN(TRACKED,                      "tracked");
+    TOKEN(SRGB_UNPREMUL,                "srgb_unpremul");
     TOKEN(CTYPE,                        "ctype");
     TOKEN(SKPMCOLOR4F,                  "SkPMColor4f");
     TOKEN(SKV4,                         "SkV4");
@@ -771,14 +773,15 @@ Layout Parser::layout() {
     Layout::Primitive primitive = Layout::kUnspecified_Primitive;
     int maxVertices = -1;
     int invocations = -1;
+    StringFragment marker;
     StringFragment when;
     Layout::Key key = Layout::kNo_Key;
     Layout::CType ctype = Layout::CType::kDefault;
     if (this->checkNext(Token::Kind::TK_LAYOUT)) {
         if (!this->expect(Token::Kind::TK_LPAREN, "'('")) {
             return Layout(flags, location, offset, binding, index, set, builtin,
-                          inputAttachmentIndex, format, primitive, maxVertices, invocations, when,
-                          key, ctype);
+                          inputAttachmentIndex, format, primitive, maxVertices, invocations, marker,
+                          when, key, ctype);
         }
         for (;;) {
             Token t = this->nextToken();
@@ -867,6 +870,9 @@ Layout Parser::layout() {
                     case LayoutToken::TRACKED:
                         flags |= Layout::kTracked_Flag;
                         break;
+                    case LayoutToken::SRGB_UNPREMUL:
+                        flags |= Layout::kSRGBUnpremul_Flag;
+                        break;
                     case LayoutToken::POINTS:
                         primitive = Layout::kPoints_Primitive;
                         break;
@@ -893,6 +899,9 @@ Layout Parser::layout() {
                         break;
                     case LayoutToken::INVOCATIONS:
                         invocations = this->layoutInt();
+                        break;
+                    case LayoutToken::MARKER:
+                        marker = this->layoutCode();
                         break;
                     case LayoutToken::WHEN:
                         when = this->layoutCode();
@@ -921,7 +930,7 @@ Layout Parser::layout() {
         }
     }
     return Layout(flags, location, offset, binding, index, set, builtin, inputAttachmentIndex,
-                  format, primitive, maxVertices, invocations, when, key, ctype);
+                  format, primitive, maxVertices, invocations, marker, when, key, ctype);
 }
 
 /* layout? (UNIFORM | CONST | IN | OUT | INOUT | LOWP | MEDIUMP | HIGHP | FLAT | NOPERSPECTIVE |
@@ -1508,7 +1517,11 @@ ASTNode::ID Parser::expression() {
         return ASTNode::ID::Invalid();
     }
     Token t;
+    AutoDepth depth(this);
     while (this->checkNext(Token::Kind::TK_COMMA, &t)) {
+        if (!depth.increase()) {
+            return ASTNode::ID::Invalid();
+        }
         ASTNode::ID right = this->assignmentExpression();
         if (!right) {
             return ASTNode::ID::Invalid();

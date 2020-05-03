@@ -93,12 +93,6 @@ public:
 
         canvas->concat(viewport * perspective * camera * inv(viewport));
     }
-
-    SkM44 localToWorld(SkCanvas* canvas) {
-        SkM44 worldToDevice;
-        SkAssertResult(canvas->findMarkedCTM(kLocalToWorld, &worldToDevice));
-        return inv(worldToDevice) * canvas->getLocalToDevice();
-    }
 };
 
 struct Face {
@@ -377,8 +371,8 @@ public:
             in fragmentProcessor color_map;
             in fragmentProcessor normal_map;
 
-            uniform float4x4 localToWorld;
-            uniform float4x4 localToWorldAdjInv;
+            layout (marker=local_to_world)          uniform float4x4 localToWorld;
+            layout (marker=normals(local_to_world)) uniform float4x4 localToWorldAdjInv;
             uniform float3   lightPos;
 
             float3 convert_normal_sample(half4 c) {
@@ -413,35 +407,16 @@ public:
             return;
         }
 
-        auto adj_inv = [](const SkM44& m) {
-            // Normals need to be transformed by the inverse-transpose of the upper-left 3x3 portion
-            // (scale + rotate) of the local to world matrix. (If the local to world only has
-            // uniform scale, we can use its upper-left 3x3 directly, but we don't know if that's
-            // the case here, so go the extra mile.)
-            SkM44 rot_scale(m.rc(0, 0), m.rc(0, 1), m.rc(0, 2), 0,
-                            m.rc(1, 0), m.rc(1, 1), m.rc(1, 2), 0,
-                            m.rc(2, 0), m.rc(2, 1), m.rc(2, 2), 0,
-                                     0,          0,          0, 1);
-            SkM44 inv(SkM44::kUninitialized_Constructor);
-            SkAssertResult(rot_scale.invert(&inv));
-            return inv.transpose();
-        };
+        SkRuntimeShaderBuilder builder(fEffect);
+        builder.input("lightPos") = fLight.computeWorldPos(fSphere);
+        // localToWorld matrices are automatically populated, via layout(marker)
 
-        struct Uniforms {
-            SkM44  fLocalToWorld;
-            SkM44  fLocalToWorldAdjInv;
-            SkV3   fLightPos;
-        } uni;
-        uni.fLocalToWorld = this->localToWorld(canvas);
-        uni.fLocalToWorldAdjInv = adj_inv(uni.fLocalToWorld);
-        uni.fLightPos = fLight.computeWorldPos(fSphere);
-
-        sk_sp<SkData> data = SkData::MakeWithCopy(&uni, sizeof(uni));
-        sk_sp<SkShader> children[] = { fImgShader, fBmpShader };
+        builder.child("color_map")  = fImgShader;
+        builder.child("normal_map") = fBmpShader;
 
         SkPaint paint;
         paint.setColor(color);
-        paint.setShader(fEffect->makeShader(data, children, 2, nullptr, true));
+        paint.setShader(builder.makeShader(nullptr, true));
 
         canvas->drawRRect(fRR, paint);
     }
@@ -486,12 +461,14 @@ public:
 
         const char code[] = R"(
             varying float3 vtx_normal;
-            uniform float4x4 localToWorld;
+
+            layout (marker=local_to_world)          uniform float4x4 localToWorld;
+            layout (marker=normals(local_to_world)) uniform float4x4 localToWorldAdjInv;
             uniform float3   lightPos;
 
             void main(float2 p, inout half4 color) {
                 float3 norm = normalize(vtx_normal);
-                float3 plane_norm = normalize(localToWorld * float4(norm, 0)).xyz;
+                float3 plane_norm = normalize(localToWorldAdjInv * float4(norm, 0)).xyz;
 
                 float3 plane_pos = (localToWorld * float4(p, 0, 1)).xyz;
                 float3 light_dir = normalize(lightPos - plane_pos);
@@ -515,18 +492,12 @@ public:
             return;
         }
 
-        struct Uniforms {
-            SkM44  fLocalToWorld;
-            SkV3   fLightPos;
-        } uni;
-        uni.fLocalToWorld = this->localToWorld(canvas);
-        uni.fLightPos = fLight.computeWorldPos(fSphere);
-
-        sk_sp<SkData> data = SkData::MakeWithCopy(&uni, sizeof(uni));
+        SkRuntimeShaderBuilder builder(fEffect);
+        builder.input("lightPos") = fLight.computeWorldPos(fSphere);
 
         SkPaint paint;
         paint.setColor(color);
-        paint.setShader(fEffect->makeShader(data, nullptr, 0, nullptr, true));
+        paint.setShader(builder.makeShader(nullptr, true));
 
         canvas->drawVertices(fVertices, paint);
     }

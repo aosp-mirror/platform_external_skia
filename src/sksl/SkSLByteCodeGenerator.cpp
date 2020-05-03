@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright 2019 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -43,9 +43,12 @@ ByteCodeGenerator::ByteCodeGenerator(const Context* context, const Program* prog
     , fContext(*context)
     , fOutput(output)
     , fIntrinsics {
+        { "atan",    ByteCodeInstruction::kATan },
         { "cos",     ByteCodeInstruction::kCos },
         { "dot",     SpecialIntrinsic::kDot },
+        { "fract",   ByteCodeInstruction::kFract },
         { "inverse", ByteCodeInstruction::kInverse2x2 },
+        { "length",  SpecialIntrinsic::kLength },
         { "sin",     ByteCodeInstruction::kSin },
         { "sqrt",    ByteCodeInstruction::kSqrt },
         { "tan",     ByteCodeInstruction::kTan },
@@ -217,7 +220,9 @@ int ByteCodeGenerator::StackUsage(ByteCodeInstruction inst, int count_) {
         VECTOR_UNARY_OP(kConvertStoF)
         VECTOR_UNARY_OP(kConvertUtoF)
 
+        VECTOR_UNARY_OP(kATan)
         VECTOR_UNARY_OP(kCos)
+        VECTOR_UNARY_OP(kFract)
         VECTOR_UNARY_OP(kSin)
         VECTOR_UNARY_OP(kSqrt)
         VECTOR_UNARY_OP(kTan)
@@ -976,31 +981,45 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
                                                 String(c.fFunction.fName).c_str()));
         return;
     }
+    Intrinsic intrin = found->second;
+
     int count = SlotCount(c.fArguments[0]->fType);
-    if (found->second.fIsSpecial) {
-        SpecialIntrinsic special = found->second.fValue.fSpecial;
-        switch (special) {
+    if (intrin.is_special) {
+        switch (intrin.special) {
             case SpecialIntrinsic::kDot: {
                 SkASSERT(c.fArguments.size() == 2);
                 SkASSERT(count == SlotCount(c.fArguments[1]->fType));
                 this->write(vector_instruction(ByteCodeInstruction::kMultiplyF, count));
-                for (int i = count; i > 1; --i) {
+                for (int i = count-1; i --> 0;) {
                     this->write(ByteCodeInstruction::kAddF);
                 }
-                break;
-            }
+            } break;
+
+            case SpecialIntrinsic::kLength: {
+                SkASSERT(c.fArguments.size() == 1);
+                this->write(vector_instruction(ByteCodeInstruction::kDup      , count));
+                this->write(vector_instruction(ByteCodeInstruction::kMultiplyF, count));
+                for (int i = count-1; i --> 0;) {
+                    this->write(ByteCodeInstruction::kAddF);
+                }
+                this->write(ByteCodeInstruction::kSqrt);
+            } break;
+
             default:
                 SkASSERT(false);
         }
     } else {
-        switch (found->second.fValue.fInstruction) {
+        switch (intrin.instruction) {
+            case ByteCodeInstruction::kATan:
             case ByteCodeInstruction::kCos:
+            case ByteCodeInstruction::kFract:
             case ByteCodeInstruction::kSin:
             case ByteCodeInstruction::kSqrt:
             case ByteCodeInstruction::kTan:
                 SkASSERT(c.fArguments.size() > 0);
-                this->write(vector_instruction(found->second.fValue.fInstruction, count));
+                this->write(vector_instruction(intrin.instruction, count));
                 break;
+
             case ByteCodeInstruction::kInverse2x2: {
                 SkASSERT(c.fArguments.size() > 0);
                 auto op = ByteCodeInstruction::kInverse2x2;
@@ -1013,6 +1032,7 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
                 this->write(op);
                 break;
             }
+
             default:
                 SkASSERT(false);
         }

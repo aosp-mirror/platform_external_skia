@@ -51,6 +51,7 @@ static const uint8_t* DisassembleInstruction(const uint8_t* ip) {
         VECTOR_MATRIX_DISASSEMBLE(kAddF, "addf")
         VECTOR_DISASSEMBLE(kAddI, "addi")
         case ByteCodeInstruction::kAndB: printf("andb"); break;
+        VECTOR_DISASSEMBLE(kATan, "atan")
         case ByteCodeInstruction::kBranch: printf("branch %d", READ16()); break;
         case ByteCodeInstruction::kCall: printf("call %d", READ8()); break;
         case ByteCodeInstruction::kCallExternal: {
@@ -85,6 +86,7 @@ static const uint8_t* DisassembleInstruction(const uint8_t* ip) {
         VECTOR_DISASSEMBLE(kDivideS, "divideS")
         VECTOR_DISASSEMBLE(kDivideU, "divideu")
         VECTOR_MATRIX_DISASSEMBLE(kDup, "dup")
+        VECTOR_DISASSEMBLE(kFract, "fract")
         case ByteCodeInstruction::kInverse2x2: printf("inverse2x2"); break;
         case ByteCodeInstruction::kInverse3x3: printf("inverse3x3"); break;
         case ByteCodeInstruction::kInverse4x4: printf("inverse4x4"); break;
@@ -641,10 +643,10 @@ static bool InnerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
             VECTOR_BINARY_MASKED_OP(kDivideU, fUnsigned, /)
             VECTOR_MATRIX_BINARY_OP(kDivideF, fFloat, /)
 
-            case ByteCodeInstruction::kDup4: PUSH(sp[(int)ByteCodeInstruction::kDup - (int)inst]);
-            case ByteCodeInstruction::kDup3: PUSH(sp[(int)ByteCodeInstruction::kDup - (int)inst]);
-            case ByteCodeInstruction::kDup2: PUSH(sp[(int)ByteCodeInstruction::kDup - (int)inst]);
-            case ByteCodeInstruction::kDup : PUSH(sp[(int)ByteCodeInstruction::kDup - (int)inst]);
+            case ByteCodeInstruction::kDup4: PUSH(sp[(int)inst - (int)ByteCodeInstruction::kDup]);
+            case ByteCodeInstruction::kDup3: PUSH(sp[(int)inst - (int)ByteCodeInstruction::kDup]);
+            case ByteCodeInstruction::kDup2: PUSH(sp[(int)inst - (int)ByteCodeInstruction::kDup]);
+            case ByteCodeInstruction::kDup : PUSH(sp[(int)inst - (int)ByteCodeInstruction::kDup]);
                                              continue;
 
             case ByteCodeInstruction::kDupN: {
@@ -653,6 +655,8 @@ static bool InnerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
                 sp += count;
                 continue;
             }
+
+            VECTOR_UNARY_FN(kFract, skvx::fract, fFloat)
 
             case ByteCodeInstruction::kInverse2x2:
                 Inverse2x2(sp);
@@ -1062,6 +1066,7 @@ static bool InnerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
                 continue;
             }
 
+            VECTOR_UNARY_FN(kATan, skvx::atan, fFloat)
             VECTOR_UNARY_FN(kTan, skvx::tan, fFloat)
 
             case ByteCodeInstruction::kWriteExternal4:
