@@ -1920,6 +1920,7 @@ cc_test {
         "bench/CompositingImagesBench.cpp",
         "bench/ControlBench.cpp",
         "bench/CoverageBench.cpp",
+        "bench/CreateBackendTextureBench.cpp",
         "bench/CubicKLMBench.cpp",
         "bench/CubicMapBench.cpp",
         "bench/DDLRecorderBench.cpp",

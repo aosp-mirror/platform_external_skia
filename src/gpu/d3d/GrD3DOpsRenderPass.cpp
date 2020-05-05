@@ -8,6 +8,7 @@
 #include "src/gpu/d3d/GrD3DOpsRenderPass.h"
 
 #include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrFixedClip.h"
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrStencilSettings.h"
@@ -27,6 +28,10 @@ bool GrD3DOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const S
     this->INHERITED::set(rt, origin);
 
     fBounds = bounds;
+
+    fColorLoadOp = colorInfo.fLoadOp;
+    fClearColor = colorInfo.fClearColor;
+
     // TODO
 
     return true;
@@ -134,9 +139,8 @@ bool GrD3DOpsRenderPass::onBindPipeline(const GrProgramInfo& info, const SkRect&
         fCurrentPipelineBounds.setEmpty();
     }
 
-    GrProgramDesc desc = fGpu->caps()->makeDesc(fRenderTarget, info);
     sk_sp<GrD3DPipelineState> pipelineState =
-        GrD3DPipelineStateBuilder::CreatePipelineState(fGpu, fRenderTarget, desc, info);
+            fGpu->resourceProvider().findOrCreateCompatiblePipelineState(fRenderTarget, info);
     if (!pipelineState) {
         return false;
     }
@@ -153,4 +157,15 @@ bool GrD3DOpsRenderPass::onBindPipeline(const GrProgramInfo& info, const SkRect&
     set_viewport(fGpu, fRenderTarget);
 
     return true;
+}
+
+void GrD3DOpsRenderPass::onBegin() {
+    if (GrLoadOp::kClear == fColorLoadOp) {
+        GrFixedClip clip;
+        fGpu->clear(clip, fClearColor, fRenderTarget);
+    }
+}
+
+void GrD3DOpsRenderPass::onClear(const GrFixedClip& clip, const SkPMColor4f& color) {
+    fGpu->clear(clip, color, fRenderTarget);
 }
