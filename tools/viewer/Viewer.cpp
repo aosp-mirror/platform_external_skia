@@ -241,19 +241,17 @@ class NullSlide : public Slide {
     }
 };
 
-const char* kName = "name";
-const char* kValue = "value";
-const char* kOptions = "options";
-const char* kSlideStateName = "Slide";
-const char* kBackendStateName = "Backend";
-const char* kMSAAStateName = "MSAA";
-const char* kPathRendererStateName = "Path renderer";
-const char* kSoftkeyStateName = "Softkey";
-const char* kSoftkeyHint = "Please select a softkey";
-const char* kFpsStateName = "FPS";
-const char* kON = "ON";
-const char* kOFF = "OFF";
-const char* kRefreshStateName = "Refresh";
+static const char kName[] = "name";
+static const char kValue[] = "value";
+static const char kOptions[] = "options";
+static const char kSlideStateName[] = "Slide";
+static const char kBackendStateName[] = "Backend";
+static const char kMSAAStateName[] = "MSAA";
+static const char kPathRendererStateName[] = "Path renderer";
+static const char kSoftkeyStateName[] = "Softkey";
+static const char kSoftkeyHint[] = "Please select a softkey";
+static const char kON[] = "ON";
+static const char kRefreshStateName[] = "Refresh";
 
 extern bool gUseSkVMBlitter;
 extern bool gSkVMJITViaDylib;
@@ -1698,12 +1696,27 @@ void Viewer::drawImGui() {
                 }
 
                 if (ctx) {
+                    // Determine the context's max sample count for MSAA radio buttons.
                     int sampleCount = fWindow->sampleCount();
-                    ImGui::Text("MSAA: "); ImGui::SameLine();
-                    ImGui::RadioButton("1", &sampleCount, 1); ImGui::SameLine();
-                    ImGui::RadioButton("4", &sampleCount, 4); ImGui::SameLine();
-                    ImGui::RadioButton("8", &sampleCount, 8); ImGui::SameLine();
-                    ImGui::RadioButton("16", &sampleCount, 16);
+                    int maxMSAA = (fBackendType != sk_app::Window::kRaster_BackendType) ?
+                            ctx->maxSurfaceSampleCountForColorType(kRGBA_8888_SkColorType) :
+                            1;
+
+                    // Only display the MSAA radio buttons when there are options above 1x MSAA.
+                    if (maxMSAA >= 4) {
+                        ImGui::Text("MSAA: ");
+
+                        for (int curMSAA = 1; curMSAA <= maxMSAA; curMSAA *= 2) {
+                            // 2x MSAA works, but doesn't offer much of a visual improvement, so we
+                            // don't show it in the list.
+                            if (curMSAA == 2) {
+                                continue;
+                            }
+                            ImGui::SameLine();
+                            ImGui::RadioButton(SkStringPrintf("%d", curMSAA).c_str(),
+                                               &sampleCount, curMSAA);
+                        }
+                    }
 
                     if (sampleCount != params.fMSAASampleCount) {
                         params.fMSAASampleCount = sampleCount;
