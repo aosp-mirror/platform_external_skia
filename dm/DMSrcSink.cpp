@@ -29,6 +29,7 @@
 #include "include/third_party/skcms/skcms.h"
 #include "include/utils/SkNullCanvas.h"
 #include "include/utils/SkRandom.h"
+#include "modules/skottie/utils/SkottieUtils.h"
 #include "src/codec/SkCodecImageGenerator.h"
 #include "src/codec/SkSwizzler.h"
 #include "src/core/SkAutoMalloc.h"
@@ -1129,12 +1130,19 @@ Result BisectSrc::draw(SkCanvas* canvas) const {
 SkottieSrc::SkottieSrc(Path path) : fPath(std::move(path)) {}
 
 Result SkottieSrc::draw(SkCanvas* canvas) const {
+    auto resource_provider =
+            skresources::DataURIResourceProviderProxy::Make(
+                skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
+                                                        /*predecode=*/true),
+                /*predecode=*/true);
+
+    static constexpr char kInterceptPrefix[] = "__";
+    auto precomp_interceptor =
+            sk_make_sp<skottie_utils::ExternalAnimationPrecompInterceptor>(resource_provider,
+                                                                           kInterceptPrefix);
     auto animation = skottie::Animation::Builder()
-        .setResourceProvider(
-                skresources::DataURIResourceProviderProxy::Make(
-                    skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
-                                                              /*predecode=*/true),
-                    /*predecode=*/true))
+        .setResourceProvider(std::move(resource_provider))
+        .setPrecompInterceptor(std::move(precomp_interceptor))
         .makeFromFile(fPath.c_str());
     if (!animation) {
         return Result::Fatal("Unable to parse file: %s", fPath.c_str());
@@ -1384,9 +1392,9 @@ sk_sp<SkSurface> GPUSink::createDstSurface(GrContext* context, SkISize size,
                                                   &props);
             break;
         case SkCommandLineConfigGpu::SurfType::kBackendTexture:
-            *backendTexture = context->createBackendTexture(
-                info.width(), info.height(), info.colorType(), SkColors::kTransparent,
-                GrMipMapped::kNo, GrRenderable::kYes, GrProtected::kNo);
+            CreateBackendTexture(context, backendTexture, info.width(), info.height(),
+                                 info.colorType(), SkColors::kTransparent, GrMipMapped::kNo,
+                                 GrRenderable::kYes, GrProtected::kNo);
             surface = SkSurface::MakeFromBackendTexture(context, *backendTexture,
                                                         kTopLeft_GrSurfaceOrigin, fSampleCount,
                                                         fColorType, info.refColorSpace(), &props);

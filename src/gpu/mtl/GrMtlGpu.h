@@ -130,13 +130,17 @@ private:
                                             const GrBackendFormat&,
                                             GrRenderable,
                                             GrMipMapped,
-                                            GrProtected,
-                                            const BackendTextureData*) override;
+                                            GrProtected) override;
+
+    bool onUpdateBackendTexture(const GrBackendTexture&,
+                                sk_sp<GrRefCntedCallback> finishedCallback,
+                                const BackendTextureData*) override;
 
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
                                                       GrMipMapped,
                                                       GrProtected,
+                                                      sk_sp<GrRefCntedCallback> finishedCallback,
                                                       const BackendTextureData*) override;
 
     sk_sp<GrTexture> onCreateTexture(SkISize,
@@ -221,8 +225,7 @@ private:
                                            GrTexturable,
                                            GrRenderable,
                                            GrMipMapped,
-                                           GrMtlTextureInfo*,
-                                           const BackendTextureData*);
+                                           GrMtlTextureInfo*);
 
 #if GR_TEST_UTILS
     void testingOnly_startCapture() override;

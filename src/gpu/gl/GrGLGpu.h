@@ -97,7 +97,6 @@ public:
         attribState->enableVertexArrays(this, numAttribs, primitiveRestart);
         return attribState;
     }
-    GrGLAttribArrayState* bindInternalVertexArray(const GrBuffer* indexBuffer, GrPrimitiveRestart);
 
     // Applies any necessary workarounds and returns the GL primitive type to use in draw calls.
     GrGLenum prepareToDraw(GrPrimitiveType primitiveType);
@@ -139,8 +138,14 @@ public:
     void deleteBackendTexture(const GrBackendTexture&) override;
 
     bool compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) override {
-        sk_sp<GrGLProgram> tmp = fProgramCache->findOrCreateProgram(desc, programInfo);
-        return SkToBool(tmp);
+        Stats::ProgramCacheResult stat;
+
+        sk_sp<GrGLProgram> tmp = fProgramCache->findOrCreateProgram(desc, programInfo, &stat);
+        if (!tmp) {
+            return false;
+        }
+
+        return stat != Stats::ProgramCacheResult::kHit;
     }
 
     bool precompileShader(const SkData& key, const SkData& data) override {
@@ -193,14 +198,18 @@ private:
                                             const GrBackendFormat&,
                                             GrRenderable,
                                             GrMipMapped,
-                                            GrProtected,
-                                            const BackendTextureData*) override;
+                                            GrProtected) override;
 
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
                                                       GrMipMapped,
                                                       GrProtected,
+                                                      sk_sp<GrRefCntedCallback> finishedCallback,
                                                       const BackendTextureData*) override;
+
+    bool onUpdateBackendTexture(const GrBackendTexture&,
+                                sk_sp<GrRefCntedCallback> finishedCallback,
+                                const BackendTextureData*) override;
 
     void onResetContext(uint32_t resetBits) override;
 
@@ -320,8 +329,6 @@ private:
     bool copySurfaceAsBlitFramebuffer(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                                       const SkIPoint& dstPoint);
 
-    static bool BlendCoeffReferencesConstant(GrBlendCoeff coeff);
-
     class ProgramCache : public ::SkNoncopyable {
     public:
         ProgramCache(GrGLGpu* gpu);
@@ -331,13 +338,13 @@ private:
         void reset();
         sk_sp<GrGLProgram> findOrCreateProgram(GrRenderTarget*, const GrProgramInfo&);
         sk_sp<GrGLProgram> findOrCreateProgram(const GrProgramDesc& desc,
-                                               const GrProgramInfo& programInfo) {
-            Stats::ProgramCacheResult stat;
-            sk_sp<GrGLProgram> tmp = this->findOrCreateProgram(nullptr, desc, programInfo, &stat);
+                                               const GrProgramInfo& programInfo,
+                                               Stats::ProgramCacheResult* stat) {
+            sk_sp<GrGLProgram> tmp = this->findOrCreateProgram(nullptr, desc, programInfo, stat);
             if (!tmp) {
                 fGpu->fStats.incNumPreCompilationFailures();
             } else {
-                fGpu->fStats.incNumPreProgramCacheResult(stat);
+                fGpu->fStats.incNumPreProgramCacheResult(*stat);
             }
 
             return tmp;
