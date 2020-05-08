@@ -19,7 +19,6 @@
 #include "modules/sksg/include/SkSGScene.h"
 #include "src/utils/SkUTF.h"
 
-#include <functional>
 #include <vector>
 
 class SkFontMgr;
@@ -176,7 +175,7 @@ private:
 
     struct AttachLayerContext;
     struct AttachShapeContext;
-    struct ImageAssetInfo;
+    struct FootageAssetInfo;
     struct LayerInfo;
 
     void parseAssets(const skjson::ArrayValue*);
@@ -189,15 +188,13 @@ private:
                                             sk_sp<sksg::RenderNode>) const;
 
     sk_sp<sksg::RenderNode> attachShape(const skjson::ArrayValue*, AttachShapeContext*) const;
-    sk_sp<sksg::RenderNode> attachAssetRef(const skjson::ObjectValue&,
-        const std::function<sk_sp<sksg::RenderNode>(const skjson::ObjectValue&)>&) const;
-    const ImageAssetInfo* loadImageAsset(const skjson::ObjectValue&) const;
-    sk_sp<sksg::RenderNode> attachImageAsset(const skjson::ObjectValue&, LayerInfo*) const;
+    const FootageAssetInfo* loadFootageAsset(const skjson::ObjectValue&) const;
+    sk_sp<sksg::RenderNode> attachFootageAsset(const skjson::ObjectValue&, LayerInfo*) const;
 
     sk_sp<sksg::RenderNode> attachExternalPrecompLayer(const skjson::ObjectValue&,
                                                        const LayerInfo&) const;
 
-    sk_sp<sksg::RenderNode> attachImageLayer  (const skjson::ObjectValue&, LayerInfo*) const;
+    sk_sp<sksg::RenderNode> attachFootageLayer(const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachNullLayer   (const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachPrecompLayer(const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachShapeLayer  (const skjson::ObjectValue&, LayerInfo*) const;
@@ -248,14 +245,32 @@ private:
         mutable bool               fIsAttaching; // Used for cycle detection
     };
 
-    struct ImageAssetInfo {
+    struct FootageAssetInfo {
         sk_sp<ImageAsset> fAsset;
         SkISize           fSize;
     };
 
-    SkTHashMap<SkString, AssetInfo>              fAssets;
-    SkTHashMap<SkString, FontInfo>               fFonts;
-    mutable SkTHashMap<SkString, ImageAssetInfo> fImageAssetCache;
+    class ScopedAssetRef {
+    public:
+        ScopedAssetRef(const AnimationBuilder* abuilder, const skjson::ObjectValue& jlayer);
+
+        ~ScopedAssetRef() {
+            if (fInfo) {
+                fInfo->fIsAttaching = false;
+            }
+        }
+
+        operator bool() const { return !!fInfo; }
+
+        const skjson::ObjectValue& operator*() const { return *fInfo->fAsset; }
+
+    private:
+        const AssetInfo* fInfo = nullptr;
+    };
+
+    SkTHashMap<SkString, AssetInfo>                fAssets;
+    SkTHashMap<SkString, FontInfo>                 fFonts;
+    mutable SkTHashMap<SkString, FootageAssetInfo> fImageAssetCache;
 
     using INHERITED = SkNoncopyable;
 };
