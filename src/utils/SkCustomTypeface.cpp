@@ -7,6 +7,7 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
+#include "include/core/SkFontMetrics.h"
 #include "include/utils/SkCustomTypeface.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 
@@ -22,6 +23,7 @@ class SkUserTypeface : public SkTypeface {
     const int fGlyphCount;
     std::vector<SkPath> fPaths;
     std::vector<float>  fAdvances;
+    SkRect              fBounds;
 
 protected:
     SkScalerContext* onCreateScalerContext(const SkScalerContextEffects&,
@@ -46,6 +48,7 @@ protected:
     }
     int onCountGlyphs() const override { return fGlyphCount; }
     int onGetUPEM() const override { return 2048; /* ?? */ }
+    bool onComputeBounds(SkRect* bounds) const override { *bounds = fBounds; return true; }
 
     // noops
 
@@ -72,9 +75,21 @@ void SkCustomTypefaceBuilder::setGlyph(SkGlyphID index, float advance, const SkP
 }
 
 sk_sp<SkTypeface> SkCustomTypefaceBuilder::detach() {
+    if (fGlyphCount <= 0) return nullptr;
+
     SkUserTypeface* tf = new SkUserTypeface(fGlyphCount);
     tf->fAdvances = std::move(fAdvances);
     tf->fPaths    = std::move(fPaths);
+
+    // initially inverted, so that any "union" will overwrite the first time
+    SkRect bounds = {SK_ScalarMax, SK_ScalarMax, -SK_ScalarMax, -SK_ScalarMax};
+
+    for (const auto& path : tf->fPaths) {
+        if (!path.isEmpty()) {
+            bounds.join(path.getBounds());
+        }
+    }
+    tf->fBounds = bounds;
 
     return sk_sp<SkTypeface>(tf);
 }
@@ -161,7 +176,15 @@ protected:
     }
 
     void generateFontMetrics(SkFontMetrics* metrics) override {
-        // TODO
+        auto [_, sy] = fMatrix.mapXY(0, 1);
+
+        sk_bzero(metrics, sizeof(*metrics));
+        metrics->fTop    = this->userTF()->fBounds.fTop    * sy;
+        metrics->fBottom = this->userTF()->fBounds.fBottom * sy;
+
+        // todo: get these from the creator of the typeface?
+        metrics->fAscent = metrics->fTop;
+        metrics->fDescent = metrics->fBottom;
     }
 
 private:
@@ -195,7 +218,7 @@ static void compress_write(SkWStream* stream, const SkPath& path, int upem) {
     std::vector<PVerb> verbs;
     for (auto [v, p, w] : SkPathPriv::Iterate(path)) {
         switch (v) {
-            default: SkASSERT(!"oops"); break;
+            default: break;
             case SkPathVerb::kMove: verbs.push_back(kMove); pCount += 1; break;
             case SkPathVerb::kQuad: verbs.push_back(kCurve); pCount += 2; break;
             case SkPathVerb::kLine: verbs.push_back(kLine); pCount += 1; break;
@@ -234,7 +257,7 @@ static void compress_write(SkWStream* stream, const SkPath& path, int upem) {
 
     for (auto [v, p, w] : SkPathPriv::Iterate(path)) {
         switch (v) {
-            default: SkASSERT(!"oops"); break;
+            default: break;
             case SkPathVerb::kMove: write_pts(&p[0], 1); break;
             case SkPathVerb::kQuad: write_pts(&p[1], 2); break;
             case SkPathVerb::kLine: write_pts(&p[1], 1); break;

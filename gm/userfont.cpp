@@ -74,9 +74,16 @@ public:
     SkISize onISize() override { return {512, 512}; }
 
     void onDraw(SkCanvas* canvas) override {
+        SkScalar x = 20,
+                 y = 250;
+
         SkPaint paint;
+        paint.setStyle(SkPaint::kStroke_Style);
+        canvas->drawRect(fBlob->bounds().makeOffset(x, y), paint);
+
+        paint.setStyle(SkPaint::kFill_Style);
         paint.setColor(SK_ColorRED);
-        canvas->drawTextBlob(fBlob, 20, 150, paint);
+        canvas->drawTextBlob(fBlob, x, y, paint);
     }
 };
 DEF_GM(return new UserFontGM;)
