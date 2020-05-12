@@ -605,6 +605,7 @@ cc_library_static {
           "src/gpu/GrSoftwarePathRenderer.cpp",
           "src/gpu/GrStagingBuffer.cpp",
           "src/gpu/GrStencilAttachment.cpp",
+          "src/gpu/GrStencilMaskHelper.cpp",
           "src/gpu/GrStencilSettings.cpp",
           "src/gpu/GrStyle.cpp",
           "src/gpu/GrSurface.cpp",
