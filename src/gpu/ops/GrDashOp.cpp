@@ -161,12 +161,15 @@ static void setup_dashed_rect(const SkRect& rect,
                               SkScalar startInterval,
                               SkScalar endInterval,
                               SkScalar strokeWidth,
+                              SkScalar perpScale,
                               DashCap cap) {
     SkScalar intervalLength = startInterval + endInterval;
     // 'dashRect' gets interpolated over the rendered 'rect'. For y we want the perpendicular signed
-    // distance from the stroke center line in device space.
-    SkRect dashRect = { offset       - bloatX, -rect.height()/2.f,
-                        offset + len + bloatX,  rect.height()/2.f};
+    // distance from the stroke center line in device space. 'perpScale' is the scale factor applied
+    // to the y dimension of 'rect' isolated from 'matrix'.
+    SkScalar halfDevRectHeight =  rect.height()*perpScale/2.f;
+    SkRect dashRect = { offset       - bloatX, -halfDevRectHeight,
+                        offset + len + bloatX,  halfDevRectHeight};
 
     if (kRound_DashCap == cap) {
         SkScalar radius = SkScalarHalf(strokeWidth) - 0.5f;
@@ -327,6 +330,7 @@ private:
         SkScalar fStrokeWidth;
         SkScalar fLineLength;
         SkScalar fDevBloatX;
+        SkScalar fPerpendicularScale;
         bool fLineDone;
         bool fHasStartRect;
         bool fHasEndRect;
@@ -602,6 +606,7 @@ private:
 
             draw.fStartOffset = startOffset;
             draw.fDevBloatX = devBloatX;
+            draw.fPerpendicularScale = args.fPerpendicularScale;
             draw.fStrokeWidth = strokeWidth;
             draw.fHasStartRect = hasStartRect;
             draw.fLineDone = lineDone;
@@ -627,7 +632,9 @@ private:
                     setup_dashed_rect(rects[rectIndex], vertices, geom.fSrcRotInv,
                                       draws[i].fStartOffset, draws[i].fDevBloatX,
                                       draws[i].fLineLength, draws[i].fIntervals[0],
-                                      draws[i].fIntervals[1], draws[i].fStrokeWidth, capType);
+                                      draws[i].fIntervals[1], draws[i].fStrokeWidth,
+                                      draws[i].fPerpendicularScale,
+                                      capType);
                 } else {
                     vertices.writeQuad(GrQuad::MakeFromRect(rects[rectIndex], geom.fSrcRotInv));
                 }
@@ -639,7 +646,8 @@ private:
                     setup_dashed_rect(rects[rectIndex], vertices, geom.fSrcRotInv,
                                       draws[i].fStartOffset, draws[i].fDevBloatX,
                                       draws[i].fIntervals[0], draws[i].fIntervals[0],
-                                      draws[i].fIntervals[1], draws[i].fStrokeWidth, capType);
+                                      draws[i].fIntervals[1], draws[i].fStrokeWidth,
+                                      draws[i].fPerpendicularScale, capType);
                 } else {
                     vertices.writeQuad(GrQuad::MakeFromRect(rects[rectIndex], geom.fSrcRotInv));
                 }
@@ -651,7 +659,8 @@ private:
                     setup_dashed_rect(rects[rectIndex], vertices, geom.fSrcRotInv,
                                       draws[i].fStartOffset, draws[i].fDevBloatX,
                                       draws[i].fIntervals[0], draws[i].fIntervals[0],
-                                      draws[i].fIntervals[1], draws[i].fStrokeWidth, capType);
+                                      draws[i].fIntervals[1], draws[i].fStrokeWidth,
+                                      draws[i].fPerpendicularScale, capType);
                 } else {
                     vertices.writeQuad(GrQuad::MakeFromRect(rects[rectIndex], geom.fSrcRotInv));
                 }
