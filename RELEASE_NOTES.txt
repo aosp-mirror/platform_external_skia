@@ -6,6 +6,13 @@ This file includes a list of high level updates for each milestone release.
 
 Milestone 84
 
+  * Add GrContext getter to SkSurface.
+    https://review.skia.org/289479
+
+  * Deprecate GrContext and SkSurface flush() call and replace ith with flushAndSubmit().
+    This only effects the default flush call that takes no parameters.
+    https://review.skia.org/289478
+
   * GrContext::createBackendTexture functions that initialize the texture no longer
     guarantee that all the data has been uploaded and the gpu is done with the texture.
     Instead the client can assume the upload work has been submitted to the gpu and they
