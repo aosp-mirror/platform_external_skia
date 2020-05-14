@@ -1818,6 +1818,7 @@ cc_test {
         "tests/VkWrapTests.cpp",
         "tests/VkYcbcrSamplerTest.cpp",
         "tests/VptrTest.cpp",
+        "tests/WangsFormulaTest.cpp",
         "tests/WindowRectanglesTest.cpp",
         "tests/WritePixelsTest.cpp",
         "tests/Writer32Test.cpp",
