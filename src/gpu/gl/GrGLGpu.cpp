@@ -2562,6 +2562,20 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
     GrGLTextureParameters::SamplerOverriddenState newSamplerState;
     if (fSamplerObjectCache) {
         fSamplerObjectCache->bindSampler(unitIdx, samplerState);
+        if (this->glCaps().mustSetTexParameterMinFilterToEnableMipMapping()) {
+            if (samplerState.filter() == GrSamplerState::Filter::kMipMap) {
+                const GrGLTextureParameters::SamplerOverriddenState& oldSamplerState =
+                        texture->parameters()->samplerOverriddenState();
+                if (setAll || oldSamplerState.fMinFilter != GR_GL_LINEAR_MIPMAP_LINEAR) {
+                    this->setTextureUnit(unitIdx);
+                    GL_CALL(TexParameteri(target, GR_GL_TEXTURE_MIN_FILTER,
+                                          GR_GL_LINEAR_MIPMAP_LINEAR));
+                    newSamplerState = oldSamplerState;
+                    newSamplerState.fMinFilter = GR_GL_LINEAR_MIPMAP_LINEAR;
+                    samplerStateToRecord = &newSamplerState;
+                }
+            }
+        }
     } else {
         const GrGLTextureParameters::SamplerOverriddenState& oldSamplerState =
                 texture->parameters()->samplerOverriddenState();
@@ -3569,6 +3583,22 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
 
     this->bindTextureToScratchUnit(GR_GL_TEXTURE_2D, info.fID);
 
+    // If we have mips make sure the base level is set to 0 and the max level set to numMipLevesl-1
+    // so that the uploads go to the right levels.
+    if (numMipLevels) {
+        auto params = backendTexture.getGLTextureParams();
+        GrGLTextureParameters::NonsamplerState nonsamplerState = params->nonsamplerState();
+        if (params->nonsamplerState().fBaseMipMapLevel != 0) {
+            GL_CALL(TexParameteri(GR_GL_TEXTURE_2D, GR_GL_TEXTURE_BASE_LEVEL, 0));
+            nonsamplerState.fBaseMipMapLevel = 0;
+        }
+        if (params->nonsamplerState().fMaxMipMapLevel != (numMipLevels - 1)) {
+            GL_CALL(TexParameteri(GR_GL_TEXTURE_2D, GR_GL_TEXTURE_MAX_LEVEL, numMipLevels - 1));
+            nonsamplerState.fBaseMipMapLevel = numMipLevels - 1;
+        }
+        params->set(nullptr, nonsamplerState, fResetTimestampForTextureParameters);
+    }
+
     SkASSERT(data->type() != BackendTextureData::Type::kCompressed);
     if (data->type() == BackendTextureData::Type::kPixmaps) {
         SkTDArray<GrMipLevel> texels;
@@ -3581,7 +3611,6 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
                                  backendTexture.height(), GR_GL_TEXTURE_2D, 0, 0,
                                  backendTexture.width(), backendTexture.height(),
                                  colorType, texels.begin(), texels.count())) {
-            GL_CALL(DeleteTextures(1, &info.fID));
             return false;
         }
     } else if (data && data->type() == BackendTextureData::Type::kColor) {
@@ -3591,7 +3620,6 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
         this->glCaps().getTexSubImageDefaultFormatTypeAndColorType(glFormat, &externalFormat,
                                                                    &externalType, &colorType);
         if (colorType == GrColorType::kUnknown) {
-            GL_CALL(DeleteTextures(1, &info.fID));
             return false;
         }
 
@@ -3600,7 +3628,6 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
         auto rb = ii.minRowBytes();
         std::unique_ptr<char[]> pixelStorage(new char[rb * backendTexture.height()]);
         if (!GrClearImage(ii, pixelStorage.get(), rb, data->color())) {
-            GL_CALL(DeleteTextures(1, &info.fID));
             return false;
         }
 

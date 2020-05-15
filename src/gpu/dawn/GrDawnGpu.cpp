@@ -119,23 +119,19 @@ GrDawnGpu::GrDawnGpu(GrContext* context, const GrContextOptions& options,
 }
 
 GrDawnGpu::~GrDawnGpu() {
-    while (!fBusyStagingBuffers.isEmpty()) {
+    while (!this->busyStagingBuffers().isEmpty()) {
         fDevice.Tick();
     }
 }
 
 
 void GrDawnGpu::disconnect(DisconnectType type) {
-    if (DisconnectType::kAbandon == type) {
-        fBusyStagingBuffers.reset();
-        fAvailableStagingBuffers.reset();
-        fActiveStagingBuffers.reset();
-    } else {
-        while (!fBusyStagingBuffers.isEmpty()) {
+    if (DisconnectType::kCleanup == type) {
+        while (!this->busyStagingBuffers().isEmpty()) {
             fDevice.Tick();
         }
     }
-    fStagingBuffers.clear();
+    INHERITED::disconnect(type);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -197,7 +193,10 @@ sk_sp<GrTexture> GrDawnGpu::onCreateTexture(SkISize dimensions,
                                             GrProtected,
                                             int mipLevelCount,
                                             uint32_t levelClearMask) {
-    SkASSERT(!levelClearMask);
+    if (levelClearMask) {
+        return nullptr;
+    }
+
     wgpu::TextureFormat format;
     if (!backendFormat.asDawnFormat(&format)) {
         return nullptr;
@@ -534,7 +533,6 @@ bool GrDawnGpu::onReadPixels(GrSurface* surface, int left, int top, int width, i
                              GrColorType surfaceColorType, GrColorType dstColorType, void* buffer,
                              size_t rowBytes) {
     wgpu::Texture tex = get_dawn_texture_from_surface(surface);
-    SkASSERT(tex);
 
     if (!tex || 0 == rowBytes) {
         return false;
@@ -716,9 +714,8 @@ void GrDawnGpu::flushCopyEncoder() {
 
 void GrDawnGpu::mapStagingBuffers() {
     // Map all active buffers, so we get a callback when they're done.
-    while (auto buffer = fActiveStagingBuffers.head()) {
-        fActiveStagingBuffers.remove(buffer);
-        fBusyStagingBuffers.addToTail(buffer);
+    while (auto buffer = this->activeStagingBuffers().head()) {
+        this->moveStagingBufferFromActiveToBusy(buffer);
         static_cast<GrDawnStagingBuffer*>(buffer)->mapAsync();
     }
 }

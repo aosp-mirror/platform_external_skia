@@ -81,8 +81,8 @@ GrMatrixConvolutionEffect::KernelWrapper GrMatrixConvolutionEffect::KernelWrappe
         scalableSampler.fBias = SkScalarToFloat(min) / scalableSampler.fGain;
     }
 
-    // TODO: Enable kernel caching and check perf.
-    static constexpr bool kCacheKernelTexture = false;
+    // TODO: Pick cache or dont-cache based on observed perf.
+    static constexpr bool kCacheKernelTexture = true;
 
     GrUniqueKey key;
     if (kCacheKernelTexture) {
@@ -191,7 +191,7 @@ void GrGLMatrixConvolutionEffect::emitKernelBlock(EmitArgs& args, SkIPoint loc) 
     auto sample = this->invokeChild(0, args, "coord + sourceOffset");
     fragBuilder->codeAppendf("half4 c = %s;", sample.c_str());
     if (!mce.convolveAlpha()) {
-        fragBuilder->codeAppend("c.rgb /= max(c.a, 0.0001);");
+        fragBuilder->codeAppend("c = unpremul(c);");
         fragBuilder->codeAppend("c.rgb = saturate(c.rgb);");
     }
     fragBuilder->codeAppend("sum += c * k;");
