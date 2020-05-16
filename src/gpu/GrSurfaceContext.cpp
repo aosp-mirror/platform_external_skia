@@ -652,7 +652,7 @@ std::unique_ptr<GrRenderTargetContext> GrSurfaceContext::rescale(
             auto srcSubset = SkRect::MakeXYWH(srcX, srcY, srcW, srcH);
             // Minimizing draw with integer coord src and dev rects can always be kFast.
             auto constraint = SkCanvas::SrcRectConstraint::kStrict_SrcRectConstraint;
-            if (stepsX <= 0 && stepsY <= 0) {
+            if (nextW <= srcW && nextH <= srcH) {
                 constraint = SkCanvas::SrcRectConstraint::kFast_SrcRectConstraint;
             }
             tempB->drawTexture(GrNoClip(), std::move(texView), srcAlphaType, filter,

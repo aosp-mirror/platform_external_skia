@@ -16,7 +16,7 @@
 #include "tools/Resources.h"
 
 static sk_sp<SkTypeface> make_tf() {
-    SkCustomTypefaceBuilder builder(128);
+    SkCustomTypefaceBuilder builder;
     SkFont font;
     font.setSize(1.0f);
     font.setHinting(SkFontHinting::kNone);
@@ -54,17 +54,7 @@ public:
         font.setSize(100);
         font.setEdging(SkFont::Edging::kAntiAlias);
 
-        std::vector<SkGlyphID> array;
-        auto expand8to16 = [&](const char str[]) {
-            for (int i = 0; str[i]; ++i) {
-                array.push_back(str[i]);
-            }
-        };
-
-        expand8to16("User Typeface");
-        fBlob = SkTextBlob::MakeFromText(array.data(), array.size() * sizeof(SkGlyphID),
-                                         font, SkTextEncoding::kGlyphID);
-
+        fBlob = SkTextBlob::MakeFromString("User Typeface", font);
     }
 
     bool runAsBench() const override { return true; }
