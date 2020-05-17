@@ -335,6 +335,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }  // No WebGL support
 
     fSkipErrorChecks = ctxInfo.driver() == kChromium_GrGLDriver;
+    if (GR_IS_GR_WEBGL(standard)) {
+        // Error checks are quite costly in webgl, especially in Chrome.
+        fSkipErrorChecks = true;
+    }
 
     /**************************************************************************
     * GrShaderCaps fields
@@ -843,6 +847,14 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
             fFBFetchRequiresEnablePerSample = true;
         }
         shaderCaps->fUsesPrecisionModifiers = true;
+    } else if (GR_IS_GR_GL(standard)) {
+        if (ctxInfo.hasExtension("GL_EXT_shader_framebuffer_fetch")) {
+            shaderCaps->fFBFetchNeedsCustomOutput = (version >= GR_GL_VER(3, 0));
+            shaderCaps->fFBFetchSupport = true;
+            shaderCaps->fFBFetchColorName = "gl_LastFragData[0]";
+            shaderCaps->fFBFetchExtensionString = "GL_EXT_shader_framebuffer_fetch";
+            fFBFetchRequiresEnablePerSample = false;
+        }
     } else if (GR_IS_GR_WEBGL(standard)) {
         shaderCaps->fUsesPrecisionModifiers = true;
     }
