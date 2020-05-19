@@ -587,6 +587,7 @@ cc_library_static {
           "src/gpu/GrProgramInfo.cpp",
           "src/gpu/GrProxyProvider.cpp",
           "src/gpu/GrRecordingContext.cpp",
+          "src/gpu/GrRectanizerPow2.cpp",
           "src/gpu/GrRectanizerSkyline.cpp",
           "src/gpu/GrReducedClip.cpp",
           "src/gpu/GrRenderTarget.cpp",
