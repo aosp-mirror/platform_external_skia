@@ -11,6 +11,35 @@
 #include "include/utils/SkCustomTypeface.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 
+static SkFontMetrics scale_fontmetrics(const SkFontMetrics& src, float sx, float sy) {
+    SkFontMetrics dst = src;
+
+    #define SCALE_X(field)  dst.field *= sx
+    #define SCALE_Y(field)  dst.field *= sy
+
+    SCALE_X(fAvgCharWidth);
+    SCALE_X(fMaxCharWidth);
+    SCALE_X(fXMin);
+    SCALE_X(fXMax);
+
+    SCALE_Y(fTop);
+    SCALE_Y(fAscent);
+    SCALE_Y(fDescent);
+    SCALE_Y(fBottom);
+    SCALE_Y(fLeading);
+    SCALE_Y(fXHeight);
+    SCALE_Y(fCapHeight);
+    SCALE_Y(fUnderlineThickness);
+    SCALE_Y(fUnderlinePosition);
+    SCALE_Y(fStrikeoutThickness);
+    SCALE_Y(fStrikeoutPosition);
+
+    #undef SCALE_X
+    #undef SCALE_Y
+
+    return dst;
+}
+
 class SkUserTypeface final : public SkTypeface {
 private:
     friend class SkCustomTypefaceBuilder;
@@ -20,7 +49,7 @@ private:
 
     std::vector<SkPath> fPaths;
     std::vector<float>  fAdvances;
-    SkRect              fBounds;
+    SkFontMetrics       fMetrics;
 
     SkScalerContext* onCreateScalerContext(const SkScalerContextEffects&,
                                            const SkDescriptor* desc) const override;
@@ -44,7 +73,10 @@ private:
     }
     int onCountGlyphs() const override { return this->glyphCount(); }
     int onGetUPEM() const override { return 2048; /* ?? */ }
-    bool onComputeBounds(SkRect* bounds) const override { *bounds = fBounds; return true; }
+    bool onComputeBounds(SkRect* bounds) const override {
+        bounds->setLTRB(fMetrics.fXMin, fMetrics.fTop, fMetrics.fXMax, fMetrics.fBottom);
+        return true;
+    }
 
     // noops
 
@@ -62,7 +94,13 @@ private:
     }
 };
 
-SkCustomTypefaceBuilder::SkCustomTypefaceBuilder() {}
+SkCustomTypefaceBuilder::SkCustomTypefaceBuilder() {
+    sk_bzero(&fMetrics, sizeof(fMetrics));
+}
+
+void SkCustomTypefaceBuilder::setMetrics(const SkFontMetrics& fm, float scale) {
+    fMetrics = scale_fontmetrics(fm, scale, scale);
+}
 
 void SkCustomTypefaceBuilder::setGlyph(SkGlyphID index, float advance, const SkPath& path) {
     SkASSERT(fPaths.size() == fAdvances.size());
@@ -81,6 +119,7 @@ sk_sp<SkTypeface> SkCustomTypefaceBuilder::detach() {
     sk_sp<SkUserTypeface> tf(new SkUserTypeface());
     tf->fAdvances = std::move(fAdvances);
     tf->fPaths    = std::move(fPaths);
+    tf->fMetrics  = fMetrics;
 
     // initially inverted, so that any "union" will overwrite the first time
     SkRect bounds = {SK_ScalarMax, SK_ScalarMax, -SK_ScalarMax, -SK_ScalarMax};
@@ -90,7 +129,10 @@ sk_sp<SkTypeface> SkCustomTypefaceBuilder::detach() {
             bounds.join(path.getBounds());
         }
     }
-    tf->fBounds = bounds;
+    tf->fMetrics.fTop    = bounds.top();
+    tf->fMetrics.fBottom = bounds.bottom();
+    tf->fMetrics.fXMin   = bounds.left();
+    tf->fMetrics.fXMax   = bounds.right();
 
     return std::move(tf);
 }
@@ -177,15 +219,8 @@ protected:
     }
 
     void generateFontMetrics(SkFontMetrics* metrics) override {
-        auto [_, sy] = fMatrix.mapXY(0, 1);
-
-        sk_bzero(metrics, sizeof(*metrics));
-        metrics->fTop    = this->userTF()->fBounds.fTop    * sy;
-        metrics->fBottom = this->userTF()->fBounds.fBottom * sy;
-
-        // todo: get these from the creator of the typeface?
-        metrics->fAscent = metrics->fTop;
-        metrics->fDescent = metrics->fBottom;
+        auto [sx, sy] = fMatrix.mapXY(1, 1);
+        *metrics = scale_fontmetrics(this->userTF()->fMetrics, sx, sy);
     }
 
 private:
@@ -269,13 +304,15 @@ static void compress_write(SkWStream* stream, const SkPath& path, int upem) {
 
 static constexpr int kMaxGlyphCount = 65536;
 static constexpr size_t kHeaderSize = 16;
-static const char gHeaderString[] = "SkUserTypeface00";
+static const char gHeaderString[] = "SkUserTypeface01";
 static_assert(sizeof(gHeaderString) == 1 + kHeaderSize, "need header to be 16 bytes");
 
 std::unique_ptr<SkStreamAsset> SkUserTypeface::onOpenStream(int* ttcIndex) const {
     SkDynamicMemoryWStream wstream;
 
     wstream.write(gHeaderString, kHeaderSize);
+
+    wstream.write(&fMetrics, sizeof(fMetrics));
 
     // just hacking around -- this makes the serialized font 1/2 size
     const bool use_compression = false;
@@ -332,12 +369,19 @@ sk_sp<SkTypeface> SkCustomTypefaceBuilder::Deserialize(SkStream* stream) {
         return nullptr;
     }
 
+    SkFontMetrics metrics;
+    if (stream->read(&metrics, sizeof(metrics)) != sizeof(metrics)) {
+        return nullptr;
+    }
+
     int glyphCount;
     if (!stream->readS32(&glyphCount) || glyphCount < 0 || glyphCount > kMaxGlyphCount) {
         return nullptr;
     }
 
     SkCustomTypefaceBuilder builder;
+
+    builder.setMetrics(metrics);
 
     std::vector<float> advances(glyphCount);
     if (stream->read(advances.data(), glyphCount * sizeof(float)) != glyphCount * sizeof(float)) {
