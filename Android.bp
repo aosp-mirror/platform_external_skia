@@ -52,10 +52,10 @@ cc_library_static {
     ],
 
     srcs: [
+        "client_utils/android/BitmapRegionDecoder.cpp",
         "client_utils/android/FrontBufferedStream.cpp",
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
-        "src/android/SkBitmapRegionCodec.cpp",
         "src/android/SkBitmapRegionDecoder.cpp",
         "src/c/sk_effects.cpp",
         "src/c/sk_imageinfo.cpp",
@@ -1470,6 +1470,7 @@ cc_test {
         "tests/ApplyGammaTest.cpp",
         "tests/ArenaAllocTest.cpp",
         "tests/AsADashTest.cpp",
+        "tests/BRDTest.cpp",
         "tests/BackendAllocationTest.cpp",
         "tests/BadIcoTest.cpp",
         "tests/BitSetTest.cpp",
