@@ -916,21 +916,26 @@ public:
         Skia will correctly order its own draws and pixel operations. This must to be used to ensure
         correct ordering when the surface backing store is accessed outside Skia (e.g. direct use of
         the 3D API or a windowing system). GrContext has additional flush and submit methods that
-        apply to all surfaces and images created from a GrContext.
+        apply to all surfaces and images created from a GrContext. This is equivalent to calling
+        SkSurface::flush with a default GrFlushInfo followed by GrContext::submit.
     */
     void flushAndSubmit();
-
-    /**
-     * Deprecated.
-     */
-    void flush() { this->flushAndSubmit(); }
 
     enum class BackendSurfaceAccess {
         kNoAccess,  //!< back-end object will not be used by client
         kPresent,   //!< back-end surface will be used for presenting to screen
     };
 
-    /** Issues pending SkSurface commands to the GPU-backed API and resolves any SkSurface MSAA.
+    /** Issues pending SkSurface commands to the GPU-backed API objects and resolves any SkSurface
+        MSAA. A call to GrContext::submit is always required to ensure work is actually sent to the
+        gpu. Some specific API details:
+            GL: Commands are actually sent to the driver, but glFlush is never called. Thus some
+                sync objects from the flush will not be valid until a submission occurs.
+
+            Vulkan/Metal/D3D/Dawn: Commands are recorded to the backend APIs corresponding command
+                buffer or encoder objects. However, these objects are not sent to the gpu until a
+                submission occurs.
+
         The work that is submitted to the GPU will be dependent on the BackendSurfaceAccess that is
         passed in.
 
@@ -946,13 +951,19 @@ public:
         The GrFlushInfo describes additional options to flush. Please see documentation at
         GrFlushInfo for more info.
 
-         If the return is GrSemaphoresSubmitted::kYes, only initialized GrBackendSemaphores will
-         have been submitted and can be waited on (it is possible Skia failed to create a subset of
-         the semaphores). If this call returns GrSemaphoresSubmitted::kNo, the GPU backend will not
-         have submitted any semaphores to be signaled on the GPU. Thus the client should not have
-         the GPU wait on any of the semaphores passed in with the GrFlushInfo. Regardless of whether
-         semaphores were submitted to the GPU or not, the client is still responsible for deleting
-         any initialized semaphores.
+        If the return is GrSemaphoresSubmitted::kYes, only initialized GrBackendSemaphores will be
+        submitted to the gpu during the next submit call (it is possible Skia failed to create a
+        subset of the semaphores). The client should not wait on these semaphores until after submit
+        has been called, but must keep them alive until then. If a submit flag was passed in with
+        the flush these valid semaphores can we waited on immediately. If this call returns
+        GrSemaphoresSubmitted::kNo, the GPU backend will not submit any semaphores to be signaled on
+        the GPU. Thus the client should not have the GPU wait on any of the semaphores passed in
+        with the GrFlushInfo. Regardless of whether semaphores were submitted to the GPU or not, the
+        client is still responsible for deleting any initialized semaphores.
+        Regardleess of semaphore submission the context will still be flushed. It should be
+        emphasized that a return value of GrSemaphoresSubmitted::kNo does not mean the flush did not
+        happen. It simply means there were no semaphores submitted to the GPU. A caller should only
+        take this as a failure if they passed in semaphores to be submitted.
 
         Pending surface commands are flushed regardless of the return result.
 
@@ -960,28 +971,6 @@ public:
         @param info    flush options
     */
     GrSemaphoresSubmitted flush(BackendSurfaceAccess access, const GrFlushInfo& info);
-
-    /** Deprecated
-     */
-    GrSemaphoresSubmitted flush(BackendSurfaceAccess access, GrFlushFlags flags,
-                                int numSemaphores, GrBackendSemaphore signalSemaphores[],
-                                GrGpuFinishedProc finishedProc = nullptr,
-                                GrGpuFinishedContext finishedContext = nullptr);
-
-    /** The below enum and flush call are deprecated
-     */
-    enum FlushFlags {
-        kNone_FlushFlags = 0,
-        // flush will wait till all submitted GPU work is finished before returning.
-        kSyncCpu_FlushFlag = 0x1,
-    };
-    GrSemaphoresSubmitted flush(BackendSurfaceAccess access, FlushFlags flags,
-                                int numSemaphores, GrBackendSemaphore signalSemaphores[]);
-
-    /** Deprecated.
-    */
-    GrSemaphoresSubmitted flushAndSignalSemaphores(int numSemaphores,
-                                                   GrBackendSemaphore signalSemaphores[]);
 
     /** Inserts a list of GPU semaphores that the current GPU-backed API must wait on before
         executing any more commands on the GPU for this surface. Skia will take ownership of the

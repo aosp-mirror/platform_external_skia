@@ -1041,13 +1041,6 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions,
             fMSFBOType = kNone_MSFBOType;
         }
     }
-
-    // We disable MSAA for all Intel GPUs. Before Gen9, performance was very bad. Even with Gen9,
-    // we've seen driver crashes in the wild. We don't have data on Gen11 yet.
-    // chromium:527565, chromium:983926
-    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
-        fMSFBOType = kNone_MSFBOType;
-    }
 }
 
 void GrGLCaps::initBlendEqationSupport(const GrGLContextInfo& ctxInfo) {
@@ -3949,8 +3942,10 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 #ifdef SK_BUILD_FOR_MAC
     // On a MacBookPro 11.5 running MacOS 10.13 with a Radeon M370X the TransferPixelsFrom test
     // fails when transferring out from a GL_RG8 texture using GL_RG/GL_UNSIGNED_BYTE.
+    // The same error also occurs in MacOS 10.15 with a Radeon Pro 5300M.
     formatWorkarounds->fDisallowDirectRG8ReadPixels =
             ctxInfo.renderer() == kAMDRadeonR9M3xx_GrGLRenderer ||
+            ctxInfo.renderer() == kAMDRadeonPro5xxx_GrGLRenderer ||
             ctxInfo.renderer() == kAMDRadeonProVegaxx_GrGLRenderer;
 #endif
 
@@ -3998,6 +3993,13 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     if (ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D9) {
         formatWorkarounds->fDisallowBGRA8ReadPixels = true;
+    }
+
+    // We disable MSAA for all Intel GPUs. Before Gen9, performance was very bad. Even with Gen9,
+    // we've seen driver crashes in the wild. We don't have data on Gen11 yet.
+    // (crbug.com/527565, crbug.com/983926)
+    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
+        fMSFBOType = kNone_MSFBOType;
     }
 }
 
