@@ -1564,6 +1564,7 @@ cc_test {
         "tests/GrQuadBufferTest.cpp",
         "tests/GrQuadCropTest.cpp",
         "tests/GrStyledShapeTest.cpp",
+        "tests/GrSubmittedFlushTest.cpp",
         "tests/GrSurfaceTest.cpp",
         "tests/GrTAllocatorTest.cpp",
         "tests/GrTRecorderTest.cpp",
