@@ -235,30 +235,6 @@ function copy2dArray(arr, dest, ptr) {
   return ptr;
 }
 
-// arr should be a non-jagged 3d JS array (TypedArrays can't be nested
-//     inside themselves.)
-// dest is something like CanvasKit.HEAPF32
-// ptr can be optionally provided if the memory was already allocated.
-function copy3dArray(arr, dest, ptr) {
-  if (!arr || !arr.length || !arr[0].length) {
-    return nullptr;
-  }
-  if (!ptr) {
-    ptr = CanvasKit._malloc(arr.length * arr[0].length * arr[0][0].length * dest.BYTES_PER_ELEMENT);
-  }
-  var idx = 0;
-  var adjustedPtr = ptr / dest.BYTES_PER_ELEMENT;
-  for (var x = 0; x < arr.length; x++) {
-    for (var y = 0; y < arr[0].length; y++) {
-      for (var z = 0; z < arr[0][0].length; z++) {
-        dest[adjustedPtr + idx] = arr[x][y][z];
-        idx++;
-      }
-    }
-  }
-  return ptr;
-}
-
 var defaultPerspective = Float32Array.of(0, 0, 1);
 
 // Copies the given DOMMatrix/Array/TypedArray to the CanvasKit heap and
@@ -270,6 +246,9 @@ var defaultPerspective = Float32Array.of(0, 0, 1);
 function copy3x3MatrixToWasm(matr) {
   if (!matr) {
     return nullptr;
+  }
+  if (matr['_ck']) {
+    return matr.byteOffset;
   }
   var mPtr = CanvasKit._malloc(9 * 4); // 9 matrix scalars, each at 4 bytes.
   if (matr.length) {
@@ -340,6 +319,7 @@ function copy4x4MatrixToWasm(matr) {
 }
 
 // copies a 4x4 matrix at the given pointer into a JS array.
+// TODO(kjlubick) Add a scratch array for this.
 function copy4x4MatrixFromWasm(matrPtr) {
   // read them out into an array. TODO(kjlubick): If we change SkMatrix to be
   // typedArrays, then we should return a typed array here too.
@@ -352,6 +332,7 @@ function copy4x4MatrixFromWasm(matrPtr) {
 }
 
 // copies the four floats at the given pointer in a js Float32Array
+// TODO(kjlubick) Add a scratch array for this.
 function copyColorFromWasm(colorPtr) {
   var rv = new Float32Array(4);
   for (var i = 0; i < 4; i++) {
@@ -359,7 +340,7 @@ function copyColorFromWasm(colorPtr) {
   }
   CanvasKit._free(colorPtr);
   return rv;
-} 
+}
 
 // Caching the Float32Arrays can save having to reallocate them
 // over and over again.
@@ -630,11 +611,11 @@ CanvasKit.SkColorBuilder = CanvasKit.OneUIntArrayHelper;
  * can manage memory and initialize values properly. When used
  * correctly, it can save copying of data between JS and C++.
  * When used incorrectly, it can lead to memory leaks.
+ * Any memory allocated by CanvasKit.Malloc needs to be released with CanvasKit.Free.
  *
  * const ta = CanvasKit.Malloc(Float32Array, 20);
  * // store data into ta
  * const cf = CanvasKit.SkColorFilter.MakeMatrix(ta);
- * // MakeMatrix cleans up the ptr automatically.
  *
  * @param {TypedArray} typedArray - constructor for the typedArray.
  * @param {number} len - number of elements to store.
@@ -646,4 +627,20 @@ CanvasKit.Malloc = function(typedArray, len) {
   // add a marker that this was allocated in C++ land
   ta['_ck'] = true;
   return ta;
+}
+
+/**
+ * Free frees the memory returned by Malloc.
+ * Any memory allocated by CanvasKit.Malloc needs to be released with CanvasKit.Free.
+ */
+CanvasKit.Free = function(typedArray) {
+  CanvasKit._free(typedArray.byteOffset)
+}
+
+// This helper will free the given pointer unless the provided array is one
+// that was returned by CanvasKit.Malloc.
+function freeArraysThatAreNotMallocedByUsers(ptr, arr) {
+  if (!arr || !arr['_ck']) {
+    CanvasKit._free(ptr);
+  }
 }
