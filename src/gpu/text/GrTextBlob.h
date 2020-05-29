@@ -131,7 +131,7 @@ public:
                const SkSurfaceProps& props,
                const SkPaint& paint,
                const SkPMColor4f& filteredColor,
-               const GrClip& clip,
+               const GrClip* clip,
                const SkMatrixProvider& deviceMatrix,
                SkPoint drawOrigin);
 
@@ -169,16 +169,6 @@ public:
     const Key& key() const;
     size_t size() const;
 
-    // Internal test methods
-    std::unique_ptr<GrDrawOp> test_makeOp(const SkMatrixProvider& matrixProvider,
-                                          SkPoint drawOrigin,
-                                          const SkPaint& paint,
-                                          const SkPMColor4f& filteredColor,
-                                          const SkSurfaceProps&,
-                                          GrTextTarget*);
-
-    bool hasW(SubRunType type) const;
-
     SubRun* makeSubRun(SubRunType type,
                        const SkZip<SkGlyphVariant, SkPoint>& drawables,
                        const SkStrikeSpec& strikeSpec,
@@ -201,6 +191,18 @@ public:
                  SkScalar minScale,
                  SkScalar maxScale);
 
+    std::unique_ptr<GrAtlasTextOp> makeOp(SubRun* subrun,
+                                          const SkMatrixProvider& matrixProvider,
+                                          SkPoint drawOrigin,
+                                          const SkIRect& clipRect,
+                                          const SkPaint& paint,
+                                          const SkPMColor4f& filteredColor,
+                                          const SkSurfaceProps&,
+                                          GrTextTarget*);
+    SubRun* firstSubRun() const;
+
+    bool forceWForDistanceFields() const;
+
 private:
     enum TextType {
         kHasDistanceField_TextType = 0x1,
@@ -221,15 +223,6 @@ private:
                bool forceWForDistanceFields);
 
     void insertSubRun(SubRun* subRun);
-
-    std::unique_ptr<GrAtlasTextOp> makeOp(SubRun& info,
-                                          const SkMatrixProvider& matrixProvider,
-                                          SkPoint drawOrigin,
-                                          const SkIRect& clipRect,
-                                          const SkPaint& paint,
-                                          const SkPMColor4f& filteredColor,
-                                          const SkSurfaceProps&,
-                                          GrTextTarget*);
 
     // Methods to satisfy SkGlyphRunPainterInterface
     void processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,

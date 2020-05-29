@@ -310,7 +310,15 @@ bool GrTextBlob::SubRun::needsPadding() const {
 }
 
 bool GrTextBlob::SubRun::hasW() const {
-    return fBlob->hasW(fType);
+    if (fType == kTransformedSDFT) {
+        return fBlob->hasPerspective() || fBlob->forceWForDistanceFields();
+    } else if (fType == kTransformedMask || fType == kTransformedPath) {
+        return fBlob->hasPerspective();
+    }
+
+    // The viewMatrix is implicitly SkMatrix::I when drawing kDirectMask, because it is not
+    // used.
+    return false;
 }
 
 void GrTextBlob::SubRun::prepareGrGlyphs(GrStrikeCache* strikeCache) {
@@ -502,7 +510,7 @@ void GrTextBlob::addOp(GrTextTarget* target,
                        const SkSurfaceProps& props,
                        const SkPaint& paint,
                        const SkPMColor4f& filteredColor,
-                       const GrClip& clip,
+                       const GrClip* clip,
                        const SkMatrixProvider& deviceMatrix,
                        SkPoint drawOrigin) {
     for (SubRun* subRun = fFirstSubRun; subRun != nullptr; subRun = subRun->fNextSubRun) {
@@ -560,15 +568,14 @@ void GrTextBlob::addOp(GrTextTarget* target,
             bool skipClip = false;
             SkIRect clipRect = SkIRect::MakeEmpty();
             SkRect rtBounds = SkRect::MakeWH(target->width(), target->height());
-            SkRRect clipRRect;
+            SkRRect clipRRect = SkRRect::MakeRect(rtBounds);
             GrAA aa;
             // We can clip geometrically if we're not using SDFs or transformed glyphs,
             // and we have an axis-aligned rectangular non-AA clip
             if (!subRun->drawAsDistanceFields() &&
                 !subRun->needsTransform() &&
-                clip.isRRect(rtBounds, &clipRRect, &aa) &&
-                clipRRect.isRect() && GrAA::kNo == aa) {
-                skipClip = true;
+                (!clip || (clip->isRRect(rtBounds, &clipRRect, &aa) &&
+                           clipRRect.isRect() && GrAA::kNo == aa))) {
                 // We only need to do clipping work if the subrun isn't contained by the clip
                 SkRect subRunBounds = subRun->deviceRect(deviceMatrix.localToDevice(), drawOrigin);
                 if (!clipRRect.getBounds().contains(subRunBounds)) {
@@ -579,17 +586,13 @@ void GrTextBlob::addOp(GrTextTarget* target,
                         clipRRect.getBounds().round(&clipRect);
                     }
                 }
+                skipClip = true;
             }
 
-            auto op = this->makeOp(*subRun, deviceMatrix, drawOrigin, clipRect,
+            auto op = this->makeOp(subRun, deviceMatrix, drawOrigin, clipRect,
                                    paint, filteredColor, props, target);
             if (op) {
-                if (skipClip) {
-                    target->addDrawOp(GrNoClip(), std::move(op));
-                }
-                else {
-                    target->addDrawOp(clip, std::move(op));
-                }
+                target->addDrawOp(skipClip ? nullptr : clip, std::move(op));
             }
         }
     }
@@ -598,29 +601,6 @@ void GrTextBlob::addOp(GrTextTarget* target,
 const GrTextBlob::Key& GrTextBlob::key() const { return fKey; }
 size_t GrTextBlob::size() const { return fSize; }
 
-std::unique_ptr<GrDrawOp> GrTextBlob::test_makeOp(const SkMatrixProvider& matrixProvider,
-                                                  SkPoint drawOrigin,
-                                                  const SkPaint& paint,
-                                                  const SkPMColor4f& filteredColor,
-                                                  const SkSurfaceProps& props,
-                                                  GrTextTarget* target) {
-    SubRun* info = fFirstSubRun;
-    SkIRect emptyRect = SkIRect::MakeEmpty();
-    return this->makeOp(*info, matrixProvider, drawOrigin, emptyRect, paint,
-                        filteredColor, props, target);
-}
-
-bool GrTextBlob::hasW(GrTextBlob::SubRunType type) const {
-    if (type == kTransformedSDFT) {
-        return this->hasPerspective() || fForceWForDistanceFields;
-    } else if (type == kTransformedMask || type == kTransformedPath) {
-        return this->hasPerspective();
-    }
-
-    // The viewMatrix is implicitly SkMatrix::I when drawing kDirectMask, because it is not
-    // used.
-    return false;
-}
 
 GrTextBlob::SubRun* GrTextBlob::makeSubRun(SubRunType type,
                                            const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -720,7 +700,7 @@ void GrTextBlob::insertSubRun(SubRun* subRun) {
     }
 }
 
-std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun& info,
+std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun* subrun,
                                                   const SkMatrixProvider& matrixProvider,
                                                   SkPoint drawOrigin,
                                                   const SkIRect& clipRect,
@@ -729,12 +709,12 @@ std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun& info,
                                                   const SkSurfaceProps& props,
                                                   GrTextTarget* target) {
     GrPaint grPaint;
-    target->makeGrPaint(info.maskFormat(), paint, matrixProvider, &grPaint);
-    if (info.drawAsDistanceFields()) {
+    target->makeGrPaint(subrun->maskFormat(), paint, matrixProvider, &grPaint);
+    if (subrun->drawAsDistanceFields()) {
         // TODO: Can we be even smarter based on the dest transfer function?
         return GrAtlasTextOp::MakeDistanceField(target->getContext(),
                                                 std::move(grPaint),
-                                                &info,
+                                                subrun,
                                                 matrixProvider.localToDevice(),
                                                 drawOrigin,
                                                 clipRect,
@@ -745,7 +725,7 @@ std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun& info,
     } else {
         return GrAtlasTextOp::MakeBitmap(target->getContext(),
                                          std::move(grPaint),
-                                         &info,
+                                         subrun,
                                          matrixProvider.localToDevice(),
                                          drawOrigin,
                                          clipRect,
@@ -781,6 +761,10 @@ void GrTextBlob::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawab
                                     const SkStrikeSpec& strikeSpec) {
     this->addMultiMaskFormat(kTransformedMask, drawables, strikeSpec);
 }
+
+auto GrTextBlob::firstSubRun() const -> SubRun* { return fFirstSubRun; }
+
+bool GrTextBlob::forceWForDistanceFields() const { return fForceWForDistanceFields; }
 
 // -- Adding a mask to an atlas ----------------------------------------------------------------
 

@@ -1472,6 +1472,7 @@ cc_test {
         "tests/AsADashTest.cpp",
         "tests/BRDTest.cpp",
         "tests/BackendAllocationTest.cpp",
+        "tests/BackendSurfaceMutableStateTest.cpp",
         "tests/BadIcoTest.cpp",
         "tests/BitSetTest.cpp",
         "tests/BitmapCopyTest.cpp",
