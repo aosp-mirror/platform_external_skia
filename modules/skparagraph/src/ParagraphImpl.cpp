@@ -9,6 +9,11 @@
 #include "modules/skparagraph/src/TextWrapper.h"
 #include "src/core/SkSpan.h"
 #include "src/utils/SkUTF.h"
+
+#if defined(SK_USING_THIRD_PARTY_ICU)
+#include "third_party/icu/SkLoadICU.h"
+#endif
+
 #include <unicode/ustring.h>
 #include <algorithm>
 #include <chrono>
@@ -50,6 +55,11 @@ TextRange operator*(const TextRange& a, const TextRange& b) {
 }
 
 bool TextBreaker::initialize(SkSpan<const char> text, UBreakIteratorType type) {
+    #if defined(SK_USING_THIRD_PARTY_ICU)
+    if (!SkLoadICU()) {
+        return false;
+    }
+    #endif
 
     UErrorCode status = U_ZERO_ERROR;
     fIterator = nullptr;
