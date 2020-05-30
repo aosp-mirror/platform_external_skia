@@ -15,6 +15,7 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/SkGr.h"
+#include "src/gpu/ops/GrAtlasTextOp.h"
 #include "src/gpu/text/GrTextBlobCache.h"
 #include "src/gpu/text/GrTextContext.h"
 #endif
@@ -274,7 +275,7 @@ SkPMColor4f generate_filtered_color(const SkPaint& paint, const GrColorInfo& col
 
 void GrTextContext::drawGlyphRunList(GrRecordingContext* context,
                                      GrTextTarget* target,
-                                     const GrClip& clip,
+                                     const GrClip* clip,
                                      const SkMatrixProvider& matrixProvider,
                                      const SkSurfaceProps& props,
                                      const SkGlyphRunList& glyphRunList) const {
@@ -402,8 +403,14 @@ std::unique_ptr<GrDrawOp> GrTextContext::createOp_TestingOnly(GrRecordingContext
                 textContext->fOptions, blob.get());
     }
 
-    return blob->test_makeOp(mtxProvider, drawOrigin, skPaint, filteredColor, surfaceProps,
-                             rtc->textTarget());
+    return blob->makeOp(blob->firstSubRun(),
+                        mtxProvider,
+                        drawOrigin,
+                        SkIRect::MakeEmpty(),
+                        skPaint,
+                        filteredColor,
+                        surfaceProps,
+                        rtc->textTarget());
 }
 
 #endif  // GR_TEST_UTILS
