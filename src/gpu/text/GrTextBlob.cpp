@@ -43,26 +43,23 @@ GrTextBlob::PathGlyph::PathGlyph(const SkPath& path, SkPoint origin)
 GrTextBlob::SubRun::SubRun(SubRunType type, GrTextBlob* textBlob, const SkStrikeSpec& strikeSpec,
                            GrMaskFormat format, SkRect vertexBounds,
                            const SkSpan<VertexData>& vertexData)
-        : fType{type}
-        , fBlob{textBlob}
+        : fBlob{textBlob}
         , fMaskFormat{format}
         , fStrikeSpec{strikeSpec}
-        , fVertexBounds(vertexBounds)
+        , fType{type}
+        , fVertexBounds{vertexBounds}
         , fVertexData{vertexData} {
     SkASSERT(fType != kTransformedPath);
-    textBlob->insertSubRun(this);
 }
 
 GrTextBlob::SubRun::SubRun(GrTextBlob* textBlob, const SkStrikeSpec& strikeSpec)
-        : fType{kTransformedPath}
-        , fBlob{textBlob}
+        : fBlob{textBlob}
         , fMaskFormat{kA8_GrMaskFormat}
         , fStrikeSpec{strikeSpec}
         , fPaths{}
-        , fVertexBounds(SkRect::MakeEmpty())
-        , fVertexData{SkSpan<VertexData>{}} {
-    textBlob->insertSubRun(this);
-}
+        , fType{kTransformedPath}
+        , fVertexBounds{SkRect::MakeEmpty()}
+        , fVertexData{SkSpan<VertexData>{}} { }
 
 void GrTextBlob::SubRun::resetBulkUseToken() { fBulkUseToken.reset(); }
 
@@ -310,7 +307,15 @@ bool GrTextBlob::SubRun::needsPadding() const {
 }
 
 bool GrTextBlob::SubRun::hasW() const {
-    return fBlob->hasW(fType);
+    if (fType == kTransformedSDFT) {
+        return fBlob->hasPerspective() || fBlob->forceWForDistanceFields();
+    } else if (fType == kTransformedMask || fType == kTransformedPath) {
+        return fBlob->hasPerspective();
+    }
+
+    // The viewMatrix is implicitly SkMatrix::I when drawing kDirectMask, because it is not
+    // used.
+    return false;
 }
 
 void GrTextBlob::SubRun::prepareGrGlyphs(GrStrikeCache* strikeCache) {
@@ -351,6 +356,83 @@ bool GrTextBlob::SubRun::hasUseLCDText() const { return fFlags.useLCDText; }
 void GrTextBlob::SubRun::setAntiAliased(bool antiAliased) { fFlags.antiAliased = antiAliased; }
 bool GrTextBlob::SubRun::isAntiAliased() const { return fFlags.antiAliased; }
 const SkStrikeSpec& GrTextBlob::SubRun::strikeSpec() const { return fStrikeSpec; }
+
+auto GrTextBlob::SubRun::MakePaths(
+        const SkZip<SkGlyphVariant, SkPoint>& drawables,
+        const SkFont& runFont,
+        const SkStrikeSpec& strikeSpec,
+        GrTextBlob* blob,
+        SkArenaAlloc* alloc) -> SubRun* {
+    SubRun* subRun = alloc->make<SubRun>(blob, strikeSpec);
+    subRun->setAntiAliased(runFont.hasSomeAntiAliasing());
+    for (auto [variant, pos] : drawables) {
+        subRun->fPaths.emplace_back(*variant.path(), pos);
+    }
+    return subRun;
+};
+
+auto GrTextBlob::SubRun::MakeSDFT(
+        const SkZip<SkGlyphVariant, SkPoint>& drawables,
+        const SkFont& runFont,
+        const SkStrikeSpec& strikeSpec,
+        GrTextBlob* blob,
+        SkArenaAlloc* alloc) -> SubRun* {
+    SubRun* subRun = SubRun::InitForAtlas(
+            kTransformedSDFT, drawables, strikeSpec, kA8_GrMaskFormat, blob, alloc);
+    subRun->setUseLCDText(runFont.getEdging() == SkFont::Edging::kSubpixelAntiAlias);
+    subRun->setAntiAliased(runFont.hasSomeAntiAliasing());
+    return subRun;
+}
+
+auto GrTextBlob::SubRun::MakeDirectMask(
+        const SkZip<SkGlyphVariant, SkPoint>& drawables,
+        const SkStrikeSpec& strikeSpec,
+        GrMaskFormat format,
+        GrTextBlob* blob,
+        SkArenaAlloc* alloc) -> SubRun* {
+    return SubRun::InitForAtlas(kDirectMask, drawables, strikeSpec, format, blob, alloc);
+}
+
+auto GrTextBlob::SubRun::MakeTransformedMask(
+        const SkZip<SkGlyphVariant, SkPoint>& drawables,
+        const SkStrikeSpec& strikeSpec,
+        GrMaskFormat format,
+        GrTextBlob* blob,
+        SkArenaAlloc* alloc) -> SubRun* {
+    return SubRun::InitForAtlas(kTransformedMask, drawables, strikeSpec, format, blob, alloc);
+}
+
+
+auto GrTextBlob::SubRun::InitForAtlas(SubRunType type,
+                                      const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                                      const SkStrikeSpec& strikeSpec,
+                                      GrMaskFormat format,
+                                      GrTextBlob* blob,
+                                      SkArenaAlloc* alloc) -> SubRun* {
+    size_t vertexCount = drawables.size();
+    using Data = VertexData;
+    SkRect bounds = SkRectPriv::MakeLargestInverted();
+    auto initializer = [&, strikeToSource=strikeSpec.strikeToSourceRatio()](size_t i) {
+        auto [variant, pos] = drawables[i];
+        SkGlyph* skGlyph = variant;
+        int16_t l = skGlyph->left();
+        int16_t t = skGlyph->top();
+        int16_t r = l + skGlyph->width();
+        int16_t b = t + skGlyph->height();
+        SkPoint lt = SkPoint::Make(l, t) * strikeToSource + pos,
+                rb = SkPoint::Make(r, b) * strikeToSource + pos;
+        bounds.joinNonEmptyArg(SkRect::MakeLTRB(lt.x(), lt.y(), rb.x(), rb.y()));
+        return Data{{skGlyph->getPackedID()}, pos, {l, t, r, b}};
+    };
+
+    SkSpan<Data> vertexData{
+            alloc->makeInitializedArray<Data>(vertexCount, initializer), vertexCount};
+
+    SubRun* subRun = alloc->make<SubRun>(type, blob, strikeSpec, format, bounds, vertexData);
+
+    return subRun;
+}
+
 
 // -- GrTextBlob -----------------------------------------------------------------------------------
 void GrTextBlob::operator delete(void* p) { ::operator delete(p); }
@@ -502,7 +584,7 @@ void GrTextBlob::addOp(GrTextTarget* target,
                        const SkSurfaceProps& props,
                        const SkPaint& paint,
                        const SkPMColor4f& filteredColor,
-                       const GrClip& clip,
+                       const GrClip* clip,
                        const SkMatrixProvider& deviceMatrix,
                        SkPoint drawOrigin) {
     for (SubRun* subRun = fFirstSubRun; subRun != nullptr; subRun = subRun->fNextSubRun) {
@@ -560,15 +642,14 @@ void GrTextBlob::addOp(GrTextTarget* target,
             bool skipClip = false;
             SkIRect clipRect = SkIRect::MakeEmpty();
             SkRect rtBounds = SkRect::MakeWH(target->width(), target->height());
-            SkRRect clipRRect;
+            SkRRect clipRRect = SkRRect::MakeRect(rtBounds);
             GrAA aa;
             // We can clip geometrically if we're not using SDFs or transformed glyphs,
             // and we have an axis-aligned rectangular non-AA clip
             if (!subRun->drawAsDistanceFields() &&
                 !subRun->needsTransform() &&
-                clip.isRRect(rtBounds, &clipRRect, &aa) &&
-                clipRRect.isRect() && GrAA::kNo == aa) {
-                skipClip = true;
+                (!clip || (clip->isRRect(rtBounds, &clipRRect, &aa) &&
+                           clipRRect.isRect() && GrAA::kNo == aa))) {
                 // We only need to do clipping work if the subrun isn't contained by the clip
                 SkRect subRunBounds = subRun->deviceRect(deviceMatrix.localToDevice(), drawOrigin);
                 if (!clipRRect.getBounds().contains(subRunBounds)) {
@@ -579,17 +660,13 @@ void GrTextBlob::addOp(GrTextTarget* target,
                         clipRRect.getBounds().round(&clipRect);
                     }
                 }
+                skipClip = true;
             }
 
-            auto op = this->makeOp(*subRun, deviceMatrix, drawOrigin, clipRect,
+            auto op = this->makeOp(subRun, deviceMatrix, drawOrigin, clipRect,
                                    paint, filteredColor, props, target);
             if (op) {
-                if (skipClip) {
-                    target->addDrawOp(GrNoClip(), std::move(op));
-                }
-                else {
-                    target->addDrawOp(clip, std::move(op));
-                }
+                target->addDrawOp(skipClip ? nullptr : clip, std::move(op));
             }
         }
     }
@@ -598,68 +675,9 @@ void GrTextBlob::addOp(GrTextTarget* target,
 const GrTextBlob::Key& GrTextBlob::key() const { return fKey; }
 size_t GrTextBlob::size() const { return fSize; }
 
-std::unique_ptr<GrDrawOp> GrTextBlob::test_makeOp(const SkMatrixProvider& matrixProvider,
-                                                  SkPoint drawOrigin,
-                                                  const SkPaint& paint,
-                                                  const SkPMColor4f& filteredColor,
-                                                  const SkSurfaceProps& props,
-                                                  GrTextTarget* target) {
-    SubRun* info = fFirstSubRun;
-    SkIRect emptyRect = SkIRect::MakeEmpty();
-    return this->makeOp(*info, matrixProvider, drawOrigin, emptyRect, paint,
-                        filteredColor, props, target);
-}
-
-bool GrTextBlob::hasW(GrTextBlob::SubRunType type) const {
-    if (type == kTransformedSDFT) {
-        return this->hasPerspective() || fForceWForDistanceFields;
-    } else if (type == kTransformedMask || type == kTransformedPath) {
-        return this->hasPerspective();
-    }
-
-    // The viewMatrix is implicitly SkMatrix::I when drawing kDirectMask, because it is not
-    // used.
-    return false;
-}
-
-GrTextBlob::SubRun* GrTextBlob::makeSubRun(SubRunType type,
-                                           const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                           const SkStrikeSpec& strikeSpec,
-                                           GrMaskFormat format) {
-    size_t vertexCount = drawables.size();
-    using Data = SubRun::VertexData;
-    SkRect bounds = SkRectPriv::MakeLargestInverted();
-    auto initializer = [&, strikeToSource=strikeSpec.strikeToSourceRatio()](size_t i) {
-        auto [variant, pos] = drawables[i];
-        SkGlyph* skGlyph = variant;
-        int16_t l = skGlyph->left();
-        int16_t t = skGlyph->top();
-        int16_t r = l + skGlyph->width();
-        int16_t b = t + skGlyph->height();
-        SkPoint lt = SkPoint::Make(l, t) * strikeToSource + pos,
-                rb = SkPoint::Make(r, b) * strikeToSource + pos;
-        bounds.joinNonEmptyArg(SkRect::MakeLTRB(lt.x(), lt.y(), rb.x(), rb.y()));
-        return Data{{skGlyph->getPackedID()}, pos, {l, t, r, b}};
-    };
-
-    SkSpan<Data> vertexData{
-        fAlloc.makeInitializedArray<Data>(vertexCount, initializer), vertexCount};
-
-    SubRun* subRun = fAlloc.make<SubRun>(type, this, strikeSpec, format, bounds, vertexData);
-
-    return subRun;
-}
-
-void GrTextBlob::addSingleMaskFormat(
-        SubRunType type,
-        const SkZip<SkGlyphVariant, SkPoint>& drawables,
-        const SkStrikeSpec& strikeSpec,
-        GrMaskFormat format) {
-    this->makeSubRun(type, drawables, strikeSpec, format);
-}
-
+template<typename AddSingleMaskFormat>
 void GrTextBlob::addMultiMaskFormat(
-        SubRunType type,
+        AddSingleMaskFormat addSingle,
         const SkZip<SkGlyphVariant, SkPoint>& drawables,
         const SkStrikeSpec& strikeSpec) {
     this->setHasBitmap();
@@ -674,26 +692,15 @@ void GrTextBlob::addMultiMaskFormat(
         GrMaskFormat nextFormat = GrGlyph::FormatFromSkGlyph(glyph->maskFormat());
         if (format != nextFormat) {
             auto sameFormat = drawables.subspan(startIndex, i - startIndex);
-            this->addSingleMaskFormat(type, sameFormat, strikeSpec, format);
+            SubRun* subRun = addSingle(sameFormat, strikeSpec, format, this, &fAlloc);
+            this->insertSubRun(subRun);
             format = nextFormat;
             startIndex = i;
         }
     }
     auto sameFormat = drawables.last(drawables.size() - startIndex);
-    this->addSingleMaskFormat(type, sameFormat, strikeSpec, format);
-}
-
-void GrTextBlob::addSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                         const SkStrikeSpec& strikeSpec,
-                         const SkFont& runFont,
-                         SkScalar minScale,
-                         SkScalar maxScale) {
-    this->setHasDistanceField();
-    this->setMinAndMaxScale(minScale, maxScale);
-
-    SubRun* subRun = this->makeSubRun(kTransformedSDFT, drawables, strikeSpec, kA8_GrMaskFormat);
-    subRun->setUseLCDText(runFont.getEdging() == SkFont::Edging::kSubpixelAntiAlias);
-    subRun->setAntiAliased(runFont.hasSomeAntiAliasing());
+    SubRun* subRun = addSingle(sameFormat, strikeSpec, format, this, &fAlloc);
+    this->insertSubRun(subRun);
 }
 
 GrTextBlob::GrTextBlob(size_t allocSize,
@@ -720,7 +727,7 @@ void GrTextBlob::insertSubRun(SubRun* subRun) {
     }
 }
 
-std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun& info,
+std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun* subrun,
                                                   const SkMatrixProvider& matrixProvider,
                                                   SkPoint drawOrigin,
                                                   const SkIRect& clipRect,
@@ -729,12 +736,12 @@ std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun& info,
                                                   const SkSurfaceProps& props,
                                                   GrTextTarget* target) {
     GrPaint grPaint;
-    target->makeGrPaint(info.maskFormat(), paint, matrixProvider, &grPaint);
-    if (info.drawAsDistanceFields()) {
+    target->makeGrPaint(subrun->maskFormat(), paint, matrixProvider, &grPaint);
+    if (subrun->drawAsDistanceFields()) {
         // TODO: Can we be even smarter based on the dest transfer function?
         return GrAtlasTextOp::MakeDistanceField(target->getContext(),
                                                 std::move(grPaint),
-                                                &info,
+                                                subrun,
                                                 matrixProvider.localToDevice(),
                                                 drawOrigin,
                                                 clipRect,
@@ -745,7 +752,7 @@ std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun& info,
     } else {
         return GrAtlasTextOp::MakeBitmap(target->getContext(),
                                          std::move(grPaint),
-                                         &info,
+                                         subrun,
                                          matrixProvider.localToDevice(),
                                          drawOrigin,
                                          clipRect,
@@ -755,18 +762,16 @@ std::unique_ptr<GrAtlasTextOp> GrTextBlob::makeOp(SubRun& info,
 
 void GrTextBlob::processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkStrikeSpec& strikeSpec) {
-    this->addMultiMaskFormat(kDirectMask, drawables, strikeSpec);
+
+    this->addMultiMaskFormat(SubRun::MakeDirectMask, drawables, strikeSpec);
 }
 
 void GrTextBlob::processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkFont& runFont,
                                     const SkStrikeSpec& strikeSpec) {
     this->setHasBitmap();
-    SubRun* subRun = fAlloc.make<SubRun>(this, strikeSpec);
-    subRun->setAntiAliased(runFont.hasSomeAntiAliasing());
-    for (auto [variant, pos] : drawables) {
-        subRun->fPaths.emplace_back(*variant.path(), pos);
-    }
+    SubRun* subRun = SubRun::MakePaths(drawables, runFont, strikeSpec, this, &fAlloc);
+    this->insertSubRun(subRun);
 }
 
 void GrTextBlob::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -774,13 +779,20 @@ void GrTextBlob::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawabl
                                    const SkFont& runFont,
                                    SkScalar minScale,
                                    SkScalar maxScale) {
-    this->addSDFT(drawables, strikeSpec, runFont, minScale, maxScale);
+    this->setHasDistanceField();
+    this->setMinAndMaxScale(minScale, maxScale);
+    SubRun* subRun = SubRun::MakeSDFT(drawables, runFont, strikeSpec, this, &fAlloc);
+    this->insertSubRun(subRun);
 }
 
 void GrTextBlob::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkStrikeSpec& strikeSpec) {
-    this->addMultiMaskFormat(kTransformedMask, drawables, strikeSpec);
+    this->addMultiMaskFormat(SubRun::MakeTransformedMask, drawables, strikeSpec);
 }
+
+auto GrTextBlob::firstSubRun() const -> SubRun* { return fFirstSubRun; }
+
+bool GrTextBlob::forceWForDistanceFields() const { return fForceWForDistanceFields; }
 
 // -- Adding a mask to an atlas ----------------------------------------------------------------
 

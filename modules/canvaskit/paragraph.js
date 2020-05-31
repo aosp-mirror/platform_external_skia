@@ -15,7 +15,7 @@
       var ret = [];
       for (var i = 0; i < floatArray.length; i+=5) {
         var r = CanvasKit.LTRBRect(floatArray[i], floatArray[i+1], floatArray[i+2], floatArray[i+3]);
-        if (floatArray[i+4] === 1) {
+        if (floatArray[i+4] === 0) {
           r['direction'] = CanvasKit.TextDirection.RTL;
         } else {
           r['direction'] = CanvasKit.TextDirection.LTR;
@@ -139,9 +139,10 @@
     }
 
     function freeArrays(textStyle) {
-      CanvasKit._free(textStyle['_colorPtr']);
-      CanvasKit._free(textStyle['_foregroundColorPtr']);
-      CanvasKit._free(textStyle['_backgroundColorPtr']);
+      // TODO(kjlubick): Use scratch arrays for these colors.
+      freeArraysThatAreNotMallocedByUsers(textStyle['_colorPtr'], textStyle['color']);
+      freeArraysThatAreNotMallocedByUsers(textStyle['_foregroundColorPtr'], textStyle['foregroundColor']);
+      freeArraysThatAreNotMallocedByUsers(textStyle['_backgroundColorPtr'], textStyle['backgroundColor']);
       // The font family strings will get copied to a vector on the C++ side, which is owned by
       // the text style.
       CanvasKit._free(textStyle['_fontFamiliesPtr']);
