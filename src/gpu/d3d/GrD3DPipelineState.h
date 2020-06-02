@@ -52,7 +52,7 @@ public:
     ID3D12PipelineState* pipelineState() const { return fPipelineState.get(); }
     const sk_sp<GrD3DRootSignature>& rootSignature() const { return fRootSignature; }
 
-    void setData(const GrRenderTarget* renderTarget, const GrProgramInfo& programInfo);
+    void setData(GrD3DGpu*, const GrRenderTarget* renderTarget, const GrProgramInfo& programInfo);
 
     void setAndBindTextures(const GrPrimitiveProcessor& primProc,
                             const GrSurfaceProxy* const primProcTextures[],
@@ -88,7 +88,8 @@ private:
         void getRTAdjustmentVec(float* destVec) {
             destVec[0] = 2.f / fRenderTargetSize.fWidth;
             destVec[1] = -1.f;
-            if (kBottomLeft_GrSurfaceOrigin == fRenderTargetOrigin) {
+            // D3D's NDC space is flipped from Vulkan and Metal
+            if (kTopLeft_GrSurfaceOrigin == fRenderTargetOrigin) {
                 destVec[2] = -2.f / fRenderTargetSize.fHeight;
                 destVec[3] = 1.f;
             } else {

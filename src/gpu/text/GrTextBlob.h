@@ -168,14 +168,6 @@ public:
             const SkZip<SkGlyphVariant, SkPoint>& drawables,
             const SkStrikeSpec& strikeSpec);
 
-    std::unique_ptr<GrAtlasTextOp> makeOp(SubRun* subrun,
-                                          const SkMatrixProvider& matrixProvider,
-                                          SkPoint drawOrigin,
-                                          const SkIRect& clipRect,
-                                          const SkPaint& paint,
-                                          const SkPMColor4f& filteredColor,
-                                          const SkSurfaceProps&,
-                                          GrTextTarget*);
     SubRun* firstSubRun() const;
 
     bool forceWForDistanceFields() const;
@@ -358,9 +350,7 @@ public:
     GrGlyph* grGlyph(int i) const;
 
     // df properties
-    void setUseLCDText(bool useLCDText);
     bool hasUseLCDText() const;
-    void setAntiAliased(bool antiAliased);
     bool isAntiAliased() const;
 
     const SkStrikeSpec& strikeSpec() const;
@@ -386,15 +376,18 @@ public:
                                        GrTextBlob* blob,
                                        SkArenaAlloc* alloc);
 
+    std::unique_ptr<GrAtlasTextOp> makeOp(const SkMatrixProvider& matrixProvider,
+                                          SkPoint drawOrigin,
+                                          const SkIRect& clipRect,
+                                          const SkPaint& paint,
+                                          const SkPMColor4f& filteredColor,
+                                          const SkSurfaceProps&,
+                                          GrTextTarget*);
+
     SubRun* fNextSubRun{nullptr};
     GrTextBlob* fBlob;
-    const GrMaskFormat fMaskFormat;
     const SkStrikeSpec fStrikeSpec;
     sk_sp<GrTextStrike> fStrike;
-    struct {
-        bool useLCDText:1;
-        bool antiAliased:1;
-    } fFlags {false, false};
     uint64_t fAtlasGeneration{GrDrawOpAtlas::kInvalidAtlasGeneration};
     std::vector<PathGlyph> fPaths;
 
@@ -406,8 +399,13 @@ private:
                                 GrTextBlob* blob,
                                 SkArenaAlloc* alloc);
     bool hasW() const;
+    void setUseLCDText(bool useLCDText);
+    void setAntiAliased(bool antiAliased);
 
     const SubRunType fType;
+    const GrMaskFormat fMaskFormat;
+    bool fUseLCDText{false};
+    bool fAntiAliased{false};
 
     GrDrawOpAtlas::BulkUseTokenUpdater fBulkUseToken;
     // The vertex bounds in device space if needsTransform() is false, otherwise the bounds in
