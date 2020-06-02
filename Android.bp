@@ -13,6 +13,7 @@ cc_library_static {
         "-Wno-attributes",
         "-Wno-implicit-fallthrough",
         "-Wno-missing-field-initializers",
+        "-Wno-sign-conversion",
         "-Wno-thread-safety-analysis",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
