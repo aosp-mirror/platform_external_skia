@@ -59,6 +59,7 @@ describe('Core canvas behavior', () => {
         const out = CanvasKit.computeTonalColors(input);
         expect(new Float32Array(out.ambient)).toEqual(CanvasKit.BLACK);
         const expectedSpot = [0.173, 0, 0, 0.969];
+        expect(out.spot.length).toEqual(4);
         expect(out.spot[0]).toBeCloseTo(expectedSpot[0], 3);
         expect(out.spot[1]).toBeCloseTo(expectedSpot[1], 3);
         expect(out.spot[2]).toBeCloseTo(expectedSpot[2], 3);
@@ -544,6 +545,35 @@ describe('Core canvas behavior', () => {
         // Reminder: drawOnce is async. In this test, we are just making
         // sure the drawOnce function is there and doesn't crash, so we can
         // just call done() when the frame is rendered.
+    });
+
+    it('can draw client-supplied dirty rects', (done) => {
+        // dirty rects are only honored by software (CPU) canvases today.
+        const surface = CanvasKit.MakeSWCanvasSurface('test');
+        expect(surface).toBeTruthy('Could not make surface');
+        if (!surface) {
+            done();
+            return;
+        }
+
+        const drawFrame = (canvas) => {
+            const paint = new CanvasKit.SkPaint();
+            paint.setStrokeWidth(1.0);
+            paint.setAntiAlias(true);
+            paint.setColor(CanvasKit.Color(0, 0, 0, 1.0));
+            paint.setStyle(CanvasKit.PaintStyle.Stroke);
+            const path = new CanvasKit.SkPath();
+            path.moveTo(20, 5);
+            path.lineTo(30, 20);
+            path.lineTo(40, 10);
+            canvas.drawPath(path, paint);
+            path.delete();
+            paint.delete();
+            done();
+        }
+        const dirtyRect = CanvasKit.XYWHRect(10, 10, 15, 15);
+        surface.drawOnce(drawFrame, dirtyRect);
+        // We simply ensure that passing a dirty rect doesn't crash.
     });
 
     it('can use DecodeCache APIs', () => {
