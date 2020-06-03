@@ -194,6 +194,7 @@ cc_library_static {
         "src/core/SkMipMap.cpp",
         "src/core/SkModeColorFilter.cpp",
         "src/core/SkOpts.cpp",
+        "src/core/SkOpts_hsw.cpp",
         "src/core/SkOpts_skx.cpp",
         "src/core/SkOverdrawCanvas.cpp",
         "src/core/SkPaint.cpp",
