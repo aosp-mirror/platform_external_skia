@@ -120,13 +120,13 @@ public:
     bool mustRegenerate(const SkPaint&, bool, const SkMaskFilterBase::BlurRec& blurRec,
                         const SkMatrix& drawMatrix, SkPoint drawOrigin);
 
-    void addOp(GrTextTarget* target,
-               const SkSurfaceProps& props,
-               const SkPaint& paint,
-               const SkPMColor4f& filteredColor,
-               const GrClip* clip,
-               const SkMatrixProvider& deviceMatrix,
-               SkPoint drawOrigin);
+    void insertOpsIntoTarget(GrTextTarget* target,
+                             const SkSurfaceProps& props,
+                             const SkPaint& paint,
+                             const SkPMColor4f& filteredColor,
+                             const GrClip* clip,
+                             const SkMatrixProvider& deviceMatrix,
+                             SkPoint drawOrigin);
 
     struct AtlasPt {
         uint16_t u;
@@ -272,7 +272,6 @@ private:
     GrResourceProvider* fResourceProvider;
     GrDeferredUploadTarget* fUploadTarget;
     GrAtlasManager* fFullAtlasManager;
-    SkTLazy<SkBulkGlyphMetricsAndImages> fMetricsAndImages;
     SubRun* fSubRun;
 };
 
@@ -314,7 +313,6 @@ public:
     // TODO when this object is more internal, drop the privacy
     void resetBulkUseToken();
     GrDrawOpAtlas::BulkUseTokenUpdater* bulkUseToken();
-    GrTextStrike* strike() const;
 
     GrMaskFormat maskFormat() const;
 
@@ -335,7 +333,6 @@ public:
     int glyphCount() const;
 
     bool drawAsDistanceFields() const;
-    bool drawAsPaths() const;
     bool needsTransform() const;
     bool needsPadding() const;
 
@@ -376,6 +373,14 @@ public:
                                        GrTextBlob* blob,
                                        SkArenaAlloc* alloc);
 
+    void insertSubRunOpsIntoTarget(GrTextTarget* target,
+                                   const SkSurfaceProps& props,
+                                   const SkPaint& paint,
+                                   const SkPMColor4f& filteredColor,
+                                   const GrClip* clip,
+                                   const SkMatrixProvider& deviceMatrix,
+                                   SkPoint drawOrigin);
+
     std::unique_ptr<GrAtlasTextOp> makeOp(const SkMatrixProvider& matrixProvider,
                                           SkPoint drawOrigin,
                                           const SkIRect& clipRect,
@@ -386,10 +391,7 @@ public:
 
     SubRun* fNextSubRun{nullptr};
     GrTextBlob* fBlob;
-    const SkStrikeSpec fStrikeSpec;
-    sk_sp<GrTextStrike> fStrike;
     uint64_t fAtlasGeneration{GrDrawOpAtlas::kInvalidAtlasGeneration};
-    std::vector<PathGlyph> fPaths;
 
 private:
     static SubRun* InitForAtlas(SubRunType type,
@@ -401,17 +403,22 @@ private:
     bool hasW() const;
     void setUseLCDText(bool useLCDText);
     void setAntiAliased(bool antiAliased);
+    bool drawAsPaths() const;
 
     const SubRunType fType;
     const GrMaskFormat fMaskFormat;
     bool fUseLCDText{false};
     bool fAntiAliased{false};
 
+    const SkStrikeSpec fStrikeSpec;
+    sk_sp<GrTextStrike> fStrike;
+
     GrDrawOpAtlas::BulkUseTokenUpdater fBulkUseToken;
     // The vertex bounds in device space if needsTransform() is false, otherwise the bounds in
     // source space. The bounds are the joined rectangles of all the glyphs.
     const SkRect fVertexBounds;
     const SkSpan<VertexData> fVertexData;
+    std::vector<PathGlyph> fPaths;
 };  // SubRun
 
 #endif  // GrTextBlob_DEFINED
