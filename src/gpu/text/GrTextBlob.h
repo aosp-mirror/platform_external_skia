@@ -269,6 +269,8 @@ private:
     // Return {success, number of glyphs regenerated}
     std::tuple<bool, int> updateTextureCoordinates(int begin, int end);
 
+    GrDrawOpAtlas::ErrorCode addGlyphToAtlas(const SkGlyph& skGlyph, GrGlyph* grGlyph, int padding);
+
     GrResourceProvider* fResourceProvider;
     GrDeferredUploadTarget* fUploadTarget;
     GrAtlasManager* fFullAtlasManager;
@@ -335,6 +337,9 @@ public:
     bool drawAsDistanceFields() const;
     bool needsTransform() const;
     bool needsPadding() const;
+    int atlasPadding() const;
+    SkSpan<const VertexData> vertexData() const;
+
 
     // Acquire a GrTextStrike and convert the SkPackedGlyphIDs to GrGlyphs for this run
     void prepareGrGlyphs(GrStrikeCache*);

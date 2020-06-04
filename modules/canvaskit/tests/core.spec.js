@@ -623,16 +623,27 @@ describe('Core canvas behavior', () => {
         expect(CanvasKit.SaveLayerF16ColorType).toEqual(16);
     });
 
-    it('can set and get a 4f color on a paint', () => {
+    it('can set color on a paint and get it as four floats', () => {
         const paint = new CanvasKit.SkPaint();
         paint.setColor(CanvasKit.Color4f(3.3, 2.2, 1.1, 0.5));
         expect(paint.getColor()).toEqual(Float32Array.of(3.3, 2.2, 1.1, 0.5));
+
+        paint.setColorComponents(0.5, 0.6, 0.7, 0.8);
+        expect(paint.getColor()).toEqual(Float32Array.of(0.5, 0.6, 0.7, 0.8));
+
+        paint.setColorInt(CanvasKit.ColorAsInt(50, 100, 150, 200));
+        const color = paint.getColor();
+        expect(color.length).toEqual(4);
+        expect(color[0]).toBeCloseTo(50/255, 5);
+        expect(color[1]).toBeCloseTo(100/255, 5);
+        expect(color[2]).toBeCloseTo(150/255, 5);
+        expect(color[3]).toBeCloseTo(200/255, 5);
     });
 
     gm('draw shadow', (canvas) => {
         const lightRadius = 30;
         const flags = 0;
-        const lightPos = [250,150,300]; 
+        const lightPos = [250,150,300];
         const zPlaneParams = [0,0,1];
         const path = starPath(CanvasKit);
 
@@ -754,6 +765,13 @@ describe('Core canvas behavior', () => {
             canvas.concat(new DOMMatrix().rotateAxisAngle(0, 1, 0, radiansToDegrees(Math.PI/4)));
             canvas.concat(new DOMMatrix().rotateAxisAngle(0, 0, 1, radiansToDegrees(Math.PI/16)));
             canvas.concat(new DOMMatrix().translate(-CANVAS_WIDTH/2, 0, 0));
+
+            const localMatrix = canvas.getLocalToDevice();
+            expect4x4MatricesToMatch([
+             0.693519, -0.137949,  0.707106,   91.944030,
+             0.698150,  0.370924, -0.612372, -209.445297,
+            -0.177806,  0.918359,  0.353553,   53.342029,
+             0       ,  0       ,  0       ,    1       ], localMatrix);
 
             // Draw some stripes to help the eye detect the turn
             const stripeWidth = 10;

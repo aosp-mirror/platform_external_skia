@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2020-06-03
+
 ### Added
  - Support for wide-gamut color spaces DisplayP3 and AdobeRGB. However, correct representation on a
    WCG monitor requires that the browser is rendering everything to the DisplayP3 or AdobeRGB
@@ -18,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `CanvasKit.Free` to explicitly clean up memory after `CanvasKit.Malloc`. All memory allocated
    with `CanvasKit.Malloc` must be released with `CanvasKit.Free` or it will be leaked. This can
    improve performance by reducing the copying of data between the JS and WASM side.
+ - `CanvasKit.ColorAsInt`, `SkPaint.setColorComponents`, `SkPaint.setColorInt`,
+   `SkCanvas.drawColorComponents`, `SkCanvas.drawColorInt` for when clients want
+   to avoid the overhead of allocating an array for color components and only need 8888 color.
 
 ### Changed
  - We now compile/ship with Emscripten v1.39.16.
@@ -26,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - all `_Make*Shader` functions now accept a color space argument at the end. leaving it off or
    passing null makes it behave as it did before, defaulting to sRGB
  - `SkPaint.setColor` accepts a new color space argument, defaulting to sRGB.
+ - Fewer allocations required to send Color and Matrices between JS and WASM layer.
+ - All APIs that take a 1 dimensional array should also accept the object returned by Malloc. It is
+   recommended to pass the Malloc object, as the TypedArray could be invalidated any time
+   CanvasKit needs to allocate memory and needs to resize to accommodate.
 
 ### Breaking
  - `CanvasKitInit(...)` now directly returns a Promise. As such, `CanvasKitInit(...).ready()`
@@ -34,8 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    the canvas element. Use the canvas element's width/height attributes to dictate the size of
    the drawing area, and use CSS width/height to set the size it will appear on the page
    (it is rescaled after drawing when css sizing applies).
- - TypedArrays returned by `CanvasKit.Malloc` will no longer be automatically cleaned up. Clients
+ - Memory returned by `CanvasKit.Malloc` will no longer be automatically cleaned up. Clients
    must use `CanvasKit.Free` to release the memory.
+ - `CanvasKit.Malloc` no longer directly returns a TypedArray, but an object that can produce
+   them with toTypedArray(). This is to avoid "detached ArrayBuffer" errors:
+   <https://github.com/emscripten-core/emscripten/issues/6747>
 
 ### Fixed
  - WebGL context is no longer created with "antialias" flag. Using "antialias" caused poor AA

@@ -21,7 +21,10 @@ public:
 
     SampleMatrixConstantEffect(std::unique_ptr<GrFragmentProcessor> child)
             : INHERITED(CLASS_ID, kNone_OptimizationFlags) {
-        child->setSampleMatrix(SkSL::SampleMatrix(SkSL::SampleMatrix::Kind::kVariable));
+        child->setSampleMatrix(SkSL::SampleMatrix(SkSL::SampleMatrix::Kind::kConstantOrUniform,
+                                                  child.get(), "float3x3(float3(0.5, 0.0, 0.0), "
+                                                                        "float3(0.0, 0.5, 0.0), "
+                                                                        "float3(0.0, 0.0, 1.0))"));
         this->registerChildProcessor(std::move(child));
     }
 
@@ -43,7 +46,7 @@ private:
 class GLSLSampleMatrixConstantEffect : public GrGLSLFragmentProcessor {
     void emitCode(EmitArgs& args) override {
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-        SkString sample = this->invokeChildWithMatrix(0, args, "float3x3(0.5)");
+        SkString sample = this->invokeChild(0, args);
         fragBuilder->codeAppendf("%s = %s;\n", args.fOutputColor, sample.c_str());
     }
 };
