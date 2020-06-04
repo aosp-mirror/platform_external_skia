@@ -1666,6 +1666,7 @@ void SkCanvas::clipShader(sk_sp<SkShader> sh, SkClipOp op) {
                 this->clipRect({0,0,0,0});
             }
         } else {
+            this->checkForDeferredSave();
             this->onClipShader(std::move(sh), op);
         }
     }
@@ -2834,7 +2835,7 @@ void SkCanvas::onDrawEdgeAAImageSet(const ImageSetEntry imageSet[], int count,
 // methods, rather than actually drawing themselves.
 //////////////////////////////////////////////////////////////////////////////
 
-void SkCanvas::drawColor(SkColor c, SkBlendMode mode) {
+void SkCanvas::drawColor(const SkColor4f& c, SkBlendMode mode) {
     SkPaint paint;
     paint.setColor(c);
     paint.setBlendMode(mode);

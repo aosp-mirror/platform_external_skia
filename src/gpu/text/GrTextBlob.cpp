@@ -305,6 +305,14 @@ bool GrTextBlob::SubRun::needsPadding() const {
     return fType == kTransformedPath || fType == kTransformedMask;
 }
 
+int GrTextBlob::SubRun::atlasPadding() const {
+    return SkTo<int>(this->needsPadding());
+}
+
+auto GrTextBlob::SubRun::vertexData() const -> SkSpan<const VertexData> {
+    return fVertexData;
+}
+
 bool GrTextBlob::SubRun::hasW() const {
     if (fType == kTransformedSDFT) {
         return fBlob->hasPerspective() || fBlob->forceWForDistanceFields();
@@ -905,38 +913,38 @@ static void get_packed_glyph_image(
         }
     }
 }
-
+using VR = GrTextBlob::VertexRegenerator;
 // returns true if glyph successfully added to texture atlas, false otherwise.  If the glyph's
 // mask format has changed, then add_glyph_to_atlas will draw a clear box.  This will almost never
 // happen.
 // TODO we can handle some of these cases if we really want to, but the long term solution is to
 // get the actual glyph image itself when we get the glyph metrics.
-static GrDrawOpAtlas::ErrorCode add_glyph_to_atlas(const SkGlyph& skGlyph,
-                                                   GrMaskFormat expectedMaskFormat,
-                                                   bool needsPadding,
-                                                   GrResourceProvider* resourceProvider,
-                                                   GrDeferredUploadTarget* target,
-                                                   GrAtlasManager* fullAtlasManager,
-                                                   GrGlyph* grGlyph) {
+GrDrawOpAtlas::ErrorCode VR::addGlyphToAtlas(
+        const SkGlyph& skGlyph, GrGlyph* grGlyph, int padding) {
+    if (skGlyph.image() == nullptr) {
+        return GrDrawOpAtlas::ErrorCode::kError;
+    }
     SkASSERT(grGlyph != nullptr);
-    SkASSERT(skGlyph.image() != nullptr);
 
-    expectedMaskFormat = fullAtlasManager->resolveMaskFormat(expectedMaskFormat);
+    GrMaskFormat glyphFormat = GrGlyph::FormatFromSkGlyph(skGlyph.maskFormat());
+    GrMaskFormat expectedMaskFormat = fFullAtlasManager->resolveMaskFormat(glyphFormat);
     int bytesPerPixel = GrMaskFormatBytesPerPixel(expectedMaskFormat);
 
-    SkDEBUGCODE(bool isSDFGlyph = skGlyph.maskFormat() == SkMask::kSDF_Format;)
-    SkASSERT(!needsPadding || !isSDFGlyph);
+    if (padding > 0) {
+        SkASSERT(skGlyph.maskFormat() != SkMask::kSDF_Format);
+    }
 
+    SkASSERT(padding == 0 || padding == 1);
     // Add 1 pixel padding around grGlyph if needed.
-    const int width = needsPadding ? skGlyph.width() + 2 : skGlyph.width();
-    const int height = needsPadding ? skGlyph.height() + 2 : skGlyph.height();
+    const int width = skGlyph.width() + 2*padding;
+    const int height = skGlyph.height() + 2*padding;
     int rowBytes = width * bytesPerPixel;
     size_t size = height * rowBytes;
 
     // Temporary storage for normalizing grGlyph image.
     SkAutoSMalloc<1024> storage(size);
     void* dataPtr = storage.get();
-    if (needsPadding) {
+    if (padding > 0) {
         sk_bzero(dataPtr, size);
         // Advance in one row and one column.
         dataPtr = (char*)(dataPtr) + rowBytes + bytesPerPixel;
@@ -944,8 +952,13 @@ static GrDrawOpAtlas::ErrorCode add_glyph_to_atlas(const SkGlyph& skGlyph,
 
     get_packed_glyph_image(skGlyph, rowBytes, expectedMaskFormat, dataPtr);
 
-    return fullAtlasManager->addToAtlas(resourceProvider, target, expectedMaskFormat, width, height,
-                                        storage.get(), &grGlyph->fAtlasLocator);
+    return fFullAtlasManager->addToAtlas(fResourceProvider,
+                                         fUploadTarget,
+                                         expectedMaskFormat,
+                                         width,
+                                         height,
+                                         storage.get(),
+                                         &grGlyph->fAtlasLocator);
 }
 
 // -- GrTextBlob::VertexRegenerator ----------------------------------------------------------------
@@ -966,32 +979,27 @@ std::tuple<bool, int> GrTextBlob::VertexRegenerator::updateTextureCoordinates(
     SkBulkGlyphMetricsAndImages metricsAndImages{fSubRun->strikeSpec()};
 
     // Update the atlas information in the GrStrike.
-    auto code = GrDrawOpAtlas::ErrorCode::kSucceeded;
     auto tokenTracker = fUploadTarget->tokenTracker();
-    int i = begin;
-    for (; i < end; i++) {
-        GrGlyph* grGlyph = fSubRun->grGlyph(i);
+    auto vertexData = fSubRun->vertexData().subspan(begin, end - begin);
+    int glyphsPlacedInAtlas = 0;
+    for (auto [glyph, pos, rect] : vertexData) {
+        GrGlyph* grGlyph = glyph.grGlyph;
         SkASSERT(grGlyph != nullptr);
 
         if (!fFullAtlasManager->hasGlyph(fSubRun->maskFormat(), grGlyph)) {
             const SkGlyph& skGlyph = *metricsAndImages.glyph(grGlyph->fPackedID);
-            if (skGlyph.image() == nullptr) {
-                return {false, 0};
-            }
-            code = add_glyph_to_atlas(skGlyph, fSubRun->maskFormat(),
-                                      fSubRun->needsPadding(), fResourceProvider,
-                                      fUploadTarget, fFullAtlasManager, grGlyph);
+            auto code = this->addGlyphToAtlas(skGlyph, grGlyph, fSubRun->atlasPadding());
             if (code != GrDrawOpAtlas::ErrorCode::kSucceeded) {
-                break;
+                return {code != GrDrawOpAtlas::ErrorCode::kError, glyphsPlacedInAtlas};
             }
         }
         fFullAtlasManager->addGlyphToBulkAndSetUseToken(
                 fSubRun->bulkUseToken(), fSubRun->maskFormat(), grGlyph,
                 tokenTracker->nextDrawToken());
+        glyphsPlacedInAtlas++;
     }
-    int glyphsPlacedInAtlas = i - begin;
 
-    return {code != GrDrawOpAtlas::ErrorCode::kError, glyphsPlacedInAtlas};
+    return {true, glyphsPlacedInAtlas};
 }
 
 std::tuple<bool, int> GrTextBlob::VertexRegenerator::regenerate(int begin, int end) {
