@@ -200,7 +200,7 @@ opts("avx") {
   } else {
     cflags = [ "-mavx" ]
     if (is_mac && is_debug) {
-      cflags += [ "-O1" ]  # Work around skia:9709
+      cflags += [ "-fno-stack-check" ]  # Work around skia:9709
     }
   }
 }
@@ -213,7 +213,7 @@ opts("hsw") {
   } else {
     cflags = [ "-march=haswell" ]
     if (is_mac && is_debug) {
-      cflags += [ "-O1" ]  # Work around skia:9709
+      cflags += [ "-fno-stack-check" ]  # Work around skia:9709
     }
   }
 }
@@ -359,6 +359,31 @@ optional("fontmgr_fuchsia") {
     "src/ports/SkFontMgr_fuchsia.cpp",
     "src/ports/SkFontMgr_fuchsia.h",
   ]
+}
+
+optional("fontmgr_mac") {
+  enabled = skia_use_fonthost_mac
+
+  sources = [ "src/ports/SkFontHost_mac.cpp" ]
+
+  if (is_mac) {
+    libs = [
+      # AppKit symbols NSFontWeightXXX may be dlsym'ed.
+      "AppKit.framework",
+      "ApplicationServices.framework",
+    ]
+  }
+
+  if (is_ios) {
+    libs = [
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+      "CoreText.framework",
+
+      # UIKit symbols UIFontWeightXXX may be dlsym'ed.
+      "UIKit.framework",
+    ]
+  }
 }
 
 optional("fontmgr_wasm") {
@@ -879,6 +904,7 @@ component("skia") {
     ":fontmgr_empty",
     ":fontmgr_fontconfig",
     ":fontmgr_fuchsia",
+    ":fontmgr_mac",
     ":fontmgr_wasm",
     ":fontmgr_win",
     ":fontmgr_win_gdi",
@@ -997,10 +1023,6 @@ component("skia") {
     }
   }
 
-  if (skia_use_fonthost_mac) {
-    sources += [ "src/ports/SkFontHost_mac.cpp" ]
-  }
-
   if (is_mac) {
     sources += [
       "src/ports/SkDebug_stdio.cpp",
@@ -1008,8 +1030,6 @@ component("skia") {
       "src/ports/SkImageGeneratorCG.cpp",
     ]
     libs += [
-      # AppKit symbols NSFontWeightXXX may be dlsym'ed.
-      "AppKit.framework",
       "ApplicationServices.framework",
       "OpenGL.framework",
     ]
@@ -1018,19 +1038,13 @@ component("skia") {
   if (is_ios) {
     sources += [
       "src/ports/SkDebug_stdio.cpp",
-      "src/ports/SkFontHost_mac.cpp",
       "src/ports/SkImageEncoder_CG.cpp",
       "src/ports/SkImageGeneratorCG.cpp",
     ]
     libs += [
       "CoreFoundation.framework",
-      "CoreGraphics.framework",
-      "CoreText.framework",
       "ImageIO.framework",
       "MobileCoreServices.framework",
-
-      # UIKit symbols UIFontWeightXXX may be dlsym'ed.
-      "UIKit.framework",
     ]
   }
 
