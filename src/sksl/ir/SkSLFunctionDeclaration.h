@@ -15,6 +15,8 @@
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
+#include <atomic>
+
 namespace SkSL {
 
 struct FunctionDefinition;
@@ -114,6 +116,7 @@ struct FunctionDeclaration : public Symbol {
     Modifiers fModifiers;
     const std::vector<const Variable*> fParameters;
     const Type& fReturnType;
+    mutable std::atomic<int> fCallCount = 0;
 
     typedef Symbol INHERITED;
 };

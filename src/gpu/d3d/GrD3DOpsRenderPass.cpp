@@ -51,7 +51,8 @@ void GrD3DOpsRenderPass::onBegin() {
     // TODO: set stencil too
 
     if (GrLoadOp::kClear == fColorLoadOp) {
-        fGpu->currentCommandList()->clearRenderTargetView(d3dRT, fClearColor, GrScissorState());
+        fGpu->currentCommandList()->clearRenderTargetView(
+                d3dRT, fClearColor, GrScissorState(fRenderTarget->dimensions()));
     }
 }
 
@@ -202,7 +203,7 @@ bool GrD3DOpsRenderPass::onBindTextures(const GrPrimitiveProcessor& primProc,
     }
 
     // TODO: possibly check for success once we start binding properly
-    fCurrentPipelineState->setAndBindTextures(primProc, primProcTextures, pipeline);
+    fCurrentPipelineState->setAndBindTextures(fGpu, primProc, primProcTextures, pipeline);
 
     return true;
 }
