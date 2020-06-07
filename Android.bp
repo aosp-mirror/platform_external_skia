@@ -193,7 +193,6 @@ cc_library_static {
         "src/core/SkMipMap.cpp",
         "src/core/SkModeColorFilter.cpp",
         "src/core/SkOpts.cpp",
-        "src/core/SkOpts_skx.cpp",
         "src/core/SkOverdrawCanvas.cpp",
         "src/core/SkPaint.cpp",
         "src/core/SkPaintPriv.cpp",
@@ -466,6 +465,7 @@ cc_library_static {
         "src/utils/SkThreadUtils_win.cpp",
         "src/utils/SkUTF.cpp",
         "src/utils/SkWhitelistTypefaces.cpp",
+        "src/utils/mac/SkCTFontSmoothBehavior.cpp",
         "src/utils/mac/SkCreateCGImageRef.cpp",
         "src/utils/win/SkAutoCoInitialize.cpp",
         "src/utils/win/SkDWrite.cpp",
@@ -505,6 +505,7 @@ cc_library_static {
             srcs: [
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
+                "src/opts/SkOpts_skx.cpp",
                 "src/opts/SkOpts_sse41.cpp",
                 "src/opts/SkOpts_sse42.cpp",
                 "src/opts/SkOpts_ssse3.cpp",
@@ -515,6 +516,7 @@ cc_library_static {
             srcs: [
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
+                "src/opts/SkOpts_skx.cpp",
                 "src/opts/SkOpts_sse41.cpp",
                 "src/opts/SkOpts_sse42.cpp",
                 "src/opts/SkOpts_ssse3.cpp",
