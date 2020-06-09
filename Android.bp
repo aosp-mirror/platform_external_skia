@@ -1051,6 +1051,7 @@ cc_test {
         "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
+        "experimental/skrive/src/Artboard.cpp",
         "experimental/skrive/src/SkRive.cpp",
         "experimental/skrive/src/reader/BinaryReader.cpp",
         "experimental/skrive/src/reader/JsonReader.cpp",
