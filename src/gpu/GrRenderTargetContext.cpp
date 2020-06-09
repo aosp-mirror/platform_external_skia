@@ -55,7 +55,6 @@
 #include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/ops/GrAtlasTextOp.h"
 #include "src/gpu/ops/GrClearOp.h"
-#include "src/gpu/ops/GrClearStencilClipOp.h"
 #include "src/gpu/ops/GrDrawAtlasOp.h"
 #include "src/gpu/ops/GrDrawOp.h"
 #include "src/gpu/ops/GrDrawVerticesOp.h"
@@ -78,8 +77,7 @@ public:
     TextTarget(GrRenderTargetContext* renderTargetContext)
             : GrTextTarget(renderTargetContext->width(), renderTargetContext->height(),
                            renderTargetContext->colorInfo())
-            , fRenderTargetContext(renderTargetContext)
-            , fGlyphPainter{*renderTargetContext} {}
+            , fRenderTargetContext(renderTargetContext) {}
 
     void addDrawOp(const GrClip* clip, std::unique_ptr<GrAtlasTextOp> op) override {
         fRenderTargetContext->addDrawOp(clip, std::move(op));
@@ -112,13 +110,11 @@ public:
     }
 
     SkGlyphRunListPainter* glyphPainter() override {
-        return &fGlyphPainter;
+        return fRenderTargetContext->glyphPainter();
     }
 
 private:
     GrRenderTargetContext* fRenderTargetContext;
-    SkGlyphRunListPainter fGlyphPainter;
-
 };
 
 #define ASSERT_OWNED_RESOURCE(R) SkASSERT(!(R) || (R)->getContext() == this->drawingManager()->getContext())
@@ -379,7 +375,8 @@ GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
         , fWriteView(std::move(writeView))
         , fOpsTask(sk_ref_sp(this->asSurfaceProxy()->getLastOpsTask()))
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
-        , fManagedOpsTask(managedOpsTask) {
+        , fManagedOpsTask(managedOpsTask)
+        , fGlyphPainter(*this) {
     if (fOpsTask) {
         fOpsTask->addClosedObserver(this);
     }
@@ -553,7 +550,7 @@ void GrRenderTargetContext::internalClear(const SkIRect* scissor,
                         GrFillRectOp::MakeNonAARect(fContext, std::move(paint), SkMatrix::I(),
                                                     SkRect::Make(scissorState.rect())));
     } else {
-        this->addOp(GrClearOp::Make(fContext, scissorState, color));
+        this->addOp(GrClearOp::MakeColor(fContext, scissorState, color));
     }
 }
 
@@ -959,7 +956,7 @@ void GrRenderTargetContext::internalStencilClear(const SkIRect* scissor, bool in
                         GrFillRectOp::MakeNonAARect(fContext, std::move(paint), SkMatrix::I(),
                                                     SkRect::Make(scissorState.rect()), ss));
     } else {
-        this->addOp(GrClearStencilClipOp::Make(fContext, scissorState, insideStencilMask));
+        this->addOp(GrClearOp::MakeStencilClip(fContext, scissorState, insideStencilMask));
     }
 }
 
