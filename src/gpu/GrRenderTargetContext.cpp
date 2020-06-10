@@ -20,6 +20,7 @@
 #include "src/core/SkGlyphRunPainter.h"
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkMatrixPriv.h"
+#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRRectPriv.h"
 #include "src/core/SkSurfacePriv.h"
 #include "src/core/SkYUVMath.h"
@@ -69,6 +70,7 @@
 #include "src/gpu/ops/GrStencilPathOp.h"
 #include "src/gpu/ops/GrStrokeRectOp.h"
 #include "src/gpu/ops/GrTextureOp.h"
+#include "src/gpu/text/GrTextBlobCache.h"
 #include "src/gpu/text/GrTextContext.h"
 #include "src/gpu/text/GrTextTarget.h"
 
@@ -373,10 +375,10 @@ GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
         : GrSurfaceContext(context, std::move(readView), colorType, kPremul_SkAlphaType,
                            std::move(colorSpace))
         , fWriteView(std::move(writeView))
-        , fOpsTask(sk_ref_sp(this->asSurfaceProxy()->getLastOpsTask()))
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
         , fManagedOpsTask(managedOpsTask)
         , fGlyphPainter(*this) {
+    fOpsTask = sk_ref_sp(context->priv().drawingManager()->getLastOpsTask(this->asSurfaceProxy()));
     if (fOpsTask) {
         fOpsTask->addClosedObserver(this);
     }
@@ -390,7 +392,7 @@ GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
 #ifdef SK_DEBUG
 void GrRenderTargetContext::onValidate() const {
     if (fOpsTask && !fOpsTask->isClosed()) {
-        SkASSERT(fWriteView.proxy()->getLastRenderTask() == fOpsTask.get());
+        SkASSERT(this->drawingManager()->getLastRenderTask(fWriteView.proxy()) == fOpsTask.get());
     }
 }
 #endif
@@ -443,9 +445,34 @@ GrOpsTask* GrRenderTargetContext::getOpsTask() {
     return fOpsTask.get();
 }
 
+static SkColor compute_canonical_color(const SkPaint& paint, bool lcd) {
+    SkColor canonicalColor = SkPaintPriv::ComputeLuminanceColor(paint);
+    if (lcd) {
+        // This is the correct computation for canonicalColor, but there are tons of cases where LCD
+        // can be modified. For now we just regenerate if any run in a textblob has LCD.
+        // TODO figure out where all of these modifications are and see if we can incorporate that
+        //      logic at a higher level *OR* use sRGB
+        //canonicalColor = SkMaskGamma::CanonicalColor(canonicalColor);
+
+        // TODO we want to figure out a way to be able to use the canonical color on LCD text,
+        // see the note above.  We pick a dummy value for LCD text to ensure we always match the
+        // same key
+        return SK_ColorTRANSPARENT;
+    } else {
+        // A8, though can have mixed BMP text but it shouldn't matter because BMP text won't have
+        // gamma corrected masks anyways, nor color
+        U8CPU lum = SkComputeLuminance(SkColorGetR(canonicalColor),
+                                       SkColorGetG(canonicalColor),
+                                       SkColorGetB(canonicalColor));
+        // reduce to our finite number of bits
+        canonicalColor = SkMaskGamma::CanonicalColor(SkColorSetRGB(lum, lum, lum));
+    }
+    return canonicalColor;
+}
+
 void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
                                              const SkMatrixProvider& matrixProvider,
-                                             const SkGlyphRunList& blob) {
+                                             const SkGlyphRunList& glyphRunList) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
@@ -458,9 +485,72 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
         return;
     }
 
-    GrTextContext* atlasTextContext = this->drawingManager()->getTextContext();
-    atlasTextContext->drawGlyphRunList(fContext, fTextTarget.get(), clip, matrixProvider,
-                                       fSurfaceProps, blob);
+    auto options = this->drawingManager()->getTextContext()->options();
+    GrTextBlobCache* textBlobCache = fContext->priv().getTextBlobCache();
+
+    // Get the first paint to use as the key paint.
+    const SkPaint& blobPaint = glyphRunList.paint();
+
+    SkPoint drawOrigin = glyphRunList.origin();
+
+    SkMaskFilterBase::BlurRec blurRec;
+    // It might be worth caching these things, but its not clear at this time
+    // TODO for animated mask filters, this will fill up our cache.  We need a safeguard here
+    const SkMaskFilter* mf = blobPaint.getMaskFilter();
+    bool canCache = glyphRunList.canCache() &&
+            !(blobPaint.getPathEffect() || (mf && !as_MFB(mf)->asABlur(&blurRec)));
+
+    // If we're doing linear blending, then we can disable the gamma hacks.
+    // Otherwise, leave them on. In either case, we still want the contrast boost:
+    // TODO: Can we be even smarter about mask gamma based on the dest transfer function?
+    SkScalerContextFlags scalerContextFlags = this->colorInfo().isLinearlyBlended()
+                                              ? SkScalerContextFlags::kBoostContrast
+                                              : SkScalerContextFlags::kFakeGammaAndBoostContrast;
+
+    sk_sp<GrTextBlob> blob;
+    GrTextBlob::Key key;
+    if (canCache) {
+        bool hasLCD = glyphRunList.anyRunsLCD();
+
+        // We canonicalize all non-lcd draws to use kUnknown_SkPixelGeometry
+        SkPixelGeometry pixelGeometry =
+                hasLCD ? fSurfaceProps.pixelGeometry() : kUnknown_SkPixelGeometry;
+
+        GrColor canonicalColor = compute_canonical_color(blobPaint, hasLCD);
+
+        key.fPixelGeometry = pixelGeometry;
+        key.fUniqueID = glyphRunList.uniqueID();
+        key.fStyle = blobPaint.getStyle();
+        key.fHasBlur = SkToBool(mf);
+        key.fCanonicalColor = canonicalColor;
+        key.fScalerContextFlags = scalerContextFlags;
+        blob = textBlobCache->find(key);
+    }
+
+    const SkMatrix& drawMatrix(matrixProvider.localToDevice());
+    if (blob != nullptr && blob->canReuse(blobPaint, blurRec, drawMatrix, drawOrigin)) {
+        // Reusing the blob. Move it to the front of LRU cache.
+        textBlobCache->makeMRU(blob.get());
+    } else {
+        // Build or Rebuild the GrTextBlob
+        if (blob != nullptr) {
+            // We have to remake the blob because changes may invalidate our masks.
+            // TODO we could probably get away with reuse most of the time if the pointer is unique,
+            //      but we'd have to clear the SubRun information
+            textBlobCache->remove(blob.get());
+        }
+        if (canCache) {
+            blob = textBlobCache->makeCachedBlob(glyphRunList, key, blurRec, drawMatrix);
+        } else {
+            blob = GrTextBlob::Make(glyphRunList, drawMatrix);
+        }
+        bool supportsSDFT = fContext->priv().caps()->shaderCaps()->supportsDistanceFieldText();
+        fGlyphPainter.processGlyphRunList(
+                glyphRunList, drawMatrix, fSurfaceProps, supportsSDFT, options, blob.get());
+    }
+
+    blob->insertOpsIntoTarget(
+            fTextTarget.get(), fSurfaceProps, blobPaint, clip, matrixProvider, drawOrigin);
 }
 
 void GrRenderTargetContext::discard() {
@@ -2459,8 +2549,9 @@ static void op_bounds(SkRect* bounds, const GrOp* op) {
 }
 
 void GrRenderTargetContext::addOp(std::unique_ptr<GrOp> op) {
-    this->getOpsTask()->addOp(
-            std::move(op), GrTextureResolveManager(this->drawingManager()), *this->caps());
+    GrDrawingManager* drawingMgr = this->drawingManager();
+    this->getOpsTask()->addOp(drawingMgr,
+            std::move(op), GrTextureResolveManager(drawingMgr), *this->caps());
 }
 
 void GrRenderTargetContext::addDrawOp(const GrClip* clip, std::unique_ptr<GrDrawOp> op,
@@ -2519,24 +2610,26 @@ void GrRenderTargetContext::addDrawOp(const GrClip* clip, std::unique_ptr<GrDraw
     GrProcessorSet::Analysis analysis = op->finalize(
             *this->caps(), &appliedClip, hasMixedSampledCoverage, clampType);
 
+    // Must be called before setDstProxyView so that it sees the final bounds of the op.
+    op->setClippedBounds(bounds);
+
     GrXferProcessor::DstProxyView dstProxyView;
     if (analysis.requiresDstTexture()) {
-        if (!this->setupDstProxyView(clip, *op, &dstProxyView)) {
+        if (!this->setupDstProxyView(*op, &dstProxyView)) {
             fContext->priv().opMemoryPool()->release(std::move(op));
             return;
         }
     }
 
-    op->setClippedBounds(bounds);
     auto opsTask = this->getOpsTask();
     if (willAddFn) {
         willAddFn(op.get(), opsTask->uniqueID());
     }
-    opsTask->addDrawOp(std::move(op), analysis, std::move(appliedClip), dstProxyView,
-                       GrTextureResolveManager(this->drawingManager()), *this->caps());
+    opsTask->addDrawOp(this->drawingManager(), std::move(op), analysis, std::move(appliedClip),
+                       dstProxyView,GrTextureResolveManager(this->drawingManager()), *this->caps());
 }
 
-bool GrRenderTargetContext::setupDstProxyView(const GrClip* clip, const GrOp& op,
+bool GrRenderTargetContext::setupDstProxyView(const GrOp& op,
                                               GrXferProcessor::DstProxyView* dstProxyView) {
     // If we are wrapping a vulkan secondary command buffer, we can't make a dst copy because we
     // don't actually have a VkImage to make a copy of. Additionally we don't have the power to
@@ -2556,37 +2649,20 @@ bool GrRenderTargetContext::setupDstProxyView(const GrClip* clip, const GrOp& op
         }
     }
 
-    SkIRect copyRect = SkIRect::MakeSize(this->asSurfaceProxy()->dimensions());
-
-    SkIRect clippedRect = get_clip_bounds(this, clip);
-    SkRect opBounds = op.bounds();
-    // If the op has aa bloating or is a infinitely thin geometry (hairline) outset the bounds by
-    // 0.5 pixels.
-    if (op.hasAABloat() || op.hasZeroArea()) {
-        opBounds.outset(0.5f, 0.5f);
-        // An antialiased/hairline draw can sometimes bleed outside of the clips bounds. For
-        // performance we may ignore the clip when the draw is entirely inside the clip is float
-        // space but will hit pixels just outside the clip when actually rasterizing.
-        clippedRect.outset(1, 1);
-        clippedRect.intersect(SkIRect::MakeSize(this->asSurfaceProxy()->dimensions()));
-    }
-    SkIRect opIBounds;
-    opBounds.roundOut(&opIBounds);
-    if (!clippedRect.intersect(opIBounds)) {
-#ifdef SK_DEBUG
-        GrCapsDebugf(this->caps(), "setupDstTexture: Missed an early reject bailing on draw.");
-#endif
-        return false;
-    }
-
     GrColorType colorType = this->colorInfo().colorType();
     // MSAA consideration: When there is support for reading MSAA samples in the shader we could
     // have per-sample dst values by making the copy multisampled.
     GrCaps::DstCopyRestrictions restrictions = this->caps()->getDstCopyRestrictions(
             this->asRenderTargetProxy(), colorType);
 
+    SkIRect copyRect = SkIRect::MakeSize(this->asSurfaceProxy()->backingStoreDimensions());
     if (!restrictions.fMustCopyWholeSrc) {
-        copyRect = clippedRect;
+        // If we don't need the whole source, restrict to the op's bounds. We add an extra pixel
+        // of padding to account for AA bloat and the unpredictable rounding of coords near pixel
+        // centers during rasterization.
+        SkIRect conservativeDrawBounds = op.bounds().roundOut();
+        conservativeDrawBounds.outset(1, 1);
+        SkAssertResult(copyRect.intersect(conservativeDrawBounds));
     }
 
     SkIPoint dstOffset;

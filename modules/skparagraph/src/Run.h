@@ -57,7 +57,6 @@ class DirText {
 
 class Run {
 public:
-    Run() = default;
     Run(ParagraphImpl* master,
         const SkShaper::RunHandler::RunInfo& info,
         size_t firstChar,
@@ -65,24 +64,18 @@ public:
         size_t index,
         SkScalar shiftX);
     Run(const Run&) = default;
-    Run& operator=(const Run&) = default;
+    Run& operator=(const Run&) = delete;
     Run(Run&&) = default;
-    Run& operator=(Run&&) = default;
+    Run& operator=(Run&&) = delete;
     ~Run() = default;
 
     void setMaster(ParagraphImpl* master) { fMaster = master; }
 
     SkShaper::RunHandler::Buffer newRunBuffer();
 
-    SkScalar posX(size_t index) const {
-        return fPositions[index].fX + fOffsets[index].fX;
-    }
-    void addX(size_t index, SkScalar shift) {
-        fPositions[index].fX += shift;
-    }
-    SkScalar posY(size_t index) const {
-        return fPositions[index].fY + fOffsets[index].fY;
-    }
+    SkScalar posX(size_t index) const { return fPositions[index].fX; }
+    void addX(size_t index, SkScalar shift) { fPositions[index].fX += shift; }
+    SkScalar posY(size_t index) const { return fPositions[index].fY; }
     size_t size() const { return fGlyphs.size(); }
     void setWidth(SkScalar width) { fAdvance.fX = width; }
     void setHeight(SkScalar height) { fAdvance.fY = height; }
@@ -159,7 +152,7 @@ public:
     }
     SkScalar calculateWidth(size_t start, size_t end, bool clip) const;
 
-    void copyTo(SkTextBlobBuilder& builder, size_t pos, size_t size, SkVector offset) const;
+    void copyTo(SkTextBlobBuilder& builder, size_t pos, size_t size) const;
 
     using ClusterTextVisitor = std::function<void(size_t glyphStart,
                                                   size_t glyphEnd,
@@ -172,15 +165,12 @@ public:
     using ClusterVisitor = std::function<void(Cluster* cluster)>;
     void iterateThroughClusters(const ClusterVisitor& visitor);
 
-    std::tuple<bool, ClusterIndex, ClusterIndex> findLimitingClusters(TextRange text, bool onlyInnerClusters) const;
+    std::tuple<bool, ClusterIndex, ClusterIndex> findLimitingClusters(TextRange text) const;
     SkSpan<const SkGlyphID> glyphs() const {
         return SkSpan<const SkGlyphID>(fGlyphs.begin(), fGlyphs.size());
     }
     SkSpan<const SkPoint> positions() const {
         return SkSpan<const SkPoint>(fPositions.begin(), fPositions.size());
-    }
-    SkSpan<const SkPoint> offsets() const {
-        return SkSpan<const SkPoint>(fOffsets.begin(), fOffsets.size());
     }
     SkSpan<const uint32_t> clusterIndexes() const {
         return SkSpan<const uint32_t>(fClusterIndexes.begin(), fClusterIndexes.size());
@@ -211,12 +201,8 @@ private:
     ClusterRange fClusterRange;
 
     SkFont fFont;
-    SkFontMetrics fFontMetrics;
-    SkScalar fHeightMultiplier;
     size_t fPlaceholderIndex;
-    bool fEllipsis;
     size_t fIndex;
-    uint8_t fBidiLevel;
     SkVector fAdvance;
     SkVector fOffset;
     TextIndex fClusterStart;
@@ -224,12 +210,17 @@ private:
     SkSTArray<128, SkGlyphID, true> fGlyphs;
     SkSTArray<128, SkPoint, true> fPositions;
     SkSTArray<128, SkPoint, true> fJustificationShifts; // For justification (current and prev shifts)
-    SkSTArray<128, SkPoint, true> fOffsets;
     SkSTArray<128, uint32_t, true> fClusterIndexes;
     SkSTArray<128, SkRect, true> fBounds;
 
     SkSTArray<128, SkScalar, true> fShifts;  // For formatting (letter/word spacing)
+
+    SkFontMetrics fFontMetrics;
+    const SkScalar fHeightMultiplier;
+
     bool fSpaced;
+    bool fEllipsis;
+    uint8_t fBidiLevel;
 };
 
 struct CodepointRepresentation {

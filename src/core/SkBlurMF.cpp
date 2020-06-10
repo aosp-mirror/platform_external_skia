@@ -766,7 +766,8 @@ bool SkBlurMaskFilterImpl::directFilterMaskGPU(GrRecordingContext* context,
             fp = GrRectBlurEffect::Make(context, *context->priv().caps()->shaderCaps(),
                                         devRRect.rect(), xformedSigma);
         } else {
-            fp = GrCircleBlurFragmentProcessor::Make(context, devRRect.rect(), xformedSigma);
+            fp = GrCircleBlurFragmentProcessor::Make(/*inputFP=*/nullptr, context, devRRect.rect(),
+                                                     xformedSigma);
         }
 
         if (!fp) {
@@ -853,15 +854,13 @@ bool SkBlurMaskFilterImpl::canFilterMaskGPU(const GrStyledShape& shape,
     }
 
     // We prefer to blur paths with small blur radii on the CPU.
-    if (ctm.rectStaysRect()) {
-        static const SkScalar kMIN_GPU_BLUR_SIZE  = SkIntToScalar(64);
-        static const SkScalar kMIN_GPU_BLUR_SIGMA = SkIntToScalar(32);
+    static const SkScalar kMIN_GPU_BLUR_SIZE  = SkIntToScalar(64);
+    static const SkScalar kMIN_GPU_BLUR_SIGMA = SkIntToScalar(32);
 
-        if (devSpaceShapeBounds.width() <= kMIN_GPU_BLUR_SIZE &&
-            devSpaceShapeBounds.height() <= kMIN_GPU_BLUR_SIZE &&
-            xformedSigma <= kMIN_GPU_BLUR_SIGMA) {
-            return false;
-        }
+    if (devSpaceShapeBounds.width() <= kMIN_GPU_BLUR_SIZE &&
+        devSpaceShapeBounds.height() <= kMIN_GPU_BLUR_SIZE &&
+        xformedSigma <= kMIN_GPU_BLUR_SIGMA) {
+        return false;
     }
 
     return true;
