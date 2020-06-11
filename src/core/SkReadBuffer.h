@@ -16,11 +16,11 @@
 #include "include/core/SkPathEffect.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkSerialProcs.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkPicturePriv.h"
-#include "src/core/SkReader32.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkShaderBase.h"
 
@@ -31,6 +31,8 @@ class SkReadBuffer {
 public:
     SkReadBuffer();
     SkReadBuffer(const void* data, size_t size);
+
+    void setMemory(const void*, size_t);
 
     /**
      *  Returns true IFF the version is older than the specified version.
@@ -48,12 +50,12 @@ public:
         fVersion = version;
     }
 
-    size_t size() const { return fReader.size(); }
-    size_t offset() const { return fReader.offset(); }
-    bool eof() { return fReader.eof(); }
+    size_t size() const { return fStop - fBase; }
+    size_t offset() const { return fCurr - fBase; }
+    bool eof() { return fCurr >= fStop; }
     const void* skip(size_t size);
     const void* skip(size_t count, size_t size);    // does safe multiply
-    size_t available() const { return fReader.available(); }
+    size_t available() const { return fStop - fCurr; }
 
     template <typename T> const T* skipT() {
         return static_cast<const T*>(this->skip(sizeof(T)));
@@ -122,6 +124,8 @@ public:
     bool readPointArray(SkPoint* points, size_t size);
     bool readScalarArray(SkScalar* values, size_t size);
 
+    const void* skipByteArray(size_t* size);
+
     sk_sp<SkData> readByteArrayAsData();
 
     // helpers to get info about arrays and binary data
@@ -168,7 +172,7 @@ public:
      */
     template <typename T>
     bool validateCanReadN(size_t n) {
-        return this->validate(n <= (fReader.available() / sizeof(T)));
+        return this->validate(n <= (this->available() / sizeof(T)));
     }
 
     bool isValid() const { return !fError; }
@@ -194,9 +198,12 @@ private:
 
     void setInvalid();
     bool readArray(void* value, size_t size, size_t elementSize);
-    void setMemory(const void*, size_t);
+    bool isAvailable(size_t size) const { return size <= this->available(); }
 
-    SkReader32 fReader;
+    // These are always 4-byte aligned
+    const char* fCurr;  // current position within buffer
+    const char* fStop;  // end of buffer
+    const char* fBase;  // beginning of buffer
 
     // Only used if we do not have an fFactoryArray.
     SkTHashMap<uint32_t, SkFlattenable::Factory> fFlattenableDict;

@@ -763,8 +763,9 @@ bool SkBlurMaskFilterImpl::directFilterMaskGPU(GrRecordingContext* context,
 
     if (devRRect.isRect() || SkRRectPriv::IsCircle(devRRect)) {
         if (devRRect.isRect()) {
-            fp = GrRectBlurEffect::Make(context, *context->priv().caps()->shaderCaps(),
-                                        devRRect.rect(), xformedSigma);
+            fp = GrRectBlurEffect::Make(
+                    /*inputFP=*/nullptr, context, *context->priv().caps()->shaderCaps(),
+                    devRRect.rect(), xformedSigma);
         } else {
             fp = GrCircleBlurFragmentProcessor::Make(/*inputFP=*/nullptr, context, devRRect.rect(),
                                                      xformedSigma);
@@ -791,7 +792,8 @@ bool SkBlurMaskFilterImpl::directFilterMaskGPU(GrRecordingContext* context,
         return true;
     }
 
-    fp = GrRRectBlurEffect::Make(context, fSigma, xformedSigma, srcRRect, devRRect);
+    fp = GrRRectBlurEffect::Make(/*inputFP=*/nullptr, context, fSigma, xformedSigma,
+                                 srcRRect, devRRect);
     if (!fp) {
         return false;
     }

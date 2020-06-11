@@ -285,7 +285,7 @@ uniform half4 circleData;
 void main() {
     // We just want to compute "(length(vec) - circleData.z + 0.5) * circleData.w" but need to
     // rearrange for precision.
-    half2 vec = (half2(sk_FragCoord.xy) - circleData.xy) * circleData.w;
+    half2 vec = half2((sk_FragCoord.xy - circleData.xy) * circleData.w);
     half dist = length(vec) + (0.5 - circleData.z) * circleData.w;
     half4 inputColor = sample(inputFP, sk_InColor);
     sk_OutColor = inputColor * sample(blurProfileSampler, half2(dist, 0.5)).a;
