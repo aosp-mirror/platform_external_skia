@@ -1056,6 +1056,7 @@ cc_test {
         "experimental/skrive/src/reader/BinaryReader.cpp",
         "experimental/skrive/src/reader/JsonReader.cpp",
         "experimental/skrive/src/reader/StreamReader.cpp",
+        "experimental/skrive/tests/BinaryReader.cpp",
         "experimental/skrive/tests/JsonReader.cpp",
         "experimental/svg/model/SkSVGAttribute.cpp",
         "experimental/svg/model/SkSVGAttributeParser.cpp",
