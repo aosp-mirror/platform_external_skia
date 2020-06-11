@@ -1778,6 +1778,51 @@ GrBackendTexture GrVkGpu::onCreateCompressedBackendTexture(
     return beTex;
 }
 
+bool GrVkGpu::setBackendSurfaceState(GrVkImageInfo info,
+                                     sk_sp<GrBackendSurfaceMutableStateImpl> currentState,
+                                     SkISize dimensions,
+                                     const GrVkSharedImageInfo& newInfo) {
+    sk_sp<GrVkTexture> texture = GrVkTexture::MakeWrappedTexture(
+            this, dimensions, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, kRW_GrIOType, info,
+            std::move(currentState));
+    SkASSERT(texture);
+    if (!texture) {
+        return false;
+    }
+    // Even though internally we use this helper for getting src access flags and stages they
+    // can also be used for general dst flags since we don't know exactly what the client
+    // plans on using the image for.
+    VkImageLayout newLayout = newInfo.getImageLayout();
+    VkPipelineStageFlags dstStage = GrVkImage::LayoutToPipelineSrcStageFlags(newLayout);
+    VkAccessFlags dstAccess = GrVkImage::LayoutToSrcAccessMask(newLayout);
+    texture->setImageLayoutAndQueueIndex(this, newLayout, dstAccess, dstStage, false,
+                                         newInfo.getQueueFamilyIndex());
+    return true;
+}
+
+bool GrVkGpu::setBackendTextureState(const GrBackendTexture& backendTeture,
+                                     const GrBackendSurfaceMutableState& newState,
+                                     sk_sp<GrRefCntedCallback> finishedCallback) {
+    GrVkImageInfo info;
+    SkAssertResult(backendTeture.getVkImageInfo(&info));
+    sk_sp<GrBackendSurfaceMutableStateImpl> currentState = backendTeture.getMutableState();
+    SkASSERT(currentState);
+    SkASSERT(newState.fBackend == GrBackend::kVulkan);
+    return this->setBackendSurfaceState(info, std::move(currentState), backendTeture.dimensions(),
+                                        newState.fVkState);
+}
+
+bool GrVkGpu::setBackendRenderTargetState(const GrBackendRenderTarget& backendRenderTarget,
+                                          const GrBackendSurfaceMutableState& newState,
+                                         sk_sp<GrRefCntedCallback> finishedCallback) {
+    GrVkImageInfo info;
+    SkAssertResult(backendRenderTarget.getVkImageInfo(&info));
+    sk_sp<GrBackendSurfaceMutableStateImpl> currentState = backendRenderTarget.getMutableState();
+    SkASSERT(currentState);
+    SkASSERT(newState.fBackend == GrBackend::kVulkan);
+    return this->setBackendSurfaceState(info, std::move(currentState),
+                                        backendRenderTarget.dimensions(), newState.fVkState);
+}
 
 void GrVkGpu::querySampleLocations(GrRenderTarget* renderTarget,
                                    SkTArray<SkPoint>* sampleLocations) {
@@ -1944,8 +1989,9 @@ void GrVkGpu::addImageMemoryBarrier(const GrManagedResource* resource,
 }
 
 void GrVkGpu::prepareSurfacesForBackendAccessAndExternalIO(
-        GrSurfaceProxy* proxies[], int numProxies, SkSurface::BackendSurfaceAccess access,
-        const GrPrepareForExternalIORequests& externalRequests) {
+        GrSurfaceProxy* proxies[],
+        int numProxies,
+        SkSurface::BackendSurfaceAccess access) {
     SkASSERT(numProxies >= 0);
     SkASSERT(!numProxies || proxies);
     // Submit the current command buffer to the Queue. Whether we inserted semaphores or not does
@@ -1962,56 +2008,6 @@ void GrVkGpu::prepareSurfacesForBackendAccessAndExternalIO(
                 image = static_cast<GrVkRenderTarget*>(rt);
             }
             image->prepareForPresent(this);
-        }
-    }
-
-    // Handle requests for preparing for external IO
-    for (int i = 0; i < externalRequests.fNumImages; ++i) {
-        SkImage* image = externalRequests.fImages[i];
-        if (!image->isTextureBacked()) {
-            continue;
-        }
-        SkImage_GpuBase* gpuImage = static_cast<SkImage_GpuBase*>(as_IB(image));
-        const GrSurfaceProxyView* view = gpuImage->view(this->getContext());
-        SkASSERT(view && *view);
-
-        if (!view->proxy()->isInstantiated()) {
-            auto resourceProvider = this->getContext()->priv().resourceProvider();
-            if (!view->proxy()->instantiate(resourceProvider)) {
-                continue;
-            }
-        }
-
-        GrTexture* tex = view->proxy()->peekTexture();
-        if (!tex) {
-            continue;
-        }
-        GrVkTexture* vkTex = static_cast<GrVkTexture*>(tex);
-        vkTex->prepareForExternal(this);
-    }
-    for (int i = 0; i < externalRequests.fNumSurfaces; ++i) {
-        SkSurface* surface = externalRequests.fSurfaces[i];
-        if (!surface->getCanvas()->getGrContext()) {
-            continue;
-        }
-        SkSurface_Gpu* gpuSurface = static_cast<SkSurface_Gpu*>(surface);
-        auto* rtc = gpuSurface->getDevice()->accessRenderTargetContext();
-        sk_sp<GrRenderTargetProxy> proxy = rtc->asRenderTargetProxyRef();
-        if (!proxy->isInstantiated()) {
-            auto resourceProvider = this->getContext()->priv().resourceProvider();
-            if (!proxy->instantiate(resourceProvider)) {
-                continue;
-            }
-        }
-
-        GrRenderTarget* rt = proxy->peekRenderTarget();
-        SkASSERT(rt);
-        GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(rt);
-        if (externalRequests.fPrepareSurfaceForPresent &&
-            externalRequests.fPrepareSurfaceForPresent[i]) {
-            vkRT->prepareForPresent(this);
-        } else {
-            vkRT->prepareForExternal(this);
         }
     }
 }

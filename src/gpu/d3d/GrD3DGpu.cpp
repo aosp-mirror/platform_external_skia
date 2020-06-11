@@ -84,11 +84,11 @@ void GrD3DGpu::destroyResources() {
     // We used a placement new for each object in fOutstandingCommandLists, so we're responsible
     // for calling the destructor on each of them as well.
     while (!fOutstandingCommandLists.empty()) {
-        OutstandingCommandList* list = (OutstandingCommandList*)fOutstandingCommandLists.back();
+        OutstandingCommandList* list = (OutstandingCommandList*)fOutstandingCommandLists.front();
         SkASSERT(list->fFenceValue <= fenceValue);
         // No reason to recycle the command lists since we are destroying all resources anyways.
         list->~OutstandingCommandList();
-        fOutstandingCommandLists.pop_back();
+        fOutstandingCommandLists.pop_front();
     }
 
     fResourceProvider.destroyResources();
@@ -1013,8 +1013,7 @@ void GrD3DGpu::addResourceBarriers(sk_sp<GrManagedResource> resource,
 }
 
 void GrD3DGpu::prepareSurfacesForBackendAccessAndExternalIO(
-        GrSurfaceProxy* proxies[], int numProxies, SkSurface::BackendSurfaceAccess access,
-        const GrPrepareForExternalIORequests& externalRequests) {
+        GrSurfaceProxy* proxies[], int numProxies, SkSurface::BackendSurfaceAccess access) {
     SkASSERT(numProxies >= 0);
     SkASSERT(!numProxies || proxies);
 
