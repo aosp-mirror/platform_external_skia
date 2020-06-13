@@ -58,6 +58,7 @@ static constexpr char g_type_message[] = "How to interpret --bytes, one of:\n"
                                          "skdescriptor_deserialize\n"
                                          "skp\n"
                                          "sksl2glsl\n"
+                                         "svg_dom\n"
                                          "sksl2metal\n"
                                          "sksl2pipeline\n"
                                          "sksl2spirv\n"
@@ -90,6 +91,7 @@ static void fuzz_sksl2glsl(sk_sp<SkData>);
 static void fuzz_sksl2metal(sk_sp<SkData>);
 static void fuzz_sksl2pipeline(sk_sp<SkData>);
 static void fuzz_sksl2spirv(sk_sp<SkData>);
+static void fuzz_svg_dom(sk_sp<SkData>);
 static void fuzz_textblob_deserialize(sk_sp<SkData>);
 
 static void print_api_names();
@@ -231,6 +233,10 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_sksl2pipeline(bytes);
         return 0;
     }
+    if (type.equals("svg_dom")) {
+        fuzz_svg_dom(bytes);
+        return 0;
+    }
     if (type.equals("textblob")) {
         fuzz_textblob_deserialize(bytes);
         return 0;
@@ -277,6 +283,7 @@ static std::map<std::string, std::string> cf_map = {
 #if defined(SK_ENABLE_SKOTTIE)
     {"skottie_json", "skottie_json"},
 #endif
+    {"svg_dom", "svg_dom"},
     {"textblob_deserialize", "textblob"}
 };
 
@@ -326,6 +333,12 @@ static void fuzz_skottie_json(sk_sp<SkData> bytes){
     SkDebugf("[terminated] Done animating!\n");
 }
 #endif
+
+void FuzzSVG(sk_sp<SkData> bytes);
+static void fuzz_svg_dom(sk_sp<SkData> bytes){
+    FuzzSVG(bytes);
+    SkDebugf("[terminated] Done DOM!\n");
+}
 
 // This adds up the first 1024 bytes and returns it as an 8 bit integer.  This allows afl-fuzz to
 // deterministically excercise different paths, or *options* (such as different scaling sizes or
@@ -464,6 +477,7 @@ static void fuzz_img(sk_sp<SkData> bytes, uint8_t scale, uint8_t mode) {
                     SkDebugf("Incompatible colortype conversion\n");
                     // Crash to allow afl-fuzz to know this was a bug.
                     raise(SIGSEGV);
+                    break;
                 default:
                     SkDebugf("[terminated] Couldn't getPixels.\n");
                     return;
@@ -594,7 +608,7 @@ static void fuzz_img(sk_sp<SkData> bytes, uint8_t scale, uint8_t mode) {
                                 return;
                             }
                             // If the first subset succeeded, a later one should not fail.
-                            // fall through to failure
+                            [[fallthrough]];
                         case SkCodec::kUnimplemented:
                             if (0 == (x|y)) {
                                 // First subset is okay to return unimplemented.
@@ -602,7 +616,7 @@ static void fuzz_img(sk_sp<SkData> bytes, uint8_t scale, uint8_t mode) {
                                 return;
                             }
                             // If the first subset succeeded, why would a later one fail?
-                            // fall through to failure
+                            [[fallthrough]];
                         default:
                             SkDebugf("[terminated] subset codec failed to decode (%d, %d, %d, %d) "
                                                   "with dimensions (%d x %d)\t error %d\n",
