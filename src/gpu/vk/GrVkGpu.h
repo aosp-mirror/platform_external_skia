@@ -267,9 +267,11 @@ private:
 
     void addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback);
 
-    void prepareSurfacesForBackendAccessAndExternalIO(
-            GrSurfaceProxy* proxies[], int numProxies,
-            SkSurface::BackendSurfaceAccess access) override;
+    void prepareSurfacesForBackendAccessAndStateUpdates(
+            GrSurfaceProxy* proxies[],
+            int numProxies,
+            SkSurface::BackendSurfaceAccess access,
+            const GrBackendSurfaceMutableState* newState) override;
 
     bool onSubmitToGpu(bool syncCpu) override;
 
@@ -296,8 +298,9 @@ private:
                              GrColorType colorType, const void* data, size_t rowBytes);
     bool uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int width, int height,
                               GrColorType colorType, const GrMipLevel texels[], int mipLevelCount);
-    bool uploadTexDataCompressed(GrVkTexture* tex, VkFormat vkFormat, SkISize dimensions,
-                                 GrMipMapped mipMapped, const void* data, size_t dataSize);
+    bool uploadTexDataCompressed(GrVkTexture* tex, SkImage::CompressionType compression,
+                                 VkFormat vkFormat, SkISize dimensions, GrMipMapped mipMapped,
+                                 const void* data, size_t dataSize);
     void resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect& srcRect,
                       const SkIPoint& dstPoint);
 
