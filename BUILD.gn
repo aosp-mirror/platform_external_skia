@@ -492,6 +492,7 @@ if (skia_lex) {
     args = [
       rebase_path(sksllex_path),
       rebase_path("bin/clang-format"),
+      rebase_path("bin/fetch-clang-format"),
       rebase_path("src"),
     ]
   }
@@ -558,6 +559,7 @@ if (skia_compile_processors) {
     args = [
       rebase_path(skslc_path),
       rebase_path("bin/clang-format"),
+      rebase_path("bin/fetch-clang-format"),
     ]
     args += rebase_path(skia_gpu_processor_sources)
   }
@@ -2006,6 +2008,7 @@ if (skia_enable_tools) {
       "fuzz/oss_fuzz/FuzzSKSL2Metal.cpp",
       "fuzz/oss_fuzz/FuzzSKSL2Pipeline.cpp",
       "fuzz/oss_fuzz/FuzzSKSL2SPIRV.cpp",
+      "fuzz/oss_fuzz/FuzzSVG.cpp",
       "fuzz/oss_fuzz/FuzzSkDescriptorDeserialize.cpp",
       "fuzz/oss_fuzz/FuzzTextBlobDeserialize.cpp",
       "tools/UrlDataManager.cpp",
@@ -2131,10 +2134,8 @@ if (skia_enable_tools) {
     test_app("skottie_android") {
       is_shared_library = true
 
-      sources = [
-        "platform_tools/android/apps/skottie/src/main/cpp/JavaInputStreamAdaptor.cpp",
-        "platform_tools/android/apps/skottie/src/main/cpp/native-lib.cpp",
-      ]
+      sources =
+          [ "platform_tools/android/apps/skottie/src/main/cpp/native-lib.cpp" ]
       libs = []
 
       deps = [

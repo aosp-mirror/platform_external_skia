@@ -8,12 +8,12 @@
 #ifndef GrDrawingManager_DEFINED
 #define GrDrawingManager_DEFINED
 
-#include <set>
 #include "include/core/SkSurface.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTHash.h"
 #include "src/gpu/GrBufferAllocPool.h"
 #include "src/gpu/GrDeferredUpload.h"
+#include "src/gpu/GrHashMapWithCache.h"
 #include "src/gpu/GrPathRenderer.h"
 #include "src/gpu/GrPathRendererChain.h"
 #include "src/gpu/GrResourceCache.h"
@@ -100,11 +100,13 @@ public:
     GrSemaphoresSubmitted flushSurfaces(GrSurfaceProxy* proxies[],
                                         int cnt,
                                         SkSurface::BackendSurfaceAccess access,
-                                        const GrFlushInfo& info);
+                                        const GrFlushInfo& info,
+                                        const GrBackendSurfaceMutableState* newState);
     GrSemaphoresSubmitted flushSurface(GrSurfaceProxy* proxy,
                                        SkSurface::BackendSurfaceAccess access,
-                                       const GrFlushInfo& info) {
-        return this->flushSurfaces(&proxy, 1, access, info);
+                                       const GrFlushInfo& info,
+                                       const GrBackendSurfaceMutableState* newState) {
+        return this->flushSurfaces(&proxy, 1, access, info, newState);
     }
 
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
@@ -196,7 +198,8 @@ private:
     bool flush(GrSurfaceProxy* proxies[],
                int numProxies,
                SkSurface::BackendSurfaceAccess access,
-               const GrFlushInfo&);
+               const GrFlushInfo&,
+               const GrBackendSurfaceMutableState* newState);
 
     bool submitToGpu(bool syncToCpu);
 
@@ -252,8 +255,13 @@ private:
     // Note: we do not expect a whole lot of these per flush
     SkTHashMap<uint32_t, GrRenderTargetProxy*> fDDLTargets;
 
-    // Keys are UniqueID of GrSurfaceProxys.
-    SkTHashMap<uint32_t, GrRenderTask*> fLastRenderTasks;
+    struct SurfaceIDKeyTraits {
+        static uint32_t GetInvalidKey() {
+            return GrSurfaceProxy::UniqueID::InvalidID().asUInt();
+        }
+    };
+
+    GrHashMapWithCache<uint32_t, GrRenderTask*, SurfaceIDKeyTraits, GrCheapHash> fLastRenderTasks;
 };
 
 #endif

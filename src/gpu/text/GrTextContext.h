@@ -28,38 +28,34 @@ class GrTextBlob;
  */
 class GrTextContext {
 public:
-    struct Options {
-        /**
-         * Below this size (in device space) distance field text will not be used. Negative means
-         * use a default value.
-         */
-        SkScalar fMinDistanceFieldFontSize = -1.f;
-        /**
-         * Above this size (in device space) distance field text will not be used and glyphs will
-         * be rendered from outline as individual paths. Negative means use a default value.
-         */
-        SkScalar fMaxDistanceFieldFontSize = -1.f;
+    class Options {
+    public:
+        Options(SkScalar min, SkScalar max)
+                : fMinDistanceFieldFontSize{min}
+                , fMaxDistanceFieldFontSize{max} {
+            SkASSERT_RELEASE(min > 0 && max >= min);
+        }
+
+        bool canDrawAsDistanceFields(const SkPaint&, const SkFont&, const SkMatrix& viewMatrix,
+                                     const SkSurfaceProps& props,
+                                     bool contextSupportsDistanceFieldText) const;
+        SkFont getSDFFont(const SkFont& font,
+                          const SkMatrix& viewMatrix,
+                          SkScalar* textRatio) const;
+        std::pair<SkScalar, SkScalar> computeSDFMinMaxScale(
+                SkScalar textSize, const SkMatrix& viewMatrix) const;
+    private:
+        // Below this size (in device space) distance field text will not be used.
+        const SkScalar fMinDistanceFieldFontSize;
+
+        // Above this size (in device space) distance field text will not be used and glyphs will
+        // be rendered from outline as individual paths.
+        const SkScalar fMaxDistanceFieldFontSize;
     };
 
     static std::unique_ptr<GrTextContext> Make(const Options& options);
 
-    static void SanitizeOptions(Options* options);
-    static bool CanDrawAsDistanceFields(const SkPaint&, const SkFont&, const SkMatrix& viewMatrix,
-                                        const SkSurfaceProps& props,
-                                        bool contextSupportsDistanceFieldText,
-                                        const Options& options);
-
-    static SkFont InitDistanceFieldFont(const SkFont& font,
-                                        const SkMatrix& viewMatrix,
-                                        const Options& options,
-                                        SkScalar* textRatio);
-
     static SkPaint InitDistanceFieldPaint(const SkPaint& paint);
-
-    static std::pair<SkScalar, SkScalar> InitDistanceFieldMinMaxScale(SkScalar textSize,
-                                                                      const SkMatrix& viewMatrix,
-                                                                      const Options& options);
-    Options options() const { return fOptions; }
 
 private:
     GrTextContext(const Options& options);

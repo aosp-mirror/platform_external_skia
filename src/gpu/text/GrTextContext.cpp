@@ -36,37 +36,16 @@ static const int kLargeDFFontLimit = 162;
 static const int kExtraLargeDFFontSize = 256;
 #endif
 
-static const int kDefaultMinDistanceFieldFontSize = 18;
-#if defined(SK_BUILD_FOR_ANDROID)
-static const int kDefaultMaxDistanceFieldFontSize = 384;
-#elif defined(SK_BUILD_FOR_MAC)
-static const int kDefaultMaxDistanceFieldFontSize = kExtraLargeDFFontSize;
-#else
-static const int kDefaultMaxDistanceFieldFontSize = 2 * kLargeDFFontSize;
-#endif
-
-GrTextContext::GrTextContext(const Options& options) : fOptions(options) {
-    SanitizeOptions(&fOptions);
-}
+GrTextContext::GrTextContext(const Options& options) : fOptions(options) { }
 
 std::unique_ptr<GrTextContext> GrTextContext::Make(const Options& options) {
     return std::unique_ptr<GrTextContext>(new GrTextContext(options));
 }
 
-void GrTextContext::SanitizeOptions(Options* options) {
-    if (options->fMaxDistanceFieldFontSize < 0.f) {
-        options->fMaxDistanceFieldFontSize = kDefaultMaxDistanceFieldFontSize;
-    }
-    if (options->fMinDistanceFieldFontSize < 0.f) {
-        options->fMinDistanceFieldFontSize = kDefaultMinDistanceFieldFontSize;
-    }
-}
-
-bool GrTextContext::CanDrawAsDistanceFields(const SkPaint& paint, const SkFont& font,
-                                            const SkMatrix& viewMatrix,
-                                            const SkSurfaceProps& props,
-                                            bool contextSupportsDistanceFieldText,
-                                            const Options& options) {
+bool GrTextContext::Options::canDrawAsDistanceFields(const SkPaint& paint, const SkFont& font,
+                                                     const SkMatrix& viewMatrix,
+                                                     const SkSurfaceProps& props,
+                                                     bool contextSupportsDistanceFieldText) const {
     // mask filters modify alpha, which doesn't translate well to distance
     if (paint.getMaskFilter() || !contextSupportsDistanceFieldText) {
         return false;
@@ -85,8 +64,8 @@ bool GrTextContext::CanDrawAsDistanceFields(const SkPaint& paint, const SkFont& 
         SkScalar scaledTextSize = maxScale * font.getSize();
         // Hinted text looks far better at small resolutions
         // Scaling up beyond 2x yields undesirable artifacts
-        if (scaledTextSize < options.fMinDistanceFieldFontSize ||
-            scaledTextSize > options.fMaxDistanceFieldFontSize) {
+        if (scaledTextSize < fMinDistanceFieldFontSize ||
+            scaledTextSize > fMaxDistanceFieldFontSize) {
             return false;
         }
 
@@ -123,10 +102,9 @@ SkScalar scaled_text_size(const SkScalar textSize, const SkMatrix& viewMatrix) {
     return scaledTextSize;
 }
 
-SkFont GrTextContext::InitDistanceFieldFont(const SkFont& font,
-                                            const SkMatrix& viewMatrix,
-                                            const Options& options,
-                                            SkScalar* textRatio) {
+SkFont GrTextContext::Options::getSDFFont(const SkFont& font,
+                                          const SkMatrix& viewMatrix,
+                                          SkScalar* textRatio) const {
     SkScalar textSize = font.getSize();
     SkScalar scaledTextSize = scaled_text_size(textSize, viewMatrix);
 
@@ -162,10 +140,8 @@ SkFont GrTextContext::InitDistanceFieldFont(const SkFont& font,
     return dfFont;
 }
 
-std::pair<SkScalar, SkScalar> GrTextContext::InitDistanceFieldMinMaxScale(
-        SkScalar textSize,
-        const SkMatrix& viewMatrix,
-        const GrTextContext::Options& options) {
+std::pair<SkScalar, SkScalar> GrTextContext::Options::computeSDFMinMaxScale(
+        SkScalar textSize, const SkMatrix& viewMatrix) const {
 
     SkScalar scaledTextSize = scaled_text_size(textSize, viewMatrix);
 
@@ -174,14 +150,14 @@ std::pair<SkScalar, SkScalar> GrTextContext::InitDistanceFieldMinMaxScale(
     SkScalar dfMaskScaleFloor;
     SkScalar dfMaskScaleCeil;
     if (scaledTextSize <= kSmallDFFontLimit) {
-        dfMaskScaleFloor = options.fMinDistanceFieldFontSize;
+        dfMaskScaleFloor = fMinDistanceFieldFontSize;
         dfMaskScaleCeil = kSmallDFFontLimit;
     } else if (scaledTextSize <= kMediumDFFontLimit) {
         dfMaskScaleFloor = kSmallDFFontLimit;
         dfMaskScaleCeil = kMediumDFFontLimit;
     } else {
         dfMaskScaleFloor = kMediumDFFontLimit;
-        dfMaskScaleCeil = options.fMaxDistanceFieldFontSize;
+        dfMaskScaleCeil = fMaxDistanceFieldFontSize;
     }
 
     // Because there can be multiple runs in the blob, we want the overall maxMinScale, and
