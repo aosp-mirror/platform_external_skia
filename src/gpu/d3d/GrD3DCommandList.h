@@ -22,6 +22,7 @@ class GrD3DConstantRingBuffer;
 class GrD3DPipelineState;
 class GrD3DRenderTarget;
 class GrD3DRootSignature;
+class GrD3DStencilAttachment;
 class GrD3DTextureResource;
 
 class GrScissorState;
@@ -143,7 +144,9 @@ public:
                               unsigned int startInstance);
 
     void clearRenderTargetView(const GrD3DRenderTarget* renderTarget, const SkPMColor4f& color,
-                               const GrScissorState& scissor);
+                               const D3D12_RECT* rect);
+    void clearDepthStencilView(const GrD3DStencilAttachment*, uint8_t stencilClearValue,
+                               const D3D12_RECT* rect);
     void setRenderTarget(const GrD3DRenderTarget* renderTarget);
 
     void setGraphicsRootConstantBufferView(unsigned int rootParameterIndex,
