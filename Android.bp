@@ -1672,6 +1672,7 @@ cc_test {
         "tests/PaintImageFilterTest.cpp",
         "tests/PaintTest.cpp",
         "tests/ParametricStageTest.cpp",
+        "tests/ParseColorTest.cpp",
         "tests/ParsePathTest.cpp",
         "tests/PathCoverageTest.cpp",
         "tests/PathMeasureTest.cpp",
