@@ -103,33 +103,6 @@ static const uint8_t* DisassembleInstruction(const uint8_t* ip) {
         case ByteCodeInstruction::kLoadUniform2: printf("loaduniform2 %d", READ8()); break;
         case ByteCodeInstruction::kLoadUniform3: printf("loaduniform3 %d", READ8()); break;
         case ByteCodeInstruction::kLoadUniform4: printf("loaduniform4 %d", READ8()); break;
-        case ByteCodeInstruction::kLoadSwizzle: {
-            int target = READ8();
-            int count = READ8();
-            printf("loadswizzle %d %d", target, count);
-            for (int i = 0; i < count; ++i) {
-                printf(", %d", READ8());
-            }
-            break;
-        }
-        case ByteCodeInstruction::kLoadSwizzleGlobal: {
-            int target = READ8();
-            int count = READ8();
-            printf("loadswizzleglobal %d %d", target, count);
-            for (int i = 0; i < count; ++i) {
-                printf(", %d", READ8());
-            }
-            break;
-        }
-        case ByteCodeInstruction::kLoadSwizzleUniform: {
-            int target = READ8();
-            int count = READ8();
-            printf("loadswizzleuniform %d %d", target, count);
-            for (int i = 0; i < count; ++i) {
-                printf(", %d", READ8());
-            }
-            break;
-        }
         case ByteCodeInstruction::kLoadExtended: printf("loadextended %d", READ8()); break;
         case ByteCodeInstruction::kLoadExtendedGlobal: printf("loadextendedglobal %d", READ8());
             break;
@@ -178,6 +151,8 @@ static const uint8_t* DisassembleInstruction(const uint8_t* ip) {
         VECTOR_DISASSEMBLE(kRemainderU, "remainderu")
         case ByteCodeInstruction::kReserve: printf("reserve %d", READ8()); break;
         case ByteCodeInstruction::kReturn: printf("return %d", READ8()); break;
+        case ByteCodeInstruction::kSampleExplicit: printf("sample %d", READ8()); break;
+        case ByteCodeInstruction::kSampleMatrix: printf("sampleMtx %d", READ8()); break;
         case ByteCodeInstruction::kScalarToMatrix: {
             int cols = READ8();
             int rows = READ8();
@@ -197,40 +172,6 @@ static const uint8_t* DisassembleInstruction(const uint8_t* ip) {
         case ByteCodeInstruction::kStoreGlobal2: printf("storeglobal2 %d", READ8()); break;
         case ByteCodeInstruction::kStoreGlobal3: printf("storeglobal3 %d", READ8()); break;
         case ByteCodeInstruction::kStoreGlobal4: printf("storeglobal4 %d", READ8()); break;
-        case ByteCodeInstruction::kStoreSwizzle: {
-            int target = READ8();
-            int count = READ8();
-            printf("storeswizzle %d %d", target, count);
-            for (int i = 0; i < count; ++i) {
-                printf(", %d", READ8());
-            }
-            break;
-        }
-        case ByteCodeInstruction::kStoreSwizzleGlobal: {
-            int target = READ8();
-            int count = READ8();
-            printf("storeswizzleglobal %d %d", target, count);
-            for (int i = 0; i < count; ++i) {
-                printf(", %d", READ8());
-            }
-            break;
-        }
-        case ByteCodeInstruction::kStoreSwizzleIndirect: {
-            int count = READ8();
-            printf("storeswizzleindirect %d", count);
-            for (int i = 0; i < count; ++i) {
-                printf(", %d", READ8());
-            }
-            break;
-        }
-        case ByteCodeInstruction::kStoreSwizzleIndirectGlobal: {
-            int count = READ8();
-            printf("storeswizzleindirectglobal %d", count);
-            for (int i = 0; i < count; ++i) {
-                printf(", %d", READ8());
-            }
-            break;
-        }
         case ByteCodeInstruction::kStoreExtended: printf("storeextended %d", READ8()); break;
         case ByteCodeInstruction::kStoreExtendedGlobal: printf("storeextendedglobal %d", READ8());
             break;
@@ -805,36 +746,6 @@ static bool InnerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
                 continue;
             }
 
-            case ByteCodeInstruction::kLoadSwizzle: {
-                int src = READ8();
-                int count = READ8();
-                for (int i = 0; i < count; ++i) {
-                    PUSH(stack[src + *(ip + i)]);
-                }
-                ip += count;
-                continue;
-            }
-
-            case ByteCodeInstruction::kLoadSwizzleGlobal: {
-                int src = READ8();
-                int count = READ8();
-                for (int i = 0; i < count; ++i) {
-                    PUSH(globals[src + *(ip + i)]);
-                }
-                ip += count;
-                continue;
-            }
-
-            case ByteCodeInstruction::kLoadSwizzleUniform: {
-                int src = READ8();
-                int count = READ8();
-                for (int i = 0; i < count; ++i) {
-                    PUSH(F32(uniforms[src + *(ip + i)]));
-                }
-                ip += count;
-                continue;
-            }
-
             case ByteCodeInstruction::kMatrixToMatrix: {
                 int srcCols = READ8();
                 int srcRows = READ8();
@@ -1010,6 +921,11 @@ static bool InnerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
                 }
             }
 
+            case ByteCodeInstruction::kSampleExplicit:
+            case ByteCodeInstruction::kSampleMatrix:
+                // TODO: Support these?
+                return false;
+
             case ByteCodeInstruction::kScalarToMatrix: {
                 int cols = READ8();
                 int rows = READ8();
@@ -1091,60 +1007,6 @@ static bool InnerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
                     }
                 }
                 sp -= count;
-                continue;
-            }
-
-            case ByteCodeInstruction::kStoreSwizzle: {
-                int target = READ8();
-                int count = READ8();
-                for (int i = count - 1; i >= 0; --i) {
-                    stack[target + *(ip + i)] = skvx::if_then_else(
-                            mask(), POP().fFloat, stack[target + *(ip + i)].fFloat);
-                }
-                ip += count;
-                continue;
-            }
-
-            case ByteCodeInstruction::kStoreSwizzleGlobal: {
-                int target = READ8();
-                int count = READ8();
-                for (int i = count - 1; i >= 0; --i) {
-                    globals[target + *(ip + i)] = skvx::if_then_else(
-                            mask(), POP().fFloat, globals[target + *(ip + i)].fFloat);
-                }
-                ip += count;
-                continue;
-            }
-
-            case ByteCodeInstruction::kStoreSwizzleIndirect: {
-                int count = READ8();
-                I32 target = POP().fSigned;
-                I32 m = mask();
-                for (int i = count - 1; i >= 0; --i) {
-                    I32 v = POP().fSigned;
-                    for (int j = 0; j < VecWidth; ++j) {
-                        if (m[j]) {
-                            stack[target[j] + *(ip + i)].fSigned[j] = v[j];
-                        }
-                    }
-                }
-                ip += count;
-                continue;
-            }
-
-            case ByteCodeInstruction::kStoreSwizzleIndirectGlobal: {
-                int count = READ8();
-                I32 target = POP().fSigned;
-                I32 m = mask();
-                for (int i = count - 1; i >= 0; --i) {
-                    I32 v = POP().fSigned;
-                    for (int j = 0; j < VecWidth; ++j) {
-                        if (m[j]) {
-                            globals[target[j] + *(ip + i)].fSigned[j] = v[j];
-                        }
-                    }
-                }
-                ip += count;
                 continue;
             }
 
