@@ -411,6 +411,7 @@ SkRuntimeEffect::ByteCodeResult SkRuntimeEffect::toByteCode(const void* inputs) 
 static std::vector<skvm::F32> program_fn(skvm::Builder* p,
                                          const SkSL::ByteCodeFunction& fn,
                                          const std::vector<skvm::F32>& uniform,
+                                         const SkMatrixProvider& matrices,
                                          std::vector<skvm::F32> stack,
                                          /*these parameters are used to call program() on children*/
                                          const std::vector<sk_sp<SkShader>>& children,
@@ -481,8 +482,9 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
                 skvm::F32 y = pop(),
                           x = pop();
 
+                SkOverrideDeviceMatrixProvider mats{matrices, SkMatrix::I()};
                 skvm::Color c = as_SB(children[ix])->program(p, x,y,paint,
-                                                             SkMatrix::I(), nullptr,
+                                                             mats, nullptr,
                                                              quality, dst,
                                                              uniforms, alloc);
                 if (!c) {
@@ -643,6 +645,11 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
                 binary(Inst::kMaxF, [](skvm::F32 x, skvm::F32 y) { return skvm::max(x,y); });
                 break;
 
+            case Inst::kNegateF:
+            case Inst::kNegateF2:
+            case Inst::kNegateF3:
+            case Inst::kNegateF4: unary(Inst::kNegateF, std::negate<>{}); break;
+
             case Inst::kPow:
             case Inst::kPow2:
             case Inst::kPow3:
@@ -673,6 +680,16 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
             case Inst::kATan3:
             case Inst::kATan4: unary(Inst::kATan, skvm::approx_atan); break;
 
+            case Inst::kCeil:
+            case Inst::kCeil2:
+            case Inst::kCeil3:
+            case Inst::kCeil4: unary(Inst::kCeil, skvm::ceil); break;
+
+            case Inst::kFloor:
+            case Inst::kFloor2:
+            case Inst::kFloor3:
+            case Inst::kFloor4: unary(Inst::kFloor, skvm::floor); break;
+
             case Inst::kFract:
             case Inst::kFract2:
             case Inst::kFract3:
@@ -687,6 +704,27 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
             case Inst::kSin2:
             case Inst::kSin3:
             case Inst::kSin4: unary(Inst::kSin, skvm::approx_sin); break;
+
+            case Inst::kMatrixMultiply: {
+                // Computes M = A*B (all stored column major)
+                int aCols = u8(),
+                    aRows = u8(),
+                    bCols = u8(),
+                    bRows = aCols;
+                std::vector<skvm::F32> A(aCols*aRows),
+                                       B(bCols*bRows);
+                for (auto i = B.size(); i --> 0;) { B[i] = pop(); }
+                for (auto i = A.size(); i --> 0;) { A[i] = pop(); }
+
+                for (int c = 0; c < bCols; ++c)
+                for (int r = 0; r < aRows; ++r) {
+                    skvm::F32 sum = p->splat(0.0f);
+                    for (int j = 0; j < aCols; ++j) {
+                        sum += A[j*aRows + r] * B[c*bRows + j];
+                    }
+                    push(sum);
+                }
+            } break;
 
             // Baby steps... just leaving test conditions on the stack for now.
             case Inst::kMaskPush:   break;
@@ -788,7 +826,7 @@ public:
         }
 
         std::vector<skvm::F32> stack =
-            program_fn(p, *fn, uniform, {c.r, c.g, c.b, c.a},
+            program_fn(p, *fn, uniform, SkSimpleMatrixProvider{SkMatrix::I()}, {c.r, c.g, c.b, c.a},
                        /* the remaining parameters are for shaders only and won't be used here */
                        {},{},{},{},{},{},{},{});
 
@@ -980,7 +1018,7 @@ public:
     }
 
     skvm::Color onProgram(skvm::Builder* p, skvm::F32 x, skvm::F32 y, skvm::Color paint,
-                          const SkMatrix& ctm, const SkMatrix* localM,
+                          const SkMatrixProvider& matrices, const SkMatrix* localM,
                           SkFilterQuality quality, const SkColorInfo& dst,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
         const SkSL::ByteCode* bc = this->byteCode();
@@ -993,11 +1031,7 @@ public:
             return {};
         }
 
-        // TODO: Eventually, plumb SkMatrixProvider here (instead of just ctm). For now, we will
-        // simply fail if our effect requires any marked matrices (SkSimpleMatrixProvider always
-        // returns false in getLocalToMarker).
-        SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
-        sk_sp<SkData> inputs = this->getUniforms(matrixProvider, dst.colorSpace());
+        sk_sp<SkData> inputs = this->getUniforms(matrices, dst.colorSpace());
         if (!inputs) {
             return {};
         }
@@ -1010,13 +1044,13 @@ public:
         }
 
         SkMatrix inv;
-        if (!this->computeTotalInverse(ctm, localM, &inv)) {
+        if (!this->computeTotalInverse(matrices.localToDevice(), localM, &inv)) {
             return {};
         }
         SkShaderBase::ApplyMatrix(p,inv, &x,&y,uniforms);
 
         std::vector<skvm::F32> stack =
-            program_fn(p, *fn, uniform, {x,y, paint.r, paint.g, paint.b, paint.a},
+            program_fn(p, *fn, uniform, matrices, {x,y, paint.r, paint.g, paint.b, paint.a},
                        /*parameters for calling program() on children*/
                        fChildren, x,y,paint, quality,dst, uniforms,alloc);
 

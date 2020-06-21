@@ -46,22 +46,25 @@ ByteCodeGenerator::ByteCodeGenerator(const Context* context, const Program* prog
     // they're available to "generic" interpreter programs (eg particles).
     // You can probably copy the declarations from sksl_gpu.inc.
     , fIntrinsics {
-        { "atan",     ByteCodeInstruction::kATan },
-        { "clamp",    SpecialIntrinsic::kClamp },
-        { "cos",      ByteCodeInstruction::kCos },
-        { "dot",      SpecialIntrinsic::kDot },
-        { "fract",    ByteCodeInstruction::kFract },
-        { "inverse",  ByteCodeInstruction::kInverse2x2 },
-        { "length",   SpecialIntrinsic::kLength },
-        { "max",      SpecialIntrinsic::kMax },
-        { "min",      SpecialIntrinsic::kMin },
-        { "mix",      SpecialIntrinsic::kMix },
-        { "pow",      ByteCodeInstruction::kPow },
-        { "sample",   SpecialIntrinsic::kSample },
-        { "saturate", SpecialIntrinsic::kSaturate },
-        { "sin",      ByteCodeInstruction::kSin },
-        { "sqrt",     ByteCodeInstruction::kSqrt },
-        { "tan",      ByteCodeInstruction::kTan },
+        { "atan",      ByteCodeInstruction::kATan },
+        { "ceil",      ByteCodeInstruction::kCeil },
+        { "clamp",     SpecialIntrinsic::kClamp },
+        { "cos",       ByteCodeInstruction::kCos },
+        { "dot",       SpecialIntrinsic::kDot },
+        { "floor",     ByteCodeInstruction::kFloor },
+        { "fract",     ByteCodeInstruction::kFract },
+        { "inverse",   ByteCodeInstruction::kInverse2x2 },
+        { "length",    SpecialIntrinsic::kLength },
+        { "max",       SpecialIntrinsic::kMax },
+        { "min",       SpecialIntrinsic::kMin },
+        { "mix",       SpecialIntrinsic::kMix },
+        { "normalize", SpecialIntrinsic::kNormalize },
+        { "pow",       ByteCodeInstruction::kPow },
+        { "sample",    SpecialIntrinsic::kSample },
+        { "saturate",  SpecialIntrinsic::kSaturate },
+        { "sin",       ByteCodeInstruction::kSin },
+        { "sqrt",      ByteCodeInstruction::kSqrt },
+        { "tan",       ByteCodeInstruction::kTan },
 
         { "lessThan",         { ByteCodeInstruction::kCompareFLT,
                                 ByteCodeInstruction::kCompareSLT,
@@ -257,7 +260,9 @@ int ByteCodeGenerator::StackUsage(ByteCodeInstruction inst, int count_) {
         VECTOR_UNARY_OP(kConvertUtoF)
 
         VECTOR_UNARY_OP(kATan)
+        VECTOR_UNARY_OP(kCeil)
         VECTOR_UNARY_OP(kCos)
+        VECTOR_UNARY_OP(kFloor)
         VECTOR_UNARY_OP(kFract)
         VECTOR_UNARY_OP(kSin)
         VECTOR_UNARY_OP(kSqrt)
@@ -1015,22 +1020,23 @@ void ByteCodeGenerator::writeVariableExpression(const Expression& expr) {
     if (count == 0) {
         return;
     }
-    if (location.isOnStack() || count > 4) {
-        if (!location.isOnStack()) {
-            this->write(ByteCodeInstruction::kPushImmediate);
-            this->write32(location.fSlot);
-        }
+    if (location.isOnStack()) {
         this->write(location.selectLoad(ByteCodeInstruction::kLoadExtended,
                                         ByteCodeInstruction::kLoadExtendedGlobal,
                                         ByteCodeInstruction::kLoadExtendedUniform),
                     count);
         this->write8(count);
     } else {
-        this->write(vector_instruction(location.selectLoad(ByteCodeInstruction::kLoad,
-                                                           ByteCodeInstruction::kLoadGlobal,
-                                                           ByteCodeInstruction::kLoadUniform),
-                                       count));
-        this->write8(location.fSlot);
+        while (count) {
+            int loadCount = std::min(count, 4);
+            this->write(vector_instruction(location.selectLoad(ByteCodeInstruction::kLoad,
+                                                               ByteCodeInstruction::kLoadGlobal,
+                                                               ByteCodeInstruction::kLoadUniform),
+                                           loadCount));
+            this->write8(location.fSlot);
+            count -= loadCount;
+            location.fSlot += loadCount;
+        }
     }
 }
 
@@ -1206,6 +1212,19 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
                     dupSmallerType(selectorCount);
                     this->write(vector_instruction(ByteCodeInstruction::kLerp, count));
                 }
+            } break;
+
+            case SpecialIntrinsic::kNormalize: {
+                SkASSERT(c.fArguments.size() == 1);
+                this->write(vector_instruction(ByteCodeInstruction::kDup      , count));
+                this->write(vector_instruction(ByteCodeInstruction::kDup      , count));
+                this->write(vector_instruction(ByteCodeInstruction::kMultiplyF, count));
+                for (int i = count-1; i --> 0;) {
+                    this->write(ByteCodeInstruction::kAddF);
+                }
+                this->write(ByteCodeInstruction::kSqrt);
+                dupSmallerType(1);
+                this->write(vector_instruction(ByteCodeInstruction::kDivideF, count));
             } break;
 
             default:
