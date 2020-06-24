@@ -1057,6 +1057,7 @@ cc_test {
         "experimental/skrive/src/Color.cpp",
         "experimental/skrive/src/Component.cpp",
         "experimental/skrive/src/Drawable.cpp",
+        "experimental/skrive/src/Ellipse.cpp",
         "experimental/skrive/src/Node.cpp",
         "experimental/skrive/src/Paint.cpp",
         "experimental/skrive/src/Shape.cpp",
