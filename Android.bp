@@ -1042,6 +1042,7 @@ cc_test {
 
     local_include_dirs: [
         "",
+        "experimental/skrive/include/",
         "include/third_party/skcms",
         "include/third_party/vulkan/",
         "modules/skottie/include/",
