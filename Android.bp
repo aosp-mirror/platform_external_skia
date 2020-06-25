@@ -533,6 +533,7 @@ cc_library_static {
           "src/gpu/GrAHardwareBufferImageGenerator.cpp",
           "src/gpu/GrAHardwareBufferUtils.cpp",
           "src/gpu/GrAuditTrail.cpp",
+          "src/gpu/GrBackendSemaphore.cpp",
           "src/gpu/GrBackendSurface.cpp",
           "src/gpu/GrBackendTextureImageGenerator.cpp",
           "src/gpu/GrBitmapTextureMaker.cpp",
