@@ -167,6 +167,8 @@ bool GrContext::abandoned() {
     return false;
 }
 
+bool GrContext::oomed() { return fGpu ? fGpu->checkAndResetOOMed() : false; }
+
 void GrContext::resetGLTextureBindings() {
     if (this->abandoned() || this->backend() != GrBackendApi::kOpenGL) {
         return;
@@ -181,10 +183,6 @@ void GrContext::resetContext(uint32_t state) {
 
 void GrContext::freeGpuResources() {
     ASSERT_SINGLE_OWNER
-
-    if (this->abandoned()) {
-        return;
-    }
 
     // TODO: the glyph cache doesn't hold any GpuResources so this call should not be needed here.
     // Some slack in the GrTextBlob's implementation requires it though. That could be fixed.
