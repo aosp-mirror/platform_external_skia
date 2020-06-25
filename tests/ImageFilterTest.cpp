@@ -514,9 +514,6 @@ static void test_negative_blur_sigma(skiatest::Reporter* reporter, GrContext* co
     sk_sp<SkImageFilter> negativeFilter(SkImageFilters::Blur(-kBlurSigma, kBlurSigma, nullptr));
 
     sk_sp<SkImage> gradient = SkImage::MakeFromBitmap(make_gradient_circle(kWidth, kHeight));
-    if (context) {
-        gradient = gradient->makeTextureImage(context);
-    }
     sk_sp<SkSpecialImage> imgSrc(
             SkSpecialImage::MakeFromImage(context, SkIRect::MakeWH(kWidth, kHeight), gradient));
 
@@ -604,9 +601,6 @@ static void test_morphology_radius_with_mirror_ctm(skiatest::Reporter* reporter,
     canvas.drawRect(SkRect::MakeXYWH(kWidth / 4, kHeight / 4, kWidth / 2, kHeight / 2),
                     paint);
     sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
-    if (context) {
-        image = image->makeTextureImage(context);
-    }
     sk_sp<SkSpecialImage> imgSrc(
             SkSpecialImage::MakeFromImage(context, SkIRect::MakeWH(kWidth, kHeight), image));
 

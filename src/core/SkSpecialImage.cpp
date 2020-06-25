@@ -158,21 +158,17 @@ sk_sp<SkSpecialImage> SkSpecialImage::MakeFromImage(GrRecordingContext* context,
     SkASSERT(rect_fits(subset, image->width(), image->height()));
 
 #if SK_SUPPORT_GPU
-    if (const GrSurfaceProxyView* view = as_IB(image)->view(context)) {
-        if (!as_IB(image)->context()->priv().matches(context)) {
-            return nullptr;
-        }
-
-        return MakeDeferredFromGpu(context, subset, image->uniqueID(), *view,
+    if (context) {
+        GrSurfaceProxyView view = as_IB(image)->refView(context, GrMipMapped::kNo);
+        return MakeDeferredFromGpu(context, subset, image->uniqueID(), view,
                                    SkColorTypeToGrColorType(image->colorType()),
                                    image->refColorSpace(), props);
-    } else
+    }
 #endif
-    {
-        SkBitmap bm;
-        if (as_IB(image)->getROPixels(&bm)) {
-            return MakeFromRaster(subset, bm, props);
-        }
+
+    SkBitmap bm;
+    if (as_IB(image)->getROPixels(&bm)) {
+        return MakeFromRaster(subset, bm, props);
     }
     return nullptr;
 }
