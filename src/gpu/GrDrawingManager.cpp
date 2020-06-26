@@ -35,6 +35,7 @@
 #include "src/gpu/GrTextureResolveRenderTask.h"
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/GrTransferFromRenderTask.h"
+#include "src/gpu/GrUnrefDDLTask.h"
 #include "src/gpu/GrWaitRenderTask.h"
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
 #include "src/gpu/text/GrSDFTOptions.h"
@@ -284,8 +285,6 @@ bool GrDrawingManager::flush(
     GrOpFlushState flushState(gpu, resourceProvider, &fTokenTracker, fCpuBufferCache);
 
     GrOnFlushResourceProvider onFlushProvider(this);
-    // TODO: AFAICT the only reason fFlushState is on GrDrawingManager rather than on the
-    // stack here is to preserve the flush tokens.
 
     // Prepare any onFlush op lists (e.g. atlases).
     if (!fOnFlushCBObjects.empty()) {
@@ -669,8 +668,13 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
     SkDEBUGCODE(this->validate());
 }
 
+#ifndef SK_DDL_IS_UNIQUE_POINTER
+void GrDrawingManager::copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList> ddl,
+                                              GrRenderTargetProxy* newDest) {
+#else
 void GrDrawingManager::copyRenderTasksFromDDL(const SkDeferredDisplayList* ddl,
                                               GrRenderTargetProxy* newDest) {
+#endif
     SkDEBUGCODE(this->validate());
 
     if (fActiveOpsTask) {
@@ -705,6 +709,12 @@ void GrDrawingManager::copyRenderTasksFromDDL(const SkDeferredDisplayList* ddl,
     }
 
     fDAG.add(ddl->fRenderTasks);
+
+#ifndef SK_DDL_IS_UNIQUE_POINTER
+    // Add a task to unref the DDL after flush.
+    GrRenderTask* unrefTask = fDAG.add(sk_make_sp<GrUnrefDDLTask>(std::move(ddl)));
+    unrefTask->makeClosed(*fContext->priv().caps());
+#endif
 
     SkDEBUGCODE(this->validate());
 }
