@@ -20,6 +20,7 @@
 #include "include/private/SkTemplates.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkBlendModePriv.h"
+#include "src/core/SkColorFilterBase.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMaskFilterBase.h"
@@ -336,23 +337,23 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
         }
     }
 
-    if (paintFP) {
-        grPaint->addColorFragmentProcessor(std::move(paintFP));
-    }
-
     SkColorFilter* colorFilter = skPaint.getColorFilter();
     if (colorFilter) {
         if (applyColorFilterToPaintColor) {
             SkColorSpace* dstCS = dstColorInfo.colorSpace();
             grPaint->setColor4f(colorFilter->filterColor4f(origColor, dstCS, dstCS).premul());
         } else {
-            auto cfFP = colorFilter->asFragmentProcessor(context, dstColorInfo);
-            if (cfFP) {
-                grPaint->addColorFragmentProcessor(std::move(cfFP));
-            } else {
+            auto [success, fp] = as_CFB(colorFilter)->asFragmentProcessor(std::move(paintFP),
+                                                                          context, dstColorInfo);
+            if (!success) {
                 return false;
             }
+            paintFP = std::move(fp);
         }
+    }
+
+    if (paintFP) {
+        grPaint->addColorFragmentProcessor(std::move(paintFP));
     }
 
     SkMaskFilterBase* maskFilter = as_MFB(skPaint.getMaskFilter());
@@ -381,9 +382,6 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
             auto ditherFP = GrSkSLFP::Make(context, effect, "Dither",
                                            SkData::MakeWithCopy(&ditherRange, sizeof(ditherRange)));
             if (ditherFP) {
-                // The dither shader doesn't actually use input coordinates, but if we don't set
-                // this flag, the generated shader includes an extra local coord varying.
-                ditherFP->temporary_SetExplicitlySampled();
                 grPaint->addColorFragmentProcessor(std::move(ditherFP));
             }
         }
