@@ -63,6 +63,10 @@
     #include "modules/skresources/include/SkResources.h"
 #endif
 
+#if defined(SK_ENABLE_SKRIVE)
+    #include "experimental/skrive/include/SkRive.h"
+#endif
+
 #if defined(SK_XML)
     #include "experimental/svg/model/SkSVGDOM.h"
     #include "include/svg/SkSVGCanvas.h"
@@ -94,7 +98,7 @@ Result GMSrc::draw(GrContext* context, SkCanvas* canvas) const {
     std::unique_ptr<skiagm::GM> gm(fFactory());
     SkString msg;
 
-    skiagm::DrawResult gpuSetupResult = gm->gpuSetup(context, &msg);
+    skiagm::DrawResult gpuSetupResult = gm->gpuSetup(context, canvas, &msg);
     switch (gpuSetupResult) {
         case skiagm::DrawResult::kOk  : break;
         case skiagm::DrawResult::kFail: return Result(Result::Status::Fatal, msg);
@@ -109,6 +113,9 @@ Result GMSrc::draw(GrContext* context, SkCanvas* canvas) const {
         case skiagm::DrawResult::kSkip: return Result(Result::Status::Skip,  msg);
         default: SK_ABORT("");
     }
+
+    // Note: we don't call "gpuTeardown" here because, when testing DDL recording, we want
+    // the gpu-backed images to live past the lifetime of the GM.
 }
 
 SkISize GMSrc::size() const {
@@ -1209,6 +1216,57 @@ SkISize SkottieSrc::size() const {
 Name SkottieSrc::name() const { return SkOSPath::Basename(fPath.c_str()); }
 
 bool SkottieSrc::veto(SinkFlags flags) const {
+    // No need to test to non-(raster||gpu||vector) or indirect backends.
+    bool type_ok = flags.type == SinkFlags::kRaster
+                || flags.type == SinkFlags::kGPU
+                || flags.type == SinkFlags::kVector;
+
+    return !type_ok || flags.approach != SinkFlags::kDirect;
+}
+#endif
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+#if defined(SK_ENABLE_SKRIVE)
+SkRiveSrc::SkRiveSrc(Path path) : fPath(std::move(path)) {}
+
+Result SkRiveSrc::draw(GrContext*, SkCanvas* canvas) const {
+    const auto skrive = skrive::SkRive::Builder().make(SkFILEStream::Make(fPath.c_str()));
+    if (!skrive) {
+        return Result::Fatal("Unable to parse file: %s", fPath.c_str());
+    }
+
+    auto bounds = SkRect::MakeEmpty();
+
+    for (const auto& ab : skrive->artboards()) {
+        const auto& pos  = ab->getTranslation();
+        const auto& size = ab->getSize();
+
+        bounds.join(SkRect::MakeXYWH(pos.x, pos.y, size.x, size.y));
+    }
+
+    canvas->drawColor(SK_ColorWHITE);
+
+    if (!bounds.isEmpty()) {
+        // TODO: tiled frames when we add animation support
+        SkAutoCanvasRestore acr(canvas, true);
+        canvas->concat(SkMatrix::MakeRectToRect(bounds,
+                                                SkRect::MakeWH(kTargetSize, kTargetSize),
+                                                SkMatrix::kCenter_ScaleToFit ));
+        for (const auto& ab : skrive->artboards()) {
+            ab->render(canvas);
+        }
+    }
+
+    return Result::Ok();
+}
+
+SkISize SkRiveSrc::size() const {
+    return SkISize::Make(kTargetSize, kTargetSize);
+}
+
+Name SkRiveSrc::name() const { return SkOSPath::Basename(fPath.c_str()); }
+
+bool SkRiveSrc::veto(SinkFlags flags) const {
     // No need to test to non-(raster||gpu||vector) or indirect backends.
     bool type_ok = flags.type == SinkFlags::kRaster
                 || flags.type == SinkFlags::kGPU
