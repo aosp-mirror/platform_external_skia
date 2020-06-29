@@ -1599,7 +1599,6 @@ cc_test {
         "tests/GpuDrawPathTest.cpp",
         "tests/GpuRectanizerTest.cpp",
         "tests/GrAHardwareBufferTest.cpp",
-        "tests/GrAffinedStorageTest.cpp",
         "tests/GrBlockAllocatorTest.cpp",
         "tests/GrCCPRTest.cpp",
         "tests/GrContextAbandonTest.cpp",
