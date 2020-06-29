@@ -18,7 +18,6 @@
 #include "include/private/GrRecordingContext.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrTexture.h"
@@ -230,9 +229,6 @@ private:
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    // We really just want the unaltered local coords, but the only way to get that right now is
-    // an identity coord transform.
-    GrCoordTransform fCoordTransform = {};
     SkColorChannel fXChannelSelector;
     SkColorChannel fYChannelSelector;
     SkVector fScale;
@@ -350,8 +346,9 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffectImpl::onFilterImage(const Context& 
                                               std::move(colorView),
                                               color->subset(),
                                               *context->priv().caps());
-        fp = GrColorSpaceXformEffect::Make(std::move(fp), color->getColorSpace(),
-                                           color->alphaType(), ctx.colorSpace());
+        fp = GrColorSpaceXformEffect::Make(std::move(fp),
+                                           color->getColorSpace(), color->alphaType(),
+                                           ctx.colorSpace(), kPremul_SkAlphaType);
 
         GrPaint paint;
         paint.addColorFragmentProcessor(std::move(fp));
@@ -510,7 +507,7 @@ GrDisplacementMapEffect::GrDisplacementMapEffect(SkColorChannel xChannelSelector
         , fScale(scale) {
     this->registerChild(std::move(displacement));
     this->registerExplicitlySampledChild(std::move(color));
-    this->addCoordTransform(&fCoordTransform);
+    this->setUsesSampleCoordsDirectly();
 }
 
 GrDisplacementMapEffect::GrDisplacementMapEffect(const GrDisplacementMapEffect& that)
@@ -519,7 +516,7 @@ GrDisplacementMapEffect::GrDisplacementMapEffect(const GrDisplacementMapEffect& 
         , fYChannelSelector(that.fYChannelSelector)
         , fScale(that.fScale) {
     this->cloneAndRegisterAllChildProcessors(that);
-    this->addCoordTransform(&fCoordTransform);
+    this->setUsesSampleCoordsDirectly();
 }
 
 GrDisplacementMapEffect::~GrDisplacementMapEffect() {}
