@@ -1230,7 +1230,12 @@ bool SkottieSrc::veto(SinkFlags flags) const {
 SkRiveSrc::SkRiveSrc(Path path) : fPath(std::move(path)) {}
 
 Result SkRiveSrc::draw(GrContext*, SkCanvas* canvas) const {
-    const auto skrive = skrive::SkRive::Builder().make(SkFILEStream::Make(fPath.c_str()));
+    auto fileStream = SkFILEStream::Make(fPath.c_str());
+    if (!fileStream) {
+        return Result::Fatal("Unable to open file: %s", fPath.c_str());
+    }
+
+    const auto skrive = skrive::SkRive::Builder().make(std::move(fileStream));
     if (!skrive) {
         return Result::Fatal("Unable to parse file: %s", fPath.c_str());
     }
@@ -1716,12 +1721,7 @@ Result GPUOOPRSink::ooprDraw(const Src& src,
         iter.compile();
     }
 
-    SkAssertResult(dstSurface->draw(ddl));
-
-    // TODO: remove this flush once DDLs are reffed by the drawing manager
-    context->flushAndSubmit();
-
-    ddl.reset();
+    SkAssertResult(dstSurface->draw(std::move(ddl)));
 
     return Result::Ok();
 }

@@ -589,6 +589,12 @@ void GrDrawingManager::setLastRenderTask(const GrSurfaceProxy* proxy, GrRenderTa
         SkASSERT(prior->isClosed());
     }
 #endif
+    // First try to store on the surface itself.
+    if (proxy->lastRenderTask().set(this, task)) {
+        return;
+    }
+
+    // Fall back to our table.
     uint32_t key = proxy->uniqueID().asUInt();
     if (task) {
         fLastRenderTasks.set(key, task);
@@ -598,6 +604,12 @@ void GrDrawingManager::setLastRenderTask(const GrSurfaceProxy* proxy, GrRenderTa
 }
 
 GrRenderTask* GrDrawingManager::getLastRenderTask(const GrSurfaceProxy* proxy) const {
+    if (auto* task = proxy->lastRenderTask().get(this)) {
+        return *task;
+    }
+    if (0 == fLastRenderTasks.count()) {
+        return nullptr;
+    }
     auto entry = fLastRenderTasks.find(proxy->uniqueID().asUInt());
     return entry ? *entry : nullptr;
 }
@@ -636,13 +648,8 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
     SkDEBUGCODE(this->validate());
 }
 
-#ifndef SK_DDL_IS_UNIQUE_POINTER
 void GrDrawingManager::copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList> ddl,
                                               GrRenderTargetProxy* newDest) {
-#else
-void GrDrawingManager::copyRenderTasksFromDDL(const SkDeferredDisplayList* ddl,
-                                              GrRenderTargetProxy* newDest) {
-#endif
     SkDEBUGCODE(this->validate());
 
     if (fActiveOpsTask) {
@@ -678,11 +685,9 @@ void GrDrawingManager::copyRenderTasksFromDDL(const SkDeferredDisplayList* ddl,
 
     fDAG.add(ddl->fRenderTasks);
 
-#ifndef SK_DDL_IS_UNIQUE_POINTER
     // Add a task to unref the DDL after flush.
     GrRenderTask* unrefTask = fDAG.add(sk_make_sp<GrUnrefDDLTask>(std::move(ddl)));
     unrefTask->makeClosed(*fContext->priv().caps());
-#endif
 
     SkDEBUGCODE(this->validate());
 }

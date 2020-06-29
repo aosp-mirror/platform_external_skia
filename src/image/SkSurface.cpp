@@ -76,6 +76,10 @@ GrContext* SkSurface_Base::onGetContext() {
     return nullptr;
 }
 
+GrRecordingContext* SkSurface_Base::onGetRecordingContext() {
+    return nullptr;
+}
+
 GrBackendTexture SkSurface_Base::onGetBackendTexture(BackendHandleAccess) {
     return GrBackendTexture(); // invalid
 }
@@ -332,6 +336,10 @@ GrContext* SkSurface::getContext() {
     return asSB(this)->onGetContext();
 }
 
+GrRecordingContext* SkSurface::recordingContext() {
+    return asSB(this)->onGetRecordingContext();
+}
+
 GrBackendTexture SkSurface::getBackendTexture(BackendHandleAccess access) {
     return asSB(this)->onGetBackendTexture(access);
 }
@@ -369,18 +377,9 @@ bool SkSurface::isCompatible(const SkSurfaceCharacterization& characterization) 
     return asConstSB(this)->onIsCompatible(characterization);
 }
 
-#ifndef SK_DDL_IS_UNIQUE_POINTER
 bool SkSurface::draw(sk_sp<const SkDeferredDisplayList> ddl) {
-    return asSB(this)->onDraw(ddl);
+    return asSB(this)->onDraw(std::move(ddl));
 }
-#else
-bool SkSurface::draw(const SkDeferredDisplayList* ddl) {
-    return asSB(this)->onDraw(ddl);
-}
-bool SkSurface::draw(const std::unique_ptr<const SkDeferredDisplayList>& ddl) {
-    return asSB(this)->onDraw(ddl.get());
-}
-#endif
 
 //////////////////////////////////////////////////////////////////////////////////////
 #include "include/utils/SkNoDrawCanvas.h"

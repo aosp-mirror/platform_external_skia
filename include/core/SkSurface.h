@@ -531,6 +531,11 @@ public:
     */
     GrContext* getContext();
 
+    /**
+     * Experimental. SkSurfaces can actually only guarantee a GrRecordingContext.
+     */
+    GrRecordingContext* recordingContext();
+
     enum BackendHandleAccess {
         kFlushRead_BackendHandleAccess,    //!< back-end object is readable
         kFlushWrite_BackendHandleAccess,   //!< back-end object is writable
@@ -1041,12 +1046,7 @@ public:
 
         example: https://fiddle.skia.org/c/@Surface_draw_2
     */
-#ifndef SK_DDL_IS_UNIQUE_POINTER
     bool draw(sk_sp<const SkDeferredDisplayList> deferredDisplayList);
-#else
-    bool draw(const SkDeferredDisplayList* deferredDisplayList);
-    bool draw(const std::unique_ptr<const SkDeferredDisplayList>& deferredDisplayList);
-#endif
 
 protected:
     SkSurface(int width, int height, const SkSurfaceProps* surfaceProps);

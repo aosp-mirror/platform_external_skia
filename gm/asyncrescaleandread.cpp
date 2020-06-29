@@ -219,6 +219,14 @@ static skiagm::DrawResult do_rescale_image_grid(SkCanvas* canvas,
                                doYUV420, errorMsg);
     } else if (auto ctx = canvas->getGrContext()) {
         image = image->makeTextureImage(ctx);
+        if (!image) {
+            *errorMsg = "Could not create image.";
+            // When testing abandoned GrContext we expect surface creation to fail.
+            if (canvas->getGrContext() && canvas->getGrContext()->abandoned()) {
+                return skiagm::DrawResult::kSkip;
+            }
+            return skiagm::DrawResult::kFail;
+        }
     }
     return do_rescale_grid(canvas, image.get(), canvas->getGrContext(), srcRect, newSize, doYUV420,
                            errorMsg);
