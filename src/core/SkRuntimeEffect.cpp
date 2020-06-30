@@ -106,6 +106,7 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
     size_t offset = 0, uniformSize = 0;
     std::vector<Variable> inAndUniformVars;
     std::vector<SkString> children;
+    std::vector<SkSL::SampleMatrix> sampleMatrices;
     std::vector<Varying> varyings;
     const SkSL::Context& ctx(compiler->context());
 
@@ -150,6 +151,7 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
                     if (var.fModifiers.fFlags & flag) {
                         if (&var.fType == ctx.fFragmentProcessor_Type.get()) {
                             children.push_back(var.fName);
+                            sampleMatrices.push_back(SkSL::SampleMatrix::Make(*program, var));
                             continue;
                         }
 
@@ -274,6 +276,7 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
                                                       std::move(program),
                                                       std::move(inAndUniformVars),
                                                       std::move(children),
+                                                      std::move(sampleMatrices),
                                                       std::move(varyings),
                                                       uniformSize,
                                                       mainHasSampleCoords));
@@ -303,6 +306,7 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
                                  std::unique_ptr<SkSL::Program> baseProgram,
                                  std::vector<Variable>&& inAndUniformVars,
                                  std::vector<SkString>&& children,
+                                 std::vector<SkSL::SampleMatrix>&& sampleMatrices,
                                  std::vector<Varying>&& varyings,
                                  size_t uniformSize,
                                  bool mainHasSampleCoords)
@@ -311,12 +315,14 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
         , fBaseProgram(std::move(baseProgram))
         , fInAndUniformVars(std::move(inAndUniformVars))
         , fChildren(std::move(children))
+        , fSampleMatrices(std::move(sampleMatrices))
         , fVaryings(std::move(varyings))
         , fUniformSize(uniformSize)
         , fMainFunctionHasSampleCoords(mainHasSampleCoords) {
     SkASSERT(fBaseProgram);
     SkASSERT(SkIsAlign4(fUniformSize));
     SkASSERT(fUniformSize <= this->inputSize());
+    SkASSERT(fChildren.size() == fSampleMatrices.size());
 }
 
 SkRuntimeEffect::~SkRuntimeEffect() = default;
@@ -435,7 +441,7 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
                                          std::vector<skvm::F32> stack,
                                          /*these parameters are used to call program() on children*/
                                          const std::vector<sk_sp<SkShader>>& children,
-                                         skvm::Coord device, skvm::Color paint,
+                                         skvm::Coord device, skvm::Coord local, skvm::Color paint,
                                          SkFilterQuality quality, const SkColorInfo& dst,
                                          skvm::Uniforms* uniforms, SkArenaAlloc* alloc) {
     auto push = [&](skvm::F32 x) { stack.push_back(x); };
@@ -455,10 +461,11 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
       //auto u16 = [&]{ auto x = sk_unaligned_load<uint16_t>(ip); ip += sizeof(x); return x; };
         auto u32 = [&]{ auto x = sk_unaligned_load<uint32_t>(ip); ip += sizeof(x); return x; };
 
-        auto unary = [&](Inst base, auto&& fn) {
-            const int N = (int)base - (int)inst + 1;
-            SkASSERT(0 < N && N <= 4);
-            skvm::F32 args[4];
+        auto unary = [&](Inst base, auto&& fn, bool allow_big = false) {
+            int N = (int)base - (int)inst + 1;
+            SkASSERT(0 < N && N <= (allow_big ? 5 : 4));
+            if (N == 5) { N = u8(); }
+            std::vector<skvm::F32> args(N);
             for (int i = 0; i < N; ++i) {
                 args[i] = pop();
             }
@@ -467,14 +474,15 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
             }
         };
 
-        auto binary = [&](Inst base, auto&& fn) {
-            const int N = (int)base - (int)inst + 1;
-            SkASSERT(0 < N && N <= 4);
-            skvm::F32 right[4];
+        auto binary = [&](Inst base, auto&& fn, bool allow_big = false) {
+            int N = (int)base - (int)inst + 1;
+            SkASSERT(0 < N && N <= (allow_big ? 5 : 4));
+            if (N == 5) { N = u8(); }
+            std::vector<skvm::F32> right(N);
             for (int i = 0; i < N; ++i) {
                 right[i] = pop();
             }
-            skvm::F32 left[4];
+            std::vector<skvm::F32> left(N);
             for (int i = 0; i < N; ++i) {
                 left[i] = pop();
             }
@@ -492,7 +500,34 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
                 #endif
                 return {};
 
-            // TODO: Inst::kSampleMatrix, should look much like kSampleExplicit.
+            case Inst::kSampleMatrix: {
+                // Child shader to run.
+                int ix = u8();
+
+                // Stack contains matrix to apply to sample coordinates.
+                skvm::F32 m[9];
+                for (int i = 9; i --> 0; ) { m[i] = pop(); }
+
+                // TODO: Optimize this for simpler matrices
+                skvm::F32 x = m[0]*local.x + m[3]*local.y + m[6],
+                          y = m[1]*local.x + m[4]*local.y + m[7],
+                          w = m[2]*local.x + m[5]*local.y + m[8];
+                x = x * (1.0f / w);
+                y = y * (1.0f / w);
+
+                SkOverrideDeviceMatrixProvider mats{matrices, SkMatrix::I()};
+                skvm::Color c = as_SB(children[ix])->program(p, device, {x,y},paint,
+                                                             mats, nullptr,
+                                                             quality, dst,
+                                                             uniforms, alloc);
+                if (!c) {
+                    return {};
+                }
+                push(c.r);
+                push(c.g);
+                push(c.b);
+                push(c.a);
+            } break;
 
             case Inst::kSampleExplicit: {
                 // Child shader to run.
@@ -642,22 +677,26 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
             case Inst::kAddF:
             case Inst::kAddF2:
             case Inst::kAddF3:
-            case Inst::kAddF4: binary(Inst::kAddF, std::plus<>{}); break;
+            case Inst::kAddF4:
+            case Inst::kAddFN: binary(Inst::kAddF, std::plus<>{}, true); break;
 
             case Inst::kSubtractF:
             case Inst::kSubtractF2:
             case Inst::kSubtractF3:
-            case Inst::kSubtractF4: binary(Inst::kSubtractF, std::minus<>{}); break;
+            case Inst::kSubtractF4:
+            case Inst::kSubtractFN: binary(Inst::kSubtractF, std::minus<>{}, true); break;
 
             case Inst::kMultiplyF:
             case Inst::kMultiplyF2:
             case Inst::kMultiplyF3:
-            case Inst::kMultiplyF4: binary(Inst::kMultiplyF, std::multiplies<>{}); break;
+            case Inst::kMultiplyF4:
+            case Inst::kMultiplyFN: binary(Inst::kMultiplyF, std::multiplies<>{}, true); break;
 
             case Inst::kDivideF:
             case Inst::kDivideF2:
             case Inst::kDivideF3:
-            case Inst::kDivideF4: binary(Inst::kDivideF, std::divides<>{}); break;
+            case Inst::kDivideF4:
+            case Inst::kDivideFN: binary(Inst::kDivideF, std::divides<>{}, true); break;
 
             case Inst::kMinF:
             case Inst::kMinF2:
@@ -676,7 +715,8 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
             case Inst::kNegateF:
             case Inst::kNegateF2:
             case Inst::kNegateF3:
-            case Inst::kNegateF4: unary(Inst::kNegateF, std::negate<>{}); break;
+            case Inst::kNegateF4:
+            case Inst::kNegateFN: unary(Inst::kNegateF, std::negate<>{}, true); break;
 
             case Inst::kPow:
             case Inst::kPow2:
@@ -856,7 +896,7 @@ public:
         std::vector<skvm::F32> stack =
             program_fn(p, *fn, uniform, SkSimpleMatrixProvider{SkMatrix::I()}, {c.r, c.g, c.b, c.a},
                        /* the remaining parameters are for shaders only and won't be used here */
-                       {},{},{},{},{},{},{});
+                       {},{},{},{},{},{},{},{});
 
         if (stack.size() == 4) {
             return {stack[0], stack[1], stack[2], stack[3]};
@@ -1082,7 +1122,7 @@ public:
             program_fn(p, *fn, uniform, matrices,
                        {local.x,local.y, paint.r, paint.g, paint.b, paint.a},
                        /*parameters for calling program() on children*/
-                       fChildren, device,paint, quality,dst, uniforms,alloc);
+                       fChildren, device,local,paint, quality,dst, uniforms,alloc);
 
         if (stack.size() == 6) {
             return {stack[2], stack[3], stack[4], stack[5]};

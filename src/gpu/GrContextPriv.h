@@ -121,11 +121,7 @@ public:
     }
 
     void moveRenderTasksToDDL(SkDeferredDisplayList*);
-#ifndef SK_DDL_IS_UNIQUE_POINTER
     void copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest);
-#else
-    void copyRenderTasksFromDDL(const SkDeferredDisplayList*, GrRenderTargetProxy* newDest);
-#endif
 
     bool compile(const GrProgramDesc&, const GrProgramInfo&);
 
@@ -157,10 +153,6 @@ public:
     void dumpContextStats(SkString*) const;
     void dumpContextStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
     void printContextStats() const;
-
-    /** Specify the TextBlob cache limit. If the current cache exceeds this limit it will purge.
-        this is for testing only */
-    void testingOnly_setTextBlobCacheLimit(size_t bytes);
 
     /** Get pointer to atlas texture for given mask format. Note that this wraps an
         actively mutating texture in an SkImage. This could yield unexpected results

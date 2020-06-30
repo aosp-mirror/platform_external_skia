@@ -8,8 +8,6 @@
 #ifndef GrUnrefDDLTask_DEFINED
 #define GrUnrefDDLTask_DEFINED
 
-#ifndef SK_DDL_IS_UNIQUE_POINTER
-
 #include "src/gpu/GrRenderTask.h"
 
 /** When a DDL is played back, the drawing manager refs the DDL and adds one
@@ -21,6 +19,14 @@ public:
     GrUnrefDDLTask(sk_sp<const SkDeferredDisplayList> ddl)
             : GrRenderTask()
             , fDDL(std::move(ddl)) {}
+
+    // We actually do the unreffing in dtor instead of onExecute, so that we maintain the invariant
+    // that DDLs are always the last owners of their render tasks (because those tasks depend on
+    // memory owned by the DDL.) If we had this in onExecute, the tasks would still be alive in
+    // the drawing manager although it would already have executed them.
+    ~GrUnrefDDLTask() override {
+        fDDL.reset();
+    }
 
 private:
     bool onIsUsed(GrSurfaceProxy* proxy) const override { return false; }
@@ -35,10 +41,7 @@ private:
         return ExpectedOutcome::kTargetUnchanged;
     }
 
-    bool onExecute(GrOpFlushState*) override {
-        fDDL.reset();
-        return true;
-    }
+    bool onExecute(GrOpFlushState*) override { return true; }
 
 #ifdef SK_DEBUG
     const char* name() const final { return "UnrefDDL"; }
@@ -48,5 +51,4 @@ private:
     sk_sp<const SkDeferredDisplayList> fDDL;
 };
 
-#endif  // !SK_DDL_IS_UNIQUE_POINTER
 #endif
