@@ -10,6 +10,7 @@
 #include "include/core/SkPromiseImageTexture.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContext.h"
+#include "include/private/GrDirectContext.h"
 #include "include/private/GrRecordingContext.h"
 #include "src/core/SkBitmapCache.h"
 #include "src/core/SkTLList.h"
@@ -250,7 +251,7 @@ GrTexture* SkImage_GpuBase::getTexture() const {
 
 bool SkImage_GpuBase::onIsValid(GrContext* context) const {
     // The base class has already checked that context isn't abandoned (if it's not nullptr)
-    if (fContext->priv().abandoned()) {
+    if (fContext->abandoned()) {
         return false;
     }
 

@@ -40,13 +40,11 @@ public:
 
     GrImageContext* asImageContext() { return fContext->asImageContext(); }
     GrRecordingContext* asRecordingContext() { return fContext->asRecordingContext(); }
-    GrContext* asDirectContext() { return fContext->asDirectContext(); }
+    GrDirectContext* asDirectContext() { return fContext->asDirectContext(); }
 
     // from GrImageContext
     GrProxyProvider* proxyProvider() { return fContext->proxyProvider(); }
     const GrProxyProvider* proxyProvider() const { return fContext->proxyProvider(); }
-
-    bool abandoned() const { return fContext->abandoned(); }
 
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* singleOwner() const { return fContext->singleOwner(); } )

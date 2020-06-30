@@ -159,18 +159,9 @@ private:
 };
 
 /**
- * Base class for GrClips that visualize a clip mask.
- */
-class MaskOnlyClipBase : public GrClip {
-private:
-    bool quickContains(const SkRect&) const final { return false; }
-    bool isRRect(SkRRect* rr, GrAA*) const final { return false; }
-};
-
-/**
  * This class clips a cover by an alpha mask. We use it to visualize the alpha clip mask.
  */
-class AlphaOnlyClip final : public MaskOnlyClipBase {
+class AlphaOnlyClip final : public GrClip {
 public:
     AlphaOnlyClip(GrSurfaceProxyView mask, int x, int y) : fMask(std::move(mask)), fX(x), fY(y) {}
 
@@ -178,9 +169,8 @@ private:
     SkIRect getConservativeBounds() const final {
         return SkIRect::MakeXYWH(fX, fY, fMask.width(), fMask.height());
     }
-
-    bool apply(GrRecordingContext* ctx, GrRenderTargetContext*, bool, bool, GrAppliedClip* out,
-               SkRect* bounds) const override {
+    Effect apply(GrRecordingContext* ctx, GrRenderTargetContext*, bool, bool,
+                     GrAppliedClip* out, SkRect* bounds) const override {
         GrSamplerState samplerState(GrSamplerState::WrapMode::kClampToBorder,
                                     GrSamplerState::Filter::kNearest);
         auto m = SkMatrix::Translate(-fX, -fY);
@@ -190,7 +180,7 @@ private:
                                               domain, *ctx->priv().caps());
         fp = GrDeviceSpaceEffect::Make(std::move(fp));
         out->addCoverageFP(std::move(fp));
-        return true;
+        return Effect::kClipped;
     }
     GrSurfaceProxyView fMask;
     int fX;
@@ -269,7 +259,7 @@ void WindowRectanglesMaskGM::visualizeStencilMask(GrRecordingContext* ctx,
                                                   GrRenderTargetContext* rtc,
                                                   const GrReducedClip& reducedClip,
                                                   GrPaint&& paint) {
-    if (ctx->priv().abandoned()) {
+    if (ctx->abandoned()) {
         // GrReducedClip assumes the context hasn't been abandoned, which is reasonable since it is
         // only ever used if a draw op is made. Since this GM calls it directly, it has to be taken
         // into account.

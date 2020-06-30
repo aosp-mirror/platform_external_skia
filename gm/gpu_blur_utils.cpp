@@ -8,7 +8,7 @@
 #include "gm/gm.h"
 
 #include "include/effects/SkGradientShader.h"
-#include "include/gpu/GrContext.h"
+#include "include/private/GrDirectContext.h"
 #include "src/core/SkGpuBlurUtils.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrStyle.h"
@@ -33,7 +33,7 @@ static GrSurfaceProxyView blur(GrRecordingContext* ctx,
 };
 
 static void run(GrRecordingContext* ctx, GrRenderTargetContext* rtc, bool subsetSrc, bool ref) {
-    GrContext* direct = ctx->priv().asDirectContext();
+    auto direct = ctx->priv().asDirectContext();
     if (!direct) {
         return;
     }
@@ -210,8 +210,8 @@ static void run(GrRecordingContext* ctx, GrRenderTargetContext* rtc, bool subset
                     GrPaint paint;
                     // Compose against white (default paint color) and then replace the dst
                     // (SkBlendMode::kSrc).
-                    fp = GrXfermodeFragmentProcessor::MakeFromSrcProcessor(std::move(fp),
-                                                                           SkBlendMode::kSrcOver);
+                    fp = GrXfermodeFragmentProcessor::Make(std::move(fp), /*dst=*/nullptr,
+                                                           SkBlendMode::kSrcOver);
                     paint.addColorFragmentProcessor(std::move(fp));
                     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
                     rtc->fillRectToRect(nullptr, std::move(paint), GrAA::kNo, m,
