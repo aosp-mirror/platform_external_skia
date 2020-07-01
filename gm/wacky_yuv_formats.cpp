@@ -38,14 +38,16 @@
 #include "include/gpu/GrConfig.h"
 #include "include/gpu/GrContext.h"
 #include "include/gpu/GrTypes.h"
+#include "include/private/GrRecordingContext.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTDArray.h"
 #include "include/private/SkTemplates.h"
 #include "include/utils/SkTextUtils.h"
 #include "src/core/SkYUVMath.h"
+#include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
-#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/YUVUtils.h"
 
@@ -326,7 +328,7 @@ static bool is_colorType_texturable(const GrCaps* caps, GrColorType ct) {
     return caps->isFormatTexturable(format);
 }
 
-static bool is_format_natively_supported(GrContext* context, YUVFormat yuvFormat) {
+static bool is_format_natively_supported(GrRecordingContext* context, YUVFormat yuvFormat) {
 
     const GrCaps* caps = context->priv().caps();
 
@@ -1363,9 +1365,7 @@ protected:
             // Some backends (e.g., Vulkan) require all work be completed for backend textures
             // before they are deleted. Since we don't know when we'll next have access to a
             // direct context, flush all the work now.
-            GrFlushInfo flushInfoSyncCpu;
-            flushInfoSyncCpu.fFlags = kSyncCpu_GrFlushFlag;
-            context->flush(flushInfoSyncCpu);
+            context->flush();
             context->submit(true);
         }
 
@@ -1592,9 +1592,7 @@ protected:
         // Some backends (e.g., Vulkan) require all work be completed for backend textures before
         // they are deleted. Since we don't know when we'll next have access to a direct context,
         // flush all the work now.
-        GrFlushInfo flushInfoSyncCpu;
-        flushInfoSyncCpu.fFlags = kSyncCpu_GrFlushFlag;
-        context->flush(flushInfoSyncCpu);
+        context->flush();
         context->submit(true);
 
         return true;
@@ -1620,7 +1618,7 @@ protected:
         fImages[0][0] = fImages[0][1] = fImages[1][0] = fImages[1][1] = nullptr;
     }
 
-    void onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas) override {
+    void onDraw(GrRecordingContext* context, GrRenderTargetContext*, SkCanvas* canvas) override {
         SkASSERT(fImages[0][0] && fImages[0][1] && fImages[1][0] && fImages[1][1]);
 
         int x = kPad;

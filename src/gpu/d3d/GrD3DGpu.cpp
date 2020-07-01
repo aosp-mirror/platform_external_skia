@@ -79,7 +79,7 @@ void GrD3DGpu::destroyResources() {
     }
 
     // We need to make sure everything has finished on the queue.
-    this->waitForQueueCompletion();
+    this->waitFence(fCurrentFenceValue);
 
     SkDEBUGCODE(uint64_t fenceValue = fFence->GetCompletedValue();)
 
@@ -122,7 +122,7 @@ bool GrD3DGpu::submitDirectCommandList(SyncQueue sync) {
         return false;
     } else if (result == GrD3DDirectCommandList::SubmitResult::kNoWork) {
         if (sync == SyncQueue::kForce) {
-            this->waitForQueueCompletion();
+            this->waitFence(fCurrentFenceValue);
             this->checkForFinishedCommandLists();
         }
         return true;
@@ -132,14 +132,12 @@ bool GrD3DGpu::submitDirectCommandList(SyncQueue sync) {
     // uniform data as dirty.
     fResourceProvider.markPipelineStateUniformsDirty();
 
+    GrFence fence = this->insertFence();
     new (fOutstandingCommandLists.push_back()) OutstandingCommandList(
-            std::move(fCurrentDirectCommandList), ++fCurrentFenceValue);
-
-    SkDEBUGCODE(HRESULT hr = ) fQueue->Signal(fFence.get(), fCurrentFenceValue);
-    SkASSERT(SUCCEEDED(hr));
+            std::move(fCurrentDirectCommandList), fence);
 
     if (sync == SyncQueue::kForce) {
-        this->waitForQueueCompletion();
+        this->waitFence(fence);
     }
 
     fCurrentDirectCommandList = fResourceProvider.findOrCreateDirectCommandList();
@@ -161,27 +159,14 @@ void GrD3DGpu::checkForFinishedCommandLists() {
     // value is less than the last signaled value. If so we pop it off and move onto the next.
     // Repeat till we find a command list that has not finished yet (and all others afterwards are
     // also guaranteed to not have finished).
-    SkDeque::F2BIter iter(fOutstandingCommandLists);
-    const OutstandingCommandList* curList = (const OutstandingCommandList*)iter.next();
-    while (curList && curList->fFenceValue <= currentFenceValue) {
-        curList = (const OutstandingCommandList*)iter.next();
-        OutstandingCommandList* front = (OutstandingCommandList*)fOutstandingCommandLists.front();
-        fResourceProvider.recycleDirectCommandList(std::move(front->fCommandList));
+    OutstandingCommandList* front = (OutstandingCommandList*)fOutstandingCommandLists.front();
+    while (front && front->fFenceValue <= currentFenceValue) {
+        std::unique_ptr<GrD3DDirectCommandList> currList(std::move(front->fCommandList));
         // Since we used placement new we are responsible for calling the destructor manually.
         front->~OutstandingCommandList();
         fOutstandingCommandLists.pop_front();
-    }
-}
-
-void GrD3DGpu::waitForQueueCompletion() {
-    if (fFence->GetCompletedValue() < fCurrentFenceValue) {
-        HANDLE fenceEvent;
-        fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        SkASSERT(fenceEvent);
-        SkDEBUGCODE(HRESULT hr = ) fFence->SetEventOnCompletion(fCurrentFenceValue, fenceEvent);
-        SkASSERT(SUCCEEDED(hr));
-        WaitForSingleObject(fenceEvent, INFINITE);
-        CloseHandle(fenceEvent);
+        fResourceProvider.recycleDirectCommandList(std::move(currList));
+        front = (OutstandingCommandList*)fOutstandingCommandLists.front();
     }
 }
 
@@ -933,36 +918,10 @@ bool copy_src_data(GrD3DGpu* gpu, char* mapPtr, DXGI_FORMAT dxgiFormat,
     return true;
 }
 
-// Used to "clear" a backend texture to a constant color by transferring.
-static GrColorType dxgi_format_to_backend_tex_clear_colortype(DXGI_FORMAT format) {
-    switch (format) {
-        case DXGI_FORMAT_A8_UNORM:            return GrColorType::kAlpha_8;
-        case DXGI_FORMAT_R8_UNORM:            return GrColorType::kR_8;
-
-        case DXGI_FORMAT_B5G6R5_UNORM:        return GrColorType::kBGR_565;
-        case DXGI_FORMAT_B4G4R4A4_UNORM:      return GrColorType::kABGR_4444;
-        case DXGI_FORMAT_R8G8B8A8_UNORM:      return GrColorType::kRGBA_8888;
-        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: return GrColorType::kRGBA_8888_SRGB;
-
-        case DXGI_FORMAT_R8G8_UNORM:          return GrColorType::kRG_88;
-        case DXGI_FORMAT_B8G8R8A8_UNORM:      return GrColorType::kBGRA_8888;
-        case DXGI_FORMAT_R10G10B10A2_UNORM:   return GrColorType::kRGBA_1010102;
-        case DXGI_FORMAT_R16_FLOAT:           return GrColorType::kR_F16;
-        case DXGI_FORMAT_R16G16B16A16_FLOAT:  return GrColorType::kRGBA_F16;
-        case DXGI_FORMAT_R16_UNORM:           return GrColorType::kR_16;
-        case DXGI_FORMAT_R16G16_UNORM:        return GrColorType::kRG_1616;
-        case DXGI_FORMAT_R16G16B16A16_UNORM:  return GrColorType::kRGBA_16161616;
-        case DXGI_FORMAT_R16G16_FLOAT:        return GrColorType::kRG_F16;
-        default:                              return GrColorType::kUnknown;
-    }
-
-    SkUNREACHABLE;
-}
-
-
-bool copy_color_data(char* mapPtr, DXGI_FORMAT dxgiFormat, SkISize dimensions,
-                     D3D12_PLACED_SUBRESOURCE_FOOTPRINT* placedFootprints, SkColor4f color) {
-    auto colorType = dxgi_format_to_backend_tex_clear_colortype(dxgiFormat);
+bool copy_color_data(const GrD3DCaps& caps, char* mapPtr, DXGI_FORMAT dxgiFormat,
+                     SkISize dimensions, D3D12_PLACED_SUBRESOURCE_FOOTPRINT* placedFootprints,
+                     SkColor4f color) {
+    auto colorType = caps.getFormatColorType(dxgiFormat);
     if (colorType == GrColorType::kUnknown) {
         return false;
     }
@@ -1044,7 +1003,8 @@ bool GrD3DGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
         SkImage::CompressionType compression =
                 GrBackendFormatToCompressionType(backendTexture.getBackendFormat());
         if (SkImage::CompressionType::kNone == compression) {
-            result = copy_color_data(bufferData, info.fFormat, backendTexture.dimensions(),
+            result = copy_color_data(this->d3dCaps(), bufferData, info.fFormat,
+                                     backendTexture.dimensions(),
                                      placedFootprints, data->color());
         } else {
             GrFillInCompressedData(compression, backendTexture.dimensions(),
@@ -1238,4 +1198,23 @@ void GrD3DGpu::waitSemaphore(GrSemaphore* semaphore) {
     GrD3DSemaphore* d3dSem = static_cast<GrD3DSemaphore*>(semaphore);
     // TODO: Do we need to track the lifetime of this?
     fQueue->Wait(d3dSem->fence(), d3dSem->value());
+}
+
+GrFence SK_WARN_UNUSED_RESULT GrD3DGpu::insertFence() {
+    SkDEBUGCODE(HRESULT hr = ) fQueue->Signal(fFence.get(), ++fCurrentFenceValue);
+    return fCurrentFenceValue;
+}
+
+bool GrD3DGpu::waitFence(GrFence fence) {
+    if (fFence->GetCompletedValue() < fence) {
+        HANDLE fenceEvent;
+        fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        SkASSERT(fenceEvent);
+        SkDEBUGCODE(HRESULT hr = ) fFence->SetEventOnCompletion(fence, fenceEvent);
+        SkASSERT(SUCCEEDED(hr));
+        WaitForSingleObject(fenceEvent, INFINITE);
+        CloseHandle(fenceEvent);
+    }
+
+    return true;
 }

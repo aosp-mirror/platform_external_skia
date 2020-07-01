@@ -12,13 +12,16 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrContext.h"
-#include "src/gpu/GrContextPriv.h"
+#include "include/private/GrDirectContext.h"
+#include "include/private/GrRecordingContext.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 
 class GrRenderTargetContext;
 
 // This test exercises Ganesh's drawing of tiled bitmaps. In particular, that the offsets and the
 // extents of the tiles don't causes gaps between tiles.
-static void draw_tile_bitmap_with_fractional_offset(GrContext* context, SkCanvas* canvas,
+static void draw_tile_bitmap_with_fractional_offset(GrRecordingContext* context,
+                                                    SkCanvas* canvas,
                                                     bool vertical) {
     // This should match kBmpSmallTileSize in SkGpuDevice.cpp. Note that our canvas size is tuned
     // to this constant as well.
@@ -29,7 +32,7 @@ static void draw_tile_bitmap_with_fractional_offset(GrContext* context, SkCanvas
     const int kBitmapLongEdge = 7 * kTileSize;
     const int kBitmapShortEdge = 1 * kTileSize;
 
-    if (GrContext* direct = context->priv().asDirectContext()) {
+    if (auto direct = context->priv().asDirectContext()) {
         // To trigger tiling, we also need the image to be more than 50% of the cache, so we
         // ensure the cache is sized to make that true.
         const int kBitmapArea = kBitmapLongEdge * kBitmapShortEdge;
