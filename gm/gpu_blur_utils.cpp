@@ -8,14 +8,15 @@
 #include "gm/gm.h"
 
 #include "include/effects/SkGradientShader.h"
+#include "include/private/GrDirectContext.h"
 #include "src/core/SkGpuBlurUtils.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrStyle.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrXfermodeFragmentProcessor.h"
 #include "src/image/SkImage_Base.h"
 
-static GrSurfaceProxyView blur(GrContext* ctx,
+static GrSurfaceProxyView blur(GrRecordingContext* ctx,
                                GrSurfaceProxyView src,
                                SkIRect dstB,
                                SkIRect srcB,
@@ -31,9 +32,14 @@ static GrSurfaceProxyView blur(GrContext* ctx,
     return resultRTC->readSurfaceView();
 };
 
-static void run(GrContext* ctx, GrRenderTargetContext* rtc, bool subsetSrc, bool ref) {
+static void run(GrRecordingContext* ctx, GrRenderTargetContext* rtc, bool subsetSrc, bool ref) {
+    auto direct = ctx->priv().asDirectContext();
+    if (!direct) {
+        return;
+    }
+
     auto srcII = SkImageInfo::Make(60, 60, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurface::MakeRenderTarget(ctx, SkBudgeted::kYes, srcII);
+    auto surf = SkSurface::MakeRenderTarget(direct, SkBudgeted::kYes, srcII);
     GrSurfaceProxyView src;
     if (surf) {
         SkScalar w = surf->width();
@@ -65,7 +71,7 @@ static void run(GrContext* ctx, GrRenderTargetContext* rtc, bool subsetSrc, bool
         surf->getCanvas()->drawLine({7.f*w/8.f, 0.f}, {7.f*h/8.f, h}, paint);
 
         auto img = surf->makeImageSnapshot();
-        if (auto v = as_IB(img)->view(ctx)) {
+        if (auto v = as_IB(img)->view(direct)) {
             src = *v;
         }
     }
@@ -204,8 +210,8 @@ static void run(GrContext* ctx, GrRenderTargetContext* rtc, bool subsetSrc, bool
                     GrPaint paint;
                     // Compose against white (default paint color) and then replace the dst
                     // (SkBlendMode::kSrc).
-                    fp = GrXfermodeFragmentProcessor::MakeFromSrcProcessor(std::move(fp),
-                                                                           SkBlendMode::kSrcOver);
+                    fp = GrXfermodeFragmentProcessor::Make(std::move(fp), /*dst=*/nullptr,
+                                                           SkBlendMode::kSrcOver);
                     paint.addColorFragmentProcessor(std::move(fp));
                     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
                     rtc->fillRectToRect(nullptr, std::move(paint), GrAA::kNo, m,

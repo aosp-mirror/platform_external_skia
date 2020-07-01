@@ -8,6 +8,7 @@
 #include "src/sksl/SkSLHCodeGenerator.h"
 
 #include "include/private/SkSLSampleMatrix.h"
+#include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLParser.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLEnum.h"
@@ -238,19 +239,6 @@ void HCodeGenerator::writeConstructor() {
     }
     this->writef(")");
     this->writeSection(INITIALIZERS_SECTION, "\n    , ");
-    const auto transforms = fSectionAndParameterHelper.getSections(COORD_TRANSFORM_SECTION);
-    for (size_t i = 0; i < transforms.size(); ++i) {
-        const Section& s = *transforms[i];
-        String field = CoordTransformName(s.fArgument.c_str(), i);
-        if (s.fArgument.size()) {
-            this->writef("\n    , %s(%s, %s.proxy(), %s.origin())", field.c_str(), s.fText.c_str(),
-                         FieldName(s.fArgument.c_str()).c_str(),
-                         FieldName(s.fArgument.c_str()).c_str());
-        }
-        else {
-            this->writef("\n    , %s(%s)", field.c_str(), s.fText.c_str());
-        }
-    }
     for (const auto& param : fSectionAndParameterHelper.getParameters()) {
         String nameString(param->fName);
         const char* name = nameString.c_str();
@@ -273,8 +261,7 @@ void HCodeGenerator::writeConstructor() {
     this->writef(" {\n");
     this->writeSection(CONSTRUCTOR_CODE_SECTION);
 
-    int usesSampleCoordsDirectly = fProgram.fSource->find("sk_TransformedCoords", 0);
-    if (usesSampleCoordsDirectly >= 0) {
+    if (Analysis::ReferencesSampleCoords(fProgram)) {
         this->writef("        this->setUsesSampleCoordsDirectly();\n");
     }
 
@@ -289,8 +276,8 @@ void HCodeGenerator::writeConstructor() {
                 this->writef("        SkASSERT(%s);", String(param->fName).c_str());
             }
 
-            bool explicitCoords = fSectionAndParameterHelper.hasCoordOverrides(*param);
-            SampleMatrix matrix = SampleMatrix::Make(fProgram, *param);
+            bool explicitCoords = Analysis::IsExplicitlySampled(fProgram, *param);
+            SampleMatrix matrix = Analysis::GetSampleMatrix(fProgram, *param);
 
             String registerFunc;
             String matrixArg;
@@ -345,22 +332,11 @@ void HCodeGenerator::writeConstructor() {
     if (samplerCount) {
         this->writef("        this->setTextureSamplerCnt(%d);", samplerCount);
     }
-    for (size_t i = 0; i < transforms.size(); ++i) {
-        const Section& s = *transforms[i];
-        String field = CoordTransformName(s.fArgument.c_str(), i);
-        this->writef("        this->addCoordTransform(&%s);\n", field.c_str());
-    }
     this->writef("    }\n");
 }
 
 void HCodeGenerator::writeFields() {
     this->writeSection(FIELDS_SECTION);
-    const auto transforms = fSectionAndParameterHelper.getSections(COORD_TRANSFORM_SECTION);
-    for (size_t i = 0; i < transforms.size(); ++i) {
-        const Section& s = *transforms[i];
-        this->writef("    GrCoordTransform %s;\n",
-                     CoordTransformName(s.fArgument.c_str(), i).c_str());
-    }
     for (const auto& param : fSectionAndParameterHelper.getParameters()) {
         String name = FieldName(String(param->fName).c_str());
         if (param->fType.nonnullable() == *fContext.fFragmentProcessor_Type) {

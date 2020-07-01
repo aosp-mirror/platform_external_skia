@@ -617,7 +617,7 @@ std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
             if (!caseValue) {
                 return nullptr;
             }
-            if (!caseValue->isConstant()) {
+            if (!caseValue->isCompileTimeConstant()) {
                 fErrors.error(caseValue->fOffset, "case value must be a constant");
                 return nullptr;
             }
@@ -862,6 +862,19 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                 }
                 break;
             }
+            case Program::kFragmentProcessor_Kind: {
+                bool valid = parameters.size() <= 1;
+                if (parameters.size() == 1) {
+                    valid = parameters[0]->fType == *fContext.fFloat2_Type &&
+                            parameters[0]->fModifiers.fFlags == 0;
+                }
+
+                if (!valid) {
+                    fErrors.error(f.fOffset, ".fp 'main' must be declared main() or main(float2)");
+                    return;
+                }
+                break;
+            }
             case Program::kGeneric_Kind:
                 break;
             default:
@@ -948,6 +961,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             } else {
                 SkASSERT(parameters.size() == 1);
                 parameters[0]->fModifiers.fLayout.fBuiltin = SK_OUTCOLOR_BUILTIN;
+            }
+        } else if (fd.fName == "main" && fKind == Program::kFragmentProcessor_Kind) {
+            if (parameters.size() == 1) {
+                parameters[0]->fModifiers.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
             }
         }
         for (size_t i = 0; i < parameters.size(); i++) {
@@ -1576,16 +1593,16 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
                                                       const Expression& right) const {
     // If the left side is a constant boolean literal, the right side does not need to be constant
     // for short circuit optimizations to allow the constant to be folded.
-    if (left.fKind == Expression::kBoolLiteral_Kind && !right.isConstant()) {
+    if (left.fKind == Expression::kBoolLiteral_Kind && !right.isCompileTimeConstant()) {
         return short_circuit_boolean(fContext, left, op, right);
-    } else if (right.fKind == Expression::kBoolLiteral_Kind && !left.isConstant()) {
+    } else if (right.fKind == Expression::kBoolLiteral_Kind && !left.isCompileTimeConstant()) {
         // There aren't side effects in SKSL within expressions, so (left OP right) is equivalent to
         // (right OP left) for short-circuit optimizations
         return short_circuit_boolean(fContext, right, op, left);
     }
 
     // Other than the short-circuit cases above, constant folding requires both sides to be constant
-    if (!left.isConstant() || !right.isConstant()) {
+    if (!left.isCompileTimeConstant() || !right.isCompileTimeConstant()) {
         return nullptr;
     }
     // Note that we expressly do not worry about precision and overflow here -- we use the maximum

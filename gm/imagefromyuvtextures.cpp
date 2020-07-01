@@ -238,9 +238,7 @@ protected:
         // Some backends (e.g., Vulkan) require all work be completed for backend textures
         // before they are deleted. Since we don't know when we'll next have access to a
         // direct context, flush all the work now.
-        GrFlushInfo flushInfoSyncCpu;
-        flushInfoSyncCpu.fFlags = kSyncCpu_GrFlushFlag;
-        context->flush(flushInfoSyncCpu);
+        context->flush();
         context->submit(true);
 
         return DrawResult::kOk;
@@ -258,7 +256,7 @@ protected:
         return fYUVAImages[index].get();
     }
 
-    void onDraw(GrContext*, GrRenderTargetContext*, SkCanvas* canvas) override {
+    void onDraw(GrRecordingContext*, GrRenderTargetContext*, SkCanvas* canvas) override {
         auto draw_image = [canvas](SkImage* image, SkFilterQuality fq) -> SkSize {
             if (!image) {
                 return {0, 0};

@@ -205,6 +205,8 @@ static inline float dither_range_for_config(GrColorType dstColorType) {
     switch (dstColorType) {
         // 4 bit
         case GrColorType::kABGR_4444:
+        case GrColorType::kARGB_4444:
+        case GrColorType::kBGRA_4444:
             return 1 / 15.f;
         // 6 bit
         case GrColorType::kBGR_565:
@@ -293,8 +295,8 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
 
             SkPMColor4f shaderInput = origColor.makeOpaque().premul();
             paintFP = GrFragmentProcessor::OverrideInput(std::move(paintFP), shaderInput);
-            paintFP = GrXfermodeFragmentProcessor::MakeFromSrcProcessor(std::move(paintFP),
-                                                                        *primColorMode);
+            paintFP = GrXfermodeFragmentProcessor::Make(std::move(paintFP), /*dst=*/nullptr,
+                                                        *primColorMode);
 
             // We can ignore origColor here - alpha is unchanged by gamma
             float paintAlpha = skPaint.getColor4f().fA;
@@ -317,8 +319,8 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
             SkPMColor4f opaqueColor = origColor.makeOpaque().premul();
             paintFP = GrConstColorProcessor::Make(/*inputFP=*/nullptr, opaqueColor,
                                                   GrConstColorProcessor::InputMode::kIgnore);
-            paintFP = GrXfermodeFragmentProcessor::MakeFromSrcProcessor(std::move(paintFP),
-                                                                        *primColorMode);
+            paintFP = GrXfermodeFragmentProcessor::Make(std::move(paintFP), /*dst=*/nullptr,
+                                                        *primColorMode);
             grPaint->setColor4f(opaqueColor);
 
             // We can ignore origColor here - alpha is unchanged by gamma
