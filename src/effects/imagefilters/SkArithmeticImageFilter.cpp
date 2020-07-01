@@ -17,7 +17,7 @@
 #include "src/core/SkWriteBuffer.h"
 #if SK_SUPPORT_GPU
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
@@ -36,7 +36,7 @@ in bool enforcePMColor;
 in fragmentProcessor child;
 
 void main(float2 p, inout half4 color) {
-    half4 dst = sample(child, p);
+    half4 dst = sample(child);
     color = saturate(half(k.x) * color * dst + half(k.y) * color + half(k.z) * dst + half(k.w));
     @if (enforcePMColor) {
         color.rgb = min(color.rgb, color.a);
