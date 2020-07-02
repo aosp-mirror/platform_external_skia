@@ -28,7 +28,7 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkBlurMask.h"
 #include "src/core/SkMask.h"
@@ -254,7 +254,7 @@ protected:
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
         if (canvas->imageInfo().colorType() == kUnknown_SkColorType ||
-            (canvas->recordingContext() && !canvas->recordingContext()->priv().asDirectContext())) {
+            (canvas->recordingContext() && !canvas->recordingContext()->asDirectContext())) {
             *errorMsg = "Not supported when recording, relies on canvas->makeSurface()";
             return DrawResult::kSkip;
         }

@@ -15,7 +15,7 @@
 #include "include/core/SkTypes.h"
 
 #include "include/gpu/GrContext.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkBlurPriv.h"
 #include "src/core/SkGpuBlurUtils.h"
 #include "src/core/SkRRectPriv.h"
@@ -138,10 +138,12 @@ private:
             , rect(rect)
             , cornerRadius(cornerRadius) {
         if (inputFP) {
-            inputFP_index = this->registerChild(std::move(inputFP));
+            inputFP_index =
+                    this->registerChild(std::move(inputFP), SkSL::SampleUsage::PassThrough());
         }
         SkASSERT(ninePatchFP);
-        ninePatchFP_index = this->registerExplicitlySampledChild(std::move(ninePatchFP));
+        ninePatchFP_index =
+                this->registerChild(std::move(ninePatchFP), SkSL::SampleUsage::Explicit());
     }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;

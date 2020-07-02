@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/GrDirectContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrImageInfo.h"
@@ -16,7 +16,7 @@
 
 void testing_only_texture_test(skiatest::Reporter* reporter, GrContext* context, SkColorType ct,
                                GrRenderable renderable, bool doDataUpload, GrMipMapped mipMapped) {
-    auto direct = context->priv().asDirectContext();
+    auto direct = context->asDirectContext();
     if (!direct) {
         return;
     }

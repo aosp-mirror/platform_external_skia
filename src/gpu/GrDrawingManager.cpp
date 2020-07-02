@@ -9,8 +9,8 @@
 
 #include "include/core/SkDeferredDisplayList.h"
 #include "include/gpu/GrBackendSemaphore.h"
-#include "include/private/GrDirectContext.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkDeferredDisplayListPriv.h"
 #include "src/core/SkTTopoSort.h"
 #include "src/gpu/GrAuditTrail.h"
@@ -214,7 +214,7 @@ bool GrDrawingManager::flush(
         }
     }
 
-    auto direct = fContext->priv().asDirectContext();
+    auto direct = fContext->asDirectContext();
     if (!direct) {
         if (info.fSubmittedProc) {
             info.fSubmittedProc(info.fSubmittedContext, false);
@@ -384,7 +384,7 @@ bool GrDrawingManager::submitToGpu(bool syncToCpu) {
         return false;
     }
 
-    auto direct = fContext->priv().asDirectContext();
+    auto direct = fContext->asDirectContext();
     if (!direct) {
         return false; // Can't submit while DDL recording
     }
@@ -540,7 +540,7 @@ GrSemaphoresSubmitted GrDrawingManager::flushSurfaces(
     SkASSERT(numProxies >= 0);
     SkASSERT(!numProxies || proxies);
 
-    auto direct = fContext->priv().asDirectContext();
+    auto direct = fContext->asDirectContext();
     if (!direct) {
         if (info.fSubmittedProc) {
             info.fSubmittedProc(info.fSubmittedContext, false);
@@ -953,7 +953,7 @@ GrCoverageCountingPathRenderer* GrDrawingManager::getCoverageCountingPathRendere
 }
 
 void GrDrawingManager::flushIfNecessary() {
-    auto direct = fContext->priv().asDirectContext();
+    auto direct = fContext->asDirectContext();
     if (!direct) {
         return;
     }

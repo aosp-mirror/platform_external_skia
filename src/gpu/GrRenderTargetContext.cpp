@@ -10,9 +10,9 @@
 #include "include/core/SkDrawable.h"
 #include "include/core/SkVertices.h"
 #include "include/gpu/GrBackendSemaphore.h"
-#include "include/private/GrDirectContext.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/private/GrImageContext.h"
-#include "include/private/GrRecordingContext.h"
 #include "include/private/SkShadowFlags.h"
 #include "include/utils/SkShadowUtils.h"
 #include "src/core/SkAutoPixmapStorage.h"
@@ -39,7 +39,6 @@
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrPathRenderer.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/GrResourceProvider.h"
@@ -1712,7 +1711,7 @@ bool GrRenderTargetContext::waitOnSemaphores(int numSemaphores,
         return false;
     }
 
-    auto direct = fContext->priv().asDirectContext();
+    auto direct = fContext->asDirectContext();
     if (!direct) {
         return false;
     }

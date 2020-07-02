@@ -7,7 +7,7 @@
 
 #include "include/core/SkColor.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/private/GrDirectContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrGpu.h"
@@ -31,7 +31,7 @@ sk_sp<GrTextureProxy> MakeTextureProxyFromData(GrContext* context,
         return nullptr;
     }
 
-    auto direct = context->priv().asDirectContext();
+    auto direct = context->asDirectContext();
     if (!direct) {
         return nullptr;
     }

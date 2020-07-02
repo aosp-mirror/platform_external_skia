@@ -17,7 +17,7 @@
 #include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrMatrixEffect.h"
@@ -783,8 +783,8 @@ private:
             , fNumOctaves(numOctaves)
             , fStitchTiles(stitchTiles)
             , fPaintingData(std::move(paintingData)) {
-        this->registerExplicitlySampledChild(std::move(permutationsFP));
-        this->registerExplicitlySampledChild(std::move(noiseFP));
+        this->registerChild(std::move(permutationsFP), SkSL::SampleUsage::Explicit());
+        this->registerChild(std::move(noiseFP), SkSL::SampleUsage::Explicit());
         this->setUsesSampleCoordsDirectly();
     }
 
@@ -1144,8 +1144,8 @@ private:
             , fOctaves(octaves)
             , fZ(z)
             , fPaintingData(std::move(paintingData)) {
-        this->registerExplicitlySampledChild(std::move(permutationsFP));
-        this->registerExplicitlySampledChild(std::move(gradientFP));
+        this->registerChild(std::move(permutationsFP), SkSL::SampleUsage::Explicit());
+        this->registerChild(std::move(gradientFP), SkSL::SampleUsage::Explicit());
         this->setUsesSampleCoordsDirectly();
     }
 

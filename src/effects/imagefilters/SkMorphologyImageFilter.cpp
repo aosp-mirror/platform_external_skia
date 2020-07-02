@@ -17,7 +17,7 @@
 
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrContext.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
@@ -340,7 +340,7 @@ GrMorphologyEffect::GrMorphologyEffect(GrSurfaceProxyView view,
         , fUseRange(SkToBool(range)) {
     this->setUsesSampleCoordsDirectly();
     auto te = GrTextureEffect::Make(std::move(view), srcAlphaType);
-    this->registerExplicitlySampledChild(std::move(te));
+    this->registerChild(std::move(te), SkSL::SampleUsage::Explicit());
     if (fUseRange) {
         fRange[0] = range[0];
         fRange[1] = range[1];

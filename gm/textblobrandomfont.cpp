@@ -23,9 +23,8 @@
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/GrDirectContext.h"
-#include "include/private/GrRecordingContext.h"
-#include "src/gpu/GrRecordingContextPriv.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/RandomScalerContext.h"
 
@@ -149,7 +148,7 @@ protected:
         surface->draw(canvas, 0, 0, nullptr);
         yOffset += stride;
 
-        if (auto direct = context->priv().asDirectContext()) {
+        if (auto direct = context->asDirectContext()) {
             // free gpu resources and verify
             direct->freeGpuResources();
         }
