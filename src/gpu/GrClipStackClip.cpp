@@ -7,7 +7,7 @@
 
 #include "src/gpu/GrClipStackClip.h"
 
-#include "include/private/GrDirectContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkClipOpPriv.h"
 #include "src/core/SkTaskGroup.h"
@@ -471,7 +471,7 @@ GrSurfaceProxyView GrClipStackClip::createSoftwareClipMask(
     SkIRect maskSpaceIBounds = SkIRect::MakeWH(reducedClip.width(), reducedClip.height());
 
     SkTaskGroup* taskGroup = nullptr;
-    if (auto direct = context->priv().asDirectContext()) {
+    if (auto direct = context->asDirectContext()) {
         taskGroup = direct->priv().getTaskGroup();
     }
 

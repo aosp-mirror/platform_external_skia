@@ -17,9 +17,9 @@
 #include <android/hardware_buffer.h>
 
 #include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/gl/GrGLTypes.h"
-#include "include/private/GrDirectContext.h"
-#include "include/private/GrRecordingContext.h"
 #include "src/core/SkMessageBus.h"
 #include "src/gpu/GrAHardwareBufferUtils.h"
 #include "src/gpu/GrContextPriv.h"
@@ -85,7 +85,7 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
         return {};
     }
 
-    auto direct = context->priv().asDirectContext();
+    auto direct = context->asDirectContext();
     if (!direct) {
         return {};
     }

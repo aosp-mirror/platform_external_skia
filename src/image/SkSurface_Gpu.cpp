@@ -11,7 +11,7 @@
 #include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkSurfaceCharacterization.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkScopeExit.h"
 #include "src/gpu/GrAHardwareBufferUtils.h"
@@ -244,7 +244,7 @@ void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPai
         if (!canvasContext) {
             return false;
         }
-        if (!canvasContext->priv().asDirectContext() ||
+        if (!canvasContext->asDirectContext() ||
             canvasContext->priv().contextID() != context->priv().contextID()) {
             return false;
         }

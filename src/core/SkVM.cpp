@@ -81,6 +81,19 @@ bool gSkVMJITViaDylib{false};
     #endif
 #endif
 
+// JIT code isn't MSAN-instrumented, so we won't see when it uses
+// uninitialized memory, and we'll not see the writes it makes as properly
+// initializing memory.  Instead force the interpreter, which should let
+// MSAN see everything our programs do properly.
+//
+// Similarly, we can't get ASAN's checks unless we let it instrument our interpreter.
+#if defined(__has_feature)
+    #if __has_feature(memory_sanitizer) || __has_feature(address_sanitizer)
+        #define SKVM_JIT_BUT_IGNORE_IT
+    #endif
+#endif
+
+
 
 namespace skvm {
 
@@ -1841,6 +1854,7 @@ namespace skvm {
 
     void Assembler::vmovdqa(Ymm dst, Operand src) { this->op(0x66,0x0f,0x6f, dst,src); }
     void Assembler::vmovups(Ymm dst, Operand src) { this->op(   0,0x0f,0x10, dst,src); }
+    void Assembler::vmovups(Xmm dst, Operand src) { this->op(   0,0x0f,0x10, dst,src); }
     void Assembler::vmovups(Operand dst, Ymm src) { this->op(   0,0x0f,0x11, src,dst); }
     void Assembler::vmovups(Operand dst, Xmm src) { this->op(   0,0x0f,0x11, src,dst); }
 
@@ -2189,13 +2203,15 @@ namespace skvm {
             });
         }
     #endif
+
+    #if !defined(SKVM_JIT_BUT_IGNORE_IT)
         // This may fail either simply because we can't JIT, or when using LLVM,
         // because the work represented by fImpl->llvm_compiling hasn't finished yet.
         if (const void* b = fImpl->jit_entry.load()) {
-    #if SKVM_JIT_STATS
+        #if SKVM_JIT_STATS
             jits++;
             fast += n;
-    #endif
+        #endif
             void** a = args;
             switch (fImpl->strides.size()) {
                 case 0: return ((void(*)(int                        ))b)(n                    );
@@ -2208,6 +2224,7 @@ namespace skvm {
                 default: SkUNREACHABLE;  // TODO
             }
         }
+    #endif
 
         // So we'll sometimes use the interpreter here even if later calls will use the JIT.
         SkOpts::interpret_skvm(fImpl->instructions.data(), (int)fImpl->instructions.size(),
@@ -2832,10 +2849,10 @@ namespace skvm {
                     a->mov(A::Mem{A::rsp, 8}, A::rdi);
                     a->mov(A::rdi, A::Mem{A::rsp, 48});
                 }
-                // 3) Save ymm6-ymm15 (really just need to save xmm6-xmm15, but this works).
-                a->sub(A::rsp, 10*K*4);
+                // 3) Save xmm6-xmm15.
+                a->sub(A::rsp, 10*16);
                 for (int i = 0; i < 10; i++) {
-                    a->vmovups(A::Mem{A::rsp, i*K*4}, (A::Ymm)(i+6));
+                    a->vmovups(A::Mem{A::rsp, i*16}, (A::Xmm)(i+6));
                 }
 
                 // Now our normal "make space for values".
@@ -2844,11 +2861,11 @@ namespace skvm {
             auto exit  = [&]{
                 if (nstack_slots) { a->add(A::rsp, nstack_slots*K*4); }
                 // Undo MS ABI setup in reverse.
-                // 3) restore ymm6-ymm15
+                // 3) restore xmm6-xmm15
                 for (int i = 0; i < 10; i++) {
-                    a->vmovups((A::Ymm)(i+6), A::Mem{A::rsp, i*K*4});
+                    a->vmovups((A::Xmm)(i+6), A::Mem{A::rsp, i*16});
                 }
-                a->add(A::rsp, 10*K*4);
+                a->add(A::rsp, 10*16);
                 // 2) restore rdi if we used it
                 if (fImpl->strides.size() >= 5) {
                     a->mov(A::rdi, A::Mem{A::rsp, 8});

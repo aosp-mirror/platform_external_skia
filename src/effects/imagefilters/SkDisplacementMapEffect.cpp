@@ -15,7 +15,7 @@
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkWriteBuffer.h"
 #if SK_SUPPORT_GPU
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrRecordingContextPriv.h"
@@ -506,7 +506,7 @@ GrDisplacementMapEffect::GrDisplacementMapEffect(SkColorChannel xChannelSelector
         , fYChannelSelector(yChannelSelector)
         , fScale(scale) {
     this->registerChild(std::move(displacement));
-    this->registerExplicitlySampledChild(std::move(color));
+    this->registerChild(std::move(color), SkSL::SampleUsage::Explicit());
     this->setUsesSampleCoordsDirectly();
 }
 

@@ -13,11 +13,10 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkYUVAIndex.h"
 #include "include/gpu/GrContext.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkScopeExit.h"
-#include "src/gpu/GrRecordingContextPriv.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
@@ -135,7 +134,7 @@ static skiagm::DrawResult do_rescale_grid(SkCanvas* canvas,
                                           SkString* errorMsg,
                                           int pad = 0) {
     if (doYUV420) {
-        if (!canvas->recordingContext() || !canvas->recordingContext()->priv().asDirectContext()) {
+        if (!canvas->recordingContext() || !canvas->recordingContext()->asDirectContext()) {
             errorMsg->printf("YUV420 only supported on direct GPU for now.");
             return skiagm::DrawResult::kSkip;
         }
