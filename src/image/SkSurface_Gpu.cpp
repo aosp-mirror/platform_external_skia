@@ -11,6 +11,7 @@
 #include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkSurfaceCharacterization.h"
 #include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkScopeExit.h"
@@ -39,7 +40,7 @@ SkSurface_Gpu::SkSurface_Gpu(sk_sp<SkGpuDevice> device)
 SkSurface_Gpu::~SkSurface_Gpu() {
 }
 
-GrContext* SkSurface_Gpu::onGetContext() {
+GrContext* SkSurface_Gpu::onGetContext_deprecated() {
     return fDevice->context();
 }
 
@@ -196,8 +197,9 @@ GrSemaphoresSubmitted SkSurface_Gpu::onFlush(BackendSurfaceAccess access, const 
     return fDevice->flush(access, info, newState);
 }
 
-bool SkSurface_Gpu::onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {
-    return fDevice->wait(numSemaphores, waitSemaphores);
+bool SkSurface_Gpu::onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores,
+                           bool deleteSemaphoresAfterWait) {
+    return fDevice->wait(numSemaphores, waitSemaphores, deleteSemaphoresAfterWait);
 }
 
 bool SkSurface_Gpu::onCharacterize(SkSurfaceCharacterization* characterization) const {
@@ -755,6 +757,7 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrContext* context,
             SkASSERT(deleteImageProc);
             deleteImageProc(deleteImageCtx);
         }
+
         return surface;
     } else {
         return nullptr;
@@ -764,8 +767,11 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrContext* context,
 
 void SkSurface::flushAndSubmit() {
     this->flush(BackendSurfaceAccess::kNoAccess, GrFlushInfo());
-    if (this->getContext()) {
-        this->getContext()->submit();
+
+    auto direct = this->recordingContext() ? this->recordingContext()->asDirectContext()
+                                           : nullptr;
+    if (direct) {
+        direct->submit();
     }
 }
 

@@ -72,7 +72,7 @@ SkSurface_Base::~SkSurface_Base() {
     }
 }
 
-GrContext* SkSurface_Base::onGetContext() {
+GrContext* SkSurface_Base::onGetContext_deprecated() {
     return nullptr;
 }
 
@@ -333,7 +333,7 @@ void SkSurface::writePixels(const SkBitmap& src, int x, int y) {
 }
 
 GrContext* SkSurface::getContext() {
-    return asSB(this)->onGetContext();
+    return asSB(this)->onGetContext_deprecated();
 }
 
 GrRecordingContext* SkSurface::recordingContext() {
@@ -365,8 +365,9 @@ GrSemaphoresSubmitted SkSurface::flush(const GrFlushInfo& info,
     return asSB(this)->onFlush(BackendSurfaceAccess::kNoAccess, info, newState);
 }
 
-bool SkSurface::wait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {
-    return asSB(this)->onWait(numSemaphores, waitSemaphores);
+bool SkSurface::wait(int numSemaphores, const GrBackendSemaphore* waitSemaphores,
+                     bool deleteSemaphoresAfterWait) {
+    return asSB(this)->onWait(numSemaphores, waitSemaphores, deleteSemaphoresAfterWait);
 }
 
 bool SkSurface::characterize(SkSurfaceCharacterization* characterization) const {

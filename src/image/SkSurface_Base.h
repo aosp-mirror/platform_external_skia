@@ -20,7 +20,7 @@ public:
     SkSurface_Base(const SkImageInfo&, const SkSurfaceProps*);
     virtual ~SkSurface_Base();
 
-    virtual GrContext* onGetContext();
+    virtual GrContext* onGetContext_deprecated();
     virtual GrRecordingContext* onGetRecordingContext();
 
     virtual GrBackendTexture onGetBackendTexture(BackendHandleAccess);
@@ -119,7 +119,8 @@ public:
      * commands on the gpu. Any previously submitting commands will not be blocked by these
      * semaphores.
      */
-    virtual bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {
+    virtual bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores,
+                        bool deleteSemaphoresAfterWait) {
         return false;
     }
 
