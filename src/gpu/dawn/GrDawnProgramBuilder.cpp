@@ -23,6 +23,12 @@ static SkSL::String sksl_to_spirv(const GrDawnGpu* gpu, const char* shaderString
     settings.fRTHeightOffset = rtHeightOffset;
     settings.fRTHeightBinding = 0;
     settings.fRTHeightSet = 0;
+#ifdef SK_BUILD_FOR_WIN
+    // Work around the fact that D3D12 gives w in fragcoord.w, while the other APIs give 1/w.
+    // This difference may be better handled by Dawn, at which point this workaround can be removed.
+    // (See http://skbug.com/10475).
+    settings.fInverseW = true;
+#endif
     std::unique_ptr<SkSL::Program> program = gpu->shaderCompiler()->convertProgram(
         kind,
         shaderString,
@@ -521,8 +527,7 @@ wgpu::BindGroup GrDawnProgram::setUniformData(GrDawnGpu* gpu, const GrRenderTarg
     this->setRenderTargetState(renderTarget, programInfo.origin());
     const GrPipeline& pipeline = programInfo.pipeline();
     const GrPrimitiveProcessor& primProc = programInfo.primProc();
-    GrFragmentProcessor::PipelineCoordTransformRange transformRange(pipeline);
-    fGeometryProcessor->setData(fDataManager, primProc, transformRange);
+    fGeometryProcessor->setData(fDataManager, primProc);
     GrFragmentProcessor::CIter fpIter(pipeline);
     GrGLSLFragmentProcessor::Iter glslIter(fFragmentProcessors.get(), fFragmentProcessorCnt);
     for (; fpIter && glslIter; ++fpIter, ++glslIter) {
