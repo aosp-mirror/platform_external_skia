@@ -87,11 +87,6 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(GrRecordingContext* con
         return nullptr;
     }
 
-    auto xform = GrColorSpaceXformEffect::Make(/*childFP=*/nullptr,
-                                               this->colorSpace(), this->alphaType(),
-                                               targetCS.get(), this->alphaType());
-    SkASSERT(xform || targetCT != this->colorType());
-
     auto renderTargetContext = GrRenderTargetContext::MakeWithFallback(
             context, SkColorTypeToGrColorType(targetCT), nullptr, SkBackingFit::kExact,
             this->dimensions());
@@ -99,12 +94,15 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(GrRecordingContext* con
         return nullptr;
     }
 
+    auto texFP = GrTextureEffect::Make(*this->view(context), this->alphaType());
+    auto colorFP = GrColorSpaceXformEffect::Make(std::move(texFP),
+                                                 this->colorSpace(), this->alphaType(),
+                                                 targetCS.get(), this->alphaType());
+    SkASSERT(colorFP);
+
     GrPaint paint;
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    paint.addColorFragmentProcessor(GrTextureEffect::Make(*this->view(context), this->alphaType()));
-    if (xform) {
-        paint.addColorFragmentProcessor(std::move(xform));
-    }
+    paint.addColorFragmentProcessor(std::move(colorFP));
 
     renderTargetContext->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
                                   SkRect::MakeIWH(this->width(), this->height()));
@@ -231,12 +229,10 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
                                         const GrBackendTexture& tex, GrSurfaceOrigin origin,
                                         SkColorType ct, SkAlphaType at, sk_sp<SkColorSpace> cs,
                                         TextureReleaseProc releaseP, ReleaseContext releaseC) {
-#ifndef SK_LEGACY_MAKEFROMTEXTURE_BEHAVIOR
     sk_sp<GrRefCntedCallback> releaseHelper;
     if (releaseP) {
         releaseHelper.reset(new GrRefCntedCallback(releaseP, releaseC));
     }
-#endif
 
     if (!ctx) {
         return nullptr;
@@ -252,13 +248,6 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
     if (!SkImage_GpuBase::ValidateBackendTexture(caps, tex, grColorType, ct, at, cs)) {
         return nullptr;
     }
-
-#ifdef SK_LEGACY_MAKEFROMTEXTURE_BEHAVIOR
-    sk_sp<GrRefCntedCallback> releaseHelper;
-    if (releaseP) {
-        releaseHelper.reset(new GrRefCntedCallback(releaseP, releaseC));
-    }
-#endif
 
     return new_wrapped_texture_common(ctx, tex, grColorType, origin, at, std::move(cs),
                                       kBorrow_GrWrapOwnership, std::move(releaseHelper));

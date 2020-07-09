@@ -389,6 +389,7 @@ void GrTextBlob::SubRun::insertSubRunOpsIntoTarget(GrTextTarget* target,
                                                    const SkMatrixProvider& deviceMatrix,
                                                    SkPoint drawOrigin) {
     if (this->drawAsPaths()) {
+        SkASSERT(!fPaths.empty());
         SkPaint runPaint{paint};
         runPaint.setAntiAlias(this->isAntiAliased());
         // If there are shaders, blurs or styles, the path must be scaled into source
@@ -434,90 +435,54 @@ void GrTextBlob::SubRun::insertSubRunOpsIntoTarget(GrTextTarget* target,
             }
         }
     } else {
-        int glyphCount = this->glyphCount();
-        if (0 == glyphCount) {
-            return;
-        }
+        // Handle the mask and distance field cases.
+        SkASSERT(this->glyphCount() != 0);
 
-        bool skipClip = false;
-        SkIRect clipRect = SkIRect::MakeEmpty();
-        SkRect rtBounds = SkRect::MakeWH(target->width(), target->height());
-        // We can clip geometrically if we're not using SDFs or transformed glyphs,
-        // and we have an axis-aligned rectangular non-AA clip
-        if (!this->drawAsDistanceFields() && !this->needsTransform()) {
-            // We only need to do clipping work if the subrun isn't contained by the clip
-            skipClip = true;
-            SkRect subRunBounds = this->deviceRect(deviceMatrix.localToDevice(), drawOrigin);
-            if (!clip && !rtBounds.intersects(subRunBounds)) {
-                // If the subrun is completely outside, don't add an op for it
-                return;
-            } else if (clip) {
-                GrClip::PreClipResult result = clip->preApply(subRunBounds);
-                if (result.fEffect == GrClip::Effect::kClipped) {
-                    if (result.fIsRRect && result.fRRect.isRect() && result.fAA == GrAA::kNo) {
-                        // Embed non-AA axis-aligned clip into the draw
-                        result.fRRect.getBounds().round(&clipRect);
-                    } else {
-                        // Can't actually skip the regular clipping
-                        skipClip = false;
-                    }
-                } else if (result.fEffect == GrClip::Effect::kClippedOut) {
+        // We can clip geometrically using clipRect and ignore clip if we're not using SDFs or
+        // transformed glyphs, and we have an axis-aligned rectangular non-AA clip.
+        std::unique_ptr<GrAtlasTextOp> op;
+        if (!this->drawAsDistanceFields()) {
+            SkIRect clipRect = SkIRect::MakeEmpty();
+            if (!this->needsTransform()) {
+                // We only need to do clipping work if the SubRun isn't contained by the clip
+                SkRect subRunBounds = this->deviceRect(deviceMatrix.localToDevice(), drawOrigin);
+                SkRect renderTargetBounds = SkRect::MakeWH(target->width(), target->height());
+                if (clip == nullptr && !renderTargetBounds.intersects(subRunBounds)) {
+                    // If the SubRun is completely outside, don't add an op for it.
                     return;
+                } else if (clip != nullptr) {
+                    GrClip::PreClipResult result = clip->preApply(subRunBounds);
+                    if (result.fEffect == GrClip::Effect::kClipped) {
+                        if (result.fIsRRect && result.fRRect.isRect() && result.fAA == GrAA::kNo) {
+                            // Clip geometrically during onPrepare using clipRect.
+                            result.fRRect.getBounds().round(&clipRect);
+                            clip = nullptr;
+                        }
+                    } else if (result.fEffect == GrClip::Effect::kClippedOut) {
+                        return;
+                    }
                 }
             }
+
+            if (!clipRect.isEmpty()) { SkASSERT(clip == nullptr); }
+
+            op = GrAtlasTextOp::MakeBitmap(target->renderTargetContext(),
+                                           paint,
+                                           this,
+                                           deviceMatrix,
+                                           drawOrigin,
+                                           clipRect);
+        } else {
+            op = GrAtlasTextOp::MakeDistanceField(target->renderTargetContext(),
+                                                  paint,
+                                                  this,
+                                                  deviceMatrix,
+                                                  drawOrigin);
         }
 
-        auto op = this->makeOp(deviceMatrix, drawOrigin, clipRect, paint, props, target);
         if (op != nullptr) {
-            target->addDrawOp(skipClip ? nullptr : clip, std::move(op));
+            target->addDrawOp(clip, std::move(op));
         }
-    }
-}
-
-SkPMColor4f generate_filtered_color(const SkPaint& paint, const GrColorInfo& colorInfo) {
-    SkColor4f c = paint.getColor4f();
-    if (auto* xform = colorInfo.colorSpaceXformFromSRGB()) {
-        c = xform->apply(c);
-    }
-    if (auto* cf = paint.getColorFilter()) {
-        c = cf->filterColor4f(c, colorInfo.colorSpace(), colorInfo.colorSpace());
-    }
-    return c.premul();
-}
-
-std::unique_ptr<GrAtlasTextOp> GrTextBlob::SubRun::makeOp(
-        const SkMatrixProvider& matrixProvider,
-        SkPoint drawOrigin,
-        const SkIRect& clipRect,
-        const SkPaint& paint,
-        const SkSurfaceProps& props,
-        GrTextTarget* target) {
-    GrPaint grPaint;
-    target->makeGrPaint(this->maskFormat(), paint, matrixProvider, &grPaint);
-    const GrColorInfo& colorInfo = target->colorInfo();
-    // This is the color the op will use to draw.
-    SkPMColor4f drawingColor = generate_filtered_color(paint, colorInfo);
-
-    if (this->drawAsDistanceFields()) {
-        // TODO: Can we be even smarter based on the dest transfer function?
-        return GrAtlasTextOp::MakeDistanceField(target->renderTargetContext(),
-                                                std::move(grPaint),
-                                                this,
-                                                matrixProvider.localToDevice(),
-                                                drawOrigin,
-                                                clipRect,
-                                                drawingColor,
-                                                target->colorInfo().isLinearlyBlended(),
-                                                SkPaintPriv::ComputeLuminanceColor(paint),
-                                                props);
-    } else {
-        return GrAtlasTextOp::MakeBitmap(target->renderTargetContext(),
-                                         std::move(grPaint),
-                                         this,
-                                         matrixProvider.localToDevice(),
-                                         drawOrigin,
-                                         clipRect,
-                                         drawingColor);
     }
 }
 
@@ -611,6 +576,11 @@ bool GrTextBlob::canReuse(const SkPaint& paint,
                           const SkMaskFilterBase::BlurRec& blurRec,
                           const SkMatrix& drawMatrix,
                           SkPoint drawOrigin) {
+    // A singular matrix will create a GrTextBlob with no subRuns. Assume that, and just regenerate.
+    if (fSubRunList.isEmpty()) {
+        return false;
+    }
+
     // If we have LCD text then our canonical color will be set to transparent, in this case we have
     // to regenerate the blob on any color change
     // We use the grPaint to get any color filter effects
@@ -693,17 +663,6 @@ bool GrTextBlob::canReuse(const SkPaint& paint,
     return true;
 }
 
-void GrTextBlob::insertOpsIntoTarget(GrTextTarget* target,
-                                     const SkSurfaceProps& props,
-                                     const SkPaint& paint,
-                                     const GrClip* clip,
-                                     const SkMatrixProvider& deviceMatrix,
-                                     SkPoint drawOrigin) {
-    for (SubRun* subRun = fFirstSubRun; subRun != nullptr; subRun = subRun->fNextSubRun) {
-        subRun->insertSubRunOpsIntoTarget(target, props, paint, clip, deviceMatrix, drawOrigin);
-    }
-}
-
 const GrTextBlob::Key& GrTextBlob::key() const { return fKey; }
 size_t GrTextBlob::size() const { return fSize; }
 
@@ -746,13 +705,7 @@ GrTextBlob::GrTextBlob(size_t allocSize,
         , fAlloc{SkTAddOffset<char>(this, sizeof(GrTextBlob)), allocSize, allocSize/2} { }
 
 void GrTextBlob::insertSubRun(SubRun* subRun) {
-    if (fFirstSubRun == nullptr) {
-        fFirstSubRun = subRun;
-        fLastSubRun = subRun;
-    } else {
-        fLastSubRun->fNextSubRun = subRun;
-        fLastSubRun = subRun;
-    }
+    fSubRunList.addToTail(subRun);
 }
 
 void GrTextBlob::processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -785,7 +738,7 @@ void GrTextBlob::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawab
     this->addMultiMaskFormat(SubRun::MakeTransformedMask, drawables, strikeSpec);
 }
 
-auto GrTextBlob::firstSubRun() const -> SubRun* { return fFirstSubRun; }
+auto GrTextBlob::firstSubRun() const -> SubRun* { return fSubRunList.head(); }
 
 // -- GrTextBlob::VertexRegenerator ----------------------------------------------------------------
 GrTextBlob::VertexRegenerator::VertexRegenerator(GrResourceProvider* resourceProvider,

@@ -554,8 +554,10 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
                 glyphRunList, drawMatrix, fSurfaceProps, supportsSDFT, options, blob.get());
     }
 
-    blob->insertOpsIntoTarget(
-            fTextTarget.get(), fSurfaceProps, blobPaint, clip, matrixProvider, drawOrigin);
+    for (GrTextBlob::SubRun* subRun : blob->subRunList()) {
+        subRun->insertSubRunOpsIntoTarget(
+                fTextTarget.get(), fSurfaceProps, blobPaint, clip, matrixProvider, drawOrigin);
+    }
 }
 
 void GrRenderTargetContext::discard() {
@@ -1703,7 +1705,8 @@ void GrRenderTargetContext::drawDrawable(std::unique_ptr<SkDrawable::GpuDrawHand
 }
 
 bool GrRenderTargetContext::waitOnSemaphores(int numSemaphores,
-                                             const GrBackendSemaphore waitSemaphores[]) {
+                                             const GrBackendSemaphore waitSemaphores[],
+                                             bool deleteSemaphoresAfterWait) {
     ASSERT_SINGLE_OWNER
     RETURN_FALSE_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
@@ -1722,12 +1725,14 @@ bool GrRenderTargetContext::waitOnSemaphores(int numSemaphores,
 
     auto resourceProvider = direct->priv().resourceProvider();
 
+    GrWrapOwnership ownership =
+            deleteSemaphoresAfterWait ? kAdopt_GrWrapOwnership : kBorrow_GrWrapOwnership;
+
     std::unique_ptr<std::unique_ptr<GrSemaphore>[]> grSemaphores(
             new std::unique_ptr<GrSemaphore>[numSemaphores]);
     for (int i = 0; i < numSemaphores; ++i) {
         grSemaphores[i] = resourceProvider->wrapBackendSemaphore(
-                waitSemaphores[i], GrResourceProvider::SemaphoreWrapType::kWillWait,
-                kAdopt_GrWrapOwnership);
+                waitSemaphores[i], GrResourceProvider::SemaphoreWrapType::kWillWait, ownership);
     }
     this->drawingManager()->newWaitRenderTask(this->asSurfaceProxyRef(), std::move(grSemaphores),
                                               numSemaphores);
