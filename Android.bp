@@ -2001,7 +2001,6 @@ cc_test {
         "bench/GMBench.cpp",
         "bench/GameBench.cpp",
         "bench/GeometryBench.cpp",
-        "bench/GrCCFillGeometryBench.cpp",
         "bench/GrMemoryPoolBench.cpp",
         "bench/GrMipMapBench.cpp",
         "bench/GrQuadBench.cpp",
