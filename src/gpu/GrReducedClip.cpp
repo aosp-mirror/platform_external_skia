@@ -46,8 +46,6 @@ GrReducedClip::GrReducedClip(const SkClipStack& stack, const SkRect& queryBounds
     SkASSERT(!queryBounds.isEmpty());
     SkASSERT(fMaxWindowRectangles <= GrWindowRectangles::kMaxWindows);
     SkASSERT(fMaxCCPRClipPaths <= fMaxAnalyticFPs);
-    fHasScissor = false;
-    fAAClipRectGenID = SK_InvalidGenID;
 
     if (stack.isWideOpen()) {
         fInitialState = InitialState::kAllIn;
@@ -655,6 +653,8 @@ GrReducedClip::ClipResult GrReducedClip::addAnalyticFP(const SkRect& deviceSpace
                                        deviceSpaceRect);
 
     SkASSERT(fAnalyticFP != nullptr);
+    ++fNumAnalyticFPs;
+
     return ClipResult::kClipped;
 }
 
@@ -670,6 +670,7 @@ GrReducedClip::ClipResult GrReducedClip::addAnalyticFP(const SkRRect& deviceSpac
                                                          GetClipEdgeType(invert, aa),
                                                          deviceSpaceRRect, *fCaps->shaderCaps());
     if (success) {
+        ++fNumAnalyticFPs;
         return ClipResult::kClipped;
     }
 
@@ -691,6 +692,7 @@ GrReducedClip::ClipResult GrReducedClip::addAnalyticFP(const SkPath& deviceSpace
                                                               GetClipEdgeType(invert, aa),
                                                               deviceSpacePath);
     if (success) {
+        ++fNumAnalyticFPs;
         return ClipResult::kClipped;
     }
 
@@ -714,6 +716,9 @@ void GrReducedClip::makeEmpty() {
     fMaskElements.reset();
     fShader.reset();
     fInitialState = InitialState::kAllOut;
+    fAnalyticFP = nullptr;
+    fNumAnalyticFPs = 0;
+    fCCPRClipPaths.reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -890,19 +895,8 @@ bool GrReducedClip::drawStencilClipMask(GrRecordingContext* context,
     return true;
 }
 
-static int count_fp_recursive(GrFragmentProcessor* fp) {
-    int count = 0;
-    if (fp != nullptr) {
-        count += 1;  // count self
-        for (int index=0; index < fp->numChildProcessors(); ++index) {
-            count += count_fp_recursive(&fp->childProcessor(index));  // count children
-        }
-    }
-    return count;
-}
-
 int GrReducedClip::numAnalyticFPs() const {
-    return fCCPRClipPaths.size() + count_fp_recursive(fAnalyticFP.get());
+    return fCCPRClipPaths.size() + fNumAnalyticFPs;
 }
 
 std::unique_ptr<GrFragmentProcessor> GrReducedClip::finishAndDetachAnalyticFPs(
@@ -910,6 +904,7 @@ std::unique_ptr<GrFragmentProcessor> GrReducedClip::finishAndDetachAnalyticFPs(
         GrCoverageCountingPathRenderer* ccpr, uint32_t opsTaskID) {
     // Combine the analytic FP with any CCPR clip processors.
     std::unique_ptr<GrFragmentProcessor> clipFP = std::move(fAnalyticFP);
+    fNumAnalyticFPs = 0;
 
     for (const SkPath& ccprClipPath : fCCPRClipPaths) {
         SkASSERT(ccpr);
