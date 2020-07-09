@@ -328,6 +328,8 @@ skia_gpu_sources = [
   "$_src/gpu/effects/generated/GrConstColorProcessor.h",
   "$_src/gpu/effects/generated/GrDeviceSpaceEffect.cpp",
   "$_src/gpu/effects/generated/GrDeviceSpaceEffect.h",
+  "$_src/gpu/effects/generated/GrDitherEffect.cpp",
+  "$_src/gpu/effects/generated/GrDitherEffect.h",
   "$_src/gpu/effects/generated/GrEllipseEffect.cpp",
   "$_src/gpu/effects/generated/GrEllipseEffect.h",
   "$_src/gpu/effects/generated/GrHSLToRGBFilterEffect.cpp",
@@ -479,7 +481,6 @@ skia_gpu_sources = [
   "$_src/gpu/text/GrTextBlob.h",
   "$_src/gpu/text/GrTextBlobCache.cpp",
   "$_src/gpu/text/GrTextBlobCache.h",
-  "$_src/gpu/text/GrTextTarget.h",
 
   # GLSL
   "$_src/gpu/glsl/GrGLSL.cpp",
