@@ -15,6 +15,7 @@
 #include "src/gpu/d3d/GrD3DStencilAttachment.h"
 #include "src/gpu/d3d/GrD3DTexture.h"
 #include "src/gpu/d3d/GrD3DTextureResource.h"
+#include "src/gpu/d3d/GrD3DUtil.h"
 
 GrD3DCommandList::GrD3DCommandList(gr_cp<ID3D12CommandAllocator> allocator,
                                    gr_cp<ID3D12GraphicsCommandList> commandList)
@@ -49,10 +50,8 @@ GrD3DCommandList::SubmitResult GrD3DCommandList::submit(ID3D12CommandQueue* queu
 
 void GrD3DCommandList::reset() {
     SkASSERT(!fIsActive);
-    SkDEBUGCODE(HRESULT hr = ) fAllocator->Reset();
-    SkASSERT(SUCCEEDED(hr));
-    SkDEBUGCODE(hr = ) fCommandList->Reset(fAllocator.get(), nullptr);
-    SkASSERT(SUCCEEDED(hr));
+    GR_D3D_CALL_ERRCHECK(fAllocator->Reset());
+    GR_D3D_CALL_ERRCHECK(fCommandList->Reset(fAllocator.get(), nullptr));
     this->onReset();
 
     this->releaseResources();
@@ -187,15 +186,13 @@ void GrD3DCommandList::addingWork() {
 
 std::unique_ptr<GrD3DDirectCommandList> GrD3DDirectCommandList::Make(ID3D12Device* device) {
     gr_cp<ID3D12CommandAllocator> allocator;
-    SkDEBUGCODE(HRESULT hr = ) device->CreateCommandAllocator(
-            D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator));
-    SkASSERT(SUCCEEDED(hr));
+    GR_D3D_CALL_ERRCHECK(device->CreateCommandAllocator(
+                         D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
 
     gr_cp<ID3D12GraphicsCommandList> commandList;
-    SkDEBUGCODE(hr = ) device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                 allocator.get(), nullptr,
-                                                 IID_PPV_ARGS(&commandList));
-    SkASSERT(SUCCEEDED(hr));
+    GR_D3D_CALL_ERRCHECK(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                   allocator.get(), nullptr,
+                                                   IID_PPV_ARGS(&commandList)));
 
     auto grCL = new GrD3DDirectCommandList(std::move(allocator), std::move(commandList));
     return std::unique_ptr<GrD3DDirectCommandList>(grCL);
@@ -383,6 +380,32 @@ void GrD3DDirectCommandList::setRenderTarget(const GrD3DRenderTarget* renderTarg
     fCommandList->OMSetRenderTargets(1, &rtvDescriptor, false, dsDescriptorPtr);
 }
 
+void GrD3DDirectCommandList::resolveSubresourceRegion(const GrD3DTextureResource* dstTexture,
+                                                      UINT dstX, UINT dstY,
+                                                      const GrD3DTextureResource* srcTexture,
+                                                      D3D12_RECT* srcRect) {
+    SkASSERT(dstTexture->dxgiFormat() == srcTexture->dxgiFormat());
+    SkASSERT(dstTexture->currentState() == D3D12_RESOURCE_STATE_RESOLVE_DEST);
+    SkASSERT(srcTexture->currentState() == D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+    this->addingWork();
+    this->addResource(dstTexture->resource());
+    this->addResource(srcTexture->resource());
+
+    gr_cp<ID3D12GraphicsCommandList1> commandList1;
+    HRESULT result = fCommandList->QueryInterface(IID_PPV_ARGS(&commandList1));
+    if (SUCCEEDED(result)) {
+        commandList1->ResolveSubresourceRegion(dstTexture->d3dResource(), 0, dstX, dstY,
+                                               srcTexture->d3dResource(), 0, srcRect,
+                                               srcTexture->dxgiFormat(),
+                                               D3D12_RESOLVE_MODE_AVERAGE);
+    } else {
+        fCommandList->ResolveSubresource(dstTexture->d3dResource(), 0, srcTexture->d3dResource(), 0,
+                                         srcTexture->dxgiFormat());
+    }
+}
+
+
+
 void GrD3DDirectCommandList::setGraphicsRootConstantBufferView(
         unsigned int rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS bufferLocation) {
     fCommandList->SetGraphicsRootConstantBufferView(rootParameterIndex, bufferLocation);
@@ -420,14 +443,12 @@ void GrD3DDirectCommandList::addSampledTextureRef(GrD3DTexture* texture) {
 
 std::unique_ptr<GrD3DCopyCommandList> GrD3DCopyCommandList::Make(ID3D12Device* device) {
     gr_cp<ID3D12CommandAllocator> allocator;
-    SkDEBUGCODE(HRESULT hr = ) device->CreateCommandAllocator(
-            D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator));
-    SkASSERT(SUCCEEDED(hr));
+    GR_D3D_CALL_ERRCHECK(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                        IID_PPV_ARGS(&allocator)));
 
     gr_cp<ID3D12GraphicsCommandList> commandList;
-    SkDEBUGCODE(hr = ) device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, allocator.get(),
-                                                 nullptr, IID_PPV_ARGS(&commandList));
-    SkASSERT(SUCCEEDED(hr));
+    GR_D3D_CALL_ERRCHECK(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, allocator.get(),
+                                                   nullptr, IID_PPV_ARGS(&commandList)));
     auto grCL = new GrD3DCopyCommandList(std::move(allocator), std::move(commandList));
     return std::unique_ptr<GrD3DCopyCommandList>(grCL);
 }

@@ -118,13 +118,6 @@ public:
     bool canReuse(const SkPaint& paint, const SkMaskFilterBase::BlurRec& blurRec,
                   const SkMatrix& drawMatrix, SkPoint drawOrigin);
 
-    void insertOpsIntoTarget(GrTextTarget* target,
-                             const SkSurfaceProps& props,
-                             const SkPaint& paint,
-                             const GrClip* clip,
-                             const SkMatrixProvider& deviceMatrix,
-                             SkPoint drawOrigin);
-
     static const int kVerticesPerGlyph = 4;
 
     const Key& key() const;
@@ -139,6 +132,8 @@ public:
     SubRun* firstSubRun() const;
 
     bool forceWForDistanceFields() const;
+
+    const SkTInternalLList<SubRun>& subRunList() const { return fSubRunList; }
 
 private:
     enum TextType {
@@ -200,8 +195,7 @@ private:
 
     uint8_t fTextType{0};
 
-    SubRun* fFirstSubRun{nullptr};
-    SubRun* fLastSubRun{nullptr};
+    SkTInternalLList<SubRun> fSubRunList;
     SkArenaAlloc fAlloc;
 };
 
@@ -337,14 +331,6 @@ public:
                                    const SkMatrixProvider& deviceMatrix,
                                    SkPoint drawOrigin);
 
-    std::unique_ptr<GrAtlasTextOp> makeOp(const SkMatrixProvider& matrixProvider,
-                                          SkPoint drawOrigin,
-                                          const SkIRect& clipRect,
-                                          const SkPaint& paint,
-                                          const SkSurfaceProps&,
-                                          GrTextTarget*);
-
-    SubRun* fNextSubRun{nullptr};
     GrTextBlob* fBlob;
     uint64_t fAtlasGeneration{GrDrawOpAtlas::kInvalidAtlasGeneration};
 
@@ -388,6 +374,8 @@ private:
     void setUseLCDText(bool useLCDText);
     void setAntiAliased(bool antiAliased);
     bool drawAsPaths() const;
+
+    SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrTextBlob::SubRun);
 
     const SubRunType fType;
     const GrMaskFormat fMaskFormat;
