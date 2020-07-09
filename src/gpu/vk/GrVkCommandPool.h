@@ -8,10 +8,9 @@
 #ifndef GrVkCommandPool_DEFINED
 #define GrVkCommandPool_DEFINED
 
-#include "GrVkGpuCommandBuffer.h"
-#include "GrVkInterface.h"
-#include "GrVkResource.h"
-#include "GrVkResourceProvider.h"
+#include "src/gpu/vk/GrVkInterface.h"
+#include "src/gpu/vk/GrVkResource.h"
+#include "src/gpu/vk/GrVkResourceProvider.h"
 
 class GrVkPrimaryCommandBuffer;
 class GrVkSecondaryCommandBuffer;
@@ -19,7 +18,7 @@ class GrVkGpu;
 
 class GrVkCommandPool : public GrVkResource {
 public:
-    static GrVkCommandPool* Create(const GrVkGpu* gpu);
+    static GrVkCommandPool* Create(GrVkGpu* gpu);
 
     VkCommandPool vkCommandPool() const {
         return fCommandPool;
@@ -29,9 +28,9 @@ public:
 
     void releaseResources(GrVkGpu* gpu);
 
-    GrVkPrimaryCommandBuffer* getPrimaryCommandBuffer() { return fPrimaryCommandBuffer; }
+    GrVkPrimaryCommandBuffer* getPrimaryCommandBuffer() { return fPrimaryCommandBuffer.get(); }
 
-    GrVkSecondaryCommandBuffer* findOrCreateSecondaryCommandBuffer(GrVkGpu* gpu);
+    std::unique_ptr<GrVkSecondaryCommandBuffer> findOrCreateSecondaryCommandBuffer(GrVkGpu* gpu);
 
     void recycleSecondaryCommandBuffer(GrVkSecondaryCommandBuffer* buffer);
 
@@ -51,9 +50,7 @@ public:
 private:
     GrVkCommandPool() = delete;
 
-    GrVkCommandPool(const GrVkGpu* gpu, VkCommandPool commandPool);
-
-    void abandonGPUData() const override;
+    GrVkCommandPool(GrVkGpu* gpu, VkCommandPool commandPool, GrVkPrimaryCommandBuffer*);
 
     void freeGPUData(GrVkGpu* gpu) const override;
 
@@ -61,10 +58,10 @@ private:
 
     VkCommandPool fCommandPool;
 
-    GrVkPrimaryCommandBuffer* fPrimaryCommandBuffer;
+    std::unique_ptr<GrVkPrimaryCommandBuffer> fPrimaryCommandBuffer;
 
     // Array of available secondary command buffers that are not in flight
-    SkSTArray<4, GrVkSecondaryCommandBuffer*, true> fAvailableSecondaryBuffers;
+    SkSTArray<4, std::unique_ptr<GrVkSecondaryCommandBuffer>, true> fAvailableSecondaryBuffers;
 };
 
 #endif

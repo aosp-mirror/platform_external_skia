@@ -5,18 +5,42 @@
  * found in the LICENSE file.
  */
 
-#include "GrContext.h"
-#include "SkAutoPixmapStorage.h"
-#include "SkCanvas.h"
-#include "SkColorPriv.h"
-#include "SkData.h"
-#include "SkRandom.h"
-#include "SkStream.h"
-#include "SkSurface.h"
-#include "gm.h"
-#include "sk_tool_utils.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkFilterQuality.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkMalloc.h"
+#include "src/core/SkAutoPixmapStorage.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "tools/ToolUtils.h"
 
 #include <functional>
+#include <utility>
+
+class GrContext;
+class GrRenderTargetContext;
 
 static void drawContents(SkSurface* surface, SkColor fillC) {
     SkSize size = SkSize::Make(SkIntToScalar(surface->width()),
@@ -64,16 +88,16 @@ static void test_surface(SkCanvas* canvas, SkSurface* surf, bool usePaint) {
     surf->draw(canvas, 0, 160, usePaint ? &paint : nullptr);
 
     SkRect src1, src2, src3;
-    src1.iset(0, 0, surf->width(), surf->height());
-    src2.iset(-surf->width() / 2, -surf->height() / 2,
-             surf->width(), surf->height());
-    src3.iset(0, 0, surf->width() / 2, surf->height() / 2);
+    src1.setIWH(surf->width(), surf->height());
+    src2.setLTRB(SkIntToScalar(-surf->width() / 2), SkIntToScalar(-surf->height() / 2),
+                 SkIntToScalar(surf->width()),       SkIntToScalar(surf->height()));
+    src3.setIWH(surf->width() / 2, surf->height() / 2);
 
     SkRect dst1, dst2, dst3, dst4;
-    dst1.set(0, 240, 65, 305);
-    dst2.set(0, 320, 65, 385);
-    dst3.set(0, 400, 65, 465);
-    dst4.set(0, 480, 65, 545);
+    dst1.setLTRB(0, 240, 65, 305);
+    dst2.setLTRB(0, 320, 65, 385);
+    dst3.setLTRB(0, 400, 65, 465);
+    dst4.setLTRB(0, 480, 65, 545);
 
     canvas->drawImageRect(imgR, src1, dst1, usePaint ? &paint : nullptr);
     canvas->drawImageRect(imgG, src2, dst2, usePaint ? &paint : nullptr);
@@ -113,7 +137,7 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         canvas->scale(2, 2);
 
-        SkFont font(sk_tool_utils::create_portable_typeface(), 8);
+        SkFont font(ToolUtils::create_portable_typeface(), 8);
 
         canvas->drawString("Original Img",  10,  60, font, SkPaint());
         canvas->drawString("Modified Img",  10, 140, font, SkPaint());
@@ -153,8 +177,6 @@ private:
 DEF_GM( return new ImageGM; )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#include "SkPictureRecorder.h"
 
 static void draw_pixmap(SkCanvas* canvas, const SkPixmap& pmap) {
     SkBitmap bitmap;
@@ -326,8 +348,7 @@ DEF_SIMPLE_GPU_GM(new_texture_image, context, rtc, canvas, 280, 60) {
     for (auto factory : imageFactories) {
         auto image(factory());
         if (image) {
-            sk_sp<SkImage> texImage(image->makeTextureImage(context,
-                                                            canvas->imageInfo().colorSpace()));
+            sk_sp<SkImage> texImage(image->makeTextureImage(context));
             if (texImage) {
                 canvas->drawImage(texImage, 0, 0);
             }
@@ -383,8 +404,6 @@ static sk_sp<SkImage> make_lazy_image(SkSurface* surf) {
     return SkImage::MakeFromEncoded(std::move(data));
 }
 
-#include "SkWriteBuffer.h"
-#include "SkReadBuffer.h"
 static sk_sp<SkImage> serial_deserial(SkImage* img) {
     SkBinaryWriteBuffer writer;
     writer.writeImage(img);
@@ -398,7 +417,7 @@ static sk_sp<SkImage> serial_deserial(SkImage* img) {
 
 DEF_SIMPLE_GM_CAN_FAIL(image_subset, canvas, errorMsg, 440, 220) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(200, 200, nullptr);
-    auto surf = sk_tool_utils::makeSurface(canvas, info, nullptr);
+    auto        surf = ToolUtils::makeSurface(canvas, info, nullptr);
     auto img = make_lazy_image(surf.get());
     if (!img) {
         *errorMsg = "Failed to make lazy image.";

@@ -5,10 +5,20 @@
  * found in the LICENSE file.
  */
 
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/private/SkFloatBits.h"
+#include "include/private/SkTArray.h"
+
 #include <functional>
-#include "SkCanvas.h"
-#include "SkDashPathEffect.h"
-#include "gm.h"
 
 constexpr SkScalar kStarts[] = {0.f, 10.f, 30.f, 45.f, 90.f, 165.f, 180.f, 270.f};
 constexpr SkScalar kSweeps[] = {1.f, 45.f, 90.f, 130.f, 180.f, 184.f, 300.f, 355.f};
@@ -251,5 +261,85 @@ DEF_SIMPLE_GM(crbug_888453, canvas, 480, 150) {
         canvas->drawArc(SkRect::MakeXYWH(x - r, y1 - r, 2 * r, 2 * r), 0, 360, false, hairline);
         canvas->drawArc(SkRect::MakeXYWH(x - r, y2 - r, 2 * r, 2 * r), 0, 360, false, stroke);
         x += 2 * r + 4;
+    }
+}
+
+DEF_SIMPLE_GM(circular_arc_stroke_matrix, canvas, 820, 1090) {
+    static constexpr SkScalar kRadius = 40.f;
+    static constexpr SkScalar kStrokeWidth = 5.f;
+    static constexpr SkScalar kStart = 89.f;
+    static constexpr SkScalar kSweep = 180.f/SK_ScalarPI; // one radian
+
+    SkTArray<SkMatrix> matrices;
+    matrices.push_back().setRotate(kRadius, kRadius, 45.f);
+    matrices.push_back(SkMatrix::I());
+    matrices.push_back().setAll(-1,  0,  2*kRadius,
+                                 0,  1,  0,
+                                 0,  0,  1);
+    matrices.push_back().setAll( 1,  0,  0,
+                                 0, -1,  2*kRadius,
+                                 0,  0,  1);
+    matrices.push_back().setAll( 1,  0,  0,
+                                 0, -1,  2*kRadius,
+                                 0,  0,  1);
+    matrices.push_back().setAll( 0, -1,  2*kRadius,
+                                -1,  0,  2*kRadius,
+                                 0,  0,  1);
+    matrices.push_back().setAll( 0, -1,  2*kRadius,
+                                 1,  0,  0,
+                                 0,  0,  1);
+    matrices.push_back().setAll( 0,  1,  0,
+                                 1,  0,  0,
+                                 0,  0,  1);
+    matrices.push_back().setAll( 0,  1,  0,
+                                -1,  0,  2*kRadius,
+                                 0,  0,  1);
+    int baseMatrixCnt = matrices.count();
+
+
+    SkMatrix tinyCW;
+    tinyCW.setRotate(0.001f, kRadius, kRadius);
+    for (int i = 0; i < baseMatrixCnt; ++i) {
+        matrices.push_back().setConcat(matrices[i], tinyCW);
+    }
+    SkMatrix tinyCCW;
+    tinyCCW.setRotate(-0.001f, kRadius, kRadius);
+    for (int i = 0; i < baseMatrixCnt; ++i) {
+        matrices.push_back().setConcat(matrices[i], tinyCCW);
+    }
+    SkMatrix cw45;
+    cw45.setRotate(45.f, kRadius, kRadius);
+    for (int i = 0; i < baseMatrixCnt; ++i) {
+        matrices.push_back().setConcat(matrices[i], cw45);
+    }
+
+    int x = 0;
+    int y = 0;
+    static constexpr SkScalar kPad = 2*kStrokeWidth;
+    canvas->translate(kPad, kPad);
+    auto bounds = SkRect::MakeWH(2*kRadius, 2*kRadius);
+    for (auto cap : {SkPaint::kRound_Cap, SkPaint::kButt_Cap, SkPaint::kSquare_Cap}) {
+        for (const auto& m : matrices) {
+            SkPaint paint;
+            paint.setStrokeCap(cap);
+            paint.setAntiAlias(true);
+            paint.setStyle(SkPaint::kStroke_Style);
+            paint.setStrokeWidth(kStrokeWidth);
+            canvas->save();
+                canvas->translate(x * (2*kRadius + kPad), y * (2*kRadius + kPad));
+                canvas->concat(m);
+                paint.setColor(SK_ColorRED);
+                paint.setAlpha(0x80);
+                canvas->drawArc(bounds, kStart, kSweep, false, paint);
+                paint.setColor(SK_ColorBLUE);
+                paint.setAlpha(0x80);
+                canvas->drawArc(bounds, kStart, kSweep - 360.f, false, paint);
+            canvas->restore();
+            ++x;
+            if (x == baseMatrixCnt) {
+                x = 0;
+                ++y;
+            }
+        }
     }
 }

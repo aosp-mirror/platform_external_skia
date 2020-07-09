@@ -4,13 +4,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkGeometry.h"
-#include "SkOpEdgeBuilder.h"
-#include "SkReduceOrder.h"
+#include "src/core/SkGeometry.h"
+#include "src/pathops/SkOpEdgeBuilder.h"
+#include "src/pathops/SkReduceOrder.h"
 
 void SkOpEdgeBuilder::init() {
     fOperand = false;
-    fXorMask[0] = fXorMask[1] = (fPath->getFillType() & 1) ? kEvenOdd_PathOpsMask
+    fXorMask[0] = fXorMask[1] = ((int)fPath->getFillType() & 1) ? kEvenOdd_PathOpsMask
             : kWinding_PathOpsMask;
     fUnparseable = false;
     fSecondHalf = preFetch();
@@ -40,7 +40,7 @@ void SkOpEdgeBuilder::addOperand(const SkPath& path) {
     SkASSERT(fPathVerbs.count() > 0 && fPathVerbs.end()[-1] == SkPath::kDone_Verb);
     fPathVerbs.pop();
     fPath = &path;
-    fXorMask[1] = (fPath->getFillType() & 1) ? kEvenOdd_PathOpsMask
+    fXorMask[1] = ((int)fPath->getFillType() & 1) ? kEvenOdd_PathOpsMask
             : kWinding_PathOpsMask;
     preFetch();
 }
@@ -312,7 +312,7 @@ bool SkOpEdgeBuilder::walk() {
                             split->fPts[0] = splits[prior].fPts[0];
                         }
                         int next = index;
-                        int breakLimit = SkTMin(breaks, (int) SK_ARRAY_COUNT(splits) - 1);
+                        int breakLimit = std::min(breaks, (int) SK_ARRAY_COUNT(splits) - 1);
                         while (next < breakLimit && !splits[next + 1].fCanAdd) {
                             ++next;
                         }

@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "VkTestContext.h"
+#include "tools/gpu/vk/VkTestContext.h"
 
 #ifdef SK_VULKAN
 
-#include "GrContext.h"
-#include "VkTestUtils.h"
-#include "vk/GrVkExtensions.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "tools/gpu/vk/VkTestUtils.h"
 
 namespace {
 
@@ -141,7 +141,7 @@ private:
     typedef sk_gpu_test::FenceSync INHERITED;
 };
 
-GR_STATIC_ASSERT(sizeof(VkFence) <= sizeof(sk_gpu_test::PlatformFence));
+static_assert(sizeof(VkFence) <= sizeof(sk_gpu_test::PlatformFence));
 
 // TODO: Implement swap buffers and finish
 class VkTestContextImpl : public sk_gpu_test::VkTestContext {
@@ -249,6 +249,7 @@ private:
                                          fVk.fGraphicsQueueIndex));
     }
 
+    void onPlatformMakeNotCurrent() const override {}
     void onPlatformMakeCurrent() const override {}
     std::function<void()> onPlatformGetAutoContextRestore() const override  { return nullptr; }
     void onPlatformSwapBuffers() const override {}

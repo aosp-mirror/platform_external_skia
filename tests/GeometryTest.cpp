@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkGeometry.h"
-#include "SkPointPriv.h"
-#include "SkRandom.h"
-#include "Test.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkPointPriv.h"
+#include "tests/Test.h"
 
 #include <array>
 #include <numeric>
@@ -185,9 +185,6 @@ static void test_conic_to_quads(skiatest::Reporter* reporter) {
 
     for (int i = 0; i < N; i += 3) {
         const SkPoint* pts = &triples[i];
-
-        SkRect bounds;
-        bounds.set(pts, 3);
 
         SkScalar w = 1e30f;
         do {

@@ -8,11 +8,13 @@
 #ifndef GrFillRectOp_DEFINED
 #define GrFillRectOp_DEFINED
 
-#include "GrRenderTargetContext.h"
-#include "GrTypesPriv.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 class GrDrawOp;
 class GrPaint;
+class GrQuad;
 class GrRecordingContext;
 struct GrUserStencilSettings;
 class SkMatrix;
@@ -24,81 +26,53 @@ struct SkRect;
  * the GrPaint is only consumed by these methods if a valid op is returned. If null is returned then
  * the paint is unmodified and may still be used.
  */
-namespace GrFillRectOp {
+class GrFillRectOp {
+public:
+    using InputFlags = GrSimpleMeshDrawOpHelper::InputFlags;
 
-// General purpose factory functions that handle per-edge anti-aliasing
-std::unique_ptr<GrDrawOp> MakePerEdge(GrRecordingContext* context,
-                                      GrPaint&& paint,
-                                      GrAAType aaType,
-                                      GrQuadAAFlags edgeAA,
-                                      const SkMatrix& viewMatrix,
-                                      const SkRect& rect,
-                                      const GrUserStencilSettings* stencil = nullptr);
-
-std::unique_ptr<GrDrawOp> MakePerEdgeWithLocalMatrix(GrRecordingContext* context,
-                                                     GrPaint&& paint,
-                                                     GrAAType aaType,
-                                                     GrQuadAAFlags edgeAA,
-                                                     const SkMatrix& viewMatrix,
-                                                     const SkMatrix& localMatrix,
-                                                     const SkRect& rect,
-                                                     const GrUserStencilSettings* stl = nullptr);
-
-std::unique_ptr<GrDrawOp> MakePerEdgeWithLocalRect(GrRecordingContext* context,
-                                                   GrPaint&& paint,
-                                                   GrAAType aaType,
-                                                   GrQuadAAFlags edgeAA,
-                                                   const SkMatrix& viewMatrix,
-                                                   const SkRect& rect,
-                                                   const SkRect& localRect,
-                                                   const GrUserStencilSettings* stencil = nullptr);
-
-// Generalization that accepts 2D convex quads instead of just rectangles. If 'localQuad' is not
-// null, this is equivalent to the "WithLocalRect" versions. Quad arrays match SkRect::toQuad order.
-std::unique_ptr<GrDrawOp> MakePerEdgeQuad(GrRecordingContext* context,
+    static std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
                                           GrPaint&& paint,
                                           GrAAType aaType,
-                                          GrQuadAAFlags edgeAA,
-                                          const SkMatrix& viewMatrix,
-                                          const SkPoint quad[4],
-                                          const SkPoint localQuad[4],
-                                          const GrUserStencilSettings* stencil = nullptr);
+                                          DrawQuad* quad,
+                                          const GrUserStencilSettings* stencil = nullptr,
+                                          InputFlags = InputFlags::kNone);
 
-// Bulk API for drawing quads with a single op
-// TODO(michaelludwig) - remove if the bulk API is not useful for SkiaRenderer
-std::unique_ptr<GrDrawOp> MakeSet(GrRecordingContext* context,
-                                  GrPaint&& paint,
-                                  GrAAType aaType,
-                                  const SkMatrix& viewMatrix,
-                                  const GrRenderTargetContext::QuadSetEntry quads[],
-                                  int quadCount,
-                                  const GrUserStencilSettings* stencil = nullptr);
+    // Utility function to create a non-AA rect transformed by view. This is used commonly enough
+    // in testing and GMs that manage ops without going through GrRTC that it's worth the
+    // convenience.
+    static std::unique_ptr<GrDrawOp> MakeNonAARect(GrRecordingContext* context,
+                                                   GrPaint&& paint,
+                                                   const SkMatrix& view,
+                                                   const SkRect& rect,
+                                                   const GrUserStencilSettings* stencil = nullptr);
 
-// Specializations where all edges are treated the same. If the aa type is coverage, then the
-// edges will be anti-aliased, otherwise per-edge AA will be disabled.
-std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
-                               GrPaint&& paint,
-                               GrAAType aaType,
+    // Bulk API for drawing quads with a single op
+    // TODO(michaelludwig) - remove if the bulk API is not useful for SkiaRenderer
+    static void AddFillRectOps(GrRenderTargetContext*,
+                               const GrClip& clip,
+                               GrRecordingContext*,
+                               GrPaint&&,
+                               GrAAType,
                                const SkMatrix& viewMatrix,
-                               const SkRect& rect,
-                               const GrUserStencilSettings* stencil = nullptr);
+                               const GrRenderTargetContext::QuadSetEntry quads[],
+                               int quadCount,
+                               const GrUserStencilSettings* = nullptr);
 
-std::unique_ptr<GrDrawOp> MakeWithLocalMatrix(GrRecordingContext* context,
-                                              GrPaint&& paint,
-                                              GrAAType aaType,
-                                              const SkMatrix& viewMatrix,
-                                              const SkMatrix& localMatrix,
-                                              const SkRect& rect,
-                                              const GrUserStencilSettings* stencil = nullptr);
+#if GR_TEST_UTILS
+    static uint32_t ClassID();
+#endif
 
-std::unique_ptr<GrDrawOp> MakeWithLocalRect(GrRecordingContext* context,
-                                            GrPaint&& paint,
-                                            GrAAType aaType,
+private:
+    // Create a GrFillRectOp that uses as many quads as possible from 'quads' w/o exceeding
+    // any index buffer size limits.
+    static std::unique_ptr<GrDrawOp> MakeOp(GrRecordingContext*,
+                                            GrPaint&&,
+                                            GrAAType,
                                             const SkMatrix& viewMatrix,
-                                            const SkRect& rect,
-                                            const SkRect& localRect,
-                                            const GrUserStencilSettings* stencil = nullptr);
-
-} // namespace GrFillRectOp
+                                            const GrRenderTargetContext::QuadSetEntry quads[],
+                                            int quadCount,
+                                            const GrUserStencilSettings*,
+                                            int* numConsumed);
+};
 
 #endif // GrFillRectOp_DEFINED

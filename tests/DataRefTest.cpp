@@ -5,24 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "SkData.h"
-#include "SkDataTable.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
-#include "SkRWBuffer.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "SkString.h"
-#include "SkTArray.h"
-#include "SkTaskGroup.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkData.h"
+#include "include/core/SkDataTable.h"
+#include "include/core/SkRWBuffer.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkOSFile.h"
+#include "src/core/SkTaskGroup.h"
+#include "src/utils/SkOSPath.h"
+#include "tests/Test.h"
 
 #include <cstdio>
 #include <cstring>
 #include <memory>
-#include <utility>
 
 static void test_is_equal(skiatest::Reporter* reporter,
                           const SkDataTable* a, const SkDataTable* b) {
@@ -207,6 +206,25 @@ DEF_TEST(Data, reporter) {
 
     test_cstring(reporter);
     test_files(reporter);
+}
+
+DEF_TEST(Data_empty, reporter) {
+    sk_sp<SkData> array[] = {
+        SkData::MakeEmpty(),
+        SkData::MakeUninitialized(0),
+        SkData::MakeFromMalloc(sk_malloc_throw(0), 0),
+        SkData::MakeWithCopy("", 0),
+        SkData::MakeWithProc(nullptr, 0, [](const void*, void*){}, nullptr),
+        SkData::MakeWithoutCopy(nullptr, 0),
+    };
+    constexpr int N = SK_ARRAY_COUNT(array);
+
+    for (int i = 0; i < N; ++i) {
+        REPORTER_ASSERT(reporter, array[i]->size() == 0);
+        for (int j = 0; j < N; ++j) {
+            REPORTER_ASSERT(reporter, array[i]->equals(array[j].get()));
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

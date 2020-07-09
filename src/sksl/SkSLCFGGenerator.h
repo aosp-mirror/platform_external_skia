@@ -8,8 +8,8 @@
 #ifndef SKSL_CFGGENERATOR
 #define SKSL_CFGGENERATOR
 
-#include "ir/SkSLExpression.h"
-#include "ir/SkSLFunctionDefinition.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLFunctionDefinition.h"
 
 #include <set>
 #include <stack>
@@ -53,6 +53,7 @@ struct BasicBlock {
             *fStatement = std::move(stmt);
         }
 
+#ifdef SK_DEBUG
         String description() const {
             if (fKind == kStatement_Kind) {
                 return (*fStatement)->description();
@@ -61,6 +62,7 @@ struct BasicBlock {
                 return (*fExpression)->description();
             }
         }
+#endif
 
         Kind fKind;
         // if false, this node should not be subject to constant propagation. This happens with

@@ -39,7 +39,8 @@ extern "C" SkEmbeddedHeader const NAME;''')
   args = parser.parse_args()
 
   out = args.output.write;
-  out('#include "SkTypes.h"\n')
+  out('#include <stddef.h>\n')
+  out('#include <stdint.h>\n')
 
   # Write the resources.
   index = 0

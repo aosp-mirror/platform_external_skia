@@ -5,11 +5,11 @@
 * found in the LICENSE file.
 */
 
-#include "GrVkMemory.h"
+#include "src/gpu/vk/GrVkMemory.h"
 
-#include "GrVkGpu.h"
-#include "GrVkUtil.h"
-#include "vk/GrVkMemoryAllocator.h"
+#include "include/gpu/vk/GrVkMemoryAllocator.h"
+#include "src/gpu/vk/GrVkGpu.h"
+#include "src/gpu/vk/GrVkUtil.h"
 
 using AllocationPropertyFlags = GrVkMemoryAllocator::AllocationPropertyFlags;
 using BufferUsage = GrVkMemoryAllocator::BufferUsage;
@@ -28,10 +28,9 @@ static BufferUsage get_buffer_usage(GrVkBuffer::Type type, bool dynamic) {
             return BufferUsage::kCpuOnly;
     }
     SK_ABORT("Invalid GrVkBuffer::Type");
-    return BufferUsage::kCpuOnly; // Just returning an arbitrary value.
 }
 
-bool GrVkMemory::AllocAndBindBufferMemory(const GrVkGpu* gpu,
+bool GrVkMemory::AllocAndBindBufferMemory(GrVkGpu* gpu,
                                           VkBuffer buffer,
                                           GrVkBuffer::Type type,
                                           bool dynamic,
@@ -63,9 +62,9 @@ bool GrVkMemory::AllocAndBindBufferMemory(const GrVkGpu* gpu,
     allocator->getAllocInfo(memory, alloc);
 
     // Bind buffer
-    VkResult err = GR_VK_CALL(gpu->vkInterface(), BindBufferMemory(gpu->device(), buffer,
-                                                                   alloc->fMemory,
-                                                                   alloc->fOffset));
+    VkResult err;
+    GR_VK_CALL_RESULT(gpu, err, BindBufferMemory(gpu->device(), buffer, alloc->fMemory,
+                                                 alloc->fOffset));
     if (err) {
         FreeBufferMemory(gpu, type, *alloc);
         return false;
@@ -86,7 +85,7 @@ void GrVkMemory::FreeBufferMemory(const GrVkGpu* gpu, GrVkBuffer::Type type,
 
 const VkDeviceSize kMaxSmallImageSize = 256 * 1024;
 
-bool GrVkMemory::AllocAndBindImageMemory(const GrVkGpu* gpu,
+bool GrVkMemory::AllocAndBindImageMemory(GrVkGpu* gpu,
                                          VkImage image,
                                          bool linearTiling,
                                          GrVkAlloc* alloc) {
@@ -98,10 +97,15 @@ bool GrVkMemory::AllocAndBindImageMemory(const GrVkGpu* gpu,
     GR_VK_CALL(gpu->vkInterface(), GetImageMemoryRequirements(gpu->device(), image, &memReqs));
 
     AllocationPropertyFlags propFlags;
-    if (memReqs.size > kMaxSmallImageSize || gpu->vkCaps().shouldAlwaysUseDedicatedImageMemory()) {
+    if (memReqs.size > kMaxSmallImageSize ||
+               gpu->vkCaps().shouldAlwaysUseDedicatedImageMemory()) {
         propFlags = AllocationPropertyFlags::kDedicatedAllocation;
     } else {
         propFlags = AllocationPropertyFlags::kNone;
+    }
+
+    if (gpu->protectedContext()) {
+        propFlags |= AllocationPropertyFlags::kProtected;
     }
 
     if (!allocator->allocateMemoryForImage(image, propFlags, &memory)) {
@@ -110,8 +114,9 @@ bool GrVkMemory::AllocAndBindImageMemory(const GrVkGpu* gpu,
     allocator->getAllocInfo(memory, alloc);
 
     // Bind buffer
-    VkResult err = GR_VK_CALL(gpu->vkInterface(), BindImageMemory(gpu->device(), image,
-                                                                  alloc->fMemory, alloc->fOffset));
+    VkResult err;
+    GR_VK_CALL_RESULT(gpu, err, BindImageMemory(gpu->device(), image, alloc->fMemory,
+                                                alloc->fOffset));
     if (err) {
         FreeImageMemory(gpu, linearTiling, *alloc);
         return false;
@@ -130,7 +135,7 @@ void GrVkMemory::FreeImageMemory(const GrVkGpu* gpu, bool linearTiling,
     }
 }
 
-void* GrVkMemory::MapAlloc(const GrVkGpu* gpu, const GrVkAlloc& alloc) {
+void* GrVkMemory::MapAlloc(GrVkGpu* gpu, const GrVkAlloc& alloc) {
     SkASSERT(GrVkAlloc::kMappable_Flag & alloc.fFlags);
 #ifdef SK_DEBUG
     if (alloc.fFlags & GrVkAlloc::kNoncoherent_Flag) {
@@ -145,9 +150,9 @@ void* GrVkMemory::MapAlloc(const GrVkGpu* gpu, const GrVkAlloc& alloc) {
     }
 
     void* mapPtr;
-    VkResult err = GR_VK_CALL(gpu->vkInterface(), MapMemory(gpu->device(), alloc.fMemory,
-                                                            alloc.fOffset,
-                                                            alloc.fSize, 0, &mapPtr));
+    VkResult err;
+    GR_VK_CALL_RESULT(gpu, err, MapMemory(gpu->device(), alloc.fMemory, alloc.fOffset, alloc.fSize,
+                                          0, &mapPtr));
     if (err) {
         mapPtr = nullptr;
     }

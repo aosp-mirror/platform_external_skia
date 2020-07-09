@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkMathPriv.h"
-#include "SkPointPriv.h"
-#include "SkScalar.h"
-#include "Test.h"
+#include "include/core/SkScalar.h"
+#include "src/core/SkMathPriv.h"
+#include "src/core/SkPointPriv.h"
+#include "tests/Test.h"
 
 /*
    Duplicates lots of code from gpu/src/GrPathUtils.cpp
@@ -61,7 +61,7 @@ static inline uint32_t compute_pointCount(SkScalar d, SkScalar tol) {
        return 1;
     } else {
        int temp = SkScalarCeilToInt(SkScalarSqrt(d / tol));
-       uint32_t count = SkMin32(SkNextPow2(temp), MAX_POINTS_PER_CURVE);
+       uint32_t count = std::min<uint32_t>(SkNextPow2(temp), MAX_POINTS_PER_CURVE);
        return count;
     }
 }

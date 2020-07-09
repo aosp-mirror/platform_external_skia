@@ -5,14 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "VkTestUtils.h"
+#include "tools/gpu/vk/VkTestUtils.h"
 
 #ifdef SK_VULKAN
 
-#include "SkAutoMalloc.h"
-#include "vk/GrVkBackendContext.h"
-#include "vk/GrVkExtensions.h"
-#include "../ports/SkOSLibrary.h"
+#ifndef SK_GPU_TOOLS_VK_LIBRARY_NAME
+    #if defined _WIN32
+        #define SK_GPU_TOOLS_VK_LIBRARY_NAME "vulkan-1.dll"
+    #else
+        #define SK_GPU_TOOLS_VK_LIBRARY_NAME "libvulkan.so"
+    #endif
+#endif
+
+#if defined(SK_BUILD_FOR_UNIX)
+#include <execinfo.h>
+#endif
+#include "include/gpu/vk/GrVkBackendContext.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/ports/SkOSLibrary.h"
 
 #if defined(SK_ENABLE_SCOPED_LSAN_SUPPRESSIONS)
 #include <sanitizer/lsan_interface.h>
@@ -32,11 +43,7 @@ bool LoadVkLibraryAndGetProcAddrFuncs(PFN_vkGetInstanceProcAddr* instProc,
     static PFN_vkGetInstanceProcAddr localInstProc = nullptr;
     static PFN_vkGetDeviceProcAddr localDevProc = nullptr;
     if (!vkLib) {
-#if defined _WIN32
-        vkLib = DynamicLoadLibrary("vulkan-1.dll");
-#else
-        vkLib = DynamicLoadLibrary("libvulkan.so");
-#endif
+        vkLib = DynamicLoadLibrary(SK_GPU_TOOLS_VK_LIBRARY_NAME);
         if (!vkLib) {
             return false;
         }
@@ -59,12 +66,8 @@ bool LoadVkLibraryAndGetProcAddrFuncs(PFN_vkGetInstanceProcAddr* instProc,
 
 #ifdef SK_ENABLE_VK_LAYERS
 const char* kDebugLayerNames[] = {
-    // elements of VK_LAYER_LUNARG_standard_validation
-    "VK_LAYER_GOOGLE_threading",
-    "VK_LAYER_LUNARG_parameter_validation",
-    "VK_LAYER_LUNARG_object_tracker",
-    "VK_LAYER_LUNARG_core_validation",
-    "VK_LAYER_GOOGLE_unique_objects",
+    // single merged layer
+    "VK_LAYER_KHRONOS_validation",
     // not included in standard_validation
     //"VK_LAYER_LUNARG_api_dump",
     //"VK_LAYER_LUNARG_vktrace",
@@ -94,6 +97,16 @@ static int should_include_debug_layer(const char* layerName,
     return -1;
 }
 
+static void print_backtrace() {
+#if defined(SK_BUILD_FOR_UNIX)
+    void* stack[64];
+    int count = backtrace(stack, SK_ARRAY_COUNT(stack));
+    backtrace_symbols_fd(stack, count, 2);
+#else
+    // Please add implementations for other platforms.
+#endif
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
     VkDebugReportFlagsEXT       flags,
     VkDebugReportObjectTypeEXT  objectType,
@@ -105,18 +118,15 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
     void*                       pUserData) {
     if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
         SkDebugf("Vulkan error [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
+        print_backtrace();
+        SkDEBUGFAIL("Vulkan debug layer error");
         return VK_TRUE; // skip further layers
     } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-        // There is currently a bug in the spec which doesn't have
-        // VK_STRUCTURE_TYPE_BLEND_OPERATION_ADVANCED_FEATURES_EXT as an allowable pNext struct in
-        // VkDeviceCreateInfo. So we ignore that warning since it is wrong.
-        if (!strstr(pMessage,
-                    "pCreateInfo->pNext chain includes a structure with unexpected VkStructureType "
-                    "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT")) {
-            SkDebugf("Vulkan warning [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
-        }
+        SkDebugf("Vulkan warning [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
+        print_backtrace();
     } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
         SkDebugf("Vulkan perf warning [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
+        print_backtrace();
     } else {
         SkDebugf("Vulkan info/debug [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
     }
@@ -320,11 +330,11 @@ static bool init_device_extensions_and_layers(GrVkGetProc getProc, uint32_t spec
     do {                                                                           \
         if (grVk##name == nullptr) {                                               \
             SkDebugf("Function ptr for vk%s could not be acquired\n", #name);      \
-            return;                                                                \
+            return false;                                                                \
         }                                                                          \
     } while (0)
 
-static void destroy_instance(GrVkGetProc getProc, VkInstance inst,
+static bool destroy_instance(GrVkGetProc getProc, VkInstance inst,
                              VkDebugReportCallbackEXT* debugCallback,
                              bool hasDebugExtension) {
     if (hasDebugExtension && *debugCallback != VK_NULL_HANDLE) {
@@ -334,17 +344,31 @@ static void destroy_instance(GrVkGetProc getProc, VkInstance inst,
     }
     ACQUIRE_VK_PROC_LOCAL(DestroyInstance, inst, VK_NULL_HANDLE);
     grVkDestroyInstance(inst, nullptr);
+    return true;
 }
 
-static void setup_extension_features(GrVkGetProc getProc, VkInstance inst, VkPhysicalDevice physDev,
-                                     uint32_t physDeviceVersion, GrVkExtensions* extensions,
-                                     VkPhysicalDeviceFeatures2* features) {
+static bool setup_features(GrVkGetProc getProc, VkInstance inst, VkPhysicalDevice physDev,
+                           uint32_t physDeviceVersion, GrVkExtensions* extensions,
+                           VkPhysicalDeviceFeatures2* features, bool isProtected) {
     SkASSERT(physDeviceVersion >= VK_MAKE_VERSION(1, 1, 0) ||
              extensions->hasExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, 1));
 
     // Setup all extension feature structs we may want to use.
-
     void** tailPNext = &features->pNext;
+
+    // If |isProtected| is given, attach that first
+    VkPhysicalDeviceProtectedMemoryFeatures* protectedMemoryFeatures = nullptr;
+    if (isProtected) {
+        SkASSERT(physDeviceVersion >= VK_MAKE_VERSION(1, 1, 0));
+        protectedMemoryFeatures =
+          (VkPhysicalDeviceProtectedMemoryFeatures*)sk_malloc_throw(
+              sizeof(VkPhysicalDeviceProtectedMemoryFeatures));
+        protectedMemoryFeatures->sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES;
+        protectedMemoryFeatures->pNext = nullptr;
+        *tailPNext = protectedMemoryFeatures;
+        tailPNext = &protectedMemoryFeatures->pNext;
+    }
 
     VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT* blend = nullptr;
     if (extensions->hasExtension(VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME, 2)) {
@@ -363,6 +387,7 @@ static void setup_extension_features(GrVkGetProc getProc, VkInstance inst, VkPhy
                 sizeof(VkPhysicalDeviceSamplerYcbcrConversionFeatures));
         ycbcrFeature->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES;
         ycbcrFeature->pNext = nullptr;
+        ycbcrFeature->samplerYcbcrConversion = VK_TRUE;
         *tailPNext = ycbcrFeature;
         tailPNext = &ycbcrFeature->pNext;
     }
@@ -377,6 +402,12 @@ static void setup_extension_features(GrVkGetProc getProc, VkInstance inst, VkPhy
         grVkGetPhysicalDeviceFeatures2KHR(physDev, features);
     }
 
+    if (isProtected) {
+        if (!protectedMemoryFeatures->protectedMemory) {
+            return false;
+        }
+    }
+    return true;
     // If we want to disable any extension features do so here.
 }
 
@@ -386,7 +417,8 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
                             VkPhysicalDeviceFeatures2* features,
                             VkDebugReportCallbackEXT* debugCallback,
                             uint32_t* presentQueueIndexPtr,
-                            CanPresentFn canPresent) {
+                            CanPresentFn canPresent,
+                            bool isProtected) {
     VkResult err;
 
     ACQUIRE_VK_PROC_NOCHECK(EnumerateInstanceVersion, VK_NULL_HANDLE, VK_NULL_HANDLE);
@@ -396,11 +428,16 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
     } else {
         err = grVkEnumerateInstanceVersion(&instanceVersion);
         if (err) {
-            SkDebugf("failed ot enumerate instance version. Err: %d\n", err);
+            SkDebugf("failed to enumerate instance version. Err: %d\n", err);
             return false;
         }
     }
     SkASSERT(instanceVersion >= VK_MAKE_VERSION(1, 0, 0));
+    if (isProtected && instanceVersion < VK_MAKE_VERSION(1, 1, 0)) {
+        SkDebugf("protected requires vk instance version 1.1\n");
+        return false;
+    }
+
     uint32_t apiVersion = VK_MAKE_VERSION(1, 0, 0);
     if (instanceVersion >= VK_MAKE_VERSION(1, 1, 0)) {
         // If the instance version is 1.0 we must have the apiVersion also be 1.0. However, if the
@@ -410,7 +447,7 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
         apiVersion = VK_MAKE_VERSION(1, 1, 0);
     }
 
-    instanceVersion = SkTMin(instanceVersion, apiVersion);
+    instanceVersion = std::min(instanceVersion, apiVersion);
 
     VkPhysicalDevice physDev;
     VkDevice device;
@@ -526,7 +563,13 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
 
     VkPhysicalDeviceProperties physDeviceProperties;
     grVkGetPhysicalDeviceProperties(physDev, &physDeviceProperties);
-    int physDeviceVersion = SkTMin(physDeviceProperties.apiVersion, apiVersion);
+    int physDeviceVersion = std::min(physDeviceProperties.apiVersion, apiVersion);
+
+    if (isProtected && physDeviceVersion < VK_MAKE_VERSION(1, 1, 0)) {
+        SkDebugf("protected requires vk physical device version 1.1\n");
+        destroy_instance(getProc, inst, debugCallback, hasDebugExtension);
+        return false;
+    }
 
     // query to get the initial queue props size
     uint32_t queueCount;
@@ -617,7 +660,12 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
     void* pointerToFeatures = nullptr;
     if (physDeviceVersion >= VK_MAKE_VERSION(1, 1, 0) ||
         extensions->hasExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, 1)) {
-        setup_extension_features(getProc, inst, physDev, physDeviceVersion, extensions, features);
+        if (!setup_features(getProc, inst, physDev, physDeviceVersion, extensions, features,
+                          isProtected)) {
+            destroy_instance(getProc, inst, debugCallback, hasDebugExtension);
+            return false;
+        }
+
         // If we set the pNext of the VkDeviceCreateInfo to our VkPhysicalDeviceFeatures2 struct,
         // the device creation will use that instead of the ppEnabledFeatures.
         pointerToFeatures = features;
@@ -629,6 +677,7 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
     // and we can't depend on it on all platforms
     deviceFeatures->robustBufferAccess = VK_FALSE;
 
+    VkDeviceQueueCreateFlags flags = isProtected ? VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT : 0;
     float queuePriorities[1] = { 0.0 };
     // Here we assume no need for swapchain queue
     // If one is needed, the client will need its own setup code
@@ -636,10 +685,11 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
         {
             VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, // sType
             nullptr,                                    // pNext
-            0,                                          // VkDeviceQueueCreateFlags
+            flags,                                      // VkDeviceQueueCreateFlags
             graphicsQueueIndex,                         // queueFamilyIndex
             1,                                          // queueCount
             queuePriorities,                            // pQueuePriorities
+
         },
         {
             VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, // sType
@@ -679,7 +729,20 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
     }
 
     VkQueue queue;
-    grVkGetDeviceQueue(device, graphicsQueueIndex, 0, &queue);
+    if (isProtected) {
+        ACQUIRE_VK_PROC(GetDeviceQueue2, inst, device);
+        SkASSERT(grVkGetDeviceQueue2 != nullptr);
+        VkDeviceQueueInfo2 queue_info2 = {
+            VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,          // sType
+            nullptr,                                        // pNext
+            VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT,           // flags
+            graphicsQueueIndex,                             // queueFamilyIndex
+            0                                               // queueIndex
+        };
+        grVkGetDeviceQueue2(device, &queue_info2, &queue);
+    } else {
+        grVkGetDeviceQueue(device, graphicsQueueIndex, 0, &queue);
+    }
 
     ctx->fInstance = inst;
     ctx->fPhysicalDevice = physDev;
@@ -691,6 +754,7 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
     ctx->fDeviceFeatures2 = features;
     ctx->fGetProc = getProc;
     ctx->fOwnsInstanceAndDevice = false;
+    ctx->fProtectedContext = isProtected ? GrProtected::kYes : GrProtected::kNo;
 
     return true;
 }

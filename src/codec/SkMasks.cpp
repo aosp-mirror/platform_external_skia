@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkCodecPriv.h"
-#include "SkMasks.h"
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
+#include "src/codec/SkCodecPriv.h"
+#include "src/codec/SkMasks.h"
 
 /*
  *
@@ -152,11 +152,3 @@ SkMasks* SkMasks::CreateMasks(InputMasks masks, int bytesPerPixel) {
                        process_mask(masks.alpha));
 }
 
-
-SkMasks::SkMasks(const MaskInfo& red, const MaskInfo& green,
-                 const MaskInfo& blue, const MaskInfo& alpha)
-    : fRed(red)
-    , fGreen(green)
-    , fBlue(blue)
-    , fAlpha(alpha)
-{}

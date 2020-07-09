@@ -5,21 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "SkArenaAlloc.h"
-#include "SkOverdrawColorFilter.h"
-#include "SkRasterPipeline.h"
-#include "SkReadBuffer.h"
+#include "include/core/SkUnPreMultiply.h"
+#include "include/effects/SkOverdrawColorFilter.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkEffectPriv.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkReadBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "effects/GrSkSLFP.h"
+#include "include/effects/SkRuntimeEffect.h"
+#include "src/gpu/effects/GrSkSLFP.h"
 
 GR_FP_SRC_STRING SKSL_OVERDRAW_SRC = R"(
-layout(ctype=SkPMColor) in uniform half4 color0;
-layout(ctype=SkPMColor) in uniform half4 color1;
-layout(ctype=SkPMColor) in uniform half4 color2;
-layout(ctype=SkPMColor) in uniform half4 color3;
-layout(ctype=SkPMColor) in uniform half4 color4;
-layout(ctype=SkPMColor) in uniform half4 color5;
+uniform half4 color0;
+uniform half4 color1;
+uniform half4 color2;
+uniform half4 color3;
+uniform half4 color4;
+uniform half4 color5;
 
 void main(inout half4 color) {
     half alpha = 255.0 * color.a;
@@ -40,16 +43,20 @@ void main(inout half4 color) {
 )";
 #endif
 
-void SkOverdrawColorFilter::onAppendStages(SkRasterPipeline* p,
-                                           SkColorSpace* dstCS,
-                                           SkArenaAlloc* alloc,
-                                           bool shader_is_opaque) const {
+static void convert_to_pm4f(SkPMColor4f dst[], const SkColor src[]) {
+    for (int i = 0; i < SkOverdrawColorFilter::kNumColors; ++i) {
+        dst[i] = SkColor4f::FromColor(src[i]).premul();
+    }
+}
+
+bool SkOverdrawColorFilter::onAppendStages(const SkStageRec& rec, bool shader_is_opaque) const {
     struct Ctx : public SkRasterPipeline_CallbackCtx {
-        const SkPMColor* colors;
+        SkPMColor4f colors[kNumColors];
     };
     // TODO: do we care about transforming to dstCS?
-    auto ctx = alloc->make<Ctx>();
-    ctx->colors = fColors;
+    auto ctx = rec.fAlloc->make<Ctx>();
+    convert_to_pm4f(ctx->colors, fColors);
+
     ctx->fn = [](SkRasterPipeline_CallbackCtx* arg, int active_pixels) {
         auto ctx = (Ctx*)arg;
         auto pixels = (SkPMColor4f*)ctx->rgba;
@@ -58,10 +65,11 @@ void SkOverdrawColorFilter::onAppendStages(SkRasterPipeline* p,
             if (alpha >= kNumColors) {
                 alpha = kNumColors - 1;
             }
-            pixels[i] = SkPMColor4f::FromPMColor(ctx->colors[alpha]);
+            pixels[i] = ctx->colors[alpha];
         }
     };
-    p->append(SkRasterPipeline::callback, ctx);
+    rec.fPipeline->append(SkRasterPipeline::callback, ctx);
+    return true;
 }
 
 void SkOverdrawColorFilter::flatten(SkWriteBuffer& buffer) const {
@@ -78,7 +86,7 @@ sk_sp<SkFlattenable> SkOverdrawColorFilter::CreateProc(SkReadBuffer& buffer) {
         return nullptr;
     }
 
-    return SkOverdrawColorFilter::Make(colors);
+    return sk_sp<SkColorFilter>(new SkOverdrawColorFilter(colors));
 }
 
 void SkOverdrawColorFilter::RegisterFlattenables() {
@@ -86,13 +94,17 @@ void SkOverdrawColorFilter::RegisterFlattenables() {
 }
 #if SK_SUPPORT_GPU
 
-#include "GrRecordingContext.h"
+#include "include/private/GrRecordingContext.h"
 
 std::unique_ptr<GrFragmentProcessor> SkOverdrawColorFilter::asFragmentProcessor(
-        GrRecordingContext* context, const GrColorSpaceInfo&) const {
-    static int overdrawIndex = GrSkSLFP::NewIndex();
-    return GrSkSLFP::Make(context, overdrawIndex, "Overdraw", SKSL_OVERDRAW_SRC, fColors,
-                          sizeof(fColors));
+        GrRecordingContext* context, const GrColorInfo&) const {
+    static auto effect = std::get<0>(SkRuntimeEffect::Make(SkString(SKSL_OVERDRAW_SRC)));
+    SkASSERT(effect->inputSize() == (kNumColors * sizeof(SkPMColor4f)));
+
+    auto inputs = SkData::MakeUninitialized(kNumColors * sizeof(SkPMColor4f));
+    convert_to_pm4f(reinterpret_cast<SkPMColor4f*>(inputs->writable_data()), fColors);
+
+    return GrSkSLFP::Make(context, effect, "Overdraw", std::move(inputs));
 }
 
 #endif

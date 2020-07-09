@@ -11,21 +11,29 @@ template("third_party") {
       if (defined(invoker.public_defines)) {
         defines = invoker.public_defines
       }
-      if (is_win && !is_clang) {
+      if (is_win) {
         include_dirs = invoker.public_include_dirs
-      } else if (is_win && is_clang) {
-        foreach(dir, invoker.public_include_dirs) {
-          cflags += [
-            "/imsvc",
-            rebase_path(dir),
-          ]
+        if (is_clang) {
+          foreach(dir, invoker.public_include_dirs) {
+            cflags += [
+              "/imsvc",
+              rebase_path(dir),
+            ]
+          }
         }
       } else {
         foreach(dir, invoker.public_include_dirs) {
-          cflags += [
-            "-isystem",
-            rebase_path(dir),
-          ]
+          if (werror) {
+            cflags += [
+              "-isystem",
+              rebase_path(dir),
+            ]
+          } else {
+            cflags += [
+              "-I",
+              rebase_path(dir),
+            ]
+          }
         }
       }
     } else {
@@ -63,12 +71,12 @@ set_defaults("third_party") {
     configs -= [ "//gn:warnings" ]
   }
 
-  # Don't want to to deal with this (especially /RTCc)
-  if (sanitize == "MSVC") {
-    configs -= [ "//gn:msvc_rtc" ]
-  }
   if (is_debug) {
     configs += [ "//gn:optimize" ]
+  }
+
+  if (sanitize == "ASAN") {
+    configs += [ "//gn:recover_pointer_overflow" ]
   }
 }
 

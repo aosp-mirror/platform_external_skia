@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorData.h"
-#include "SkEndian.h"
-#include "SkFDot6.h"
-#include "SkFixed.h"
-#include "SkHalf.h"
-#include "SkMathPriv.h"
-#include "SkPoint.h"
-#include "SkRandom.h"
-#include "SkTo.h"
-#include "Test.h"
+#include "include/core/SkPoint.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkFixed.h"
+#include "include/private/SkHalf.h"
+#include "include/private/SkTo.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkEndian.h"
+#include "src/core/SkFDot6.h"
+#include "src/core/SkMathPriv.h"
+#include "tests/Test.h"
 
 static void test_clz(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 32 == SkCLZ(0));
@@ -408,15 +408,6 @@ DEF_TEST(Math, reporter) {
         REPORTER_ASSERT(reporter, SkScalarIsNaN(x));
     }
 
-    for (i = 0; i < 1000; i++) {
-        int value = rand.nextS() >> 16;
-        int max = rand.nextU() >> 16;
-
-        int clamp = SkClampMax(value, max);
-        int clamp2 = value < 0 ? 0 : (value > max ? max : value);
-        REPORTER_ASSERT(reporter, clamp == clamp2);
-    }
-
     for (i = 0; i < 10000; i++) {
         SkPoint p;
 
@@ -651,14 +642,7 @@ DEF_TEST(FloatSaturate32, reporter) {
         int i = sk_float_saturate2int(r.fFloat);
         REPORTER_ASSERT(reporter, r.fExpectedInt == i);
 
-        // ensure that these bound even non-finite values (including NaN)
-
-        SkScalar mx = SkTMax<SkScalar>(r.fFloat, 50);
-        REPORTER_ASSERT(reporter, mx >= 50);
-
-        SkScalar mn = SkTMin<SkScalar>(r.fFloat, 50);
-        REPORTER_ASSERT(reporter, mn <= 50);
-
+        // Ensure that SkTPin bounds even non-finite values (including NaN)
         SkScalar p = SkTPin<SkScalar>(r.fFloat, 0, 100);
         REPORTER_ASSERT(reporter, p >= 0 && p <= 100);
     }

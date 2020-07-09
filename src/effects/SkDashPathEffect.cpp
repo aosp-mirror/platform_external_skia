@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkDashPathEffect.h"
+#include "include/effects/SkDashPathEffect.h"
 
-#include "SkDashImpl.h"
-#include "SkDashPathPriv.h"
-#include "SkReadBuffer.h"
-#include "SkStrokeRec.h"
-#include "SkTo.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/effects/SkDashImpl.h"
+#include "src/utils/SkDashPathPriv.h"
 
 #include <utility>
 
@@ -228,7 +228,7 @@ bool SkDashImpl::onAsPoints(PointData* results, const SkPath& src, const SkStrok
 
     if (results) {
         results->fFlags = 0;
-        SkScalar clampedInitialDashLength = SkMinScalar(length, fInitialDashLength);
+        SkScalar clampedInitialDashLength = std::min(length, fInitialDashLength);
 
         if (SkPaint::kRound_Cap == rec.getCap()) {
             results->fFlags |= PointData::kCircles_PointFlag;

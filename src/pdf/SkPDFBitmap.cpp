@@ -5,20 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "SkPDFBitmap.h"
+#include "src/pdf/SkPDFBitmap.h"
 
-#include "SkColorData.h"
-#include "SkData.h"
-#include "SkDeflate.h"
-#include "SkExecutor.h"
-#include "SkImage.h"
-#include "SkImageInfoPriv.h"
-#include "SkJpegInfo.h"
-#include "SkPDFDocumentPriv.h"
-#include "SkPDFTypes.h"
-#include "SkPDFUtils.h"
-#include "SkStream.h"
-#include "SkTo.h"
+#include "include/core/SkData.h"
+#include "include/core/SkExecutor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkImageInfoPriv.h"
+#include "include/private/SkTo.h"
+#include "src/pdf/SkDeflate.h"
+#include "src/pdf/SkJpegInfo.h"
+#include "src/pdf/SkPDFDocumentPriv.h"
+#include "src/pdf/SkPDFTypes.h"
+#include "src/pdf/SkPDFUtils.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,10 +45,10 @@ static SkColor get_neighbor_avg_color(const SkPixmap& bm, int xOrig, int yOrig) 
     SkASSERT(kBGRA_8888_SkColorType == bm.colorType());
     unsigned r = 0, g = 0, b = 0, n = 0;
     // Clamp the range to the edge of the bitmap.
-    int ymin = SkTMax(0, yOrig - 1);
-    int ymax = SkTMin(yOrig + 1, bm.height() - 1);
-    int xmin = SkTMax(0, xOrig - 1);
-    int xmax = SkTMin(xOrig + 1, bm.width() - 1);
+    int ymin = std::max(0, yOrig - 1);
+    int ymax = std::min(yOrig + 1, bm.height() - 1);
+    int xmin = std::max(0, xOrig - 1);
+    int xmax = std::min(xOrig + 1, bm.width() - 1);
     for (int y = ymin; y <= ymax; ++y) {
         const SkColor* scanline = bm.addr32(0, y);
         for (int x = xmin; x <= xmax; ++x) {

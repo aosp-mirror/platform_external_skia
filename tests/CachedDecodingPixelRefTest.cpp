@@ -5,19 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkColorData.h"
-#include "SkImage.h"
-#include "SkImageGenerator.h"
-#include "SkImageInfo.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkTypes.h"
-#include "SkUtils.h"
-#include "Test.h"
-#include "sk_tool_utils.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageGenerator.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkColorData.h"
+#include "src/core/SkUtils.h"
+#include "tests/Test.h"
+#include "tools/ToolUtils.h"
 
 #include <utility>
 
@@ -31,7 +30,7 @@ public:
     static int Width() { return 10; }
     static int Height() { return 10; }
     // value choosen so that there is no loss when converting to to RGB565 and back
-    static SkColor Color() { return sk_tool_utils::color_to_565(0xffaabbcc); }
+    static SkColor   Color() { return ToolUtils::color_to_565(0xffaabbcc); }
     static SkPMColor PMColor() { return SkPreMultiplyColor(Color()); }
 
     TestImageGenerator(TestType type, skiatest::Reporter* reporter,
@@ -100,7 +99,7 @@ DEF_TEST(Image_NewFromGenerator, r) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(testTypes); ++i) {
         TestImageGenerator::TestType test = testTypes[i];
         for (const SkColorType testColorType : testColorTypes) {
-            auto gen = skstd::make_unique<TestImageGenerator>(test, r, testColorType);
+            auto gen = std::make_unique<TestImageGenerator>(test, r, testColorType);
             sk_sp<SkImage> image(SkImage::MakeFromGenerator(std::move(gen)));
             if (nullptr == image) {
                 ERRORF(r, "SkImage::NewFromGenerator unexpecedly failed ["

@@ -5,18 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "GrBufferAllocPool.h"
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrCpuBuffer.h"
-#include "GrGpu.h"
-#include "GrGpuBuffer.h"
-#include "GrResourceProvider.h"
-#include "GrTypes.h"
-#include "SkMacros.h"
-#include "SkSafeMath.h"
-#include "SkTraceEvent.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/SkMacros.h"
+#include "src/core/SkSafeMath.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/GrBufferAllocPool.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrCpuBuffer.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrGpuBuffer.h"
+#include "src/gpu/GrResourceProvider.h"
 
 sk_sp<GrBufferAllocPool::CpuBufferCache> GrBufferAllocPool::CpuBufferCache::Make(
         int maxBuffersToCache) {
@@ -178,6 +178,14 @@ void GrBufferAllocPool::validate(bool unusedBlockAllowed) const {
 }
 #endif
 
+static inline size_t align_up_pad(size_t x, size_t alignment) {
+    return (alignment - x % alignment) % alignment;
+}
+
+static inline size_t align_down(size_t x, uint32_t alignment) {
+    return (x / alignment) * alignment;
+}
+
 void* GrBufferAllocPool::makeSpace(size_t size,
                                    size_t alignment,
                                    sk_sp<const GrBuffer>* buffer,
@@ -190,7 +198,7 @@ void* GrBufferAllocPool::makeSpace(size_t size,
     if (fBufferPtr) {
         BufferBlock& back = fBlocks.back();
         size_t usedBytes = back.fBuffer->size() - back.fBytesFree;
-        size_t pad = GrSizeAlignUpPad(usedBytes, alignment);
+        size_t pad = align_up_pad(usedBytes, alignment);
         SkSafeMath safeMath;
         size_t alignedSize = safeMath.add(pad, size);
         if (!safeMath.ok()) {
@@ -245,7 +253,7 @@ void* GrBufferAllocPool::makeSpaceAtLeast(size_t minSize,
     if (fBufferPtr) {
         BufferBlock& back = fBlocks.back();
         size_t usedBytes = back.fBuffer->size() - back.fBytesFree;
-        size_t pad = GrSizeAlignUpPad(usedBytes, alignment);
+        size_t pad = align_up_pad(usedBytes, alignment);
         if ((minSize + pad) <= back.fBytesFree) {
             // Consume padding first, to make subsequent alignment math easier
             memset((void*)(reinterpret_cast<intptr_t>(fBufferPtr) + usedBytes), 0, pad);
@@ -257,10 +265,10 @@ void* GrBufferAllocPool::makeSpaceAtLeast(size_t minSize,
             // correctly)
             size_t size;
             if (back.fBytesFree >= fallbackSize) {
-                SkASSERT(GrSizeAlignDown(fallbackSize, alignment) == fallbackSize);
+                SkASSERT(align_down(fallbackSize, alignment) == fallbackSize);
                 size = fallbackSize;
             } else {
-                size = GrSizeAlignDown(back.fBytesFree, alignment);
+                size = align_down(back.fBytesFree, alignment);
             }
             *offset = usedBytes;
             *buffer = back.fBuffer;
@@ -325,7 +333,7 @@ void GrBufferAllocPool::putBack(size_t bytes) {
 }
 
 bool GrBufferAllocPool::createBlock(size_t requestSize) {
-    size_t size = SkTMax(requestSize, kDefaultBufferSize);
+    size_t size = std::max(requestSize, kDefaultBufferSize);
 
     VALIDATE();
 

@@ -8,12 +8,14 @@
 #ifndef SkColorSpaceXformSteps_DEFINED
 #define SkColorSpaceXformSteps_DEFINED
 
-#include "SkColorSpace.h"
-#include "SkImageInfo.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImageInfo.h"
+#include "include/private/SkImageInfoPriv.h"
 
 class SkRasterPipeline;
 
 struct SkColorSpaceXformSteps {
+
     struct Flags {
         bool unpremul         = false;
         bool linearize        = false;
@@ -33,17 +35,16 @@ struct SkColorSpaceXformSteps {
     SkColorSpaceXformSteps(SkColorSpace* src, SkAlphaType srcAT,
                            SkColorSpace* dst, SkAlphaType dstAT);
 
+    template <typename S, typename D>
+    SkColorSpaceXformSteps(const S& src, const D& dst)
+        : SkColorSpaceXformSteps(src.colorSpace(), src.alphaType(),
+                                 dst.colorSpace(), dst.alphaType()) {}
+
     void apply(float rgba[4]) const;
     void apply(SkRasterPipeline*, bool src_is_normalized) const;
 
     void apply(SkRasterPipeline* p, SkColorType srcCT) const {
-    #if 0
-        this->apply(p, srcCT < kRGBA_F16_SkColorType);
-    #else
-        // F16Norm is normalized, but to make diffing with F16 easier we
-        // intentionally take the slower, non-normalized path here.
-        this->apply(p, srcCT < kRGBA_F16Norm_SkColorType);
-    #endif
+        return this->apply(p, SkColorTypeIsNormalized(srcCT));
     }
 
     Flags flags;

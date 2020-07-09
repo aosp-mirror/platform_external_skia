@@ -8,8 +8,8 @@
 #ifndef GrImageTextureMaker_DEFINED
 #define GrImageTextureMaker_DEFINED
 
-#include "GrTextureMaker.h"
-#include "SkImage.h"
+#include "include/core/SkImage.h"
+#include "src/gpu/GrTextureMaker.h"
 
 class SkImage_Lazy;
 class SkImage_GpuYUVA;
@@ -21,20 +21,16 @@ public:
     GrImageTextureMaker(GrRecordingContext* context, const SkImage* client,
                         SkImage::CachingHint chint, bool useDecal = false);
 
-protected:
+private:
     // TODO: consider overriding this, for the case where the underlying generator might be
     //       able to efficiently produce a "stretched" texture natively (e.g. picture-backed)
     //          GrTexture* generateTextureForParams(const CopyParams&) override;
-    sk_sp<GrTextureProxy> refOriginalTextureProxy(bool willBeMipped,
-                                                  AllowedTexGenType onlyIfFast) override;
+    GrSurfaceProxyView refOriginalTextureProxyView(bool willBeMipped,
+                                                   AllowedTexGenType onlyIfFast) override;
 
     void makeCopyKey(const CopyParams& stretch, GrUniqueKey* paramsCopyKey) override;
     void didCacheCopy(const GrUniqueKey& copyKey, uint32_t contextUniqueID) override {}
 
-    SkAlphaType alphaType() const override;
-    SkColorSpace* colorSpace() const override;
-
-private:
     const SkImage_Lazy*     fImage;
     GrUniqueKey             fOriginalKey;
     SkImage::CachingHint    fCachingHint;
@@ -47,12 +43,15 @@ class GrYUVAImageTextureMaker : public GrTextureMaker {
 public:
     GrYUVAImageTextureMaker(GrContext* context, const SkImage* client, bool useDecal = false);
 
+    // This could be made more nuanced and compare all of the texture proxy resolutions, but
+    // it's probably not worth the effort.
+    bool hasMixedResolutions() const override { return true; }
 protected:
     // TODO: consider overriding this, for the case where the underlying generator might be
     //       able to efficiently produce a "stretched" texture natively (e.g. picture-backed)
     //          GrTexture* generateTextureForParams(const CopyParams&) override;
-    sk_sp<GrTextureProxy> refOriginalTextureProxy(bool willBeMipped,
-                                                  AllowedTexGenType onlyIfFast) override;
+    GrSurfaceProxyView refOriginalTextureProxyView(bool willBeMipped,
+                                                   AllowedTexGenType onlyIfFast) override;
 
     void makeCopyKey(const CopyParams& stretch, GrUniqueKey* paramsCopyKey) override;
     void didCacheCopy(const GrUniqueKey& copyKey, uint32_t contextUniqueID) override {}
@@ -64,15 +63,11 @@ protected:
         bool coordsLimitedToConstraintRect,
         const GrSamplerState::Filter* filterOrNullForBicubic) override;
 
-    SkAlphaType alphaType() const override;
-    SkColorSpace* colorSpace() const override;
-
 private:
     const SkImage_GpuYUVA*  fImage;
     GrUniqueKey             fOriginalKey;
 
     typedef GrTextureMaker INHERITED;
 };
-
 
 #endif

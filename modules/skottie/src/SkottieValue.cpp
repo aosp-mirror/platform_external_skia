@@ -5,14 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkottieValue.h"
+#include "modules/skottie/src/SkottieValue.h"
 
-#include "SkColor.h"
-#include "SkottieJson.h"
-#include "SkottiePriv.h"
-#include "SkNx.h"
-#include "SkPoint.h"
-#include "SkSize.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkSize.h"
+#include "include/private/SkNx.h"
+#include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
 
 namespace  skottie {
 
@@ -30,7 +31,6 @@ bool ValueTraits<ScalarValue>::CanLerp(const ScalarValue&, const ScalarValue&) {
 template <>
 void ValueTraits<ScalarValue>::Lerp(const ScalarValue& v0, const ScalarValue& v1, float t,
                                     ScalarValue* result) {
-    SkASSERT(t >= 0 && t <= 1);
     *result = v0 + (v1 - v0) * t;
 }
 
@@ -63,6 +63,7 @@ void ValueTraits<VectorValue>::Lerp(const VectorValue& v0, const VectorValue& v1
     }
 }
 
+// DEPRECATED: remove after converting everything to SkColor4f
 template <>
 template <>
 SkColor ValueTraits<VectorValue>::As<SkColor>(const VectorValue& v) {
@@ -80,11 +81,35 @@ SkColor ValueTraits<VectorValue>::As<SkColor>(const VectorValue& v) {
 
 template <>
 template <>
+SkColor4f ValueTraits<VectorValue>::As<SkColor4f>(const VectorValue& v) {
+    // best effort to turn a vector into a color
+    const auto r = v.size() > 0 ? SkTPin(v[0], 0.0f, 1.0f) : 0,
+               g = v.size() > 1 ? SkTPin(v[1], 0.0f, 1.0f) : 0,
+               b = v.size() > 2 ? SkTPin(v[2], 0.0f, 1.0f) : 0,
+               a = v.size() > 3 ? SkTPin(v[3], 0.0f, 1.0f) : 1;
+
+    return { r, g, b, a };
+}
+
+template <>
+template <>
 SkPoint ValueTraits<VectorValue>::As<SkPoint>(const VectorValue& vec) {
-    // best effort to turn this into a point
-    const auto x = vec.size() > 0 ? vec[0] : 0,
-               y = vec.size() > 1 ? vec[1] : 0;
-    return SkPoint::Make(x, y);
+    // best effort to turn this into a 2D point
+    return SkPoint {
+        vec.size() > 0 ? vec[0] : 0,
+        vec.size() > 1 ? vec[1] : 0,
+    };
+}
+
+template <>
+template <>
+SkV3 ValueTraits<VectorValue>::As<SkV3>(const VectorValue& vec) {
+    // best effort to turn this into a 3D point
+    return SkV3 {
+        vec.size() > 0 ? vec[0] : 0,
+        vec.size() > 1 ? vec[1] : 0,
+        vec.size() > 2 ? vec[2] : 0,
+    };
 }
 
 template <>
@@ -183,7 +208,6 @@ static SkPoint lerp_point(const SkPoint& v0, const SkPoint& v1, const Sk2f& t) {
 template <>
 void ValueTraits<ShapeValue>::Lerp(const ShapeValue& v0, const ShapeValue& v1, float t,
                                    ShapeValue* result) {
-    SkASSERT(t >= 0 && t <= 1);
     SkASSERT(v0.fVertices.size() == v1.fVertices.size());
     SkASSERT(v0.fClosed == v1.fClosed);
 
@@ -242,71 +266,6 @@ SkPath ValueTraits<ShapeValue>::As<SkPath>(const ShapeValue& shape) {
     path.shrinkToFit();
 
     return path;
-}
-
-template <>
-bool ValueTraits<TextValue>::FromJSON(const skjson::Value& jv,
-                                       const internal::AnimationBuilder* abuilder,
-                                       TextValue* v) {
-    const skjson::ObjectValue* jtxt = jv;
-    if (!jtxt) {
-        return false;
-    }
-
-    const skjson::StringValue* font_name = (*jtxt)["f"];
-    const skjson::StringValue* text      = (*jtxt)["t"];
-    const skjson::NumberValue* text_size = (*jtxt)["s"];
-    if (!font_name || !text || !text_size ||
-        !(v->fTypeface = abuilder->findFont(SkString(font_name->begin(), font_name->size())))) {
-        return false;
-    }
-    v->fText.set(text->begin(), text->size());
-    v->fTextSize = **text_size;
-
-    static constexpr SkTextUtils::Align gAlignMap[] = {
-        SkTextUtils::kLeft_Align,  // 'j': 0
-        SkTextUtils::kRight_Align, // 'j': 1
-        SkTextUtils::kCenter_Align // 'j': 2
-    };
-    v->fAlign = gAlignMap[SkTMin<size_t>(ParseDefault<size_t>((*jtxt)["j"], 0),
-                                         SK_ARRAY_COUNT(gAlignMap))];
-
-    const auto& parse_color = [] (const skjson::ArrayValue* jcolor,
-                                  const internal::AnimationBuilder* abuilder,
-                                  SkColor* c) {
-        if (!jcolor) {
-            return false;
-        }
-
-        VectorValue color_vec;
-        if (!ValueTraits<VectorValue>::FromJSON(*jcolor, abuilder, &color_vec)) {
-            return false;
-        }
-
-        *c = ValueTraits<VectorValue>::As<SkColor>(color_vec);
-        return true;
-    };
-
-    v->fHasFill   = parse_color((*jtxt)["fc"], abuilder, &v->fFillColor);
-    v->fHasStroke = parse_color((*jtxt)["sc"], abuilder, &v->fStrokeColor);
-
-    if (v->fHasStroke) {
-        v->fStrokeWidth = ParseDefault((*jtxt)["s"], 0.0f);
-    }
-
-    return true;
-}
-
-template <>
-bool ValueTraits<TextValue>::CanLerp(const TextValue&, const TextValue&) {
-    // Text values are never interpolated, but we pretend that they could be.
-    return true;
-}
-
-template <>
-void ValueTraits<TextValue>::Lerp(const TextValue& v0, const TextValue&, float, TextValue* result) {
-    // Text value keyframes are treated as selectors, not as interpolated values.
-    *result = v0;
 }
 
 } // namespace skottie

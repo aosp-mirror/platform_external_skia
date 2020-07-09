@@ -8,10 +8,12 @@
 #ifndef SKSL_SWITCHSTATEMENT
 #define SKSL_SWITCHSTATEMENT
 
-#include "SkSLStatement.h"
-#include "SkSLSwitchCase.h"
+#include "src/sksl/ir/SkSLStatement.h"
+#include "src/sksl/ir/SkSLSwitchCase.h"
 
 namespace SkSL {
+
+class SymbolTable;
 
 /**
  * A 'switch' statement.
@@ -35,6 +37,7 @@ struct SwitchStatement : public Statement {
                                                               std::move(cloned), fSymbols));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         String result;
         if (fIsStatic) {
@@ -47,6 +50,7 @@ struct SwitchStatement : public Statement {
         result += "}";
         return result;
     }
+#endif
 
     bool fIsStatic;
     std::unique_ptr<Expression> fValue;

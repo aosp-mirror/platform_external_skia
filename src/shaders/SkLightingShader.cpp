@@ -5,20 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "SkArenaAlloc.h"
-#include "SkBitmapProcShader.h"
-#include "SkBitmapProcState.h"
-#include "SkColor.h"
-#include "SkColorSpaceXformer.h"
-#include "SkEmptyShader.h"
-#include "SkLightingShader.h"
-#include "SkMathPriv.h"
-#include "SkNormalSource.h"
-#include "SkPoint3.h"
-#include "SkReadBuffer.h"
-#include "SkShaderBase.h"
-#include "SkUnPreMultiply.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPoint3.h"
+#include "include/core/SkUnPreMultiply.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkBitmapProcState.h"
+#include "src/core/SkMathPriv.h"
+#include "src/core/SkNormalSource.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/SkBitmapProcShader.h"
+#include "src/shaders/SkEmptyShader.h"
+#include "src/shaders/SkLightingShader.h"
+#include "src/shaders/SkShaderBase.h"
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -85,7 +84,6 @@ protected:
 #ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
     Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override;
 #endif
-    sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override;
 
 private:
     SK_FLATTENABLE_HOOKS(SkLightingShaderImpl)
@@ -103,13 +101,13 @@ private:
 
 #if SK_SUPPORT_GPU
 
-#include "GrCoordTransform.h"
-#include "GrFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
-#include "SkGr.h"
+#include "src/gpu/GrCoordTransform.h"
+#include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
 // This FP expects a premul'd color input for its diffuse color. Premul'ing of the paint's color is
 // handled by the asFragmentProcessor() factory, but shaders providing diffuse color must output it
@@ -167,8 +165,7 @@ private:
 
             fragBuilder->codeAppendf("half4 diffuseColor = %s;", args.fInputColor);
 
-            SkString dstNormalName("dstNormal");
-            this->emitChild(0, &dstNormalName, args);
+            SkString dstNormalName = this->invokeChild(0, args);
 
             fragBuilder->codeAppendf("float3 normal = %s.xyz;", dstNormalName.c_str());
 
@@ -366,7 +363,7 @@ void SkLightingShaderImpl::LightingShaderContext::shadeSpan(int x, int y,
     SkColor diffColor = fPaintColor;
 
     do {
-        int n = SkTMin(count, BUFFER_MAX);
+        int n = std::min(count, BUFFER_MAX);
 
         fNormalProvider->fillScanLine(x, y, normals, n);
 
@@ -472,13 +469,6 @@ SkShaderBase::Context* SkLightingShaderImpl::onMakeContext(
     return alloc->make<LightingShaderContext>(*this, rec, diffuseContext, normalProvider, nullptr);
 }
 #endif
-
-sk_sp<SkShader> SkLightingShaderImpl::onMakeColorSpace(SkColorSpaceXformer* xformer) const {
-    sk_sp<SkShader> xformedDiffuseShader =
-            fDiffuseShader ? xformer->apply(fDiffuseShader.get()) : nullptr;
-    return SkLightingShader::Make(std::move(xformedDiffuseShader), fNormalSource,
-                                  fLights->makeColorSpace(xformer));
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 

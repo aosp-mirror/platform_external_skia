@@ -8,8 +8,8 @@
 #ifndef SKSL_IFSTATEMENT
 #define SKSL_IFSTATEMENT
 
-#include "SkSLExpression.h"
-#include "SkSLStatement.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 namespace SkSL {
 
@@ -30,6 +30,7 @@ struct IfStatement : public Statement {
                 fIfTrue->clone(), fIfFalse ? fIfFalse->clone() : nullptr));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         String result;
         if (fIsStatic) {
@@ -41,6 +42,7 @@ struct IfStatement : public Statement {
         }
         return result;
     }
+#endif
 
     bool fIsStatic;
     std::unique_ptr<Expression> fTest;

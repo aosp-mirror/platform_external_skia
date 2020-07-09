@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "GrCCStrokeGeometry.h"
+#include "src/gpu/ccpr/GrCCStrokeGeometry.h"
 
-#include "SkGeometry.h"
-#include "SkMathPriv.h"
-#include "SkNx.h"
-#include "SkStrokeRec.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/private/SkNx.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkMathPriv.h"
 
 // This is the maximum distance in pixels that we can stray from the edge of a stroke when
 // converting it to flat line segments.
@@ -60,7 +60,6 @@ static GrCCStrokeGeometry::Verb join_verb_from_join(SkPaint::Join join) {
             return Verb::kRoundJoin;
     }
     SK_ABORT("Invalid SkPaint::Join.");
-    return Verb::kBevelJoin;
 }
 
 void GrCCStrokeGeometry::beginPath(const SkStrokeRec& stroke, float strokeDevWidth,
@@ -83,7 +82,7 @@ void GrCCStrokeGeometry::beginPath(const SkStrokeRec& stroke, float strokeDevWid
 
     // Find the angle of curvature where the arc height above a simple line from point A to point B
     // is equal to kMaxErrorFromLinearization.
-    float r = SkTMax(1 - kMaxErrorFromLinearization / fCurrStrokeRadius, 0.f);
+    float r = std::max(1 - kMaxErrorFromLinearization / fCurrStrokeRadius, 0.f);
     fMaxCurvatureCosTheta = 2*r*r - 1;
 
     fCurrContourFirstPtIdx = -1;
@@ -156,7 +155,7 @@ void GrCCStrokeGeometry::quadraticTo(Verb leftJoinVerb, const SkPoint P[3], floa
 
     // Decide how many flat line segments to chop the curve into.
     int numSegments = wangs_formula_quadratic(p0, p1, p2);
-    numSegments = SkTMin(numSegments, 1 << kMaxNumLinearSegmentsLog2);
+    numSegments = std::min(numSegments, 1 << kMaxNumLinearSegmentsLog2);
     if (numSegments <= 1) {
         this->rotateTo(leftJoinVerb, normals[0]);
         this->lineTo(Verb::kInternalRoundJoin, P[2]);
@@ -284,7 +283,7 @@ void GrCCStrokeGeometry::cubicTo(Verb leftJoinVerb, const SkPoint P[4], float ma
 
     // Decide how many flat line segments to chop the curve into.
     int numSegments = wangs_formula_cubic(p0, p1, p2, p3);
-    numSegments = SkTMin(numSegments, 1 << kMaxNumLinearSegmentsLog2);
+    numSegments = std::min(numSegments, 1 << kMaxNumLinearSegmentsLog2);
     if (numSegments <= 1) {
         this->rotateTo(leftJoinVerb, normals[0]);
         this->lineTo(leftJoinVerb, P[3]);

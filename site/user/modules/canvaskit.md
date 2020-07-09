@@ -29,12 +29,12 @@ Samples
     margin: 2px;
   }
 
-  #patheffect, #ink {
+  #patheffect, #ink, #shaping {
     width: 400px;
     height: 400px;
   }
 
-  #sk_legos, #sk_drinks, #sk_party, #sk_onboarding {
+  #sk_legos, #sk_drinks, #sk_party, #sk_onboarding, #shader1 {
     width: 300px;
     height: 300px;
   }
@@ -87,15 +87,21 @@ Samples
     <canvas id=sk_onboarding width=500 height=500></canvas>
   </a>
 
-  <h3>Text Shaping using ICU and Harfbuzz</h3>
+  <h3>SkParagraph (using ICU and Harfbuzz)</h3>
   <figure>
-    <canvas id=shaping width=400 height=400></canvas>
+    <canvas id=shaping width=500 height=500></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/d5c61a106d57ff4ada119a46ddc3bfa479d343330d0c9e50da21f4ef113d0dee"
+      <a href="https://jsfiddle.skia.org/canvaskit/56cb197c724dfdfad0c3d8133d4fcab587e4c4e7f31576e62c17251637d3745c"
           target=_blank rel=noopener>
-        Text Shaping JSFiddle</a>
+        SkParagraph JSFiddle</a>
     </figcaption>
   </figure>
+
+  <h3>SKSL for writing custom shaders</h3>
+  <a href="https://jsfiddle.skia.org/canvaskit/33ff9bed883cd5742b4770169da0b36fb0cbc18fd395ddd9563213e178362d30"
+    target=_blank rel=noopener>
+    <canvas id=shader1 width=512 height=512></canvas>
+  </a>
 
 </div>
 
@@ -103,10 +109,13 @@ Samples
 (function() {
   // Tries to load the WASM version if supported, shows error otherwise
   let s = document.createElement('script');
-  var locate_file = '';
+  let locate_file = '';
+  // Hey, if you are looking at this code for an example of how to do it yourself, please use
+  // an actual CDN, such as https://unpkg.com/canvaskit-wasm - it will have better reliability
+  // and niceties like brotli compression.
   if (window.WebAssembly && typeof window.WebAssembly.compile === 'function') {
     console.log('WebAssembly is supported!');
-    locate_file = 'https://unpkg.com/canvaskit-wasm@0.4.0/bin/';
+    locate_file = 'https://particles.skia.org/static/';
   } else {
     console.log('WebAssembly is not supported (yet) on this browser.');
     document.getElementById('demo').innerHTML = "<div>WASM not supported by your browser. Try a recent version of Chrome, Firefox, Edge, or Safari.</div>";
@@ -114,12 +123,12 @@ Samples
   }
   s.src = locate_file + 'canvaskit.js';
   s.onload = () => {
-  var CanvasKit = null;
-  var legoJSON = null;
-  var drinksJSON = null;
-  var confettiJSON = null;
-  var onboardingJSON = null;
-  var fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
+  let CanvasKit = null;
+  let legoJSON = null;
+  let drinksJSON = null;
+  let confettiJSON = null;
+  let onboardingJSON = null;
+  let fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
   CanvasKitInit({
     locateFile: (file) => locate_file + file,
   }).ready().then((CK) => {
@@ -133,6 +142,7 @@ Samples
     SkottieExample(CanvasKit, 'sk_drinks', drinksJSON, fullBounds);
     SkottieExample(CanvasKit, 'sk_party', confettiJSON, fullBounds);
     SkottieExample(CanvasKit, 'sk_onboarding', onboardingJSON, fullBounds);
+    ShaderExample1(CanvasKit);
   });
 
   fetch('https://storage.googleapis.com/skia-cdn/misc/lego_loader.json').then((resp) => {
@@ -313,51 +323,87 @@ Samples
       console.log('Could not make surface');
       return;
     }
-    const context = CanvasKit.currentContext();
+    let robotoData = null;
+    fetch('https://storage.googleapis.com/skia-cdn/google-web-fonts/Roboto-Regular.ttf').then((resp) => {
+      resp.arrayBuffer().then((buffer) => {
+        robotoData = buffer;
+        requestAnimationFrame(drawFrame);
+      });
+    });
+
+    let emojiData = null;
+    fetch('https://storage.googleapis.com/skia-cdn/misc/NotoColorEmoji.ttf').then((resp) => {
+      resp.arrayBuffer().then((buffer) => {
+        emojiData = buffer;
+        requestAnimationFrame(drawFrame);
+      });
+    });
+
     const skcanvas = surface.getCanvas();
-    const paint = new CanvasKit.SkPaint();
-    paint.setColor(CanvasKit.BLUE);
-    paint.setStyle(CanvasKit.PaintStyle.Stroke);
 
-    const textPaint = new CanvasKit.SkPaint();
-    const bigFont = new CanvasKit.SkFont(null, 30);
-    const smallFont = new CanvasKit.SkFont(null, 14);
+    const font = new CanvasKit.SkFont(null, 18);
+    const fontPaint = new CanvasKit.SkPaint();
+    fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
+    fontPaint.setAntiAlias(true);
 
-    const TEXT = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ac leo vitae ipsum hendrerit euismod quis rutrum nibh. Quisque non suscipit urna. Donec enim urna, facilisis vitae volutpat in, mattis at elit. Sed quis augue et dolor dignissim fringilla. Sed non massa eu neque tristique malesuada. ';
+    skcanvas.drawText(`Fetching Font data...`, 5, 450, fontPaint, font);
+    surface.flush();
 
-    let X = 280;
-    let Y = 190;
+    const context = CanvasKit.currentContext();
+
+    let paragraph = null;
+    let X = 10;
+    let Y = 10;
+    const str = 'The quick brown fox 🦊 ate a zesty hamburgerfons 🍔.\nThe 👩‍👩‍👧‍👧 laughed.';
 
     function drawFrame() {
+      if (robotoData && emojiData && !paragraph) {
+        const fontMgr = CanvasKit.SkFontMgr.FromData([robotoData, emojiData]);
+
+        const paraStyle = new CanvasKit.ParagraphStyle({
+          textStyle: {
+            color: CanvasKit.BLACK,
+            fontFamilies: ['Roboto', 'Noto Color Emoji'],
+            fontSize: 50,
+          },
+          textAlign: CanvasKit.TextAlign.Left,
+          maxLines: 7,
+          ellipsis: '...',
+        });
+
+        const builder = CanvasKit.ParagraphBuilder.Make(paraStyle, fontMgr);
+        builder.addText(str);
+        paragraph = builder.build();
+      }
+      if (!paragraph) {
+        requestAnimationFrame(drawFrame);
+        return;
+      }
       CanvasKit.setCurrentContext(context);
-      skcanvas.clear(CanvasKit.TRANSPARENT);
+      skcanvas.clear(CanvasKit.WHITE);
 
-      const shapedText = new CanvasKit.ShapedText({
-        font: smallFont,
-        leftToRight: true,
-        text: TEXT,
-        width: X - 10,
-      });
+      const wrapTo = 350 + 150 * Math.sin(Date.now() / 2000);
+      paragraph.layout(wrapTo);
+      skcanvas.drawParagraph(paragraph, 0, 0);
+      skcanvas.drawLine(wrapTo, 0, wrapTo, 400, fontPaint);
 
-      skcanvas.drawRect(CanvasKit.LTRBRect(10, 10, X, Y), paint);
-      skcanvas.drawText(shapedText, 10, 10, textPaint, smallFont);
-      skcanvas.drawText('Try dragging the box!', 10, 380, textPaint, bigFont);
+      let posA = paragraph.getGlyphPositionAtCoordinate(X, Y);
+      const cp = str.codePointAt(posA.pos);
+      if (cp) {
+        const glyph = String.fromCodePoint(cp);
+        skcanvas.drawText(`At (${X.toFixed(2)}, ${Y.toFixed(2)}) glyph is '${glyph}'`, 5, 450, fontPaint, font);
+      }
 
       surface.flush();
-
-      shapedText.delete();
-
-      window.requestAnimationFrame(drawFrame);
+      requestAnimationFrame(drawFrame);
     }
-    window.requestAnimationFrame(drawFrame);
 
     // Make animation interactive
     let interact = (e) => {
-      if (!e.pressure) {
-        return;
-      }
-      X = e.offsetX;
-      Y = e.offsetY;
+      // multiply by 4/5 to account for the difference in the canvas width and the CSS width.
+      // The 10 accounts for where the mouse actually is compared to where it is drawn.
+      X = (e.offsetX * 4/5) - 10;
+      Y = e.offsetY * 4/5;
     };
     document.getElementById('shaping').addEventListener('pointermove', interact);
     document.getElementById('shaping').addEventListener('pointerdown', interact);
@@ -409,6 +455,59 @@ Samples
     window.requestAnimationFrame(drawFrame);
     //animation.delete();
   }
+
+  function ShaderExample1(CanvasKit) {
+    if (!CanvasKit) {
+      return;
+    }
+    const surface = CanvasKit.MakeCanvasSurface('shader1');
+    if (!surface) {
+      throw 'Could not make surface';
+    }
+    const skcanvas = surface.getCanvas();
+    const paint = new CanvasKit.SkPaint();
+
+    const prog = `
+uniform float rad_scale;
+uniform float2 in_center;
+uniform float4 in_colors0;
+uniform float4 in_colors1;
+
+void main(float2 p, inout half4 color) {
+    float2 pp = p - in_center;
+    float radius = sqrt(dot(pp, pp));
+    radius = sqrt(radius);
+    float angle = atan(pp.y / pp.x);
+    float t = (angle + 3.1415926/2) / (3.1415926);
+    t += radius * rad_scale;
+    t = fract(t);
+    color = half4(mix(in_colors0, in_colors1, t));
+}
+`;
+
+    // If there are multiple contexts on the screen, we need to make sure
+    // we switch to this one before we draw.
+    const context = CanvasKit.currentContext();
+    const fact = CanvasKit.SkRuntimeEffect.Make(prog);
+    function drawFrame() {
+      CanvasKit.setCurrentContext(context);
+      skcanvas.clear(CanvasKit.WHITE);
+      const shader = fact.makeShader([
+        Math.sin(Date.now() / 2000) / 5,
+        256, 256,
+        1, 0, 0, 1,
+        0, 1, 0, 1],
+        true/*=opaque*/);
+
+      paint.setShader(shader);
+      skcanvas.drawRect(CanvasKit.LTRBRect(0, 0, 512, 512), paint);
+      surface.flush();
+      requestAnimationFrame(drawFrame);
+      shader.delete();
+    }
+    requestAnimationFrame(drawFrame);
+  }
+
   }
   document.head.appendChild(s);
 })();

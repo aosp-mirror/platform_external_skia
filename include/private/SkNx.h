@@ -8,9 +8,9 @@
 #ifndef SkNx_DEFINED
 #define SkNx_DEFINED
 
-#include "SkSafe_math.h"
-#include "SkScalar.h"
-#include "SkTypes.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkSafe_math.h"
 
 #include <algorithm>
 #include <limits>
@@ -105,8 +105,8 @@ struct SkNx {
         Half::Store2(ptr + 2*N/2*sizeof(T), a.fHi, b.fHi);
     }
 
-    AI T min() const { return SkTMin(fLo.min(), fHi.min()); }
-    AI T max() const { return SkTMax(fLo.max(), fHi.max()); }
+    AI T min() const { return std::min(fLo.min(), fHi.min()); }
+    AI T max() const { return std::max(fLo.max(), fHi.max()); }
     AI bool anyTrue() const { return fLo.anyTrue() || fHi.anyTrue(); }
     AI bool allTrue() const { return fLo.allTrue() && fHi.allTrue(); }
 
@@ -410,9 +410,9 @@ typedef SkNx<4, uint32_t> Sk4u;
 
 // Include platform specific specializations if available.
 #if !defined(SKNX_NO_SIMD) && SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
-    #include "SkNx_sse.h"
+    #include "include/private/SkNx_sse.h"
 #elif !defined(SKNX_NO_SIMD) && defined(SK_ARM_HAS_NEON)
-    #include "SkNx_neon.h"
+    #include "include/private/SkNx_neon.h"
 #else
 
 AI static Sk4i Sk4f_round(const Sk4f& x) {

@@ -7,12 +7,11 @@
 
 #include <vector>
 
-#include "Benchmark.h"
-#include "SkFontTypes.h"
-#include "SkMakeUnique.h"
-#include "SkTypeface.h"
-#include "SkUTF.h"
-#include "SkUtils.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkTypeface.h"
+#include "src/core/SkUtils.h"
+#include "src/utils/SkUTF.h"
 
 // From Project Guttenberg. This is UTF-8 text.
 static const char* atext[] = {
@@ -238,12 +237,12 @@ protected:
     }
 
     void onDraw(int loops, SkCanvas* canvas) override {
+        SkFont font(fTypeface);
         // Do more loops to reduce variance.
         for (int i = 0; i < loops * 3; ++i) {
             for (auto& line : fLines) {
-                fTypeface->charsToGlyphs(line->utf.data(),
-                                  (SkTypeface::Encoding)fEncoding, fGlyphIds.data(),
-                                  line->glyphCount);
+                font.textToGlyphs(line->utf.data(), line->utf.size(), fEncoding,
+                                  fGlyphIds.data(), line->glyphCount);
             }
         }
     }
@@ -255,7 +254,7 @@ private:
     };
 
     std::unique_ptr<Line> convertLine(int lineIndex) {
-        std::unique_ptr<Line> result = skstd::make_unique<Line>();
+        std::unique_ptr<Line> result = std::make_unique<Line>();
 
         const char* cursor = fText[lineIndex];
         size_t len = strlen(cursor);
@@ -294,7 +293,7 @@ private:
     std::vector<std::unique_ptr<Line>> fLines;
     std::vector<SkGlyphID> fGlyphIds;
     sk_sp<SkTypeface> fTypeface;
-    const char* (*fText);
+    const char** fText;
     int fLineCount;
     const char* fName;
 };

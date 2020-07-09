@@ -5,19 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "GrDrawAtlasOp.h"
+#include "src/gpu/ops/GrDrawAtlasOp.h"
 
-#include "GrCaps.h"
-#include "GrDefaultGeoProcFactory.h"
-#include "GrDrawOpTest.h"
-#include "GrOpFlushState.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrSimpleMeshDrawOpHelper.h"
-#include "SkGr.h"
-#include "SkRSXform.h"
-#include "SkRandom.h"
-#include "SkRectPriv.h"
+#include "include/core/SkRSXform.h"
+#include "include/private/GrRecordingContext.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkRectPriv.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDefaultGeoProcFactory.h"
+#include "src/gpu/GrDrawOpTest.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 namespace {
 
@@ -34,7 +34,7 @@ public:
 
     const char* name() const override { return "DrawAtlasOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -44,8 +44,8 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override;
 
-    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrFSAAType,
-                                      GrClampType) override;
+    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
+                                      bool hasMixedSampledCoverage, GrClampType) override;
 
 private:
     void onPrepareDraws(Target*) override;
@@ -56,7 +56,7 @@ private:
     bool hasColors() const { return fHasColors; }
     int quadCount() const { return fQuadCount; }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps&) override;
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*, const GrCaps&) override;
 
     struct Geometry {
         SkPMColor4f fColor;
@@ -73,17 +73,18 @@ private:
     typedef GrMeshDrawOp INHERITED;
 };
 
-static sk_sp<GrGeometryProcessor> make_gp(const GrShaderCaps* shaderCaps,
-                                          bool hasColors,
-                                          const SkPMColor4f& color,
-                                          const SkMatrix& viewMatrix) {
+static GrGeometryProcessor* make_gp(SkArenaAlloc* arena,
+                                    const GrShaderCaps* shaderCaps,
+                                    bool hasColors,
+                                    const SkPMColor4f& color,
+                                    const SkMatrix& viewMatrix) {
     using namespace GrDefaultGeoProcFactory;
     Color gpColor(color);
     if (hasColors) {
         gpColor.fType = Color::kPremulGrColorAttribute_Type;
     }
 
-    return GrDefaultGeoProcFactory::Make(shaderCaps, gpColor, Coverage::kSolid_Type,
+    return GrDefaultGeoProcFactory::Make(arena, shaderCaps, gpColor, Coverage::kSolid_Type,
                                          LocalCoords::kHasExplicit_Type, viewMatrix);
 }
 
@@ -166,7 +167,7 @@ DrawAtlasOp::DrawAtlasOp(const Helper::MakeArgs& helperArgs, const SkPMColor4f& 
         currVertex += vertexStride;
     }
 
-    this->setTransformedBounds(bounds, viewMatrix, HasAABloat::kNo, IsZeroArea::kNo);
+    this->setTransformedBounds(bounds, viewMatrix, HasAABloat::kNo, IsHairline::kNo);
 }
 
 #ifdef SK_DEBUG
@@ -184,10 +185,11 @@ SkString DrawAtlasOp::dumpInfo() const {
 
 void DrawAtlasOp::onPrepareDraws(Target* target) {
     // Setup geometry processor
-    sk_sp<GrGeometryProcessor> gp(make_gp(target->caps().shaderCaps(),
-                                          this->hasColors(),
-                                          this->color(),
-                                          this->viewMatrix()));
+    GrGeometryProcessor* gp = make_gp(target->allocator(),
+                                      target->caps().shaderCaps(),
+                                      this->hasColors(),
+                                      this->color(),
+                                      this->viewMatrix());
 
     int instanceCount = fGeoData.count();
     size_t vertexStride = gp->vertexStride();
@@ -208,14 +210,19 @@ void DrawAtlasOp::onPrepareDraws(Target* target) {
         memcpy(vertPtr, args.fVerts.begin(), allocSize);
         vertPtr += allocSize;
     }
-    helper.recordDraw(target, std::move(gp));
+    helper.recordDraw(target, gp);
 }
 
 void DrawAtlasOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {
-    fHelper.executeDrawsAndUploads(this, flushState, chainBounds);
+    auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
+                                                             fHelper.detachProcessorSet(),
+                                                             fHelper.pipelineFlags());
+
+    flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
 }
 
-GrOp::CombineResult DrawAtlasOp::onCombineIfPossible(GrOp* t, const GrCaps& caps) {
+GrOp::CombineResult DrawAtlasOp::onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                                     const GrCaps& caps) {
     DrawAtlasOp* that = t->cast<DrawAtlasOp>();
 
     if (!fHelper.isCompatible(that->fHelper, caps, this->bounds(), that->bounds())) {
@@ -223,7 +230,7 @@ GrOp::CombineResult DrawAtlasOp::onCombineIfPossible(GrOp* t, const GrCaps& caps
     }
 
     // We currently use a uniform viewmatrix for this op.
-    if (!this->viewMatrix().cheapEqualTo(that->viewMatrix())) {
+    if (!SkMatrixPriv::CheapEqual(this->viewMatrix(), that->viewMatrix())) {
         return CombineResult::kCannotCombine;
     }
 
@@ -245,16 +252,17 @@ GrDrawOp::FixedFunctionFlags DrawAtlasOp::fixedFunctionFlags() const {
     return fHelper.fixedFunctionFlags();
 }
 
-GrProcessorSet::Analysis DrawAtlasOp::finalize(const GrCaps& caps, const GrAppliedClip* clip,
-                                               GrFSAAType fsaaType, GrClampType clampType) {
+GrProcessorSet::Analysis DrawAtlasOp::finalize(
+        const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
+        GrClampType clampType) {
     GrProcessorAnalysisColor gpColor;
     if (this->hasColors()) {
         gpColor.setToUnknown();
     } else {
         gpColor.setToConstant(fColor);
     }
-    auto result = fHelper.finalizeProcessors(
-            caps, clip, fsaaType, clampType, GrProcessorAnalysisCoverage::kNone, &gpColor);
+    auto result = fHelper.finalizeProcessors(caps, clip, hasMixedSampledCoverage, clampType,
+                                             GrProcessorAnalysisCoverage::kNone, &gpColor);
     if (gpColor.isConstant(&fColor)) {
         fHasColors = false;
     }
@@ -333,7 +341,7 @@ GR_DRAW_OP_TEST_DEFINE(DrawAtlasOp) {
 
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     GrAAType aaType = GrAAType::kNone;
-    if (GrFSAAType::kUnifiedMSAA == fsaaType && random->nextBool()) {
+    if (numSamples > 1 && random->nextBool()) {
         aaType = GrAAType::kMSAA;
     }
 

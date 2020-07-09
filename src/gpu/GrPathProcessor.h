@@ -8,7 +8,7 @@
 #ifndef GrPathProcessor_DEFINED
 #define GrPathProcessor_DEFINED
 
-#include "GrPrimitiveProcessor.h"
+#include "src/gpu/GrPrimitiveProcessor.h"
 
 /*
  * The path equivalent of the GP.  For now this just manages color. In the long term we plan on
@@ -27,8 +27,6 @@ public:
     const SkPMColor4f& color() const { return fColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
-
-    bool willUseGeoShader() const override { return false; }
 
     virtual void getGLSLProcessorKey(const GrShaderCaps& caps,
                                      GrProcessorKeyBuilder* b) const override;

@@ -13,6 +13,7 @@ module.exports = function(config) {
       { pattern: 'npm-wasm/bin/pathkit.wasm', included:false, served:true},
       'perf/perfReporter.js',
       'npm-wasm/bin/pathkit.js',
+      'tests/pathkitinit.js',
       'perf/*.bench.js'
     ],
 
@@ -38,8 +39,8 @@ module.exports = function(config) {
     // enable / disable watching file and executing tests whenever any file changes
     autoWatch: true,
 
-    browserDisconnectTimeout: 10000,
-    browserNoActivityTimeout: 10000,
+    browserDisconnectTimeout: 20000,
+    browserNoActivityTimeout: 20000,
 
     // start these browsers
     browsers: ['Chrome'],
@@ -58,12 +59,18 @@ module.exports = function(config) {
     cfg.browsers = ['ChromeHeadlessNoSandbox'],
     cfg.customLaunchers = {
         ChromeHeadlessNoSandbox: {
-            base: 'ChromeHeadless',
-            flags: [
+          base: 'ChromeHeadless',
+          flags: [
             // Without this flag, we see an error:
             // Failed to move to new namespace: PID namespaces supported, Network namespace supported, but failed: errno = Operation not permitted
-                '--no-sandbox'
-            ],
+            '--no-sandbox',
+            // may help tests be less flaky
+            // https://peter.sh/experiments/chromium-command-line-switches/#browser-test
+            '--browser-test',
+            // This can also help avoid crashes/timeouts:
+            // https://github.com/GoogleChrome/puppeteer/issues/1834
+            '--disable-dev-shm-usage',
+          ],
         },
     };
   }
@@ -74,6 +81,7 @@ module.exports = function(config) {
       { pattern: 'npm-asmjs/bin/pathkit.js.mem', included:false, served:true},
       'perf/perfReporter.js',
       'npm-asmjs/bin/pathkit.js',
+      'tests/pathkitinit.js',
       'perf/*.bench.js'
     ];
 

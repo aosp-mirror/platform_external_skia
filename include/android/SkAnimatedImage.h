@@ -8,13 +8,14 @@
 #ifndef SkAnimatedImage_DEFINED
 #define SkAnimatedImage_DEFINED
 
-#include "SkBitmap.h"
-#include "SkCodecAnimation.h"
-#include "SkDrawable.h"
-#include "SkMatrix.h"
-#include "SkRect.h"
+#include "include/codec/SkCodecAnimation.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
 
 class SkAndroidCodec;
+class SkImage;
 class SkPicture;
 
 /**
@@ -83,6 +84,13 @@ public:
     int decodeNextFrame();
 
     /**
+     *  Returns the current frame as an SkImage. The SkImage will not change
+     *  after it has been returned.
+     *  If there is no current frame, nullptr will be returned.
+     */
+    sk_sp<SkImage> getCurrentFrame();
+
+    /**
      *  How long to display the current frame.
      *
      *  Useful for the first frame, for which decodeNextFrame is called
@@ -109,6 +117,16 @@ public:
     int getRepetitionCount() const {
         return fRepetitionCount;
     }
+
+    /**
+     *  Return the total number of frames in the animation.
+     */
+    int getFrameCount() const { return fFrameCount; }
+
+    /**
+     * Return the (possibly scaled) dimensions of the image.
+     */
+    SkISize dimensions() const { return fScaledSize; }
 
 protected:
     SkRect onGetBounds() override;

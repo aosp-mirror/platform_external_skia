@@ -8,8 +8,7 @@
 #ifndef SkColorShader_DEFINED
 #define SkColorShader_DEFINED
 
-#include "SkColorSpaceXformer.h"
-#include "SkShaderBase.h"
+#include "src/shaders/SkShaderBase.h"
 
 /** \class SkColorShader
     A Shader that represents a single color. In general, this effect can be
@@ -43,11 +42,14 @@ private:
         return true;
     }
 
-    bool onAppendStages(const StageRec&) const override;
+    bool onAppendStages(const SkStageRec&) const override;
 
-    sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override {
-        return SkShader::MakeColorShader(xformer->apply(fColor));
-    }
+    bool onProgram(skvm::Builder*,
+                   const SkMatrix& ctm, const SkMatrix* localM,
+                   SkFilterQuality quality, SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms, SkArenaAlloc*,
+                   skvm::F32 x, skvm::F32 y,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
 
     SkColor fColor;
 };
@@ -67,8 +69,14 @@ private:
     SK_FLATTENABLE_HOOKS(SkColor4Shader)
 
     void flatten(SkWriteBuffer&) const override;
-    bool onAppendStages(const StageRec&) const override;
-    sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override;
+    bool onAppendStages(const SkStageRec&) const override;
+
+    bool onProgram(skvm::Builder*,
+                   const SkMatrix& ctm, const SkMatrix* localM,
+                   SkFilterQuality quality, SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms, SkArenaAlloc*,
+                   skvm::F32 x, skvm::F32 y,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
 
     sk_sp<SkColorSpace> fColorSpace;
     const SkColor4f     fColor;

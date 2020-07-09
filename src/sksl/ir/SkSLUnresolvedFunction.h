@@ -8,7 +8,7 @@
 #ifndef SKSL_UNRESOLVEDFUNCTION
 #define SKSL_UNRESOLVEDFUNCTION
 
-#include "SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLFunctionDeclaration.h"
 
 namespace SkSL {
 
@@ -26,9 +26,11 @@ struct UnresolvedFunction : public Symbol {
 #endif
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return fName;
     }
+#endif
 
     const std::vector<const FunctionDeclaration*> fFunctions;
 

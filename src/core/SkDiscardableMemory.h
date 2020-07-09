@@ -8,14 +8,14 @@
 #ifndef SkDiscardableMemory_DEFINED
 #define SkDiscardableMemory_DEFINED
 
-#include "SkRefCnt.h"
-#include "SkTypes.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
 
 /**
  *  Interface for discardable memory. Implementation is provided by the
  *  embedder.
  */
-class SK_API SkDiscardableMemory {
+class SK_SPI SkDiscardableMemory {
 public:
     /**
      *  Factory method that creates, initializes and locks an SkDiscardableMemory

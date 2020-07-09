@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorSpace.h"
-#include "SkRasterPipeline.h"
-#include "Test.h"
+#include "include/core/SkColorSpace.h"
+#include "src/core/SkRasterPipeline.h"
+#include "tests/Test.h"
 
 static void check_error(skiatest::Reporter* r, float limit, skcms_TransferFunction fn) {
     float in[256], out[256];
@@ -21,7 +21,7 @@ static void check_error(skiatest::Reporter* r, float limit, skcms_TransferFuncti
 
     SkRasterPipeline_<256> p;
     p.append(SkRasterPipeline::load_f32, &ip);
-    p.append(SkRasterPipeline::parametric, &fn);
+    p.append_transfer_function(fn);
     p.append(SkRasterPipeline::store_f32, &op);
 
     p.run(0,0, 256/4,1);

@@ -8,10 +8,10 @@
 #ifndef SkTLList_DEFINED
 #define SkTLList_DEFINED
 
-#include "SkMalloc.h"
-#include "SkTInternalLList.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkTInternalLList.h"
 #include <new>
 #include <utility>
 
@@ -28,7 +28,7 @@
     allocCnt is the number of objects to allocate as a group. In the worst case fragmentation
     each object is using the space required for allocCnt unfragmented objects.
 */
-template <typename T, unsigned int N> class SkTLList : SkNoncopyable {
+template <typename T, unsigned int N> class SkTLList {
 private:
     struct Block;
     struct Node {
@@ -151,7 +151,7 @@ public:
         this->validate();
     }
 
-    int count() const { return SkTMax(fCount ,0); }
+    int count() const { return std::max(fCount ,0); }
     bool isEmpty() const { this->validate(); return 0 == fCount || -1 == fCount; }
 
     bool operator== (const SkTLList& list) const {
@@ -346,6 +346,9 @@ private:
     NodeList fFreeList;
     Block    fFirstBlock;
     int fCount;
+
+    SkTLList(const SkTLList&) = delete;
+    SkTLList& operator=(const SkTLList&) = delete;
 };
 
 #endif

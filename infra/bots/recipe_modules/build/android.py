@@ -5,6 +5,7 @@
 
 import re
 
+from . import util
 
 def compile_fn(api, checkout_root, out_dir):
   skia_dir      = checkout_root.join('skia')
@@ -33,6 +34,7 @@ def compile_fn(api, checkout_root, out_dir):
   args = {
       'ndk': quote(api.vars.slave_dir.join(ndk_path)),
       'target_cpu': quote(target_arch),
+      'werror': 'true',
   }
   extra_cflags.append('-DDUMMY_ndk_version=%s' %
                       api.run.asset_version(ndk_asset, skia_dir))
@@ -44,8 +46,8 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_enable_vulkan_debug_layers'] = 'false'
   if 'ASAN' in extra_tokens:
     args['sanitize'] = '"ASAN"'
-    if target_arch == 'arm' and 'ndk_api' not in args:
-      args['ndk_api'] = 21
+  if 'Wuffs' in extra_tokens:
+    args['skia_use_wuffs'] = 'true'
 
   # If an Android API level is specified, use that.
   for t in extra_tokens:
@@ -94,5 +96,13 @@ def compile_fn(api, checkout_root, out_dir):
       api.run(api.step, 'ninja', cmd=['ninja', '-C', out_dir])
 
 
-def copy_extra_build_products(api, src, dst):
-  pass
+ANDROID_BUILD_PRODUCTS_LIST = [
+  'dm',
+  'nanobench',
+  'skpbench',
+]
+
+
+def copy_build_products(api, src, dst):
+  """Copy Android build products from src to dst."""
+  util.copy_listed_files(api, src, dst, ANDROID_BUILD_PRODUCTS_LIST)

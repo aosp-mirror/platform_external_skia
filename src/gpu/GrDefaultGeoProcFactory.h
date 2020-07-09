@@ -8,9 +8,9 @@
 #ifndef GrDefaultGeoProcFactory_DEFINED
 #define GrDefaultGeoProcFactory_DEFINED
 
-#include "GrColorSpaceXform.h"
-#include "GrGeometryProcessor.h"
-#include "GrShaderCaps.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrShaderCaps.h"
 
 /*
  * A factory for creating default Geometry Processors which simply multiply position by the uniform
@@ -76,22 +76,24 @@ namespace GrDefaultGeoProcFactory {
         const SkMatrix* fMatrix;
     };
 
-    sk_sp<GrGeometryProcessor> Make(const GrShaderCaps*,
-                                    const Color&,
-                                    const Coverage&,
-                                    const LocalCoords&,
-                                    const SkMatrix& viewMatrix);
+    GrGeometryProcessor* Make(SkArenaAlloc*,
+                              const GrShaderCaps*,
+                              const Color&,
+                              const Coverage&,
+                              const LocalCoords&,
+                              const SkMatrix& viewMatrix);
 
     /*
      * Use this factory to create a GrGeometryProcessor that expects a device space vertex position
      * attribute. The view matrix must still be provided to compute correctly transformed
      * coordinates for GrFragmentProcessors. It may fail if the view matrix is not invertible.
      */
-    sk_sp<GrGeometryProcessor> MakeForDeviceSpace(const GrShaderCaps*,
-                                                  const Color&,
-                                                  const Coverage&,
-                                                  const LocalCoords&,
-                                                  const SkMatrix& viewMatrix);
+    GrGeometryProcessor* MakeForDeviceSpace(SkArenaAlloc*,
+                                            const GrShaderCaps*,
+                                            const Color&,
+                                            const Coverage&,
+                                            const LocalCoords&,
+                                            const SkMatrix& viewMatrix);
 };
 
 #endif

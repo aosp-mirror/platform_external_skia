@@ -10,7 +10,7 @@ enum class Type {
     kRadial, kStrip, kFocal
 };
 
-in half4x4 gradientMatrix;
+in half3x3 gradientMatrix;
 
 layout(key) in Type type;
 layout(key) in bool isRadiusIncreasing;
@@ -125,8 +125,8 @@ void main() {
 //////////////////////////////////////////////////////////////////////////////
 
 @header {
-    #include "SkTwoPointConicalGradient.h"
-    #include "GrGradientShader.h"
+    #include "src/gpu/gradients/GrGradientShader.h"
+    #include "src/shaders/gradients/SkTwoPointConicalGradient.h"
 }
 
 // The 2 point conical gradient can reject a pixel so it does change opacity
@@ -252,7 +252,7 @@ void main() {
             radius2 += offset;
         }
     } else if (type == static_cast<int>(Type::kStrip)) {
-        radius1 = SkTMax(radius1, .1f); // Make sure that the radius is non-zero
+        radius1 = std::max(radius1, .1f); // Make sure that the radius is non-zero
         radius2 = radius1;
         // Make sure that the centers are different
         if (SkScalarNearlyZero(SkPoint::Distance(center1, center2))) {
@@ -297,6 +297,6 @@ void main() {
     GrTest::TestAsFPArgs asFPArgs(d);
     std::unique_ptr<GrFragmentProcessor> fp = as_SB(shader)->asFragmentProcessor(asFPArgs.args());
 
-    GrAlwaysAssert(fp);
+    SkASSERT_RELEASE(fp);
     return fp;
 }

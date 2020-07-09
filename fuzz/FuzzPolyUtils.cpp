@@ -5,8 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Fuzz.h"
-#include "SkPolyUtils.h"
+#include "fuzz/Fuzz.h"
+
+#include "include/private/SkTemplates.h"
+#include "src/utils/SkPolyUtils.h"
 
 void inline ignoreResult(bool ) {}
 
@@ -17,6 +19,8 @@ DEF_FUZZ(PolyUtils, fuzz) {
     for (int index = 0; index < count; ++index) {
         fuzz->next(&polygon[index].fX, &polygon[index].fY);
     }
+    SkRect bounds;
+    bounds.setBoundsCheck(polygon, count);
 
     ignoreResult(SkGetPolygonWinding(polygon, count));
     ignoreResult(SkIsConvexPolygon(polygon, count));
@@ -29,7 +33,7 @@ DEF_FUZZ(PolyUtils, fuzz) {
 
     SkScalar offset;
     fuzz->next(&offset);
-    ignoreResult(SkOffsetSimplePolygon(polygon, count, offset, &output));
+    ignoreResult(SkOffsetSimplePolygon(polygon, count, bounds, offset, &output));
 
     SkAutoSTMalloc<64, uint16_t> indexMap(count);
     for (int index = 0; index < count; ++index) {

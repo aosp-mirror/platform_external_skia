@@ -6,8 +6,8 @@
  */
 
 
-#include "GrShaderVar.h"
-#include "GrShaderCaps.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/GrShaderVar.h"
 
 static const char* type_modifier_string(GrShaderVar::TypeModifier t) {
     switch (t) {
@@ -18,7 +18,6 @@ static const char* type_modifier_string(GrShaderVar::TypeModifier t) {
         case GrShaderVar::kUniform_TypeModifier: return "uniform";
     }
     SK_ABORT("Unknown shader variable type modifier.");
-    return "";
 }
 
 void GrShaderVar::setIOType(GrIOType ioType) {

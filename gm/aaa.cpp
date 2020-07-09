@@ -5,9 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkPath.h"
-#include "SkScan.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkScalar.h"
+#include "include/private/SkFloatBits.h"
 
 #define W   800
 #define H   800
@@ -60,7 +64,7 @@ DEF_SIMPLE_GM(analytic_antialias_convex, canvas, W, H) {
                 SkBits2Float(0x4344f079), SkBits2Float(0x4397e900), SkBits2Float(0x3f3504f3));
         path.close();
         // Manually setting convexity is required. Otherwise, this path will be considered concave.
-        path.setConvexity(SkPath::kConvex_Convexity);
+        path.setConvexityType(SkPathConvexityType::kConvex);
         canvas->drawPath(path, p);
 
         // skbug.com/7573
@@ -100,9 +104,7 @@ DEF_SIMPLE_GM(analytic_antialias_general, canvas, W, H) {
         path.moveTo(C + R, C);
         for (int i = 1; i < 8; ++i) {
             SkScalar a = 2.6927937f * i;
-            SkScalar cosine;
-            SkScalar sine = SkScalarSinCos(a, &cosine);
-            path.lineTo(C + R * cosine, C + R * sine);
+            path.lineTo(C + R * SkScalarCos(a), C + R * SkScalarSin(a));
         }
         canvas->drawPath(path, p);
         canvas->restore();
@@ -141,7 +143,7 @@ DEF_SIMPLE_GM(analytic_antialias_inverse, canvas, W, H) {
 
         SkPath path;
         path.addCircle(100, 100, 30);
-        path.setFillType(SkPath::kInverseWinding_FillType);
+        path.setFillType(SkPathFillType::kInverseWinding);
         canvas->drawPath(path, p);
         canvas->restore();
 }

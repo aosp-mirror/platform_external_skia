@@ -7,108 +7,34 @@
 
 // This test only works with the GPU backend.
 
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/GrSharedEnums.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/core/SkTLList.h"
+#include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/effects/GrConvexPolyEffect.h"
+#include "tools/gpu/TestOps.h"
 
-#include "GrContext.h"
-#include "GrDefaultGeoProcFactory.h"
-#include "GrMemoryPool.h"
-#include "GrOpFlushState.h"
-#include "GrPathUtils.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContextPriv.h"
-#include "SkColorPriv.h"
-#include "SkGeometry.h"
-#include "SkPointPriv.h"
-#include "SkTLList.h"
-#include "effects/GrConvexPolyEffect.h"
-#include "ops/GrMeshDrawOp.h"
+#include <memory>
+#include <utility>
 
-/** outset rendered rect to visualize anti-aliased poly edges */
-static SkRect outset(const SkRect& unsorted) {
-    SkRect r = unsorted;
-    r.outset(5.f, 5.f);
-    return r;
-}
-
-/** sorts a rect */
-static SkRect sorted_rect(const SkRect& unsorted) {
-    SkRect r = unsorted;
-    r.sort();
-    return r;
-}
+class GrAppliedClip;
 
 namespace skiagm {
-class PolyBoundsOp : public GrMeshDrawOp {
-public:
-    DEFINE_OP_CLASS_ID
-
-    static std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
-                                          GrPaint&& paint,
-                                          const SkRect& rect) {
-        GrOpMemoryPool* pool = context->priv().opMemoryPool();
-
-        return pool->allocate<PolyBoundsOp>(std::move(paint), rect);
-    }
-
-    const char* name() const override { return "PolyBoundsOp"; }
-
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
-        fProcessors.visitProxies(func);
-    }
-
-    FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
-
-    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
-                                      GrFSAAType fsaaType, GrClampType clampType) override {
-        return fProcessors.finalize(
-                fColor, GrProcessorAnalysisCoverage::kNone, clip, &GrUserStencilSettings::kUnused,
-                fsaaType, caps, clampType, &fColor);
-    }
-
-private:
-    friend class ::GrOpMemoryPool; // for ctor
-
-    PolyBoundsOp(GrPaint&& paint, const SkRect& rect)
-            : INHERITED(ClassID())
-            , fColor(paint.getColor4f())
-            , fProcessors(std::move(paint))
-            , fRect(outset(rect)) {
-        this->setBounds(sorted_rect(fRect), HasAABloat::kNo, IsZeroArea::kNo);
-    }
-
-    void onPrepareDraws(Target* target) override {
-        using namespace GrDefaultGeoProcFactory;
-
-        Color color(fColor);
-        sk_sp<GrGeometryProcessor> gp(GrDefaultGeoProcFactory::Make(
-                target->caps().shaderCaps(),
-                color,
-                Coverage::kSolid_Type,
-                LocalCoords::kUnused_Type,
-                SkMatrix::I()));
-
-        SkASSERT(gp->vertexStride() == sizeof(SkPoint));
-        QuadHelper helper(target, sizeof(SkPoint), 1);
-        SkPoint* verts = reinterpret_cast<SkPoint*>(helper.vertices());
-        if (!verts) {
-            return;
-        }
-
-        SkPointPriv::SetRectTriStrip(verts, fRect, sizeof(SkPoint));
-        helper.recordDraw(target, std::move(gp));
-    }
-
-    void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, std::move(fProcessors));
-    }
-
-    SkPMColor4f fColor;
-    GrProcessorSet fProcessors;
-    SkRect fRect;
-
-    typedef GrMeshDrawOp INHERITED;
-};
 
 /**
  * This GM directly exercises a GrProcessor that draws convex polygons.
@@ -145,8 +71,7 @@ protected:
         const SkPoint center = { kRadius, kRadius };
         for (int i = 0; i < GrConvexPolyEffect::kMaxEdges; ++i) {
             SkScalar angle = 2 * SK_ScalarPI * i / GrConvexPolyEffect::kMaxEdges;
-            SkPoint point;
-            point.fY = SkScalarSinCos(angle, &point.fX);
+            SkPoint point = { SkScalarCos(angle), SkScalarSin(angle) };
             point.scale(kRadius);
             point = center + point;
             if (0 == i) {
@@ -186,7 +111,9 @@ protected:
     void onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
                 SkCanvas* canvas) override {
         SkScalar y = 0;
-        constexpr SkScalar kDX = 12.f;
+        static constexpr SkScalar kDX = 12.f;
+        static constexpr SkScalar kOutset = 5.f;
+
         for (PathList::Iter iter(fPaths, PathList::Iter::kHead_IterStart);
              iter.get();
              iter.next()) {
@@ -209,8 +136,8 @@ protected:
                 grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
                 grPaint.addCoverageFragmentProcessor(std::move(fp));
 
-                std::unique_ptr<GrDrawOp> op =
-                        PolyBoundsOp::Make(context, std::move(grPaint), p.getBounds());
+                auto rect = p.getBounds().makeOutset(kOutset, kOutset);
+                auto op = sk_gpu_test::test_ops::MakeRect(context, std::move(grPaint), rect);
                 renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
 
                 x += SkScalarCeilToScalar(path->getBounds().width() + kDX);
@@ -236,8 +163,7 @@ protected:
             SkScalar x = 0;
 
             for (int et = 0; et < kGrClipEdgeTypeCnt; ++et) {
-                SkRect rect = *iter.get();
-                rect.offset(x, y);
+                SkRect rect = iter.get()->makeOffset(x, y);
                 GrClipEdgeType edgeType = (GrClipEdgeType) et;
                 std::unique_ptr<GrFragmentProcessor> fp(GrConvexPolyEffect::Make(edgeType, rect));
                 if (!fp) {
@@ -249,8 +175,9 @@ protected:
                 grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
                 grPaint.addCoverageFragmentProcessor(std::move(fp));
 
-                std::unique_ptr<GrDrawOp> op = PolyBoundsOp::Make(context, std::move(grPaint),
-                                                                  rect);
+                auto drawRect = rect.makeOutset(kOutset, kOutset);
+                auto op = sk_gpu_test::test_ops::MakeRect(context, std::move(grPaint), drawRect);
+
                 renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
 
                 x += SkScalarCeilToScalar(rect.width() + kDX);

@@ -5,16 +5,16 @@
 * found in the LICENSE file
 */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkSpecialImage.h"
-#include "SkSpecialSurface.h"
-#include "Test.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkSpecialSurface.h"
+#include "tests/Test.h"
 
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "SkGr.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/SkGr.h"
 
 class TestingSpecialSurfaceAccess {
 public:
@@ -78,19 +78,13 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu1, reporter, ctxInfo) {
-    for (auto config : { kRGBA_8888_GrPixelConfig, kRGBA_1010102_GrPixelConfig }) {
-        const GrCaps* caps = ctxInfo.grContext()->priv().caps();
-        if (!caps->isConfigRenderable(config)) {
+    for (auto colorType : {GrColorType::kRGBA_8888, GrColorType::kRGBA_1010102}) {
+        if (!ctxInfo.grContext()->colorTypeSupportedAsSurface(
+                    GrColorTypeToSkColorType(colorType))) {
             continue;
         }
-        GrSRGBEncoded srgbEncoded = GrSRGBEncoded::kNo;
-        GrColorType colorType = GrPixelConfigToColorTypeAndEncoding(config, &srgbEncoded);
-        const GrBackendFormat format =
-                caps->getBackendFormatFromGrColorType(colorType, srgbEncoded);
-        sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRenderTarget(ctxInfo.grContext(),
-                                                                        format,
-                                                                        kSmallerSize, kSmallerSize,
-                                                                        config, nullptr));
+        sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRenderTarget(
+                ctxInfo.grContext(), kSmallerSize, kSmallerSize, colorType, nullptr));
         test_surface(surf, reporter, 0);
     }
 }

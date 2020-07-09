@@ -4,13 +4,15 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef GrTextureOp_DEFINED
+#define GrTextureOp_DEFINED
 
-#include "GrColor.h"
-#include "GrRenderTargetContext.h"
-#include "GrSamplerState.h"
-#include "GrTypesPriv.h"
-#include "SkCanvas.h"
-#include "SkRefCnt.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrColor.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSamplerState.h"
 
 class GrColorSpaceXform;
 class GrDrawOp;
@@ -18,54 +20,61 @@ class GrTextureProxy;
 struct SkRect;
 class SkMatrix;
 
-namespace GrTextureOp {
+class GrTextureOp {
+public:
 
-/**
- * Creates an op that draws a sub-rectangle of a texture. The passed color is modulated by the
- * texture's color. 'srcRect' specifies the rectangle of the texture to draw. 'dstRect' specifies
- * the rectangle to draw in local coords which will be transformed by 'viewMatrix' to be in device
- * space. 'viewMatrix' must be affine. If GrAAType is kCoverage then AA is applied to the edges
- * indicated by GrQuadAAFlags. Otherwise, GrQuadAAFlags is ignored.
- */
-std::unique_ptr<GrDrawOp> Make(GrRecordingContext*,
-                               sk_sp<GrTextureProxy>,
-                               GrSamplerState::Filter,
-                               const SkPMColor4f&,
-                               const SkRect& srcRect,
-                               const SkRect& dstRect,
-                               GrAAType,
-                               GrQuadAAFlags,
-                               SkCanvas::SrcRectConstraint,
-                               const SkMatrix& viewMatrix,
-                               sk_sp<GrColorSpaceXform> textureXform);
+    /**
+     * Controls whether saturate() is called after the texture is color-converted to ensure all
+     * color values are in 0..1 range.
+     */
+    enum class Saturate : bool { kNo = false, kYes = true };
 
-// Generalizes the above subrect drawing operation to draw a subquad of an image, where srcQuad
-// and dstQuad correspond to srcRect and dstRect. If domain is not null, this behaves as if it
-// had a strict constraint relying on the given domain.
-std::unique_ptr<GrDrawOp> MakeQuad(GrRecordingContext* context,
-                                  sk_sp<GrTextureProxy>,
-                                  GrSamplerState::Filter,
-                                  const SkPMColor4f&,
-                                  const SkPoint srcQuad[4],
-                                  const SkPoint dstQuad[4],
-                                  GrAAType,
-                                  GrQuadAAFlags,
-                                  const SkRect* domain,
-                                  const SkMatrix& viewMatrix,
-                                  sk_sp<GrColorSpaceXform> textureXform);
+    /**
+     * Creates an op that draws a sub-quadrilateral of a texture. The passed color is modulated by
+     * the texture's color. 'deviceQuad' specifies the device-space coordinates to draw, using
+     * 'localQuad' to map into the proxy's texture space. If non-null, 'domain' represents the
+     * boundary for the strict src rect constraint. If GrAAType is kCoverage then AA is applied to
+     * the edges indicated by GrQuadAAFlags. Otherwise, GrQuadAAFlags is ignored.
+     *
+     * This is functionally very similar to GrFillRectOp::Make, except that the GrPaint has been
+     * deconstructed into the texture, filter, modulating color, and blend mode. When blend mode is
+     * src over, this will return a GrFillRectOp with a paint that samples the proxy.
+     */
+    static std::unique_ptr<GrDrawOp> Make(GrRecordingContext*,
+                                          GrSurfaceProxyView,
+                                          SkAlphaType srcAlphaType,
+                                          sk_sp<GrColorSpaceXform>,
+                                          GrSamplerState::Filter,
+                                          const SkPMColor4f&,
+                                          Saturate,
+                                          SkBlendMode,
+                                          GrAAType,
+                                          DrawQuad*,
+                                          const SkRect* domain = nullptr);
 
-std::unique_ptr<GrDrawOp> MakeSet(GrRecordingContext*,
-                                  const GrRenderTargetContext::TextureSetEntry[],
-                                  int cnt,
-                                  GrSamplerState::Filter,
-                                  GrAAType,
-                                  const SkMatrix& viewMatrix,
-                                  sk_sp<GrColorSpaceXform> textureXform);
+    // Automatically falls back to using one GrFillRectOp per entry if dynamic states are not
+    // supported, or if the blend mode is not src-over. 'cnt' is the size of the entry array.
+    // 'proxyCnt' <= 'cnt' and represents the number of proxy switches within the array.
+    static void AddTextureSetOps(GrRenderTargetContext*,
+                                 const GrClip& clip,
+                                 GrRecordingContext*,
+                                 GrRenderTargetContext::TextureSetEntry[],
+                                 int cnt,
+                                 int proxyRunCnt,
+                                 GrSamplerState::Filter,
+                                 Saturate,
+                                 SkBlendMode,
+                                 GrAAType,
+                                 SkCanvas::SrcRectConstraint,
+                                 const SkMatrix& viewMatrix,
+                                 sk_sp<GrColorSpaceXform> textureXform);
 
-/**
- * Returns true if bilerp texture filtering matters when rendering the src rect
- * texels to dst rect, with the given view matrix.
- */
-bool GetFilterHasEffect(const SkMatrix& viewMatrix, const SkRect& srcRect, const SkRect& dstRect);
+#if GR_TEST_UTILS
+    static uint32_t ClassID();
+#endif
 
-}
+private:
+    class BatchSizeLimiter;
+};
+
+#endif  // GrTextureOp_DEFINED

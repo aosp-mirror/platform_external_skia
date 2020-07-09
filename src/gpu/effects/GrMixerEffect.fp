@@ -28,10 +28,10 @@ in uniform half      weight;
                       ? ConstantOutputForConstantInput(this->childProcessor(1), input)
                       : input;
         return {
-            c0.fR + (c1.fR - c0.fR) * fWeight,
-            c0.fG + (c1.fG - c0.fG) * fWeight,
-            c0.fB + (c1.fB - c0.fB) * fWeight,
-            c0.fA + (c1.fA - c0.fA) * fWeight
+            c0.fR + (c1.fR - c0.fR) * weight,
+            c0.fG + (c1.fG - c0.fG) * weight,
+            c0.fB + (c1.fB - c0.fB) * weight,
+            c0.fA + (c1.fA - c0.fA) * weight
         };
     }
 }
@@ -39,8 +39,8 @@ in uniform half      weight;
 @optimizationFlags { OptFlags(fp0, fp1) }
 
 void main() {
-    half4 in0 = process(fp0, sk_InColor);
-    half4 in1 = (fp1 != null) ? process(fp1, sk_InColor) : sk_InColor;
+    half4 in0 = sample(fp0, sk_InColor);
+    half4 in1 = (fp1 != null) ? sample(fp1, sk_InColor) : sk_InColor;
 
     sk_OutColor = mix(in0, in1, weight);
 }

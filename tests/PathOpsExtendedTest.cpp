@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "PathOpsDebug.h"
-#include "PathOpsExtendedTest.h"
-#include "PathOpsThreadedCommon.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkMatrix.h"
-#include "SkMutex.h"
-#include "SkPaint.h"
-#include "SkParsePath.h"
-#include "SkRegion.h"
-#include "SkStream.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkMutex.h"
+#include "include/utils/SkParsePath.h"
+#include "tests/PathOpsDebug.h"
+#include "tests/PathOpsExtendedTest.h"
+#include "tests/PathOpsThreadedCommon.h"
 
 #include <stdlib.h>
 #include <vector>
@@ -357,12 +357,11 @@ static void showPathOpPath(const char* testName, const SkPath& one, const SkPath
     drawAsciiPaths(scaledOne, scaledTwo, true);
 }
 
-SK_DECLARE_STATIC_MUTEX(compareDebugOut3);
-
 static int comparePaths(skiatest::Reporter* reporter, const char* testName, const SkPath& one,
         const SkPath& scaledOne, const SkPath& two, const SkPath& scaledTwo, SkBitmap& bitmap,
         const SkPath& a, const SkPath& b, const SkPathOp shapeOp, const SkMatrix& scale,
         ExpectMatch expectMatch) {
+    static SkMutex& compareDebugOut3 = *(new SkMutex);
     int errors2x2;
     const int MAX_ERRORS = 8;
     (void) pathsDrawTheSame(bitmap, scaledOne, scaledTwo, errors2x2);
@@ -376,7 +375,7 @@ static int comparePaths(skiatest::Reporter* reporter, const char* testName, cons
         return 0;
     }
     if (ExpectMatch::kYes == expectMatch && errors2x2 >= MAX_ERRORS) {
-        SkAutoMutexAcquire autoM(compareDebugOut3);
+        SkAutoMutexExclusive autoM(compareDebugOut3);
         showPathOpPath(testName, one, two, a, b, scaledOne, scaledTwo, shapeOp, scale);
         SkDebugf("\n/*");
         REPORTER_ASSERT(reporter, 0);
@@ -450,11 +449,10 @@ void markTestFlakyForPathKit() {
     }
 }
 
-SK_DECLARE_STATIC_MUTEX(simplifyDebugOut);
-
 bool testSimplify(SkPath& path, bool useXor, SkPath& out, PathOpsThreadState& state,
                   const char* pathStr) {
-    SkPath::FillType fillType = useXor ? SkPath::kEvenOdd_FillType : SkPath::kWinding_FillType;
+    static SkMutex& simplifyDebugOut = *(new SkMutex);
+    SkPathFillType fillType = useXor ? SkPathFillType::kEvenOdd : SkPathFillType::kWinding;
     path.setFillType(fillType);
     state.fReporter->bumpTestCount();
     if (!Simplify(path, &out)) {
@@ -467,12 +465,12 @@ bool testSimplify(SkPath& path, bool useXor, SkPath& out, PathOpsThreadState& st
     }
     int result = comparePaths(state.fReporter, nullptr, path, out, *state.fBitmap);
     if (result) {
-        SkAutoMutexAcquire autoM(simplifyDebugOut);
+        SkAutoMutexExclusive autoM(simplifyDebugOut);
         std::string str;
         const char* pathPrefix = nullptr;
         const char* nameSuffix = nullptr;
-        if (fillType == SkPath::kEvenOdd_FillType) {
-            pathPrefix = "    path.setFillType(SkPath::kEvenOdd_FillType);\n";
+        if (fillType == SkPathFillType::kEvenOdd) {
+            pathPrefix = "    path.setFillType(SkPathFillType::kEvenOdd);\n";
             nameSuffix = "x";
         }
         const char testFunction[] = "testSimplify(reporter, path);";
@@ -688,7 +686,7 @@ static bool innerPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkP
     }
     SkPath pathOut, scaledPathOut;
     SkRegion rgnA, rgnB, openClip, rgnOut;
-    openClip.setRect(-16000, -16000, 16000, 16000);
+    openClip.setRect({-16000, -16000, 16000, 16000});
     rgnA.setPath(a, openClip);
     rgnB.setPath(b, openClip);
     rgnOut.op(rgnA, rgnB, (SkRegion::Op) shapeOp);
@@ -751,11 +749,10 @@ bool testPathOpFail(skiatest::Reporter* reporter, const SkPath& a, const SkPath&
     return true;
 }
 
-SK_DECLARE_STATIC_MUTEX(gMutex);
-
 void initializeTests(skiatest::Reporter* reporter, const char* test) {
+    static SkMutex& mu = *(new SkMutex);
     if (reporter->verbose()) {
-        SkAutoMutexAcquire lock(gMutex);
+        SkAutoMutexExclusive lock(mu);
         testName = test;
         size_t testNameSize = strlen(test);
         SkFILEStream inFile("../../experimental/Intersection/op.htm");
@@ -775,12 +772,12 @@ void initializeTests(skiatest::Reporter* reporter, const char* test) {
     }
 }
 
-void PathOpsThreadState::outputProgress(const char* pathStr, SkPath::FillType pathFillType) {
+void PathOpsThreadState::outputProgress(const char* pathStr, SkPathFillType pathFillType) {
     const char testFunction[] = "testSimplify(path);";
     const char* pathPrefix = nullptr;
     const char* nameSuffix = nullptr;
-    if (pathFillType == SkPath::kEvenOdd_FillType) {
-        pathPrefix = "    path.setFillType(SkPath::kEvenOdd_FillType);\n";
+    if (pathFillType == SkPathFillType::kEvenOdd) {
+        pathPrefix = "    path.setFillType(SkPathFillType::kEvenOdd);\n";
         nameSuffix = "x";
     }
     appendTest(pathStr, pathPrefix, nameSuffix, testFunction, false, fPathStr);

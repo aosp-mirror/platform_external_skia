@@ -8,10 +8,10 @@
 #ifndef GrAtlasManager_DEFINED
 #define GrAtlasManager_DEFINED
 
-#include "GrCaps.h"
-#include "GrDrawOpAtlas.h"
-#include "GrOnFlushResourceProvider.h"
-#include "GrProxyProvider.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDrawOpAtlas.h"
+#include "src/gpu/GrOnFlushResourceProvider.h"
+#include "src/gpu/GrProxyProvider.h"
 
 struct GrGlyph;
 class GrTextStrike;
@@ -23,7 +23,7 @@ class GrTextStrike;
  *  This implies that all of the advanced atlasManager functionality (i.e.,
  *  adding glyphs to the atlas) are only available at flush time.
  */
-class GrAtlasManager : public GrOnFlushCallbackObject {
+class GrAtlasManager : public GrOnFlushCallbackObject, public GrDrawOpAtlas::GenerationCounter {
 public:
     GrAtlasManager(GrProxyProvider*, GrStrikeCache*,
                    size_t maxTextureBytes, GrDrawOpAtlas::AllowMultitexturing);
@@ -34,21 +34,22 @@ public:
     // GrStrikeCache.cpp
     GrMaskFormat resolveMaskFormat(GrMaskFormat format) const {
         if (kA565_GrMaskFormat == format &&
-            !fProxyProvider->caps()->isConfigTexturable(kRGB_565_GrPixelConfig)) {
+            !fProxyProvider->caps()->getDefaultBackendFormat(GrColorType::kBGR_565,
+                                                             GrRenderable::kNo).isValid()) {
             format = kARGB_GrMaskFormat;
         }
         return format;
     }
 
-    // if getProxies returns nullptr, the client must not try to use other functions on the
+    // if getViews returns nullptr, the client must not try to use other functions on the
     // GrStrikeCache which use the atlas.  This function *must* be called first, before other
     // functions which use the atlas. Note that we can have proxies available but none active
     // (i.e., none instantiated).
-    const sk_sp<GrTextureProxy>* getProxies(GrMaskFormat format, unsigned int* numActiveProxies) {
+    const GrSurfaceProxyView* getViews(GrMaskFormat format, unsigned int* numActiveProxies) {
         format = this->resolveMaskFormat(format);
         if (this->initAtlas(format)) {
             *numActiveProxies = this->getAtlas(format)->numActivePages();
-            return this->getAtlas(format)->getProxies();
+            return this->getAtlas(format)->getViews();
         }
         *numActiveProxies = 0;
         return nullptr;
@@ -74,9 +75,9 @@ public:
 
     // add to texture atlas that matches this format
     GrDrawOpAtlas::ErrorCode addToAtlas(
-                    GrResourceProvider*, GrStrikeCache*, GrTextStrike*,
-                    GrDrawOpAtlas::AtlasID*, GrDeferredUploadTarget*, GrMaskFormat,
-                    int width, int height, const void* image, SkIPoint16* loc);
+            GrResourceProvider*,
+            GrDrawOpAtlas::PlotLocator*, GrDeferredUploadTarget*, GrMaskFormat,
+            int width, int height, const void* image, SkIPoint16* loc);
 
     // Some clients may wish to verify the integrity of the texture backing store of the
     // GrDrawOpAtlas. The atlasGeneration returned below is a monotonically increasing number which
@@ -87,17 +88,16 @@ public:
 
     // GrOnFlushCallbackObject overrides
 
-    void preFlush(GrOnFlushResourceProvider* onFlushResourceProvider, const uint32_t*, int,
-                  SkTArray<sk_sp<GrRenderTargetContext>>*) override {
+    void preFlush(GrOnFlushResourceProvider* onFlushRP, const uint32_t*, int) override {
         for (int i = 0; i < kMaskFormatCount; ++i) {
             if (fAtlases[i]) {
-                fAtlases[i]->instantiate(onFlushResourceProvider);
+                fAtlases[i]->instantiate(onFlushRP);
             }
         }
     }
 
     void postFlush(GrDeferredUploadToken startTokenForNextFlush,
-                   const uint32_t* opListIDs, int numOpListIDs) override {
+                   const uint32_t* opsTaskIDs, int numOpsTaskIDs) override {
         for (int i = 0; i < kMaskFormatCount; ++i) {
             if (fAtlases[i]) {
                 fAtlases[i]->compact(startTokenForNextFlush);
@@ -115,24 +115,15 @@ public:
     void dump(GrContext* context) const;
 #endif
 
-    void setAtlasSizesToMinimum_ForTesting();
+    void setAtlasDimensionsToMinimum_ForTesting();
     void setMaxPages_TestingOnly(uint32_t maxPages);
 
 private:
     bool initAtlas(GrMaskFormat);
 
     // There is a 1:1 mapping between GrMaskFormats and atlas indices
-    static int MaskFormatToAtlasIndex(GrMaskFormat format) {
-        static const int sAtlasIndices[] = {
-            kA8_GrMaskFormat,
-            kA565_GrMaskFormat,
-            kARGB_GrMaskFormat,
-        };
-        static_assert(SK_ARRAY_COUNT(sAtlasIndices) == kMaskFormatCount, "array_size_mismatch");
-
-        SkASSERT(sAtlasIndices[format] < kMaskFormatCount);
-        return sAtlasIndices[format];
-    }
+    static int MaskFormatToAtlasIndex(GrMaskFormat format) { return static_cast<int>(format); }
+    static GrMaskFormat AtlasIndexToMaskFormat(int idx) { return static_cast<GrMaskFormat>(idx); }
 
     GrDrawOpAtlas* getAtlas(GrMaskFormat format) const {
         format = this->resolveMaskFormat(format);
@@ -143,6 +134,7 @@ private:
 
     GrDrawOpAtlas::AllowMultitexturing fAllowMultitexturing;
     std::unique_ptr<GrDrawOpAtlas> fAtlases[kMaskFormatCount];
+    static_assert(kMaskFormatCount == 3);
     GrProxyProvider* fProxyProvider;
     sk_sp<const GrCaps> fCaps;
     GrStrikeCache* fGlyphCache;

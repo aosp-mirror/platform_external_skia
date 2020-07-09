@@ -8,13 +8,17 @@
 #ifndef SkMaskFilterBase_DEFINED
 #define SkMaskFilterBase_DEFINED
 
-#include "SkBlurTypes.h"
-#include "SkFlattenable.h"
-#include "SkMask.h"
-#include "SkMaskFilter.h"
-#include "SkNoncopyable.h"
-#include "SkPaint.h"
-#include "SkStrokeRec.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/private/SkNoncopyable.h"
+#include "src/core/SkMask.h"
+
+#if SK_SUPPORT_GPU
+#include "include/private/GrTypesPriv.h"
+#endif
 
 class GrClip;
 struct GrFPArgs;
@@ -25,6 +29,7 @@ class GrRenderTarget;
 class GrRenderTargetContext;
 class GrResourceProvider;
 class GrShape;
+class GrSurfaceProxyView;
 class GrTexture;
 class GrTextureProxy;
 
@@ -122,10 +127,12 @@ public:
      * Implementations are free to get the GrContext from the src texture in order to create
      * additional textures and perform multiple passes.
      */
-    virtual sk_sp<GrTextureProxy> filterMaskGPU(GrRecordingContext*,
-                                                sk_sp<GrTextureProxy> srcProxy,
-                                                const SkMatrix& ctm,
-                                                const SkIRect& maskRect) const;
+    virtual GrSurfaceProxyView filterMaskGPU(GrRecordingContext*,
+                                             GrSurfaceProxyView srcView,
+                                             GrColorType srcColorType,
+                                             SkAlphaType srcAlphaType,
+                                             const SkMatrix& ctm,
+                                             const SkIRect& maskRect) const;
 #endif
 
     /**

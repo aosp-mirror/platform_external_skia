@@ -1,7 +1,7 @@
 [
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -16,7 +16,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -26,11 +26,15 @@
       "/path/to/tmp/"
     ],
     "infra_step": true,
-    "name": "Get lottie-samples VERSION"
+    "name": "Get lottie-samples VERSION",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@VERSION@42@@@",
+      "@@@STEP_LOG_END@VERSION@@@"
+    ]
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -40,11 +44,15 @@
       "[START_DIR]/tmp/LOTTIE_VERSION"
     ],
     "infra_step": true,
-    "name": "write LOTTIE_VERSION"
+    "name": "write LOTTIE_VERSION",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@LOTTIE_VERSION@42@@@",
+      "@@@STEP_LOG_END@LOTTIE_VERSION@@@"
+    ]
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -57,7 +65,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -125,7 +133,6 @@
       "import os\nprint os.environ.get('SWARMING_BOT_ID', '')\n"
     ],
     "name": "get swarming bot id",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@python.inline@import os@@@",
       "@@@STEP_LOG_LINE@python.inline@print os.environ.get('SWARMING_BOT_ID', '')@@@",
@@ -139,7 +146,6 @@
       "import os\nprint os.environ.get('SWARMING_TASK_ID', '')\n"
     ],
     "name": "get swarming task id",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@python.inline@import os@@@",
       "@@@STEP_LOG_LINE@python.inline@print os.environ.get('SWARMING_TASK_ID', '')@@@",
@@ -179,6 +185,7 @@
       "--svgs",
       "[START_DIR]/svg",
       "--lotties",
+      "[START_DIR]/skia/resources/skottie",
       "[START_DIR]/lottie-samples",
       "--key",
       "arch",
@@ -205,8 +212,6 @@
       "[START_DIR]/tmp/uninteresting_hashes.txt",
       "--writePath",
       "[START_DIR]/[SWARM_OUT_DIR]",
-      "--dont_write",
-      "pdf",
       "--randomProcessorTest",
       "--nogpu",
       "--config",
@@ -229,7 +234,6 @@
     "name": "symbolized dm"
   },
   {
-    "jsonResult": null,
     "name": "$result"
   }
 ]

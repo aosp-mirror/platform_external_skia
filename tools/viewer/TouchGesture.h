@@ -8,8 +8,8 @@
 #ifndef TouchGesture_DEFINED
 #define TouchGesture_DEFINED
 
-#include "../private/SkTDArray.h"
-#include "SkMatrix.h"
+#include "include/core/SkMatrix.h"
+#include "include/private/SkTDArray.h"
 
 class TouchGesture {
 public:
@@ -26,6 +26,10 @@ public:
     void stop() { fFlinger.stop(); }
     bool isBeingTouched() { return kEmpty_State != fState; }
     bool isFling(SkPoint* dir);
+
+    void startZoom();
+    void updateZoom(float scale, float startX, float startY, float lastX, float lastY);
+    void endZoom();
 
     const SkMatrix& localM();
     const SkMatrix& globalM() const { return fGlobalM; }

@@ -8,7 +8,7 @@
 #ifndef GrRecordingContextPriv_DEFINED
 #define GrRecordingContextPriv_DEFINED
 
-#include "GrRecordingContext.h"
+#include "include/private/GrRecordingContext.h"
 
 /** Class that exposes methods to GrRecordingContext that are only intended for use internal to
     Skia. This class is purely a privileged window into GrRecordingContext. It should never have
@@ -22,14 +22,8 @@ public:
 
     const GrContextOptions& options() const { return fContext->options(); }
 
-    bool explicitlyAllocateGPUResources() const {
-        return fContext->explicitlyAllocateGPUResources();
-    }
-
     const GrCaps* caps() const { return fContext->caps(); }
     sk_sp<const GrCaps> refCaps() const;
-
-    sk_sp<GrSkSLFPFactoryCache> fpFactoryCache();
 
     GrImageContext* asImageContext() { return fContext->asImageContext(); }
     GrRecordingContext* asRecordingContext() { return fContext->asRecordingContext(); }
@@ -47,8 +41,19 @@ public:
     // from GrRecordingContext
     GrDrawingManager* drawingManager() { return fContext->drawingManager(); }
 
-    sk_sp<GrOpMemoryPool> refOpMemoryPool();
-    GrOpMemoryPool* opMemoryPool() { return fContext->opMemoryPool(); }
+    GrOpMemoryPool* opMemoryPool() { return fContext->arenas().opMemoryPool(); }
+    SkArenaAlloc* recordTimeAllocator() { return fContext->arenas().recordTimeAllocator(); }
+    GrRecordingContext::Arenas arenas() { return fContext->arenas(); }
+
+    GrRecordingContext::OwnedArenas&& detachArenas() { return fContext->detachArenas(); }
+
+    void recordProgramInfo(const GrProgramInfo* programInfo) {
+        fContext->recordProgramInfo(programInfo);
+    }
+
+    void detachProgramData(SkTArray<GrRecordingContext::ProgramData>* dst) {
+        fContext->detachProgramData(dst);
+    }
 
     GrStrikeCache* getGrStrikeCache() { return fContext->getGrStrikeCache(); }
     GrTextBlobCache* getTextBlobCache() { return fContext->getTextBlobCache(); }
@@ -61,59 +66,38 @@ public:
      */
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
-    sk_sp<GrSurfaceContext> makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy>,
-                                                      sk_sp<SkColorSpace> = nullptr,
-                                                      const SkSurfaceProps* = nullptr);
-
-    sk_sp<GrSurfaceContext> makeDeferredSurfaceContext(const GrBackendFormat&,
-                                                       const GrSurfaceDesc&,
-                                                       GrSurfaceOrigin,
-                                                       GrMipMapped,
-                                                       SkBackingFit,
-                                                       SkBudgeted,
-                                                       sk_sp<SkColorSpace> colorSpace = nullptr,
-                                                       const SkSurfaceProps* = nullptr);
-
-    /*
-     * Create a new render target context backed by a deferred-style
-     * GrRenderTargetProxy. We guarantee that "asTextureProxy" will succeed for
-     * renderTargetContexts created via this entry point.
-     */
-    sk_sp<GrRenderTargetContext> makeDeferredRenderTargetContext(
-                                            const GrBackendFormat& format,
-                                            SkBackingFit fit,
-                                            int width, int height,
-                                            GrPixelConfig config,
-                                            sk_sp<SkColorSpace> colorSpace,
-                                            int sampleCnt = 1,
-                                            GrMipMapped = GrMipMapped::kNo,
-                                            GrSurfaceOrigin origin = kBottomLeft_GrSurfaceOrigin,
-                                            const SkSurfaceProps* surfaceProps = nullptr,
-                                            SkBudgeted = SkBudgeted::kYes);
-
-    /*
-     * This method will attempt to create a renderTargetContext that has, at least, the number of
-     * channels and precision per channel as requested in 'config' (e.g., A8 and 888 can be
-     * converted to 8888). It may also swizzle the channels (e.g., BGRA -> RGBA).
-     * SRGB-ness will be preserved.
-     */
-    sk_sp<GrRenderTargetContext> makeDeferredRenderTargetContextWithFallback(
-                                            const GrBackendFormat& format,
-                                            SkBackingFit fit,
-                                            int width, int height,
-                                            GrPixelConfig config,
-                                            sk_sp<SkColorSpace> colorSpace,
-                                            int sampleCnt = 1,
-                                            GrMipMapped = GrMipMapped::kNo,
-                                            GrSurfaceOrigin origin = kBottomLeft_GrSurfaceOrigin,
-                                            const SkSurfaceProps* surfaceProps = nullptr,
-                                            SkBudgeted budgeted = SkBudgeted::kYes);
-
     GrAuditTrail* auditTrail() { return fContext->auditTrail(); }
 
     // CONTEXT TODO: remove this backdoor
     // In order to make progress we temporarily need a way to break CL impasses.
     GrContext* backdoor();
+
+#if GR_TEST_UTILS
+    // Used by tests that intentionally exercise codepaths that print warning messages, in order to
+    // not confuse users with output that looks like a testing failure.
+    class AutoSuppressWarningMessages {
+    public:
+        AutoSuppressWarningMessages(GrRecordingContext* context) : fContext(context) {
+            ++fContext->fSuppressWarningMessages;
+        }
+        ~AutoSuppressWarningMessages() {
+            --fContext->fSuppressWarningMessages;
+        }
+    private:
+        GrRecordingContext* fContext;
+    };
+    void incrSuppressWarningMessages() { ++fContext->fSuppressWarningMessages; }
+    void decrSuppressWarningMessages() { --fContext->fSuppressWarningMessages; }
+#endif
+
+    void printWarningMessage(const char* msg) const {
+#if GR_TEST_UTILS
+        if (fContext->fSuppressWarningMessages > 0) {
+            return;
+        }
+#endif
+        SkDebugf(msg);
+    }
 
 private:
     explicit GrRecordingContextPriv(GrRecordingContext* context) : fContext(context) {}

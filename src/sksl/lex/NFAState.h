@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "LexUtil.h"
+#include "src/sksl/lex/LexUtil.h"
 
 struct NFAState {
     enum Kind {
@@ -79,6 +79,7 @@ struct NFAState {
         }
     }
 
+#ifdef SK_DEBUG
     std::string description() const {
         switch (fKind) {
             case kAccept_Kind:
@@ -134,6 +135,7 @@ struct NFAState {
                 ABORT("unreachable");
         }
     }
+#endif
 
     Kind fKind;
 

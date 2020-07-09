@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkNWayCanvas.h"
-#include "SkCanvasPriv.h"
+#include "include/utils/SkNWayCanvas.h"
+#include "src/core/SkCanvasPriv.h"
 
 SkNWayCanvas::SkNWayCanvas(int width, int height) : INHERITED(width, height) {}
 
@@ -92,12 +92,18 @@ void SkNWayCanvas::willRestore() {
     this->INHERITED::willRestore();
 }
 
+void SkNWayCanvas::didConcat44(const SkScalar m[16]) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->concat44(m);
+    }
+}
+
 void SkNWayCanvas::didConcat(const SkMatrix& matrix) {
     Iter iter(fList);
     while (iter.next()) {
         iter->concat(matrix);
     }
-    this->INHERITED::didConcat(matrix);
 }
 
 void SkNWayCanvas::didSetMatrix(const SkMatrix& matrix) {
@@ -105,7 +111,20 @@ void SkNWayCanvas::didSetMatrix(const SkMatrix& matrix) {
     while (iter.next()) {
         iter->setMatrix(matrix);
     }
-    this->INHERITED::didSetMatrix(matrix);
+}
+
+void SkNWayCanvas::didTranslate(SkScalar x, SkScalar y) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->translate(x, y);
+    }
+}
+
+void SkNWayCanvas::didScale(SkScalar x, SkScalar y) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->scale(x, y);
+    }
 }
 
 void SkNWayCanvas::onClipRect(const SkRect& rect, SkClipOp op, ClipEdgeStyle edgeStyle) {
@@ -166,14 +185,6 @@ void SkNWayCanvas::onDrawRect(const SkRect& rect, const SkPaint& paint) {
     Iter iter(fList);
     while (iter.next()) {
         iter->drawRect(rect, paint);
-    }
-}
-
-void SkNWayCanvas::onDrawEdgeAARect(const SkRect& rect, SkCanvas::QuadAAFlags aa, SkColor color,
-                                    SkBlendMode mode) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->experimental_DrawEdgeAARectV1(rect, aa, color, mode);
     }
 }
 
@@ -284,14 +295,6 @@ void SkNWayCanvas::onDrawImageLattice(const SkImage* image, const Lattice& latti
     }
 }
 
-void SkNWayCanvas::onDrawImageSet(const SkCanvas::ImageSetEntry set[], int count,
-                                  SkFilterQuality filterQuality, SkBlendMode mode) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->experimental_DrawImageSetV1(set, count, filterQuality, mode);
-    }
-}
-
 void SkNWayCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                   const SkPaint &paint) {
     Iter iter(fList);
@@ -352,6 +355,24 @@ void SkNWayCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData
     Iter iter(fList);
     while (iter.next()) {
         iter->drawAnnotation(rect, key, data);
+    }
+}
+
+void SkNWayCanvas::onDrawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4],
+                                    QuadAAFlags aa, const SkColor4f& color, SkBlendMode mode) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->experimental_DrawEdgeAAQuad(rect, clip, aa, color, mode);
+    }
+}
+
+void SkNWayCanvas::onDrawEdgeAAImageSet(const ImageSetEntry set[], int count,
+                                        const SkPoint dstClips[], const SkMatrix preViewMatrices[],
+                                        const SkPaint* paint, SrcRectConstraint constraint) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->experimental_DrawEdgeAAImageSet(
+                set, count, dstClips, preViewMatrices, paint, constraint);
     }
 }
 

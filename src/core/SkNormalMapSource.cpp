@@ -5,20 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "SkNormalMapSource.h"
+#include "src/core/SkNormalMapSource.h"
 
-#include "SkArenaAlloc.h"
-#include "SkLightingShader.h"
-#include "SkMatrix.h"
-#include "SkNormalSource.h"
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkMatrix.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkNormalSource.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/SkLightingShader.h"
 
 #if SK_SUPPORT_GPU
-#include "GrCoordTransform.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "SkGr.h"
+#include "src/gpu/GrCoordTransform.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 
 class NormalMapFP : public GrFragmentProcessor {
 public:
@@ -49,10 +49,9 @@ private:
             fXformUni = uniformHandler->addUniform(kFragment_GrShaderFlag, kFloat2x2_GrSLType,
                                                    "Xform", &xformUniName);
 
-            SkString dstNormalColorName("dstNormalColor");
-            this->emitChild(0, &dstNormalColorName, args);
+            SkString dstNormalColor = this->invokeChild(0, args);
             fragBuilder->codeAppendf("float3 normal = normalize(%s.rgb - float3(0.5));",
-                                     dstNormalColorName.c_str());
+                                     dstNormalColor.c_str());
 
             // If there's no x & y components, return (0, 0, +/- 1) instead to avoid division by 0
             fragBuilder->codeAppend( "if (abs(normal.z) > 0.999) {");
@@ -167,7 +166,7 @@ SkNormalSource::Provider* SkNormalMapSourceImpl::asProvider(const SkShaderBase::
 
 bool SkNormalMapSourceImpl::computeNormTotalInverse(const SkShaderBase::ContextRec& rec,
                                                     SkMatrix* normTotalInverse) const {
-    SkMatrix total = SkMatrix::Concat(*rec.fMatrix, fMapShader->getLocalMatrix());
+    SkMatrix total = SkMatrix::Concat(*rec.fMatrix, as_SB(fMapShader)->getLocalMatrix());
     if (rec.fLocalMatrix) {
         total.preConcat(*rec.fLocalMatrix);
     }
@@ -181,7 +180,7 @@ void SkNormalMapSourceImpl::Provider::fillScanLine(int x, int y, SkPoint3 output
     SkPMColor tmpNormalColors[BUFFER_MAX];
 
     do {
-        int n = SkTMin(count, BUFFER_MAX);
+        int n = std::min(count, BUFFER_MAX);
 
         fMapContext->shadeSpan(x, y, tmpNormalColors, n);
 

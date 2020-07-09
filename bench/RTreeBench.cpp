@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkRTree.h"
-#include "SkRandom.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkRTree.h"
 
 // confine rectangles to a smallish area, so queries generally hit something, and overlap occurs:
 static const SkScalar GENERATE_EXTENTS = 1000.0f;
@@ -79,7 +79,7 @@ protected:
     void onDraw(int loops, SkCanvas* canvas) override {
         SkRandom rand;
         for (int i = 0; i < loops; ++i) {
-            SkTDArray<int> hits;
+            std::vector<int> hits;
             SkRect query;
             query.fLeft   = rand.nextRangeF(0, GENERATE_EXTENTS);
             query.fTop    = rand.nextRangeF(0, GENERATE_EXTENTS);

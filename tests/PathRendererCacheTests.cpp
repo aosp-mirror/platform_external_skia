@@ -5,18 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "tests/Test.h"
 
-#include "GrClip.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrResourceCache.h"
-#include "GrShape.h"
-#include "GrSoftwarePathRenderer.h"
-#include "GrStyle.h"
-#include "SkPath.h"
-#include "effects/GrPorterDuffXferProcessor.h"
-#include "ops/GrTessellatingPathRenderer.h"
+#include "include/core/SkPath.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrResourceCache.h"
+#include "src/gpu/GrSoftwarePathRenderer.h"
+#include "src/gpu/GrStyle.h"
+#include "src/gpu/effects/GrPorterDuffXferProcessor.h"
+#include "src/gpu/geometry/GrShape.h"
+#include "src/gpu/ops/GrTessellatingPathRenderer.h"
 
 static SkPath create_concave_path() {
     SkPath path;
@@ -76,15 +76,12 @@ static void test_path(skiatest::Reporter* reporter,
                       GrStyle style = GrStyle(SkStrokeRec::kFill_InitStyle)) {
     sk_sp<GrContext> ctx = GrContext::MakeMock(nullptr);
     // The cache needs to be big enough that nothing gets flushed, or our expectations can be wrong
-    ctx->setResourceCacheLimits(100, 8000000);
+    ctx->setResourceCacheLimit(8000000);
     GrResourceCache* cache = ctx->priv().getResourceCache();
 
-    const GrBackendFormat format =
-            ctx->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
-
-    sk_sp<GrRenderTargetContext> rtc(ctx->priv().makeDeferredRenderTargetContext(
-            format, SkBackingFit::kApprox, 800, 800, kRGBA_8888_GrPixelConfig, nullptr, 1,
-            GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin));
+    auto rtc = GrRenderTargetContext::Make(
+            ctx.get(), GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {800, 800}, 1,
+            GrMipMapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
     if (!rtc) {
         return;
     }
@@ -129,7 +126,8 @@ DEF_GPUTEST(TessellatingPathRendererCacheTest, reporter, /* options */) {
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(1);
     GrStyle style(paint);
-    test_path(reporter, create_concave_path, createPR, kExpectedResources, GrAAType::kNone, style);
+    test_path(
+            reporter, create_concave_path, createPR, kExpectedResources, GrAAType::kNone, style);
 }
 
 // Test that deleting the original path invalidates the textures cached by the SW path renderer

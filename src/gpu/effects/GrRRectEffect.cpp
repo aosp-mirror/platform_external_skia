@@ -5,18 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "GrRRectEffect.h"
+#include "src/gpu/effects/GrRRectEffect.h"
 
-#include "GrConvexPolyEffect.h"
-#include "GrFragmentProcessor.h"
-#include "GrOvalEffect.h"
-#include "GrShaderCaps.h"
-#include "SkRRectPriv.h"
-#include "SkTLazy.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
+#include "src/core/SkRRectPriv.h"
+#include "src/core/SkTLazy.h"
+#include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/effects/GrConvexPolyEffect.h"
+#include "src/gpu/effects/GrOvalEffect.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
 // The effects defined here only handle rrect radii >= kRadiusMin.
 static const SkScalar kRadiusMin = SK_ScalarHalf;
@@ -285,7 +285,7 @@ void GLCircularRRectEffect::emitCode(EmitArgs& args) {
 void GLCircularRRectEffect::GenKey(const GrProcessor& processor, const GrShaderCaps&,
                                    GrProcessorKeyBuilder* b) {
     const CircularRRectEffect& crre = processor.cast<CircularRRectEffect>();
-    GR_STATIC_ASSERT(kGrClipEdgeTypeCnt <= 8);
+    static_assert(kGrClipEdgeTypeCnt <= 8);
     b->add32((crre.getCircularCornerFlags() << 3) | (int) crre.getEdgeType());
 }
 
@@ -592,7 +592,7 @@ void GLEllipticalRRectEffect::emitCode(EmitArgs& args) {
 void GLEllipticalRRectEffect::GenKey(const GrProcessor& effect, const GrShaderCaps&,
                                      GrProcessorKeyBuilder* b) {
     const EllipticalRRectEffect& erre = effect.cast<EllipticalRRectEffect>();
-    GR_STATIC_ASSERT((int) GrClipEdgeType::kLast < (1 << 3));
+    static_assert((int)GrClipEdgeType::kLast < (1 << 3));
     b->add32(erre.getRRect().getType() | (int) erre.getEdgeType() << 3);
 }
 
@@ -632,7 +632,7 @@ void GLEllipticalRRectEffect::onSetData(const GrGLSLProgramDataManager& pdman,
                 rect.fRight -= r1.fX;
                 rect.fBottom -= r1.fY;
                 if (fScaleUniform.isValid()) {
-                    float scale = SkTMax(SkTMax(r0.fX, r0.fY), SkTMax(r1.fX, r1.fY));
+                    float scale = std::max(std::max(r0.fX, r0.fY), std::max(r1.fX, r1.fY));
                     float scaleSqd = scale * scale;
                     pdman.set4f(fInvRadiiSqdUniform, scaleSqd / (r0.fX * r0.fX),
                                                      scaleSqd / (r0.fY * r0.fY),

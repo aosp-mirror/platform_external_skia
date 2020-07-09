@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "GrGLPath.h"
-#include "GrGLPathRendering.h"
-#include "GrGLGpu.h"
-#include "GrStyle.h"
+#include "src/gpu/GrStyle.h"
+#include "src/gpu/gl/GrGLGpu.h"
+#include "src/gpu/gl/GrGLPath.h"
+#include "src/gpu/gl/GrGLPathRendering.h"
 
 namespace {
 inline GrGLubyte verb_to_gl_path_cmd(SkPath::Verb verb) {
@@ -20,12 +20,12 @@ inline GrGLubyte verb_to_gl_path_cmd(SkPath::Verb verb) {
         GR_GL_CUBIC_CURVE_TO,
         GR_GL_CLOSE_PATH,
     };
-    GR_STATIC_ASSERT(0 == SkPath::kMove_Verb);
-    GR_STATIC_ASSERT(1 == SkPath::kLine_Verb);
-    GR_STATIC_ASSERT(2 == SkPath::kQuad_Verb);
-    GR_STATIC_ASSERT(3 == SkPath::kConic_Verb);
-    GR_STATIC_ASSERT(4 == SkPath::kCubic_Verb);
-    GR_STATIC_ASSERT(5 == SkPath::kClose_Verb);
+    static_assert(0 == SkPath::kMove_Verb);
+    static_assert(1 == SkPath::kLine_Verb);
+    static_assert(2 == SkPath::kQuad_Verb);
+    static_assert(3 == SkPath::kConic_Verb);
+    static_assert(4 == SkPath::kCubic_Verb);
+    static_assert(5 == SkPath::kClose_Verb);
 
     SkASSERT(verb >= 0 && (size_t)verb < SK_ARRAY_COUNT(gTable));
     return gTable[verb];
@@ -41,12 +41,12 @@ inline int num_coords(SkPath::Verb verb) {
         6, // cubic
         0, // close
     };
-    GR_STATIC_ASSERT(0 == SkPath::kMove_Verb);
-    GR_STATIC_ASSERT(1 == SkPath::kLine_Verb);
-    GR_STATIC_ASSERT(2 == SkPath::kQuad_Verb);
-    GR_STATIC_ASSERT(3 == SkPath::kConic_Verb);
-    GR_STATIC_ASSERT(4 == SkPath::kCubic_Verb);
-    GR_STATIC_ASSERT(5 == SkPath::kClose_Verb);
+    static_assert(0 == SkPath::kMove_Verb);
+    static_assert(1 == SkPath::kLine_Verb);
+    static_assert(2 == SkPath::kQuad_Verb);
+    static_assert(3 == SkPath::kConic_Verb);
+    static_assert(4 == SkPath::kCubic_Verb);
+    static_assert(5 == SkPath::kClose_Verb);
 
     SkASSERT(verb >= 0 && (size_t)verb < SK_ARRAY_COUNT(gTable));
     return gTable[verb];
@@ -60,10 +60,10 @@ inline GrGLenum join_to_gl_join(SkPaint::Join join) {
         GR_GL_BEVEL
     };
     return gSkJoinsToGrGLJoins[join];
-    GR_STATIC_ASSERT(0 == SkPaint::kMiter_Join);
-    GR_STATIC_ASSERT(1 == SkPaint::kRound_Join);
-    GR_STATIC_ASSERT(2 == SkPaint::kBevel_Join);
-    GR_STATIC_ASSERT(SK_ARRAY_COUNT(gSkJoinsToGrGLJoins) == SkPaint::kJoinCount);
+    static_assert(0 == SkPaint::kMiter_Join);
+    static_assert(1 == SkPaint::kRound_Join);
+    static_assert(2 == SkPaint::kBevel_Join);
+    static_assert(SK_ARRAY_COUNT(gSkJoinsToGrGLJoins) == SkPaint::kJoinCount);
 }
 
 inline GrGLenum cap_to_gl_cap(SkPaint::Cap cap) {
@@ -73,10 +73,10 @@ inline GrGLenum cap_to_gl_cap(SkPaint::Cap cap) {
         GR_GL_SQUARE
     };
     return gSkCapsToGrGLCaps[cap];
-    GR_STATIC_ASSERT(0 == SkPaint::kButt_Cap);
-    GR_STATIC_ASSERT(1 == SkPaint::kRound_Cap);
-    GR_STATIC_ASSERT(2 == SkPaint::kSquare_Cap);
-    GR_STATIC_ASSERT(SK_ARRAY_COUNT(gSkCapsToGrGLCaps) == SkPaint::kCapCount);
+    static_assert(0 == SkPaint::kButt_Cap);
+    static_assert(1 == SkPaint::kRound_Cap);
+    static_assert(2 == SkPaint::kSquare_Cap);
+    static_assert(SK_ARRAY_COUNT(gSkCapsToGrGLCaps) == SkPaint::kCapCount);
 }
 
 #ifdef SK_DEBUG
@@ -193,15 +193,15 @@ inline bool init_path_object_for_general_path(GrGLGpu* gpu, GrGLuint pathID,
 /*
  * For now paths only natively support winding and even odd fill types
  */
-static GrPathRendering::FillType convert_skpath_filltype(SkPath::FillType fill) {
+static GrPathRendering::FillType convert_skpath_filltype(SkPathFillType fill) {
     switch (fill) {
         default:
             SK_ABORT("Incomplete Switch\n");
-        case SkPath::kWinding_FillType:
-        case SkPath::kInverseWinding_FillType:
+        case SkPathFillType::kWinding:
+        case SkPathFillType::kInverseWinding:
             return GrPathRendering::kWinding_FillType;
-        case SkPath::kEvenOdd_FillType:
-        case SkPath::kInverseEvenOdd_FillType:
+        case SkPathFillType::kEvenOdd:
+        case SkPathFillType::kInverseEvenOdd:
             return GrPathRendering::kEvenOdd_FillType;
     }
 }
@@ -224,13 +224,11 @@ void GrGLPath::InitPathObjectPathData(GrGLGpu* gpu,
         int verbCnt = skPath.countVerbs();
         int pointCnt = skPath.countPoints();
         int coordCnt = pointCnt * 2;
-        SkSTArray<16, GrGLubyte, true> pathCommands(verbCnt);
-        SkSTArray<16, GrGLfloat, true> pathCoords(coordCnt);
+        SkAutoSTArray<16, GrGLubyte> pathCommands(verbCnt);
+        SkAutoSTArray<16, GrGLfloat> pathCoords(coordCnt);
 
         static_assert(sizeof(SkPoint) == sizeof(GrGLfloat) * 2, "sk_point_not_two_floats");
 
-        pathCommands.resize_back(verbCnt);
-        pathCoords.resize_back(coordCnt);
         skPath.getPoints(reinterpret_cast<SkPoint*>(&pathCoords[0]), pointCnt);
         skPath.getVerbs(&pathCommands[0], verbCnt);
 
@@ -330,6 +328,8 @@ GrGLPath::GrGLPath(GrGLGpu* gpu, const SkPath& origSkPath, const GrStyle& style)
 }
 
 void GrGLPath::onRelease() {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+
     if (0 != fPathID) {
         static_cast<GrGLGpu*>(this->getGpu())->glPathRendering()->deletePaths(fPathID, 1);
         fPathID = 0;

@@ -5,13 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkSGDraw.h"
+#include "modules/sksg/include/SkSGDraw.h"
 
-#include "SkPath.h"
-#include "SkSGGeometryNode.h"
-#include "SkSGInvalidationController.h"
-#include "SkSGPaintNode.h"
-#include "SkTLazy.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPath.h"
+#include "modules/sksg/include/SkSGGeometryNode.h"
+#include "modules/sksg/include/SkSGInvalidationController.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "src/core/SkTLazy.h"
 
 namespace sksg {
 
@@ -30,7 +31,7 @@ Draw::~Draw() {
 void Draw::onRender(SkCanvas* canvas, const RenderContext* ctx) const {
     auto paint = fPaint->makePaint();
     if (ctx) {
-        ctx->modulatePaint(&paint);
+        ctx->modulatePaint(canvas->getTotalMatrix(), &paint);
     }
 
     const auto skipDraw = paint.nothingToDraw() ||

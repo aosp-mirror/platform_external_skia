@@ -10,12 +10,12 @@
 #include <string>
 #include <vector>
 
-#include "gm.h"
+#include "gm/gm.h"
 
 int main() {
     std::vector<std::string> gms;
     for (skiagm::GMFactory factory : skiagm::GMRegistry::Range()) {
-        std::unique_ptr<skiagm::GM> gm(factory(nullptr));
+        std::unique_ptr<skiagm::GM> gm(factory());
         gms.push_back(std::string(gm->getName()));
     }
     std::sort(gms.begin(), gms.end());

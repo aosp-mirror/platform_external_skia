@@ -5,42 +5,39 @@
  * found in the LICENSE file.
  */
 
-#include "SkMatrix.h"
+#include "include/core/SkMatrix.h"
 
-#include "SkFloatBits.h"
-#include "SkMathPriv.h"
-#include "SkMatrixPriv.h"
-#include "SkNx.h"
-#include "SkPaint.h"
-#include "SkPoint3.h"
-#include "SkRSXform.h"
-#include "SkString.h"
-#include "SkTo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint3.h"
+#include "include/core/SkRSXform.h"
+#include "include/core/SkString.h"
+#include "include/private/SkFloatBits.h"
+#include "include/private/SkNx.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkMathPriv.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/core/SkPathPriv.h"
 
 #include <cstddef>
 #include <utility>
 
-static void normalize_perspective(SkScalar mat[9]) {
-    // If it was interesting to never store the last element, we could divide all 8 other
-    // elements here by the 9th, making it 1.0...
+void SkMatrix::doNormalizePerspective() {
+    // If the bottom row of the matrix is [0, 0, not_one], we will treat the matrix as if it
+    // is in perspective, even though it stills behaves like its affine. If we divide everything
+    // by the not_one value, then it will behave the same, but will be treated as affine,
+    // and therefore faster (e.g. clients can forward-difference calculations).
     //
-    // When SkScalar was SkFixed, we would sometimes rescale the entire matrix to keep its
-    // component values from getting too large. This is not a concern when using floats/doubles,
-    // so we do nothing now.
-
-    // Disable this for now, but it could be enabled.
-#if 0
-    if (0 == mat[SkMatrix::kMPersp0] && 0 == mat[SkMatrix::kMPersp1]) {
-        SkScalar p2 = mat[SkMatrix::kMPersp2];
+    if (0 == fMat[SkMatrix::kMPersp0] && 0 == fMat[SkMatrix::kMPersp1]) {
+        SkScalar p2 = fMat[SkMatrix::kMPersp2];
         if (p2 != 0 && p2 != 1) {
             double inv = 1.0 / p2;
             for (int i = 0; i < 6; ++i) {
-                mat[i] = SkDoubleToScalar(mat[i] * inv);
+                fMat[i] = SkDoubleToScalar(fMat[i] * inv);
             }
-            mat[SkMatrix::kMPersp2] = 1;
+            fMat[SkMatrix::kMPersp2] = 1;
         }
+        this->setTypeMask(kUnknown_Mask);
     }
-#endif
 }
 
 // In a few places, we performed the following
@@ -63,21 +60,15 @@ static void normalize_perspective(SkScalar mat[9]) {
         [persp-0    persp-1     persp-2]   [1]   [1 ]
 */
 
-void SkMatrix::reset() {
-    fMat[kMScaleX] = fMat[kMScaleY] = fMat[kMPersp2] = 1;
-    fMat[kMSkewX]  = fMat[kMSkewY] =
-    fMat[kMTransX] = fMat[kMTransY] =
-    fMat[kMPersp0] = fMat[kMPersp1] = 0;
-    this->setTypeMask(kIdentity_Mask | kRectStaysRect_Mask);
-}
+SkMatrix& SkMatrix::reset() { *this = SkMatrix(); return *this; }
 
-void SkMatrix::set9(const SkScalar buffer[]) {
+SkMatrix& SkMatrix::set9(const SkScalar buffer[]) {
     memcpy(fMat, buffer, 9 * sizeof(SkScalar));
-    normalize_perspective(fMat);
     this->setTypeMask(kUnknown_Mask);
+    return *this;
 }
 
-void SkMatrix::setAffine(const SkScalar buffer[]) {
+SkMatrix& SkMatrix::setAffine(const SkScalar buffer[]) {
     fMat[kMScaleX] = buffer[kAScaleX];
     fMat[kMSkewX]  = buffer[kASkewX];
     fMat[kMTransX] = buffer[kATransX];
@@ -88,6 +79,7 @@ void SkMatrix::setAffine(const SkScalar buffer[]) {
     fMat[kMPersp1] = 0;
     fMat[kMPersp2] = 1;
     this->setTypeMask(kUnknown_Mask);
+    return *this;
 }
 
 // this guy aligns with the masks, so we can compute a mask from a varaible 0/1
@@ -273,22 +265,16 @@ static inline SkScalar scross(SkScalar a, SkScalar b, SkScalar c, SkScalar d) {
     return a * b - c * d;
 }
 
-void SkMatrix::setTranslate(SkScalar dx, SkScalar dy) {
-    if ((dx != 0) | (dy != 0)) {
-        fMat[kMTransX] = dx;
-        fMat[kMTransY] = dy;
-
-        fMat[kMScaleX] = fMat[kMScaleY] = fMat[kMPersp2] = 1;
-        fMat[kMSkewX]  = fMat[kMSkewY] =
-        fMat[kMPersp0] = fMat[kMPersp1] = 0;
-
-        this->setTypeMask(kTranslate_Mask | kRectStaysRect_Mask);
-    } else {
-        this->reset();
-    }
+SkMatrix& SkMatrix::setTranslate(SkScalar dx, SkScalar dy) {
+    *this = SkMatrix(1, 0, dx,
+                     0, 1, dy,
+                     0, 0, 1,
+                     (dx != 0 || dy != 0) ? kTranslate_Mask | kRectStaysRect_Mask
+                                          : kIdentity_Mask  | kRectStaysRect_Mask);
+    return *this;
 }
 
-void SkMatrix::preTranslate(SkScalar dx, SkScalar dy) {
+SkMatrix& SkMatrix::preTranslate(SkScalar dx, SkScalar dy) {
     const unsigned mask = this->getType();
 
     if (mask <= kTranslate_Mask) {
@@ -297,16 +283,16 @@ void SkMatrix::preTranslate(SkScalar dx, SkScalar dy) {
     } else if (mask & kPerspective_Mask) {
         SkMatrix    m;
         m.setTranslate(dx, dy);
-        this->preConcat(m);
-        return;
+        return this->preConcat(m);
     } else {
         fMat[kMTransX] += sdot(fMat[kMScaleX], dx, fMat[kMSkewX], dy);
         fMat[kMTransY] += sdot(fMat[kMSkewY], dx, fMat[kMScaleY], dy);
     }
     this->updateTranslateMask();
+    return *this;
 }
 
-void SkMatrix::postTranslate(SkScalar dx, SkScalar dy) {
+SkMatrix& SkMatrix::postTranslate(SkScalar dx, SkScalar dy) {
     if (this->hasPerspective()) {
         SkMatrix    m;
         m.setTranslate(dx, dy);
@@ -316,47 +302,42 @@ void SkMatrix::postTranslate(SkScalar dx, SkScalar dy) {
         fMat[kMTransY] += dy;
         this->updateTranslateMask();
     }
+    return *this;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkMatrix::setScale(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::setScale(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
     if (1 == sx && 1 == sy) {
         this->reset();
     } else {
         this->setScaleTranslate(sx, sy, px - sx * px, py - sy * py);
     }
+    return *this;
 }
 
-void SkMatrix::setScale(SkScalar sx, SkScalar sy) {
-    if (1 == sx && 1 == sy) {
-        this->reset();
-    } else {
-        fMat[kMScaleX] = sx;
-        fMat[kMScaleY] = sy;
-        fMat[kMPersp2] = 1;
-
-        fMat[kMTransX] = fMat[kMTransY] =
-        fMat[kMSkewX]  = fMat[kMSkewY] =
-        fMat[kMPersp0] = fMat[kMPersp1] = 0;
-
-        this->setTypeMask(kScale_Mask | kRectStaysRect_Mask);
-    }
+SkMatrix& SkMatrix::setScale(SkScalar sx, SkScalar sy) {
+    *this = SkMatrix(sx, 0,  0,
+                     0,  sy, 0,
+                     0,  0,  1,
+                     (sx == 1 && sy == 1) ? kIdentity_Mask | kRectStaysRect_Mask
+                                          : kScale_Mask    | kRectStaysRect_Mask);
+    return *this;
 }
 
-void SkMatrix::preScale(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::preScale(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
     if (1 == sx && 1 == sy) {
-        return;
+        return *this;
     }
 
     SkMatrix    m;
     m.setScale(sx, sy, px, py);
-    this->preConcat(m);
+    return this->preConcat(m);
 }
 
-void SkMatrix::preScale(SkScalar sx, SkScalar sy) {
+SkMatrix& SkMatrix::preScale(SkScalar sx, SkScalar sy) {
     if (1 == sx && 1 == sy) {
-        return;
+        return *this;
     }
 
     // the assumption is that these multiplies are very cheap, and that
@@ -382,24 +363,25 @@ void SkMatrix::preScale(SkScalar sx, SkScalar sy) {
     } else {
         this->orTypeMask(kScale_Mask);
     }
+    return *this;
 }
 
-void SkMatrix::postScale(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::postScale(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
     if (1 == sx && 1 == sy) {
-        return;
+        return *this;
     }
     SkMatrix    m;
     m.setScale(sx, sy, px, py);
-    this->postConcat(m);
+    return this->postConcat(m);
 }
 
-void SkMatrix::postScale(SkScalar sx, SkScalar sy) {
+SkMatrix& SkMatrix::postScale(SkScalar sx, SkScalar sy) {
     if (1 == sx && 1 == sy) {
-        return;
+        return *this;
     }
     SkMatrix    m;
     m.setScale(sx, sy);
-    this->postConcat(m);
+    return this->postConcat(m);
 }
 
 // this guy perhaps can go away, if we have a fract/high-precision way to
@@ -426,7 +408,7 @@ bool SkMatrix::postIDiv(int divx, int divy) {
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-void SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV, SkScalar px, SkScalar py) {
     const SkScalar oneMinusCosV = 1 - cosV;
 
     fMat[kMScaleX]  = cosV;
@@ -441,6 +423,7 @@ void SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV, SkScalar px, SkScalar py)
     fMat[kMPersp2] = 1;
 
     this->setTypeMask(kUnknown_Mask | kOnlyPerspectiveValid_Mask);
+    return *this;
 }
 
 SkMatrix& SkMatrix::setRSXform(const SkRSXform& xform) {
@@ -459,7 +442,7 @@ SkMatrix& SkMatrix::setRSXform(const SkRSXform& xform) {
     return *this;
 }
 
-void SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV) {
+SkMatrix& SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV) {
     fMat[kMScaleX]  = cosV;
     fMat[kMSkewX]   = -sinV;
     fMat[kMTransX]  = 0;
@@ -472,62 +455,54 @@ void SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV) {
     fMat[kMPersp2] = 1;
 
     this->setTypeMask(kUnknown_Mask | kOnlyPerspectiveValid_Mask);
+    return *this;
 }
 
-void SkMatrix::setRotate(SkScalar degrees, SkScalar px, SkScalar py) {
-    SkScalar sinV, cosV;
-    sinV = SkScalarSinCos(SkDegreesToRadians(degrees), &cosV);
-    this->setSinCos(sinV, cosV, px, py);
+SkMatrix& SkMatrix::setRotate(SkScalar degrees, SkScalar px, SkScalar py) {
+    SkScalar rad = SkDegreesToRadians(degrees);
+    return this->setSinCos(SkScalarSinSnapToZero(rad), SkScalarCosSnapToZero(rad), px, py);
 }
 
-void SkMatrix::setRotate(SkScalar degrees) {
-    SkScalar sinV, cosV;
-    sinV = SkScalarSinCos(SkDegreesToRadians(degrees), &cosV);
-    this->setSinCos(sinV, cosV);
+SkMatrix& SkMatrix::setRotate(SkScalar degrees) {
+    SkScalar rad = SkDegreesToRadians(degrees);
+    return this->setSinCos(SkScalarSinSnapToZero(rad), SkScalarCosSnapToZero(rad));
 }
 
-void SkMatrix::preRotate(SkScalar degrees, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::preRotate(SkScalar degrees, SkScalar px, SkScalar py) {
     SkMatrix    m;
     m.setRotate(degrees, px, py);
-    this->preConcat(m);
+    return this->preConcat(m);
 }
 
-void SkMatrix::preRotate(SkScalar degrees) {
+SkMatrix& SkMatrix::preRotate(SkScalar degrees) {
     SkMatrix    m;
     m.setRotate(degrees);
-    this->preConcat(m);
+    return this->preConcat(m);
 }
 
-void SkMatrix::postRotate(SkScalar degrees, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::postRotate(SkScalar degrees, SkScalar px, SkScalar py) {
     SkMatrix    m;
     m.setRotate(degrees, px, py);
-    this->postConcat(m);
+    return this->postConcat(m);
 }
 
-void SkMatrix::postRotate(SkScalar degrees) {
+SkMatrix& SkMatrix::postRotate(SkScalar degrees) {
     SkMatrix    m;
     m.setRotate(degrees);
-    this->postConcat(m);
+    return this->postConcat(m);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-void SkMatrix::setSkew(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
-    fMat[kMScaleX]  = 1;
-    fMat[kMSkewX]   = sx;
-    fMat[kMTransX]  = -sx * py;
-
-    fMat[kMSkewY]   = sy;
-    fMat[kMScaleY]  = 1;
-    fMat[kMTransY]  = -sy * px;
-
-    fMat[kMPersp0] = fMat[kMPersp1] = 0;
-    fMat[kMPersp2] = 1;
-
-    this->setTypeMask(kUnknown_Mask | kOnlyPerspectiveValid_Mask);
+SkMatrix& SkMatrix::setSkew(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
+    *this = SkMatrix(1,  sx, -sx * py,
+                     sy, 1,  -sy * px,
+                     0,  0,  1,
+                     kUnknown_Mask | kOnlyPerspectiveValid_Mask);
+    return *this;
 }
 
-void SkMatrix::setSkew(SkScalar sx, SkScalar sy) {
+SkMatrix& SkMatrix::setSkew(SkScalar sx, SkScalar sy) {
     fMat[kMScaleX]  = 1;
     fMat[kMSkewX]   = sx;
     fMat[kMTransX]  = 0;
@@ -540,30 +515,31 @@ void SkMatrix::setSkew(SkScalar sx, SkScalar sy) {
     fMat[kMPersp2] = 1;
 
     this->setTypeMask(kUnknown_Mask | kOnlyPerspectiveValid_Mask);
+    return *this;
 }
 
-void SkMatrix::preSkew(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::preSkew(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
     SkMatrix    m;
     m.setSkew(sx, sy, px, py);
-    this->preConcat(m);
+    return this->preConcat(m);
 }
 
-void SkMatrix::preSkew(SkScalar sx, SkScalar sy) {
+SkMatrix& SkMatrix::preSkew(SkScalar sx, SkScalar sy) {
     SkMatrix    m;
     m.setSkew(sx, sy);
-    this->preConcat(m);
+    return this->preConcat(m);
 }
 
-void SkMatrix::postSkew(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
+SkMatrix& SkMatrix::postSkew(SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
     SkMatrix    m;
     m.setSkew(sx, sy, px, py);
-    this->postConcat(m);
+    return this->postConcat(m);
 }
 
-void SkMatrix::postSkew(SkScalar sx, SkScalar sy) {
+SkMatrix& SkMatrix::postSkew(SkScalar sx, SkScalar sy) {
     SkMatrix    m;
     m.setSkew(sx, sy);
-    this->postConcat(m);
+    return this->postConcat(m);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -633,7 +609,7 @@ static bool only_scale_and_translate(unsigned mask) {
     return 0 == (mask & (SkMatrix::kAffine_Mask | SkMatrix::kPerspective_Mask));
 }
 
-void SkMatrix::setConcat(const SkMatrix& a, const SkMatrix& b) {
+SkMatrix& SkMatrix::setConcat(const SkMatrix& a, const SkMatrix& b) {
     TypeMask aType = a.getType();
     TypeMask bType = b.getType();
 
@@ -660,7 +636,6 @@ void SkMatrix::setConcat(const SkMatrix& a, const SkMatrix& b) {
             tmp.fMat[kMPersp1] = rowcol3(&a.fMat[6], &b.fMat[1]);
             tmp.fMat[kMPersp2] = rowcol3(&a.fMat[6], &b.fMat[2]);
 
-            normalize_perspective(tmp.fMat);
             tmp.setTypeMask(kUnknown_Mask);
         } else {
             tmp.fMat[kMScaleX] = muladdmul(a.fMat[kMScaleX],
@@ -702,22 +677,25 @@ void SkMatrix::setConcat(const SkMatrix& a, const SkMatrix& b) {
         }
         *this = tmp;
     }
+    return *this;
 }
 
-void SkMatrix::preConcat(const SkMatrix& mat) {
+SkMatrix& SkMatrix::preConcat(const SkMatrix& mat) {
     // check for identity first, so we don't do a needless copy of ourselves
     // to ourselves inside setConcat()
     if(!mat.isIdentity()) {
         this->setConcat(*this, mat);
     }
+    return *this;
 }
 
-void SkMatrix::postConcat(const SkMatrix& mat) {
+SkMatrix& SkMatrix::postConcat(const SkMatrix& mat) {
     // check for identity first, so we don't do a needless copy of ourselves
     // to ourselves inside setConcat()
     if (!mat.isIdentity()) {
         this->setConcat(mat, *this);
     }
+    return *this;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1096,6 +1074,30 @@ void SkMatrix::mapHomogeneousPoints(SkPoint3 dst[], const SkPoint3 src[], int co
                                                  sizeof(SkPoint3), count);
 }
 
+void SkMatrix::mapHomogeneousPoints(SkPoint3 dst[], const SkPoint src[], int count) const {
+    if (this->isIdentity()) {
+        for (int i = 0; i < count; ++i) {
+            dst[i] = { src[i].fX, src[i].fY, 1 };
+        }
+    } else if (this->hasPerspective()) {
+        for (int i = 0; i < count; ++i) {
+            dst[i] = {
+                fMat[0] * src[i].fX + fMat[1] * src[i].fY + fMat[2],
+                fMat[3] * src[i].fX + fMat[4] * src[i].fY + fMat[5],
+                fMat[6] * src[i].fX + fMat[7] * src[i].fY + fMat[8],
+            };
+        }
+    } else {    // affine
+        for (int i = 0; i < count; ++i) {
+            dst[i] = {
+                fMat[0] * src[i].fX + fMat[1] * src[i].fY + fMat[2],
+                fMat[3] * src[i].fX + fMat[4] * src[i].fY + fMat[5],
+                1,
+            };
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkMatrix::mapVectors(SkPoint dst[], const SkPoint src[], int count) const {
@@ -1142,7 +1144,7 @@ void SkMatrix::mapRectScaleTranslate(SkRect* dst, const SkRect& src) const {
     sort_as_rect(Sk4f::Load(&src.fLeft) * scale + trans).store(&dst->fLeft);
 }
 
-bool SkMatrix::mapRect(SkRect* dst, const SkRect& src) const {
+bool SkMatrix::mapRect(SkRect* dst, const SkRect& src, SkApplyPerspectiveClip pc) const {
     SkASSERT(dst);
 
     if (this->getType() <= kTranslate_Mask) {
@@ -1155,6 +1157,12 @@ bool SkMatrix::mapRect(SkRect* dst, const SkRect& src) const {
     if (this->isScaleTranslate()) {
         this->mapRectScaleTranslate(dst, src);
         return true;
+    } else if (pc == SkApplyPerspectiveClip::kYes && this->hasPerspective()) {
+        SkPath path;
+        path.addRect(src);
+        path.transform(*this);
+        *dst = path.getBounds();
+        return false;
     } else {
         SkPoint quad[4];
 
@@ -1272,7 +1280,7 @@ const SkMatrix::MapXYProc SkMatrix::gMapXYProcs[] = {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-
+#if 0
 // if its nearly zero (just made up 26, perhaps it should be bigger or smaller)
 #define PerspNearlyZero(x)  SkScalarNearlyZero(x, (1.0f / (1 << 26)))
 
@@ -1290,6 +1298,7 @@ SkVector SkMatrix::fixedStepInX(SkScalar y) const {
         return SkVector::Make(fMat[kMScaleX] / z, fMat[kMSkewY] / z);
     }
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1447,10 +1456,10 @@ template <MinMaxOrBoth MIN_MAX_OR_BOTH> bool get_scale_factor(SkMatrix::TypeMask
     }
     if (!(typeMask & SkMatrix::kAffine_Mask)) {
         if (kMin_MinMaxOrBoth == MIN_MAX_OR_BOTH) {
-             results[0] = SkMinScalar(SkScalarAbs(m[SkMatrix::kMScaleX]),
+             results[0] = std::min(SkScalarAbs(m[SkMatrix::kMScaleX]),
                                       SkScalarAbs(m[SkMatrix::kMScaleY]));
         } else if (kMax_MinMaxOrBoth == MIN_MAX_OR_BOTH) {
-             results[0] = SkMaxScalar(SkScalarAbs(m[SkMatrix::kMScaleX]),
+             results[0] = std::max(SkScalarAbs(m[SkMatrix::kMScaleX]),
                                       SkScalarAbs(m[SkMatrix::kMScaleY]));
         } else {
             results[0] = SkScalarAbs(m[SkMatrix::kMScaleX]);
@@ -1480,9 +1489,9 @@ template <MinMaxOrBoth MIN_MAX_OR_BOTH> bool get_scale_factor(SkMatrix::TypeMask
     // if upper left 2x2 is orthogonal save some math
     if (bSqd <= SK_ScalarNearlyZero*SK_ScalarNearlyZero) {
         if (kMin_MinMaxOrBoth == MIN_MAX_OR_BOTH) {
-            results[0] = SkMinScalar(a, c);
+            results[0] = std::min(a, c);
         } else if (kMax_MinMaxOrBoth == MIN_MAX_OR_BOTH) {
-            results[0] = SkMaxScalar(a, c);
+            results[0] = std::max(a, c);
         } else {
             results[0] = a;
             results[1] = c;
@@ -1550,41 +1559,19 @@ bool SkMatrix::getMinMaxScales(SkScalar scaleFactors[2]) const {
     return get_scale_factor<kBoth_MinMaxOrBoth>(this->getType(), fMat, scaleFactors);
 }
 
-namespace {
-
-// SkMatrix is C++11 POD (trivial and standard-layout), but not aggregate (it has private fields).
-struct AggregateMatrix {
-    SkScalar matrix[9];
-    uint32_t typemask;
-
-    const SkMatrix& asSkMatrix() const { return *reinterpret_cast<const SkMatrix*>(this); }
-};
-static_assert(sizeof(AggregateMatrix) == sizeof(SkMatrix), "AggregateMatrix size mismatch.");
-
-}  // namespace
-
 const SkMatrix& SkMatrix::I() {
-    static_assert(offsetof(SkMatrix,fMat)      == offsetof(AggregateMatrix,matrix),   "fMat");
-    static_assert(offsetof(SkMatrix,fTypeMask) == offsetof(AggregateMatrix,typemask), "fTypeMask");
-
-    static const AggregateMatrix identity = { {SK_Scalar1, 0, 0,
-                                               0, SK_Scalar1, 0,
-                                               0, 0, SK_Scalar1 },
-                                             kIdentity_Mask | kRectStaysRect_Mask};
-    SkASSERT(identity.asSkMatrix().isIdentity());
-    return identity.asSkMatrix();
+    static constexpr SkMatrix identity;
+    SkASSERT(identity.isIdentity());
+    return identity;
 }
 
 const SkMatrix& SkMatrix::InvalidMatrix() {
-    static_assert(offsetof(SkMatrix,fMat)      == offsetof(AggregateMatrix,matrix),   "fMat");
-    static_assert(offsetof(SkMatrix,fTypeMask) == offsetof(AggregateMatrix,typemask), "fTypeMask");
-
-    static const AggregateMatrix invalid =
-        { {SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
-           SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
-           SK_ScalarMax, SK_ScalarMax, SK_ScalarMax },
-         kTranslate_Mask | kScale_Mask | kAffine_Mask | kPerspective_Mask };
-    return invalid.asSkMatrix();
+    static constexpr SkMatrix invalid(SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
+                                      SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
+                                      SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
+                                      kTranslate_Mask | kScale_Mask |
+                                      kAffine_Mask | kPerspective_Mask);
+    return invalid;
 }
 
 bool SkMatrix::decomposeScale(SkSize* scale, SkMatrix* remaining) const {
@@ -1604,8 +1591,7 @@ bool SkMatrix::decomposeScale(SkSize* scale, SkMatrix* remaining) const {
     }
     if (remaining) {
         *remaining = *this;
-        // As per skbug.com/7211, this should actually be preScale
-        remaining->postScale(SkScalarInvert(sx), SkScalarInvert(sy));
+        remaining->preScale(SkScalarInvert(sx), SkScalarInvert(sy));
     }
     return true;
 }
@@ -1641,7 +1627,7 @@ void SkMatrix::dump() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkMatrixUtils.h"
+#include "src/core/SkMatrixUtils.h"
 
 bool SkTreatAsSprite(const SkMatrix& mat, const SkISize& size, const SkPaint& paint) {
     // Our path aa is 2-bits, and our rect aa is 8, so we could use 8,
@@ -1837,4 +1823,37 @@ void SkRSXform::toTriStrip(SkScalar width, SkScalar height, SkPoint strip[4]) co
     strip[1].set(m01 * height + m02, m11 * height + m12);
     strip[2].set(m00 * width + m02, m10 * width + m12);
     strip[3].set(m00 * width + m01 * height + m02, m10 * width + m11 * height + m12);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+SkFilterQuality SkMatrixPriv::AdjustHighQualityFilterLevel(const SkMatrix& matrix,
+                                                           bool matrixIsInverse) {
+    if (matrix.isIdentity()) {
+        return kNone_SkFilterQuality;
+    }
+
+    auto is_minimizing = [&](SkScalar scale) {
+        return matrixIsInverse ? scale > 1 : scale < 1;
+    };
+
+    SkScalar scales[2];
+    if (!matrix.getMinMaxScales(scales) || is_minimizing(scales[0])) {
+        // Bicubic doesn't handle arbitrary minimization well, as src texels can be skipped
+        // entirely,
+        return kMedium_SkFilterQuality;
+    }
+
+    // At this point if scales[1] == SK_Scalar1 then the matrix doesn't do any scaling.
+    if (scales[1] == SK_Scalar1) {
+        if (matrix.rectStaysRect() && SkScalarIsInt(matrix.getTranslateX()) &&
+                                      SkScalarIsInt(matrix.getTranslateY())) {
+            return kNone_SkFilterQuality;
+        } else {
+            // Use bilerp to handle rotation or fractional translation.
+            return kLow_SkFilterQuality;
+        }
+    }
+
+    return kHigh_SkFilterQuality;
 }

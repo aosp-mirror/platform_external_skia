@@ -4,17 +4,17 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Test.h"
+#include "tests/Test.h"
 
-#include "Resources.h"
-#include "SkCanvas.h"
-#include "SkExecutor.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
-#include "SkPDFDocument.h"
-#include "SkStream.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkExecutor.h"
+#include "include/core/SkStream.h"
+#include "include/docs/SkPDFDocument.h"
+#include "src/core/SkOSFile.h"
+#include "src/utils/SkOSPath.h"
+#include "tools/Resources.h"
 
-#include "sk_tool_utils.h"
+#include "tools/ToolUtils.h"
 
 static void test_empty(skiatest::Reporter* reporter) {
     SkDynamicMemoryWStream stream;
@@ -185,8 +185,6 @@ DEF_TEST(SkPDF_pdfa_document, r) {
 
     static const char* moreExpectations[] = {
         "/Producer (phoney library)",
-        "/ProductionLibrary (Skia/PDF m",
-        "<!-- <skia:ProductionLibrary>Skia/PDF m",
         "<pdf:Producer>phoney library</pdf:Producer>",
     };
     for (const char* expectation : moreExpectations) {
@@ -244,6 +242,7 @@ DEF_TEST(SkPDF_multiple_pages, r) {
 // Test to make sure that jobs launched by PDF backend don't cause a segfault
 // after calling abort().
 DEF_TEST(SkPDF_abort_jobs, rep) {
+    REQUIRE_PDF_DOCUMENT(SkPDF_abort_jobs, rep);
     SkBitmap b;
     b.allocN32Pixels(612, 792);
     b.eraseColor(0x4F9643A0);

@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "samplecode/Sample.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -20,13 +20,7 @@ public:
     }
 
 protected:
-    virtual bool onQuery(Sample::Event* evt) {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "LayerMask");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    virtual SkString name() { return SkString("LayerMask"); }
 
     void drawMask(SkCanvas* canvas, const SkRect& r) {
         SkPaint paint;
@@ -48,7 +42,7 @@ protected:
         } else {
             SkPath p;
             p.addOval(r);
-            p.setFillType(SkPath::kInverseWinding_FillType);
+            p.setFillType(SkPathFillType::kInverseWinding);
             paint.setBlendMode(SkBlendMode::kDstOut);
             canvas->drawPath(p, paint);
         }
@@ -56,7 +50,7 @@ protected:
 
     virtual void onDrawContent(SkCanvas* canvas) {
         SkRect  r;
-        r.set(SkIntToScalar(20), SkIntToScalar(20), SkIntToScalar(120), SkIntToScalar(120));
+        r.setLTRB(20, 20, 120, 120);
         canvas->saveLayer(&r, nullptr);
         canvas->drawColor(SK_ColorRED);
         drawMask(canvas, r);

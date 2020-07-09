@@ -3,6 +3,31 @@
     "cmd": [
       "python",
       "-u",
+      "\nimport subprocess\nimport sys\n\nwhich = 'where' if sys.platform == 'win32' else 'which'\ngit = subprocess.check_output([which, 'git'])\nprint 'git was found at %s' % git\nif 'cipd_bin_packages' not in git:\n  print >> sys.stderr, 'Git must be obtained through CIPD.'\n  sys.exit(1)\n"
+    ],
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "name": "Assert that Git is from CIPD",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@python.inline@@@@",
+      "@@@STEP_LOG_LINE@python.inline@import subprocess@@@",
+      "@@@STEP_LOG_LINE@python.inline@import sys@@@",
+      "@@@STEP_LOG_LINE@python.inline@@@@",
+      "@@@STEP_LOG_LINE@python.inline@which = 'where' if sys.platform == 'win32' else 'which'@@@",
+      "@@@STEP_LOG_LINE@python.inline@git = subprocess.check_output([which, 'git'])@@@",
+      "@@@STEP_LOG_LINE@python.inline@print 'git was found at %s' % git@@@",
+      "@@@STEP_LOG_LINE@python.inline@if 'cipd_bin_packages' not in git:@@@",
+      "@@@STEP_LOG_LINE@python.inline@  print >> sys.stderr, 'Git must be obtained through CIPD.'@@@",
+      "@@@STEP_LOG_LINE@python.inline@  sys.exit(1)@@@",
+      "@@@STEP_LOG_END@python.inline@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "vpython",
+      "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
       "/path/to/tmp/json",
@@ -16,7 +41,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -29,7 +54,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
@@ -52,6 +77,7 @@
     },
     "infra_step": true,
     "name": "gerrit fetch current CL info",
+    "timeout": 600,
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@json.output@[@@@",
       "@@@STEP_LOG_LINE@json.output@  {@@@",
@@ -85,14 +111,14 @@
       "--output_json",
       "/path/to/tmp/json",
       "--patch_ref",
-      "https://skia.googlesource.com/skia@refs/changes/89/456789/12",
+      "https://skia.googlesource.com/skia@refs/heads/master:refs/changes/89/456789/12",
       "--patch_ref",
-      "https://skia.googlesource.com/skia.git@refs/changes/89/456789/12",
+      "https://skia.googlesource.com/skia.git@abc123:refs/changes/89/456789/12",
       "--revision",
       "skia@abc123"
     ],
     "cwd": "[START_DIR]/cache/work",
-    "env_prefixes": {
+    "env_suffixes": {
       "PATH": [
         "RECIPE_REPO[depot_tools]"
       ]
@@ -139,7 +165,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -154,7 +180,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -166,7 +192,6 @@
     "cwd": "[START_DIR]/build",
     "infra_step": true,
     "name": "find WASM binaries",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@glob@[START_DIR]/build/pathkit.wasm@@@",
       "@@@STEP_LOG_END@glob@@@"
@@ -180,7 +205,6 @@
     ],
     "cwd": "[START_DIR]/build",
     "name": "get swarming bot id",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@python.inline@import os@@@",
       "@@@STEP_LOG_LINE@python.inline@print os.environ.get('SWARMING_BOT_ID', '')@@@",
@@ -195,7 +219,6 @@
     ],
     "cwd": "[START_DIR]/build",
     "name": "get swarming task id",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@python.inline@import os@@@",
       "@@@STEP_LOG_LINE@python.inline@print os.environ.get('SWARMING_TASK_ID', '')@@@",
@@ -219,7 +242,6 @@
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "Analyze wasm",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@bloaty_symbol_short@@@@",
       "@@@STEP_LOG_LINE@bloaty_symbol_short@Report A@@@",
@@ -241,7 +263,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -253,7 +275,6 @@
     "cwd": "[START_DIR]/build",
     "infra_step": true,
     "name": "find JS files",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@glob@[START_DIR]/build/pathkit.js@@@",
       "@@@STEP_LOG_END@glob@@@"
@@ -278,7 +299,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -290,7 +311,6 @@
     "cwd": "[START_DIR]/build",
     "infra_step": true,
     "name": "find JS mem files",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@glob@[START_DIR]/build/pathkit.js.mem@@@",
       "@@@STEP_LOG_END@glob@@@"
@@ -315,7 +335,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -327,7 +347,6 @@
     "cwd": "[START_DIR]/build",
     "infra_step": true,
     "name": "find flutter library",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@glob@[START_DIR]/build/libflutter.so@@@",
       "@@@STEP_LOG_END@glob@@@"
@@ -351,7 +370,6 @@
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "Analyze flutter",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@bloaty_file_symbol_short@@@@",
       "@@@STEP_LOG_LINE@bloaty_file_symbol_short@Report A@@@",
@@ -383,7 +401,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -395,7 +413,6 @@
     "cwd": "[START_DIR]/build",
     "infra_step": true,
     "name": "find skia library",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@glob@[START_DIR]/build/libskia.so@@@",
       "@@@STEP_LOG_END@glob@@@"
@@ -421,7 +438,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -433,7 +450,6 @@
     "cwd": "[START_DIR]/build",
     "infra_step": true,
     "name": "find skottie_tool",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@glob@[START_DIR]/build/skottie_tool@@@",
       "@@@STEP_LOG_END@glob@@@"
@@ -453,11 +469,44 @@
       "DOCKER_CONFIG": "/home/chrome-bot/.docker",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
-    "name": "Make code size treemap",
-    "stdout": "/path/to/tmp/"
+    "name": "Make code size treemap [START_DIR]/build/skottie_tool"
   },
   {
-    "jsonResult": null,
+    "cmd": [
+      "vpython",
+      "-u",
+      "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
+      "--json-output",
+      "/path/to/tmp/json",
+      "glob",
+      "[START_DIR]/build",
+      "dm"
+    ],
+    "cwd": "[START_DIR]/build",
+    "infra_step": true,
+    "name": "find dm",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@glob@[START_DIR]/build/dm@@@",
+      "@@@STEP_LOG_END@glob@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "python",
+      "-u",
+      "[START_DIR]/cache/work/skia/infra/bots/buildstats/make_treemap.py",
+      "[START_DIR]/build/dm",
+      "[START_DIR]/[SWARM_OUT_DIR]"
+    ],
+    "cwd": "[START_DIR]/cache/work/skia",
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "DOCKER_CONFIG": "/home/chrome-bot/.docker",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "name": "Make code size treemap [START_DIR]/build/dm"
+  },
+  {
     "name": "$result"
   }
 ]

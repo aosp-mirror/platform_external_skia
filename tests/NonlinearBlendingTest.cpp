@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "../third_party/skcms/skcms.h"
-#include "SkColorSpace.h"
-#include "SkColorSpaceXformSteps.h"
-#include "Test.h"
+#include "include/core/SkColorSpace.h"
+#include "include/third_party/skcms/skcms.h"
+#include "src/core/SkColorSpaceXformSteps.h"
+#include "tests/Test.h"
 
 DEF_TEST(SkColorSpaceXformSteps_vs_skcms, r) {
     auto srgb = SkColorSpace::MakeSRGB();
-    auto dp3  = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDCIP3);
+    auto dp3  = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
 
     skcms_ICCProfile srgb_profile;
     srgb->toProfile(&srgb_profile);

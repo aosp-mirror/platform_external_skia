@@ -9,17 +9,16 @@
 #ifndef GrTexture_DEFINED
 #define GrTexture_DEFINED
 
-#include "GrBackendSurface.h"
-#include "GrSamplerState.h"
-#include "GrSurface.h"
-#include "SkImage.h"
-#include "SkPoint.h"
-#include "SkRefCnt.h"
-#include "../private/GrTypesPriv.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrSurface.h"
+#include "include/private/GrTypesPriv.h"
 
 class GrTexturePriv;
 
-class SK_API GrTexture : virtual public GrSurface {
+class GrTexture : virtual public GrSurface {
 public:
     GrTexture* asTexture() override { return this; }
     const GrTexture* asTexture() const override { return this; }
@@ -30,7 +29,7 @@ public:
      * This function indicates that the texture parameters (wrap mode, filtering, ...) have been
      * changed externally to Skia.
      */
-    virtual void textureParamsModified() = 0;
+    SK_API virtual void textureParamsModified() = 0;
 
     /**
      * This function steals the backend texture from a uniquely owned GrTexture with no pending
@@ -43,23 +42,31 @@ public:
                                     GrBackendTexture*,
                                     SkImage::BackendTextureReleaseProc*);
 
-#ifdef SK_DEBUG
-    void validate() const {
-        this->INHERITED::validate();
-    }
-#endif
-
+    /** See addIdleProc. */
+    enum class IdleState {
+        kFlushed,
+        kFinished
+    };
     /**
-     * Installs a proc on this texture. It will be called when the texture becomes "idle". Idle is
-     * defined to mean that the texture has no refs or pending IOs and that GPU I/O operations on
-     * the texture are completed if the backend API disallows deletion of a texture before such
-     * operations occur (e.g. Vulkan). After the idle proc is called it is removed. The idle proc
-     * will always be called before the texture is destroyed, even in unusual shutdown scenarios
-     * (e.g. GrContext::abandonContext()).
+     * Installs a proc on this texture. It will be called when the texture becomes "idle". There
+     * are two types of idle states as indicated by IdleState. For managed backends (e.g. GL where
+     * a driver typically handles CPU/GPU synchronization of resource access) there is no difference
+     * between the two. They both mean "all work related to the resource has been flushed to the
+     * backend API and the texture is not owned outside the resource cache".
+     *
+     * If the API is unmanaged (e.g. Vulkan) then kFinished has the additional constraint that the
+     * work flushed to the GPU is finished.
      */
-    virtual void addIdleProc(sk_sp<GrRefCntedCallback> callback) {
-        callback->addChild(std::move(fIdleCallback));
-        fIdleCallback = std::move(callback);
+    virtual void addIdleProc(sk_sp<GrRefCntedCallback> idleProc, IdleState) {
+        // This is the default implementation for the managed case where the IdleState can be
+        // ignored. Unmanaged backends, e.g. Vulkan, must override this to consider IdleState.
+        fIdleProcs.push_back(std::move(idleProc));
+    }
+    /** Helper version of addIdleProc that creates the ref-counted wrapper. */
+    void addIdleProc(GrRefCntedCallback::Callback callback,
+                     GrRefCntedCallback::Context context,
+                     IdleState state) {
+        this->addIdleProc(sk_make_sp<GrRefCntedCallback>(callback, context), state);
     }
 
     /** Access methods that are only to be used within Skia code. */
@@ -67,19 +74,19 @@ public:
     inline const GrTexturePriv texturePriv() const;
 
 protected:
-    GrTexture(GrGpu*, const GrSurfaceDesc&, GrTextureType, GrMipMapsStatus);
+    GrTexture(GrGpu*, const SkISize&, GrProtected, GrTextureType, GrMipMapsStatus);
 
     virtual bool onStealBackendTexture(GrBackendTexture*, SkImage::BackendTextureReleaseProc*) = 0;
 
-    sk_sp<GrRefCntedCallback> fIdleCallback;
+    SkTArray<sk_sp<GrRefCntedCallback>> fIdleProcs;
 
-    void willRemoveLastRefOrPendingIO() override {
-        // We're about to be idle in the resource cache. Do our part to trigger the idle callback.
-        fIdleCallback.reset();
+    void willRemoveLastRef() override {
+        // We're about to be idle in the resource cache. Do our part to trigger the idle callbacks.
+        fIdleProcs.reset();
     }
+    void computeScratchKey(GrScratchKey*) const override;
 
 private:
-    void computeScratchKey(GrScratchKey*) const override;
     size_t onGpuMemorySize() const override;
     void markMipMapsDirty();
     void markMipMapsClean();

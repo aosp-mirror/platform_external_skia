@@ -5,20 +5,35 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
-#include "SkGradientShader.h"
-#include "SkImage.h"
-#include "SkPath.h"
-#include "SkSurface.h"
-#include "sk_tool_utils.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "tools/ToolUtils.h"
 
 static sk_sp<SkImage> make_image(SkCanvas* origCanvas, int w, int h) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
-    auto surface(sk_tool_utils::makeSurface(origCanvas, info));
+    auto        surface(ToolUtils::makeSurface(origCanvas, info));
     SkCanvas* canvas = surface->getCanvas();
 
-    sk_tool_utils::draw_checkerboard(canvas, SK_ColorRED, SK_ColorGREEN, w/10);
+    ToolUtils::draw_checkerboard(canvas, SK_ColorRED, SK_ColorGREEN, w / 10);
     return surface->makeImageSnapshot();
 }
 
@@ -41,12 +56,10 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        fBitmap = sk_tool_utils::create_checkerboard_bitmap(kCellSize, kCellSize,
-                                                            SK_ColorBLUE, SK_ColorYELLOW,
-                                                            kCellSize/10);
+        fBitmap = ToolUtils::create_checkerboard_bitmap(
+                kCellSize, kCellSize, SK_ColorBLUE, SK_ColorYELLOW, kCellSize / 10);
 
-        fBitmapShader = SkShader::MakeBitmapShader(fBitmap, SkShader::kClamp_TileMode,
-                                                   SkShader::kClamp_TileMode);
+        fBitmapShader = fBitmap.makeShader();
         SkPoint pts1[] = {
             { 0, 0 },
             { SkIntToScalar(kCellSize), SkIntToScalar(kCellSize) }
@@ -61,9 +74,9 @@ protected:
         constexpr SkScalar pos[] = { 0, 0.25f, 0.5f, 0.75f, SK_Scalar1 };
 
         fLinearGrad1 = SkGradientShader::MakeLinear(pts1, colors, pos, SK_ARRAY_COUNT(colors),
-                                                    SkShader::kClamp_TileMode);
+                                                    SkTileMode::kClamp);
         fLinearGrad2 = SkGradientShader::MakeLinear(pts2, colors, pos, SK_ARRAY_COUNT(colors),
-                                                    SkShader::kClamp_TileMode);
+                                                    SkTileMode::kClamp);
 
         fPerspMatrix.reset();
         fPerspMatrix.setPerspY(SK_Scalar1 / 50);
@@ -165,9 +178,54 @@ private:
 
     typedef GM INHERITED;
 };
+DEF_GM(return new PerspShadersGM(true);)
+DEF_GM(return new PerspShadersGM(false);)
+}
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new PerspShadersGM(true);)
-DEF_GM(return new PerspShadersGM(false);)
+#include "tools/Resources.h"
+
+static SkPath make_path() {
+    SkRandom rand;
+    auto rand_pt = [&rand]() {
+        auto x = rand.nextF();
+        auto y = rand.nextF();
+        return SkPoint{x * 400, y * 400};
+    };
+
+    SkPath path;
+    for (int i = 0; i < 4; ++i) {
+        SkPoint pts[6];
+        for (auto& p : pts) {
+            p = rand_pt();
+        }
+        path.moveTo(pts[0]).quadTo(pts[1], pts[2]).quadTo(pts[3], pts[4]).lineTo(pts[5]);
+    }
+    return path;
+}
+
+DEF_SIMPLE_GM(perspective_clip, canvas, 800, 800) {
+    SkPath path = make_path();
+    auto shader = GetResourceAsImage("images/mandrill_128.png")
+                                    ->makeShader(SkMatrix::MakeScale(3, 3));
+
+    SkPaint paint;
+    paint.setColor({0.75, 0.75, 0.75, 1});
+    canvas->drawPath(path, paint);
+
+    // This is a crazy perspective matrix, derived from halfplanes3, to draw a shape where
+    // part of it is "behind" the viewer, hence showing the need for "half-plane" clipping
+    // when in perspective.
+    SkMatrix mx;
+    const SkScalar array[] = {
+        -1.7866f,  1.3357f, 273.0295f,
+        -1.0820f,  1.3186f, 135.5196f,
+        -0.0047f, -0.0015f,  2.1485f,
+    };
+    mx.set9(array);
+
+    paint.setShader(shader);
+    canvas->concat(mx);
+    canvas->drawPath(path, paint);
 }

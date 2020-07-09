@@ -5,19 +5,18 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "SkAnimTimer.h"
-#include "SkBlurMask.h"
-#include "SkBlurMaskFilter.h"
-#include "SkColorFilter.h"
-#include "SkCamera.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkPathOps.h"
-#include "SkPoint3.h"
-#include "SkShadowUtils.h"
-#include "SkUTF.h"
-#include "sk_tool_utils.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint3.h"
+#include "include/pathops/SkPathOps.h"
+#include "include/utils/SkCamera.h"
+#include "include/utils/SkShadowUtils.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkBlurMask.h"
+#include "src/utils/SkUTF.h"
+#include "tools/ToolUtils.h"
+#include "tools/timer/TimeUtils.h"
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -35,39 +34,25 @@ class ShadowsView : public Sample {
     SkPath    fTabPath;
 
     SkPoint3  fLightPos;
-    SkScalar  fZDelta;
-    SkScalar  fAnimTranslate;
-    SkScalar  fAnimAngle;
-    SkScalar  fAnimAlpha;
+    SkScalar  fZDelta = 0;
+    SkScalar  fAnimTranslate = 0;
+    SkScalar  fAnimAngle = 0;
+    SkScalar  fAnimAlpha = 1;
 
-    bool      fShowAmbient;
-    bool      fShowSpot;
-    bool      fUseAlt;
-    bool      fShowObject;
-    bool      fIgnoreShadowAlpha;
-    bool      fDoAlphaAnimation;
+    bool      fShowAmbient = true;
+    bool      fShowSpot = true;
+    bool      fUseAlt = false;
+    bool      fShowObject = true;
+    bool      fIgnoreShadowAlpha = false;
+    bool      fDoAlphaAnimation = false;
 
-public:
-    ShadowsView()
-        : fZDelta(0)
-        , fAnimTranslate(0)
-        , fAnimAngle(0)
-        , fAnimAlpha(1)
-        , fShowAmbient(true)
-        , fShowSpot(true)
-        , fUseAlt(false)
-        , fShowObject(true)
-        , fIgnoreShadowAlpha(false)
-        , fDoAlphaAnimation(false) {}
-
-protected:
     void onOnceBeforeDraw() override {
         fCirclePath.addCircle(0, 0, 50);
         fRectPath.addRect(SkRect::MakeXYWH(-100, -50, 200, 100));
         fRRPath.addRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(-100, -50, 200, 100), 4, 4));
         fFunkyRRPath.addRoundRect(SkRect::MakeXYWH(-50, -50, SK_Scalar1 * 100, SK_Scalar1 * 100),
                                   40 * SK_Scalar1, 20 * SK_Scalar1,
-                                  SkPath::kCW_Direction);
+                                  SkPathDirection::kCW);
         fCubicPath.cubicTo(100 * SK_Scalar1, 50 * SK_Scalar1,
                            20 * SK_Scalar1, 100 * SK_Scalar1,
                            0 * SK_Scalar1, 0 * SK_Scalar1);
@@ -106,14 +91,9 @@ protected:
         fLightPos = SkPoint3::Make(350, 0, 600);
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "AndroidShadows");
-            return true;
-        }
+    SkString name() override { return SkString("AndroidShadows"); }
 
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    bool onChar(SkUnichar uni) override {
             bool handled = false;
             switch (uni) {
                 case 'W':
@@ -157,12 +137,7 @@ protected:
             if (handled) {
                 return true;
             }
-        }
-        return this->INHERITED::onQuery(evt);
-    }
-
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
+            return false;
     }
 
     void drawShadowedPath(SkCanvas* canvas, const SkPath& path,
@@ -202,7 +177,8 @@ protected:
     }
 
     void onDrawContent(SkCanvas* canvas) override {
-        this->drawBG(canvas);
+        canvas->drawColor(0xFFDDDDDD);
+
         const SkScalar kLightWidth = 800;
         const SkScalar kAmbientAlpha = 0.039f;
         const SkScalar kSpotAlpha = 0.19f;
@@ -215,55 +191,55 @@ protected:
 
         paint.setColor(SK_ColorWHITE);
         canvas->translate(200, 90);
-        zPlaneParams.fZ = SkTMax(1.0f, 2 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 2 + fZDelta);
         this->drawShadowedPath(canvas, fRRPath, zPlaneParams, paint, fAnimAlpha*kAmbientAlpha,
                                lightPos, kLightWidth, fAnimAlpha*kSpotAlpha);
 
         paint.setColor(SK_ColorRED);
         canvas->translate(250, 0);
-        zPlaneParams.fZ = SkTMax(1.0f, 8 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 8 + fZDelta);
         this->drawShadowedPath(canvas, fRectPath, zPlaneParams, paint, fAnimAlpha*kAmbientAlpha,
                                lightPos, kLightWidth, fAnimAlpha*kSpotAlpha);
 
         paint.setColor(SK_ColorBLUE);
         canvas->translate(-250, 110);
-        zPlaneParams.fZ = SkTMax(1.0f, 12 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 12 + fZDelta);
         this->drawShadowedPath(canvas, fCirclePath, zPlaneParams, paint, fAnimAlpha*kAmbientAlpha,
                                lightPos, kLightWidth, fAnimAlpha*0.5f);
 
         paint.setColor(SK_ColorGREEN);
         canvas->translate(250, 0);
-        zPlaneParams.fZ = SkTMax(1.0f, 64 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 64 + fZDelta);
         this->drawShadowedPath(canvas, fRRPath, zPlaneParams, paint, fAnimAlpha*kAmbientAlpha,
                                lightPos, kLightWidth, fAnimAlpha*kSpotAlpha);
 
         paint.setColor(SK_ColorYELLOW);
         canvas->translate(-250, 110);
-        zPlaneParams.fZ = SkTMax(1.0f, 8 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 8 + fZDelta);
         this->drawShadowedPath(canvas, fFunkyRRPath, zPlaneParams, paint, fAnimAlpha*kAmbientAlpha,
                                lightPos, kLightWidth, fAnimAlpha*kSpotAlpha);
 
         paint.setColor(SK_ColorCYAN);
         canvas->translate(250, 0);
-        zPlaneParams.fZ = SkTMax(1.0f, 16 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 16 + fZDelta);
         this->drawShadowedPath(canvas, fCubicPath, zPlaneParams, paint, fAnimAlpha*kAmbientAlpha,
                                lightPos, kLightWidth, fAnimAlpha*kSpotAlpha);
 
         paint.setColor(SK_ColorWHITE);
         canvas->translate(250, -180);
-        zPlaneParams.fZ = SkTMax(1.0f, 8 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 8 + fZDelta);
         this->drawShadowedPath(canvas, fStarPath, zPlaneParams, paint,
                                kAmbientAlpha, lightPos, kLightWidth, kSpotAlpha);
 
         paint.setColor(SK_ColorWHITE);
         canvas->translate(150, 0);
-        zPlaneParams.fZ = SkTMax(1.0f, 2 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 2 + fZDelta);
         this->drawShadowedPath(canvas, fNotchPath, zPlaneParams, paint,
                                kAmbientAlpha, lightPos, kLightWidth, kSpotAlpha);
 
         paint.setColor(SK_ColorWHITE);
         canvas->translate(200, 0);
-        zPlaneParams.fZ = SkTMax(1.0f, 16 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 16 + fZDelta);
         this->drawShadowedPath(canvas, fTabPath, zPlaneParams, paint,
                                kAmbientAlpha, lightPos, kLightWidth, kSpotAlpha);
 
@@ -275,7 +251,7 @@ protected:
 
         paint.setColor(SK_ColorMAGENTA);
         canvas->translate(-725, 240);
-        zPlaneParams.fZ = SkTMax(1.0f, 32 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 32 + fZDelta);
         this->drawShadowedPath(canvas, tmpPath, zPlaneParams, paint, .1f,
                                lightPos, kLightWidth, .5f);
 
@@ -285,7 +261,7 @@ protected:
         Op(fSquareRRectPath, tmpClipPathBug, kIntersect_SkPathOp, &tmpPath);
 
         canvas->translate(250, 0);
-        zPlaneParams.fZ = SkTMax(1.0f, 32 + fZDelta);
+        zPlaneParams.fZ = std::max(1.0f, 32 + fZDelta);
         this->drawShadowedPath(canvas, tmpPath, zPlaneParams, paint, .1f,
                                lightPos, kLightWidth, .5f);
 
@@ -305,7 +281,7 @@ protected:
         SkScalar radians = SkDegreesToRadians(fAnimAngle);
         zPlaneParams = SkPoint3::Make(0,
                                       SkScalarSin(radians),
-                                      SkTMax(1.0f, 16 + fZDelta) - SkScalarSin(radians)*pivot.fY);
+                                      std::max(1.0f, 16 + fZDelta) - SkScalarSin(radians)*pivot.fY);
         this->drawShadowedPath(canvas, fWideRectPath, zPlaneParams, paint, .1f,
                                lightPos, kLightWidth, .5f);
 
@@ -321,7 +297,7 @@ protected:
         canvas->setMatrix(persp);
         zPlaneParams = SkPoint3::Make(-SkScalarSin(radians),
                                       0,
-                                      SkTMax(1.0f, 32 + fZDelta) + SkScalarSin(radians)*pivot.fX);
+                                      std::max(1.0f, 32 + fZDelta) + SkScalarSin(radians)*pivot.fX);
         this->drawShadowedPath(canvas, fWideOvalPath, zPlaneParams, paint, .1f,
                                lightPos, kLightWidth, .5f);
 
@@ -336,16 +312,16 @@ protected:
         canvas->setMatrix(persp);
         zPlaneParams = SkPoint3::Make(-SkScalarSin(radians),
                                       0,
-                                      SkTMax(1.0f, 8 + fZDelta) + SkScalarSin(radians)*pivot.fX);
+                                      std::max(1.0f, 8 + fZDelta) + SkScalarSin(radians)*pivot.fX);
         this->drawShadowedPath(canvas, fStarPath, zPlaneParams, paint, .1f,
                                lightPos, kLightWidth, .5f);
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
-        fAnimTranslate = timer.pingPong(30, 0, 125, -125);
-        fAnimAngle = timer.pingPong(15, 0, 0, 20);
+    bool onAnimate(double nanos) override {
+        fAnimTranslate = TimeUtils::PingPong(1e-9 * nanos, 30, 0, 125, -125);
+        fAnimAngle = TimeUtils::PingPong(1e-9 * nanos, 15, 0, 0, 20);
         if (fDoAlphaAnimation) {
-            fAnimAlpha = timer.pingPong(5, 0, 1, 0);
+            fAnimAlpha = TimeUtils::PingPong(1e-9 * nanos, 5, 0, 1, 0);
         }
         return true;
     }

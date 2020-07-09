@@ -5,18 +5,39 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
-#include "SkColor.h"
-#include "SkGradientShader.h"
-#include "SkMatrixConvolutionImageFilter.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkImageFilters.h"
+#include "tools/ToolUtils.h"
+
+#include <vector>
 
 namespace skiagm {
 
+enum KernelFixture {
+    kBasic_KernelFixture,
+    kLarge_KernelFixture
+};
+
 class MatrixConvolutionGM : public GM {
 public:
-    MatrixConvolutionGM(SkColor colorOne, SkColor colorTwo, const char* nameSuffix)
-            : fNameSuffix(nameSuffix) {
+    MatrixConvolutionGM(SkColor colorOne, SkColor colorTwo, KernelFixture kernelFixture, const char* nameSuffix)
+            : fNameSuffix(nameSuffix),
+              fKernelFixture(kernelFixture) {
         this->setBGColor(0x00000000);
         fColors[0] = colorOne;
         fColors[1] = colorTwo;
@@ -39,8 +60,8 @@ protected:
                            {0, 80.0f} };
         SkScalar pos[2] = { 0, 80.0f };
         paint.setShader(SkGradientShader::MakeLinear(
-            pts, fColors, pos, 2, SkShader::kClamp_TileMode));
-        SkFont font(sk_tool_utils::create_portable_typeface(), 180.0f);
+            pts, fColors, pos, 2, SkTileMode::kClamp));
+        SkFont font(ToolUtils::create_portable_typeface(), 180.0f);
         canvas.drawString("e", -10.0f, 80.0f, font, paint);
     }
 
@@ -48,26 +69,32 @@ protected:
         return SkISize::Make(500, 300);
     }
 
+    sk_sp<SkImageFilter> makeFilter(const SkIPoint &kernelOffset, SkTileMode tileMode,
+                                    bool convolveAlpha, const SkIRect *cropRect = nullptr) {
+        switch (fKernelFixture) {
+            case kBasic_KernelFixture: {
+                // All 1s except center value, which is -7 (sum of 1).
+                std::vector<SkScalar> kernel(9, SkIntToScalar(1));
+                kernel[4] = SkIntToScalar(-7);
+                return SkImageFilters::MatrixConvolution({3,3}, kernel.data(), /* gain */ 0.3f, /* bias */ SkIntToScalar(100), kernelOffset, tileMode, convolveAlpha, nullptr, cropRect);
+            }
+            case kLarge_KernelFixture: {
+                // Intentionally go over the MAX_KERNEL_SIZE limit and trigger CPU fallback.
+                // All 1s except center value, which is -47 (sum of 1).
+                std::vector<SkScalar> kernel(49, SkIntToScalar(1));
+                kernel[24] = SkIntToScalar(-47);
+                return SkImageFilters::MatrixConvolution({7,7}, kernel.data(), /* gain */ 0.3f, /* bias */ SkIntToScalar(100), kernelOffset, tileMode, convolveAlpha, nullptr, cropRect);
+            }
+            default:
+                return nullptr;
+        }
+    }
+
     void draw(SkCanvas* canvas, int x, int y, const SkIPoint& kernelOffset,
-              SkMatrixConvolutionImageFilter::TileMode tileMode, bool convolveAlpha,
-              const SkImageFilter::CropRect* cropRect = nullptr) {
-        SkScalar kernel[9] = {
-            SkIntToScalar( 1), SkIntToScalar( 1), SkIntToScalar( 1),
-            SkIntToScalar( 1), SkIntToScalar(-7), SkIntToScalar( 1),
-            SkIntToScalar( 1), SkIntToScalar( 1), SkIntToScalar( 1),
-        };
-        SkISize kernelSize = SkISize::Make(3, 3);
-        SkScalar gain = 0.3f, bias = SkIntToScalar(100);
+              SkTileMode tileMode, bool convolveAlpha,
+              const SkIRect* cropRect = nullptr) {
         SkPaint paint;
-        paint.setImageFilter(SkMatrixConvolutionImageFilter::Make(kernelSize,
-                                                                  kernel,
-                                                                  gain,
-                                                                  bias,
-                                                                  kernelOffset,
-                                                                  tileMode,
-                                                                  convolveAlpha,
-                                                                  nullptr,
-                                                                  cropRect));
+        paint.setImageFilter(this->makeFilter(kernelOffset, tileMode, convolveAlpha, cropRect));
         canvas->save();
         canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
         const SkRect layerBounds = SkRect::MakeIWH(fBitmap.width(), fBitmap.height());
@@ -81,8 +108,6 @@ protected:
         canvas->restore();
     }
 
-    typedef SkMatrixConvolutionImageFilter MCIF;
-
     void onOnceBeforeDraw() override {
         this->makeBitmap();
     }
@@ -90,35 +115,38 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         canvas->clear(SK_ColorBLACK);
         SkIPoint kernelOffset = SkIPoint::Make(1, 0);
-        SkImageFilter::CropRect rect(SkRect::Make(fBitmap.bounds()));
+        SkIRect rect = fBitmap.bounds();
         for (int x = 10; x < 310; x += 100) {
-            this->draw(canvas, x, 10, kernelOffset, MCIF::kClamp_TileMode, true, &rect);
-            this->draw(canvas, x, 110, kernelOffset, MCIF::kClampToBlack_TileMode, true, &rect);
-            this->draw(canvas, x, 210, kernelOffset, MCIF::kRepeat_TileMode, true, &rect);
+            this->draw(canvas, x, 10, kernelOffset, SkTileMode::kClamp, true, &rect);
+            this->draw(canvas, x, 110, kernelOffset, SkTileMode::kDecal, true, &rect);
+            this->draw(canvas, x, 210, kernelOffset, SkTileMode::kRepeat, true, &rect);
             kernelOffset.fY++;
         }
         kernelOffset.fY = 1;
-        SkImageFilter::CropRect smallRect(SkRect::MakeXYWH(10, 5, 60, 60));
-        this->draw(canvas, 310, 10, kernelOffset, MCIF::kClamp_TileMode, true, &smallRect);
-        this->draw(canvas, 310, 110, kernelOffset, MCIF::kClampToBlack_TileMode, true, &smallRect);
-        this->draw(canvas, 310, 210, kernelOffset, MCIF::kRepeat_TileMode, true, &smallRect);
+        SkIRect smallRect = SkIRect::MakeXYWH(10, 5, 60, 60);
+        this->draw(canvas, 310, 10, kernelOffset, SkTileMode::kClamp, true, &smallRect);
+        this->draw(canvas, 310, 110, kernelOffset, SkTileMode::kDecal, true, &smallRect);
+        this->draw(canvas, 310, 210, kernelOffset, SkTileMode::kRepeat, true, &smallRect);
 
-        this->draw(canvas, 410, 10, kernelOffset, MCIF::kClamp_TileMode, false, &rect);
-        this->draw(canvas, 410, 110, kernelOffset, MCIF::kClampToBlack_TileMode, false, &rect);
-        this->draw(canvas, 410, 210, kernelOffset, MCIF::kRepeat_TileMode, false, &rect);
+        this->draw(canvas, 410, 10, kernelOffset, SkTileMode::kClamp, false, &rect);
+        this->draw(canvas, 410, 110, kernelOffset, SkTileMode::kDecal, false, &rect);
+        this->draw(canvas, 410, 210, kernelOffset, SkTileMode::kRepeat, false, &rect);
     }
 
 private:
     SkBitmap fBitmap;
     SkColor fColors[2];
     const char* fNameSuffix;
+    KernelFixture fKernelFixture;
 
     typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new MatrixConvolutionGM(0xFFFFFFFF, 0x40404040, "");)
-DEF_GM(return new MatrixConvolutionGM(0xFFFF0000, 0xFF00FF00, "_color");)
+DEF_GM(return new MatrixConvolutionGM(0xFFFFFFFF, 0x40404040, KernelFixture::kBasic_KernelFixture, "");)
+DEF_GM(return new MatrixConvolutionGM(0xFFFF0000, 0xFF00FF00, KernelFixture::kBasic_KernelFixture, "_color");)
+DEF_GM(return new MatrixConvolutionGM(0xFFFFFFFF, 0x40404040, KernelFixture::kLarge_KernelFixture, "_big");)
+DEF_GM(return new MatrixConvolutionGM(0xFFFF0000, 0xFF00FF00, KernelFixture::kLarge_KernelFixture, "_big_color");)
 
 }

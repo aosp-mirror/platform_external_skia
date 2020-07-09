@@ -5,11 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
-#include "SkCanvasPriv.h"
-#include "SkPath.h"
-#include "SkMakeUnique.h"
+#include "gm/gm.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "src/core/SkCanvasPriv.h"
+#include "tools/ToolUtils.h"
 
 static void do_draw(SkCanvas* canvas, const SkRect& r) {
     SkPaint paint;
@@ -150,18 +158,12 @@ DEF_SIMPLE_GM(aaclip, canvas, 240, 120) {
 
 #ifdef SK_BUILD_FOR_MAC
 
+#include "include/utils/mac/SkCGUtils.h"
+
 static std::unique_ptr<SkCanvas> make_canvas(const SkBitmap& bm) {
-    const SkImageInfo& info = bm.info();
-    if (info.bytesPerPixel() == 4) {
-        return SkCanvas::MakeRasterDirectN32(info.width(), info.height(),
-                                             (SkPMColor*)bm.getPixels(),
-                                             bm.rowBytes());
-    } else {
-        return skstd::make_unique<SkCanvas>(bm);
-    }
+    return SkCanvas::MakeRasterDirect(bm.info(), bm.getPixels(), bm.rowBytes());
 }
 
-#include "SkCGUtils.h"
 static void test_image(SkCanvas* canvas, const SkImageInfo& info) {
     SkBitmap bm;
     bm.allocPixels(info);
@@ -257,7 +259,7 @@ protected:
 
         SkRect r = SkRect::MakeXYWH(0, H/4, W, H/2);
         SkPaint paint;
-        paint.setColor(sk_tool_utils::color_to_565(0xFF8888FF));
+        paint.setColor(ToolUtils::color_to_565(0xFF8888FF));
 
         canvas->drawRect(r, paint);
         this->doDraw(canvas, path);

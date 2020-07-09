@@ -4,12 +4,12 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "PathOpsExtendedTest.h"
-#include "PathOpsThreadedCommon.h"
-#include "SkCanvas.h"
-#include "SkRandom.h"
-#include "SkTSort.h"
-#include "Test.h"
+#include "include/core/SkCanvas.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkTSort.h"
+#include "tests/PathOpsExtendedTest.h"
+#include "tests/PathOpsThreadedCommon.h"
+#include "tests/Test.h"
 
 static void testTightBoundsLines(PathOpsThreadState* data) {
     SkRandom ran;
@@ -91,14 +91,14 @@ static void testTightBoundsQuads(PathOpsThreadState* data) {
                     continue;
                 }
                 lineWritten = true;
-                bitsWritten.fLeft = SkTMin(bitsWritten.fLeft, x);
-                bitsWritten.fRight = SkTMax(bitsWritten.fRight, x);
+                bitsWritten.fLeft = std::min(bitsWritten.fLeft, x);
+                bitsWritten.fRight = std::max(bitsWritten.fRight, x);
             }
             if (!lineWritten) {
                 continue;
             }
-            bitsWritten.fTop = SkTMin(bitsWritten.fTop, y);
-            bitsWritten.fBottom = SkTMax(bitsWritten.fBottom, y);
+            bitsWritten.fTop = std::min(bitsWritten.fTop, y);
+            bitsWritten.fBottom = std::max(bitsWritten.fBottom, y);
         }
         if (!bitsWritten.isEmpty()) {
             SkIRect tightOut;

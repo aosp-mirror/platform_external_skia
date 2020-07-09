@@ -8,7 +8,7 @@
 #ifndef GrSoftwarePathRenderer_DEFINED
 #define GrSoftwarePathRenderer_DEFINED
 
-#include "GrPathRenderer.h"
+#include "src/gpu/GrPathRenderer.h"
 
 class GrProxyProvider;
 class GrTextureProxy;
@@ -51,7 +51,7 @@ private:
     // This utility draws a path mask using a provided paint. The rectangle is drawn in device
     // space. The 'viewMatrix' will be used to ensure the correct local coords are provided to
     // any fragment processors in the paint.
-    static void DrawToTargetWithShapeMask(sk_sp<GrTextureProxy> proxy,
+    static void DrawToTargetWithShapeMask(GrSurfaceProxyView,
                                           GrRenderTargetContext* renderTargetContext,
                                           GrPaint&& paint,
                                           const GrUserStencilSettings& userStencilSettings,

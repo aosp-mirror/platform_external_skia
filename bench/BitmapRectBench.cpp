@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColorPriv.h"
-#include "SkPaint.h"
-#include "SkRandom.h"
-#include "SkString.h"
-#include "SkTo.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkString.h"
+#include "include/private/SkTo.h"
+#include "include/utils/SkRandom.h"
 
 static void draw_into_bitmap(const SkBitmap& bm) {
     const int w = bm.width();
@@ -23,10 +23,10 @@ static void draw_into_bitmap(const SkBitmap& bm) {
     p.setAntiAlias(true);
     p.setColor(SK_ColorRED);
     canvas.drawCircle(SkIntToScalar(w)/2, SkIntToScalar(h)/2,
-                      SkIntToScalar(SkMin32(w, h))*3/8, p);
+                      SkIntToScalar(std::min(w, h))*3/8, p);
 
     SkRect r;
-    r.set(0, 0, SkIntToScalar(w), SkIntToScalar(h));
+    r.setWH(SkIntToScalar(w), SkIntToScalar(h));
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SkIntToScalar(4));
     p.setColor(SK_ColorBLUE);
@@ -74,8 +74,8 @@ protected:
         fBitmap.eraseColor(SK_ColorBLACK);
         draw_into_bitmap(fBitmap);
 
-        fSrcR.iset(0, 0, kWidth, kHeight);
-        fDstR.iset(0, 0, kWidth, kHeight);
+        fSrcR.setWH(SkIntToScalar(kWidth), SkIntToScalar(kHeight));
+        fDstR.setWH(SkIntToScalar(kWidth), SkIntToScalar(kHeight));
 
         if (fSlightMatrix) {
             // want fractional translate

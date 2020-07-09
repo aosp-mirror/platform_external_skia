@@ -8,63 +8,48 @@
 #ifndef GrYUVtoRGBEffect_DEFINED
 #define GrYUVtoRGBEffect_DEFINED
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
-#include "GrFragmentProcessor.h"
-#include "GrCoordTransform.h"
-
-#include "SkYUVAIndex.h"
+#include "include/core/SkYUVAIndex.h"
+#include "src/gpu/GrCoordTransform.h"
+#include "src/gpu/GrFragmentProcessor.h"
 
 class GrYUVtoRGBEffect : public GrFragmentProcessor {
 public:
-    static std::unique_ptr<GrFragmentProcessor> Make(const sk_sp<GrTextureProxy> proxies[],
+    // The domain supported by this effect is more limited than the general GrTextureDomain due
+    // to the multi-planar, varying resolution images that it has to sample. If 'domain' is provided
+    // it is the Y plane's domain. This will automatically inset for bilinear filtering, and only
+    // the clamp wrap mode is supported.
+    static std::unique_ptr<GrFragmentProcessor> Make(GrSurfaceProxyView views[],
                                                      const SkYUVAIndex indices[4],
                                                      SkYUVColorSpace yuvColorSpace,
-                                                     GrSamplerState::Filter filterMode);
+                                                     GrSamplerState::Filter filterMode,
+                                                     const GrCaps&,
+                                                     const SkMatrix& localMatrix = SkMatrix::I(),
+                                                     const SkRect* domain = nullptr);
 #ifdef SK_DEBUG
     SkString dumpInfo() const override;
 #endif
 
-    const SkMatrix44& colorSpaceMatrix() const { return fColorSpaceMatrix; }
-    const SkYUVAIndex& yuvaIndex(int i) const { return fYUVAIndices[i]; }
-
-    GrYUVtoRGBEffect(const GrYUVtoRGBEffect& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
+
     const char* name() const override { return "YUVtoRGBEffect"; }
 
 private:
-    GrYUVtoRGBEffect(const sk_sp<GrTextureProxy> proxies[], const SkSize scales[],
-                     const GrSamplerState::Filter filterModes[], int numPlanes,
-                     const SkYUVAIndex yuvaIndices[4], const SkMatrix44& colorSpaceMatrix)
-            : INHERITED(kGrYUVtoRGBEffect_ClassID, kNone_OptimizationFlags)
-            , fColorSpaceMatrix(colorSpaceMatrix) {
-        for (int i = 0; i < numPlanes; ++i) {
-            fSamplers[i].reset(std::move(proxies[i]),
-                               GrSamplerState(GrSamplerState::WrapMode::kClamp, filterModes[i]));
-            fSamplerTransforms[i] = SkMatrix::MakeScale(scales[i].width(), scales[i].height());
-            fSamplerCoordTransforms[i] =
-                    GrCoordTransform(fSamplerTransforms[i], fSamplers[i].proxy());
-        }
+    GrYUVtoRGBEffect(std::unique_ptr<GrFragmentProcessor> planeFPs[4], int numPlanes,
+                     const SkYUVAIndex yuvaIndices[4], SkYUVColorSpace yuvColorSpace);
 
-        this->setTextureSamplerCnt(numPlanes);
-        for (int i = 0; i < numPlanes; ++i) {
-            this->addCoordTransform(&fSamplerCoordTransforms[i]);
-        }
+    GrYUVtoRGBEffect(const GrYUVtoRGBEffect& src);
 
-        memcpy(fYUVAIndices, yuvaIndices, sizeof(fYUVAIndices));
-    }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
+
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+
     bool onIsEqual(const GrFragmentProcessor&) const override;
-    const TextureSampler& onTextureSampler(int) const override;
+
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    TextureSampler   fSamplers[4];
-    SkMatrix44       fSamplerTransforms[4];
-    GrCoordTransform fSamplerCoordTransforms[4];
     SkYUVAIndex      fYUVAIndices[4];
-    SkMatrix44       fColorSpaceMatrix;
-
-    typedef GrFragmentProcessor INHERITED;
+    SkYUVColorSpace  fYUVColorSpace;
 };
 #endif

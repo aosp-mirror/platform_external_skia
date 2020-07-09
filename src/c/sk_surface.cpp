@@ -5,23 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkData.h"
-#include "SkImage.h"
-#include "SkMaskFilter.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPictureRecorder.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkSurface.h"
 
-#include "sk_canvas.h"
-#include "sk_data.h"
-#include "sk_image.h"
-#include "sk_paint.h"
-#include "sk_path.h"
-#include "sk_surface.h"
-#include "sk_types_priv.h"
+#include "include/c/sk_canvas.h"
+#include "include/c/sk_data.h"
+#include "include/c/sk_image.h"
+#include "include/c/sk_paint.h"
+#include "include/c/sk_path.h"
+#include "include/c/sk_picture.h"
+#include "include/c/sk_surface.h"
+#include "src/c/sk_types_priv.h"
 
 const struct {
     sk_pixelgeometry_t fC;
@@ -55,13 +56,13 @@ static void from_c_matrix(const sk_matrix_t* cmatrix, SkMatrix* matrix) {
 
 const struct {
     sk_path_direction_t fC;
-    SkPath::Direction   fSk;
+    SkPathDirection   fSk;
 } gPathDirMap[] = {
-    { CW_SK_PATH_DIRECTION,  SkPath::kCW_Direction },
-    { CCW_SK_PATH_DIRECTION, SkPath::kCCW_Direction },
+    { CW_SK_PATH_DIRECTION,  SkPathDirection::kCW },
+    { CCW_SK_PATH_DIRECTION, SkPathDirection::kCCW },
 };
 
-static bool from_c_path_direction(sk_path_direction_t cdir, SkPath::Direction* dir) {
+static bool from_c_path_direction(sk_path_direction_t cdir, SkPathDirection* dir) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(gPathDirMap); ++i) {
         if (gPathDirMap[i].fC == cdir) {
             if (dir) {
@@ -201,7 +202,7 @@ void sk_path_close(sk_path_t* cpath) {
 }
 
 void sk_path_add_rect(sk_path_t* cpath, const sk_rect_t* crect, sk_path_direction_t cdir) {
-    SkPath::Direction dir;
+    SkPathDirection dir;
     if (!from_c_path_direction(cdir, &dir)) {
         return;
     }
@@ -209,7 +210,7 @@ void sk_path_add_rect(sk_path_t* cpath, const sk_rect_t* crect, sk_path_directio
 }
 
 void sk_path_add_oval(sk_path_t* cpath, const sk_rect_t* crect, sk_path_direction_t cdir) {
-    SkPath::Direction dir;
+    SkPathDirection dir;
     if (!from_c_path_direction(cdir, &dir)) {
         return;
     }

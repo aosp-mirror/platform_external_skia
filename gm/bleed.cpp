@@ -5,19 +5,32 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkBlurMask.h"
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkImage.h"
-#include "SkMaskFilter.h"
-#include "SkTDArray.h"
-#include "SkUTF.h"
-#include "sk_tool_utils.h"
-
-#include "GrContext.h"
-#include "GrContextOptions.h"
-#include "SkGr.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/gpu/GrContextOptions.h"
+#include "include/private/SkTDArray.h"
+#include "src/core/SkBlurMask.h"
+#include "tools/ToolUtils.h"
 
 /** Holds either a bitmap or image to be rendered and a rect that indicates what part of the bitmap
     or image should be tested by the GM. The area outside of the rect is present to check
@@ -100,7 +113,7 @@ bool make_ringed_bitmap(TestPixels* result, int width, int height,
         scanline[x] = outerRingColor;
     }
     result->fBitmap.setImmutable();
-    result->fRect.set(2, 2, width - 2, height - 2);
+    result->fRect.setLTRB(2, 2, width - 2, height - 2);
     return true;
 }
 
@@ -157,7 +170,7 @@ bool make_ringed_alpha_image(TestPixels* result, int width, int height) {
 static sk_sp<SkShader> make_shader() {
     constexpr SkPoint pts[] = { {0, 0}, {20, 20} };
     constexpr SkColor colors[] = { SK_ColorGREEN, SK_ColorYELLOW };
-    return SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkShader::kMirror_TileMode);
+    return SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kMirror);
 }
 
 static sk_sp<SkShader> make_null_shader() { return nullptr; }
@@ -332,8 +345,8 @@ protected:
         SkPoint corners[] = {{0, 0}, { 0, kBottom }, { kWidth, kBottom }, {kWidth, 0} };
         matrices[matrices.count()-1].mapPoints(corners, 4);
         SkScalar y = (corners[0].fY + corners[1].fY + corners[2].fY + corners[3].fY) / 4;
-        SkScalar x = SkTMax(SkTMax(corners[0].fX, corners[1].fX),
-                            SkTMax(corners[2].fX, corners[3].fX));
+        SkScalar x = std::max(std::max(corners[0].fX, corners[1].fX),
+                            std::max(corners[2].fX, corners[3].fX));
         m.setTranslate(x, y);
         m.preScale(0.2f, 0.2f);
         *matrices.append() = m;
@@ -391,9 +404,9 @@ protected:
 
                 SkPoint corners[] = { { 0, 0 },{ 0, kBottom },{ kWidth, kBottom },{ kWidth, 0 } };
                 matrices[m].mapPoints(corners, 4);
-                SkScalar x = kBlockSize + SkTMax(SkTMax(corners[0].fX, corners[1].fX),
-                                                 SkTMax(corners[2].fX, corners[3].fX));
-                maxX = SkTMax(maxX, x);
+                SkScalar x = kBlockSize + std::max(std::max(corners[0].fX, corners[1].fX),
+                                                 std::max(corners[2].fX, corners[3].fX));
+                maxX = std::max(maxX, x);
                 canvas->restore();
             }
             canvas->restore();
@@ -444,7 +457,6 @@ DEF_GM( return new BleedGM(kUseAlphaBitmapShader_BleedTest); )
 DEF_GM( return new BleedGM(kUseAlphaImageShader_BleedTest); )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-#include "SkSurface.h"
 
 // Construct an image and return the inner "src" rect. Build the image such that the interior is
 // blue, with a margin of blue (2px) but then an outer margin of red.
@@ -457,7 +469,7 @@ static sk_sp<SkImage> make_image(SkCanvas* canvas, SkRect* srcR) {
     // produce different mipmap filtering when we have an odd sized texture.
     const int N = 10 + 2 + 8 + 2 + 10;
     SkImageInfo info = SkImageInfo::MakeN32Premul(N, N);
-    auto surface = sk_tool_utils::makeSurface(canvas, info);
+    auto        surface = ToolUtils::makeSurface(canvas, info);
     SkCanvas* c = surface->getCanvas();
     SkRect r = SkRect::MakeIWH(info.width(), info.height());
     SkPaint paint;
@@ -489,7 +501,7 @@ DEF_SIMPLE_GM(bleed_downscale, canvas, 360, 240) {
         canvas->save();
         for (auto quality : qualities) {
             paint.setFilterQuality(quality);
-            auto surf = sk_tool_utils::makeSurface(canvas, SkImageInfo::MakeN32Premul(1, 1));
+            auto surf = ToolUtils::makeSurface(canvas, SkImageInfo::MakeN32Premul(1, 1));
             surf->getCanvas()->drawImageRect(img, src, SkRect::MakeWH(1, 1), &paint, constraint);
             // now blow up the 1 pixel result
             canvas->drawImageRect(surf->makeImageSnapshot(), SkRect::MakeWH(100, 100), nullptr);

@@ -4,14 +4,28 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "Sk1DPathEffect.h"
-#include "Sk2DPathEffect.h"
-#include "SkCornerPathEffect.h"
-#include "SkDashPathEffect.h"
-#include "SkDiscretePathEffect.h"
+
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/Sk1DPathEffect.h"
+#include "include/effects/Sk2DPathEffect.h"
+#include "include/effects/SkCornerPathEffect.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/effects/SkDiscretePathEffect.h"
+#include "include/effects/SkOpPathEffect.h"
+#include "include/pathops/SkPathOps.h"
+
+#include <initializer_list>
 
 namespace skiagm {
 
@@ -134,9 +148,9 @@ protected:
 
         path.reset();
         SkRect r = { 0, 0, 250, 120 };
-        path.addOval(r, SkPath::kCW_Direction);
+        path.addOval(r, SkPathDirection::kCW);
         r.inset(50, 50);
-        path.addRect(r, SkPath::kCCW_Direction);
+        path.addRect(r, SkPathDirection::kCCW);
 
         canvas->translate(320, 20);
         for (size_t i = 0; i < SK_ARRAY_COUNT(gPE2); i++) {
@@ -165,7 +179,6 @@ DEF_GM( return new PathEffectGM; )
 }
 
 //////////////////////////////////////////////////////////////////////////////
-#include "SkOpPathEffect.h"
 
 class ComboPathEfectsGM : public skiagm::GM {
 public:

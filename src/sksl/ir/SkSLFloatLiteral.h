@@ -8,8 +8,8 @@
 #ifndef SKSL_FLOATLITERAL
 #define SKSL_FLOATLITERAL
 
-#include "SkSLContext.h"
-#include "SkSLExpression.h"
+#include "src/sksl/SkSLContext.h"
+#include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
 
@@ -25,11 +25,13 @@ struct FloatLiteral : public Expression {
     : INHERITED(offset, kFloatLiteral_Kind, *type)
     , fValue(value) {}
 
+#ifdef SK_DEBUG
     String description() const override {
         return to_string(fValue);
     }
+#endif
 
-    bool hasSideEffects() const override {
+    bool hasProperty(Property property) const override {
         return false;
     }
 

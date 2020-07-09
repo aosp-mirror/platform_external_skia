@@ -8,8 +8,8 @@
 #ifndef Window_mac_DEFINED
 #define Window_mac_DEFINED
 
-#include "../Window.h"
-#include "SkTDynamicHash.h"
+#include "src/core/SkTDynamicHash.h"
+#include "tools/sk_app/Window.h"
 
 #import <Cocoa/Cocoa.h>
 
@@ -19,9 +19,7 @@ class Window_mac : public Window {
 public:
     Window_mac()
             : INHERITED()
-            , fWindow(nil)
-            , fMSAASampleCount(1)
-            , fIsMouseDown(false) {}
+            , fWindow(nil) {}
     ~Window_mac() override {
         this->closeWindow();
     }
@@ -36,7 +34,6 @@ public:
     void onInval() override {}
 
     static void PaintWindows();
-    static void HandleWindowEvent(const NSEvent* event);
 
     static const NSInteger& GetKey(const Window_mac& w) {
         return w.fWindowNumber;
@@ -46,22 +43,12 @@ public:
         return windowNumber;
     }
 
-    bool needsPaint() { return this->fIsContentInvalidated; }
-
     NSWindow* window() { return fWindow; }
     void closeWindow();
 
-    void resetMouse();
-
 private:
-    void handleEvent(const NSEvent* event);
-
     NSWindow*    fWindow;
     NSInteger    fWindowNumber;
-    int          fMSAASampleCount;
-    bool         fIsMouseDown;
-    NSPoint      fMouseDownPos;
-    uint32_t     fMouseModifiers;
 
     static SkTDynamicHash<Window_mac, NSInteger> gWindowMap;
 

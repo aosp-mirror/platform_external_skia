@@ -5,60 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkottieUtils.h"
-
-#include "SkAnimCodecPlayer.h"
-#include "SkData.h"
-#include "SkCodec.h"
-#include "SkImage.h"
-#include "SkMakeUnique.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
+#include "modules/skottie/utils/SkottieUtils.h"
 
 namespace skottie_utils {
-
-sk_sp<MultiFrameImageAsset> MultiFrameImageAsset::Make(sk_sp<SkData> data) {
-    if (auto codec = SkCodec::MakeFromData(std::move(data))) {
-        return sk_sp<MultiFrameImageAsset>(
-              new MultiFrameImageAsset(skstd::make_unique<SkAnimCodecPlayer>(std::move(codec))));
-    }
-
-    return nullptr;
-}
-
-MultiFrameImageAsset::MultiFrameImageAsset(std::unique_ptr<SkAnimCodecPlayer> player)
-    : fPlayer(std::move(player)) {
-    SkASSERT(fPlayer);
-}
-
-bool MultiFrameImageAsset::isMultiFrame() {
-    return fPlayer->duration() > 0;
-}
-
-sk_sp<SkImage> MultiFrameImageAsset::getFrame(float t) {
-    fPlayer->seek(static_cast<uint32_t>(t * 1000));
-    return fPlayer->getFrame();
-}
-
-sk_sp<FileResourceProvider> FileResourceProvider::Make(SkString base_dir) {
-    return sk_isdir(base_dir.c_str())
-        ? sk_sp<FileResourceProvider>(new FileResourceProvider(std::move(base_dir)))
-        : nullptr;
-}
-
-FileResourceProvider::FileResourceProvider(SkString base_dir) : fDir(std::move(base_dir)) {}
-
-sk_sp<SkData> FileResourceProvider::load(const char resource_path[],
-                                         const char resource_name[]) const {
-    const auto full_dir  = SkOSPath::Join(fDir.c_str()    , resource_path),
-               full_path = SkOSPath::Join(full_dir.c_str(), resource_name);
-    return SkData::MakeFromFileName(full_path.c_str());
-}
-
-sk_sp<skottie::ImageAsset> FileResourceProvider::loadImageAsset(const char resource_path[],
-                                                                const char resource_name[]) const {
-    return MultiFrameImageAsset::Make(this->load(resource_path, resource_name));
-}
 
 class CustomPropertyManager::PropertyInterceptor final : public skottie::PropertyObserver {
 public:
@@ -66,25 +15,44 @@ public:
 
     void onColorProperty(const char node_name[],
                          const LazyHandle<skottie::ColorPropertyHandle>& c) override {
-        const auto key = fMgr->acceptKey(node_name);
-        if (!key.empty()) {
-            fMgr->fColorMap[key].push_back(c());
-        }
+        const auto markedKey = fMgr->acceptKey(node_name);
+        const auto key = markedKey.empty() ? markedKey : fMgr->fCurrentNode + ".Color";
+        fMgr->fColorMap[key].push_back(c());
     }
 
     void onOpacityProperty(const char node_name[],
                            const LazyHandle<skottie::OpacityPropertyHandle>& o) override {
-        const auto key = fMgr->acceptKey(node_name);
-        if (!key.empty()) {
-            fMgr->fOpacityMap[key].push_back(o());
-        }
+        const auto markedKey = fMgr->acceptKey(node_name);
+        const auto key = markedKey.empty() ? markedKey : fMgr->fCurrentNode + ".Opacity";
+        fMgr->fOpacityMap[key].push_back(o());
     }
 
     void onTransformProperty(const char node_name[],
                              const LazyHandle<skottie::TransformPropertyHandle>& t) override {
+        const auto markedKey = fMgr->acceptKey(node_name);
+        const auto key = markedKey.empty() ? markedKey : fMgr->fCurrentNode + ".Transform";
+        fMgr->fTransformMap[key].push_back(t());
+    }
+
+    void onEnterNode(const char node_name[]) override {
+        fMgr->fCurrentNode =
+                fMgr->fCurrentNode.empty() ? node_name : fMgr->fCurrentNode + "." + node_name;
+    }
+
+    void onLeavingNode(const char node_name[]) override {
+        auto length = strlen(node_name);
+        fMgr->fCurrentNode =
+                fMgr->fCurrentNode.length() > length
+                        ? fMgr->fCurrentNode.substr(
+                                  0, fMgr->fCurrentNode.length() - strlen(node_name) - 1)
+                        : "";
+    }
+
+    void onTextProperty(const char node_name[],
+                        const LazyHandle<skottie::TextPropertyHandle>& t) override {
         const auto key = fMgr->acceptKey(node_name);
         if (!key.empty()) {
-            fMgr->fTransformMap[key].push_back(t());
+            fMgr->fTextMap[key].push_back(t());
         }
     }
 
@@ -189,9 +157,26 @@ CustomPropertyManager::getTransformProps() const {
     return this->getProps(fTransformMap);
 }
 
+skottie::TransformPropertyValue CustomPropertyManager::getTransform(const PropKey& key) const {
+    return this->get<skottie::TransformPropertyValue>(key, fTransformMap);
+}
+
 bool CustomPropertyManager::setTransform(const PropKey& key,
                                          const skottie::TransformPropertyValue& t) {
     return this->set(key, t, fTransformMap);
+}
+
+std::vector<CustomPropertyManager::PropKey>
+CustomPropertyManager::getTextProps() const {
+    return this->getProps(fTextMap);
+}
+
+skottie::TextPropertyValue CustomPropertyManager::getText(const PropKey& key) const {
+    return this->get<skottie::TextPropertyValue>(key, fTextMap);
+}
+
+bool CustomPropertyManager::setText(const PropKey& key, const skottie::TextPropertyValue& o) {
+    return this->set(key, o, fTextMap);
 }
 
 } // namespace skottie_utils

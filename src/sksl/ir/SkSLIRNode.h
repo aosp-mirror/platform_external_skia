@@ -8,7 +8,8 @@
 #ifndef SKSL_IRNODE
 #define SKSL_IRNODE
 
-#include "../SkSLLexer.h"
+#include "src/sksl/SkSLLexer.h"
+#include "src/sksl/SkSLString.h"
 
 namespace SkSL {
 
@@ -22,7 +23,9 @@ struct IRNode {
 
     virtual ~IRNode() {}
 
+#ifdef SK_DEBUG
     virtual String description() const = 0;
+#endif
 
     // character offset of this element within the program being compiled, for error reporting
     // purposes

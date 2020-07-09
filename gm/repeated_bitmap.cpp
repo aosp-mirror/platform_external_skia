@@ -5,15 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "SkImage.h"
-#include "gm.h"
-#include "sk_tool_utils.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
 static skiagm::DrawResult draw_rotated_image(SkCanvas* canvas, const SkImage* image,
                                              SkString* errorMsg) {
-    sk_tool_utils::draw_checkerboard(canvas, SkColorSetRGB(156, 154, 156),
-                                     SK_ColorWHITE, 12);
+    ToolUtils::draw_checkerboard(canvas, SkColorSetRGB(156, 154, 156), SK_ColorWHITE, 12);
     if (!image) {
         *errorMsg = "No image. Did you forget to set the resourcePath?";
         return skiagm::DrawResult::kFail;
@@ -21,7 +28,7 @@ static skiagm::DrawResult draw_rotated_image(SkCanvas* canvas, const SkImage* im
     SkRect rect = SkRect::MakeLTRB(-68.0f, -68.0f, 68.0f, 68.0f);
     SkPaint paint;
     paint.setColor(SkColorSetRGB(49, 48, 49));
-    SkScalar scale = SkTMin(128.0f / image->width(),
+    SkScalar scale = std::min(128.0f / image->width(),
                             128.0f / image->height());
     SkScalar point[2] = {-0.5f * image->width(), -0.5f * image->height()};
     for (int j = 0; j < 4; ++j) {

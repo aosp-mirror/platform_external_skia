@@ -5,20 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "CodecPriv.h"
-#include "FakeStreams.h"
-#include "Resources.h"
-#include "SkBitmap.h"
-#include "SkCodec.h"
-#include "SkData.h"
-#include "SkImageInfo.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "tests/CodecPriv.h"
+#include "tests/FakeStreams.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
 
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -99,9 +100,8 @@ static void test_partial(skiatest::Reporter* r, const char* name, const sk_sp<Sk
 
     while (true) {
         // This imitates how Chromium calls getFrameCount before resuming a decode.
-        // Without this line, the test passes. With it, it fails when skia_use_wuffs
-        // is true.
         partialCodec->getFrameCount();
+
         const SkCodec::Result result = partialCodec->incrementalDecode();
 
         if (result == SkCodec::kSuccess) {
@@ -131,7 +131,7 @@ static void test_partial(skiatest::Reporter* r, const char* name, size_t minByte
 
     // This size is arbitrary, but deliberately different from the buffer size used by SkPngCodec.
     constexpr size_t kIncrement = 1000;
-    test_partial(r, name, file, SkTMax(file->size() / 2, minBytes), kIncrement);
+    test_partial(r, name, file, std::max(file->size() / 2, minBytes), kIncrement);
 }
 
 DEF_TEST(Codec_partial, r) {
@@ -167,6 +167,34 @@ DEF_TEST(Codec_partialWuffs, r) {
         // first frame to decode a full image.
         test_partial(r, path, file, 100, 53);
     }
+}
+
+DEF_TEST(Codec_frameCountUpdatesInIncrementalDecode, r) {
+    sk_sp<SkData> file = GetResourceAsData("images/colorTables.gif");
+    size_t fileSize = file->size();
+    REPORTER_ASSERT(r, fileSize == 2829);
+    std::unique_ptr<SkCodec> fullCodec(SkCodec::MakeFromData(file));
+    REPORTER_ASSERT(r, fullCodec->getFrameCount() == 2);
+    const SkImageInfo info = standardize_info(fullCodec.get());
+
+    static const size_t n = 1000;
+    HaltingStream* stream = new HaltingStream(file, n);
+    // Note that we cheat and hold on to a pointer to stream, though it is owned by
+    // partialCodec.
+    auto partialCodec = SkCodec::MakeFromStream(std::unique_ptr<SkStream>(stream));
+    REPORTER_ASSERT(r, partialCodec->getFrameCount() == 1);
+
+    SkBitmap bitmap;
+    bitmap.allocPixels(info);
+    REPORTER_ASSERT(r, SkCodec::kSuccess ==
+            partialCodec->startIncrementalDecode(
+                info, bitmap.getPixels(), bitmap.rowBytes()));
+    REPORTER_ASSERT(r, SkCodec::kIncompleteInput ==
+            partialCodec->incrementalDecode());
+
+    REPORTER_ASSERT(r, partialCodec->getFrameCount() == 1);
+    stream->addNewData(fileSize - n);
+    REPORTER_ASSERT(r, partialCodec->getFrameCount() == 2);
 }
 
 // Verify that when decoding an animated gif byte by byte we report the correct
@@ -231,7 +259,7 @@ DEF_TEST(Codec_partialAnim, r) {
 
     // This stream will be owned by fullCodec, but we hang on to the pointer
     // to determine frame offsets.
-    std::unique_ptr<SkCodec> fullCodec(SkCodec::MakeFromStream(skstd::make_unique<SkMemoryStream>(file)));
+    std::unique_ptr<SkCodec> fullCodec(SkCodec::MakeFromStream(std::make_unique<SkMemoryStream>(file)));
     const auto info = standardize_info(fullCodec.get());
 
     // frameByteCounts stores the number of bytes to decode a particular frame.
@@ -333,7 +361,7 @@ static void test_interleaved(skiatest::Reporter* r, const char* name) {
     }
     const size_t halfSize = file->size() / 2;
     std::unique_ptr<SkCodec> partialCodec(SkCodec::MakeFromStream(
-                                  skstd::make_unique<HaltingStream>(std::move(file), halfSize)));
+                                  std::make_unique<HaltingStream>(std::move(file), halfSize)));
     if (!partialCodec) {
         ERRORF(r, "Failed to create codec for %s", name);
         return;
@@ -503,7 +531,7 @@ DEF_TEST(Codec_incomplete, r) {
         for (size_t len = 14; len <= file->size(); len += 5) {
             SkCodec::Result result;
             std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(
-                                   skstd::make_unique<SkMemoryStream>(file->data(), len), &result));
+                                   std::make_unique<SkMemoryStream>(file->data(), len), &result));
             if (codec) {
                 if (result != SkCodec::kSuccess) {
                     ERRORF(r, "Created an SkCodec for %s with %lu bytes, but "

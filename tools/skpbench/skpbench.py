@@ -51,6 +51,9 @@ __argparse.add_argument('-d', '--duration',
   type=int, help="number of milliseconds to run each benchmark")
 __argparse.add_argument('-l', '--sample-ms',
   type=int, help="duration of a sample (minimum)")
+__argparse.add_argument('--force',
+  action='store_true',
+  help="perform benchmarking on unrecognized Android devices")
 __argparse.add_argument('--gpu',
   action='store_true',
   help="perform timing on the gpu clock instead of cpu (gpu work only)")
@@ -60,6 +63,8 @@ __argparse.add_argument('--pr',
   help="comma- or space-separated list of GPU path renderers, including: "
        "[[~]all [~]default [~]dashline [~]nvpr [~]msaa [~]aaconvex "
        "[~]aalinearizing [~]small [~]tess]")
+__argparse.add_argument('--cc',
+  action='store_true', help="allow coverage counting shortcuts to render paths")
 __argparse.add_argument('--nocache',
   action='store_true', help="disable caching of path mask textures")
 __argparse.add_argument('-c', '--config',
@@ -131,6 +136,8 @@ class SKPBench:
     ARGV.extend(['--fps', 'true'])
   if FLAGS.pr:
     ARGV.extend(['--pr'] + re.split(r'[ ,]', FLAGS.pr))
+  if FLAGS.cc:
+    ARGV.extend(['--cc', 'true'])
   if FLAGS.nocache:
     ARGV.extend(['--cachePathMasks', 'false'])
   if FLAGS.gpuThreads != -1:
@@ -323,6 +330,7 @@ def main():
   DELIMITER = r'[, ](?!(?:[^(]*\([^)]*\))*[^()]*\))'
   configs = re.split(DELIMITER, FLAGS.config)
   srcs = _path.find_skps(FLAGS.srcs)
+  assert srcs
 
   if FLAGS.adb:
     adb = Adb(FLAGS.device_serial, FLAGS.adb_binary,
@@ -340,11 +348,14 @@ def main():
     elif model == 'Nexus 6P':
       from _hardware_nexus_6p import HardwareNexus6P
       hardware = HardwareNexus6P(adb)
-    else:
+    elif FLAGS.force:
       from _hardware_android import HardwareAndroid
       print("WARNING: %s: don't know how to monitor this hardware; results "
             "may be unreliable." % model, file=sys.stderr)
       hardware = HardwareAndroid(adb)
+    else:
+      raise Exception("%s: don't know how to monitor this hardware. "
+                      "Use --force to bypass this warning." % model)
   else:
     hardware = Hardware()
 

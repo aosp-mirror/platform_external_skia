@@ -5,32 +5,35 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkTypes.h"
+#include "tests/Test.h"
 
-#include "GrClip.h"
-#include "GrContextPriv.h"
-#include "GrDrawingManager.h"
-#include "GrPathRenderer.h"
-#include "GrPaint.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetContextPriv.h"
-#include "GrShape.h"
-#include "GrTexture.h"
-#include "SkExchange.h"
-#include "SkMatrix.h"
-#include "SkPathPriv.h"
-#include "SkRect.h"
-#include "sk_tool_utils.h"
-#include "ccpr/GrCoverageCountingPathRenderer.h"
-#include "ccpr/GrCCPathCache.h"
-#include "mock/GrMockTypes.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/gpu/GrTexture.h"
+#include "include/gpu/mock/GrMockTypes.h"
+#include "include/private/GrRecordingContext.h"
+#include "src/core/SkExchange.h"
+#include "src/core/SkPathPriv.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrPathRenderer.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/ccpr/GrCCPathCache.h"
+#include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
+#include "src/gpu/geometry/GrShape.h"
+#include "tools/ToolUtils.h"
 
 #include <cmath>
 
 static constexpr int kCanvasSize = 100;
+
+enum class DoCoverageCount { kNo = false, kYes };
+enum class DoStroke { kNo = false, kYes };
 
 class CCPRClip : public GrClip {
 public:
@@ -39,16 +42,15 @@ public:
 private:
     bool apply(GrRecordingContext* context, GrRenderTargetContext* rtc, bool useHWAA,
                bool hasUserStencilSettings, GrAppliedClip* out, SkRect* bounds) const override {
-        out->addCoverageFP(fCCPR->makeClipProcessor(rtc->priv().testingOnly_getOpListID(), fPath,
+        out->addCoverageFP(fCCPR->makeClipProcessor(rtc->priv().testingOnly_getOpsTaskID(), fPath,
                                                     SkIRect::MakeWH(rtc->width(), rtc->height()),
-                                                    rtc->width(), rtc->height(),
                                                     *context->priv().caps()));
         return true;
     }
     bool quickContains(const SkRect&) const final { return false; }
     bool isRRect(const SkRect& rtBounds, SkRRect* rr, GrAA*) const final { return false; }
     void getConservativeBounds(int width, int height, SkIRect* rect, bool* iior) const final {
-        rect->set(0, 0, width, height);
+        rect->setWH(width, height);
         if (iior) {
             *iior = false;
         }
@@ -59,14 +61,13 @@ private:
 
 class CCPRPathDrawer {
 public:
-    CCPRPathDrawer(sk_sp<GrContext> ctx, skiatest::Reporter* reporter, bool doStroke)
+    CCPRPathDrawer(sk_sp<GrContext> ctx, skiatest::Reporter* reporter, DoStroke doStroke)
             : fCtx(ctx)
             , fCCPR(fCtx->priv().drawingManager()->getCoverageCountingPathRenderer())
-            , fRTC(fCtx->priv().makeDeferredRenderTargetContext(
-                ctx->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType),
-                SkBackingFit::kExact, kCanvasSize, kCanvasSize, kRGBA_8888_GrPixelConfig,
-                nullptr))
-            , fDoStroke(doStroke) {
+            , fRTC(GrRenderTargetContext::Make(
+                      fCtx.get(), GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
+                      {kCanvasSize, kCanvasSize}))
+            , fDoStroke(DoStroke::kYes == doStroke) {
         if (!fCCPR) {
             ERRORF(reporter, "ccpr not enabled in GrContext for ccpr tests");
         }
@@ -82,7 +83,6 @@ public:
     void clear() const { fRTC->clear(nullptr, SK_PMColor4fTRANSPARENT,
                                      GrRenderTargetContext::CanClearFullscreen::kYes); }
     void destroyGrContext() {
-        SkASSERT(fRTC->unique());
         SkASSERT(fCtx->unique());
         fRTC.reset();
         fCCPR = nullptr;
@@ -133,28 +133,29 @@ public:
 private:
     sk_sp<GrContext> fCtx;
     GrCoverageCountingPathRenderer* fCCPR;
-    sk_sp<GrRenderTargetContext> fRTC;
+    std::unique_ptr<GrRenderTargetContext> fRTC;
     const bool fDoStroke;
 };
 
 class CCPRTest {
 public:
-    void run(skiatest::Reporter* reporter, bool doStroke) {
+    void run(skiatest::Reporter* reporter, DoCoverageCount doCoverageCount, DoStroke doStroke) {
         GrMockOptions mockOptions;
         mockOptions.fInstanceAttribSupport = true;
         mockOptions.fHalfFloatVertexAttributeSupport = true;
         mockOptions.fMapBufferFlags = GrCaps::kCanMap_MapFlag;
-        mockOptions.fConfigOptions[kAlpha_half_GrPixelConfig].fRenderability =
+        mockOptions.fConfigOptions[(int)GrColorType::kAlpha_F16].fRenderability =
                 GrMockOptions::ConfigOptions::Renderability::kNonMSAA;
-        mockOptions.fConfigOptions[kAlpha_half_GrPixelConfig].fTexturable = true;
-        mockOptions.fConfigOptions[kAlpha_8_GrPixelConfig].fRenderability =
-                GrMockOptions::ConfigOptions::Renderability::kNonMSAA;
-        mockOptions.fConfigOptions[kAlpha_8_GrPixelConfig].fTexturable = true;
+        mockOptions.fConfigOptions[(int)GrColorType::kAlpha_F16].fTexturable = true;
+        mockOptions.fConfigOptions[(int)GrColorType::kAlpha_8].fRenderability =
+                GrMockOptions::ConfigOptions::Renderability::kMSAA;
+        mockOptions.fConfigOptions[(int)GrColorType::kAlpha_8].fTexturable = true;
         mockOptions.fGeometryShaderSupport = true;
         mockOptions.fIntegerSupport = true;
         mockOptions.fFlatInterpolationSupport = true;
 
         GrContextOptions ctxOptions;
+        ctxOptions.fDisableCoverageCountingPaths = (DoCoverageCount::kNo == doCoverageCount);
         ctxOptions.fAllowPathMaskCaching = false;
         ctxOptions.fGpuPathRenderers = GpuPathRenderers::kCoverageCounting;
 
@@ -192,11 +193,14 @@ protected:
 #define DEF_CCPR_TEST(name) \
     DEF_GPUTEST(name, reporter, /* options */) { \
         name test; \
-        test.run(reporter, false); \
-        test.run(reporter, true); \
+        test.run(reporter, DoCoverageCount::kYes, DoStroke::kNo); \
+        test.run(reporter, DoCoverageCount::kYes, DoStroke::kYes); \
+        test.run(reporter, DoCoverageCount::kNo, DoStroke::kNo); \
+        /* FIXME: test.run(reporter, (DoCoverageCount::kNo, DoStroke::kYes) once supported. */ \
     }
 
 class CCPR_cleanup : public CCPRTest {
+protected:
     void onRun(skiatest::Reporter* reporter, CCPRPathDrawer& ccpr) override {
         REPORTER_ASSERT(reporter, SkPathPriv::TestingOnly_unique(fPath));
 
@@ -232,6 +236,10 @@ DEF_CCPR_TEST(CCPR_cleanup)
 class CCPR_cleanupWithTexAllocFail : public CCPR_cleanup {
     void customizeOptions(GrMockOptions* mockOptions, GrContextOptions*) override {
         mockOptions->fFailTextureAllocations = true;
+    }
+    void onRun(skiatest::Reporter* reporter, CCPRPathDrawer& ccpr) override {
+        ((GrRecordingContext*)ccpr.ctx())->priv().incrSuppressWarningMessages();
+        this->CCPR_cleanup::onRun(reporter, ccpr);
     }
 };
 DEF_CCPR_TEST(CCPR_cleanupWithTexAllocFail)
@@ -303,7 +311,7 @@ static int get_mock_texture_id(const GrTexture* texture) {
 
     GrMockTextureInfo info;
     backingTexture.getMockTextureInfo(&info);
-    return info.fID;
+    return info.id();
 }
 
 // Base class for cache path unit tests.
@@ -318,8 +326,8 @@ protected:
         int lastCopyAtlasID() const { return fLastCopyAtlasID; }
         int lastRenderedAtlasID() const { return fLastRenderedAtlasID; }
 
-        void preFlush(GrOnFlushResourceProvider*, const uint32_t* opListIDs, int numOpListIDs,
-                      SkTArray<sk_sp<GrRenderTargetContext>>* out) override {
+        void preFlush(GrOnFlushResourceProvider*, const uint32_t* opsTaskIDs,
+                      int numOpsTaskIDs) override {
             fLastRenderedAtlasID = fLastCopyAtlasID = 0;
 
             const GrCCPerFlushResources* resources = fCCPR->testingOnly_getCurrentFlushResources();
@@ -354,7 +362,7 @@ protected:
             do {
                 step = primes[rand.nextU() % SK_ARRAY_COUNT(primes)];
             } while (step == numPts);
-            fPaths[i] = sk_tool_utils::make_star(SkRect::MakeLTRB(0,0,1,1), numPts, step);
+            fPaths[i] = ToolUtils::make_star(SkRect::MakeLTRB(0, 0, 1, 1), numPts, step);
         }
     }
 
@@ -621,7 +629,7 @@ class CCPR_cache_hashTable : public CCPRCacheTest {
                     const GrCCCachedAtlas* cachedAtlas = entry->cachedAtlas();
                     REPORTER_ASSERT(reporter, cachedAtlas);
                     if (1 == i) {
-                        REPORTER_ASSERT(reporter, CoverageType::kFP16_CoverageCount
+                        REPORTER_ASSERT(reporter, ccpr.ccpr()->coverageType()
                                                           == cachedAtlas->coverageType());
                     } else {
                         REPORTER_ASSERT(reporter, CoverageType::kA8_LiteralCoverage
@@ -672,7 +680,7 @@ class CCPR_cache_multiFlush : public CCPRCacheTest {
                     } else {
                         REPORTER_ASSERT(reporter, 0 == atlasIDRecorder.lastRenderedAtlasID());
                     }
-                    nextFlush = SkTMin(j + (int)rand.nextRangeU(1, 29), kNumPaths - 1);
+                    nextFlush = std::min(j + (int)rand.nextRangeU(1, 29), kNumPaths - 1);
                 }
             }
             SkASSERT(endPathIdx == pathIdx % kNumPaths);
@@ -836,7 +844,7 @@ class CCPR_cache_partialInvalidate : public CCPRCacheTest {
 };
 DEF_CCPR_TEST(CCPR_cache_partialInvalidate)
 
-class CCPR_unrefPerOpListPathsBeforeOps : public CCPRTest {
+class CCPR_unrefPerOpsTaskPathsBeforeOps : public CCPRTest {
     void onRun(skiatest::Reporter* reporter, CCPRPathDrawer& ccpr) override {
         REPORTER_ASSERT(reporter, SkPathPriv::TestingOnly_unique(fPath));
         for (int i = 0; i < 10000; ++i) {
@@ -844,9 +852,9 @@ class CCPR_unrefPerOpListPathsBeforeOps : public CCPRTest {
             ccpr.drawPath(fPath);
         }
 
-        // Unref the GrCCPerOpListPaths object.
-        auto perOpListPathsMap = ccpr.ccpr()->detachPendingPaths();
-        perOpListPathsMap.clear();
+        // Unref the GrCCPerOpsTaskPaths object.
+        auto perOpsTaskPathsMap = ccpr.ccpr()->detachPendingPaths();
+        perOpsTaskPathsMap.clear();
 
         // Now delete the Op and all its draws.
         REPORTER_ASSERT(reporter, !SkPathPriv::TestingOnly_unique(fPath));
@@ -854,19 +862,22 @@ class CCPR_unrefPerOpListPathsBeforeOps : public CCPRTest {
         REPORTER_ASSERT(reporter, SkPathPriv::TestingOnly_unique(fPath));
     }
 };
-DEF_CCPR_TEST(CCPR_unrefPerOpListPathsBeforeOps)
+DEF_CCPR_TEST(CCPR_unrefPerOpsTaskPathsBeforeOps)
 
 class CCPRRenderingTest {
 public:
-    void run(skiatest::Reporter* reporter, GrContext* ctx, bool doStroke) const {
-        if (!ctx->priv().drawingManager()->getCoverageCountingPathRenderer()) {
-            return; // CCPR is not enabled on this GPU.
+    void run(skiatest::Reporter* reporter, GrContext* ctx, DoStroke doStroke) const {
+        if (auto ccpr = ctx->priv().drawingManager()->getCoverageCountingPathRenderer()) {
+            if (DoStroke::kYes == doStroke &&
+                GrCCAtlas::CoverageType::kA8_Multisample == ccpr->coverageType()) {
+                return;  // Stroking is not yet supported for multisample.
+            }
+            CCPRPathDrawer drawer(sk_ref_sp(ctx), reporter, doStroke);
+            if (!drawer.valid()) {
+                return;
+            }
+            this->onRun(reporter, drawer);
         }
-        CCPRPathDrawer ccpr(sk_ref_sp(ctx), reporter, doStroke);
-        if (!ccpr.valid()) {
-            return;
-        }
-        this->onRun(reporter, ccpr);
     }
 
     virtual ~CCPRRenderingTest() {}
@@ -878,8 +889,8 @@ protected:
 #define DEF_CCPR_RENDERING_TEST(name) \
     DEF_GPUTEST_FOR_RENDERING_CONTEXTS(name, reporter, ctxInfo) { \
         name test; \
-        test.run(reporter, ctxInfo.grContext(), false); \
-        test.run(reporter, ctxInfo.grContext(), true); \
+        test.run(reporter, ctxInfo.grContext(), DoStroke::kNo); \
+        test.run(reporter, ctxInfo.grContext(), DoStroke::kYes); \
     }
 
 class CCPR_busyPath : public CCPRRenderingTest {

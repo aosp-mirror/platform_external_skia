@@ -5,14 +5,31 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkFilterQuality.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/effects/SkGradientShader.h"
+#include "src/core/SkColorSpaceXformSteps.h"
 
-#include "SkColorSpace.h"
-#include "SkColorSpaceXformSteps.h"
-#include "SkDashPathEffect.h"
-#include "SkFont.h"
-#include "SkGradientShader.h"
-#include "SkString.h"
+#include <math.h>
+#include <string.h>
 
 static bool nearly_equal(SkColor4f x, SkColor4f y) {
     const float K = 0.01f;
@@ -96,7 +113,7 @@ static void compare_pixel(const char* label,
 }
 
 DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
-    auto p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDCIP3);
+    auto p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
     auto srgb = SkColorSpace::MakeSRGB();
 
     auto p3_to_srgb = [&](SkColor4f c) {
@@ -179,8 +196,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         SkAssertResult(pm.erase({1,0,0,1} /*in p3*/));
 
         SkPaint paint;
-        paint.setShader(SkShader::MakeBitmapShader(bm, SkShader::kRepeat_TileMode,
-                                                   SkShader::kRepeat_TileMode));
+        paint.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat));
 
         canvas->drawRect({10,10,70,70}, paint);
         compare_pixel("drawBitmapAsShader P3 red, from SkPixmap::erase",
@@ -201,7 +217,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         SkPaint paint;
         paint.setShader(SkGradientShader::MakeLinear(points, colors, p3,
                                                      nullptr, SK_ARRAY_COUNT(colors),
-                                                     SkShader::kClamp_TileMode));
+                                                     SkTileMode::kClamp));
         canvas->drawRect({10,10,70,70}, paint);
         canvas->save();
             compare_pixel("UPM P3 gradient, P3 red",
@@ -228,7 +244,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         paint.setShader(
                 SkGradientShader::MakeLinear(points, colors, p3,
                                              nullptr, SK_ARRAY_COUNT(colors),
-                                             SkShader::kClamp_TileMode,
+                                             SkTileMode::kClamp,
                                              SkGradientShader::kInterpolateColorsInPremul_Flag,
                                              nullptr/*local matrix*/));
         canvas->drawRect({10,10,70,70}, paint);
@@ -256,7 +272,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         SkPaint paint;
         paint.setShader(SkGradientShader::MakeLinear(points, colors, srgb,
                                                      nullptr, SK_ARRAY_COUNT(colors),
-                                                     SkShader::kClamp_TileMode));
+                                                     SkTileMode::kClamp));
         canvas->drawRect({10,10,70,70}, paint);
         canvas->save();
             compare_pixel("UPM sRGB gradient, P3 red",
@@ -283,7 +299,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         paint.setShader(
                 SkGradientShader::MakeLinear(points, colors, srgb,
                                              nullptr, SK_ARRAY_COUNT(colors),
-                                             SkShader::kClamp_TileMode,
+                                             SkTileMode::kClamp,
                                              SkGradientShader::kInterpolateColorsInPremul_Flag,
                                              nullptr/*local matrix*/));
         canvas->drawRect({10,10,70,70}, paint);
@@ -311,7 +327,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         paint.setShader(
                 SkGradientShader::MakeLinear(points, colors, p3,
                                              nullptr, SK_ARRAY_COUNT(colors),
-                                             SkShader::kClamp_TileMode,
+                                             SkTileMode::kClamp,
                                              SkGradientShader::kInterpolateColorsInPremul_Flag,
                                              nullptr/*local matrix*/));
         canvas->drawRect({10,10,70,70}, paint);
@@ -346,8 +362,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         SkPaint as_shader;
         as_shader.setColor4f({1,0,0,1}, p3.get());
         as_shader.setFilterQuality(kLow_SkFilterQuality);
-        as_shader.setShader(SkShader::MakeBitmapShader(bm, SkShader::kClamp_TileMode
-                                                         , SkShader::kClamp_TileMode));
+        as_shader.setShader(bm.makeShader());
 
         canvas->drawBitmap(bm, 10,10, &as_bitmap);
         compare_pixel("A8 sprite bitmap P3 red",
@@ -387,7 +402,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
 }
 
 DEF_SIMPLE_GM(p3_ovals, canvas, 450, 320) {
-    auto p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDCIP3);
+    auto p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
 
     // Test cases that exercise each Op in GrOvalOpFactory.cpp
 

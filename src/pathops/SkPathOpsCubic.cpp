@@ -4,15 +4,15 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkGeometry.h"
-#include "SkLineParameters.h"
-#include "SkPathOpsConic.h"
-#include "SkPathOpsCubic.h"
-#include "SkPathOpsCurve.h"
-#include "SkPathOpsLine.h"
-#include "SkPathOpsQuad.h"
-#include "SkPathOpsRect.h"
-#include "SkTSort.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkTSort.h"
+#include "src/pathops/SkLineParameters.h"
+#include "src/pathops/SkPathOpsConic.h"
+#include "src/pathops/SkPathOpsCubic.h"
+#include "src/pathops/SkPathOpsCurve.h"
+#include "src/pathops/SkPathOpsLine.h"
+#include "src/pathops/SkPathOpsQuad.h"
+#include "src/pathops/SkPathOpsRect.h"
 
 const int SkDCubic::gPrecisionUnit = 256;  // FIXME: test different values in test framework
 
@@ -215,11 +215,11 @@ bool SkDCubic::isLinear(int startIndex, int endIndex) const {
     lineParameters.cubicEndPoints(*this, startIndex, endIndex);
     // FIXME: maybe it's possible to avoid this and compare non-normalized
     lineParameters.normalize();
-    double tiniest = SkTMin(SkTMin(SkTMin(SkTMin(SkTMin(SkTMin(SkTMin(fPts[0].fX, fPts[0].fY),
+    double tiniest = std::min(std::min(std::min(std::min(std::min(std::min(std::min(fPts[0].fX, fPts[0].fY),
             fPts[1].fX), fPts[1].fY), fPts[2].fX), fPts[2].fY), fPts[3].fX), fPts[3].fY);
-    double largest = SkTMax(SkTMax(SkTMax(SkTMax(SkTMax(SkTMax(SkTMax(fPts[0].fX, fPts[0].fY),
+    double largest = std::max(std::max(std::max(std::max(std::max(std::max(std::max(fPts[0].fX, fPts[0].fY),
             fPts[1].fX), fPts[1].fY), fPts[2].fX), fPts[2].fY), fPts[3].fX), fPts[3].fY);
-    largest = SkTMax(largest, -tiniest);
+    largest = std::max(largest, -tiniest);
     double distance = lineParameters.controlPtDistance(*this, 1);
     if (!approximately_zero_when_compared_to(distance, largest)) {
         return false;

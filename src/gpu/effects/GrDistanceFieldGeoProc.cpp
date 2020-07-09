@@ -5,19 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "GrDistanceFieldGeoProc.h"
-#include "GrAtlasedShaderHelpers.h"
-#include "GrCaps.h"
-#include "GrShaderCaps.h"
-#include "GrTexture.h"
-#include "SkDistanceFieldGen.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
-#include "glsl/GrGLSLUtil.h"
-#include "glsl/GrGLSLVarying.h"
-#include "glsl/GrGLSLVertexGeoBuilder.h"
+#include "include/gpu/GrTexture.h"
+#include "src/core/SkDistanceFieldGen.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/effects/GrAtlasedShaderHelpers.h"
+#include "src/gpu/effects/GrDistanceFieldGeoProc.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
+#include "src/gpu/glsl/GrGLSLUtil.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
+#include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 
 // Assuming a radius of a little less than the diagonal of the fragment
 #define SK_DistanceFieldAAFactor     "0.65"
@@ -38,11 +38,11 @@ public:
         // emit attributes
         varyingHandler->emitAttributes(dfTexEffect);
 
-        const char* atlasSizeInvName;
-        fAtlasSizeInvUniform = uniformHandler->addUniform(kVertex_GrShaderFlag,
-                                                          kFloat2_GrSLType,
-                                                          "AtlasSizeInv",
-                                                          &atlasSizeInvName);
+        const char* atlasDimensionsInvName;
+        fAtlasDimensionsInvUniform = uniformHandler->addUniform(kVertex_GrShaderFlag,
+                                                                kFloat2_GrSLType,
+                                                                "AtlasDimensionsInv",
+                                                                &atlasDimensionsInvName);
 #ifdef SK_GAMMA_APPLY_TO_A8
         // adjust based on gamma
         const char* distanceAdjustUniName = nullptr;
@@ -70,7 +70,8 @@ public:
         GrSLType texIdxType = args.fShaderCaps->integerSupport() ? kInt_GrSLType : kFloat_GrSLType;
         GrGLSLVarying texIdx(texIdxType);
         GrGLSLVarying st(kFloat2_GrSLType);
-        append_index_uv_varyings(args, dfTexEffect.inTextureCoords().name(), atlasSizeInvName, &uv,
+        append_index_uv_varyings(args, dfTexEffect.numTextureSamplers(),
+                                 dfTexEffect.inTextureCoords().name(), atlasDimensionsInvName, &uv,
                                  &texIdx, &st);
 
         bool isUniformScale = (dfTexEffect.getFlags() & kUniformScale_DistanceFieldEffectMask) ==
@@ -163,7 +164,7 @@ public:
     }
 
     void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& proc,
-                 FPCoordTransformIter&& transformIter) override {
+                 const CoordTransformRange& transformRange) override {
         const GrDistanceFieldA8TextGeoProc& dfa8gp = proc.cast<GrDistanceFieldA8TextGeoProc>();
 
 #ifdef SK_GAMMA_APPLY_TO_A8
@@ -174,14 +175,16 @@ public:
         }
 #endif
 
-        const SkISize& atlasSize = dfa8gp.atlasSize();
-        SkASSERT(SkIsPow2(atlasSize.fWidth) && SkIsPow2(atlasSize.fHeight));
+        const SkISize& atlasDimensions = dfa8gp.atlasDimensions();
+        SkASSERT(SkIsPow2(atlasDimensions.fWidth) && SkIsPow2(atlasDimensions.fHeight));
 
-        if (fAtlasSize != atlasSize) {
-            pdman.set2f(fAtlasSizeInvUniform, 1.0f / atlasSize.fWidth, 1.0f / atlasSize.fHeight);
-            fAtlasSize = atlasSize;
+        if (fAtlasDimensions != atlasDimensions) {
+            pdman.set2f(fAtlasDimensionsInvUniform,
+                        1.0f / atlasDimensions.fWidth,
+                        1.0f / atlasDimensions.fHeight);
+            fAtlasDimensions = atlasDimensions;
         }
-        this->setTransformDataHelper(dfa8gp.localMatrix(), pdman, &transformIter);
+        this->setTransformDataHelper(dfa8gp.localMatrix(), pdman, transformRange);
     }
 
     static inline void GenKey(const GrGeometryProcessor& gp,
@@ -198,8 +201,8 @@ private:
     float fDistanceAdjust = -1.f;
     UniformHandle fDistanceAdjustUni;
 #endif
-    SkISize fAtlasSize = {0, 0};
-    UniformHandle fAtlasSizeInvUniform;
+    SkISize fAtlasDimensions = {0, 0};
+    UniformHandle fAtlasDimensionsInvUniform;
 
     typedef GrGLSLGeometryProcessor INHERITED;
 };
@@ -207,9 +210,9 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 GrDistanceFieldA8TextGeoProc::GrDistanceFieldA8TextGeoProc(const GrShaderCaps& caps,
-                                                           const sk_sp<GrTextureProxy>* proxies,
-                                                           int numProxies,
-                                                           const GrSamplerState& params,
+                                                           const GrSurfaceProxyView* views,
+                                                           int numViews,
+                                                           GrSamplerState params,
 #ifdef SK_GAMMA_APPLY_TO_A8
                                                            float distanceAdjust,
 #endif
@@ -222,7 +225,7 @@ GrDistanceFieldA8TextGeoProc::GrDistanceFieldA8TextGeoProc(const GrShaderCaps& c
         , fDistanceAdjust(distanceAdjust)
 #endif
 {
-    SkASSERT(numProxies <= kMaxTextures);
+    SkASSERT(numViews <= kMaxTextures);
     SkASSERT(!(flags & ~kNonLCD_DistanceFieldEffectMask));
 
     if (flags & kPerspective_DistanceFieldEffectFlag) {
@@ -235,34 +238,38 @@ GrDistanceFieldA8TextGeoProc::GrDistanceFieldA8TextGeoProc(const GrShaderCaps& c
                         caps.integerSupport() ? kUShort2_GrSLType : kFloat2_GrSLType};
     this->setVertexAttributes(&fInPosition, 3);
 
-    if (numProxies) {
-        fAtlasSize = proxies[0]->isize();
+    if (numViews) {
+        fAtlasDimensions = views[0].proxy()->dimensions();
     }
-    for (int i = 0; i < numProxies; ++i) {
-        SkASSERT(proxies[i]);
-        SkASSERT(proxies[i]->isize() == fAtlasSize);
-        fTextureSamplers[i].reset(proxies[i]->textureType(), proxies[i]->config(), params);
+    for (int i = 0; i < numViews; ++i) {
+        const GrSurfaceProxy* proxy = views[i].proxy();
+        SkASSERT(proxy);
+        SkASSERT(proxy->dimensions() == fAtlasDimensions);
+        fTextureSamplers[i].reset(params, proxy->backendFormat(), views[i].swizzle());
     }
-    this->setTextureSamplerCnt(numProxies);
+    this->setTextureSamplerCnt(numViews);
 }
 
-void GrDistanceFieldA8TextGeoProc::addNewProxies(const sk_sp<GrTextureProxy>* proxies,
-                                                 int numProxies,
-                                                 const GrSamplerState& params) {
-    SkASSERT(numProxies <= kMaxTextures);
+void GrDistanceFieldA8TextGeoProc::addNewViews(const GrSurfaceProxyView* views,
+                                               int numViews,
+                                               GrSamplerState params) {
+    SkASSERT(numViews <= kMaxTextures);
+    // Just to make sure we don't try to add too many proxies
+    numViews = std::min(numViews, kMaxTextures);
 
     if (!fTextureSamplers[0].isInitialized()) {
-        fAtlasSize = proxies[0]->isize();
+        fAtlasDimensions = views[0].proxy()->dimensions();
     }
 
-    for (int i = 0; i < numProxies; ++i) {
-        SkASSERT(proxies[i]);
-        SkASSERT(proxies[i]->isize() == fAtlasSize);
+    for (int i = 0; i < numViews; ++i) {
+        const GrSurfaceProxy* proxy = views[i].proxy();
+        SkASSERT(proxy);
+        SkASSERT(proxy->dimensions() == fAtlasDimensions);
         if (!fTextureSamplers[i].isInitialized()) {
-            fTextureSamplers[i].reset(proxies[i]->textureType(), proxies[i]->config(), params);
+            fTextureSamplers[i].reset(params, proxy->backendFormat(), views[i].swizzle());
         }
     }
-    this->setTextureSamplerCnt(numProxies);
+    this->setTextureSamplerCnt(numViews);
 }
 
 void GrDistanceFieldA8TextGeoProc::getGLSLProcessorKey(const GrShaderCaps& caps,
@@ -280,15 +287,8 @@ GrDistanceFieldA8TextGeoProc::createGLSLInstance(const GrShaderCaps&) const {
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrDistanceFieldA8TextGeoProc);
 
 #if GR_TEST_UTILS
-sk_sp<GrGeometryProcessor> GrDistanceFieldA8TextGeoProc::TestCreate(GrProcessorTestData* d) {
-    int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx
-                                        : GrProcessorUnitTest::kAlphaTextureIdx;
-    sk_sp<GrTextureProxy> proxies[kMaxTextures] = {
-        d->textureProxy(texIdx),
-        nullptr,
-        nullptr,
-        nullptr
-    };
+GrGeometryProcessor* GrDistanceFieldA8TextGeoProc::TestCreate(GrProcessorTestData* d) {
+    auto [view, ct, at] = d->randomAlphaOnlyView();
 
     GrSamplerState::WrapMode wrapModes[2];
     GrTest::TestWrapModes(d->fRandom, wrapModes);
@@ -305,8 +305,8 @@ sk_sp<GrGeometryProcessor> GrDistanceFieldA8TextGeoProc::TestCreate(GrProcessorT
 #ifdef SK_GAMMA_APPLY_TO_A8
     float lum = d->fRandom->nextF();
 #endif
-    return GrDistanceFieldA8TextGeoProc::Make(*d->caps()->shaderCaps(),
-                                              proxies, 1,
+    return GrDistanceFieldA8TextGeoProc::Make(d->allocator(), *d->caps()->shaderCaps(),
+                                              &view, 1,
                                               samplerState,
 #ifdef SK_GAMMA_APPLY_TO_A8
                                               lum,
@@ -319,10 +319,7 @@ sk_sp<GrGeometryProcessor> GrDistanceFieldA8TextGeoProc::TestCreate(GrProcessorT
 
 class GrGLDistanceFieldPathGeoProc : public GrGLSLGeometryProcessor {
 public:
-    GrGLDistanceFieldPathGeoProc()
-            : fMatrix(SkMatrix::InvalidMatrix())
-            , fAtlasSize({0,0}) {
-    }
+    GrGLDistanceFieldPathGeoProc() : fMatrix(SkMatrix::InvalidMatrix()), fAtlasDimensions{0,0} {}
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
         const GrDistanceFieldPathGeoProc& dfPathEffect =
@@ -337,17 +334,18 @@ public:
         // emit attributes
         varyingHandler->emitAttributes(dfPathEffect);
 
-        const char* atlasSizeInvName;
-        fAtlasSizeInvUniform = uniformHandler->addUniform(kVertex_GrShaderFlag,
-                                                          kFloat2_GrSLType,
-                                                          "AtlasSizeInv",
-                                                          &atlasSizeInvName);
+        const char* atlasDimensionsInvName;
+        fAtlasDimensionsInvUniform = uniformHandler->addUniform(kVertex_GrShaderFlag,
+                                                                kFloat2_GrSLType,
+                                                                "AtlasDimensionsInv",
+                                                                &atlasDimensionsInvName);
 
         GrGLSLVarying uv(kFloat2_GrSLType);
         GrSLType texIdxType = args.fShaderCaps->integerSupport() ? kInt_GrSLType : kFloat_GrSLType;
         GrGLSLVarying texIdx(texIdxType);
         GrGLSLVarying st(kFloat2_GrSLType);
-        append_index_uv_varyings(args, dfPathEffect.inTextureCoords().name(), atlasSizeInvName, &uv,
+        append_index_uv_varyings(args, dfPathEffect.numTextureSamplers(),
+                                 dfPathEffect.inTextureCoords().name(), atlasDimensionsInvName, &uv,
                                  &texIdx, &st);
 
         // setup pass through color
@@ -460,28 +458,29 @@ public:
     }
 
     void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& proc,
-                 FPCoordTransformIter&& transformIter) override {
-
+                 const CoordTransformRange& transformRange) override {
         const GrDistanceFieldPathGeoProc& dfpgp = proc.cast<GrDistanceFieldPathGeoProc>();
 
-        if (dfpgp.matrix().hasPerspective() && !fMatrix.cheapEqualTo(dfpgp.matrix())) {
+        if (dfpgp.matrix().hasPerspective() && !SkMatrixPriv::CheapEqual(fMatrix, dfpgp.matrix())) {
             fMatrix = dfpgp.matrix();
             float matrix[3 * 3];
             GrGLSLGetMatrix<3>(matrix, fMatrix);
             pdman.setMatrix3f(fMatrixUniform, matrix);
         }
 
-        const SkISize& atlasSize = dfpgp.atlasSize();
-        SkASSERT(SkIsPow2(atlasSize.fWidth) && SkIsPow2(atlasSize.fHeight));
-        if (fAtlasSize != atlasSize) {
-            pdman.set2f(fAtlasSizeInvUniform, 1.0f / atlasSize.fWidth, 1.0f / atlasSize.fHeight);
-            fAtlasSize = atlasSize;
+        const SkISize& atlasDimensions = dfpgp.atlasDimensions();
+        SkASSERT(SkIsPow2(atlasDimensions.fWidth) && SkIsPow2(atlasDimensions.fHeight));
+        if (fAtlasDimensions != atlasDimensions) {
+            pdman.set2f(fAtlasDimensionsInvUniform,
+                        1.0f / atlasDimensions.fWidth,
+                        1.0f / atlasDimensions.fHeight);
+            fAtlasDimensions = atlasDimensions;
         }
 
         if (dfpgp.matrix().hasPerspective()) {
-            this->setTransformDataHelper(SkMatrix::I(), pdman, &transformIter);
+            this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
         } else {
-            this->setTransformDataHelper(dfpgp.matrix(), pdman, &transformIter);
+            this->setTransformDataHelper(dfpgp.matrix(), pdman, transformRange);
         }
     }
 
@@ -501,8 +500,8 @@ private:
     SkMatrix      fMatrix;        // view matrix if perspective, local matrix otherwise
     UniformHandle fMatrixUniform;
 
-    SkISize       fAtlasSize;
-    UniformHandle fAtlasSizeInvUniform;
+    SkISize       fAtlasDimensions;
+    UniformHandle fAtlasDimensionsInvUniform;
 
     typedef GrGLSLGeometryProcessor INHERITED;
 };
@@ -512,14 +511,14 @@ private:
 GrDistanceFieldPathGeoProc::GrDistanceFieldPathGeoProc(const GrShaderCaps& caps,
                                                        const SkMatrix& matrix,
                                                        bool wideColor,
-                                                       const sk_sp<GrTextureProxy>* proxies,
-                                                       int numProxies,
-                                                       const GrSamplerState& params,
+                                                       const GrSurfaceProxyView* views,
+                                                       int numViews,
+                                                       GrSamplerState params,
                                                        uint32_t flags)
         : INHERITED(kGrDistanceFieldPathGeoProc_ClassID)
         , fMatrix(matrix)
         , fFlags(flags & kNonLCD_DistanceFieldEffectMask) {
-    SkASSERT(numProxies <= kMaxTextures);
+    SkASSERT(numViews <= kMaxTextures);
     SkASSERT(!(flags & ~kNonLCD_DistanceFieldEffectMask));
 
     fInPosition = {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
@@ -528,36 +527,39 @@ GrDistanceFieldPathGeoProc::GrDistanceFieldPathGeoProc(const GrShaderCaps& caps,
                         caps.integerSupport() ? kUShort2_GrSLType : kFloat2_GrSLType};
     this->setVertexAttributes(&fInPosition, 3);
 
-    if (numProxies) {
-        fAtlasSize = proxies[0]->isize();
+    if (numViews) {
+        fAtlasDimensions = views[0].proxy()->dimensions();
     }
 
-    for (int i = 0; i < numProxies; ++i) {
-        SkASSERT(proxies[i]);
-        SkASSERT(proxies[i]->isize() == fAtlasSize);
-        fTextureSamplers[i].reset(proxies[i]->textureType(), proxies[i]->config(), params);
+    for (int i = 0; i < numViews; ++i) {
+        const GrSurfaceProxy* proxy = views[i].proxy();
+        SkASSERT(proxy);
+        SkASSERT(proxy->dimensions() == fAtlasDimensions);
+        fTextureSamplers[i].reset(params, proxy->backendFormat(), views[i].swizzle());
     }
-    this->setTextureSamplerCnt(numProxies);
+    this->setTextureSamplerCnt(numViews);
 }
 
-void GrDistanceFieldPathGeoProc::addNewProxies(const sk_sp<GrTextureProxy>* proxies,
-                                               int numProxies,
-                                               const GrSamplerState& params) {
-    SkASSERT(numProxies <= kMaxTextures);
+void GrDistanceFieldPathGeoProc::addNewViews(const GrSurfaceProxyView* views,
+                                             int numViews,
+                                             GrSamplerState params) {
+    SkASSERT(numViews <= kMaxTextures);
+    // Just to make sure we don't try to add too many proxies
+    numViews = std::min(numViews, kMaxTextures);
 
     if (!fTextureSamplers[0].isInitialized()) {
-        fAtlasSize = proxies[0]->isize();
+        fAtlasDimensions = views[0].proxy()->dimensions();
     }
 
-    for (int i = 0; i < numProxies; ++i) {
-        SkASSERT(proxies[i]);
-        SkASSERT(proxies[i]->isize() == fAtlasSize);
-
+    for (int i = 0; i < numViews; ++i) {
+        const GrSurfaceProxy* proxy = views[i].proxy();
+        SkASSERT(proxy);
+        SkASSERT(proxy->dimensions() == fAtlasDimensions);
         if (!fTextureSamplers[i].isInitialized()) {
-            fTextureSamplers[i].reset(proxies[i]->textureType(), proxies[i]->config(), params);
+            fTextureSamplers[i].reset(params, proxy->backendFormat(), views[i].swizzle());
         }
     }
-    this->setTextureSamplerCnt(numProxies);
+    this->setTextureSamplerCnt(numViews);
 }
 
 void GrDistanceFieldPathGeoProc::getGLSLProcessorKey(const GrShaderCaps& caps,
@@ -575,15 +577,8 @@ GrDistanceFieldPathGeoProc::createGLSLInstance(const GrShaderCaps&) const {
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrDistanceFieldPathGeoProc);
 
 #if GR_TEST_UTILS
-sk_sp<GrGeometryProcessor> GrDistanceFieldPathGeoProc::TestCreate(GrProcessorTestData* d) {
-    int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx
-                                        : GrProcessorUnitTest::kAlphaTextureIdx;
-    sk_sp<GrTextureProxy> proxies[kMaxTextures] = {
-        d->textureProxy(texIdx),
-        nullptr,
-        nullptr,
-        nullptr
-    };
+GrGeometryProcessor* GrDistanceFieldPathGeoProc::TestCreate(GrProcessorTestData* d) {
+    auto [view, ct, at] = d->randomAlphaOnlyView();
 
     GrSamplerState::WrapMode wrapModes[2];
     GrTest::TestWrapModes(d->fRandom, wrapModes);
@@ -597,10 +592,10 @@ sk_sp<GrGeometryProcessor> GrDistanceFieldPathGeoProc::TestCreate(GrProcessorTes
         flags |= d->fRandom->nextBool() ? kScaleOnly_DistanceFieldEffectFlag : 0;
     }
 
-    return GrDistanceFieldPathGeoProc::Make(*d->caps()->shaderCaps(),
+    return GrDistanceFieldPathGeoProc::Make(d->allocator(), *d->caps()->shaderCaps(),
                                             GrTest::TestMatrix(d->fRandom),
                                             d->fRandom->nextBool(),
-                                            proxies, 1,
+                                            &view, 1,
                                             samplerState,
                                             flags);
 }
@@ -610,7 +605,7 @@ sk_sp<GrGeometryProcessor> GrDistanceFieldPathGeoProc::TestCreate(GrProcessorTes
 
 class GrGLDistanceFieldLCDTextGeoProc : public GrGLSLGeometryProcessor {
 public:
-    GrGLDistanceFieldLCDTextGeoProc() : fAtlasSize({0, 0}) {
+    GrGLDistanceFieldLCDTextGeoProc() : fAtlasDimensions({0, 0}) {
         fDistanceAdjust = GrDistanceFieldLCDTextGeoProc::DistanceAdjust::Make(1.0f, 1.0f, 1.0f);
     }
 
@@ -625,11 +620,11 @@ public:
         // emit attributes
         varyingHandler->emitAttributes(dfTexEffect);
 
-        const char* atlasSizeInvName;
-        fAtlasSizeInvUniform = uniformHandler->addUniform(kVertex_GrShaderFlag,
-                                                          kFloat2_GrSLType,
-                                                          "AtlasSizeInv",
-                                                          &atlasSizeInvName);
+        const char* atlasDimensionsInvName;
+        fAtlasDimensionsInvUniform = uniformHandler->addUniform(kVertex_GrShaderFlag,
+                                                                kFloat2_GrSLType,
+                                                                "AtlasDimensionsInv",
+                                                                &atlasDimensionsInvName);
 
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
 
@@ -652,15 +647,16 @@ public:
         GrSLType texIdxType = args.fShaderCaps->integerSupport() ? kInt_GrSLType : kFloat_GrSLType;
         GrGLSLVarying texIdx(texIdxType);
         GrGLSLVarying st(kFloat2_GrSLType);
-        append_index_uv_varyings(args, dfTexEffect.inTextureCoords().name(), atlasSizeInvName, &uv,
+        append_index_uv_varyings(args, dfTexEffect.numTextureSamplers(),
+                                 dfTexEffect.inTextureCoords().name(), atlasDimensionsInvName, &uv,
                                  &texIdx, &st);
 
         GrGLSLVarying delta(kFloat_GrSLType);
         varyingHandler->addVarying("Delta", &delta);
         if (dfTexEffect.getFlags() & kBGR_DistanceFieldEffectFlag) {
-            vertBuilder->codeAppendf("%s = -%s.x/3.0;", delta.vsOut(), atlasSizeInvName);
+            vertBuilder->codeAppendf("%s = -%s.x/3.0;", delta.vsOut(), atlasDimensionsInvName);
         } else {
-            vertBuilder->codeAppendf("%s = %s.x/3.0;", delta.vsOut(), atlasSizeInvName);
+            vertBuilder->codeAppendf("%s = %s.x/3.0;", delta.vsOut(), atlasDimensionsInvName);
         }
 
         // add frag shader code
@@ -782,7 +778,7 @@ public:
     }
 
     void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& processor,
-                 FPCoordTransformIter&& transformIter) override {
+                 const CoordTransformRange& transformRange) override {
         SkASSERT(fDistanceAdjustUni.isValid());
 
         const GrDistanceFieldLCDTextGeoProc& dflcd = processor.cast<GrDistanceFieldLCDTextGeoProc>();
@@ -795,13 +791,15 @@ public:
             fDistanceAdjust = wa;
         }
 
-        const SkISize& atlasSize = dflcd.atlasSize();
-        SkASSERT(SkIsPow2(atlasSize.fWidth) && SkIsPow2(atlasSize.fHeight));
-        if (fAtlasSize != atlasSize) {
-            pdman.set2f(fAtlasSizeInvUniform, 1.0f / atlasSize.fWidth, 1.0f / atlasSize.fHeight);
-            fAtlasSize = atlasSize;
+        const SkISize& atlasDimensions = dflcd.atlasDimensions();
+        SkASSERT(SkIsPow2(atlasDimensions.fWidth) && SkIsPow2(atlasDimensions.fHeight));
+        if (fAtlasDimensions != atlasDimensions) {
+            pdman.set2f(fAtlasDimensionsInvUniform,
+                        1.0f / atlasDimensions.fWidth,
+                        1.0f / atlasDimensions.fHeight);
+            fAtlasDimensions = atlasDimensions;
         }
-        this->setTransformDataHelper(dflcd.localMatrix(), pdman, &transformIter);
+        this->setTransformDataHelper(dflcd.localMatrix(), pdman, transformRange);
     }
 
     static inline void GenKey(const GrGeometryProcessor& gp,
@@ -818,8 +816,8 @@ private:
     GrDistanceFieldLCDTextGeoProc::DistanceAdjust fDistanceAdjust;
     UniformHandle                                 fDistanceAdjustUni;
 
-    SkISize                                       fAtlasSize;
-    UniformHandle                                 fAtlasSizeInvUniform;
+    SkISize                                       fAtlasDimensions;
+    UniformHandle                                 fAtlasDimensionsInvUniform;
 
     typedef GrGLSLGeometryProcessor INHERITED;
 };
@@ -827,9 +825,9 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 GrDistanceFieldLCDTextGeoProc::GrDistanceFieldLCDTextGeoProc(const GrShaderCaps& caps,
-                                                             const sk_sp<GrTextureProxy>* proxies,
-                                                             int numProxies,
-                                                             const GrSamplerState& params,
+                                                             const GrSurfaceProxyView* views,
+                                                             int numViews,
+                                                             GrSamplerState params,
                                                              DistanceAdjust distanceAdjust,
                                                              uint32_t flags,
                                                              const SkMatrix& localMatrix)
@@ -837,7 +835,7 @@ GrDistanceFieldLCDTextGeoProc::GrDistanceFieldLCDTextGeoProc(const GrShaderCaps&
         , fLocalMatrix(localMatrix)
         , fDistanceAdjust(distanceAdjust)
         , fFlags(flags & kLCD_DistanceFieldEffectMask) {
-    SkASSERT(numProxies <= kMaxTextures);
+    SkASSERT(numViews <= kMaxTextures);
     SkASSERT(!(flags & ~kLCD_DistanceFieldEffectMask) && (flags & kUseLCD_DistanceFieldEffectFlag));
 
     if (fFlags & kPerspective_DistanceFieldEffectFlag) {
@@ -850,36 +848,39 @@ GrDistanceFieldLCDTextGeoProc::GrDistanceFieldLCDTextGeoProc(const GrShaderCaps&
                         caps.integerSupport() ? kUShort2_GrSLType : kFloat2_GrSLType};
     this->setVertexAttributes(&fInPosition, 3);
 
-    if (numProxies) {
-        fAtlasSize = proxies[0]->isize();
+    if (numViews) {
+        fAtlasDimensions = views[0].proxy()->dimensions();
     }
 
-    for (int i = 0; i < numProxies; ++i) {
-        SkASSERT(proxies[i]);
-        SkASSERT(proxies[i]->isize() == fAtlasSize);
-        fTextureSamplers[i].reset(proxies[i]->textureType(), proxies[i]->config(), params);
+    for (int i = 0; i < numViews; ++i) {
+        const GrSurfaceProxy* proxy = views[i].proxy();
+        SkASSERT(proxy);
+        SkASSERT(proxy->dimensions() == fAtlasDimensions);
+        fTextureSamplers[i].reset(params, proxy->backendFormat(), views[i].swizzle());
     }
-    this->setTextureSamplerCnt(numProxies);
+    this->setTextureSamplerCnt(numViews);
 }
 
-void GrDistanceFieldLCDTextGeoProc::addNewProxies(const sk_sp<GrTextureProxy>* proxies,
-                                                  int numProxies,
-                                                  const GrSamplerState& params) {
-    SkASSERT(numProxies <= kMaxTextures);
+void GrDistanceFieldLCDTextGeoProc::addNewViews(const GrSurfaceProxyView* views,
+                                                int numViews,
+                                                GrSamplerState params) {
+    SkASSERT(numViews <= kMaxTextures);
+    // Just to make sure we don't try to add too many proxies
+    numViews = std::min(numViews, kMaxTextures);
 
     if (!fTextureSamplers[0].isInitialized()) {
-        fAtlasSize = proxies[0]->isize();
+        fAtlasDimensions = views[0].proxy()->dimensions();
     }
 
-    for (int i = 0; i < numProxies; ++i) {
-        SkASSERT(proxies[i]);
-        SkASSERT(proxies[i]->isize() == fAtlasSize);
-
+    for (int i = 0; i < numViews; ++i) {
+        const GrSurfaceProxy* proxy = views[i].proxy();
+        SkASSERT(proxy);
+        SkASSERT(proxy->dimensions() == fAtlasDimensions);
         if (!fTextureSamplers[i].isInitialized()) {
-            fTextureSamplers[i].reset(proxies[i]->textureType(), proxies[i]->config(), params);
+            fTextureSamplers[i].reset(params, proxy->backendFormat(), views[i].swizzle());
         }
     }
-    this->setTextureSamplerCnt(numProxies);
+    this->setTextureSamplerCnt(numViews);
 }
 
 void GrDistanceFieldLCDTextGeoProc::getGLSLProcessorKey(const GrShaderCaps& caps,
@@ -896,15 +897,8 @@ GrGLSLPrimitiveProcessor* GrDistanceFieldLCDTextGeoProc::createGLSLInstance(cons
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrDistanceFieldLCDTextGeoProc);
 
 #if GR_TEST_UTILS
-sk_sp<GrGeometryProcessor> GrDistanceFieldLCDTextGeoProc::TestCreate(GrProcessorTestData* d) {
-    int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
-                                          GrProcessorUnitTest::kAlphaTextureIdx;
-    sk_sp<GrTextureProxy> proxies[kMaxTextures] = {
-        d->textureProxy(texIdx),
-        nullptr,
-        nullptr,
-        nullptr
-    };
+GrGeometryProcessor* GrDistanceFieldLCDTextGeoProc::TestCreate(GrProcessorTestData* d) {
+    auto [view, ct, at] = d->randomView();
 
     GrSamplerState::WrapMode wrapModes[2];
     GrTest::TestWrapModes(d->fRandom, wrapModes);
@@ -919,7 +913,8 @@ sk_sp<GrGeometryProcessor> GrDistanceFieldLCDTextGeoProc::TestCreate(GrProcessor
     }
     flags |= d->fRandom->nextBool() ? kBGR_DistanceFieldEffectFlag : 0;
     SkMatrix localMatrix = GrTest::TestMatrix(d->fRandom);
-    return GrDistanceFieldLCDTextGeoProc::Make(*d->caps()->shaderCaps(), proxies, 1, samplerState,
-                                               wa, flags, localMatrix);
+
+    return GrDistanceFieldLCDTextGeoProc::Make(d->allocator(), *d->caps()->shaderCaps(), &view,
+                                               1, samplerState, wa, flags, localMatrix);
 }
 #endif

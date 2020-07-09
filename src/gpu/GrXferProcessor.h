@@ -8,11 +8,12 @@
 #ifndef GrXferProcessor_DEFINED
 #define GrXferProcessor_DEFINED
 
-#include "GrBlend.h"
-#include "GrNonAtomicRef.h"
-#include "GrProcessor.h"
-#include "GrProcessorAnalysis.h"
-#include "GrTypes.h"
+#include "include/gpu/GrTypes.h"
+#include "src/gpu/GrBlend.h"
+#include "src/gpu/GrNonAtomicRef.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrProcessorAnalysis.h"
+#include "src/gpu/GrSurfaceProxyView.h"
 
 class GrGLSLXferProcessor;
 class GrProcessorSet;
@@ -28,7 +29,7 @@ enum GrXferBarrierType {
     kBlend_GrXferBarrierType,    //<! Required by certain blend extensions.
 };
 /** Should be able to treat kNone as false in boolean expressions */
-GR_STATIC_ASSERT(SkToBool(kNone_GrXferBarrierType) == false);
+static_assert(SkToBool(kNone_GrXferBarrierType) == false);
 
 /**
  * GrXferProcessor is responsible for implementing the xfer mode that blends the src color and dst
@@ -53,55 +54,52 @@ public:
      * to the space of the texture. Depending on GPU capabilities a DstTexture may be used by a
      * GrXferProcessor for blending in the fragment shader.
      */
-    class DstProxy {
+    class DstProxyView {
     public:
-        DstProxy() { fOffset.set(0, 0); }
+        DstProxyView() { fOffset.set(0, 0); }
 
-        DstProxy(const DstProxy& other) {
+        DstProxyView(const DstProxyView& other) {
             *this = other;
         }
 
-        DstProxy(sk_sp<GrTextureProxy> proxy, const SkIPoint& offset)
-            : fProxy(std::move(proxy)) {
-            if (fProxy) {
+        DstProxyView(GrSurfaceProxyView view, const SkIPoint& offset)
+            : fProxyView(std::move(view)) {
+            if (fProxyView.proxy()) {
                 fOffset = offset;
             } else {
                 fOffset.set(0, 0);
             }
         }
 
-        DstProxy& operator=(const DstProxy& other) {
-            fProxy = other.fProxy;
+        DstProxyView& operator=(const DstProxyView& other) {
+            fProxyView = other.fProxyView;
             fOffset = other.fOffset;
             return *this;
         }
 
-        bool operator==(const DstProxy& that) const {
-            return fProxy == that.fProxy && fOffset == that.fOffset;
+        bool operator==(const DstProxyView& that) const {
+            return fProxyView == that.fProxyView && fOffset == that.fOffset;
         }
-        bool operator!=(const DstProxy& that) const { return !(*this == that); }
+        bool operator!=(const DstProxyView& that) const { return !(*this == that); }
 
         const SkIPoint& offset() const { return fOffset; }
 
         void setOffset(const SkIPoint& offset) { fOffset = offset; }
         void setOffset(int ox, int oy) { fOffset.set(ox, oy); }
 
-        GrTextureProxy* proxy() const { return fProxy.get(); }
+        GrTextureProxy* proxy() const { return fProxyView.asTextureProxy(); }
+        const GrSurfaceProxyView& proxyView() const { return fProxyView; }
 
-        void setProxy(sk_sp<GrTextureProxy> proxy) {
-            fProxy = std::move(proxy);
-            if (!fProxy) {
+        void setProxyView(GrSurfaceProxyView view) {
+            fProxyView = std::move(view);
+            if (!fProxyView.proxy()) {
                 fOffset = {0, 0};
             }
         }
 
-        bool instantiate(GrResourceProvider* resourceProvider) {
-            return SkToBool(fProxy->instantiate(resourceProvider));
-        }
-
     private:
-        sk_sp<GrTextureProxy> fProxy;
-        SkIPoint              fOffset;
+        GrSurfaceProxyView fProxyView;
+        SkIPoint           fOffset;
     };
 
     /**
@@ -127,24 +125,24 @@ public:
     }
 
     struct BlendInfo {
-        void reset() {
-            fEquation = kAdd_GrBlendEquation;
-            fSrcBlend = kOne_GrBlendCoeff;
-            fDstBlend = kZero_GrBlendCoeff;
-            fBlendConstant = SK_PMColor4fTRANSPARENT;
-            fWriteColor = true;
-        }
-
         SkDEBUGCODE(SkString dump() const;)
 
-        GrBlendEquation fEquation;
-        GrBlendCoeff    fSrcBlend;
-        GrBlendCoeff    fDstBlend;
-        SkPMColor4f     fBlendConstant;
-        bool            fWriteColor;
+        GrBlendEquation fEquation = kAdd_GrBlendEquation;
+        GrBlendCoeff    fSrcBlend = kOne_GrBlendCoeff;
+        GrBlendCoeff    fDstBlend = kZero_GrBlendCoeff;
+        SkPMColor4f     fBlendConstant = SK_PMColor4fTRANSPARENT;
+        bool            fWriteColor = true;
     };
 
-    void getBlendInfo(BlendInfo* blendInfo) const;
+    inline BlendInfo getBlendInfo() const {
+        BlendInfo blendInfo;
+        if (!this->willReadDstColor()) {
+            this->onGetBlendInfo(&blendInfo);
+        } else if (this->dstReadUsesMixedSamples()) {
+            blendInfo.fDstBlend = kIS2A_GrBlendCoeff;
+        }
+        return blendInfo;
+    }
 
     bool willReadDstColor() const { return fWillReadDstColor; }
 
@@ -253,7 +251,7 @@ private:
 #endif
 class GrXPFactory {
 public:
-    typedef GrXferProcessor::DstProxy DstProxy;
+    typedef GrXferProcessor::DstProxyView DstProxyView;
 
     enum class AnalysisProperties : unsigned {
         kNone = 0x0,
@@ -264,7 +262,7 @@ public:
         /**
          * The op may apply coverage as alpha and still blend correctly.
          */
-        kCompatibleWithAlphaAsCoverage = 0x2,
+        kCompatibleWithCoverageAsAlpha = 0x2,
         /**
          * The color input to the GrXferProcessor will be ignored.
          */
@@ -321,6 +319,6 @@ private:
 #pragma clang diagnostic pop
 #endif
 
-GR_MAKE_BITFIELD_CLASS_OPS(GrXPFactory::AnalysisProperties);
+GR_MAKE_BITFIELD_CLASS_OPS(GrXPFactory::AnalysisProperties)
 
 #endif

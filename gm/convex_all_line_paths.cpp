@@ -5,20 +5,31 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkPolyUtils.h"
-#include "SkPathPriv.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "src/core/SkPathPriv.h"
+
+#include <memory>
 
 static void create_ngon(int n, SkPoint* pts, SkScalar width, SkScalar height) {
-    float angleStep = 360.0f / n, angle = 0.0f, sin, cos;
+    float angleStep = 360.0f / n, angle = 0.0f;
     if ((n % 2) == 1) {
         angle = angleStep/2.0f;
     }
 
     for (int i = 0; i < n; ++i) {
-        sin = SkScalarSinCos(SkDegreesToRadians(angle), &cos);
-        pts[i].fX = -sin * width;
-        pts[i].fY = cos * height;
+        pts[i].fX = -SkScalarSin(SkDegreesToRadians(angle)) * width;
+        pts[i].fY =  SkScalarCos(SkDegreesToRadians(angle)) * height;
         angle += angleStep;
     }
 }
@@ -56,13 +67,9 @@ const SkPoint gPoints3[] = {
 const SkPoint gPoints4[] = {
     { -6.0f, -50.0f },
     { 4.0f, -50.0f },
-#if SK_TREAT_COLINEAR_DIAGONAL_POINTS_AS_CONCAVE == 0
     { 5.0f, -25.0f },  // remove if collinear diagonal points are not concave
-#endif
     { 6.0f,   0.0f },
-#if SK_TREAT_COLINEAR_DIAGONAL_POINTS_AS_CONCAVE == 0
     { 5.0f,  25.0f },  // remove if collinear diagonal points are not concave
-#endif
     { 4.0f,  50.0f },
     { -4.0f,  50.0f }
 };
@@ -176,7 +183,7 @@ protected:
     SkISize onISize() override { return SkISize::Make(kGMWidth, kGMHeight); }
     bool runAsBench() const override { return true; }
 
-    static SkPath GetPath(int index, SkPath::Direction dir) {
+    static SkPath GetPath(int index, SkPathDirection dir) {
         std::unique_ptr<SkPoint[]> data(nullptr);
         const SkPoint* points;
         int numPts;
@@ -231,7 +238,7 @@ protected:
 
         SkPath path;
 
-        if (SkPath::kCW_Direction == dir) {
+        if (SkPathDirection::kCW == dir) {
             path.moveTo(points[0]);
             for (int i = 1; i < numPts; ++i) {
                 path.lineTo(points[i]);
@@ -266,7 +273,7 @@ protected:
 
         SkPoint center;
         {
-            SkPath path = GetPath(index, SkPath::kCW_Direction);
+            SkPath path = GetPath(index, SkPathDirection::kCW);
             if (offset->fX+path.getBounds().width() > kGMWidth) {
                 offset->fX = 0;
                 offset->fY += kMaxPathHeight;
@@ -283,7 +290,7 @@ protected:
         }
 
         const SkColor colors[2] = { SK_ColorBLACK, SK_ColorWHITE };
-        const SkPath::Direction dirs[2] = { SkPath::kCW_Direction, SkPath::kCCW_Direction };
+        const SkPathDirection dirs[2] = { SkPathDirection::kCW, SkPathDirection::kCCW };
         const float scales[] = { 1.0f, 0.75f, 0.5f, 0.25f, 0.1f, 0.01f, 0.001f };
         const SkPaint::Join joins[3] = { SkPaint::kRound_Join,
                                          SkPaint::kBevel_Join,
@@ -367,7 +374,7 @@ protected:
             // inset rings into outsets when adjacent bisector angles converged outside the previous
             // ring due to accumulated error.
             SkPath p3;
-            p3.setFillType(SkPath::kEvenOdd_FillType);
+            p3.setFillType(SkPathFillType::kEvenOdd);
             p3.moveTo(1184.96f, 982.557f);
             p3.lineTo(1183.71f, 982.865f);
             p3.lineTo(1180.99f, 982.734f);

@@ -5,14 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkStrike.h"
-#include "SkStrikeCache.h"
-#include "sk_tool_utils.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkScalerCache.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkStrikeSpec.h"
+#include "tools/ToolUtils.h"
 
 static constexpr int kScreenWidth = 1500;
 static constexpr int kScreenHeight = 1500;
@@ -46,7 +47,8 @@ private:
 
     void onDelayedSetup() override {
         SkFont defaultFont;
-        auto cache = SkStrikeCache::FindOrCreateStrikeWithNoDeviceExclusive(defaultFont);
+        SkStrikeSpec strikeSpec = SkStrikeSpec::MakeWithNoDevice(defaultFont);
+        auto cache = strikeSpec.findOrCreateExclusiveStrike();
         for (int i = 0; i < kNumGlyphs; ++i) {
             SkPackedGlyphID id(defaultFont.unicharToGlyph(kGlyphs[i]));
             sk_ignore_unused_variable(cache->getScalerContext()->getPath(id, &fGlyphs[i]));
@@ -57,11 +59,11 @@ private:
         for (int i = 0; i < kNumDraws; ++i) {
             const SkPath& glyph = fGlyphs[i % kNumGlyphs];
             const SkRect& bounds = glyph.getBounds();
-            float glyphSize = SkTMax(bounds.width(), bounds.height());
+            float glyphSize = std::max(bounds.width(), bounds.height());
 
             float t0 = pow(rand.nextF(), 100);
-            float size = (1 - t0) * SkTMin(kScreenWidth, kScreenHeight) / 50 +
-                         t0 * SkTMin(kScreenWidth, kScreenHeight) / 3;
+            float size = (1 - t0) * std::min(kScreenWidth, kScreenHeight) / 50 +
+                         t0 * std::min(kScreenWidth, kScreenHeight) / 3;
             float scale = size / glyphSize;
             float t1 = rand.nextF(), t2 = rand.nextF();
             fXforms[i].setTranslate((1 - t1) * sqrt(2) * scale/2 * glyphSize +
@@ -76,7 +78,7 @@ private:
         }
 
         if (fClipped) {
-            fClipPath = sk_tool_utils::make_star(SkRect::MakeIWH(kScreenWidth,kScreenHeight), 11,3);
+            fClipPath = ToolUtils::make_star(SkRect::MakeIWH(kScreenWidth, kScreenHeight), 11, 3);
             fClipPath.setIsVolatile(fUncached);
         }
     }

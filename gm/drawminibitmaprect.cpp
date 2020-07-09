@@ -5,14 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkColorPriv.h"
-#include "SkGradientShader.h"
-#include "SkImage.h"
-#include "SkMathPriv.h"
-#include "SkRandom.h"
-#include "SkShader.h"
-#include "SkSurface.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkMathPriv.h"
 
 static sk_sp<SkImage> makebm(int w, int h) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
@@ -24,7 +36,7 @@ static sk_sp<SkImage> makebm(int w, int h) {
 
     const SkPoint     pt = { wScalar / 2, hScalar / 2 };
 
-    const SkScalar    radius = 4 * SkMaxScalar(wScalar, hScalar);
+    const SkScalar    radius = 4 * std::max(wScalar, hScalar);
 
     constexpr SkColor     colors[] = { SK_ColorRED, SK_ColorYELLOW,
                                           SK_ColorGREEN, SK_ColorMAGENTA,
@@ -48,7 +60,7 @@ static sk_sp<SkImage> makebm(int w, int h) {
                         pt, radius,
                         colors, pos,
                         SK_ARRAY_COUNT(colors),
-                        SkShader::kRepeat_TileMode,
+                        SkTileMode::kRepeat,
                         0, &mat));
         canvas->drawRect(rect, paint);
         rect.inset(wScalar / 8, hScalar / 8);

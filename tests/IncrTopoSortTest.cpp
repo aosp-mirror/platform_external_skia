@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "SkRefCnt.h"
-#include "SkTSort.h"
-#include "Test.h"
+#include "include/core/SkRefCnt.h"
+#include "src/core/SkTSort.h"
+#include "tests/Test.h"
 
-#include "sk_tool_utils.h"
+#include "tools/ToolUtils.h"
 
-// A node in the graph. This corresponds to an opList in the MDB world.
+// A node in the graph. This corresponds to an opsTask in the MDB world.
 class Node : public SkRefCnt {
 public:
     char id() const { return fID; }
@@ -80,7 +80,7 @@ private:
     bool             fVisited;             // only used in addEdges()
 };
 
-// The DAG driving the incremental topological sort. This corresponds to the opList DAG in
+// The DAG driving the incremental topological sort. This corresponds to the opsTask DAG in
 // the MDB world.
 class Graph {
 public:
@@ -159,7 +159,7 @@ public:
                 this->dfs(dependent, (*dependedOn)[i]->indexInSort());
             }
 
-            lowerBound = SkTMin(dependent->indexInSort(), lowerBound);
+            lowerBound = std::min(dependent->indexInSort(), lowerBound);
         }
 
         this->shift(lowerBound);

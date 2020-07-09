@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkCommandLineFlags.h"
-#include "SkFontMgr.h"
-#include "SkOTTable_name.h"
-#include "SkTypeface.h"
-#include "Test.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkTypeface.h"
+#include "src/sfnt/SkOTTable_name.h"
+#include "tests/Test.h"
+#include "tools/flags/CommandLineFlags.h"
 
 #include <stddef.h>
 
@@ -146,7 +146,7 @@ static void test_systemfonts(skiatest::Reporter* reporter, bool verbose) {
     static const SkFontTableTag nameTag = SkSetFourByteTag('n','a','m','e');
 
     sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
-    int count = SkMin32(fm->countFamilies(), MAX_FAMILIES);
+    int count = std::min(fm->countFamilies(), MAX_FAMILIES);
     for (int i = 0; i < count; ++i) {
         sk_sp<SkFontStyleSet> set(fm->createStyleSet(i));
         for (int j = 0; j < set->count(); ++j) {
@@ -216,7 +216,7 @@ static void test_systemfonts(skiatest::Reporter* reporter, bool verbose) {
 
 } // namespace
 
-DEFINE_bool(verboseFontNames, false, "verbose FontNames test.");
+static DEFINE_bool(verboseFontNames, false, "verbose FontNames test.");
 
 DEF_TEST(FontNames, reporter) {
     test_synthetic(reporter, FLAGS_verboseFontNames);

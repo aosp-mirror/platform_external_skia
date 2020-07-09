@@ -8,9 +8,10 @@
 #ifndef GrGLSLFragmentShaderBuilder_DEFINED
 #define GrGLSLFragmentShaderBuilder_DEFINED
 
-#include "GrBlend.h"
-#include "GrGLSLShaderBuilder.h"
-#include "GrProcessor.h"
+#include "src/gpu/GrBlend.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLShaderBuilder.h"
 
 class GrRenderTarget;
 class GrGLSLVarying;
@@ -54,9 +55,15 @@ public:
      */
     virtual const char* sampleOffsets() = 0;
 
-    enum class Scope : bool {
-        kTopLevel,
-        kInsideLoopOrBranch
+    enum class ScopeFlags {
+        // Every fragment will always execute this code, and will do it exactly once.
+        kTopLevel = 0,
+        // Either all fragments in a given primitive, or none, will execute this code.
+        kInsidePerPrimitiveBranch = (1 << 0),
+        // Any given fragment may or may not execute this code.
+        kInsidePerPixelBranch = (1 << 1),
+        // This code will be executed more than once.
+        kInsideLoop = (1 << 2)
     };
 
     /**
@@ -68,7 +75,21 @@ public:
      *
      * Requires MSAA and GLSL support for sample variables.
      */
-    virtual void maskOffMultisampleCoverage(const char* mask, Scope) = 0;
+    virtual void maskOffMultisampleCoverage(const char* mask, ScopeFlags) = 0;
+
+    /**
+     * Turns off coverage at each sample where the implicit function fn > 0.
+     *
+     * The provided "fn" value represents the implicit function at pixel center. We then approximate
+     * the implicit at each sample by riding the gradient, "grad", linearly from pixel center to
+     * each sample location.
+     *
+     * If "grad" is null, we approximate the gradient using HW derivatives.
+     *
+     * Requires MSAA and GLSL support for sample variables. Also requires HW derivatives if not
+     * providing a gradient.
+     */
+    virtual void applyFnToMultisampleMask(const char* fn, const char* grad, ScopeFlags) = 0;
 
     /**
      * Fragment procs with child procs should call these functions before/after calling emitCode
@@ -77,10 +98,15 @@ public:
     virtual void onBeforeChildProcEmitCode() = 0;
     virtual void onAfterChildProcEmitCode() = 0;
 
+    virtual SkString writeProcessorFunction(GrGLSLFragmentProcessor* fp,
+                                            GrGLSLFragmentProcessor::EmitArgs& args);
+
     virtual const SkString& getMangleString() const = 0;
 
     virtual void forceHighPrecision() = 0;
 };
+
+GR_MAKE_BITFIELD_CLASS_OPS(GrGLSLFPFragmentBuilder::ScopeFlags);
 
 /*
  * This class is used by Xfer processors to build their fragment code.
@@ -119,7 +145,8 @@ public:
 
     // GrGLSLFPFragmentBuilder interface.
     const char* sampleOffsets() override;
-    void maskOffMultisampleCoverage(const char* mask, Scope) override;
+    void maskOffMultisampleCoverage(const char* mask, ScopeFlags) override;
+    void applyFnToMultisampleMask(const char* fn, const char* grad, ScopeFlags) override;
     const SkString& getMangleString() const override { return fMangleString; }
     void onBeforeChildProcEmitCode() override;
     void onAfterChildProcEmitCode() override;
@@ -187,7 +214,7 @@ private:
     bool fHasCustomColorOutput = false;
     int fCustomColorOutputIndex = -1;
     bool fHasSecondaryOutput = false;
-    bool fHasInitializedSampleMask = false;
+    bool fHasModifiedSampleMask = false;
     bool fForceHighPrecision = false;
 
     friend class GrGLSLProgramBuilder;

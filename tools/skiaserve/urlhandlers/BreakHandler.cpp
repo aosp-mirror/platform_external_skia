@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "UrlHandler.h"
+#include "tools/skiaserve/urlhandlers/UrlHandler.h"
 
 #include "microhttpd.h"
-#include "../Request.h"
-#include "../Response.h"
+#include "tools/skiaserve/Request.h"
+#include "tools/skiaserve/Response.h"
 
 using namespace Response;
 
@@ -52,7 +52,8 @@ int BreakHandler::handle(Request* request, MHD_Connection* connection,
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kFast);
     writer.beginObject(); // root
 
-    writer.appendName("startColor"); SkDrawCommand::MakeJsonColor(writer, target);
+    writer.appendName("startColor");
+    DrawCommand::MakeJsonColor(writer, target);
 
     bool changed = false;
     for (int i = n + 1; i < n + count; ++i) {
@@ -66,14 +67,16 @@ int BreakHandler::handle(Request* request, MHD_Connection* connection,
         request->fDebugCanvas->getDrawCommandAt(index)->execute(canvas);
         SkColor current = request->getPixel(x, y);
         if (current != target) {
-            writer.appendName("endColor"); SkDrawCommand::MakeJsonColor(writer, current);
+            writer.appendName("endColor");
+            DrawCommand::MakeJsonColor(writer, current);
             writer.appendS32("endOp", index);
             changed = true;
             break;
         }
     }
     if (!changed) {
-        writer.appendName("endColor"); SkDrawCommand::MakeJsonColor(writer, target);
+        writer.appendName("endColor");
+        DrawCommand::MakeJsonColor(writer, target);
         writer.appendS32("endOp", n);
     }
     canvas->restoreToCount(saveCount);

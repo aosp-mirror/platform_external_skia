@@ -5,18 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "SkBitmapCache.h"
-#include "SkBitmapProvider.h"
-#include "SkCanvas.h"
-#include "SkDiscardableMemoryPool.h"
-#include "SkGraphics.h"
-#include "SkMakeUnique.h"
-#include "SkMipMap.h"
-#include "SkPicture.h"
-#include "SkPictureRecorder.h"
-#include "SkResourceCache.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkBitmapCache.h"
+#include "src/core/SkMipMap.h"
+#include "src/core/SkResourceCache.h"
+#include "src/image/SkImage_Base.h"
+#include "src/lazy/SkDiscardableMemoryPool.h"
+#include "tests/Test.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -45,13 +44,12 @@ static void test_mipmapcache(skiatest::Reporter* reporter, SkResourceCache* cach
     src.allocN32Pixels(5, 5);
     src.setImmutable();
     sk_sp<SkImage> img = SkImage::MakeFromBitmap(src);
-    SkBitmapProvider provider(img.get());
-    const auto desc = provider.makeCacheDesc();
+    const auto desc = SkBitmapCacheDesc::Make(img.get());
 
     const SkMipMap* mipmap = SkMipMapCache::FindAndRef(desc, cache);
     REPORTER_ASSERT(reporter, nullptr == mipmap);
 
-    mipmap = SkMipMapCache::AddAndRef(provider, cache);
+    mipmap = SkMipMapCache::AddAndRef(as_IB(img.get()), cache);
     REPORTER_ASSERT(reporter, mipmap);
 
     {
@@ -88,9 +86,8 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
         src[i].allocN32Pixels(5, 5);
         src[i].setImmutable();
         img[i] = SkImage::MakeFromBitmap(src[i]);
-        SkBitmapProvider provider(img[i].get());
-        SkMipMapCache::AddAndRef(provider, cache)->unref();
-        desc[i] = provider.makeCacheDesc();
+        SkMipMapCache::AddAndRef(as_IB(img[i].get()), cache)->unref();
+        desc[i] = SkBitmapCacheDesc::Make(img[i].get());
     }
 
     for (int i = 0; i < N; ++i) {
@@ -110,7 +107,7 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
     }
 }
 
-#include "SkDiscardableMemoryPool.h"
+#include "src/lazy/SkDiscardableMemoryPool.h"
 
 static SkDiscardableMemoryPool* gPool = nullptr;
 static SkDiscardableMemory* pool_factory(size_t bytes) {
@@ -248,8 +245,8 @@ static void test_duplicate_add(SkResourceCache* cache, skiatest::Reporter* repor
 
     int flags0 = 0, flags1 = 0;
 
-    auto rec0 = skstd::make_unique<TestRec>(sharedID, data, &flags0);
-    auto rec1 = skstd::make_unique<TestRec>(sharedID, data, &flags1);
+    auto rec0 = std::make_unique<TestRec>(sharedID, data, &flags0);
+    auto rec1 = std::make_unique<TestRec>(sharedID, data, &flags1);
     SkASSERT(rec0->getKey() == rec1->getKey());
 
     TestRec* r0 = rec0.get();   // save the bare-pointer since we will release rec0

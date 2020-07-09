@@ -14,6 +14,7 @@ DEPS = [
   'recipe_engine/context',
   'recipe_engine/file',
   'recipe_engine/path',
+  'recipe_engine/platform',
   'recipe_engine/properties',
   'recipe_engine/python',
   'recipe_engine/raw_io',
@@ -77,10 +78,11 @@ def skpbench_steps(api):
         '--adb_binary', ADB_BINARY]
   if 'CCPR' in api.vars.builder_name:
     skpbench_args += [
-        '--pr', 'ccpr',
-        '--nocache',
+        '--pr', 'ccpr', '--cc', '--nocache',
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_*svg.skp'),
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_chalkboard.skp')]
+  elif 'Mskp' in api.vars.builder_name:
+    skpbench_args += [api.flavor.device_dirs.mskp_dir]
   else:
     skpbench_args += [api.flavor.device_dirs.skp_dir]
 
@@ -130,7 +132,8 @@ def RunSteps(api):
   api.flavor.setup()
 
   try:
-    api.flavor.install(skps=True)
+    mksp_mode = ('Mskp' in api.vars.builder_name)
+    api.flavor.install(skps=not mksp_mode, mskps=mksp_mode)
     skpbench_steps(api)
   finally:
     api.flavor.cleanup_steps()
@@ -138,6 +141,8 @@ def RunSteps(api):
 
 
 TEST_BUILDERS = [
+  ('Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-'
+   'Android_Skpbench_Mskp'),
   ('Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-'
    'Android_CCPR_Skpbench'),
   'Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-Vulkan_Skpbench',
@@ -166,7 +171,8 @@ def GenTests(api):
       api.step_data('get swarming task id',
           stdout=api.raw_io.output('123456'))
     )
-
+    if 'Win' in builder and not 'LenovoYogaC630' in builder:
+      test += api.platform('win', 64)
     yield test
 
   b = ('Perf-Android-Clang-Pixel2XL-GPU-Adreno540-arm64-Release-All-'

@@ -5,56 +5,53 @@
  * found in the LICENSE file.
  */
 
-#include "DMJsonWriter.h"
+#include "dm/DMJsonWriter.h"
 
-#include "ProcStats.h"
-#include "SkCommonFlags.h"
-#include "SkData.h"
-#include "SkJSON.h"
-#include "SkJSONWriter.h"
-#include "SkMutex.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
-#include "SkStream.h"
-#include "SkTArray.h"
+#include "include/core/SkData.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkMutex.h"
+#include "include/private/SkTArray.h"
+#include "src/core/SkOSFile.h"
+#include "src/utils/SkJSON.h"
+#include "src/utils/SkJSONWriter.h"
+#include "src/utils/SkOSPath.h"
+#include "tools/ProcStats.h"
 
 namespace DM {
 
 SkTArray<JsonWriter::BitmapResult> gBitmapResults;
-SK_DECLARE_STATIC_MUTEX(gBitmapResultLock);
+static SkMutex& bitmap_result_mutex() {
+    static SkMutex& mutex = *(new SkMutex);
+    return mutex;
+}
+
 
 void JsonWriter::AddBitmapResult(const BitmapResult& result) {
-    SkAutoMutexAcquire lock(&gBitmapResultLock);
+    SkAutoMutexExclusive lock(bitmap_result_mutex());
     gBitmapResults.push_back(result);
 }
 
-SkTArray<skiatest::Failure> gFailures;
-SK_DECLARE_STATIC_MUTEX(gFailureLock);
-
-void JsonWriter::AddTestFailure(const skiatest::Failure& failure) {
-    SkAutoMutexAcquire lock(gFailureLock);
-    gFailures.push_back(failure);
-}
-
-void JsonWriter::DumpJson() {
-    if (FLAGS_writePath.isEmpty()) {
+void JsonWriter::DumpJson(const char* dir,
+                          CommandLineFlags::StringArray key,
+                          CommandLineFlags::StringArray properties) {
+    if (0 == strcmp(dir, "")) {
         return;
     }
 
-    SkString path = SkOSPath::Join(FLAGS_writePath[0], "dm.json");
-    sk_mkdir(FLAGS_writePath[0]);
+    SkString path = SkOSPath::Join(dir, "dm.json");
+    sk_mkdir(dir);
     SkFILEWStream stream(path.c_str());
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
 
     writer.beginObject(); // root
 
-    for (int i = 1; i < FLAGS_properties.count(); i += 2) {
-        writer.appendString(FLAGS_properties[i-1], FLAGS_properties[i]);
+    for (int i = 1; i < properties.count(); i += 2) {
+        writer.appendString(properties[i-1], properties[i]);
     }
 
     writer.beginObject("key");
-    for (int i = 1; i < FLAGS_key.count(); i += 2) {
-        writer.appendString(FLAGS_key[i-1], FLAGS_key[i]);
+    for (int i = 1; i < key.count(); i += 2) {
+        writer.appendString(key[i-1], key[i]);
     }
     writer.endObject();
 
@@ -64,7 +61,7 @@ void JsonWriter::DumpJson() {
     }
 
     {
-        SkAutoMutexAcquire lock(&gBitmapResultLock);
+        SkAutoMutexExclusive lock(bitmap_result_mutex());
         writer.beginArray("results");
         for (int i = 0; i < gBitmapResults.count(); i++) {
             writer.beginObject();
@@ -95,24 +92,6 @@ void JsonWriter::DumpJson() {
             writer.endObject(); // 1 result
         }
         writer.endArray(); // results
-    }
-
-    {
-        SkAutoMutexAcquire lock(gFailureLock);
-        if (gFailures.count() > 0) {
-            writer.beginObject("test_results");
-            writer.beginArray("failures");
-            for (int i = 0; i < gFailures.count(); i++) {
-                writer.beginObject();
-                writer.appendString("file_name", gFailures[i].fileName);
-                writer.appendS32   ("line_no"  , gFailures[i].lineNo);
-                writer.appendString("condition", gFailures[i].condition);
-                writer.appendString("message"  , gFailures[i].message.c_str());
-                writer.endObject(); // 1 failure
-            }
-            writer.endArray(); // failures
-            writer.endObject(); // test_results
-        }
     }
 
     writer.endObject(); // root

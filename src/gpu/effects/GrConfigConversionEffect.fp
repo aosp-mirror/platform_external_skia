@@ -6,20 +6,18 @@
  */
 
 @header {
-    #include "GrClip.h"
-    #include "GrContext.h"
-    #include "GrContextPriv.h"
-    #include "GrProxyProvider.h"
-    #include "GrRenderTargetContext.h"
+    #include "include/gpu/GrContext.h"
+    #include "src/gpu/GrBitmapTextureMaker.h"
+    #include "src/gpu/GrClip.h"
+    #include "src/gpu/GrContextPriv.h"
+    #include "src/gpu/GrImageInfo.h"
+    #include "src/gpu/GrRenderTargetContext.h"
 }
 
 @class {
     static bool TestForPreservingPMConversions(GrContext* context) {
         static constexpr int kSize = 256;
-        static constexpr GrPixelConfig kConfig = kRGBA_8888_GrPixelConfig;
-        static constexpr SkColorType kColorType = kRGBA_8888_SkColorType;
-        const GrBackendFormat format =
-                context->priv().caps()->getBackendFormatFromColorType(kColorType);
+        static constexpr GrColorType kColorType = GrColorType::kRGBA_8888;
         SkAutoTMalloc<uint32_t> data(kSize * kSize * 3);
         uint32_t* srcData = data.get();
         uint32_t* firstRead = data.get() + kSize * kSize;
@@ -32,9 +30,9 @@
             for (int x = 0; x < kSize; ++x) {
                 uint8_t* color = reinterpret_cast<uint8_t*>(&srcData[kSize*y + x]);
                 color[3] = y;
-                color[2] = SkTMin(x, y);
-                color[1] = SkTMin(x, y);
-                color[0] = SkTMin(x, y);
+                color[2] = std::min(x, y);
+                color[1] = std::min(x, y);
+                color[0] = std::min(x, y);
             }
         }
         memset(firstRead, 0, kSize * kSize * sizeof(uint32_t));
@@ -43,14 +41,10 @@
         const SkImageInfo ii = SkImageInfo::Make(kSize, kSize,
                                                  kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
-        sk_sp<GrRenderTargetContext> readRTC(
-                context->priv().makeDeferredRenderTargetContext(format, SkBackingFit::kExact,
-                                                                kSize, kSize,
-                                                                kConfig, nullptr));
-        sk_sp<GrRenderTargetContext> tempRTC(
-                context->priv().makeDeferredRenderTargetContext(format, SkBackingFit::kExact,
-                                                                kSize, kSize,
-                                                                kConfig, nullptr));
+        auto readRTC = GrRenderTargetContext::Make(
+                context, kColorType, nullptr, SkBackingFit::kExact, {kSize, kSize});
+        auto tempRTC = GrRenderTargetContext::Make(
+                context, kColorType, nullptr, SkBackingFit::kExact, {kSize, kSize});
         if (!readRTC || !readRTC->asTextureProxy() || !tempRTC) {
             return false;
         }
@@ -58,21 +52,17 @@
         // draw
         readRTC->discard();
 
-        GrProxyProvider* proxyProvider = context->priv().proxyProvider();
-
-        SkPixmap pixmap(ii, srcData, 4 * kSize);
-
         // This function is only ever called if we are in a GrContext that has a GrGpu since we are
         // calling read pixels here. Thus the pixel data will be uploaded immediately and we don't
         // need to keep the pixel data alive in the proxy. Therefore the ReleaseProc is nullptr.
-        sk_sp<SkImage> image = SkImage::MakeFromRaster(pixmap, nullptr, nullptr);
+        SkBitmap bitmap;
+        bitmap.installPixels(ii, srcData, 4 * kSize);
+        bitmap.setImmutable();
 
-        sk_sp<GrTextureProxy> dataProxy = proxyProvider->createTextureProxy(std::move(image),
-                                                                            kNone_GrSurfaceFlags,
-                                                                            1,
-                                                                            SkBudgeted::kYes,
-                                                                            SkBackingFit::kExact);
-        if (!dataProxy) {
+        GrBitmapTextureMaker maker(context, bitmap);
+        auto [dataView, ct] = maker.view(GrMipMapped::kNo);
+
+        if (!dataView.proxy()) {
             return false;
         }
 
@@ -90,13 +80,14 @@
         std::unique_ptr<GrFragmentProcessor> upmToPM(
                 new GrConfigConversionEffect(PMConversion::kToPremul));
 
-        paint1.addColorTextureProcessor(dataProxy, SkMatrix::I());
+        paint1.addColorFragmentProcessor(GrTextureEffect::Make(std::move(dataView),
+                                                               kPremul_SkAlphaType));
         paint1.addColorFragmentProcessor(pmToUPM->clone());
         paint1.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
         readRTC->fillRectToRect(GrNoClip(), std::move(paint1), GrAA::kNo, SkMatrix::I(), kRect,
                                 kRect);
-        if (!readRTC->readPixels(ii, firstRead, 0, 0, 0)) {
+        if (!readRTC->readPixels(ii, firstRead, 0, {0, 0})) {
             return false;
         }
 
@@ -104,21 +95,23 @@
         // draw
         tempRTC->discard();
 
-        paint2.addColorTextureProcessor(readRTC->asTextureProxyRef(), SkMatrix::I());
+        paint2.addColorFragmentProcessor(GrTextureEffect::Make(readRTC->readSurfaceView(),
+                                                               kUnpremul_SkAlphaType));
         paint2.addColorFragmentProcessor(std::move(upmToPM));
         paint2.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
         tempRTC->fillRectToRect(GrNoClip(), std::move(paint2), GrAA::kNo, SkMatrix::I(), kRect,
                                 kRect);
 
-        paint3.addColorTextureProcessor(tempRTC->asTextureProxyRef(), SkMatrix::I());
+        paint3.addColorFragmentProcessor(GrTextureEffect::Make(tempRTC->readSurfaceView(),
+                                                               kPremul_SkAlphaType));
         paint3.addColorFragmentProcessor(std::move(pmToUPM));
         paint3.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
         readRTC->fillRectToRect(GrNoClip(), std::move(paint3), GrAA::kNo, SkMatrix::I(), kRect,
                                 kRect);
 
-        if (!readRTC->readPixels(ii, secondRead, 0, 0, 0)) {
+        if (!readRTC->readPixels(ii, secondRead, 0, {0, 0})) {
             return false;
         }
 

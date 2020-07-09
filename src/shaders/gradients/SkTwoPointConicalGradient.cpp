@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkFloatingPoint.h"
-#include "SkRasterPipeline.h"
-#include "SkReadBuffer.h"
-#include "SkTwoPointConicalGradient.h"
-#include "SkWriteBuffer.h"
+#include "include/private/SkFloatingPoint.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/gradients/SkTwoPointConicalGradient.h"
 
 #include <utility>
 
@@ -55,13 +55,13 @@ sk_sp<SkShader> SkTwoPointConicalGradient::Create(const SkPoint& c0, SkScalar r0
     Type     gradientType;
 
     if (SkScalarNearlyZero((c0 - c1).length())) {
-        if (SkScalarNearlyZero(SkTMax(r0, r1)) || SkScalarNearlyEqual(r0, r1)) {
+        if (SkScalarNearlyZero(std::max(r0, r1)) || SkScalarNearlyEqual(r0, r1)) {
             // Degenerate case; avoid dividing by zero. Should have been caught by caller but
             // just in case, recheck here.
             return nullptr;
         }
         // Concentric case: we can pretend we're radial (with a tiny twist).
-        const SkScalar scale = sk_ieee_float_divide(1, SkTMax(r0, r1));
+        const SkScalar scale = sk_ieee_float_divide(1, std::max(r0, r1));
         gradientMatrix = SkMatrix::MakeTrans(-c1.x(), -c1.y());
         gradientMatrix.postScale(scale, scale);
 
@@ -136,7 +136,7 @@ sk_sp<SkFlattenable> SkTwoPointConicalGradient::CreateProc(SkReadBuffer& buffer)
     SkScalar r1 = buffer.readScalar();
     SkScalar r2 = buffer.readScalar();
 
-    if (buffer.isVersionLT(SkReadBuffer::k2PtConicalNoFlip_Version) && buffer.readBool()) {
+    if (buffer.isVersionLT(SkPicturePriv::k2PtConicalNoFlip_Version) && buffer.readBool()) {
         using std::swap;
         // legacy flipped gradient
         swap(c1, c2);
@@ -177,13 +177,6 @@ void SkTwoPointConicalGradient::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalar(fRadius2);
 }
 
-sk_sp<SkShader> SkTwoPointConicalGradient::onMakeColorSpace(SkColorSpaceXformer* xformer) const {
-    const AutoXformColors xformedColors(*this, xformer);
-    return SkGradientShader::MakeTwoPointConical(fCenter1, fRadius1, fCenter2, fRadius2,
-                                                 xformedColors.fColors.get(), fOrigPos, fColorCount,
-                                                 fTileMode, fGradFlags, &this->getLocalMatrix());
-}
-
 void SkTwoPointConicalGradient::appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* p,
                                                      SkRasterPipeline* postPipeline) const {
     const auto dRadius = fRadius2 - fRadius1;
@@ -192,7 +185,7 @@ void SkTwoPointConicalGradient::appendGradientStages(SkArenaAlloc* alloc, SkRast
         p->append(SkRasterPipeline::xy_to_radius);
 
         // Tiny twist: radial computes a t for [0, r2], but we want a t for [r1, r2].
-        auto scale =  SkTMax(fRadius1, fRadius2) / dRadius;
+        auto scale =  std::max(fRadius1, fRadius2) / dRadius;
         auto bias  = -fRadius1 / dRadius;
 
         p->append_matrix(alloc, SkMatrix::Concat(SkMatrix::MakeTrans(bias, 0),
@@ -241,11 +234,62 @@ void SkTwoPointConicalGradient::appendGradientStages(SkArenaAlloc* alloc, SkRast
     }
 }
 
+skvm::F32 SkTwoPointConicalGradient::transformT(skvm::Builder* p, skvm::Uniforms* uniforms,
+                                                skvm::F32 x, skvm::F32 y, skvm::I32* mask) const {
+    // See https://skia.org/dev/design/conical, and onAppendStages() above.
+    // There's a lot going on here, and I'm not really sure what's independent
+    // or disjoint, what can be reordered, simplified, etc.  Tweak carefully.
+
+    if (fType == Type::kRadial) {
+        float denom = 1.0f / (fRadius2 - fRadius1),
+              scale = std::max(fRadius1, fRadius2) * denom,
+               bias =                  -fRadius1 * denom;
+        return p->mad(p->norm(x,y), p->uniformF(uniforms->pushF(scale))
+                                  , p->uniformF(uniforms->pushF(bias )));
+    }
+
+    if (fType == Type::kStrip) {
+        float r = fRadius1 / this->getCenterX1();
+        skvm::F32 t = p->add(x, p->sqrt(p->sub(p->splat(r*r),
+                                        p->mul(y,y))));
+
+        *mask = p->eq(t,t);   // t != NaN
+        return t;
+    }
+
+    const skvm::F32 invR1 = p->uniformF(uniforms->pushF(1 / fFocalData.fR1));
+
+    skvm::F32 t;
+    if (fFocalData.isFocalOnCircle()) {
+        t = p->mad(p->div(y,x),y,x);       // (x^2 + y^2) / x  ~~>  x + y^2/x  ~~>  y/x * y + x
+    } else if (fFocalData.isWellBehaved()) {
+        t = p->sub(p->norm(x,y), p->mul(x, invR1));
+    } else {
+        skvm::F32 k = p->sqrt(p->sub(p->mul(x,x),
+                                     p->mul(y,y)));
+        if (fFocalData.isSwapped() || 1 - fFocalData.fFocalX < 0) {
+            k = p->negate(k);
+        }
+        t = p->sub(k, p->mul(x, invR1));
+    }
+
+    if (!fFocalData.isWellBehaved()) {
+        // TODO: not sure why we consider t == 0 degenerate
+        *mask = p->gt(t, p->splat(0.0f));  // t > 0 and implicitly, t != NaN
+    }
+
+    const skvm::F32 focalX = p->uniformF(uniforms->pushF(fFocalData.fFocalX));
+    if (1 - fFocalData.fFocalX < 0)    { t = p->negate(t); }
+    if (!fFocalData.isNativelyFocal()) { t = p->add(t, focalX); }
+    if (fFocalData.isSwapped())        { t = p->sub(p->splat(1.0f), t); }
+    return t;
+}
+
 /////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
 
-#include "gradients/GrGradientShader.h"
+#include "src/gpu/gradients/GrGradientShader.h"
 
 std::unique_ptr<GrFragmentProcessor> SkTwoPointConicalGradient::asFragmentProcessor(
         const GrFPArgs& args) const {

@@ -8,7 +8,7 @@
 #ifndef GrVulkanDefines_DEFINED
 #define GrVulkanDefines_DEFINED
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if defined(SK_BUILD_FOR_WIN)
 #   if !defined(VK_USE_PLATFORM_WIN32_KHR)
@@ -19,7 +19,7 @@
 #      define VK_USE_PLATFORM_ANDROID_KHR
 #   endif
 #elif defined(SK_BUILD_FOR_UNIX)
-#   if !defined(VK_USE_PLATFORM_XCB_KHR)
+#   if !defined(__Fuchsia__) && !defined(VK_USE_PLATFORM_XCB_KHR)
 #      define VK_USE_PLATFORM_XCB_KHR
 #   endif
 #elif defined(SK_BUILD_FOR_MAC)

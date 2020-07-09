@@ -8,9 +8,9 @@
 #ifndef SkTHash_DEFINED
 #define SkTHash_DEFINED
 
-#include "SkChecksum.h"
-#include "SkTypes.h"
-#include "SkTemplates.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkChecksum.h"
+#include "include/private/SkTemplates.h"
 #include <new>
 
 // Before trying to use SkTHashTable, look below to see if SkTHashMap or SkTHashSet works for you.
@@ -104,38 +104,10 @@ public:
             Slot& s = fSlots[index];
             SkASSERT(!s.empty());
             if (hash == s.hash && key == Traits::GetKey(s.val)) {
-                fCount--;
-                break;
+               this->removeSlot(index);
+               return;
             }
             index = this->next(index);
-        }
-
-        // Rearrange elements to restore the invariants for linear probing.
-        for (;;) {
-            Slot& emptySlot = fSlots[index];
-            int emptyIndex = index;
-            int originalIndex;
-            // Look for an element that can be moved into the empty slot.
-            // If the empty slot is in between where an element landed, and its native slot, then
-            // move it to the empty slot. Don't move it if its native slot is in between where
-            // the element landed and the empty slot.
-            // [native] <= [empty] < [candidate] == GOOD, can move candidate to empty slot
-            // [empty] < [native] < [candidate] == BAD, need to leave candidate where it is
-            do {
-                index = this->next(index);
-                Slot& s = fSlots[index];
-                if (s.empty()) {
-                    // We're done shuffling elements around.  Clear the last empty slot.
-                    emptySlot = Slot();
-                    return;
-                }
-                originalIndex = s.hash & (fCapacity - 1);
-            } while ((index <= originalIndex && originalIndex < emptyIndex)
-                     || (originalIndex < emptyIndex && emptyIndex < index)
-                     || (emptyIndex < index && index <= originalIndex));
-            // Move the element to the empty slot.
-            Slot& moveFrom = fSlots[index];
-            emptySlot = std::move(moveFrom);
         }
     }
 
@@ -155,6 +127,25 @@ public:
         for (int i = 0; i < fCapacity; i++) {
             if (!fSlots[i].empty()) {
                 fn(fSlots[i].val);
+            }
+        }
+    }
+
+    // Call fn on every entry in the table. Fn can return false to remove the entry. You may mutate
+    // the entries, but be very careful.
+    template <typename Fn>  // f(T*)
+    void mutate(Fn&& fn) {
+        for (int i = 0; i < fCapacity;) {
+            bool keep = true;
+            if (!fSlots[i].empty()) {
+                keep = fn(&fSlots[i].val);
+            }
+            if (keep) {
+                i++;
+            } else {
+                this->removeSlot(i);
+                // Something may now have moved into slot i, so we'll loop
+                // around to check slot i again.
             }
         }
     }
@@ -204,6 +195,38 @@ private:
         SkASSERT(fCount == oldCount);
     }
 
+    void removeSlot(int index) {
+        fCount--;
+
+        // Rearrange elements to restore the invariants for linear probing.
+        for (;;) {
+            Slot& emptySlot = fSlots[index];
+            int emptyIndex = index;
+            int originalIndex;
+            // Look for an element that can be moved into the empty slot.
+            // If the empty slot is in between where an element landed, and its native slot, then
+            // move it to the empty slot. Don't move it if its native slot is in between where
+            // the element landed and the empty slot.
+            // [native] <= [empty] < [candidate] == GOOD, can move candidate to empty slot
+            // [empty] < [native] < [candidate] == BAD, need to leave candidate where it is
+            do {
+                index = this->next(index);
+                Slot& s = fSlots[index];
+                if (s.empty()) {
+                    // We're done shuffling elements around.  Clear the last empty slot.
+                    emptySlot = Slot();
+                    return;
+                }
+                originalIndex = s.hash & (fCapacity - 1);
+            } while ((index <= originalIndex && originalIndex < emptyIndex)
+                     || (originalIndex < emptyIndex && emptyIndex < index)
+                     || (emptyIndex < index && index <= originalIndex));
+            // Move the element to the empty slot.
+            Slot& moveFrom = fSlots[index];
+            emptySlot = std::move(moveFrom);
+        }
+    }
+
     int next(int index) const {
         index--;
         if (index < 0) { index += fCapacity; }
@@ -211,12 +234,12 @@ private:
     }
 
     static uint32_t Hash(const K& key) {
-        uint32_t hash = Traits::Hash(key);
+        uint32_t hash = Traits::Hash(key) & 0xffffffff;
         return hash ? hash : 1;  // We reserve hash 0 to mark empty.
     }
 
     struct Slot {
-        Slot() : hash(0) {}
+        Slot() : val{}, hash(0) {}
         Slot(T&& v, uint32_t h) : val(std::move(v)), hash(h) {}
         Slot(Slot&& o) { *this = std::move(o); }
         Slot& operator=(Slot&& o) {
@@ -274,6 +297,13 @@ public:
         return nullptr;
     }
 
+    V& operator[](const K& key) {
+        if (V* val = this->find(key)) {
+            return *val;
+        }
+        return *this->set(key, V{});
+    }
+
     // Remove the key/value entry in the table with this key.
     void remove(const K& key) {
         SkASSERT(this->find(key));
@@ -292,12 +322,19 @@ public:
         fTable.foreach([&fn](const Pair& p){ fn(p.key, p.val); });
     }
 
+    // Call fn on every key/value pair in the table. Fn may return false to remove the entry. You
+    // may mutate the value but not the key.
+    template <typename Fn>  // f(K, V*) or f(const K&, V*)
+    void mutate(Fn&& fn) {
+        fTable.mutate([&fn](Pair* p) { return fn(p->key, &p->val); });
+    }
+
 private:
     struct Pair {
         K key;
         V val;
         static const K& GetKey(const Pair& p) { return p.key; }
-        static uint32_t Hash(const K& key) { return HashK()(key); }
+        static auto Hash(const K& key) { return HashK()(key); }
     };
 
     SkTHashTable<Pair, K> fTable;
@@ -319,6 +356,9 @@ public:
 
     // How many items are in the set?
     int count() const { return fTable.count(); }
+
+    // Is empty?
+    bool empty() const { return fTable.count() == 0; }
 
     // Approximately how many bytes of memory do we use beyond sizeof(*this)?
     size_t approxBytesUsed() const { return fTable.approxBytesUsed(); }
@@ -348,7 +388,7 @@ public:
 private:
     struct Traits {
         static const T& GetKey(const T& item) { return item; }
-        static uint32_t Hash(const T& item) { return HashT()(item); }
+        static auto Hash(const T& item) { return HashT()(item); }
     };
     SkTHashTable<T, T, Traits> fTable;
 

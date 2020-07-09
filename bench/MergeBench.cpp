@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkFont.h"
-#include "SkImageSource.h"
-#include "SkMergeImageFilter.h"
-#include "SkSurface.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkSurface.h"
+#include "include/effects/SkImageFilters.h"
 
 #define FILTER_WIDTH_SMALL  SkIntToScalar(32)
 #define FILTER_HEIGHT_SMALL SkIntToScalar(32)
@@ -24,7 +23,7 @@ static sk_sp<SkImage> make_bitmap() {
     paint.setColor(0xFF884422);
     SkFont font;
     font.setSize(SkIntToScalar(96));
-    surface->getCanvas()->drawSimpleText("g", 1, kUTF8_SkTextEncoding, 15, 55, font, paint);
+    surface->getCanvas()->drawSimpleText("g", 1, SkTextEncoding::kUTF8, 15, 55, font, paint);
     return surface->makeImageSnapshot();
 }
 
@@ -72,18 +71,14 @@ protected:
         SkRect r = fIsSmall ? SkRect::MakeWH(FILTER_WIDTH_SMALL, FILTER_HEIGHT_SMALL) :
                               SkRect::MakeWH(FILTER_WIDTH_LARGE, FILTER_HEIGHT_LARGE);
         SkPaint paint;
-        paint.setImageFilter(this->mergeBitmaps());
+        paint.setImageFilter(SkImageFilters::Merge(SkImageFilters::Image(fCheckerboard),
+                                                   SkImageFilters::Image(fImage)));
         for (int i = 0; i < loops; i++) {
             canvas->drawRect(r, paint);
         }
     }
 
 private:
-    sk_sp<SkImageFilter> mergeBitmaps() {
-        return SkMergeImageFilter::Make(SkImageSource::Make(fCheckerboard),
-                                        SkImageSource::Make(fImage));
-    }
-
     bool fIsSmall;
     bool fInitialized;
     sk_sp<SkImage> fImage, fCheckerboard;

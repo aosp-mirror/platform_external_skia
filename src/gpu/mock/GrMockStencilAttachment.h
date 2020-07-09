@@ -8,8 +8,8 @@
 #ifndef GrMockStencilAttachment_DEFINED
 #define GrMockStencilAttachment_DEFINED
 
-#include "GrMockGpu.h"
-#include "GrStencilAttachment.h"
+#include "src/gpu/GrStencilAttachment.h"
+#include "src/gpu/mock/GrMockGpu.h"
 
 class GrMockStencilAttachment : public GrStencilAttachment {
 public:
@@ -20,7 +20,7 @@ public:
 
 private:
     size_t onGpuMemorySize() const override {
-        return SkTMax(1, (int)(this->bits() / sizeof(char))) * this->width() * this->height();
+        return std::max(1, (int)(this->bits() / sizeof(char))) * this->width() * this->height();
     }
 
     typedef GrStencilAttachment INHERITED;

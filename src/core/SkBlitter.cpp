@@ -5,25 +5,29 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlitter.h"
+#include "src/core/SkBlitter.h"
 
-#include "SkAntiRun.h"
-#include "SkArenaAlloc.h"
-#include "SkColor.h"
-#include "SkColorData.h"
-#include "SkColorFilter.h"
-#include "SkMask.h"
-#include "SkMaskFilterBase.h"
-#include "SkPaintPriv.h"
-#include "SkReadBuffer.h"
-#include "SkRegionPriv.h"
-#include "SkShaderBase.h"
-#include "SkString.h"
-#include "SkTLazy.h"
-#include "SkTo.h"
-#include "SkUtils.h"
-#include "SkWriteBuffer.h"
-#include "SkXfermodeInterpretation.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkString.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkAntiRun.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkMask.h"
+#include "src/core/SkMaskFilterBase.h"
+#include "src/core/SkPaintPriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkRegionPriv.h"
+#include "src/core/SkTLazy.h"
+#include "src/core/SkUtils.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/core/SkXfermodeInterpretation.h"
+#include "src/shaders/SkShaderBase.h"
+
+// Hacks for testing.
+bool gUseSkVMBlitter{false};
+bool gSkForceRasterPipelineBlitter{false};
 
 SkBlitter::~SkBlitter() {}
 
@@ -99,119 +103,6 @@ void SkBlitter::blitFatAntiRect(const SkRect& rect) {
         alphas[1] = ScalarToAlpha(partialB);
         alphas[bounds.width() - 1] = ScalarToAlpha(partialR * partialB);
         this->blitAntiH(bounds.fLeft, bounds.fBottom - 1, alphas, runs);
-    }
-}
-
-void SkBlitter::blitCoverageDeltas(SkCoverageDeltaList* deltas, const SkIRect& clip,
-                                   bool isEvenOdd, bool isInverse, bool isConvex) {
-    int         runSize = clip.width() + 1; // +1 so we can set runs[clip.width()] = 0
-    void*       storage = this->allocBlitMemory(runSize * (sizeof(int16_t) + sizeof(SkAlpha)));
-    int16_t*    runs    = reinterpret_cast<int16_t*>(storage);
-    SkAlpha*    alphas  = reinterpret_cast<SkAlpha*>(runs + runSize);
-    runs[clip.width()]  = 0; // we must set the last run to 0 so blitAntiH can stop there
-
-    bool canUseMask = !deltas->forceRLE() &&
-                      SkCoverageDeltaMask::CanHandle(SkIRect::MakeLTRB(0, 0, clip.width(), 1));
-    const SkAntiRect& antiRect = deltas->getAntiRect();
-
-    // Only access rows within our clip. Otherwise, we'll have data race in the threaded backend.
-    int top = SkTMax(deltas->top(), clip.fTop);
-    int bottom = SkTMin(deltas->bottom(), clip.fBottom);
-    for(int y = top; y < bottom; ++y) {
-        // If antiRect is non-empty and we're in it, blit it and skip to the bottom
-        if (y >= antiRect.fY && y < antiRect.fY + antiRect.fHeight) {
-            // Clip the antiRect because of possible tilings (e.g., the threaded backend)
-            int leftOverClip = clip.fLeft - antiRect.fX;
-            int rightOverClip = antiRect.fX + antiRect.fWidth - clip.fRight;
-            int topOverClip = clip.fTop - antiRect.fY;
-            int botOverClip = antiRect.fY + antiRect.fHeight - clip.fBottom;
-
-            int rectX = antiRect.fX;
-            int rectY = antiRect.fY;
-            int width = antiRect.fWidth;
-            int height = antiRect.fHeight;
-            SkAlpha leftAlpha = antiRect.fLeftAlpha;
-            SkAlpha rightAlpha = antiRect.fRightAlpha;
-
-            if (leftOverClip > 0) {
-                rectX = clip.fLeft;
-                width -= leftOverClip;
-                leftAlpha = 0xFF;
-            }
-            if (rightOverClip > 0) {
-                width -= rightOverClip;
-                rightAlpha = 0xFF;
-            }
-            if (topOverClip > 0) {
-                rectY = clip.fTop;
-                height -= topOverClip;
-            }
-            if (botOverClip > 0) {
-                height -= botOverClip;
-            }
-
-            if (width >= 0) {
-                this->blitAntiRect(rectX, rectY, width, height, leftAlpha, rightAlpha);
-            }
-            y += antiRect.fHeight - 1; // -1 because ++y in the for loop
-            continue;
-        }
-
-        // If there are too many deltas, sorting will be slow. Using a mask is much faster.
-        // This is such an important optimization that will bring ~2x speedup for benches like
-        // path_fill_small_long_line and path_stroke_small_sawtooth.
-        if (canUseMask && !deltas->sorted(y) && deltas->count(y) << 3 >= clip.width()) {
-            // Note that deltas->left()/right() may be different than clip.fLeft/fRight because in
-            // the threaded backend, deltas are generated in the initFn with full clip, while
-            // blitCoverageDeltas is called in drawFn with a subclip. For inverse fill, the clip
-            // might be wider than deltas' bounds (which is clippedIR).
-            SkIRect rowIR = SkIRect::MakeLTRB(SkTMin(clip.fLeft, deltas->left()), y,
-                                              SkTMax(clip.fRight, deltas->right()), y + 1);
-            SkSTArenaAlloc<SkCoverageDeltaMask::MAX_SIZE> alloc;
-            SkCoverageDeltaMask mask(&alloc, rowIR);
-            for(int i = 0; i < deltas->count(y); ++i) {
-                const SkCoverageDelta& delta = deltas->getDelta(y, i);
-                mask.addDelta(delta.fX, y, delta.fDelta);
-            }
-            mask.convertCoverageToAlpha(isEvenOdd, isInverse, isConvex);
-            this->blitMask(mask.prepareSkMask(), rowIR);
-            continue;
-        }
-
-        // The normal flow of blitting deltas starts from here. First sort deltas.
-        deltas->sort(y);
-
-        int     i = 0;              // init delta index to 0
-        int     lastX = clip.fLeft; // init x to clip.fLeft
-        SkFixed coverage = 0;       // init coverage to 0
-
-        // skip deltas with x less than clip.fLeft; they may be:
-        //   1. precision errors
-        //   2. deltas generated during init-once phase (threaded backend) that has a wider
-        //      clip than the final tile clip.
-        for(; i < deltas->count(y) && deltas->getDelta(y, i).fX < clip.fLeft; ++i) {
-            coverage += deltas->getDelta(y, i).fDelta;
-        }
-        for(; i < deltas->count(y) && deltas->getDelta(y, i).fX < clip.fRight; ++i) {
-            const SkCoverageDelta& delta = deltas->getDelta(y, i);
-            SkASSERT(delta.fX >= lastX);    // delta must be x sorted
-            if (delta.fX > lastX) {         // we have proceeded to a new x (different from lastX)
-                SkAlpha alpha = isConvex ? ConvexCoverageToAlpha(coverage, isInverse)
-                                         : CoverageToAlpha(coverage, isEvenOdd, isInverse);
-                alphas[lastX - clip.fLeft]  = alpha;            // set alpha at lastX
-                runs[lastX - clip.fLeft]    = delta.fX - lastX; // set the run length
-                lastX                       = delta.fX;         // now set lastX to current x
-            }
-            coverage += delta.fDelta; // cumulate coverage with the current delta
-        }
-
-        // Set the alpha and run length from the right-most delta to the right clip boundary
-        SkAlpha alpha = isConvex ? ConvexCoverageToAlpha(coverage, isInverse)
-                                 : CoverageToAlpha(coverage, isEvenOdd, isInverse);
-        alphas[lastX - clip.fLeft]  = alpha;
-        runs[lastX - clip.fLeft]    = clip.fRight - lastX;
-
-        this->blitAntiH(clip.fLeft, y, alphas, runs); // finally blit the current row
     }
 }
 
@@ -537,7 +428,7 @@ void SkRectClipBlitter::blitV(int x, int y, int height, SkAlpha alpha) {
 void SkRectClipBlitter::blitRect(int left, int y, int width, int height) {
     SkIRect    r;
 
-    r.set(left, y, left + width, y + height);
+    r.setLTRB(left, y, left + width, y + height);
     if (r.intersect(fClipRect)) {
         fBlitter->blitRect(r.fLeft, r.fTop, r.width(), r.height());
     }
@@ -548,7 +439,7 @@ void SkRectClipBlitter::blitAntiRect(int left, int y, int width, int height,
     SkIRect    r;
 
     // The *true* width of the rectangle blitted is width+2:
-    r.set(left, y, left + width + 2, y + height);
+    r.setLTRB(left, y, left + width + 2, y + height);
     if (r.intersect(fClipRect)) {
         if (r.fLeft != left) {
             SkASSERT(r.fLeft > left);
@@ -641,7 +532,7 @@ void SkRgnClipBlitter::blitAntiH(int x, int y, const SkAlpha aa[],
 
 void SkRgnClipBlitter::blitV(int x, int y, int height, SkAlpha alpha) {
     SkIRect    bounds;
-    bounds.set(x, y, x + 1, y + height);
+    bounds.setXYWH(x, y, 1, height);
 
     SkRegion::Cliperator    iter(*fRgn, bounds);
 
@@ -656,7 +547,7 @@ void SkRgnClipBlitter::blitV(int x, int y, int height, SkAlpha alpha) {
 
 void SkRgnClipBlitter::blitRect(int x, int y, int width, int height) {
     SkIRect    bounds;
-    bounds.set(x, y, x + width, y + height);
+    bounds.setXYWH(x, y, width, height);
 
     SkRegion::Cliperator    iter(*fRgn, bounds);
 
@@ -673,7 +564,7 @@ void SkRgnClipBlitter::blitAntiRect(int x, int y, int width, int height,
                                     SkAlpha leftAlpha, SkAlpha rightAlpha) {
     // The *true* width of the rectangle to blit is width + 2
     SkIRect    bounds;
-    bounds.set(x, y, x + width + 2, y + height);
+    bounds.setXYWH(x, y, width + 2, height);
 
     SkRegion::Cliperator    iter(*fRgn, bounds);
 
@@ -748,10 +639,7 @@ SkBlitter* SkBlitterClipper::apply(SkBlitter* blitter, const SkRegion* clip,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkCoreBlitters.h"
-
-// hack for testing, not to be exposed to clients
-bool gSkForceRasterPipelineBlitter;
+#include "src/core/SkCoreBlitters.h"
 
 bool SkBlitter::UseRasterPipelineBlitter(const SkPixmap& device, const SkPaint& paint,
                                          const SkMatrix& matrix) {
@@ -831,6 +719,13 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
         p->setColor(0x00000000);
     }
 
+#ifndef SK_SUPPORT_LEGACY_COLORFILTER_NO_SHADER
+    if (paint->getColorFilter()) {
+        SkPaintPriv::RemoveColorFilter(paint.writable(), device.colorSpace());
+    }
+    SkASSERT(!paint->getColorFilter());
+#endif
+
     if (drawCoverage) {
         if (device.colorType() == kAlpha_8_SkColorType) {
             SkASSERT(!paint->getShader());
@@ -842,6 +737,16 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
 
     if (paint->isDither() && !SkPaintPriv::ShouldDither(*paint, device.colorType())) {
         paint.writable()->setDither(false);
+    }
+
+    bool try_skvm_blitter = gUseSkVMBlitter;
+#if defined(SK_USE_SKVM_BLITTER)
+    try_skvm_blitter = true;
+#endif
+    if (try_skvm_blitter) {
+        if (auto blitter = SkCreateSkVMBlitter(device, *paint, matrix, alloc)) {
+            return blitter;
+        }
     }
 
     // We'll end here for many interesting cases: color spaces, color filters, most color types.

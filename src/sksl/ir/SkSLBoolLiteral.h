@@ -8,8 +8,8 @@
 #ifndef SKSL_BOOLLITERAL
 #define SKSL_BOOLLITERAL
 
-#include "SkSLContext.h"
-#include "SkSLExpression.h"
+#include "src/sksl/SkSLContext.h"
+#include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
 
@@ -21,11 +21,13 @@ struct BoolLiteral : public Expression {
     : INHERITED(offset, kBoolLiteral_Kind, *context.fBool_Type)
     , fValue(value) {}
 
+#ifdef SK_DEBUG
     String description() const override {
         return String(fValue ? "true" : "false");
     }
+#endif
 
-    bool hasSideEffects() const override {
+    bool hasProperty(Property property) const override {
         return false;
     }
 

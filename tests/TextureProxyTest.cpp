@@ -7,46 +7,39 @@
 
 // This is a GPU-backend specific test.
 
-#include "Test.h"
+#include "tests/Test.h"
 
-#include "GrBackendSurface.h"
-#include "GrContextPriv.h"
-#include "GrResourceCache.h"
-#include "GrProxyProvider.h"
-#include "GrResourceProvider.h"
-#include "GrTexture.h"
-#include "GrTextureProxy.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrResourceCache.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrTextureProxy.h"
 
-#include "SkGr.h"
-#include "SkImage.h"
+#include "include/core/SkImage.h"
+#include "src/gpu/SkGr.h"
 
 int GrProxyProvider::numUniqueKeyProxies_TestOnly() const {
     return fUniquelyKeyedProxies.count();
 }
 
-static GrSurfaceDesc make_desc(GrSurfaceDescFlags descFlags) {
-    GrSurfaceDesc desc;
-    desc.fFlags = descFlags;
-    desc.fWidth = 64;
-    desc.fHeight = 64;
-    desc.fConfig = kRGBA_8888_GrPixelConfig;
-    desc.fSampleCnt = 1;
-
-    return desc;
-}
+static constexpr auto kColorType = GrColorType::kRGBA_8888;
+static constexpr auto kSize = SkISize::Make(64, 64);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Basic test
 
 static sk_sp<GrTextureProxy> deferred_tex(skiatest::Reporter* reporter, GrContext* ctx,
                                           GrProxyProvider* proxyProvider, SkBackingFit fit) {
-    const GrSurfaceDesc desc = make_desc(kNone_GrSurfaceFlags);
-    GrBackendFormat format =
-            ctx->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
+    const GrCaps* caps = ctx->priv().caps();
+
+    GrBackendFormat format = caps->getDefaultBackendFormat(kColorType, GrRenderable::kNo);
+    GrSwizzle swizzle = caps->getReadSwizzle(format, kColorType);
 
     sk_sp<GrTextureProxy> proxy =
-            proxyProvider->createProxy(format, desc, kBottomLeft_GrSurfaceOrigin, fit,
-                                       SkBudgeted::kYes);
+            proxyProvider->createProxy(format, kSize, swizzle, GrRenderable::kNo, 1,
+                                       GrMipMapped::kNo, fit, SkBudgeted::kYes, GrProtected::kNo);
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
     return proxy;
@@ -54,12 +47,14 @@ static sk_sp<GrTextureProxy> deferred_tex(skiatest::Reporter* reporter, GrContex
 
 static sk_sp<GrTextureProxy> deferred_texRT(skiatest::Reporter* reporter, GrContext* ctx,
                                             GrProxyProvider* proxyProvider, SkBackingFit fit) {
-    const GrSurfaceDesc desc = make_desc(kRenderTarget_GrSurfaceFlag);
-    GrBackendFormat format =
-            ctx->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
+    const GrCaps* caps = ctx->priv().caps();
+
+    GrBackendFormat format = caps->getDefaultBackendFormat(kColorType, GrRenderable::kYes);
+    GrSwizzle swizzle = caps->getReadSwizzle(format, kColorType);
 
     sk_sp<GrTextureProxy> proxy =
-            proxyProvider->createProxy(format, desc, kBottomLeft_GrSurfaceOrigin, fit, SkBudgeted::kYes);
+            proxyProvider->createProxy(format, kSize, swizzle, GrRenderable::kYes, 1,
+                                       GrMipMapped::kNo, fit, SkBudgeted::kYes, GrProtected::kNo);
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
     return proxy;
@@ -67,10 +62,8 @@ static sk_sp<GrTextureProxy> deferred_texRT(skiatest::Reporter* reporter, GrCont
 
 static sk_sp<GrTextureProxy> wrapped(skiatest::Reporter* reporter, GrContext* ctx,
                                      GrProxyProvider* proxyProvider, SkBackingFit fit) {
-    const GrSurfaceDesc desc = make_desc(kNone_GrSurfaceFlags);
-
     sk_sp<GrTextureProxy> proxy = proxyProvider->testingOnly_createInstantiatedProxy(
-            desc, kBottomLeft_GrSurfaceOrigin, fit, SkBudgeted::kYes);
+            kSize, kColorType, GrRenderable::kNo, 1, fit, SkBudgeted::kYes, GrProtected::kNo);
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
     return proxy;
@@ -87,11 +80,9 @@ static sk_sp<GrTextureProxy> wrapped_with_key(skiatest::Reporter* reporter, GrCo
     builder[0] = kUniqueKeyData++;
     builder.finish();
 
-    const GrSurfaceDesc desc = make_desc(kNone_GrSurfaceFlags);
-
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     sk_sp<GrTextureProxy> proxy = proxyProvider->testingOnly_createInstantiatedProxy(
-            desc, kBottomLeft_GrSurfaceOrigin, fit, SkBudgeted::kYes);
+            kSize, kColorType, GrRenderable::kNo, 1, fit, SkBudgeted::kYes, GrProtected::kNo);
     SkAssertResult(proxyProvider->assignUniqueKeyToProxy(key, proxy.get()));
     REPORTER_ASSERT(reporter, proxy->getUniqueKey().isValid());
     return proxy;
@@ -102,17 +93,19 @@ static sk_sp<GrTextureProxy> create_wrapped_backend(GrContext* context, SkBackin
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     GrResourceProvider* resourceProvider = context->priv().resourceProvider();
 
-    const GrSurfaceDesc desc = make_desc(kNone_GrSurfaceFlags);
+    GrBackendFormat format =
+            proxyProvider->caps()->getDefaultBackendFormat(kColorType, GrRenderable::kYes);
 
-    *backingSurface = resourceProvider->createTexture(desc, SkBudgeted::kNo);
+    *backingSurface =
+            resourceProvider->createTexture(kSize, format, GrRenderable::kNo, 1, GrMipMapped::kNo,
+                                            SkBudgeted::kNo, GrProtected::kNo);
     if (!(*backingSurface)) {
         return nullptr;
     }
 
     GrBackendTexture backendTex = (*backingSurface)->getBackendTexture();
-    backendTex.setPixelConfig(desc.fConfig);
 
-    return proxyProvider->wrapBackendTexture(backendTex, kBottomLeft_GrSurfaceOrigin,
+    return proxyProvider->wrapBackendTexture(backendTex, GrColorType::kRGBA_8888,
                                              kBorrow_GrWrapOwnership, GrWrapCacheable::kYes,
                                              kRead_GrIOType);
 }
@@ -150,8 +143,7 @@ static void basic_test(GrContext* context,
     REPORTER_ASSERT(reporter, key == proxy->getUniqueKey());
 
     // We just added it, surely we can find it
-    REPORTER_ASSERT(reporter, proxyProvider->findOrCreateProxyByUniqueKey(
-                                                                key, kBottomLeft_GrSurfaceOrigin));
+    REPORTER_ASSERT(reporter, proxyProvider->findOrCreateProxyByUniqueKey(key, kColorType));
     REPORTER_ASSERT(reporter, 1 == proxyProvider->numUniqueKeyProxies_TestOnly());
 
     int expectedCacheCount = startCacheCount + (proxy->isInstantiated() ? 0 : 1);
@@ -182,7 +174,7 @@ static void basic_test(GrContext* context,
     REPORTER_ASSERT(reporter, expectedCacheCount == cache->getResourceCount());
 
     // If the proxy was cached refinding it should bring it back to life
-    proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, kBottomLeft_GrSurfaceOrigin);
+    proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, kColorType);
     REPORTER_ASSERT(reporter, proxy);
     REPORTER_ASSERT(reporter, 1 == proxyProvider->numUniqueKeyProxies_TestOnly());
     REPORTER_ASSERT(reporter, expectedCacheCount == cache->getResourceCount());
@@ -197,7 +189,7 @@ static void basic_test(GrContext* context,
 
     // If the texture was deleted then the proxy should no longer be findable. Otherwise, it should
     // be.
-    proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, kBottomLeft_GrSurfaceOrigin);
+    proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, kColorType);
     REPORTER_ASSERT(reporter, expectResourceToOutliveProxy ? (bool)proxy : !proxy);
     REPORTER_ASSERT(reporter, expectedCacheCount == cache->getResourceCount());
 
@@ -207,7 +199,7 @@ static void basic_test(GrContext* context,
         SkMessageBus<GrUniqueKeyInvalidatedMessage>::Post(msg);
         cache->purgeAsNeeded();
         expectedCacheCount--;
-        proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, kBottomLeft_GrSurfaceOrigin);
+        proxy = proxyProvider->findOrCreateProxyByUniqueKey(key, kColorType);
         REPORTER_ASSERT(reporter, !proxy);
         REPORTER_ASSERT(reporter, expectedCacheCount == cache->getResourceCount());
     }
@@ -236,17 +228,15 @@ static void invalidation_test(GrContext* context, skiatest::Reporter* reporter) 
         REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
     }
 
-    sk_sp<SkImage> textureImg = rasterImg->makeTextureImage(context, nullptr);
+    sk_sp<SkImage> textureImg = rasterImg->makeTextureImage(context);
     REPORTER_ASSERT(reporter, 1 == proxyProvider->numUniqueKeyProxies_TestOnly());
     REPORTER_ASSERT(reporter, 1 == cache->getResourceCount());
 
     rasterImg = nullptr;        // this invalidates the uniqueKey
 
     // this forces the cache to respond to the inval msg
-    int maxNum;
-    size_t maxBytes;
-    context->getResourceCacheLimits(&maxNum, &maxBytes);
-    context->setResourceCacheLimits(maxNum-1, maxBytes);
+    size_t maxBytes = context->getResourceCacheLimit();
+    context->setResourceCacheLimit(maxBytes-1);
 
     REPORTER_ASSERT(reporter, 0 == proxyProvider->numUniqueKeyProxies_TestOnly());
     REPORTER_ASSERT(reporter, 1 == cache->getResourceCount());

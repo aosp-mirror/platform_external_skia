@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "SkMutex.h"
-#include "SkOpCoincidence.h"
-#include "SkOpContour.h"
-#include "SkOSFile.h"
-#include "SkPath.h"
-#include "SkPathOpsDebug.h"
-#include "SkString.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkString.h"
+#include "include/private/SkMutex.h"
+#include "src/core/SkOSFile.h"
+#include "src/pathops/SkOpCoincidence.h"
+#include "src/pathops/SkOpContour.h"
+#include "src/pathops/SkPathOpsDebug.h"
 
 #include <utility>
 
@@ -557,27 +557,26 @@ static void show_op(SkPathOp op, const char* pathOne, const char* pathTwo) {
     SkDebugf("}\n");
 }
 
-SK_DECLARE_STATIC_MUTEX(gTestMutex);
-
 void SkPathOpsDebug::ShowPath(const SkPath& a, const SkPath& b, SkPathOp shapeOp,
         const char* testName) {
-    SkAutoMutexAcquire ac(gTestMutex);
+    static SkMutex& mutex = *(new SkMutex);
+
+    SkAutoMutexExclusive ac(mutex);
     show_function_header(testName);
     ShowOnePath(a, "path", true);
     ShowOnePath(b, "pathB", true);
     show_op(shapeOp, "path", "pathB");
 }
 
-#include "SkPathOpsTypes.h"
-#include "SkIntersectionHelper.h"
-#include "SkIntersections.h"
+#include "src/pathops/SkIntersectionHelper.h"
+#include "src/pathops/SkIntersections.h"
+#include "src/pathops/SkPathOpsTypes.h"
 
 #if DEBUG_COIN
 
-SK_DECLARE_STATIC_MUTEX(gCoinDictMutex);
-
 void SkOpGlobalState::debugAddToGlobalCoinDicts() {
-    SkAutoMutexAcquire ac(&gCoinDictMutex);
+    static SkMutex& mutex = *(new SkMutex);
+    SkAutoMutexExclusive ac(mutex);
     SkPathOpsDebug::gCoinSumChangedDict.add(fCoinChangedDict);
     SkPathOpsDebug::gCoinSumVisitedDict.add(fCoinVisitedDict);
 }
@@ -705,8 +704,8 @@ void SkIntersections::debugResetLoopCount() {
 }
 #endif
 
-#include "SkPathOpsConic.h"
-#include "SkPathOpsCubic.h"
+#include "src/pathops/SkPathOpsConic.h"
+#include "src/pathops/SkPathOpsCubic.h"
 
 SkDCubic SkDQuad::debugToCubic() const {
     SkDCubic cubic;
@@ -739,8 +738,8 @@ void SkDRect::debugInit() {
     fLeft = fTop = fRight = fBottom = SK_ScalarNaN;
 }
 
-#include "SkOpAngle.h"
-#include "SkOpSegment.h"
+#include "src/pathops/SkOpAngle.h"
+#include "src/pathops/SkOpSegment.h"
 
 #if DEBUG_COIN
 // commented-out lines keep this in sync with addT()
@@ -1121,15 +1120,15 @@ void SkOpSegment::debugReset() {
 void SkOpSegment::debugSetCoinT(int index, SkScalar t) const {
     if (fDebugBaseMax < 0 || fDebugBaseIndex == index) {
         fDebugBaseIndex = index;
-        fDebugBaseMin = SkTMin(t, fDebugBaseMin);
-        fDebugBaseMax = SkTMax(t, fDebugBaseMax);
+        fDebugBaseMin = std::min(t, fDebugBaseMin);
+        fDebugBaseMax = std::max(t, fDebugBaseMax);
         return;
     }
     SkASSERT(fDebugBaseMin >= t || t >= fDebugBaseMax);
     if (fDebugLastMax < 0 || fDebugLastIndex == index) {
         fDebugLastIndex = index;
-        fDebugLastMin = SkTMin(t, fDebugLastMin);
-        fDebugLastMax = SkTMax(t, fDebugLastMax);
+        fDebugLastMin = std::min(t, fDebugLastMin);
+        fDebugLastMax = std::max(t, fDebugLastMax);
         return;
     }
     SkASSERT(fDebugLastMin >= t || t >= fDebugLastMax);
@@ -2717,7 +2716,7 @@ int SkIntersections::debugCoincidentUsed() const {
     return count;
 }
 
-#include "SkOpContour.h"
+#include "src/pathops/SkOpContour.h"
 
 // Commented-out lines keep this in sync with addOpp()
 void SkOpPtT::debugAddOpp(const SkOpPtT* opp, const SkOpPtT* oppPrev) const {
@@ -2902,10 +2901,10 @@ static void showPathContours(SkPath::RawIter& iter, const char* pathName) {
 }
 
 static const char* gFillTypeStr[] = {
-    "kWinding_FillType",
-    "kEvenOdd_FillType",
-    "kInverseWinding_FillType",
-    "kInverseEvenOdd_FillType"
+    "kWinding",
+    "kEvenOdd",
+    "kInverseWinding",
+    "kInverseEvenOdd"
 };
 
 void SkPathOpsDebug::ShowOnePath(const SkPath& path, const char* name, bool includeDeclaration) {
@@ -2915,32 +2914,32 @@ void SkPathOpsDebug::ShowOnePath(const SkPath& path, const char* name, bool incl
     int rectCount = path.isRectContours() ? path.rectContours(nullptr, nullptr) : 0;
     if (rectCount > 0) {
         SkTDArray<SkRect> rects;
-        SkTDArray<SkPath::Direction> directions;
+        SkTDArray<SkPathDirection> directions;
         rects.setCount(rectCount);
         directions.setCount(rectCount);
         path.rectContours(rects.begin(), directions.begin());
         for (int contour = 0; contour < rectCount; ++contour) {
             const SkRect& rect = rects[contour];
             SkDebugf("path.addRect(%1.9g, %1.9g, %1.9g, %1.9g, %s);\n", rect.fLeft, rect.fTop,
-                    rect.fRight, rect.fBottom, directions[contour] == SkPath::kCCW_Direction
-                    ? "SkPath::kCCW_Direction" : "SkPath::kCW_Direction");
+                    rect.fRight, rect.fBottom, directions[contour] == SkPathDirection::kCCW
+                    ? "SkPathDirection::kCCW" : "SkPathDirection::kCW");
         }
         return;
     }
 #endif
-    SkPath::FillType fillType = path.getFillType();
-    SkASSERT(fillType >= SkPath::kWinding_FillType && fillType <= SkPath::kInverseEvenOdd_FillType);
+    SkPathFillType fillType = path.getFillType();
+    SkASSERT(fillType >= SkPathFillType::kWinding && fillType <= SkPathFillType::kInverseEvenOdd);
     if (includeDeclaration) {
         SkDebugf("    SkPath %s;\n", name);
     }
-    SkDebugf("    %s.setFillType(SkPath::%s);\n", name, gFillTypeStr[fillType]);
+    SkDebugf("    %s.setFillType(SkPath::%s);\n", name, gFillTypeStr[(int)fillType]);
     iter.setPath(path);
     showPathContours(iter, name);
 }
 
 #if DEBUG_DUMP_VERIFY
-#include "SkData.h"
-#include "SkStream.h"
+#include "include/core/SkData.h"
+#include "include/core/SkStream.h"
 
 static void dump_path(FILE* file, const SkPath& path, bool force, bool dumpAsHex) {
     SkDynamicMemoryWStream wStream;
@@ -2994,9 +2993,9 @@ void SkPathOpsDebug::DumpSimplify(FILE* file, const SkPath& path, const char* te
     fclose(file);
 }
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
 
 const int bitWidth = 64;
 const int bitHeight = 64;

@@ -8,8 +8,8 @@
 #ifndef SKSL_VARDECLARATIONSSTATEMENT
 #define SKSL_VARDECLARATIONSSTATEMENT
 
-#include "SkSLStatement.h"
-#include "SkSLVarDeclarations.h"
+#include "src/sksl/ir/SkSLStatement.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
 
 namespace SkSL {
 
@@ -35,9 +35,11 @@ struct VarDeclarationsStatement : public Statement {
         return std::unique_ptr<Statement>(new VarDeclarationsStatement(std::move(cloned)));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return fDeclaration->description() + ";";
     }
+#endif
 
     std::unique_ptr<VarDeclarations> fDeclaration;
 

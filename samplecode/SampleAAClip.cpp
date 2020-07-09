@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkAAClip.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPath.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkAAClip.h"
 
 static void testop(const SkIRect& r0, const SkIRect& r1, SkRegion::Op op,
                    const SkIRect& expectedR) {
@@ -55,27 +55,17 @@ static void drawClip(SkCanvas* canvas, const SkAAClip& clip) {
 }
 
 class AAClipView : public Sample {
-public:
-    AAClipView() {
-        testop();
-    }
+    SkString name() override { return SkString("AAClip"); }
 
-protected:
-    virtual bool onQuery(Sample::Event* evt) {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "AAClip");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    void onOnceBeforeDraw() override { testop(); }
 
-    virtual void onDrawContent(SkCanvas* canvas) {
+    void onDrawContent(SkCanvas* canvas) override {
 #if 1
         SkAAClip aaclip;
         SkPath path;
         SkRect bounds;
 
-        bounds.set(0, 0, 20, 20);
+        bounds.setLTRB(0, 0, 20, 20);
         bounds.inset(SK_ScalarHalf, SK_ScalarHalf);
 
 //        path.addRect(bounds);
@@ -112,11 +102,5 @@ protected:
         canvas->drawPath(path, paint);
 #endif
     }
-
-private:
-    typedef Sample INHERITED;
 };
-
-//////////////////////////////////////////////////////////////////////////////
-
 DEF_SAMPLE( return new AAClipView(); )

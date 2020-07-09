@@ -5,15 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkBBoxHierarchy.h"
-#include "SkPaint.h"
-#include "SkPicture.h"
-#include "SkPictureRecorder.h"
-#include "SkRectPriv.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "src/core/SkRectPriv.h"
 
-#include "Test.h"
+#include "tests/Test.h"
 
 class PictureBBHTestBase {
 public:
@@ -94,18 +93,6 @@ DEF_TEST(PictureBBH, reporter) {
     emptyClipPictureTest.run(reporter);
 }
 
-DEF_TEST(RTreeMakeLargest, r) {
-    // A call to insert() with 2 or more rects and a bounds of SkRect::MakeLargest()
-    // used to fall into an infinite loop.
-
-    SkRTreeFactory factory;
-    std::unique_ptr<SkBBoxHierarchy> bbh{ factory(SkRectPriv::MakeLargest()) };
-
-    SkRect rects[] = { {0,0, 10,10}, {5,5,15,15} };
-    bbh->insert(rects, SK_ARRAY_COUNT(rects));
-    REPORTER_ASSERT(r, bbh->getRootBound() == SkRect::MakeWH(15,15));
-}
-
 DEF_TEST(PictureNegativeSpace, r) {
     SkRTreeFactory factory;
     SkPictureRecorder recorder;
@@ -113,7 +100,8 @@ DEF_TEST(PictureNegativeSpace, r) {
     SkRect cull = {-200,-200,+200,+200};
 
     {
-        auto canvas = recorder.beginRecording(cull, &factory);
+        sk_sp<SkBBoxHierarchy> bbh = factory();
+        auto canvas = recorder.beginRecording(cull, bbh);
             canvas->save();
             canvas->clipRect(cull);
             canvas->drawRect({-20,-20,-10,-10}, SkPaint{});

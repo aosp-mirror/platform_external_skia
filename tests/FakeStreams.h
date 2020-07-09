@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkData.h"
-#include "SkStream.h"
+#include "include/core/SkData.h"
+#include "include/core/SkStream.h"
 
 #ifndef FakeStreams_DEFINED
 #define FakeStreams_DEFINED
@@ -52,7 +52,7 @@ public:
     {}
 
     void addNewData(size_t extra) {
-        fLimit = SkTMin(fTotalSize, fLimit + extra);
+        fLimit = std::min(fTotalSize, fLimit + extra);
     }
 
     size_t read(void* buffer, size_t size) override {

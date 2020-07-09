@@ -5,24 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "GrTextContext.h"
+#include "src/gpu/text/GrTextContext.h"
 
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrSDFMaskFilter.h"
-#include "GrTextBlobCache.h"
-#include "SkDistanceFieldGen.h"
-#include "SkDraw.h"
-#include "SkDrawProcs.h"
-#include "SkGlyphRun.h"
-#include "SkGr.h"
-#include "SkGraphics.h"
-#include "SkMakeUnique.h"
-#include "SkMaskFilterBase.h"
-#include "SkPaintPriv.h"
-#include "SkTo.h"
-#include "ops/GrMeshDrawOp.h"
+#include "include/core/SkGraphics.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkDistanceFieldGen.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkDrawProcs.h"
+#include "src/core/SkGlyphRun.h"
+#include "src/core/SkMaskFilterBase.h"
+#include "src/core/SkPaintPriv.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/text/GrSDFMaskFilter.h"
+#include "src/gpu/text/GrTextBlobCache.h"
 
 // DF sizes and thresholds for usage of the small and medium sizes. For example, above
 // kSmallDFFontLimit we will use the medium size. The large size is used up until the size at
@@ -32,10 +31,16 @@ static const int kSmallDFFontLimit = 32;
 static const int kMediumDFFontSize = 72;
 static const int kMediumDFFontLimit = 72;
 static const int kLargeDFFontSize = 162;
+#ifdef SK_BUILD_FOR_MAC
+static const int kLargeDFFontLimit = 162;
+static const int kExtraLargeDFFontSize = 256;
+#endif
 
 static const int kDefaultMinDistanceFieldFontSize = 18;
-#ifdef SK_BUILD_FOR_ANDROID
+#if defined(SK_BUILD_FOR_ANDROID)
 static const int kDefaultMaxDistanceFieldFontSize = 384;
+#elif defined(SK_BUILD_FOR_MAC)
+static const int kDefaultMaxDistanceFieldFontSize = kExtraLargeDFFontSize;
 #else
 static const int kDefaultMaxDistanceFieldFontSize = 2 * kLargeDFFontSize;
 #endif
@@ -70,12 +75,11 @@ SkColor GrTextContext::ComputeCanonicalColor(const SkPaint& paint, bool lcd) {
     return canonicalColor;
 }
 
-SkScalerContextFlags GrTextContext::ComputeScalerContextFlags(
-        const GrColorSpaceInfo& colorSpaceInfo) {
+SkScalerContextFlags GrTextContext::ComputeScalerContextFlags(const GrColorInfo& colorInfo) {
     // If we're doing linear blending, then we can disable the gamma hacks.
     // Otherwise, leave them on. In either case, we still want the contrast boost:
     // TODO: Can we be even smarter about mask gamma based on the dest transfer function?
-    if (colorSpaceInfo.isLinearlyBlended()) {
+    if (colorInfo.isLinearlyBlended()) {
         return SkScalerContextFlags::kBoostContrast;
     } else {
         return SkScalerContextFlags::kFakeGammaAndBoostContrast;
@@ -96,7 +100,21 @@ bool GrTextContext::CanDrawAsDistanceFields(const SkPaint& paint, const SkFont& 
                                             const SkSurfaceProps& props,
                                             bool contextSupportsDistanceFieldText,
                                             const Options& options) {
-    if (!viewMatrix.hasPerspective()) {
+    // mask filters modify alpha, which doesn't translate well to distance
+    if (paint.getMaskFilter() || !contextSupportsDistanceFieldText) {
+        return false;
+    }
+
+    // TODO: add some stroking support
+    if (paint.getStyle() != SkPaint::kFill_Style) {
+        return false;
+    }
+
+    if (viewMatrix.hasPerspective()) {
+        if (!options.fDistanceFieldVerticesAlwaysHaveW) {
+            return false;
+        }
+    } else {
         SkScalar maxScale = viewMatrix.getMaxScale();
         SkScalar scaledTextSize = maxScale * font.getSize();
         // Hinted text looks far better at small resolutions
@@ -114,16 +132,6 @@ bool GrTextContext::CanDrawAsDistanceFields(const SkPaint& paint, const SkFont& 
         if (!useDFT && scaledTextSize < kLargeDFFontSize) {
             return false;
         }
-    }
-
-    // mask filters modify alpha, which doesn't translate well to distance
-    if (paint.getMaskFilter() || !contextSupportsDistanceFieldText) {
-        return false;
-    }
-
-    // TODO: add some stroking support
-    if (paint.getStyle() != SkPaint::kFill_Style) {
-        return false;
     }
 
     return true;
@@ -164,15 +172,27 @@ SkFont GrTextContext::InitDistanceFieldFont(const SkFont& font,
     } else if (scaledTextSize <= kMediumDFFontLimit) {
         *textRatio = textSize / kMediumDFFontSize;
         dfFont.setSize(SkIntToScalar(kMediumDFFontSize));
+#ifdef SK_BUILD_FOR_MAC
+    } else if (scaledTextSize <= kLargeDFFontLimit) {
+        *textRatio = textSize / kLargeDFFontSize;
+        dfFont.setSize(SkIntToScalar(kLargeDFFontSize));
+    } else {
+        *textRatio = textSize / kExtraLargeDFFontSize;
+        dfFont.setSize(SkIntToScalar(kExtraLargeDFFontSize));
+    }
+#else
     } else {
         *textRatio = textSize / kLargeDFFontSize;
         dfFont.setSize(SkIntToScalar(kLargeDFFontSize));
     }
+#endif
 
     dfFont.setEdging(SkFont::Edging::kAntiAlias);
     dfFont.setForceAutoHinting(false);
-    dfFont.setHinting(kNormal_SkFontHinting);
-    dfFont.setSubpixel(true);
+    dfFont.setHinting(SkFontHinting::kNormal);
+
+    // The sub-pixel position will always happen when transforming to the screen.
+    dfFont.setSubpixel(false);
     return dfFont;
 }
 
@@ -220,7 +240,7 @@ SkPaint GrTextContext::InitDistanceFieldPaint(const SkPaint& paint) {
 
 #if GR_TEST_UTILS
 
-#include "GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContext.h"
 
 GR_DRAW_OP_TEST_DEFINE(GrAtlasTextOp) {
     static uint32_t gContextID = SK_InvalidGenID;
@@ -232,12 +252,9 @@ GR_DRAW_OP_TEST_DEFINE(GrAtlasTextOp) {
         gTextContext = GrTextContext::Make(GrTextContext::Options());
     }
 
-    const GrBackendFormat format =
-            context->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
-
     // Setup dummy SkPaint / GrPaint / GrRenderTargetContext
-    sk_sp<GrRenderTargetContext> rtc(context->priv().makeDeferredRenderTargetContext(
-        format, SkBackingFit::kApprox, 1024, 1024, kRGBA_8888_GrPixelConfig, nullptr));
+    auto rtc = GrRenderTargetContext::Make(
+            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1024, 1024});
 
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
 

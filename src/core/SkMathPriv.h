@@ -8,7 +8,7 @@
 #ifndef SkMathPriv_DEFINED
 #define SkMathPriv_DEFINED
 
-#include "SkMath.h"
+#include "include/core/SkMath.h"
 
 /**
  *  Return the integer square root of value, with a bias of bitBias
@@ -121,10 +121,6 @@ static inline unsigned SkDiv255Round(unsigned prod) {
     return (prod + (prod >> 8)) >> 8;
 }
 
-static inline float SkPinToUnitFloat(float x) {
-    return SkTMin(SkTMax(x, 0.0f), 1.0f);
-}
-
 /**
  * Swap byte order of a 4-byte value, e.g. 0xaarrggbb -> 0xbbggrraa.
  */
@@ -215,7 +211,7 @@ static inline int SkPrevLog2(uint32_t value) {
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- *  Return the next power of 2 >= n.
+ *  Return the smallest power-of-2 >= n.
  */
 static inline uint32_t GrNextPow2(uint32_t n) {
     return n ? (1 << (32 - SkCLZ(n - 1))) : 1;

@@ -5,11 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkColorPriv.h"
-#include "SkPath.h"
-#include "SkShader.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 
 static void test4(SkCanvas* canvas) {
     SkPaint paint;
@@ -111,8 +122,7 @@ static sk_sp<SkShader> make_bg_shader() {
                                                              0xCF, 0xCE);
 
     const SkMatrix m = SkMatrix::MakeScale(SkIntToScalar(6), SkIntToScalar(6));
-    return SkShader::MakeBitmapShader(bm, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode,
-                                      &m);
+    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &m);
 }
 
 DEF_SIMPLE_GM(aarectmodes, canvas, 640, 480) {

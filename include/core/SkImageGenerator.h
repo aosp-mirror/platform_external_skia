@@ -8,15 +8,15 @@
 #ifndef SkImageGenerator_DEFINED
 #define SkImageGenerator_DEFINED
 
-#include "SkBitmap.h"
-#include "SkColor.h"
-#include "SkImage.h"
-#include "SkImageInfo.h"
-#include "SkYUVAIndex.h"
-#include "SkYUVASizeInfo.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkYUVAIndex.h"
+#include "include/core/SkYUVASizeInfo.h"
 
 class GrRecordingContext;
-class GrTextureProxy;
+class GrSurfaceProxyView;
 class GrSamplerState;
 class SkBitmap;
 class SkData;
@@ -139,9 +139,10 @@ public:
      *  the generator is allowed to return a non mipped proxy, but this will have some additional
      *  overhead in later allocating mips and copying of the base layer.
      */
-    sk_sp<GrTextureProxy> generateTexture(GrRecordingContext*, const SkImageInfo& info,
-                                          const SkIPoint& origin,
-                                          bool willNeedMipMaps);
+    GrSurfaceProxyView generateTexture(GrRecordingContext*, const SkImageInfo& info,
+                                       const SkIPoint& origin, bool willNeedMipMaps);
+
+    bool texturesAreCacheable() const { return this->onTexturesAreCacheable(); }
 #endif
 
     /**
@@ -182,9 +183,10 @@ protected:
     };
 
     virtual TexGenType onCanGenerateTexture() const { return TexGenType::kNone; }
-    virtual sk_sp<GrTextureProxy> onGenerateTexture(GrRecordingContext*, const SkImageInfo&,
+    virtual GrSurfaceProxyView onGenerateTexture(GrRecordingContext*, const SkImageInfo&,
                                                     const SkIPoint&,
                                                     bool willNeedMipMaps);  // returns nullptr
+    virtual bool onTexturesAreCacheable() const { return true; }
 #endif
 
 private:

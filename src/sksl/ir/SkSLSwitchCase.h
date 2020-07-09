@@ -8,8 +8,8 @@
 #ifndef SKSL_SWITCHCASE
 #define SKSL_SWITCHCASE
 
-#include "SkSLExpression.h"
-#include "SkSLStatement.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 namespace SkSL {
 
@@ -33,6 +33,7 @@ struct SwitchCase : public Statement {
                                                          std::move(cloned)));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         String result;
         if (fValue) {
@@ -45,6 +46,7 @@ struct SwitchCase : public Statement {
         }
         return result;
     }
+#endif
 
     // null value implies "default" case
     std::unique_ptr<Expression> fValue;

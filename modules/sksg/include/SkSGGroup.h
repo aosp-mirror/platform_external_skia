@@ -8,7 +8,7 @@
 #ifndef SkSGGroup_DEFINED
 #define SkSGGroup_DEFINED
 
-#include "SkSGRenderNode.h"
+#include "modules/sksg/include/SkSGRenderNode.h"
 
 #include <vector>
 
@@ -45,6 +45,7 @@ protected:
 
 private:
     std::vector<sk_sp<RenderNode>> fChildren;
+    bool                           fRequiresIsolation = true;
 
     typedef RenderNode INHERITED;
 };

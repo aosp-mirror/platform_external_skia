@@ -7,19 +7,40 @@
 
 // This test only works with the GPU backend.
 
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/core/SkYUVAIndex.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrBitmapTextureMaker.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/GrSamplerState.h"
+#include "src/gpu/GrTextureProxy.h"
+#include "src/gpu/effects/GrPorterDuffXferProcessor.h"
+#include "src/gpu/effects/GrYUVtoRGBEffect.h"
+#include "src/gpu/ops/GrDrawOp.h"
+#include "src/gpu/ops/GrFillRectOp.h"
 
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrProxyProvider.h"
-#include "GrRenderTargetContextPriv.h"
-#include "GrTextureProxy.h"
-#include "SkBitmap.h"
-#include "SkGr.h"
-#include "SkGradientShader.h"
-#include "effects/GrYUVtoRGBEffect.h"
-#include "ops/GrDrawOp.h"
-#include "ops/GrFillRectOp.h"
+#include <memory>
+#include <utility>
+
+class SkCanvas;
 
 #define YSIZE 8
 #define USIZE 4
@@ -46,50 +67,48 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        SkBitmap bmp[3];
         SkImageInfo yinfo = SkImageInfo::MakeA8(YSIZE, YSIZE);
-        bmp[0].allocPixels(yinfo);
+        fBitmaps[0].allocPixels(yinfo);
         SkImageInfo uinfo = SkImageInfo::MakeA8(USIZE, USIZE);
-        bmp[1].allocPixels(uinfo);
+        fBitmaps[1].allocPixels(uinfo);
         SkImageInfo vinfo = SkImageInfo::MakeA8(VSIZE, VSIZE);
-        bmp[2].allocPixels(vinfo);
+        fBitmaps[2].allocPixels(vinfo);
         unsigned char* pixels[3];
         for (int i = 0; i < 3; ++i) {
-            pixels[i] = (unsigned char*)bmp[i].getPixels();
+            pixels[i] = (unsigned char*)fBitmaps[i].getPixels();
         }
         int color[] = {0, 85, 170};
         const int limit[] = {255, 0, 255};
         const int invl[]  = {0, 255, 0};
         const int inc[]   = {1, -1, 1};
         for (int i = 0; i < 3; ++i) {
-            const size_t nbBytes = bmp[i].rowBytes() * bmp[i].height();
+            const size_t nbBytes = fBitmaps[i].rowBytes() * fBitmaps[i].height();
             for (size_t j = 0; j < nbBytes; ++j) {
                 pixels[i][j] = (unsigned char)color[i];
                 color[i] = (color[i] == limit[i]) ? invl[i] : color[i] + inc[i];
             }
         }
         for (int i = 0; i < 3; ++i) {
-            fImage[i] = SkImage::MakeFromBitmap(bmp[i]);
+            fBitmaps[i].setImmutable();
         }
     }
 
     DrawResult onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
                       SkCanvas* canvas, SkString* errorMsg) override {
-        GrProxyProvider* proxyProvider = context->priv().proxyProvider();
-        sk_sp<GrTextureProxy> proxies[3];
+        GrSurfaceProxyView views[3];
 
         for (int i = 0; i < 3; ++i) {
-            proxies[i] = proxyProvider->createTextureProxy(fImage[i], kNone_GrSurfaceFlags, 1,
-                                                           SkBudgeted::kYes, SkBackingFit::kExact);
-            if (!proxies[i]) {
+            GrBitmapTextureMaker maker(context, fBitmaps[i]);
+            std::tie(views[i], std::ignore) = maker.view(GrMipMapped::kNo);
+            if (!views[i]) {
                 *errorMsg = "Failed to create proxy";
                 return DrawResult::kFail;
             }
         }
 
         for (int space = kJPEG_SkYUVColorSpace; space <= kLastEnum_SkYUVColorSpace; ++space) {
-            SkRect renderRect = SkRect::MakeWH(SkIntToScalar(fImage[0]->width()),
-                                               SkIntToScalar(fImage[0]->height()));
+            SkRect renderRect = SkRect::MakeWH(SkIntToScalar(fBitmaps[0].width()),
+                                               SkIntToScalar(fBitmaps[0].height()));
             renderRect.outset(kDrawPad, kDrawPad);
 
             SkScalar y = kDrawPad + kTestPad + space * kColorSpaceOffset;
@@ -105,11 +124,10 @@ protected:
                     { indices[i][2], SkColorChannel::kR },
                     { -1, SkColorChannel::kA }
                 };
-
-                std::unique_ptr<GrFragmentProcessor> fp(
-                        GrYUVtoRGBEffect::Make(proxies, yuvaIndices,
-                                               static_cast<SkYUVColorSpace>(space),
-                                               GrSamplerState::Filter::kNearest));
+                const auto& caps = *context->priv().caps();
+                std::unique_ptr<GrFragmentProcessor> fp(GrYUVtoRGBEffect::Make(
+                        views, yuvaIndices, static_cast<SkYUVColorSpace>(space),
+                        GrSamplerState::Filter::kNearest, caps));
                 if (fp) {
                     GrPaint grPaint;
                     grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
@@ -117,8 +135,8 @@ protected:
                     SkMatrix viewMatrix;
                     viewMatrix.setTranslate(x, y);
                     renderTargetContext->priv().testingOnly_addDrawOp(
-                            GrFillRectOp::Make(context, std::move(grPaint), GrAAType::kNone,
-                                               viewMatrix, renderRect));
+                            GrFillRectOp::MakeNonAARect(context, std::move(grPaint),
+                                                        viewMatrix, renderRect));
                 }
                 x += renderRect.width() + kTestPad;
             }
@@ -127,7 +145,7 @@ protected:
      }
 
 private:
-    sk_sp<SkImage> fImage[3];
+    SkBitmap fBitmaps[3];
 
     static constexpr SkScalar kDrawPad = 10.f;
     static constexpr SkScalar kTestPad = 10.f;
@@ -157,19 +175,18 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        SkBitmap bmp[2];
         SkImageInfo yinfo = SkImageInfo::MakeA8(YSIZE, YSIZE);
-        bmp[0].allocPixels(yinfo);
+        fBitmaps[0].allocPixels(yinfo);
         SkImageInfo uvinfo = SkImageInfo::MakeN32Premul(USIZE, USIZE);
-        bmp[1].allocPixels(uvinfo);
+        fBitmaps[1].allocPixels(uvinfo);
         int color[] = {0, 85, 170};
         const int limit[] = {255, 0, 255};
         const int invl[] = {0, 255, 0};
         const int inc[] = {1, -1, 1};
 
         {
-            unsigned char* pixels = (unsigned char*)bmp[0].getPixels();
-            const size_t nbBytes = bmp[0].rowBytes() * bmp[0].height();
+            unsigned char* pixels = (unsigned char*)fBitmaps[0].getPixels();
+            const size_t nbBytes = fBitmaps[0].rowBytes() * fBitmaps[0].height();
             for (size_t j = 0; j < nbBytes; ++j) {
                 pixels[j] = (unsigned char)color[0];
                 color[0] = (color[0] == limit[0]) ? invl[0] : color[0] + inc[0];
@@ -177,9 +194,9 @@ protected:
         }
 
         {
-            for (int y = 0; y < bmp[1].height(); ++y) {
-                uint32_t* pixels = bmp[1].getAddr32(0, y);
-                for (int j = 0; j < bmp[1].width(); ++j) {
+            for (int y = 0; y < fBitmaps[1].height(); ++y) {
+                uint32_t* pixels = fBitmaps[1].getAddr32(0, y);
+                for (int j = 0; j < fBitmaps[1].width(); ++j) {
                     pixels[j] = SkColorSetARGB(0, color[1], color[2], 0);
                     color[1] = (color[1] == limit[1]) ? invl[1] : color[1] + inc[1];
                     color[2] = (color[2] == limit[2]) ? invl[2] : color[2] + inc[2];
@@ -188,19 +205,18 @@ protected:
         }
 
         for (int i = 0; i < 2; ++i) {
-            fImage[i] = SkImage::MakeFromBitmap(bmp[i]);
+            fBitmaps[i].setImmutable();
         }
     }
 
     DrawResult onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
                       SkCanvas* canvas, SkString* errorMsg) override {
-        GrProxyProvider* proxyProvider = context->priv().proxyProvider();
-        sk_sp<GrTextureProxy> proxies[2];
+        GrSurfaceProxyView views[2];
 
         for (int i = 0; i < 2; ++i) {
-            proxies[i] = proxyProvider->createTextureProxy(fImage[i], kNone_GrSurfaceFlags, 1,
-                                                           SkBudgeted::kYes, SkBackingFit::kExact);
-            if (!proxies[i]) {
+            GrBitmapTextureMaker maker(context, fBitmaps[i]);
+            std::tie(views[i], std::ignore) = maker.view(GrMipMapped::kNo);
+            if (!views[i]) {
                 *errorMsg = "Failed to create proxy";
                 return DrawResult::kFail;
             }
@@ -214,8 +230,8 @@ protected:
         };
 
         for (int space = kJPEG_SkYUVColorSpace; space <= kLastEnum_SkYUVColorSpace; ++space) {
-            SkRect renderRect = SkRect::MakeWH(SkIntToScalar(fImage[0]->width()),
-                                               SkIntToScalar(fImage[0]->height()));
+            SkRect renderRect = SkRect::MakeWH(SkIntToScalar(fBitmaps[0].width()),
+                                               SkIntToScalar(fBitmaps[0].height()));
             renderRect.outset(kDrawPad, kDrawPad);
 
             SkScalar y = kDrawPad + kTestPad + space * kColorSpaceOffset;
@@ -223,15 +239,16 @@ protected:
 
             GrPaint grPaint;
             grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
-            auto fp = GrYUVtoRGBEffect::Make(proxies, yuvaIndices,
+            const auto& caps = *context->priv().caps();
+            auto fp = GrYUVtoRGBEffect::Make(views, yuvaIndices,
                                              static_cast<SkYUVColorSpace>(space),
-                                             GrSamplerState::Filter::kNearest);
+                                             GrSamplerState::Filter::kNearest, caps);
             if (fp) {
                 SkMatrix viewMatrix;
                 viewMatrix.setTranslate(x, y);
                 grPaint.addColorFragmentProcessor(std::move(fp));
-                std::unique_ptr<GrDrawOp> op(GrFillRectOp::Make(context, std::move(grPaint),
-                        GrAAType::kNone, viewMatrix, renderRect));
+                std::unique_ptr<GrDrawOp> op(GrFillRectOp::MakeNonAARect(
+                        context, std::move(grPaint), viewMatrix, renderRect));
                 renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
             }
         }
@@ -239,7 +256,7 @@ protected:
     }
 
 private:
-    sk_sp<SkImage> fImage[2];
+    SkBitmap fBitmaps[2];
 
     static constexpr SkScalar kDrawPad = 10.f;
     static constexpr SkScalar kTestPad = 10.f;
@@ -249,4 +266,115 @@ private:
 };
 
 DEF_GM(return new YUVNV12toRGBEffect;)
+
+//////////////////////////////////////////////////////////////////////////////
+
+// This GM tests domain clamping on YUV multiplanar images where the U and V
+// planes have different resolution from Y. See skbug:8959
+
+class YUVtoRGBDomainEffect : public GpuGM {
+public:
+    YUVtoRGBDomainEffect() {
+        this->setBGColor(0xFFFFFFFF);
+    }
+
+protected:
+    SkString onShortName() override {
+        return SkString("yuv_to_rgb_domain_effect");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make((YSIZE + kTestPad) * 3 + kDrawPad, (YSIZE + kTestPad) * 2 + kDrawPad);
+    }
+
+    void onOnceBeforeDraw() override {
+        SkImageInfo yinfo = SkImageInfo::MakeA8(YSIZE, YSIZE);
+        fBitmaps[0].allocPixels(yinfo);
+        SkImageInfo uinfo = SkImageInfo::MakeA8(USIZE, USIZE);
+        fBitmaps[1].allocPixels(uinfo);
+        SkImageInfo vinfo = SkImageInfo::MakeA8(VSIZE, VSIZE);
+        fBitmaps[2].allocPixels(vinfo);
+
+        int innerColor[] = {149, 43, 21};
+        int outerColor[] = {128, 128, 128};
+        for (int i = 0; i < 3; ++i) {
+            fBitmaps[i].eraseColor(SkColorSetARGB(outerColor[i], 0, 0, 0));
+            SkIRect innerRect = i == 0 ? SkIRect::MakeLTRB(2, 2, 6, 6) : SkIRect::MakeLTRB(1, 1, 3, 3);
+            fBitmaps[i].erase(SkColorSetARGB(innerColor[i], 0, 0, 0), innerRect);
+            fBitmaps[i].setImmutable();
+        }
+    }
+
+    DrawResult onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
+                      SkCanvas* canvas, SkString* errorMsg) override {
+        GrSurfaceProxyView views[3];
+
+        for (int i = 0; i < 3; ++i) {
+            GrBitmapTextureMaker maker(context, fBitmaps[i]);
+            std::tie(views[i], std::ignore) = maker.view(GrMipMapped::kNo);
+            if (!views[i]) {
+                *errorMsg = "Failed to create proxy";
+                return DrawResult::kFail;
+            }
+        }
+
+        // Draw a 2x2 grid of the YUV images.
+        // Rows = kNearest, kBilerp, Cols = No clamp, clamp
+        static const GrSamplerState::Filter kFilters[] = {
+                GrSamplerState::Filter::kNearest, GrSamplerState::Filter::kBilerp };
+        static const SkRect kGreenRect = SkRect::MakeLTRB(2.f, 2.f, 6.f, 6.f);
+
+        SkYUVAIndex yuvaIndices[4] = {
+            { SkYUVAIndex::kY_Index, SkColorChannel::kR },
+            { SkYUVAIndex::kU_Index, SkColorChannel::kR },
+            { SkYUVAIndex::kV_Index, SkColorChannel::kR },
+            { -1, SkColorChannel::kA }
+        };
+        SkRect rect = SkRect::MakeWH(YSIZE, YSIZE);
+
+        SkScalar y = kDrawPad + kTestPad;
+        for (uint32_t i = 0; i < SK_ARRAY_COUNT(kFilters); ++i) {
+            SkScalar x = kDrawPad + kTestPad;
+
+            for (uint32_t j = 0; j < 2; ++j) {
+                SkMatrix ctm = SkMatrix::MakeTrans(x, y);
+                ctm.postScale(10.f, 10.f);
+
+                SkRect domain = kGreenRect;
+                if (kFilters[i] == GrSamplerState::Filter::kNearest) {
+                    // Make a very small inset for nearest-neighbor filtering so that 0.5px
+                    // centers don't round out beyond the green pixels.
+                    domain.inset(0.01f, 0.01f);
+                }
+
+                const SkRect* domainPtr = j > 0 ? &domain : nullptr;
+                const auto& caps = *context->priv().caps();
+                std::unique_ptr<GrFragmentProcessor> fp(
+                        GrYUVtoRGBEffect::Make(views, yuvaIndices, kJPEG_SkYUVColorSpace,
+                                               kFilters[i], caps, SkMatrix::I(), domainPtr));
+                if (fp) {
+                    GrPaint grPaint;
+                    grPaint.addColorFragmentProcessor(std::move(fp));
+                    renderTargetContext->drawRect(
+                            GrNoClip(), std::move(grPaint), GrAA::kYes, ctm, rect);
+                }
+                x += rect.width() + kTestPad;
+            }
+
+            y += rect.height() + kTestPad;
+        }
+
+        return DrawResult::kOk;
+     }
+
+private:
+    SkBitmap fBitmaps[3];
+
+    static constexpr SkScalar kDrawPad = 10.f;
+    static constexpr SkScalar kTestPad = 10.f;
+
+    typedef GM INHERITED;
+};
+
+DEF_GM(return new YUVtoRGBDomainEffect;)
 }

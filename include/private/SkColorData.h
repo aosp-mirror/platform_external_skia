@@ -8,10 +8,10 @@
 #ifndef SkColorData_DEFINED
 #define SkColorData_DEFINED
 
-#include "SkColor.h"
-#include "SkColorPriv.h"
-#include "SkNx.h"
-#include "SkTo.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/private/SkNx.h"
+#include "include/private/SkTo.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Convert a 16bit pixel to a 32bit pixel
@@ -437,8 +437,8 @@ using SkPMColor4f = SkRGBA4f<kPremul_SkAlphaType>;
 constexpr SkPMColor4f SK_PMColor4fTRANSPARENT = { 0, 0, 0, 0 };
 constexpr SkPMColor4f SK_PMColor4fWHITE = { 1, 1, 1, 1 };
 constexpr SkPMColor4f SK_PMColor4fILLEGAL = { SK_FloatNegativeInfinity,
-                                                  SK_FloatNegativeInfinity,
-                                                  SK_FloatNegativeInfinity,
-                                                  SK_FloatNegativeInfinity };
+                                              SK_FloatNegativeInfinity,
+                                              SK_FloatNegativeInfinity,
+                                              SK_FloatNegativeInfinity };
 
 #endif

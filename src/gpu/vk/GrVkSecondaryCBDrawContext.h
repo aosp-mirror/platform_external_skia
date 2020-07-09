@@ -8,9 +8,9 @@
 #ifndef GrVkSecondaryCBDrawContext_DEFINED
 #define GrVkSecondaryCBDrawContext_DEFINED
 
-#include "SkTypes.h"
-#include "SkRefCnt.h"
-#include "SkSurfaceProps.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTypes.h"
 
 class GrBackendSemaphore;
 class GrContext;
@@ -55,7 +55,7 @@ class SkSurfaceProps;
  * GrVkSecondaryCBDrawContext, the client must call releaseResources() so that Skia can cleanup
  * any internal objects that were created for the draws into the secondary command buffer.
  */
-class SK_API GrVkSecondaryCBDrawContext : public SkRefCnt {
+class SK_SPI GrVkSecondaryCBDrawContext : public SkRefCnt {
 public:
     static sk_sp<GrVkSecondaryCBDrawContext> Make(GrContext*, const SkImageInfo&,
                                                   const GrVkDrawableInfo&,

@@ -8,9 +8,9 @@
 #ifndef SkLuaCanvas_DEFINED
 #define SkLuaCanvas_DEFINED
 
-#include "SkCanvas.h"
-#include "SkString.h"
-#include "SkVertices.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkString.h"
+#include "include/core/SkVertices.h"
 
 struct lua_State;
 
@@ -27,8 +27,11 @@ protected:
     bool onDoSaveBehind(const SkRect*) override;
     void willRestore() override;
 
+    void didConcat44(const SkScalar[16]) override;
     void didConcat(const SkMatrix&) override;
     void didSetMatrix(const SkMatrix&) override;
+    void didScale(SkScalar, SkScalar) override;
+    void didTranslate(SkScalar, SkScalar) override;
 
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override;
     virtual void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,

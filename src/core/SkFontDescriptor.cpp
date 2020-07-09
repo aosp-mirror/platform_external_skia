@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkFontDescriptor.h"
-#include "SkMakeUnique.h"
-#include "SkStream.h"
-#include "SkData.h"
+#include "include/core/SkData.h"
+#include "include/core/SkStream.h"
+#include "src/core/SkFontDescriptor.h"
 
 enum {
     kInvalid        = 0x00,
@@ -110,7 +109,7 @@ bool SkFontDescriptor::Deserialize(SkStream* stream, SkFontDescriptor* result) {
             SkDEBUGFAIL("Could not read font data");
             return false;
         }
-        result->fFontData = skstd::make_unique<SkFontData>(
+        result->fFontData = std::make_unique<SkFontData>(
             SkMemoryStream::Make(std::move(data)), index, axis, axisCount);
     }
     return true;

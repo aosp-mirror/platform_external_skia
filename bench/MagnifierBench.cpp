@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkMagnifierImageFilter.h"
-#include "SkRandom.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/effects/SkImageFilters.h"
+#include "include/utils/SkRandom.h"
 
 #define FILTER_WIDTH_SMALL  32
 #define FILTER_HEIGHT_SMALL 32
@@ -39,7 +39,7 @@ protected:
         const int h = fIsSmall ? FILTER_HEIGHT_SMALL : FILTER_HEIGHT_LARGE;
         SkPaint paint;
         paint.setImageFilter(
-            SkMagnifierImageFilter::Make(
+            SkImageFilters::Magnifier(
                 SkRect::MakeXYWH(SkIntToScalar(w / 4),
                                  SkIntToScalar(h / 4),
                                  SkIntToScalar(w / 2),

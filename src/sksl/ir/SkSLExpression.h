@@ -8,8 +8,8 @@
 #ifndef SKSL_EXPRESSION
 #define SKSL_EXPRESSION
 
-#include "SkSLType.h"
-#include "SkSLVariable.h"
+#include "src/sksl/ir/SkSLType.h"
+#include "src/sksl/ir/SkSLVariable.h"
 
 #include <unordered_map>
 
@@ -25,10 +25,11 @@ typedef std::unordered_map<const Variable*, std::unique_ptr<Expression>*> Defini
  */
 struct Expression : public IRNode {
     enum Kind {
-        kAppendStage_Kind,
         kBinary_Kind,
         kBoolLiteral_Kind,
         kConstructor_Kind,
+        kExternalFunctionCall_Kind,
+        kExternalValue_Kind,
         kIntLiteral_Kind,
         kFieldAccess_Kind,
         kFloatLiteral_Kind,
@@ -44,6 +45,11 @@ struct Expression : public IRNode {
         kTernary_Kind,
         kTypeReference_Kind,
         kDefined_Kind
+    };
+
+    enum class Property {
+        kSideEffects,
+        kContainsRTAdjust
     };
 
     Expression(int offset, Kind kind, const Type& type)
@@ -84,12 +90,15 @@ struct Expression : public IRNode {
         ABORT("not a constant float");
     }
 
-    /**
-     * Returns true if evaluating the expression potentially has side effects. Expressions may never
-     * return false if they actually have side effects, but it is legal (though suboptimal) to
-     * return true if there are not actually any side effects.
-     */
-    virtual bool hasSideEffects() const = 0;
+    virtual bool hasProperty(Property property) const = 0;
+
+    bool hasSideEffects() const {
+        return this->hasProperty(Property::kSideEffects);
+    }
+
+    bool containsRTAdjust() const {
+        return this->hasProperty(Property::kContainsRTAdjust);
+    }
 
     /**
      * Given a map of known constant variable values, substitute them in for references to those
@@ -105,6 +114,34 @@ struct Expression : public IRNode {
 
     virtual int coercionCost(const Type& target) const {
         return fType.coercionCost(target);
+    }
+
+    /**
+     * For a literal vector expression, return the floating point value of the n'th vector
+     * component. It is an error to call this method on an expression which is not a literal vector.
+     */
+    virtual SKSL_FLOAT getFVecComponent(int n) const {
+        SkASSERT(false);
+        return 0;
+    }
+
+    /**
+     * For a literal vector expression, return the integer value of the n'th vector component. It is
+     * an error to call this method on an expression which is not a literal vector.
+     */
+    virtual SKSL_INT getIVecComponent(int n) const {
+        SkASSERT(false);
+        return 0;
+    }
+
+    /**
+     * For a literal matrix expression, return the floating point value of the component at
+     * [col][row]. It is an error to call this method on an expression which is not a literal
+     * matrix.
+     */
+    virtual SKSL_FLOAT getMatComponent(int col, int row) const {
+        SkASSERT(false);
+        return 0;
     }
 
     virtual std::unique_ptr<Expression> clone() const = 0;

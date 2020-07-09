@@ -8,11 +8,10 @@
 #ifndef SkColorSpace_DEFINED
 #define SkColorSpace_DEFINED
 
-#include "../private/SkFixed.h"
-#include "../private/SkOnce.h"
-#include "../../third_party/skcms/skcms.h"
-#include "SkMatrix44.h"
-#include "SkRefCnt.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/SkFixed.h"
+#include "include/private/SkOnce.h"
+#include "include/third_party/skcms/skcms.h"
 #include <memory>
 
 class SkData;
@@ -49,6 +48,15 @@ static constexpr skcms_TransferFunction k2Dot2 =
 static constexpr skcms_TransferFunction kLinear =
     { 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
+static constexpr skcms_TransferFunction kRec2020 =
+    {2.22222f, 0.909672f, 0.0903276f, 0.222222f, 0.0812429f, 0, 0};
+
+static constexpr skcms_TransferFunction kPQ =
+    {-2.0f, -107/128.0f, 1.0f, 32/2523.0f, 2413/128.0f, -2392/128.0f, 8192/1305.0f };
+
+static constexpr skcms_TransferFunction kHLG =
+    {-3.0f, 2.0f, 2.0f, 1/0.17883277f, 0.28466892f, 0.55991073f, 0.0f };
+
 }
 
 namespace SkNamedGamut {
@@ -73,11 +81,13 @@ static constexpr skcms_Matrix3x3 kAdobeRGB = {{
     { SkFixedToFloat(0x04fc), SkFixedToFloat(0x0f95), SkFixedToFloat(0xbe9c) },
 }};
 
-static constexpr skcms_Matrix3x3 kDCIP3 = {{
+static constexpr skcms_Matrix3x3 kDisplayP3 = {{
     {  0.515102f,   0.291965f,  0.157153f  },
     {  0.241182f,   0.692236f,  0.0665819f },
     { -0.00104941f, 0.0418818f, 0.784378f  },
 }};
+// TODO: skia:9792 We originally misnamed this matrix... delete this incorrect alias?
+static constexpr skcms_Matrix3x3 kDCIP3 = kDisplayP3;
 
 static constexpr skcms_Matrix3x3 kRec2020 = {{
     {  0.673459f,   0.165661f,  0.125100f  },
@@ -132,10 +142,9 @@ public:
     bool gammaIsLinear() const;
 
     /**
-     *  If the transfer function can be represented as coefficients to the standard
-     *  equation, returns true and sets |fn| to the proper values.
-     *
-     *  If not, returns false.
+     *  Sets |fn| to the transfer function from this color space. Returns true if the transfer
+     *  function can be represented as coefficients to the standard ICC 7-parameter equation.
+     *  Returns false otherwise (eg, PQ, HLG).
      */
     bool isNumericalTransferFn(skcms_TransferFunction* fn) const;
 
@@ -143,8 +152,6 @@ public:
      *  Returns true and sets |toXYZD50| if the color gamut can be described as a matrix.
      *  Returns false otherwise.
      */
-    bool toXYZD50(SkMatrix44* toXYZD50) const;
-
     bool toXYZD50(skcms_Matrix3x3* toXYZD50) const;
 
     /**
@@ -211,9 +218,10 @@ public:
      */
     static bool Equals(const SkColorSpace*, const SkColorSpace*);
 
-    void       transferFn(float gabcdef[7]) const;
-    void    invTransferFn(float gabcdef[7]) const;
-    void gamutTransformTo(const SkColorSpace* dst, float src_to_dst_row_major[9]) const;
+    void       transferFn(float gabcdef[7]) const;  // DEPRECATED: Remove when webview usage is gone
+    void       transferFn(skcms_TransferFunction* fn) const;
+    void    invTransferFn(skcms_TransferFunction* fn) const;
+    void gamutTransformTo(const SkColorSpace* dst, skcms_Matrix3x3* src_to_dst) const;
 
     uint32_t transferFnHash() const { return fTransferFnHash; }
     uint64_t           hash() const { return (uint64_t)fTransferFnHash << 32 | fToXYZD50Hash; }
@@ -221,19 +229,18 @@ public:
 private:
     friend class SkColorSpaceSingletonFactory;
 
-    SkColorSpace(const float transferFn[7],
-                 const skcms_Matrix3x3& toXYZ);
+    SkColorSpace(const skcms_TransferFunction& transferFn, const skcms_Matrix3x3& toXYZ);
 
     void computeLazyDstFields() const;
 
     uint32_t                            fTransferFnHash;
     uint32_t                            fToXYZD50Hash;
 
-    float                               fTransferFn[7];
-    float                               fToXYZD50_3x3[9];    // row-major
+    skcms_TransferFunction              fTransferFn;
+    skcms_Matrix3x3                     fToXYZD50;
 
-    mutable float                       fInvTransferFn[7];
-    mutable float                       fFromXYZD50_3x3[9];  // row-major
+    mutable skcms_TransferFunction      fInvTransferFn;
+    mutable skcms_Matrix3x3             fFromXYZD50;
     mutable SkOnce                      fLazyDstFieldsOnce;
 };
 

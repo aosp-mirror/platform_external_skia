@@ -5,47 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrCaps.h"
-#include "SkExecutor.h"
-#include "Test.h"
+#include "include/core/SkExecutor.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
 using namespace sk_gpu_test;
-
-DEF_GPUTEST(GrContextFactory_NVPRContextOptionHasPathRenderingSupport, reporter, options) {
-    // Test that if NVPR is requested, the context always has path rendering
-    // or the context creation fails.
-    for (int i = 0; i < GrContextFactory::kContextTypeCnt; ++i) {
-        GrContextFactory testFactory(options);
-        // Test that if NVPR is possible, caps are in sync.
-        GrContextFactory::ContextType ctxType = static_cast<GrContextFactory::ContextType>(i);
-        GrContext* context = testFactory.get(ctxType,
-                                           GrContextFactory::ContextOverrides::kRequireNVPRSupport);
-        if (!context) {
-            continue;
-        }
-        REPORTER_ASSERT(reporter,
-                        context->priv().caps()->shaderCaps()->pathRenderingSupport());
-    }
-}
-
-DEF_GPUTEST(GrContextFactory_NoPathRenderingIfNVPRDisabled, reporter, options) {
-    // Test that if NVPR is explicitly disabled, the context has no path rendering support.
-
-    for (int i = 0; i <= GrContextFactory::kLastContextType; ++i) {
-        GrContextFactory testFactory(options);
-        GrContextFactory::ContextType ctxType = (GrContextFactory::ContextType)i;
-        GrContext* context =
-            testFactory.get(ctxType, GrContextFactory::ContextOverrides::kDisableNVPR);
-        if (context) {
-            REPORTER_ASSERT(reporter,
-                            !context->priv().caps()->shaderCaps()->pathRenderingSupport());
-        }
-    }
-}
 
 DEF_GPUTEST(GrContextFactory_abandon, reporter, options) {
     for (int i = 0; i < GrContextFactory::kContextTypeCnt; ++i) {
@@ -92,10 +60,6 @@ DEF_GPUTEST(GrContextFactory_sharedContexts, reporter, options) {
 
         // Create a new base context
         ContextInfo info3 = testFactory.getContextInfo(ctxType);
-        if (!info3.grContext()) {
-            // Vulkan NexusPlayer bot fails here. Sigh.
-            continue;
-        }
 
         // Creating a context in a share group may fail, but should never crash.
         ContextInfo info4 = testFactory.getSharedContextInfo(info3.grContext());
@@ -141,7 +105,7 @@ DEF_GPUTEST(GrContextFactory_executorAndTaskGroup, reporter, options) {
 #ifdef SK_ENABLE_DUMP_GPU
 DEF_GPUTEST_FOR_ALL_CONTEXTS(GrContextDump, reporter, ctxInfo) {
     // Ensure that GrContext::dump doesn't assert (which is possible, if the JSON code is wrong)
-    SkString result = ctxInfo.grContext()->priv().dump();
+    SkString result = ctxInfo.grContext()->dump();
     REPORTER_ASSERT(reporter, !result.isEmpty());
 }
 #endif

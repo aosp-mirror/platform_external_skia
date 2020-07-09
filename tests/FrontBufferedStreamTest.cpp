@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "SkAutoMalloc.h"
-#include "SkBitmap.h"
-#include "SkCodec.h"
-#include "SkFrontBufferedStream.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "Test.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/utils/SkFrontBufferedStream.h"
+#include "src/core/SkAutoMalloc.h"
+#include "tests/Test.h"
 
 static void test_read(skiatest::Reporter* reporter, SkStream* bufferedStream,
                       const void* expectations, size_t bytesToRead) {
@@ -239,7 +239,7 @@ static void test_initial_offset(skiatest::Reporter* reporter, size_t bufferSize)
         REPORTER_ASSERT(reporter, !bufferedStream->isAtEnd());
         test_read(reporter, bufferedStream.get(), gAbcs + arbitraryOffset + currentPosition,
                   amountToRead);
-        currentPosition = SkTMin(currentPosition + amountToRead, bufferedLength);
+        currentPosition = std::min(currentPosition + amountToRead, bufferedLength);
         REPORTER_ASSERT(reporter, memStream->getPosition() - arbitraryOffset == currentPosition);
     }
     REPORTER_ASSERT(reporter, bufferedStream->isAtEnd());

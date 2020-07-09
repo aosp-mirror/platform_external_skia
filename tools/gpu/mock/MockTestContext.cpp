@@ -8,9 +8,9 @@
 #ifndef GLTestContext_DEFINED
 #define GLTestContext_DEFINED
 
-#include "MockTestContext.h"
+#include "tools/gpu/mock/MockTestContext.h"
 
-#include "GrContext.h"
+#include "include/gpu/GrContext.h"
 
 namespace {
 
@@ -31,6 +31,7 @@ public:
 
 protected:
     void teardown() override {}
+    void onPlatformMakeNotCurrent() const override {}
     void onPlatformMakeCurrent() const override {}
     std::function<void()> onPlatformGetAutoContextRestore() const override { return nullptr; }
     void onPlatformSwapBuffers() const override {}

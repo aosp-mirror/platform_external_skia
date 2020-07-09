@@ -5,34 +5,33 @@
  * found in the LICENSE file.
  */
 
-#include "SkBBHFactory.h"
-#include "SkBBoxHierarchy.h"
-#include "SkBigPicture.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkClipOp.h"
-#include "SkClipOpPriv.h"
-#include "SkColor.h"
-#include "SkData.h"
-#include "SkFontStyle.h"
-#include "SkImageInfo.h"
-#include "SkMatrix.h"
-#include "SkMiniRecorder.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPicturePriv.h"
-#include "SkPictureRecorder.h"
-#include "SkPixelRef.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkRectPriv.h"
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkShader.h"
-#include "SkStream.h"
-#include "SkTypeface.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkBBHFactory.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkData.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkPixelRef.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkBigPicture.h"
+#include "src/core/SkClipOpPriv.h"
+#include "src/core/SkMiniRecorder.h"
+#include "src/core/SkPicturePriv.h"
+#include "src/core/SkRectPriv.h"
+#include "tests/Test.h"
 
 #include <memory>
 
@@ -379,7 +378,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
 
     SkPath invPath;
     invPath.addOval(rect1);
-    invPath.setFillType(SkPath::kInverseEvenOdd_FillType);
+    invPath.setFillType(SkPathFillType::kInverseEvenOdd);
     SkPath path;
     path.addOval(rect2);
     SkPath path2;
@@ -468,13 +467,6 @@ static void test_cull_rect_reset(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 0 == finalCullRect.fTop);
     REPORTER_ASSERT(reporter, 100 == finalCullRect.fBottom);
     REPORTER_ASSERT(reporter, 100 == finalCullRect.fRight);
-
-    const SkBBoxHierarchy* pictureBBH = picture->bbh();
-    SkRect bbhCullRect = pictureBBH->getRootBound();
-    REPORTER_ASSERT(reporter, 0 == bbhCullRect.fLeft);
-    REPORTER_ASSERT(reporter, 0 == bbhCullRect.fTop);
-    REPORTER_ASSERT(reporter, 100 == bbhCullRect.fBottom);
-    REPORTER_ASSERT(reporter, 100 == bbhCullRect.fRight);
 }
 
 
@@ -668,34 +660,33 @@ DEF_TEST(DontOptimizeSaveLayerDrawDrawRestore, reporter) {
 
 struct CountingBBH : public SkBBoxHierarchy {
     mutable int searchCalls;
-    SkRect rootBound;
 
-    CountingBBH(const SkRect& bound) : searchCalls(0), rootBound(bound) {}
+    CountingBBH() : searchCalls(0) {}
 
-    void search(const SkRect& query, SkTDArray<int>* results) const override {
+    void search(const SkRect& query, std::vector<int>* results) const override {
         this->searchCalls++;
     }
 
     void insert(const SkRect[], int) override {}
     virtual size_t bytesUsed() const override { return 0; }
-    SkRect getRootBound() const override { return rootBound; }
 };
 
 class SpoonFedBBHFactory : public SkBBHFactory {
 public:
-    explicit SpoonFedBBHFactory(SkBBoxHierarchy* bbh) : fBBH(bbh) {}
-    SkBBoxHierarchy* operator()(const SkRect&) const override {
-        return SkRef(fBBH);
+    explicit SpoonFedBBHFactory(sk_sp<SkBBoxHierarchy> bbh) : fBBH(bbh) {}
+    sk_sp<SkBBoxHierarchy> operator()() const override {
+        return fBBH;
     }
 private:
-    SkBBoxHierarchy* fBBH;
+    sk_sp<SkBBoxHierarchy> fBBH;
 };
 
 // When the canvas clip covers the full picture, we don't need to call the BBH.
 DEF_TEST(Picture_SkipBBH, r) {
     SkRect bound = SkRect::MakeWH(320, 240);
-    CountingBBH bbh(bound);
-    SpoonFedBBHFactory factory(&bbh);
+
+    auto bbh = sk_make_sp<CountingBBH>();
+    SpoonFedBBHFactory factory(bbh);
 
     SkPictureRecorder recorder;
     SkCanvas* c = recorder.beginRecording(bound, &factory);
@@ -707,10 +698,10 @@ DEF_TEST(Picture_SkipBBH, r) {
     SkCanvas big(640, 480), small(300, 200);
 
     picture->playback(&big);
-    REPORTER_ASSERT(r, bbh.searchCalls == 0);
+    REPORTER_ASSERT(r, bbh->searchCalls == 0);
 
     picture->playback(&small);
-    REPORTER_ASSERT(r, bbh.searchCalls == 1);
+    REPORTER_ASSERT(r, bbh->searchCalls == 1);
 }
 
 DEF_TEST(Picture_BitmapLeak, r) {
@@ -761,7 +752,7 @@ DEF_TEST(Picture_getRecordingCanvas, r) {
 DEF_TEST(MiniRecorderLeftHanging, r) {
     // Any shader or other ref-counted effect will do just fine here.
     SkPaint paint;
-    paint.setShader(SkShader::MakeColorShader(SK_ColorRED));
+    paint.setShader(SkShaders::Color(SK_ColorRED));
 
     SkMiniRecorder rec;
     REPORTER_ASSERT(r, rec.drawRect(SkRect::MakeWH(20,30), paint));
@@ -879,3 +870,101 @@ DEF_TEST(Picture_empty_serial, reporter) {
     REPORTER_ASSERT(reporter, pic2);
 }
 
+
+DEF_TEST(Picture_drawsNothing, r) {
+    // Tests that pic->cullRect().isEmpty() is a good way to test a picture
+    // recorded with an R-tree draws nothing.
+    struct {
+        bool draws_nothing;
+        void (*fn)(SkCanvas*);
+    } cases[] = {
+        {  true, [](SkCanvas* c) {                                                             } },
+        {  true, [](SkCanvas* c) { c->save();                                    c->restore(); } },
+        {  true, [](SkCanvas* c) { c->save(); c->clipRect({0,0,5,5});            c->restore(); } },
+        {  true, [](SkCanvas* c) {            c->clipRect({0,0,5,5});                          } },
+
+        { false, [](SkCanvas* c) {            c->drawRect({0,0,5,5}, SkPaint{});               } },
+        { false, [](SkCanvas* c) { c->save(); c->drawRect({0,0,5,5}, SkPaint{}); c->restore(); } },
+        { false, [](SkCanvas* c) {
+            c->drawRect({0,0, 5, 5}, SkPaint{});
+            c->drawRect({5,5,10,10}, SkPaint{});
+        }},
+    };
+
+    for (const auto& c : cases) {
+        SkPictureRecorder rec;
+        SkRTreeFactory factory;
+        c.fn(rec.beginRecording(10,10, &factory));
+        sk_sp<SkPicture> pic = rec.finishRecordingAsPicture();
+
+        REPORTER_ASSERT(r, pic->cullRect().isEmpty() == c.draws_nothing);
+    }
+}
+
+DEF_TEST(Picture_emptyNestedPictureBug, r) {
+    const SkRect bounds = {-5000, -5000, 5000, 5000};
+
+    SkPictureRecorder recorder;
+    SkRTreeFactory factory;
+
+    // These three pictures should all draw the same but due to bugs they don't:
+    //
+    //   1) inner has enough content that it is recoreded as an SkBigPicture,
+    //      and all its content falls outside the positive/positive quadrant,
+    //      and it is recorded with an R-tree so we contract the cullRect to those bounds;
+    //
+    //   2) middle wraps inner,
+    //      and it its recorded with an R-tree so we update middle's cullRect to inner's;
+    //
+    //   3) outer wraps inner,
+    //      and notices that middle contains only one op, drawPicture(inner),
+    //      so it plays middle back during recording rather than ref'ing middle,
+    //      querying middle's R-tree with its SkCanvas' bounds* {0,0, 5000,5000},
+    //      finding nothing to draw.
+    //
+    //  * The bug was that these bounds were not tracked as {-5000,-5000, 5000,5000}.
+    {
+        SkCanvas* canvas = recorder.beginRecording(bounds, &factory);
+        canvas->translate(-100,-100);
+        canvas->drawRect({0,0,50,50}, SkPaint{});
+    }
+    sk_sp<SkPicture> inner = recorder.finishRecordingAsPicture();
+
+    recorder.beginRecording(bounds, &factory)->drawPicture(inner);
+    sk_sp<SkPicture> middle = recorder.finishRecordingAsPicture();
+
+    // This doesn't need &factory to reproduce the bug,
+    // but it's nice to see we come up with the same {-100,-100, -50,-50} bounds.
+    recorder.beginRecording(bounds, &factory)->drawPicture(middle);
+    sk_sp<SkPicture> outer = recorder.finishRecordingAsPicture();
+
+    REPORTER_ASSERT(r, (inner ->cullRect() == SkRect{-100,-100, -50,-50}));
+    REPORTER_ASSERT(r, (middle->cullRect() == SkRect{-100,-100, -50,-50}));
+    REPORTER_ASSERT(r, (outer ->cullRect() == SkRect{-100,-100, -50,-50}));   // Used to fail.
+}
+
+DEF_TEST(Picture_fillsBBH, r) {
+    // Test empty (0 draws), mini (1 draw), and big (2+) pictures, making sure they fill the BBH.
+    const SkRect rects[] = {
+        { 0, 0, 20,20},
+        {20,20, 40,40},
+    };
+
+    for (int n = 0; n <= 2; n++) {
+        SkRTreeFactory factory;
+        SkPictureRecorder rec;
+
+        sk_sp<SkBBoxHierarchy> bbh = factory();
+
+        SkCanvas* c = rec.beginRecording({0,0, 100,100}, bbh);
+        for (int i = 0; i < n; i++) {
+            c->drawRect(rects[i], SkPaint{});
+        }
+        sk_sp<SkPicture> pic = rec.finishRecordingAsPicture();
+
+        std::vector<int> results;
+        bbh->search({0,0, 100,100}, &results);
+        REPORTER_ASSERT(r, (int)results.size() == n,
+                        "results.size() == %d, want %d\n", (int)results.size(), n);
+    }
+}

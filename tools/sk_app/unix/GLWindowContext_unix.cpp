@@ -6,9 +6,9 @@
  * found in the LICENSE file.
  */
 
-#include "../GLWindowContext.h"
-#include "WindowContextFactory_unix.h"
-#include "gl/GrGLInterface.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "tools/sk_app/GLWindowContext.h"
+#include "tools/sk_app/unix/WindowContextFactory_unix.h"
 
 #include <GL/gl.h>
 
@@ -67,6 +67,7 @@ sk_sp<const GrGLInterface> GLWindowContext_xlib::onInitializeContext() {
     SkASSERT(!fGLContext);
     sk_sp<const GrGLInterface> interface;
     bool current = false;
+
     // We attempt to use glXCreateContextAttribsARB as RenderDoc requires that the context be
     // created with this rather than glXCreateContext.
     CreateContextAttribsFn* createContextAttribs = (CreateContextAttribsFn*)glXGetProcAddressARB(
@@ -126,6 +127,17 @@ sk_sp<const GrGLInterface> GLWindowContext_xlib::onInitializeContext() {
     if (!current && !glXMakeCurrent(fDisplay, fWindow, fGLContext)) {
         return nullptr;
     }
+
+    const char* glxExtensions = glXQueryExtensionsString(fDisplay, DefaultScreen(fDisplay));
+    if (glxExtensions) {
+        if (strstr(glxExtensions, "GLX_EXT_swap_control")) {
+            PFNGLXSWAPINTERVALEXTPROC glXSwapIntervalEXT =
+                    (PFNGLXSWAPINTERVALEXTPROC)glXGetProcAddressARB(
+                            (const GLubyte*)"glXSwapIntervalEXT");
+            glXSwapIntervalEXT(fDisplay, fWindow, fDisplayParams.fDisableVsync ? 0 : 1);
+        }
+    }
+
     glClearStencil(0);
     glClearColor(0, 0, 0, 0);
     glStencilMask(0xffffffff);
@@ -133,7 +145,7 @@ sk_sp<const GrGLInterface> GLWindowContext_xlib::onInitializeContext() {
 
     glXGetConfig(fDisplay, fVisualInfo, GLX_STENCIL_SIZE, &fStencilBits);
     glXGetConfig(fDisplay, fVisualInfo, GLX_SAMPLES_ARB, &fSampleCount);
-    fSampleCount = SkTMax(fSampleCount, 1);
+    fSampleCount = std::max(fSampleCount, 1);
 
     XWindow root;
     int x, y;
@@ -170,10 +182,10 @@ namespace sk_app {
 
 namespace window_context_factory {
 
-WindowContext* NewGLForXlib(const XlibWindowInfo& winInfo, const DisplayParams& params) {
-    WindowContext* ctx = new GLWindowContext_xlib(winInfo, params);
+std::unique_ptr<WindowContext> MakeGLForXlib(const XlibWindowInfo& winInfo,
+                                             const DisplayParams& params) {
+    std::unique_ptr<WindowContext> ctx(new GLWindowContext_xlib(winInfo, params));
     if (!ctx->isValid()) {
-        delete ctx;
         return nullptr;
     }
     return ctx;

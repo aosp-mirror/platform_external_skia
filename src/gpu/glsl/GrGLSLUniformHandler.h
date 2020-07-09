@@ -8,16 +8,16 @@
 #ifndef GrGLSLUniformHandler_DEFINED
 #define GrGLSLUniformHandler_DEFINED
 
-#include "GrGLSLProgramDataManager.h"
-#include "GrShaderVar.h"
-#include "GrSwizzle.h"
+#include "src/gpu/GrShaderVar.h"
+#include "src/gpu/GrSwizzle.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 
 // variable names beginning with this prefix will not be mangled
 #define GR_NO_MANGLE_PREFIX "sk_"
 
 class GrGLSLProgramBuilder;
 class GrSamplerState;
-class GrTexture;
+class GrSurfaceProxy;
 
 // Handles for program uniforms (other than per-effect uniforms)
 struct GrGLSLBuiltinUniformHandles {
@@ -64,6 +64,11 @@ public:
     virtual const GrShaderVar& getUniformVariable(UniformHandle u) const = 0;
 
     /**
+     * 'Or's the visibility parameter with the current uniform visibililty.
+     */
+    virtual void updateUniformVisibility(UniformHandle u, uint32_t visibility) = 0;
+
+    /**
      * Shortcut for getUniformVariable(u).c_str()
      */
     virtual const char* getUniformCStr(UniformHandle u) const = 0;
@@ -75,11 +80,12 @@ protected:
     GrGLSLProgramBuilder* fProgramBuilder;
 
 private:
-    virtual const GrShaderVar& samplerVariable(SamplerHandle) const = 0;
+    virtual const char * samplerVariable(SamplerHandle) const = 0;
+    // Only called if GrShaderCaps(:textureSwizzleAppliedInShader() == true.
     virtual GrSwizzle samplerSwizzle(SamplerHandle) const = 0;
 
-    virtual SamplerHandle addSampler(const GrTexture*, const GrSamplerState&, const char* name,
-                                     const GrShaderCaps*) = 0;
+    virtual SamplerHandle addSampler(const GrSurfaceProxy*, GrSamplerState, const GrSwizzle&,
+                                     const char* name, const GrShaderCaps*) = 0;
 
     virtual UniformHandle internalAddUniformArray(uint32_t visibility,
                                                   GrSLType type,

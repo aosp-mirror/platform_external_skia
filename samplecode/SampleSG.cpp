@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkFont.h"
-#include "SkFontMetrics.h"
-#include "SkPath.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkPath.h"
+#include "samplecode/Sample.h"
 
-#include "SkSGDraw.h"
-#include "SkSGColor.h"
-#include "SkSGGroup.h"
-#include "SkSGRect.h"
-#include "SkSGScene.h"
+#include "modules/sksg/include/SkSGDraw.h"
+#include "modules/sksg/include/SkSGGroup.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGRect.h"
+#include "modules/sksg/include/SkSGScene.h"
 
 struct PerNodeInfo {
     // key
@@ -66,25 +66,19 @@ public:
     }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "SceneGraph");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("SceneGraph"); }
 
     void onDrawContent(SkCanvas* canvas) override {
         fScene->render(canvas);
     }
 
-    Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) override {
+    Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
         if (auto node = fScene->nodeAt({x, y})) {
-            Click* click = new Click(this);
+            Click* click = new Click();
             click->fMeta.setPtr("node", (void*)node);
             return click;
         }
-        return this->INHERITED::onFindClickHandler(x, y, modi);
+        return nullptr;
     }
 
     bool onClick(Click* click) override {

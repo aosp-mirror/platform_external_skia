@@ -8,8 +8,8 @@
 #ifndef GrClearOp_DEFINED
 #define GrClearOp_DEFINED
 
-#include "GrFixedClip.h"
-#include "GrOp.h"
+#include "src/gpu/GrFixedClip.h"
+#include "src/gpu/ops/GrOp.h"
 
 class GrOpFlushState;
 class GrRecordingContext;
@@ -62,10 +62,11 @@ private:
         if (fullScreen) {
             fClip.disableScissor();
         }
-        this->setBounds(SkRect::Make(rect), HasAABloat::kNo, IsZeroArea::kNo);
+        this->setBounds(SkRect::Make(rect), HasAABloat::kNo, IsHairline::kNo);
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         // This could be much more complicated. Currently we look at cases where the new clear
         // contains the old clear, or when the new clear is a subset of the old clear and is the
         // same color.

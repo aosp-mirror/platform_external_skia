@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "tests/Test.h"
 
-#include "Resources.h"
-#include "SkCanvas.h"
-#include "SkCommandLineFlags.h"
-#include "SkFixed.h"
-#include "SkFont.h"
-#include "SkFontMgr_android.h"
-#include "SkFontMgr_android_parser.h"
-#include "SkOSFile.h"
-#include "SkTypeface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkTypeface.h"
+#include "include/ports/SkFontMgr_android.h"
+#include "include/private/SkFixed.h"
+#include "src/core/SkOSFile.h"
+#include "src/ports/SkFontMgr_android_parser.h"
+#include "tools/Resources.h"
+#include "tools/flags/CommandLineFlags.h"
 
 #include <cmath>
 #include <cstdio>
@@ -144,7 +144,7 @@ template <int N, typename T> static double test_parse_fixed_r(skiatest::Reporter
             double f2 = fix * SK_FixedEpsilon_double;
             double error = fabs(f - f2);
             REPORTER_ASSERT(reporter,  error <= SK_FixedEpsilon_double);
-            maxError = SkTMax(maxError, error);
+            maxError = std::max(maxError, error);
         } else {
             REPORTER_ASSERT(reporter, f < -SK_FixedMax_double || SK_FixedMax_double < f);
         }
