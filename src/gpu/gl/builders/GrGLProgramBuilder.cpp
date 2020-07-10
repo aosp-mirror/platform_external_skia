@@ -7,7 +7,7 @@
 
 #include "src/gpu/gl/builders/GrGLProgramBuilder.h"
 
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/core/SkATrace.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkReadBuffer.h"
@@ -559,7 +559,6 @@ sk_sp<GrGLProgram> GrGLProgramBuilder::createProgram(GrGLuint programID) {
                              std::move(fGeometryProcessor),
                              std::move(fXferProcessor),
                              std::move(fFragmentProcessors),
-                             fFragmentProcessorCnt,
                              std::move(fAttributes),
                              fVertexAttributeCnt,
                              fInstanceAttributeCnt,

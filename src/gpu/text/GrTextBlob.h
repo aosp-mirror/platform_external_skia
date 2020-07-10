@@ -27,7 +27,6 @@ class GrAtlasTextOp;
 class GrDeferredUploadTarget;
 class GrGlyph;
 class GrStrikeCache;
-class GrTextTarget;
 
 class SkMatrixProvider;
 class SkSurfaceProps;
@@ -324,15 +323,12 @@ public:
                                        GrTextBlob* blob,
                                        SkArenaAlloc* alloc);
 
-    void insertSubRunOpsIntoTarget(GrTextTarget* target,
-                                   const SkSurfaceProps& props,
-                                   const SkPaint& paint,
-                                   const GrClip* clip,
-                                   const SkMatrixProvider& deviceMatrix,
-                                   SkPoint drawOrigin);
-
     GrTextBlob* fBlob;
     uint64_t fAtlasGeneration{GrDrawOpAtlas::kInvalidAtlasGeneration};
+
+    bool drawAsPaths() const;
+
+    SkSpan<const PathGlyph> paths() const { return SkMakeSpan(fPaths); }
 
 private:
     struct AtlasPt {
@@ -373,7 +369,6 @@ private:
     bool hasW() const;
     void setUseLCDText(bool useLCDText);
     void setAntiAliased(bool antiAliased);
-    bool drawAsPaths() const;
 
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrTextBlob::SubRun);
 

@@ -9,6 +9,7 @@
 
 #include "src/gpu/GrScissorState.h"
 #include "src/gpu/d3d/GrD3DBuffer.h"
+#include "src/gpu/d3d/GrD3DCommandSignature.h"
 #include "src/gpu/d3d/GrD3DGpu.h"
 #include "src/gpu/d3d/GrD3DPipelineState.h"
 #include "src/gpu/d3d/GrD3DRenderTarget.h"
@@ -285,13 +286,14 @@ void GrD3DDirectCommandList::setVertexBuffers(unsigned int startSlot,
                                               size_t instanceStride) {
     if (fCurrentVertexBuffer != vertexBuffer || fCurrentVertexStride != vertexStride ||
         fCurrentInstanceBuffer != instanceBuffer || fCurrentInstanceStride != instanceStride) {
-        this->addResource(vertexBuffer->resource());
-
         D3D12_VERTEX_BUFFER_VIEW views[2];
         int numViews = 0;
-        views[numViews].BufferLocation = vertexBuffer->d3dResource()->GetGPUVirtualAddress();
-        views[numViews].SizeInBytes = vertexBuffer->size();
-        views[numViews++].StrideInBytes = vertexStride;
+        if (vertexBuffer) {
+            this->addResource(vertexBuffer->resource());
+            views[numViews].BufferLocation = vertexBuffer->d3dResource()->GetGPUVirtualAddress();
+            views[numViews].SizeInBytes = vertexBuffer->size();
+            views[numViews++].StrideInBytes = vertexStride;
+        }
         if (instanceBuffer) {
             this->addResource(instanceBuffer->resource());
             views[numViews].BufferLocation = instanceBuffer->d3dResource()->GetGPUVirtualAddress();
@@ -335,6 +337,19 @@ void GrD3DDirectCommandList::drawIndexedInstanced(unsigned int indexCount,
     this->addingWork();
     fCommandList->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex,
                                        startInstance);
+}
+
+void GrD3DDirectCommandList::executeIndirect(const sk_sp<GrD3DCommandSignature> commandSignature,
+                                             unsigned int maxCommandCount,
+                                             const GrD3DBuffer* argumentBuffer,
+                                             size_t argumentBufferOffset) {
+    SkASSERT(fIsActive);
+    this->addingWork();
+    this->addResource(commandSignature);
+    this->addResource(argumentBuffer->resource());
+    fCommandList->ExecuteIndirect(commandSignature->commandSignature(), maxCommandCount,
+                                  argumentBuffer->d3dResource(), argumentBufferOffset,
+                                  nullptr, 0);
 }
 
 void GrD3DDirectCommandList::clearRenderTargetView(const GrD3DRenderTarget* renderTarget,
@@ -381,7 +396,7 @@ void GrD3DDirectCommandList::setRenderTarget(const GrD3DRenderTarget* renderTarg
 }
 
 void GrD3DDirectCommandList::resolveSubresourceRegion(const GrD3DTextureResource* dstTexture,
-                                                      UINT dstX, UINT dstY,
+                                                      unsigned int dstX, unsigned int dstY,
                                                       const GrD3DTextureResource* srcTexture,
                                                       D3D12_RECT* srcRect) {
     SkASSERT(dstTexture->dxgiFormat() == srcTexture->dxgiFormat());

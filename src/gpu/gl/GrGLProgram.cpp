@@ -35,7 +35,6 @@ sk_sp<GrGLProgram> GrGLProgram::Make(
         std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
         std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
         std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fps,
-        int fragmentProcessorCnt,
         std::unique_ptr<Attribute[]> attributes,
         int vertexAttributeCnt,
         int instanceAttributeCnt,
@@ -50,7 +49,6 @@ sk_sp<GrGLProgram> GrGLProgram::Make(
                                                std::move(geometryProcessor),
                                                std::move(xferProcessor),
                                                std::move(fps),
-                                               fragmentProcessorCnt,
                                                std::move(attributes),
                                                vertexAttributeCnt,
                                                instanceAttributeCnt,
@@ -72,7 +70,6 @@ GrGLProgram::GrGLProgram(
         std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
         std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
         std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fps,
-        int fragmentProcessorCnt,
         std::unique_ptr<Attribute[]> attributes,
         int vertexAttributeCnt,
         int instanceAttributeCnt,
@@ -83,7 +80,6 @@ GrGLProgram::GrGLProgram(
         , fPrimitiveProcessor(std::move(geometryProcessor))
         , fXferProcessor(std::move(xferProcessor))
         , fFragmentProcessors(std::move(fps))
-        , fFragmentProcessorCnt(fragmentProcessorCnt)
         , fAttributes(std::move(attributes))
         , fVertexAttributeCnt(vertexAttributeCnt)
         , fInstanceAttributeCnt(instanceAttributeCnt)
@@ -118,12 +114,13 @@ void GrGLProgram::updateUniforms(const GrRenderTarget* renderTarget,
     // primProc, fragProcs, XP.
     fPrimitiveProcessor->setData(fProgramDataManager, programInfo.primProc());
 
-    GrFragmentProcessor::CIter fpIter(programInfo.pipeline());
-    GrGLSLFragmentProcessor::Iter glslIter(fFragmentProcessors.get(), fFragmentProcessorCnt);
-    for (; fpIter && glslIter; ++fpIter, ++glslIter) {
-        glslIter->setData(fProgramDataManager, *fpIter);
+    for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
+        auto& pipelineFP = programInfo.pipeline().getFragmentProcessor(i);
+        auto& baseGLSLFP = *fFragmentProcessors[i];
+        for (auto [fp, glslFP] : GrGLSLFragmentProcessor::ParallelRange(pipelineFP, baseGLSLFP)) {
+            glslFP.setData(fProgramDataManager, fp);
+        }
     }
-    SkASSERT(!fpIter && !glslIter);
 
     const GrXferProcessor& xp = programInfo.pipeline().getXferProcessor();
     SkIPoint offset;
@@ -143,14 +140,12 @@ void GrGLProgram::bindTextures(const GrPrimitiveProcessor& primProc,
     }
     int nextTexSamplerIdx = primProc.numTextureSamplers();
 
-    GrFragmentProcessor::CIter fpIter(pipeline);
-    for (; fpIter; ++fpIter) {
-        for (int i = 0; i < fpIter->numTextureSamplers(); ++i) {
-            const GrFragmentProcessor::TextureSampler& sampler = fpIter->textureSampler(i);
-            fGpu->bindTexture(nextTexSamplerIdx++, sampler.samplerState(), sampler.view().swizzle(),
-                              static_cast<GrGLTexture*>(sampler.peekTexture()));
-        }
-    }
+    pipeline.visitTextureEffects([&](const GrTextureEffect& te) {
+        GrSamplerState samplerState = te.samplerState();
+        GrSwizzle swizzle = te.view().swizzle();
+        auto* texture = static_cast<GrGLTexture*>(te.texture());
+        fGpu->bindTexture(nextTexSamplerIdx++, samplerState, swizzle, texture);
+    });
 
     SkIPoint offset;
     GrTexture* dstTexture = pipeline.peekDstTexture(&offset);
