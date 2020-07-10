@@ -7,7 +7,7 @@
 
 #include "src/gpu/mtl/GrMtlPipelineStateBuilder.h"
 
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrAutoLocaleSetter.h"
@@ -536,8 +536,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTa
                                   (uint32_t)fUniformHandler.numSamplers(),
                                   std::move(fGeometryProcessor),
                                   std::move(fXferProcessor),
-                                  std::move(fFragmentProcessors),
-                                  fFragmentProcessorCnt);
+                                  std::move(fFragmentProcessors));
 }
 
 //////////////////////////////////////////////////////////////////////////////
