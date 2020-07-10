@@ -480,7 +480,7 @@ void GrRenderTargetContext::drawTextPaths(const GrClip* clip,
 }
 
 void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
-                                             const SkMatrixProvider& matrixProvider,
+                                             const SkMatrixProvider& viewMatrix,
                                              const SkGlyphRunList& glyphRunList) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
@@ -536,7 +536,7 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
         blob = textBlobCache->find(key);
     }
 
-    const SkMatrix& drawMatrix(matrixProvider.localToDevice());
+    const SkMatrix& drawMatrix(viewMatrix.localToDevice());
     if (blob != nullptr && blob->canReuse(blobPaint, blurRec, drawMatrix, drawOrigin)) {
         // Reusing the blob. Move it to the front of LRU cache.
         textBlobCache->makeMRU(blob.get());
@@ -560,58 +560,11 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
 
     for (GrTextBlob::SubRun* subRun : blob->subRunList()) {
         if (subRun->drawAsPaths()) {
-            this->drawTextPaths(clip, matrixProvider, glyphRunList, subRun);
+            this->drawTextPaths(clip, viewMatrix, glyphRunList, subRun);
         } else {
-            // Handle the mask and distance field cases.
-            SkASSERT(subRun->glyphCount() != 0);
-
-            // We can clip geometrically using clipRect and ignore clip if we're not using SDFs or
-            // transformed glyphs, and we have an axis-aligned rectangular non-AA clip.
-            std::unique_ptr<GrAtlasTextOp> op;
-            const GrClip* subRunClip = clip;
-            if (!subRun->drawAsDistanceFields()) {
-                SkIRect clipRect = SkIRect::MakeEmpty();
-                if (!subRun->needsTransform()) {
-                    // We only need to do clipping work if the SubRun isn't contained by the clip
-                    SkRect subRunBounds = subRun->deviceRect(
-                            matrixProvider.localToDevice(), drawOrigin);
-                    SkRect renderTargetBounds = SkRect::MakeWH(this->width(), this->height());
-                    if (subRunClip == nullptr && !renderTargetBounds.intersects(subRunBounds)) {
-                        // If the SubRun is completely outside, don't add an op for it.
-                        continue;
-                    } else if (subRunClip != nullptr) {
-                        GrClip::PreClipResult result = subRunClip->preApply(subRunBounds);
-                        if (result.fEffect == GrClip::Effect::kClipped) {
-                            if (result.fIsRRect && result.fRRect.isRect() &&
-                                result.fAA == GrAA::kNo) {
-                                // Clip geometrically during onPrepare using clipRect.
-                                result.fRRect.getBounds().round(&clipRect);
-                                subRunClip = nullptr;
-                            }
-                        } else if (result.fEffect == GrClip::Effect::kClippedOut) {
-                            continue;
-                        }
-                    }
-                }
-
-                if (!clipRect.isEmpty()) { SkASSERT(subRunClip == nullptr); }
-
-                op = GrAtlasTextOp::MakeBitmap(this,
-                                               blobPaint,
-                                               subRun,
-                                               matrixProvider,
-                                               drawOrigin,
-                                               clipRect);
-            } else {
-                op = GrAtlasTextOp::MakeDistanceField(this,
-                                                      blobPaint,
-                                                      subRun,
-                                                      matrixProvider,
-                                                      drawOrigin);
-            }
-
+            auto [drawingClip, op] = subRun->makeAtlasTextOp(clip, viewMatrix, glyphRunList, this);
             if (op != nullptr) {
-                this->addDrawOp(subRunClip, std::move(op));
+                this->addDrawOp(drawingClip, std::move(op));
             }
         }
     }
