@@ -1997,6 +1997,7 @@ cc_test {
         "bench/DrawBitmapAABench.cpp",
         "bench/EncodeBench.cpp",
         "bench/FSRectBench.cpp",
+        "bench/FilteringBench.cpp",
         "bench/FontCacheBench.cpp",
         "bench/GMBench.cpp",
         "bench/GameBench.cpp",
