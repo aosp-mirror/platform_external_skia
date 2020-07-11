@@ -26,14 +26,32 @@ class SkData;
 class SkCanvas;
 class SkImageFilter;
 class SkImageGenerator;
+class SkM44;
 class SkPaint;
 class SkPicture;
 class SkSurface;
 class GrBackendTexture;
 class GrContext;
 class GrContextThreadSafeProxy;
+class GrRecordingContext;
 
 struct SkYUVAIndex;
+
+enum class SkSamplingMode {
+    kNearest,   // single sample point (nearest neighbor)
+    kLinear,    // interporate between 2x2 sample points (bilinear interpolation)
+};
+
+enum class SkMipmapMode {
+    kNone,      // ignore mipmap levels, sample from the "base"
+    kNearest,   // sample from the nearest level
+    kLinear,    // interpolate between the two nearest levels
+};
+
+struct SkFilterOptions {
+    SkSamplingMode  fSampling;
+    SkMipmapMode    fMipmap;
+};
 
 /** \class SkImage
     SkImage describes a two dimensional array of pixels to draw. The pixels may be
@@ -770,6 +788,9 @@ public:
     */
     bool isOpaque() const { return SkAlphaTypeIsOpaque(this->alphaType()); }
 
+    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkFilterOptions&,
+                               const SkMatrix* localMatrix = nullptr) const;
+
     /** Creates SkShader from SkImage. SkShader dimensions are taken from SkImage. SkShader uses
         SkTileMode rules to fill drawn area outside SkImage. localMatrix permits
         transforming SkImage before SkCanvas matrix is applied.
@@ -830,7 +851,7 @@ public:
         If context is nullptr, tests if SkImage draws on raster surface;
         otherwise, tests if SkImage draws on GPU surface associated with context.
 
-        SkImage backed by GPU texture may become invalid if associated GrContext is
+        SkImage backed by GPU texture may become invalid if associated context is
         invalid. lazy image may be invalid and may not draw to raster surface or
         GPU surface or both.
 
@@ -839,6 +860,10 @@ public:
 
         example: https://fiddle.skia.org/c/@Image_isValid
     */
+    bool isValid(GrRecordingContext* context) const;
+
+    /** Deprecated.
+     */
     bool isValid(GrContext* context) const;
 
     /** Flushes any pending uses of texture-backed images in the GPU backend. If the image is not
