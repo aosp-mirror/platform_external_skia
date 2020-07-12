@@ -22,6 +22,9 @@
 #include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/geometry/GrQuad.h"
+#include "src/gpu/text/GrTextBlob.h"
+
+#include <tuple>
 
 class GrBackendSemaphore;
 class GrClip;
@@ -138,8 +141,6 @@ public:
                           const SkSurfaceProps*, bool managedOpsTask = true);
 
     ~GrRenderTargetContext() override;
-
-    virtual void drawGlyphRunList(const GrClip*, const SkMatrixProvider&, const SkGlyphRunList&);
 
     /**
      * Provides a perfomance hint that the render target's contents are allowed
@@ -308,7 +309,7 @@ public:
         SkRect fDstRect;
         const SkPoint* fDstClipQuad; // Must be null, or point to an array of 4 points
         const SkMatrix* fPreViewMatrix; // If not null, entry's CTM is 'viewMatrix' * fPreViewMatrix
-        float fAlpha;
+        SkPMColor4f   fColor; // {a,a,a,a} for rgb textures, {r,g,b,a} for alpha-only textures
         GrQuadAAFlags fAAFlags;
     };
     /**
@@ -509,6 +510,23 @@ public:
                           GrSamplerState::Filter,
                           std::unique_ptr<SkLatticeIter>,
                           const SkRect& dst);
+    /**
+     * Draw the paths for text.
+     */
+    void drawTextPaths(const GrClip*,
+                       const SkMatrixProvider& viewMatrix,
+                       const SkGlyphRunList& glyphRunList,
+                       GrTextBlob::SubRun* subRun);
+
+    /**
+     * Draw the text specified by the SkGlyphRunList.
+     *
+     * @param viewMatrix      transformationMatrix
+     * @param glyphRunList    text, text positions, and paint.
+     */
+    void drawGlyphRunList(const GrClip*,
+                          const SkMatrixProvider& viewMatrix,
+                          const SkGlyphRunList& glyphRunList);
 
     /**
      * Draws the src texture with no matrix. The dstRect is the dstPoint with the width and height
@@ -582,7 +600,6 @@ private:
     friend class GrFillRectOp;                       // for access to addDrawOp
     friend class GrTessellationPathRenderer;         // for access to addDrawOp
     friend class GrTextureOp;                        // for access to addDrawOp
-    friend class GrAtlasTextOp;                      // for access to addDrawOp
 
     SkDEBUGCODE(void onValidate() const override;)
 

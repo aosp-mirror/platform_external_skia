@@ -28,7 +28,7 @@
 #include "src/shaders/SkImageShader.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/image/SkImage_Gpu.h"
 #endif
 #include "include/gpu/GrBackendSurface.h"
@@ -128,6 +128,13 @@ sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
 }
 
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
+                                    const SkFilterOptions& options,
+                                    const SkMatrix* localMatrix) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy,
+                               options, localMatrix);
+}
+
+sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkMatrix* localMatrix, SkFilterQuality filtering) const {
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, localMatrix,
                                SkImageShader::FilterEnum(filtering));
@@ -195,11 +202,15 @@ GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
     return as_IB(this)->onGetBackendTexture(flushPendingGrContextIO, origin);
 }
 
-bool SkImage::isValid(GrContext* context) const {
+bool SkImage::isValid(GrRecordingContext* context) const {
     if (context && context->abandoned()) {
         return false;
     }
     return as_IB(this)->onIsValid(context);
+}
+
+bool SkImage::isValid(GrContext* context) const {
+    return this->isValid(static_cast<GrRecordingContext*>(context));
 }
 
 GrSemaphoresSubmitted SkImage::flush(GrContext* context, const GrFlushInfo& flushInfo) {
@@ -220,11 +231,18 @@ GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
     return GrBackendTexture(); // invalid
 }
 
+bool SkImage::isValid(GrRecordingContext* context) const {
+    if (context) {
+        return false;
+    }
+    return as_IB(this)->onIsValid(nullptr);
+}
+
 bool SkImage::isValid(GrContext* context) const {
     if (context) {
         return false;
     }
-    return as_IB(this)->onIsValid(context);
+    return as_IB(this)->onIsValid(nullptr);
 }
 
 GrSemaphoresSubmitted SkImage::flush(GrContext*, const GrFlushInfo&) {

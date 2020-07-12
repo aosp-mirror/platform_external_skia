@@ -906,6 +906,7 @@ optional("wuffs") {
   enabled = skia_use_wuffs
   public_defines = [
     "SK_HAS_WUFFS_LIBRARY",
+
     # SK_FAVOR_WUFFS_V_0_3_OVER_V_0_2 is temporary, used during a multiple step
     # transition (perhaps a month or two in mid 2020), distributed across
     # multiple repositories:
@@ -924,10 +925,7 @@ optional("wuffs") {
     # Steps 2a and 2b can occur concurrently. Similarly for 3a and 3b.
     #
     # "Users" means software that uses Skia+Wuffs, such as Chromium or Flutter.
-    #
-    # Uncommenting the next line (as well as changing "0.2" to "0.3" in
-    # "etc/wuffs-v0.2.c" in third_party/wuffs/BUILD.gn) is step 3b.
-    # "SK_FAVOR_WUFFS_V_0_3_OVER_V_0_2",
+    "SK_FAVOR_WUFFS_V_0_3_OVER_V_0_2",
   ]
 
   deps = [ "//third_party/wuffs" ]
@@ -956,6 +954,11 @@ optional("sksl_interpreter") {
 optional("skvm_jit") {
   enabled = skia_enable_skvm_jit
   public_defines = [ "SKVM_JIT" ]
+  if (skia_vtune_path != "") {
+    public_defines += [ "SKVM_JIT_VTUNE" ]
+    public_include_dirs = [ "$skia_vtune_path/include" ]
+    libs = [ "$skia_vtune_path/lib64/jitprofiling.lib" ]
+  }
 }
 
 if (skia_enable_gpu && skia_generate_workarounds) {
@@ -2082,6 +2085,7 @@ if (skia_enable_tools) {
       "fuzz/oss_fuzz/FuzzSKSL2SPIRV.cpp",
       "fuzz/oss_fuzz/FuzzSVG.cpp",
       "fuzz/oss_fuzz/FuzzSkDescriptorDeserialize.cpp",
+      "fuzz/oss_fuzz/FuzzSkRuntimeEffect.cpp",
       "fuzz/oss_fuzz/FuzzTextBlobDeserialize.cpp",
       "tools/UrlDataManager.cpp",
       "tools/debugger/DebugCanvas.cpp",
@@ -2248,6 +2252,7 @@ if (skia_enable_tools) {
       "tools/sk_app/RasterWindowContext.h",
       "tools/sk_app/Window.cpp",
       "tools/sk_app/Window.h",
+      "tools/sk_app/WindowContext.cpp",
       "tools/sk_app/WindowContext.h",
     ]
     libs = []
