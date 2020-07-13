@@ -219,8 +219,6 @@ public:
     std::tuple<bool, int> regenerate(int begin, int end);
 
 private:
-    // Return {success, number of glyphs regenerated}
-    std::tuple<bool, int> updateTextureCoordinates(int begin, int end);
 
     GrResourceProvider* fResourceProvider;
     GrDeferredUploadTarget* fUploadTarget;
@@ -273,6 +271,11 @@ public:
                    const SkMatrixProvider& viewMatrix,
                    const SkGlyphRunList& glyphRunList,
                    GrRenderTargetContext* rtc);
+
+    void draw(const GrClip* clip,
+              const SkMatrixProvider& viewMatrix,
+              const SkGlyphRunList& glyphRunList,
+              GrRenderTargetContext* rtc);
 
     // TODO when this object is more internal, drop the privacy
     void resetBulkUseToken();
