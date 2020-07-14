@@ -195,6 +195,22 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::MulInputByChildAlpha(
     return GrXfermodeFragmentProcessor::Make(/*src=*/nullptr, std::move(fp), SkBlendMode::kSrcIn);
 }
 
+std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::ModulateAlpha(
+        std::unique_ptr<GrFragmentProcessor> inputFP, const SkPMColor4f& color) {
+    auto colorFP = GrConstColorProcessor::Make(color);
+    return GrXfermodeFragmentProcessor::Make(
+            std::move(colorFP), std::move(inputFP), SkBlendMode::kSrcIn,
+            GrXfermodeFragmentProcessor::ComposeBehavior::kSkModeBehavior);
+}
+
+std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::ModulateRGBA(
+        std::unique_ptr<GrFragmentProcessor> inputFP, const SkPMColor4f& color) {
+    auto colorFP = GrConstColorProcessor::Make(color);
+    return GrXfermodeFragmentProcessor::Make(
+            std::move(colorFP), std::move(inputFP), SkBlendMode::kModulate,
+            GrXfermodeFragmentProcessor::ComposeBehavior::kSkModeBehavior);
+}
+
 std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::ClampPremulOutput(
         std::unique_ptr<GrFragmentProcessor> fp) {
     if (!fp) {
@@ -431,8 +447,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::RunInSeries(
     SkPMColor4f knownColor;
     int leadingFPsToEliminate = info.initialProcessorsToEliminate(&knownColor);
     if (leadingFPsToEliminate) {
-        std::unique_ptr<GrFragmentProcessor> colorFP = GrConstColorProcessor::Make(
-            /*inputFP=*/nullptr, knownColor, GrConstColorProcessor::InputMode::kIgnore);
+        std::unique_ptr<GrFragmentProcessor> colorFP = GrConstColorProcessor::Make(knownColor);
         if (leadingFPsToEliminate == cnt) {
             return colorFP;
         }

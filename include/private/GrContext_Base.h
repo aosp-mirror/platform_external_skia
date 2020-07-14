@@ -69,7 +69,7 @@ protected:
     uint32_t contextID() const;
 
     bool matches(GrContext_Base* candidate) const {
-        return candidate->contextID() == this->contextID();
+        return candidate && candidate->contextID() == this->contextID();
     }
 
     /*
@@ -88,12 +88,5 @@ protected:
 private:
     typedef SkRefCnt INHERITED;
 };
-
-/**
- * Safely cast a base context to direct context.
- */
-static inline GrDirectContext* GrAsDirectContext(GrContext_Base* base) {
-    return base ? base->asDirectContext() : nullptr;
-}
 
 #endif

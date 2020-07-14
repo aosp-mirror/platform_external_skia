@@ -262,9 +262,8 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
             if (1.0f != paintAlpha) {
                 // No gamut conversion - paintAlpha is a (linear) alpha value, splatted to all
                 // color channels. It's value should be treated as the same in ANY color space.
-                paintFP = GrConstColorProcessor::Make(
-                    std::move(paintFP), { paintAlpha, paintAlpha, paintAlpha, paintAlpha },
-                    GrConstColorProcessor::InputMode::kModulateRGBA);
+                paintFP = GrFragmentProcessor::ModulateRGBA(
+                        std::move(paintFP), {paintAlpha, paintAlpha, paintAlpha, paintAlpha});
             }
         } else {
             // The shader's FP sees the paint *unpremul* color
@@ -276,8 +275,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
             // There is a blend between the primitive color and the paint color. The blend considers
             // the opaque paint color. The paint's alpha is applied to the post-blended color.
             SkPMColor4f opaqueColor = origColor.makeOpaque().premul();
-            paintFP = GrConstColorProcessor::Make(/*inputFP=*/nullptr, opaqueColor,
-                                                  GrConstColorProcessor::InputMode::kIgnore);
+            paintFP = GrConstColorProcessor::Make(opaqueColor);
             paintFP = GrXfermodeFragmentProcessor::Make(std::move(paintFP), /*dst=*/nullptr,
                                                         *primColorMode);
             grPaint->setColor4f(opaqueColor);
@@ -287,9 +285,8 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
             if (1.0f != paintAlpha) {
                 // No gamut conversion - paintAlpha is a (linear) alpha value, splatted to all
                 // color channels. It's value should be treated as the same in ANY color space.
-                paintFP = GrConstColorProcessor::Make(
-                    std::move(paintFP), { paintAlpha, paintAlpha, paintAlpha, paintAlpha },
-                    GrConstColorProcessor::InputMode::kModulateRGBA);
+                paintFP = GrFragmentProcessor::ModulateRGBA(
+                        std::move(paintFP), {paintAlpha, paintAlpha, paintAlpha, paintAlpha});
             }
         } else {
             // No shader, no primitive color.

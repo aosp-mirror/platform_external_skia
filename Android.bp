@@ -1609,6 +1609,7 @@ cc_test {
         "tests/GrContextAbandonTest.cpp",
         "tests/GrContextFactoryTest.cpp",
         "tests/GrContextOOM.cpp",
+        "tests/GrDDLImageTest.cpp",
         "tests/GrFinishedFlushTest.cpp",
         "tests/GrGLExtensionsTest.cpp",
         "tests/GrMemoryPoolTest.cpp",
