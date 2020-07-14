@@ -25,55 +25,12 @@ public:
         (void)_outer;
         auto color = _outer.color;
         (void)color;
-        auto mode = _outer.mode;
-        (void)mode;
         colorVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                     kHalf4_GrSLType, "color");
         fragBuilder->codeAppendf(
-                R"SkSL(@switch (%d) {
-    case 0:
-        {
-            %s = %s;
-            break;
-        }
-    case 1:
-        {)SkSL",
-                (int)_outer.mode, args.fOutputColor,
-                args.fUniformHandler->getUniformCStr(colorVar));
-        SkString _input1009(args.fInputColor);
-        SkString _sample1009;
-        if (_outer.inputFP_index >= 0) {
-            _sample1009 = this->invokeChild(_outer.inputFP_index, _input1009.c_str(), args);
-        } else {
-            _sample1009.swap(_input1009);
-        }
-        fragBuilder->codeAppendf(
-                R"SkSL(
-            half4 inputColor = %s;
-            %s = inputColor * %s;
-            break;
-        }
-    case 2:
-        {)SkSL",
-                _sample1009.c_str(), args.fOutputColor,
-                args.fUniformHandler->getUniformCStr(colorVar));
-        SkString _input1181(args.fInputColor);
-        SkString _sample1181;
-        if (_outer.inputFP_index >= 0) {
-            _sample1181 = this->invokeChild(_outer.inputFP_index, _input1181.c_str(), args);
-        } else {
-            _sample1181.swap(_input1181);
-        }
-        fragBuilder->codeAppendf(
-                R"SkSL(
-            half inputAlpha = %s.w;
-            %s = inputAlpha * %s;
-            break;
-        }
-}
+                R"SkSL(%s = %s;
 )SkSL",
-                _sample1181.c_str(), args.fOutputColor,
-                args.fUniformHandler->getUniformCStr(colorVar));
+                args.fOutputColor, args.fUniformHandler->getUniformCStr(colorVar));
     }
 
 private:
@@ -95,24 +52,15 @@ GrGLSLFragmentProcessor* GrConstColorProcessor::onCreateGLSLInstance() const {
     return new GrGLSLConstColorProcessor();
 }
 void GrConstColorProcessor::onGetGLSLProcessorKey(const GrShaderCaps& caps,
-                                                  GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)mode);
-}
+                                                  GrProcessorKeyBuilder* b) const {}
 bool GrConstColorProcessor::onIsEqual(const GrFragmentProcessor& other) const {
     const GrConstColorProcessor& that = other.cast<GrConstColorProcessor>();
     (void)that;
     if (color != that.color) return false;
-    if (mode != that.mode) return false;
     return true;
 }
 GrConstColorProcessor::GrConstColorProcessor(const GrConstColorProcessor& src)
-        : INHERITED(kGrConstColorProcessor_ClassID, src.optimizationFlags())
-        , color(src.color)
-        , mode(src.mode) {
-    if (src.inputFP_index >= 0) {
-        inputFP_index = this->cloneAndRegisterChildProcessor(src.childProcessor(src.inputFP_index));
-    }
-}
+        : INHERITED(kGrConstColorProcessor_ClassID, src.optimizationFlags()), color(src.color) {}
 std::unique_ptr<GrFragmentProcessor> GrConstColorProcessor::clone() const {
     return std::unique_ptr<GrFragmentProcessor>(new GrConstColorProcessor(*this));
 }
@@ -138,7 +86,6 @@ std::unique_ptr<GrFragmentProcessor> GrConstColorProcessor::TestCreate(GrProcess
             color = SkPMColor4f::FromBytes_RGBA(c | (c << 8) | (c << 16) | (c << 24));
             break;
     }
-    InputMode mode = static_cast<InputMode>(d->fRandom->nextULessThan(kInputModeCnt));
-    return GrConstColorProcessor::Make(/*inputFP=*/nullptr, color, mode);
+    return GrConstColorProcessor::Make(color);
 }
 #endif
