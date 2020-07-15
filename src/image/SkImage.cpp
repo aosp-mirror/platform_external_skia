@@ -20,7 +20,7 @@
 #include "src/core/SkImageFilterCache.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkImagePriv.h"
-#include "src/core/SkMipMap.h"
+#include "src/core/SkMipmap.h"
 #include "src/core/SkNextID.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/image/SkImage_Base.h"
@@ -189,7 +189,6 @@ sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset, GrDirectContext* direc
         direct = GrAsDirectContext(myContext);
     }
 #endif
-    // This check is also performed in the subclass, but we do it here for the short-circuit below.
     if (myContext && !myContext->priv().matches(direct)) {
         return nullptr;
     }
@@ -434,29 +433,36 @@ bool SkImage::isLazyGenerated() const {
 
 bool SkImage::isAlphaOnly() const { return SkColorTypeIsAlphaOnly(fInfo.colorType()); }
 
-sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target, GrDirectContext* direct) const {
-    return this->makeColorTypeAndColorSpace(this->colorType(), std::move(target), direct);
+sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target) const {
+    if (!target) {
+        return nullptr;
+    }
+
+    // No need to create a new image if:
+    // (1) The color spaces are equal.
+    // (2) The color type is kAlpha8.
+    SkColorSpace* colorSpace = this->colorSpace();
+    if (!colorSpace) {
+        colorSpace = sk_srgb_singleton();
+    }
+    if (SkColorSpace::Equals(colorSpace, target.get()) || this->isAlphaOnly()) {
+        return sk_ref_sp(const_cast<SkImage*>(this));
+    }
+
+    // CONTEXT TODO: propagate the context parameter to the top-level API
+#if SK_SUPPORT_GPU
+    return as_IB(this)->onMakeColorTypeAndColorSpace(as_IB(this)->context(),
+#else
+    return as_IB(this)->onMakeColorTypeAndColorSpace(nullptr,
+#endif
+                                                     this->colorType(), std::move(target));
 }
 
 sk_sp<SkImage> SkImage::makeColorTypeAndColorSpace(SkColorType targetColorType,
-                                                   sk_sp<SkColorSpace> targetColorSpace,
-                                                   GrDirectContext* direct) const {
+                                                   sk_sp<SkColorSpace> targetColorSpace) const {
     if (kUnknown_SkColorType == targetColorType || !targetColorSpace) {
         return nullptr;
     }
-
-#if SK_SUPPORT_GPU
-    auto myContext = as_IB(this)->context();
-#ifdef SK_IMAGE_MAKE_COLOR_TYPE_AND_SPACE_USE_SOURCE_CONTEXT
-    if (!direct) {
-        direct = GrAsDirectContext(myContext);
-    }
-#endif
-    // This check is also performed in the subclass, but we do it here for the short-circuit below.
-    if (myContext && !myContext->priv().matches(direct)) {
-        return nullptr;
-    }
-#endif
 
     SkColorType colorType = this->colorType();
     SkColorSpace* colorSpace = this->colorSpace();
@@ -468,8 +474,13 @@ sk_sp<SkImage> SkImage::makeColorTypeAndColorSpace(SkColorType targetColorType,
         return sk_ref_sp(const_cast<SkImage*>(this));
     }
 
-    return as_IB(this)->onMakeColorTypeAndColorSpace(targetColorType,
-                                                     std::move(targetColorSpace), direct);
+    // CONTEXT TODO: propagate the context parameter to the top-level API
+#if SK_SUPPORT_GPU
+    return as_IB(this)->onMakeColorTypeAndColorSpace(as_IB(this)->context(),
+#else
+    return as_IB(this)->onMakeColorTypeAndColorSpace(nullptr,
+#endif
+                                                     targetColorType, std::move(targetColorSpace));
 }
 
 sk_sp<SkImage> SkImage::reinterpretColorSpace(sk_sp<SkColorSpace> target) const {
@@ -643,7 +654,7 @@ SkIRect SkImage_getSubset(const SkImage* image) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 SkMipmapBuilder::SkMipmapBuilder(const SkImageInfo& info) {
-    fMM = sk_sp<SkMipMap>(SkMipMap::Build({info, nullptr, 0}, nullptr, false));
+    fMM = sk_sp<SkMipmap>(SkMipmap::Build({info, nullptr, 0}, nullptr, false));
 }
 
 SkMipmapBuilder::~SkMipmapBuilder() {}
@@ -655,14 +666,14 @@ int SkMipmapBuilder::countLevels() const {
 SkPixmap SkMipmapBuilder::level(int index) const {
     SkPixmap pm;
 
-    SkMipMap::Level level;
+    SkMipmap::Level level;
     if (fMM && fMM->getLevel(index, &level)) {
         pm = level.fPixmap;
     }
     return pm;
 }
 
-sk_sp<SkMipMap> SkMipmapBuilder::detach() {
+sk_sp<SkMipmap> SkMipmapBuilder::detach() {
     return std::move(fMM);
 }
 
@@ -670,7 +681,7 @@ bool SkImage::hasMipmaps() const {
     return as_IB(this)->onPeekMips() != nullptr;
 }
 
-sk_sp<SkImage> SkImage::withMipmaps(sk_sp<SkMipMap> data) const {
+sk_sp<SkImage> SkImage::withMipmaps(sk_sp<SkMipmap> data) const {
     auto result = as_IB(this)->onMakeWithMipmaps(std::move(data));
     if (!result) {
         result = sk_ref_sp((const_cast<SkImage*>(this)));
