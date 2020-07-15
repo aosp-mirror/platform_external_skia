@@ -244,6 +244,82 @@ void GrTextBlob::SubRun::drawPaths(const GrClip* clip,
     }
 }
 
+void GrTextBlob::SubRun::draw(const GrClip* clip,
+                              const SkMatrixProvider& viewMatrix,
+                              const SkGlyphRunList& glyphRunList,
+                              GrRenderTargetContext* rtc) {
+    if (this->drawAsPaths()) {
+        this->drawPaths(clip, viewMatrix, glyphRunList, rtc);
+    } else {
+        auto [drawingClip, op] = this->makeAtlasTextOp(clip, viewMatrix, glyphRunList, rtc);
+        if (op != nullptr) {
+            rtc->priv().addDrawOp(drawingClip, std::move(op));
+        }
+    }
+}
+
+std::tuple<bool, int> GrTextBlob::SubRun::regenerateAtlas(
+        int begin, int end, GrMeshDrawOp::Target *target) {
+    GrAtlasManager* atlasManager = target->atlasManager();
+    GrDeferredUploadTarget* uploadTarget = target->deferredUploadTarget();
+
+    uint64_t currentAtlasGen = atlasManager->atlasGeneration(this->maskFormat());
+
+    if (fAtlasGeneration != currentAtlasGen) {
+        // Calculate the texture coordinates for the vertexes during first use (fAtlasGeneration
+        // is set to kInvalidAtlasGeneration) or the atlas has changed in subsequent calls..
+        this->resetBulkUseToken();
+
+        SkASSERT(this->isPrepared());
+
+        SkBulkGlyphMetricsAndImages metricsAndImages{this->strikeSpec()};
+
+        // Update the atlas information in the GrStrike.
+        auto tokenTracker = uploadTarget->tokenTracker();
+        auto vertexData = this->vertexData().subspan(begin, end - begin);
+        int glyphsPlacedInAtlas = 0;
+        bool success = true;
+        for (auto [glyph, pos, rect] : vertexData) {
+            GrGlyph* grGlyph = glyph.grGlyph;
+            SkASSERT(grGlyph != nullptr);
+
+            if (!atlasManager->hasGlyph(this->maskFormat(), grGlyph)) {
+                const SkGlyph& skGlyph = *metricsAndImages.glyph(grGlyph->fPackedID);
+                auto code = atlasManager->addGlyphToAtlas(
+                        skGlyph, this->atlasPadding(), grGlyph,
+                        target->resourceProvider(), uploadTarget);
+                if (code != GrDrawOpAtlas::ErrorCode::kSucceeded) {
+                    success = code != GrDrawOpAtlas::ErrorCode::kError;
+                    break;
+                }
+            }
+            atlasManager->addGlyphToBulkAndSetUseToken(
+                    this->bulkUseToken(), this->maskFormat(), grGlyph,
+                    tokenTracker->nextDrawToken());
+            glyphsPlacedInAtlas++;
+        }
+
+        // Update atlas generation if there are no more glyphs to put in the atlas.
+        if (success && begin + glyphsPlacedInAtlas == this->glyphCount()) {
+            // Need to get the freshest value of the atlas' generation because
+            // updateTextureCoordinates may have changed it.
+            fAtlasGeneration = atlasManager->atlasGeneration(this->maskFormat());
+        }
+
+        return {success, glyphsPlacedInAtlas};
+    } else {
+        // The atlas hasn't changed, so our texture coordinates are still valid.
+        if (end == this->glyphCount()) {
+            // The atlas hasn't changed and the texture coordinates are all still valid. Update
+            // all the plots used to the new use token.
+            atlasManager->setUseTokenBulk(*this->bulkUseToken(),
+                                          uploadTarget->tokenTracker()->nextDrawToken(),
+                                               this->maskFormat());
+        }
+        return {true, end - begin};
+    }
+}
+
 void GrTextBlob::SubRun::resetBulkUseToken() { fBulkUseToken.reset(); }
 
 GrDrawOpAtlas::BulkUseTokenUpdater* GrTextBlob::SubRun::bulkUseToken() { return &fBulkUseToken; }
@@ -656,8 +732,10 @@ bool GrTextBlob::canReuse(const SkPaint& paint,
                           const SkMaskFilterBase::BlurRec& blurRec,
                           const SkMatrix& drawMatrix,
                           SkPoint drawOrigin) {
-    // A singular matrix will create a GrTextBlob with no subRuns. Assume that, and just regenerate.
-    if (fSubRunList.isEmpty()) {
+    // A singular matrix will create a GrTextBlob with no SubRuns, but unknown glyphs can
+    // also cause empty runs. If there are no subRuns, and the matrix is complicated, then
+    // regenerate.
+    if (fSubRunList.isEmpty() && !fInitialMatrix.rectStaysRect()) {
         return false;
     }
 
@@ -818,76 +896,3 @@ void GrTextBlob::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawab
     this->addMultiMaskFormat(SubRun::MakeTransformedMask, drawables, strikeSpec);
 }
 
-auto GrTextBlob::firstSubRun() const -> SubRun* { return fSubRunList.head(); }
-
-// -- GrTextBlob::VertexRegenerator ----------------------------------------------------------------
-GrTextBlob::VertexRegenerator::VertexRegenerator(GrResourceProvider* resourceProvider,
-                                                 GrTextBlob::SubRun* subRun,
-                                                 GrDeferredUploadTarget* uploadTarget,
-                                                 GrAtlasManager* fullAtlasManager)
-        : fResourceProvider(resourceProvider)
-        , fUploadTarget(uploadTarget)
-        , fFullAtlasManager(fullAtlasManager)
-        , fSubRun(subRun) { }
-
-std::tuple<bool, int> GrTextBlob::VertexRegenerator::updateTextureCoordinates(
-        const int begin, const int end) {
-
-    SkASSERT(fSubRun->isPrepared());
-
-    SkBulkGlyphMetricsAndImages metricsAndImages{fSubRun->strikeSpec()};
-
-    // Update the atlas information in the GrStrike.
-    auto tokenTracker = fUploadTarget->tokenTracker();
-    auto vertexData = fSubRun->vertexData().subspan(begin, end - begin);
-    int glyphsPlacedInAtlas = 0;
-    for (auto [glyph, pos, rect] : vertexData) {
-        GrGlyph* grGlyph = glyph.grGlyph;
-        SkASSERT(grGlyph != nullptr);
-
-        if (!fFullAtlasManager->hasGlyph(fSubRun->maskFormat(), grGlyph)) {
-            const SkGlyph& skGlyph = *metricsAndImages.glyph(grGlyph->fPackedID);
-            auto code = fFullAtlasManager->addGlyphToAtlas(
-                    skGlyph, fSubRun->atlasPadding(), grGlyph, fResourceProvider, fUploadTarget);
-            if (code != GrDrawOpAtlas::ErrorCode::kSucceeded) {
-                return {code != GrDrawOpAtlas::ErrorCode::kError, glyphsPlacedInAtlas};
-            }
-        }
-        fFullAtlasManager->addGlyphToBulkAndSetUseToken(
-                fSubRun->bulkUseToken(), fSubRun->maskFormat(), grGlyph,
-                tokenTracker->nextDrawToken());
-        glyphsPlacedInAtlas++;
-    }
-
-    return {true, glyphsPlacedInAtlas};
-}
-
-std::tuple<bool, int> GrTextBlob::VertexRegenerator::regenerate(int begin, int end) {
-    uint64_t currentAtlasGen = fFullAtlasManager->atlasGeneration(fSubRun->maskFormat());
-
-    if (fSubRun->fAtlasGeneration != currentAtlasGen) {
-        // Calculate the texture coordinates for the vertexes during first use (fAtlasGeneration
-        // is set to kInvalidAtlasGeneration) or the atlas has changed in subsequent calls..
-        fSubRun->resetBulkUseToken();
-        auto [success, glyphsPlacedInAtlas] = this->updateTextureCoordinates(begin, end);
-
-        // Update atlas generation if there are no more glyphs to put in the atlas.
-        if (success && begin + glyphsPlacedInAtlas == fSubRun->glyphCount()) {
-            // Need to get the freshest value of the atlas' generation because
-            // updateTextureCoordinates may have changed it.
-            fSubRun->fAtlasGeneration = fFullAtlasManager->atlasGeneration(fSubRun->maskFormat());
-        }
-
-        return {success, glyphsPlacedInAtlas};
-    } else {
-        // The atlas hasn't changed, so our texture coordinates are still valid.
-        if (end == fSubRun->glyphCount()) {
-            // The atlas hasn't changed and the texture coordinates are all still valid. Update
-            // all the plots used to the new use token.
-            fFullAtlasManager->setUseTokenBulk(*fSubRun->bulkUseToken(),
-                                               fUploadTarget->tokenTracker()->nextDrawToken(),
-                                               fSubRun->maskFormat());
-        }
-        return {true, end - begin};
-    }
-}

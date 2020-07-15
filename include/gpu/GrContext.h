@@ -59,6 +59,7 @@ public:
     static sk_sp<GrContext> MakeGL();
 #endif
 
+#ifdef SK_VULKAN
     /**
      * The Vulkan context (VkQueue, VkDevice, VkInstance) must be kept alive until the returned
      * GrContext is destroyed. This also means that any objects created with this GrContext (e.g.
@@ -68,6 +69,7 @@ public:
      */
     static sk_sp<GrContext> MakeVulkan(const GrVkBackendContext&, const GrContextOptions&);
     static sk_sp<GrContext> MakeVulkan(const GrVkBackendContext&);
+#endif
 
 #ifdef SK_METAL
     /**
@@ -648,6 +650,39 @@ public:
                                                     GrGpuFinishedContext finishedContext = nullptr);
 
     /**
+     * If possible, updates a backend texture filled with the provided color. If the texture is
+     * mipmapped, all levels of the mip chain will be updated to have the supplied color. The client
+     * should check the return value to see if the update was successful. The client can pass in a
+     * finishedProc to be notified when the data has been uploaded by the gpu and the texture can be
+     * deleted. The client is required to call GrContext::submit to send the upload work to the gpu.
+     * The finishedProc will always get called even if we failed to create the GrBackendTexture.
+     * For the Vulkan backend after a successful update the layout of the created VkImage will be:
+     *      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+     */
+    bool updateCompressedBackendTexture(const GrBackendTexture&,
+                                        const SkColor4f& color,
+                                        GrGpuFinishedProc finishedProc,
+                                        GrGpuFinishedContext finishedContext);
+
+    /**
+     * If possible, updates a backend texture filled with the provided raw data. The client
+     * should check the return value to see if the update was successful. The client can pass in a
+     * finishedProc to be notified when the data has been uploaded by the gpu and the texture can be
+     * deleted. The client is required to call GrContext::submit to send the upload work to the gpu.
+     * The finishedProc will always get called even if we failed to create the GrBackendTexture.
+     * If a mipMapped texture is passed in, the data for all the mipmap levels must be provided.
+     * Additionally, all the miplevels must be sized correctly (please see
+     * SkMipMap::ComputeLevelSize and ComputeLevelCount).
+     * For the Vulkan backend after a successful update the layout of the created VkImage will be:
+     *      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+     */
+    bool updateCompressedBackendTexture(const GrBackendTexture&,
+                                        const void* data,
+                                        size_t dataSize,
+                                        GrGpuFinishedProc finishedProc,
+                                        GrGpuFinishedContext finishedContext);
+
+    /**
      * Updates the state of the GrBackendTexture/RenderTarget to have the passed in
      * GrBackendSurfaceMutableState. All objects that wrap the backend surface (i.e. SkSurfaces and
      * SkImages) will also be aware of this state change. This call does not submit the state change
@@ -701,6 +736,8 @@ protected:
     virtual GrAtlasManager* onGetAtlasManager() = 0;
 
 private:
+    friend class GrDirectContext; // for access to fGpu
+
     // fTaskGroup must appear before anything that uses it (e.g. fGpu), so that it is destroyed
     // after all of its users. Clients of fTaskGroup will generally want to ensure that they call
     // wait() on it as they are being destroyed, to avoid the possibility of pending tasks being
