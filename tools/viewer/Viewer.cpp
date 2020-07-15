@@ -19,6 +19,7 @@
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkScan.h"
+#include "src/core/SkTSort.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTextBlobPriv.h"
 #include "src/gpu/GrContextPriv.h"
@@ -821,7 +822,7 @@ void Viewer::initSlides() {
                     sortedFilenames.push_back(name);
                 }
                 if (sortedFilenames.count()) {
-                    SkTQSort(sortedFilenames.begin(), sortedFilenames.end() - 1,
+                    SkTQSort(sortedFilenames.begin(), sortedFilenames.end(),
                              [](const SkString& a, const SkString& b) {
                                  return strcmp(a.c_str(), b.c_str()) < 0;
                              });

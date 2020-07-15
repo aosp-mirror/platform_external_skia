@@ -24,40 +24,20 @@ GrSurfaceProxyView GrTextureMaker::onView(GrMipMapped mipMapped) {
 
 std::unique_ptr<GrFragmentProcessor> GrTextureMaker::createFragmentProcessor(
         const SkMatrix& textureMatrix,
-        const SkRect& constraintRect,
-        FilterConstraint filterConstraint,
-        bool coordsLimitedToConstraintRect,
-        GrSamplerState::WrapMode wrapX,
-        GrSamplerState::WrapMode wrapY,
-        const GrSamplerState::Filter* filterOrNullForBicubic) {
-    const GrSamplerState::Filter* fmForDetermineDomain = filterOrNullForBicubic;
-    if (filterOrNullForBicubic && GrSamplerState::Filter::kMipMap == *filterOrNullForBicubic &&
-        kYes_FilterConstraint == filterConstraint) {
-        // TODO: Here we should force a copy restricted to the constraintRect since MIP maps will
-        // read outside the constraint rect. However, as in the adjuster case, we aren't currently
-        // doing that.
-        // We instead we compute the domain as though were bilerping which is only correct if we
-        // only sample level 0.
-        static const GrSamplerState::Filter kBilerp = GrSamplerState::Filter::kBilerp;
-        fmForDetermineDomain = &kBilerp;
-    }
-
+        const SkRect* subset,
+        const SkRect* domain,
+        GrSamplerState sampler) {
     GrSurfaceProxyView view;
-    if (filterOrNullForBicubic) {
-        view = this->view(*filterOrNullForBicubic);
-    } else {
-        view = this->view(GrMipMapped::kNo);
-    }
-    if (!view) {
-        return nullptr;
-    }
+    return this->createFragmentProcessorForView(
+            this->view(sampler.filter()), textureMatrix, subset, domain, sampler);
+}
 
-    SkRect domain;
-    DomainMode domainMode =
-        DetermineDomainMode(constraintRect, filterConstraint, coordsLimitedToConstraintRect,
-                            view.proxy(), fmForDetermineDomain, &domain);
-    SkASSERT(kTightCopy_DomainMode != domainMode);
-    return this->createFragmentProcessorForSubsetAndFilter(std::move(view), textureMatrix,
-                                                           domainMode, domain, wrapX, wrapY,
-                                                           filterOrNullForBicubic);
+std::unique_ptr<GrFragmentProcessor> GrTextureMaker::createBicubicFragmentProcessor(
+        const SkMatrix& textureMatrix,
+        const SkRect* subset,
+        const SkRect* domain,
+        GrSamplerState::WrapMode wrapX,
+        GrSamplerState::WrapMode wrapY) {
+    return this->createBicubicFragmentProcessorForView(
+            this->view(GrMipMapped::kNo), textureMatrix, subset, domain, wrapX, wrapY);
 }
