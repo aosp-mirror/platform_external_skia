@@ -1569,7 +1569,6 @@ cc_test {
         "tests/DeferredDisplayListTest.cpp",
         "tests/DequeTest.cpp",
         "tests/DescriptorTest.cpp",
-        "tests/DetermineDomainModeTest.cpp",
         "tests/DeviceTest.cpp",
         "tests/DiscardableMemoryPoolTest.cpp",
         "tests/DiscardableMemoryTest.cpp",
