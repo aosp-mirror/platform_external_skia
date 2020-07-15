@@ -102,8 +102,8 @@ public:
         SkASSERT(bitmapMayBeMutable || fBitmap.isImmutable());
     }
 
-    sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType, sk_sp<SkColorSpace>,
-                                                GrDirectContext*) const override;
+    sk_sp<SkImage> onMakeColorTypeAndColorSpace(GrRecordingContext*,
+                                                SkColorType, sk_sp<SkColorSpace>) const override;
 
     sk_sp<SkImage> onReinterpretColorSpace(sk_sp<SkColorSpace>) const override;
 
@@ -123,14 +123,14 @@ public:
     void onUnpinAsTexture(GrContext*) const override;
 #endif
 
-    SkMipMap* onPeekMips() const override { return fBitmap.fMips.get(); }
+    SkMipmap* onPeekMips() const override { return fBitmap.fMips.get(); }
 
-    sk_sp<SkImage> onMakeWithMipmaps(sk_sp<SkMipMap> mips) const override {
+    sk_sp<SkImage> onMakeWithMipmaps(sk_sp<SkMipmap> mips) const override {
         auto img = new SkImage_Raster(fBitmap);
         if (mips) {
             img->fBitmap.fMips = std::move(mips);
         } else {
-            img->fBitmap.fMips.reset(SkMipMap::Build(fBitmap.pixmap(), nullptr));
+            img->fBitmap.fMips.reset(SkMipmap::Build(fBitmap.pixmap(), nullptr));
         }
         return sk_sp<SkImage>(img);
     }
@@ -384,9 +384,9 @@ bool SkImage_Raster::onAsLegacyBitmap(SkBitmap* bitmap) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-sk_sp<SkImage> SkImage_Raster::onMakeColorTypeAndColorSpace(SkColorType targetCT,
-                                                            sk_sp<SkColorSpace> targetCS,
-                                                            GrDirectContext*) const {
+sk_sp<SkImage> SkImage_Raster::onMakeColorTypeAndColorSpace(GrRecordingContext*,
+                                                            SkColorType targetCT,
+                                                            sk_sp<SkColorSpace> targetCS) const {
     SkPixmap src;
     SkAssertResult(fBitmap.peekPixels(&src));
 
