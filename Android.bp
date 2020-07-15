@@ -42,6 +42,7 @@ cc_library_static {
         "include/utils/",
         "include/utils/mac/",
         "modules/skottie/include/",
+        "modules/skparagraph/include/",
         "modules/skshaper/include/",
     ],
 
