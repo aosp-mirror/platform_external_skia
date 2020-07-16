@@ -36,7 +36,8 @@ std::unique_ptr<GrFragmentProcessor> GrYUVtoRGBEffect::Make(GrSurfaceProxyView v
                                                             GrSamplerState samplerState,
                                                             const GrCaps& caps,
                                                             const SkMatrix& localMatrix,
-                                                            const SkRect* subset) {
+                                                            const SkRect* subset,
+                                                            const SkRect* domain) {
     int numPlanes;
     SkAssertResult(SkYUVAIndex::AreValidIndices(yuvaIndices, &numPlanes));
 
@@ -56,7 +57,8 @@ std::unique_ptr<GrFragmentProcessor> GrYUVtoRGBEffect::Make(GrSurfaceProxyView v
         SkISize dimensions = views[i].proxy()->dimensions();
         SkTCopyOnFirstWrite<SkMatrix> planeMatrix(&SkMatrix::I());
         SkRect planeSubset;
-        bool makeBilerpWithSnap = false;
+        SkRect planeDomain;
+        bool makeLinearWithSnap = false;
         float sx = 1.f,
               sy = 1.f;
         if (dimensions != yDimensions) {
@@ -73,16 +75,6 @@ std::unique_ptr<GrFragmentProcessor> GrYUVtoRGBEffect::Make(GrSurfaceProxyView v
                 dimensions.height() == yDimensions.height() / 2 + 1) {
                 sy = 0.5f;
             }
-            // This promotion of nearest to bilinear for UV planes exists to mimic libjpeg[-turbo]'s
-            // do_fancy_upsampling option. We will filter the subsampled plane, however we want to
-            // filter at a fixed point for each logical image pixel to simulate nearest neighbor.
-            if (samplerState.filter() == GrSamplerState::Filter::kNearest) {
-                bool snapX = (sx != 1.f),
-                     snapY = (sy != 1.f);
-                makeBilerpWithSnap = snapX || snapY;
-                snap[0] |= snapX;
-                snap[1] |= snapY;
-            }
             *planeMatrix.writable() = SkMatrix::Scale(sx, sy);
             if (subset) {
                 planeSubset = {subset->fLeft   * sx,
@@ -90,24 +82,60 @@ std::unique_ptr<GrFragmentProcessor> GrYUVtoRGBEffect::Make(GrSurfaceProxyView v
                                subset->fRight  * sx,
                                subset->fBottom * sy};
             }
-        } else if (subset) {
-            planeSubset = *subset;
+            if (domain) {
+                planeDomain = {domain->fLeft   * sx,
+                               domain->fTop    * sy,
+                               domain->fRight  * sx,
+                               domain->fBottom * sy};
+            }
+            // This promotion of nearest to linear filtering for UV planes exists to mimic
+            // libjpeg[-turbo]'s do_fancy_upsampling option. We will filter the subsampled plane,
+            // however we want to filter at a fixed point for each logical image pixel to simulate
+            // nearest neighbor.
+            if (samplerState.filter() == GrSamplerState::Filter::kNearest) {
+                bool snapX = (sx != 1.f),
+                     snapY = (sy != 1.f);
+                makeLinearWithSnap = snapX || snapY;
+                snap[0] |= snapX;
+                snap[1] |= snapY;
+                if (domain) {
+                    // The outer YUVToRGB effect will ensure sampling happens at pixel centers
+                    // within this plane.
+                    planeDomain = {std::floor(planeDomain.fLeft)   + 0.5f,
+                                   std::floor(planeDomain.fTop)    + 0.5f,
+                                   std::floor(planeDomain.fRight)  + 0.5f,
+                                   std::floor(planeDomain.fBottom) + 0.5f};
+                }
+            }
+        } else {
+            if (subset) {
+                planeSubset = *subset;
+            }
+            if (domain) {
+                planeDomain = *domain;
+            }
         }
         if (subset) {
-            if (makeBilerpWithSnap) {
+            SkASSERT(samplerState.filter() != GrSamplerState::Filter::kMipMap);
+            if (makeLinearWithSnap) {
                 // The plane is subsampled and we have an overall subset on the image. We're
-                // emulating do_fancy_upsampling using bilerp but snapping look ups to the y-plane
-                // pixel centers. Consider a logical image pixel at the edge of the subset. When
-                // computing the logical pixel color value we should use a 50/50 blend of two values
-                // from the subsampled plane. Depending on where the subset edge falls in actual
-                // subsampled plane, one of those values may come from outside the subset. Hence,
-                // we use this custom inset factory which applies the wrap mode to planeSubset but
-                // allows the bilerp sampling to read pixels from the plane that are just outside
-                // planeSubset.
-                planeFPs[i] = GrTextureEffect::MakeBilerpWithInset(
+                // emulating do_fancy_upsampling using linear filtering but snapping look ups to the
+                // y-plane pixel centers. Consider a logical image pixel at the edge of the subset.
+                // When computing the logical pixel color value we should use a 50/50 blend of two
+                // values from the subsampled plane. Depending on where the subset edge falls in
+                // actual subsampled plane, one of those values may come from outside the subset.
+                // Hence, we use this custom inset factory which applies the wrap mode to
+                // planeSubset but allows linear filtering to read pixels from the plane that are
+                // just outside planeSubset.
+                SkRect* domainRect = domain ? &planeDomain : nullptr;
+                planeFPs[i] = GrTextureEffect::MakeCustomLinearFilterInset(
                         views[i], kUnknown_SkAlphaType, *planeMatrix, samplerState.wrapModeX(),
-                        samplerState.wrapModeY(), planeSubset, {sx/2.f, sy/2.f}, caps,
-                        planeBorders[i]);
+                        samplerState.wrapModeY(), planeSubset, domainRect, {sx / 2.f, sy / 2.f},
+                        caps, planeBorders[i]);
+            } else if (domain) {
+                planeFPs[i] = GrTextureEffect::MakeSubset(views[i], kUnknown_SkAlphaType,
+                                                          *planeMatrix, samplerState, planeSubset,
+                                                          planeDomain, caps, planeBorders[i]);
             } else {
                 SkASSERT(samplerState.filter() != GrSamplerState::Filter::kMipMap);
                 planeFPs[i] = GrTextureEffect::MakeSubset(views[i], kUnknown_SkAlphaType,
@@ -116,8 +144,8 @@ std::unique_ptr<GrFragmentProcessor> GrYUVtoRGBEffect::Make(GrSurfaceProxyView v
             }
         } else {
             GrSamplerState planeSampler = samplerState;
-            if (makeBilerpWithSnap) {
-                planeSampler.setFilterMode(GrSamplerState::Filter::kBilerp);
+            if (makeLinearWithSnap) {
+                planeSampler.setFilterMode(GrSamplerState::Filter::kLinear);
             }
             planeFPs[i] = GrTextureEffect::Make(views[i], kUnknown_SkAlphaType, *planeMatrix,
                                                 planeSampler, caps, planeBorders[i]);

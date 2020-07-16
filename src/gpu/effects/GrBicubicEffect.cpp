@@ -14,6 +14,7 @@
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
+#include <cmath>
 
 class GrBicubicEffect::Impl : public GrGLSLFragmentProcessor {
 public:
@@ -180,6 +181,34 @@ std::unique_ptr<GrFragmentProcessor> GrBicubicEffect::MakeSubset(
             new GrBicubicEffect(std::move(fp), kernel, direction, clamp)));
 }
 
+std::unique_ptr<GrFragmentProcessor> GrBicubicEffect::MakeSubset(
+        GrSurfaceProxyView view,
+        SkAlphaType alphaType,
+        const SkMatrix& matrix,
+        const GrSamplerState::WrapMode wrapX,
+        const GrSamplerState::WrapMode wrapY,
+        const SkRect& subset,
+        const SkRect& domain,
+        Kernel kernel,
+        Direction direction,
+        const GrCaps& caps) {
+    auto lowerBound = [](float x) { return std::floor(x - 1.5f) + 0.5f; };
+    auto upperBound = [](float x) { return std::floor(x + 1.5f) - 0.5f; };
+    SkRect expandedDomain {
+            lowerBound(domain.fLeft)  ,
+            upperBound(domain.fRight) ,
+            lowerBound(domain.fTop)   ,
+            upperBound(domain.fBottom)
+    };
+    GrSamplerState sampler(wrapX, wrapY, GrSamplerState::Filter::kNearest);
+    std::unique_ptr<GrFragmentProcessor> fp;
+    fp = GrTextureEffect::MakeSubset(
+            std::move(view), alphaType, SkMatrix::I(), sampler, subset, expandedDomain, caps);
+    auto clamp = kPremul_SkAlphaType == alphaType ? Clamp::kPremul : Clamp::kUnpremul;
+    return GrMatrixEffect::Make(matrix, std::unique_ptr<GrFragmentProcessor>(
+            new GrBicubicEffect(std::move(fp), kernel, direction, clamp)));
+}
+
 std::unique_ptr<GrFragmentProcessor> GrBicubicEffect::Make(std::unique_ptr<GrFragmentProcessor> fp,
                                                            SkAlphaType alphaType,
                                                            const SkMatrix& matrix,
@@ -297,7 +326,7 @@ bool GrBicubicEffect::ShouldUseBicubic(const SkMatrix& matrix, GrSamplerState::F
             *filterMode = GrSamplerState::Filter::kNearest;
             break;
         case kLow_SkFilterQuality:
-            *filterMode = GrSamplerState::Filter::kBilerp;
+            *filterMode = GrSamplerState::Filter::kLinear;
             break;
         case kMedium_SkFilterQuality:
             *filterMode = GrSamplerState::Filter::kMipMap;

@@ -883,6 +883,7 @@ optional("typeface_freetype") {
   sources = [
     "src/ports/SkFontHost_FreeType.cpp",
     "src/ports/SkFontHost_FreeType_common.cpp",
+    "src/ports/SkFontHost_FreeType_common.h",
   ]
 }
 
@@ -1285,6 +1286,7 @@ if (skia_enable_tools) {
     "include/svg",
     "include/utils",
     "include/utils/mac",
+    "modules/skparagraph/include",
     "modules/skshaper/include",
     "modules/skottie/include",
   ]

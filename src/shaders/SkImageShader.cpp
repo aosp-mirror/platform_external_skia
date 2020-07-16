@@ -302,20 +302,22 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
     // quality setting. This completely ignores the complexity of the drawVertices case
     // where explicit local coords are provided by the caller.
     bool doBicubic;
-    GrSamplerState::Filter textureFilterMode = GrSkFilterQualityToGrFilterMode(
+    GrSamplerState::Filter fm = GrSkFilterQualityToGrFilterMode(
             fImage->width(), fImage->height(), this->resolveFiltering(args.fFilterQuality),
             args.fMatrixProvider.localToDevice(), *lm,
             args.fContext->priv().options().fSharpenMipmappedTextures, &doBicubic);
-    const GrSamplerState::Filter* filterOrNull = doBicubic ? nullptr : &textureFilterMode;
-    auto fp = producer->createFragmentProcessor(lmInverse, SkRect::Make(fImage->dimensions()),
-                                                GrTextureProducer::kNo_FilterConstraint, false, wmX,
-                                                wmY, filterOrNull);
+    std::unique_ptr<GrFragmentProcessor> fp;
+    if (doBicubic) {
+        fp = producer->createBicubicFragmentProcessor(lmInverse, nullptr, nullptr, wmX, wmY);
+    } else {
+        fp = producer->createFragmentProcessor(lmInverse, nullptr, nullptr, {wmX, wmY, fm});
+    }
 
+    fp = GrColorSpaceXformEffect::Make(std::move(fp), fImage->colorSpace(), producer->alphaType(),
+                                       args.fDstColorInfo->colorSpace(), kPremul_SkAlphaType);
     if (!fp) {
         return nullptr;
     }
-    fp = GrColorSpaceXformEffect::Make(std::move(fp), fImage->colorSpace(), producer->alphaType(),
-                                       args.fDstColorInfo->colorSpace(), kPremul_SkAlphaType);
     bool isAlphaOnly = SkColorTypeIsAlphaOnly(fImage->colorType());
     if (isAlphaOnly) {
         return fp;
@@ -786,19 +788,13 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
 
     skvm::Coord upperLocal = SkShaderBase::ApplyMatrix(p, upperInv, origLocal, uniforms);
 
-    // Bail out if sample() can't yet handle our image's color type.
-    switch (upper->colorType()) {
-        default: return {};
-        case    kGray_8_SkColorType:
-        case   kAlpha_8_SkColorType:
-        case   kRGB_565_SkColorType:
-        case  kRGB_888x_SkColorType:
-        case kRGBA_8888_SkColorType:
-        case kBGRA_8888_SkColorType:
-        case kRGBA_1010102_SkColorType:
-        case kBGRA_1010102_SkColorType:
-        case  kRGB_101010x_SkColorType:
-        case  kBGR_101010x_SkColorType: break;
+    // Bail out if sample() can't yet handle our image's color type(s).
+    skvm::PixelFormat unused;
+    if (true  && !SkColorType_to_PixelFormat(upper->colorType(), &unused)) {
+        return {};
+    }
+    if (lower && !SkColorType_to_PixelFormat(lower->colorType(), &unused)) {
+        return {};
     }
 
     // We can exploit image opacity to skip work unpacking alpha channels.
@@ -831,12 +827,14 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
         skvm::Uniform addr;
         skvm::I32     rowBytesAsPixels;
 
-        SkColorType colorType;  // not a uniform, but needed for each texel sample,
-                                // so we store it here, since it is also dependent on
-                                // the current pixmap (level).
+        skvm::PixelFormat pixelFormat;  // not a uniform, but needed for each texel sample,
+                                        // so we store it here, since it is also dependent on
+                                        // the current pixmap (level).
     };
 
     auto setup_uniforms = [&](const SkPixmap& pm) -> Uniforms {
+        skvm::PixelFormat pixelFormat;
+        SkAssertResult(SkColorType_to_PixelFormat(pm.colorType(), &pixelFormat));
         return {
             p->uniformF(uniforms->pushF(     pm.width())),
             p->uniformF(uniforms->pushF(1.0f/pm.width())), // iff tileX == kRepeat
@@ -852,7 +850,7 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
             uniforms->pushPtr(pm.addr()),
             p->uniform32(uniforms->push(pm.rowBytesAsPixels())),
 
-            pm.colorType(),
+            pixelFormat,
         };
     };
 
@@ -887,39 +885,10 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
                   clamped_y = clamp(sy, 0, u.clamp_h);
 
         // Load pixels from pm.addr()[(int)sx + (int)sy*stride].
-        skvm::Uniform img = u.addr;
         skvm::I32 index = trunc(clamped_x) +
                           trunc(clamped_y) * u.rowBytesAsPixels;
-        skvm::Color c;
-        switch (u.colorType) {
-            default: SkUNREACHABLE;
+        skvm::Color c = gather(u.pixelFormat, u.addr, index);
 
-            case kGray_8_SkColorType: c.r = c.g = c.b = from_unorm(8, gather8(img, index));
-                                      c.a = p->splat(1.0f);
-                                      break;
-
-            case kAlpha_8_SkColorType: c.r = c.g = c.b = p->splat(0.0f);
-                                       c.a = from_unorm(8, gather8(img, index));
-                                       break;
-
-            case   kRGB_565_SkColorType: c = unpack_565 (gather16(img, index)); break;
-
-            case  kRGB_888x_SkColorType: [[fallthrough]];
-            case kRGBA_8888_SkColorType: c = unpack_8888(gather32(img, index));
-                                         break;
-            case kBGRA_8888_SkColorType: c = unpack_8888(gather32(img, index));
-                                         std::swap(c.r, c.b);
-                                         break;
-
-            case  kRGB_101010x_SkColorType: [[fallthrough]];
-            case kRGBA_1010102_SkColorType: c = unpack_1010102(gather32(img, index));
-                                            break;
-
-            case  kBGR_101010x_SkColorType: [[fallthrough]];
-            case kBGRA_1010102_SkColorType: c = unpack_1010102(gather32(img, index));
-                                            std::swap(c.r, c.b);
-                                            break;
-        }
         // If we know the image is opaque, jump right to alpha = 1.0f, skipping work to unpack it.
         if (input_is_opaque) {
             c.a = p->splat(1.0f);

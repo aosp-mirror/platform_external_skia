@@ -55,7 +55,7 @@ public:
                                                                        GrColorType::kAlpha_8);
             GrSurfaceProxyView view{std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle};
             return GrTextureEffect::Make(std::move(view), kPremul_SkAlphaType, m,
-                                         GrSamplerState::Filter::kBilerp);
+                                         GrSamplerState::Filter::kLinear);
         }
 
         SkBitmap bitmap;
@@ -81,7 +81,7 @@ public:
         SkASSERT(view.origin() == kTopLeft_GrSurfaceOrigin);
         proxyProvider->assignUniqueKeyToProxy(key, view.asTextureProxy());
         return GrTextureEffect::Make(std::move(view), kPremul_SkAlphaType, m,
-                                     GrSamplerState::Filter::kBilerp);
+                                     GrSamplerState::Filter::kLinear);
     }
 
     static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> inputFP,
@@ -121,14 +121,12 @@ public:
         bool isFast = insetRect.isSorted();
         return std::unique_ptr<GrFragmentProcessor>(
                 new GrRectBlurEffect(std::move(inputFP), insetRect, std::move(integral), isFast,
-                                     GrSamplerState::Filter::kBilerp));
+                                     GrSamplerState::Filter::kLinear));
     }
     GrRectBlurEffect(const GrRectBlurEffect& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "RectBlurEffect"; }
-    int inputFP_index = -1;
     SkRect rect;
-    int integral_index = -1;
     bool isFast;
 
 private:
@@ -143,9 +141,9 @@ private:
                                 kCompatibleWithCoverageAsAlpha_OptimizationFlag)
             , rect(rect)
             , isFast(isFast) {
-        inputFP_index = this->registerChild(std::move(inputFP), SkSL::SampleUsage::PassThrough());
+        this->registerChild(std::move(inputFP), SkSL::SampleUsage::PassThrough());
         SkASSERT(integral);
-        integral_index = this->registerChild(std::move(integral), SkSL::SampleUsage::Explicit());
+        this->registerChild(std::move(integral), SkSL::SampleUsage::Explicit());
     }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
