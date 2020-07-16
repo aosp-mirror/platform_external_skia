@@ -14,7 +14,7 @@
 #include "include/private/SkTo.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
-#include "src/core/SkMipMap.h"
+#include "src/core/SkMipmap.h"
 #include "src/gpu/GrBackendUtils.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDataUtils.h"
@@ -178,6 +178,7 @@ GrVkGpu::GrVkGpu(GrDirectContext* direct, const GrContextOptions& options,
         , fQueue(backendContext.fQueue)
         , fQueueIndex(backendContext.fGraphicsQueueIndex)
         , fResourceProvider(this)
+        , fStagingBufferManager(this)
         , fDisconnected(false)
         , fProtectedContext(backendContext.fProtectedContext) {
     SkASSERT(!backendContext.fOwnsInstanceAndDevice);
@@ -279,6 +280,8 @@ void GrVkGpu::destroyResources() {
         fSemaphoresToSignal[i]->unref();
     }
     fSemaphoresToSignal.reset();
+
+    fStagingBufferManager.reset();
 
     // must call this just before we destroy the command pool and VkDevice
     fResourceProvider.destroyResources(VK_ERROR_DEVICE_LOST == res);
@@ -719,7 +722,7 @@ static size_t fill_in_regions(GrVkCaps* vkCaps, SkTArray<VkBufferImageCopy>* reg
                               VkDeviceSize bufferOffset) {
     int numMipLevels = 1;
     if (mipMapped == GrMipMapped::kYes) {
-        numMipLevels = SkMipMap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
     regions->reserve(numMipLevels);
@@ -1124,7 +1127,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
 
     int numMipLevels = 1;
     if (mipMapped == GrMipMapped::kYes) {
-        numMipLevels = SkMipMap::ComputeLevelCount(dimensions.width(), dimensions.height())+1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height())+1;
     }
 
     // Compressed textures with MIP levels or multiple samples are not supported as of now.
@@ -1433,8 +1436,8 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
     VkImageBlit blitRegion;
     memset(&blitRegion, 0, sizeof(VkImageBlit));
 
-    // SkMipMap doesn't include the base level in the level count so we have to add 1
-    uint32_t levelCount = SkMipMap::ComputeLevelCount(tex->width(), tex->height()) + 1;
+    // SkMipmap doesn't include the base level in the level count so we have to add 1
+    uint32_t levelCount = SkMipmap::ComputeLevelCount(tex->width(), tex->height()) + 1;
     SkASSERT(levelCount == vkTex->mipLevels());
 
     // change layout of the layers so we can write to them.
@@ -1579,7 +1582,7 @@ bool GrVkGpu::createVkImageForBackendSurface(VkFormat vkFormat,
 
     int numMipLevels = 1;
     if (mipMapped == GrMipMapped::kYes) {
-        numMipLevels = SkMipMap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
     VkImageUsageFlags usageFlags = 0;
@@ -2037,6 +2040,10 @@ void GrVkGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
 void GrVkGpu::addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback) {
     SkASSERT(finishedCallback);
     fResourceProvider.addFinishedProcToActiveCommandBuffers(std::move(finishedCallback));
+}
+
+void GrVkGpu::takeOwnershipOfStagingBuffer(sk_sp<GrGpuBuffer> buffer) {
+    this->currentCommandBuffer()->addGpuBuffer(std::move(buffer));
 }
 
 bool GrVkGpu::onSubmitToGpu(bool syncCpu) {

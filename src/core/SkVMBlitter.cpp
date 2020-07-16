@@ -159,18 +159,9 @@ namespace {
             }
         }
 
-        switch (params.dst.colorType()) {
-            default: *ok = false;
-                     break;
-
-            case kRGB_565_SkColorType:
-            case kRGB_888x_SkColorType:
-            case kRGBA_8888_SkColorType:
-            case kBGRA_8888_SkColorType:
-            case kRGBA_1010102_SkColorType:
-            case kBGRA_1010102_SkColorType:
-            case kRGB_101010x_SkColorType:
-            case kBGR_101010x_SkColorType:  break;
+        skvm::PixelFormat unused;
+        if (!SkColorType_to_PixelFormat(params.dst.colorType(), &unused)) {
+            *ok = false;
         }
 
         return {
@@ -268,12 +259,14 @@ namespace {
                                        from_unorm(8, p->load8(p->varying<uint8_t>()));
                                        break;
 
-                case Coverage::MaskLCD16:
+                case Coverage::MaskLCD16: {
                     SkASSERT(dst_loaded);
-                    *cov = unpack_565(p->load16(p->varying<uint16_t>()));
+                    skvm::PixelFormat fmt;
+                    SkAssertResult(SkColorType_to_PixelFormat(kRGB_565_SkColorType, &fmt));
+                    *cov = p->load(fmt, p->varying<uint16_t>());
                     cov->a = select(src.a < dst.a, min(cov->r, min(cov->g, cov->b))
                                                  , max(cov->r, max(cov->g, cov->b)));
-                    break;
+                } break;
             }
 
             if (params.clip) {
@@ -310,28 +303,10 @@ namespace {
 
         // Load up the destination color.
         SkDEBUGCODE(dst_loaded = true;)
-        switch (params.dst.colorType()) {
-            default: SkUNREACHABLE;
-            case kRGB_565_SkColorType: dst = unpack_565(p->load16(dst_ptr));
-                                       break;
+        skvm::PixelFormat pixelFormat;
+        SkAssertResult(SkColorType_to_PixelFormat(params.dst.colorType(), &pixelFormat));
 
-            case  kRGB_888x_SkColorType: [[fallthrough]];
-            case kRGBA_8888_SkColorType: dst = unpack_8888(p->load32(dst_ptr));
-                                         break;
-
-            case kBGRA_8888_SkColorType: dst = unpack_8888(p->load32(dst_ptr));
-                                         std::swap(dst.r, dst.b);
-                                         break;
-
-            case  kRGB_101010x_SkColorType: [[fallthrough]];
-            case kRGBA_1010102_SkColorType: dst = unpack_1010102(p->load32(dst_ptr));
-                                            break;
-
-            case  kBGR_101010x_SkColorType: [[fallthrough]];
-            case kBGRA_1010102_SkColorType: dst = unpack_1010102(p->load32(dst_ptr));
-                                            std::swap(dst.r, dst.b);
-                                            break;
-        }
+        dst = p->load(pixelFormat, dst_ptr);
 
         // When a destination is known opaque, we may assume it both starts and stays fully
         // opaque, ignoring any math that disagrees.  This sometimes trims a little work.
@@ -375,35 +350,7 @@ namespace {
             src.a = clamp01(src.a);
         }
 
-        // Store back to the destination.
-        switch (params.dst.colorType()) {
-            default: SkUNREACHABLE;
-
-            case kRGB_565_SkColorType:
-                store16(dst_ptr, pack(pack(to_unorm(5,src.b),
-                                           to_unorm(6,src.g), 5),
-                                           to_unorm(5,src.r),11));
-                break;
-
-            case kBGRA_8888_SkColorType: std::swap(src.r, src.b);  [[fallthrough]];
-            case  kRGB_888x_SkColorType:                           [[fallthrough]];
-            case kRGBA_8888_SkColorType:
-                 store32(dst_ptr, pack(pack(to_unorm(8, src.r),
-                                            to_unorm(8, src.g), 8),
-                                       pack(to_unorm(8, src.b),
-                                            to_unorm(8, src.a), 8), 16));
-                 break;
-
-            case  kBGR_101010x_SkColorType:                          [[fallthrough]];
-            case kBGRA_1010102_SkColorType: std::swap(src.r, src.b); [[fallthrough]];
-            case  kRGB_101010x_SkColorType:                          [[fallthrough]];
-            case kRGBA_1010102_SkColorType:
-                 store32(dst_ptr, pack(pack(to_unorm(10, src.r),
-                                            to_unorm(10, src.g), 10),
-                                       pack(to_unorm(10, src.b),
-                                            to_unorm( 2, src.a), 10), 20));
-                 break;
-        }
+        SkAssertResult(store(pixelFormat, dst_ptr, src));
     }
 
 

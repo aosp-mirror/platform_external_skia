@@ -10,10 +10,10 @@
 #include <type_traits>
 
 #include "include/core/SkYUVASizeInfo.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkAutoPixmapStorage.h"
-#include "src/core/SkMipMap.h"
+#include "src/core/SkMipmap.h"
 #include "src/core/SkScopeExit.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrClip.h"
@@ -63,8 +63,10 @@ SkImage_GpuYUVA::SkImage_GpuYUVA(sk_sp<GrContext> context,
 }
 
 // For onMakeColorSpace()
-SkImage_GpuYUVA::SkImage_GpuYUVA(const SkImage_GpuYUVA* image, sk_sp<SkColorSpace> targetCS)
-        : INHERITED(image->fContext, image->dimensions(), kNeedNewImageUniqueID, kAssumedColorType,
+SkImage_GpuYUVA::SkImage_GpuYUVA(sk_sp<GrContext> context, const SkImage_GpuYUVA* image,
+                                 sk_sp<SkColorSpace> targetCS)
+        : INHERITED(std::move(context), image->dimensions(), kNeedNewImageUniqueID,
+                    kAssumedColorType,
                     // If an alpha channel is present we always switch to kPremul. This is because,
                     // although the planar data is always un-premul, the final interleaved RGB image
                     // is/would-be premul.
@@ -96,19 +98,23 @@ bool SkImage_GpuYUVA::setupMipmapsForPlanes(GrRecordingContext* context) const {
     if (!context || !fContext->priv().matches(context)) {
         return false;
     }
-
+    GrSurfaceProxyView newViews[4];
+    if (!context->priv().caps()->mipMapSupport()) {
+        // We succeed in this case by doing nothing.
+        return true;
+    }
     for (int i = 0; i < fNumViews; ++i) {
-        int mipCount = SkMipMap::ComputeLevelCount(fViews[i].proxy()->width(),
-                                                   fViews[i].proxy()->height());
-        if (mipCount && GrGpu::IsACopyNeededForMips(fContext->priv().caps(),
-                                                    fViews[i].asTextureProxy(),
-                                                    GrSamplerState::Filter::kMipMap)) {
-            auto mippedView = GrCopyBaseMipMapToView(context, fViews[i]);
-            if (!mippedView) {
+        auto* t = fViews[i].asTextureProxy();
+        if (t->mipMapped() == GrMipMapped::kNo && (t->width() > 1 || t->height() > 1)) {
+            if (!(newViews[i] = GrCopyBaseMipMapToView(context, fViews[i]))) {
                 return false;
             }
-            fViews[i] = std::move(mippedView);
+        } else {
+            newViews[i] = fViews[i];
         }
+    }
+    for (int i = 0; i < fNumViews; ++i) {
+        fViews[i] = std::move(newViews[i]);
     }
     return true;
 }
@@ -205,7 +211,7 @@ const GrSurfaceProxyView* SkImage_GpuYUVA::view(GrRecordingContext* context) con
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
 sk_sp<SkImage> SkImage_GpuYUVA::onMakeColorTypeAndColorSpace(
-        GrRecordingContext*, SkColorType, sk_sp<SkColorSpace> targetCS) const {
+        SkColorType, sk_sp<SkColorSpace> targetCS, GrDirectContext* direct) const {
     // We explicitly ignore color type changes, for now.
 
     // we may need a mutex here but for now we expect usage to be in a single thread
@@ -213,7 +219,7 @@ sk_sp<SkImage> SkImage_GpuYUVA::onMakeColorTypeAndColorSpace(
         SkColorSpace::Equals(targetCS.get(), fOnMakeColorSpaceTarget.get())) {
         return fOnMakeColorSpaceResult;
     }
-    sk_sp<SkImage> result = sk_sp<SkImage>(new SkImage_GpuYUVA(this, targetCS));
+    sk_sp<SkImage> result = sk_sp<SkImage>(new SkImage_GpuYUVA(sk_ref_sp(direct), this, targetCS));
     if (result) {
         fOnMakeColorSpaceTarget = targetCS;
         fOnMakeColorSpaceResult = result;

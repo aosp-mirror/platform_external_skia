@@ -77,44 +77,19 @@ GrSurfaceProxyView GrTextureAdjuster::onView(GrMipMapped mipMapped) {
 
 std::unique_ptr<GrFragmentProcessor> GrTextureAdjuster::createFragmentProcessor(
         const SkMatrix& textureMatrix,
-        const SkRect& constraintRect,
-        FilterConstraint filterConstraint,
-        bool coordsLimitedToConstraintRect,
+        const SkRect* subset,
+        const SkRect* domain,
+        GrSamplerState samplerState) {
+    return this->createFragmentProcessorForView(
+            this->view(samplerState.filter()), textureMatrix, subset, domain, samplerState);
+}
+
+std::unique_ptr<GrFragmentProcessor> GrTextureAdjuster::createBicubicFragmentProcessor(
+        const SkMatrix& textureMatrix,
+        const SkRect* subset,
+        const SkRect* domain,
         GrSamplerState::WrapMode wrapX,
-        GrSamplerState::WrapMode wrapY,
-        const GrSamplerState::Filter* filterOrNullForBicubic) {
-    GrSurfaceProxyView view;
-    if (filterOrNullForBicubic) {
-        view = this->view(*filterOrNullForBicubic);
-    } else {
-        view = this->view(GrMipMapped::kNo);
-    }
-    if (!view) {
-        return nullptr;
-    }
-    SkASSERT(view.asTextureProxy());
-
-    SkRect domain;
-    DomainMode domainMode =
-        DetermineDomainMode(constraintRect, filterConstraint, coordsLimitedToConstraintRect,
-                            view.proxy(), filterOrNullForBicubic, &domain);
-    if (kTightCopy_DomainMode == domainMode) {
-        // TODO: Copy the texture and adjust the texture matrix (both parts need to consider
-        // non-int constraint rect)
-        // For now: treat as bilerp and ignore what goes on above level 0.
-
-        // We only expect MIP maps to require a tight copy.
-        SkASSERT(filterOrNullForBicubic &&
-                 GrSamplerState::Filter::kMipMap == *filterOrNullForBicubic);
-        static const GrSamplerState::Filter kBilerp = GrSamplerState::Filter::kBilerp;
-        domainMode =
-            DetermineDomainMode(constraintRect, filterConstraint, coordsLimitedToConstraintRect,
-                                view.proxy(), &kBilerp, &domain);
-        SkASSERT(kTightCopy_DomainMode != domainMode);
-    }
-    SkASSERT(kNoDomain_DomainMode == domainMode ||
-             (domain.fLeft <= domain.fRight && domain.fTop <= domain.fBottom));
-    return this->createFragmentProcessorForSubsetAndFilter(std::move(view), textureMatrix,
-                                                           domainMode, domain, wrapX, wrapY,
-                                                           filterOrNullForBicubic);
+        GrSamplerState::WrapMode wrapY) {
+    return this->createBicubicFragmentProcessorForView(
+            this->view(GrMipMapped::kNo), textureMatrix, subset, domain, wrapX, wrapY);
 }

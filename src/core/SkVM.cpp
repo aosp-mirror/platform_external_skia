@@ -8,6 +8,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/private/SkChecksum.h"
+#include "include/private/SkHalf.h"
 #include "include/private/SkSpinlock.h"
 #include "include/private/SkTFitsIn.h"
 #include "include/private/SkThreadID.h"
@@ -320,11 +321,13 @@ namespace skvm {
             case Op::select:  write(o, V{id}, "=", op, V{x}, V{y}, V{z}, fs(id)...); break;
             case Op::pack:    write(o, V{id}, "=", op, V{x}, V{y}, Shift{immz}, fs(id)...); break;
 
-            case Op::ceil:   write(o, V{id}, "=", op, V{x}, fs(id)...); break;
-            case Op::floor:  write(o, V{id}, "=", op, V{x}, fs(id)...); break;
-            case Op::to_f32: write(o, V{id}, "=", op, V{x}, fs(id)...); break;
-            case Op::trunc:  write(o, V{id}, "=", op, V{x}, fs(id)...); break;
-            case Op::round:  write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+            case Op::ceil:      write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+            case Op::floor:     write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+            case Op::to_f32:    write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+            case Op::to_half:   write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+            case Op::from_half: write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+            case Op::trunc:     write(o, V{id}, "=", op, V{x}, fs(id)...); break;
+            case Op::round:     write(o, V{id}, "=", op, V{x}, fs(id)...); break;
         }
 
         write(o, "\n");
@@ -440,11 +443,13 @@ namespace skvm {
                 case Op::select:  write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
                 case Op::pack:    write(o, R{d}, "=", op,   R{x}, R{y}, Shift{immz}); break;
 
-                case Op::ceil:   write(o, R{d}, "=", op, R{x}); break;
-                case Op::floor:  write(o, R{d}, "=", op, R{x}); break;
-                case Op::to_f32: write(o, R{d}, "=", op, R{x}); break;
-                case Op::trunc:  write(o, R{d}, "=", op, R{x}); break;
-                case Op::round:  write(o, R{d}, "=", op, R{x}); break;
+                case Op::ceil:      write(o, R{d}, "=", op, R{x}); break;
+                case Op::floor:     write(o, R{d}, "=", op, R{x}); break;
+                case Op::to_f32:    write(o, R{d}, "=", op, R{x}); break;
+                case Op::to_half:   write(o, R{d}, "=", op, R{x}); break;
+                case Op::from_half: write(o, R{d}, "=", op, R{x}); break;
+                case Op::trunc:     write(o, R{d}, "=", op, R{x}); break;
+                case Op::round:     write(o, R{d}, "=", op, R{x}); break;
             }
             write(o, "\n");
         }
@@ -1106,6 +1111,15 @@ namespace skvm {
         return {this, this->push(Op::round, x.id)};
     }
 
+    I32 Builder::to_half(F32 x) {
+        if (float X; this->allImm(x.id,&X)) { return splat((int)SkFloatToHalf(X)); }
+        return {this, this->push(Op::to_half, x.id)};
+    }
+    F32 Builder::from_half(I32 x) {
+        if (int X; this->allImm(x.id,&X)) { return splat(SkHalfToFloat(X)); }
+        return {this, this->push(Op::from_half, x.id)};
+    }
+
     F32 Builder::from_unorm(int bits, I32 x) {
         F32 limit = splat(1 / ((1<<bits)-1.0f));
         return mul(to_f32(x), limit);
@@ -1115,29 +1129,107 @@ namespace skvm {
         return round(mul(x, limit));
     }
 
-    Color Builder::unpack_1010102(I32 rgba) {
+    bool SkColorType_to_PixelFormat(SkColorType ct, PixelFormat* f) {
+        switch (ct) {
+            case kUnknown_SkColorType: SkASSERT(false); return false;
+
+            // TODO: float and >32-bit formats
+            case kRGBA_F16Norm_SkColorType:
+            case kRGBA_F16_SkColorType:
+            case kRGBA_F32_SkColorType:
+            case kA16_float_SkColorType:
+            case kR16G16_float_SkColorType:
+            case kR16G16B16A16_unorm_SkColorType: return false;
+
+            case kAlpha_8_SkColorType: *f = {0,0,0,8, 0,0,0,0}; return true;
+            case kGray_8_SkColorType:  *f = {8,8,8,0, 0,0,0,0}; return true;  // Gray is subtle!
+
+            case kRGB_565_SkColorType:   *f = {5,6,5,0, 11,5,0,0}; return true;  // Yes, it's BGR.
+            case kARGB_4444_SkColorType: *f = {4,4,4,4, 12,8,4,0}; return true;  // Yes, it's ABGR.
+
+            case kRGBA_8888_SkColorType:  *f = {8,8,8,8,  0,8,16,24}; return true;
+            case kRGB_888x_SkColorType:   *f = {8,8,8,0,  0,8,16,32}; return true;  // N.B. 4-byte.
+            case kBGRA_8888_SkColorType:  *f = {8,8,8,8, 16,8, 0,24}; return true;
+
+            case kRGBA_1010102_SkColorType: *f = {10,10,10,2,  0,10,20,30}; return true;
+            case kBGRA_1010102_SkColorType: *f = {10,10,10,2, 20,10, 0,30}; return true;
+            case kRGB_101010x_SkColorType:  *f = {10,10,10,0,  0,10,20, 0}; return true;
+            case kBGR_101010x_SkColorType:  *f = {10,10,10,0, 20,10, 0, 0}; return true;
+
+            case kR8G8_unorm_SkColorType:   *f = { 8, 8,0, 0, 0, 8,0,0}; return true;
+            case kR16G16_unorm_SkColorType: *f = {16,16,0, 0, 0,16,0,0}; return true;
+            case kA16_unorm_SkColorType:    *f = { 0, 0,0,16, 0, 0,0,0}; return true;
+        }
+        return false;
+    }
+
+    static Color unpack_unorm(PixelFormat f, I32 x) {
         return {
-            from_unorm(10, extract(rgba,  0, 0x3ff)),
-            from_unorm(10, extract(rgba, 10, 0x3ff)),
-            from_unorm(10, extract(rgba, 20, 0x3ff)),
-            from_unorm( 2, extract(rgba, 30, 0x3  )),
+            f.r_bits ? from_unorm(f.r_bits, extract(x, f.r_shift, (1<<f.r_bits)-1)) : x->splat(0.f),
+            f.g_bits ? from_unorm(f.g_bits, extract(x, f.g_shift, (1<<f.g_bits)-1)) : x->splat(0.f),
+            f.b_bits ? from_unorm(f.b_bits, extract(x, f.b_shift, (1<<f.b_bits)-1)) : x->splat(0.f),
+            f.a_bits ? from_unorm(f.a_bits, extract(x, f.a_shift, (1<<f.a_bits)-1)) : x->splat(1.f),
         };
     }
-    Color Builder::unpack_8888(I32 rgba) {
-        return {
-            from_unorm(8, extract(rgba,  0, 0xff)),
-            from_unorm(8, extract(rgba,  8, 0xff)),
-            from_unorm(8, extract(rgba, 16, 0xff)),
-            from_unorm(8, extract(rgba, 24, 0xff)),
-        };
+
+    static int byte_size(PixelFormat f) {
+        // What's the highest bit we read?
+        int bits = std::max(f.r_bits + f.r_shift,
+                   std::max(f.g_bits + f.g_shift,
+                   std::max(f.b_bits + f.b_shift,
+                            f.a_bits + f.a_shift)));
+        // Round up to bytes.
+        return (bits + 7) / 8;
     }
-    Color Builder::unpack_565(I32 bgr) {
-        return {
-            from_unorm(5, extract(bgr, 11, 0b011'111)),
-            from_unorm(6, extract(bgr,  5, 0b111'111)),
-            from_unorm(5, extract(bgr,  0, 0b011'111)),
-            splat(1.0f),
-        };
+
+    Color Builder::load(PixelFormat f, Arg ptr) {
+        switch (byte_size(f)) {
+            case 1: return unpack_unorm(f, load8 (ptr));
+            case 2: return unpack_unorm(f, load16(ptr));
+            case 4: return unpack_unorm(f, load32(ptr));
+            // TODO: 8,16
+            default: SkUNREACHABLE;
+        }
+        return {};
+    }
+
+    Color Builder::gather(PixelFormat f, Arg ptr, int offset, I32 index) {
+        switch (byte_size(f)) {
+            case 1: return unpack_unorm(f, gather8 (ptr, offset, index));
+            case 2: return unpack_unorm(f, gather16(ptr, offset, index));
+            case 4: return unpack_unorm(f, gather32(ptr, offset, index));
+            // TODO: 8,16
+            default: SkUNREACHABLE;
+        }
+        return {};
+    }
+
+    bool Builder::store(PixelFormat f, Arg ptr, Color c) {
+        // Detect a grayscale PixelFormat: r,g,b bit counts and shifts all equal.
+        if (f.r_bits  == f.g_bits  && f.g_bits  == f.b_bits &&
+            f.r_shift == f.g_shift && f.g_shift == f.b_shift) {
+
+            // TODO: pull these coefficients from an SkColorSpace?  This is sRGB luma/luminance.
+            c.r = c.r * 0.2126f
+                + c.g * 0.7152f
+                + c.b * 0.0722f;
+            f.g_bits = f.b_bits = 0;
+        }
+
+        I32 bits = splat(0);
+        if (f.r_bits) { bits = pack(bits, to_unorm(f.r_bits, c.r), f.r_shift); }
+        if (f.g_bits) { bits = pack(bits, to_unorm(f.g_bits, c.g), f.g_shift); }
+        if (f.b_bits) { bits = pack(bits, to_unorm(f.b_bits, c.b), f.b_shift); }
+        if (f.a_bits) { bits = pack(bits, to_unorm(f.a_bits, c.a), f.a_shift); }
+
+        switch (byte_size(f)) {
+            case 1: store8 (ptr, bits); return true;
+            case 2: store16(ptr, bits); return true;
+            case 4: store32(ptr, bits); return true;
+            // TODO: 8,16
+            default: SkUNREACHABLE;
+        }
+        return false;
     }
 
     void Builder::unpremul(F32* r, F32* g, F32* b, F32 a) {
@@ -1879,6 +1971,14 @@ namespace skvm {
     void Assembler::vcvttps2dq(Ymm dst, Operand x) { this->op(0xf3,0x0f,0x5b, dst,x); }
     void Assembler::vcvtps2dq (Ymm dst, Operand x) { this->op(0x66,0x0f,0x5b, dst,x); }
     void Assembler::vsqrtps   (Ymm dst, Operand x) { this->op(   0,0x0f,0x51, dst,x); }
+
+    void Assembler::vcvtps2ph(Operand dst, Ymm x, Rounding imm) {
+        this->op(0x66,0x3a0f,0x1d, x,dst);
+        this->imm_byte_after_operand(dst, imm);
+    }
+    void Assembler::vcvtph2ps(Ymm dst, Operand x) {
+        this->op(0x66,0x380f,0x13, dst,x);
+    }
 
     int Assembler::disp19(Label* l) {
         SkASSERT(l->kind == Label::NotYetSet ||
@@ -3153,6 +3253,11 @@ namespace skvm {
                     // Make sure splat constants can be found by load_from_memory() or any().
                     (void)constants[immy];
                     break;
+
+                case Op::to_half:
+                case Op::from_half:
+                    // TODO
+                    return false;
 
             #if defined(__x86_64__) || defined(_M_X64)
                 case Op::assert_true: {
