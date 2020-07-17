@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "include/gpu/GrContext.h"
+#include "src/gpu/vk/GrVkPipelineState.h"
+
 #include "src/core/SkMipmap.h"
-#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrTexturePriv.h"
@@ -21,7 +21,6 @@
 #include "src/gpu/vk/GrVkImageView.h"
 #include "src/gpu/vk/GrVkMemory.h"
 #include "src/gpu/vk/GrVkPipeline.h"
-#include "src/gpu/vk/GrVkPipelineState.h"
 #include "src/gpu/vk/GrVkSampler.h"
 #include "src/gpu/vk/GrVkTexture.h"
 #include "src/gpu/vk/GrVkUniformBuffer.h"
@@ -59,14 +58,14 @@ GrVkPipelineState::~GrVkPipelineState() {
     SkASSERT(!fPipeline);
 }
 
-void GrVkPipelineState::freeGPUResources() {
+void GrVkPipelineState::freeGPUResources(GrVkGpu* gpu) {
     if (fPipeline) {
         fPipeline->unref();
         fPipeline = nullptr;
     }
 
     if (fUniformBuffer) {
-        fUniformBuffer->release();
+        fUniformBuffer->release(gpu);
         fUniformBuffer.reset();
     }
 }

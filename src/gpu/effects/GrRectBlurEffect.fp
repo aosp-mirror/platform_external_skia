@@ -9,7 +9,6 @@
 #include <cmath>
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
-#include "include/gpu/GrContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkBlurMask.h"
 #include "src/core/SkMathPriv.h"
@@ -196,7 +195,7 @@ void main() {
         yCoverage = 1 - sample(integral, half2(rect.T, 0.5)).a
                       - sample(integral, half2(rect.B, 0.5)).a;
     }
-    half4 inputColor = sample(inputFP, sk_InColor);
+    half4 inputColor = sample(inputFP);
     sk_OutColor = inputColor * xCoverage * yCoverage;
 }
 

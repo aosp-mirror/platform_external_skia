@@ -154,10 +154,6 @@ func (b *jobBuilder) genTasksForJob() {
 			// Android Framework compile tasks use a different recipe.
 			b.androidFrameworkCompile()
 			return
-		} else if b.extraConfig("G3") && b.extraConfig("Framework") {
-			// G3 compile tasks use a different recipe.
-			b.g3FrameworkCompile()
-			return
 		} else {
 			b.compile()
 			return
@@ -188,6 +184,23 @@ func (b *jobBuilder) genTasksForJob() {
 		return
 	}
 
+	// Canary bots.
+	if b.role("Canary") {
+		if b.project("G3") {
+			b.g3FrameworkCanary()
+			return
+		} else if b.project("Android") {
+			b.canary("android-master-autoroll")
+			return
+		} else if b.project("Chromium") {
+			b.canary("skia-autoroll")
+			return
+		} else if b.project("Flutter") {
+			b.canary("skia-flutter-autoroll")
+			return
+		}
+	}
+
 	if b.extraConfig("Puppeteer") {
 		// TODO(kjlubick) make this a new role
 		b.puppeteer()
@@ -211,7 +224,7 @@ func (b *jobBuilder) finish() {
 		b.trigger(specs.TRIGGER_WEEKLY)
 	} else if b.extraConfig("Flutter", "CommandBuffer") {
 		b.trigger(specs.TRIGGER_MASTER_ONLY)
-	} else if b.frequency("OnDemand") || (b.extraConfig("Framework") && b.extraConfig("Android", "G3")) {
+	} else if b.frequency("OnDemand") || (b.extraConfig("Framework") && b.extraConfig("Android", "G3") || b.role("Canary")) {
 		b.trigger(specs.TRIGGER_ON_DEMAND)
 	} else {
 		b.trigger(specs.TRIGGER_ANY_BRANCH)
