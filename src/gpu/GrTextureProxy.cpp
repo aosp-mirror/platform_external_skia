@@ -8,7 +8,7 @@
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureProxyPriv.h"
 
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDeferredProxyUploader.h"
 #include "src/gpu/GrProxyProvider.h"
@@ -148,7 +148,7 @@ size_t GrTextureProxy::onUninstantiatedGpuMemorySize(const GrCaps& caps) const {
 }
 
 GrSamplerState::Filter GrTextureProxy::HighestFilterMode(GrTextureType textureType) {
-    return GrTextureTypeHasRestrictedSampling(textureType) ? GrSamplerState::Filter::kBilerp
+    return GrTextureTypeHasRestrictedSampling(textureType) ? GrSamplerState::Filter::kLinear
                                                            : GrSamplerState::Filter::kMipMap;
 }
 

@@ -177,7 +177,7 @@ void GrGLGpu::TextureUnitBindings::invalidateAllTargets(bool markUnmodified) {
 static GrGLenum filter_to_gl_mag_filter(GrSamplerState::Filter filter) {
     switch (filter) {
         case GrSamplerState::Filter::kNearest: return GR_GL_NEAREST;
-        case GrSamplerState::Filter::kBilerp:  return GR_GL_LINEAR;
+        case GrSamplerState::Filter::kLinear:  return GR_GL_LINEAR;
         case GrSamplerState::Filter::kMipMap:  return GR_GL_LINEAR;
     }
     SK_ABORT("Unknown filter");
@@ -186,7 +186,7 @@ static GrGLenum filter_to_gl_mag_filter(GrSamplerState::Filter filter) {
 static GrGLenum filter_to_gl_min_filter(GrSamplerState::Filter filter) {
     switch (filter) {
         case GrSamplerState::Filter::kNearest: return GR_GL_NEAREST;
-        case GrSamplerState::Filter::kBilerp:  return GR_GL_LINEAR;
+        case GrSamplerState::Filter::kLinear:  return GR_GL_LINEAR;
         case GrSamplerState::Filter::kMipMap:  return GR_GL_LINEAR_MIPMAP_LINEAR;
     }
     SK_ABORT("Unknown filter");
@@ -232,7 +232,7 @@ public:
     }
 
     void bindSampler(int unitIdx, GrSamplerState state) {
-        int index = StateToIndex(state);
+        int index = state.asIndex();
         if (!fSamplers[index]) {
             GrGLuint s;
             GR_GL_CALL(fGpu->glInterface(), GenSamplers(1, &s));
@@ -280,20 +280,8 @@ public:
     }
 
 private:
-    static int StateToIndex(GrSamplerState state) {
-        int filter = static_cast<int>(state.filter());
-        SkASSERT(filter >= 0 && filter < 3);
-        int wrapX = static_cast<int>(state.wrapModeX());
-        SkASSERT(wrapX >= 0 && wrapX < 4);
-        int wrapY = static_cast<int>(state.wrapModeY());
-        SkASSERT(wrapY >= 0 && wrapY < 4);
-        int idx = 16 * filter + 4 * wrapX + wrapY;
-        SkASSERT(idx < kNumSamplers);
-        return idx;
-    }
-
+    static constexpr int kNumSamplers = GrSamplerState::kNumUniqueSamplers;
     GrGLGpu* fGpu;
-    static constexpr int kNumSamplers = 48;
     std::unique_ptr<GrGLuint[]> fHWBoundSamplers;
     GrGLuint fSamplers[kNumSamplers];
     int fNumTextureUnits;
@@ -2589,7 +2577,7 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
     if (samplerState.filter() == GrSamplerState::Filter::kMipMap) {
         if (!this->caps()->mipMapSupport() ||
             texture->texturePriv().mipMapped() == GrMipMapped::kNo) {
-            samplerState.setFilterMode(GrSamplerState::Filter::kBilerp);
+            samplerState.setFilterMode(GrSamplerState::Filter::kLinear);
         }
     }
 
@@ -3436,7 +3424,7 @@ bool GrGLGpu::onRegenerateMipMapLevels(GrTexture* texture) {
     // We'll be changing our base level further below:
     this->setTextureUnit(0);
     // The mipmap program does not do any swizzling.
-    this->bindTexture(0, GrSamplerState::Filter::kBilerp, GrSwizzle::RGBA(), glTex);
+    this->bindTexture(0, GrSamplerState::Filter::kLinear, GrSwizzle::RGBA(), glTex);
 
     // Vertex data:
     if (!fMipmapProgramArrayBuffer) {

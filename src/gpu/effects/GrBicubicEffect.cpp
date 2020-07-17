@@ -132,7 +132,7 @@ void GrBicubicEffect::Impl::emitCode(EmitArgs& args) {
                     "bicubicColor.rgb = max(half3(0.0), min(bicubicColor.rgb, bicubicColor.aaa));");
             break;
     }
-    fragBuilder->codeAppendf("%s = bicubicColor * %s;", args.fOutputColor, args.fInputColor);
+    fragBuilder->codeAppendf("%s = bicubicColor;", args.fOutputColor);
 }
 
 std::unique_ptr<GrFragmentProcessor> GrBicubicEffect::Make(GrSurfaceProxyView view,
@@ -326,7 +326,7 @@ bool GrBicubicEffect::ShouldUseBicubic(const SkMatrix& matrix, GrSamplerState::F
             *filterMode = GrSamplerState::Filter::kNearest;
             break;
         case kLow_SkFilterQuality:
-            *filterMode = GrSamplerState::Filter::kBilerp;
+            *filterMode = GrSamplerState::Filter::kLinear;
             break;
         case kMedium_SkFilterQuality:
             *filterMode = GrSamplerState::Filter::kMipMap;

@@ -12,7 +12,6 @@
 #include "include/core/SkData.h"
 #include "include/core/SkPixelRef.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/gpu/GrContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkIDChangeListener.h"
@@ -32,7 +31,6 @@
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrPaint.h"
 #include "src/gpu/GrProxyProvider.h"
@@ -448,7 +446,7 @@ GrSamplerState::Filter GrSkFilterQualityToGrFilterMode(int imageWidth, int image
         case kNone_SkFilterQuality:
             return GrSamplerState::Filter::kNearest;
         case kLow_SkFilterQuality:
-            return GrSamplerState::Filter::kBilerp;
+            return GrSamplerState::Filter::kLinear;
         case kMedium_SkFilterQuality: {
             SkMatrix matrix;
             matrix.setConcat(viewM, localM);
@@ -465,7 +463,7 @@ GrSamplerState::Filter GrSkFilterQualityToGrFilterMode(int imageWidth, int image
                 return GrSamplerState::Filter::kMipMap;
             } else {
                 // Don't trigger MIP level generation unnecessarily.
-                return GrSamplerState::Filter::kBilerp;
+                return GrSamplerState::Filter::kLinear;
             }
         }
         case kHigh_SkFilterQuality: {

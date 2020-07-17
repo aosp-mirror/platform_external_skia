@@ -47,8 +47,7 @@ public:
                         break;
                     case SkSL::Compiler::FormatArg::Kind::kChildProcessor: {
                         SkSL::String coords = this->expandFormatArgs(arg.fCoords, args, fmtArg);
-                        result += this->invokeChild(arg.fIndex, args.fInputColor, args, coords)
-                                          .c_str();
+                        result += this->invokeChild(arg.fIndex, args, coords).c_str();
                         break;
                     }
                     case SkSL::Compiler::FormatArg::Kind::kChildProcessorWithMatrix: {
@@ -60,7 +59,7 @@ public:
 
                         SkSL::String coords = this->expandFormatArgs(arg.fCoords, args, fmtArg);
                         result += this->invokeChildWithMatrix(
-                                              arg.fIndex, args.fInputColor, args,
+                                              arg.fIndex, args,
                                               sampleUsage.hasUniformMatrix() ? "" : coords)
                                           .c_str();
                         break;
@@ -261,7 +260,6 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrSkSLFP);
 
 #include "include/effects/SkArithmeticImageFilter.h"
 #include "include/effects/SkOverdrawColorFilter.h"
-#include "include/gpu/GrContext.h"
 #include "src/core/SkColorFilterBase.h"
 #include "src/gpu/effects/generated/GrConstColorProcessor.h"
 

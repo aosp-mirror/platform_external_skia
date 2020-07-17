@@ -17,7 +17,6 @@
 #include <cmath>
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
-#include "include/gpu/GrContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkBlurMask.h"
 #include "src/core/SkMathPriv.h"
@@ -55,7 +54,7 @@ public:
                                                                        GrColorType::kAlpha_8);
             GrSurfaceProxyView view{std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle};
             return GrTextureEffect::Make(std::move(view), kPremul_SkAlphaType, m,
-                                         GrSamplerState::Filter::kBilerp);
+                                         GrSamplerState::Filter::kLinear);
         }
 
         SkBitmap bitmap;
@@ -81,7 +80,7 @@ public:
         SkASSERT(view.origin() == kTopLeft_GrSurfaceOrigin);
         proxyProvider->assignUniqueKeyToProxy(key, view.asTextureProxy());
         return GrTextureEffect::Make(std::move(view), kPremul_SkAlphaType, m,
-                                     GrSamplerState::Filter::kBilerp);
+                                     GrSamplerState::Filter::kLinear);
     }
 
     static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> inputFP,
@@ -121,7 +120,7 @@ public:
         bool isFast = insetRect.isSorted();
         return std::unique_ptr<GrFragmentProcessor>(
                 new GrRectBlurEffect(std::move(inputFP), insetRect, std::move(integral), isFast,
-                                     GrSamplerState::Filter::kBilerp));
+                                     GrSamplerState::Filter::kLinear));
     }
     GrRectBlurEffect(const GrRectBlurEffect& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;

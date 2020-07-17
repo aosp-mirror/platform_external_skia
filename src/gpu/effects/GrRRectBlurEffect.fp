@@ -14,7 +14,6 @@ layout(ctype=SkRect) uniform float4 proxyRect;
 uniform half blurRadius;
 
 @header {
-    #include "include/gpu/GrContext.h"
     #include "include/gpu/GrRecordingContext.h"
     #include "src/core/SkBlurPriv.h"
     #include "src/core/SkGpuBlurUtils.h"
@@ -215,7 +214,7 @@ void main() {
     half2 proxyDims = half2(2.0 * edgeSize);
     half2 texCoord = translatedFragPos / proxyDims;
 
-    half4 inputColor = sample(inputFP, sk_InColor);
+    half4 inputColor = sample(inputFP);
     sk_OutColor = inputColor * sample(ninePatchFP, texCoord);
 }
 
