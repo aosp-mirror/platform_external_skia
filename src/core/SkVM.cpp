@@ -266,12 +266,15 @@ namespace skvm {
             case Op::store8:  write(o, op, Arg{immy}, V{x}, fs(id)...); break;
             case Op::store16: write(o, op, Arg{immy}, V{x}, fs(id)...); break;
             case Op::store32: write(o, op, Arg{immy}, V{x}, fs(id)...); break;
+            case Op::store64: write(o, op, Arg{immz}, V{x}, V{y}, fs(id)...); break;
 
             case Op::index: write(o, V{id}, "=", op, fs(id)...); break;
 
-            case Op::load8:  write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
-            case Op::load16: write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
-            case Op::load32: write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+            case Op::load8:     write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+            case Op::load16:    write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+            case Op::load32:    write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+            case Op::load64_lo: write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
+            case Op::load64_hi: write(o, V{id}, "=", op, Arg{immy}, fs(id)...); break;
 
             case Op::gather8:  write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}, fs(id)...); break;
             case Op::gather16: write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}, fs(id)...); break;
@@ -388,12 +391,15 @@ namespace skvm {
                 case Op::store8:  write(o, op, Arg{immy}, R{x}); break;
                 case Op::store16: write(o, op, Arg{immy}, R{x}); break;
                 case Op::store32: write(o, op, Arg{immy}, R{x}); break;
+                case Op::store64: write(o, op, Arg{immz}, R{x}, R{y}); break;
 
                 case Op::index: write(o, R{d}, "=", op); break;
 
-                case Op::load8:  write(o, R{d}, "=", op, Arg{immy}); break;
-                case Op::load16: write(o, R{d}, "=", op, Arg{immy}); break;
-                case Op::load32: write(o, R{d}, "=", op, Arg{immy}); break;
+                case Op::load8:     write(o, R{d}, "=", op, Arg{immy}); break;
+                case Op::load16:    write(o, R{d}, "=", op, Arg{immy}); break;
+                case Op::load32:    write(o, R{d}, "=", op, Arg{immy}); break;
+                case Op::load64_lo: write(o, R{d}, "=", op, Arg{immy}); break;
+                case Op::load64_hi: write(o, R{d}, "=", op, Arg{immy}); break;
 
                 case Op::gather8:  write(o, R{d}, "=", op, Arg{immy}, Hex{immz}, R{x}); break;
                 case Op::gather16: write(o, R{d}, "=", op, Arg{immy}, Hex{immz}, R{x}); break;
@@ -680,12 +686,17 @@ namespace skvm {
     void Builder::store8 (Arg ptr, I32 val) { (void)push(Op::store8 , val.id,NA,NA, ptr.ix); }
     void Builder::store16(Arg ptr, I32 val) { (void)push(Op::store16, val.id,NA,NA, ptr.ix); }
     void Builder::store32(Arg ptr, I32 val) { (void)push(Op::store32, val.id,NA,NA, ptr.ix); }
+    void Builder::store64(Arg ptr, I32 lo, I32 hi) {
+        (void)push(Op::store64, lo.id,hi.id,NA, NA,ptr.ix);
+    }
 
     I32 Builder::index() { return {this, push(Op::index , NA,NA,NA,0) }; }
 
-    I32 Builder::load8 (Arg ptr) { return {this, push(Op::load8 , NA,NA,NA, ptr.ix) }; }
-    I32 Builder::load16(Arg ptr) { return {this, push(Op::load16, NA,NA,NA, ptr.ix) }; }
-    I32 Builder::load32(Arg ptr) { return {this, push(Op::load32, NA,NA,NA, ptr.ix) }; }
+    I32 Builder::load8    (Arg ptr) { return {this, push(Op::load8    , NA,NA,NA, ptr.ix) }; }
+    I32 Builder::load16   (Arg ptr) { return {this, push(Op::load16   , NA,NA,NA, ptr.ix) }; }
+    I32 Builder::load32   (Arg ptr) { return {this, push(Op::load32   , NA,NA,NA, ptr.ix) }; }
+    I32 Builder::load64_lo(Arg ptr) { return {this, push(Op::load64_lo, NA,NA,NA, ptr.ix) }; }
+    I32 Builder::load64_hi(Arg ptr) { return {this, push(Op::load64_hi, NA,NA,NA, ptr.ix) }; }
 
     I32 Builder::gather8 (Arg ptr, int offset, I32 index) {
         return {this, push(Op::gather8 , index.id,NA,NA, ptr.ix,offset)};
@@ -1135,11 +1146,11 @@ namespace skvm {
         switch (ct) {
             case kUnknown_SkColorType: SkASSERT(false); return false;
 
-            // TODO: >32-bit formats
-            case kRGBA_F16Norm_SkColorType:
-            case kRGBA_F16_SkColorType:
-            case kRGBA_F32_SkColorType:
-            case kR16G16B16A16_unorm_SkColorType: return false;
+            case kRGBA_F32_SkColorType: return false;  // TODO?
+
+            case kRGBA_F16Norm_SkColorType:       *f = {HALF ,16,16,16,16, 0,16,32,48}; return true;
+            case kRGBA_F16_SkColorType:           *f = {HALF ,16,16,16,16, 0,16,32,48}; return true;
+            case kR16G16B16A16_unorm_SkColorType: *f = {UNORM,16,16,16,16, 0,16,32,48}; return true;
 
             case kA16_float_SkColorType:    *f = {HALF,  0, 0,0,16, 0, 0,0,0}; return true;
             case kR16G16_float_SkColorType: *f = {HALF, 16,16,0, 0, 0,16,0,0}; return true;
@@ -1166,7 +1177,18 @@ namespace skvm {
         return false;
     }
 
+    static int byte_size(PixelFormat f) {
+        // What's the highest bit we read?
+        int bits = std::max(f.r_bits + f.r_shift,
+                   std::max(f.g_bits + f.g_shift,
+                   std::max(f.b_bits + f.b_shift,
+                            f.a_bits + f.a_shift)));
+        // Round up to bytes.
+        return (bits + 7) / 8;
+    }
+
     static Color unpack(PixelFormat f, I32 x) {
+        SkASSERT(byte_size(f) <= 4);
         auto unpack_channel = [=](int bits, int shift) {
             I32 channel = extract(x, shift, (1<<bits)-1);
             switch (f.encoding) {
@@ -1181,27 +1203,6 @@ namespace skvm {
             f.b_bits ? unpack_channel(f.b_bits, f.b_shift) : x->splat(0.0f),
             f.a_bits ? unpack_channel(f.a_bits, f.a_shift) : x->splat(1.0f),
         };
-    }
-
-    static int byte_size(PixelFormat f) {
-        // What's the highest bit we read?
-        int bits = std::max(f.r_bits + f.r_shift,
-                   std::max(f.g_bits + f.g_shift,
-                   std::max(f.b_bits + f.b_shift,
-                            f.a_bits + f.a_shift)));
-        // Round up to bytes.
-        return (bits + 7) / 8;
-    }
-
-    Color Builder::load(PixelFormat f, Arg ptr) {
-        switch (byte_size(f)) {
-            case 1: return unpack(f, load8 (ptr));
-            case 2: return unpack(f, load16(ptr));
-            case 4: return unpack(f, load32(ptr));
-            // TODO: 8,16
-            default: SkUNREACHABLE;
-        }
-        return {};
     }
 
     static void split_disjoint_8byte_format(PixelFormat f, PixelFormat* lo, PixelFormat* hi) {
@@ -1223,6 +1224,29 @@ namespace skvm {
         SkASSERT(byte_size(*hi) == 4);
     }
 
+    Color Builder::load(PixelFormat f, Arg ptr) {
+        switch (byte_size(f)) {
+            case 1: return unpack(f, load8 (ptr));
+            case 2: return unpack(f, load16(ptr));
+            case 4: return unpack(f, load32(ptr));
+            case 8: {
+                PixelFormat lo,hi;
+                split_disjoint_8byte_format(f, &lo,&hi);
+                Color l = unpack(lo, load64_lo(ptr)),
+                      h = unpack(hi, load64_hi(ptr));
+                return {
+                    lo.r_bits ? l.r : h.r,
+                    lo.g_bits ? l.g : h.g,
+                    lo.b_bits ? l.b : h.b,
+                    lo.a_bits ? l.a : h.a,
+                };
+            }
+            // TODO: 16?
+            default: SkUNREACHABLE;
+        }
+        return {};
+    }
+
     Color Builder::gather(PixelFormat f, Arg ptr, int offset, I32 index) {
         switch (byte_size(f)) {
             case 1: return unpack(f, gather8 (ptr, offset, index));
@@ -1240,10 +1264,28 @@ namespace skvm {
                     lo.a_bits ? l.a : h.a,
                 };
             }
-            // TODO: 16
+            // TODO: 16?
             default: SkUNREACHABLE;
         }
         return {};
+    }
+
+    static I32 pack32(PixelFormat f, Color c) {
+        SkASSERT(byte_size(f) <= 4);
+        I32 packed = c->splat(0);
+        auto pack_channel = [&](F32 channel, int bits, int shift) {
+            I32 encoded;
+            switch (f.encoding) {
+                case PixelFormat::UNORM: encoded = to_unorm(bits, channel); break;
+                case PixelFormat::HALF:  encoded = to_half (      channel); break;
+            }
+            packed = pack(packed, encoded, shift);
+        };
+        if (f.r_bits) { pack_channel(c.r, f.r_bits, f.r_shift); }
+        if (f.g_bits) { pack_channel(c.g, f.g_bits, f.g_shift); }
+        if (f.b_bits) { pack_channel(c.b, f.b_bits, f.b_shift); }
+        if (f.a_bits) { pack_channel(c.a, f.a_bits, f.a_shift); }
+        return packed;
     }
 
     bool Builder::store(PixelFormat f, Arg ptr, Color c) {
@@ -1258,26 +1300,18 @@ namespace skvm {
             f.g_bits = f.b_bits = 0;
         }
 
-        auto pack_channel = [=](I32 dst, F32 channel, int bits, int shift) {
-            I32 encoded;
-            switch (f.encoding) {
-                case PixelFormat::UNORM: encoded = to_unorm(bits, channel); break;
-                case PixelFormat::HALF:  encoded = to_half (      channel); break;
-            }
-            return pack(dst, encoded, shift);
-        };
-
-        I32 dst = splat(0);
-        if (f.r_bits) { dst = pack_channel(dst, c.r, f.r_bits, f.r_shift); }
-        if (f.g_bits) { dst = pack_channel(dst, c.g, f.g_bits, f.g_shift); }
-        if (f.b_bits) { dst = pack_channel(dst, c.b, f.b_bits, f.b_shift); }
-        if (f.a_bits) { dst = pack_channel(dst, c.a, f.a_bits, f.a_shift); }
-
         switch (byte_size(f)) {
-            case 1: store8 (ptr, dst); return true;
-            case 2: store16(ptr, dst); return true;
-            case 4: store32(ptr, dst); return true;
-            // TODO: 8,16
+            case 1: store8 (ptr, pack32(f,c)); return true;
+            case 2: store16(ptr, pack32(f,c)); return true;
+            case 4: store32(ptr, pack32(f,c)); return true;
+            case 8: {
+                PixelFormat lo,hi;
+                split_disjoint_8byte_format(f, &lo,&hi);
+                store64(ptr, pack32(lo,c)
+                           , pack32(hi,c));
+                return true;
+            }
+            // TODO: 16?
             default: SkUNREACHABLE;
         }
         return false;
@@ -3304,6 +3338,12 @@ namespace skvm {
                     // Make sure splat constants can be found by load_from_memory() or any().
                     (void)constants[immy];
                     break;
+
+                case Op::load64_lo:
+                case Op::load64_hi:
+                case Op::store64:
+                    // TODO
+                    return false;
 
             #if defined(__x86_64__) || defined(_M_X64)
                 case Op::assert_true: {
