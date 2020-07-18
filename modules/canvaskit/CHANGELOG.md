@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and when passed into CanvasKit will be used w/o copying the data (just like
   `Malloc.toTypedArray`).
  - `SkM44.setupCamera` to return a 4x4 matrix which sets up a perspective view from a camera.
+ - `SkPath.arcToOval`, `SkPath.arcToTangent`, and `SkPath.arcToRotated` to replace the three
+   overloads of `SkPath.arcTo`. https://github.com/flutter/flutter/issues/61305
 
 ### Changed
  - In all places where color arrays are accepted (gradient makers, drawAtlas, and MakeSkVertices),
@@ -31,13 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    The fastest choice for gradients is the flat Float32Array, the fastest choice for drawAtlas and
    MakeSkVertices is the flat Uint32Array.
  - Color arrays may also be objects created with CanvasKit.Malloc
-
+ - renamed `reportBackendType` to `reportBackendTypeIsGPU` and made it return a boolean
+ - `MakeWebGLCanvasSurface` can now accept an optional dictionary of WebGL context attributes that
+   can be used to override default attributes.
 ### Fixed
  - `TextStyle.color` can correctly be a Malloc'd Float32Array.
  
 ### Deprecated
  - `CanvasKit.MakePathFromCmds` has been renamed to `CanvasKit.SkPath.MakeFromCmds`. The alias
    will be removed in an upcoming release.
+ - `SkPath.arcTo` Separated into three functions.
 
 ## [0.16.2] - 2020-06-05
 
