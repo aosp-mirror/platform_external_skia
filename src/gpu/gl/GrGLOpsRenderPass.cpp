@@ -224,6 +224,21 @@ static const void* buffer_offset_to_gl_address(const GrBuffer* drawIndirectBuffe
 
 void GrGLOpsRenderPass::onDrawIndirect(const GrBuffer* drawIndirectBuffer, size_t offset,
                                        int drawCount) {
+    SkASSERT(fGpu->caps()->nativeDrawIndirectSupport());
+    SkASSERT(fGpu->glCaps().baseVertexBaseInstanceSupport());
+    SkASSERT(!fActiveVertexBuffer || fGpu->glCaps().drawArraysBaseVertexIsBroken());
+
+    if (fGpu->glCaps().drawArraysBaseVertexIsBroken()) {
+        // We weren't able to bind the vertex buffer during onBindBuffers because of a driver bug
+        // affecting glDrawArrays.
+        this->bindVertexBuffer(fActiveVertexBuffer.get(), 0);
+    }
+
+    if (fGpu->glCaps().ANGLEMultiDrawSupport()) {
+        this->multiDrawArraysANGLE(drawIndirectBuffer, offset, drawCount);
+        return;
+    }
+
     fGpu->bindBuffer(GrGpuBufferType::kDrawIndirect, drawIndirectBuffer);
 
     if (fGpu->glCaps().multiDrawIndirectSupport() && drawCount > 1) {
@@ -242,8 +257,51 @@ void GrGLOpsRenderPass::onDrawIndirect(const GrBuffer* drawIndirectBuffer, size_
     }
 }
 
+void GrGLOpsRenderPass::multiDrawArraysANGLE(const GrBuffer* drawIndirectBuffer, size_t offset,
+                                             int drawCount) {
+    SkASSERT(fGpu->glCaps().ANGLEMultiDrawSupport());
+    SkASSERT(drawIndirectBuffer->isCpuBuffer());
+
+    constexpr static int kMaxDrawCountPerBatch = 128;
+    GrGLint fFirsts[kMaxDrawCountPerBatch];
+    GrGLsizei fCounts[kMaxDrawCountPerBatch];
+    GrGLsizei fInstanceCounts[kMaxDrawCountPerBatch];
+    GrGLuint fBaseInstances[kMaxDrawCountPerBatch];
+
+    GrGLenum glPrimType = fGpu->prepareToDraw(fPrimitiveType);
+    auto* cpuBuffer = static_cast<const GrCpuBuffer*>(drawIndirectBuffer);
+    auto* cmds = reinterpret_cast<const GrDrawIndirectCommand*>(cpuBuffer->data() + offset);
+
+    while (drawCount) {
+        int countInBatch = std::min(drawCount, kMaxDrawCountPerBatch);
+        for (int i = 0; i < countInBatch; ++i) {
+            const auto& cmd = cmds[i];
+            fFirsts[i] = cmd.fBaseVertex;
+            fCounts[i] = cmd.fVertexCount;
+            fInstanceCounts[i] = cmd.fInstanceCount;
+            fBaseInstances[i] = cmd.fBaseInstance;
+        }
+        GL_CALL(MultiDrawArraysInstancedBaseInstance(glPrimType, fFirsts, fCounts, fInstanceCounts,
+                                                     fBaseInstances, countInBatch));
+        drawCount -= countInBatch;
+        cmds += countInBatch;
+    }
+}
+
 void GrGLOpsRenderPass::onDrawIndexedIndirect(const GrBuffer* drawIndirectBuffer, size_t offset,
                                               int drawCount) {
+    SkASSERT(fGpu->caps()->nativeDrawIndirectSupport());
+    SkASSERT(!fGpu->caps()->nativeDrawIndexedIndirectIsBroken());
+    SkASSERT(fGpu->glCaps().baseVertexBaseInstanceSupport());
+    // The vertex buffer should have already gotten bound (as opposed us stashing it away during
+    // onBindBuffers and not expecting to bind it until this point).
+    SkASSERT(!fActiveVertexBuffer);
+
+    if (fGpu->glCaps().ANGLEMultiDrawSupport()) {
+        this->multiDrawElementsANGLE(drawIndirectBuffer, offset, drawCount);
+        return;
+    }
+
     fGpu->bindBuffer(GrGpuBufferType::kDrawIndirect, drawIndirectBuffer);
 
     if (fGpu->glCaps().multiDrawIndirectSupport() && drawCount > 1) {
@@ -259,6 +317,41 @@ void GrGLOpsRenderPass::onDrawIndexedIndirect(const GrBuffer* drawIndirectBuffer
         GL_CALL(DrawElementsIndirect(glPrimType, GR_GL_UNSIGNED_SHORT,
                                      buffer_offset_to_gl_address(drawIndirectBuffer, offset)));
         offset += sizeof(GrDrawIndexedIndirectCommand);
+    }
+}
+
+void GrGLOpsRenderPass::multiDrawElementsANGLE(const GrBuffer* drawIndirectBuffer, size_t offset,
+                                               int drawCount) {
+    SkASSERT(fGpu->glCaps().ANGLEMultiDrawSupport());
+    SkASSERT(drawIndirectBuffer->isCpuBuffer());
+
+    constexpr static int kMaxDrawCountPerBatch = 128;
+    GrGLint fCounts[kMaxDrawCountPerBatch];
+    const void* fIndices[kMaxDrawCountPerBatch];
+    GrGLsizei fInstanceCounts[kMaxDrawCountPerBatch];
+    GrGLint fBaseVertices[kMaxDrawCountPerBatch];
+    GrGLuint fBaseInstances[kMaxDrawCountPerBatch];
+
+    GrGLenum glPrimType = fGpu->prepareToDraw(fPrimitiveType);
+    auto* cpuBuffer = static_cast<const GrCpuBuffer*>(drawIndirectBuffer);
+    auto* cmds = reinterpret_cast<const GrDrawIndexedIndirectCommand*>(cpuBuffer->data() + offset);
+
+    while (drawCount) {
+        int countInBatch = std::min(drawCount, kMaxDrawCountPerBatch);
+        for (int i = 0; i < countInBatch; ++i) {
+            const auto& cmd = cmds[i];
+            fCounts[i] = cmd.fIndexCount;
+            fIndices[i] = this->offsetForBaseIndex(cmd.fBaseIndex);
+            fInstanceCounts[i] = cmd.fInstanceCount;
+            fBaseVertices[i] = cmd.fBaseVertex;
+            fBaseInstances[i] = cmd.fBaseInstance;
+        }
+        GL_CALL(MultiDrawElementsInstancedBaseVertexBaseInstance(glPrimType, fCounts,
+                                                                 GR_GL_UNSIGNED_SHORT, fIndices,
+                                                                 fInstanceCounts, fBaseVertices,
+                                                                 fBaseInstances, countInBatch));
+        drawCount -= countInBatch;
+        cmds += countInBatch;
     }
 }
 

@@ -22,6 +22,7 @@
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrDrawOpAtlas.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/text/GrStrikeCache.h"
 
 class GrAtlasManager;
 class GrAtlasTextOp;
@@ -220,11 +221,56 @@ private:
     const SkStrikeSpec fStrikeSpec;
     const SkSpan<const PathGlyph> fPaths;
 };
-
 // -- GrAtlasSubRun --------------------------------------------------------------------------------
+class GrAtlasSubRun : public GrSubRun {
+public:
+    static constexpr int kVerticesPerGlyph = 4;
+    virtual size_t vertexStride() const = 0;
+    virtual int glyphCount() const = 0;
+
+    virtual std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
+    makeAtlasTextOp(const GrClip* clip,
+                    const SkMatrixProvider& viewMatrix,
+                    const SkGlyphRunList& glyphRunList,
+                    GrRenderTargetContext* rtc) = 0;
+    virtual std::tuple<bool, int> regenerateAtlas(
+            int begin, int end, GrMeshDrawOp::Target* target) = 0;
+    virtual void fillVertexData(
+            void* vertexDst, int offset, int count,
+            GrColor color, const SkMatrix& drawMatrix, SkPoint drawOrigin,
+            SkIRect clip) const = 0;
+};
+
+// -- GrGlyphVector --------------------------------------------------------------------------------
+class GrGlyphVector {
+    union Variant {
+        // Initially, filled with packed id, but changed to GrGlyph* in the onPrepare stage.
+        SkPackedGlyphID packedGlyphID;
+        GrGlyph* grGlyph;
+    };
+public:
+    static GrGlyphVector Make(
+            const SkStrikeSpec& spec, SkSpan<SkGlyphVariant> glyphs, SkArenaAlloc* alloc);
+    void prepareGrGlyphs(GrStrikeCache* strikeCache);
+    std::tuple<bool, int> regenerateAtlas(
+            int begin, int end, GrMaskFormat maskFormat, int padding, GrMeshDrawOp::Target *target);
+    SkSpan<const GrGlyph*> glyphs() const;
+    SkScalar strikeToSourceRatio() const { return fStrikeSpec.strikeToSourceRatio(); }
+
+private:
+    GrGlyphVector(const SkStrikeSpec& spec, SkSpan<Variant> glyphs);
+
+    const SkStrikeSpec fStrikeSpec;
+    SkSpan<Variant> fGlyphs;
+    sk_sp<GrTextStrike> fStrike{nullptr};
+    uint64_t fAtlasGeneration{GrDrawOpAtlas::kInvalidAtlasGeneration};
+    GrDrawOpAtlas::BulkUseTokenUpdater fBulkUseToken;
+};
+
+// -- GrMaskSubRun ---------------------------------------------------------------------------------
 // Hold data to draw the different types of sub run. SubRuns are produced knowing all the
 // glyphs that are included in them.
-class GrAtlasSubRun : public GrSubRun {
+class GrMaskSubRun : public GrAtlasSubRun {
     enum SubRunType {
         kDirectMask,
         kTransformedMask,
@@ -232,13 +278,7 @@ class GrAtlasSubRun : public GrSubRun {
     };
 
 public:
-    static constexpr int kVerticesPerGlyph = 4;
     struct VertexData {
-        union {
-            // Initially, filled with packed id, but changed to GrGlyph* in the onPrepare stage.
-            SkPackedGlyphID packedGlyphID;
-            GrGlyph* grGlyph;
-        } glyph;
         const SkPoint pos;
         // The rectangle of the glyphs in strike space. But, for kDirectMask this also implies a
         // device space rect.
@@ -246,41 +286,34 @@ public:
     };
 
     // SubRun for masks
-    GrAtlasSubRun(SubRunType type,
-                  GrTextBlob* textBlob,
-                  const SkStrikeSpec& strikeSpec,
-                  GrMaskFormat format,
-                  SkRect vertexBounds,
-                  const SkSpan<VertexData>& vertexData);
+    GrMaskSubRun(SubRunType type,
+                 GrTextBlob* textBlob,
+                 GrMaskFormat format,
+                 SkRect vertexBounds,
+                 GrGlyphVector glyphs,
+                 const SkSpan<VertexData>& vertexData);
 
     std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
     makeAtlasTextOp(const GrClip* clip,
                     const SkMatrixProvider& viewMatrix,
                     const SkGlyphRunList& glyphRunList,
-                    GrRenderTargetContext* rtc);
+                    GrRenderTargetContext* rtc) override;
 
     void draw(const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
               const SkGlyphRunList& glyphRunList,
               GrRenderTargetContext* rtc) override;
 
-    std::tuple<bool, int> regenerateAtlas(int begin, int end, GrMeshDrawOp::Target* target);
+    std::tuple<bool, int> regenerateAtlas(
+            int begin, int end, GrMeshDrawOp::Target* target) override;
 
-    size_t vertexStride() const;
-    size_t quadOffset(size_t index) const;
+    size_t vertexStride() const override;
     void fillVertexData(
             void* vertexDst, int offset, int count,
             GrColor color, const SkMatrix& drawMatrix, SkPoint drawOrigin,
-            SkIRect clip) const;
+            SkIRect clip) const override;
 
-    int glyphCount() const;
-
-    // Acquire a GrTextStrike and convert the SkPackedGlyphIDs to GrGlyphs for this run
-    void prepareGrGlyphs(GrStrikeCache*);
-
-    GrGlyph* grGlyph(int i) const;
-
-    const SkStrikeSpec& strikeSpec() const;
+    int glyphCount() const override;
 
     static GrSubRun* MakeSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                               const SkFont& runFont,
@@ -330,12 +363,12 @@ private:
         AtlasPt atlasPos;
     };
 
-    static GrAtlasSubRun* InitForAtlas(SubRunType type,
-                                       const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                       const SkStrikeSpec& strikeSpec,
-                                       GrMaskFormat format,
-                                       GrTextBlob* blob,
-                                       SkArenaAlloc* alloc);
+    static GrMaskSubRun* InitForAtlas(SubRunType type,
+                                      const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                                      const SkStrikeSpec& strikeSpec,
+                                      GrMaskFormat format,
+                                      GrTextBlob* blob,
+                                      SkArenaAlloc* alloc);
     bool hasW() const;
     void setUseLCDText(bool useLCDText);
     void setAntiAliased(bool antiAliased);
@@ -355,27 +388,18 @@ private:
     int atlasPadding() const;
     SkSpan<const VertexData> vertexData() const;
 
-    // has 'prepareGrGlyphs' been called (i.e., can the GrGlyphs be accessed) ?
-    SkDEBUGCODE(bool isPrepared() const { return SkToBool(fStrike); })
-
-    void resetBulkUseToken();
-    GrDrawOpAtlas::BulkUseTokenUpdater* bulkUseToken();
-
     GrTextBlob* fBlob;
     const SubRunType fType;
     const GrMaskFormat fMaskFormat;
     bool fUseLCDText{false};
     bool fAntiAliased{false};
 
-    const SkStrikeSpec fStrikeSpec;
-    sk_sp<GrTextStrike> fStrike;
+    GrGlyphVector fGlyphs;
 
-    GrDrawOpAtlas::BulkUseTokenUpdater fBulkUseToken;
     // The vertex bounds in device space if needsTransform() is false, otherwise the bounds in
     // source space. The bounds are the joined rectangles of all the glyphs.
     const SkRect fVertexBounds;
     const SkSpan<VertexData> fVertexData;
-    uint64_t fAtlasGeneration{GrDrawOpAtlas::kInvalidAtlasGeneration};
 };  // SubRun
 
 #endif  // GrTextBlob_DEFINED
