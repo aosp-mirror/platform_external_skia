@@ -14,6 +14,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkString.h"
+#include "include/gpu/GrContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/GrTypesPriv.h"
 #include "src/gpu/GrBuffer.h"
@@ -225,7 +226,7 @@ private:
         }
 
         flushState->bindPipeline(*fProgramInfo, SkRect::MakeIWH(kWidth, kHeight));
-        flushState->bindBuffers(nullptr, nullptr, fVertexBuffer.get());
+        flushState->bindBuffers(nullptr, nullptr, std::move(fVertexBuffer));
         flushState->draw(4, 0);
 
     }
