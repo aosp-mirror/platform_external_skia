@@ -18,7 +18,7 @@ public:
                                                                       SkISize,
                                                                       int sampleCnt,
                                                                       MTLTextureDescriptor*,
-                                                                      GrMipMapsStatus);
+                                                                      GrMipmapStatus);
 
     static sk_sp<GrMtlTextureRenderTarget> MakeWrappedTextureRenderTarget(GrMtlGpu*,
                                                                           SkISize,
@@ -47,26 +47,26 @@ private:
                              int sampleCnt,
                              id<MTLTexture> colorTexture,
                              id<MTLTexture> resolveTexture,
-                             GrMipMapsStatus);
+                             GrMipmapStatus);
 
     GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                              SkBudgeted budgeted,
                              SkISize,
                              id<MTLTexture> colorTexture,
-                             GrMipMapsStatus);
+                             GrMipmapStatus);
 
     GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                              SkISize,
                              int sampleCnt,
                              id<MTLTexture> colorTexture,
                              id<MTLTexture> resolveTexture,
-                             GrMipMapsStatus,
+                             GrMipmapStatus,
                              GrWrapCacheable cacheable);
 
     GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                              SkISize,
                              id<MTLTexture> colorTexture,
-                             GrMipMapsStatus,
+                             GrMipmapStatus,
                              GrWrapCacheable cacheable);
 
     size_t onGpuMemorySize() const override {
@@ -79,7 +79,7 @@ private:
         }
         const GrCaps& caps = *this->getGpu()->caps();
         return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
-                                      numColorSamples, GrMipMapped::kNo);
+                                      numColorSamples, GrMipmapped::kNo);
     }
 };
 

@@ -22,7 +22,6 @@
 #include "src/core/SkValidationUtils.h"
 #include "src/core/SkWriteBuffer.h"
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrContextPriv.h"
@@ -571,7 +570,7 @@ sk_sp<SkSpecialImage> SkImageFilter_Base::DrawWithFP(GrRecordingContext* context
 
     auto renderTargetContext = GrRenderTargetContext::Make(
             context, SkColorTypeToGrColorType(colorType), sk_ref_sp(colorSpace),
-            SkBackingFit::kApprox, bounds.size(), 1, GrMipMapped::kNo, isProtected,
+            SkBackingFit::kApprox, bounds.size(), 1, GrMipmapped::kNo, isProtected,
             kBottomLeft_GrSurfaceOrigin);
     if (!renderTargetContext) {
         return nullptr;

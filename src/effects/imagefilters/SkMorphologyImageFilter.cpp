@@ -16,7 +16,6 @@
 #include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrRecordingContextPriv.h"
@@ -465,7 +464,7 @@ static sk_sp<SkSpecialImage> apply_morphology(
     if (radius.fWidth > 0) {
         auto dstRTContext = GrRenderTargetContext::Make(
                 context, colorType, colorSpace, SkBackingFit::kApprox, rect.size(), 1,
-                GrMipMapped::kNo, proxy->isProtected(), kBottomLeft_GrSurfaceOrigin);
+                GrMipmapped::kNo, proxy->isProtected(), kBottomLeft_GrSurfaceOrigin);
         if (!dstRTContext) {
             return nullptr;
         }
@@ -485,7 +484,7 @@ static sk_sp<SkSpecialImage> apply_morphology(
     if (radius.fHeight > 0) {
         auto dstRTContext = GrRenderTargetContext::Make(
                 context, colorType, colorSpace, SkBackingFit::kApprox, rect.size(), 1,
-                GrMipMapped::kNo, srcView.proxy()->isProtected(), kBottomLeft_GrSurfaceOrigin);
+                GrMipmapped::kNo, srcView.proxy()->isProtected(), kBottomLeft_GrSurfaceOrigin);
         if (!dstRTContext) {
             return nullptr;
         }

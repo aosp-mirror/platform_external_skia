@@ -26,17 +26,15 @@ public:
         fTexture->markMipMapsClean();
     }
 
-    GrMipMapsStatus mipMapsStatus() const { return fTexture->fMipMapsStatus; }
+    GrMipmapStatus mipmapStatus() const { return fTexture->fMipMapsStatus; }
 
-    bool mipMapsAreDirty() const {
-        return GrMipMapsStatus::kValid != this->mipMapsStatus();
-    }
+    bool mipMapsAreDirty() const { return GrMipmapStatus::kValid != this->mipmapStatus(); }
 
-    GrMipMapped mipMapped() const {
-        if (GrMipMapsStatus::kNotAllocated != this->mipMapsStatus()) {
-            return GrMipMapped::kYes;
+    GrMipmapped mipMapped() const {
+        if (GrMipmapStatus::kNotAllocated != this->mipmapStatus()) {
+            return GrMipmapped::kYes;
         }
-        return GrMipMapped::kNo;
+        return GrMipmapped::kNo;
     }
 
     int maxMipMapLevel() const {
@@ -53,7 +51,7 @@ public:
                                   SkISize dimensions,
                                   GrRenderable,
                                   int sampleCnt,
-                                  GrMipMapped,
+                                  GrMipmapped,
                                   GrProtected,
                                   GrScratchKey* key);
 

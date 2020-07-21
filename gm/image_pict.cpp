@@ -25,7 +25,7 @@
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/GrTypesPriv.h"
@@ -189,7 +189,7 @@ protected:
     GrSurfaceProxyView onGenerateTexture(GrRecordingContext* rContext,
                                          const SkImageInfo& info,
                                          const SkIPoint& origin,
-                                         GrMipMapped mipMapped,
+                                         GrMipmapped mipMapped,
                                          GrImageTexGenPolicy policy) override {
         SkASSERT(rContext);
         SkASSERT(rContext == fRContext.get());
@@ -276,7 +276,7 @@ protected:
 
     static void draw_as_tex(SkCanvas* canvas, SkImage* image, SkScalar x, SkScalar y) {
         GrSurfaceProxyView view = as_IB(image)->refView(canvas->recordingContext(),
-                                                        GrMipMapped::kNo);
+                                                        GrMipmapped::kNo);
         if (!view) {
             // show placeholder if we have no texture
             SkPaint paint;
