@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+ - Compile option to deserialize effects in skps `include_effects_deserialization`.
+ 
+### Changed
+- Pathops and SKP deserialization/serialization enabled on the npm build.
+
+## [0.17.0] - 2020-07-20
+
+### Added
  - Added `CanvasKit.MakeImageFromCanvasImageSource` which takes either an HTMLImageElement,
    SVGImageElement, HTMLVideoElement, HTMLCanvasElement, ImageBitmap, or OffscreenCanvas and returns
    an SkImage. This function is an alternative to `CanvasKit.MakeImageFromEncoded` for creating
@@ -27,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
  - In all places where color arrays are accepted (gradient makers, drawAtlas, and MakeSkVertices),
-   You can now provide either flat Float32Arrays of float colors, Uint32Arrays of int colors, or 
+   You can now provide either flat Float32Arrays of float colors, Uint32Arrays of int colors, or
    2d Arrays of Float32Array(4) colors. The one thing you should not pass is an Array of numbers,
    since canvaskit wouldn't be able to tell whether they're ints or floats without checking them all.
    The fastest choice for gradients is the flat Float32Array, the fastest choice for drawAtlas and
@@ -36,9 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - renamed `reportBackendType` to `reportBackendTypeIsGPU` and made it return a boolean
  - `MakeWebGLCanvasSurface` can now accept an optional dictionary of WebGL context attributes that
    can be used to override default attributes.
+
 ### Fixed
  - `TextStyle.color` can correctly be a Malloc'd Float32Array.
- 
+ - Support wombat-dressing-room. go/npm-publish
+
 ### Deprecated
  - `CanvasKit.MakePathFromCmds` has been renamed to `CanvasKit.SkPath.MakeFromCmds`. The alias
    will be removed in an upcoming release.
