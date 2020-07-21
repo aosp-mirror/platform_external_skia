@@ -92,7 +92,7 @@ public:
     // this call will flatten a SkImage_GpuYUV to a single texture.
     virtual const GrSurfaceProxyView* view(GrRecordingContext*) const { return nullptr; }
 
-    virtual GrSurfaceProxyView refView(GrRecordingContext*, GrMipMapped) const = 0;
+    virtual GrSurfaceProxyView refView(GrRecordingContext*, GrMipmapped) const = 0;
     virtual GrSurfaceProxyView refPinnedView(GrRecordingContext*, uint32_t* uniqueID) const {
         return {};
     }
@@ -127,8 +127,8 @@ public:
 
     virtual bool onIsValid(GrRecordingContext*) const = 0;
 
-    virtual bool onPinAsTexture(GrContext*) const { return false; }
-    virtual void onUnpinAsTexture(GrContext*) const {}
+    virtual bool onPinAsTexture(GrRecordingContext*) const { return false; }
+    virtual void onUnpinAsTexture(GrRecordingContext*) const {}
 
     virtual sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType, sk_sp<SkColorSpace>,
                                                         GrDirectContext*) const = 0;
