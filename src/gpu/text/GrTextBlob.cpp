@@ -138,18 +138,6 @@ GrGlyphVector GrGlyphVector::Make(
     return GrGlyphVector{spec, SkMakeSpan(variants, glyphs.size())};
 }
 
-void GrGlyphVector::prepareGrGlyphs(GrStrikeCache* strikeCache) {
-    if (fStrike) {
-        return;
-    }
-
-    fStrike = fStrikeSpec.findOrCreateGrStrike(strikeCache);
-
-    for (auto& variant : fGlyphs) {
-        variant.grGlyph = fStrike->getGlyph(variant.packedGlyphID);
-    }
-}
-
 SkSpan<const GrGlyph*> GrGlyphVector::glyphs() const {
     return SkMakeSpan(reinterpret_cast<const GrGlyph**>(fGlyphs.data()), fGlyphs.size());
 }
@@ -161,7 +149,13 @@ std::tuple<bool, int> GrGlyphVector::regenerateAtlas(
 
     uint64_t currentAtlasGen = atlasManager->atlasGeneration(maskFormat);
 
-    this->prepareGrGlyphs(target->strikeCache());
+    if (fStrike == nullptr) {
+        fStrike = fStrikeSpec.findOrCreateGrStrike(target->strikeCache());
+
+        for (auto& variant : fGlyphs) {
+            variant.grGlyph = fStrike->getGlyph(variant.packedGlyphID);
+        }
+    }
 
     if (fAtlasGeneration != currentAtlasGen) {
         // Calculate the texture coordinates for the vertexes during first use (fAtlasGeneration
@@ -354,11 +348,11 @@ GrDirectMaskSubRun::makeAtlasTextOp(const GrClip* clip, const SkMatrixProvider& 
     const SkPMColor4f drawingColor =
             calculate_colors(rtc, drawPaint, viewMatrix, fMaskFormat, &grPaint);
     GrAtlasTextOp::Geometry geometry = {
-            SkRef(fBlob),
             this,
             drawMatrix,
             drawOrigin,
             clipRect,
+            SkRef(fBlob),
             drawingColor
     };
 
@@ -367,8 +361,8 @@ GrDirectMaskSubRun::makeAtlasTextOp(const GrClip* clip, const SkMatrixProvider& 
                                                                  false,
                                                                  this->glyphCount(),
                                                                  subRunBounds,
-                                                                 std::move(grPaint),
-                                                                 std::move(geometry));
+                                                                 geometry,
+                                                                 std::move(grPaint));
 
     return {clip, std::move(op)};
 }
@@ -520,11 +514,11 @@ GrMaskSubRun::makeAtlasTextOp(const GrClip* clip,
     // We can clip geometrically using clipRect and ignore clip if we're not using SDFs or
     // transformed glyphs, and we have an axis-aligned rectangular non-AA clip.
     GrAtlasTextOp::Geometry geometry = {
-            SkRef(fBlob),
             this,
             drawMatrix,
             drawOrigin,
             SkIRect::MakeEmpty(),
+            SkRef(fBlob),
             drawingColor
     };
     std::unique_ptr<GrDrawOp> op;
@@ -536,8 +530,8 @@ GrMaskSubRun::makeAtlasTextOp(const GrClip* clip,
                                            true,
                                            this->glyphCount(),
                                            this->deviceRect(drawMatrix, drawOrigin),
-                                           std::move(grPaint),
-                                           std::move(geometry));
+                                           geometry,
+                                           std::move(grPaint));
     } else {
         const GrColorInfo& colorInfo = rtc->colorInfo();
         const SkSurfaceProps& props = rtc->surfaceProps();
@@ -570,8 +564,8 @@ GrMaskSubRun::makeAtlasTextOp(const GrClip* clip,
                                            SkPaintPriv::ComputeLuminanceColor(drawPaint),
                                            useGammaCorrectDistanceTable,
                                            DFGPFlags,
-                                           std::move(grPaint),
-                                           std::move(geometry));
+                                           geometry,
+                                           std::move(grPaint));
     }
 
     return {clip, std::move(op)};

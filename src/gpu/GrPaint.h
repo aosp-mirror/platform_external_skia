@@ -60,11 +60,12 @@ public:
     void setCoverageSetOpXPFactory(SkRegion::Op, bool invertCoverage = false);
 
     /**
-     * Appends an additional color processor to the color computation.
+     * Sets a processor for color computation.
      */
-    void addColorFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
+    void setColorFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
         SkASSERT(fp);
-        fColorFragmentProcessors.push_back(std::move(fp));
+        SkASSERT(fColorFragmentProcessor == nullptr);
+        fColorFragmentProcessor = std::move(fp);
         fTrivial = false;
     }
 
@@ -77,15 +78,16 @@ public:
         fTrivial = false;
     }
 
-    int numColorFragmentProcessors() const { return fColorFragmentProcessors.count(); }
+    bool hasColorFragmentProcessor() const { return fColorFragmentProcessor ? true : false; }
     int numCoverageFragmentProcessors() const { return fCoverageFragmentProcessors.count(); }
-    int numTotalFragmentProcessors() const { return this->numColorFragmentProcessors() +
-                                              this->numCoverageFragmentProcessors(); }
+    int numTotalFragmentProcessors() const {
+        return (this->hasColorFragmentProcessor() ? 1 : 0) + this->numCoverageFragmentProcessors();
+    }
 
     const GrXPFactory* getXPFactory() const { return fXPFactory; }
 
-    GrFragmentProcessor* getColorFragmentProcessor(int i) const {
-        return fColorFragmentProcessors[i].get();
+    GrFragmentProcessor* getColorFragmentProcessor() const {
+        return fColorFragmentProcessor.get();
     }
     GrFragmentProcessor* getCoverageFragmentProcessor(int i) const {
         return fCoverageFragmentProcessors[i].get();
@@ -118,7 +120,7 @@ private:
     friend class GrProcessorSet;
 
     const GrXPFactory* fXPFactory = nullptr;
-    SkSTArray<4, std::unique_ptr<GrFragmentProcessor>> fColorFragmentProcessors;
+    std::unique_ptr<GrFragmentProcessor> fColorFragmentProcessor;
     SkSTArray<2, std::unique_ptr<GrFragmentProcessor>> fCoverageFragmentProcessors;
     bool fTrivial = true;
     SkPMColor4f fColor = SK_PMColor4fWHITE;
