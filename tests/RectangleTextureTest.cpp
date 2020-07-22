@@ -35,7 +35,7 @@ static void test_basic_draw_as_src(skiatest::Reporter* reporter, GrRecordingCont
         auto fp = GrTextureEffect::Make(rectView, alphaType, SkMatrix::I(), filter);
         GrPaint paint;
         paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-        paint.addColorFragmentProcessor(std::move(fp));
+        paint.setColorFragmentProcessor(std::move(fp));
         rtContext->drawPaint(nullptr, std::move(paint), SkMatrix::I());
         TestReadPixels(reporter, rtContext.get(), expectedPixelValues,
                        "RectangleTexture-basic-draw");
@@ -138,7 +138,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(RectangleTexture, reporter, ctxInfo) {
         GrBackendTexture rectangleTex = direct->createBackendTexture(kWidth,
                                                                      kHeight,
                                                                      format,
-                                                                     GrMipMapped::kNo,
+                                                                     GrMipmapped::kNo,
                                                                      GrRenderable::kYes);
         if (!rectangleTex.isValid()) {
             continue;
@@ -164,8 +164,8 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(RectangleTexture, reporter, ctxInfo) {
             continue;
         }
 
-        SkASSERT(rectProxy->mipMapped() == GrMipMapped::kNo);
-        SkASSERT(rectProxy->peekTexture()->texturePriv().mipMapped() == GrMipMapped::kNo);
+        SkASSERT(rectProxy->mipmapped() == GrMipmapped::kNo);
+        SkASSERT(rectProxy->peekTexture()->texturePriv().mipmapped() == GrMipmapped::kNo);
 
         SkASSERT(rectProxy->textureType() == GrTextureType::kRectangle);
         SkASSERT(rectProxy->peekTexture()->texturePriv().textureType() ==

@@ -99,7 +99,7 @@ sk_sp<GrSurfaceProxy> GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
     if (!ctx->priv().caps()->isFormatCopyable(baseProxy->backendFormat())) {
         return {};
     }
-    auto copy = GrSurfaceProxy::Copy(ctx, baseProxy, origin, GrMipMapped::kYes,
+    auto copy = GrSurfaceProxy::Copy(ctx, baseProxy, origin, GrMipmapped::kYes,
                                      SkBackingFit::kExact, budgeted);
     if (!copy) {
         return {};
@@ -118,7 +118,7 @@ GrSurfaceProxyView GrCopyBaseMipMapToView(GrRecordingContext* context,
 }
 
 GrSurfaceProxyView GrRefCachedBitmapView(GrRecordingContext* ctx, const SkBitmap& bitmap,
-                                         GrMipMapped mipMapped) {
+                                         GrMipmapped mipMapped) {
     GrBitmapTextureMaker maker(ctx, bitmap, GrImageTexGenPolicy::kDraw);
     return maker.view(mipMapped);
 }
@@ -130,7 +130,7 @@ GrSurfaceProxyView GrMakeCachedBitmapProxyView(GrRecordingContext* context,
     }
 
     GrBitmapTextureMaker maker(context, bitmap, GrImageTexGenPolicy::kDraw);
-    return maker.view(GrMipMapped::kNo);
+    return maker.view(GrMipmapped::kNo);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -313,7 +313,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
         // We may have set this before passing to the SkShader.
         fpArgs.fInputColorIsOpaque = false;
         if (auto mfFP = maskFilter->asFragmentProcessor(fpArgs)) {
-            grPaint->addCoverageFragmentProcessor(std::move(mfFP));
+            grPaint->setCoverageFragmentProcessor(std::move(mfFP));
         }
     }
 
@@ -345,7 +345,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
     }
 
     if (paintFP) {
-        grPaint->addColorFragmentProcessor(std::move(paintFP));
+        grPaint->setColorFragmentProcessor(std::move(paintFP));
     }
 
     return true;

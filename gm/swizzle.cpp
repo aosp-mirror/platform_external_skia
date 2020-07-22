@@ -11,7 +11,6 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContext.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrFragmentProcessor.h"
@@ -27,7 +26,7 @@ DEF_SIMPLE_GPU_GM(swizzle, ctx, rtCtx, canvas, 512, 512) {
     SkBitmap bmp;
     GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
     GrBitmapTextureMaker maker(ctx, bmp, GrImageTexGenPolicy::kDraw);
-    auto view = maker.view(GrMipMapped::kNo);
+    auto view = maker.view(GrMipmapped::kNo);
     if (!view) {
         return;
     }
@@ -36,7 +35,7 @@ DEF_SIMPLE_GPU_GM(swizzle, ctx, rtCtx, canvas, 512, 512) {
     auto fp = GrFragmentProcessor::SwizzleOutput(std::move(imgFP), GrSwizzle("grb1"));
 
     GrPaint grPaint;
-    grPaint.addColorFragmentProcessor(std::move(fp));
+    grPaint.setColorFragmentProcessor(std::move(fp));
 
     rtCtx->priv().testingOnly_addDrawOp(
         GrFillRectOp::MakeNonAARect(ctx, std::move(grPaint), SkMatrix(), bounds));

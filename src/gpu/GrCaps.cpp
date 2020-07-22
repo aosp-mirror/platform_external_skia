@@ -16,7 +16,7 @@
 #include "src/utils/SkJSONWriter.h"
 
 GrCaps::GrCaps(const GrContextOptions& options) {
-    fMipMapSupport = false;
+    fMipmapSupport = false;
     fNPOTTextureTileSupport = false;
     fReuseScratchTextures = true;
     fReuseScratchBuffers = true;
@@ -197,7 +197,7 @@ static SkString map_flags_to_string(uint32_t flags) {
 void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->beginObject();
 
-    writer->appendBool("MIP Map Support", fMipMapSupport);
+    writer->appendBool("MIP Map Support", fMipmapSupport);
     writer->appendBool("NPOT Texture Tile Support", fNPOTTextureTileSupport);
     writer->appendBool("Reuse Scratch Textures", fReuseScratchTextures);
     writer->appendBool("Reuse Scratch Buffers", fReuseScratchBuffers);
@@ -308,12 +308,12 @@ bool GrCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src
 
 bool GrCaps::validateSurfaceParams(const SkISize& dimensions, const GrBackendFormat& format,
                                    GrRenderable renderable, int renderTargetSampleCnt,
-                                   GrMipMapped mipped) const {
+                                   GrMipmapped mipped) const {
     if (!this->isFormatTexturable(format)) {
         return false;
     }
 
-    if (GrMipMapped::kYes == mipped && !this->mipMapSupport()) {
+    if (GrMipmapped::kYes == mipped && !this->mipmapSupport()) {
         return false;
     }
 

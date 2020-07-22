@@ -17,7 +17,6 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContext.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
@@ -81,7 +80,7 @@ DEF_SIMPLE_GPU_GM_BG(fpcoordinateoverride, ctx, rtCtx, canvas, 512, 512,
     SkBitmap bmp;
     GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
     GrBitmapTextureMaker maker(ctx, bmp, GrImageTexGenPolicy::kDraw);
-    auto view = maker.view(GrMipMapped::kNo);
+    auto view = maker.view(GrMipmapped::kNo);
     if (!view) {
         return;
     }
@@ -90,7 +89,7 @@ DEF_SIMPLE_GPU_GM_BG(fpcoordinateoverride, ctx, rtCtx, canvas, 512, 512,
     auto fp = std::unique_ptr<GrFragmentProcessor>(new SampleCoordEffect(std::move(imgFP)));
 
     GrPaint grPaint;
-    grPaint.addCoverageFragmentProcessor(std::move(fp));
+    grPaint.setCoverageFragmentProcessor(std::move(fp));
 
     rtCtx->priv().testingOnly_addDrawOp(GrFillRectOp::MakeNonAARect(ctx,
                                                                     std::move(grPaint),

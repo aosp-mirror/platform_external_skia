@@ -160,7 +160,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
                     context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1});
             {
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                        format, kDims, GrRenderable::kNo, 1, GrMipMapped::kNo, SkBackingFit::kExact,
+                        format, kDims, GrRenderable::kNo, 1, GrMipmapped::kNo, SkBackingFit::kExact,
                         SkBudgeted::kYes, GrProtected::kNo);
 
                 {
@@ -229,7 +229,7 @@ static GrColor input_texel_color(int i, int j, SkScalar delta) {
 void test_draw_op(GrContext* context, GrRenderTargetContext* rtc,
                   std::unique_ptr<GrFragmentProcessor> fp) {
     GrPaint paint;
-    paint.addColorFragmentProcessor(std::move(fp));
+    paint.setColorFragmentProcessor(std::move(fp));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
     auto op = GrFillRectOp::MakeNonAARect(context, std::move(paint), SkMatrix::I(),
@@ -285,7 +285,7 @@ class TestFPGenerator {
                 bitmap.setImmutable();
                 GrBitmapTextureMaker maker(fContext, bitmap,
                                            GrImageTexGenPolicy::kNew_Uncached_Budgeted);
-                GrSurfaceProxyView view = maker.view(GrMipMapped::kNo);
+                GrSurfaceProxyView view = maker.view(GrMipmapped::kNo);
                 if (!view.proxy() || !view.proxy()->instantiate(fResourceProvider)) {
                     SkDebugf("Unable to instantiate RGBA8888 test texture.");
                     return false;
@@ -312,7 +312,7 @@ class TestFPGenerator {
                 bitmap.setImmutable();
                 GrBitmapTextureMaker maker(fContext, bitmap,
                                            GrImageTexGenPolicy::kNew_Uncached_Budgeted);
-                GrSurfaceProxyView view = maker.view(GrMipMapped::kNo);
+                GrSurfaceProxyView view = maker.view(GrMipmapped::kNo);
                 if (!view.proxy() || !view.proxy()->instantiate(fResourceProvider)) {
                     SkDebugf("Unable to instantiate A8 test texture.");
                     return false;
@@ -379,7 +379,7 @@ GrSurfaceProxyView make_input_texture(GrRecordingContext* context, int width, in
                          [](void* addr, void* context) { delete[] (GrColor*)addr; }, nullptr);
     bitmap.setImmutable();
     GrBitmapTextureMaker maker(context, bitmap, GrImageTexGenPolicy::kNew_Uncached_Budgeted);
-    return maker.view(GrMipMapped::kNo);
+    return maker.view(GrMipmapped::kNo);
 }
 
 // We tag logged data as unpremul to avoid conversion when encoding as PNG. The input texture

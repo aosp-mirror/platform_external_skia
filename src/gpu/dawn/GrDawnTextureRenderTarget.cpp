@@ -16,9 +16,9 @@ GrDawnTextureRenderTarget::GrDawnTextureRenderTarget(GrDawnGpu* gpu,
                                                      wgpu::TextureView textureView,
                                                      int sampleCnt,
                                                      const GrDawnTextureInfo& textureInfo,
-                                                     GrMipMapsStatus mipMapsStatus)
+                                                     GrMipmapStatus mipmapStatus)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
-        , GrDawnTexture(gpu, dimensions, textureView, textureInfo, mipMapsStatus)
+        , GrDawnTexture(gpu, dimensions, textureView, textureInfo, mipmapStatus)
         , GrDawnRenderTarget(gpu, dimensions, sampleCnt,
                              GrDawnRenderTargetInfo(textureInfo)) {}
 
@@ -30,5 +30,5 @@ size_t GrDawnTextureRenderTarget::onGpuMemorySize() const {
     const GrCaps& caps = *this->getGpu()->caps();
     return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
                                   1, // FIXME: for MSAA
-                                  this->texturePriv().mipMapped());
+                                  this->texturePriv().mipmapped());
 }

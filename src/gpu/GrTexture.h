@@ -74,7 +74,7 @@ public:
     inline const GrTexturePriv texturePriv() const;
 
 protected:
-    GrTexture(GrGpu*, const SkISize&, GrProtected, GrTextureType, GrMipMapsStatus);
+    GrTexture(GrGpu*, const SkISize&, GrProtected, GrTextureType, GrMipmapStatus);
 
     virtual bool onStealBackendTexture(GrBackendTexture*, SkImage::BackendTextureReleaseProc*) = 0;
 
@@ -89,12 +89,12 @@ protected:
 
 private:
     size_t onGpuMemorySize() const override;
-    void markMipMapsDirty();
-    void markMipMapsClean();
+    void markMipmapsDirty();
+    void markMipmapsClean();
 
     GrTextureType                 fTextureType;
-    GrMipMapsStatus               fMipMapsStatus;
-    int                           fMaxMipMapLevel;
+    GrMipmapStatus                fMipmapStatus;
+    int                           fMaxMipmapLevel;
     friend class GrTexturePriv;
     friend class GrTextureResource;
 

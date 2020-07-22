@@ -160,7 +160,7 @@ static std::unique_ptr<GrRenderTargetContext> random_render_target_context(GrCon
 
     return GrRenderTargetContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
-            {kRenderTargetWidth, kRenderTargetHeight}, sampleCnt, GrMipMapped::kNo,
+            {kRenderTargetWidth, kRenderTargetHeight}, sampleCnt, GrMipmapped::kNo,
             GrProtected::kNo, origin);
 }
 
@@ -229,22 +229,17 @@ static void set_random_color_coverage_stages(GrPaint* paint,
     if (d->fRandom->nextF() < procTreeProbability) {
         std::unique_ptr<GrFragmentProcessor> fp(create_random_proc_tree(d, 2, maxTreeLevels));
         if (fp) {
-            paint->addColorFragmentProcessor(std::move(fp));
+            paint->setColorFragmentProcessor(std::move(fp));
         }
     } else {
-        int numProcs = d->fRandom->nextULessThan(maxStages + 1);
-        int numColorProcs = d->fRandom->nextULessThan(numProcs + 1);
-
-        for (int s = 0; s < numProcs; ++s) {
-            std::unique_ptr<GrFragmentProcessor> fp(GrFragmentProcessorTestFactory::Make(d));
-            if (!fp) {
-                continue;
+        if (maxStages >= 1) {
+            if (std::unique_ptr<GrFragmentProcessor> fp = GrFragmentProcessorTestFactory::Make(d)) {
+                paint->setColorFragmentProcessor(std::move(fp));
             }
-            // finally add the stage to the correct pipeline in the drawstate
-            if (s < numColorProcs) {
-                paint->addColorFragmentProcessor(std::move(fp));
-            } else {
-                paint->addCoverageFragmentProcessor(std::move(fp));
+        }
+        if (maxStages >= 2) {
+            if (std::unique_ptr<GrFragmentProcessor> fp = GrFragmentProcessorTestFactory::Make(d)) {
+                paint->setCoverageFragmentProcessor(std::move(fp));
             }
         }
     }
@@ -262,7 +257,7 @@ bool GrDrawingManager::ProgramUnitTest(GrDirectContext* direct, int maxStages, i
     GrProcessorTestData::ViewInfo views[2];
 
     // setup dummy textures
-    GrMipMapped mipMapped = GrMipMapped(caps->mipMapSupport());
+    GrMipmapped mipMapped = GrMipmapped(caps->mipmapSupport());
     {
         static constexpr SkISize kDummyDims = {34, 18};
         const GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
@@ -330,7 +325,7 @@ bool GrDrawingManager::ProgramUnitTest(GrDirectContext* direct, int maxStages, i
             paint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
             auto fp = GrFragmentProcessorTestFactory::MakeIdx(i, &ptd);
             auto blockFP = BlockInputFragmentProcessor::Make(std::move(fp));
-            paint.addColorFragmentProcessor(std::move(blockFP));
+            paint.setColorFragmentProcessor(std::move(blockFP));
             GrDrawRandomOp(&random, renderTargetContext.get(), std::move(paint));
 
             direct->flush(GrFlushInfo());

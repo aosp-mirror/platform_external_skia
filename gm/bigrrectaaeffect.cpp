@@ -17,7 +17,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContext.h"
 #include "include/private/GrSharedEnums.h"
 #include "include/private/GrTypesPriv.h"
 #include "src/gpu/GrCaps.h"
@@ -99,7 +98,7 @@ protected:
                     GrPaint grPaint;
                     grPaint.setColor4f({ 0, 0, 0, 1.f });
                     grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
-                    grPaint.addCoverageFragmentProcessor(std::move(fp));
+                    grPaint.setCoverageFragmentProcessor(std::move(fp));
 
                     SkRect bounds = testBounds;
                     bounds.offset(SkIntToScalar(x), SkIntToScalar(y));

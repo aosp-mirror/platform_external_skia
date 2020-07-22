@@ -342,14 +342,14 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffectImpl::onFilterImage(const Context& 
                                            ctx.colorSpace(), kPremul_SkAlphaType);
 
         GrPaint paint;
-        paint.addColorFragmentProcessor(std::move(fp));
+        paint.setColorFragmentProcessor(std::move(fp));
         paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
         SkMatrix matrix;
         matrix.setTranslate(-SkIntToScalar(colorBounds.x()), -SkIntToScalar(colorBounds.y()));
 
         auto renderTargetContext = GrRenderTargetContext::Make(
                 context, ctx.grColorType(), ctx.refColorSpace(), SkBackingFit::kApprox,
-                bounds.size(), 1, GrMipMapped::kNo, isProtected, kBottomLeft_GrSurfaceOrigin);
+                bounds.size(), 1, GrMipmapped::kNo, isProtected, kBottomLeft_GrSurfaceOrigin);
         if (!renderTargetContext) {
             return nullptr;
         }

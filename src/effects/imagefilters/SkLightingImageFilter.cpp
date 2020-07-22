@@ -467,7 +467,7 @@ void SkLightingImageFilterInternal::drawRect(GrRenderTargetContext* renderTarget
     GrPaint paint;
     auto fp = this->makeFragmentProcessor(std::move(srcView), matrix, srcBounds, boundaryMode,
                                           *renderTargetContext->caps());
-    paint.addColorFragmentProcessor(std::move(fp));
+    paint.setColorFragmentProcessor(std::move(fp));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
     renderTargetContext->fillRectToRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
                                         dstRect, srcRect);
@@ -487,7 +487,7 @@ sk_sp<SkSpecialImage> SkLightingImageFilterInternal::filterImageGPU(
 
     auto renderTargetContext = GrRenderTargetContext::Make(
             context, ctx.grColorType(), ctx.refColorSpace(), SkBackingFit::kApprox,
-            offsetBounds.size(), 1, GrMipMapped::kNo, inputView.proxy()->isProtected(),
+            offsetBounds.size(), 1, GrMipmapped::kNo, inputView.proxy()->isProtected(),
             kBottomLeft_GrSurfaceOrigin);
     if (!renderTargetContext) {
         return nullptr;

@@ -711,7 +711,7 @@ static void test_path(GrContext* ctx,
     GrPaint paint;
     paint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
     if (fp) {
-        paint.addColorFragmentProcessor(std::move(fp));
+        paint.setColorFragmentProcessor(std::move(fp));
     }
 
     SkIRect clipConservativeBounds = SkIRect::MakeWH(renderTargetContext->width(),
@@ -735,7 +735,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests, reporter, ctxInfo) 
     auto ctx = ctxInfo.directContext();
     auto rtc = GrRenderTargetContext::Make(
             ctx, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {800, 800}, 1,
-            GrMipMapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
+            GrMipmapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
     if (!rtc) {
         return;
     }

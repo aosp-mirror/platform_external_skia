@@ -15,9 +15,8 @@
 #include "src/image/SkImage_Base.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
@@ -159,7 +158,7 @@ sk_sp<SkSpecialImage> SkSpecialImage::MakeFromImage(GrRecordingContext* context,
 
 #if SK_SUPPORT_GPU
     if (context) {
-        GrSurfaceProxyView view = as_IB(image)->refView(context, GrMipMapped::kNo);
+        GrSurfaceProxyView view = as_IB(image)->refView(context, GrMipmapped::kNo);
         return MakeDeferredFromGpu(context, subset, image->uniqueID(), view,
                                    SkColorTypeToGrColorType(image->colorType()),
                                    image->refColorSpace(), props);
@@ -409,7 +408,7 @@ public:
                                            fColorSpace);
             }
 
-            auto subsetView = GrSurfaceProxyView::Copy(fContext, fView, GrMipMapped::kNo, *subset,
+            auto subsetView = GrSurfaceProxyView::Copy(fContext, fView, GrMipmapped::kNo, *subset,
                                                        SkBackingFit::kExact, SkBudgeted::kYes);
             if (!subsetView) {
                 return nullptr;

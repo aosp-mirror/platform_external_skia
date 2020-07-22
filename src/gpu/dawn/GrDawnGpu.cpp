@@ -203,15 +203,15 @@ sk_sp<GrTexture> GrDawnGpu::onCreateTexture(SkISize dimensions,
         return nullptr;
     }
 
-    GrMipMapsStatus mipMapsStatus =
-        mipLevelCount > 1 ? GrMipMapsStatus::kDirty : GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus =
+        mipLevelCount > 1 ? GrMipmapStatus::kDirty : GrMipmapStatus::kNotAllocated;
 
     return GrDawnTexture::Make(this, dimensions, format, renderable, renderTargetSampleCnt,
-                               budgeted, mipLevelCount, mipMapsStatus);
+                               budgeted, mipLevelCount, mipmapStatus);
 }
 
 sk_sp<GrTexture> GrDawnGpu::onCreateCompressedTexture(SkISize dimensions, const GrBackendFormat&,
-                                                      SkBudgeted, GrMipMapped, GrProtected,
+                                                      SkBudgeted, GrMipmapped, GrProtected,
                                                       const void* data, size_t dataSize) {
     SkASSERT(!"unimplemented");
     return nullptr;
@@ -227,7 +227,7 @@ sk_sp<GrTexture> GrDawnGpu::onWrapBackendTexture(const GrBackendTexture& backend
     }
 
     SkISize dimensions = { backendTex.width(), backendTex.height() };
-    GrMipMapsStatus status = GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus status = GrMipmapStatus::kNotAllocated;
     return GrDawnTexture::MakeWrapped(this, dimensions, GrRenderable::kNo, 1, status, cacheable,
                                       ioType, info);
 }
@@ -253,7 +253,7 @@ sk_sp<GrTexture> GrDawnGpu::onWrapRenderableBackendTexture(const GrBackendTextur
         return nullptr;
     }
 
-    GrMipMapsStatus status = GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus status = GrMipmapStatus::kNotAllocated;
     return GrDawnTexture::MakeWrapped(this, dimensions, GrRenderable::kYes, sampleCnt, status,
                                       cacheable, kRW_GrIOType, info);
 }
@@ -301,7 +301,7 @@ GrStencilAttachment* GrDawnGpu::createStencilAttachmentForRenderTarget(const GrR
 GrBackendTexture GrDawnGpu::onCreateBackendTexture(SkISize dimensions,
                                                    const GrBackendFormat& backendFormat,
                                                    GrRenderable renderable,
-                                                   GrMipMapped mipMapped,
+                                                   GrMipmapped mipMapped,
                                                    GrProtected isProtected) {
     wgpu::TextureFormat format;
     if (!backendFormat.asDawnFormat(&format)) {
@@ -309,7 +309,7 @@ GrBackendTexture GrDawnGpu::onCreateBackendTexture(SkISize dimensions,
     }
 
     // FIXME: Dawn doesn't support mipmapped render targets (yet).
-    if (mipMapped == GrMipMapped::kYes && GrRenderable::kYes == renderable) {
+    if (mipMapped == GrMipmapped::kYes && GrRenderable::kYes == renderable) {
         return GrBackendTexture();
     }
 
@@ -324,7 +324,7 @@ GrBackendTexture GrDawnGpu::onCreateBackendTexture(SkISize dimensions,
     }
 
     int numMipLevels = 1;
-    if (mipMapped == GrMipMapped::kYes) {
+    if (mipMapped == GrMipmapped::kYes) {
         numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
@@ -404,7 +404,7 @@ bool GrDawnGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
 }
 
 GrBackendTexture GrDawnGpu::onCreateCompressedBackendTexture(
-        SkISize dimensions, const GrBackendFormat&, GrMipMapped, GrProtected) {
+        SkISize dimensions, const GrBackendFormat&, GrMipmapped, GrProtected) {
     return {};
 }
 

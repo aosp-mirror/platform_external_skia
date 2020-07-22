@@ -592,11 +592,11 @@ sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopy(GrContext* ctx, SkYUVColorSpace
 }
 
 #ifndef SK_IMAGE_MAKE_TEXTURE_IMAGE_ALLOW_GR_CONTEXT
-sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext*, GrMipMapped, SkBudgeted) const {
+sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext*, GrMipmapped, SkBudgeted) const {
     return nullptr;
 }
 #else
-sk_sp<SkImage> SkImage::makeTextureImage(GrContext*, GrMipMapped, SkBudgeted) const {
+sk_sp<SkImage> SkImage::makeTextureImage(GrContext*, GrMipmapped, SkBudgeted) const {
     return nullptr;
 }
 #endif
@@ -617,16 +617,16 @@ sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool SkImage_pinAsTexture(const SkImage* image, GrContext* ctx) {
+bool SkImage_pinAsTexture(const SkImage* image, GrRecordingContext* rContext) {
     SkASSERT(image);
-    SkASSERT(ctx);
-    return as_IB(image)->onPinAsTexture(ctx);
+    SkASSERT(rContext);
+    return as_IB(image)->onPinAsTexture(rContext);
 }
 
-void SkImage_unpinAsTexture(const SkImage* image, GrContext* ctx) {
+void SkImage_unpinAsTexture(const SkImage* image, GrRecordingContext* rContext) {
     SkASSERT(image);
-    SkASSERT(ctx);
-    as_IB(image)->onUnpinAsTexture(ctx);
+    SkASSERT(rContext);
+    as_IB(image)->onUnpinAsTexture(rContext);
 }
 
 SkIRect SkImage_getSubset(const SkImage* image) {
