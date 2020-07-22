@@ -228,14 +228,14 @@ DEF_SIMPLE_GPU_GM(fp_sample_chaining, ctx, rtCtx, canvas, 380, 306) {
 #if 0
         auto fp = std::unique_ptr<GrFragmentProcessor>(new TestPatternEffect());
 #else
-        auto view = maker.view(GrMipMapped::kNo);
+        auto view = maker.view(GrMipmapped::kNo);
         auto fp = GrTextureEffect::Make(std::move(view), maker.alphaType());
 #endif
         for (EffectType effectType : effects) {
             fp = wrap(std::move(fp), effectType);
         }
         GrPaint paint;
-        paint.addColorFragmentProcessor(std::move(fp));
+        paint.setColorFragmentProcessor(std::move(fp));
         rtCtx->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::Translate(x, y),
                         SkRect::MakeIWH(64, 64));
         nextCol();

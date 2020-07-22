@@ -56,7 +56,7 @@ static bool draw_mask(GrRenderTargetContext* renderTargetContext,
     SkMatrix matrix = SkMatrix::Translate(-SkIntToScalar(maskRect.fLeft),
                                           -SkIntToScalar(maskRect.fTop));
     matrix.preConcat(viewMatrix);
-    paint.addCoverageFragmentProcessor(
+    paint.setCoverageFragmentProcessor(
             GrTextureEffect::Make(std::move(mask), kUnknown_SkAlphaType, matrix));
 
     renderTargetContext->fillRectWithLocalMatrix(clip, std::move(paint), GrAA::kNo, SkMatrix::I(),
@@ -153,7 +153,7 @@ static bool sw_draw_with_mask_filter(GrRecordingContext* context,
         bm.setImmutable();
 
         GrBitmapTextureMaker maker(context, bm, SkBackingFit::kApprox);
-        filteredMaskView = maker.view(GrMipMapped::kNo);
+        filteredMaskView = maker.view(GrMipmapped::kNo);
         if (!filteredMaskView.proxy()) {
             return false;
         }
@@ -189,7 +189,7 @@ static std::unique_ptr<GrRenderTargetContext> create_mask_GPU(GrRecordingContext
     auto approxSize = GrResourceProvider::MakeApprox(maskRect.size());
     auto rtContext = GrRenderTargetContext::MakeWithFallback(
             context, GrColorType::kAlpha_8, nullptr, SkBackingFit::kExact, approxSize, sampleCnt,
-            GrMipMapped::kNo, GrProtected::kNo, kMaskOrigin);
+            GrMipmapped::kNo, GrProtected::kNo, kMaskOrigin);
     if (!rtContext) {
         return nullptr;
     }

@@ -64,7 +64,7 @@ public:
         }
 
         void visitProxies(const VisitProxyFunc& func) const override {
-            func(fProxy.get(), GrMipMapped::kNo);
+            func(fProxy.get(), GrMipmapped::kNo);
         }
 
         void onExecute(GrOpFlushState*, const SkRect& chainBounds) override {
@@ -93,7 +93,7 @@ public:
                             static constexpr SkISize kDimensions = {1234, 567};
                             sk_sp<GrTexture> texture = rp->createTexture(
                                     kDimensions, desc.fFormat, desc.fRenderable, desc.fSampleCnt,
-                                    desc.fMipMapped, desc.fBudgeted, desc.fProtected);
+                                    desc.fMipmapped, desc.fBudgeted, desc.fProtected);
                             REPORTER_ASSERT(fTest->fReporter, texture);
                             return texture;
                         }
@@ -231,7 +231,7 @@ DEF_GPUTEST(LazyProxyReleaseTest, reporter, /* options */) {
                                                            GrRenderable::kNo);
 
     auto tex = ctx->priv().resourceProvider()->createTexture({kSize, kSize}, format,
-                                                             GrRenderable::kNo, 1, GrMipMapped::kNo,
+                                                             GrRenderable::kNo, 1, GrMipmapped::kNo,
                                                              SkBudgeted::kNo, GrProtected::kNo);
     using LazyInstantiationResult = GrSurfaceProxy::LazyCallbackResult;
     for (bool doInstantiate : {true, false}) {
@@ -273,7 +273,7 @@ DEF_GPUTEST(LazyProxyReleaseTest, reporter, /* options */) {
             };
             sk_sp<GrTextureProxy> proxy = proxyProvider->createLazyProxy(
                     TestCallback(&testCount, releaseCallback, tex), format, {kSize, kSize},
-                    GrRenderable::kNo, 1, GrMipMapped::kNo, GrMipMapsStatus::kNotAllocated,
+                    GrRenderable::kNo, 1, GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
                     GrInternalSurfaceFlags::kNone, SkBackingFit::kExact, SkBudgeted::kNo,
                     GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
 
@@ -315,7 +315,7 @@ public:
     }
 
     void visitProxies(const VisitProxyFunc& func) const override {
-        func(fLazyProxy.get(), GrMipMapped::kNo);
+        func(fLazyProxy.get(), GrMipmapped::kNo);
     }
 
 private:
@@ -339,12 +339,12 @@ private:
                         return {};
                     }
                     return {rp->createTexture(desc.fDimensions, desc.fFormat, desc.fRenderable,
-                                              desc.fSampleCnt, desc.fMipMapped, desc.fBudgeted,
+                                              desc.fSampleCnt, desc.fMipmapped, desc.fBudgeted,
                                               desc.fProtected),
                             true, GrSurfaceProxy::LazyInstantiationKeyMode::kUnsynced};
                 },
-                format, dims, GrRenderable::kNo, 1, GrMipMapped::kNo,
-                GrMipMapsStatus::kNotAllocated, GrInternalSurfaceFlags::kNone, SkBackingFit::kExact,
+                format, dims, GrRenderable::kNo, 1, GrMipmapped::kNo,
+                GrMipmapStatus::kNotAllocated, GrInternalSurfaceFlags::kNone, SkBackingFit::kExact,
                 SkBudgeted::kNo, GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
 
         SkASSERT(fLazyProxy.get());

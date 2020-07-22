@@ -647,10 +647,10 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
         desc.fOwnership = GrBackendObjectOwnership::kOwned;
     }
 
-    GrMipMapsStatus mipMapsStatus = backendTex.hasMipMaps() ? GrMipMapsStatus::kValid
-                                                            : GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = backendTex.hasMipmaps() ? GrMipmapStatus::kValid
+                                                          : GrMipmapStatus::kNotAllocated;
 
-    auto texture = GrGLTexture::MakeWrapped(this, mipMapsStatus, desc,
+    auto texture = GrGLTexture::MakeWrapped(this, mipmapStatus, desc,
                                             backendTex.getGLTextureParams(), cacheable, ioType);
     // We don't know what parameters are already set on wrapped textures.
     texture->textureParamsModified();
@@ -699,10 +699,10 @@ sk_sp<GrTexture> GrGLGpu::onWrapCompressedBackendTexture(const GrBackendTexture&
         desc.fOwnership = GrBackendObjectOwnership::kOwned;
     }
 
-    GrMipMapsStatus mipMapsStatus = backendTex.hasMipMaps() ? GrMipMapsStatus::kValid
-                                                            : GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = backendTex.hasMipmaps() ? GrMipmapStatus::kValid
+                                                          : GrMipmapStatus::kNotAllocated;
 
-    auto texture = GrGLTexture::MakeWrapped(this, mipMapsStatus, desc,
+    auto texture = GrGLTexture::MakeWrapped(this, mipmapStatus, desc,
                                             backendTex.getGLTextureParams(), cacheable,
                                             kRead_GrIOType);
     // We don't know what parameters are already set on wrapped textures.
@@ -743,12 +743,12 @@ sk_sp<GrTexture> GrGLGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
         return nullptr;
     }
 
-    GrMipMapsStatus mipMapsStatus = backendTex.hasMipMaps() ? GrMipMapsStatus::kDirty
-                                                            : GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = backendTex.hasMipmaps() ? GrMipmapStatus::kDirty
+                                                          : GrMipmapStatus::kNotAllocated;
 
     sk_sp<GrGLTextureRenderTarget> texRT(GrGLTextureRenderTarget::MakeWrapped(
             this, sampleCnt, desc, backendTex.getGLTextureParams(), rtIDs, cacheable,
-            mipMapsStatus));
+            mipmapStatus));
     texRT->baseLevelWasBoundToFBO();
     // We don't know what parameters are already set on wrapped textures.
     texRT->textureParamsModified();
@@ -1043,7 +1043,7 @@ void GrGLGpu::uploadTexData(SkISize texDims,
 bool GrGLGpu::uploadCompressedTexData(SkImage::CompressionType compressionType,
                                       GrGLFormat format,
                                       SkISize dimensions,
-                                      GrMipMapped mipMapped,
+                                      GrMipmapped mipMapped,
                                       GrGLenum target,
                                       const void* data, size_t dataSize) {
     SkASSERT(format != GrGLFormat::kUnknown);
@@ -1060,7 +1060,7 @@ bool GrGLGpu::uploadCompressedTexData(SkImage::CompressionType compressionType,
     bool useTexStorage = caps.formatSupportsTexStorage(format);
 
     int numMipLevels = 1;
-    if (mipMapped == GrMipMapped::kYes) {
+    if (mipMapped == GrMipmapped::kYes) {
         numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height())+1;
     }
 
@@ -1274,8 +1274,8 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(SkISize dimensions,
     SkASSERT(GrGLCaps::kNone_MSFBOType != this->glCaps().msFBOType() || renderTargetSampleCnt == 1);
 
     SkASSERT(mipLevelCount > 0);
-    GrMipMapsStatus mipMapsStatus =
-            mipLevelCount > 1 ? GrMipMapsStatus::kDirty : GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus =
+            mipLevelCount > 1 ? GrMipmapStatus::kDirty : GrMipmapStatus::kNotAllocated;
     GrGLTextureParameters::SamplerOverriddenState initialState;
     GrGLTexture::Desc texDesc;
     texDesc.fSize = dimensions;
@@ -1316,10 +1316,10 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(SkISize dimensions,
             return return_null_texture();
         }
         tex = sk_make_sp<GrGLTextureRenderTarget>(
-                this, budgeted, renderTargetSampleCnt, texDesc, rtIDDesc, mipMapsStatus);
+                this, budgeted, renderTargetSampleCnt, texDesc, rtIDDesc, mipmapStatus);
         tex->baseLevelWasBoundToFBO();
     } else {
-        tex = sk_make_sp<GrGLTexture>(this, budgeted, texDesc, mipMapsStatus);
+        tex = sk_make_sp<GrGLTexture>(this, budgeted, texDesc, mipmapStatus);
     }
     // The non-sampler params are still at their default values.
     tex->parameters()->set(&initialState, GrGLTextureParameters::NonsamplerState(),
@@ -1364,7 +1364,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(SkISize dimensions,
 sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(SkISize dimensions,
                                                     const GrBackendFormat& format,
                                                     SkBudgeted budgeted,
-                                                    GrMipMapped mipMapped,
+                                                    GrMipmapped mipMapped,
                                                     GrProtected isProtected,
                                                     const void* data, size_t dataSize) {
     // We don't support protected textures in GL.
@@ -1396,11 +1396,11 @@ sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(SkISize dimensions,
     // Unbind this texture from the scratch texture unit.
     this->bindTextureToScratchUnit(GR_GL_TEXTURE_2D, 0);
 
-    GrMipMapsStatus mipMapsStatus = mipMapped == GrMipMapped::kYes
-                                                            ? GrMipMapsStatus::kValid
-                                                            : GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = mipMapped == GrMipmapped::kYes
+                                                            ? GrMipmapStatus::kValid
+                                                            : GrMipmapStatus::kNotAllocated;
 
-    auto tex = sk_make_sp<GrGLTexture>(this, budgeted, desc, mipMapsStatus);
+    auto tex = sk_make_sp<GrGLTexture>(this, budgeted, desc, mipmapStatus);
     // The non-sampler params are still at their default values.
     tex->parameters()->set(&initialState, GrGLTextureParameters::NonsamplerState(),
                            fResetTimestampForTextureParameters);
@@ -1408,7 +1408,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(SkISize dimensions,
 }
 
 GrBackendTexture GrGLGpu::onCreateCompressedBackendTexture(
-        SkISize dimensions, const GrBackendFormat& format, GrMipMapped mipMapped,
+        SkISize dimensions, const GrBackendFormat& format, GrMipmapped mipMapped,
         GrProtected isProtected) {
     // We don't support protected textures in GL.
     if (isProtected == GrProtected::kYes) {
@@ -1462,7 +1462,7 @@ bool GrGLGpu::onUpdateCompressedBackendTexture(const GrBackendTexture& backendTe
     }
     SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
 
-    GrMipMapped mipMapped = backendTexture.hasMipMaps() ? GrMipMapped::kYes : GrMipMapped::kNo;
+    GrMipmapped mipMapped = backendTexture.hasMipmaps() ? GrMipmapped::kYes : GrMipmapped::kNo;
 
     const char* rawData = nullptr;
     size_t rawDataSize = 0;
@@ -1475,7 +1475,7 @@ bool GrGLGpu::onUpdateCompressedBackendTexture(const GrBackendTexture& backendTe
         SkASSERT(compression != SkImage::CompressionType::kNone);
 
         rawDataSize = SkCompressedDataSize(compression, backendTexture.dimensions(), nullptr,
-                                           backendTexture.hasMipMaps());
+                                           backendTexture.hasMipmaps());
 
         am.reset(rawDataSize);
 
@@ -1602,7 +1602,7 @@ GrGLuint GrGLGpu::createCompressedTexture2D(
         SkISize dimensions,
         SkImage::CompressionType compression,
         GrGLFormat format,
-        GrMipMapped mipMapped,
+        GrMipmapped mipMapped,
         GrGLTextureParameters::SamplerOverriddenState* initialState) {
     if (format == GrGLFormat::kUnknown) {
         return 0;
@@ -2575,8 +2575,8 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
     }
 
     if (samplerState.filter() == GrSamplerState::Filter::kMipMap) {
-        if (!this->caps()->mipMapSupport() ||
-            texture->texturePriv().mipMapped() == GrMipMapped::kNo) {
+        if (!this->caps()->mipmapSupport() ||
+            texture->texturePriv().mipmapped() == GrMipmapped::kNo) {
             samplerState.setFilterMode(GrSamplerState::Filter::kLinear);
         }
     }
@@ -2584,7 +2584,7 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
 #ifdef SK_DEBUG
     // We were supposed to ensure MipMaps were up-to-date before getting here.
     if (samplerState.filter() == GrSamplerState::Filter::kMipMap) {
-        SkASSERT(!texture->texturePriv().mipMapsAreDirty());
+        SkASSERT(!texture->texturePriv().mipmapsAreDirty());
     }
 #endif
 
@@ -2595,7 +2595,7 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
     GrGLTextureParameters::SamplerOverriddenState newSamplerState;
     if (fSamplerObjectCache) {
         fSamplerObjectCache->bindSampler(unitIdx, samplerState);
-        if (this->glCaps().mustSetTexParameterMinFilterToEnableMipMapping()) {
+        if (this->glCaps().mustSetTexParameterMinFilterToEnableMipmapping()) {
             if (samplerState.filter() == GrSamplerState::Filter::kMipMap) {
                 const GrGLTextureParameters::SamplerOverriddenState& oldSamplerState =
                         texture->parameters()->samplerOverriddenState();
@@ -2632,7 +2632,7 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
             this->setTextureUnit(unitIdx);
             GL_CALL(TexParameteri(target, GR_GL_TEXTURE_MIN_FILTER, newSamplerState.fMinFilter));
         }
-        if (this->glCaps().mipMapLevelAndLodControlSupport()) {
+        if (this->glCaps().mipmapLevelAndLodControlSupport()) {
             if (setAll || newSamplerState.fMinLOD != oldSamplerState.fMinLOD) {
                 this->setTextureUnit(unitIdx);
                 GL_CALL(TexParameterf(target, GR_GL_TEXTURE_MIN_LOD, newSamplerState.fMinLOD));
@@ -2661,7 +2661,7 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
     }
     GrGLTextureParameters::NonsamplerState newNonsamplerState;
     newNonsamplerState.fBaseMipMapLevel = 0;
-    newNonsamplerState.fMaxMipMapLevel = texture->texturePriv().maxMipMapLevel();
+    newNonsamplerState.fMaxMipmapLevel = texture->texturePriv().maxMipmapLevel();
 
     const GrGLTextureParameters::NonsamplerState& oldNonsamplerState =
             texture->parameters()->nonsamplerState();
@@ -2685,7 +2685,7 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
         }
     }
     // These are not supported in ES2 contexts
-    if (this->glCaps().mipMapLevelAndLodControlSupport() &&
+    if (this->glCaps().mipmapLevelAndLodControlSupport() &&
         (texture->texturePriv().textureType() != GrTextureType::kExternal ||
          !this->glCaps().dontSetBaseOrMaxLevelForExternalTextures())) {
         if (newNonsamplerState.fBaseMipMapLevel != oldNonsamplerState.fBaseMipMapLevel) {
@@ -2693,10 +2693,10 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
             GL_CALL(TexParameteri(target, GR_GL_TEXTURE_BASE_LEVEL,
                                   newNonsamplerState.fBaseMipMapLevel));
         }
-        if (newNonsamplerState.fMaxMipMapLevel != oldNonsamplerState.fMaxMipMapLevel) {
+        if (newNonsamplerState.fMaxMipmapLevel != oldNonsamplerState.fMaxMipmapLevel) {
             this->setTextureUnit(unitIdx);
             GL_CALL(TexParameteri(target, GR_GL_TEXTURE_MAX_LEVEL,
-                                  newNonsamplerState.fMaxMipMapLevel));
+                                  newNonsamplerState.fMaxMipmapLevel));
         }
     }
     texture->parameters()->set(samplerStateToRecord, newNonsamplerState,
@@ -3411,7 +3411,7 @@ bool GrGLGpu::onRegenerateMipMapLevels(GrTexture* texture) {
     int width = texture->width();
     int height = texture->height();
     int levelCount = SkMipmap::ComputeLevelCount(width, height) + 1;
-    SkASSERT(levelCount == texture->texturePriv().maxMipMapLevel() + 1);
+    SkASSERT(levelCount == texture->texturePriv().maxMipmapLevel() + 1);
 
     // Create (if necessary), then bind temporary FBO:
     if (0 == fTempDstFBOID) {
@@ -3552,7 +3552,7 @@ void GrGLGpu::insertManualFramebufferBarrier() {
 GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
                                                  const GrBackendFormat& format,
                                                  GrRenderable renderable,
-                                                 GrMipMapped mipMapped,
+                                                 GrMipmapped mipMapped,
                                                  GrProtected isProtected) {
     // We don't support protected textures in GL.
     if (isProtected == GrProtected::kYes) {
@@ -3567,7 +3567,7 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
     }
 
     int numMipLevels = 1;
-    if (mipMapped == GrMipMapped::kYes) {
+    if (mipMapped == GrMipmapped::kYes) {
         numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
@@ -3588,7 +3588,7 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
             info.fTarget = GR_GL_TEXTURE_2D;
             break;
         case GrTextureType::kRectangle:
-            if (!this->glCaps().rectangleTextureSupport() || mipMapped == GrMipMapped::kYes) {
+            if (!this->glCaps().rectangleTextureSupport() || mipMapped == GrMipmapped::kYes) {
                 return {};
             }
             info.fTarget = GR_GL_TEXTURE_RECTANGLE;
@@ -3620,7 +3620,7 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
     SkAssertResult(backendTexture.getGLTextureInfo(&info));
 
     int numMipLevels = 1;
-    if (backendTexture.hasMipMaps()) {
+    if (backendTexture.hasMipmaps()) {
         numMipLevels =
                 SkMipmap::ComputeLevelCount(backendTexture.width(), backendTexture.height()) + 1;
     }
@@ -3631,14 +3631,14 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
 
     // If we have mips make sure the base level is set to 0 and the max level set to numMipLevels-1
     // so that the uploads go to the right levels.
-    if (numMipLevels && this->glCaps().mipMapLevelAndLodControlSupport()) {
+    if (numMipLevels && this->glCaps().mipmapLevelAndLodControlSupport()) {
         auto params = backendTexture.getGLTextureParams();
         GrGLTextureParameters::NonsamplerState nonsamplerState = params->nonsamplerState();
         if (params->nonsamplerState().fBaseMipMapLevel != 0) {
             GL_CALL(TexParameteri(info.fTarget, GR_GL_TEXTURE_BASE_LEVEL, 0));
             nonsamplerState.fBaseMipMapLevel = 0;
         }
-        if (params->nonsamplerState().fMaxMipMapLevel != (numMipLevels - 1)) {
+        if (params->nonsamplerState().fMaxMipmapLevel != (numMipLevels - 1)) {
             GL_CALL(TexParameteri(info.fTarget, GR_GL_TEXTURE_MAX_LEVEL, numMipLevels - 1));
             nonsamplerState.fBaseMipMapLevel = numMipLevels - 1;
         }

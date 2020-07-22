@@ -127,7 +127,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
         SkISize dimensions,
         const GrBackendFormat& format,
         int sampleCnt,
-        GrMipMapped mipMapped,
+        GrMipmapped mipMapped,
         GrProtected isProtected,
         GrSurfaceOrigin origin,
         SkBudgeted budgeted,
@@ -163,7 +163,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
         SkBackingFit fit,
         SkISize dimensions,
         int sampleCnt,
-        GrMipMapped mipMapped,
+        GrMipmapped mipMapped,
         GrProtected isProtected,
         GrSurfaceOrigin origin,
         SkBudgeted budgeted,
@@ -222,7 +222,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::MakeWithFallback(
         SkBackingFit fit,
         SkISize dimensions,
         int sampleCnt,
-        GrMipMapped mipMapped,
+        GrMipmapped mipMapped,
         GrProtected isProtected,
         GrSurfaceOrigin origin,
         SkBudgeted budgeted,
@@ -370,11 +370,11 @@ inline GrAAType GrRenderTargetContext::chooseAAType(GrAA aa) {
     return (this->numSamples() > 1) ? GrAAType::kMSAA : GrAAType::kCoverage;
 }
 
-GrMipMapped GrRenderTargetContext::mipMapped() const {
+GrMipmapped GrRenderTargetContext::mipmapped() const {
     if (const GrTextureProxy* proxy = this->asTextureProxy()) {
-        return proxy->mipMapped();
+        return proxy->mipmapped();
     }
-    return GrMipMapped::kNo;
+    return GrMipmapped::kNo;
 }
 
 GrOpsTask* GrRenderTargetContext::getOpsTask() {
@@ -776,8 +776,7 @@ void GrRenderTargetContext::drawFilledQuad(const GrClip* clip,
 
     SkPMColor4f* constColor = nullptr;
     SkPMColor4f paintColor;
-    if (!ss && !paint.numCoverageFragmentProcessors() &&
-        paint.isConstantBlendedColor(&paintColor)) {
+    if (!ss && !paint.hasCoverageFragmentProcessor() && paint.isConstantBlendedColor(&paintColor)) {
         // Only consider clears/rrects when it's easy to guarantee 100% fill with single color
         constColor = &paintColor;
     }
@@ -1444,7 +1443,7 @@ bool GrRenderTargetContext::drawFilledDRRect(const GrClip* clip,
         return false;
     }
 
-    paint.addCoverageFragmentProcessor(std::move(fp));
+    paint.setCoverageFragmentProcessor(std::move(fp));
 
     SkRect bounds = outer->getBounds();
     if (GrAAType::kCoverage == aaType) {
@@ -2093,7 +2092,7 @@ bool GrRenderTargetContext::setupDstProxyView(const GrOp& op,
         fit = SkBackingFit::kApprox;
     }
     auto copy =
-            GrSurfaceProxy::Copy(fContext, this->asSurfaceProxy(), this->origin(), GrMipMapped::kNo,
+            GrSurfaceProxy::Copy(fContext, this->asSurfaceProxy(), this->origin(), GrMipmapped::kNo,
                                  copyRect, fit, SkBudgeted::kYes, restrictions.fRectsMustMatch);
     SkASSERT(copy);
 
@@ -2119,7 +2118,7 @@ bool GrRenderTargetContext::blitTexture(GrSurfaceProxyView view, const SkIRect& 
     if (!fp) {
         return false;
     }
-    paint.addColorFragmentProcessor(std::move(fp));
+    paint.setColorFragmentProcessor(std::move(fp));
 
     this->fillRectToRect(
             nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),

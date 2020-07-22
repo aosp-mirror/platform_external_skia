@@ -8,7 +8,6 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContext.h"
 #include "include/gpu/mtl/GrMtlTypes.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
@@ -46,7 +45,7 @@ sk_sp<SkSurface> SkSurface::MakeFromCAMetalLayer(GrContext* context,
     SkISize dims = {(int)metalLayer.drawableSize.width, (int)metalLayer.drawableSize.height};
 
     GrProxyProvider::TextureInfo texInfo;
-    texInfo.fMipMapped = GrMipMapped::kNo;
+    texInfo.fMipmapped = GrMipmapped::kNo;
     texInfo.fTextureType = GrTextureType::k2D;
 
     sk_sp<GrRenderTargetProxy> proxy = proxyProvider->createLazyRenderTargetProxy(
@@ -78,7 +77,7 @@ sk_sp<SkSurface> SkSurface::MakeFromCAMetalLayer(GrContext* context,
             sampleCnt > 1 ? GrInternalSurfaceFlags::kRequiresManualMSAAResolve
                           : GrInternalSurfaceFlags::kNone,
             metalLayer.framebufferOnly ? nullptr : &texInfo,
-            GrMipMapsStatus::kNotAllocated,
+            GrMipmapStatus::kNotAllocated,
             SkBackingFit::kExact,
             SkBudgeted::kYes,
             GrProtected::kNo,
@@ -117,7 +116,7 @@ sk_sp<SkSurface> SkSurface::MakeFromMTKView(GrContext* context,
     SkISize dims = {(int)mtkView.drawableSize.width, (int)mtkView.drawableSize.height};
 
     GrProxyProvider::TextureInfo texInfo;
-    texInfo.fMipMapped = GrMipMapped::kNo;
+    texInfo.fMipmapped = GrMipmapped::kNo;
     texInfo.fTextureType = GrTextureType::k2D;
 
     sk_sp<GrRenderTargetProxy> proxy = proxyProvider->createLazyRenderTargetProxy(
@@ -148,7 +147,7 @@ sk_sp<SkSurface> SkSurface::MakeFromMTKView(GrContext* context,
             sampleCnt > 1 ? GrInternalSurfaceFlags::kRequiresManualMSAAResolve
                           : GrInternalSurfaceFlags::kNone,
             mtkView.framebufferOnly ? nullptr : &texInfo,
-            GrMipMapsStatus::kNotAllocated,
+            GrMipmapStatus::kNotAllocated,
             SkBackingFit::kExact,
             SkBudgeted::kYes,
             GrProtected::kNo,

@@ -17,19 +17,19 @@
 // Tests that MIP maps are created and invalidated as expected when drawing to and from GrTextures.
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrTextureMipMapInvalidationTest, reporter, ctxInfo) {
     auto context = ctxInfo.directContext();
-    if (!context->priv().caps()->mipMapSupport()) {
+    if (!context->priv().caps()->mipmapSupport()) {
         return;
     }
 
     auto isMipped = [] (SkSurface* surf) {
         SkImage_GpuBase* image = static_cast<SkImage_GpuBase*>(as_IB(surf->makeImageSnapshot()));
         const GrTexture* texture = image->getTexture();
-        return GrMipMapped::kYes == texture->texturePriv().mipMapped();
+        return GrMipmapped::kYes == texture->texturePriv().mipmapped();
     };
 
     auto mipsAreDirty = [] (SkSurface* surf) {
         SkImage_GpuBase* image = static_cast<SkImage_GpuBase*>(as_IB(surf->makeImageSnapshot()));
-        return image->getTexture()->texturePriv().mipMapsAreDirty();
+        return image->getTexture()->texturePriv().mipmapsAreDirty();
     };
 
     auto info = SkImageInfo::MakeN32Premul(256, 256);
@@ -66,7 +66,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrTextureMipMapInvalidationTest, reporter, ct
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReimportImageTextureWithMipLevels, reporter, ctxInfo) {
     auto ctx = ctxInfo.directContext();
-    if (!ctx->priv().caps()->mipMapSupport()) {
+    if (!ctx->priv().caps()->mipmapSupport()) {
         return;
     }
     static constexpr auto kCreateWithMipMaps = true;
@@ -90,7 +90,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReimportImageTextureWithMipLevels, reporter, 
         // ERRORF(reporter, "Could not turn image into texture");
         return;
     }
-    REPORTER_ASSERT(reporter, btex.hasMipMaps());
+    REPORTER_ASSERT(reporter, btex.hasMipmaps());
     // Reimport the texture as an image and perform a downsampling draw with medium quality which
     // should use the upper MIP levels.
     img = SkImage::MakeFromTexture(ctx, btex, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,

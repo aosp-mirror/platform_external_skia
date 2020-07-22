@@ -269,16 +269,16 @@ bool GrDrawingManager::flush(
             // OnFlush callbacks are invoked during flush, and are therefore expected to handle
             // resource allocation & usage on their own. (No deferred or lazy proxies!)
             onFlushRenderTask->visitTargetAndSrcProxies_debugOnly(
-                    [](GrSurfaceProxy* p, GrMipMapped mipMapped) {
+                    [](GrSurfaceProxy* p, GrMipmapped mipMapped) {
                 SkASSERT(!p->asTextureProxy() || !p->asTextureProxy()->texPriv().isDeferred());
                 SkASSERT(!p->isLazy());
                 if (p->requiresManualMSAAResolve()) {
                     // The onFlush callback is responsible for ensuring MSAA gets resolved.
                     SkASSERT(p->asRenderTargetProxy() && !p->asRenderTargetProxy()->isMSAADirty());
                 }
-                if (GrMipMapped::kYes == mipMapped) {
+                if (GrMipmapped::kYes == mipMapped) {
                     // The onFlush callback is responsible for regenerating mips if needed.
-                    SkASSERT(p->asTextureProxy() && !p->asTextureProxy()->mipMapsAreDirty());
+                    SkASSERT(p->asTextureProxy() && !p->asTextureProxy()->mipmapsAreDirty());
                 }
             });
 #endif
@@ -513,10 +513,10 @@ static void resolve_and_mipmap(GrGpu* gpu, GrSurfaceProxy* proxy) {
     // (This special case is exercised by the ReimportImageTextureWithMipLevels test.)
     // FIXME: It may be more ideal to plumb down a "we're going to steal the backends" flag.
     if (auto* textureProxy = proxy->asTextureProxy()) {
-        if (textureProxy->mipMapsAreDirty()) {
+        if (textureProxy->mipmapsAreDirty()) {
             SkASSERT(textureProxy->peekTexture());
             gpu->regenerateMipMapLevels(textureProxy->peekTexture());
-            textureProxy->markMipMapsClean();
+            textureProxy->markMipmapsClean();
         }
     }
 }
@@ -656,8 +656,8 @@ void GrDrawingManager::copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList>
                                ddl->characterization().origin());
     }
     GrTextureProxy* newTextureProxy = newDest->asTextureProxy();
-    if (newTextureProxy && GrMipMapped::kYes == newTextureProxy->mipMapped()) {
-        newTextureProxy->markMipMapsDirty();
+    if (newTextureProxy && GrMipmapped::kYes == newTextureProxy->mipmapped()) {
+        newTextureProxy->markMipmapsDirty();
     }
 
     this->addDDLTarget(newDest, ddl->priv().targetProxy());
@@ -861,9 +861,9 @@ void GrDrawingManager::newTransferFromRenderTask(sk_sp<GrSurfaceProxy> srcProxy,
 
     const GrCaps& caps = *fContext->priv().caps();
 
-    // We always say GrMipMapped::kNo here since we are always just copying from the base layer. We
+    // We always say GrMipmapped::kNo here since we are always just copying from the base layer. We
     // don't need to make sure the whole mip map chain is valid.
-    task->addDependency(this, srcProxy.get(), GrMipMapped::kNo,
+    task->addDependency(this, srcProxy.get(), GrMipmapped::kNo,
                         GrTextureResolveManager(this), caps);
     task->makeClosed(caps);
 
@@ -892,9 +892,9 @@ bool GrDrawingManager::newCopyRenderTask(GrSurfaceProxyView srcView,
         return false;
     }
 
-    // We always say GrMipMapped::kNo here since we are always just copying from the base layer to
+    // We always say GrMipmapped::kNo here since we are always just copying from the base layer to
     // another base layer. We don't need to make sure the whole mip map chain is valid.
-    task->addDependency(this, srcProxy, GrMipMapped::kNo, GrTextureResolveManager(this), caps);
+    task->addDependency(this, srcProxy, GrMipmapped::kNo, GrTextureResolveManager(this), caps);
     task->makeClosed(caps);
 
     // We have closed the previous active oplist but since a new oplist isn't being added there

@@ -75,7 +75,7 @@ public:
      * The bitmap is uploaded to the texture proxy assuming a kTopLeft_GrSurfaceOrigin.
      */
     sk_sp<GrTextureProxy> createProxyFromBitmap(const SkBitmap&,
-                                                GrMipMapped,
+                                                GrMipmapped,
                                                 SkBackingFit,
                                                 SkBudgeted);
 
@@ -86,7 +86,7 @@ public:
                                       SkISize dimensions,
                                       GrRenderable,
                                       int renderTargetSampleCnt,
-                                      GrMipMapped,
+                                      GrMipmapped,
                                       SkBackingFit,
                                       SkBudgeted,
                                       GrProtected,
@@ -98,7 +98,7 @@ public:
      */
     sk_sp<GrTextureProxy> createCompressedTextureProxy(SkISize dimensions,
                                                        SkBudgeted,
-                                                       GrMipMapped,
+                                                       GrMipmapped,
                                                        GrProtected,
                                                        SkImage::CompressionType,
                                                        sk_sp<SkData> data);
@@ -151,7 +151,7 @@ public:
     using LazyInstantiateCallback = GrSurfaceProxy::LazyInstantiateCallback;
 
     struct TextureInfo {
-        GrMipMapped fMipMapped;
+        GrMipmapped fMipmapped;
         GrTextureType fTextureType;
     };
 
@@ -170,8 +170,8 @@ public:
                                           SkISize dimensions,
                                           GrRenderable,
                                           int renderTargetSampleCnt,
-                                          GrMipMapped,
-                                          GrMipMapsStatus,
+                                          GrMipmapped,
+                                          GrMipmapStatus,
                                           GrInternalSurfaceFlags,
                                           SkBackingFit,
                                           SkBudgeted,
@@ -185,7 +185,7 @@ public:
                                                            int renderTargetSampleCnt,
                                                            GrInternalSurfaceFlags,
                                                            const TextureInfo*,
-                                                           GrMipMapsStatus,
+                                                           GrMipmapStatus,
                                                            SkBackingFit,
                                                            SkBudgeted,
                                                            GrProtected,

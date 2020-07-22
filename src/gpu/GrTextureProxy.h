@@ -31,25 +31,25 @@ public:
     // claim to not need mips at creation time, but the instantiation happens to give us a mipped
     // target. In that case we should use that for our benefit to avoid possible copies/mip
     // generation later.
-    GrMipMapped mipMapped() const;
+    GrMipmapped mipmapped() const;
 
-    bool mipMapsAreDirty() const {
-        SkASSERT((GrMipMapped::kNo == fMipMapped) ==
-                 (GrMipMapsStatus::kNotAllocated == fMipMapsStatus));
-        return GrMipMapped::kYes == fMipMapped && GrMipMapsStatus::kValid != fMipMapsStatus;
+    bool mipmapsAreDirty() const {
+        SkASSERT((GrMipmapped::kNo == fMipmapped) ==
+                 (GrMipmapStatus::kNotAllocated == fMipmapStatus));
+        return GrMipmapped::kYes == fMipmapped && GrMipmapStatus::kValid != fMipmapStatus;
     }
-    void markMipMapsDirty() {
-        SkASSERT(GrMipMapped::kYes == fMipMapped);
-        fMipMapsStatus = GrMipMapsStatus::kDirty;
+    void markMipmapsDirty() {
+        SkASSERT(GrMipmapped::kYes == fMipmapped);
+        fMipmapStatus = GrMipmapStatus::kDirty;
     }
-    void markMipMapsClean() {
-        SkASSERT(GrMipMapped::kYes == fMipMapped);
-        fMipMapsStatus = GrMipMapsStatus::kValid;
+    void markMipmapsClean() {
+        SkASSERT(GrMipmapped::kYes == fMipmapped);
+        fMipmapStatus = GrMipmapStatus::kValid;
     }
 
-    // Returns the GrMipMapped value of the proxy from creation time regardless of whether it has
+    // Returns the GrMipmapped value of the proxy from creation time regardless of whether it has
     // been instantiated or not.
-    GrMipMapped proxyMipMapped() const { return fMipMapped; }
+    GrMipmapped proxyMipmapped() const { return fMipmapped; }
 
     GrTextureType textureType() const { return this->backendFormat().textureType(); }
 
@@ -113,8 +113,8 @@ protected:
     // Deferred version - no data.
     GrTextureProxy(const GrBackendFormat&,
                    SkISize,
-                   GrMipMapped,
-                   GrMipMapsStatus,
+                   GrMipmapped,
+                   GrMipmapStatus,
                    SkBackingFit,
                    SkBudgeted,
                    GrProtected,
@@ -135,8 +135,8 @@ protected:
     GrTextureProxy(LazyInstantiateCallback&&,
                    const GrBackendFormat&,
                    SkISize,
-                   GrMipMapped,
-                   GrMipMapsStatus,
+                   GrMipmapped,
+                   GrMipmapStatus,
                    SkBackingFit,
                    SkBudgeted,
                    GrProtected,
@@ -165,19 +165,19 @@ private:
     // that particular class don't require it. Changing the size of this object can move the start
     // address of other types, leading to this problem.
 
-    GrMipMapped      fMipMapped;
+    GrMipmapped      fMipmapped;
 
     // This tracks the mipmap status at the proxy level and is thus somewhat distinct from the
     // backing GrTexture's mipmap status. In particular, this status is used to determine when
     // mipmap levels need to be explicitly regenerated during the execution of a DAG of opsTasks.
-    GrMipMapsStatus  fMipMapsStatus;
-    // TEMPORARY: We are in the process of moving GrMipMapsStatus from the texture to the proxy.
-    // We track the fInitialMipMapsStatus here so we can assert that the proxy did indeed expect
+    GrMipmapStatus   fMipmapStatus;
+    // TEMPORARY: We are in the process of moving GrMipmapStatus from the texture to the proxy.
+    // We track the fInitialMipmapStatus here so we can assert that the proxy did indeed expect
     // the correct mipmap status immediately after instantiation.
     //
-    // NOTE: fMipMapsStatus may no longer be equal to fInitialMipMapsStatus by the time the texture
+    // NOTE: fMipmapStatus may no longer be equal to fInitialMipmapStatus by the time the texture
     // is instantiated, since it tracks mipmaps in the time frame in which the DAG is being built.
-    SkDEBUGCODE(const GrMipMapsStatus fInitialMipMapsStatus;)
+    SkDEBUGCODE(const GrMipmapStatus fInitialMipmapStatus;)
 
     bool             fSyncTargetKey = true;  // Should target's unique key be sync'ed with ours.
 

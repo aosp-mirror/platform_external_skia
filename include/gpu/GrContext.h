@@ -402,7 +402,7 @@ public:
     // Returns the gpu memory size of the the texture that backs the passed in SkImage. Returns 0 if
     // the SkImage is not texture backed. For external format textures this will also return 0 as we
     // cannot determine the correct size.
-    static size_t ComputeImageSize(sk_sp<SkImage> image, GrMipMapped, bool useNextPow2 = false);
+    static size_t ComputeImageSize(sk_sp<SkImage> image, GrMipmapped, bool useNextPow2 = false);
 
     /**
      * Retrieve the default GrBackendFormat for a given SkColorType and renderability.
@@ -438,7 +438,7 @@ public:
      */
     GrBackendTexture createBackendTexture(int width, int height,
                                           const GrBackendFormat&,
-                                          GrMipMapped,
+                                          GrMipmapped,
                                           GrRenderable,
                                           GrProtected = GrProtected::kNo);
 
@@ -452,7 +452,7 @@ public:
      */
     GrBackendTexture createBackendTexture(int width, int height,
                                           SkColorType,
-                                          GrMipMapped,
+                                          GrMipmapped,
                                           GrRenderable,
                                           GrProtected = GrProtected::kNo);
 
@@ -478,7 +478,7 @@ public:
     GrBackendTexture createBackendTexture(int width, int height,
                                           const GrBackendFormat&,
                                           const SkColor4f& color,
-                                          GrMipMapped,
+                                          GrMipmapped,
                                           GrRenderable,
                                           GrProtected = GrProtected::kNo,
                                           GrGpuFinishedProc finishedProc = nullptr,
@@ -498,7 +498,7 @@ public:
     GrBackendTexture createBackendTexture(int width, int height,
                                           SkColorType,
                                           const SkColor4f& color,
-                                          GrMipMapped,
+                                          GrMipmapped,
                                           GrRenderable,
                                           GrProtected = GrProtected::kNo,
                                           GrGpuFinishedProc finishedProc = nullptr,
@@ -568,6 +568,23 @@ public:
                               GrGpuFinishedContext finishedContext);
 
     /**
+     * If possible, updates a backend texture to be filled to a particular color. The data in
+     * GrBackendTexture and passed in color is interpreted with respect to the passed in
+     * SkColorType. The client should check the return value to see if the update was successful.
+     * The client can pass in a finishedProc to be notified when the data has been uploaded by the
+     * gpu and the texture can be deleted. The client is required to call GrContext::submit to send
+     * the upload work to the gpu. The finishedProc will always get called even if we failed to
+     * update the GrBackendTexture.
+     * For the Vulkan backend after a successful update the layout of the created VkImage will be:
+     *      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+     */
+    bool updateBackendTexture(const GrBackendTexture&,
+                              SkColorType skColorType,
+                              const SkColor4f& color,
+                              GrGpuFinishedProc finishedProc,
+                              GrGpuFinishedContext finishedContext);
+
+    /**
      * If possible, updates a backend texture filled with the provided pixmap data. The client
      * should check the return value to see if the update was successful. The client can pass in a
      * finishedProc to be notified when the data has been uploaded by the gpu and the texture can be
@@ -612,7 +629,7 @@ public:
     GrBackendTexture createCompressedBackendTexture(int width, int height,
                                                     const GrBackendFormat&,
                                                     const SkColor4f& color,
-                                                    GrMipMapped,
+                                                    GrMipmapped,
                                                     GrProtected = GrProtected::kNo,
                                                     GrGpuFinishedProc finishedProc = nullptr,
                                                     GrGpuFinishedContext finishedContext = nullptr);
@@ -620,7 +637,7 @@ public:
     GrBackendTexture createCompressedBackendTexture(int width, int height,
                                                     SkImage::CompressionType,
                                                     const SkColor4f& color,
-                                                    GrMipMapped,
+                                                    GrMipmapped,
                                                     GrProtected = GrProtected::kNo,
                                                     GrGpuFinishedProc finishedProc = nullptr,
                                                     GrGpuFinishedContext finishedContext = nullptr);
@@ -640,7 +657,7 @@ public:
     GrBackendTexture createCompressedBackendTexture(int width, int height,
                                                     const GrBackendFormat&,
                                                     const void* data, size_t dataSize,
-                                                    GrMipMapped,
+                                                    GrMipmapped,
                                                     GrProtected = GrProtected::kNo,
                                                     GrGpuFinishedProc finishedProc = nullptr,
                                                     GrGpuFinishedContext finishedContext = nullptr);
@@ -648,7 +665,7 @@ public:
     GrBackendTexture createCompressedBackendTexture(int width, int height,
                                                     SkImage::CompressionType,
                                                     const void* data, size_t dataSize,
-                                                    GrMipMapped,
+                                                    GrMipmapped,
                                                     GrProtected = GrProtected::kNo,
                                                     GrGpuFinishedProc finishedProc = nullptr,
                                                     GrGpuFinishedContext finishedContext = nullptr);

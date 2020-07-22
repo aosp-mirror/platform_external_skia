@@ -46,7 +46,7 @@ bool GrFragmentProcessor::isEqual(const GrFragmentProcessor& that) const {
 void GrFragmentProcessor::visitProxies(const GrOp::VisitProxyFunc& func) const {
     this->visitTextureEffects([&func](const GrTextureEffect& te) {
         bool mipped = (GrSamplerState::Filter::kMipMap == te.samplerState().filter());
-        func(te.view().proxy(), GrMipMapped(mipped));
+        func(te.view().proxy(), GrMipmapped(mipped));
     });
 }
 
@@ -481,11 +481,11 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::RunInSeries(
 //////////////////////////////////////////////////////////////////////////////
 
 GrFragmentProcessor::CIter::CIter(const GrPaint& paint) {
-    for (int i = paint.numCoverageFragmentProcessors() - 1; i >= 0; --i) {
-        fFPStack.push_back(paint.getCoverageFragmentProcessor(i));
+    if (paint.hasCoverageFragmentProcessor()) {
+        fFPStack.push_back(paint.getCoverageFragmentProcessor());
     }
-    for (int i = paint.numColorFragmentProcessors() - 1; i >= 0; --i) {
-        fFPStack.push_back(paint.getColorFragmentProcessor(i));
+    if (paint.hasColorFragmentProcessor()) {
+        fFPStack.push_back(paint.getColorFragmentProcessor());
     }
 }
 

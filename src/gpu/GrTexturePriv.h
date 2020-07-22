@@ -18,29 +18,27 @@
     implemented privately in GrTexture with a inline public method here). */
 class GrTexturePriv {
 public:
-    void markMipMapsDirty() {
-        fTexture->markMipMapsDirty();
+    void markMipmapsDirty() {
+        fTexture->markMipmapsDirty();
     }
 
-    void markMipMapsClean() {
-        fTexture->markMipMapsClean();
+    void markMipmapsClean() {
+        fTexture->markMipmapsClean();
     }
 
-    GrMipMapsStatus mipMapsStatus() const { return fTexture->fMipMapsStatus; }
+    GrMipmapStatus mipmapStatus() const { return fTexture->fMipmapStatus; }
 
-    bool mipMapsAreDirty() const {
-        return GrMipMapsStatus::kValid != this->mipMapsStatus();
-    }
+    bool mipmapsAreDirty() const { return GrMipmapStatus::kValid != this->mipmapStatus(); }
 
-    GrMipMapped mipMapped() const {
-        if (GrMipMapsStatus::kNotAllocated != this->mipMapsStatus()) {
-            return GrMipMapped::kYes;
+    GrMipmapped mipmapped() const {
+        if (GrMipmapStatus::kNotAllocated != this->mipmapStatus()) {
+            return GrMipmapped::kYes;
         }
-        return GrMipMapped::kNo;
+        return GrMipmapped::kNo;
     }
 
-    int maxMipMapLevel() const {
-        return fTexture->fMaxMipMapLevel;
+    int maxMipmapLevel() const {
+        return fTexture->fMaxMipmapLevel;
     }
 
     GrTextureType textureType() const { return fTexture->fTextureType; }
@@ -53,7 +51,7 @@ public:
                                   SkISize dimensions,
                                   GrRenderable,
                                   int sampleCnt,
-                                  GrMipMapped,
+                                  GrMipmapped,
                                   GrProtected,
                                   GrScratchKey* key);
 
