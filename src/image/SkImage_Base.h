@@ -34,7 +34,7 @@ enum {
 
 class SkImage_Base : public SkImage {
 public:
-    virtual ~SkImage_Base();
+    ~SkImage_Base() override;
 
     virtual SkIRect onGetSubset() const {
         return { 0, 0, this->width(), this->height() };
@@ -77,7 +77,7 @@ public:
     virtual GrContext* context() const { return nullptr; }
 
 #if SK_SUPPORT_GPU
-    virtual GrSemaphoresSubmitted onFlush(GrContext* context, const GrFlushInfo&) {
+    virtual GrSemaphoresSubmitted onFlush(GrDirectContext*, const GrFlushInfo&) {
         return GrSemaphoresSubmitted::kNo;
     }
 

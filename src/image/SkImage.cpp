@@ -142,6 +142,12 @@ sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                SkImageShader::FilterEnum(filtering));
 }
 
+sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy, CubicResampler cubic,
+                                           const SkMatrix* localMatrix) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, cubic,
+                               localMatrix);
+}
+
 sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) const {
     SkBitmap bm;
     if (as_IB(this)->getROPixels(&bm)) {
@@ -207,25 +213,31 @@ GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
     return as_IB(this)->onGetBackendTexture(flushPendingGrContextIO, origin);
 }
 
-bool SkImage::isValid(GrRecordingContext* context) const {
-    if (context && context->abandoned()) {
+bool SkImage::isValid(GrRecordingContext* rContext) const {
+    if (rContext && rContext->abandoned()) {
         return false;
     }
-    return as_IB(this)->onIsValid(context);
+    return as_IB(this)->onIsValid(rContext);
 }
 
-bool SkImage::isValid(GrContext* context) const {
-    return this->isValid(static_cast<GrRecordingContext*>(context));
+GrSemaphoresSubmitted SkImage::flush(GrDirectContext* dContext, const GrFlushInfo& flushInfo) {
+    return as_IB(this)->onFlush(dContext, flushInfo);
 }
 
+void SkImage::flushAndSubmit(GrDirectContext* dContext) {
+    this->flush(dContext, {});
+    dContext->submit();
+}
+
+#ifdef SK_IMAGE_FLUSH_LEGACY_API
 GrSemaphoresSubmitted SkImage::flush(GrContext* context, const GrFlushInfo& flushInfo) {
-    return as_IB(this)->onFlush(context, flushInfo);
+    return this->flush(GrAsDirectContext(context), flushInfo);
 }
 
 void SkImage::flushAndSubmit(GrContext* context) {
-    this->flush(context, {});
-    context->submit();
+    this->flushAndSubmit(GrAsDirectContext(context));
 }
+#endif
 
 #else
 
@@ -236,25 +248,26 @@ GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
     return GrBackendTexture(); // invalid
 }
 
-bool SkImage::isValid(GrRecordingContext* context) const {
-    if (context) {
+bool SkImage::isValid(GrRecordingContext* rContext) const {
+    if (rContext) {
         return false;
     }
     return as_IB(this)->onIsValid(nullptr);
 }
 
-bool SkImage::isValid(GrContext* context) const {
-    if (context) {
-        return false;
-    }
-    return as_IB(this)->onIsValid(nullptr);
+GrSemaphoresSubmitted SkImage::flush(GrDirectContext*, const GrFlushInfo&) {
+    return GrSemaphoresSubmitted::kNo;
 }
 
+void SkImage::flushAndSubmit(GrDirectContext*) {}
+
+#ifdef SK_IMAGE_FLUSH_LEGACY_API
 GrSemaphoresSubmitted SkImage::flush(GrContext*, const GrFlushInfo&) {
     return GrSemaphoresSubmitted::kNo;
 }
 
 void SkImage::flushAndSubmit(GrContext*) {}
+#endif
 
 #endif
 
@@ -359,26 +372,24 @@ sk_sp<SkImage> SkImage::MakeFromPicture(sk_sp<SkPicture> picture, const SkISize&
                                                                std::move(colorSpace)));
 }
 
-sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
-                                       const SkIRect& clipBounds, SkIRect* outSubset,
-                                       SkIPoint* offset) const {
-    GrContext* context = as_IB(this)->context();
+sk_sp<SkImage> SkImage::makeWithFilter(GrRecordingContext* rContext, const SkImageFilter* filter,
+                                       const SkIRect& subset, const SkIRect& clipBounds,
+                                       SkIRect* outSubset, SkIPoint* offset) const {
 
-    return this->makeWithFilter(context, filter, subset, clipBounds, outSubset, offset);
-}
-
-sk_sp<SkImage> SkImage::makeWithFilter(GrContext* grContext,
-                                       const SkImageFilter* filter, const SkIRect& subset,
-                                       const SkIRect& clipBounds, SkIRect* outSubset,
-                                       SkIPoint* offset) const {
     if (!filter || !outSubset || !offset || !this->bounds().contains(subset)) {
         return nullptr;
     }
-    sk_sp<SkSpecialImage> srcSpecialImage =
+    sk_sp<SkSpecialImage> srcSpecialImage;
 #if SK_SUPPORT_GPU
-        SkSpecialImage::MakeFromImage(grContext, subset, sk_ref_sp(const_cast<SkImage*>(this)));
+    auto myContext = as_IB(this)->context();
+    if (myContext && !myContext->priv().matches(rContext)) {
+        return nullptr;
+    }
+    srcSpecialImage = SkSpecialImage::MakeFromImage(rContext, subset,
+                                                    sk_ref_sp(const_cast<SkImage*>(this)));
 #else
-        SkSpecialImage::MakeFromImage(nullptr, subset, sk_ref_sp(const_cast<SkImage*>(this)));
+    srcSpecialImage = SkSpecialImage::MakeFromImage(nullptr, subset,
+                                                    sk_ref_sp(const_cast<SkImage*>(this)));
 #endif
     if (!srcSpecialImage) {
         return nullptr;
@@ -422,6 +433,18 @@ sk_sp<SkImage> SkImage::makeWithFilter(GrContext* grContext,
     *outSubset = clippedDstRect;
     return result->asImage();
 }
+
+#ifdef SK_IMAGE_MAKE_WITH_FILTER_LEGACY_API
+sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
+                                       const SkIRect& clipBounds, SkIRect* outSubset,
+                                       SkIPoint* offset) const {
+    GrRecordingContext* rContext = nullptr;
+#if SK_SUPPORT_GPU
+    rContext = as_IB(this)->context();
+#endif
+    return this->makeWithFilter(rContext, filter, subset, clipBounds, outSubset, offset);
+}
+#endif
 
 bool SkImage::isLazyGenerated() const {
     return as_IB(this)->onIsLazyGenerated();
