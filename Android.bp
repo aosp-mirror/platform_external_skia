@@ -1624,7 +1624,7 @@ cc_test {
         "tests/GrStyledShapeTest.cpp",
         "tests/GrSubmittedFlushTest.cpp",
         "tests/GrSurfaceTest.cpp",
-        "tests/GrTAllocatorTest.cpp",
+        "tests/GrTBlockListTest.cpp",
         "tests/GrTestingBackendTextureUploadTest.cpp",
         "tests/GrTextureMipMapInvalidationTest.cpp",
         "tests/GrUploadPixelsTests.cpp",

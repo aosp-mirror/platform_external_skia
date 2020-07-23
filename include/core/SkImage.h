@@ -11,6 +11,7 @@
 #include "include/core/SkFilterQuality.h"
 #include "include/core/SkImageEncoder.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkM44.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
@@ -35,7 +36,6 @@ class GrContext;
 class GrDirectContext;
 class GrRecordingContext;
 class GrContextThreadSafeProxy;
-class GrRecordingContext;
 
 struct SkYUVAIndex;
 
@@ -786,8 +786,39 @@ public:
     */
     bool isOpaque() const { return SkAlphaTypeIsOpaque(this->alphaType()); }
 
+    /**
+     *  Make a shader with the specified tiling and mipmap sampling.
+     */
     sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkFilterOptions&,
                                const SkMatrix* localMatrix = nullptr) const;
+
+    /*
+     *  Specify B and C (each between 0...1) to create a shader that applies the corresponding
+     *  cubic reconstruction filter to the image.
+     *
+     *  Example values:
+     *      B = 1/3, C = 1/3        "Mitchell" filter
+     *      B = 0,   C = 1/2        "Catmull-Rom" filter
+     *
+     *  See "Reconstruction Filters in Computer Graphics"
+     *          Don P. Mitchell
+     *          Arun N. Netravali
+     *          1988
+     *  https://www.cs.utexas.edu/~fussell/courses/cs384g-fall2013/lectures/mitchell/Mitchell.pdf
+     *
+     *  Desmos worksheet https://www.desmos.com/calculator/aghdpicrvr
+     *  Nice overview https://entropymine.com/imageworsener/bicubic/
+     */
+    struct CubicResampler {
+        float B, C;
+    };
+
+    /**
+     *  Make a shader with the specified tiling and CubicResampler parameters.
+     *  Returns nullptr if the resampler values are outside of [0...1]
+     */
+    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, CubicResampler,
+                                      const SkMatrix* localMatrix = nullptr) const;
 
     /** Creates SkShader from SkImage. SkShader dimensions are taken from SkImage. SkShader uses
         SkTileMode rules to fill drawn area outside SkImage. localMatrix permits
@@ -860,29 +891,31 @@ public:
     */
     bool isValid(GrRecordingContext* context) const;
 
-    /** Deprecated.
-     */
-    bool isValid(GrContext* context) const;
-
     /** Flushes any pending uses of texture-backed images in the GPU backend. If the image is not
-        texture-backed (including promise texture images) or if the the GrContext does not
+        texture-backed (including promise texture images) or if the GrDirectContext does not
         have the same context ID as the context backing the image then this is a no-op.
 
-        If the image was not used in any non-culled draws recorded on the passed GrContext then
-        this is a no-op unless the GrFlushInfo contains semaphores or  a finish proc. Those are
-        respected even when the image has not been used.
+        If the image was not used in any non-culled draws in the current queue of work for the
+        passed GrDirectContext then this is a no-op unless the GrFlushInfo contains semaphores or
+        a finish proc. Those are respected even when the image has not been used.
 
         @param context  the context on which to flush pending usages of the image.
         @param info     flush options
      */
-    GrSemaphoresSubmitted flush(GrContext* context, const GrFlushInfo& flushInfo);
+    GrSemaphoresSubmitted flush(GrDirectContext* context, const GrFlushInfo& flushInfo);
 
-    void flush(GrContext* context) { this->flush(context, {}); }
+    void flush(GrDirectContext* context) { this->flush(context, {}); }
 
     /** Version of flush() that uses a default GrFlushInfo. Also submits the flushed work to the
         GPU.
     */
+    void flushAndSubmit(GrDirectContext*);
+
+#ifdef SK_IMAGE_FLUSH_LEGACY_API
+    GrSemaphoresSubmitted flush(GrContext* context, const GrFlushInfo& flushInfo);
+    void flush(GrContext* context) { this->flush(context, {}); }
     void flushAndSubmit(GrContext*);
+#endif
 
     /** Retrieves the back-end texture. If SkImage has no back-end texture, an invalid
         object is returned. Call GrBackendTexture::isValid to determine if the result
@@ -1257,7 +1290,8 @@ public:
         is required storage for the actual bounds of the filtered SkImage. offset is
         required storage for translation of returned SkImage.
 
-        Returns nullptr if SkImage could not be created. If nullptr is returned, outSubset
+        Returns nullptr if SkImage could not be created or if the recording context provided doesn't
+        match the GPU context in which the image was created. If nullptr is returned, outSubset
         and offset are undefined.
 
         Useful for animation of SkImageFilter that varies size from frame to frame.
@@ -1266,7 +1300,7 @@ public:
         of GPU texture returned. offset translates the returned SkImage to keep subsequent
         animation frames aligned with respect to each other.
 
-        @param context     the GrContext in play - if it exists
+        @param context     the GrRecordingContext in play - if it exists
         @param filter      how SkImage is sampled when transformed
         @param subset      bounds of SkImage processed by filter
         @param clipBounds  expected bounds of filtered SkImage
@@ -1274,16 +1308,16 @@ public:
         @param offset      storage for returned SkImage translation
         @return            filtered SkImage, or nullptr
     */
-    sk_sp<SkImage> makeWithFilter(GrContext* context,
+    sk_sp<SkImage> makeWithFilter(GrRecordingContext* context,
                                   const SkImageFilter* filter, const SkIRect& subset,
                                   const SkIRect& clipBounds, SkIRect* outSubset,
                                   SkIPoint* offset) const;
 
-    /** To be deprecated.
-    */
+#ifdef SK_IMAGE_MAKE_WITH_FILTER_LEGACY_API
     sk_sp<SkImage> makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
                                   const SkIRect& clipBounds, SkIRect* outSubset,
                                   SkIPoint* offset) const;
+#endif
 
     /** Defines a callback function, taking one parameter of type GrBackendTexture with
         no return value. Function is called when back-end texture is to be released.

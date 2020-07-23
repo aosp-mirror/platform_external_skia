@@ -1987,6 +1987,9 @@ namespace skvm {
     void Assembler::vpackusdw(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x380f,0x2b, dst,x,y); }
     void Assembler::vpackuswb(Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0x67, dst,x,y); }
 
+    void Assembler::vpunpckldq(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x62, dst,x,y); }
+    void Assembler::vpunpckhdq(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x6a, dst,x,y); }
+
     void Assembler::vpcmpeqd(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x76, dst,x,y); }
     void Assembler::vpcmpgtd(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x66, dst,x,y); }
 
@@ -2036,6 +2039,15 @@ namespace skvm {
         // A bit unusual among the instructions we use, this is 64-bit operation, so we set W.
         this->op(0x66,0x3a0f,0x00, dst,x,W1);
         this->imm_byte_after_operand(x, imm);
+    }
+
+    void Assembler::vperm2f128(Ymm dst, Ymm x, Operand y, int imm) {
+        this->op(0x66,0x3a0f,0x06, dst,x,y);
+        this->imm_byte_after_operand(y, imm);
+    }
+
+    void Assembler::vpermps(Ymm dst, Ymm ix, Operand src) {
+        this->op(0x66,0x380f,0x16, dst,ix,src);
     }
 
     void Assembler::vroundps(Ymm dst, Operand x, Rounding imm) {
@@ -3007,6 +3019,7 @@ namespace skvm {
 
         SkTHashMap<int, A::Label> constants;    // Constants (mostly splats) share the same pool.
         A::Label                  iota;         // Varies per lane, for Op::index.
+        A::Label                  load64_index; // Used to load low or high half of 64-bit lanes.
 
         // The `regs` array tracks everything we know about each register's state:
         //   - NA:   empty
@@ -3336,12 +3349,6 @@ namespace skvm {
                     (void)constants[immy];
                     break;
 
-                case Op::load64_lo:
-                case Op::load64_hi:
-                case Op::store64:
-                    // TODO
-                    return false;
-
             #if defined(__x86_64__) || defined(_M_X64)
                 case Op::assert_true: {
                     a->vptest (r(x), &constants[0xffffffff]);
@@ -3374,6 +3381,25 @@ namespace skvm {
                                   else        { a->vmovups(A::Mem{arg[immy]},         r(x)); }
                                   break;
 
+                case Op::store64: if (scalar) {
+                                      a->vmovd(A::Mem{arg[immz],0}, (A::Xmm)r(x));
+                                      a->vmovd(A::Mem{arg[immz],4}, (A::Xmm)r(y));
+                                  } else {
+                                      // r(x) = {a,b,c,d|e,f,g,h}
+                                      // r(y) = {i,j,k,l|m,n,o,p}
+                                      // We want to write a,i,b,j,c,k,d,l,e,m...
+                                      A::Ymm L = alloc_tmp(),
+                                             H = alloc_tmp();
+                                      a->vpunpckldq(L, r(x), any(y));  // L = {a,i,b,j|e,m,f,n}
+                                      a->vpunpckhdq(H, r(x), any(y));  // H = {c,k,d,l|g,o,h,p}
+                                      a->vperm2f128(dst(), L,H, 0x20); //   = {a,i,b,j|c,k,d,l}
+                                      a->vmovups(A::Mem{arg[immz], 0}, dst());
+                                      a->vperm2f128(dst(), L,H, 0x31); //   = {e,m,f,n|g,o,h,p}
+                                      a->vmovups(A::Mem{arg[immz],32}, dst());
+                                      free_tmp(L);
+                                      free_tmp(H);
+                                  } break;
+
                 case Op::load8:  if (scalar) {
                                      a->vpxor  (dst(), dst(), dst());
                                      a->vpinsrb((A::Xmm)dst(), (A::Xmm)dst(), A::Mem{arg[immy]}, 0);
@@ -3391,6 +3417,31 @@ namespace skvm {
                 case Op::load32: if (scalar) { a->vmovd  ((A::Xmm)dst(), A::Mem{arg[immy]}); }
                                  else        { a->vmovups(        dst(), A::Mem{arg[immy]}); }
                                  break;
+
+                case Op::load64_lo: if (scalar) {
+                                        a->vmovd((A::Xmm)dst(), A::Mem{arg[immy], 0});
+                                    } else {
+                                        A::Ymm tmp = alloc_tmp();
+                                        a->vmovups(tmp, &load64_index);
+                                        a->vpermps(dst(), tmp, A::Mem{arg[immy],  0});
+                                        a->vpermps(  tmp, tmp, A::Mem{arg[immy], 32});
+                                        // Select low 128-bits holding 0,2,4,6 from each.
+                                        a->vperm2f128(dst(), dst(),tmp, 0x20);
+                                        free_tmp(tmp);
+                                    } break;
+
+                case Op::load64_hi: if (scalar) {
+                                        a->vmovd((A::Xmm)dst(), A::Mem{arg[immy], 4});
+                                    } else {
+                                        A::Ymm tmp = alloc_tmp();
+                                        a->vmovups(tmp, &load64_index);
+                                        a->vpermps(dst(), tmp, A::Mem{arg[immy],  0});
+                                        a->vpermps(  tmp, tmp, A::Mem{arg[immy], 32});
+                                        // Select high 128-bits holding 1,3,5,7 from each.
+                                        a->vperm2f128(dst(), dst(),tmp, 0x31);
+                                        free_tmp(tmp);
+                                    } break;
+
 
                 case Op::gather8: {
                     // As usual, the gather base pointer is immz bytes off of uniform immy.
@@ -3836,10 +3887,17 @@ namespace skvm {
 
         if (!iota.references.empty()) {
             a->align(4);
-            a->label(&iota);
+            a->label(&iota);        // 0,1,2,3,4,...
             for (int i = 0; i < K; i++) {
                 a->word(i);
             }
+        }
+
+        if (!load64_index.references.empty()) {
+            a->align(4);
+            a->label(&load64_index);  // {0,2,4,6|1,3,5,7}
+            a->word(0); a->word(2); a->word(4); a->word(6);
+            a->word(1); a->word(3); a->word(5); a->word(7);
         }
 
         return true;
