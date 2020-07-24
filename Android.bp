@@ -634,7 +634,6 @@ cc_library_static {
           "src/gpu/GrUniformDataManager.cpp",
           "src/gpu/GrWaitRenderTask.cpp",
           "src/gpu/GrXferProcessor.cpp",
-          "src/gpu/GrYUVProvider.cpp",
           "src/gpu/SkGpuDevice.cpp",
           "src/gpu/SkGpuDevice_drawTexture.cpp",
           "src/gpu/SkGr.cpp",
