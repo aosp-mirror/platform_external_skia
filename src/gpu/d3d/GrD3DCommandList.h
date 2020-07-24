@@ -12,7 +12,7 @@
 #include "include/gpu/d3d/GrD3DTypes.h"
 #include "include/private/SkColorData.h"
 #include "src/gpu/GrManagedResource.h"
-#include "src/gpu/d3d/GrD3DConstantRingBuffer.h"
+#include "src/gpu/GrRingBuffer.h"
 #include "src/gpu/d3d/GrD3DRootSignature.h"
 
 #include <memory>
@@ -57,24 +57,32 @@ public:
                          const D3D12_RESOURCE_TRANSITION_BARRIER* barriers);
 
     // Helper method that calls copyTextureRegion multiple times, once for each subresource
-    void copyBufferToTexture(const GrD3DBuffer* srcBuffer,
+    // The srcBuffer comes from a staging buffer so we don't need to take any refs to it. Instead,
+    // we ref the whole buffer during sumbit.
+    void copyBufferToTexture(ID3D12Resource* srcBuffer,
                              const GrD3DTextureResource* dstTexture,
                              uint32_t subresourceCount,
                              D3D12_PLACED_SUBRESOURCE_FOOTPRINT* bufferFootprints,
                              int left, int top);
-    void copyTextureRegion(sk_sp<GrManagedResource> dst,
-                           const D3D12_TEXTURE_COPY_LOCATION* dstLocation,
-                           UINT dstX, UINT dstY,
-                           sk_sp<GrManagedResource> src,
-                           const D3D12_TEXTURE_COPY_LOCATION* srcLocation,
-                           const D3D12_BOX* srcBox);
+
+    void copyTextureRegionToTexture(sk_sp<GrManagedResource> dst,
+                                    const D3D12_TEXTURE_COPY_LOCATION* dstLocation,
+                                    UINT dstX, UINT dstY,
+                                    sk_sp<GrManagedResource> src,
+                                    const D3D12_TEXTURE_COPY_LOCATION* srcLocation,
+                                    const D3D12_BOX* srcBox);
+
+     void copyTextureRegionToBuffer(sk_sp<const GrBuffer> dst,
+                                    const D3D12_TEXTURE_COPY_LOCATION* dstLocation,
+                                    UINT dstX,
+                                    UINT dstY,
+                                    sk_sp<GrManagedResource> src,
+                                    const D3D12_TEXTURE_COPY_LOCATION* srcLocation,
+                                    const D3D12_BOX* srcBox);
 
     // We don't take a ref to the src buffer because we assume the src buffer is coming from a
     // staging buffer which will get ref'd during submit.
-    // TODO: Temporarily we are still taking the ref to the src ManagedResource until we remove
-    // those from GrD3DBuffer in a follow up change.
     void copyBufferToBuffer(sk_sp<GrD3DBuffer> dstBuffer, uint64_t dstOffset,
-                            sk_sp<GrManagedResource> src,
                             ID3D12Resource* srcBuffer, uint64_t srcOffset,
                             uint64_t numBytes);
 
@@ -144,7 +152,7 @@ public:
 
     void setPipelineState(sk_sp<GrD3DPipelineState> pipelineState);
 
-    void setCurrentConstantBuffer(const sk_sp<GrD3DConstantRingBuffer>& constantBuffer);
+    void setCurrentConstantBuffer(GrRingBuffer* constantsRingBuffer);
 
     void setStencilRef(unsigned int stencilRef);
     void setBlendFactor(const float blendFactor[4]);
@@ -199,8 +207,8 @@ private:
     size_t fCurrentInstanceStride;
     const GrBuffer* fCurrentIndexBuffer;
 
-    GrD3DConstantRingBuffer* fCurrentConstantRingBuffer;
-    GrD3DConstantRingBuffer::SubmitData fConstantRingBufferSubmitData;
+    GrRingBuffer* fCurrentConstantRingBuffer;
+    GrRingBuffer::SubmitData fConstantRingBufferSubmitData;
 
     D3D12_GPU_VIRTUAL_ADDRESS fCurrentConstantBufferAddress;
     D3D12_GPU_DESCRIPTOR_HANDLE fCurrentRootDescriptorTable[GrD3DRootSignature::kParamIndexCount];
