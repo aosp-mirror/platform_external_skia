@@ -20,8 +20,8 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/effects/GrBlendFragmentProcessor.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
-#include "src/gpu/effects/GrXfermodeFragmentProcessor.h"
 #include "src/gpu/effects/generated/GrConfigConversionEffect.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -145,9 +145,10 @@ private:
 static const int kRenderTargetHeight = 1;
 static const int kRenderTargetWidth = 1;
 
-static std::unique_ptr<GrRenderTargetContext> random_render_target_context(GrContext* context,
-                                                                           SkRandom* random,
-                                                                           const GrCaps* caps) {
+static std::unique_ptr<GrRenderTargetContext> random_render_target_context(
+        GrRecordingContext* rContext,
+        SkRandom* random,
+        const GrCaps* caps) {
     GrSurfaceOrigin origin = random->nextBool() ? kTopLeft_GrSurfaceOrigin
                                                 : kBottomLeft_GrSurfaceOrigin;
 
@@ -159,7 +160,7 @@ static std::unique_ptr<GrRenderTargetContext> random_render_target_context(GrCon
     sampleCnt = std::max(1, sampleCnt);
 
     return GrRenderTargetContext::Make(
-            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
+            rContext, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kRenderTargetWidth, kRenderTargetHeight}, sampleCnt, GrMipmapped::kNo,
             GrProtected::kNo, origin);
 }
@@ -209,12 +210,10 @@ static std::unique_ptr<GrFragmentProcessor> create_random_proc_tree(GrProcessorT
                                                                (int)SkBlendMode::kLastMode));
     std::unique_ptr<GrFragmentProcessor> fp;
     if (d->fRandom->nextF() < 0.5f) {
-        fp = GrXfermodeFragmentProcessor::Make(std::move(minLevelsChild),
-                                               std::move(otherChild), mode);
+        fp = GrBlendFragmentProcessor::Make(std::move(minLevelsChild), std::move(otherChild), mode);
         SkASSERT(fp);
     } else {
-        fp = GrXfermodeFragmentProcessor::Make(std::move(otherChild),
-                                               std::move(minLevelsChild), mode);
+        fp = GrBlendFragmentProcessor::Make(std::move(otherChild), std::move(minLevelsChild), mode);
         SkASSERT(fp);
     }
     return fp;
