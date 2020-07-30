@@ -542,10 +542,6 @@ sk_sp<SkImage> SkImage::makeRasterImage(CachingHint chint) const {
 
 #if !SK_SUPPORT_GPU
 
-sk_sp<SkImage> SkImage::DecodeToTexture(GrDirectContext*, const void*, size_t, const SkIRect*) {
-    return nullptr;
-}
-
 sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
                                         const GrBackendTexture& tex, GrSurfaceOrigin origin,
                                         SkColorType ct, SkAlphaType at, sk_sp<SkColorSpace> cs,
@@ -570,34 +566,43 @@ bool SkImage::MakeBackendTextureFromSkImage(GrContext*,
     return false;
 }
 
-sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext* ctx,
-                                               const GrBackendTexture& tex, GrSurfaceOrigin origin,
-                                               SkColorType ct, SkAlphaType at,
-                                               sk_sp<SkColorSpace> cs) {
+sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrDirectContext*,
+                                               const GrBackendTexture&, GrSurfaceOrigin,
+                                               SkColorType, SkAlphaType,
+                                               sk_sp<SkColorSpace>) {
     return nullptr;
 }
 
-sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopy(GrContext* context,
-                                                 SkYUVColorSpace yuvColorSpace,
-                                                 const GrBackendTexture yuvaTextures[],
-                                                 const SkYUVAIndex yuvaIndices[4],
-                                                 SkISize imageSize,
-                                                 GrSurfaceOrigin imageOrigin,
-                                                 sk_sp<SkColorSpace> imageColorSpace) {
+#ifdef SK_IMAGE_MAKE_FROM_ADOPTED_TEXTURE_LEGACY_API
+sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext*,
+                                               const GrBackendTexture&, GrSurfaceOrigin,
+                                               SkColorType, SkAlphaType,
+                                               sk_sp<SkColorSpace>) {
+    return nullptr;
+}
+#endif
+
+sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopy(GrRecordingContext*,
+                                                 SkYUVColorSpace,
+                                                 const GrBackendTexture[],
+                                                 const SkYUVAIndex[4],
+                                                 SkISize,
+                                                 GrSurfaceOrigin,
+                                                 sk_sp<SkColorSpace>) {
     return nullptr;
 }
 
 sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopyWithExternalBackend(
-        GrContext* context,
-        SkYUVColorSpace yuvColorSpace,
-        const GrBackendTexture yuvaTextures[],
-        const SkYUVAIndex yuvaIndices[4],
-        SkISize imageSize,
-        GrSurfaceOrigin imageOrigin,
-        const GrBackendTexture& backendTexture,
-        sk_sp<SkColorSpace> imageColorSpace,
-        TextureReleaseProc textureReleaseProc,
-        ReleaseContext releaseContext) {
+        GrRecordingContext*,
+        SkYUVColorSpace,
+        const GrBackendTexture[],
+        const SkYUVAIndex[4],
+        SkISize,
+        GrSurfaceOrigin,
+        const GrBackendTexture&,
+        sk_sp<SkColorSpace>,
+        TextureReleaseProc,
+        ReleaseContext) {
     return nullptr;
 }
 
@@ -652,11 +657,6 @@ void SkImage_unpinAsTexture(const SkImage* image, GrRecordingContext* rContext) 
     SkASSERT(image);
     SkASSERT(rContext);
     as_IB(image)->onUnpinAsTexture(rContext);
-}
-
-SkIRect SkImage_getSubset(const SkImage* image) {
-    SkASSERT(image);
-    return as_IB(image)->onGetSubset();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
