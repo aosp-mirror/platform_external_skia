@@ -1113,7 +1113,10 @@ DEF_TEST(SkVM_Assembler, r) {
         a.add(A::Mem{A::rsi}, 7);                       // addq $7, (%rsi)
         a.add(A::Mem{A::rsi, 12}, 7);                   // addq $7, 12(%rsi)
         a.add(A::Mem{A::rsp, 12}, 7);                   // addq $7, 12(%rsp)
+        a.add(A::Mem{A::r12, 12}, 7);                   // addq $7, 12(%r12)
         a.add(A::Mem{A::rsp, 12, A::rax, A::FOUR}, 7);  // addq $7, 12(%rsp,%rax,4)
+        a.add(A::Mem{A::r12, 12, A::rax, A::FOUR}, 7);  // addq $7, 12(%r12,%rax,4)
+        a.add(A::Mem{A::rax, 12, A::r12, A::FOUR}, 7);  // addq $7, 12(%rax,%r12,4)
         a.add(A::Mem{A::r11, 12, A::r8 , A::TWO }, 7);  // addq $7, 12(%r11,%r8,2)
         a.add(A::Mem{A::r11, 12, A::rax}         , 7);  // addq $7, 12(%r11,%rax)
         a.add(A::Mem{A::rax, 12, A::r11}         , 7);  // addq $7, 12(%rax,%r11)
@@ -1142,7 +1145,10 @@ DEF_TEST(SkVM_Assembler, r) {
         0x48,0x83,0x06,0x07,
         0x48,0x83,0x46,0x0c,0x07,
         0x48,0x83,0x44,0x24,0x0c,0x07,
+        0x49,0x83,0x44,0x24,0x0c,0x07,
         0x48,0x83,0x44,0x84,0x0c,0x07,
+        0x49,0x83,0x44,0x84,0x0c,0x07,
+        0x4a,0x83,0x44,0xa0,0x0c,0x07,
         0x4b,0x83,0x44,0x43,0x0c,0x07,
         0x49,0x83,0x44,0x03,0x0c,0x07,
         0x4a,0x83,0x44,0x18,0x0c,0x07,
@@ -2295,6 +2301,35 @@ DEF_TEST(SkVM_is_NaN_is_finite, r) {
             REPORTER_ASSERT(r, nan[i] == ((i == 0 || i == 1) ? 0xffffffff : 0));
             REPORTER_ASSERT(r, fin[i] == ((i == 2 || i == 3 ||
                                            i == 4 || i == 5) ? 0xffffffff : 0));
+        }
+    });
+}
+
+DEF_TEST(SkVM_args, r) {
+    // Test we can handle at least six arguments.
+    skvm::Builder b;
+    {
+        skvm::Arg dst = b.varying<float>(),
+                    A = b.varying<float>(),
+                    B = b.varying<float>(),
+                    C = b.varying<float>(),
+                    D = b.varying<float>(),
+                    E = b.varying<float>();
+        storeF(dst, b.loadF(A)
+                  + b.loadF(B)
+                  + b.loadF(C)
+                  + b.loadF(D)
+                  + b.loadF(E));
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+        float dst[17],A[17],B[17],C[17],D[17],E[17];
+        for (int i = 0; i < 17; i++) {
+            A[i] = B[i] = C[i] = D[i] = E[i] = (float)i;
+        }
+        program.eval(17, dst,A,B,C,D,E);
+        for (int i = 0; i < 17; i++) {
+            REPORTER_ASSERT(r, dst[i] == 5.0f*i);
         }
     });
 }

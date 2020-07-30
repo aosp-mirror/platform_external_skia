@@ -210,55 +210,6 @@ public:
     */
     static sk_sp<SkImage> MakeFromEncoded(sk_sp<SkData> encoded);
 
-    /**
-     *  Decode the data in encoded/length into a raster image.
-     *
-     *  The subset parameter specifies a area within the decoded image to create the image from.
-     *  If subset is null, then the entire image is returned.
-     *
-     *  This is similar to MakeFromEncoded, but this method will always decode immediately, and
-     *  allocate the memory for the pixels for the lifetime of the returned image.
-     *
-     *  If the encoded format is not supported, or subset is outside of the bounds of the decoded
-     *  image, nullptr is returned.
-     *
-     *  @param encoded  the encoded data
-     *  @param length   the number of bytes of encoded data
-     *  @param subset   the bounds of the pixels within the decoded image to return. may be null.
-     *  @return         created SkImage, or nullptr
-     */
-    static sk_sp<SkImage> DecodeToRaster(const void* encoded, size_t length,
-                                         const SkIRect* subset = nullptr);
-    static sk_sp<SkImage> DecodeToRaster(const sk_sp<SkData>& data,
-                                         const SkIRect* subset = nullptr) {
-        return DecodeToRaster(data->data(), data->size(), subset);
-    }
-
-    /**
-     *  Decode the data in encoded/length into a texture-backed image.
-     *
-     *  The subset parameter specifies a area within the decoded image to create the image from.
-     *  If subset is null, then the entire image is returned.
-     *
-     *  This is similar to MakeFromEncoded, but this method will always decode immediately, and
-     *  allocate the texture for the pixels for the lifetime of the returned image.
-     *
-     *  If the encoded format is not supported, or subset is outside of the bounds of the decoded
-     *  image, nullptr is returned.
-     *
-     *  @param direct   the GrDirectContext in play
-     *  @param encoded  the encoded data
-     *  @param length   the number of bytes of encoded data
-     *  @param subset   the bounds of the pixels within the decoded image to return. may be null.
-     *  @return         created SkImage, or nullptr
-     */
-    static sk_sp<SkImage> DecodeToTexture(GrDirectContext* direct, const void* encoded,
-                                          size_t length, const SkIRect* subset = nullptr);
-    static sk_sp<SkImage> DecodeToTexture(GrDirectContext* direct, const sk_sp<SkData>& data,
-                                          const SkIRect* subset = nullptr) {
-        return DecodeToTexture(direct, data->data(), data->size(), subset);
-    }
-
     /*
      * Experimental:
      *   Skia                | GL_COMPRESSED_*     | MTLPixelFormat*      | VK_FORMAT_*_BLOCK
@@ -449,12 +400,21 @@ public:
         @param colorSpace      range of colors; may be nullptr
         @return                created SkImage, or nullptr
     */
+    static sk_sp<SkImage> MakeFromAdoptedTexture(GrDirectContext* context,
+                                                 const GrBackendTexture& backendTexture,
+                                                 GrSurfaceOrigin surfaceOrigin,
+                                                 SkColorType colorType,
+                                                 SkAlphaType alphaType = kPremul_SkAlphaType,
+                                                 sk_sp<SkColorSpace> colorSpace = nullptr);
+
+#ifdef SK_IMAGE_MAKE_FROM_ADOPTED_TEXTURE_LEGACY_API
     static sk_sp<SkImage> MakeFromAdoptedTexture(GrContext* context,
                                                  const GrBackendTexture& backendTexture,
                                                  GrSurfaceOrigin surfaceOrigin,
                                                  SkColorType colorType,
                                                  SkAlphaType alphaType = kPremul_SkAlphaType,
                                                  sk_sp<SkColorSpace> colorSpace = nullptr);
+#endif
 
     /** Creates an SkImage by flattening the specified YUVA planes into a single, interleaved RGBA
         image.
@@ -470,7 +430,7 @@ public:
         @param imageColorSpace range of colors of the resulting image; may be nullptr
         @return                created SkImage, or nullptr
     */
-    static sk_sp<SkImage> MakeFromYUVATexturesCopy(GrContext* context,
+    static sk_sp<SkImage> MakeFromYUVATexturesCopy(GrRecordingContext* context,
                                                    SkYUVColorSpace yuvColorSpace,
                                                    const GrBackendTexture yuvaTextures[],
                                                    const SkYUVAIndex yuvaIndices[4],
@@ -496,7 +456,7 @@ public:
         @return                   created SkImage, or nullptr
     */
     static sk_sp<SkImage> MakeFromYUVATexturesCopyWithExternalBackend(
-            GrContext* context,
+            GrRecordingContext* context,
             SkYUVColorSpace yuvColorSpace,
             const GrBackendTexture yuvaTextures[],
             const SkYUVAIndex yuvaIndices[4],
@@ -1188,20 +1148,20 @@ public:
     */
     sk_sp<SkData> refEncodedData() const;
 
-    /** Returns subset of SkImage. subset must be fully contained by SkImage dimensions().
-        The implementation may share pixels, or may copy them.
+    /** Returns subset of this image.
 
         Returns nullptr if any of the following are true:
           - Subset is empty
-          - Subset is not contained by bounds
-          - Pixels in SkImage could not be read or copied
+          - Subset is not contained inside the image's bounds
+          - Pixels in the image could not be read or copied
 
         If this image is texture-backed, the context parameter is required and must match the
-        context of the source image.
+        context of the source image. If the context parameter is provided, and the image is
+        raster-backed, the subset will be converted to texture-backed.
 
         @param subset  bounds of returned SkImage
         @param context the GrDirectContext in play, if it exists
-        @return        partial or full SkImage, or nullptr
+        @return        the subsetted image, or nullptr
 
         example: https://fiddle.skia.org/c/@Image_makeSubset
     */
