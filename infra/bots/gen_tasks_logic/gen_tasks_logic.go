@@ -392,10 +392,7 @@ func (b *taskBuilder) kitchenTaskNoBundle(recipe string, outputDir string) {
 	}
 
 	// Attempts.
-	if b.extraConfig("Framework") && b.extraConfig("Android", "G3") {
-		// Both bots can be long running. No need to retry them.
-		b.attempts(1)
-	} else if !b.role("Build", "Upload") && b.extraConfig("ASAN", "MSAN", "TSAN", "Valgrind") {
+	if !b.role("Build", "Upload") && b.extraConfig("ASAN", "MSAN", "TSAN", "Valgrind") {
 		// Sanitizers often find non-deterministic issues that retries would hide.
 		b.attempts(1)
 	} else {
@@ -1135,6 +1132,23 @@ func (b *jobBuilder) checkGeneratedFiles() {
 	})
 }
 
+// checkGnToBp verifies that the gn_to_bp.py script continues to work.
+func (b *jobBuilder) checkGnToBp() {
+	b.addTask(b.Name, func(b *taskBuilder) {
+		b.isolate("compile.isolate")
+		b.dep(b.buildTaskDrivers())
+		b.cmd("./run_gn_to_bp",
+			"--local=false",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--alsologtostderr")
+		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
+		b.usesPython()
+		b.serviceAccount(b.cfg.ServiceAccountHousekeeper)
+	})
+}
+
 // housekeeper generates a Housekeeper task.
 func (b *jobBuilder) housekeeper() {
 	b.addTask(b.Name, func(b *taskBuilder) {
@@ -1144,21 +1158,6 @@ func (b *jobBuilder) housekeeper() {
 		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
 		b.usesGit()
 		b.cache(CACHES_WORKDIR...)
-	})
-}
-
-// androidFrameworkCompile generates an Android Framework Compile task. Returns
-// the name of the last task in the generated chain of tasks, which the Job
-// should add as a dependency.
-func (b *jobBuilder) androidFrameworkCompile() {
-	b.addTask(b.Name, func(b *taskBuilder) {
-		b.recipeProps(EXTRA_PROPS)
-		b.kitchenTask("android_compile", OUTPUT_NONE)
-		b.isolate("compile_android_framework.isolate")
-		b.serviceAccount("skia-android-framework-compile@skia-swarming-bots.iam.gserviceaccount.com")
-		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
-		b.timeout(2 * time.Hour)
-		b.usesGit()
 	})
 }
 

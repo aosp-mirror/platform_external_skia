@@ -142,6 +142,10 @@ func (b *jobBuilder) genTasksForJob() {
 		b.checkGeneratedFiles()
 		return
 	}
+	if b.Name == "Housekeeper-PerCommit-RunGnToBp" {
+		b.checkGnToBp()
+		return
+	}
 	if b.Name == "Housekeeper-OnDemand-Presubmit" {
 		b.priority(1)
 		b.presubmit()
@@ -150,14 +154,8 @@ func (b *jobBuilder) genTasksForJob() {
 
 	// Compile bots.
 	if b.role("Build") {
-		if b.extraConfig("Android") && b.extraConfig("Framework") {
-			// Android Framework compile tasks use a different recipe.
-			b.androidFrameworkCompile()
-			return
-		} else {
-			b.compile()
-			return
-		}
+		b.compile()
+		return
 	}
 
 	// BuildStats bots. This computes things like binary size.
@@ -224,7 +222,7 @@ func (b *jobBuilder) finish() {
 		b.trigger(specs.TRIGGER_WEEKLY)
 	} else if b.extraConfig("Flutter", "CommandBuffer") {
 		b.trigger(specs.TRIGGER_MASTER_ONLY)
-	} else if b.frequency("OnDemand") || (b.extraConfig("Framework") && b.extraConfig("Android", "G3") || b.role("Canary")) {
+	} else if b.frequency("OnDemand") || b.role("Canary") {
 		b.trigger(specs.TRIGGER_ON_DEMAND)
 	} else {
 		b.trigger(specs.TRIGGER_ANY_BRANCH)

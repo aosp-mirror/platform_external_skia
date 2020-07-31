@@ -1384,8 +1384,6 @@ SkPath& SkPath::addPath(const SkPath& srcPath, const SkMatrix& matrix, AddPathMo
         return this->dirtyAfterEdit();
     }
 
-    SkPathRef::Editor(&fPathRef, src->countVerbs(), src->countPoints());
-
     SkMatrixPriv::MapPtsProc mapPtsProc = SkMatrixPriv::GetMapPtsProc(matrix);
     bool firstVerb = true;
     for (auto [verb, pts, w] : SkPathPriv::Iterate(*src)) {
@@ -1496,8 +1494,6 @@ SkPath& SkPath::reverseAddPath(const SkPath& srcPath) {
     if (this == src) {
         src = tmp.set(srcPath);
     }
-
-    SkPathRef::Editor ed(&fPathRef, src->countVerbs(), src->countPoints());
 
     const uint8_t* verbsBegin = src->fPathRef->verbsBegin();
     const uint8_t* verbs = src->fPathRef->verbsEnd();
