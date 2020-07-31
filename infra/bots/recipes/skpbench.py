@@ -47,7 +47,7 @@ def skpbench_steps(api):
     app = api.vars.build_dir.join('skpbench')
     _adb(api, 'push skpbench', 'push', app, api.flavor.device_dirs.bin_dir)
 
-  skpbench_dir = api.vars.slave_dir.join('skia', 'tools', 'skpbench')
+  skpbench_dir = api.vars.workdir.join('skia', 'tools', 'skpbench')
   table = api.path.join(api.vars.swarming_out_dir, 'table')
 
   if 'Vulkan' in api.vars.builder_name:
@@ -63,7 +63,7 @@ def skpbench_steps(api):
         '-v5']
   if 'DDL' in api.vars.builder_name:
     skpbench_args += ['--ddl']
-    # disable the mask generation threads for sanity's sake in DDL mode
+    # disable the mask generation threads for simplicity's sake in DDL mode
     skpbench_args += ['--gpuThreads', '0']
   if '9x9' in api.vars.builder_name:
     skpbench_args += [
