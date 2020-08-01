@@ -818,6 +818,70 @@ DEF_TEST(SkSLFPBadIn, r) {
          "custom @setData function\n1 error\n");
 }
 
+DEF_TEST(SkSLFPNoFPLocals, r) {
+    test_failure(r,
+    R"__SkSL__(
+        void main() {
+            fragmentProcessor child;
+        }
+    )__SkSL__",
+    "error: 1: variables of type 'fragmentProcessor' must be global\n"
+    "1 error\n");
+}
+
+DEF_TEST(SkSLFPNoFPParams, r) {
+    test_failure(r,
+    R"__SkSL__(
+        in fragmentProcessor child;
+        half4 helper(fragmentProcessor fp) { return sample(fp); }
+        void main() {
+            sk_OutColor = helper(child);
+        }
+    )__SkSL__",
+    "error: 3: parameters of type 'fragmentProcessor' not allowed\n"
+    "error: 5: unknown identifier 'helper'\n"
+    "2 errors\n");
+}
+
+DEF_TEST(SkSLFPNoFPReturns, r) {
+    test_failure(r,
+    R"__SkSL__(
+        in fragmentProcessor child;
+        fragmentProcessor get_child() { return child; }
+        void main() {
+            sk_OutColor = sample(get_child());
+        }
+    )__SkSL__",
+    "error: 3: functions may not return type 'fragmentProcessor'\n"
+    "error: 5: unknown identifier 'get_child'\n"
+    "2 errors\n");
+}
+
+DEF_TEST(SkSLFPNoFPConstructors, r) {
+    test_failure(r,
+    R"__SkSL__(
+        in fragmentProcessor child;
+        void main() {
+            sk_OutColor = sample(fragmentProcessor(child));
+        }
+    )__SkSL__",
+    "error: 4: cannot construct 'fragmentProcessor'\n"
+    "1 error\n");
+}
+
+DEF_TEST(SkSLFPNoFPExpressions, r) {
+    test_failure(r,
+    R"__SkSL__(
+        in fragmentProcessor child1;
+        in fragmentProcessor child2;
+        void main(float2 coord) {
+            sk_OutColor = sample(coord.x > 10 ? child1 : child2);
+        }
+    )__SkSL__",
+    "error: 5: ternary expression of type 'fragmentProcessor' not allowed\n"
+    "1 error\n");
+}
+
 DEF_TEST(SkSLFPSampleCoords, r) {
     test(r,
          *SkSL::ShaderCapsFactory::Default(),
@@ -860,12 +924,12 @@ DEF_TEST(SkSLFPFunction, r) {
             "R\"SkSL(return c.wzyx;\n"
             ")SkSL\", &flip_name);",
             "fragBuilder->codeAppendf(\n"
-            "R\"SkSL(half4 inlineResult_fp_0;\n"
-            "half4 inlineArg_fp_1_0 = %s;\n"
+            "R\"SkSL(half4 _inlineResulthalf4fliphalf40;\n"
+            "half4 _inlineArghalf4fliphalf41_0 = %s;\n"
             "{\n"
-            "    inlineResult_fp_0 = inlineArg_fp_1_0.wzyx;\n"
+            "    _inlineResulthalf4fliphalf40 = _inlineArghalf4fliphalf41_0.wzyx;\n"
             "}\n"
-            "%s = inlineResult_fp_0;\n"
+            "%s = _inlineResulthalf4fliphalf40;\n"
             "\n"
             ")SkSL\"\n"
             ", args.fInputColor, args.fOutputColor);"
