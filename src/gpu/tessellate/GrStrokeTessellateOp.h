@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrTessellateStrokeOp_DEFINED
-#define GrTessellateStrokeOp_DEFINED
+#ifndef GrStrokeTessellateOp_DEFINED
+#define GrStrokeTessellateOp_DEFINED
 
 #include "include/core/SkStrokeRec.h"
 #include "src/gpu/GrSTArenaList.h"
@@ -16,7 +16,7 @@
 // Renders opaque, constant-color strokes by decomposing them into standalone tessellation patches.
 // Each patch is either a "cubic" (single stroked bezier curve with butt caps) or a "join". Requires
 // MSAA if antialiasing is desired.
-class GrTessellateStrokeOp : public GrDrawOp {
+class GrStrokeTessellateOp : public GrDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -26,9 +26,9 @@ private:
     //
     // Patches can overlap, so until a stencil technique is implemented, the provided paint must be
     // a constant blended color.
-    GrTessellateStrokeOp(const SkMatrix&, const SkPath&, const SkStrokeRec&, GrPaint&&, GrAAType);
+    GrStrokeTessellateOp(GrAAType, const SkMatrix&, const SkPath&, const SkStrokeRec&, GrPaint&&);
 
-    const char* name() const override { return "GrTessellateStrokeOp"; }
+    const char* name() const override { return "GrStrokeTessellateOp"; }
     void visitProxies(const VisitProxyFunc& fn) const override { fProcessors.visitProxies(fn); }
     FixedFunctionFlags fixedFunctionFlags() const override;
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
@@ -48,10 +48,11 @@ private:
     GrSTArenaList<PathStroke> fPathStrokes;
     int fTotalCombinedVerbCnt;
 
-    SkPMColor4f fColor;
-    const SkMatrix fViewMatrix = SkMatrix::I();
     const GrAAType fAAType;
+    float fMatrixScale;  // The matrix scale is applied to control points before tessellation.
+    SkMatrix fSkewMatrix;  // The skew matrix is applied to the post-tessellation triangles.
     float fMiterLimitOrZero = 0;  // Zero if there is not a stroke with a miter join type.
+    SkPMColor4f fColor;
     GrProcessorSet fProcessors;
 
     // S=1 because we will almost always fit everything into one single chunk.

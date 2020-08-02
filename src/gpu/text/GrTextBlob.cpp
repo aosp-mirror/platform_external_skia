@@ -144,8 +144,8 @@ SkSpan<const GrGlyph*> GrGlyphVector::glyphs() const {
 
 std::tuple<bool, int> GrGlyphVector::regenerateAtlas(int begin, int end,
                                                      GrMaskFormat maskFormat,
-                                                     int padding,
-                                                     GrMeshDrawOp::Target* target) {
+                                                     GrMeshDrawOp::Target* target,
+                                                     bool bilerpPadding) {
     GrAtlasManager* atlasManager = target->atlasManager();
     GrDeferredUploadTarget* uploadTarget = target->deferredUploadTarget();
 
@@ -178,8 +178,8 @@ std::tuple<bool, int> GrGlyphVector::regenerateAtlas(int begin, int end,
             if (!atlasManager->hasGlyph(maskFormat, grGlyph)) {
                 const SkGlyph& skGlyph = *metricsAndImages.glyph(grGlyph->fPackedID);
                 auto code = atlasManager->addGlyphToAtlas(
-                        skGlyph, padding, grGlyph,
-                        target->resourceProvider(), uploadTarget);
+                        skGlyph, grGlyph, target->resourceProvider(),
+                        uploadTarget, bilerpPadding);
                 if (code != GrDrawOpAtlas::ErrorCode::kSucceeded) {
                     success = code != GrDrawOpAtlas::ErrorCode::kError;
                     break;
@@ -363,7 +363,7 @@ GrDirectMaskSubRun::makeAtlasTextOp(const GrClip* clip, const SkMatrixProvider& 
 
 std::tuple<bool, int>
 GrDirectMaskSubRun::regenerateAtlas(int begin, int end, GrMeshDrawOp::Target* target) const {
-    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, 0, target);
+    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, target);
 }
 
 template <typename Rect>
@@ -567,7 +567,7 @@ GrTransformedMaskSubRun::makeAtlasTextOp(const GrClip* clip,
 
 std::tuple<bool, int> GrTransformedMaskSubRun::regenerateAtlas(int begin, int end,
                                                                GrMeshDrawOp::Target* target) const {
-    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, 1, target);
+    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, target, true);
 }
 
 template<typename Quad, typename VertexData>
@@ -625,7 +625,6 @@ static void fill_transformed_vertices_3D(SkZip<Quad, const GrGlyph*, const Verte
         quad[3] = {rb, color, {ar, ab}};  // R,B
     }
 }
-
 
 void GrTransformedMaskSubRun::fillVertexData(void* vertexDst,
                                              int offset, int count,
@@ -840,7 +839,7 @@ void GrSDFTSubRun::draw(const GrClip* clip,
 std::tuple<bool, int> GrSDFTSubRun::regenerateAtlas(
         int begin, int end, GrMeshDrawOp::Target *target) const {
 
-    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, 0, target);
+    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, target);
 }
 
 size_t GrSDFTSubRun::vertexStride() const {
@@ -904,12 +903,21 @@ GrTextBlob::~GrTextBlob() = default;
 
 sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList, const SkMatrix& drawMatrix) {
     // The difference in alignment from the storage of VertexData to SubRun;
-    using AllSubRuns = std::aligned_union_t<1, GrSDFTSubRun, GrDirectMaskSubRun, GrPathSubRun>;
-    constexpr size_t alignDiff = alignof(AllSubRuns) - alignof(GrSDFTSubRun::VertexData);
+    using AllSubRuns = std::aligned_union_t<1,
+            GrDirectMaskSubRun,
+            GrTransformedMaskSubRun,
+            GrSDFTSubRun,
+            GrPathSubRun>;
+
+    using AllVertexData = std::aligned_union<1,
+            GrDirectMaskSubRun::VertexData,
+            GrTransformedMaskSubRun::VertexData,
+            GrSDFTSubRun::VertexData>;
+    constexpr size_t alignDiff = alignof(AllSubRuns) - alignof(AllVertexData);
     constexpr size_t vertexDataToSubRunPadding = alignDiff > 0 ? alignDiff : 0;
     size_t totalGlyphCount = glyphRunList.totalGlyphCount();
     size_t arenaSize =
-            totalGlyphCount * sizeof(GrSDFTSubRun::VertexData)
+            totalGlyphCount * sizeof(AllVertexData)
             + GrGlyphVector::GlyphVectorSize(totalGlyphCount)
             + glyphRunList.runCount() * (sizeof(AllSubRuns) + vertexDataToSubRunPadding)
             + 32;  // Misc arena overhead.

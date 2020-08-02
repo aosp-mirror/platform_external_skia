@@ -246,11 +246,6 @@ public:
             int begin, int end, GrMeshDrawOp::Target* target) const = 0;
 
 protected:
-    using VertexData = std::tuple<
-            SkPoint,   // glyph position.
-            GrIRect16  // glyph bounding rectangle.
-        >;
-
     struct AtlasPt {
         uint16_t u;
         uint16_t v;
@@ -296,7 +291,10 @@ public:
 
     SkScalar strikeToSourceRatio() const { return fStrikeSpec.strikeToSourceRatio(); }
     std::tuple<bool, int> regenerateAtlas(
-            int begin, int end, GrMaskFormat maskFormat, int padding, GrMeshDrawOp::Target *target);
+            int begin, int end,
+            GrMaskFormat maskFormat,
+            GrMeshDrawOp::Target *target,
+            bool bilerpPadding = false);
 
     static size_t GlyphVectorSize(size_t count) {
         return sizeof(Variant) * count;
@@ -315,6 +313,11 @@ private:
 // -- GrDirectMaskSubRun ---------------------------------------------------------------------------
 class GrDirectMaskSubRun final : public GrAtlasSubRun {
 public:
+    using VertexData = std::tuple<
+            SkPoint,   // glyph position.
+            GrIRect16  // glyph bounding rectangle.
+    >;
+
     GrDirectMaskSubRun(GrMaskFormat format,
                        GrTextBlob* blob,
                        const SkRect& bounds,
