@@ -116,16 +116,17 @@ DEF_TEST(pathbuilder_addRect, reporter) {
 DEF_TEST(pathbuilder_addOval, reporter) {
     const SkRect r = { 10, 20, 30, 40 };
 
-    for (int i = 0; i < 4; ++i) {
-        for (auto dir : {SkPathDirection::kCW, SkPathDirection::kCCW}) {
-            SkPathBuilder b;
-            b.addOval(r, dir, i);
-            auto bp = b.detach();
-
+    for (auto dir : {SkPathDirection::kCW, SkPathDirection::kCCW}) {
+        for (int i = 0; i < 4; ++i) {
+            auto bp = SkPathBuilder().addOval(r, dir, i).detach();
             SkPath p;
             p.addOval(r, dir, i);
             REPORTER_ASSERT(reporter, p == bp);
         }
+        auto bp = SkPathBuilder().addOval(r, dir).detach();
+        SkPath p;
+        p.addOval(r, dir);
+        REPORTER_ASSERT(reporter, p == bp);
     }
 }
 
@@ -177,4 +178,30 @@ DEF_TEST(pathbuilder_genid, r) {
     auto p2 = builder.snapshot();
 
     REPORTER_ASSERT(r, p1.getGenerationID() != p2.getGenerationID());
+}
+
+DEF_TEST(pathbuilder_addPolygon, reporter) {
+    SkPoint pts[] = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};
+
+    auto addpoly = [](const SkPoint pts[], int count, bool isClosed) {
+        SkPathBuilder builder;
+        if (count > 0) {
+            builder.moveTo(pts[0]);
+            for (int i = 1; i < count; ++i) {
+                builder.lineTo(pts[i]);
+            }
+            if (isClosed) {
+                builder.close();
+            }
+        }
+        return builder.detach();
+    };
+
+    for (bool isClosed : {false, true}) {
+        for (size_t i = 0; i <= SK_ARRAY_COUNT(pts); ++i) {
+            auto path0 = SkPathBuilder().addPolygon(pts, i, isClosed).detach();
+            auto path1 = addpoly(pts, i, isClosed);
+            REPORTER_ASSERT(reporter, path0 == path1);
+        }
+    }
 }

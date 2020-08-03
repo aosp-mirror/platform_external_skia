@@ -309,3 +309,30 @@ SkPathBuilder& SkPathBuilder::addRRect(const SkRRect& rrect, SkPathDirection dir
     }
     return *this;
 }
+
+SkPathBuilder& SkPathBuilder::addCircle(SkScalar x, SkScalar y, SkScalar r, SkPathDirection dir) {
+    if (r >= 0) {
+        this->addOval(SkRect::MakeLTRB(x - r, y - r, x + r, y + r), dir);
+    }
+    return *this;
+}
+
+SkPathBuilder& SkPathBuilder::addPolygon(const SkPoint pts[], int count, bool isClosed) {
+    if (count <= 0) {
+        return *this;
+    }
+
+    this->incReserve(count, count + isClosed);
+
+    this->moveTo(pts[0]);
+    if (count > 1) {
+        count -= 1;
+        memcpy(fPts.append(count), &pts[1], count * sizeof(SkPoint));
+        memset(fVerbs.append(count), (uint8_t)SkPathVerb::kLine, count);
+        fSegmentMask |= kLine_SkPathSegmentMask;
+    }
+    if (isClosed) {
+        this->close();
+    }
+    return *this;
+}
