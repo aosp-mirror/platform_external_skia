@@ -634,6 +634,7 @@ cc_library_static {
           "src/gpu/GrTransferFromRenderTask.cpp",
           "src/gpu/GrTriangulator.cpp",
           "src/gpu/GrUniformDataManager.cpp",
+          "src/gpu/GrUtil.cpp",
           "src/gpu/GrWaitRenderTask.cpp",
           "src/gpu/GrXferProcessor.cpp",
           "src/gpu/SkGpuDevice.cpp",
