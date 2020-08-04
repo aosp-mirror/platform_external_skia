@@ -115,25 +115,38 @@ DEF_TEST(pathbuilder_addRect, reporter) {
 
 DEF_TEST(pathbuilder_addOval, reporter) {
     const SkRect r = { 10, 20, 30, 40 };
+    SkRect tmp;
 
-    for (int i = 0; i < 4; ++i) {
-        for (auto dir : {SkPathDirection::kCW, SkPathDirection::kCCW}) {
-            SkPathBuilder b;
-            b.addOval(r, dir, i);
-            auto bp = b.detach();
-
+    for (auto dir : {SkPathDirection::kCW, SkPathDirection::kCCW}) {
+        for (int i = 0; i < 4; ++i) {
+            auto bp = SkPathBuilder().addOval(r, dir, i).detach();
             SkPath p;
             p.addOval(r, dir, i);
             REPORTER_ASSERT(reporter, p == bp);
+            REPORTER_ASSERT(reporter,  p.isOval(&tmp) && (tmp == r));
+            REPORTER_ASSERT(reporter, bp.isOval(&tmp) && (tmp == r));
         }
+        auto bp = SkPathBuilder().addOval(r, dir).detach();
+        SkPath p;
+        p.addOval(r, dir);
+        REPORTER_ASSERT(reporter, p == bp);
+        REPORTER_ASSERT(reporter,  p.isOval(&tmp) && (tmp == r));
+        REPORTER_ASSERT(reporter, bp.isOval(&tmp) && (tmp == r));
+
+        // test negative case -- can't have any other segments
+        bp = SkPathBuilder().addOval(r, dir).lineTo(10, 10).detach();
+        REPORTER_ASSERT(reporter, !bp.isOval(&tmp));
+        bp = SkPathBuilder().lineTo(10, 10).addOval(r, dir).detach();
+        REPORTER_ASSERT(reporter, !bp.isOval(&tmp));
     }
 }
 
 DEF_TEST(pathbuilder_addRRect, reporter) {
     const SkRRect rr = SkRRect::MakeRectXY({ 10, 20, 30, 40 }, 5, 6);
+    SkRRect tmp;
 
-    for (int i = 0; i < 4; ++i) {
-        for (auto dir : {SkPathDirection::kCW, SkPathDirection::kCCW}) {
+    for (auto dir : {SkPathDirection::kCW, SkPathDirection::kCCW}) {
+        for (int i = 0; i < 4; ++i) {
             SkPathBuilder b;
             b.addRRect(rr, dir, i);
             auto bp = b.detach();
@@ -141,7 +154,21 @@ DEF_TEST(pathbuilder_addRRect, reporter) {
             SkPath p;
             p.addRRect(rr, dir, i);
             REPORTER_ASSERT(reporter, p == bp);
+            REPORTER_ASSERT(reporter,  p.isRRect(&tmp) && (tmp == rr));
+            REPORTER_ASSERT(reporter, bp.isRRect(&tmp) && (tmp == rr));
         }
+        auto bp = SkPathBuilder().addRRect(rr, dir).detach();
+        SkPath p;
+        p.addRRect(rr, dir);
+        REPORTER_ASSERT(reporter, p == bp);
+        REPORTER_ASSERT(reporter,  p.isRRect(&tmp) && (tmp == rr));
+        REPORTER_ASSERT(reporter, bp.isRRect(&tmp) && (tmp == rr));
+
+        // test negative case -- can't have any other segments
+        bp = SkPathBuilder().addRRect(rr, dir).lineTo(10, 10).detach();
+        REPORTER_ASSERT(reporter, !bp.isRRect(&tmp));
+        bp = SkPathBuilder().lineTo(10, 10).addRRect(rr, dir).detach();
+        REPORTER_ASSERT(reporter, !bp.isRRect(&tmp));
     }
 }
 
@@ -177,4 +204,30 @@ DEF_TEST(pathbuilder_genid, r) {
     auto p2 = builder.snapshot();
 
     REPORTER_ASSERT(r, p1.getGenerationID() != p2.getGenerationID());
+}
+
+DEF_TEST(pathbuilder_addPolygon, reporter) {
+    SkPoint pts[] = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};
+
+    auto addpoly = [](const SkPoint pts[], int count, bool isClosed) {
+        SkPathBuilder builder;
+        if (count > 0) {
+            builder.moveTo(pts[0]);
+            for (int i = 1; i < count; ++i) {
+                builder.lineTo(pts[i]);
+            }
+            if (isClosed) {
+                builder.close();
+            }
+        }
+        return builder.detach();
+    };
+
+    for (bool isClosed : {false, true}) {
+        for (size_t i = 0; i <= SK_ARRAY_COUNT(pts); ++i) {
+            auto path0 = SkPathBuilder().addPolygon(pts, i, isClosed).detach();
+            auto path1 = addpoly(pts, i, isClosed);
+            REPORTER_ASSERT(reporter, path0 == path1);
+        }
+    }
 }
