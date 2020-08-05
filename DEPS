@@ -7,10 +7,10 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@41442cce3d0f30dbfce4d95bdda18c0faa452b43",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@709472c9dd0c413ceb944e06afb600d741e63720",
   # Dawn requires jinja2 and markupsafe for the code generator, and glslang and shaderc for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@8c9858e9b8e36b8c13606b1053133ab395c03418",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@1ea3a22f521ef0e0c7ed4ba9f41ac56b5157a7f0",
   "third_party/externals/glslang"         : "https://chromium.googlesource.com/external/github.com/KhronosGroup/glslang@3ee5f2f1d3316e228916788b300d786bb574d337",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@b41863e42637544c2941b574c7877d3e1f663e25",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@8f45f5cfa0009d2a70589bcda0349b8cb2b72783",
@@ -37,13 +37,13 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@7778792aec717e982cbe07009e4db1de706f6619",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@c0df742ec0b8178ad58c68cff3437ad4b6a06e26",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@e95fbfb1f509ad7a7fdfb72ac35fe412d72fc4a4",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@4568d8587998b3db6c25ba7def35105ee1c31f42",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@74cc8ea2b8df3e6e43430cfcfd71d47f7bef39f9",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@00cc8a50aa0c86b6bcb37e9ece8fb100047cc17b",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@eaf99a4e2009b0e5759e6070ad1760ac1dd75461",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@c28de0e53968ee7ff092f240d2a66e4d8f4bde3c",
+    "url": "https://chromium.googlesource.com/chromium/src.git@be02bd1a23260fe6528b2b9fc91709829e4cb129",
     "condition": "checkout_chromium",
   },
 }

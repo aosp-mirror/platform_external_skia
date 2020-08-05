@@ -13,6 +13,7 @@
 #include "modules/skparagraph/include/Paragraph.h"
 #include "modules/skparagraph/include/ParagraphBuilder.h"
 #include "modules/skparagraph/include/TextStyle.h"
+#include "modules/skparagraph/include/TypefaceFontProvider.h"
 #include "modules/skparagraph/src/ParagraphBuilderImpl.h"
 #include "modules/skparagraph/src/ParagraphImpl.h"
 
@@ -190,6 +191,14 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
             para::ParagraphBuilderImpl pbi(ps, fc);
             return pbi;
         }), allow_raw_pointers())
+      .class_function("_MakeFromFontProvider", optional_override([](SimpleParagraphStyle style,
+                                                                    sk_sp<para::TypefaceFontProvider> fontProvider)-> para::ParagraphBuilderImpl {
+            auto fc = sk_make_sp<para::FontCollection>();
+            fc->setDefaultFontManager(fontProvider);
+            auto ps = toParagraphStyle(style);
+            para::ParagraphBuilderImpl pbi(ps, fc);
+            return pbi;
+      }), allow_raw_pointers())
         .function("addText", optional_override([](para::ParagraphBuilderImpl& self, std::string text) {
             return self.addText(text.c_str(), text.length());
         }))
@@ -199,7 +208,29 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
                                                      SimpleTextStyle textStyle) {
             auto ts = toTextStyle(textStyle);
             self.pushStyle(ts);
+        }))
+        // A method of pushing a textStyle with paints instead of colors for foreground and
+        // background. Since SimpleTextStyle is a value object, it cannot contain paints, which are not primitives. This binding is here to accept them. Any color that is specified in the textStyle is overridden.
+        .function("_pushPaintStyle",  optional_override([](para::ParagraphBuilderImpl& self,
+                SimpleTextStyle textStyle, SkPaint foreground, SkPaint background) {
+            auto ts = toTextStyle(textStyle);
+            ts.setForegroundColor(foreground);
+            ts.setBackgroundColor(background);
+            self.pushStyle(ts);
         }));
+
+    class_<para::TypefaceFontProvider, base<SkFontMgr>>("TypefaceFontProvider")
+      .smart_ptr<sk_sp<para::TypefaceFontProvider>>("sk_sp<TypefaceFontProvider>")
+      .class_function("Make", optional_override([]()-> sk_sp<para::TypefaceFontProvider> {
+          return sk_make_sp<para::TypefaceFontProvider>();
+      }))
+      .function("_registerFont", optional_override([](para::TypefaceFontProvider& self,
+                                                      sk_sp<SkTypeface> typeface,
+                                                      uintptr_t familyPtr) {
+          const char* fPtr = reinterpret_cast<const char*>(familyPtr);
+          SkString fStr(fPtr);
+          self.registerTypeface(typeface, fStr);
+      }), allow_raw_pointers());
 
 
     enum_<para::Affinity>("Affinity")

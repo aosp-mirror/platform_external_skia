@@ -136,17 +136,21 @@ var CanvasKit = {
 
   ParagraphBuilder: {
     Make: function() {},
+    MakeFromFontProvider: function() {},
     addText: function() {},
     build: function() {},
     pop: function() {},
 
     prototype: {
       pushStyle: function() {},
+      pushPaintStyle: function() {},
     },
 
     // private API
     _Make: function() {},
+    _MakeFromFontProvider: function() {},
     _pushStyle: function() {},
+    _pushPaintStyle: function() {},
   },
 
   SkRuntimeEffect: {
@@ -313,6 +317,15 @@ var CanvasKit = {
     // private API
     _makeTypefaceFromData: function() {},
     _fromData: function() {},
+  },
+
+  TypefaceFontProvider: {
+    // public API (from C++ and JS bindings)
+    Make: function() {},
+    registerFont: function() {},
+
+    // private API
+    _registerFont: function() {},
   },
 
   SkImage: {

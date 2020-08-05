@@ -13,6 +13,7 @@
 
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLParser.h"
+#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
@@ -832,7 +833,17 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     if (!returnType) {
         return;
     }
-    if (returnType->nonnullable() == *fContext.fFragmentProcessor_Type) {
+    auto type_is_allowed = [&](const Type* t) {
+#if defined(SKSL_STANDALONE)
+        return true;
+#else
+        GrSLType unusedSLType;
+        return fKind != Program::kPipelineStage_Kind ||
+               type_to_grsltype(fContext, *t, &unusedSLType);
+#endif
+    };
+    if (returnType->nonnullable() == *fContext.fFragmentProcessor_Type ||
+        !type_is_allowed(returnType)) {
         fErrors.error(f.fOffset,
                       "functions may not return type '" + returnType->displayName() + "'");
         return;
@@ -848,12 +859,6 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (!type) {
             return;
         }
-        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters
-        if (type->nonnullable() == *fContext.fFragmentProcessor_Type && !fIsBuiltinCode) {
-            fErrors.error(param.fOffset,
-                          "parameters of type '" + type->displayName() + "' not allowed");
-            return;
-        }
         for (int j = (int) pd.fSizeCount; j >= 1; j--) {
             int size = (param.begin() + j)->getInt();
             String name = type->name() + "[" + to_string(size) + "]";
@@ -862,6 +867,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                                                                                   Type::kArray_Kind,
                                                                                   *type,
                                                                                   size)));
+        }
+        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters
+        if ((type->nonnullable() == *fContext.fFragmentProcessor_Type && !fIsBuiltinCode) ||
+            !type_is_allowed(type)) {
+            fErrors.error(param.fOffset,
+                          "parameters of type '" + type->displayName() + "' not allowed");
+            return;
         }
         StringFragment name = pd.fName;
         const Variable* var = (const Variable*) fSymbolTable->takeOwnership(
@@ -2946,10 +2958,7 @@ std::unique_ptr<Expression> IRGenerator::getArg(int offset, String name) const {
     if (found == fSettings->fArgs.end()) {
         return nullptr;
     }
-    String fullName = "sk_Args." + name;
-    return std::unique_ptr<Expression>(new Setting(offset,
-                                                   fullName,
-                                                   found->second.literal(fContext, offset)));
+    return found->second.literal(fContext, offset);
 }
 
 std::unique_ptr<Expression> IRGenerator::findEnumRef(
@@ -3048,9 +3057,6 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
     StringFragment field = fieldNode.getString();
     if (base->fType == *fContext.fSkCaps_Type) {
         return this->getCap(fieldNode.fOffset, field);
-    }
-    if (base->fType == *fContext.fSkArgs_Type) {
-        return this->getArg(fieldNode.fOffset, field);
     }
     if (base->fKind == Expression::kTypeReference_Kind) {
         return this->convertTypeField(base->fOffset, ((TypeReference&) *base).fValue,
