@@ -8,6 +8,8 @@
 #ifndef SKSL_CONTEXT
 #define SKSL_CONTEXT
 
+#include <memory>
+
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLType.h"
 
@@ -188,7 +190,6 @@ public:
     , fBVec_Type(new Type("$bvec", { fInvalid_Type.get(), fBool2_Type.get(),
                                      fBool3_Type.get(), fBool4_Type.get() }))
     , fSkCaps_Type(new Type("$sk_Caps"))
-    , fSkArgs_Type(new Type("$sk_Args"))
     , fFragmentProcessor_Type(fp_type(fInt_Type.get(), fBool_Type.get()))
     , fDefined_Expression(new Defined(*fInvalid_Type)) {}
 
@@ -355,7 +356,6 @@ public:
     const std::unique_ptr<Type> fBVec_Type;
 
     const std::unique_ptr<Type> fSkCaps_Type;
-    const std::unique_ptr<Type> fSkArgs_Type;
     const std::unique_ptr<Type> fFragmentProcessor_Type;
 
     // sentinel expression used to mark that a variable has a value during dataflow analysis (when
@@ -401,7 +401,7 @@ private:
             Type::Field(mods, "preservesOpaqueInput", boolType),
             Type::Field(mods, "hasConstantOutputForConstantInput", boolType)
         };
-        return std::unique_ptr<Type>(new Type("fragmentProcessor", fields));
+        return std::make_unique<Type>("fragmentProcessor", fields);
     }
 };
 

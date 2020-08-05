@@ -8,10 +8,12 @@
 #include "src/sksl/SkSLIRGenerator.h"
 
 #include "limits.h"
+#include <memory>
 #include <unordered_set>
 
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLParser.h"
+#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
@@ -178,7 +180,7 @@ void IRGenerator::start(const Program::Settings* settings,
 }
 
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragment name) {
-    return std::unique_ptr<Extension>(new Extension(offset, name));
+    return std::make_unique<Extension>(offset, name);
 }
 
 void IRGenerator::finish() {
@@ -222,9 +224,8 @@ std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& st
                         std::vector<std::unique_ptr<Statement>> statements;
                         statements.push_back(getNormalizeSkPositionCode());
                         statements.push_back(std::move(result));
-                        return std::unique_ptr<Block>(new Block(statement.fOffset,
-                                                                std::move(statements),
-                                                                fSymbolTable));
+                        return std::make_unique<Block>(statement.fOffset, std::move(statements),
+                                                       fSymbolTable);
                     }
                 }
             }
@@ -261,7 +262,7 @@ std::unique_ptr<Block> IRGenerator::convertBlock(const ASTNode& block) {
         }
         statements.push_back(std::move(statement));
     }
-    return std::unique_ptr<Block>(new Block(block.fOffset, std::move(statements), fSymbolTable));
+    return std::make_unique<Block>(block.fOffset, std::move(statements), fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertVarDeclarationStatement(const ASTNode& s) {
@@ -404,8 +405,8 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
                 sizes.push_back(nullptr);
             }
         }
-        auto var = std::unique_ptr<Variable>(new Variable(varDecl.fOffset, modifiers,
-                                                          varData.fName, *type, storage));
+        auto var = std::make_unique<Variable>(varDecl.fOffset, modifiers, varData.fName, *type,
+                                              storage);
         if (var->fName == Compiler::RTADJUST_NAME) {
             SkASSERT(!fRTAdjust);
             SkASSERT(var->fType == *fContext.fFloat4_Type);
@@ -440,9 +441,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
             fSymbolTable->add(name, std::move(var));
         }
     }
-    return std::unique_ptr<VarDeclarations>(new VarDeclarations(decls.fOffset,
-                                                                baseType,
-                                                                std::move(variables)));
+    return std::make_unique<VarDeclarations>(decls.fOffset, baseType, std::move(variables));
 }
 
 std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(const ASTNode& m) {
@@ -469,7 +468,7 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
         !fSettings->fCaps->gsInvocationsSupport()) {
         modifiers.fLayout.fMaxVertices *= fInvocations;
     }
-    return std::unique_ptr<ModifiersDeclaration>(new ModifiersDeclaration(modifiers));
+    return std::make_unique<ModifiersDeclaration>(modifiers);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
@@ -736,7 +735,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
     std::unique_ptr<Expression> test(new BinaryExpression(-1,
                     std::unique_ptr<Expression>(new VariableReference(-1, *loopIdx)),
                     Token::Kind::TK_LT,
-                    std::unique_ptr<IntLiteral>(new IntLiteral(fContext, -1, fInvocations)),
+                    std::make_unique<IntLiteral>(fContext, -1, fInvocations),
                     *fContext.fBool_Type));
     std::unique_ptr<Expression> next(new PostfixExpression(
                 std::unique_ptr<Expression>(
@@ -762,7 +761,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
                     std::unique_ptr<Expression>(new VariableReference(-1, *loopIdx,
                                                                 VariableReference::kWrite_RefKind)),
                     Token::Kind::TK_EQ,
-                    std::unique_ptr<IntLiteral>(new IntLiteral(fContext, -1, 0)),
+                    std::make_unique<IntLiteral>(fContext, -1, 0),
                     *fContext.fInt_Type));
     std::unique_ptr<Statement> initializer(new ExpressionStatement(std::move(assignment)));
     std::unique_ptr<Statement> loop = std::unique_ptr<Statement>(
@@ -770,11 +769,11 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
                                  std::move(initializer),
                                  std::move(test),
                                  std::move(next),
-                                 std::unique_ptr<Block>(new Block(-1, std::move(loopBody))),
+                                 std::make_unique<Block>(-1, std::move(loopBody)),
                                  fSymbolTable));
     std::vector<std::unique_ptr<Statement>> children;
     children.push_back(std::move(loop));
-    return std::unique_ptr<Block>(new Block(-1, std::move(children)));
+    return std::make_unique<Block>(-1, std::move(children));
 }
 
 std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
@@ -834,7 +833,17 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     if (!returnType) {
         return;
     }
-    if (returnType->nonnullable() == *fContext.fFragmentProcessor_Type) {
+    auto type_is_allowed = [&](const Type* t) {
+#if defined(SKSL_STANDALONE)
+        return true;
+#else
+        GrSLType unusedSLType;
+        return fKind != Program::kPipelineStage_Kind ||
+               type_to_grsltype(fContext, *t, &unusedSLType);
+#endif
+    };
+    if (returnType->nonnullable() == *fContext.fFragmentProcessor_Type ||
+        !type_is_allowed(returnType)) {
         fErrors.error(f.fOffset,
                       "functions may not return type '" + returnType->displayName() + "'");
         return;
@@ -850,12 +859,6 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (!type) {
             return;
         }
-        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters
-        if (type->nonnullable() == *fContext.fFragmentProcessor_Type && !fIsBuiltinCode) {
-            fErrors.error(param.fOffset,
-                          "parameters of type '" + type->displayName() + "' not allowed");
-            return;
-        }
         for (int j = (int) pd.fSizeCount; j >= 1; j--) {
             int size = (param.begin() + j)->getInt();
             String name = type->name() + "[" + to_string(size) + "]";
@@ -864,6 +867,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                                                                                   Type::kArray_Kind,
                                                                                   *type,
                                                                                   size)));
+        }
+        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters
+        if ((type->nonnullable() == *fContext.fFragmentProcessor_Type && !fIsBuiltinCode) ||
+            !type_is_allowed(type)) {
+            fErrors.error(param.fOffset,
+                          "parameters of type '" + type->displayName() + "' not allowed");
+            return;
         }
         StringFragment name = pd.fName;
         const Variable* var = (const Variable*) fSymbolTable->takeOwnership(
@@ -980,13 +990,12 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     }
     if (!decl) {
         // couldn't find an existing declaration
-        auto newDecl = std::unique_ptr<FunctionDeclaration>(new FunctionDeclaration(
-                                                                                   f.fOffset,
-                                                                                   fd.fModifiers,
-                                                                                   fd.fName,
-                                                                                   parameters,
-                                                                                   *returnType,
-                                                                                   fIsBuiltinCode));
+        auto newDecl = std::make_unique<FunctionDeclaration>(f.fOffset,
+                                                             fd.fModifiers,
+                                                             fd.fName,
+                                                             parameters,
+                                                             *returnType,
+                                                             fIsBuiltinCode);
         decl = newDecl.get();
         fSymbolTable->add(decl->fName, std::move(newDecl));
     }
@@ -1138,16 +1147,15 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
         old->addWithoutOwnership(id.fInstanceName, var);
     } else {
         for (size_t i = 0; i < fields.size(); i++) {
-            old->add(fields[i].fName, std::unique_ptr<Field>(new Field(intf.fOffset, *var,
-                                                                       (int) i)));
+            old->add(fields[i].fName, std::make_unique<Field>(intf.fOffset, *var, (int)i));
         }
     }
-    return std::unique_ptr<InterfaceBlock>(new InterfaceBlock(intf.fOffset,
-                                                              var,
-                                                              id.fTypeName,
-                                                              id.fInstanceName,
-                                                              std::move(sizes),
-                                                              symbols));
+    return std::make_unique<InterfaceBlock>(intf.fOffset,
+                                            var,
+                                            id.fTypeName,
+                                            id.fInstanceName,
+                                            std::move(sizes),
+                                            symbols);
 }
 
 void IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
@@ -1193,9 +1201,8 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         }
         value = std::unique_ptr<Expression>(new IntLiteral(fContext, e.fOffset, currentValue));
         ++currentValue;
-        auto var = std::unique_ptr<Variable>(new Variable(e.fOffset, modifiers, child.getString(),
-                                                          *type, Variable::kGlobal_Storage,
-                                                          value.get()));
+        auto var = std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), *type,
+                                              Variable::kGlobal_Storage, value.get());
         variables.push_back(var.get());
         symbols->add(child.getString(), std::move(var));
         symbols->takeOwnership(std::move(value));
@@ -1292,15 +1299,11 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
             std::vector<const FunctionDeclaration*> f = {
                 (const FunctionDeclaration*) result
             };
-            return std::unique_ptr<FunctionReference>(new FunctionReference(fContext,
-                                                                            identifier.fOffset,
-                                                                            f));
+            return std::make_unique<FunctionReference>(fContext, identifier.fOffset, f);
         }
         case Symbol::kUnresolvedFunction_Kind: {
             const UnresolvedFunction* f = (const UnresolvedFunction*) result;
-            return std::unique_ptr<FunctionReference>(new FunctionReference(fContext,
-                                                                            identifier.fOffset,
-                                                                            f->fFunctions));
+            return std::make_unique<FunctionReference>(fContext, identifier.fOffset, f->fFunctions);
         }
         case Symbol::kVariable_Kind: {
             const Variable* var = (const Variable*) result;
@@ -1345,10 +1348,9 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
                 }
             }
             // default to kRead_RefKind; this will be corrected later if the variable is written to
-            return std::unique_ptr<VariableReference>(new VariableReference(
-                                                                 identifier.fOffset,
-                                                                 *var,
-                                                                 VariableReference::kRead_RefKind));
+            return std::make_unique<VariableReference>(identifier.fOffset,
+                                                       *var,
+                                                       VariableReference::kRead_RefKind);
         }
         case Symbol::kField_Kind: {
             const Field* field = (const Field*) result;
@@ -1361,13 +1363,11 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
         }
         case Symbol::kType_Kind: {
             const Type* t = (const Type*) result;
-            return std::unique_ptr<TypeReference>(new TypeReference(fContext, identifier.fOffset,
-                                                                    *t));
+            return std::make_unique<TypeReference>(fContext, identifier.fOffset, *t);
         }
         case Symbol::kExternal_Kind: {
             ExternalValue* r = (ExternalValue*) result;
-            return std::unique_ptr<ExternalValueReference>(
-                                                 new ExternalValueReference(identifier.fOffset, r));
+            return std::make_unique<ExternalValueReference>(identifier.fOffset, r);
         }
         default:
             ABORT("unsupported symbol type %d\n", result->fKind);
@@ -1376,8 +1376,8 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
 
 std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
     ASTNode::SectionData section = s.getSectionData();
-    return std::unique_ptr<Section>(new Section(s.fOffset, section.fName, section.fArgument,
-                                                section.fText));
+    return std::make_unique<Section>(s.fOffset, section.fName, section.fArgument,
+                                                section.fText);
 }
 
 
@@ -1668,11 +1668,11 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
         }
         return std::unique_ptr<Expression>(new BoolLiteral(fContext, left.fOffset, result));
     }
-    #define RESULT(t, op) std::unique_ptr<Expression>(new t ## Literal(fContext, left.fOffset, \
-                                                                       leftVal op rightVal))
-    #define URESULT(t, op) std::unique_ptr<Expression>(new t ## Literal(fContext, left.fOffset, \
-                                                                        (uint32_t) leftVal op   \
-                                                                        (uint32_t) rightVal))
+    #define RESULT(t, op) std::make_unique<t ## Literal>(fContext, left.fOffset, \
+                                                         leftVal op rightVal)
+    #define URESULT(t, op) std::make_unique<t ## Literal>(fContext, left.fOffset, \
+                                                          (uint32_t) leftVal op   \
+                                                          (uint32_t) rightVal)
     if (left.fKind == Expression::kIntLiteral_Kind && right.fKind == Expression::kIntLiteral_Kind) {
         int64_t leftVal  = ((IntLiteral&) left).fValue;
         int64_t rightVal = ((IntLiteral&) right).fValue;
@@ -2057,8 +2057,7 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(int offset,
     switch (statement.fKind) {
         case Statement::kBlock_Kind: {
             const Block& b = (const Block&) statement;
-            return std::unique_ptr<Statement>(new Block(offset, stmts(b.fStatements), b.fSymbols,
-                                                        b.fIsScope));
+            return std::make_unique<Block>(offset, stmts(b.fStatements), b.fSymbols, b.fIsScope);
         }
 
         case Statement::kBreak_Kind:
@@ -2068,56 +2067,51 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(int offset,
 
         case Statement::kDo_Kind: {
             const DoStatement& d = (const DoStatement&) statement;
-            return std::unique_ptr<Statement>(new DoStatement(offset,
-                                                              stmt(d.fStatement),
-                                                              expr(d.fTest)));
+            return std::make_unique<DoStatement>(offset, stmt(d.fStatement), expr(d.fTest));
         }
         case Statement::kExpression_Kind: {
             const ExpressionStatement& e = (const ExpressionStatement&) statement;
-            return std::unique_ptr<Statement>(new ExpressionStatement(expr(e.fExpression)));
+            return std::make_unique<ExpressionStatement>(expr(e.fExpression));
         }
         case Statement::kFor_Kind: {
             const ForStatement& f = (const ForStatement&) statement;
             // need to ensure initializer is evaluated first so that we've already remapped its
             // declarations by the time we evaluate test & next
             std::unique_ptr<Statement> initializer = stmt(f.fInitializer);
-            return std::unique_ptr<Statement>(new ForStatement(offset, std::move(initializer),
-                                                               expr(f.fTest), expr(f.fNext),
-                                                               stmt(f.fStatement), f.fSymbols));
+            return std::make_unique<ForStatement>(offset, std::move(initializer), expr(f.fTest),
+                                                  expr(f.fNext), stmt(f.fStatement), f.fSymbols);
         }
         case Statement::kIf_Kind: {
             const IfStatement& i = (const IfStatement&) statement;
-            return std::unique_ptr<Statement>(new IfStatement(offset, i.fIsStatic, expr(i.fTest),
-                                                               stmt(i.fIfTrue), stmt(i.fIfFalse)));
+            return std::make_unique<IfStatement>(offset, i.fIsStatic, expr(i.fTest),
+                                                 stmt(i.fIfTrue), stmt(i.fIfFalse));
         }
         case Statement::kNop_Kind:
             return statement.clone();
         case Statement::kReturn_Kind: {
             const ReturnStatement& r = (const ReturnStatement&) statement;
             if (r.fExpression) {
-                std::unique_ptr<Statement> assignment(new ExpressionStatement(
-                                    std::unique_ptr<Expression>(new BinaryExpression(offset,
-                                        std::unique_ptr<Expression>(new VariableReference(
-                                                                offset,
-                                                                *returnVar,
-                                                                VariableReference::kWrite_RefKind)),
-                                        Token::Kind::TK_EQ,
-                                        expr(r.fExpression),
-                                        returnVar->fType))));
+                std::unique_ptr<Statement> assignment = std::make_unique<ExpressionStatement>(
+                        std::make_unique<BinaryExpression>(
+                            offset,
+                            std::make_unique<VariableReference>(offset, *returnVar,
+                                                                VariableReference::kWrite_RefKind),
+                            Token::Kind::TK_EQ,
+                            expr(r.fExpression),
+                            returnVar->fType));
                 if (haveEarlyReturns) {
                     std::vector<std::unique_ptr<Statement>> block;
                     block.push_back(std::move(assignment));
                     block.emplace_back(new BreakStatement(offset));
-                    return std::unique_ptr<Statement>(new Block(offset, std::move(block), nullptr,
-                                                                false));
+                    return std::make_unique<Block>(offset, std::move(block), nullptr, false);
                 } else {
                     return assignment;
                 }
             } else {
                 if (haveEarlyReturns) {
-                    return std::unique_ptr<Statement>(new BreakStatement(offset));
+                    return std::make_unique<BreakStatement>(offset);
                 } else {
-                    return std::unique_ptr<Statement>(new Nop());
+                    return std::make_unique<Nop>();
                 }
             }
         }
@@ -2128,10 +2122,8 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(int offset,
                 cases.emplace_back(new SwitchCase(offset, expr(sc->fValue),
                                                   stmts(sc->fStatements)));
             }
-            return std::unique_ptr<Statement>(new SwitchStatement(offset, ss.fIsStatic,
-                                                                  expr(ss.fValue),
-                                                                  std::move(cases),
-                                                                  ss.fSymbols));
+            return std::make_unique<SwitchStatement>(offset, ss.fIsStatic, expr(ss.fValue),
+                                                     std::move(cases), ss.fSymbols);
         }
         case Statement::kVarDeclaration_Kind: {
             const VarDeclaration& decl = (const VarDeclaration&) statement;
@@ -2152,8 +2144,8 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(int offset,
                                                                 old->fStorage,
                                                                 initialValue.get())));
             (*varMap)[old] = clone;
-            return std::unique_ptr<Statement>(new VarDeclaration(clone, std::move(sizes),
-                                                                 std::move(initialValue)));
+            return std::make_unique<VarDeclaration>(clone, std::move(sizes),
+                                                    std::move(initialValue));
         }
         case Statement::kVarDeclarations_Kind: {
             const VarDeclarations& decls = *((VarDeclarationsStatement&) statement).fDeclaration;
@@ -2163,14 +2155,11 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(int offset,
             }
             const Type* typePtr = copy_if_needed(&decls.fBaseType, *fSymbolTable);
             return std::unique_ptr<Statement>(new VarDeclarationsStatement(
-                    std::unique_ptr<VarDeclarations>(new VarDeclarations(offset, typePtr,
-                                                                         std::move(vars)))));
+                    std::make_unique<VarDeclarations>(offset, typePtr, std::move(vars))));
         }
         case Statement::kWhile_Kind: {
             const WhileStatement& w = (const WhileStatement&) statement;
-            return std::unique_ptr<Statement>(new WhileStatement(offset,
-                                                              expr(w.fTest),
-                                                              stmt(w.fStatement)));
+            return std::make_unique<WhileStatement>(offset, expr(w.fTest), stmt(w.fStatement));
         }
         default:
             SkASSERT(false);
@@ -2280,16 +2269,15 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
         name->appendf("_inlineResult%s%d", inlineSalt.c_str(), varIndex);
         String* namePtr = (String*) fSymbolTable->takeOwnership(std::move(name));
         resultVar = new Variable(-1, Modifiers(), namePtr->c_str(),
-                                                                  function.fDeclaration.fReturnType,
-                                                                  Variable::kLocal_Storage,
-                                                                  nullptr);
+                                 function.fDeclaration.fReturnType,
+                                 Variable::kLocal_Storage,
+                                 nullptr);
         fSymbolTable->add(resultVar->fName, std::unique_ptr<Symbol>(resultVar));
         std::vector<std::unique_ptr<VarDeclaration>> variables;
         variables.emplace_back(new VarDeclaration(resultVar, {}, nullptr));
-        fExtraStatements.emplace_back(new VarDeclarationsStatement(
-                        std::unique_ptr<VarDeclarations>(new VarDeclarations(offset,
-                                                                           &resultVar->fType,
-                                                                           std::move(variables)))));
+        fExtraStatements.emplace_back(
+                new VarDeclarationsStatement(std::make_unique<VarDeclarations>(
+                        offset, &resultVar->fType, std::move(variables))));
 
     } else {
         resultVar = nullptr;
@@ -2312,9 +2300,9 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
             vars.emplace_back(new VarDeclaration(argVar, {}, std::move(arguments[i])));
         }
         fExtraStatements.emplace_back(new VarDeclarationsStatement(
-                           std::unique_ptr<VarDeclarations>(new VarDeclarations(offset,
+                           std::make_unique<VarDeclarations>(offset,
                                                                                 &argVar->fType,
-                                                                                std::move(vars)))));
+                                                                                std::move(vars))));
     }
     SkASSERT(function.fBody->fKind == Statement::kBlock_Kind);
     const Block& body = (Block&) *function.fBody;
@@ -2429,8 +2417,8 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
          !has_early_return(*function.fDefinition))) {
         return this->inlineCall(offset, *function.fDefinition, std::move(arguments));
     }
-    return std::unique_ptr<FunctionCall>(new FunctionCall(offset, *returnType, function,
-                                                          std::move(arguments)));
+    return std::make_unique<FunctionCall>(offset, *returnType, function,
+                                                          std::move(arguments));
 }
 
 /**
@@ -2799,10 +2787,26 @@ std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression
     return nullptr;
 }
 
+// counts the number of chunks of contiguous 'x's in a swizzle, e.g. xxx1 has one and x0xx has two
+int count_contiguous_swizzle_chunks(const std::vector<int>& components) {
+    int chunkCount = 0;
+    for (size_t i = 0; i < components.size(); ++i) {
+        SkASSERT(components[i] <= 0);
+        if (components[i] == 0) {
+            ++chunkCount;
+            while (i + 1 < components.size() && components[i + 1] == 0) {
+                ++i;
+            }
+        }
+    }
+    return chunkCount;
+}
+
 std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expression> base,
                                                         StringFragment fields) {
-    if (base->fType.kind() != Type::kVector_Kind) {
-        fErrors.error(base->fOffset, "cannot swizzle type '" + base->fType.displayName() + "'");
+    if (base->fType.kind() != Type::kVector_Kind && !base->fType.isNumber()) {
+        fErrors.error(base->fOffset, "cannot swizzle value of type '" + base->fType.displayName() +
+                                     "'");
         return nullptr;
     }
     std::vector<int> swizzleComponents;
@@ -2858,6 +2862,83 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
         fErrors.error(base->fOffset, "too many components in swizzle mask '" + fields + "'");
         return nullptr;
     }
+    if (base->fType.isNumber()) {
+        // Swizzling a single scalar. Something like foo.x0x1 is equivalent to float4(foo, 0, foo,
+        // 1)
+        int offset = base->fOffset;
+        std::unique_ptr<Expression> expr;
+        switch (base->fKind) {
+            case Expression::kVariableReference_Kind:
+            case Expression::kFloatLiteral_Kind:
+            case Expression::kIntLiteral_Kind:
+                // the value being swizzled is just a constant or variable reference, so we can
+                // safely re-use copies of it without reevaluation concerns
+                expr = std::move(base);
+                break;
+            default:
+                // It's a value we can't safely re-use multiple times. If it's all in one contiguous
+                // chunk it's easy (e.g. foo.xxx0 can be turned into half4(half3(x), 0)), but
+                // for multiple discontiguous chunks we'll need to copy it into a temporary value.
+                int chunkCount = count_contiguous_swizzle_chunks(swizzleComponents);
+                if (chunkCount <= 1) {
+                    // no copying needed, so we can just use the value directly
+                    expr = std::move(base);
+                } else {
+                    // store the value in a temporary variable so we can re-use it
+                    int varIndex = fInlineVarCounter++;
+                    auto name = std::make_unique<String>();
+                    name->appendf("_tmpSwizzle%d", varIndex);
+                    String* namePtr = (String*) fSymbolTable->takeOwnership(std::move(name));
+                    Variable* var = (Variable*) fSymbolTable->takeOwnership(
+                                std::unique_ptr<const Symbol>(new Variable(offset, Modifiers(),
+                                                                           namePtr->c_str(),
+                                                                           base->fType,
+                                                                           Variable::kLocal_Storage,
+                                                                           base.get())));
+                    expr = std::make_unique<VariableReference>(offset, *var);
+                    std::vector<std::unique_ptr<VarDeclaration>> variables;
+                    variables.emplace_back(new VarDeclaration(var, {}, std::move(base)));
+                    fExtraStatements.emplace_back(new VarDeclarationsStatement(
+                            std::make_unique<VarDeclarations>(offset, &expr->fType,
+                                                              std::move(variables))));
+                }
+        }
+        std::vector<std::unique_ptr<Expression>> args;
+        for (size_t i = 0; i < swizzleComponents.size(); ++i) {
+            switch (swizzleComponents[i]) {
+                case 0: {
+                    args.push_back(expr->clone());
+                    int count = 1;
+                    while (i + 1 < swizzleComponents.size() && swizzleComponents[i + 1] == 0) {
+                        ++i;
+                        ++count;
+                    }
+                    if (count > 1) {
+                        std::vector<std::unique_ptr<Expression>> constructorArgs;
+                        constructorArgs.push_back(std::move(args.back()));
+                        args.pop_back();
+                        args.emplace_back(new Constructor(offset, expr->fType.toCompound(fContext,
+                                                                                         count,
+                                                                                         1),
+                                                          std::move(constructorArgs)));
+                    }
+                    break;
+                }
+                case SKSL_SWIZZLE_0:
+                    args.emplace_back(new IntLiteral(fContext, offset, 0));
+                    break;
+                case SKSL_SWIZZLE_1:
+                    args.emplace_back(new IntLiteral(fContext, offset, 1));
+                    break;
+            }
+        }
+        return std::unique_ptr<Expression>(new Constructor(offset,
+                                                           expr->fType.toCompound(
+                                                                           fContext,
+                                                                           swizzleComponents.size(),
+                                                                           1),
+                                                           std::move(args)));
+    }
     return std::unique_ptr<Expression>(new Swizzle(fContext, std::move(base), swizzleComponents));
 }
 
@@ -2877,10 +2958,7 @@ std::unique_ptr<Expression> IRGenerator::getArg(int offset, String name) const {
     if (found == fSettings->fArgs.end()) {
         return nullptr;
     }
-    String fullName = "sk_Args." + name;
-    return std::unique_ptr<Expression>(new Setting(offset,
-                                                   fullName,
-                                                   found->second.literal(fContext, offset)));
+    return found->second.literal(fContext, offset);
 }
 
 std::unique_ptr<Expression> IRGenerator::findEnumRef(
@@ -2900,8 +2978,8 @@ std::unique_ptr<Expression> IRGenerator::findEnumRef(
                 const Variable& v = ((VariableReference&) *result).fVariable;
                 SkASSERT(v.fInitialValue);
                 SkASSERT(v.fInitialValue->fKind == Expression::kIntLiteral_Kind);
-                result.reset(new IntLiteral(offset, ((IntLiteral&) *v.fInitialValue).fValue,
-                                            &type));
+                result = std::make_unique<IntLiteral>(
+                        offset, ((IntLiteral&)*v.fInitialValue).fValue, &type);
             }
             fSymbolTable = old;
             return result;
@@ -2980,9 +3058,6 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
     if (base->fType == *fContext.fSkCaps_Type) {
         return this->getCap(fieldNode.fOffset, field);
     }
-    if (base->fType == *fContext.fSkArgs_Type) {
-        return this->getArg(fieldNode.fOffset, field);
-    }
     if (base->fKind == Expression::kTypeReference_Kind) {
         return this->convertTypeField(base->fOffset, ((TypeReference&) *base).fValue,
                                       field);
@@ -2991,15 +3066,11 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
         return this->convertField(std::move(base), field);
     }
     switch (base->fType.kind()) {
-        case Type::kVector_Kind:
-            return this->convertSwizzle(std::move(base), field);
         case Type::kOther_Kind:
         case Type::kStruct_Kind:
             return this->convertField(std::move(base), field);
         default:
-            fErrors.error(base->fOffset, "cannot swizzle value of type '" +
-                                         base->fType.displayName() + "'");
-            return nullptr;
+            return this->convertSwizzle(std::move(base), field);
     }
 }
 

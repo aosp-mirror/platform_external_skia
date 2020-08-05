@@ -573,13 +573,7 @@ void CPPCodeGenerator::writeFunction(const FunctionDefinition& f) {
 }
 
 void CPPCodeGenerator::writeSetting(const Setting& s) {
-    static constexpr const char* kPrefix = "sk_Args.";
-    if (!strncmp(s.fName.c_str(), kPrefix, strlen(kPrefix))) {
-        const char* name = s.fName.c_str() + strlen(kPrefix);
-        this->writeRuntimeValue(s.fType, Layout(), HCodeGenerator::FieldName(name).c_str());
-    } else {
-        this->write(s.fName.c_str());
-    }
+    this->write(s.fName.c_str());
 }
 
 bool CPPCodeGenerator::writeSection(const char* name, const char* prefix) {
@@ -1102,7 +1096,7 @@ void CPPCodeGenerator::writeClone() {
         this->write("}\n");
         this->writef("std::unique_ptr<GrFragmentProcessor> %s::clone() const {\n",
                      fFullName.c_str());
-        this->writef("    return std::unique_ptr<GrFragmentProcessor>(new %s(*this));\n",
+        this->writef("    return std::make_unique<%s>(*this);\n",
                      fFullName.c_str());
         this->write("}\n");
     }

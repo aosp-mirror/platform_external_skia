@@ -26,6 +26,19 @@
       return ret;
     }
 
+    // Registers the font (provided as an arrayBuffer) with the alias `family`.
+    CanvasKit.TypefaceFontProvider.prototype.registerFont = function(font, family) {
+      var typeface = CanvasKit.SkFontMgr.RefDefault().MakeTypefaceFromData(font);
+      if (!typeface) {
+          SkDebug('Could not decode font data');
+          // We do not need to free the data since the C++ will do that for us
+          // when the font is deleted (or fails to decode);
+          return null;
+      }
+      var familyPtr = cacheOrCopyString(family);
+      this._registerFont(typeface, familyPtr);
+    }
+
     // These helpers fill out all fields, because emscripten complains if we
     // have undefined and it expects, for example, a float.
     CanvasKit.ParagraphStyle = function(s) {
@@ -123,7 +136,6 @@
       textStyle['_colorPtr'] = copyColorToWasm(textStyle['color']);
       textStyle['_foregroundColorPtr'] = nullptr; // nullptr is 0, from helper.js
       textStyle['_backgroundColorPtr'] = nullptr;
-
       if (textStyle['foregroundColor']) {
         textStyle['_foregroundColorPtr'] = copyColorToWasm(textStyle['foregroundColor'], scratchForegroundColorPtr);
       }
@@ -155,9 +167,23 @@
       return result;
     };
 
+    CanvasKit.ParagraphBuilder.MakeFromFontProvider = function(paragraphStyle, fontProvider) {
+        copyArrays(paragraphStyle['textStyle']);
+
+        var result =  CanvasKit.ParagraphBuilder._MakeFromFontProvider(paragraphStyle, fontProvider);
+        freeArrays(paragraphStyle['textStyle']);
+        return result;
+    };
+
     CanvasKit.ParagraphBuilder.prototype.pushStyle = function(textStyle) {
       copyArrays(textStyle);
       this._pushStyle(textStyle);
+      freeArrays(textStyle);
+    }
+
+    CanvasKit.ParagraphBuilder.prototype.pushPaintStyle = function(textStyle, fg, bg) {
+      copyArrays(textStyle);
+      this._pushPaintStyle(textStyle, fg, bg);
       freeArrays(textStyle);
     }
 });

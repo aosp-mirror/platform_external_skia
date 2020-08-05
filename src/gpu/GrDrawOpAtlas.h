@@ -106,7 +106,7 @@ public:
 
     class AtlasLocator {
     public:
-        std::array<uint16_t, 4> getUVs(int padding) const;
+        std::array<uint16_t, 4> getUVs() const;
 
         // TODO: Remove the small path renderer's use of this for eviction
         PlotLocator plotLocator() const { return fPlotLocator; }
@@ -117,16 +117,22 @@ public:
 
         uint64_t genID() const { return fPlotLocator.genID(); }
 
+        void insetSrc(int padding) {
+            fRect.fLeft += padding;
+            fRect.fTop += padding;
+            fRect.fRight -= padding;
+            fRect.fBottom -= padding;
+        }
+
     private:
         friend class GrDrawOpAtlas;
 
         SkDEBUGCODE(void validate(const GrDrawOpAtlas*) const;)
 
         PlotLocator fPlotLocator;
-        GrIRect16   fRect{0, 0, 0, 0};
 
-        // TODO: the inset to the actual data w/in 'fRect' could also be stored in this class
-        // This would simplify the 'getUVs' call. The valid values would be 0, 1, 2 & 4.
+        // The inset padded bounds in the atlas.
+        GrIRect16   fRect{0, 0, 0, 0};
     };
 
     /**
