@@ -397,24 +397,18 @@ public:
 
         @param context         GPU context
         @param backendTexture  texture residing on GPU
+        @param imageOrigin     origin of the resulting image
+        @param colorType       color type of the resulting image
+        @param alphaType       alpha type of the resulting image
         @param colorSpace      range of colors; may be nullptr
         @return                created SkImage, or nullptr
     */
-    static sk_sp<SkImage> MakeFromAdoptedTexture(GrDirectContext* context,
+    static sk_sp<SkImage> MakeFromAdoptedTexture(GrRecordingContext* context,
                                                  const GrBackendTexture& backendTexture,
-                                                 GrSurfaceOrigin surfaceOrigin,
+                                                 GrSurfaceOrigin imageOrigin,
                                                  SkColorType colorType,
                                                  SkAlphaType alphaType = kPremul_SkAlphaType,
                                                  sk_sp<SkColorSpace> colorSpace = nullptr);
-
-#ifdef SK_IMAGE_MAKE_FROM_ADOPTED_TEXTURE_LEGACY_API
-    static sk_sp<SkImage> MakeFromAdoptedTexture(GrContext* context,
-                                                 const GrBackendTexture& backendTexture,
-                                                 GrSurfaceOrigin surfaceOrigin,
-                                                 SkColorType colorType,
-                                                 SkAlphaType alphaType = kPremul_SkAlphaType,
-                                                 sk_sp<SkColorSpace> colorSpace = nullptr);
-#endif
 
     /** Creates an SkImage by flattening the specified YUVA planes into a single, interleaved RGBA
         image.
@@ -1254,12 +1248,6 @@ public:
                                   const SkImageFilter* filter, const SkIRect& subset,
                                   const SkIRect& clipBounds, SkIRect* outSubset,
                                   SkIPoint* offset) const;
-
-#ifdef SK_IMAGE_MAKE_WITH_FILTER_LEGACY_API
-    sk_sp<SkImage> makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
-                                  const SkIRect& clipBounds, SkIRect* outSubset,
-                                  SkIPoint* offset) const;
-#endif
 
     /** Defines a callback function, taking one parameter of type GrBackendTexture with
         no return value. Function is called when back-end texture is to be released.
