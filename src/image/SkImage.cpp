@@ -410,18 +410,6 @@ sk_sp<SkImage> SkImage::makeWithFilter(GrRecordingContext* rContext, const SkIma
     return result->asImage();
 }
 
-#ifdef SK_IMAGE_MAKE_WITH_FILTER_LEGACY_API
-sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
-                                       const SkIRect& clipBounds, SkIRect* outSubset,
-                                       SkIPoint* offset) const {
-    GrRecordingContext* rContext = nullptr;
-#if SK_SUPPORT_GPU
-    rContext = as_IB(this)->context();
-#endif
-    return this->makeWithFilter(rContext, filter, subset, clipBounds, outSubset, offset);
-}
-#endif
-
 bool SkImage::isLazyGenerated() const {
     return as_IB(this)->onIsLazyGenerated();
 }
@@ -541,21 +529,12 @@ bool SkImage::MakeBackendTextureFromSkImage(GrContext*,
     return false;
 }
 
-sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrDirectContext*,
+sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrRecordingContext*,
                                                const GrBackendTexture&, GrSurfaceOrigin,
                                                SkColorType, SkAlphaType,
                                                sk_sp<SkColorSpace>) {
     return nullptr;
 }
-
-#ifdef SK_IMAGE_MAKE_FROM_ADOPTED_TEXTURE_LEGACY_API
-sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext*,
-                                               const GrBackendTexture&, GrSurfaceOrigin,
-                                               SkColorType, SkAlphaType,
-                                               sk_sp<SkColorSpace>) {
-    return nullptr;
-}
-#endif
 
 sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopy(GrRecordingContext*,
                                                  SkYUVColorSpace,
