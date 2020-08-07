@@ -7,10 +7,10 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@6c873cfde957758b51ae44fc225a7eefd4a45444",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@bedac4f06b5cea6f79f0a8844d9414600e9ee26b",
   # Dawn requires jinja2 and markupsafe for the code generator, and glslang and shaderc for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@076a4e58205dfa2bcf5e33cc8718aa4799d46735",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@fa4b74d479aa9cf41e4aa067817bad47e97f3b63",
   "third_party/externals/glslang"         : "https://chromium.googlesource.com/external/github.com/KhronosGroup/glslang@2de6d657dde37a421ff8afb1bd820d522df5821d",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@b41863e42637544c2941b574c7877d3e1f663e25",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@8f45f5cfa0009d2a70589bcda0349b8cb2b72783",
@@ -43,7 +43,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@eaf99a4e2009b0e5759e6070ad1760ac1dd75461",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@b133b38aa4d36fa6d1a729c383bbaba4c30f8f28",
+    "url": "https://chromium.googlesource.com/chromium/src.git@69b685d4bfd2f9f5bb330f5070e725faa833dd1e",
     "condition": "checkout_chromium",
   },
 }

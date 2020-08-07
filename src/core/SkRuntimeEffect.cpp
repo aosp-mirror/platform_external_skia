@@ -58,7 +58,7 @@ private:
     static SkSL::Compiler* gCompiler;
 };
 SkSL::Compiler* SharedCompiler::gCompiler = nullptr;
-}
+}  // namespace SkSL
 
 // Accepts a valid marker, or "normals(<marker>)"
 static bool parse_marker(const SkSL::StringFragment& marker, uint32_t* id, uint32_t* flags) {
@@ -121,7 +121,16 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
     SkASSERT(!compiler->errorCount());
 
     bool hasMain = false;
-    bool mainHasSampleCoords = SkSL::Analysis::ReferencesSampleCoords(*program);
+    const bool usesSampleCoords = SkSL::Analysis::ReferencesSampleCoords(*program);
+    const bool usesFragCoords   = SkSL::Analysis::ReferencesFragCoords(*program);
+
+    // Color filters are not allowed to depend on position (local or device) in any way, but they
+    // can sample children with matrices or explicit coords. Because the children are color filters,
+    // we know (by induction) that they don't use those coords, so we keep the overall invariant.
+    //
+    // Further down, we also ensure that color filters can't use layout(marker), which would allow
+    // them to change behavior based on the CTM.
+    bool allowColorFilter = !usesSampleCoords && !usesFragCoords;
 
     std::vector<const SkSL::Variable*> inVars;
     std::vector<const SkSL::Variable*> uniformVars;
@@ -234,6 +243,7 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
             const SkSL::StringFragment& marker(var->fModifiers.fLayout.fMarker);
             if (marker.fLength) {
                 v.fFlags |= Variable::kMarker_Flag;
+                allowColorFilter = false;
                 if (!parse_marker(marker, &v.fMarker, &v.fFlags)) {
                     RETURN_FAILURE("Invalid 'marker' string: '%.*s'", (int)marker.fLength,
                                    marker.fChars);
@@ -262,7 +272,8 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
                                                       std::move(sampleUsages),
                                                       std::move(varyings),
                                                       uniformSize,
-                                                      mainHasSampleCoords));
+                                                      usesSampleCoords,
+                                                      allowColorFilter));
     return std::make_tuple(std::move(effect), SkString());
 }
 
@@ -292,7 +303,8 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
                                  std::vector<SkSL::SampleUsage>&& sampleUsages,
                                  std::vector<Varying>&& varyings,
                                  size_t uniformSize,
-                                 bool mainHasSampleCoords)
+                                 bool usesSampleCoords,
+                                 bool allowColorFilter)
         : fHash(SkGoodHash()(sksl))
         , fSkSL(std::move(sksl))
         , fBaseProgram(std::move(baseProgram))
@@ -301,7 +313,8 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
         , fSampleUsages(std::move(sampleUsages))
         , fVaryings(std::move(varyings))
         , fUniformSize(uniformSize)
-        , fMainFunctionHasSampleCoords(mainHasSampleCoords) {
+        , fUsesSampleCoords(usesSampleCoords)
+        , fAllowColorFilter(allowColorFilter) {
     SkASSERT(fBaseProgram);
     SkASSERT(SkIsAlign4(fUniformSize));
     SkASSERT(fUniformSize <= this->inputSize());
@@ -681,6 +694,71 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
     return stack;
 }
 
+static sk_sp<SkData> get_xformed_inputs(const SkRuntimeEffect* effect,
+                                        sk_sp<SkData> baseInputs,
+                                        const SkMatrixProvider* matrixProvider,
+                                        const SkColorSpace* dstCS) {
+    using Flags = SkRuntimeEffect::Variable::Flags;
+    using Type = SkRuntimeEffect::Variable::Type;
+    SkColorSpaceXformSteps steps(sk_srgb_singleton(), kUnpremul_SkAlphaType,
+                                 dstCS,               kUnpremul_SkAlphaType);
+
+    sk_sp<SkData> inputs = nullptr;
+    auto writableData = [&]() {
+        if (!inputs) {
+            inputs =  SkData::MakeWithCopy(baseInputs->data(), baseInputs->size());
+        }
+        return inputs->writable_data();
+    };
+
+    for (const auto& v : effect->inputs()) {
+        if (v.fFlags & Flags::kMarker_Flag) {
+            SkASSERT(v.fType == Type::kFloat4x4);
+            // Color filters don't provide a matrix provider, but shouldn't be allowed to get here
+            SkASSERT(matrixProvider);
+            SkM44* localToMarker = SkTAddOffset<SkM44>(writableData(), v.fOffset);
+            if (!matrixProvider->getLocalToMarker(v.fMarker, localToMarker)) {
+                // We couldn't provide a matrix that was requested by the SkSL
+                return nullptr;
+            }
+            if (v.fFlags & Flags::kMarkerNormals_Flag) {
+                // Normals need to be transformed by the inverse-transpose of the upper-left
+                // 3x3 portion (scale + rotate) of the matrix.
+                localToMarker->setRow(3, {0, 0, 0, 1});
+                localToMarker->setCol(3, {0, 0, 0, 1});
+                if (!localToMarker->invert(localToMarker)) {
+                    return nullptr;
+                }
+                *localToMarker = localToMarker->transpose();
+            }
+        } else if (v.fFlags & Flags::kSRGBUnpremul_Flag) {
+            SkASSERT(v.fType == Type::kFloat3 || v.fType == Type::kFloat4);
+            if (steps.flags.mask()) {
+                float* color = SkTAddOffset<float>(writableData(), v.fOffset);
+                if (v.fType == Type::kFloat4) {
+                    // RGBA, easy case
+                    for (int i = 0; i < v.fCount; ++i) {
+                        steps.apply(color);
+                        color += 4;
+                    }
+                } else {
+                    // RGB, need to pad out to include alpha. Technically, this isn't necessary,
+                    // because steps shouldn't include unpremul or premul, and thus shouldn't
+                    // read or write the fourth element. But let's be safe.
+                    float rgba[4];
+                    for (int i = 0; i < v.fCount; ++i) {
+                        memcpy(rgba, color, 3 * sizeof(float));
+                        rgba[3] = 1.0f;
+                        steps.apply(rgba);
+                        memcpy(color, rgba, 3 * sizeof(float));
+                        color += 3;
+                    }
+                }
+            }
+        }
+    }
+    return inputs ? inputs : baseInputs;
+}
 
 class SkRuntimeColorFilter : public SkColorFilterBase {
 public:
@@ -692,7 +770,14 @@ public:
     GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
                                    GrRecordingContext* context,
                                    const GrColorInfo& colorInfo) const override {
-        auto runtimeFP = GrSkSLFP::Make(context, fEffect, "Runtime_Color_Filter", fInputs);
+        sk_sp<SkData> inputs =
+                get_xformed_inputs(fEffect.get(), fInputs, nullptr, colorInfo.colorSpace());
+        if (!inputs) {
+            return GrFPFailure(nullptr);
+        }
+
+        auto runtimeFP =
+                GrSkSLFP::Make(context, fEffect, "Runtime_Color_Filter", std::move(inputs));
         if (inputFP == nullptr) {
             return GrFPSuccess(std::move(runtimeFP));
         }
@@ -721,7 +806,7 @@ public:
     }
 
     skvm::Color onProgram(skvm::Builder* p, skvm::Color c,
-                          SkColorSpace* /*dstCS*/,
+                          SkColorSpace* dstCS,
                           skvm::Uniforms* uniforms, SkArenaAlloc*) const override {
         const SkSL::ByteCode* bc = this->byteCode();
         if (!bc) {
@@ -733,10 +818,15 @@ public:
             return {};
         }
 
+        sk_sp<SkData> inputs = get_xformed_inputs(fEffect.get(), fInputs, nullptr, dstCS);
+        if (!inputs) {
+            return {};
+        }
+
         std::vector<skvm::F32> uniform;
         for (int i = 0; i < (int)fEffect->uniformSize() / 4; i++) {
             float f;
-            memcpy(&f, (const char*)fInputs->data() + 4*i, 4);
+            memcpy(&f, (const char*)inputs->data() + 4*i, 4);
             uniform.push_back(p->uniformF(uniforms->pushF(f)));
         }
 
@@ -798,68 +888,6 @@ public:
 
     bool isOpaque() const override { return fIsOpaque; }
 
-    sk_sp<SkData> getUniforms(const SkMatrixProvider& matrixProvider,
-                              const SkColorSpace* dstCS) const {
-        using Flags = SkRuntimeEffect::Variable::Flags;
-        using Type = SkRuntimeEffect::Variable::Type;
-        SkColorSpaceXformSteps steps(sk_srgb_singleton(), kUnpremul_SkAlphaType,
-                                     dstCS,               kUnpremul_SkAlphaType);
-
-        sk_sp<SkData> inputs = nullptr;
-        auto writableData = [&]() {
-            if (!inputs) {
-                inputs =  SkData::MakeWithCopy(fInputs->data(), fInputs->size());
-            }
-            return inputs->writable_data();
-        };
-
-        for (const auto& v : fEffect->inputs()) {
-            if (v.fFlags & Flags::kMarker_Flag) {
-                SkASSERT(v.fType == Type::kFloat4x4);
-                SkM44* localToMarker = SkTAddOffset<SkM44>(writableData(), v.fOffset);
-                if (!matrixProvider.getLocalToMarker(v.fMarker, localToMarker)) {
-                    // We couldn't provide a matrix that was requested by the SkSL
-                    return nullptr;
-                }
-                if (v.fFlags & Flags::kMarkerNormals_Flag) {
-                    // Normals need to be transformed by the inverse-transpose of the upper-left
-                    // 3x3 portion (scale + rotate) of the matrix.
-                    localToMarker->setRow(3, {0, 0, 0, 1});
-                    localToMarker->setCol(3, {0, 0, 0, 1});
-                    if (!localToMarker->invert(localToMarker)) {
-                        return nullptr;
-                    }
-                    *localToMarker = localToMarker->transpose();
-                }
-            } else if (v.fFlags & Flags::kSRGBUnpremul_Flag) {
-                SkASSERT(v.fType == Type::kFloat3 || v.fType == Type::kFloat4);
-                if (steps.flags.mask()) {
-                    float* color = SkTAddOffset<float>(writableData(), v.fOffset);
-                    if (v.fType == Type::kFloat4) {
-                        // RGBA, easy case
-                        for (int i = 0; i < v.fCount; ++i) {
-                            steps.apply(color);
-                            color += 4;
-                        }
-                    } else {
-                        // RGB, need to pad out to include alpha. Technically, this isn't necessary,
-                        // because steps shouldn't include unpremul or premul, and thus shouldn't
-                        // read or write the fourth element. But let's be safe.
-                        float rgba[4];
-                        for (int i = 0; i < v.fCount; ++i) {
-                            memcpy(rgba, color, 3 * sizeof(float));
-                            rgba[3] = 1.0f;
-                            steps.apply(rgba);
-                            memcpy(color, rgba, 3 * sizeof(float));
-                            color += 3;
-                        }
-                    }
-                }
-            }
-        }
-        return inputs ? inputs : fInputs;
-    }
-
 #if SK_SUPPORT_GPU
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs& args) const override {
         SkMatrix matrix;
@@ -867,8 +895,8 @@ public:
             return nullptr;
         }
 
-        sk_sp<SkData> inputs =
-                this->getUniforms(args.fMatrixProvider, args.fDstColorInfo->colorSpace());
+        sk_sp<SkData> inputs = get_xformed_inputs(fEffect.get(), fInputs, &args.fMatrixProvider,
+                                                  args.fDstColorInfo->colorSpace());
         if (!inputs) {
             return nullptr;
         }
@@ -920,7 +948,8 @@ public:
             return {};
         }
 
-        sk_sp<SkData> inputs = this->getUniforms(matrices, dst.colorSpace());
+        sk_sp<SkData> inputs =
+                get_xformed_inputs(fEffect.get(), fInputs, &matrices, dst.colorSpace());
         if (!inputs) {
             return {};
         }
@@ -1046,6 +1075,9 @@ sk_sp<SkShader> SkRuntimeEffect::makeShader(sk_sp<SkData> inputs,
 
 sk_sp<SkColorFilter> SkRuntimeEffect::makeColorFilter(sk_sp<SkData> inputs) {
     if (!fChildren.empty()) {
+        return nullptr;
+    }
+    if (!fAllowColorFilter) {
         return nullptr;
     }
     if (!inputs) {
