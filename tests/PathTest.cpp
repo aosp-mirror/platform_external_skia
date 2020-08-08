@@ -22,6 +22,7 @@
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPathPriv.h"
+#include "src/core/SkPathView.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "tests/Test.h"
@@ -1055,7 +1056,8 @@ static void check_direction(skiatest::Reporter* reporter, const SkPath& path,
     if (expected == kDontCheckDir) {
         return;
     }
-    SkPath copy(path); // we make a copy so that we don't cache the result on the passed in path.
+    // We make a copy so that we don't cache the result on the passed in path.
+    SkPath copy(path);  // NOLINT(performance-unnecessary-copy-initialization)
 
     SkPathPriv::FirstDirection dir;
     if (SkPathPriv::CheapComputeFirstDirection(copy, &dir)) {
@@ -1312,7 +1314,8 @@ static void test_close(skiatest::Reporter* reporter) {
 
 static void check_convexity(skiatest::Reporter* reporter, const SkPath& path,
                             SkPathConvexityType expected) {
-    SkPath copy(path); // we make a copy so that we don't cache the result on the passed in path.
+    // We make a copy so that we don't cache the result on the passed in path.
+    SkPath copy(path);  // NOLINT(performance-unnecessary-copy-initialization)
     SkPathConvexityType c = copy.getConvexityType();
     REPORTER_ASSERT(reporter, c == expected);
 
@@ -1618,7 +1621,8 @@ static void test_convexity(skiatest::Reporter* reporter) {
         check_direction(reporter, path, gRec[i].fExpectedDirection);
         // check after setting the initial convex and direction
         if (kDontCheckDir != gRec[i].fExpectedDirection) {
-            SkPath copy(path);
+            // We make a copy so that we don't cache the result on the passed in path.
+            SkPath copy(path);  // NOLINT(performance-unnecessary-copy-initialization)
             SkPathPriv::FirstDirection dir;
             bool foundDir = SkPathPriv::CheapComputeFirstDirection(copy, &dir);
             REPORTER_ASSERT(reporter, (gRec[i].fExpectedDirection == SkPathPriv::kUnknown_FirstDirection)
@@ -1699,7 +1703,8 @@ static void test_convexity(skiatest::Reporter* reporter) {
         if (curveSelect == 0 || curveSelect == 1 || curveSelect == 2 || curveSelect == 5) {
             check_convexity(reporter, path, SkPathConvexityType::kConvex);
         } else {
-            SkPath copy(path); // we make a copy so that we don't cache the result on the passed in path.
+            // We make a copy so that we don't cache the result on the passed in path.
+            SkPath copy(path);  // NOLINT(performance-unnecessary-copy-initialization)
             SkPathConvexityType c = copy.getConvexityType();
             REPORTER_ASSERT(reporter, SkPathConvexityType::kUnknown == c
                     || SkPathConvexityType::kConcave == c);
@@ -1734,7 +1739,8 @@ static void test_convexity(skiatest::Reporter* reporter) {
         if (curveSelect == 0) {
             check_convexity(reporter, path, SkPathConvexityType::kConvex);
         } else {
-            SkPath copy(path); // we make a copy so that we don't cache the result on the passed in path.
+            // We make a copy so that we don't cache the result on the passed in path.
+            SkPath copy(path);  // NOLINT(performance-unnecessary-copy-initialization)
             SkPathConvexityType c = copy.getConvexityType();
             REPORTER_ASSERT(reporter, SkPathConvexityType::kUnknown == c
                     || SkPathConvexityType::kConcave == c);
@@ -5554,12 +5560,13 @@ void survive(SkPath* path, const Xforms& x, bool isAxisAligned, skiatest::Report
     // getConvexityTypeOrUnknown() instead of getConvexityType().
     path->transform(x.fRM, &path2);
     path->transform(x.fRM);
+    REPORTER_ASSERT(reporter, path2.getConvexityTypeOrUnknown() != SkPathConvexityType::kConvex);
+    REPORTER_ASSERT(reporter, path->getConvexityTypeOrUnknown() != SkPathConvexityType::kConvex);
+
     if (isAxisAligned) {
         REPORTER_ASSERT(reporter, !isa_proc(path2));
         REPORTER_ASSERT(reporter, !isa_proc(*path));
     }
-    REPORTER_ASSERT(reporter, path2.getConvexityTypeOrUnknown() != SkPathConvexityType::kConvex);
-    REPORTER_ASSERT(reporter, path->getConvexityTypeOrUnknown() != SkPathConvexityType::kConvex);
 }
 
 DEF_TEST(Path_survive_transform, r) {
@@ -5626,13 +5633,18 @@ static void test_edger(skiatest::Reporter* r,
     }
 
     SkPathEdgeIter iter(path);
+    SkPathEdgeIter iter2(path.view());
     for (auto v : expected) {
         auto e = iter.next();
         REPORTER_ASSERT(r, e);
         REPORTER_ASSERT(r, SkPathEdgeIter::EdgeToVerb(e.fEdge) == v);
+
+        e = iter2.next();
+        REPORTER_ASSERT(r, e);
+        REPORTER_ASSERT(r, SkPathEdgeIter::EdgeToVerb(e.fEdge) == v);
     }
-    auto e = iter.next();
-    REPORTER_ASSERT(r, !e);
+    REPORTER_ASSERT(r, !iter.next());
+    REPORTER_ASSERT(r, !iter2.next());
 }
 
 DEF_TEST(pathedger, r) {
