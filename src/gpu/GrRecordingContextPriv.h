@@ -115,8 +115,8 @@ public:
 
 private:
     explicit GrRecordingContextPriv(GrRecordingContext* context) : fContext(context) {}
-    GrRecordingContextPriv(const GrRecordingContextPriv&); // unimpl
-    GrRecordingContextPriv& operator=(const GrRecordingContextPriv&); // unimpl
+    GrRecordingContextPriv(const GrRecordingContextPriv&) = delete;
+    GrRecordingContextPriv& operator=(const GrRecordingContextPriv&) = delete;
 
     // No taking addresses of this type.
     const GrRecordingContextPriv* operator&() const;
@@ -129,7 +129,7 @@ private:
 
 inline GrRecordingContextPriv GrRecordingContext::priv() { return GrRecordingContextPriv(this); }
 
-inline const GrRecordingContextPriv GrRecordingContext::priv () const {
+inline const GrRecordingContextPriv GrRecordingContext::priv () const {  // NOLINT(readability-const-return-type)
     return GrRecordingContextPriv(const_cast<GrRecordingContext*>(this));
 }
 

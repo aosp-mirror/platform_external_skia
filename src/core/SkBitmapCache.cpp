@@ -50,7 +50,7 @@ public:
 
     const SkBitmapCacheDesc fDesc;
 };
-}
+}  // namespace
 
 //////////////////////
 #include "src/core/SkDiscardableMemory.h"
@@ -266,7 +266,7 @@ private:
     MipMapKey       fKey;
     const SkMipmap* fMipMap;
 };
-}
+}  // namespace
 
 const SkMipmap* SkMipmapCache::FindAndRef(const SkBitmapCacheDesc& desc,
                                           SkResourceCache* localCache) {
@@ -280,7 +280,7 @@ const SkMipmap* SkMipmapCache::FindAndRef(const SkBitmapCacheDesc& desc,
 }
 
 static SkResourceCache::DiscardableFactory get_fact(SkResourceCache* localCache) {
-    return localCache ? localCache->GetDiscardableFactory()
+    return localCache ? localCache->discardableFactory()
                       : SkResourceCache::GetDiscardableFactory();
 }
 

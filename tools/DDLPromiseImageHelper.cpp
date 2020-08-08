@@ -45,7 +45,7 @@ DDLPromiseImageHelper::PromiseImageInfo::PromiseImageInfo(PromiseImageInfo&& oth
 
 DDLPromiseImageHelper::PromiseImageInfo::~PromiseImageInfo() {}
 
-const std::unique_ptr<SkPixmap[]> DDLPromiseImageHelper::PromiseImageInfo::normalMipLevels() const {
+std::unique_ptr<SkPixmap[]> DDLPromiseImageHelper::PromiseImageInfo::normalMipLevels() const {
     SkASSERT(!this->isYUV());
     std::unique_ptr<SkPixmap[]> pixmaps(new SkPixmap[this->numMipLevels()]);
     pixmaps[0] = fBaseLevel.pixmap();
@@ -103,8 +103,8 @@ void DDLPromiseImageHelper::PromiseImageInfo::setYUVPlanes(
         }
         auto info = SkImageInfo::Make(yuvaSizeInfo.fSizes[i], colorTypes[i], kPremul_SkAlphaType);
         auto release = [](void* addr, void*) { std::unique_ptr<char[]>(static_cast<char*>(addr)); };
-        fYUVPlanes[i].installPixels(info, planes[i].get(), yuvaSizeInfo.fWidthBytes[i], release,
-                                    planes[i].release());
+        char* pixels = planes[i].release();
+        fYUVPlanes[i].installPixels(info, pixels, yuvaSizeInfo.fWidthBytes[i], release, pixels);
     }
 }
 
