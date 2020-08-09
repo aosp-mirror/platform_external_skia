@@ -45,7 +45,7 @@ DDLPromiseImageHelper::PromiseImageInfo::PromiseImageInfo(PromiseImageInfo&& oth
 
 DDLPromiseImageHelper::PromiseImageInfo::~PromiseImageInfo() {}
 
-const std::unique_ptr<SkPixmap[]> DDLPromiseImageHelper::PromiseImageInfo::normalMipLevels() const {
+std::unique_ptr<SkPixmap[]> DDLPromiseImageHelper::PromiseImageInfo::normalMipLevels() const {
     SkASSERT(!this->isYUV());
     std::unique_ptr<SkPixmap[]> pixmaps(new SkPixmap[this->numMipLevels()]);
     pixmaps[0] = fBaseLevel.pixmap();
@@ -413,7 +413,7 @@ sk_sp<SkImage> DDLPromiseImageHelper::CreatePromiseImages(const void* rawData,
         }
 #endif
     } else {
-        GrBackendFormat backendFormat = curImage.backendFormat(0);
+        const GrBackendFormat& backendFormat = curImage.backendFormat(0);
         SkASSERT(backendFormat.isValid());
 
         // Each DDL recorder gets its own ref on the promise callback context for the

@@ -29,8 +29,8 @@ public:
 private:
     explicit GrRenderTargetProxyPriv(GrRenderTargetProxy* renderTargetProxy)
             : fRenderTargetProxy(renderTargetProxy) {}
-    GrRenderTargetProxyPriv(const GrRenderTargetProxyPriv&) {} // unimpl
-    GrRenderTargetProxyPriv& operator=(const GrRenderTargetProxyPriv&); // unimpl
+    GrRenderTargetProxyPriv(const GrRenderTargetProxyPriv&) = delete;
+    GrRenderTargetProxyPriv& operator=(const GrRenderTargetProxyPriv&) = delete;
 
     // No taking addresses of this type.
     const GrRenderTargetProxyPriv* operator&() const;
@@ -45,7 +45,7 @@ inline GrRenderTargetProxyPriv GrRenderTargetProxy::rtPriv() {
     return GrRenderTargetProxyPriv(this);
 }
 
-inline const GrRenderTargetProxyPriv GrRenderTargetProxy::rtPriv() const {
+inline const GrRenderTargetProxyPriv GrRenderTargetProxy::rtPriv() const {  // NOLINT(readability-const-return-type)
     return GrRenderTargetProxyPriv(const_cast<GrRenderTargetProxy*>(this));
 }
 

@@ -22,7 +22,6 @@ public:
     SkPDFTagTree();
     ~SkPDFTagTree();
     void init(SkPDF::StructureElementNode*);
-    void reset();
     // Used to allow marked content to refer to its corresponding structure
     // tree node, via a page entry in the parent tree. Returns -1 if no
     // mark ID.
