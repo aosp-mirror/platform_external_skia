@@ -790,6 +790,7 @@ cc_library_static {
           "src/gpu/ops/GrShadowRRectOp.cpp",
           "src/gpu/ops/GrSimpleMeshDrawOpHelper.cpp",
           "src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.cpp",
+          "src/gpu/ops/GrSmallPathAtlasMgr.cpp",
           "src/gpu/ops/GrSmallPathRenderer.cpp",
           "src/gpu/ops/GrStencilAndCoverPathRenderer.cpp",
           "src/gpu/ops/GrStencilPathOp.cpp",
