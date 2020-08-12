@@ -40,9 +40,9 @@ public:
 
     const char* name() const override { return "GaussianConvolution"; }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        return SkStringPrintf("GaussianConvolutionFragmentProcessor(dir=%s, radius=%d)",
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        return SkStringPrintf("(dir=%s, radius=%d)",
                               Direction::kX == fDirection ? "X" : "Y", fRadius);
     }
 #endif
