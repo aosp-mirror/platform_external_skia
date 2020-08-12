@@ -1868,6 +1868,7 @@ cc_test {
         "tests/TextBlobCacheTest.cpp",
         "tests/TextBlobTest.cpp",
         "tests/TextureBindingsResetTest.cpp",
+        "tests/TextureOpTest.cpp",
         "tests/TextureProxyTest.cpp",
         "tests/TextureStripAtlasManagerTest.cpp",
         "tests/Time.cpp",
