@@ -7,11 +7,11 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@48ba75ac6845428971ea2a12bfb69eb85e608409",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@23335ac01cb81e510145f9fa105cd468f0519251",
   # Dawn requires jinja2 and markupsafe for the code generator, and glslang and shaderc for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@1662e97f324ef120cf097ba38d63a69cad83593c",
-  "third_party/externals/glslang"         : "https://chromium.googlesource.com/external/github.com/KhronosGroup/glslang@2de6d657dde37a421ff8afb1bd820d522df5821d",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@cbec3179ef87cf995bd2669da302d530c8c3d93b",
+  "third_party/externals/glslang"         : "https://chromium.googlesource.com/external/github.com/KhronosGroup/glslang@b60e067b43744ce88adea33ab347ac9997b923d8",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@b41863e42637544c2941b574c7877d3e1f663e25",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@8f45f5cfa0009d2a70589bcda0349b8cb2b72783",
   "third_party/externals/shaderc"         : "https://chromium.googlesource.com/external/github.com/google/shaderc@c626b912dc4568867b29c5b221df6aac75390ab5",
@@ -43,7 +43,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@eaf99a4e2009b0e5759e6070ad1760ac1dd75461",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@4430c2c58af2949e5cbd964beb39e68a254628b0",
+    "url": "https://chromium.googlesource.com/chromium/src.git@5246cdb214b31c12eebcc7146a755c13aba32a00",
     "condition": "checkout_chromium",
   },
 }

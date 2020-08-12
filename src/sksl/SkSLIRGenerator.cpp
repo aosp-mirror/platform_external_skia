@@ -313,6 +313,12 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
             fErrors.error(decls.fOffset, "'key' is only permitted within fragment processors");
         }
     }
+    if (fKind == Program::kPipelineStage_Kind) {
+        if ((modifiers.fFlags & Modifiers::kIn_Flag) &&
+            baseType->nonnullable() != *fContext.fFragmentProcessor_Type) {
+            fErrors.error(decls.fOffset, "'in' variables not permitted in runtime effects");
+        }
+    }
     if (modifiers.fLayout.fKey && (modifiers.fFlags & Modifiers::kUniform_Flag)) {
         fErrors.error(decls.fOffset, "'key' is not permitted on 'uniform' variables");
     }
@@ -1897,10 +1903,10 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
                                                              std::move(ifFalse)));
 }
 
-std::unique_ptr<Expression> IRGenerator::inlineExpression(int offset,
-                                                          std::map<const Variable*,
-                                                                   const Variable*>* varMap,
-                                                          const Expression& expression) {
+std::unique_ptr<Expression> IRGenerator::inlineExpression(
+        int offset,
+        std::unordered_map<const Variable*, const Variable*>* varMap,
+        const Expression& expression) {
     auto expr = [&](const std::unique_ptr<Expression>& e) {
         if (e) {
             return this->inlineExpression(offset, varMap, *e);
@@ -2004,12 +2010,12 @@ const Type* copy_if_needed(const Type* src, SymbolTable& symbolTable) {
     return src;
 }
 
-std::unique_ptr<Statement> IRGenerator::inlineStatement(int offset,
-                                                        std::map<const Variable*,
-                                                                 const Variable*>* varMap,
-                                                        const Variable* returnVar,
-                                                        bool haveEarlyReturns,
-                                                        const Statement& statement) {
+std::unique_ptr<Statement> IRGenerator::inlineStatement(
+        int offset,
+        std::unordered_map<const Variable*, const Variable*>* varMap,
+        const Variable* returnVar,
+        bool haveEarlyReturns,
+        const Statement& statement) {
     auto stmt = [&](const std::unique_ptr<Statement>& s) {
         if (s) {
             return this->inlineStatement(offset, varMap, returnVar, haveEarlyReturns, *s);
@@ -2259,7 +2265,7 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
     } else {
         resultVar = nullptr;
     }
-    std::map<const Variable*, const Variable*> varMap;
+    std::unordered_map<const Variable*, const Variable*> varMap;
     // create variables to hold the arguments and assign the arguments to them
     int argIndex = fInlineVarCounter++;
     for (int i = 0; i < (int) arguments.size(); ++i) {
@@ -2929,14 +2935,6 @@ std::unique_ptr<Expression> IRGenerator::getCap(int offset, String name) {
     String fullName = "sk_Caps." + name;
     return std::unique_ptr<Expression>(new Setting(offset, fullName,
                                                    found->second.literal(fContext, offset)));
-}
-
-std::unique_ptr<Expression> IRGenerator::getArg(int offset, String name) const {
-    auto found = fSettings->fArgs.find(name);
-    if (found == fSettings->fArgs.end()) {
-        return nullptr;
-    }
-    return found->second.literal(fContext, offset);
 }
 
 std::unique_ptr<Expression> IRGenerator::findEnumRef(

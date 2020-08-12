@@ -18,6 +18,10 @@ static int g_NumFreedShapes = 0;
 GrSmallPathAtlasMgr::GrSmallPathAtlasMgr() {}
 
 GrSmallPathAtlasMgr::~GrSmallPathAtlasMgr() {
+    this->reset();
+}
+
+void GrSmallPathAtlasMgr::reset() {
     ShapeDataList::Iter iter;
     iter.init(fShapeList, ShapeDataList::Iter::kHead_IterStart);
     GrSmallPathShapeData* shapeData;
@@ -26,9 +30,13 @@ GrSmallPathAtlasMgr::~GrSmallPathAtlasMgr() {
         delete shapeData;
     }
 
+    fShapeCache.reset();
+
 #ifdef DF_PATH_TRACKING
     SkDebugf("Cached shapes: %d, freed shapes: %d\n", g_NumCachedShapes, g_NumFreedShapes);
 #endif
+
+    fAtlas = nullptr;
 }
 
 bool GrSmallPathAtlasMgr::initAtlas(GrProxyProvider* proxyProvider, const GrCaps* caps) {
@@ -41,7 +49,7 @@ bool GrSmallPathAtlasMgr::initAtlas(GrProxyProvider* proxyProvider, const GrCaps
     static constexpr size_t kPlotHeight = 256;
 
     const GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kAlpha_8,
-                                                                    GrRenderable::kNo);
+                                                                 GrRenderable::kNo);
 
     GrDrawOpAtlasConfig atlasConfig(caps->maxTextureSize(), kMaxAtlasTextureBytes);
     SkISize size = atlasConfig.atlasDimensions(kA8_GrMaskFormat);
@@ -62,6 +70,7 @@ void GrSmallPathAtlasMgr::deleteCacheEntry(GrSmallPathShapeData* shapeData) {
 GrSmallPathShapeData* GrSmallPathAtlasMgr::findOrCreate(const GrSmallPathShapeDataKey& key) {
     auto shapeData = fShapeCache.find(key);
     if (!shapeData) {
+        // TODO: move the key into the ctor
         shapeData = new GrSmallPathShapeData(key);
         fShapeCache.add(shapeData);
         fShapeList.addToTail(shapeData);
@@ -73,6 +82,22 @@ GrSmallPathShapeData* GrSmallPathAtlasMgr::findOrCreate(const GrSmallPathShapeDa
     }
 
     return shapeData;
+}
+
+GrSmallPathShapeData* GrSmallPathAtlasMgr::findOrCreate(const GrStyledShape& shape,
+                                                        int desiredDimension) {
+    GrSmallPathShapeDataKey key(shape, desiredDimension);
+
+    // TODO: move the key into 'findOrCreate'
+    return this->findOrCreate(key);
+}
+
+GrSmallPathShapeData* GrSmallPathAtlasMgr::findOrCreate(const GrStyledShape& shape,
+                                                        const SkMatrix& ctm) {
+    GrSmallPathShapeDataKey key(shape, ctm);
+
+    // TODO: move the key into 'findOrCreate'
+    return this->findOrCreate(key);
 }
 
 void GrSmallPathAtlasMgr::setUseToken(GrSmallPathShapeData* shapeData,
