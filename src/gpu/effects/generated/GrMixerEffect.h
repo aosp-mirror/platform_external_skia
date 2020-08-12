@@ -33,8 +33,8 @@ public:
                 new GrMixerEffect(std::move(inputFP), std::move(fp0), std::move(fp1), weight));
     }
     GrMixerEffect(const GrMixerEffect& src);
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
 #endif
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "MixerEffect"; }

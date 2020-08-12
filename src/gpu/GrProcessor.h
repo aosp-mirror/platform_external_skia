@@ -184,12 +184,14 @@ public:
     virtual const char* name() const = 0;
 
     /** Human-readable dump of all information */
-#ifdef SK_DEBUG
-    virtual SkString dumpInfo() const {
-        return SkString(name());
+#if GR_TEST_UTILS
+    virtual SkString onDumpInfo() const { return SkString(); }
+
+    virtual SkString dumpInfo() const final {
+        SkString info(name());
+        info.append(this->onDumpInfo());
+        return info;
     }
-#else
-    SkString dumpInfo() const { return SkString("<Processor information unavailable>"); }
 #endif
 
     /**

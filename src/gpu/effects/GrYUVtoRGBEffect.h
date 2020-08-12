@@ -23,8 +23,8 @@ public:
                                                      const SkMatrix& localMatrix = SkMatrix::I(),
                                                      const SkRect* subset = nullptr,
                                                      const SkRect* domain = nullptr);
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
 #endif
 
     std::unique_ptr<GrFragmentProcessor> clone() const override;

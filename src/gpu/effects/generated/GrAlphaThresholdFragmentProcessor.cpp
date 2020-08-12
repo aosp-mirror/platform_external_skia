@@ -96,10 +96,9 @@ GrAlphaThresholdFragmentProcessor::GrAlphaThresholdFragmentProcessor(
 std::unique_ptr<GrFragmentProcessor> GrAlphaThresholdFragmentProcessor::clone() const {
     return std::make_unique<GrAlphaThresholdFragmentProcessor>(*this);
 }
-#ifdef SK_DEBUG
-SkString GrAlphaThresholdFragmentProcessor::dumpInfo() const {
-    return SkStringPrintf("AlphaThresholdFragmentProcessor(innerThreshold=%f, outerThreshold=%f)",
-                          innerThreshold, outerThreshold);
+#if GR_TEST_UTILS
+SkString GrAlphaThresholdFragmentProcessor::onDumpInfo() const {
+    return SkStringPrintf("(innerThreshold=%f, outerThreshold=%f)", innerThreshold, outerThreshold);
 }
 #endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrAlphaThresholdFragmentProcessor);

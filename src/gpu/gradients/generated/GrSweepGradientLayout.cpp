@@ -91,9 +91,9 @@ GrSweepGradientLayout::GrSweepGradientLayout(const GrSweepGradientLayout& src)
 std::unique_ptr<GrFragmentProcessor> GrSweepGradientLayout::clone() const {
     return std::make_unique<GrSweepGradientLayout>(*this);
 }
-#ifdef SK_DEBUG
-SkString GrSweepGradientLayout::dumpInfo() const {
-    return SkStringPrintf("SweepGradientLayout(bias=%f, scale=%f)", bias, scale);
+#if GR_TEST_UTILS
+SkString GrSweepGradientLayout::onDumpInfo() const {
+    return SkStringPrintf("(bias=%f, scale=%f)", bias, scale);
 }
 #endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrSweepGradientLayout);

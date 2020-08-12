@@ -185,11 +185,11 @@ GrTwoPointConicalGradientLayout::GrTwoPointConicalGradientLayout(
 std::unique_ptr<GrFragmentProcessor> GrTwoPointConicalGradientLayout::clone() const {
     return std::make_unique<GrTwoPointConicalGradientLayout>(*this);
 }
-#ifdef SK_DEBUG
-SkString GrTwoPointConicalGradientLayout::dumpInfo() const {
+#if GR_TEST_UTILS
+SkString GrTwoPointConicalGradientLayout::onDumpInfo() const {
     return SkStringPrintf(
-            "TwoPointConicalGradientLayout(type=%d, isRadiusIncreasing=%s, isFocalOnCircle=%s, "
-            "isWellBehaved=%s, isSwapped=%s, isNativelyFocal=%s, focalParams=half2(%f, %f))",
+            "(type=%d, isRadiusIncreasing=%s, isFocalOnCircle=%s, isWellBehaved=%s, isSwapped=%s, "
+            "isNativelyFocal=%s, focalParams=half2(%f, %f))",
             (int)type, (isRadiusIncreasing ? "true" : "false"),
             (isFocalOnCircle ? "true" : "false"), (isWellBehaved ? "true" : "false"),
             (isSwapped ? "true" : "false"), (isNativelyFocal ? "true" : "false"), focalParams.fX,
