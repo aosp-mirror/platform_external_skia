@@ -9,6 +9,8 @@
 #define SKSL_IRGENERATOR
 
 #include <map>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLASTNode.h"
@@ -87,14 +89,16 @@ private:
     std::unique_ptr<ModifiersDeclaration> convertModifiersDeclaration(const ASTNode& m);
 
     const Type* convertType(const ASTNode& type);
-    std::unique_ptr<Expression> inlineExpression(int offset,
-                                                 std::map<const Variable*, const Variable*>* varMap,
-                                                 const Expression& expression);
-    std::unique_ptr<Statement> inlineStatement(int offset,
-                                               std::map<const Variable*, const Variable*>* varMap,
-                                               const Variable* returnVar,
-                                               bool haveEarlyReturns,
-                                               const Statement& statement);
+    std::unique_ptr<Expression> inlineExpression(
+            int offset,
+            std::unordered_map<const Variable*, const Variable*>* varMap,
+            const Expression& expression);
+    std::unique_ptr<Statement> inlineStatement(
+            int offset,
+            std::unordered_map<const Variable*, const Variable*>* varMap,
+            const Variable* returnVar,
+            bool haveEarlyReturns,
+            const Statement& statement);
     std::unique_ptr<Expression> inlineCall(int offset, const FunctionDefinition& function,
                                            std::vector<std::unique_ptr<Expression>> arguments);
     std::unique_ptr<Expression> call(int offset,
@@ -176,7 +180,7 @@ private:
     // Symbols which have definitions in the include files. The bool tells us whether this
     // intrinsic has been included already.
     std::map<String, std::pair<std::unique_ptr<ProgramElement>, bool>>* fIntrinsics = nullptr;
-    std::set<const FunctionDeclaration*> fReferencedIntrinsics;
+    std::unordered_set<const FunctionDeclaration*> fReferencedIntrinsics;
     int fLoopLevel;
     int fSwitchLevel;
     ErrorReporter& fErrors;
@@ -195,6 +199,7 @@ private:
     friend class AutoSymbolTable;
     friend class AutoLoopLevel;
     friend class AutoSwitchLevel;
+    friend class AutoDisableInline;
     friend class Compiler;
 };
 

@@ -24,7 +24,7 @@
 
 class GrConfigConversionEffect : public GrFragmentProcessor {
 public:
-    static bool TestForPreservingPMConversions(GrDirectContext* context);
+    static bool TestForPreservingPMConversions(GrDirectContext* dContext);
 
     static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> fp,
                                                      PMConversion pmConversion) {
@@ -35,6 +35,9 @@ public:
                 new GrConfigConversionEffect(std::move(fp), pmConversion));
     }
     GrConfigConversionEffect(const GrConfigConversionEffect& src);
+#ifdef SK_DEBUG
+    SkString dumpInfo() const override;
+#endif
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "ConfigConversionEffect"; }
     PMConversion pmConversion;
