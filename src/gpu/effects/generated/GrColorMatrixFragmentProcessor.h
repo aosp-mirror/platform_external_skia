@@ -57,6 +57,9 @@ public:
                 std::move(inputFP), m44, v4, unpremulInput, clampRGBOutput, premulOutput));
     }
     GrColorMatrixFragmentProcessor(const GrColorMatrixFragmentProcessor& src);
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "ColorMatrixFragmentProcessor"; }
     SkM44 m;

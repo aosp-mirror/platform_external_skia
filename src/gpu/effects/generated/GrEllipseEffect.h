@@ -41,6 +41,9 @@ public:
                 new GrEllipseEffect(std::move(inputFP), edgeType, center, radii)));
     }
     GrEllipseEffect(const GrEllipseEffect& src);
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "EllipseEffect"; }
     GrClipEdgeType edgeType;

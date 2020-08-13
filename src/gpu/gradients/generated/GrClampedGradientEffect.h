@@ -30,6 +30,9 @@ public:
                 makePremul, colorsAreOpaque));
     }
     GrClampedGradientEffect(const GrClampedGradientEffect& src);
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "ClampedGradientEffect"; }
     SkPMColor4f leftBorderColor;

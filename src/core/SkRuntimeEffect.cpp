@@ -42,10 +42,14 @@ public:
     SharedCompiler() : fLock(compiler_mutex()) {
         if (!gCompiler) {
             gCompiler = new SkSL::Compiler{};
+            gInlineThreshold = SkSL::Program::Settings().fInlineThreshold;
         }
     }
 
     SkSL::Compiler* operator->() const { return gCompiler; }
+
+    int  getInlineThreshold() const { return gInlineThreshold; }
+    void setInlineThreshold(int threshold) { gInlineThreshold = threshold; }
 
 private:
     SkAutoMutexExclusive fLock;
@@ -56,9 +60,16 @@ private:
     }
 
     static SkSL::Compiler* gCompiler;
+    static int             gInlineThreshold;
 };
 SkSL::Compiler* SharedCompiler::gCompiler = nullptr;
+int             SharedCompiler::gInlineThreshold = 0;
 }  // namespace SkSL
+
+void SkRuntimeEffect_SetInlineThreshold(int threshold) {
+    SkSL::SharedCompiler compiler;
+    compiler.setInlineThreshold(threshold);
+}
 
 // Accepts a valid marker, or "normals(<marker>)"
 static bool parse_marker(const SkSL::StringFragment& marker, uint32_t* id, uint32_t* flags) {
@@ -106,9 +117,11 @@ static bool init_uniform_type(const SkSL::Context& ctx,
 
 SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
     SkSL::SharedCompiler compiler;
+    SkSL::Program::Settings settings;
+    settings.fInlineThreshold = compiler.getInlineThreshold();
     auto program = compiler->convertProgram(SkSL::Program::kPipelineStage_Kind,
                                             SkSL::String(sksl.c_str(), sksl.size()),
-                                            SkSL::Program::Settings());
+                                            settings);
     // TODO: Many errors aren't caught until we process the generated Program here. Catching those
     // in the IR generator would provide better errors messages (with locations).
     #define RETURN_FAILURE(...) return std::make_tuple(nullptr, SkStringPrintf(__VA_ARGS__))
@@ -293,6 +306,7 @@ bool SkRuntimeEffect::toPipelineStage(const GrShaderCaps* shaderCaps,
     // If the supplied shaderCaps have any non-default values, we have baked in the wrong settings.
     SkSL::Program::Settings settings;
     settings.fCaps = shaderCaps;
+    settings.fInlineThreshold = compiler.getInlineThreshold();
 
     auto program = compiler->convertProgram(SkSL::Program::kPipelineStage_Kind,
                                             SkSL::String(fSkSL.c_str(), fSkSL.size()),
@@ -322,14 +336,27 @@ SkRuntimeEffect::ByteCodeResult SkRuntimeEffect::toByteCode() const {
 
 using SampleChildFn = std::function<skvm::Color(int, skvm::Coord)>;
 
-static std::vector<skvm::F32> program_fn(skvm::Builder* p,
-                                         const SkSL::ByteCodeFunction& fn,
-                                         const std::vector<skvm::F32>& uniform,
-                                         std::vector<skvm::F32> stack,
-                                         SampleChildFn sampleChild,
-                                         skvm::Coord device, skvm::Coord local) {
+static skvm::Color program_fn(skvm::Builder* p,
+                              const SkSL::ByteCodeFunction& fn,
+                              const std::vector<skvm::F32>& uniform,
+                              skvm::Color inColor,
+                              SampleChildFn sampleChild,
+                              skvm::Coord device, skvm::Coord local) {
+    std::vector<skvm::F32> stack;
+
     auto push = [&](skvm::F32 x) { stack.push_back(x); };
     auto pop  = [&]{ skvm::F32 x = stack.back(); stack.pop_back(); return x; };
+
+    // main(inout half4 color) or main(float2 local, inout half4 color)
+    SkASSERT(fn.getParameterCount() == 4 || fn.getParameterCount() == 6);
+    if (fn.getParameterCount() == 6) {
+        push(local.x);
+        push(local.y);
+    }
+    push(inColor.r);
+    push(inColor.g);
+    push(inColor.b);
+    push(inColor.a);
 
     for (int i = 0; i < fn.getLocalCount(); i++) {
         push(p->splat(0.0f));
@@ -572,7 +599,12 @@ static std::vector<skvm::F32> program_fn(skvm::Builder* p,
     for (int i = 0; i < fn.getLocalCount(); i++) {
         pop();
     }
-    return stack;
+    SkASSERT(stack.size() == (size_t)fn.getParameterCount());
+    skvm::F32 a = pop(),
+              b = pop(),
+              g = pop(),
+              r = pop();
+    return { r, g, b, a };
 }
 
 static sk_sp<SkData> get_xformed_uniforms(const SkRuntimeEffect* effect,
@@ -738,14 +770,8 @@ public:
         // Regardless, just to be extra-safe, we pass something valid (0, 0) as both coords, so
         // the builder isn't trying to do math on invalid values.
         skvm::Coord zeroCoord = { p->splat(0.0f), p->splat(0.0f) };
-        std::vector<skvm::F32> stack =
-                program_fn(p, *fn, uniform, {c.r, c.g, c.b, c.a}, sampleChild,
-                           /*device=*/ zeroCoord, /*local=*/ zeroCoord);
-
-        if (stack.size() == 4) {
-            return {stack[0], stack[1], stack[2], stack[3]};
-        }
-        return {};
+        return program_fn(p, *fn, uniform, c, sampleChild,
+                          /*device=*/zeroCoord, /*local=*/zeroCoord);
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
@@ -900,15 +926,7 @@ public:
             }
         };
 
-        std::vector<skvm::F32> stack =
-            program_fn(p, *fn, uniform,
-                       {local.x,local.y, paint.r, paint.g, paint.b, paint.a},
-                       sampleChild, device, local);
-
-        if (stack.size() == 6) {
-            return {stack[2], stack[3], stack[4], stack[5]};
-        }
-        return {};
+        return program_fn(p, *fn, uniform, paint, sampleChild, device, local);
     }
 
     void flatten(SkWriteBuffer& buffer) const override {

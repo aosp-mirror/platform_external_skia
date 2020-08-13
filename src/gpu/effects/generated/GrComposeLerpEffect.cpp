@@ -63,3 +63,6 @@ GrComposeLerpEffect::GrComposeLerpEffect(const GrComposeLerpEffect& src)
 std::unique_ptr<GrFragmentProcessor> GrComposeLerpEffect::clone() const {
     return std::make_unique<GrComposeLerpEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrComposeLerpEffect::onDumpInfo() const { return SkStringPrintf("(weight=%f)", weight); }
+#endif

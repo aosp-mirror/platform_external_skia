@@ -113,6 +113,9 @@ public:
         return std::unique_ptr<GrFragmentProcessor>(new GrTest());
     }
     GrTest(const GrTest& src);
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "Test"; }
 private:
@@ -176,6 +179,11 @@ GrTest::GrTest(const GrTest& src)
 std::unique_ptr<GrFragmentProcessor> GrTest::clone() const {
     return std::make_unique<GrTest>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrTest::onDumpInfo() const {
+    return SkString();
+}
+#endif
 )__Cpp__"
          });
 }
@@ -215,22 +223,44 @@ DEF_TEST(SkSLFPInputHalf1, r) {
              }
          )__SkSL__",
          /*expectedH=*/{
-             "static std::unique_ptr<GrFragmentProcessor> Make(float value) {",
-             "return std::unique_ptr<GrFragmentProcessor>(new GrTest(value));",
-             "GrTest(float value)",
-             ", value(value)"
+R"__Cpp__(static std::unique_ptr<GrFragmentProcessor> Make(float value) {
+        return std::unique_ptr<GrFragmentProcessor>(new GrTest(value));
+    }
+)__Cpp__",
+R"__Cpp__(GrTest(float value)
+    : INHERITED(kGrTest_ClassID, kNone_OptimizationFlags)
+    , value(value) {
+    }
+)__Cpp__",
          },
          /*expectedCPP=*/{
 R"__Cpp__(void GrTest::onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
     b->add32(sk_bit_cast<uint32_t>(value));
-})__Cpp__",
-R"__Cpp__(fragBuilder->codeAppendf(
-R"SkSL(%s = half4(%f);
-)SkSL"
-, args.fOutputColor, _outer.value);
+}
 )__Cpp__",
-             "if (value != that.value) return false;"
-         });
+R"__Cpp__(bool GrTest::onIsEqual(const GrFragmentProcessor& other) const {
+    const GrTest& that = other.cast<GrTest>();
+    (void) that;
+    if (value != that.value) return false;
+    return true;
+}
+)__Cpp__",
+R"__Cpp__(GrTest::GrTest(const GrTest& src)
+: INHERITED(kGrTest_ClassID, src.optimizationFlags())
+, value(src.value) {
+        this->cloneAndRegisterAllChildProcessors(src);
+}
+)__Cpp__",
+R"__Cpp__(std::unique_ptr<GrFragmentProcessor> GrTest::clone() const {
+    return std::make_unique<GrTest>(*this);
+}
+)__Cpp__",
+R"__Cpp__(#if GR_TEST_UTILS
+SkString GrTest::onDumpInfo() const {
+    return SkStringPrintf("(value=%f)", value);
+}
+)__Cpp__",
+        });
 }
 
 DEF_TEST(SkSLFPUniform, r) {
@@ -472,6 +502,7 @@ DEF_TEST(SkSLFPSections, r) {
          R"__SkSL__(
              @fields { fields section }
              @clone { }
+             @dumpInfo { }
              void main() {
                  sk_OutColor = half4(1);
              }
@@ -526,6 +557,22 @@ DEF_TEST(SkSLFPSections, r) {
              "std::unique_ptr<GrFragmentProcessor> GrTest::TestCreate(GrProcessorTestData* testDataName) {\n"
              " testDataName section }\n"
              "#endif"
+         });
+    test(r,
+         *SkSL::ShaderCapsFactory::Default(),
+         R"__SkSL__(
+             @dumpInfo {dump all the fields}
+             void main() {
+                 sk_OutColor = half4(1);
+             }
+         )__SkSL__",
+         /*expectedH=*/{},
+         /*expectedCPP=*/{
+R"__Cpp__(#if GR_TEST_UTILS
+SkString GrTest::onDumpInfo() const {
+dump all the fields
+}
+#endif)__Cpp__"
          });
 }
 

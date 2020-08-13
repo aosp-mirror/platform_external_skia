@@ -276,7 +276,7 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
     SkString dumpInfo() const override {
         SkString str;
         str.appendf("# draws: %d\n", fQuads.count());
@@ -308,7 +308,9 @@ public:
         str += INHERITED::dumpInfo();
         return str;
     }
+#endif
 
+#ifdef SK_DEBUG
     static void ValidateResourceLimits() {
         // The op implementation has an upper bound on the number of quads that it can represent.
         // However, the resource manager imposes its own limit on the number of quads, which should
@@ -993,7 +995,7 @@ private:
     CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
                                       const GrCaps& caps) override {
         TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-        const auto* that = t->cast<TextureOp>();
+        auto* that = t->cast<TextureOp>();
 
         SkDEBUGCODE(this->validate();)
         SkDEBUGCODE(that->validate();)
@@ -1070,7 +1072,16 @@ private:
         fMetadata.fTotalQuadCount += that->fQuads.count();
 
         if (upgradeToCoverageAAOnMerge) {
+            // This merger may be the start of a concatenation of two chains. When one
+            // of the chains mutates its AA the other must follow suit or else the above AA
+            // check may prevent later ops from chaining together. A specific example of this is
+            // when chain2 is prepended onto chain1:
+            //  chain1 (that): opA (non-AA/mergeable) opB (non-AA/non-mergeable)
+            //  chain2 (this): opC (cov-AA/non-mergeable) opD (cov-AA/mergeable)
+            // W/o this propagation, after opD & opA merge, opB and opC would say they couldn't
+            // chain - which would stop the concatenation process.
             this->propagateCoverageAAThroughoutChain();
+            that->propagateCoverageAAThroughoutChain();
         }
 
         SkDEBUGCODE(this->validate();)

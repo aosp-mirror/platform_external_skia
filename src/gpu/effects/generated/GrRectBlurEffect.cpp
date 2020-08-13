@@ -152,6 +152,12 @@ GrRectBlurEffect::GrRectBlurEffect(const GrRectBlurEffect& src)
 std::unique_ptr<GrFragmentProcessor> GrRectBlurEffect::clone() const {
     return std::make_unique<GrRectBlurEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrRectBlurEffect::onDumpInfo() const {
+    return SkStringPrintf("(rect=float4(%f, %f, %f, %f), isFast=%s)", rect.left(), rect.top(),
+                          rect.right(), rect.bottom(), (isFast ? "true" : "false"));
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrRectBlurEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrRectBlurEffect::TestCreate(GrProcessorTestData* data) {

@@ -26,6 +26,9 @@ public:
         return std::unique_ptr<GrFragmentProcessor>(new GrDitherEffect(std::move(inputFP), range));
     }
     GrDitherEffect(const GrDitherEffect& src);
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "DitherEffect"; }
     float range;
