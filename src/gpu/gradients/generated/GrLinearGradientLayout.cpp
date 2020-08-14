@@ -53,8 +53,8 @@ GrLinearGradientLayout::GrLinearGradientLayout(const GrLinearGradientLayout& src
 std::unique_ptr<GrFragmentProcessor> GrLinearGradientLayout::clone() const {
     return std::make_unique<GrLinearGradientLayout>(*this);
 }
-#ifdef SK_DEBUG
-SkString GrLinearGradientLayout::dumpInfo() const { return SkStringPrintf("LinearGradientLayout"); }
+#if GR_TEST_UTILS
+SkString GrLinearGradientLayout::onDumpInfo() const { return SkString(); }
 #endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrLinearGradientLayout);
 #if GR_TEST_UTILS

@@ -856,17 +856,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        string.appendf("Color: 0x%08x Coverage: 0x%02x, Count: %d\n", fColor.toBytes_RGBA(),
-                       fCoverage, fPaths.count());
-        string += INHERITED::dumpInfo();
-        string += fHelper.dumpInfo();
-        return string;
-    }
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
     GrProcessorSet::Analysis finalize(
@@ -963,6 +952,14 @@ private:
         fPaths.push_back_n(that->fPaths.count(), that->fPaths.begin());
         return CombineResult::kMerged;
     }
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        return SkStringPrintf("Color: 0x%08x Coverage: 0x%02x, Count: %d\n%s",
+                              fColor.toBytes_RGBA(), fCoverage, fPaths.count(),
+                              fHelper.dumpInfo().c_str());
+    }
+#endif
 
     const SkPMColor4f& color() const { return fColor; }
     uint8_t coverage() const { return fCoverage; }

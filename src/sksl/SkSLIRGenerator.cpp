@@ -994,14 +994,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     }
     if (!decl) {
         // couldn't find an existing declaration
-        auto newDecl = std::make_unique<FunctionDeclaration>(f.fOffset,
-                                                             fd.fModifiers,
-                                                             fd.fName,
-                                                             parameters,
-                                                             *returnType,
-                                                             fIsBuiltinCode);
-        decl = newDecl.get();
-        fSymbolTable->add(decl->fName, std::move(newDecl));
+        decl = fSymbolTable->add(fd.fName,
+                                 std::make_unique<FunctionDeclaration>(f.fOffset,
+                                                                       fd.fModifiers,
+                                                                       fd.fName,
+                                                                       parameters,
+                                                                       *returnType,
+                                                                       fIsBuiltinCode));
     }
     if (iter != f.end()) {
         // compile body
@@ -1174,7 +1173,6 @@ void IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
 
 void IRGenerator::convertEnum(const ASTNode& e) {
     SkASSERT(e.fKind == ASTNode::Kind::kEnum);
-    std::vector<Variable*> variables;
     int64_t currentValue = 0;
     Layout layout;
     ASTNode enumType(e.fNodes, e.fOffset, ASTNode::Kind::kType,
@@ -1197,10 +1195,9 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         }
         value = std::unique_ptr<Expression>(new IntLiteral(fContext, e.fOffset, currentValue));
         ++currentValue;
-        auto var = std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), *type,
-                                              Variable::kGlobal_Storage, value.get());
-        variables.push_back(var.get());
-        symbols->add(child.getString(), std::move(var));
+        symbols->add(child.getString(),
+                     std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), *type,
+                                                Variable::kGlobal_Storage, value.get()));
         symbols->takeOwnershipOfIRNode(std::move(value));
     }
     fProgramElements->push_back(std::unique_ptr<ProgramElement>(new Enum(e.fOffset, e.getString(),
@@ -2008,7 +2005,7 @@ std::unique_ptr<Expression> IRGenerator::inlineExpression(
     }
 }
 
-const Type* copy_if_needed(const Type* src, SymbolTable& symbolTable) {
+static const Type* copy_if_needed(const Type* src, SymbolTable& symbolTable) {
     if (src->kind() == Type::kArray_Kind) {
         return symbolTable.takeOwnershipOfSymbol(std::make_unique<Type>(*src));
     }
@@ -2155,47 +2152,48 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
     }
 }
 
-int return_count(const Statement& statement) {
+template <bool countTopLevelReturns>
+static int return_count(const Statement& statement, bool inLoopOrSwitch) {
     switch (statement.fKind) {
         case Statement::kBlock_Kind: {
-            const Block& b = (const Block&) statement;
+            const Block& b = static_cast<const Block&>(statement);
             int result = 0;
-            for (const auto& s : b.fStatements) {
-                result += return_count(*s);
+            for (const std::unique_ptr<Statement>& s : b.fStatements) {
+                result += return_count<countTopLevelReturns>(*s, inLoopOrSwitch);
             }
             return result;
         }
         case Statement::kDo_Kind: {
-            const DoStatement& d = (const DoStatement&) statement;
-            return return_count(*d.fStatement);
+            const DoStatement& d = static_cast<const DoStatement&>(statement);
+            return return_count<countTopLevelReturns>(*d.fStatement, /*inLoopOrSwitch=*/true);
         }
         case Statement::kFor_Kind: {
-            const ForStatement& f = (const ForStatement&) statement;
-            return return_count(*f.fStatement);
+            const ForStatement& f = static_cast<const ForStatement&>(statement);
+            return return_count<countTopLevelReturns>(*f.fStatement, /*inLoopOrSwitch=*/true);
         }
         case Statement::kIf_Kind: {
-            const IfStatement& i = (const IfStatement&) statement;
-            int result = return_count(*i.fIfTrue);
+            const IfStatement& i = static_cast<const IfStatement&>(statement);
+            int result = return_count<countTopLevelReturns>(*i.fIfTrue, inLoopOrSwitch);
             if (i.fIfFalse) {
-                result += return_count(*i.fIfFalse);
+                result += return_count<countTopLevelReturns>(*i.fIfFalse, inLoopOrSwitch);
             }
             return result;
         }
         case Statement::kReturn_Kind:
-            return 1;
+            return (countTopLevelReturns || inLoopOrSwitch) ? 1 : 0;
         case Statement::kSwitch_Kind: {
-            const SwitchStatement& ss = (const SwitchStatement&) statement;
+            const SwitchStatement& ss = static_cast<const SwitchStatement&>(statement);
             int result = 0;
-            for (const auto& sc : ss.fCases) {
-                for (const auto& s : ((SwitchCase&) *sc).fStatements) {
-                    result += return_count(*s);
+            for (const std::unique_ptr<SwitchCase>& sc : ss.fCases) {
+                for (const std::unique_ptr<Statement>& s : sc->fStatements) {
+                    result += return_count<countTopLevelReturns>(*s, /*inLoopOrSwitch=*/true);
                 }
             }
             return result;
         }
         case Statement::kWhile_Kind: {
-            const WhileStatement& w = (const WhileStatement&) statement;
-            return return_count(*w.fStatement);
+            const WhileStatement& w = static_cast<const WhileStatement&>(statement);
+            return return_count<countTopLevelReturns>(*w.fStatement, /*inLoopOrSwitch=*/true);
         }
         case Statement::kBreak_Kind:
         case Statement::kContinue_Kind:
@@ -2211,8 +2209,9 @@ int return_count(const Statement& statement) {
     }
 }
 
-bool has_early_return(const FunctionDefinition& f) {
-    int returnCount = return_count(*f.fBody);
+static bool has_early_return(const FunctionDefinition& f) {
+    int returnCount =
+            return_count</*countTopLevelReturns=*/true>(*f.fBody, /*inLoopOrSwitch=*/false);
     if (returnCount == 0) {
         return false;
     }
@@ -2220,7 +2219,13 @@ bool has_early_return(const FunctionDefinition& f) {
         return true;
     }
     SkASSERT(f.fBody->fKind == Statement::kBlock_Kind);
-    return ((Block&) *f.fBody).fStatements.back()->fKind != Statement::kReturn_Kind;
+    return static_cast<Block&>(*f.fBody).fStatements.back()->fKind != Statement::kReturn_Kind;
+}
+
+static bool has_return_in_breakable_construct(const FunctionDefinition& f) {
+    int returnCount =
+            return_count</*countTopLevelReturns=*/false>(*f.fBody, /*inLoopOrSwitch=*/false);
+    return returnCount > 0;
 }
 
 std::unique_ptr<Expression> IRGenerator::inlineCall(
@@ -2250,25 +2255,24 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
         }
     }
 
-    Variable* resultVar;
+    const Variable* resultVar = nullptr;
     if (function.fDeclaration.fReturnType != *fContext.fVoid_Type) {
         std::unique_ptr<String> name(new String());
         int varIndex = fInlineVarCounter++;
         name->appendf("_inlineResult%s%d", inlineSalt.c_str(), varIndex);
         const String* namePtr = fSymbolTable->takeOwnershipOfString(std::move(name));
-        resultVar = new Variable(/*offset=*/-1, Modifiers(), namePtr->c_str(),
-                                 function.fDeclaration.fReturnType,
-                                 Variable::kLocal_Storage,
-                                 nullptr);
-        fSymbolTable->add(resultVar->fName, std::unique_ptr<Symbol>(resultVar));
+        StringFragment nameFrag{namePtr->c_str(), namePtr->length()};
+        resultVar = fSymbolTable->add(
+                nameFrag,
+                std::make_unique<Variable>(
+                        /*offset=*/-1, Modifiers(), nameFrag, function.fDeclaration.fReturnType,
+                        Variable::kLocal_Storage, /*initialValue=*/nullptr));
         std::vector<std::unique_ptr<VarDeclaration>> variables;
         variables.emplace_back(new VarDeclaration(resultVar, {}, nullptr));
         fExtraStatements.emplace_back(
                 new VarDeclarationsStatement(std::make_unique<VarDeclarations>(
                         offset, &resultVar->fType, std::move(variables))));
 
-    } else {
-        resultVar = nullptr;
     }
     std::unordered_map<const Variable*, const Variable*> varMap;
     // create variables to hold the arguments and assign the arguments to them
@@ -2277,10 +2281,11 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
         std::unique_ptr<String> argName(new String());
         argName->appendf("_inlineArg%s%d_%d", inlineSalt.c_str(), argIndex, i);
         const String* argNamePtr = fSymbolTable->takeOwnershipOfString(std::move(argName));
-        Variable* argVar =
-                new Variable(/*offset=*/-1, Modifiers(), argNamePtr->c_str(), arguments[i]->fType,
-                             Variable::kLocal_Storage, arguments[i].get());
-        fSymbolTable->add(argVar->fName, std::unique_ptr<Symbol>(argVar));
+        StringFragment argNameFrag{argNamePtr->c_str(), argNamePtr->length()};
+        const Variable* argVar = fSymbolTable->add(
+                argNameFrag, std::make_unique<Variable>(
+                                     /*offset=*/-1, Modifiers(), argNameFrag, arguments[i]->fType,
+                                     Variable::kLocal_Storage, arguments[i].get()));
         varMap[function.fDeclaration.fParameters[i]] = argVar;
         std::vector<std::unique_ptr<VarDeclaration>> vars;
         if (function.fDeclaration.fParameters[i]->fModifiers.fFlags & Modifiers::kOut_Flag) {
@@ -2289,9 +2294,7 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
             vars.emplace_back(new VarDeclaration(argVar, {}, std::move(arguments[i])));
         }
         fExtraStatements.emplace_back(new VarDeclarationsStatement(
-                           std::make_unique<VarDeclarations>(offset,
-                                                                                &argVar->fType,
-                                                                                std::move(vars))));
+                std::make_unique<VarDeclarations>(offset, &argVar->fType, std::move(vars))));
     }
     SkASSERT(function.fBody->fKind == Statement::kBlock_Kind);
     const Block& body = (Block&) *function.fBody;
@@ -2348,6 +2351,25 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
     }
 }
 
+bool IRGenerator::isSafeToInline(const FunctionDefinition& functionDef) {
+    if (!fCanInline) {
+        // Inlining has been explicitly disabled by the IR generator.
+        return false;
+    }
+    if (functionDef.inlinedFunctionSize() >= fSettings->fInlineThreshold) {
+        // The function exceeds our maximum inline size.
+        return false;
+    }
+    if (!fSettings->fCaps || !fSettings->fCaps->canUseDoLoops()) {
+        // We don't have do-while loops. We use do-while loops to simulate early returns, so we
+        // can't inline functions that have an early return.
+        return !has_early_return(functionDef);
+    }
+    // We have do-while loops, but we don't have any mechanism to simulate early returns within a
+    // breakable construct (switch/for/do/while), so we can't inline if there's a return inside one.
+    return !has_return_in_breakable_construct(functionDef);
+}
+
 std::unique_ptr<Expression> IRGenerator::call(int offset,
                                               const FunctionDeclaration& function,
                                               std::vector<std::unique_ptr<Expression>> arguments) {
@@ -2401,14 +2423,11 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
                              VariableReference::kPointer_RefKind);
         }
     }
-    if (fCanInline && function.fDefinition &&
-        function.fDefinition->canBeInlined(fSettings->fInlineThreshold) &&
-        ((fSettings->fCaps && fSettings->fCaps->canUseDoLoops()) ||
-         !has_early_return(*function.fDefinition))) {
+    if (function.fDefinition && this->isSafeToInline(*function.fDefinition)) {
         return this->inlineCall(offset, *function.fDefinition, std::move(arguments));
     }
-    return std::make_unique<FunctionCall>(offset, *returnType, function,
-                                                          std::move(arguments));
+
+    return std::make_unique<FunctionCall>(offset, *returnType, function, std::move(arguments));
 }
 
 /**
@@ -2551,7 +2570,7 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
     return std::unique_ptr<Expression>(new Constructor(offset, type, std::move(args)));
 }
 
-int component_count(const Type& type) {
+static int component_count(const Type& type) {
     switch (type.kind()) {
         case Type::kVector_Kind:
             return type.columns();
@@ -2777,7 +2796,7 @@ std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression
 }
 
 // counts the number of chunks of contiguous 'x's in a swizzle, e.g. xxx1 has one and x0xx has two
-int count_contiguous_swizzle_chunks(const std::vector<int>& components) {
+static int count_contiguous_swizzle_chunks(const std::vector<int>& components) {
     int chunkCount = 0;
     for (size_t i = 0; i < components.size(); ++i) {
         SkASSERT(components[i] <= 0);

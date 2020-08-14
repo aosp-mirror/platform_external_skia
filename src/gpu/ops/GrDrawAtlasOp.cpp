@@ -44,10 +44,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override;
 
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
@@ -64,6 +60,9 @@ private:
 
     void onPrepareDraws(Target*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
 
     const SkPMColor4f& color() const { return fColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
@@ -186,15 +185,14 @@ DrawAtlasOp::DrawAtlasOp(const Helper::MakeArgs& helperArgs, const SkPMColor4f& 
     this->setTransformedBounds(bounds, viewMatrix, HasAABloat::kNo, IsHairline::kNo);
 }
 
-#ifdef SK_DEBUG
-SkString DrawAtlasOp::dumpInfo() const {
+#if GR_TEST_UTILS
+SkString DrawAtlasOp::onDumpInfo() const {
     SkString string;
     for (const auto& geo : fGeoData) {
         string.appendf("Color: 0x%08x, Quads: %d\n", geo.fColor.toBytes_RGBA(),
                        geo.fVerts.count() / 4);
     }
     string += fHelper.dumpInfo();
-    string += INHERITED::dumpInfo();
     return string;
 }
 #endif

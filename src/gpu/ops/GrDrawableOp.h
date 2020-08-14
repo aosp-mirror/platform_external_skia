@@ -26,12 +26,6 @@ public:
 
     const char* name() const override { return "Drawable"; }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        return INHERITED::dumpInfo();
-    }
-#endif
-
 private:
     friend class GrOpMemoryPool; // for ctor
 

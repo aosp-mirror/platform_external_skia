@@ -455,10 +455,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override;
 
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
@@ -475,6 +471,9 @@ private:
 
     void onPrepareDraws(Target*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
 
     GrGeometryProcessor* makeGP(SkArenaAlloc*);
 
@@ -581,14 +580,11 @@ DrawVerticesOp::DrawVerticesOp(const Helper::MakeArgs& helperArgs,
                                 zeroArea);
 }
 
-#ifdef SK_DEBUG
-SkString DrawVerticesOp::dumpInfo() const {
-    SkString string;
-    string.appendf("PrimType: %d, MeshCount %d, VCount: %d, ICount: %d\n", (int)fPrimitiveType,
-                   fMeshes.count(), fVertexCount, fIndexCount);
-    string += fHelper.dumpInfo();
-    string += INHERITED::dumpInfo();
-    return string;
+#if GR_TEST_UTILS
+SkString DrawVerticesOp::onDumpInfo() const {
+    return SkStringPrintf("PrimType: %d, MeshCount %d, VCount: %d, ICount: %d\n%s",
+                          (int)fPrimitiveType, fMeshes.count(), fVertexCount, fIndexCount,
+                          fHelper.dumpInfo().c_str());
 }
 #endif
 

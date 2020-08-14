@@ -72,21 +72,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString str;
-        str.appendf("# combined: %d\n", fRegions.count());
-        for (int i = 0; i < fRegions.count(); ++i) {
-            const RegionInfo& info = fRegions[i];
-            str.appendf("%d: Color: 0x%08x, Region with %d rects\n", i, info.fColor.toBytes_RGBA(),
-                        info.fRegion.computeRegionComplexity());
-        }
-        str += fHelper.dumpInfo();
-        str += INHERITED::dumpInfo();
-        return str;
-    }
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
     GrProcessorSet::Analysis finalize(
@@ -180,6 +165,19 @@ private:
         fWideColor |= that->fWideColor;
         return CombineResult::kMerged;
     }
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString str = SkStringPrintf("# combined: %d\n", fRegions.count());
+        for (int i = 0; i < fRegions.count(); ++i) {
+            const RegionInfo& info = fRegions[i];
+            str.appendf("%d: Color: 0x%08x, Region with %d rects\n", i, info.fColor.toBytes_RGBA(),
+                        info.fRegion.computeRegionComplexity());
+        }
+        str += fHelper.dumpInfo();
+        return str;
+    }
+#endif
 
     struct RegionInfo {
         SkPMColor4f fColor;

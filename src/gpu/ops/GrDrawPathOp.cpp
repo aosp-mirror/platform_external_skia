@@ -37,12 +37,9 @@ GrDrawPathOpBase::GrDrawPathOpBase(uint32_t classID, const SkMatrix& viewMatrix,
         , fDoAA(GrAA::kYes == aa)
         , fProcessorSet(std::move(paint)) {}
 
-#ifdef SK_DEBUG
-SkString GrDrawPathOp::dumpInfo() const {
-    SkString string;
-    string.printf("PATH: 0x%p", fPath.get());
-    string.append(INHERITED::dumpInfo());
-    return string;
+#if GR_TEST_UTILS
+SkString GrDrawPathOp::onDumpInfo() const {
+    return SkStringPrintf("PATH: 0x%p", fPath.get());
 }
 #endif
 

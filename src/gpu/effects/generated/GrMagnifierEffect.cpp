@@ -147,11 +147,11 @@ GrMagnifierEffect::GrMagnifierEffect(const GrMagnifierEffect& src)
 std::unique_ptr<GrFragmentProcessor> GrMagnifierEffect::clone() const {
     return std::make_unique<GrMagnifierEffect>(*this);
 }
-#ifdef SK_DEBUG
-SkString GrMagnifierEffect::dumpInfo() const {
+#if GR_TEST_UTILS
+SkString GrMagnifierEffect::onDumpInfo() const {
     return SkStringPrintf(
-            "MagnifierEffect(bounds=int4(%d, %d, %d, %d), srcRect=float4(%f, %f, %f, %f), "
-            "xInvZoom=%f, yInvZoom=%f, xInvInset=%f, yInvInset=%f)",
+            "(bounds=int4(%d, %d, %d, %d), srcRect=float4(%f, %f, %f, %f), xInvZoom=%f, "
+            "yInvZoom=%f, xInvInset=%f, yInvInset=%f)",
             bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), srcRect.left(),
             srcRect.top(), srcRect.right(), srcRect.bottom(), xInvZoom, yInvZoom, xInvInset,
             yInvInset);

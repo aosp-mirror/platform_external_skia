@@ -49,7 +49,7 @@ GrProcessorSet::~GrProcessorSet() {
     }
 }
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
 SkString GrProcessorSet::dumpProcessors() const {
     SkString result;
     if (this->hasColorFragmentProcessor()) {
@@ -58,7 +58,7 @@ SkString GrProcessorSet::dumpProcessors() const {
     } else {
         result.append("No color fragment processor.\n");
     }
-    if (this->hasColorFragmentProcessor()) {
+    if (this->hasCoverageFragmentProcessor()) {
         result.append("Coverage Fragment Processor:\n");
         result += this->coverageFragmentProcessor()->dumpTreeInfo();
     } else {

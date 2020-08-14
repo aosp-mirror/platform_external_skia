@@ -1676,6 +1676,7 @@ cc_test {
         "tests/MipMapTest.cpp",
         "tests/MultiPictureDocumentTest.cpp",
         "tests/NdkDecodeTest.cpp",
+        "tests/NdkEncodeTest.cpp",
         "tests/NonlinearBlendingTest.cpp",
         "tests/OSPathTest.cpp",
         "tests/OctoBoundsTest.cpp",

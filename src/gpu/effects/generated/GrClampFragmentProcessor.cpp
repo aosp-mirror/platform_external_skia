@@ -65,10 +65,9 @@ GrClampFragmentProcessor::GrClampFragmentProcessor(const GrClampFragmentProcesso
 std::unique_ptr<GrFragmentProcessor> GrClampFragmentProcessor::clone() const {
     return std::make_unique<GrClampFragmentProcessor>(*this);
 }
-#ifdef SK_DEBUG
-SkString GrClampFragmentProcessor::dumpInfo() const {
-    return SkStringPrintf("ClampFragmentProcessor(clampToPremul=%s)",
-                          (clampToPremul ? "true" : "false"));
+#if GR_TEST_UTILS
+SkString GrClampFragmentProcessor::onDumpInfo() const {
+    return SkStringPrintf("(clampToPremul=%s)", (clampToPremul ? "true" : "false"));
 }
 #endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrClampFragmentProcessor);

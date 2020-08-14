@@ -190,16 +190,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        string.appendf("Color 0x%08x, aa: %d\n", fColor.toBytes_RGBA(), fAntiAlias);
-        string += fHelper.dumpInfo();
-        string += INHERITED::dumpInfo();
-        return string;
-    }
-#endif
-
     TriangulatingPathOp(Helper::MakeArgs helperArgs,
                         const SkPMColor4f& color,
                         const GrStyledShape& shape,
@@ -400,6 +390,13 @@ private:
         flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
         flushState->drawMesh(*fMesh);
     }
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        return SkStringPrintf("Color 0x%08x, aa: %d\n%s",
+                              fColor.toBytes_RGBA(), fAntiAlias, fHelper.dumpInfo().c_str());
+    }
+#endif
 
     Helper         fHelper;
     SkPMColor4f    fColor;

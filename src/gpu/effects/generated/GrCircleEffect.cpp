@@ -121,10 +121,10 @@ GrCircleEffect::GrCircleEffect(const GrCircleEffect& src)
 std::unique_ptr<GrFragmentProcessor> GrCircleEffect::clone() const {
     return std::make_unique<GrCircleEffect>(*this);
 }
-#ifdef SK_DEBUG
-SkString GrCircleEffect::dumpInfo() const {
-    return SkStringPrintf("CircleEffect(edgeType=%d, center=float2(%f, %f), radius=%f)",
-                          (int)edgeType, center.fX, center.fY, radius);
+#if GR_TEST_UTILS
+SkString GrCircleEffect::onDumpInfo() const {
+    return SkStringPrintf("(edgeType=%d, center=float2(%f, %f), radius=%f)", (int)edgeType,
+                          center.fX, center.fY, radius);
 }
 #endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrCircleEffect);
