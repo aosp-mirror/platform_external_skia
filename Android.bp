@@ -2015,6 +2015,7 @@ cc_test {
         "bench/GMBench.cpp",
         "bench/GameBench.cpp",
         "bench/GeometryBench.cpp",
+        "bench/GlyphQuadFillBench.cpp",
         "bench/GrMemoryPoolBench.cpp",
         "bench/GrMipmapBench.cpp",
         "bench/GrQuadBench.cpp",
