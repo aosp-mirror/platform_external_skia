@@ -100,12 +100,6 @@ public:
         this->recordOp(std::move(op), GrProcessorSet::EmptySetAnalysis(), nullptr, nullptr, caps);
     }
 
-    void addWaitOp(GrDrawingManager* drawingMgr, std::unique_ptr<GrOp> op,
-                   GrTextureResolveManager textureResolveManager, const GrCaps& caps) {
-        fHasWaitOp = true;
-        this->addOp(drawingMgr, std::move(op), textureResolveManager, caps);
-    }
-
     void addDrawOp(GrDrawingManager* drawingMgr, std::unique_ptr<GrDrawOp> op,
                    const GrProcessorSet::Analysis& processorAnalysis,
                    GrAppliedClip&& clip, const DstProxyView& dstProxyView,
@@ -121,7 +115,14 @@ public:
         if (dstProxyView.proxy()) {
             this->addSampledTexture(dstProxyView.proxy());
             addDependency(dstProxyView.proxy(), GrMipmapped::kNo);
+            if (this->target(0).asTextureProxy() == dstProxyView.proxy()) {
+                // Since we are sampling and drawing to the same surface we will need to use
+                // texture barriers.
+                fUsesXferBarriers |= true;
+            }
         }
+
+        fUsesXferBarriers |= processorAnalysis.usesNonCoherentHWBlending();
 
         this->recordOp(std::move(op), processorAnalysis, clip.doesClip() ? &clip : nullptr,
                        &dstProxyView, caps);
@@ -319,8 +320,7 @@ private:
     SkIRect fLastDevClipBounds;
     int fLastClipNumAnalyticElements;
 
-    // We must track if we have a wait op so that we don't delete the op when we have a full clear.
-    bool fHasWaitOp = false;
+    bool fUsesXferBarriers = false;
 
     // For ops/opsTask we have mean: 5 stdDev: 28
     SkSTArray<25, OpChain> fOpChains;

@@ -34,9 +34,6 @@ public:
                                                i - substringStartIndex);
                 const SkSL::Compiler::FormatArg& arg = *fmtArg++;
                 switch (arg.fKind) {
-                    case SkSL::Compiler::FormatArg::Kind::kInput:
-                        result += args.fInputColor;
-                        break;
                     case SkSL::Compiler::FormatArg::Kind::kOutput:
                         result += args.fOutputColor;
                         break;
@@ -109,6 +106,7 @@ public:
                                       body.c_str(),
                                       &fFunctionNames.back());
         }
+        fragBuilder->codeAppendf("%s = %s;\n", args.fOutputColor, args.fInputColor);
         auto fmtArgIter = fArgs.fFormatArgs.cbegin();
         fragBuilder->codeAppend(this->expandFormatArgs(fArgs.fCode, args, fmtArgIter).c_str());
         SkASSERT(fmtArgIter == fArgs.fFormatArgs.cend());
