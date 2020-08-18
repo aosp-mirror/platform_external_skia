@@ -1431,19 +1431,19 @@ void ByteCodeGenerator::writeTernaryExpression(const TernaryExpression& t) {
 void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
     switch (e.fKind) {
         case Expression::kBinary_Kind:
-            discard = this->writeBinaryExpression((BinaryExpression&) e, discard);
+            discard = this->writeBinaryExpression(e.as<BinaryExpression>(), discard);
             break;
         case Expression::kBoolLiteral_Kind:
-            this->writeBoolLiteral((BoolLiteral&) e);
+            this->writeBoolLiteral(e.as<BoolLiteral>());
             break;
         case Expression::kConstructor_Kind:
-            this->writeConstructor((Constructor&) e);
+            this->writeConstructor(e.as<Constructor>());
             break;
         case Expression::kExternalFunctionCall_Kind:
-            this->writeExternalFunctionCall((ExternalFunctionCall&) e);
+            this->writeExternalFunctionCall(e.as<ExternalFunctionCall>());
             break;
         case Expression::kExternalValue_Kind:
-            this->writeExternalValue((ExternalValueReference&) e);
+            this->writeExternalValue(e.as<ExternalValueReference>());
             break;
         case Expression::kFieldAccess_Kind:
         case Expression::kIndex_Kind:
@@ -1451,28 +1451,28 @@ void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
             this->writeVariableExpression(e);
             break;
         case Expression::kFloatLiteral_Kind:
-            this->writeFloatLiteral((FloatLiteral&) e);
+            this->writeFloatLiteral(e.as<FloatLiteral>());
             break;
         case Expression::kFunctionCall_Kind:
-            this->writeFunctionCall((FunctionCall&) e);
+            this->writeFunctionCall(e.as<FunctionCall>());
             break;
         case Expression::kIntLiteral_Kind:
-            this->writeIntLiteral((IntLiteral&) e);
+            this->writeIntLiteral(e.as<IntLiteral>());
             break;
         case Expression::kNullLiteral_Kind:
-            this->writeNullLiteral((NullLiteral&) e);
+            this->writeNullLiteral(e.as<NullLiteral>());
             break;
         case Expression::kPrefix_Kind:
-            discard = this->writePrefixExpression((PrefixExpression&) e, discard);
+            discard = this->writePrefixExpression(e.as<PrefixExpression>(), discard);
             break;
         case Expression::kPostfix_Kind:
-            discard = this->writePostfixExpression((PostfixExpression&) e, discard);
+            discard = this->writePostfixExpression(e.as<PostfixExpression>(), discard);
             break;
         case Expression::kSwizzle_Kind:
-            this->writeSwizzle((Swizzle&) e);
+            this->writeSwizzle(e.as<Swizzle>());
             break;
         case Expression::kTernary_Kind:
-            this->writeTernaryExpression((TernaryExpression&) e);
+            this->writeTernaryExpression(e.as<TernaryExpression>());
             break;
         default:
 #ifdef SK_DEBUG
@@ -1491,7 +1491,7 @@ void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
 
 class ByteCodeExternalValueLValue : public ByteCodeGenerator::LValue {
 public:
-    ByteCodeExternalValueLValue(ByteCodeGenerator* generator, ExternalValue& value, int index)
+    ByteCodeExternalValueLValue(ByteCodeGenerator* generator, const ExternalValue& value, int index)
         : INHERITED(*generator)
         , fCount(ByteCodeGenerator::SlotCount(value.type()))
         , fIndex(index) {}
@@ -1602,7 +1602,7 @@ private:
 std::unique_ptr<ByteCodeGenerator::LValue> ByteCodeGenerator::getLValue(const Expression& e) {
     switch (e.fKind) {
         case Expression::kExternalValue_Kind: {
-            ExternalValue* value = ((ExternalValueReference&) e).fValue;
+            const ExternalValue* value = ((ExternalValueReference&) e).fValue;
             int index = fOutput->fExternalValues.size();
             fOutput->fExternalValues.push_back(value);
             SkASSERT(index <= 255);
