@@ -377,6 +377,17 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
             fErrors.error(decls.fOffset, "'varying' must be float scalar or vector");
         }
     }
+    int permitted = Modifiers::kConst_Flag;
+    if (storage == Variable::kGlobal_Storage) {
+        permitted |= Modifiers::kIn_Flag | Modifiers::kOut_Flag | Modifiers::kUniform_Flag |
+                     Modifiers::kFlat_Flag | Modifiers::kVarying_Flag |
+                     Modifiers::kNoPerspective_Flag | Modifiers::kPLS_Flag |
+                     Modifiers::kPLSIn_Flag | Modifiers::kPLSOut_Flag |
+                     Modifiers::kRestrict_Flag | Modifiers::kVolatile_Flag |
+                     Modifiers::kReadOnly_Flag | Modifiers::kWriteOnly_Flag |
+                     Modifiers::kCoherent_Flag | Modifiers::kBuffer_Flag;
+    }
+    this->checkModifiers(decls.fOffset, modifiers, permitted);
     for (; iter != decls.end(); ++iter) {
         const ASTNode& varDecl = *iter;
         if (modifiers.fLayout.fLocation == 0 && modifiers.fLayout.fIndex == 0 &&
@@ -836,6 +847,36 @@ private:
 
 template <typename T> AutoClear(T* c) -> AutoClear<T>;
 
+void IRGenerator::checkModifiers(int offset, const Modifiers& modifiers, int permitted) {
+    int flags = modifiers.fFlags;
+    #define CHECK(flag, name)                                              \
+        if (!flags) return;                                                \
+        if (flags & flag) {                                                \
+            if (!(permitted & flag)) {                                     \
+                fErrors.error(offset, "'" name "' is not permitted here"); \
+            }                                                              \
+            flags &= ~flag;                                                \
+        }
+    CHECK(Modifiers::kConst_Flag,          "const")
+    CHECK(Modifiers::kIn_Flag,             "in")
+    CHECK(Modifiers::kOut_Flag,            "out")
+    CHECK(Modifiers::kUniform_Flag,        "uniform")
+    CHECK(Modifiers::kFlat_Flag,           "flat")
+    CHECK(Modifiers::kNoPerspective_Flag,  "noperspective")
+    CHECK(Modifiers::kReadOnly_Flag,       "readonly")
+    CHECK(Modifiers::kWriteOnly_Flag,      "writeonly")
+    CHECK(Modifiers::kCoherent_Flag,       "coherent")
+    CHECK(Modifiers::kVolatile_Flag,       "volatile")
+    CHECK(Modifiers::kRestrict_Flag,       "restrict")
+    CHECK(Modifiers::kBuffer_Flag,         "buffer")
+    CHECK(Modifiers::kHasSideEffects_Flag, "sk_has_side_effects")
+    CHECK(Modifiers::kPLS_Flag,            "__pixel_localEXT")
+    CHECK(Modifiers::kPLSIn_Flag,          "__pixel_local_inEXT")
+    CHECK(Modifiers::kPLSOut_Flag,         "__pixel_local_outEXT")
+    CHECK(Modifiers::kVarying_Flag,        "varying")
+    SkASSERT(flags == 0);
+}
+
 void IRGenerator::convertFunction(const ASTNode& f) {
     AutoClear clear(&fReferencedIntrinsics);
     auto iter = f.begin();
@@ -859,11 +900,14 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         return;
     }
     const ASTNode::FunctionData& fd = f.getFunctionData();
+    this->checkModifiers(f.fOffset, fd.fModifiers, Modifiers::kHasSideEffects_Flag);
     std::vector<const Variable*> parameters;
     for (size_t i = 0; i < fd.fParameterCount; ++i) {
         const ASTNode& param = *(iter++);
         SkASSERT(param.fKind == ASTNode::Kind::kParameter);
         ASTNode::ParameterData pd = param.getParameterData();
+        this->checkModifiers(param.fOffset, pd.fModifiers, Modifiers::kIn_Flag |
+                                                           Modifiers::kOut_Flag);
         auto paramIter = param.begin();
         const Type* type = this->convertType(*(paramIter++));
         if (!type) {
@@ -1081,14 +1125,6 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
             if (vd.fValue) {
                 fErrors.error(decl->fOffset,
                               "initializers are not permitted on interface block fields");
-            }
-            if (vd.fVar->fModifiers.fFlags & (Modifiers::kIn_Flag |
-                                              Modifiers::kOut_Flag |
-                                              Modifiers::kUniform_Flag |
-                                              Modifiers::kBuffer_Flag |
-                                              Modifiers::kConst_Flag)) {
-                fErrors.error(decl->fOffset,
-                              "interface block fields may not have storage qualifiers");
             }
             if (vd.fVar->fType.kind() == Type::kArray_Kind &&
                 vd.fVar->fType.columns() == -1) {
@@ -2817,13 +2853,16 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
         return nullptr;
     }
     std::vector<int> swizzleComponents;
+    size_t numLiteralFields = 0;
     for (size_t i = 0; i < fields.fLength; i++) {
         switch (fields[i]) {
             case '0':
                 swizzleComponents.push_back(SKSL_SWIZZLE_0);
+                numLiteralFields++;
                 break;
             case '1':
                 swizzleComponents.push_back(SKSL_SWIZZLE_1);
+                numLiteralFields++;
                 break;
             case 'x':
             case 'r':
@@ -2867,6 +2906,10 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
     SkASSERT(swizzleComponents.size() > 0);
     if (swizzleComponents.size() > 4) {
         fErrors.error(base->fOffset, "too many components in swizzle mask '" + fields + "'");
+        return nullptr;
+    }
+    if (numLiteralFields == swizzleComponents.size()) {
+        fErrors.error(base->fOffset, "swizzle must refer to base expression");
         return nullptr;
     }
     if (base->fType.isNumber()) {
