@@ -413,7 +413,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
                 String name(type->fName);
                 int64_t count;
                 if (size->fKind == Expression::kIntLiteral_Kind) {
-                    count = ((IntLiteral&) *size).fValue;
+                    count = size->as<IntLiteral>().fValue;
                     if (count <= 0) {
                         fErrors.error(size->fOffset, "array size must be positive");
                         return nullptr;
@@ -1146,7 +1146,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
             String name = type->fName;
             int64_t count;
             if (converted->fKind == Expression::kIntLiteral_Kind) {
-                count = ((IntLiteral&) *converted).fValue;
+                count = converted->as<IntLiteral>().fValue;
                 if (count <= 0) {
                     fErrors.error(converted->fOffset, "array size must be positive");
                     return nullptr;
@@ -1386,7 +1386,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
             return std::make_unique<TypeReference>(fContext, identifier.fOffset, *t);
         }
         case Symbol::kExternal_Kind: {
-            ExternalValue* r = (ExternalValue*) result;
+            const ExternalValue* r = (const ExternalValue*) result;
             return std::make_unique<ExternalValueReference>(identifier.fOffset, r);
         }
         default:
@@ -1694,8 +1694,8 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
                                                           (uint32_t) leftVal op   \
                                                           (uint32_t) rightVal)
     if (left.fKind == Expression::kIntLiteral_Kind && right.fKind == Expression::kIntLiteral_Kind) {
-        int64_t leftVal  = ((IntLiteral&) left).fValue;
-        int64_t rightVal = ((IntLiteral&) right).fValue;
+        int64_t leftVal  = left.as<IntLiteral>().fValue;
+        int64_t rightVal = right.as<IntLiteral>().fValue;
         switch (op) {
             case Token::Kind::TK_PLUS:       return URESULT(Int, +);
             case Token::Kind::TK_MINUS:      return URESULT(Int, -);
@@ -1748,8 +1748,8 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
     }
     if (left.fKind == Expression::kFloatLiteral_Kind &&
         right.fKind == Expression::kFloatLiteral_Kind) {
-        double leftVal  = ((FloatLiteral&) left).fValue;
-        double rightVal = ((FloatLiteral&) right).fValue;
+        double leftVal  = left.as<FloatLiteral>().fValue;
+        double rightVal = right.as<FloatLiteral>().fValue;
         switch (op) {
             case Token::Kind::TK_PLUS:  return RESULT(Float, +);
             case Token::Kind::TK_MINUS: return RESULT(Float, -);
@@ -2072,7 +2072,7 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
     };
     switch (statement.fKind) {
         case Statement::kBlock_Kind: {
-            const Block& b = static_cast<const Block&>(statement);
+            const Block& b = statement.as<Block>();
             return std::make_unique<Block>(offset, stmts(b.fStatements), b.fSymbols, b.fIsScope);
         }
 
@@ -2082,15 +2082,15 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
             return statement.clone();
 
         case Statement::kDo_Kind: {
-            const DoStatement& d = static_cast<const DoStatement&>(statement);
+            const DoStatement& d = statement.as<DoStatement>();
             return std::make_unique<DoStatement>(offset, stmt(d.fStatement), expr(d.fTest));
         }
         case Statement::kExpression_Kind: {
-            const ExpressionStatement& e = static_cast<const ExpressionStatement&>(statement);
+            const ExpressionStatement& e = statement.as<ExpressionStatement>();
             return std::make_unique<ExpressionStatement>(expr(e.fExpression));
         }
         case Statement::kFor_Kind: {
-            const ForStatement& f = static_cast<const ForStatement&>(statement);
+            const ForStatement& f = statement.as<ForStatement>();
             // need to ensure initializer is evaluated first so that we've already remapped its
             // declarations by the time we evaluate test & next
             std::unique_ptr<Statement> initializer = stmt(f.fInitializer);
@@ -2098,14 +2098,14 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
                                                   expr(f.fNext), stmt(f.fStatement), f.fSymbols);
         }
         case Statement::kIf_Kind: {
-            const IfStatement& i = static_cast<const IfStatement&>(statement);
+            const IfStatement& i = statement.as<IfStatement>();
             return std::make_unique<IfStatement>(offset, i.fIsStatic, expr(i.fTest),
                                                  stmt(i.fIfTrue), stmt(i.fIfFalse));
         }
         case Statement::kNop_Kind:
             return statement.clone();
         case Statement::kReturn_Kind: {
-            const ReturnStatement& r = static_cast<const ReturnStatement&>(statement);
+            const ReturnStatement& r = statement.as<ReturnStatement>();
             if (r.fExpression) {
                 auto assignment = std::make_unique<ExpressionStatement>(
                         std::make_unique<BinaryExpression>(
@@ -2133,7 +2133,7 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
             }
         }
         case Statement::kSwitch_Kind: {
-            const SwitchStatement& ss = static_cast<const SwitchStatement&>(statement);
+            const SwitchStatement& ss = statement.as<SwitchStatement>();
             std::vector<std::unique_ptr<SwitchCase>> cases;
             for (const auto& sc : ss.fCases) {
                 cases.emplace_back(new SwitchCase(offset, expr(sc->fValue),
@@ -2143,7 +2143,7 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
                                                      std::move(cases), ss.fSymbols);
         }
         case Statement::kVarDeclaration_Kind: {
-            const VarDeclaration& decl = static_cast<const VarDeclaration&>(statement);
+            const VarDeclaration& decl = statement.as<VarDeclaration>();
             std::vector<std::unique_ptr<Expression>> sizes;
             for (const auto& size : decl.fSizes) {
                 sizes.push_back(expr(size));
@@ -2167,18 +2167,17 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
                                                     std::move(initialValue));
         }
         case Statement::kVarDeclarations_Kind: {
-            const VarDeclarations& decls =
-                    *static_cast<const VarDeclarationsStatement&>(statement).fDeclaration;
+            const VarDeclarations& decls = *statement.as<VarDeclarationsStatement>().fDeclaration;
             std::vector<std::unique_ptr<VarDeclaration>> vars;
             for (const auto& var : decls.fVars) {
-                vars.emplace_back((VarDeclaration*) stmt(var).release());
+                vars.emplace_back(&stmt(var).release()->as<VarDeclaration>());
             }
             const Type* typePtr = copy_if_needed(&decls.fBaseType, *fSymbolTable);
             return std::unique_ptr<Statement>(new VarDeclarationsStatement(
                     std::make_unique<VarDeclarations>(offset, typePtr, std::move(vars))));
         }
         case Statement::kWhile_Kind: {
-            const WhileStatement& w = static_cast<const WhileStatement&>(statement);
+            const WhileStatement& w = statement.as<WhileStatement>();
             return std::make_unique<WhileStatement>(offset, expr(w.fTest), stmt(w.fStatement));
         }
         default:
@@ -2501,7 +2500,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
                                             ((TypeReference&) *functionValue).fValue,
                                             std::move(arguments));
         case Expression::kExternalValue_Kind: {
-            ExternalValue* v = ((ExternalValueReference&) *functionValue).fValue;
+            const ExternalValue* v = ((ExternalValueReference&) *functionValue).fValue;
             if (!v->canCall()) {
                 fErrors.error(offset, "this external value is not a function");
                 return nullptr;
@@ -2574,17 +2573,17 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
         return std::move(args[0]);
     }
     if (type.isFloat() && args.size() == 1 && args[0]->fKind == Expression::kFloatLiteral_Kind) {
-        double value = ((FloatLiteral&) *args[0]).fValue;
+        double value = args[0]->as<FloatLiteral>().fValue;
         return std::unique_ptr<Expression>(new FloatLiteral(offset, value, &type));
     }
     if (type.isFloat() && args.size() == 1 && args[0]->fKind == Expression::kIntLiteral_Kind) {
-        int64_t value = ((IntLiteral&) *args[0]).fValue;
+        int64_t value = args[0]->as<IntLiteral>().fValue;
         return std::unique_ptr<Expression>(new FloatLiteral(offset, (double) value, &type));
     }
     if (args[0]->fKind == Expression::kIntLiteral_Kind && (type == *fContext.fInt_Type ||
         type == *fContext.fUInt_Type)) {
         return std::unique_ptr<Expression>(new IntLiteral(offset,
-                                                          ((IntLiteral&) *args[0]).fValue,
+                                                          args[0]->as<IntLiteral>().fValue,
                                                           &type));
     }
     if (args[0]->fType == *fContext.fBool_Type) {
@@ -2712,10 +2711,10 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
         case Token::Kind::TK_MINUS:
             if (base->fKind == Expression::kIntLiteral_Kind) {
                 return std::unique_ptr<Expression>(new IntLiteral(fContext, base->fOffset,
-                                                                  -((IntLiteral&) *base).fValue));
+                                                                  -base->as<IntLiteral>().fValue));
             }
             if (base->fKind == Expression::kFloatLiteral_Kind) {
-                double value = -((FloatLiteral&) *base).fValue;
+                double value = -base->as<FloatLiteral>().fValue;
                 return std::unique_ptr<Expression>(new FloatLiteral(fContext, base->fOffset,
                                                                     value));
             }
@@ -2810,7 +2809,7 @@ std::unique_ptr<Expression> IRGenerator::convertIndex(std::unique_ptr<Expression
 std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression> base,
                                                       StringFragment field) {
     if (base->fKind == Expression::kExternalValue_Kind) {
-        ExternalValue& ev = *((ExternalValueReference&) *base).fValue;
+        const ExternalValue& ev = *((ExternalValueReference&) *base).fValue;
         ExternalValue* result = ev.getChild(String(field).c_str());
         if (!result) {
             fErrors.error(base->fOffset, "external value does not have a child named '" + field +
@@ -3022,7 +3021,7 @@ std::unique_ptr<Expression> IRGenerator::findEnumRef(
                 SkASSERT(v.fInitialValue);
                 SkASSERT(v.fInitialValue->fKind == Expression::kIntLiteral_Kind);
                 result = std::make_unique<IntLiteral>(
-                        offset, ((IntLiteral&)*v.fInitialValue).fValue, &type);
+                        offset, v.fInitialValue->as<IntLiteral>().fValue, &type);
             }
             fSymbolTable = old;
             return result;

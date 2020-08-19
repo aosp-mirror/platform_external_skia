@@ -1431,19 +1431,19 @@ void ByteCodeGenerator::writeTernaryExpression(const TernaryExpression& t) {
 void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
     switch (e.fKind) {
         case Expression::kBinary_Kind:
-            discard = this->writeBinaryExpression((BinaryExpression&) e, discard);
+            discard = this->writeBinaryExpression(e.as<BinaryExpression>(), discard);
             break;
         case Expression::kBoolLiteral_Kind:
-            this->writeBoolLiteral((BoolLiteral&) e);
+            this->writeBoolLiteral(e.as<BoolLiteral>());
             break;
         case Expression::kConstructor_Kind:
-            this->writeConstructor((Constructor&) e);
+            this->writeConstructor(e.as<Constructor>());
             break;
         case Expression::kExternalFunctionCall_Kind:
-            this->writeExternalFunctionCall((ExternalFunctionCall&) e);
+            this->writeExternalFunctionCall(e.as<ExternalFunctionCall>());
             break;
         case Expression::kExternalValue_Kind:
-            this->writeExternalValue((ExternalValueReference&) e);
+            this->writeExternalValue(e.as<ExternalValueReference>());
             break;
         case Expression::kFieldAccess_Kind:
         case Expression::kIndex_Kind:
@@ -1451,28 +1451,28 @@ void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
             this->writeVariableExpression(e);
             break;
         case Expression::kFloatLiteral_Kind:
-            this->writeFloatLiteral((FloatLiteral&) e);
+            this->writeFloatLiteral(e.as<FloatLiteral>());
             break;
         case Expression::kFunctionCall_Kind:
-            this->writeFunctionCall((FunctionCall&) e);
+            this->writeFunctionCall(e.as<FunctionCall>());
             break;
         case Expression::kIntLiteral_Kind:
-            this->writeIntLiteral((IntLiteral&) e);
+            this->writeIntLiteral(e.as<IntLiteral>());
             break;
         case Expression::kNullLiteral_Kind:
-            this->writeNullLiteral((NullLiteral&) e);
+            this->writeNullLiteral(e.as<NullLiteral>());
             break;
         case Expression::kPrefix_Kind:
-            discard = this->writePrefixExpression((PrefixExpression&) e, discard);
+            discard = this->writePrefixExpression(e.as<PrefixExpression>(), discard);
             break;
         case Expression::kPostfix_Kind:
-            discard = this->writePostfixExpression((PostfixExpression&) e, discard);
+            discard = this->writePostfixExpression(e.as<PostfixExpression>(), discard);
             break;
         case Expression::kSwizzle_Kind:
-            this->writeSwizzle((Swizzle&) e);
+            this->writeSwizzle(e.as<Swizzle>());
             break;
         case Expression::kTernary_Kind:
-            this->writeTernaryExpression((TernaryExpression&) e);
+            this->writeTernaryExpression(e.as<TernaryExpression>());
             break;
         default:
 #ifdef SK_DEBUG
@@ -1491,7 +1491,7 @@ void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
 
 class ByteCodeExternalValueLValue : public ByteCodeGenerator::LValue {
 public:
-    ByteCodeExternalValueLValue(ByteCodeGenerator* generator, ExternalValue& value, int index)
+    ByteCodeExternalValueLValue(ByteCodeGenerator* generator, const ExternalValue& value, int index)
         : INHERITED(*generator)
         , fCount(ByteCodeGenerator::SlotCount(value.type()))
         , fIndex(index) {}
@@ -1602,7 +1602,7 @@ private:
 std::unique_ptr<ByteCodeGenerator::LValue> ByteCodeGenerator::getLValue(const Expression& e) {
     switch (e.fKind) {
         case Expression::kExternalValue_Kind: {
-            ExternalValue* value = ((ExternalValueReference&) e).fValue;
+            const ExternalValue* value = ((ExternalValueReference&) e).fValue;
             int index = fOutput->fExternalValues.size();
             fOutput->fExternalValues.push_back(value);
             SkASSERT(index <= 255);
@@ -1770,42 +1770,42 @@ void ByteCodeGenerator::writeWhileStatement(const WhileStatement& w) {
 void ByteCodeGenerator::writeStatement(const Statement& s) {
     switch (s.fKind) {
         case Statement::kBlock_Kind:
-            this->writeBlock((Block&) s);
+            this->writeBlock(s.as<Block>());
             break;
         case Statement::kBreak_Kind:
-            this->writeBreakStatement((BreakStatement&) s);
+            this->writeBreakStatement(s.as<BreakStatement>());
             break;
         case Statement::kContinue_Kind:
-            this->writeContinueStatement((ContinueStatement&) s);
+            this->writeContinueStatement(s.as<ContinueStatement>());
             break;
         case Statement::kDiscard_Kind:
             // not yet implemented
             abort();
         case Statement::kDo_Kind:
-            this->writeDoStatement((DoStatement&) s);
+            this->writeDoStatement(s.as<DoStatement>());
             break;
         case Statement::kExpression_Kind:
-            this->writeExpression(*((ExpressionStatement&) s).fExpression, true);
+            this->writeExpression(*s.as<ExpressionStatement>().fExpression, true);
             break;
         case Statement::kFor_Kind:
-            this->writeForStatement((ForStatement&) s);
+            this->writeForStatement(s.as<ForStatement>());
             break;
         case Statement::kIf_Kind:
-            this->writeIfStatement((IfStatement&) s);
+            this->writeIfStatement(s.as<IfStatement>());
             break;
         case Statement::kNop_Kind:
             break;
         case Statement::kReturn_Kind:
-            this->writeReturnStatement((ReturnStatement&) s);
+            this->writeReturnStatement(s.as<ReturnStatement>());
             break;
         case Statement::kSwitch_Kind:
-            this->writeSwitchStatement((SwitchStatement&) s);
+            this->writeSwitchStatement(s.as<SwitchStatement>());
             break;
         case Statement::kVarDeclarations_Kind:
-            this->writeVarDeclarations(*((VarDeclarationsStatement&) s).fDeclaration);
+            this->writeVarDeclarations(*s.as<VarDeclarationsStatement>().fDeclaration);
             break;
         case Statement::kWhile_Kind:
-            this->writeWhileStatement((WhileStatement&) s);
+            this->writeWhileStatement(s.as<WhileStatement>());
             break;
         default:
             SkASSERT(false);
