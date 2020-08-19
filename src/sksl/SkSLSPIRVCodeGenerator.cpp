@@ -655,31 +655,31 @@ SpvId SPIRVCodeGenerator::getPointerType(const Type& rawType, const MemoryLayout
 SpvId SPIRVCodeGenerator::writeExpression(const Expression& expr, OutputStream& out) {
     switch (expr.fKind) {
         case Expression::kBinary_Kind:
-            return this->writeBinaryExpression((BinaryExpression&) expr, out);
+            return this->writeBinaryExpression(expr.as<BinaryExpression>(), out);
         case Expression::kBoolLiteral_Kind:
-            return this->writeBoolLiteral((BoolLiteral&) expr);
+            return this->writeBoolLiteral(expr.as<BoolLiteral>());
         case Expression::kConstructor_Kind:
-            return this->writeConstructor((Constructor&) expr, out);
+            return this->writeConstructor(expr.as<Constructor>(), out);
         case Expression::kIntLiteral_Kind:
-            return this->writeIntLiteral((IntLiteral&) expr);
+            return this->writeIntLiteral(expr.as<IntLiteral>());
         case Expression::kFieldAccess_Kind:
-            return this->writeFieldAccess(((FieldAccess&) expr), out);
+            return this->writeFieldAccess(expr.as<FieldAccess>(), out);
         case Expression::kFloatLiteral_Kind:
-            return this->writeFloatLiteral(((FloatLiteral&) expr));
+            return this->writeFloatLiteral(expr.as<FloatLiteral>());
         case Expression::kFunctionCall_Kind:
-            return this->writeFunctionCall((FunctionCall&) expr, out);
+            return this->writeFunctionCall(expr.as<FunctionCall>(), out);
         case Expression::kPrefix_Kind:
-            return this->writePrefixExpression((PrefixExpression&) expr, out);
+            return this->writePrefixExpression(expr.as<PrefixExpression>(), out);
         case Expression::kPostfix_Kind:
-            return this->writePostfixExpression((PostfixExpression&) expr, out);
+            return this->writePostfixExpression(expr.as<PostfixExpression>(), out);
         case Expression::kSwizzle_Kind:
-            return this->writeSwizzle((Swizzle&) expr, out);
+            return this->writeSwizzle(expr.as<Swizzle>(), out);
         case Expression::kVariableReference_Kind:
-            return this->writeVariableReference((VariableReference&) expr, out);
+            return this->writeVariableReference(expr.as<VariableReference>(), out);
         case Expression::kTernary_Kind:
-            return this->writeTernaryExpression((TernaryExpression&) expr, out);
+            return this->writeTernaryExpression(expr.as<TernaryExpression>(), out);
         case Expression::kIndex_Kind:
-            return this->writeIndexExpression((IndexExpression&) expr, out);
+            return this->writeIndexExpression(expr.as<IndexExpression>(), out);
         default:
 #ifdef SK_DEBUG
             ABORT("unsupported expression: %s", expr.description().c_str());
@@ -2864,28 +2864,28 @@ void SPIRVCodeGenerator::writeStatement(const Statement& s, OutputStream& out) {
             this->writeBlock((Block&) s, out);
             break;
         case Statement::kExpression_Kind:
-            this->writeExpression(*((ExpressionStatement&) s).fExpression, out);
+            this->writeExpression(*s.as<ExpressionStatement>().fExpression, out);
             break;
         case Statement::kReturn_Kind:
-            this->writeReturnStatement((ReturnStatement&) s, out);
+            this->writeReturnStatement(s.as<ReturnStatement>(), out);
             break;
         case Statement::kVarDeclarations_Kind:
-            this->writeVarDeclarations(*((VarDeclarationsStatement&) s).fDeclaration, out);
+            this->writeVarDeclarations(*s.as<VarDeclarationsStatement>().fDeclaration, out);
             break;
         case Statement::kIf_Kind:
-            this->writeIfStatement((IfStatement&) s, out);
+            this->writeIfStatement(s.as<IfStatement>(), out);
             break;
         case Statement::kFor_Kind:
-            this->writeForStatement((ForStatement&) s, out);
+            this->writeForStatement(s.as<ForStatement>(), out);
             break;
         case Statement::kWhile_Kind:
-            this->writeWhileStatement((WhileStatement&) s, out);
+            this->writeWhileStatement(s.as<WhileStatement>(), out);
             break;
         case Statement::kDo_Kind:
-            this->writeDoStatement((DoStatement&) s, out);
+            this->writeDoStatement(s.as<DoStatement>(), out);
             break;
         case Statement::kSwitch_Kind:
-            this->writeSwitchStatement((SwitchStatement&) s, out);
+            this->writeSwitchStatement(s.as<SwitchStatement>(), out);
             break;
         case Statement::kBreak_Kind:
             this->writeInstruction(SpvOpBranch, fBreakTarget.top(), out);
@@ -3055,8 +3055,7 @@ void SPIRVCodeGenerator::writeSwitchStatement(const SwitchStatement& s, OutputSt
         if (!s.fCases[i]->fValue) {
             continue;
         }
-        SkASSERT(s.fCases[i]->fValue->fKind == Expression::kIntLiteral_Kind);
-        this->writeWord(((IntLiteral&) *s.fCases[i]->fValue).fValue, out);
+        this->writeWord(s.fCases[i]->fValue->as<IntLiteral>().fValue, out);
         this->writeWord(labels[i], out);
     }
     for (size_t i = 0; i < s.fCases.size(); ++i) {
