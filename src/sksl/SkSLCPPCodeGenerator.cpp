@@ -15,6 +15,8 @@
 
 #include <algorithm>
 
+#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
+
 namespace SkSL {
 
 static bool needs_uniform_var(const Variable& var) {
@@ -84,11 +86,9 @@ void CPPCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                b.fRight->fKind == Expression::kNullLiteral_Kind) {
         const Variable* var;
         if (b.fLeft->fKind != Expression::kNullLiteral_Kind) {
-            SkASSERT(b.fLeft->fKind == Expression::kVariableReference_Kind);
-            var = &((VariableReference&) *b.fLeft).fVariable;
+            var = &b.fLeft->as<VariableReference>().fVariable;
         } else {
-            SkASSERT(b.fRight->fKind == Expression::kVariableReference_Kind);
-            var = &((VariableReference&) *b.fRight).fVariable;
+            var = &b.fRight->as<VariableReference>().fVariable;
         }
         SkASSERT(var->fType.kind() == Type::kNullable_Kind &&
                  var->fType.componentType() == *fContext.fFragmentProcessor_Type);
@@ -1421,3 +1421,5 @@ bool CPPCodeGenerator::generateCode() {
 }
 
 }  // namespace SkSL
+
+#endif // defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
