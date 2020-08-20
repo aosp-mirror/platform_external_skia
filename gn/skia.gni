@@ -24,7 +24,6 @@ declare_args() {
   skia_enable_pdf = true
   skia_enable_skottie = !(is_win && is_component_build)
   skia_enable_skrive = true
-  skia_enable_sksl_interpreter = is_skia_dev_build
   skia_enable_skvm_jit_when_possible = is_skia_dev_build
   skia_enable_tools = is_skia_dev_build
   skia_enable_gpu_debug_layers = is_skia_dev_build && is_debug
@@ -64,6 +63,7 @@ declare_args() {
   skia_use_ndk_images = is_android && defined(ndk_api) && ndk_api >= 30
   skia_use_opencl = false
   skia_use_piex = !is_win
+  skia_use_sfml = false
   skia_use_wuffs = false
   skia_use_x11 = is_linux
   skia_use_xps = true
