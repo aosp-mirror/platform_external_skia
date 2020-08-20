@@ -15,8 +15,6 @@
 
 #include <algorithm>
 
-#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
-
 namespace SkSL {
 
 static bool needs_uniform_var(const Variable& var) {
@@ -168,18 +166,6 @@ String CPPCodeGenerator::formatRuntimeValue(const Type& type,
                                             const Layout& layout,
                                             const String& cppCode,
                                             std::vector<String>* formatArgs) {
-    if (type.kind() == Type::kArray_Kind) {
-        String result("[");
-        const char* separator = "";
-        for (int i = 0; i < type.columns(); i++) {
-            result += separator + this->formatRuntimeValue(type.componentType(), layout,
-                                                           "(" + cppCode + ")[" + to_string(i) +
-                                                           "]", formatArgs);
-            separator = ",";
-        }
-        result += "]";
-        return result;
-    }
     if (type.isFloat()) {
         formatArgs->push_back(cppCode);
         return "%f";
@@ -684,21 +670,11 @@ void CPPCodeGenerator::addUniform(const Variable& var) {
     if (var.fModifiers.fLayout.fWhen.fLength) {
         this->writef("        if (%s) {\n    ", String(var.fModifiers.fLayout.fWhen).c_str());
     }
+    const char* type = glsltype_string(fContext, var.fType);
     String name(var.fName);
-    if (var.fType.kind() != Type::kArray_Kind) {
-        this->writef("        %sVar = args.fUniformHandler->addUniform(&_outer, "
-                     "kFragment_GrShaderFlag, %s, \"%s\");\n",
-                     HCodeGenerator::FieldName(name.c_str()).c_str(),
-                     glsltype_string(fContext, var.fType),
-                     name.c_str());
-    } else {
-        this->writef("        %sVar = args.fUniformHandler->addUniformArray(&_outer, "
-                     "kFragment_GrShaderFlag, %s, \"%s\", %d);\n",
-                     HCodeGenerator::FieldName(name.c_str()).c_str(),
-                     glsltype_string(fContext, var.fType.componentType()),
-                     name.c_str(),
-                     var.fType.columns());
-    }
+    this->writef("        %sVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,"
+                 " %s, \"%s\");\n", HCodeGenerator::FieldName(name.c_str()).c_str(), type,
+                 name.c_str());
     if (var.fModifiers.fLayout.fWhen.fLength) {
         this->write("        }\n");
     }
@@ -1437,5 +1413,3 @@ bool CPPCodeGenerator::generateCode() {
 }
 
 }  // namespace SkSL
-
-#endif // defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
