@@ -400,6 +400,9 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
         const Type* type = baseType;
         std::vector<std::unique_ptr<Expression>> sizes;
         auto iter = varDecl.begin();
+        if (varData.fSizeCount > 0 && (modifiers.fFlags & Modifiers::kIn_Flag)) {
+            fErrors.error(varDecl.fOffset, "'in' variables may not have array type");
+        }
         for (size_t i = 0; i < varData.fSizeCount; ++i, ++iter) {
             const ASTNode& rawSize = *iter;
             if (rawSize) {
@@ -871,7 +874,6 @@ void IRGenerator::checkModifiers(int offset, const Modifiers& modifiers, int per
     CHECK(Modifiers::kPLSIn_Flag,          "__pixel_local_inEXT")
     CHECK(Modifiers::kPLSOut_Flag,         "__pixel_local_outEXT")
     CHECK(Modifiers::kVarying_Flag,        "varying")
-    CHECK(Modifiers::kInline_Flag,         "inline")
     SkASSERT(flags == 0);
 }
 
@@ -898,8 +900,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         return;
     }
     const ASTNode::FunctionData& fd = f.getFunctionData();
-    this->checkModifiers(f.fOffset, fd.fModifiers, Modifiers::kHasSideEffects_Flag |
-                                                   Modifiers::kInline_Flag);
+    this->checkModifiers(f.fOffset, fd.fModifiers, Modifiers::kHasSideEffects_Flag);
     std::vector<const Variable*> parameters;
     for (size_t i = 0; i < fd.fParameterCount; ++i) {
         const ASTNode& param = *(iter++);
@@ -2389,9 +2390,8 @@ bool IRGenerator::isSafeToInline(const FunctionDefinition& functionDef) {
         // Inlining has been explicitly disabled by the IR generator.
         return false;
     }
-    if (!(functionDef.fDeclaration.fModifiers.fFlags & Modifiers::kInline_Flag) &&
-        functionDef.inlinedFunctionSize() >= fSettings->fInlineThreshold) {
-        // The function exceeds our maximum inline size and is not flagged 'inline'.
+    if (functionDef.inlinedFunctionSize() >= fSettings->fInlineThreshold) {
+        // The function exceeds our maximum inline size.
         return false;
     }
     if (!fSettings->fCaps || !fSettings->fCaps->canUseDoLoops()) {

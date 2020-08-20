@@ -1771,7 +1771,6 @@ bool Compiler::toMetal(Program& program, String* out) {
     return result;
 }
 
-#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
 bool Compiler::toCPP(Program& program, String name, OutputStream& out) {
     if (!this->optimize(program)) {
         return false;
@@ -1793,9 +1792,8 @@ bool Compiler::toH(Program& program, String name, OutputStream& out) {
     fSource = nullptr;
     return result;
 }
-#endif // defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
 
-#endif // defined(SKSL_STANDALONE) || SK_SUPPORT_GPU
+#endif
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 bool Compiler::toPipelineStage(Program& program, PipelineStageArgs* outArgs) {
@@ -1815,6 +1813,7 @@ bool Compiler::toPipelineStage(Program& program, PipelineStageArgs* outArgs) {
 #endif
 
 std::unique_ptr<ByteCode> Compiler::toByteCode(Program& program) {
+#if defined(SK_ENABLE_SKSL_INTERPRETER)
     if (!this->optimize(program)) {
         return nullptr;
     }
@@ -1826,6 +1825,9 @@ std::unique_ptr<ByteCode> Compiler::toByteCode(Program& program) {
     if (success) {
         return result;
     }
+#else
+    ABORT("ByteCode interpreter not enabled");
+#endif
     return nullptr;
 }
 
