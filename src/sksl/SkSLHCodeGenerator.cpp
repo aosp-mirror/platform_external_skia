@@ -19,6 +19,8 @@
 
 #include <set>
 
+#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
+
 namespace SkSL {
 
 HCodeGenerator::HCodeGenerator(const Context* context, const Program* program,
@@ -31,6 +33,10 @@ HCodeGenerator::HCodeGenerator(const Context* context, const Program* program,
 
 String HCodeGenerator::ParameterType(const Context& context, const Type& type,
                                      const Layout& layout) {
+    if (type.kind() == Type::kArray_Kind) {
+        return String::printf("std::array<%s>", ParameterType(context, type.componentType(),
+                                                              layout).c_str());
+    }
     Layout::CType ctype = ParameterCType(context, type, layout);
     if (ctype != Layout::CType::kDefault) {
         return Layout::CTypeToStr(ctype);
@@ -40,6 +46,7 @@ String HCodeGenerator::ParameterType(const Context& context, const Type& type,
 
 Layout::CType HCodeGenerator::ParameterCType(const Context& context, const Type& type,
                                      const Layout& layout) {
+    SkASSERT(type.kind() != Type::kArray_Kind);
     if (layout.fCType != Layout::CType::kDefault) {
         return layout.fCType;
     }
@@ -383,3 +390,5 @@ bool HCodeGenerator::generateCode() {
 }
 
 }  // namespace SkSL
+
+#endif // defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)

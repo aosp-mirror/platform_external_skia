@@ -15,6 +15,8 @@
 
 #include <algorithm>
 
+#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
+
 namespace SkSL {
 
 static bool needs_uniform_var(const Variable& var) {
@@ -84,11 +86,9 @@ void CPPCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                b.fRight->fKind == Expression::kNullLiteral_Kind) {
         const Variable* var;
         if (b.fLeft->fKind != Expression::kNullLiteral_Kind) {
-            SkASSERT(b.fLeft->fKind == Expression::kVariableReference_Kind);
-            var = &((VariableReference&) *b.fLeft).fVariable;
+            var = &b.fLeft->as<VariableReference>().fVariable;
         } else {
-            SkASSERT(b.fRight->fKind == Expression::kVariableReference_Kind);
-            var = &((VariableReference&) *b.fRight).fVariable;
+            var = &b.fRight->as<VariableReference>().fVariable;
         }
         SkASSERT(var->fType.kind() == Type::kNullable_Kind &&
                  var->fType.componentType() == *fContext.fFragmentProcessor_Type);
@@ -168,6 +168,18 @@ String CPPCodeGenerator::formatRuntimeValue(const Type& type,
                                             const Layout& layout,
                                             const String& cppCode,
                                             std::vector<String>* formatArgs) {
+    if (type.kind() == Type::kArray_Kind) {
+        String result("[");
+        const char* separator = "";
+        for (int i = 0; i < type.columns(); i++) {
+            result += separator + this->formatRuntimeValue(type.componentType(), layout,
+                                                           "(" + cppCode + ")[" + to_string(i) +
+                                                           "]", formatArgs);
+            separator = ",";
+        }
+        result += "]";
+        return result;
+    }
     if (type.isFloat()) {
         formatArgs->push_back(cppCode);
         return "%f";
@@ -309,12 +321,6 @@ void CPPCodeGenerator::writeVariableReference(const VariableReference& ref) {
         return;
     }
     switch (ref.fVariable.fModifiers.fLayout.fBuiltin) {
-        case SK_INCOLOR_BUILTIN:
-            this->write("%s");
-            // EmitArgs.fInputColor is automatically set to half4(1) if
-            // no input was specified
-            fFormatArgs.push_back(String("args.fInputColor"));
-            break;
         case SK_OUTCOLOR_BUILTIN:
             this->write("%s");
             fFormatArgs.push_back(String("args.fOutputColor"));
@@ -678,11 +684,21 @@ void CPPCodeGenerator::addUniform(const Variable& var) {
     if (var.fModifiers.fLayout.fWhen.fLength) {
         this->writef("        if (%s) {\n    ", String(var.fModifiers.fLayout.fWhen).c_str());
     }
-    const char* type = glsltype_string(fContext, var.fType);
     String name(var.fName);
-    this->writef("        %sVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,"
-                 " %s, \"%s\");\n", HCodeGenerator::FieldName(name.c_str()).c_str(), type,
-                 name.c_str());
+    if (var.fType.kind() != Type::kArray_Kind) {
+        this->writef("        %sVar = args.fUniformHandler->addUniform(&_outer, "
+                     "kFragment_GrShaderFlag, %s, \"%s\");\n",
+                     HCodeGenerator::FieldName(name.c_str()).c_str(),
+                     glsltype_string(fContext, var.fType),
+                     name.c_str());
+    } else {
+        this->writef("        %sVar = args.fUniformHandler->addUniformArray(&_outer, "
+                     "kFragment_GrShaderFlag, %s, \"%s\", %d);\n",
+                     HCodeGenerator::FieldName(name.c_str()).c_str(),
+                     glsltype_string(fContext, var.fType.componentType()),
+                     name.c_str(),
+                     var.fType.columns());
+    }
     if (var.fModifiers.fLayout.fWhen.fLength) {
         this->write("        }\n");
     }
@@ -1421,3 +1437,5 @@ bool CPPCodeGenerator::generateCode() {
 }
 
 }  // namespace SkSL
+
+#endif // defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)

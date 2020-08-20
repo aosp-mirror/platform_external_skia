@@ -26,7 +26,6 @@
 
 #define SK_FRAGCOLOR_BUILTIN           10001
 #define SK_IN_BUILTIN                  10002
-#define SK_INCOLOR_BUILTIN             10003
 #define SK_OUTCOLOR_BUILTIN            10004
 #define SK_TEXTURESAMPLERS_BUILTIN     10006
 #define SK_OUT_BUILTIN                 10007
@@ -141,9 +140,11 @@ public:
 
     bool toMetal(Program& program, String* out);
 
+#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
     bool toCPP(Program& program, String name, OutputStream& out);
 
     bool toH(Program& program, String name, OutputStream& out);
+#endif
 
     std::unique_ptr<ByteCode> toByteCode(Program& program);
 
