@@ -112,26 +112,6 @@ void CPPCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
     }
 }
 
-void CPPCodeGenerator::writeIndexExpression(const IndexExpression& i) {
-    const Expression& base = *i.fBase;
-    if (base.fKind == Expression::kVariableReference_Kind) {
-        int builtin = ((VariableReference&) base).fVariable.fModifiers.fLayout.fBuiltin;
-        if (SK_TEXTURESAMPLERS_BUILTIN == builtin) {
-            this->write("%s");
-            if (i.fIndex->fKind != Expression::kIntLiteral_Kind) {
-                fErrors.error(i.fIndex->fOffset,
-                              "index into sk_TextureSamplers must be an integer literal");
-                return;
-            }
-            int64_t index = i.fIndex->as<IntLiteral>().fValue;
-            fFormatArgs.push_back("        fragBuilder->getProgramBuilder()->samplerVariable("
-                                            "args.fTexSamplers[" + to_string(index) + "])");
-            return;
-        }
-    }
-    INHERITED::writeIndexExpression(i);
-}
-
 static String default_value(const Type& type) {
     if (type.fName == "bool") {
         return "false";
@@ -399,7 +379,7 @@ void CPPCodeGenerator::writeFieldAccess(const FieldAccess& access) {
         }
 
         const Type::Field& field = fContext.fFragmentProcessor_Type->fields()[access.fFieldIndex];
-        const Variable& var = ((const VariableReference&) *access.fBase).fVariable;
+        const Variable& var = access.fBase->as<VariableReference>().fVariable;
         String cppAccess = String::printf("_outer.childProcessor(%d)->%s()",
                                           this->getChildFPIndex(var),
                                           String(field.fName).c_str());
@@ -419,9 +399,9 @@ int CPPCodeGenerator::getChildFPIndex(const Variable& var) const {
     bool found = false;
     for (const auto& p : fProgram) {
         if (ProgramElement::kVar_Kind == p.fKind) {
-            const VarDeclarations& decls = (const VarDeclarations&) p;
+            const VarDeclarations& decls = p.as<VarDeclarations>();
             for (const auto& raw : decls.fVars) {
-                const VarDeclaration& decl = (VarDeclaration&) *raw;
+                const VarDeclaration& decl = raw->as<VarDeclaration>();
                 if (decl.fVar == &var) {
                     found = true;
                 } else if (decl.fVar->fType.nonnullable() == *fContext.fFragmentProcessor_Type) {
@@ -453,7 +433,7 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                     "sample()'s fragmentProcessor argument must be a variable reference\n");
             return;
         }
-        const Variable& child = ((const VariableReference&) *c.fArguments[0]).fVariable;
+        const Variable& child = c.fArguments[0]->as<VariableReference>().fVariable;
 
         // Start a new extra emit code section so that the emitted child processor can depend on
         // sksl variables defined in earlier sksl code.
@@ -522,7 +502,7 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         this->write(".%s");
         SkASSERT(c.fArguments.size() >= 1);
         SkASSERT(c.fArguments[0]->fKind == Expression::kVariableReference_Kind);
-        String sampler = this->getSamplerHandle(((VariableReference&) *c.fArguments[0]).fVariable);
+        String sampler = this->getSamplerHandle(c.fArguments[0]->as<VariableReference>().fVariable);
         fFormatArgs.push_back("fragBuilder->getProgramBuilder()->samplerSwizzle(" + sampler +
                               ").asString().c_str()");
     }
@@ -609,7 +589,7 @@ void CPPCodeGenerator::writeFunction(const FunctionDefinition& f) {
     fOut = &buffer;
     if (decl.fName == "main") {
         fInMain = true;
-        for (const auto& s : ((Block&) *f.fBody).fStatements) {
+        for (const auto& s : f.fBody->as<Block>().fStatements) {
             this->writeStatement(*s);
             this->writeLine();
         }
@@ -629,7 +609,7 @@ void CPPCodeGenerator::writeFunction(const FunctionDefinition& f) {
         }
         args += "};";
         this->addExtraEmitCodeLine(args.c_str());
-        for (const auto& s : ((Block&) *f.fBody).fStatements) {
+        for (const auto& s : f.fBody->as<Block>().fStatements) {
             this->writeStatement(*s);
             this->writeLine();
         }
@@ -664,11 +644,11 @@ void CPPCodeGenerator::writeProgramElement(const ProgramElement& p) {
         return;
     }
     if (p.fKind == ProgramElement::kVar_Kind) {
-        const VarDeclarations& decls = (const VarDeclarations&) p;
+        const VarDeclarations& decls = p.as<VarDeclarations>();
         if (!decls.fVars.size()) {
             return;
         }
-        const Variable& var = *((VarDeclaration&) *decls.fVars[0]).fVar;
+        const Variable& var = *decls.fVars[0]->as<VarDeclaration>().fVar;
         if (var.fModifiers.fFlags & (Modifiers::kIn_Flag | Modifiers::kUniform_Flag) ||
             -1 != var.fModifiers.fLayout.fBuiltin) {
             return;
@@ -710,9 +690,9 @@ void CPPCodeGenerator::writeInputVars() {
 void CPPCodeGenerator::writePrivateVars() {
     for (const auto& p : fProgram) {
         if (ProgramElement::kVar_Kind == p.fKind) {
-            const VarDeclarations& decls = (const VarDeclarations&) p;
+            const VarDeclarations& decls = p.as<VarDeclarations>();
             for (const auto& raw : decls.fVars) {
-                VarDeclaration& decl = (VarDeclaration&) *raw;
+                VarDeclaration& decl = raw->as<VarDeclaration>();
                 if (is_private(*decl.fVar)) {
                     if (decl.fVar->fType == *fContext.fFragmentProcessor_Type) {
                         fErrors.error(decl.fOffset,
@@ -750,9 +730,9 @@ void CPPCodeGenerator::writePrivateVars() {
 void CPPCodeGenerator::writePrivateVarValues() {
     for (const auto& p : fProgram) {
         if (ProgramElement::kVar_Kind == p.fKind) {
-            const VarDeclarations& decls = (const VarDeclarations&) p;
+            const VarDeclarations& decls = p.as<VarDeclarations>();
             for (const auto& raw : decls.fVars) {
-                VarDeclaration& decl = (VarDeclaration&) *raw;
+                VarDeclaration& decl = raw->as<VarDeclaration>();
                 if (is_private(*decl.fVar) && decl.fValue) {
                     this->writef("%s = ", String(decl.fVar->fName).c_str());
                     fCPPMode = true;
@@ -967,9 +947,9 @@ bool CPPCodeGenerator::writeEmitCode(std::vector<const Variable*>& uniforms) {
                  fFullName.c_str(), fFullName.c_str());
     for (const auto& p : fProgram) {
         if (ProgramElement::kVar_Kind == p.fKind) {
-            const VarDeclarations& decls = (const VarDeclarations&) p;
+            const VarDeclarations& decls = p.as<VarDeclarations>();
             for (const auto& raw : decls.fVars) {
-                VarDeclaration& decl = (VarDeclaration&) *raw;
+                VarDeclaration& decl = raw->as<VarDeclaration>();
                 String nameString(decl.fVar->fName);
                 const char* name = nameString.c_str();
                 if (SectionAndParameterHelper::IsParameter(*decl.fVar) &&
@@ -1083,9 +1063,9 @@ void CPPCodeGenerator::writeSetData(std::vector<const Variable*>& uniforms) {
         int samplerIndex = 0;
         for (const auto& p : fProgram) {
             if (ProgramElement::kVar_Kind == p.fKind) {
-                const VarDeclarations& decls = (const VarDeclarations&) p;
+                const VarDeclarations& decls = p.as<VarDeclarations>();
                 for (const std::unique_ptr<Statement>& raw : decls.fVars) {
-                    const VarDeclaration& decl = static_cast<VarDeclaration&>(*raw);
+                    const VarDeclaration& decl = raw->as<VarDeclaration>();
                     const Variable& variable = *decl.fVar;
                     String nameString(variable.fName);
                     const char* name = nameString.c_str();
@@ -1257,9 +1237,9 @@ void CPPCodeGenerator::writeGetKey() {
                  fFullName.c_str());
     for (const auto& p : fProgram) {
         if (ProgramElement::kVar_Kind == p.fKind) {
-            const VarDeclarations& decls = (const VarDeclarations&) p;
+            const VarDeclarations& decls = p.as<VarDeclarations>();
             for (const auto& raw : decls.fVars) {
-                const VarDeclaration& decl = (VarDeclaration&) *raw;
+                const VarDeclaration& decl = raw->as<VarDeclaration>();
                 const Variable& var = *decl.fVar;
                 String nameString(var.fName);
                 const char* name = nameString.c_str();
@@ -1335,9 +1315,9 @@ bool CPPCodeGenerator::generateCode() {
     std::vector<const Variable*> uniforms;
     for (const auto& p : fProgram) {
         if (ProgramElement::kVar_Kind == p.fKind) {
-            const VarDeclarations& decls = (const VarDeclarations&) p;
+            const VarDeclarations& decls = p.as<VarDeclarations>();
             for (const auto& raw : decls.fVars) {
-                VarDeclaration& decl = (VarDeclaration&) *raw;
+                VarDeclaration& decl = raw->as<VarDeclaration>();
                 if ((decl.fVar->fModifiers.fFlags & Modifiers::kUniform_Flag) &&
                            decl.fVar->fType.kind() != Type::kSampler_Kind) {
                     uniforms.push_back(decl.fVar);

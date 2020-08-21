@@ -10,6 +10,7 @@
 #include "src/sksl/SkSLStringStream.h"
 
 #include <map>
+#include <mutex>
 #include <vector>
 
 #if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
@@ -144,14 +145,20 @@ UniformCTypeMapper::UniformCTypeMapper(
     , fSaveStateTemplate(saveStateFormat) {}
 
 const UniformCTypeMapper* UniformCTypeMapper::arrayMapper(int count) const {
-    // We leak an object here, but since this code only ever runs as part of the build process and
-    // is rarely executed, it doesn't really matter.
-#if !defined(SKSL_STANDALONE) && !defined(GR_TEST_UTILS)
-    #error This code leaks memory and should not be present in a release build.
-#endif
-    UniformCTypeMapper* result = new UniformCTypeMapper(*this);
-    result->fArrayCount = count;
-    return result;
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> guard(mutex);
+    using Key = std::pair<const UniformCTypeMapper*, int>;
+    static std::map<Key, UniformCTypeMapper> registered;
+    Key key(this, count);
+    auto result = registered.find(key);
+    if (result == registered.end()) {
+        auto [iter, didInsert] = registered.insert({key, *this});
+        SkASSERT(didInsert);
+        UniformCTypeMapper* inserted = &iter->second;
+        inserted->fArrayCount = count;
+        return inserted;
+    }
+    return &result->second;
 }
 
 

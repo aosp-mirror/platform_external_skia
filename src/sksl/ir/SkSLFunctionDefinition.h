@@ -22,18 +22,16 @@ struct ASTNode;
  * A function definition (a declaration plus an associated block of code).
  */
 struct FunctionDefinition : public ProgramElement {
+    static constexpr Kind kProgramElementKind = kFunction_Kind;
+
     FunctionDefinition(int offset,
                        const FunctionDeclaration& declaration,
                        std::unique_ptr<Statement> body,
                        std::unordered_set<const FunctionDeclaration*> referencedIntrinsics = {})
-        : INHERITED(offset, kFunction_Kind)
+        : INHERITED(offset, kProgramElementKind)
         , fDeclaration(declaration)
         , fBody(std::move(body))
         , fReferencedIntrinsics(std::move(referencedIntrinsics)) {}
-
-    int inlinedFunctionSize() const {
-        return fBody->nodeCount();
-    }
 
     std::unique_ptr<ProgramElement> clone() const override {
         return std::make_unique<FunctionDefinition>(fOffset, fDeclaration,

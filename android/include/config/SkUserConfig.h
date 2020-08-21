@@ -23,6 +23,10 @@
 #define SK_ENABLE_ANDROID_UTILS
 #endif
 
+#ifndef SK_ENABLE_SKSL_INTERPRETER
+#define SK_ENABLE_SKSL_INTERPRETER
+#endif
+
 #ifndef SK_ENCODE_JPEG
 #define SK_ENCODE_JPEG
 #endif
