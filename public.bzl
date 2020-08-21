@@ -239,6 +239,9 @@ BASE_SRCS_ALL = struct(
         "src/gpu/gl/*",
         "src/gpu/gl/builders/*",
 
+        # Exclude all WebGL specific files
+        "src/gpu/gl/webgl/*",
+
         # Currently exclude all vulkan specific files
         "src/gpu/vk/*",
 
@@ -731,6 +734,8 @@ def base_defines(os_conditions):
         # JPEG is in codec_limited
         "SK_CODEC_DECODES_JPEG",
         "SK_ENCODE_JPEG",
+        # Needed for some tests in dm
+        "SK_ENABLE_SKSL_INTERPRETER",
     ] + skia_select(
         os_conditions,
         [

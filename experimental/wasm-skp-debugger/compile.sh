@@ -46,7 +46,7 @@ python tools/embed_resources.py \
     --align 4
 
 GN_GPU_FLAGS="\"-DSK_DISABLE_LEGACY_SHADERCONTEXT\","
-WASM_GPU="-lEGL -lGLESv2 -DSK_SUPPORT_GPU=1 -DSK_GL \
+WASM_GPU="-lEGL -lGL -lGLESv2 -DSK_SUPPORT_GPU=1 -DSK_GL \
           -DSK_DISABLE_LEGACY_SHADERCONTEXT --pre-js $BASE_DIR/cpu.js --pre-js $BASE_DIR/gpu.js"
 
 # Turn off exiting while we check for ninja (which may not be on PATH)
@@ -70,6 +70,7 @@ echo "Compiling bitcode"
   extra_cflags_cc=[\"-frtti\"] \
   extra_cflags=[\"-s\", \"WARN_UNALIGNED=1\", \"-s\", \"MAIN_MODULE=1\",
     \"-DSKNX_NO_SIMD\", \"-DSK_DISABLE_AAA\",
+    \"-DSK_FORCE_8_BYTE_ALIGNMENT\",
     ${GN_GPU_FLAGS}
     ${EXTRA_CFLAGS}
   ] \
@@ -79,7 +80,7 @@ echo "Compiling bitcode"
   werror=true \
   target_cpu=\"wasm\" \
   \
-  skia_use_angle = false \
+  skia_use_angle=false \
   skia_use_dng_sdk=false \
   skia_use_egl=true \
   skia_use_expat=false \
