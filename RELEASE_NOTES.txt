@@ -4,6 +4,15 @@ This file includes a list of high level updates for each milestone release.
 
 * * *
 
+Milestone 87
+------------
+
+  * <insert new release notes here>
+
+  * Added VkImageUsageFlags to GrVkImageInfo struct.
+
+* * *
+
 Milestone 86
 ------------
 
