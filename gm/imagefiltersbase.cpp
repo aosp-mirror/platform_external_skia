@@ -184,11 +184,8 @@ static void draw_patch(SkCanvas* canvas, SkImage*, const SkRect& r, sk_sp<SkImag
 
 static void draw_atlas(SkCanvas* canvas, SkImage* atlas, const SkRect& r,
                        sk_sp<SkImageFilter> imf) {
-    SkRSXform xform;
     const SkScalar rad = SkDegreesToRadians(15.0f);
-    xform.fSCos = SkScalarCos(rad);
-    xform.fSSin = SkScalarSin(rad);
-    xform.fTx = r.width() * 0.15f;
+    SkRSXform xform = SkRSXform::Make(SkScalarCos(rad), SkScalarSin(rad), r.width() * 0.15f, 0);
 
     SkPaint paint;
     paint.setImageFilter(std::move(imf));
