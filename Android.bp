@@ -283,7 +283,7 @@ cc_library_static {
         "src/core/SkXfermode.cpp",
         "src/core/SkXfermodeInterpretation.cpp",
         "src/core/SkYUVAInfo.cpp",
-        "src/core/SkYUVAInfoPriv.cpp",
+        "src/core/SkYUVAPixmaps.cpp",
         "src/core/SkYUVASizeInfo.cpp",
         "src/core/SkYUVMath.cpp",
         "src/core/SkYUVPlanesCache.cpp",
