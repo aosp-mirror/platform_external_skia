@@ -123,7 +123,6 @@ bool GrDualIntervalGradientColorizer::onIsEqual(const GrFragmentProcessor& other
     if (threshold != that.threshold) return false;
     return true;
 }
-bool GrDualIntervalGradientColorizer::usesExplicitReturn() const { return false; }
 GrDualIntervalGradientColorizer::GrDualIntervalGradientColorizer(
         const GrDualIntervalGradientColorizer& src)
         : INHERITED(kGrDualIntervalGradientColorizer_ClassID, src.optimizationFlags())

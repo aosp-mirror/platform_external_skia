@@ -123,8 +123,7 @@ public:
                       int argCnt,
                       const GrShaderVar* args,
                       const char* body,
-                      SkString* outName,
-                      bool forceInline = false);
+                      SkString* outName);
 
     /*
      * Combines the various parts of the shader to create a single finalized shader string.
