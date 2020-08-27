@@ -6,13 +6,13 @@
  */
 
 
-#include "SkDiscretePathEffect.h"
-#include "SkFixed.h"
-#include "SkPathMeasure.h"
-#include "SkPointPriv.h"
-#include "SkReadBuffer.h"
-#include "SkStrokeRec.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkPathMeasure.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/effects/SkDiscretePathEffect.h"
+#include "include/private/SkFixed.h"
+#include "src/core/SkPointPriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
 
 sk_sp<SkPathEffect> SkDiscretePathEffect::Make(SkScalar segLength, SkScalar deviation,
                                                uint32_t seedAssist) {
@@ -103,7 +103,7 @@ bool SkDiscretePathEffect::onFilterPath(SkPath* dst, const SkPath& src,
         } else {
             int         n = SkScalarRoundToInt(length / fSegLength);
             constexpr int kMaxReasonableIterations = 100000;
-            n = SkTMin(n, kMaxReasonableIterations);
+            n = std::min(n, kMaxReasonableIterations);
             SkScalar    delta = length / n;
             SkScalar    distance = 0;
 

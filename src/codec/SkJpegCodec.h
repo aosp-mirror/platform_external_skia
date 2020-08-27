@@ -8,11 +8,11 @@
 #ifndef SkJpegCodec_DEFINED
 #define SkJpegCodec_DEFINED
 
-#include "SkCodec.h"
-#include "SkImageInfo.h"
-#include "SkSwizzler.h"
-#include "SkStream.h"
-#include "SkTemplates.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkTemplates.h"
+#include "src/codec/SkSwizzler.h"
 
 class JpegDecoderMgr;
 
@@ -106,7 +106,7 @@ private:
 
     void initializeSwizzler(const SkImageInfo& dstInfo, const Options& options,
                             bool needsCMYKToRGB);
-    void allocateStorage(const SkImageInfo& dstInfo);
+    bool SK_WARN_UNUSED_RESULT allocateStorage(const SkImageInfo& dstInfo);
     int readRows(const SkImageInfo& dstInfo, void* dst, size_t rowBytes, int count, const Options&);
 
     /*

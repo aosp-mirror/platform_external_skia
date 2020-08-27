@@ -8,10 +8,11 @@
 #ifndef SKSL_BINARYEXPRESSION
 #define SKSL_BINARYEXPRESSION
 
-#include "SkSLExpression.h"
-#include "SkSLExpression.h"
-#include "../SkSLIRGenerator.h"
-#include "../SkSLLexer.h"
+#include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLIRGenerator.h"
+#include "src/sksl/SkSLLexer.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
 
@@ -33,9 +34,11 @@ struct BinaryExpression : public Expression {
                                         *fRight);
     }
 
-    bool hasSideEffects() const override {
-        return Compiler::IsAssignment(fOperator) || fLeft->hasSideEffects() ||
-               fRight->hasSideEffects();
+    bool hasProperty(Property property) const override {
+        if (property == Property::kSideEffects && Compiler::IsAssignment(fOperator)) {
+            return true;
+        }
+        return fLeft->hasProperty(property) || fRight->hasProperty(property);
     }
 
     std::unique_ptr<Expression> clone() const override {
@@ -43,10 +46,12 @@ struct BinaryExpression : public Expression {
                                                                 fRight->clone(), fType));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return "(" + fLeft->description() + " " + Compiler::OperatorName(fOperator) + " " +
                fRight->description() + ")";
     }
+#endif
 
     std::unique_ptr<Expression> fLeft;
     const Token::Kind fOperator;

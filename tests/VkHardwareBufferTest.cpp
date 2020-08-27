@@ -7,27 +7,27 @@
 
 // This is a GPU-backend specific test. It relies on static intializers to work
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if SK_SUPPORT_GPU && defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26 && defined(SK_VULKAN)
 
-#include "GrBackendSemaphore.h"
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrGpu.h"
-#include "GrProxyProvider.h"
-#include "SkAutoMalloc.h"
-#include "SkCanvas.h"
-#include "SkGr.h"
-#include "SkImage.h"
-#include "SkSurface.h"
-#include "Test.h"
-#include "../tools/gpu/vk/VkTestUtils.h"
-#include "gl/GrGLDefines.h"
-#include "gl/GrGLUtil.h"
-#include "vk/GrVkBackendContext.h"
-#include "vk/GrVkExtensions.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrBackendSemaphore.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/vk/GrVkBackendContext.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/gl/GrGLDefines.h"
+#include "src/gpu/gl/GrGLUtil.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
+#include "tools/gpu/vk/VkTestUtils.h"
 
 #include <android/hardware_buffer.h>
 #include <cinttypes>
@@ -70,6 +70,7 @@ protected:
     int fFdHandle = 0;
 };
 
+#ifdef SK_GL
 class EGLTestHelper : public BaseTestHelper {
 public:
     EGLTestHelper(const GrContextOptions& options) : fFactory(options) {}
@@ -155,7 +156,8 @@ bool EGLTestHelper::init(skiatest::Reporter* reporter) {
         !fGLCtx->gl()->hasExtension("EGL_ANDROID_get_native_client_buffer") ||
         !fGLCtx->gl()->hasExtension("GL_OES_EGL_image_external") ||
         !fGLCtx->gl()->hasExtension("GL_OES_EGL_image") ||
-        !fGLCtx->gl()->hasExtension("EGL_KHR_fence_sync")) {
+        !fGLCtx->gl()->hasExtension("EGL_KHR_fence_sync") ||
+        !fGLCtx->gl()->hasExtension("EGL_ANDROID_native_fence_sync")) {
         return false;
     }
 
@@ -361,6 +363,7 @@ void EGLTestHelper::doClientSync() {
     fenceSync->waitFence(fence);
     fenceSync->deleteFence(fence);
 }
+#endif  // SK_GL
 
 #define DECLARE_VK_PROC(name) PFN_vk##name fVk##name
 
@@ -821,7 +824,10 @@ bool VulkanTestHelper::flushSurfaceAndSignalSemaphore(skiatest::Reporter* report
     if (!this->setupSemaphoreForSignaling(reporter, &semaphore)) {
         return false;
     }
-    GrSemaphoresSubmitted submitted = fGrContext->flush(kNone_GrFlushFlags, 1, &semaphore);
+    GrFlushInfo info;
+    info.fNumSemaphores = 1;
+    info.fSignalSemaphores = &semaphore;
+    GrSemaphoresSubmitted submitted = fGrContext->flush(info);
     if (GrSemaphoresSubmitted::kNo == submitted) {
         ERRORF(reporter, "Failing call to flush on GrContext");
         return false;
@@ -1074,7 +1080,11 @@ void run_test(skiatest::Reporter* reporter, const GrContextOptions& options,
     if (SrcType::kVulkan == srcType) {
         srcHelper.reset(new VulkanTestHelper());
     } else if (SrcType::kEGL == srcType) {
+#ifdef SK_GL
         srcHelper.reset(new EGLTestHelper(options));
+#else
+        SkASSERT(false, "SrcType::kEGL used without OpenGL support.");
+#endif
     }
     if (srcHelper) {
         if (!srcHelper->init(reporter)) {
@@ -1086,8 +1096,12 @@ void run_test(skiatest::Reporter* reporter, const GrContextOptions& options,
     if (DstType::kVulkan == dstType) {
         dstHelper.reset(new VulkanTestHelper());
     } else {
+#ifdef SK_GL
         SkASSERT(DstType::kEGL == dstType);
         dstHelper.reset(new EGLTestHelper(options));
+#else
+        SkASSERT(false, "DstType::kEGL used without OpenGL support.");
+#endif
     }
     if (dstHelper) {
         if (!dstHelper->init(reporter)) {
@@ -1271,12 +1285,17 @@ DEF_GPUTEST(VulkanHardwareBuffer_CPU_Vulkan, reporter, options) {
     run_test(reporter, options, SrcType::kCPU, DstType::kVulkan, false);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_EGL_Vulkan, reporter, options) {
-    run_test(reporter, options, SrcType::kEGL, DstType::kVulkan, false);
-}
-
 DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_Vulkan, reporter, options) {
     run_test(reporter, options, SrcType::kVulkan, DstType::kVulkan, false);
+}
+
+DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_Vulkan_Syncs, reporter, options) {
+    run_test(reporter, options, SrcType::kVulkan, DstType::kVulkan, true);
+}
+
+#if defined(SK_GL)
+DEF_GPUTEST(VulkanHardwareBuffer_EGL_Vulkan, reporter, options) {
+    run_test(reporter, options, SrcType::kEGL, DstType::kVulkan, false);
 }
 
 DEF_GPUTEST(VulkanHardwareBuffer_CPU_EGL, reporter, options) {
@@ -1302,10 +1321,8 @@ DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_EGL_Syncs, reporter, options) {
 DEF_GPUTEST(VulkanHardwareBuffer_EGL_Vulkan_Syncs, reporter, options) {
     run_test(reporter, options, SrcType::kEGL, DstType::kVulkan, true);
 }
-
-DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_Vulkan_Syncs, reporter, options) {
-    run_test(reporter, options, SrcType::kVulkan, DstType::kVulkan, true);
-}
-
 #endif
+
+#endif  // SK_SUPPORT_GPU && defined(SK_BUILD_FOR_ANDROID) &&
+        // __ANDROID_API__ >= 26 && defined(SK_VULKAN)
 

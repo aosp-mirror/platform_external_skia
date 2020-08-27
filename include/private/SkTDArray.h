@@ -9,10 +9,11 @@
 #ifndef SkTDArray_DEFINED
 #define SkTDArray_DEFINED
 
-#include "SkMalloc.h"
-#include "SkTo.h"
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkTo.h"
 
+#include <algorithm>
 #include <initializer_list>
 #include <utility>
 
@@ -253,7 +254,7 @@ public:
         if (index >= fCount) {
             return 0;
         }
-        int count = SkMin32(max, fCount - index);
+        int count = std::min(max, fCount - index);
         memcpy(dst, fArray + index, sizeof(T) * count);
         return count;
     }
@@ -319,14 +320,17 @@ public:
 #endif
 
     void shrinkToFit() {
-        fReserve = fCount;
-        fArray = (T*)sk_realloc_throw(fArray, fReserve * sizeof(T));
+        if (fReserve != fCount) {
+            SkASSERT(fReserve > fCount);
+            fReserve = fCount;
+            fArray = (T*)sk_realloc_throw(fArray, fReserve * sizeof(T));
+        }
     }
 
 private:
     T*      fArray;
-    int     fReserve;
-    int     fCount;
+    int     fReserve;   // size of the allocation in fArray (#elements)
+    int     fCount;     // logical number of elements (fCount <= fReserve)
 
     /**
      *  Adjusts the number of elements in the array.

@@ -8,8 +8,8 @@
 #ifndef SKSL_CONTINUESTATEMENT
 #define SKSL_CONTINUESTATEMENT
 
-#include "SkSLExpression.h"
-#include "SkSLStatement.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 namespace SkSL {
 
@@ -24,9 +24,11 @@ struct ContinueStatement : public Statement {
         return std::unique_ptr<Statement>(new ContinueStatement(fOffset));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return String("continue;");
     }
+#endif
 
     typedef Statement INHERITED;
 };

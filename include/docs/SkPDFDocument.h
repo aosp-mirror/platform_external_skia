@@ -3,13 +3,23 @@
 #ifndef SkPDFDocument_DEFINED
 #define SkPDFDocument_DEFINED
 
-#include "SkDocument.h"
+#include "include/core/SkDocument.h"
 
-#include "SkScalar.h"
-#include "SkString.h"
-#include "SkTime.h"
+#include <vector>
+
+#include "include/core/SkColor.h"
+#include "include/core/SkMilestone.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTime.h"
+#include "include/private/SkNoncopyable.h"
+
+#define SKPDF_STRING(X) SKPDF_STRING_IMPL(X)
+#define SKPDF_STRING_IMPL(X) #X
 
 class SkExecutor;
+class SkPDFArray;
+class SkPDFTagTree;
 
 namespace SkPDF {
 
@@ -67,16 +77,50 @@ enum class DocumentStructureType {
     kForm,        //!< Form control (not like an HTML FORM element)
 };
 
+/** Attributes for nodes in the PDF tree. */
+class SK_API AttributeList : SkNoncopyable {
+public:
+    AttributeList();
+    ~AttributeList();
+
+    // Each attribute must have an owner (e.g. "Layout", "List", "Table", etc)
+    // and an attribute name (e.g. "BBox", "RowSpan", etc.) from PDF32000_2008 14.8.5,
+    // and then a value of the proper type according to the spec.
+    void appendInt(const char* owner, const char* name, int value);
+    void appendFloat(const char* owner, const char* name, float value);
+    void appendString(const char* owner, const char* name, const char* value);
+    void appendFloatArray(const char* owner,
+                          const char* name,
+                          const std::vector<float>& value);
+    void appendStringArray(const char* owner,
+                           const char* name,
+                           const std::vector<SkString>& value);
+
+private:
+    friend class ::SkPDFTagTree;
+
+    std::unique_ptr<SkPDFArray> fAttrs;
+};
+
 /** A node in a PDF structure tree, giving a semantic representation
     of the content.  Each node ID is associated with content
     by passing the SkCanvas and node ID to SkPDF::SetNodeId() when drawing.
     NodeIDs should be unique within each tree.
 */
 struct StructureElementNode {
-    const StructureElementNode* fChildren = nullptr;
-    size_t fChildCount;
-    int fNodeId;
-    DocumentStructureType fType;
+    SkString fTypeString;
+    std::vector<std::unique_ptr<StructureElementNode>> fChildVector;
+    int fNodeId = 0;
+    AttributeList fAttributes;
+    SkString fAlt;
+    SkString fLang;
+
+    // Deprecated. Use fChildVector instead.
+    StructureElementNode* fChildren = nullptr;
+    size_t fChildCount = 0;
+
+    // Deprecated. Use fTypeString instead.
+    DocumentStructureType fType = DocumentStructureType::kNonStruct;
 };
 
 /** Optional metadata to be passed into the PDF factory function.
@@ -106,9 +150,8 @@ struct Metadata {
     SkString fCreator;
 
     /** The product that is converting this document to PDF.
-        Leave fProducer empty to get the default, correct value.
     */
-    SkString fProducer;
+    SkString fProducer = SkString("Skia/PDF m" SKPDF_STRING(SK_MILESTONE));
 
     /** The date and time the document was created.
         The zero default value represents an unknown/unset time.
@@ -146,7 +189,7 @@ struct Metadata {
         a semantic representation of the content. The caller
         should retain ownership.
     */
-    const StructureElementNode* fStructureElementTreeRoot = nullptr;
+    StructureElementNode* fStructureElementTreeRoot = nullptr;
 
     /** Executor to handle threaded work within PDF Backend. If this is nullptr,
         then all work will be done serially on the main thread. To have worker
@@ -159,6 +202,17 @@ struct Metadata {
         Experimental.
     */
     SkExecutor* fExecutor = nullptr;
+
+    /** Preferred Subsetter. Only respected if both are compiled in.
+
+        The Sfntly subsetter is deprecated.
+
+        Experimental.
+    */
+    enum Subsetter {
+        kHarfbuzz_Subsetter,
+        kSfntly_Subsetter,
+    } fSubsetter = kHarfbuzz_Subsetter;
 };
 
 /** Associate a node ID with subsequent drawing commands in an
@@ -191,4 +245,7 @@ static inline sk_sp<SkDocument> MakeDocument(SkWStream* stream) {
 }
 
 }  // namespace SkPDF
+
+#undef SKPDF_STRING
+#undef SKPDF_STRING_IMPL
 #endif  // SkPDFDocument_DEFINED

@@ -5,19 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkAndroidFrameworkUtils.h"
-#include "SkCanvas.h"
-#include "SkDevice.h"
-#include "SkPaintFilterCanvas.h"
-#include "SkSurface_Base.h"
-
-#if SK_SUPPORT_GPU
-#include "GrStyle.h"
-#include "GrClip.h"
-#include "GrRenderTargetContext.h"
-#include "GrUserStencilSettings.h"
-#include "effects/GrDisableColorXP.h"
-#endif //SK_SUPPORT_GPU
+#include "include/android/SkAndroidFrameworkUtils.h"
+#include "include/core/SkCanvas.h"
+#include "include/utils/SkPaintFilterCanvas.h"
+#include "src/core/SkDevice.h"
+#include "src/image/SkSurface_Base.h"
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 
@@ -25,36 +17,10 @@
 
 #if SK_SUPPORT_GPU
 bool SkAndroidFrameworkUtils::clipWithStencil(SkCanvas* canvas) {
-    SkRegion clipRegion;
-    canvas->temporary_internal_getRgnClip(&clipRegion);
-    if (clipRegion.isEmpty()) {
-        return false;
-    }
     SkBaseDevice* device = canvas->getDevice();
-    if (!device) {
-        return false;
-    }
-    GrRenderTargetContext* rtc = device->accessRenderTargetContext();
-    if (!rtc) {
-        return false;
-    }
-    GrPaint grPaint;
-    grPaint.setXPFactory(GrDisableColorXPFactory::Get());
-    GrNoClip noClip;
-    static constexpr GrUserStencilSettings kDrawToStencil(
-        GrUserStencilSettings::StaticInit<
-            0x1,
-            GrUserStencilTest::kAlways,
-            0x1,
-            GrUserStencilOp::kReplace,
-            GrUserStencilOp::kReplace,
-            0x1>()
-    );
-    rtc->drawRegion(noClip, std::move(grPaint), GrAA::kNo, SkMatrix::I(), clipRegion,
-                    GrStyle::SimpleFill(), &kDrawToStencil);
-    return true;
+    return device && device->android_utils_clipWithStencil();
 }
-#endif //SK_SUPPORT_GPU
+#endif
 
 void SkAndroidFrameworkUtils::SafetyNetLog(const char* bugNumber) {
     android_errorWriteLog(0x534e4554, bugNumber);

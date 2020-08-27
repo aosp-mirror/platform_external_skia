@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkChecksum.h"
-#include "SkRefCnt.h"
-#include "SkString.h"
-#include "SkTHash.h"
-#include "Test.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkString.h"
+#include "include/private/SkChecksum.h"
+#include "include/private/SkTHash.h"
+#include "tests/Test.h"
 
 // Tests use of const foreach().  map.count() is of course the better way to do this.
 static int count(const SkTHashMap<int, double>& map) {
@@ -198,4 +198,35 @@ DEF_TEST(HashFindOrNull, r) {
     table.set(&seven);
 
     REPORTER_ASSERT(r, &seven == table.findOrNull(7));
+}
+
+DEF_TEST(HashFilter, r) {
+
+
+    struct HashTraits {
+        static int GetKey(const int e) { return e; }
+        static uint32_t Hash(int key) { return 0; }
+    };
+
+    SkTHashTable<int, int, HashTraits> table;
+
+    for (int i = 0; i < 10; i++) {
+        table.set(i);
+    }
+
+    REPORTER_ASSERT(r, table.count() == 10);
+
+    table.mutate([](int* i) {
+        // Do not remove.
+        return true;
+    });
+
+    REPORTER_ASSERT(r, table.count() == 10);
+
+    table.mutate([](int* i) {
+        // table.remove(*i);
+        return false;
+    });
+
+    REPORTER_ASSERT(r, table.count() == 0);
 }

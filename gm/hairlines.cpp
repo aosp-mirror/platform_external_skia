@@ -5,10 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkTArray.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkTArray.h"
 
 namespace skiagm {
 
@@ -149,13 +157,11 @@ protected:
             bug->addArc(circle, kStartAngle, kSweepAngle);
 
             // Now add the chord that should cap the circular arc
-            SkScalar cosV, sinV = SkScalarSinCos(SkDegreesToRadians(kStartAngle), &cosV);
+            SkPoint p0 = { kRad * SkScalarCos(SkDegreesToRadians(kStartAngle)),
+                           kRad * SkScalarSin(SkDegreesToRadians(kStartAngle)) };
 
-            SkPoint p0 = SkPoint::Make(kRad * cosV, kRad * sinV);
-
-            sinV = SkScalarSinCos(SkDegreesToRadians(kStartAngle + kSweepAngle), &cosV);
-
-            SkPoint p1 = SkPoint::Make(kRad * cosV, kRad * sinV);
+            SkPoint p1 = { kRad * SkScalarCos(SkDegreesToRadians(kStartAngle + kSweepAngle)),
+                           kRad * SkScalarSin(SkDegreesToRadians(kStartAngle + kSweepAngle)) };
 
             bug->moveTo(p0);
             bug->lineTo(p1);
@@ -201,7 +207,7 @@ protected:
                         canvas->drawPath(fPaths[p], paint);
                         canvas->restore();
 
-                        maxH = SkMaxScalar(maxH, bounds.height());
+                        maxH = std::max(maxH, bounds.height());
 
                         SkScalar dx = bounds.width() + SkIntToScalar(kMargin);
                         x += dx;

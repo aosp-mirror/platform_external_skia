@@ -8,15 +8,16 @@
 #ifndef ParticlesSlide_DEFINED
 #define ParticlesSlide_DEFINED
 
-#include "Slide.h"
+#include "tools/viewer/Slide.h"
 
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkTArray.h"
+#include "include/core/SkPath.h"
+#include "include/private/SkTArray.h"
+#include "include/utils/SkRandom.h"
 
-class SkAnimTimer;
 class SkParticleEffect;
 class SkParticleEffectParams;
+
+namespace skresources { class ResourceProvider; }
 
 class ParticlesSlide : public Slide {
 public:
@@ -27,17 +28,18 @@ public:
 
     void load(SkScalar winWidth, SkScalar winHeight) override;
     void draw(SkCanvas* canvas) override;
-    bool animate(const SkAnimTimer& timer) override;
+    bool animate(double) override;
 
-    bool onMouse(SkScalar x, SkScalar y, sk_app::Window::InputState state,
-                 uint32_t modifiers) override;
+    bool onMouse(SkScalar x, SkScalar y, skui::InputState state,
+                 skui::ModifierKey modifiers) override;
 
 private:
     void loadEffects(const char* dirname);
 
     SkRandom fRandom;
-    const SkAnimTimer* fTimer;
-    SkPoint fPlayPosition;
+    bool fAnimated = false;
+    double fAnimationTime = 0;
+    SkPoint fMousePos = { 0, 0 };
 
     struct LoadedEffect {
         SkString fName;
@@ -46,11 +48,13 @@ private:
     SkTArray<LoadedEffect> fLoaded;
 
     struct RunningEffect {
-        SkPoint fPosition;
         SkString fName;
         sk_sp<SkParticleEffect> fEffect;
+        bool fTrackMouse;
     };
     SkTArray<RunningEffect> fRunning;
+
+    sk_sp<skresources::ResourceProvider> fResourceProvider;
 };
 
 #endif

@@ -5,20 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrProxyProvider.h"
-#include "GrSamplerState.h"
-#include "GrTextureProducer.h"
-#include "GrTextureProxy.h"
-#include "GrTypes.h"
-#include "GrTypesPriv.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "Test.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrSamplerState.h"
+#include "src/gpu/GrTextureProducer.h"
+#include "src/gpu/GrTextureProxy.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
 #include <initializer_list>
 
@@ -123,16 +125,13 @@ static sk_sp<GrTextureProxy> create_proxy(GrContext* ctx,
                                           bool isExact,
                                           RectInfo* rect) {
     GrProxyProvider* proxyProvider = ctx->priv().proxyProvider();
+    const GrCaps* caps = ctx->priv().caps();
+
     int size = isPowerOfTwo ? 128 : 100;
     SkBackingFit fit = isExact ? SkBackingFit::kExact : SkBackingFit::kApprox;
 
-    GrSurfaceDesc desc;
-    desc.fWidth = size;
-    desc.fHeight = size;
-    desc.fConfig = kRGBA_8888_GrPixelConfig;
-
-    GrBackendFormat format =
-            ctx->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
+    GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
+                                                           GrRenderable::kNo);
 
     static const char* name = "proxy";
 
@@ -144,8 +143,10 @@ static sk_sp<GrTextureProxy> create_proxy(GrContext* ctx,
               (isPowerOfTwo || isExact) ? RectInfo::kHard : RectInfo::kBad,
               name);
 
-    return proxyProvider->createProxy(format, desc, kTopLeft_GrSurfaceOrigin, fit,
-                                      SkBudgeted::kYes);
+    GrSwizzle swizzle = caps->getReadSwizzle(format, GrColorType::kRGBA_8888);
+
+    return proxyProvider->createProxy(format, {size, size}, swizzle, GrRenderable::kNo, 1,
+                                      GrMipMapped::kNo, fit, SkBudgeted::kYes, GrProtected::kNo);
 }
 
 static RectInfo::EdgeType compute_inset_edgetype(RectInfo::EdgeType previous,
