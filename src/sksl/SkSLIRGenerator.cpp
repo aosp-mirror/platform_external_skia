@@ -294,9 +294,9 @@ std::unique_ptr<Statement> IRGenerator::convertVarDeclarationStatement(const AST
 std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNode& decls,
                                                                      Variable::Storage storage) {
     SkASSERT(decls.fKind == ASTNode::Kind::kVarDeclarations);
-    auto iter = decls.begin();
-    const Modifiers& modifiers = iter++->getModifiers();
-    const ASTNode& rawType = *(iter++);
+    auto declarationsIter = decls.begin();
+    const Modifiers& modifiers = declarationsIter++->getModifiers();
+    const ASTNode& rawType = *(declarationsIter++);
     std::vector<std::unique_ptr<VarDeclaration>> variables;
     const Type* baseType = this->convertType(rawType);
     if (!baseType) {
@@ -389,8 +389,8 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
                      Modifiers::kCoherent_Flag | Modifiers::kBuffer_Flag;
     }
     this->checkModifiers(decls.fOffset, modifiers, permitted);
-    for (; iter != decls.end(); ++iter) {
-        const ASTNode& varDecl = *iter;
+    for (; declarationsIter != decls.end(); ++declarationsIter) {
+        const ASTNode& varDecl = *declarationsIter;
         if (modifiers.fLayout.fLocation == 0 && modifiers.fLayout.fIndex == 0 &&
             (modifiers.fFlags & Modifiers::kOut_Flag) && fKind == Program::kFragment_Kind &&
             varDecl.getVarData().fName != "sk_FragColor") {
@@ -936,37 +936,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         return parameters[idx]->fType == *fContext.fFloat2_Type &&
                parameters[idx]->fModifiers.fFlags == 0;
     };
-#ifdef SK_USE_LEGACY_RUNTIME_EFFECT_SIGNATURE
-    auto paramIsColor = [&](int idx) {
-        return parameters[idx]->fType == *fContext.fHalf4_Type &&
-               parameters[idx]->fModifiers.fFlags == (Modifiers::kIn_Flag | Modifiers::kOut_Flag);
-    };
-#endif
 
     if (funcData.fName == "main") {
         switch (fKind) {
             case Program::kPipelineStage_Kind: {
-#ifdef SK_USE_LEGACY_RUNTIME_EFFECT_SIGNATURE
-                // void main(inout half4)  -or-  void main(float2, inout half4)
-                bool valid = (*returnType == *fContext.fVoid_Type);
-                switch (parameters.size()) {
-                    case 2:
-                        valid &= paramIsCoords(0) && paramIsColor(1);
-                        break;
-                    case 1:
-                        valid &= paramIsColor(0);
-                        break;
-                    default:
-                        valid &= false;
-                }
-                if (!valid) {
-                    fErrors.error(f.fOffset, "pipeline stage 'main' must be declared "
-                                             "void main(inout half4) or "
-                                             "void main(float2, inout half4)");
-                    return;
-                }
-                break;
-#else
                 // half4 main()  -or-  half4 main(float2)
                 bool valid = (*returnType == *fContext.fHalf4_Type) &&
                              ((parameters.size() == 0) ||
@@ -977,15 +950,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                     return;
                 }
                 break;
-#endif
-           }
+            }
             case Program::kFragmentProcessor_Kind: {
-                bool valid = parameters.size() <= 1;
-                if (parameters.size() == 1) {
-                    valid = parameters[0]->fType == *fContext.fFloat2_Type &&
-                            parameters[0]->fModifiers.fFlags == 0;
-                }
-
+                bool valid = (parameters.size() == 0) ||
+                             (parameters.size() == 1 && paramIsCoords(0));
                 if (!valid) {
                     fErrors.error(f.fOffset, ".fp 'main' must be declared main() or main(float2)");
                     return;
@@ -1075,23 +1043,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         fCurrentFunction = decl;
         std::shared_ptr<SymbolTable> old = fSymbolTable;
         AutoSymbolTable table(this);
-        if (funcData.fName == "main" && fKind == Program::kPipelineStage_Kind) {
-#ifdef SK_USE_LEGACY_RUNTIME_EFFECT_SIGNATURE
-            if (parameters.size() == 2) {
-                parameters[0]->fModifiers.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
-                parameters[1]->fModifiers.fLayout.fBuiltin = SK_OUTCOLOR_BUILTIN;
-            } else {
-                SkASSERT(parameters.size() == 1);
-                parameters[0]->fModifiers.fLayout.fBuiltin = SK_OUTCOLOR_BUILTIN;
-            }
-#else
+        if (funcData.fName == "main" && (fKind == Program::kPipelineStage_Kind ||
+                                         fKind == Program::kFragmentProcessor_Kind)) {
             if (parameters.size() == 1) {
                 SkASSERT(paramIsCoords(0));
-                parameters[0]->fModifiers.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
-            }
-#endif
-        } else if (funcData.fName == "main" && fKind == Program::kFragmentProcessor_Kind) {
-            if (parameters.size() == 1) {
                 parameters[0]->fModifiers.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
             }
         }
@@ -2219,7 +2174,7 @@ template <bool countTopLevelReturns>
 static int return_count(const Statement& statement, bool inLoopOrSwitch) {
     switch (statement.fKind) {
         case Statement::kBlock_Kind: {
-            const Block& b = static_cast<const Block&>(statement);
+            const Block& b = statement.as<Block>();
             int result = 0;
             for (const std::unique_ptr<Statement>& s : b.fStatements) {
                 result += return_count<countTopLevelReturns>(*s, inLoopOrSwitch);
@@ -2227,15 +2182,15 @@ static int return_count(const Statement& statement, bool inLoopOrSwitch) {
             return result;
         }
         case Statement::kDo_Kind: {
-            const DoStatement& d = static_cast<const DoStatement&>(statement);
+            const DoStatement& d = statement.as<DoStatement>();
             return return_count<countTopLevelReturns>(*d.fStatement, /*inLoopOrSwitch=*/true);
         }
         case Statement::kFor_Kind: {
-            const ForStatement& f = static_cast<const ForStatement&>(statement);
+            const ForStatement& f = statement.as<ForStatement>();
             return return_count<countTopLevelReturns>(*f.fStatement, /*inLoopOrSwitch=*/true);
         }
         case Statement::kIf_Kind: {
-            const IfStatement& i = static_cast<const IfStatement&>(statement);
+            const IfStatement& i = statement.as<IfStatement>();
             int result = return_count<countTopLevelReturns>(*i.fIfTrue, inLoopOrSwitch);
             if (i.fIfFalse) {
                 result += return_count<countTopLevelReturns>(*i.fIfFalse, inLoopOrSwitch);
@@ -2245,7 +2200,7 @@ static int return_count(const Statement& statement, bool inLoopOrSwitch) {
         case Statement::kReturn_Kind:
             return (countTopLevelReturns || inLoopOrSwitch) ? 1 : 0;
         case Statement::kSwitch_Kind: {
-            const SwitchStatement& ss = static_cast<const SwitchStatement&>(statement);
+            const SwitchStatement& ss = statement.as<SwitchStatement>();
             int result = 0;
             for (const std::unique_ptr<SwitchCase>& sc : ss.fCases) {
                 for (const std::unique_ptr<Statement>& s : sc->fStatements) {
@@ -2255,7 +2210,7 @@ static int return_count(const Statement& statement, bool inLoopOrSwitch) {
             return result;
         }
         case Statement::kWhile_Kind: {
-            const WhileStatement& w = static_cast<const WhileStatement&>(statement);
+            const WhileStatement& w = statement.as<WhileStatement>();
             return return_count<countTopLevelReturns>(*w.fStatement, /*inLoopOrSwitch=*/true);
         }
         case Statement::kBreak_Kind:
@@ -2281,8 +2236,30 @@ static bool has_early_return(const FunctionDefinition& f) {
     if (returnCount > 1) {
         return true;
     }
-    SkASSERT(f.fBody->fKind == Statement::kBlock_Kind);
-    return static_cast<Block&>(*f.fBody).fStatements.back()->fKind != Statement::kReturn_Kind;
+
+    // Descend into the last statement of the block to see if it ends with a return statement.
+    // Sometimes the last statement of the function is actually another block, so we may need to
+    // descend more than once.
+    const Block* block = &f.fBody->as<Block>();
+    for (;;) {
+        if (block->fStatements.empty()) {
+            // The function ended with a totally empty block, but we know there's a return statement
+            // earlier in the function, so there must be an early return.
+            return true;
+        }
+        const Statement& lastStatement = *block->fStatements.back();
+        if (lastStatement.fKind == Statement::kReturn_Kind) {
+            // The last statement is a return; it's not early.
+            return false;
+        }
+        if (lastStatement.fKind != Statement::kBlock_Kind) {
+            // The last statement is not a sub-block but also not a return. We know there's a return
+            // statement earlier in the function, which must be an early return.
+            return true;
+        }
+        // The last statement is itself another block. We have to go deeper.
+        block = &lastStatement.as<Block>();
+    }
 }
 
 static bool has_return_in_breakable_construct(const FunctionDefinition& f) {
@@ -2341,6 +2318,17 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
     // create variables to hold the arguments and assign the arguments to them
     int argIndex = fInlineVarCounter++;
     for (int i = 0; i < (int) arguments.size(); ++i) {
+        if (arguments[i]->fKind == Expression::kVariableReference_Kind) {
+            // the argument is just a variable, so we only need to copy it if it's an out parameter
+            // or it's written to within the function
+            const VariableReference& v = arguments[i]->as<VariableReference>();
+            const Variable* param = function.fDeclaration.fParameters[i];
+            if ((param->fModifiers.fFlags & Modifiers::kOut_Flag) ||
+                !Analysis::StatementWritesToVariable(*function.fBody, *param)) {
+                varMap[param] = &v.fVariable;
+                continue;
+            }
+        }
         std::unique_ptr<String> argName(new String());
         argName->appendf("_inlineArg%s%d_%d", inlineSalt.c_str(), argIndex, i);
         const String* argNamePtr = fSymbolTable->takeOwnershipOfString(std::move(argName));
@@ -2383,6 +2371,13 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
     for (size_t i = 0; i < arguments.size(); ++i) {
         const Variable* p = function.fDeclaration.fParameters[i];
         if (p->fModifiers.fFlags & Modifiers::kOut_Flag) {
+            SkASSERT(varMap.find(p) != varMap.end());
+            if (arguments[i]->fKind == Expression::kVariableReference_Kind &&
+                &arguments[i]->as<VariableReference>().fVariable == varMap[p]) {
+                // we didn't create a temporary for this parameter, so there's nothing to copy back
+                // out
+                continue;
+            }
             std::unique_ptr<Expression> varRef(new VariableReference(offset, *varMap[p]));
             fExtraStatements.emplace_back(new ExpressionStatement(
                     std::unique_ptr<Expression>(new BinaryExpression(offset,

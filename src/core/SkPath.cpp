@@ -1436,21 +1436,6 @@ SkPath& SkPath::addPath(const SkPath& srcPath, const SkMatrix& matrix, AddPathMo
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static int pts_in_verb(unsigned verb) {
-    static const uint8_t gPtsInVerb[] = {
-        1,  // kMove
-        1,  // kLine
-        2,  // kQuad
-        2,  // kConic
-        3,  // kCubic
-        0,  // kClose
-        0   // kDone
-    };
-
-    SkASSERT(verb < SK_ARRAY_COUNT(gPtsInVerb));
-    return gPtsInVerb[verb];
-}
-
 // ignore the last point of the 1st contour
 SkPath& SkPath::reversePathTo(const SkPath& path) {
     if (path.fPathRef->fVerbs.count() == 0) {
@@ -1465,7 +1450,7 @@ SkPath& SkPath::reversePathTo(const SkPath& path) {
 
     while (verbs > verbsBegin) {
         uint8_t v = *--verbs;
-        pts -= pts_in_verb(v);
+        pts -= SkPathPriv::PtsInVerb(v);
         switch (v) {
             case kMove_Verb:
                 // if the path has multiple contours, stop after reversing the last
@@ -1509,7 +1494,7 @@ SkPath& SkPath::reverseAddPath(const SkPath& srcPath) {
     bool needClose = false;
     while (verbs > verbsBegin) {
         uint8_t v = *--verbs;
-        int n = pts_in_verb(v);
+        int n = SkPathPriv::PtsInVerb(v);
 
         if (needMove) {
             --pts;
@@ -3405,12 +3390,16 @@ SkPath SkPath::Make(const SkPoint pts[], int pointCount,
                   ft, isVolatile, SkPathConvexityType::kUnknown);
 }
 
-SkPath SkPath::Rect(const SkRect& r, SkPathDirection dir) {
-    return SkPathBuilder().addRect(r, dir).detach();
+SkPath SkPath::Rect(const SkRect& r, SkPathDirection dir, unsigned startIndex) {
+    return SkPathBuilder().addRect(r, dir, startIndex).detach();
 }
 
 SkPath SkPath::Oval(const SkRect& r, SkPathDirection dir) {
     return SkPathBuilder().addOval(r, dir).detach();
+}
+
+SkPath SkPath::Oval(const SkRect& r, SkPathDirection dir, unsigned startIndex) {
+    return SkPathBuilder().addOval(r, dir, startIndex).detach();
 }
 
 SkPath SkPath::Circle(SkScalar x, SkScalar y, SkScalar r, SkPathDirection dir) {
@@ -3419,6 +3408,10 @@ SkPath SkPath::Circle(SkScalar x, SkScalar y, SkScalar r, SkPathDirection dir) {
 
 SkPath SkPath::RRect(const SkRRect& rr, SkPathDirection dir) {
     return SkPathBuilder().addRRect(rr, dir).detach();
+}
+
+SkPath SkPath::RRect(const SkRRect& rr, SkPathDirection dir, unsigned startIndex) {
+    return SkPathBuilder().addRRect(rr, dir, startIndex).detach();
 }
 
 SkPath SkPath::RRect(const SkRect& r, SkScalar rx, SkScalar ry, SkPathDirection dir) {
