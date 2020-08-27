@@ -329,7 +329,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createNonMippedProxyFromBitmap(const SkBi
                         desc.fDimensions, desc.fFormat, colorType, desc.fRenderable,
                         desc.fSampleCnt, desc.fBudgeted, desc.fFit, desc.fProtected, mipLevel));
             },
-            format, dims, GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
+            format, dims, GrRenderable::kNo, 1, GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
             GrInternalSurfaceFlags::kNone, fit, budgeted, GrProtected::kNo, UseAllocator::kYes);
 
     if (!proxy) {
@@ -377,8 +377,9 @@ sk_sp<GrTextureProxy> GrProxyProvider::createMippedProxyFromBitmap(const SkBitma
                         desc.fDimensions, desc.fFormat, colorType, GrRenderable::kNo, 1,
                         desc.fBudgeted, GrProtected::kNo, texels.get(), mipLevelCount));
             },
-            format, dims, GrMipmapped::kYes, GrMipmapStatus::kValid, GrInternalSurfaceFlags::kNone,
-            SkBackingFit::kExact, budgeted, GrProtected::kNo, UseAllocator::kYes);
+            format, dims, GrRenderable::kNo, 1, GrMipmapped::kYes, GrMipmapStatus::kValid,
+            GrInternalSurfaceFlags::kNone, SkBackingFit::kExact, budgeted, GrProtected::kNo,
+            UseAllocator::kYes);
 
     if (!proxy) {
         return nullptr;
@@ -464,8 +465,9 @@ sk_sp<GrTextureProxy> GrProxyProvider::createCompressedTextureProxy(
                         desc.fDimensions, desc.fFormat, desc.fBudgeted, desc.fMipmapped,
                         desc.fProtected, data.get()));
             },
-            format, dimensions, mipMapped, mipmapStatus,GrInternalSurfaceFlags::kReadOnly,
-            SkBackingFit::kExact, SkBudgeted::kYes, GrProtected::kNo, UseAllocator::kYes);
+            format, dimensions, GrRenderable::kNo, 1, mipMapped, mipmapStatus,
+            GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kYes,
+            GrProtected::kNo, UseAllocator::kYes);
 
     if (!proxy) {
         return nullptr;
@@ -694,6 +696,8 @@ sk_sp<GrRenderTargetProxy> GrProxyProvider::wrapVulkanSecondaryCBAsRenderTarget(
 sk_sp<GrTextureProxy> GrProxyProvider::createLazyProxy(LazyInstantiateCallback&& callback,
                                                        const GrBackendFormat& format,
                                                        SkISize dimensions,
+                                                       GrRenderable renderable,
+                                                       int renderTargetSampleCnt,
                                                        GrMipmapped mipMapped,
                                                        GrMipmapStatus mipmapStatus,
                                                        GrInternalSurfaceFlags surfaceFlags,
@@ -717,17 +721,33 @@ sk_sp<GrTextureProxy> GrProxyProvider::createLazyProxy(LazyInstantiateCallback&&
         return nullptr;
     }
 
-    return sk_sp<GrTextureProxy>(new GrTextureProxy(std::move(callback),
-                                                    format,
-                                                    dimensions,
-                                                    mipMapped,
-                                                    mipmapStatus,
-                                                    fit,
-                                                    budgeted,
-                                                    isProtected,
-                                                    surfaceFlags,
-                                                    useAllocator,
-                                                    this->isDDLProvider()));
+    if (renderable == GrRenderable::kYes) {
+        return sk_sp<GrTextureProxy>(new GrTextureRenderTargetProxy(*this->caps(),
+                                                                    std::move(callback),
+                                                                    format,
+                                                                    dimensions,
+                                                                    renderTargetSampleCnt,
+                                                                    mipMapped,
+                                                                    mipmapStatus,
+                                                                    fit,
+                                                                    budgeted,
+                                                                    isProtected,
+                                                                    surfaceFlags,
+                                                                    useAllocator,
+                                                                    this->isDDLProvider()));
+    } else {
+        return sk_sp<GrTextureProxy>(new GrTextureProxy(std::move(callback),
+                                                        format,
+                                                        dimensions,
+                                                        mipMapped,
+                                                        mipmapStatus,
+                                                        fit,
+                                                        budgeted,
+                                                        isProtected,
+                                                        surfaceFlags,
+                                                        useAllocator,
+                                                        this->isDDLProvider()));
+    }
 }
 
 sk_sp<GrRenderTargetProxy> GrProxyProvider::createLazyRenderTargetProxy(

@@ -46,22 +46,20 @@ void GrGLSLShaderBuilder::emitFunction(GrSLType returnType,
                                        int argCnt,
                                        const GrShaderVar* args,
                                        const char* body,
-                                       SkString* outName,
-                                       bool forceInline) {
+                                       SkString* outName) {
+    this->functions().append(GrGLSLTypeString(returnType));
     fProgramBuilder->nameVariable(outName, '\0', name);
-    this->functions().appendf("%s%s %s(",
-                              forceInline ? "inline " : "",
-                              GrGLSLTypeString(returnType),
-                              outName->c_str());
+    this->functions().appendf(" %s", outName->c_str());
+    this->functions().append("(");
     for (int i = 0; i < argCnt; ++i) {
         args[i].appendDecl(fProgramBuilder->shaderCaps(), &this->functions());
         if (i < argCnt - 1) {
             this->functions().append(", ");
         }
     }
-    this->functions().appendf(") {\n"
-                              "%s"
-                              "}\n\n", body);
+    this->functions().append(") {\n");
+    this->functions().append(body);
+    this->functions().append("}\n\n");
 }
 
 static inline void append_texture_swizzle(SkString* out, GrSwizzle swizzle) {

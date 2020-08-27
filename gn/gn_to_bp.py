@@ -238,7 +238,6 @@ cc_defaults {
     ],
     cflags: [
         "-DSK_SHAPER_HARFBUZZ_AVAILABLE",
-        "-DSK_UNICODE_AVAILABLE",
         "-Wno-implicit-fallthrough",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",

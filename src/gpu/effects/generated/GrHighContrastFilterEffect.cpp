@@ -149,7 +149,6 @@ bool GrHighContrastFilterEffect::onIsEqual(const GrFragmentProcessor& other) con
     if (linearize != that.linearize) return false;
     return true;
 }
-bool GrHighContrastFilterEffect::usesExplicitReturn() const { return false; }
 GrHighContrastFilterEffect::GrHighContrastFilterEffect(const GrHighContrastFilterEffect& src)
         : INHERITED(kGrHighContrastFilterEffect_ClassID, src.optimizationFlags())
         , contrastMod(src.contrastMod)

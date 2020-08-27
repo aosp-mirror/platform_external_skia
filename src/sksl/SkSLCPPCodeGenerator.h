@@ -119,15 +119,6 @@ private:
     // Append CPP code to the current extra emit code block.
     void addExtraEmitCodeLine(const String& toAppend);
 
-    // Called when we encounter `sk_OutColor = xxxxx` or `return xxxxx` during the parse. If both
-    // return types are encountered in a single file, an error is generated.
-    enum class ReturnType {
-        kNothing,
-        kUsesExplicitReturn,
-        kUsesSkOutColor
-    };
-    void setReturnType(int offset, ReturnType typeToSet);
-
     int getChildFPIndex(const Variable& var) const;
 
     String fName;
@@ -140,14 +131,9 @@ private:
     // parameter in its body.
     bool fAccessSampleCoordsDirectly = false;
 
-    // If true, we are writing a C++ expression instead of a GLSL expression
+    // if true, we are writing a C++ expression instead of a GLSL expression
     bool fCPPMode = false;
-
-    // True while compiling the main() function of the FP.
     bool fInMain = false;
-
-    // Keeps track of how main() returns a color to the caller. An FP file cannot mix return types.
-    ReturnType fReturnType = ReturnType::kNothing;
 
     // if not null, we are accumulating SkSL for emitCode into fOut, which
     // replaced the original buffer with a StringStream. The original buffer is
