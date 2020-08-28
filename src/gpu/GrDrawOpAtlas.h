@@ -212,15 +212,11 @@ public:
      */
     static std::pair<uint16_t, uint16_t> PackIndexInTexCoords(
             uint16_t u, uint16_t v, int pageIndex) {
-        // The two bits that make up the texture index are packed into the lower bits of the u and v
-        // coordinate respectively.
-        SkASSERT(pageIndex >= 0 && pageIndex < 4);
-        uint16_t uBit = (pageIndex >> 1u) & 0x1u;
-        uint16_t vBit = pageIndex & 0x1u;
-        u <<= 1u;
-        u |= uBit;
-        v <<= 1u;
-        v |= vBit;
+        // Pack the two bits for the page index in bit 15 of u and v; u gets the high bit, and v
+        // gets the low bit.
+        SkASSERT(0 <= pageIndex && pageIndex < 4);
+        u |= (pageIndex & 0x2u) << 14;
+        v |= pageIndex << 15;
         return std::make_pair(u, v);
     }
 

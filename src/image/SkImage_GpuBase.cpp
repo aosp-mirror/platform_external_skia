@@ -85,10 +85,10 @@ bool SkImage_GpuBase::ValidateCompressedBackendTexture(const GrCaps* caps,
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool SkImage_GpuBase::getROPixels(SkBitmap* dst, CachingHint chint) const {
-    auto dContext = fContext->asDirectContext();
-    if (!dContext) {
-        // DDL TODO: buffer up the readback so it occurs when the DDL is drawn?
+bool SkImage_GpuBase::getROPixels(GrDirectContext* dContext,
+                                  SkBitmap* dst,
+                                  CachingHint chint) const {
+    if (!fContext->priv().matches(dContext)) {
         return false;
     }
 
@@ -156,15 +156,15 @@ sk_sp<SkImage> SkImage_GpuBase::onMakeSubset(const SkIRect& subset,
                                    this->colorType(), this->alphaType(), this->refColorSpace());
 }
 
-bool SkImage_GpuBase::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
-                                   int srcX, int srcY, CachingHint) const {
-    auto dContext = fContext->asDirectContext();
-    if (!dContext) {
-        // DDL TODO: buffer up the readback so it occurs when the DDL is drawn?
-        return false;
-    }
-
-    if (!SkImageInfoValidConversion(dstInfo, this->imageInfo())) {
+bool SkImage_GpuBase::onReadPixels(GrDirectContext* dContext,
+                                   const SkImageInfo& dstInfo,
+                                   void* dstPixels,
+                                   size_t dstRB,
+                                   int srcX,
+                                   int srcY,
+                                   CachingHint) const {
+    if (!fContext->priv().matches(dContext)
+            || !SkImageInfoValidConversion(dstInfo, this->imageInfo())) {
         return false;
     }
 
@@ -501,7 +501,7 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
     // We pass kReadOnly here since we should treat content of the client's texture as immutable.
     // The promise API provides no way for the client to indicated that the texture is protected.
     return proxyProvider->createLazyProxy(
-            std::move(callback), backendFormat, {width, height}, GrRenderable::kNo, 1, mipMapped,
-            mipmapStatus, GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kNo,
+            std::move(callback), backendFormat, {width, height}, mipMapped, mipmapStatus,
+            GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kNo,
             GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
 }

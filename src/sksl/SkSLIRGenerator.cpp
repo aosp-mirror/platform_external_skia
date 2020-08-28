@@ -192,7 +192,7 @@ void IRGenerator::start(const Program::Settings* settings,
     }
     SkASSERT(fIntrinsics);
     for (auto& pair : *fIntrinsics) {
-        pair.second.second = false;
+        pair.second.fAlreadyIncluded = false;
     }
 }
 
@@ -2170,102 +2170,113 @@ std::unique_ptr<Statement> IRGenerator::inlineStatement(
     }
 }
 
-template <bool countTopLevelReturns>
-static int return_count(const Statement& statement, bool inLoopOrSwitch) {
-    switch (statement.fKind) {
-        case Statement::kBlock_Kind: {
-            const Block& b = statement.as<Block>();
-            int result = 0;
-            for (const std::unique_ptr<Statement>& s : b.fStatements) {
-                result += return_count<countTopLevelReturns>(*s, inLoopOrSwitch);
+static int count_all_returns(const FunctionDefinition& funcDef) {
+    class CountAllReturns : public ProgramVisitor {
+    public:
+        CountAllReturns(const FunctionDefinition& funcDef) {
+            this->visitProgramElement(funcDef);
+        }
+
+        bool visitStatement(const Statement& stmt) override {
+            switch (stmt.fKind) {
+                case Statement::kReturn_Kind:
+                    ++fNumReturns;
+                    [[fallthrough]];
+
+                default:
+                    return this->INHERITED::visitStatement(stmt);
             }
-            return result;
         }
-        case Statement::kDo_Kind: {
-            const DoStatement& d = statement.as<DoStatement>();
-            return return_count<countTopLevelReturns>(*d.fStatement, /*inLoopOrSwitch=*/true);
-        }
-        case Statement::kFor_Kind: {
-            const ForStatement& f = statement.as<ForStatement>();
-            return return_count<countTopLevelReturns>(*f.fStatement, /*inLoopOrSwitch=*/true);
-        }
-        case Statement::kIf_Kind: {
-            const IfStatement& i = statement.as<IfStatement>();
-            int result = return_count<countTopLevelReturns>(*i.fIfTrue, inLoopOrSwitch);
-            if (i.fIfFalse) {
-                result += return_count<countTopLevelReturns>(*i.fIfFalse, inLoopOrSwitch);
-            }
-            return result;
-        }
-        case Statement::kReturn_Kind:
-            return (countTopLevelReturns || inLoopOrSwitch) ? 1 : 0;
-        case Statement::kSwitch_Kind: {
-            const SwitchStatement& ss = statement.as<SwitchStatement>();
-            int result = 0;
-            for (const std::unique_ptr<SwitchCase>& sc : ss.fCases) {
-                for (const std::unique_ptr<Statement>& s : sc->fStatements) {
-                    result += return_count<countTopLevelReturns>(*s, /*inLoopOrSwitch=*/true);
-                }
-            }
-            return result;
-        }
-        case Statement::kWhile_Kind: {
-            const WhileStatement& w = statement.as<WhileStatement>();
-            return return_count<countTopLevelReturns>(*w.fStatement, /*inLoopOrSwitch=*/true);
-        }
-        case Statement::kBreak_Kind:
-        case Statement::kContinue_Kind:
-        case Statement::kDiscard_Kind:
-        case Statement::kExpression_Kind:
-        case Statement::kNop_Kind:
-        case Statement::kVarDeclaration_Kind:
-        case Statement::kVarDeclarations_Kind:
-            return 0;
-        default:
-            SkASSERT(false);
-            return 0;
-    }
+
+        int fNumReturns = 0;
+        using INHERITED = ProgramVisitor;
+    };
+
+    return CountAllReturns{funcDef}.fNumReturns;
 }
 
-static bool has_early_return(const FunctionDefinition& f) {
-    int returnCount =
-            return_count</*countTopLevelReturns=*/true>(*f.fBody, /*inLoopOrSwitch=*/false);
+static int count_returns_at_end_of_control_flow(const FunctionDefinition& funcDef) {
+    class CountReturnsAtEndOfControlFlow : public ProgramVisitor {
+    public:
+        CountReturnsAtEndOfControlFlow(const FunctionDefinition& funcDef) {
+            this->visitProgramElement(funcDef);
+        }
+
+        bool visitStatement(const Statement& stmt) override {
+            switch (stmt.fKind) {
+                case Statement::kBlock_Kind: {
+                    // Check only the last statement of a block.
+                    const auto& blockStmts = stmt.as<Block>().fStatements;
+                    return (blockStmts.size() > 0) ? this->visitStatement(*blockStmts.back())
+                                                   : false;
+                }
+                case Statement::kSwitch_Kind:
+                case Statement::kWhile_Kind:
+                case Statement::kDo_Kind:
+                case Statement::kFor_Kind:
+                    // Don't introspect switches or loop structures at all.
+                    return false;
+
+                case Statement::kReturn_Kind:
+                    ++fNumReturns;
+                    [[fallthrough]];
+
+                default:
+                    return this->INHERITED::visitStatement(stmt);
+            }
+        }
+
+        int fNumReturns = 0;
+        using INHERITED = ProgramVisitor;
+    };
+
+    return CountReturnsAtEndOfControlFlow{funcDef}.fNumReturns;
+}
+
+static int count_returns_in_breakable_constructs(const FunctionDefinition& funcDef) {
+    class CountReturnsInBreakableConstructs : public ProgramVisitor {
+    public:
+        CountReturnsInBreakableConstructs(const FunctionDefinition& funcDef) {
+            this->visitProgramElement(funcDef);
+        }
+
+        bool visitStatement(const Statement& stmt) override {
+            switch (stmt.fKind) {
+                case Statement::kSwitch_Kind:
+                case Statement::kWhile_Kind:
+                case Statement::kDo_Kind:
+                case Statement::kFor_Kind: {
+                    ++fInsideBreakableConstruct;
+                    bool result = this->INHERITED::visitStatement(stmt);
+                    --fInsideBreakableConstruct;
+                    return result;
+                }
+
+                case Statement::kReturn_Kind:
+                    fNumReturns += (fInsideBreakableConstruct > 0) ? 1 : 0;
+                    [[fallthrough]];
+
+                default:
+                    return this->INHERITED::visitStatement(stmt);
+            }
+        }
+
+        int fNumReturns = 0;
+        int fInsideBreakableConstruct = 0;
+        using INHERITED = ProgramVisitor;
+    };
+
+    return CountReturnsInBreakableConstructs{funcDef}.fNumReturns;
+}
+
+static bool has_early_return(const FunctionDefinition& funcDef) {
+    int returnCount = count_all_returns(funcDef);
     if (returnCount == 0) {
         return false;
     }
-    if (returnCount > 1) {
-        return true;
-    }
 
-    // Descend into the last statement of the block to see if it ends with a return statement.
-    // Sometimes the last statement of the function is actually another block, so we may need to
-    // descend more than once.
-    const Block* block = &f.fBody->as<Block>();
-    for (;;) {
-        if (block->fStatements.empty()) {
-            // The function ended with a totally empty block, but we know there's a return statement
-            // earlier in the function, so there must be an early return.
-            return true;
-        }
-        const Statement& lastStatement = *block->fStatements.back();
-        if (lastStatement.fKind == Statement::kReturn_Kind) {
-            // The last statement is a return; it's not early.
-            return false;
-        }
-        if (lastStatement.fKind != Statement::kBlock_Kind) {
-            // The last statement is not a sub-block but also not a return. We know there's a return
-            // statement earlier in the function, which must be an early return.
-            return true;
-        }
-        // The last statement is itself another block. We have to go deeper.
-        block = &lastStatement.as<Block>();
-    }
-}
-
-static bool has_return_in_breakable_construct(const FunctionDefinition& f) {
-    int returnCount =
-            return_count</*countTopLevelReturns=*/false>(*f.fBody, /*inLoopOrSwitch=*/false);
-    return returnCount > 0;
+    int returnsAtEndOfControlFlow = count_returns_at_end_of_control_flow(funcDef);
+    return returnCount > returnsAtEndOfControlFlow;
 }
 
 std::unique_ptr<Expression> IRGenerator::inlineCall(
@@ -2398,9 +2409,9 @@ std::unique_ptr<Expression> IRGenerator::inlineCall(
 
 void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
     auto found = fIntrinsics->find(function.description());
-    if (found != fIntrinsics->end() && !found->second.second) {
-        found->second.second = true;
-        FunctionDefinition& original = found->second.first->as<FunctionDefinition>();
+    if (found != fIntrinsics->end() && !found->second.fAlreadyIncluded) {
+        found->second.fAlreadyIncluded = true;
+        FunctionDefinition& original = found->second.fIntrinsic->as<FunctionDefinition>();
         for (const FunctionDeclaration* f : original.fReferencedIntrinsics) {
             this->copyIntrinsicIfNeeded(*f);
         }
@@ -2421,11 +2432,20 @@ bool IRGenerator::isSafeToInline(const FunctionDefinition& functionDef) {
     if (!fSettings->fCaps || !fSettings->fCaps->canUseDoLoops()) {
         // We don't have do-while loops. We use do-while loops to simulate early returns, so we
         // can't inline functions that have an early return.
-        return !has_early_return(functionDef);
+        bool hasEarlyReturn = has_early_return(functionDef);
+
+        // If we didn't detect an early return, there shouldn't be any returns in breakable
+        // constructs either.
+        SkASSERT(hasEarlyReturn || count_returns_in_breakable_constructs(functionDef) == 0);
+        return !hasEarlyReturn;
     }
     // We have do-while loops, but we don't have any mechanism to simulate early returns within a
     // breakable construct (switch/for/do/while), so we can't inline if there's a return inside one.
-    return !has_return_in_breakable_construct(functionDef);
+    bool hasReturnInBreakableConstruct = (count_returns_in_breakable_constructs(functionDef) > 0);
+
+    // If we detected returns in breakable constructs, we should also detect an early return.
+    SkASSERT(!hasReturnInBreakableConstruct || has_early_return(functionDef));
+    return !hasReturnInBreakableConstruct;
 }
 
 std::unique_ptr<Expression> IRGenerator::call(int offset,
@@ -3061,9 +3081,9 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
     if (!result) {
         auto found = fIntrinsics->find(type.fName);
         if (found != fIntrinsics->end()) {
-            SkASSERT(!found->second.second);
-            found->second.second = true;
-            fProgramElements->push_back(found->second.first->clone());
+            SkASSERT(!found->second.fAlreadyIncluded);
+            found->second.fAlreadyIncluded = true;
+            fProgramElements->push_back(found->second.fIntrinsic->clone());
             return this->convertTypeField(offset, type, field);
         }
         fErrors.error(offset, "type '" + type.fName + "' does not have a field named '" + field +

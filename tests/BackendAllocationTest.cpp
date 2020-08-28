@@ -275,7 +275,7 @@ static void check_base_readbacks(GrDirectContext* dContext, const GrBackendTextu
                                                       nullptr);
         if (img) {
             actual.erase(SkColors::kTransparent);
-            bool result = img->readPixels(actual, 0, 0);
+            bool result = img->readPixels(dContext, actual, 0, 0);
             if (!result) {
                 // TODO: we need a better way to tell a priori if readPixels will work for an
                 // arbitrary colorType
@@ -576,96 +576,6 @@ void check_vk_layout(const GrBackendTexture& backendTex, VkLayout layout) {
         SkASSERT(VK_IMAGE_TILING_OPTIMAL == vkII.fImageTiling);
     }
 #endif
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// This test is a bit different from the others in this file. It is mainly checking that, for any
-// SkSurface we can create in Ganesh, we can also create a backend texture that is compatible with
-// its characterization and then create a new surface that wraps that backend texture.
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CharacterizationBackendAllocationTest, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
-
-    for (int ct = 0; ct <= kLastEnum_SkColorType; ++ct) {
-        SkColorType colorType = static_cast<SkColorType>(ct);
-
-        SkImageInfo ii = SkImageInfo::Make(32, 32, colorType, kPremul_SkAlphaType);
-
-        for (auto origin : { kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin } ) {
-            for (bool mipMaps : { true, false } ) {
-                for (int sampleCount : {1, 2}) {
-                    SkSurfaceCharacterization c;
-
-                    // Get a characterization, if possible
-                    {
-                        sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo,
-                                                                         ii, sampleCount,
-                                                                         origin, nullptr, mipMaps);
-                        if (!s) {
-                            continue;
-                        }
-
-                        if (!s->characterize(&c)) {
-                            continue;
-                        }
-
-                        REPORTER_ASSERT(reporter, s->isCompatible(c));
-                    }
-
-                    // Test out uninitialized path
-                    {
-                        GrBackendTexture backendTex = context->createBackendTexture(c);
-                        check_vk_layout(backendTex, VkLayout::kUndefined);
-                        REPORTER_ASSERT(reporter, backendTex.isValid());
-                        REPORTER_ASSERT(reporter, c.isCompatible(backendTex));
-
-                        {
-                            GrBackendFormat format = context->defaultBackendFormat(
-                                                                    c.imageInfo().colorType(),
-                                                                    GrRenderable::kYes);
-                            REPORTER_ASSERT(reporter, format == backendTex.getBackendFormat());
-                        }
-
-                        sk_sp<SkSurface> s2 = SkSurface::MakeFromBackendTexture(context, c,
-                                                                                backendTex);
-                        REPORTER_ASSERT(reporter, s2);
-                        REPORTER_ASSERT(reporter, s2->isCompatible(c));
-
-                        s2 = nullptr;
-                        context->deleteBackendTexture(backendTex);
-                    }
-
-                    // Test out color-initialized path
-
-                    {
-
-                        bool finished = false;
-                        GrBackendTexture backendTex = context->createBackendTexture(c,
-                                                                                    SkColors::kRed,
-                                                                                    mark_signaled,
-                                                                                    &finished);
-                        check_vk_layout(backendTex, VkLayout::kReadOnlyOptimal);
-                        REPORTER_ASSERT(reporter, backendTex.isValid());
-                        REPORTER_ASSERT(reporter, c.isCompatible(backendTex));
-
-                        {
-                            GrBackendFormat format = context->defaultBackendFormat(
-                                                                    c.imageInfo().colorType(),
-                                                                    GrRenderable::kYes);
-                            REPORTER_ASSERT(reporter, format == backendTex.getBackendFormat());
-                        }
-
-                        sk_sp<SkSurface> s2 = SkSurface::MakeFromBackendTexture(context, c,
-                                                                                backendTex);
-                        REPORTER_ASSERT(reporter, s2);
-                        REPORTER_ASSERT(reporter, s2->isCompatible(c));
-
-                        s2 = nullptr;
-                        delete_backend_texture(context, backendTex, &finished);
-                    }
-                }
-            }
-        }
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
