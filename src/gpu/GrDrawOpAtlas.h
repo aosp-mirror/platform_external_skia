@@ -141,11 +141,15 @@ public:
 
         GrIRect16 rect() const { return fRect; }
 
+        void updatePlotLocator(PlotLocator p) {
+            fPlotLocator = p;
+        }
+
+        void updateRect(GrIRect16 rect) {
+            fRect = rect;
+        }
+
     private:
-        friend class GrDrawOpAtlas;
-
-        SkDEBUGCODE(void validate(const GrDrawOpAtlas*) const;)
-
         PlotLocator fPlotLocator{0, 0, 0};
 
         // The inset padded bounds in the atlas.
@@ -212,9 +216,10 @@ public:
      */
     static std::pair<uint16_t, uint16_t> PackIndexInTexCoords(
             uint16_t u, uint16_t v, int pageIndex) {
-        // Pack the two bits of page in bits 14 and 15 of u.
+        // Pack the two bits of page in bits 13 and 14 of u.
         SkASSERT(0 <= pageIndex && pageIndex < 4);
-        u |= pageIndex << 14;
+        u &= 0x1FFF;
+        u |= pageIndex << 13;
         return std::make_pair(u, v);
     }
 
@@ -393,7 +398,7 @@ private:
         }
         SkDEBUGCODE(size_t bpp() const { return fBytesPerPixel; })
 
-        bool addSubImage(int width, int height, const void* image, GrIRect16* rect);
+        bool addSubImage(int width, int height, const void* image, AtlasLocator* atlasLocator);
 
         /**
          * To manage the lifetime of a plot, we use two tokens. We use the last upload token to
@@ -518,6 +523,8 @@ private:
     uint32_t fMaxPages;
 
     uint32_t fNumActivePages;
+
+    SkDEBUGCODE(void validate(const AtlasLocator& atlasLocator) const;)
 };
 
 // There are three atlases (A8, 565, ARGB) that are kept in relation with one another. In
