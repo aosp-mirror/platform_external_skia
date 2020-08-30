@@ -97,11 +97,11 @@ GrFPResult GrConvexPolyEffect::Make(std::unique_ptr<GrFragmentProcessor> inputFP
         return GrFPFailure(std::move(inputFP));
     }
 
-    SkPathPriv::FirstDirection dir;
+    SkPathFirstDirection dir = SkPathPriv::ComputeFirstDirection(path);
     // The only way this should fail is if the clip is effectively a infinitely thin line. In that
     // case nothing is inside the clip. It'd be nice to detect this at a higher level and either
     // skip the draw or omit the clip element.
-    if (!SkPathPriv::CheapComputeFirstDirection(path, &dir)) {
+    if (dir == SkPathFirstDirection::kUnknown) {
         if (GrProcessorEdgeTypeIsInverseFill(type)) {
             return GrFPSuccess(
                     GrFragmentProcessor::ModulateRGBA(std::move(inputFP), SK_PMColor4fWHITE));
@@ -138,7 +138,7 @@ GrFPResult GrConvexPolyEffect::Make(std::unique_ptr<GrFragmentProcessor> inputFP
                 if (pts[0] != pts[1]) {
                     SkVector v = pts[1] - pts[0];
                     v.normalize();
-                    if (SkPathPriv::kCCW_FirstDirection == dir) {
+                    if (SkPathFirstDirection::kCCW == dir) {
                         edges[3 * n] = v.fY;
                         edges[3 * n + 1] = -v.fX;
                     } else {

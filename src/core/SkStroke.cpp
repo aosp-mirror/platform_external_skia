@@ -1504,7 +1504,7 @@ DONE:
     stroker.done(dst, lastSegment == SkPath::kLine_Verb);
 
     if (fDoFill && !ignoreCenter) {
-        if (SkPathPriv::CheapIsFirstDirection(src, SkPathPriv::kCCW_FirstDirection)) {
+        if (SkPathPriv::ComputeFirstDirection(src) == SkPathFirstDirection::kCCW) {
             dst->reverseAddPath(src);
         } else {
             dst->addPath(src);
