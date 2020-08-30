@@ -24,31 +24,34 @@ static void append_index_uv_varyings(GrGLSLPrimitiveProcessor::EmitArgs& args,
                                      GrGLSLVarying* st) {
     using Interpolation = GrGLSLVaryingHandler::Interpolation;
     // This extracts the texture index and texel coordinates from the same variable
-    // Packing structure: texel coordinates have the 2-bit texture page encoded in bit 15 of uv,
-    // with the high bit of the page in u, and to low bit in v.
+    // Packing structure: texel coordinates have the 2-bit texture page encoded in bits 13 & 14 of
+    // the x coordinate. It would be nice to use bits 14 and 15, but iphone6 has problem with those
+    // bits when in gles. Iphone6 works fine with bits 14 and 15 in metal.
     if (args.fShaderCaps->integerSupport()) {
-        args.fVertBuilder->codeAppendf("int2 coords = int2(%s.x, %s.y);",
-                                       inTexCoordsName, inTexCoordsName);
-        args.fVertBuilder->codeAppend(
-                "float2 unormTexCoords = float2(coords.x & 0x7FFF, coords.y & 0x7FFF);");
         if (numTextureSamplers <= 1) {
-            args.fVertBuilder->codeAppend("int texIdx = 0;");
+            args.fVertBuilder->codeAppendf(R"code(
+                int texIdx = 0;
+                float2 unormTexCoords = float2(%s.x, %s.y);
+           )code", inTexCoordsName, inTexCoordsName);
         } else {
-            args.fVertBuilder->codeAppend(
-                    "int texIdx = ((coords.x >> 14) & 0x2) + ((coords.y >> 15) & 0x1);");
+            args.fVertBuilder->codeAppendf(R"code(
+                int2 coords = int2(%s.x, %s.y);
+                int texIdx = coords.x >> 13;
+                float2 unormTexCoords = float2(coords.x & 0x1FFF, coords.y);
+            )code", inTexCoordsName, inTexCoordsName);
         }
     } else {
-        args.fVertBuilder->codeAppendf("float2 coord = float2(%s.x, %s.y);",
-                                       inTexCoordsName, inTexCoordsName);
-        args.fVertBuilder->codeAppend(R"code(
-            float2 unitTexCoords = exp2(-15) * coord;
-            float2 highBits = floor(unitTexCoords);
-            float2 unormTexCoords = coord - exp2(15) * highBits;
-        )code");
         if (numTextureSamplers <= 1) {
-            args.fVertBuilder->codeAppend("float texIdx = 0;");
+            args.fVertBuilder->codeAppendf(R"code(
+                float texIdx = 0;
+                float2 unormTexCoords = float2(%s.x, %s.y);
+            )code", inTexCoordsName, inTexCoordsName);
         } else {
-            args.fVertBuilder->codeAppend("float texIdx = highBits.x * 2.0 + highBits.y;");
+            args.fVertBuilder->codeAppendf(R"code(
+                float2 coord = float2(%s.x, %s.y);
+                float texIdx = floor(coord.x * exp2(-13));
+                float2 unormTexCoords = float2(coord.x - texIdx * exp2(13), coord.y);
+            )code", inTexCoordsName, inTexCoordsName);
         }
     }
 

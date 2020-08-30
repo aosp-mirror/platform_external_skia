@@ -147,11 +147,12 @@ SkPath::SkPath()
     fIsVolatile = false;
 }
 
-SkPath::SkPath(sk_sp<SkPathRef> pr, SkPathFillType ft, bool isVolatile, SkPathConvexityType ct)
+SkPath::SkPath(sk_sp<SkPathRef> pr, SkPathFillType ft, bool isVolatile, SkPathConvexityType ct,
+               uint8_t firstDirection)
     : fPathRef(std::move(pr))
     , fLastMoveToIndex(INITIAL_LASTMOVETOINDEX_VALUE)
     , fConvexity((uint8_t)ct)
-    , fFirstDirection(SkPathPriv::kUnknown_FirstDirection)
+    , fFirstDirection(firstDirection)
     , fFillType((unsigned)ft)
     , fIsVolatile(isVolatile)
 {}
@@ -2174,14 +2175,19 @@ private:
     bool                fIsFinite { true };
 };
 
-SkPathConvexityType SkPath::internalGetConvexity() const {
+SkPathConvexityType SkPath::computeConvexity() const {
     SkPoint         pts[4];
     SkPath::Verb    verb;
     SkPath::Iter    iter(*this, true);
+
     auto setComputedConvexity = [=](SkPathConvexityType convexity){
         SkASSERT(SkPathConvexityType::kUnknown != convexity);
         this->setConvexityType(convexity);
         return convexity;
+    };
+
+    auto setFail = [=](){
+        return setComputedConvexity(SkPathConvexityType::kConcave);
     };
 
     // Check to see if path changes direction more than three times as quick concave test
@@ -2199,25 +2205,17 @@ SkPathConvexityType SkPath::internalGetConvexity() const {
         }
         --points;
         SkPathConvexityType convexity = Convexicator::BySign(points, (int) (last - points));
-        if (SkPathConvexityType::kConcave == convexity) {
+        if (SkPathConvexityType::kConvex != convexity) {
             return setComputedConvexity(SkPathConvexityType::kConcave);
-        } else if (SkPathConvexityType::kUnknown == convexity) {
-            return SkPathConvexityType::kUnknown;
         }
         iter.setPath(*this, true);
     } else if (!this->isFinite()) {
-        return SkPathConvexityType::kUnknown;
+        return setFail();
     }
 
     int             contourCount = 0;
     int             count;
     Convexicator    state;
-    auto setFail = [=](){
-        if (!state.isFinite()) {
-            return SkPathConvexityType::kUnknown;
-        }
-        return setComputedConvexity(SkPathConvexityType::kConcave);
-    };
 
     while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
         switch (verb) {
@@ -3387,7 +3385,7 @@ SkPath SkPath::Make(const SkPoint pts[], int pointCount,
                                                  SkTDArray<uint8_t>(vbs, verbCount),
                                                  SkTDArray<SkScalar>(ws, info.weights),
                                                  info.segmentMask)),
-                  ft, isVolatile, SkPathConvexityType::kUnknown);
+              ft, isVolatile, SkPathConvexityType::kUnknown, SkPathPriv::kUnknown_FirstDirection);
 }
 
 SkPath SkPath::Rect(const SkRect& r, SkPathDirection dir, unsigned startIndex) {
