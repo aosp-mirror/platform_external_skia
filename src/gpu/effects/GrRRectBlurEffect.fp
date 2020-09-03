@@ -179,7 +179,7 @@ uniform half blurRadius;
         const int halfWidthPlus1 = (dimensions.width() / 2) + 1;
         const int halfHeightPlus1 = (dimensions.height() / 2) + 1;
 
-        std::unique_ptr<float> kernel(new float[kernelSize]);
+        std::unique_ptr<float[]> kernel(new float[kernelSize]);
 
         SkFillIn1DGaussianKernel(kernel.get(), xformedSigma, radius);
 
@@ -199,10 +199,10 @@ uniform half blurRadius;
             if (x < rrectToDraw.rect().fLeft || x > rrectToDraw.rect().fRight) {
                 topVec.push_back(-1);
             } else {
-                if (x+0.5f < rrectToDraw.rect().fLeft + radii.fX) {
-                    float foo = rrectToDraw.rect().fLeft + radii.fX - x - 0.5f;
-                    float h = sqrtf(radii.fX * radii.fX - foo * foo);
-                    SkASSERT(0 <= h && h < radii.fX);
+                if (x+0.5f < rrectToDraw.rect().fLeft + radii.fX) { // in the circular section
+                    float xDist = rrectToDraw.rect().fLeft + radii.fX - x - 0.5f;
+                    float h = sqrtf(radii.fX * radii.fX - xDist * xDist);
+                    SkASSERT(0 <= h && h < radii.fY);
                     topVec.push_back(rrectToDraw.rect().fTop+radii.fX-h + 3*xformedSigma);
                 } else {
                     topVec.push_back(rrectToDraw.rect().fTop + 3*xformedSigma);
