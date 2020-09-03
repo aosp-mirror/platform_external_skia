@@ -157,7 +157,7 @@ static GrSurfaceProxyView create_mask_on_cpu(GrRecordingContext* context,
     const int halfWidthPlus1 = (dimensions.width() / 2) + 1;
     const int halfHeightPlus1 = (dimensions.height() / 2) + 1;
 
-    std::unique_ptr<float> kernel(new float[kernelSize]);
+    std::unique_ptr<float[]> kernel(new float[kernelSize]);
 
     SkFillIn1DGaussianKernel(kernel.get(), xformedSigma, radius);
 
@@ -177,10 +177,10 @@ static GrSurfaceProxyView create_mask_on_cpu(GrRecordingContext* context,
         if (x < rrectToDraw.rect().fLeft || x > rrectToDraw.rect().fRight) {
             topVec.push_back(-1);
         } else {
-            if (x + 0.5f < rrectToDraw.rect().fLeft + radii.fX) {
-                float foo = rrectToDraw.rect().fLeft + radii.fX - x - 0.5f;
-                float h = sqrtf(radii.fX * radii.fX - foo * foo);
-                SkASSERT(0 <= h && h < radii.fX);
+            if (x + 0.5f < rrectToDraw.rect().fLeft + radii.fX) {  // in the circular section
+                float xDist = rrectToDraw.rect().fLeft + radii.fX - x - 0.5f;
+                float h = sqrtf(radii.fX * radii.fX - xDist * xDist);
+                SkASSERT(0 <= h && h < radii.fY);
                 topVec.push_back(rrectToDraw.rect().fTop + radii.fX - h + 3 * xformedSigma);
             } else {
                 topVec.push_back(rrectToDraw.rect().fTop + 3 * xformedSigma);
@@ -337,18 +337,18 @@ half2 texCoord = translatedFragPos / proxyDims;)SkSL",
                 args.fUniformHandler->getUniformCStr(proxyRectVar),
                 args.fUniformHandler->getUniformCStr(blurRadiusVar),
                 args.fUniformHandler->getUniformCStr(cornerRadiusVar));
-        SkString _sample15496 = this->invokeChild(0, args);
+        SkString _sample15531 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(
 half4 inputColor = %s;)SkSL",
-                _sample15496.c_str());
-        SkString _coords15544("float2(texCoord)");
-        SkString _sample15544 = this->invokeChild(1, args, _coords15544.c_str());
+                _sample15531.c_str());
+        SkString _coords15579("float2(texCoord)");
+        SkString _sample15579 = this->invokeChild(1, args, _coords15579.c_str());
         fragBuilder->codeAppendf(
                 R"SkSL(
 %s = inputColor * %s;
 )SkSL",
-                args.fOutputColor, _sample15544.c_str());
+                args.fOutputColor, _sample15579.c_str());
     }
 
 private:
