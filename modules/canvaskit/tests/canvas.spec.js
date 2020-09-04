@@ -22,7 +22,8 @@ describe('Canvas Behavior', () => {
         paint.setStyle(CanvasKit.PaintStyle.Stroke);
 
         canvas.drawLine(3, 10, 30, 15, paint);
-        canvas.drawRoundRect(CanvasKit.LTRBRect(5, 35, 45, 80), 15, 10, paint);
+        const rrect = CanvasKit.RRectXY([5, 35, 45, 80], 15, 10);
+        canvas.drawRRect(rrect, paint);
 
         canvas.drawOval(CanvasKit.LTRBRect(5, 35, 45, 80), paint);
 
@@ -177,18 +178,43 @@ describe('Canvas Behavior', () => {
 
         canvas.clear(CanvasKit.WHITE);
 
-        canvas.drawRRect({
-          rect: CanvasKit.LTRBRect(10, 10, 210, 210),
-          rx1: 10, // top left corner, going clockwise
-          ry1: 30,
-          rx2: 30,
-          ry2: 10,
-          rx3: 50,
-          ry3: 75,
-          rx4: 120,
-          ry4: 120,
-        }, paint);
+        canvas.drawRRect([10, 10, 210, 210,
+          // top left corner, going clockwise
+          10, 30,
+          30, 10,
+          50, 75,
+          120, 120,
+        ], paint);
 
+        path.delete();
+        paint.delete();
+    });
+
+    // As above, except with the array passed in via malloc'd memory.
+    gm('rrect_8corners_malloc_canvas', (canvas) => {
+        const path = starPath(CanvasKit);
+
+        const paint = new CanvasKit.SkPaint();
+
+        paint.setStyle(CanvasKit.PaintStyle.Stroke);
+        paint.setStrokeWidth(3.0);
+        paint.setAntiAlias(true);
+        paint.setColor(CanvasKit.BLACK);
+
+        canvas.clear(CanvasKit.WHITE);
+
+        const rrect = CanvasKit.Malloc(Float32Array, 12);
+        rrect.toTypedArray().set([10, 10, 210, 210,
+          // top left corner, going clockwise
+          10, 30,
+          30, 10,
+          50, 75,
+          120, 120,
+        ]);
+
+        canvas.drawRRect(rrect, paint);
+
+        CanvasKit.Free(rrect);
         path.delete();
         paint.delete();
     });
@@ -233,7 +259,7 @@ describe('Canvas Behavior', () => {
         paint.setColorFilter(lerp)
         canvas.drawRect(CanvasKit.LTRBRect(50, 10, 100, 60), paint);
         paint.setColorFilter(red)
-        canvas.drawRect(CanvasKit.LTRBRect(90, 10, 140, 60), paint);
+        canvas.drawRect4f(90, 10, 140, 60, paint);
 
         const r = CanvasKit.SkColorMatrix.rotated(0, .707, -.707);
         const b = CanvasKit.SkColorMatrix.rotated(2, .5, .866);
@@ -410,7 +436,7 @@ describe('Canvas Behavior', () => {
         // The rectangle is just a hint, so I've set it to be the area that
         // we actually draw in before restore is called. It could also be omitted,
         // see the test below.
-        canvas.saveLayer(CanvasKit.LTRBRect(10, 10, 220, 180), alpha);
+        canvas.saveLayer(alpha, CanvasKit.LTRBRect(10, 10, 220, 180));
 
         // Draw the same blue overlapping rectangles as before. Notice in the
         // final output, we have two different shades of purple instead of the
@@ -511,7 +537,7 @@ describe('Canvas Behavior', () => {
 
         const blurIF = CanvasKit.SkImageFilter.MakeBlur(8, 0.2, CanvasKit.TileMode.Decal, null);
 
-        const count = canvas.saveLayer(null, blurIF, 0);
+        const count = canvas.saveLayer(null, null, blurIF, 0);
         expect(count).toEqual(1);
         canvas.scale(1/4, 1/4);
         canvas.drawCircle(125, 85, 8, redPaint);
@@ -568,12 +594,8 @@ describe('Canvas Behavior', () => {
         canvas.clear(CanvasKit.WHITE);
         const paint = new CanvasKit.SkPaint();
 
-        canvas.drawImageNine(img, {
-            fLeft: 40,
-            fTop: 40,
-            fRight: 400,
-            fBottom: 300,
-        }, CanvasKit.LTRBRect(5, 5, 300, 650), paint);
+        canvas.drawImageNine(img, CanvasKit.LTRBiRect(40, 40, 400, 300),
+            CanvasKit.LTRBRect(5, 5, 300, 650), paint);
         paint.delete();
         img.delete();
     }, '/assets/mandrill_512.png');
@@ -590,10 +612,7 @@ describe('Canvas Behavior', () => {
             points, null /*textureCoordinates*/, colors, false /*isVolatile*/);
 
         const bounds = vertices.bounds();
-        expect(bounds.fLeft).toEqual(0);
-        expect(bounds.fTop).toEqual(0);
-        expect(bounds.fRight).toEqual(250);
-        expect(bounds.fBottom).toEqual(250);
+        expect(bounds).toEqual(CanvasKit.LTRBRect(0, 0, 250, 250));
 
         canvas.drawVertices(vertices, CanvasKit.BlendMode.Src, paint);
         vertices.delete();
@@ -612,10 +631,7 @@ describe('Canvas Behavior', () => {
             points, null /*textureCoordinates*/, colors, false /*isVolatile*/);
 
         const bounds = vertices.bounds();
-        expect(bounds.fLeft).toEqual(0);
-        expect(bounds.fTop).toEqual(0);
-        expect(bounds.fRight).toEqual(250);
-        expect(bounds.fBottom).toEqual(250);
+        expect(bounds).toEqual(CanvasKit.LTRBRect(0, 0, 250, 250));
 
         canvas.drawVertices(vertices, CanvasKit.BlendMode.Src, paint);
         vertices.delete();

@@ -33,17 +33,26 @@ struct ProgramElement : public IRNode {
     , fKind(kind) {}
 
     /**
+     *  Use is<T> to check the type of a program element.
+     *  e.g. replace `el.fKind == ProgramElement::kEnum_Kind` with `el.is<Enum>()`.
+     */
+    template <typename T>
+    bool is() const {
+        return this->fKind == T::kProgramElementKind;
+    }
+
+    /**
      *  Use as<T> to downcast program elements. e.g. replace `(Enum&) el` with `el.as<Enum>()`.
      */
     template <typename T>
     const T& as() const {
-        SkASSERT(this->fKind == T::kProgramElementKind);
+        SkASSERT(this->is<T>());
         return static_cast<const T&>(*this);
     }
 
     template <typename T>
     T& as() {
-        SkASSERT(this->fKind == T::kProgramElementKind);
+        SkASSERT(this->is<T>());
         return static_cast<T&>(*this);
     }
 
@@ -51,7 +60,7 @@ struct ProgramElement : public IRNode {
 
     virtual std::unique_ptr<ProgramElement> clone() const = 0;
 
-    typedef IRNode INHERITED;
+    using INHERITED = IRNode;
 };
 
 }  // namespace SkSL
