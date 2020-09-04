@@ -1835,6 +1835,7 @@ cc_test {
         "tests/SkSLErrorTest.cpp",
         "tests/SkSLFPTest.cpp",
         "tests/SkSLGLSLTest.cpp",
+        "tests/SkSLInlinerTest.cpp",
         "tests/SkSLInterpreterTest.cpp",
         "tests/SkSLMemoryLayoutTest.cpp",
         "tests/SkSLMetalTest.cpp",

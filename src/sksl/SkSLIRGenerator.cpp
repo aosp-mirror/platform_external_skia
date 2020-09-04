@@ -201,6 +201,13 @@ void IRGenerator::start(const Program::Settings* settings,
 }
 
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragment name) {
+    if (fKind != Program::kFragment_Kind &&
+        fKind != Program::kVertex_Kind &&
+        fKind != Program::kGeometry_Kind) {
+        fErrors.error(offset, "extensions are not allowed here");
+        return nullptr;
+    }
+
     return std::make_unique<Extension>(offset, name);
 }
 
@@ -473,6 +480,13 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
 }
 
 std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(const ASTNode& m) {
+    if (fKind != Program::kFragment_Kind &&
+        fKind != Program::kVertex_Kind &&
+        fKind != Program::kGeometry_Kind) {
+        fErrors.error(m.fOffset, "layout qualifiers are not allowed here");
+        return nullptr;
+    }
+
     SkASSERT(m.fKind == ASTNode::Kind::kModifiers);
     Modifiers modifiers = m.getModifiers();
     if (modifiers.fLayout.fInvocations != -1) {
@@ -498,6 +512,42 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
     return std::make_unique<ModifiersDeclaration>(modifiers);
 }
 
+static void ensure_scoped_blocks(Statement* stmt) {
+    // No changes necessary if this statement isn't actually a block.
+    if (stmt->fKind != Statement::kBlock_Kind) {
+        return;
+    }
+
+    Block& block = stmt->as<Block>();
+
+    // Occasionally, IR generation can lead to Blocks containing multiple statements, but no scope.
+    // If this block is used as the statement for a while/if/for, this isn't actually possible to
+    // represent textually; a scope must be added for the generated code to match the intent. In the
+    // case of Blocks nested inside other Blocks, we add the scope to the outermost block if needed.
+    // Zero-statement blocks have similar issues--if we don't represent the Block textually somehow,
+    // we run the risk of accidentally absorbing the following statement into our loop--so we also
+    // add a scope to these.
+    for (Block* nestedBlock = &block;; ) {
+        if (nestedBlock->fIsScope) {
+            // We found an explicit scope; all is well.
+            return;
+        }
+        if (nestedBlock->fStatements.size() != 1) {
+            // We found a block with multiple (or zero) statements, but no scope? Let's add a scope
+            // to the outermost block.
+            block.fIsScope = true;
+            return;
+        }
+        if (nestedBlock->fStatements[0]->fKind != Statement::kBlock_Kind) {
+            // This block has exactly one thing inside, and it's not another block. No need to scope
+            // it.
+            return;
+        }
+        // We have to go deeper.
+        nestedBlock = &nestedBlock->fStatements[0]->as<Block>();
+    }
+}
+
 std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     SkASSERT(n.fKind == ASTNode::Kind::kIf);
     auto iter = n.begin();
@@ -510,12 +560,14 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     if (!ifTrue) {
         return nullptr;
     }
+    ensure_scoped_blocks(ifTrue.get());
     std::unique_ptr<Statement> ifFalse;
     if (iter != n.end()) {
         ifFalse = this->convertStatement(*(iter++));
         if (!ifFalse) {
             return nullptr;
         }
+        ensure_scoped_blocks(ifFalse.get());
     }
     if (test->fKind == Expression::kBoolLiteral_Kind) {
         // static boolean value, fold down to a single branch
@@ -525,13 +577,11 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
             return ifFalse;
         } else {
             // False & no else clause. Not an error, so don't return null!
-            std::vector<std::unique_ptr<Statement>> empty;
-            return std::unique_ptr<Statement>(new Block(n.fOffset, std::move(empty),
-                                                        fSymbolTable));
+            return std::make_unique<Nop>();
         }
     }
-    return std::unique_ptr<Statement>(new IfStatement(n.fOffset, n.getBool(), std::move(test),
-                                                      std::move(ifTrue), std::move(ifFalse)));
+    return std::make_unique<IfStatement>(n.fOffset, n.getBool(),
+                                         std::move(test), std::move(ifTrue), std::move(ifFalse));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
@@ -571,6 +621,7 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
     if (!statement) {
         return nullptr;
     }
+    ensure_scoped_blocks(statement.get());
     return std::make_unique<ForStatement>(f.fOffset, std::move(initializer), std::move(test),
                                           std::move(next), std::move(statement), fSymbolTable);
 }
@@ -591,6 +642,7 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     if (!statement) {
         return nullptr;
     }
+    ensure_scoped_blocks(statement.get());
     return std::make_unique<WhileStatement>(w.fOffset, std::move(test), std::move(statement));
 }
 
@@ -602,6 +654,7 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (!statement) {
         return nullptr;
     }
+    ensure_scoped_blocks(statement.get());
     std::unique_ptr<Expression> test;
     {
         AutoDisableInline disableInline(this);
@@ -1078,6 +1131,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
 }
 
 std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
+    if (fKind != Program::kFragment_Kind &&
+        fKind != Program::kVertex_Kind &&
+        fKind != Program::kGeometry_Kind) {
+        fErrors.error(intf.fOffset, "interface block is not allowed here");
+        return nullptr;
+    }
+
     SkASSERT(intf.fKind == ASTNode::Kind::kInterfaceBlock);
     ASTNode::InterfaceBlockData id = intf.getInterfaceBlockData();
     std::shared_ptr<SymbolTable> old = fSymbolTable;
@@ -1191,6 +1251,11 @@ bool IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
 }
 
 void IRGenerator::convertEnum(const ASTNode& e) {
+    if (fKind == Program::kPipelineStage_Kind) {
+        fErrors.error(e.fOffset, "enum is not allowed here");
+        return;
+    }
+
     SkASSERT(e.fKind == ASTNode::Kind::kEnum);
     int64_t currentValue = 0;
     Layout layout;
@@ -1381,6 +1446,11 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
 }
 
 std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
+    if (fKind != Program::kFragmentProcessor_Kind) {
+        fErrors.error(s.fOffset, "syntax error");
+        return nullptr;
+    }
+
     ASTNode::SectionData section = s.getSectionData();
     return std::make_unique<Section>(s.fOffset, section.fName, section.fArgument,
                                                 section.fText);
@@ -1879,13 +1949,18 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
     if (!test) {
         return nullptr;
     }
-    std::unique_ptr<Expression> ifTrue = this->convertExpression(*(iter++));
-    if (!ifTrue) {
-        return nullptr;
-    }
-    std::unique_ptr<Expression> ifFalse = this->convertExpression(*(iter++));
-    if (!ifFalse) {
-        return nullptr;
+    std::unique_ptr<Expression> ifTrue;
+    std::unique_ptr<Expression> ifFalse;
+    {
+        AutoDisableInline disableInline(this);
+        ifTrue = this->convertExpression(*(iter++));
+        if (!ifTrue) {
+            return nullptr;
+        }
+        ifFalse = this->convertExpression(*(iter++));
+        if (!ifFalse) {
+            return nullptr;
+        }
     }
     const Type* trueType;
     const Type* falseType;
@@ -1918,10 +1993,10 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
             return ifFalse;
         }
     }
-    return std::unique_ptr<Expression>(new TernaryExpression(node.fOffset,
-                                                             std::move(test),
-                                                             std::move(ifTrue),
-                                                             std::move(ifFalse)));
+    return std::make_unique<TernaryExpression>(node.fOffset,
+                                               std::move(test),
+                                               std::move(ifTrue),
+                                               std::move(ifFalse));
 }
 
 void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {

@@ -80,7 +80,7 @@ private:
     MorphType fType;
     SkSize    fRadius;
 
-    typedef SkImageFilter_Base INHERITED;
+    using INHERITED = SkImageFilter_Base;
 };
 
 } // end namespace
@@ -221,7 +221,7 @@ private:
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 GrGLSLFragmentProcessor* GrMorphologyEffect::onCreateGLSLInstance() const {
@@ -637,7 +637,9 @@ sk_sp<SkSpecialImage> SkMorphologyImageFilterImpl::onFilterImage(const Context& 
     int height = SkScalarRoundToInt(radius.height());
 
     // Width (or height) must fit in a signed 32-bit int to avoid UBSAN issues (crbug.com/1018190)
-    constexpr int kMaxRadius = (std::numeric_limits<int>::max() - 1) / 2;
+    // Further, we limit the radius to something much smaller, to avoid extremely slow draw calls:
+    // (crbug.com/1123035):
+    constexpr int kMaxRadius = 100; // (std::numeric_limits<int>::max() - 1) / 2;
 
     if (width < 0 || height < 0 || width > kMaxRadius || height > kMaxRadius) {
         return nullptr;

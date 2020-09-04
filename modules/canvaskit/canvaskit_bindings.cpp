@@ -106,6 +106,19 @@ SkColor4f ptrToSkColor4f(uintptr_t /* float* */ cPtr) {
     return color;
 }
 
+SkRRect ptrToSkRRect(uintptr_t /* float* */ fPtr) {
+    // In order, these floats should be 4 floats for the rectangle
+    // (left, top, right, bottom) and then 8 floats for the radii
+    // (upper left, upper right, lower right, lower left).
+    const SkScalar* twelveFloats = reinterpret_cast<const SkScalar*>(fPtr);
+    const SkRect rect = reinterpret_cast<const SkRect*>(twelveFloats)[0];
+    const SkVector* radiiValues = reinterpret_cast<const SkVector*>(twelveFloats + 4);
+
+    SkRRect rr;
+    rr.setRectRadii(rect, radiiValues);
+    return rr;
+}
+
 // Surface creation structs and helpers
 struct SimpleImageInfo {
     int width;
@@ -210,15 +223,6 @@ sk_sp<SkSurface> MakeRenderTarget(sk_sp<GrContext> grContext, SimpleImageInfo si
 // isn't assigned to a JS variable and has delete() called on it.
 // These Apply methods, combined with the smarter binding code allow for chainable
 // commands that don't leak if the return value is ignored (i.e. when used intuitively).
-
-void ApplyAddArc(SkPath& orig, const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle) {
-    orig.addArc(oval, startAngle, sweepAngle);
-}
-
-void ApplyAddOval(SkPath& orig, const SkRect& oval, bool ccw, unsigned start) {
-    orig.addOval(oval, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW, start);
-}
-
 void ApplyAddPath(SkPath& orig, const SkPath& newPath,
                    SkScalar scaleX, SkScalar skewX,  SkScalar transX,
                    SkScalar skewY,  SkScalar scaleY, SkScalar transY,
@@ -231,27 +235,9 @@ void ApplyAddPath(SkPath& orig, const SkPath& newPath,
                                           SkPath::kAppend_AddPathMode);
 }
 
-void ApplyAddRect(SkPath& path, SkScalar left, SkScalar top,
-                  SkScalar right, SkScalar bottom, bool ccw) {
-    path.addRect(left, top, right, bottom, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
-}
-
-void ApplyAddRoundRect(SkPath& path, SkScalar left, SkScalar top,
-                  SkScalar right, SkScalar bottom, uintptr_t /* SkScalar*  */ rPtr,
-                  bool ccw) {
-    // See comment below for uintptr_t explanation
-    const SkScalar* radii = reinterpret_cast<const SkScalar*>(rPtr);
-    path.addRoundRect(SkRect::MakeLTRB(left, top, right, bottom), radii,
-                      ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
-}
-
 void ApplyArcToTangent(SkPath& p, SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                 SkScalar radius) {
     p.arcTo(x1, y1, x2, y2, radius);
-}
-
-void ApplyArcToOval(SkPath& p, SkRect& oval, SkScalar startAngle, SkScalar sweepAngle, bool forceMoveTo) {
-    p.arcTo(oval, startAngle, sweepAngle, forceMoveTo);
 }
 
 void ApplyArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
@@ -674,42 +660,10 @@ void drawShapedText(SkCanvas& canvas, ShapedText st, SkScalar x,
 }
 #endif //SK_NO_FONTS
 
-int saveLayerRec(SkCanvas& canvas, const SkPaint* paint,
-                 const SkImageFilter* backdrop, SkCanvas::SaveLayerFlags flags) {
-    return canvas.saveLayer(SkCanvas::SaveLayerRec(nullptr, paint, backdrop, flags));
-}
-
-int saveLayerRecBounds(SkCanvas& canvas, const SkPaint* paint, const SkImageFilter* backdrop,
-                       SkCanvas::SaveLayerFlags flags, const SkRect& bounds) {
-    return canvas.saveLayer(SkCanvas::SaveLayerRec(&bounds, paint, backdrop, flags));
-}
-
 // This is simpler than dealing with an SkPoint and SkVector
 struct PosTan {
     SkScalar px, py, tx, ty;
 };
-
-// SimpleRRect is simpler than passing a (complex) SkRRect over the wire to JS.
-struct SimpleRRect {
-    SkRect rect;
-
-    SkScalar rx1;
-    SkScalar ry1;
-    SkScalar rx2;
-    SkScalar ry2;
-    SkScalar rx3;
-    SkScalar ry3;
-    SkScalar rx4;
-    SkScalar ry4;
-};
-
-SkRRect toRRect(const SimpleRRect& r) {
-    SkVector fRadii[4] = {{r.rx1, r.ry1}, {r.rx2, r.ry2},
-                          {r.rx3, r.ry3}, {r.rx4, r.ry4}};
-    SkRRect rr;
-    rr.setRectRadii(r.rect, fRadii);
-    return rr;
-}
 
 // This function is private, we call it in interface.js
 void computeTonalColors(uintptr_t cPtrAmbi /* float * */, uintptr_t cPtrSpot /* float * */) {
@@ -838,7 +792,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
     function("_MakeImage", optional_override([](SimpleImageInfo ii,
                                                 uintptr_t /* uint8_t*  */ pPtr, int plen,
                                                 size_t rowBytes)->sk_sp<SkImage> {
-        // See comment above for uintptr_t explanation
         uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
         SkImageInfo info = toSkImageInfo(ii);
         sk_sp<SkData> pixelData = SkData::MakeFromMalloc(pixels, plen);
@@ -856,7 +809,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                 uintptr_t /* SkScalar*  */ mPtr,
                                 sk_sp<SkColorSpace> colorSpace)->sk_sp<SkShader> {
         SkPoint points[] = { start, end };
-        // See comment above for uintptr_t explanation
         const SkScalar* positions = reinterpret_cast<const SkScalar*>(pPtr);
         OptionalMatrix localMatrix(mPtr);
 
@@ -876,7 +828,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
 #ifdef SK_SERIALIZE_SKP
     function("_MakeSkPicture", optional_override([](uintptr_t /* unint8_t* */ dPtr,
                                                     size_t bytes)->sk_sp<SkPicture> {
-        // See comment above for uintptr_t explanation
         uint8_t* d = reinterpret_cast<uint8_t*>(dPtr);
         sk_sp<SkData> data = SkData::MakeFromMalloc(d, bytes);
 
@@ -889,7 +840,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                 int count, SkTileMode mode, uint32_t flags,
                                 uintptr_t /* SkScalar*  */ mPtr,
                                 sk_sp<SkColorSpace> colorSpace)->sk_sp<SkShader> {
-        // See comment above for uintptr_t explanation
         const SkScalar* positions = reinterpret_cast<const SkScalar*>(pPtr);
         OptionalMatrix localMatrix(mPtr);
         if (colorType == SkColorType::kRGBA_F32_SkColorType) {
@@ -913,7 +863,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                 uint32_t flags,
                                 uintptr_t /* SkScalar*  */ mPtr,
                                 sk_sp<SkColorSpace> colorSpace)->sk_sp<SkShader> {
-        // See comment above for uintptr_t explanation
         const SkScalar* positions = reinterpret_cast<const SkScalar*>(pPtr);
         OptionalMatrix localMatrix(mPtr);
         if (colorType == SkColorType::kRGBA_F32_SkColorType) {
@@ -939,7 +888,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                 int count, SkTileMode mode, uint32_t flags,
                                 uintptr_t /* SkScalar*  */ mPtr,
                                 sk_sp<SkColorSpace> colorSpace)->sk_sp<SkShader> {
-        // See comment above for uintptr_t explanation
         const SkScalar* positions = reinterpret_cast<const SkScalar*>(pPtr);
         OptionalMatrix localMatrix(mPtr);
 
@@ -1003,24 +951,30 @@ EMSCRIPTEN_BINDINGS(Skia) {
             self.clear(ptrToSkColor4f(cPtr));
         }))
         .function("clipPath", select_overload<void (const SkPath&, SkClipOp, bool)>(&SkCanvas::clipPath))
-        .function("clipRRect", optional_override([](SkCanvas& self, const SimpleRRect& r, SkClipOp op, bool doAntiAlias) {
-            self.clipRRect(toRRect(r), op, doAntiAlias);
+        .function("_clipRRect", optional_override([](SkCanvas& self, uintptr_t /* float* */ fPtr, SkClipOp op, bool doAntiAlias) {
+            self.clipRRect(ptrToSkRRect(fPtr), op, doAntiAlias);
         }))
-        .function("clipRect", select_overload<void (const SkRect&, SkClipOp, bool)>(&SkCanvas::clipRect))
+        .function("_clipRect", optional_override([](SkCanvas& self, uintptr_t /* float* */ fPtr, SkClipOp op, bool doAntiAlias) {
+            const SkRect* rect = reinterpret_cast<const SkRect*>(fPtr);
+            self.clipRect(*rect, op, doAntiAlias);
+        }))
         .function("_concat", optional_override([](SkCanvas& self, uintptr_t /* SkScalar*  */ mPtr) {
-            // See comment above for uintptr_t explanation
             //TODO(skbug.com/10108): make the JS side be column major.
             const SkScalar* sixteenMatrixValues = reinterpret_cast<const SkScalar*>(mPtr);
             SkM44 m = SkM44::RowMajor(sixteenMatrixValues);
             self.concat(m);
         }))
-        .function("drawArc", &SkCanvas::drawArc)
+        .function("_drawArc", optional_override([](SkCanvas& self, uintptr_t /* float* */ fPtr,
+                                                  SkScalar startAngle, SkScalar sweepAngle,
+                                                  bool useCenter, const SkPaint& paint) {
+            const SkRect* oval = reinterpret_cast<const SkRect*>(fPtr);
+            self.drawArc(*oval, startAngle, sweepAngle, useCenter, paint);
+        }))
         // _drawAtlas takes an array of SkColor. There is no SkColor4f override.
         .function("_drawAtlas", optional_override([](SkCanvas& self,
                 const sk_sp<SkImage>& atlas, uintptr_t /* SkRSXform* */ xptr,
                 uintptr_t /* SkRect* */ rptr, uintptr_t /* SkColor* */ cptr, int count,
                 SkBlendMode mode, const SkPaint* paint)->void {
-            // See comment above for uintptr_t explanation
             const SkRSXform* dstXforms = reinterpret_cast<const SkRSXform*>(xptr);
             const SkRect* srcRects = reinterpret_cast<const SkRect*>(rptr);
             const SkColor* colors = nullptr;
@@ -1042,51 +996,69 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("drawColorInt", optional_override([](SkCanvas& self, SkColor color, SkBlendMode mode) {
             self.drawColor(color, mode);
         }))
-        .function("drawDRRect",optional_override([](SkCanvas& self, const SimpleRRect& o, const SimpleRRect& i, const SkPaint& paint) {
-            self.drawDRRect(toRRect(o), toRRect(i), paint);
+        .function("_drawDRRect", optional_override([](SkCanvas& self, uintptr_t /* float* */ outerPtr,
+                                                     uintptr_t /* float* */ innerPtr, const SkPaint& paint) {
+            self.drawDRRect(ptrToSkRRect(outerPtr), ptrToSkRRect(innerPtr), paint);
         }))
         .function("drawAnimatedImage",  optional_override([](SkCanvas& self, sk_sp<SkAnimatedImage>& aImg,
                                                              SkScalar x, SkScalar y)->void {
             self.drawDrawable(aImg.get(), x, y);
         }), allow_raw_pointers())
         .function("drawImage", select_overload<void (const sk_sp<SkImage>&, SkScalar, SkScalar, const SkPaint*)>(&SkCanvas::drawImage), allow_raw_pointers())
-        .function("drawImageNine", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
-                                                        SkIRect center, SkRect dst,
-                                                        const SkPaint* paint)->void {
-            self.drawImageNine(image, center, dst, paint);
+        .function("_drawImageNine", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
+                                                         uintptr_t /* int* */ centerPtr, uintptr_t /* float* */ dstPtr,
+                                                         const SkPaint* paint)->void {
+            const SkIRect* center = reinterpret_cast<const SkIRect*>(centerPtr);
+            const SkRect* dst = reinterpret_cast<const SkRect*>(dstPtr);
+
+            self.drawImageNine(image, *center, *dst, paint);
         }), allow_raw_pointers())
-        .function("drawImageRect", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
-                                                        SkRect src, SkRect dst,
-                                                        const SkPaint* paint, bool fastSample)->void {
-            self.drawImageRect(image, src, dst, paint,
-                               fastSample ? SkCanvas::kFast_SrcRectConstraint :
+        .function("_drawImageRect", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
+                                                         uintptr_t /* float* */ srcPtr, uintptr_t /* float* */ dstPtr,
+                                                         const SkPaint* paint, bool fastSample)->void {
+            const SkRect* src = reinterpret_cast<const SkRect*>(srcPtr);
+            const SkRect* dst = reinterpret_cast<const SkRect*>(dstPtr);
+            self.drawImageRect(image, *src, *dst, paint,
+                               fastSample ? SkCanvas::kFast_SrcRectConstraint:
                                             SkCanvas::kStrict_SrcRectConstraint);
         }), allow_raw_pointers())
         .function("drawLine", select_overload<void (SkScalar, SkScalar, SkScalar, SkScalar, const SkPaint&)>(&SkCanvas::drawLine))
-        .function("drawOval", &SkCanvas::drawOval)
+        .function("_drawOval", optional_override([](SkCanvas& self, uintptr_t /* float* */ fPtr,
+                                                    const SkPaint paint)->void {
+            const SkRect* oval = reinterpret_cast<const SkRect*>(fPtr);
+            self.drawOval(*oval, paint);
+        }))
         .function("drawPaint", &SkCanvas::drawPaint)
 #ifdef SK_INCLUDE_PARAGRAPH
         .function("drawParagraph", optional_override([](SkCanvas& self, skia::textlayout::Paragraph* p,
-                                                     SkScalar x, SkScalar y) {
+                                                        SkScalar x, SkScalar y) {
             p->paint(&self, x, y);
         }), allow_raw_pointers())
 #endif
         .function("drawPath", &SkCanvas::drawPath)
         // Of note, picture is *not* what is colloquially thought of as a "picture", what we call
         // a bitmap. An SkPicture is a series of draw commands.
-        .function("drawPicture",  select_overload<void (const sk_sp<SkPicture>&)>(&SkCanvas::drawPicture))
+        .function("drawPicture", select_overload<void (const sk_sp<SkPicture>&)>(&SkCanvas::drawPicture))
         .function("_drawPoints", optional_override([](SkCanvas& self, SkCanvas::PointMode mode,
                                                      uintptr_t /* SkPoint* */ pptr,
                                                      int count, SkPaint paint)->void {
-            // See comment above for uintptr_t explanation
             const SkPoint* pts = reinterpret_cast<const SkPoint*>(pptr);
             self.drawPoints(mode, count, pts, paint);
         }))
-        .function("drawRRect",optional_override([](SkCanvas& self, const SimpleRRect& r, const SkPaint& paint) {
-            self.drawRRect(toRRect(r), paint);
+        .function("_drawRRect",optional_override([](SkCanvas& self, uintptr_t /* float* */ fPtr, const SkPaint& paint) {
+            self.drawRRect(ptrToSkRRect(fPtr), paint);
         }))
-        .function("drawRect", &SkCanvas::drawRect)
-        .function("drawRoundRect", &SkCanvas::drawRoundRect)
+        .function("_drawRect", optional_override([](SkCanvas& self, uintptr_t /* float* */ fPtr,
+                                                    const SkPaint paint)->void {
+            const SkRect* rect = reinterpret_cast<const SkRect*>(fPtr);
+            self.drawRect(*rect, paint);
+        }))
+        .function("drawRect4f", optional_override([](SkCanvas& self, SkScalar left, SkScalar top,
+                                                     SkScalar right, SkScalar bottom,
+                                                     const SkPaint paint)->void {
+            const SkRect rect = SkRect::MakeLTRB(left, top, right, bottom);
+            self.drawRect(rect, paint);
+        }))
         .function("_drawShadow", optional_override([](SkCanvas& self, const SkPath& path,
                                                      const SkPoint3& zPlaneParams,
                                                      const SkPoint3& lightPos, SkScalar lightRadius,
@@ -1103,7 +1075,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("_drawSimpleText", optional_override([](SkCanvas& self, uintptr_t /* char* */ sptr,
                                                           size_t len, SkScalar x, SkScalar y, const SkFont& font,
                                                           const SkPaint& paint) {
-            // See comment above for uintptr_t explanation
             const char* str = reinterpret_cast<const char*>(sptr);
 
             self.drawSimpleText(str, len, SkTextEncoding::kUTF8, x, y, font, paint);
@@ -1117,7 +1088,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         // an awkward moment where we malloc something here and "just know" to free it on the
         // JS side.
         .function("_getTotalMatrix", optional_override([](const SkCanvas& self, uintptr_t /* uint8_t* */ mPtr) {
-            // See comment above for uintptr_t explanation
             SkScalar* nineMatrixValues = reinterpret_cast<SkScalar*>(mPtr);
             if (!nineMatrixValues) {
                 return; // matrix cannot be null
@@ -1155,25 +1125,17 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("restoreToCount", &SkCanvas::restoreToCount)
         .function("rotate", select_overload<void (SkScalar, SkScalar, SkScalar)>(&SkCanvas::rotate))
         .function("save", &SkCanvas::save)
-         // 1 param (only the paint)
-        .function("saveLayer", optional_override([](SkCanvas& self, const SkPaint* p) {
-            return self.saveLayer(nullptr, p);
+        .function("_saveLayer", optional_override([](SkCanvas& self, const SkPaint* p, uintptr_t /* float* */ fPtr,
+                                                     const SkImageFilter* backdrop, SkCanvas::SaveLayerFlags flags)->int {
+            SkRect* bounds = reinterpret_cast<SkRect*>(fPtr);
+            return self.saveLayer(SkCanvas::SaveLayerRec(bounds, p, backdrop, flags));
         }), allow_raw_pointers())
-         // 2 params
-        .function("saveLayer", select_overload<int (const SkRect&, const SkPaint*)>(&SkCanvas::saveLayer),
-                               allow_raw_pointers())
-         // 3 params (effectively with SaveLayerRec, but no bounds)
-        .function("saveLayer", saveLayerRec, allow_raw_pointers())
-         // 4 params (effectively with SaveLayerRec)
-        .function("saveLayer", saveLayerRecBounds, allow_raw_pointers())
-
         .function("scale", &SkCanvas::scale)
         .function("skew", &SkCanvas::skew)
         .function("translate", &SkCanvas::translate)
         .function("_writePixels", optional_override([](SkCanvas& self, SimpleImageInfo di,
                                                        uintptr_t /* uint8_t* */ pPtr,
                                                        size_t srcRowBytes, int dstX, int dstY) {
-            // See comment above for uintptr_t explanation
             uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
             SkImageInfo dstInfo = toSkImageInfo(di);
 
@@ -1286,14 +1248,17 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<ShapedText>("ShapedText")
         .constructor<ShapedTextOpts>()
-        .function("getBounds", &ShapedText::getBounds);
+        .function("_getBounds", optional_override([](ShapedText& self,
+                                                     uintptr_t /* float* */ fPtr)->void {
+            SkRect* output = reinterpret_cast<SkRect*>(fPtr);
+            output[0] = self.getBounds();
+        }));
 
     class_<SkFontMgr>("SkFontMgr")
         .smart_ptr<sk_sp<SkFontMgr>>("sk_sp<SkFontMgr>")
         .class_function("_fromData", optional_override([](uintptr_t /* uint8_t**  */ dPtr,
                                                           uintptr_t /* size_t*  */ sPtr,
                                                           int numFonts)->sk_sp<SkFontMgr> {
-            // See comment above for uintptr_t explanation
             auto datas = reinterpret_cast<const uint8_t**>(dPtr);
             auto sizes = reinterpret_cast<const size_t*>(sPtr);
 
@@ -1323,7 +1288,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("_makeTypefaceFromData", optional_override([](SkFontMgr& self,
                                                 uintptr_t /* uint8_t*  */ fPtr,
                                                 int flen)->sk_sp<SkTypeface> {
-        // See comment above for uintptr_t explanation
         uint8_t* font = reinterpret_cast<uint8_t*>(fPtr);
         sk_sp<SkData> fontData = SkData::MakeFromMalloc(font, flen);
 
@@ -1346,10 +1310,9 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("_readPixels", optional_override([](sk_sp<SkImage> self,
                                  SimpleImageInfo sii, uintptr_t /* uint8_t*  */ pPtr,
                                  size_t dstRowBytes, int srcX, int srcY)->bool {
-                                    // See comment above for uintptr_t explanation
             uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
             SkImageInfo ii = toSkImageInfo(sii);
-            // TODO: Migrate CanvasKit API to require DirectContext arg here.
+            // TODO(adlai) Migrate CanvasKit API to require DirectContext arg here.
             GrDirectContext* dContext = nullptr;
 #ifdef SK_GL
             dContext = GrAsDirectContext(as_IB(self.get())->context());
@@ -1361,12 +1324,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .smart_ptr<sk_sp<SkImageFilter>>("sk_sp<SkImageFilter>")
         .class_function("MakeBlur", optional_override([](SkScalar sigmaX, SkScalar sigmaY,
                                                          SkTileMode tileMode, sk_sp<SkImageFilter> input)->sk_sp<SkImageFilter> {
-            // Emscripten does not like default args nor SkIRect* much
             return SkImageFilters::Blur(sigmaX, sigmaY, tileMode, input);
         }))
         .class_function("MakeColorFilter", optional_override([](sk_sp<SkColorFilter> cf,
-                                                                  sk_sp<SkImageFilter> input)->sk_sp<SkImageFilter> {
-            // Emscripten does not like default args nor SkIRect* much
+                                                                sk_sp<SkImageFilter> input)->sk_sp<SkImageFilter> {
             return SkImageFilters::ColorFilter(cf, input);
         }))
         .class_function("MakeCompose", &SkImageFilters::Compose)
@@ -1447,7 +1408,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .class_function("MakeCorner", &SkCornerPathEffect::Make)
         .class_function("_MakeDash", optional_override([](uintptr_t /* float* */ cptr, int count,
                                                           SkScalar phase)->sk_sp<SkPathEffect> {
-            // See comment above for uintptr_t explanation
             const float* intervals = reinterpret_cast<const float*>(cptr);
             return SkDashPathEffect::Make(intervals, count, phase);
         }), allow_raw_pointers())
@@ -1458,23 +1418,44 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .constructor<const SkPath&>()
         .class_function("_MakeFromCmds", &MakePathFromCmds)
         .class_function("_MakeFromVerbsPointsWeights", &MakePathFromVerbsPointsWeights)
-        .function("_addArc", &ApplyAddArc)
+        .function("_addArc", optional_override([](SkPath& self,
+                                                   uintptr_t /* float* */ fPtr,
+                                                   SkScalar startAngle, SkScalar sweepAngle)->void {
+            const SkRect* oval = reinterpret_cast<const SkRect*>(fPtr);
+            self.addArc(*oval, startAngle, sweepAngle);
+        }))
+        .function("_addOval", optional_override([](SkPath& self,
+                                                   uintptr_t /* float* */ fPtr,
+                                                   bool ccw, unsigned start)->void {
+            const SkRect* oval = reinterpret_cast<const SkRect*>(fPtr);
+            self.addOval(*oval, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW, start);
+        }))
         // interface.js has 3 overloads of addPath
-        .function("_addOval", &ApplyAddOval)
         .function("_addPath", &ApplyAddPath)
         .function("_addPoly", optional_override([](SkPath& self,
-                                                   uintptr_t /* SkPoint* */ pptr,
+                                                   uintptr_t /* SkPoint* */ fPtr,
                                                    int count, bool close)->void {
-            // See comment above for uintptr_t explanation
-            const SkPoint* pts = reinterpret_cast<const SkPoint*>(pptr);
+            const SkPoint* pts = reinterpret_cast<const SkPoint*>(fPtr);
             self.addPoly(pts, count, close);
         }))
-        // interface.js has 4 overloads of addRect
-        .function("_addRect", &ApplyAddRect)
-        // interface.js has 4 overloads of addRoundRect
-        .function("_addRoundRect", &ApplyAddRoundRect)
+        .function("_addRect", optional_override([](SkPath& self,
+                                                   uintptr_t /* float* */ fPtr,
+                                                   bool ccw)->void {
+            const SkRect* rect = reinterpret_cast<const SkRect*>(fPtr);
+            self.addRect(*rect, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
+        }))
+        .function("_addRRect", optional_override([](SkPath& self,
+                                                   uintptr_t /* float* */ fPtr,
+                                                   bool ccw)->void {
+            self.addRRect(ptrToSkRRect(fPtr), ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
+        }))
         .function("_addVerbsPointsWeights", &PathAddVerbsPointsWeights)
-        .function("_arcToOval", &ApplyArcToOval)
+        .function("_arcToOval", optional_override([](SkPath& self,
+                                                   uintptr_t /* float* */ fPtr, SkScalar startAngle,
+                                                   SkScalar sweepAngle, bool forceMoveTo)->void {
+            const SkRect* oval = reinterpret_cast<const SkRect*>(fPtr);
+            self.arcTo(*oval, startAngle, sweepAngle, forceMoveTo);
+        }))
         .function("_arcToRotated", &ApplyArcToArcSize)
         .function("_arcToTangent", ApplyArcToTangent)
         .function("_close", &ApplyClose)
@@ -1515,7 +1496,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
         .function("setFillType", select_overload<void(SkPathFillType)>(&SkPath::setFillType))
         .function("getFillType", &SkPath::getFillType)
-        .function("getBounds", &SkPath::getBounds)
+        .function("_getBounds", optional_override([](SkPath& self,
+                                                     uintptr_t /* float* */ fPtr)->void {
+            SkRect* output = reinterpret_cast<SkRect*>(fPtr);
+            output[0] = self.getBounds();
+        }))
         .function("computeTightBounds", &SkPath::computeTightBounds)
         .function("equals", &Equals)
         .function("copy", &CopyPath)
@@ -1551,9 +1536,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<SkPictureRecorder>("SkPictureRecorder")
         .constructor<>()
-        .function("beginRecording", optional_override([](SkPictureRecorder& self,
-                                                         const SkRect& bounds) -> SkCanvas* {
-            return self.beginRecording(bounds);
+        .function("_beginRecording", optional_override([](SkPictureRecorder& self,
+                                                          uintptr_t /* float* */ fPtr) -> SkCanvas* {
+            SkRect* bounds = reinterpret_cast<SkRect*>(fPtr);
+            return self.beginRecording(*bounds, nullptr);
         }), allow_raw_pointers())
         .function("finishRecordingAsPicture", optional_override([](SkPictureRecorder& self)
                                                                    -> sk_sp<SkPicture> {
@@ -1598,7 +1584,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         .function("_makeShader", optional_override([](SkRuntimeEffect& self, uintptr_t fPtr, size_t fLen, bool isOpaque,
                                                       uintptr_t /* SkScalar*  */ mPtr)->sk_sp<SkShader> {
-            // See comment above for uintptr_t explanation
             void* inputData = reinterpret_cast<void*>(fPtr);
             sk_sp<SkData> inputs = SkData::MakeFromMalloc(inputData, fLen);
 
@@ -1608,7 +1593,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("_makeShaderWithChildren", optional_override([](SkRuntimeEffect& self, uintptr_t fPtr, size_t fLen, bool isOpaque,
                                                                   uintptr_t /** SkShader*[] */cPtrs, size_t cLen,
                                                                   uintptr_t /* SkScalar*  */ mPtr)->sk_sp<SkShader> {
-            // See comment above for uintptr_t explanation
             void* inputData = reinterpret_cast<void*>(fPtr);
             sk_sp<SkData> inputs = SkData::MakeFromMalloc(inputData, fLen);
 
@@ -1635,8 +1619,13 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return {ii.width(), ii.height(), ii.colorType(), ii.alphaType(), ii.refColorSpace()};
         }))
         .function("height", &SkSurface::height)
-        .function("makeImageSnapshot", select_overload<sk_sp<SkImage>()>(&SkSurface::makeImageSnapshot))
-        .function("makeImageSnapshot", select_overload<sk_sp<SkImage>(const SkIRect& bounds)>(&SkSurface::makeImageSnapshot))
+        .function("_makeImageSnapshot",  optional_override([](SkSurface& self, uintptr_t /* int*  */ iPtr)->sk_sp<SkImage> {
+            SkIRect* bounds = reinterpret_cast<SkIRect*>(iPtr);
+            if (!bounds) {
+                return self.makeImageSnapshot();
+            }
+            return self.makeImageSnapshot(*bounds);
+        }))
         .function("makeSurface", optional_override([](SkSurface& self, SimpleImageInfo sii)->sk_sp<SkSurface> {
             return self.makeSurface(toSkImageInfo(sii));
         }), allow_raw_pointers())
@@ -1662,7 +1651,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                               size_t strBtyes,
                                                               uintptr_t /* SkRSXform* */ xptr,
                                                               const SkFont& font)->sk_sp<SkTextBlob> {
-            // See comment above for uintptr_t explanation
             const char* str = reinterpret_cast<const char*>(sptr);
             const SkRSXform* xforms = reinterpret_cast<const SkRSXform*>(xptr);
 
@@ -1670,7 +1658,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }), allow_raw_pointers())
         .class_function("_MakeFromText", optional_override([](uintptr_t /* char* */ sptr,
                                                               size_t len, const SkFont& font)->sk_sp<SkTextBlob> {
-            // See comment above for uintptr_t explanation
             const char* str = reinterpret_cast<const char*>(sptr);
             return SkTextBlob::MakeFromText(str, len, font, SkTextEncoding::kUTF8);
         }), allow_raw_pointers());
@@ -1681,7 +1668,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<SkVertices>("SkVertices")
         .smart_ptr<sk_sp<SkVertices>>("sk_sp<SkVertices>")
-        .function("bounds", &SkVertices::bounds)
+        .function("_bounds", optional_override([](SkVertices& self,
+                                                  uintptr_t /* float* */ fPtr)->void {
+            SkRect* output = reinterpret_cast<SkRect*>(fPtr);
+            output[0] = self.bounds();
+        }))
         .function("uniqueID", &SkVertices::uniqueID);
 
     // Not intended to be called directly by clients
@@ -1852,28 +1843,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .field("text",        &ShapedTextOpts::text)
         .field("width",       &ShapedTextOpts::width);
 #endif
-    value_object<SkRect>("SkRect")
-        .field("fLeft",   &SkRect::fLeft)
-        .field("fTop",    &SkRect::fTop)
-        .field("fRight",  &SkRect::fRight)
-        .field("fBottom", &SkRect::fBottom);
-
-    value_object<SimpleRRect>("SkRRect")
-        .field("rect", &SimpleRRect::rect)
-        .field("rx1",  &SimpleRRect::rx1)
-        .field("ry1",  &SimpleRRect::ry1)
-        .field("rx2",  &SimpleRRect::rx2)
-        .field("ry2",  &SimpleRRect::ry2)
-        .field("rx3",  &SimpleRRect::rx3)
-        .field("ry3",  &SimpleRRect::ry3)
-        .field("rx4",  &SimpleRRect::rx4)
-        .field("ry4",  &SimpleRRect::ry4);
-
-    value_object<SkIRect>("SkIRect")
-        .field("fLeft",   &SkIRect::fLeft)
-        .field("fTop",    &SkIRect::fTop)
-        .field("fRight",  &SkIRect::fRight)
-        .field("fBottom", &SkIRect::fBottom);
 
     value_object<SimpleImageInfo>("SkImageInfo")
         .field("width",      &SimpleImageInfo::width)

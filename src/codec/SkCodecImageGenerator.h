@@ -98,7 +98,8 @@ protected:
                      size_t rowBytes,
                      const Options& opts) override;
 
-    bool onQueryYUVAInfo(SkYUVAPixmapInfo* yuvaPixmapInfo) const override;
+    bool onQueryYUVAInfo(const SkYUVAPixmapInfo::SupportedDataTypes&,
+                         SkYUVAPixmapInfo*) const override;
 
     bool onGetYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) override;
 
@@ -111,6 +112,6 @@ private:
     std::unique_ptr<SkCodec> fCodec;
     sk_sp<SkData> fData;
 
-    typedef SkImageGenerator INHERITED;
+    using INHERITED = SkImageGenerator;
 };
 #endif  // SkCodecImageGenerator_DEFINED

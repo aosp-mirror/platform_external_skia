@@ -97,7 +97,7 @@ private:
     int                          fUnreleasedFulfills = 0;
     int                          fDoneCnt = 0;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 // This class consolidates tracking & extraction of the original image data from an skp,
@@ -124,7 +124,8 @@ private:
 // all the replaying is complete. This will pin the GrBackendTextures in VRAM.
 class DDLPromiseImageHelper {
 public:
-    DDLPromiseImageHelper() = default;
+    DDLPromiseImageHelper(const SkYUVAPixmapInfo::SupportedDataTypes& supportedYUVADataTypes)
+            : fSupportedYUVADataTypes(supportedYUVADataTypes) {}
     ~DDLPromiseImageHelper() = default;
 
     // Convert the SkPicture into SkData replacing all the SkImages with an index.
@@ -270,6 +271,7 @@ private:
     // returns -1 on failure
     int findOrDefineImage(SkImage* image);
 
+    SkYUVAPixmapInfo::SupportedDataTypes fSupportedYUVADataTypes;
     SkTArray<PromiseImageInfo> fImageInfo;
 };
 
