@@ -38,7 +38,7 @@ void main() {
         weight = min(min(delta_squared.x, delta_squared.y), 1.0);
     }
 
-    sk_OutColor = texture(src, mix(coord, zoom_coord, weight));
+    sk_OutColor = sample(src, mix(coord, zoom_coord, weight));
 }
 
 @setData(pdman) {
@@ -47,7 +47,7 @@ void main() {
 
     {
         SkScalar y = srcRect.y() * invH;
-        if (srcProxy.origin() != kTopLeft_GrSurfaceOrigin) {
+        if (srcView.origin() != kTopLeft_GrSurfaceOrigin) {
             y = 1.0f - (srcRect.height() / bounds.height()) - y;
         }
 
@@ -56,20 +56,22 @@ void main() {
 
     {
         SkScalar y = bounds.y() * invH;
-        if (srcProxy.origin() != kTopLeft_GrSurfaceOrigin) {
-            y = 1.0f - bounds.height() * invH;
+        SkScalar hSign = 1.f;
+        if (srcView.origin() != kTopLeft_GrSurfaceOrigin) {
+            y = 1.0f - bounds.y() * invH;
+            hSign = -1.f;
         }
 
         pdman.set4f(boundsUniform,
                     bounds.x() * invW,
                     y,
                     SkIntToScalar(src.width()) / bounds.width(),
-                    SkIntToScalar(src.height()) / bounds.height());
+                    hSign * SkIntToScalar(src.height()) / bounds.height());
     }
 }
 
 @test(d) {
-    sk_sp<GrTextureProxy> proxy = d->textureProxy(0);
+    auto [view, ct, at] = d->randomView();
     const int kMaxWidth = 200;
     const int kMaxHeight = 200;
     const SkScalar kMaxInset = 20.0f;
@@ -80,7 +82,7 @@ void main() {
     SkIRect bounds = SkIRect::MakeWH(SkIntToScalar(kMaxWidth), SkIntToScalar(kMaxHeight));
     SkRect srcRect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
 
-    auto effect = GrMagnifierEffect::Make(std::move(proxy),
+    auto effect = GrMagnifierEffect::Make(std::move(view),
                                           bounds,
                                           srcRect,
                                           srcRect.width() / bounds.width(),

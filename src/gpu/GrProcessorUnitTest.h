@@ -8,20 +8,23 @@
 #ifndef GrProcessorUnitTest_DEFINED
 #define GrProcessorUnitTest_DEFINED
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if GR_TEST_UTILS
 
-#include "../private/GrTextureProxy.h"
-#include "../private/SkTArray.h"
-#include "GrTestUtils.h"
+#include "include/private/SkTArray.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/gpu/GrTestUtils.h"
+#include "src/gpu/GrTextureProxy.h"
+
+#include <tuple>
 
 class SkMatrix;
 class GrCaps;
 class GrContext;
 class GrProxyProvider;
 class GrRenderTargetContext;
-struct GrProcessorTestData;
+class GrProcessorTestData;
 class GrTexture;
 class GrXPFactory;
 class GrGeometryProcessor;
@@ -43,37 +46,31 @@ std::unique_ptr<GrFragmentProcessor> MakeChildFP(GrProcessorTestData*);
 /*
  * GrProcessorTestData is an argument struct to TestCreate functions
  * fTextures are valid textures that can optionally be used to construct
- * TextureSampler. The first texture has config kSkia8888_GrPixelConfig and the second has
- * kAlpha_8_GrPixelConfig. TestCreate functions are also free to create additional textures using
+ * TextureSampler. The first texture has a RGBA8 format and the second has Alpha8 format for the
+ * specific backend API. TestCreate functions are also free to create additional textures using
  * the GrContext.
  */
-struct GrProcessorTestData {
-    GrProcessorTestData(SkRandom* random,
-                        GrContext* context,
-                        const GrRenderTargetContext* renderTargetContext,
-                        sk_sp<GrTextureProxy> proxies[2])
-            : fRandom(random)
-            , fRenderTargetContext(renderTargetContext)
-            , fContext(context) {
-        SkASSERT(proxies[0] && proxies[1]);
-        fProxies[0] = proxies[0];
-        fProxies[1] = proxies[1];
-    }
-    SkRandom* fRandom;
-    const GrRenderTargetContext* fRenderTargetContext;
+class GrProcessorTestData {
+public:
+    using ViewInfo = std::tuple<GrSurfaceProxyView, GrColorType, SkAlphaType>;
+    GrProcessorTestData(SkRandom* random, GrContext* context, int numProxies, const ViewInfo[]);
 
     GrContext* context() { return fContext; }
     GrResourceProvider* resourceProvider();
     GrProxyProvider* proxyProvider();
     const GrCaps* caps();
-    sk_sp<GrTextureProxy> textureProxy(int index) { return fProxies[index]; }
+    SkArenaAlloc* allocator() { return fArena.get(); }
+
+    ViewInfo randomView();
+    ViewInfo randomAlphaOnlyView();
+
+    SkRandom* fRandom;
 
 private:
     GrContext* fContext;
-    sk_sp<GrTextureProxy> fProxies[2];
+    SkTArray<ViewInfo> fViews;
+    std::unique_ptr<SkArenaAlloc> fArena;
 };
-
-#if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 
 class GrProcessor;
 class GrTexture;
@@ -81,7 +78,6 @@ class GrTexture;
 template <class ProcessorSmartPtr>
 class GrProcessorTestFactory : private SkNoncopyable {
 public:
-    using Processor = typename ProcessorSmartPtr::element_type;
     using MakeProc = ProcessorSmartPtr (*)(GrProcessorTestData*);
 
     GrProcessorTestFactory(MakeProc makeProc) {
@@ -92,7 +88,9 @@ public:
     /** Pick a random factory function and create a processor.  */
     static ProcessorSmartPtr Make(GrProcessorTestData* data) {
         VerifyFactoryCount();
-        SkASSERT(GetFactories()->count());
+        if (GetFactories()->count() == 0) {
+            return nullptr;
+        }
         uint32_t idx = data->fRandom->nextRangeU(0, GetFactories()->count() - 1);
         return MakeIdx(idx, data);
     }
@@ -102,6 +100,7 @@ public:
 
     /** Use factory function at Index idx to create a processor. */
     static ProcessorSmartPtr MakeIdx(int idx, GrProcessorTestData* data) {
+        SkASSERT(idx < GetFactories()->count());
         GrProcessorTestFactory<ProcessorSmartPtr>* factory = (*GetFactories())[idx];
         ProcessorSmartPtr processor = factory->fMakeProc(data);
         SkASSERT(processor);
@@ -120,7 +119,7 @@ private:
 };
 
 using GrFragmentProcessorTestFactory = GrProcessorTestFactory<std::unique_ptr<GrFragmentProcessor>>;
-using GrGeometryProcessorTestFactory = GrProcessorTestFactory<sk_sp<GrGeometryProcessor>>;
+using GrGeometryProcessorTestFactory = GrProcessorTestFactory<GrGeometryProcessor*>;
 
 class GrXPFactoryTestFactory : private SkNoncopyable {
 public:
@@ -130,7 +129,9 @@ public:
 
     static const GrXPFactory* Get(GrProcessorTestData* data) {
         VerifyFactoryCount();
-        SkASSERT(GetFactories()->count());
+        if (GetFactories()->count() == 0) {
+            return nullptr;
+        }
         uint32_t idx = data->fRandom->nextRangeU(0, GetFactories()->count() - 1);
         const GrXPFactory* xpf = (*GetFactories())[idx]->fGetProc(data);
         SkASSERT(xpf);
@@ -144,12 +145,14 @@ private:
     static SkTArray<GrXPFactoryTestFactory*, true>* GetFactories();
 };
 
+#if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+
 /** GrProcessor subclasses should insert this macro in their declaration to be included in the
  *  program generation unit test.
  */
 #define GR_DECLARE_GEOMETRY_PROCESSOR_TEST                        \
     static GrGeometryProcessorTestFactory gTestFactory SK_UNUSED; \
-    static sk_sp<GrGeometryProcessor> TestCreate(GrProcessorTestData*);
+    static GrGeometryProcessor* TestCreate(GrProcessorTestData*);
 
 #define GR_DECLARE_FRAGMENT_PROCESSOR_TEST                        \
     static GrFragmentProcessorTestFactory gTestFactory SK_UNUSED; \
@@ -183,7 +186,7 @@ private:
 // The unit test relies on static initializers. Just declare the TestCreate function so that
 // its definitions will compile.
 #define GR_DECLARE_GEOMETRY_PROCESSOR_TEST                                                         \
-    static sk_sp<GrGeometryProcessor> TestCreate(GrProcessorTestData*);
+    static GrGeometryProcessor* TestCreate(GrProcessorTestData*);
 #define GR_DEFINE_GEOMETRY_PROCESSOR_TEST(X)
 
 // The unit test relies on static initializers. Just declare the TestGet function so that

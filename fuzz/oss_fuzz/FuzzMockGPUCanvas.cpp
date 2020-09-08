@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "../Fuzz.h"
-#include "SkTestFontMgr.h"
-#include "SkFontMgrPriv.h"
+#include "fuzz/Fuzz.h"
+#include "src/core/SkFontMgrPriv.h"
+#include "tools/fonts/TestFontMgr.h"
 
 void fuzz_MockGPUCanvas(Fuzz* f);
 
@@ -20,7 +20,7 @@ extern "C" {
     }
 
     int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-        gSkFontMgr_DefaultFactory = &sk_tool_utils::MakePortableFontMgr;
+        gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
         auto fuzz = Fuzz(SkData::MakeWithoutCopy(data, size));
         fuzz_MockGPUCanvas(&fuzz);
         return 0;

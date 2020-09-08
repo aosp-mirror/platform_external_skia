@@ -5,27 +5,44 @@
  * found in the LICENSE file.
  */
 
-#include "GrRecordingContext.h"
+#include "include/private/GrRecordingContext.h"
 
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrDrawingManager.h"
-#include "GrMemoryPool.h"
-#include "GrProxyProvider.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrSkSLFPFactoryCache.h"
-#include "GrTextureContext.h"
-#include "SkGr.h"
-#include "text/GrTextBlobCache.h"
+#include "include/gpu/GrContext.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/gpu/GrAuditTrail.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/GrProgramDesc.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSurfaceContext.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrSkSLFP.h"
+#include "src/gpu/text/GrTextBlobCache.h"
 
 #define ASSERT_SINGLE_OWNER_PRIV \
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(this->singleOwner());)
 
+GrRecordingContext::ProgramData::ProgramData(std::unique_ptr<const GrProgramDesc> desc,
+                                             const GrProgramInfo* info)
+        : fDesc(std::move(desc))
+        , fInfo(info) {
+}
+
+GrRecordingContext::ProgramData::ProgramData(ProgramData&& other)
+        : fDesc(std::move(other.fDesc))
+        , fInfo(other.fInfo) {
+}
+
+GrRecordingContext::ProgramData::~ProgramData() {}
+
 GrRecordingContext::GrRecordingContext(GrBackendApi backend,
                                        const GrContextOptions& options,
                                        uint32_t contextID)
-        : INHERITED(backend, options, contextID) {
+        : INHERITED(backend, options, contextID)
+        , fAuditTrail(new GrAuditTrail()) {
 }
 
 GrRecordingContext::~GrRecordingContext() { }
@@ -49,14 +66,13 @@ static void textblobcache_overbudget_CB(void* data) {
     direct->flush();
 }
 
-bool GrRecordingContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> cache) {
+bool GrRecordingContext::init(sk_sp<const GrCaps> caps) {
 
-    if (!INHERITED::init(std::move(caps), std::move(cache))) {
+    if (!INHERITED::init(std::move(caps))) {
         return false;
     }
 
-    fStrikeCache.reset(new GrStrikeCache(this->caps(),
-                                        this->options().fGlyphCacheTextureMaximumBytes));
+    fStrikeCache.reset(new GrStrikeCache{});
 
     fTextBlobCache.reset(new GrTextBlobCache(textblobcache_overbudget_CB, this,
                                              this->contextID()));
@@ -64,14 +80,15 @@ bool GrRecordingContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCac
     return true;
 }
 
-void GrRecordingContext::setupDrawingManager(bool explicitlyAllocate, bool sortOpLists) {
+void GrRecordingContext::setupDrawingManager(bool sortOpsTasks, bool reduceOpsTaskSplitting) {
     GrPathRendererChain::Options prcOptions;
     prcOptions.fAllowPathMaskCaching = this->options().fAllowPathMaskCaching;
 #if GR_TEST_UTILS
     prcOptions.fGpuPathRenderers = this->options().fGpuPathRenderers;
 #endif
-    if (this->options().fDisableCoverageCountingPaths) {
-        prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kCoverageCounting;
+    // FIXME: Once this is removed from Chrome and Android, rename to fEnable"".
+    if (!this->options().fDisableCoverageCountingPaths) {
+        prcOptions.fGpuPathRenderers |= GpuPathRenderers::kCoverageCounting;
     }
     if (this->options().fDisableDistanceFieldPaths) {
         prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kSmall;
@@ -80,7 +97,7 @@ void GrRecordingContext::setupDrawingManager(bool explicitlyAllocate, bool sortO
     if (!this->proxyProvider()->renderingDirectly()) {
         // DDL TODO: remove this crippling of the path renderer chain
         // Disable the small path renderer bc of the proxies in the atlas. They need to be
-        // unified when the opLists are added back to the destination drawing manager.
+        // unified when the opsTasks are added back to the destination drawing manager.
         prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kSmall;
     }
 
@@ -94,16 +111,11 @@ void GrRecordingContext::setupDrawingManager(bool explicitlyAllocate, bool sortO
     }
 #endif
 
-    // SHORT TERM TODO: until intermediate flushes at allocation time are added we need to obey the
-    // reduceOpListSplitting flag. Once that lands we should always reduce opList splitting in
-    // DDL contexts/drawing managers. We should still obey the options for non-DDL drawing managers
-    // until predictive intermediate flushes are added (i.e., we can't reorder forever).
     fDrawingManager.reset(new GrDrawingManager(this,
-                                                prcOptions,
-                                                textContextOptions,
-                                                explicitlyAllocate,
-                                                sortOpLists,
-                                                this->options().fReduceOpListSplitting));
+                                               prcOptions,
+                                               textContextOptions,
+                                               sortOpsTasks,
+                                               reduceOpsTaskSplitting));
 }
 
 void GrRecordingContext::abandonContext() {
@@ -117,20 +129,43 @@ GrDrawingManager* GrRecordingContext::drawingManager() {
     return fDrawingManager.get();
 }
 
-sk_sp<GrOpMemoryPool> GrRecordingContext::refOpMemoryPool() {
+GrRecordingContext::Arenas::Arenas(GrOpMemoryPool* opMemoryPool, SkArenaAlloc* recordTimeAllocator)
+        : fOpMemoryPool(opMemoryPool)
+        , fRecordTimeAllocator(recordTimeAllocator) {
+    // OwnedArenas should instantiate these before passing the bare pointer off to this struct.
+    SkASSERT(opMemoryPool);
+    SkASSERT(recordTimeAllocator);
+}
+
+// Must be defined here so that std::unique_ptr can see the sizes of the various pools, otherwise
+// it can't generate a default destructor for them.
+GrRecordingContext::OwnedArenas::OwnedArenas() {}
+GrRecordingContext::OwnedArenas::~OwnedArenas() {}
+
+GrRecordingContext::OwnedArenas& GrRecordingContext::OwnedArenas::operator=(OwnedArenas&& a) {
+    fOpMemoryPool = std::move(a.fOpMemoryPool);
+    fRecordTimeAllocator = std::move(a.fRecordTimeAllocator);
+    return *this;
+}
+
+GrRecordingContext::Arenas GrRecordingContext::OwnedArenas::get() {
     if (!fOpMemoryPool) {
         // DDL TODO: should the size of the memory pool be decreased in DDL mode? CPU-side memory
         // consumed in DDL mode vs. normal mode for a single skp might be a good metric of wasted
         // memory.
-        fOpMemoryPool = sk_sp<GrOpMemoryPool>(new GrOpMemoryPool(16384, 16384));
+        fOpMemoryPool = GrOpMemoryPool::Make(16384, 16384);
     }
 
-    SkASSERT(fOpMemoryPool);
-    return fOpMemoryPool;
+    if (!fRecordTimeAllocator) {
+        // TODO: empirically determine a better number for SkArenaAlloc's firstHeapAllocation param
+        fRecordTimeAllocator = std::make_unique<SkArenaAlloc>(sizeof(GrPipeline) * 100);
+    }
+
+    return {fOpMemoryPool.get(), fRecordTimeAllocator.get()};
 }
 
-GrOpMemoryPool* GrRecordingContext::opMemoryPool() {
-    return this->refOpMemoryPool().get();
+GrRecordingContext::OwnedArenas&& GrRecordingContext::detachArenas() {
+    return std::move(fArenas);
 }
 
 GrTextBlobCache* GrRecordingContext::getTextBlobCache() {
@@ -145,226 +180,16 @@ void GrRecordingContext::addOnFlushCallbackObject(GrOnFlushCallbackObject* onFlu
     this->drawingManager()->addOnFlushCallbackObject(onFlushCBObject);
 }
 
-sk_sp<GrSurfaceContext> GrRecordingContext::makeWrappedSurfaceContext(
-                                                                 sk_sp<GrSurfaceProxy> proxy,
-                                                                 sk_sp<SkColorSpace> colorSpace,
-                                                                 const SkSurfaceProps* props) {
-    ASSERT_SINGLE_OWNER_PRIV
-
-    if (proxy->asRenderTargetProxy()) {
-        return this->drawingManager()->makeRenderTargetContext(std::move(proxy),
-                                                               std::move(colorSpace), props);
-    } else {
-        SkASSERT(proxy->asTextureProxy());
-        SkASSERT(!props);
-        return this->drawingManager()->makeTextureContext(std::move(proxy), std::move(colorSpace));
-    }
-}
-
-sk_sp<GrSurfaceContext> GrRecordingContext::makeDeferredSurfaceContext(
-                                                                  const GrBackendFormat& format,
-                                                                  const GrSurfaceDesc& dstDesc,
-                                                                  GrSurfaceOrigin origin,
-                                                                  GrMipMapped mipMapped,
-                                                                  SkBackingFit fit,
-                                                                  SkBudgeted isDstBudgeted,
-                                                                  sk_sp<SkColorSpace> colorSpace,
-                                                                  const SkSurfaceProps* props) {
-    sk_sp<GrTextureProxy> proxy;
-    if (GrMipMapped::kNo == mipMapped) {
-        proxy = this->proxyProvider()->createProxy(format, dstDesc, origin, fit, isDstBudgeted);
-    } else {
-        SkASSERT(SkBackingFit::kExact == fit);
-        proxy = this->proxyProvider()->createMipMapProxy(format, dstDesc, origin, isDstBudgeted);
-    }
-    if (!proxy) {
-        return nullptr;
-    }
-
-    sk_sp<GrSurfaceContext> sContext = this->makeWrappedSurfaceContext(std::move(proxy),
-                                                                       std::move(colorSpace),
-                                                                       props);
-    if (sContext && sContext->asRenderTargetContext()) {
-        sContext->asRenderTargetContext()->discard();
-    }
-
-    return sContext;
-}
-
-sk_sp<GrRenderTargetContext> GrRecordingContext::makeDeferredRenderTargetContext(
-                                                        const GrBackendFormat& format,
-                                                        SkBackingFit fit,
-                                                        int width, int height,
-                                                        GrPixelConfig config,
-                                                        sk_sp<SkColorSpace> colorSpace,
-                                                        int sampleCnt,
-                                                        GrMipMapped mipMapped,
-                                                        GrSurfaceOrigin origin,
-                                                        const SkSurfaceProps* surfaceProps,
-                                                        SkBudgeted budgeted) {
-    SkASSERT(sampleCnt > 0);
-    if (this->abandoned()) {
-        return nullptr;
-    }
-
-    GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = width;
-    desc.fHeight = height;
-    desc.fConfig = config;
-    desc.fSampleCnt = sampleCnt;
-
-    sk_sp<GrTextureProxy> rtp;
-    if (GrMipMapped::kNo == mipMapped) {
-        rtp = this->proxyProvider()->createProxy(format, desc, origin, fit, budgeted);
-    } else {
-        rtp = this->proxyProvider()->createMipMapProxy(format, desc, origin, budgeted);
-    }
-    if (!rtp) {
-        return nullptr;
-    }
-
-    auto drawingManager = this->drawingManager();
-
-    sk_sp<GrRenderTargetContext> renderTargetContext =
-        drawingManager->makeRenderTargetContext(std::move(rtp), std::move(colorSpace),
-                                                surfaceProps);
-    if (!renderTargetContext) {
-        return nullptr;
-    }
-
-    renderTargetContext->discard();
-
-    return renderTargetContext;
-}
-
-static inline GrPixelConfig GrPixelConfigFallback(GrPixelConfig config) {
-    switch (config) {
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-        case kRGBA_half_Clamped_GrPixelConfig:
-            return kRGBA_8888_GrPixelConfig;
-        case kSBGRA_8888_GrPixelConfig:
-            return kSRGBA_8888_GrPixelConfig;
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-            return kRGBA_half_GrPixelConfig;
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-            return kRGB_888_GrPixelConfig;
-        default:
-            return kUnknown_GrPixelConfig;
-    }
-}
-
-sk_sp<GrRenderTargetContext> GrRecordingContext::makeDeferredRenderTargetContextWithFallback(
-                                                                 const GrBackendFormat& format,
-                                                                 SkBackingFit fit,
-                                                                 int width, int height,
-                                                                 GrPixelConfig config,
-                                                                 sk_sp<SkColorSpace> colorSpace,
-                                                                 int sampleCnt,
-                                                                 GrMipMapped mipMapped,
-                                                                 GrSurfaceOrigin origin,
-                                                                 const SkSurfaceProps* surfaceProps,
-                                                                 SkBudgeted budgeted) {
-    GrBackendFormat localFormat = format;
-    SkASSERT(sampleCnt > 0);
-    if (0 == this->caps()->getRenderTargetSampleCount(sampleCnt, config)) {
-        config = GrPixelConfigFallback(config);
-        // TODO: First we should be checking the getRenderTargetSampleCount from the GrBackendFormat
-        // and not GrPixelConfig. Besides that, we should implement the fallback in the caps, but
-        // for now we just convert the fallback pixel config to an SkColorType and then get the
-        // GrBackendFormat from that.
-        SkColorType colorType;
-        if (!GrPixelConfigToColorType(config, &colorType)) {
-            return nullptr;
-        }
-        localFormat = this->caps()->getBackendFormatFromColorType(colorType);
-    }
-
-    return this->makeDeferredRenderTargetContext(localFormat, fit, width, height, config,
-                                                 std::move(colorSpace), sampleCnt, mipMapped,
-                                                 origin, surfaceProps, budgeted);
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 sk_sp<const GrCaps> GrRecordingContextPriv::refCaps() const {
     return fContext->refCaps();
-}
-
-sk_sp<GrSkSLFPFactoryCache> GrRecordingContextPriv::fpFactoryCache() {
-    return fContext->fpFactoryCache();
-}
-
-sk_sp<GrOpMemoryPool> GrRecordingContextPriv::refOpMemoryPool() {
-    return fContext->refOpMemoryPool();
 }
 
 void GrRecordingContextPriv::addOnFlushCallbackObject(GrOnFlushCallbackObject* onFlushCBObject) {
     fContext->addOnFlushCallbackObject(onFlushCBObject);
 }
 
-sk_sp<GrSurfaceContext> GrRecordingContextPriv::makeWrappedSurfaceContext(
-                                                    sk_sp<GrSurfaceProxy> proxy,
-                                                    sk_sp<SkColorSpace> colorSpace,
-                                                    const SkSurfaceProps* props) {
-    return fContext->makeWrappedSurfaceContext(std::move(proxy), std::move(colorSpace), props);
-}
-
-sk_sp<GrSurfaceContext> GrRecordingContextPriv::makeDeferredSurfaceContext(
-                                                    const GrBackendFormat& format,
-                                                    const GrSurfaceDesc& dstDesc,
-                                                    GrSurfaceOrigin origin,
-                                                    GrMipMapped mipMapped,
-                                                    SkBackingFit fit,
-                                                    SkBudgeted isDstBudgeted,
-                                                    sk_sp<SkColorSpace> colorSpace,
-                                                    const SkSurfaceProps* props) {
-    return fContext->makeDeferredSurfaceContext(format, dstDesc, origin, mipMapped, fit,
-                                                isDstBudgeted, std::move(colorSpace), props);
-}
-
-sk_sp<GrRenderTargetContext> GrRecordingContextPriv::makeDeferredRenderTargetContext(
-                                                    const GrBackendFormat& format,
-                                                    SkBackingFit fit,
-                                                    int width, int height,
-                                                    GrPixelConfig config,
-                                                    sk_sp<SkColorSpace> colorSpace,
-                                                    int sampleCnt,
-                                                    GrMipMapped mipMapped,
-                                                    GrSurfaceOrigin origin,
-                                                    const SkSurfaceProps* surfaceProps,
-                                                    SkBudgeted budgeted) {
-    return fContext->makeDeferredRenderTargetContext(format, fit, width, height, config,
-                                                     std::move(colorSpace), sampleCnt, mipMapped,
-                                                     origin, surfaceProps, budgeted);
-}
-
-sk_sp<GrRenderTargetContext> GrRecordingContextPriv::makeDeferredRenderTargetContextWithFallback(
-                                        const GrBackendFormat& format,
-                                        SkBackingFit fit,
-                                        int width, int height,
-                                        GrPixelConfig config,
-                                        sk_sp<SkColorSpace> colorSpace,
-                                        int sampleCnt,
-                                        GrMipMapped mipMapped,
-                                        GrSurfaceOrigin origin,
-                                        const SkSurfaceProps* surfaceProps,
-                                        SkBudgeted budgeted) {
-    return fContext->makeDeferredRenderTargetContextWithFallback(format, fit, width, height, config,
-                                                                 std::move(colorSpace), sampleCnt,
-                                                                 mipMapped, origin, surfaceProps,
-                                                                 budgeted);
-}
-
 GrContext* GrRecordingContextPriv::backdoor() {
     return (GrContext*) fContext;
 }
+

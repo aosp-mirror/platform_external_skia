@@ -5,10 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkRRect.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
 
 namespace skiagm {
 
@@ -45,7 +53,7 @@ protected:
         kShapeCount
     };
 
-    static void AddShape(SkPath* path, const SkRect& rect, Shapes shape, SkPath::Direction dir) {
+    static void AddShape(SkPath* path, const SkRect& rect, Shapes shape, SkPathDirection dir) {
         switch (shape) {
             case kRect_Shape:
                 path->addRect(rect, dir);
@@ -97,9 +105,9 @@ protected:
                 for (size_t innerRect = 0; innerRect < SK_ARRAY_COUNT(innerRects); ++innerRect) {
                     SkPath path;
 
-                    AddShape(&path, outerRect, (Shapes) outerShape, SkPath::kCW_Direction);
+                    AddShape(&path, outerRect, (Shapes) outerShape, SkPathDirection::kCW);
                     AddShape(&path, innerRects[innerRect], (Shapes) innerShape,
-                             SkPath::kCCW_Direction);
+                             SkPathDirection::kCCW);
 
                     canvas->save();
                     if (fFlipped) {

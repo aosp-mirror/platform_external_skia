@@ -7,12 +7,12 @@
 #ifndef GrAHardwareBufferUtils_DEFINED
 #define GrAHardwareBufferUtils_DEFINED
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 
-#include "GrBackendSurface.h"
-#include "GrTypes.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrTypes.h"
 
 class GrContext;
 
@@ -30,15 +30,6 @@ GrBackendFormat GetBackendFormat(GrContext* context, AHardwareBuffer* hardwareBu
 typedef void* TexImageCtx;
 typedef void (*DeleteImageProc)(TexImageCtx);
 typedef void (*UpdateImageProc)(TexImageCtx, GrContext*);
-
-//TODO: delete this function after clients stop using it.
-GrBackendTexture MakeBackendTexture(GrContext* context, AHardwareBuffer* hardwareBuffer,
-                                    int width, int height,
-                                    DeleteImageProc* deleteProc,
-                                    TexImageCtx* imageCtx,
-                                    bool isProtectedContent,
-                                    const GrBackendFormat& backendFormat,
-                                    bool isRenderable);
 
 /**
  * Create a GrBackendTexture from AHardwareBuffer

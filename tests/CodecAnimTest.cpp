@@ -5,24 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "CodecPriv.h"
-#include "Resources.h"
-#include "SkAndroidCodec.h"
-#include "SkAnimCodecPlayer.h"
-#include "SkBitmap.h"
-#include "SkCodec.h"
-#include "SkCodecAnimation.h"
-#include "SkData.h"
-#include "SkImageInfo.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkSize.h"
-#include "SkString.h"
-#include "SkTypes.h"
-#include "Test.h"
-#include "sk_tool_utils.h"
+#include "include/codec/SkAndroidCodec.h"
+#include "include/codec/SkCodec.h"
+#include "include/codec/SkCodecAnimation.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkAnimCodecPlayer.h"
+#include "tests/CodecPriv.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
+#include <stdio.h>
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -151,13 +154,22 @@ DEF_TEST(Codec_frames, r) {
         { "images/blendBG.webp", 7,
             { 0, kNoFrame, kNoFrame, kNoFrame, 4, 4 },
             { kOpaque, kOpaque, kUnpremul, kOpaque, kUnpremul, kUnpremul },
-            { 525, 500, 525, 437, 609, 729, 444 }, 7,
+            { 525, 500, 525, 437, 609, 729, 444 },
+#ifdef SK_LEGACY_WEBP_LOOP_COUNT
+            7,
+#else
+            6,
+#endif
             { kKeep, kKeep, kKeep, kKeep, kKeep, kKeep, kKeep } },
         { "images/required.webp", 7,
             { 0, 1, 1, kNoFrame, 4, 4 },
             { kOpaque, kUnpremul, kUnpremul, kOpaque, kOpaque, kOpaque },
             { 100, 100, 100, 100, 100, 100, 100 },
+#ifdef SK_LEGACY_WEBP_LOOP_COUNT
             1,
+#else
+            0,
+#endif
             { kKeep, kRestoreBG, kKeep, kKeep, kKeep, kRestoreBG, kKeep } },
     };
 
@@ -317,8 +329,8 @@ DEF_TEST(Codec_frames, r) {
                 bm->allocPixels(decodeInfo);
                 if (cachedIndex != SkCodec::kNoFrame) {
                     // First copy the pixels from the cached frame
-                    const bool success = sk_tool_utils::copy_to(bm, kN32_SkColorType,
-                            cachedFrames[cachedIndex]);
+                    const bool success =
+                            ToolUtils::copy_to(bm, kN32_SkColorType, cachedFrames[cachedIndex]);
                     REPORTER_ASSERT(r, success);
                 }
                 SkCodec::Options opts;
@@ -411,7 +423,7 @@ DEF_TEST(AndroidCodec_animated, r) {
 
     for (int sampleSize : { 8, 32, 100 }) {
         auto dimensions = codec->codec()->getScaledDimensions(1.0f / sampleSize);
-        info = info.makeWH(dimensions.width(), dimensions.height());
+        info = info.makeDimensions(dimensions);
         SkBitmap bm;
         bm.allocPixels(info);
 
@@ -468,7 +480,7 @@ DEF_TEST(AnimCodecPlayer, r) {
         auto codec = SkCodec::MakeFromData(GetResourceAsData(test.fFile));
         REPORTER_ASSERT(r, codec);
 
-        auto player = skstd::make_unique<SkAnimCodecPlayer>(std::move(codec));
+        auto player = std::make_unique<SkAnimCodecPlayer>(std::move(codec));
         if (player->duration() != test.fDuration) {
             printf("*** %d vs %d\n", player->duration(), test.fDuration);
         }

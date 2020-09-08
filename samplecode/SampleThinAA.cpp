@@ -5,15 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
+#include "samplecode/Sample.h"
 
-#include "SkAnimTimer.h"
-#include "SkCanvas.h"
-#include "SkColorFilter.h"
-#include "SkFont.h"
-#include "SkImage.h"
-#include "SkPath.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkSurface.h"
 
 namespace skiagm {
 
@@ -214,14 +213,14 @@ public:
         blit.setFilterQuality(scale > 1.f ? kNone_SkFilterQuality : kMedium_SkFilterQuality);
         if (debugMode) {
             // Makes anything that's > 1/255 alpha fully opaque and sets color to medium green.
-            static constexpr SkScalar kFilter[] = {
-                0.f, 0.f, 0.f, 0.f, 16.f,
-                0.f, 0.f, 0.f, 0.f, 200.f,
-                0.f, 0.f, 0.f, 0.f, 16.f,
+            static constexpr float kFilter[] = {
+                0.f, 0.f, 0.f, 0.f, 16.f/255,
+                0.f, 0.f, 0.f, 0.f, 200.f/255,
+                0.f, 0.f, 0.f, 0.f, 16.f/255,
                 0.f, 0.f, 0.f, 255.f, 0.f
             };
 
-            blit.setColorFilter(SkColorFilter::MakeMatrixFilterRowMajor255(kFilter));
+            blit.setColorFilter(SkColorFilters::Matrix(kFilter));
         }
 
         canvas->scale(scale, scale);
@@ -316,8 +315,8 @@ protected:
         this->drawShapes(canvas, "SSx64", 4, fSS16);
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
-        SkScalar t = timer.secs();
+    bool onAnimate(double nanos) override {
+        SkScalar t = 1e-9 * nanos;
         SkScalar dt = fLastFrameTime < 0.f ? 0.f : t - fLastFrameTime;
         fLastFrameTime = t;
 
@@ -373,14 +372,9 @@ protected:
         return true;
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "Thin-AA");
-            return true;
-        }
+    SkString name() override { return SkString("Thin-AA"); }
 
-        SkUnichar key;
-        if (Sample::CharQ(*evt, &key)) {
+    bool onChar(SkUnichar key) override {
             switch(key) {
                 case 't':
                     // Toggle translation animation.
@@ -409,11 +403,10 @@ protected:
                 case 'u': fAngle = 0.f; return true;
                 case 'y': fAngle = 90.f; return true;
                 case ' ': fAngle = SkScalarMod(fAngle + 15.f, 360.f); return true;
-                case '-': fStrokeWidth = SkMaxScalar(0.1f, fStrokeWidth - 0.05f); return true;
-                case '=': fStrokeWidth = SkMinScalar(1.f, fStrokeWidth + 0.05f); return true;
+                case '-': fStrokeWidth = std::max(0.1f, fStrokeWidth - 0.05f); return true;
+                case '=': fStrokeWidth = std::min(1.f, fStrokeWidth + 0.05f); return true;
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
 
 private:

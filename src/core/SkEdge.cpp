@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkEdge.h"
+#include "src/core/SkEdge.h"
 
-#include "SkFDot6.h"
-#include "SkMathPriv.h"
-#include "SkTo.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkFDot6.h"
+#include "src/core/SkMathPriv.h"
 
 #include <utility>
 
@@ -345,7 +345,7 @@ static SkFDot6 cubic_delta_from_line(SkFDot6 a, SkFDot6 b, SkFDot6 c, SkFDot6 d)
     SkFDot6 oneThird = (a*8 - b*15 + 6*c + d) * 19 >> 9;
     SkFDot6 twoThird = (a + 6*b - c*15 + d*8) * 19 >> 9;
 
-    return SkMax32(SkAbs32(oneThird), SkAbs32(twoThird));
+    return std::max(SkAbs32(oneThird), SkAbs32(twoThird));
 }
 
 bool SkCubicEdge::setCubicWithoutUpdate(const SkPoint pts[4], int shift, bool sortY) {

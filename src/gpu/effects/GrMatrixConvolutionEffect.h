@@ -8,7 +8,7 @@
 #ifndef GrMatrixConvolutionEffect_DEFINED
 #define GrMatrixConvolutionEffect_DEFINED
 
-#include "GrTextureDomain.h"
+#include "src/gpu/effects/GrTextureDomain.h"
 
 // A little bit less than the minimum # uniforms required by DX9SM2 (32).
 // Allows for a 5x5 kernel (or 25x1, for that matter).
@@ -16,7 +16,7 @@
 
 class GrMatrixConvolutionEffect : public GrFragmentProcessor {
 public:
-    static std::unique_ptr<GrFragmentProcessor> Make(sk_sp<GrTextureProxy> srcProxy,
+    static std::unique_ptr<GrFragmentProcessor> Make(GrSurfaceProxyView srcView,
                                                      const SkIRect& srcBounds,
                                                      const SkISize& kernelSize,
                                                      const SkScalar* kernel,
@@ -26,11 +26,11 @@ public:
                                                      GrTextureDomain::Mode tileMode,
                                                      bool convolveAlpha) {
         return std::unique_ptr<GrFragmentProcessor>(
-                new GrMatrixConvolutionEffect(std::move(srcProxy), srcBounds, kernelSize, kernel,
+                new GrMatrixConvolutionEffect(std::move(srcView), srcBounds, kernelSize, kernel,
                                               gain, bias, kernelOffset, tileMode, convolveAlpha));
     }
 
-    static std::unique_ptr<GrFragmentProcessor> MakeGaussian(sk_sp<GrTextureProxy> srcProxy,
+    static std::unique_ptr<GrFragmentProcessor> MakeGaussian(GrSurfaceProxyView srcView,
                                                              const SkIRect& srcBounds,
                                                              const SkISize& kernelSize,
                                                              SkScalar gain,
@@ -57,7 +57,7 @@ public:
 private:
     // srcProxy is the texture that is going to be convolved
     // srcBounds is the subset of 'srcProxy' that will be used (e.g., for clamp mode)
-    GrMatrixConvolutionEffect(sk_sp<GrTextureProxy> srcProxy,
+    GrMatrixConvolutionEffect(GrSurfaceProxyView srcView,
                               const SkIRect& srcBounds,
                               const SkISize& kernelSize,
                               const SkScalar* kernel,

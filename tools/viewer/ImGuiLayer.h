@@ -8,9 +8,9 @@
 #ifndef ImGuiLayer_DEFINED
 #define ImGuiLayer_DEFINED
 
-#include "SkPaint.h"
-#include "SkTArray.h"
-#include "sk_app/Window.h"
+#include "include/core/SkPaint.h"
+#include "include/private/SkTArray.h"
+#include "tools/sk_app/Window.h"
 
 #include "imgui.h"
 
@@ -33,7 +33,7 @@ struct DragCanvas {
             aspect = h / w;
         }
 
-        float availWidth = SkTMax(ImGui::GetContentRegionAvailWidth(), 1.0f);
+        float availWidth = std::max(ImGui::GetContentRegionAvailWidth(), 1.0f);
         fPos = ImGui::GetCursorScreenPos();
         fSize = ImVec2(availWidth, availWidth * aspect);
 
@@ -123,10 +123,10 @@ public:
     void onAttach(sk_app::Window* window) override;
     void onPrePaint() override;
     void onPaint(SkSurface*) override;
-    bool onMouse(int x, int y, sk_app::Window::InputState state, uint32_t modifiers) override;
-    bool onMouseWheel(float delta, uint32_t modifiers) override;
-    bool onKey(sk_app::Window::Key key, sk_app::Window::InputState state, uint32_t modifiers) override;
-    bool onChar(SkUnichar c, uint32_t modifiers) override;
+    bool onMouse(int x, int y, skui::InputState state, skui::ModifierKey modifiers) override;
+    bool onMouseWheel(float delta, skui::ModifierKey modifiers) override;
+    bool onKey(skui::Key key, skui::InputState state, skui::ModifierKey modifiers) override;
+    bool onChar(SkUnichar c, skui::ModifierKey modifiers) override;
 
 private:
     sk_app::Window* fWindow;

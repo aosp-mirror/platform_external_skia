@@ -8,8 +8,8 @@
 #ifndef SKSL_FIELDACCESS
 #define SKSL_FIELDACCESS
 
-#include "SkSLExpression.h"
-#include "SkSLUtil.h"
+#include "src/sksl/SkSLUtil.h"
+#include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
 
@@ -31,8 +31,8 @@ struct FieldAccess : public Expression {
     , fFieldIndex(fieldIndex)
     , fOwnerKind(ownerKind) {}
 
-    bool hasSideEffects() const override {
-        return fBase->hasSideEffects();
+    bool hasProperty(Property property) const override {
+        return fBase->hasProperty(property);
     }
 
     std::unique_ptr<Expression> clone() const override {
@@ -40,9 +40,11 @@ struct FieldAccess : public Expression {
                                                            fOwnerKind));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return fBase->description() + "." + fBase->fType.fields()[fFieldIndex].fName;
     }
+#endif
 
     std::unique_ptr<Expression> fBase;
     const int fFieldIndex;

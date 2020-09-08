@@ -5,14 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "GrContext.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkPictureRecorder.h"
-#include "SkTableColorFilter.h"
-#include "SkColorFilterImageFilter.h"
-#include "SkPictureImageFilter.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
+#include "include/effects/SkTableColorFilter.h"
+#include "include/gpu/GrContext.h"
 
 constexpr int kTestRectSize = 50;
 constexpr int kDetectorGreenValue = 50;
@@ -40,8 +48,8 @@ static void install_detector_color_filter(SkPaint* drawPaint) {
 
 // This detector detects that image filter phase of the pixel pipeline receives the correct value.
 static void install_detector_image_filter(SkPaint* drawPaint) {
-    drawPaint->setImageFilter(SkColorFilterImageFilter::Make(make_detector_color_filter(),
-                                                             drawPaint->refImageFilter()));
+    drawPaint->setImageFilter(SkImageFilters::ColorFilter(
+            make_detector_color_filter(), drawPaint->refImageFilter()));
 }
 
 static void no_detector_install(SkPaint*) {
@@ -115,7 +123,7 @@ static void draw_svg_opacity_and_filter_layer_sequence(SkCanvas* canvas, SkColor
         canvas->save();
             canvas->clipRect(targetRect);
             SkPaint drawPaint;
-            drawPaint.setImageFilter(SkPictureImageFilter::Make(shape));
+            drawPaint.setImageFilter(SkImageFilters::Picture(shape));
             installDetector(&drawPaint);
             canvas->saveLayer(&targetRect, &drawPaint);
             canvas->restore();

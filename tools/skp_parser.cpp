@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkDebugCanvas.h"
-#include "SkNullCanvas.h"
-#include "SkPicture.h"
-#include "SkStream.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkStream.h"
+#include "include/utils/SkNullCanvas.h"
+#include "tools/debugger/DebugCanvas.h"
 
 #include <iostream>
 
@@ -51,14 +51,14 @@ int main(int argc, char** argv) {
         return 3;
     }
     SkISize size = pic->cullRect().roundOut().size();
-    SkDebugCanvas debugCanvas(size.width(), size.height());
+    DebugCanvas debugCanvas(size.width(), size.height());
     pic->playback(&debugCanvas);
     std::unique_ptr<SkCanvas> nullCanvas = SkMakeNullCanvas();
     UrlDataManager dataManager(SkString("data"));
     SkDynamicMemoryWStream stream;
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
     writer.beginObject(); // root
-    debugCanvas.toJSON(writer, dataManager, debugCanvas.getSize(), nullCanvas.get());
+    debugCanvas.toJSON(writer, dataManager, nullCanvas.get());
     writer.endObject(); // root
     writer.flush();
     if (argc > 2) {

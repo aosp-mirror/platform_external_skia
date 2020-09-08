@@ -5,47 +5,38 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
-#include "SkCanvas.h"
-#include "SkImage.h"
-#include "Resources.h"
-#include "SkColorFilterPriv.h"
-#include "SkReadBuffer.h"
-#include "effects/GrSkSLFP.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/effects/SkRuntimeEffect.h"
+#include "tools/Resources.h"
+
+#include <stddef.h>
+#include <utility>
 
 const char* SKSL_TEST_SRC = R"(
-    in uniform float b;
-
     void main(inout half4 color) {
-        color.rg = color.gr;
-        color.b = half(b);
+        color.a = color.r*0.3 + color.g*0.6 + color.b*0.1;
+        color.r = 0;
+        color.g = 0;
+        color.b = 0;
     }
 )";
 
-static void runtimeCpuFunc(float color[4], const void* context) {
-    std::swap(color[0], color[1]);
-    color[2] = *(float*) context;
-}
-
-DEF_SIMPLE_GPU_GM(runtimecolorfilter, context, rtc, canvas, 768, 256) {
+DEF_SIMPLE_GM(runtimecolorfilter, canvas, 512, 256) {
     auto img = GetResourceAsImage("images/mandrill_256.png");
     canvas->drawImage(img, 0, 0, nullptr);
 
-    float b = 0.75;
-    sk_sp<SkData> data = SkData::MakeWithoutCopy(&b, sizeof(b));
-    auto cf1 = SkRuntimeColorFilterFactory(SkString(SKSL_TEST_SRC), runtimeCpuFunc).make(data);
+    sk_sp<SkRuntimeEffect> effect = std::get<0>(SkRuntimeEffect::Make(SkString(SKSL_TEST_SRC)));
+
+    auto cf1 = effect->makeColorFilter(nullptr);
     SkPaint p;
     p.setColorFilter(cf1);
     canvas->drawImage(img, 256, 0, &p);
-
-    static constexpr size_t kBufferSize = 512;
-    char buffer[kBufferSize];
-    SkBinaryWriteBuffer wb(buffer, kBufferSize);
-    wb.writeFlattenable(cf1.get());
-    SkReadBuffer rb(buffer, kBufferSize);
-    auto cf2 = rb.readColorFilter();
-    SkASSERT(cf2);
-    p.setColorFilter(cf2);
-    canvas->drawImage(img, 512, 0, &p);
 }

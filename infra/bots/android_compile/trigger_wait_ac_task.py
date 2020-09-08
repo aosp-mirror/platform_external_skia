@@ -11,7 +11,6 @@ import json
 import math
 import optparse
 import os
-import requests
 import subprocess
 import sys
 import time
@@ -19,6 +18,7 @@ import time
 INFRA_BOTS_DIR = os.path.abspath(os.path.realpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir)))
 sys.path.insert(0, INFRA_BOTS_DIR)
+import git_utils
 import utils
 
 
@@ -28,17 +28,14 @@ GS_RETRIES = 5
 GS_RETRY_WAIT_BASE = 15
 
 POLLING_FREQUENCY_SECS = 10
-DEADLINE_SECS = 60 * 60  # 60 minutes.
+DEADLINE_SECS = 2* 60 * 60  # 2 hours.
 
 INFRA_FAILURE_ERROR_MSG = (
       '\n\n'
-      'Your run failed due to infra failures. '
-      'It could be due to any of the following:\n\n'
-      '* Need to rebase\n\n'
-      '* Failure when running "python -c from gn import gn_to_bp"\n\n'
-      '* Problem with syncing Android repository.\n\n'
-      'See go/skia-android-framework-compile-bot-cloud-logs-errors for the '
-      'compile server\'s logs.'
+      'Your run failed due to unknown infrastructure failures.\n'
+      'Please contact rmistry@ or the trooper from '
+      'http://skia-tree-status.appspot.com/trooper\n'
+      'Sorry for the inconvenience!\n'
 )
 
 
@@ -112,6 +109,14 @@ def _trigger_task(options):
   return task
 
 
+def _add_cl_comment(issue, comment):
+  # Depot tools needs a checkout to use "git cl" even though we are just adding
+  # a comment to a change unrelated to the checkout.
+  with git_utils.NewGitCheckout(repository=utils.SKIA_REPO) as checkout:
+    add_comment_cmd = ['git', 'cl', 'comments', '-i', str(issue), '-a', comment]
+    subprocess.check_call(add_comment_cmd)
+
+
 def trigger_and_wait(options):
   """Triggers a task on the compile server and waits for it to complete."""
   task = _trigger_task(options)
@@ -135,14 +140,14 @@ def trigger_and_wait(options):
     for retry in range(GS_RETRIES):
       try:
         output = subprocess.check_output(['gsutil', 'cat', gs_file])
-      except subprocess.CalledProcessError:
-        raise AndroidCompileException('The %s file no longer exists.' % gs_file)
-      try:
         ret = json.loads(output)
         break
-      except ValueError, e:
-        print 'Received output that could not be converted to json: %s' % output
-        print e
+      except (ValueError, subprocess.CalledProcessError) as e:
+        if e.__class__ == ValueError:
+          print ('Received output "%s" that could not be converted to '
+                 'json: %s' % (output, e))
+        elif e.__class__ == subprocess.CalledProcessError:
+          print e
         if retry == (GS_RETRIES-1):
           print '%d retries did not help' % GS_RETRIES
           raise
@@ -151,7 +156,11 @@ def trigger_and_wait(options):
         time.sleep(waittime)
 
     if ret.get('infra_failure'):
-      raise AndroidCompileException(INFRA_FAILURE_ERROR_MSG)
+      if ret.get('error'):
+        raise AndroidCompileException('Run failed with:\n\n%s\n' % ret['error'])
+      else:
+        # Use a general purpose error message.
+        raise AndroidCompileException(INFRA_FAILURE_ERROR_MSG)
 
     if ret.get('done'):
       if not ret.get('is_master_branch', True):
@@ -167,14 +176,21 @@ def trigger_and_wait(options):
                'build without the patch succeeded. This means that the patch '
                'causes Android to fail compilation.\n\n'
                'With patch logs are here: %s\n\n'
-               'No patch logs are here: %s\n\n' % (
-                   ret['withpatch_log'], ret['nopatch_log']))
+               'No patch logs are here: %s\n\n'
+               'You can force sync of the checkout if needed here: %s\n\n' % (
+                   ret['withpatch_log'], ret['nopatch_log'],
+                   'https://skia-android-compile.corp.goog/'))
       else:
-        print ('Both with patch and no patch builds failed. This means that the'
-               ' Android tree is currently broken. Marking this bot as '
-               'successful')
-        print 'With patch logs are here: %s' % ret['withpatch_log']
-        print 'No patch logs are here: %s' % ret['nopatch_log']
+        msg = ('FYI: Both with patch and no patch builds of the %s bot '
+               'failed.\nThis could mean that the Android tree is currently '
+               'broken and infra is investigating.\nMarking this bot as '
+               'successful to not block the CQ.\n\n'
+               'With patch logs are here: %s\n'
+               'No patch logs are here: %s\n\n') % (
+                   options.builder_name, ret['withpatch_log'],
+                   ret['nopatch_log'])
+        _add_cl_comment(task['issue'], msg)
+        print msg
         return 0
 
     # Print status of the task.
@@ -210,6 +226,9 @@ def main():
   option_parser.add_option(
       '', '--hash', type=str, default='',
       help='The Skia repo hash to compile against.')
+  option_parser.add_option(
+      '', '--builder_name', type=str, default='',
+      help='The builder that triggered this run.')
   options, _ = option_parser.parse_args()
   sys.exit(trigger_and_wait(options))
 

@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkMatrixPriv.h"
-#include "SkReader32.h"
-#include "SkString.h"
-#include "SkTo.h"
+#include "include/core/SkString.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/core/SkReader32.h"
 
-#include "SkWriter32.h"
+#include "src/core/SkWriter32.h"
 
 void SkWriter32::writeMatrix(const SkMatrix& matrix) {
     size_t size = SkMatrixPriv::WriteToMemory(matrix, nullptr);
@@ -75,7 +75,7 @@ size_t SkWriter32::WriteStringSize(const char* str, size_t len) {
 void SkWriter32::growToAtLeast(size_t size) {
     const bool wasExternal = (fExternal != nullptr) && (fData == fExternal);
 
-    fCapacity = 4096 + SkTMax(size, fCapacity + (fCapacity / 2));
+    fCapacity = 4096 + std::max(size, fCapacity + (fCapacity / 2));
     fInternal.realloc(fCapacity);
     fData = fInternal.get();
 

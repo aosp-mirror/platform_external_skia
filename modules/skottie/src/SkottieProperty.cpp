@@ -5,13 +5,34 @@
  * found in the LICENSE file.
  */
 
-#include "SkottieProperty.h"
+#include "modules/skottie/include/SkottieProperty.h"
 
-#include "SkottieAdapter.h"
-#include "SkSGColor.h"
-#include "SkSGOpacityEffect.h"
+#include "modules/skottie/src/Transform.h"
+#include "modules/skottie/src/text/TextAdapter.h"
+#include "modules/sksg/include/SkSGOpacityEffect.h"
+#include "modules/sksg/include/SkSGPaint.h"
 
 namespace skottie {
+
+bool TextPropertyValue::operator==(const TextPropertyValue& other) const {
+    return fTypeface == other.fTypeface
+        && fText == other.fText
+        && fTextSize == other.fTextSize
+        && fStrokeWidth == other.fStrokeWidth
+        && fLineHeight == other.fLineHeight
+        && fHAlign == other.fHAlign
+        && fVAlign == other.fVAlign
+        && fResize == other.fResize
+        && fBox == other.fBox
+        && fFillColor == other.fFillColor
+        && fStrokeColor == other.fStrokeColor
+        && fHasFill == other.fHasFill
+        && fHasStroke == other.fHasStroke;
+}
+
+bool TextPropertyValue::operator!=(const TextPropertyValue& other) const {
+    return !(*this== other);
+}
 
 bool TransformPropertyValue::operator==(const TransformPropertyValue& other) const {
     return this->fAnchorPoint == other.fAnchorPoint
@@ -52,10 +73,24 @@ void PropertyHandle<OpacityPropertyValue, sksg::OpacityEffect>::set(const Opacit
 }
 
 template <>
-PropertyHandle<TransformPropertyValue, TransformAdapter2D>::~PropertyHandle() {}
+PropertyHandle<TextPropertyValue, internal::TextAdapter>::~PropertyHandle() {}
 
 template <>
-TransformPropertyValue PropertyHandle<TransformPropertyValue, TransformAdapter2D>::get() const {
+TextPropertyValue PropertyHandle<TextPropertyValue, internal::TextAdapter>::get() const {
+      return fNode->getText();
+}
+
+template<>
+void PropertyHandle<TextPropertyValue, internal::TextAdapter>::set(const TextPropertyValue& t) {
+      fNode->setText(t);
+}
+
+template <>
+PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::~PropertyHandle() {}
+
+template <>
+TransformPropertyValue PropertyHandle<TransformPropertyValue,
+                                      internal::TransformAdapter2D>::get() const {
     return {
         fNode->getAnchorPoint(),
         fNode->getPosition(),
@@ -67,7 +102,7 @@ TransformPropertyValue PropertyHandle<TransformPropertyValue, TransformAdapter2D
 }
 
 template <>
-void PropertyHandle<TransformPropertyValue, TransformAdapter2D>::set(
+void PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::set(
         const TransformPropertyValue& t) {
     fNode->setAnchorPoint(t.fAnchorPoint);
     fNode->setPosition(t.fPosition);
@@ -83,7 +118,14 @@ void PropertyObserver::onColorProperty(const char[],
 void PropertyObserver::onOpacityProperty(const char[],
                                          const LazyHandle<OpacityPropertyHandle>&) {}
 
+void PropertyObserver::onTextProperty(const char[],
+                                      const LazyHandle<TextPropertyHandle>&) {}
+
 void PropertyObserver::onTransformProperty(const char[],
                                            const LazyHandle<TransformPropertyHandle>&) {}
 
-} // namespace skottie
+void PropertyObserver::onEnterNode(const char node_name[]) {}
+
+void PropertyObserver::onLeavingNode(const char node_name[]) {}
+
+}  // namespace skottie

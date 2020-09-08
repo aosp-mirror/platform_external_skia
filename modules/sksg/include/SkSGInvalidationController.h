@@ -8,9 +8,10 @@
 #ifndef SkSGInvalidationController_DEFINED
 #define SkSGInvalidationController_DEFINED
 
-#include "SkMatrix.h"
-#include "SkTDArray.h"
-#include "SkTypes.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkTypes.h"
+
+#include <vector>
 
 struct SkRect;
 
@@ -29,13 +30,16 @@ public:
 
     void inval(const SkRect&, const SkMatrix& ctm = SkMatrix::I());
 
-    const SkRect& bounds() const { return fBounds;        }
-    const SkRect*  begin() const { return fRects.begin(); }
-    const SkRect*    end() const { return fRects.end();   }
+    const SkRect& bounds() const { return fBounds; }
+
+    auto begin() const { return fRects.cbegin(); }
+    auto   end() const { return fRects.cend();   }
+
+    void reset();
 
 private:
-    SkTDArray<SkRect> fRects;
-    SkRect            fBounds;
+    std::vector<SkRect> fRects;
+    SkRect              fBounds;
 };
 
 } // namespace sksg

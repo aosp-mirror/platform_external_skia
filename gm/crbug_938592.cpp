@@ -5,10 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkPaint.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTileMode.h"
+#include "include/effects/SkGradientShader.h"
 
 // This draws a hard stop gradient applied to a rectangle. The hard stops fall at half pixel
 // boundaries in y. On some GPUs we've found that the winding of the two triangles that make up the
@@ -22,7 +27,7 @@ DEF_SIMPLE_GM(crbug_938592, canvas, 500, 300) {
     static constexpr SkColor c1 = SK_ColorRED;
     static constexpr SkColor c2 = SK_ColorGREEN;
     static constexpr SkColor colors[] = {c0, c0, c1, c1, c2, c2};
-    auto grad = SkGradientShader::MakeLinear(pts, colors, pos, 6, SkShader::kClamp_TileMode);
+    auto grad = SkGradientShader::MakeLinear(pts, colors, pos, 6, SkTileMode::kClamp);
     SkPaint paint;
     paint.setShader(grad);
     static constexpr int kMirrorX = 400;

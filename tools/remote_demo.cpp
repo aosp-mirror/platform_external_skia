@@ -16,10 +16,10 @@
 #include <thread>
 #include <unistd.h>
 
-#include "SkGraphics.h"
-#include "SkRemoteGlyphCache.h"
-#include "SkScalerContext.h"
-#include "SkSurface.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkRemoteGlyphCache.h"
+#include "src/core/SkScalerContext.h"
 
 static std::string gSkpName;
 static bool gUseGpu = true;
@@ -137,7 +137,7 @@ static bool push_font_data(const SkPicture& pic, SkStrikeServer* strikeServer,
     const SkIRect bounds = pic.cullRect().round();
     const SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
     SkTextBlobCacheDiffCanvas filter(bounds.width(), bounds.height(), props,
-                                     strikeServer, std::move(colorSpace));
+                                     strikeServer, std::move(colorSpace), true);
     pic.playback(&filter);
 
     std::vector<uint8_t> fontData;

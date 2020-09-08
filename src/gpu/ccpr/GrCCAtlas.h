@@ -8,31 +8,17 @@
 #ifndef GrCCAtlas_DEFINED
 #define GrCCAtlas_DEFINED
 
-#include "GrAllocator.h"
-#include "GrNonAtomicRef.h"
-#include "GrResourceKey.h"
-#include "GrTexture.h"
-#include "SkRefCnt.h"
-#include "SkSize.h"
+#include "src/gpu/GrDynamicAtlas.h"
+
+#include "src/gpu/ccpr/GrCCPathProcessor.h"
 
 class GrCCCachedAtlas;
-class GrOnFlushResourceProvider;
-class GrRenderTargetContext;
-class GrTextureProxy;
-struct SkIPoint16;
-struct SkIRect;
 
 /**
- * This class implements a dynamic size GrRectanizer that grows until it reaches the implementation-
- * dependent max texture size. When finalized, it also creates and stores a GrTextureProxy for the
- * underlying atlas.
+ * GrDynamicAtlas with CCPR caching capabilities.
  */
-class GrCCAtlas {
+class GrCCAtlas : public GrDynamicAtlas {
 public:
-    // As long as GrSurfaceOrigin exists, we just have to decide on one for the atlas texture.
-    static constexpr GrSurfaceOrigin kTextureOrigin = kTopLeft_GrSurfaceOrigin;
-    static constexpr int kPadding = 1;  // Amount of padding below and to the right of each path.
-
     // This struct encapsulates the minimum and desired requirements for an atlas, as well as an
     // approximate number of pixels to help select a good initial size.
     struct Specs {
@@ -46,59 +32,71 @@ public:
         void accountForSpace(int width, int height);
     };
 
-    enum class CoverageType : bool {
+    enum class CoverageType {
         kFP16_CoverageCount,
+        kA8_Multisample,
         kA8_LiteralCoverage
     };
 
+    static constexpr GrColorType CoverageTypeToColorType(CoverageType coverageType) {
+        switch (coverageType) {
+            case CoverageType::kFP16_CoverageCount:
+                return GrColorType::kAlpha_F16;
+            case CoverageType::kA8_Multisample:
+            case CoverageType::kA8_LiteralCoverage:
+                return GrColorType::kAlpha_8;
+        }
+        SkUNREACHABLE;
+    }
+
+    static constexpr InternalMultisample CoverageTypeHasInternalMultisample(
+            CoverageType coverageType) {
+        switch (coverageType) {
+            case CoverageType::kFP16_CoverageCount:
+            case CoverageType::kA8_LiteralCoverage:
+                return InternalMultisample::kNo;
+            case CoverageType::kA8_Multisample:
+                return InternalMultisample::kYes;
+        }
+        SkUNREACHABLE;
+    }
+
+    static constexpr GrCCPathProcessor::CoverageMode CoverageTypeToPathCoverageMode(
+            CoverageType coverageType) {
+        return (GrCCAtlas::CoverageType::kFP16_CoverageCount == coverageType)
+                ? GrCCPathProcessor::CoverageMode::kCoverageCount
+                : GrCCPathProcessor::CoverageMode::kLiteral;
+    }
+
+
+    static sk_sp<GrTextureProxy> MakeLazyAtlasProxy(const LazyInstantiateAtlasCallback& callback,
+                                                    CoverageType coverageType, const GrCaps& caps,
+                                                    GrSurfaceProxy::UseAllocator useAllocator) {
+        return GrDynamicAtlas::MakeLazyAtlasProxy(callback, CoverageTypeToColorType(coverageType),
+                                                  CoverageTypeHasInternalMultisample(coverageType),
+                                                  caps, useAllocator);
+    }
+
     GrCCAtlas(CoverageType, const Specs&, const GrCaps&);
-    ~GrCCAtlas();
+    ~GrCCAtlas() override;
 
-    GrTextureProxy* textureProxy() const { return fTextureProxy.get(); }
-    int currentWidth() const { return fWidth; }
-    int currentHeight() const { return fHeight; }
-
-    // Attempts to add a rect to the atlas. If successful, returns the integer offset from
-    // device-space pixels where the path will be drawn, to atlas pixels where its mask resides.
-    bool addRect(const SkIRect& devIBounds, SkIVector* atlasOffset);
-    const SkISize& drawBounds() { return fDrawBounds; }
-
-    // This is an optional space for the caller to jot down which user-defined batches to use when
-    // they render the content of this atlas.
+    // This is an optional space for the caller to jot down user-defined instance data to use when
+    // rendering atlas content.
     void setFillBatchID(int id);
     int getFillBatchID() const { return fFillBatchID; }
     void setStrokeBatchID(int id);
     int getStrokeBatchID() const { return fStrokeBatchID; }
+    void setEndStencilResolveInstance(int idx);
+    int getEndStencilResolveInstance() const { return fEndStencilResolveInstance; }
 
     sk_sp<GrCCCachedAtlas> refOrMakeCachedAtlas(GrOnFlushResourceProvider*);
 
-    // Instantiates our texture proxy for the atlas and returns a pre-cleared GrRenderTargetContext
-    // that the caller may use to render the content. After this call, it is no longer valid to call
-    // addRect(), setUserBatchID(), or this method again.
-    //
-    // 'backingTexture', if provided, is a renderable texture with which to instantiate our proxy.
-    // If null then we will create a texture using the resource provider. The purpose of this param
-    // is to provide a guaranteed way to recycle a stashed atlas texture from a previous flush.
-    sk_sp<GrRenderTargetContext> makeRenderTargetContext(GrOnFlushResourceProvider*,
-                                                         sk_sp<GrTexture> backingTexture = nullptr);
-
 private:
-    class Node;
-
-    bool internalPlaceRect(int w, int h, SkIPoint16* loc);
-
     const CoverageType fCoverageType;
-    const int fMaxTextureSize;
-    int fWidth, fHeight;
-    std::unique_ptr<Node> fTopNode;
-    SkISize fDrawBounds = {0, 0};
-
     int fFillBatchID;
     int fStrokeBatchID;
-
+    int fEndStencilResolveInstance;
     sk_sp<GrCCCachedAtlas> fCachedAtlas;
-    sk_sp<GrTextureProxy> fTextureProxy;
-    sk_sp<GrTexture> fBackingTexture;
 };
 
 /**
@@ -112,6 +110,7 @@ public:
     GrCCAtlasStack(CoverageType coverageType, const GrCCAtlas::Specs& specs, const GrCaps* caps)
             : fCoverageType(coverageType), fSpecs(specs), fCaps(caps) {}
 
+    CoverageType coverageType() const { return fCoverageType; }
     bool empty() const { return fAtlases.empty(); }
     const GrCCAtlas& front() const { SkASSERT(!this->empty()); return fAtlases.front(); }
     GrCCAtlas& front() { SkASSERT(!this->empty()); return fAtlases.front(); }
@@ -143,8 +142,8 @@ private:
 };
 
 inline void GrCCAtlas::Specs::accountForSpace(int width, int height) {
-    fMinWidth = SkTMax(width, fMinWidth);
-    fMinHeight = SkTMax(height, fMinHeight);
+    fMinWidth = std::max(width, fMinWidth);
+    fMinHeight = std::max(height, fMinHeight);
     fApproxNumPixels += (width + kPadding) * (height + kPadding);
 }
 
