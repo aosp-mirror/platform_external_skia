@@ -116,8 +116,9 @@ void ParagraphImpl::layout(SkScalar rawWidth) {
         fState >= kLineBroken &&
          fLines.size() == 1 && fLines.front().ellipsis() == nullptr) {
         // Most common case: one line of text (and one line is never justified, so no cluster shifts)
+        // We cannot mark it as kLineBroken because the new width can be bigger than the old width
         fWidth = floorWidth;
-        fState = kLineBroken;
+        fState = kMarked;
     } else if (fState >= kLineBroken && fOldWidth != floorWidth) {
         // We can use the results from SkShaper but have to do EVERYTHING ELSE again
         fState = kShaped;
@@ -206,16 +207,13 @@ void ParagraphImpl::paint(SkCanvas* canvas, SkScalar x, SkScalar y) {
 
     if (fParagraphStyle.getDrawOptions() == DrawOptions::kDirect) {
         // Paint the text without recording it
-        canvas->save();
-        canvas->translate(x, y);
-        this->paintLines(canvas);
-        canvas->restore();
+        this->paintLines(canvas, x, y);
         return;
     }
 
     if (fState < kDrawn) {
         // Record the picture anyway (but if we have some pieces in the cache they will be used)
-        this->paintLinesIntoPicture();
+        this->paintLinesIntoPicture(0, 0);
         fState = kDrawn;
     }
 
@@ -482,22 +480,22 @@ void ParagraphImpl::formatLines(SkScalar maxWidth) {
     }
 }
 
-void ParagraphImpl::paintLinesIntoPicture() {
+void ParagraphImpl::paintLinesIntoPicture(SkScalar x, SkScalar y) {
     SkPictureRecorder recorder;
     SkCanvas* textCanvas = recorder.beginRecording(this->getMaxWidth(), this->getHeight());
 
     auto bounds = SkRect::MakeEmpty();
     for (auto& line : fLines) {
-        auto boundaries = line.paint(textCanvas);
+        auto boundaries = line.paint(textCanvas, x, y);
         bounds.joinPossiblyEmptyRect(boundaries);
     }
 
     fPicture = recorder.finishRecordingAsPictureWithCull(bounds);
 }
 
-void ParagraphImpl::paintLines(SkCanvas* canvas) {
+void ParagraphImpl::paintLines(SkCanvas* canvas, SkScalar x, SkScalar y) {
     for (auto& line : fLines) {
-        line.paint(canvas);
+        line.paint(canvas, x, y);
     }
 }
 
