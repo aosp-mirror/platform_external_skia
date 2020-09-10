@@ -85,6 +85,8 @@ public:
         kIf_Command,
         // Expression base, Expression index
         kIndex_Command,
+        // FunctionDeclaration function
+        kInlineMarker_Command,
         // Variable* var, String typeName, String instanceName, uint8 sizeCount, Expression[] sizes
         kInterfaceBlock_Command,
         // int32 value
@@ -143,6 +145,7 @@ public:
     Rehydrator(Context* context, std::shared_ptr<SymbolTable> symbolTable,
                ErrorReporter* errorReporter, const uint8_t* src, size_t length)
         : fContext(*context)
+        , fErrors(errorReporter)
         , fSymbolTable(std::move(symbolTable))
         , fStart(src)
         SkDEBUGCODE(, fEnd(fStart + length)) {
@@ -154,7 +157,7 @@ public:
 
     std::vector<std::unique_ptr<ProgramElement>> elements();
 
-    std::shared_ptr<SymbolTable> symbolTable();
+    std::shared_ptr<SymbolTable> symbolTable(bool inherit = true);
 
 private:
     int8_t readS8() {
@@ -224,6 +227,7 @@ private:
     const Type* type();
 
     Context& fContext;
+    ErrorReporter* fErrors;
     std::shared_ptr<SymbolTable> fSymbolTable;
     std::vector<const Symbol*> fSymbols;
 

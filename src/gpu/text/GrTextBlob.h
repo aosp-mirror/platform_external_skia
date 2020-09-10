@@ -37,7 +37,6 @@ class SkSurfaceProps;
 class SkTextBlob;
 class SkTextBlobRunIterator;
 
-
 // A GrTextBlob contains a fully processed SkTextBlob, suitable for nearly immediate drawing
 // on the GPU.  These are initially created with valid positions and colors, but invalid
 // texture coordinates.
@@ -50,9 +49,8 @@ class SkTextBlobRunIterator;
 //
 // In these classes, I'm trying to follow the convention about matrices and origins.
 // * draw Matrix|Origin    - describes the current draw command.
-// * initial Matrix|Origin - describes the matrix and origin the GrTextBlob was created with.
-// * current Matrix|Origin - describes the matrix and origin that are currently in the SubRun's
-//                           vertex data.
+// * initial Matrix - describes the combined initial matrix and origin the GrTextBlob was created
+//   with.
 //
 //
 class GrTextBlob final : public SkNVRefCnt<GrTextBlob>, public SkGlyphRunPainterInterface {
@@ -96,13 +94,13 @@ public:
     static uint32_t Hash(const Key& key);
 
     void addKey(const Key& key);
-    bool hasDistanceField() const;
-    bool hasBitmap() const;
     bool hasPerspective() const;
+    const SkMatrix& initialMatrix() const { return fInitialMatrix; }
 
-    void setHasDistanceField();
-    void setHasBitmap();
     void setMinAndMaxScale(SkScalar scaledMin, SkScalar scaledMax);
+    std::tuple<SkScalar, SkScalar> scaleBounds() const {
+        return {fMaxMinScale, fMinMaxScale};
+    }
 
     bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix, SkPoint drawOrigin);
 
@@ -119,11 +117,6 @@ public:
     const SkTInternalLList<GrSubRun>& subRunList() const { return fSubRunList; }
 
 private:
-    enum TextType {
-        kHasDistanceField_TextType = 0x1,
-        kHasBitmap_TextType = 0x2,
-    };
-
     GrTextBlob(size_t allocSize,
                const SkMatrix& drawMatrix,
                SkPoint origin,
@@ -149,15 +142,9 @@ private:
     // Overall size of this struct plus vertices and glyphs at the end.
     const size_t fSize;
 
-    // The initial view matrix. This is used for moving additional draws of this
-    // same text blob. We record the initial view matrix and initial offsets(x,y), because we
-    // record vertex bounds relative to these numbers.  When blobs are reused with new matrices,
-    // we need to return to source space so we can update the vertex bounds appropriately.
+    // The initial view matrix combined with the initial origin. Used to determine if a cached
+    // subRun can be used in this draw situation.
     const SkMatrix fInitialMatrix;
-
-    // Initial position of this blob. Used for calculating position differences when reusing this
-    // blob.
-    const SkPoint fInitialOrigin;
 
     const SkColor fInitialLuminance;
 
@@ -169,8 +156,6 @@ private:
     SkScalar fMaxMinScale{-SK_ScalarMax};
     SkScalar fMinMaxScale{SK_ScalarMax};
 
-    uint8_t fTextType{0};
-
     SkTInternalLList<GrSubRun> fSubRunList;
     SkArenaAlloc fAlloc;
 };
@@ -179,10 +164,18 @@ private:
 class GrSubRun {
 public:
     virtual ~GrSubRun() = default;
+
+    // Produce GPU ops for this subRun.
     virtual void draw(const GrClip* clip,
                       const SkMatrixProvider& viewMatrix,
                       const SkGlyphRunList& glyphRunList,
                       GrRenderTargetContext* rtc) const = 0;
+
+    // Given an already cached subRun, can this subRun handle this combination paint, matrix, and
+    // position.
+    virtual bool canReuse(const SkPaint& paint,
+                          const SkMatrix& drawMatrix,
+                          SkPoint drawOrigin) = 0;
 
 private:
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrSubRun);
@@ -193,16 +186,22 @@ class GrPathSubRun final : public GrSubRun {
     struct PathGlyph;
 
 public:
-    GrPathSubRun(bool isAntiAliased, const SkStrikeSpec& strikeSpec, SkSpan<PathGlyph> paths);
+    GrPathSubRun(bool isAntiAliased,
+                 const SkStrikeSpec& strikeSpec,
+                 const GrTextBlob& blob,
+                 SkSpan<PathGlyph> paths);
 
     void draw(const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
               const SkGlyphRunList& glyphRunList,
               GrRenderTargetContext* rtc) const override;
 
+    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix, SkPoint drawOrigin) override;
+
     static GrSubRun* Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                           bool isAntiAliased,
                           const SkStrikeSpec& strikeSpec,
+                          const GrTextBlob& blob,
                           SkArenaAlloc* alloc);
 
 private:
@@ -212,6 +211,7 @@ private:
         SkPoint fOrigin;
     };
 
+    const GrTextBlob& fBlob;
     const bool fIsAntiAliased;
     const SkStrikeSpec fStrikeSpec;
     const SkSpan<const PathGlyph> fPaths;
@@ -304,6 +304,8 @@ public:
               const SkGlyphRunList& glyphRunList,
               GrRenderTargetContext* rtc) const override;
 
+    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix, SkPoint drawOrigin) override;
+
     size_t vertexStride() const override;
 
     int glyphCount() const override;
@@ -367,6 +369,8 @@ public:
               const SkMatrixProvider& viewMatrix,
               const SkGlyphRunList& glyphRunList,
               GrRenderTargetContext* rtc) const override;
+
+    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix, SkPoint drawOrigin) override;
 
     std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
     makeAtlasTextOp(const GrClip* clip,
@@ -432,6 +436,8 @@ public:
               const SkMatrixProvider& viewMatrix,
               const SkGlyphRunList& glyphRunList,
               GrRenderTargetContext* rtc) const override;
+
+    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix, SkPoint drawOrigin) override;
 
     std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
     makeAtlasTextOp(const GrClip* clip,

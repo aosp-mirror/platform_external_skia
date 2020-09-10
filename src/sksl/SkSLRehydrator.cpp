@@ -27,6 +27,7 @@
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
+#include "src/sksl/ir/SkSLInlineMarker.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLModifiers.h"
@@ -265,7 +266,7 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
     switch (kind) {
         case Rehydrator::kEnum_Command: {
             StringFragment typeName = this->readString();
-            std::shared_ptr<SymbolTable> symbols = this->symbolTable();
+            std::shared_ptr<SymbolTable> symbols = this->symbolTable(/*inherit=*/false);
             for (auto& s : symbols->fOwnedSymbols) {
                 SkASSERT(s->kind() == Symbol::Kind::kVariable);
                 Variable& v = (Variable&) *s;
@@ -376,6 +377,11 @@ std::unique_ptr<Statement> Rehydrator::statement() {
             return std::unique_ptr<Statement>(new IfStatement(-1, isStatic, std::move(test),
                                                               std::move(ifTrue),
                                                               std::move(ifFalse)));
+        }
+        case Rehydrator::kInlineMarker_Command: {
+            const FunctionDeclaration* funcDecl = this->symbolRef<FunctionDeclaration>(
+                                                          Symbol::Kind::kFunctionDeclaration);
+            return std::make_unique<InlineMarker>(*funcDecl);
         }
         case Rehydrator::kReturn_Command: {
             std::unique_ptr<Expression> expr = this->expression();
@@ -560,14 +566,16 @@ std::unique_ptr<Expression> Rehydrator::expression() {
     }
 }
 
-std::shared_ptr<SymbolTable> Rehydrator::symbolTable() {
+std::shared_ptr<SymbolTable> Rehydrator::symbolTable(bool inherit) {
     int command = this->readU8();
     if (command == kVoid_Command) {
         return nullptr;
     }
     SkASSERT(command == kSymbolTable_Command);
     uint16_t ownedCount = this->readU16();
-    std::shared_ptr<SymbolTable> result(new SymbolTable(fSymbolTable));
+    std::shared_ptr<SymbolTable> oldTable = fSymbolTable;
+    std::shared_ptr<SymbolTable> result = inherit ? std::make_shared<SymbolTable>(fSymbolTable)
+                                                  : std::make_shared<SymbolTable>(fErrors);
     fSymbolTable = result;
     std::vector<const Symbol*> ownedSymbols;
     ownedSymbols.reserve(ownedCount);
@@ -582,7 +590,7 @@ std::shared_ptr<SymbolTable> Rehydrator::symbolTable() {
         int index = this->readU16();
         fSymbolTable->addWithoutOwnership(name, ownedSymbols[index]);
     }
-    fSymbolTable = fSymbolTable->fParent;
+    fSymbolTable = oldTable;
     return result;
 }
 

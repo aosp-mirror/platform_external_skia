@@ -615,7 +615,6 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
         if (!next) {
             return nullptr;
         }
-        this->checkValid(*next);
     }
     ++iter;
     std::unique_ptr<Statement> statement = this->convertStatement(*iter);
@@ -731,7 +730,6 @@ std::unique_ptr<Statement> IRGenerator::convertExpressionStatement(const ASTNode
     if (!e) {
         return nullptr;
     }
-    this->checkValid(*e);
     return std::unique_ptr<Statement>(new ExpressionStatement(std::move(e)));
 }
 
@@ -749,6 +747,7 @@ std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
         }
         if (fCurrentFunction->fReturnType == *fContext.fVoid_Type) {
             fErrors.error(result->fOffset, "may not return a value from a void function");
+            return nullptr;
         } else {
             result = this->coerce(std::move(result), fCurrentFunction->fReturnType);
             if (!result) {
@@ -936,7 +935,7 @@ void IRGenerator::checkModifiers(int offset, const Modifiers& modifiers, int per
 void IRGenerator::convertFunction(const ASTNode& f) {
     AutoClear clear(&fReferencedIntrinsics);
     auto iter = f.begin();
-    const Type* returnType = this->convertType(*(iter++));
+    const Type* returnType = this->convertType(*(iter++), /*allowVoid=*/true);
     if (returnType == nullptr) {
         return;
     }
@@ -1265,7 +1264,8 @@ void IRGenerator::convertEnum(const ASTNode& e) {
                      ASTNode::TypeData(e.getString(), false, false));
     const Type* type = this->convertType(enumType);
     Modifiers modifiers(layout, Modifiers::kConst_Flag);
-    AutoSymbolTable table(this);
+    std::shared_ptr<SymbolTable> oldTable = fSymbolTable;
+    fSymbolTable = std::make_shared<SymbolTable>(fSymbolTable);
     for (auto iter = e.begin(); iter != e.end(); ++iter) {
         const ASTNode& child = *iter;
         SkASSERT(child.fKind == ASTNode::Kind::kEnumCase);
@@ -1273,10 +1273,12 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         if (child.begin() != child.end()) {
             value = this->convertExpression(*child.begin());
             if (!value) {
+                fSymbolTable = oldTable;
                 return;
             }
             if (!this->getConstantInt(*value, &currentValue)) {
                 fErrors.error(value->fOffset, "enum value must be a constant integer");
+                fSymbolTable = oldTable;
                 return;
             }
         }
@@ -1287,14 +1289,17 @@ void IRGenerator::convertEnum(const ASTNode& e) {
                                                      Variable::kGlobal_Storage, value.get()));
         fSymbolTable->takeOwnershipOfIRNode(std::move(value));
     }
+    // Now we orphanize the Enum's symbol table, so that future lookups in it are strict
+    fSymbolTable->fParent = nullptr;
     fProgramElements->push_back(std::unique_ptr<ProgramElement>(
             new Enum(e.fOffset, e.getString(), fSymbolTable, fIsBuiltinCode)));
+    fSymbolTable = oldTable;
 }
 
-const Type* IRGenerator::convertType(const ASTNode& type) {
+const Type* IRGenerator::convertType(const ASTNode& type, bool allowVoid) {
     ASTNode::TypeData td = type.getTypeData();
     const Symbol* result = (*fSymbolTable)[td.fName];
-    if (result && result->kind() == Symbol::Kind::kType) {
+    if (result && result->is<Type>()) {
         if (td.fIsNullable) {
             if (result->as<Type>() == *fContext.fFragmentProcessor_Type) {
                 if (type.begin() != type.end()) {
@@ -1305,6 +1310,16 @@ const Type* IRGenerator::convertType(const ASTNode& type) {
                         String(result->fName) + "?", Type::TypeKind::kNullable, result->as<Type>()));
             } else {
                 fErrors.error(type.fOffset, "type '" + td.fName + "' may not be nullable");
+            }
+        }
+        if (result->as<Type>() == *fContext.fVoid_Type) {
+            if (!allowVoid) {
+                fErrors.error(type.fOffset, "type '" + td.fName + "' not allowed in this context");
+                return nullptr;
+            }
+            if (type.begin() != type.end()) {
+                fErrors.error(type.fOffset, "type '" + td.fName + "' may not be used in an array");
+                return nullptr;
             }
         }
         for (const auto& size : type) {
@@ -2626,38 +2641,41 @@ std::unique_ptr<Expression> IRGenerator::getCap(int offset, String name) {
                                                    found->second.literal(fContext, offset)));
 }
 
-std::unique_ptr<Expression> IRGenerator::findEnumRef(
-                                           int offset,
-                                           const Type& type,
-                                           StringFragment field,
-                                           std::vector<std::unique_ptr<ProgramElement>>& elements) {
-    for (const auto& e : elements) {
-        if (e->kind() == ProgramElement::Kind::kEnum && type.name() == e->as<Enum>().fTypeName) {
-            std::shared_ptr<SymbolTable> old = fSymbolTable;
-            fSymbolTable = e->as<Enum>().fSymbols;
-            std::unique_ptr<Expression> result = convertIdentifier(ASTNode(&fFile->fNodes, offset,
-                                                                         ASTNode::Kind::kIdentifier,
-                                                                         field));
-            if (result) {
-                const Variable& v = result->as<VariableReference>().fVariable;
-                SkASSERT(v.fInitialValue);
-                result = std::make_unique<IntLiteral>(
-                        offset, v.fInitialValue->as<IntLiteral>().fValue, &type);
-            }
-            fSymbolTable = old;
-            return result;
-        }
-    }
-    return nullptr;
-}
-
 std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type& type,
                                                           StringFragment field) {
-    std::unique_ptr<Expression> result = this->findEnumRef(offset, type, field, *fProgramElements);
-    if (fInherited && !result) {
-        result = this->findEnumRef(offset, type, field, *fInherited);
+    // Find the Enum element that this type refers to (if any)
+    auto findEnum = [=](std::vector<std::unique_ptr<ProgramElement>>& elements) -> ProgramElement* {
+        for (const auto& e : elements) {
+            if (e->is<Enum>() && type.name() == e->as<Enum>().fTypeName) {
+                return e.get();
+            }
+        }
+        return nullptr;
+    };
+    const ProgramElement* enumElement = findEnum(*fProgramElements);
+    if (fInherited && !enumElement) {
+        enumElement = findEnum(*fInherited);
     }
-    if (!result) {
+
+    if (enumElement) {
+        // We found the Enum element. Look for 'field' as a member.
+        std::shared_ptr<SymbolTable> old = fSymbolTable;
+        fSymbolTable = enumElement->as<Enum>().fSymbols;
+        std::unique_ptr<Expression> result = convertIdentifier(
+                ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier, field));
+        if (result) {
+            const Variable& v = result->as<VariableReference>().fVariable;
+            SkASSERT(v.fInitialValue);
+            result = std::make_unique<IntLiteral>(
+                    offset, v.fInitialValue->as<IntLiteral>().fValue, &type);
+        } else {
+            fErrors.error(offset,
+                          "type '" + type.fName + "' does not have a field named '" + field + "'");
+        }
+        fSymbolTable = old;
+        return result;
+    } else {
+        // No Enum element? Check the intrinsics, clone it into the program, try again.
         auto found = fIntrinsics->find(type.fName);
         if (found != fIntrinsics->end()) {
             SkASSERT(!found->second.fAlreadyIncluded);
@@ -2665,10 +2683,10 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
             fProgramElements->push_back(found->second.fIntrinsic->clone());
             return this->convertTypeField(offset, type, field);
         }
-        fErrors.error(offset, "type '" + type.fName + "' does not have a field named '" + field +
-                              "'");
+        fErrors.error(offset,
+                      "type '" + type.fName + "' does not have a field named '" + field + "'");
+        return nullptr;
     }
-    return result;
 }
 
 std::unique_ptr<Expression> IRGenerator::convertIndexExpression(const ASTNode& index) {
@@ -2889,6 +2907,24 @@ void IRGenerator::convertProgram(Program::Kind kind,
 #endif
                 break;
         }
+    }
+
+    // Do a final pass looking for dangling FunctionReference or TypeReference expressions
+    class FindIllegalExpressions : public ProgramVisitor {
+    public:
+        FindIllegalExpressions(IRGenerator* generator) : fGenerator(generator) {}
+
+        bool visitExpression(const Expression& e) override {
+            fGenerator->checkValid(e);
+            return INHERITED::visitExpression(e);
+        }
+
+        IRGenerator* fGenerator;
+        using INHERITED = ProgramVisitor;
+        using INHERITED::visitProgramElement;
+    };
+    for (const auto& pe : *fProgramElements) {
+        FindIllegalExpressions{this}.visitProgramElement(*pe);
     }
 }
 
