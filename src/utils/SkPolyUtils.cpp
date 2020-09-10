@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkPolyUtils.h"
+#include "src/utils/SkPolyUtils.h"
 
 #include <limits>
 
-#include "SkNx.h"
-#include "SkPointPriv.h"
-#include "SkTArray.h"
-#include "SkTemplates.h"
-#include "SkTDPQueue.h"
-#include "SkTInternalLList.h"
+#include "include/private/SkNx.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkPointPriv.h"
+#include "src/core/SkTDPQueue.h"
+#include "src/core/SkTInternalLList.h"
 
 //////////////////////////////////////////////////////////////////////////////////
 // Helper data structures and functions
@@ -481,7 +481,8 @@ bool SkComputeRadialSteps(const SkVector& v1, const SkVector& v2, SkScalar offse
     int steps = SkScalarRoundToInt(floatSteps);
 
     SkScalar dTheta = steps > 0 ? theta / steps : 0;
-    *rotSin = SkScalarSinCos(dTheta, rotCos);
+    *rotSin = SkScalarSin(dTheta);
+    *rotCos = SkScalarCos(dTheta);
     *n = steps;
     return true;
 }
@@ -1051,14 +1052,14 @@ bool SkIsSimplePolygon(const SkPoint* polygon, int polygonSize) {
         return false;
     }
 
-    // need to be able to represent all the vertices in the 16-bit indices
-    if (polygonSize > std::numeric_limits<uint16_t>::max()) {
-        return false;
-    }
-
     // If it's convex, it's simple
     if (SkIsConvexPolygon(polygon, polygonSize)) {
         return true;
+    }
+
+    // practically speaking, it takes too long to process large polygons
+    if (polygonSize > 2048) {
+        return false;
     }
 
     SkTDPQueue <Vertex, Vertex::Left> vertexQueue(polygonSize);
@@ -1145,7 +1146,8 @@ static bool is_reflex_vertex(const SkPoint* inputPolygonVerts, int winding, SkSc
     return (side*winding*offset < 0);
 }
 
-bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSize, SkScalar offset,
+bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSize,
+                           const SkRect& bounds, SkScalar offset,
                            SkTDArray<SkPoint>* offsetPolygon, SkTDArray<int>* polygonIndices) {
     if (inputPolygonSize < 3) {
         return false;
@@ -1160,11 +1162,19 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
         return false;
     }
 
+    // can't inset more than the half bounds of the polygon
+    if (offset > std::min(SkTAbs(SK_ScalarHalf*bounds.width()),
+                        SkTAbs(SK_ScalarHalf*bounds.height()))) {
+        return false;
+    }
+
     // offsetting close to zero just returns the original poly
     if (SkScalarNearlyZero(offset)) {
         for (int i = 0; i < inputPolygonSize; ++i) {
             *offsetPolygon->push() = inputPolygonVerts[i];
-            *polygonIndices->push() = i;
+            if (polygonIndices) {
+                *polygonIndices->push() = i;
+            }
         }
         return true;
     }
@@ -1199,7 +1209,7 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
                                           &rotSin, &rotCos, &numSteps)) {
                     return false;
                 }
-                numEdges += SkTMax(numSteps, 1);
+                numEdges += std::max(numSteps, 1);
             }
         }
         numEdges++;
@@ -1212,7 +1222,7 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
                                   &rotSin, &rotCos, &numSteps)) {
             return false;
         }
-        numEdges += SkTMax(numSteps, 1);
+        numEdges += std::max(numSteps, 1);
     }
 
     // Make sure we don't overflow the max array count.
@@ -1239,7 +1249,7 @@ bool SkOffsetSimplePolygon(const SkPoint* inputPolygonVerts, int inputPolygonSiz
                                       &rotSin, &rotCos, &numSteps)) {
                 return false;
             }
-            auto currEdge = edgeData.push_back_n(SkTMax(numSteps, 1));
+            auto currEdge = edgeData.push_back_n(std::max(numSteps, 1));
             for (int i = 0; i < numSteps - 1; ++i) {
                 SkVector currNormal = SkVector::Make(prevNormal.fX*rotCos - prevNormal.fY*rotSin,
                                                      prevNormal.fY*rotCos + prevNormal.fX*rotSin);
@@ -1432,8 +1442,8 @@ static void compute_triangle_bounds(const SkPoint& p0, const SkPoint& p1, const 
     Sk4s xy(p1.fX, p1.fY, p2.fX, p2.fY);
     min = Sk4s::Min(min, xy);
     max = Sk4s::Max(max, xy);
-    bounds->set(SkTMin(min[0], min[2]), SkTMin(min[1], min[3]),
-                SkTMax(max[0], max[2]), SkTMax(max[1], max[3]));
+    bounds->setLTRB(std::min(min[0], min[2]), std::min(min[1], min[3]),
+                    std::max(max[0], max[2]), std::max(max[1], max[3]));
 }
 
 // test to see if point p is in triangle p0p1p2.
@@ -1480,7 +1490,7 @@ public:
         if (!SkScalarIsFinite(hCount)) {
             return false;
         }
-        fHCount = SkTMax(SkTMin(SkScalarRoundToInt(hCount), vertexCount), 1);
+        fHCount = std::max(std::min(SkScalarRoundToInt(hCount), vertexCount), 1);
         fVCount = vertexCount/fHCount;
         fGridConversion.set(sk_ieee_float_divide(fHCount - 0.001f, width),
                             sk_ieee_float_divide(fVCount - 0.001f, height));
@@ -1603,7 +1613,7 @@ bool SkTriangulateSimplePolygon(const SkPoint* polygonVerts, uint16_t* indexMap,
     for (int currIndex = 0; currIndex < polygonSize; ++currIndex) {
         int nextIndex = (currIndex + 1) % polygonSize;
 
-        SkDEBUGCODE(memset(&triangulationVertices[currIndex], 0, sizeof(TriangulationVertex)));
+        triangulationVertices[currIndex] = TriangulationVertex{};
         triangulationVertices[currIndex].fPosition = polygonVerts[currIndex];
         triangulationVertices[currIndex].fIndex = currIndex;
         triangulationVertices[currIndex].fPrevIndex = prevIndex;

@@ -8,7 +8,7 @@
 #ifndef GrProcessorAnalysis_DEFINED
 #define GrProcessorAnalysis_DEFINED
 
-#include "SkColorData.h"
+#include "include/private/SkColorData.h"
 
 class GrDrawOp;
 class GrFragmentProcessor;
@@ -95,7 +95,7 @@ public:
     GrColorFragmentProcessorAnalysis() = delete;
 
     GrColorFragmentProcessorAnalysis(const GrProcessorAnalysisColor& input,
-                                     const GrFragmentProcessor* const* processors,
+                                     std::unique_ptr<GrFragmentProcessor> const fps[],
                                      int cnt);
 
     bool isOpaque() const { return fIsOpaque; }

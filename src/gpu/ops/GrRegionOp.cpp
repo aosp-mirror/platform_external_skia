@@ -5,29 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "GrRegionOp.h"
+#include "src/gpu/ops/GrRegionOp.h"
 
-#include "GrCaps.h"
-#include "GrDefaultGeoProcFactory.h"
-#include "GrDrawOpTest.h"
-#include "GrMeshDrawOp.h"
-#include "GrOpFlushState.h"
-#include "GrResourceProvider.h"
-#include "GrSimpleMeshDrawOpHelper.h"
-#include "GrVertexWriter.h"
-#include "SkMatrixPriv.h"
-#include "SkRegion.h"
+#include "include/core/SkRegion.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDefaultGeoProcFactory.h"
+#include "src/gpu/GrDrawOpTest.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
-static const int kVertsPerInstance = 4;
-static const int kIndicesPerInstance = 6;
-
-static sk_sp<GrGeometryProcessor> make_gp(const GrShaderCaps* shaderCaps,
-                                          const SkMatrix& viewMatrix,
-                                          bool wideColor) {
+static GrGeometryProcessor* make_gp(SkArenaAlloc* arena,
+                                    const GrShaderCaps* shaderCaps,
+                                    const SkMatrix& viewMatrix,
+                                    bool wideColor) {
     using namespace GrDefaultGeoProcFactory;
-    Color::Type colorType =
-        wideColor ? Color::kPremulWideColorAttribute_Type : Color::kPremulGrColorAttribute_Type;
-    return GrDefaultGeoProcFactory::Make(shaderCaps, colorType, Coverage::kSolid_Type,
+    Color::Type colorType = wideColor ? Color::kPremulWideColorAttribute_Type
+                                      : Color::kPremulGrColorAttribute_Type;
+    return GrDefaultGeoProcFactory::Make(arena, shaderCaps, colorType, Coverage::kSolid_Type,
                                          LocalCoords::kUsePosition_Type, viewMatrix);
 }
 
@@ -61,13 +59,12 @@ public:
         info.fRegion = region;
 
         SkRect bounds = SkRect::Make(region.getBounds());
-        this->setTransformedBounds(bounds, viewMatrix, HasAABloat::kNo, IsZeroArea::kNo);
-        fWideColor = !SkPMColor4fFitsInBytes(color);
+        this->setTransformedBounds(bounds, viewMatrix, HasAABloat::kNo, IsHairline::kNo);
     }
 
     const char* name() const override { return "GrRegionOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -88,16 +85,18 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
-                                      GrFSAAType fsaaType, GrClampType clampType) override {
-        return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kNone, &fRegions[0].fColor);
+    GrProcessorSet::Analysis finalize(
+            const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
+            GrClampType clampType) override {
+        return fHelper.finalizeProcessors(
+                caps, clip, hasMixedSampledCoverage, clampType, GrProcessorAnalysisCoverage::kNone,
+                &fRegions[0].fColor, &fWideColor);
     }
 
 private:
     void onPrepareDraws(Target* target) override {
-        sk_sp<GrGeometryProcessor> gp = make_gp(target->caps().shaderCaps(), fViewMatrix,
-                                                fWideColor);
+        GrGeometryProcessor* gp = make_gp(target->allocator(), target->caps().shaderCaps(),
+                                          fViewMatrix, fWideColor);
         if (!gp) {
             SkDebugf("Couldn't create GrGeometryProcessor\n");
             return;
@@ -112,14 +111,9 @@ private:
         if (!numRects) {
             return;
         }
-        sk_sp<const GrGpuBuffer> indexBuffer = target->resourceProvider()->refQuadIndexBuffer();
-        if (!indexBuffer) {
-            SkDebugf("Could not allocate indices\n");
-            return;
-        }
-        PatternHelper helper(target, GrPrimitiveType::kTriangles, gp->vertexStride(),
-                             std::move(indexBuffer), kVertsPerInstance, kIndicesPerInstance,
-                             numRects);
+
+        QuadHelper helper(target, gp->vertexStride(), numRects);
+
         GrVertexWriter vertices{helper.vertices()};
         if (!vertices.fPtr) {
             SkDebugf("Could not allocate vertices\n");
@@ -135,14 +129,20 @@ private:
                 iter.next();
             }
         }
-        helper.recordDraw(target, std::move(gp));
+        helper.recordDraw(target, gp);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        fHelper.executeDrawsAndUploads(this, flushState, chainBounds);
+        auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
+                                                                 fHelper.detachProcessorSet(),
+                                                                 fHelper.pipelineFlags(),
+                                                                 fHelper.stencilSettings());
+
+        flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         RegionOp* that = t->cast<RegionOp>();
         if (!fHelper.isCompatible(that->fHelper, caps, this->bounds(), that->bounds())) {
             return CombineResult::kCannotCombine;
@@ -204,14 +204,14 @@ GR_DRAW_OP_TEST_DEFINE(RegionOp) {
             op = SkRegion::kReplace_Op;
         } else {
             // Pick an other than replace.
-            GR_STATIC_ASSERT(SkRegion::kLastOp == SkRegion::kReplace_Op);
+            static_assert(SkRegion::kLastOp == SkRegion::kReplace_Op);
             op = (SkRegion::Op)random->nextULessThan(SkRegion::kLastOp);
         }
         region.op(rect, op);
     }
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     GrAAType aaType = GrAAType::kNone;
-    if (GrFSAAType::kUnifiedMSAA == fsaaType && random->nextBool()) {
+    if (numSamples > 1 && random->nextBool()) {
         aaType = GrAAType::kMSAA;
     }
     return RegionOp::Make(context, std::move(paint), viewMatrix, region, aaType,

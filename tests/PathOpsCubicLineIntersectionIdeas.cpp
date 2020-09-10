@@ -4,14 +4,14 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "PathOpsTestCommon.h"
-#include "SkIntersections.h"
-#include "SkPathOpsCubic.h"
-#include "SkPathOpsLine.h"
-#include "SkPathOpsQuad.h"
-#include "SkRandom.h"
-#include "SkReduceOrder.h"
-#include "Test.h"
+#include "include/utils/SkRandom.h"
+#include "src/pathops/SkIntersections.h"
+#include "src/pathops/SkPathOpsCubic.h"
+#include "src/pathops/SkPathOpsLine.h"
+#include "src/pathops/SkPathOpsQuad.h"
+#include "src/pathops/SkReduceOrder.h"
+#include "tests/PathOpsTestCommon.h"
+#include "tests/Test.h"
 
 static bool gPathOpsCubicLineIntersectionIdeasVerbose = false;
 
@@ -80,7 +80,7 @@ static double binary_search(const SkDCubic& cubic, double step, const SkDPoint& 
         // use larger x/y difference to choose step
         if (calcDist > lessDist) {
             t -= step;
-            t = SkTMax(0., t);
+            t = std::max(0., t);
         } else {
             SkDPoint morePt = cubic.ptAtT(t + lastStep);
             double moreX = morePt.fX - pt.fX;
@@ -90,7 +90,7 @@ static double binary_search(const SkDCubic& cubic, double step, const SkDPoint& 
                 continue;
             }
             t += step;
-            t = SkTMin(1., t);
+            t = std::min(1., t);
         }
     } while (true);
     return t;
@@ -177,13 +177,13 @@ DEF_TEST(PathOpsCubicLineRoots, reporter) {
 #if 0
         double R2MinusQ3;
         if (r2check(A, B, C, D, &R2MinusQ3)) {
-            smallestR2 = SkTMin(smallestR2, R2MinusQ3);
-            largestR2 = SkTMax(largestR2, R2MinusQ3);
+            smallestR2 = std::min(smallestR2, R2MinusQ3);
+            largestR2 = std::max(largestR2, R2MinusQ3);
         }
 #endif
-        double largest = SkTMax(fabs(allRoots[0]), fabs(allRoots[1]));
+        double largest = std::max(fabs(allRoots[0]), fabs(allRoots[1]));
         if (realRoots == 3) {
-            largest = SkTMax(largest, fabs(allRoots[2]));
+            largest = std::max(largest, fabs(allRoots[2]));
         }
         int largeBits;
         if (largest <= 1) {
@@ -192,9 +192,9 @@ DEF_TEST(PathOpsCubicLineRoots, reporter) {
                 realRoots, allRoots[0], allRoots[1], allRoots[2], valid, validRoots[0],
                 validRoots[1], validRoots[2]);
 #endif
-            double smallest = SkTMin(allRoots[0], allRoots[1]);
+            double smallest = std::min(allRoots[0], allRoots[1]);
             if (realRoots == 3) {
-                smallest = SkTMin(smallest, allRoots[2]);
+                smallest = std::min(smallest, allRoots[2]);
             }
             SkASSERT_RELEASE(smallest < 0);
             SkASSERT_RELEASE(smallest >= -1);
@@ -226,7 +226,7 @@ DEF_TEST(PathOpsCubicLineRoots, reporter) {
             step *= 1.5;
             SkASSERT_RELEASE(step < 1);
         } while (true);
-        worstStep[largeBits] = SkTMax(worstStep[largeBits], diff);
+        worstStep[largeBits] = std::max(worstStep[largeBits], diff);
 #if 0
         {
             cubic.dump();

@@ -9,67 +9,18 @@
 """Default flavor, used for running code on desktop machines."""
 
 
+import collections
+
+
 WIN_TOOLCHAIN_DIR = 't'
 
 
-class DeviceDirs(object):
-  def __init__(self,
-               bin_dir,
-               dm_dir,
-               perf_data_dir,
-               resource_dir,
-               images_dir,
-               lotties_dir,
-               skp_dir,
-               svg_dir,
-               tmp_dir):
-    self._bin_dir = bin_dir
-    self._dm_dir = dm_dir
-    self._perf_data_dir = perf_data_dir
-    self._resource_dir = resource_dir
-    self._images_dir = images_dir
-    self._lotties_dir = lotties_dir
-    self._skp_dir = skp_dir
-    self._svg_dir = svg_dir
-    self._tmp_dir = tmp_dir
-
-  @property
-  def bin_dir(self):
-    return self._bin_dir
-
-  @property
-  def dm_dir(self):
-    """Where DM writes."""
-    return self._dm_dir
-
-  @property
-  def perf_data_dir(self):
-    return self._perf_data_dir
-
-  @property
-  def resource_dir(self):
-    return self._resource_dir
-
-  @property
-  def images_dir(self):
-    return self._images_dir
-
-  @property
-  def lotties_dir(self):
-    return self._lotties_dir
-
-  @property
-  def skp_dir(self):
-    """Holds SKP files that are consumed by RenderSKPs and BenchPictures."""
-    return self._skp_dir
-
-  @property
-  def svg_dir(self):
-    return self._svg_dir
-
-  @property
-  def tmp_dir(self):
-    return self._tmp_dir
+# Notes:
+#   dm_dir: Where DM writes.
+#   skp_dir: Holds SKP files that are consumed by RenderSKPs and BenchPictures.
+DeviceDirs = collections.namedtuple(
+    'DeviceDirs', ['bin_dir', 'dm_dir', 'perf_data_dir', 'resource_dir', 'images_dir',
+                   'lotties_dir', 'skp_dir', 'svg_dir', 'mskp_dir', 'tmp_dir', 'texttraces_dir'])
 
 
 class DefaultFlavor(object):
@@ -92,7 +43,9 @@ class DefaultFlavor(object):
         lotties_dir=self.m.path['start_dir'].join('lottie-samples'),
         skp_dir=self.m.path['start_dir'].join('skp'),
         svg_dir=self.m.path['start_dir'].join('svg'),
-        tmp_dir=self.m.vars.tmp_dir)
+        mskp_dir=self.m.path['start_dir'].join('mskp'),
+        tmp_dir=self.m.vars.tmp_dir,
+        texttraces_dir=self.m.path['start_dir'].join('text_blob_traces'))
     self.host_dirs = self.device_dirs
 
   def device_path_join(self, *args):
@@ -139,6 +92,14 @@ class DefaultFlavor(object):
     self.m.file.ensure_directory(
         'makedirs %s' % self.m.path.basename(path), path)
 
+  def read_file_on_device(self, path, **kwargs):
+    """Reads the specified file."""
+    return self.m.file.read_text('read %s' % path, path)
+
+  def remove_file_on_device(self, path):
+    """Removes the specified file."""
+    return self.m.file.remove('remove %s' % path, path)
+
   def install(self):
     """Run device-specific installation steps."""
     pass
@@ -155,7 +116,7 @@ class DefaultFlavor(object):
     return self.m.run(self.m.python, title, script=script, args=args,
                infra_step=infra_step)
 
-  def step(self, name, cmd):
+  def step(self, name, cmd, **unused_kwargs):
     app = self.device_dirs.bin_dir.join(cmd[0])
     cmd = [app] + cmd[1:]
     env = self.m.context.env
@@ -175,8 +136,18 @@ class DefaultFlavor(object):
         env['VK_ICD_FILENAMES'] = str(dri_path.join('intel_icd.x86_64.json'))
 
       if 'Vulkan' in extra_tokens:
+        env['VULKAN_SDK'] = str(slave_dir.join('linux_vulkan_sdk'))
         path.append(slave_dir.join('linux_vulkan_sdk', 'bin'))
         ld_library_path.append(slave_dir.join('linux_vulkan_sdk', 'lib'))
+        # Enable layers for Debug only to avoid affecting perf results on
+        # Release.
+        # ASAN reports leaks in the Vulkan SDK when the debug layer is enabled.
+        # TSAN runs out of memory.
+        if (self.m.vars.builder_cfg.get('configuration', '') != 'Release' and
+            'ASAN' not in extra_tokens and
+            'TSAN' not in extra_tokens):
+          env['VK_LAYER_PATH'] = str(slave_dir.join(
+              'linux_vulkan_sdk', 'etc', 'vulkan', 'explicit_layer.d'))
 
       if 'OpenCL' in extra_tokens:
         ld_library_path.append(slave_dir.join('opencl_ocl_icd_linux'))
@@ -197,9 +168,11 @@ class DefaultFlavor(object):
     if 'SwiftShader' in extra_tokens:
       ld_library_path.append(self.host_dirs.bin_dir.join('swiftshader_out'))
 
+    # Find the MSAN/TSAN-built libc++.
     if 'MSAN' in extra_tokens:
-      # Find the MSAN-built libc++.
       ld_library_path.append(clang_linux + '/msan')
+    elif 'TSAN' in extra_tokens:
+      ld_library_path.append(clang_linux + '/tsan')
 
     if any('SAN' in t for t in extra_tokens):
       # Sanitized binaries may want to run clang_linux/bin/llvm-symbolizer.
@@ -225,11 +198,13 @@ class DefaultFlavor(object):
       #   specified dir
       cmd = [procdump, '-accepteula', '-mp', '-e', '1', '-x', dumps_dir] + cmd
 
-    if 'ASAN' in extra_tokens or 'UBSAN' in extra_tokens:
+    if 'ASAN' in extra_tokens:
       # Note: if you see "<unknown module>" in stacktraces for xSAN warnings,
       # try adding "fast_unwind_on_malloc=0" to xSAN_OPTIONS.
-      if 'Mac' in self.m.vars.builder_cfg.get('os', ''):
-        env['ASAN_OPTIONS'] = 'symbolize=1'  # Mac doesn't support detect_leaks.
+      os = self.m.vars.builder_cfg.get('os', '')
+      if 'Mac' in os or 'Win' in os:
+        # Mac and Win don't support detect_leaks.
+        env['ASAN_OPTIONS'] = 'symbolize=1'
       else:
         env['ASAN_OPTIONS'] = 'symbolize=1 detect_leaks=1'
       env[ 'LSAN_OPTIONS'] = 'symbolize=1 print_suppressions=1'
@@ -249,9 +224,11 @@ class DefaultFlavor(object):
                                                   profname)
 
     if path:
-      env['PATH'] = '%%(PATH)s:%s' % ':'.join('%s' % p for p in path)
+      env['PATH'] = self.m.path.pathsep.join(
+          ['%(PATH)s'] + ['%s' % p for p in path])
     if ld_library_path:
-      env['LD_LIBRARY_PATH'] = ':'.join('%s' % p for p in ld_library_path)
+      env['LD_LIBRARY_PATH'] = self.m.path.pathsep.join(
+          '%s' % p for p in ld_library_path)
 
     to_symbolize = ['dm', 'nanobench']
     if name in to_symbolize and self.m.vars.is_linux:
@@ -263,7 +240,12 @@ class DefaultFlavor(object):
                  self.module.resource('symbolize_stack_trace.py'),
                  args=args,
                  infra_step=False)
-
+    elif 'Win' in self.m.vars.builder_cfg.get('os', ''):
+      with self.m.context(env=env):
+        wrapped_cmd = ['powershell', '-ExecutionPolicy', 'Unrestricted',
+                       '-File',
+                       self.module.resource('win_run_and_check_log.ps1')] + cmd
+        self._run(name, wrapped_cmd)
     else:
       with self.m.context(env=env):
         self._run(name, cmd)

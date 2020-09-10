@@ -8,8 +8,8 @@
 #ifndef GrTextureRenderTargetProxy_DEFINED
 #define GrTextureRenderTargetProxy_DEFINED
 
-#include "GrRenderTargetProxy.h"
-#include "GrTextureProxy.h"
+#include "src/gpu/GrRenderTargetProxy.h"
+#include "src/gpu/GrTextureProxy.h"
 
 #ifdef SK_BUILD_FOR_WIN
 // Windows gives warnings about inheriting asTextureProxy/asRenderTargetProxy via dominance.
@@ -28,22 +28,45 @@ private:
     friend class GrProxyProvider; // for ctors
 
     // Deferred version
-    GrTextureRenderTargetProxy(const GrCaps&, const GrBackendFormat&, const GrSurfaceDesc&,
-                               GrSurfaceOrigin, GrMipMapped, SkBackingFit, SkBudgeted,
-                               GrInternalSurfaceFlags);
+    GrTextureRenderTargetProxy(const GrCaps&,
+                               const GrBackendFormat&,
+                               SkISize,
+                               int sampleCnt,
+                               GrMipMapped,
+                               GrMipMapsStatus,
+                               const GrSwizzle& textureSwizzle,
+                               SkBackingFit,
+                               SkBudgeted,
+                               GrProtected,
+                               GrInternalSurfaceFlags,
+                               UseAllocator);
 
     // Lazy-callback version
-    GrTextureRenderTargetProxy(LazyInstantiateCallback&&, LazyInstantiationType,
-                               const GrBackendFormat&, const GrSurfaceDesc& desc, GrSurfaceOrigin,
-                               GrMipMapped, SkBackingFit, SkBudgeted, GrInternalSurfaceFlags);
+    GrTextureRenderTargetProxy(const GrCaps&,
+                               LazyInstantiateCallback&&,
+                               const GrBackendFormat&,
+                               SkISize,
+                               int sampleCnt,
+                               GrMipMapped,
+                               GrMipMapsStatus,
+                               const GrSwizzle& textureSwizzle,
+                               SkBackingFit,
+                               SkBudgeted,
+                               GrProtected,
+                               GrInternalSurfaceFlags,
+                               UseAllocator);
 
     // Wrapped version
-    GrTextureRenderTargetProxy(sk_sp<GrSurface>, GrSurfaceOrigin);
+    GrTextureRenderTargetProxy(sk_sp<GrSurface>,
+                               const GrSwizzle& textureSwizzle,
+                               UseAllocator);
+
+    void initSurfaceFlags(const GrCaps&);
 
     bool instantiate(GrResourceProvider*) override;
     sk_sp<GrSurface> createSurface(GrResourceProvider*) const override;
 
-    size_t onUninstantiatedGpuMemorySize() const override;
+    size_t onUninstantiatedGpuMemorySize(const GrCaps&) const override;
 
     SkDEBUGCODE(void onValidateSurface(const GrSurface*) override;)
 };

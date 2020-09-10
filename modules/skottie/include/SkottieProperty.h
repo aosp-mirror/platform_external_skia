@@ -8,9 +8,12 @@
 #ifndef SkottieProperty_DEFINED
 #define SkottieProperty_DEFINED
 
-#include "SkColor.h"
-#include "SkPoint.h"
-#include "SkRefCnt.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkTextUtils.h"
+#include "modules/skottie/src/text/SkottieShaper.h"
 
 #include <functional>
 
@@ -27,6 +30,26 @@ namespace skottie {
 
 using ColorPropertyValue   = SkColor;
 using OpacityPropertyValue = float;
+
+struct TextPropertyValue {
+    sk_sp<SkTypeface>    fTypeface;
+    SkString             fText;
+    float                fTextSize    = 0,
+                         fStrokeWidth = 0,
+                         fLineHeight  = 0,
+                         fAscent      = 0;
+    SkTextUtils::Align   fHAlign      = SkTextUtils::kLeft_Align;
+    Shaper::VAlign       fVAlign      = Shaper::VAlign::kTop;
+    Shaper::ResizePolicy fResize      = Shaper::ResizePolicy::kNone;
+    SkRect               fBox         = SkRect::MakeEmpty();
+    SkColor              fFillColor   = SK_ColorTRANSPARENT,
+                         fStrokeColor = SK_ColorTRANSPARENT;
+    bool                 fHasFill     = false,
+                         fHasStroke   = false;
+
+    bool operator==(const TextPropertyValue& other) const;
+    bool operator!=(const TextPropertyValue& other) const;
+};
 
 struct TransformPropertyValue {
     SkPoint  fAnchorPoint,
@@ -49,24 +72,31 @@ namespace internal { class AnimationBuilder; }
 template <typename ValueT, typename NodeT>
 class SK_API PropertyHandle final {
 public:
+    explicit PropertyHandle(sk_sp<NodeT> node) : fNode(std::move(node)) {}
     ~PropertyHandle();
 
     ValueT get() const;
     void set(const ValueT&);
 
 private:
-    explicit PropertyHandle(sk_sp<NodeT> node) : fNode(std::move(node)) {}
-
-    friend class skottie::internal::AnimationBuilder;
-
     const sk_sp<NodeT> fNode;
 };
 
+namespace internal {
+
+class TextAdapter;
 class TransformAdapter2D;
 
-using ColorPropertyHandle     = PropertyHandle<ColorPropertyValue    , sksg::Color         >;
-using OpacityPropertyHandle   = PropertyHandle<OpacityPropertyValue  , sksg::OpacityEffect >;
-using TransformPropertyHandle = PropertyHandle<TransformPropertyValue, TransformAdapter2D  >;
+} // namespace internal
+
+using ColorPropertyHandle     = PropertyHandle<ColorPropertyValue,
+                                               sksg::Color>;
+using OpacityPropertyHandle   = PropertyHandle<OpacityPropertyValue,
+                                               sksg::OpacityEffect>;
+using TextPropertyHandle      = PropertyHandle<TextPropertyValue,
+                                               internal::TextAdapter>;
+using TransformPropertyHandle = PropertyHandle<TransformPropertyValue,
+                                               internal::TransformAdapter2D>;
 
 /**
  * A PropertyObserver can be used to track and manipulate certain properties of "interesting"
@@ -85,8 +115,12 @@ public:
                                      const LazyHandle<ColorPropertyHandle>&);
     virtual void onOpacityProperty  (const char node_name[],
                                      const LazyHandle<OpacityPropertyHandle>&);
+    virtual void onTextProperty     (const char node_name[],
+                                     const LazyHandle<TextPropertyHandle>&);
     virtual void onTransformProperty(const char node_name[],
                                      const LazyHandle<TransformPropertyHandle>&);
+    virtual void onEnterNode(const char node_name[]);
+    virtual void onLeavingNode(const char node_name[]);
 };
 
 } // namespace skottie

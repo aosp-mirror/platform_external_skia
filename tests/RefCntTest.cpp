@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkRefCnt.h"
-#include "SkTypes.h"
-#include "SkWeakRefCnt.h"
-#include "Test.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkWeakRefCnt.h"
+#include "tests/Test.h"
 
 #include <thread>
 
@@ -279,28 +279,13 @@ DEF_TEST(sk_sp, reporter) {
         REPORTER_ASSERT(reporter, nullptr == empty);
         REPORTER_ASSERT(reporter, empty == nullptr);
         REPORTER_ASSERT(reporter, empty == empty);
-
-        REPORTER_ASSERT(reporter, nullptr <= empty);
-        REPORTER_ASSERT(reporter, empty <= nullptr);
-        REPORTER_ASSERT(reporter, empty <= empty);
-
-        REPORTER_ASSERT(reporter, nullptr >= empty);
-        REPORTER_ASSERT(reporter, empty >= nullptr);
-        REPORTER_ASSERT(reporter, empty >= empty);
     }
 
     {
         sk_sp<SkRefCnt> a = sk_make_sp<SkRefCnt>();
         sk_sp<SkRefCnt> b = sk_make_sp<SkRefCnt>();
         REPORTER_ASSERT(reporter, a != b);
-        REPORTER_ASSERT(reporter, (a < b) != (b < a));
-        REPORTER_ASSERT(reporter, (b > a) != (a > b));
-        REPORTER_ASSERT(reporter, (a <= b) != (b <= a));
-        REPORTER_ASSERT(reporter, (b >= a) != (a >= b));
-
         REPORTER_ASSERT(reporter, a == a);
-        REPORTER_ASSERT(reporter, a <= a);
-        REPORTER_ASSERT(reporter, a >= a);
     }
 
     // http://wg21.cmeerw.net/lwg/issue998

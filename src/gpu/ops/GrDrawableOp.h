@@ -8,11 +8,11 @@
 #ifndef GrDrawableOp_DEFINED
 #define GrDrawableOp_DEFINED
 
-#include "GrOp.h"
+#include "src/gpu/ops/GrOp.h"
 
-#include "GrSemaphore.h"
-#include "SkDrawable.h"
-#include "SkMatrix.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkMatrix.h"
+#include "src/gpu/GrSemaphore.h"
 
 class GrRecordingContext;
 
@@ -37,7 +37,8 @@ private:
 
     GrDrawableOp(std::unique_ptr<SkDrawable::GpuDrawHandler>, const SkRect& bounds);
 
-    CombineResult onCombineIfPossible(GrOp* that, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* that, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         return CombineResult::kCannotCombine;
     }
     void onPrepare(GrOpFlushState*) override {}

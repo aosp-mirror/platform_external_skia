@@ -5,18 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "SkBitmap.h"
-#include "SkCodec.h"
-#include "SkData.h"
-#include "SkImageInfo.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "SkTemplates.h"
-#include "Test.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkTemplates.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
 
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <utility>
 
@@ -75,7 +75,7 @@ DEF_TEST(Codec_end, r) {
         SkMemoryStream stream(std::move(multiData));
         for (int i = 0; i < kNumImages; ++i) {
             std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(
-                                                   skstd::make_unique<UnowningStream>(&stream)));
+                                                   std::make_unique<UnowningStream>(&stream)));
             if (!codec) {
                 ERRORF(r, "Failed to create a codec from %s, iteration %i", path, i);
                 continue;

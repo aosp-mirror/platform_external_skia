@@ -93,11 +93,11 @@ cc_library_static {
           "third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
         ],
         local_include_dirs: [
-          "include/config/android",
+          "android",
           "third_party/vulkanmemoryallocator/",
         ],
         export_include_dirs: [
-          "include/config/android",
+          "android",
         ],
       },
       linux_glibc: {
@@ -108,10 +108,10 @@ cc_library_static {
           $linux_srcs
         ],
         local_include_dirs: [
-          "include/config/linux",
+          "linux",
         ],
         export_include_dirs: [
-          "include/config/linux",
+          "linux",
         ],
       },
       darwin: {
@@ -122,10 +122,10 @@ cc_library_static {
           $mac_srcs
         ],
         local_include_dirs: [
-          "include/config/mac",
+          "mac",
         ],
         export_include_dirs: [
-          "include/config/mac",
+          "mac",
         ],
       },
       windows: {
@@ -137,10 +137,10 @@ cc_library_static {
           $win_srcs
         ],
         local_include_dirs: [
-          "include/config/win",
+          "win",
         ],
         export_include_dirs: [
-          "include/config/win",
+          "win",
         ],
       },
     },
@@ -221,9 +221,7 @@ cc_defaults {
         ],
       },
       windows: {
-        // clang-r353983 emits error when building Skia for Windows. Do not
-        // build it for now until the compiler issue is addressed.
-        // enabled: true,
+        enabled: true,
         host_ldlibs: [
             "-lgdi32",
             "-loleaut32",
@@ -289,7 +287,7 @@ cc_test {
     ],
 
     data: [
-        "resources/*",
+        "resources/**/*",
     ],
 }''')
 
@@ -310,14 +308,21 @@ def generate_args(target_os, enable_gpu):
     'skia_enable_fontmgr_win_gdi':        'false',
     'skia_use_fonthost_mac':              'false',
 
+    # enable features used in skia_nanobench
+    'skia_enable_sksl_interpreter':       'true',
+    'skia_tools_require_resources':       'true',
+
     'skia_use_freetype':                  'true',
     'skia_use_fontconfig':                'false',
     'skia_use_fixed_gamma_text':          'true',
+    'skia_include_multiframe_procs':      'false',
+    'skia_libgifcodec_path':              '"third_party/libgifcodec"',
   }
   d['target_os'] = target_os
   if target_os == '"android"':
     d['skia_enable_tools'] = 'true'
     d['skia_use_libheif']  = 'true'
+    d['skia_include_multiframe_procs'] = 'true'
   else:
     d['skia_use_libheif']  = 'false'
 
@@ -336,6 +341,7 @@ def generate_args(target_os, enable_gpu):
     # some dummy values.
     d['win_vc'] = '"dummy_version"'
     d['win_sdk_version'] = '"dummy_version"'
+    d['win_toolchain_version'] = '"dummy_version"'
   return d
 
 gn_args       = generate_args('"android"', True)
@@ -366,8 +372,8 @@ gn_to_bp_utils.GrabDependentValues(js, '//:nanobench', 'sources',
                                    nanobench_srcs, 'skia')
 
 # skcms is a little special, kind of a second-party library.
-local_includes.add("third_party/skcms")
-dm_includes   .add("third_party/skcms")
+local_includes.add("include/third_party/skcms")
+dm_includes   .add("include/third_party/skcms")
 
 # Android's build will choke if we list headers.
 def strip_headers(sources):
@@ -418,11 +424,11 @@ win_defines     = get_defines(js_win)
 
 def mkdir_if_not_exists(path):
   if not os.path.exists(path):
-    os.mkdir(path)
-mkdir_if_not_exists('include/config/android/')
-mkdir_if_not_exists('include/config/linux/')
-mkdir_if_not_exists('include/config/mac/')
-mkdir_if_not_exists('include/config/win/')
+    os.makedirs(path)
+mkdir_if_not_exists('android/include/config/')
+mkdir_if_not_exists('linux/include/config/')
+mkdir_if_not_exists('mac/include/config/')
+mkdir_if_not_exists('win/include/config/')
 
 platforms = { 'IOS', 'MAC', 'WIN', 'ANDROID', 'UNIX' }
 
@@ -444,7 +450,7 @@ def append_to_file(config, s):
   with open(config, 'a') as f:
     print >>f, s
 
-android_config = 'include/config/android/SkUserConfig.h'
+android_config = 'android/include/config/SkUserConfig.h'
 gn_to_bp_utils.WriteUserConfig(android_config, android_defines)
 append_to_file(android_config, '''
 #ifndef SK_BUILD_FOR_ANDROID
@@ -456,7 +462,7 @@ def write_config(config_path, defines, platform):
   gn_to_bp_utils.WriteUserConfig(config_path, defines)
   append_to_file(config_path, '''
 // Correct SK_BUILD_FOR flags that may have been set by
-// SkPreConfig.h/Android.bp
+// SkTypes.h/Android.bp
 #ifndef SK_BUILD_FOR_%s
     #define SK_BUILD_FOR_%s
 #endif
@@ -465,9 +471,9 @@ def write_config(config_path, defines, platform):
 #endif''' % (platform, platform))
   disallow_platforms(config_path, platform)
 
-write_config('include/config/linux/SkUserConfig.h', linux_defines, 'UNIX')
-write_config('include/config/mac/SkUserConfig.h',   mac_defines, 'MAC')
-write_config('include/config/win/SkUserConfig.h',   win_defines, 'WIN')
+write_config('linux/include/config/SkUserConfig.h', linux_defines, 'UNIX')
+write_config('mac/include/config/SkUserConfig.h',   mac_defines, 'MAC')
+write_config('win/include/config/SkUserConfig.h',   win_defines, 'WIN')
 
 # Turn a list of strings into the style bpfmt outputs.
 def bpfmt(indent, lst, sort=True):

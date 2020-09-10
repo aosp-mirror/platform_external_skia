@@ -5,27 +5,49 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
-#include "SkFont.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "tools/ToolUtils.h"
 
-namespace skiagm {
+#include <string.h>
+
+namespace {
 
 static const char* color_type_name(SkColorType colorType) {
     switch (colorType) {
-        case kUnknown_SkColorType:      return "unknown";
-        case kAlpha_8_SkColorType:      return "A8";
-        case kRGB_565_SkColorType:      return "565";
-        case kARGB_4444_SkColorType:    return "4444";
-        case kRGBA_8888_SkColorType:    return "8888";
-        case kRGB_888x_SkColorType:     return "888x";
-        case kBGRA_8888_SkColorType:    return "8888";
-        case kRGBA_1010102_SkColorType: return "1010102";
-        case kRGB_101010x_SkColorType:  return "101010x";
-        case kGray_8_SkColorType:       return "G8";
-        case kRGBA_F16Norm_SkColorType: return "F16Norm";
-        case kRGBA_F16_SkColorType:     return "F16";
-        case kRGBA_F32_SkColorType:     return "F32";
+        case kUnknown_SkColorType:            return "unknown";
+        case kAlpha_8_SkColorType:            return "A8";
+        case kRGB_565_SkColorType:            return "565";
+        case kARGB_4444_SkColorType:          return "4444";
+        case kRGBA_8888_SkColorType:          return "8888";
+        case kRGB_888x_SkColorType:           return "888x";
+        case kBGRA_8888_SkColorType:          return "8888";
+        case kRGBA_1010102_SkColorType:       return "1010102";
+        case kRGB_101010x_SkColorType:        return "101010x";
+        case kBGRA_1010102_SkColorType:       return "bgra1010102";
+        case kBGR_101010x_SkColorType:        return "bgr101010x";
+        case kGray_8_SkColorType:             return "G8";
+        case kRGBA_F16Norm_SkColorType:       return "F16Norm";
+        case kRGBA_F16_SkColorType:           return "F16";
+        case kRGBA_F32_SkColorType:           return "F32";
+        case kR8G8_unorm_SkColorType:         return "R8G8_unorm";
+        case kA16_unorm_SkColorType:          return "A16_unorm";
+        case kR16G16_unorm_SkColorType:       return "R16G16_unorm";
+        case kA16_float_SkColorType:          return "A16_float";
+        case kR16G16_float_SkColorType:       return "R16G16_float";
+        case kR16G16B16A16_unorm_SkColorType: return "R16G16B16A16_unorm";
     }
     return "";
 }
@@ -53,24 +75,16 @@ static void draw_checks(SkCanvas* canvas, int width, int height) {
                      SkIntToScalar(height) }, paint);
 }
 
-class BitmapCopyGM : public GM {
-public:
+class BitmapCopyGM : public skiagm::GM {
     SkBitmap    fDst[NUM_CONFIGS];
 
-    BitmapCopyGM() {
-        this->setBGColor(0xFFDDDDDD);
-    }
+    void onOnceBeforeDraw() override { this->setBGColor(0xFFDDDDDD); }
 
-protected:
-    virtual SkString onShortName() {
-        return SkString("bitmapcopy");
-    }
+    SkString onShortName() override { return SkString("bitmapcopy"); }
 
-    virtual SkISize onISize() {
-        return SkISize::Make(540, 330);
-    }
+    SkISize onISize() override { return {540, 330}; }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         SkScalar horizMargin = 10;
         SkScalar vertMargin = 10;
@@ -82,13 +96,13 @@ protected:
         draw_checks(&canvasTmp, 40, 40);
 
         for (unsigned i = 0; i < NUM_CONFIGS; ++i) {
-            sk_tool_utils::copy_to(&fDst[i], gColorTypes[i], src);
+            ToolUtils::copy_to(&fDst[i], gColorTypes[i], src);
         }
 
         canvas->clear(0xFFDDDDDD);
         paint.setAntiAlias(true);
 
-        SkFont font(sk_tool_utils::create_portable_typeface());
+        SkFont font(ToolUtils::create_portable_typeface());
 
         SkScalar width = SkIntToScalar(40);
         SkScalar height = SkIntToScalar(40);
@@ -97,7 +111,7 @@ protected:
         }
         for (unsigned i = 0; i < NUM_CONFIGS; i++) {
             const char* name = color_type_name(src.colorType());
-            SkScalar textWidth = font.measureText(name, strlen(name), kUTF8_SkTextEncoding);
+            SkScalar textWidth = font.measureText(name, strlen(name), SkTextEncoding::kUTF8);
             if (textWidth > width) {
                 width = textWidth;
             }
@@ -110,10 +124,10 @@ protected:
             canvas->save();
             // Draw destination config name
             const char* name = color_type_name(fDst[i].colorType());
-            SkScalar textWidth = font.measureText(name, strlen(name), kUTF8_SkTextEncoding);
+            SkScalar textWidth = font.measureText(name, strlen(name), SkTextEncoding::kUTF8);
             SkScalar x = (width - textWidth) / SkScalar(2);
             SkScalar y = font.getSpacing() / SkScalar(2);
-            canvas->drawSimpleText(name, strlen(name), kUTF8_SkTextEncoding, x, y, font, paint);
+            canvas->drawSimpleText(name, strlen(name), SkTextEncoding::kUTF8, x, y, font, paint);
 
             // Draw destination bitmap
             canvas->translate(0, vertOffset);
@@ -124,12 +138,9 @@ protected:
             canvas->translate(horizOffset, 0);
         }
     }
-
-private:
-    typedef GM INHERITED;
 };
+}  // namespace
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new BitmapCopyGM; )
-}

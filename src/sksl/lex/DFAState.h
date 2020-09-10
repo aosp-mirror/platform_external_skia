@@ -8,7 +8,10 @@
 #ifndef SKSL_DFASTATE
 #define SKSL_DFASTATE
 
-#include "LexUtil.h"
+#include "src/sksl/lex/LexUtil.h"
+
+#include <vector>
+#include <string>
 
 struct DFAState {
     struct Label {
@@ -25,6 +28,7 @@ struct DFAState {
             return !(*this == other);
         }
 
+#ifdef SK_DEBUG
         std::string description() const {
             std::string result = "<";
             const char* separator = "";
@@ -36,6 +40,7 @@ struct DFAState {
             result += ">";
             return result;
         }
+#endif
     };
 
     DFAState()

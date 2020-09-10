@@ -8,8 +8,8 @@
 #ifndef GrVkUniformBuffer_DEFINED
 #define GrVkUniformBuffer_DEFINED
 
-#include "GrVkBuffer.h"
-#include "vk/GrVkTypes.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/vk/GrVkBuffer.h"
 
 class GrVkGpu;
 
@@ -33,7 +33,6 @@ public:
         return this->vkUpdateData(gpu, src, srcSizeInBytes, createdNewBuffer);
     }
     void release(const GrVkGpu* gpu) { this->vkRelease(gpu); }
-    void abandon() { this->vkAbandon(); }
 
 private:
     class Resource : public GrVkBuffer::Resource {

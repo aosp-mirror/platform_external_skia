@@ -5,45 +5,47 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkClipOp.h"
-#include "SkClipOpPriv.h"
-#include "SkClipStack.h"
-#include "SkImageInfo.h"
-#include "SkMatrix.h"
-#include "SkPath.h"
-#include "SkPoint.h"
-#include "SkRRect.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkRegion.h"
-#include "SkScalar.h"
-#include "SkSize.h"
-#include "SkString.h"
-#include "SkSurface.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
-#include "Test.h"
-
-#include "GrCaps.h"
-#include "GrClip.h"
-#include "GrClipStackClip.h"
-#include "GrConfig.h"
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrReducedClip.h"
-#include "GrResourceCache.h"
-#include "GrResourceKey.h"
-#include "GrSurfaceProxyPriv.h"
-#include "GrTexture.h"
-#include "GrTextureProxy.h"
-typedef GrReducedClip::ElementList ElementList;
-typedef GrReducedClip::InitialState InitialState;
+#include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrConfig.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/GrResourceKey.h"
+#include "include/private/SkTemplates.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkClipOpPriv.h"
+#include "src/core/SkClipStack.h"
+#include "src/core/SkTLList.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrClipStackClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrReducedClip.h"
+#include "src/gpu/GrResourceCache.h"
+#include "src/gpu/GrTextureProxy.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
 #include <cstring>
+#include <initializer_list>
 #include <new>
+
+class GrCaps;
+
+typedef GrReducedClip::ElementList ElementList;
+typedef GrReducedClip::InitialState InitialState;
 
 static void test_assign_and_comparison(skiatest::Reporter* reporter) {
     SkClipStack s;
@@ -261,8 +263,8 @@ static void test_bounds(skiatest::Reporter* reporter,
 
     SkRect rectA, rectB;
 
-    rectA.iset(10, 10, 50, 50);
-    rectB.iset(40, 40, 80, 80);
+    rectA.setLTRB(10, 10, 50, 50);
+    rectB.setLTRB(40, 40, 80, 80);
 
     SkRRect rrectA, rrectB;
     rrectA.setOval(rectA);
@@ -286,10 +288,10 @@ static void test_bounds(skiatest::Reporter* reporter,
             bool doInvA = SkToBool(invBits & 1);
             bool doInvB = SkToBool(invBits & 2);
 
-            pathA.setFillType(doInvA ? SkPath::kInverseEvenOdd_FillType :
-                                       SkPath::kEvenOdd_FillType);
-            pathB.setFillType(doInvB ? SkPath::kInverseEvenOdd_FillType :
-                                       SkPath::kEvenOdd_FillType);
+            pathA.setFillType(doInvA ? SkPathFillType::kInverseEvenOdd :
+                                       SkPathFillType::kEvenOdd);
+            pathB.setFillType(doInvB ? SkPathFillType::kInverseEvenOdd :
+                                       SkPathFillType::kEvenOdd);
 
             switch (primType) {
                 case SkClipStack::Element::DeviceSpaceType::kEmpty:
@@ -342,8 +344,8 @@ static void test_isWideOpen(skiatest::Reporter* reporter) {
 
     SkRect rectA, rectB;
 
-    rectA.iset(10, 10, 40, 40);
-    rectB.iset(50, 50, 80, 80);
+    rectA.setLTRB(10, 10, 40, 40);
+    rectB.setLTRB(50, 50, 80, 80);
 
     // Stack should initially be wide open
     {
@@ -360,10 +362,10 @@ static void test_isWideOpen(skiatest::Reporter* reporter) {
         SkPath clipA, clipB;
 
         clipA.addRoundRect(rectA, SkIntToScalar(5), SkIntToScalar(5));
-        clipA.setFillType(SkPath::kInverseEvenOdd_FillType);
+        clipA.setFillType(SkPathFillType::kInverseEvenOdd);
 
         clipB.addRoundRect(rectB, SkIntToScalar(5), SkIntToScalar(5));
-        clipB.setFillType(SkPath::kInverseEvenOdd_FillType);
+        clipB.setFillType(SkPathFillType::kInverseEvenOdd);
 
         stack.clipPath(clipA, SkMatrix::I(), kReplace_SkClipOp, false);
         stack.clipPath(clipB, SkMatrix::I(), kUnion_SkClipOp, false);
@@ -854,7 +856,7 @@ static void test_invfill_diff_bug(skiatest::Reporter* reporter) {
 
     SkPath path;
     path.addRect({30, 10, 40, 20});
-    path.setFillType(SkPath::kInverseWinding_FillType);
+    path.setFillType(SkPathFillType::kInverseWinding);
     stack.clipPath(path, SkMatrix::I(), kDifference_SkClipOp, false);
 
     REPORTER_ASSERT(reporter, SkClipStack::kEmptyGenID == stack.getTopmostGenID());
@@ -891,7 +893,7 @@ static void add_round_rect(const SkRect& rect, bool invert, SkClipOp op, SkClipS
     if (invert) {
         SkPath path;
         path.addRoundRect(rect, rx, ry);
-        path.setFillType(SkPath::kInverseWinding_FillType);
+        path.setFillType(SkPathFillType::kInverseWinding);
         stack->clipPath(path, SkMatrix::I(), op, doAA);
     } else {
         SkRRect rrect;
@@ -905,7 +907,7 @@ static void add_rect(const SkRect& rect, bool invert, SkClipOp op, SkClipStack* 
     if (invert) {
         SkPath path;
         path.addRect(rect);
-        path.setFillType(SkPath::kInverseWinding_FillType);
+        path.setFillType(SkPathFillType::kInverseWinding);
         stack->clipPath(path, SkMatrix::I(), op, doAA);
     } else {
         stack->clipRect(rect, SkMatrix::I(), op, doAA);
@@ -917,7 +919,7 @@ static void add_oval(const SkRect& rect, bool invert, SkClipOp op, SkClipStack* 
     SkPath path;
     path.addOval(rect);
     if (invert) {
-        path.setFillType(SkPath::kInverseWinding_FillType);
+        path.setFillType(SkPathFillType::kInverseWinding);
     }
     stack->clipPath(path, SkMatrix::I(), op, doAA);
 };
@@ -1046,7 +1048,7 @@ static void test_reduced_clip_stack(skiatest::Reporter* reporter) {
         // will be kInvalidGenID if left uninitialized.
         SkAlignedSTStorage<1, GrReducedClip> storage;
         memset(storage.get(), 0, sizeof(GrReducedClip));
-        GR_STATIC_ASSERT(0 == SkClipStack::kInvalidGenID);
+        static_assert(0 == SkClipStack::kInvalidGenID);
 
         // Get the reduced version of the stack.
         SkRect queryBounds = kBounds;
@@ -1115,7 +1117,7 @@ static void test_reduced_clip_stack_genid(skiatest::Reporter* reporter) {
 
         SkAlignedSTStorage<1, GrReducedClip> storage;
         memset(storage.get(), 0, sizeof(GrReducedClip));
-        GR_STATIC_ASSERT(0 == SkClipStack::kInvalidGenID);
+        static_assert(0 == SkClipStack::kInvalidGenID);
         const GrReducedClip* reduced = new (storage.get()) GrReducedClip(stack, bounds, caps);
 
         REPORTER_ASSERT(reporter, reduced->maskElements().count() == 1);
@@ -1480,7 +1482,7 @@ DEF_TEST(ClipStack, reporter) {
     SkClipStack::B2TIter iter(stack);
     const SkClipStack::Element* element = iter.next();
     SkRect answer;
-    answer.iset(25, 25, 75, 75);
+    answer.setLTRB(25, 25, 75, 75);
 
     REPORTER_ASSERT(reporter, element);
     REPORTER_ASSERT(reporter,
@@ -1519,7 +1521,7 @@ DEF_TEST(ClipStack, reporter) {
 
 sk_sp<GrTextureProxy> GrClipStackClip::testingOnly_createClipMask(GrContext* context) const {
     const GrReducedClip reducedClip(*fStack, SkRect::MakeWH(512, 512), 0);
-    return this->createSoftwareClipMask(context, reducedClip, nullptr);
+    return this->createSoftwareClipMask(context, reducedClip, nullptr).asTextureProxyRef();
 }
 
 // Verify that clip masks are freed up when the clip state that generated them goes away.
@@ -1532,7 +1534,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ClipMaskCache, reporter, ctxInfo) {
     SkPath path;
     path.addCircle(10, 10, 8);
     path.addCircle(15, 15, 8);
-    path.setFillType(SkPath::kEvenOdd_FillType);
+    path.setFillType(SkPathFillType::kEvenOdd);
 
     static const char* kTag = GrClipStackClip::kMaskTestTag;
     GrResourceCache* cache = context->priv().getResourceCache();
@@ -1560,33 +1562,4 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ClipMaskCache, reporter, ctxInfo) {
         REPORTER_ASSERT(reporter, kN - (i + 1) == cache->countUniqueKeysWithTag(kTag));
     }
 #endif
-}
-
-DEF_GPUTEST_FOR_ALL_CONTEXTS(canvas_private_clipRgn, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
-
-    const int w = 10;
-    const int h = 10;
-    SkImageInfo info = SkImageInfo::Make(w, h, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    sk_sp<SkSurface> surf = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info);
-    SkCanvas* canvas = surf->getCanvas();
-    SkRegion rgn;
-
-    canvas->temporary_internal_getRgnClip(&rgn);
-    REPORTER_ASSERT(reporter, rgn.isRect());
-    REPORTER_ASSERT(reporter, rgn.getBounds() == SkIRect::MakeWH(w, h));
-
-    canvas->save();
-    canvas->clipRect(SkRect::MakeWH(5, 5), kDifference_SkClipOp);
-    canvas->temporary_internal_getRgnClip(&rgn);
-    REPORTER_ASSERT(reporter, rgn.isComplex());
-    REPORTER_ASSERT(reporter, rgn.getBounds() == SkIRect::MakeWH(w, h));
-    canvas->restore();
-
-    canvas->save();
-    canvas->clipRRect(SkRRect::MakeOval(SkRect::MakeLTRB(3, 3, 7, 7)));
-    canvas->temporary_internal_getRgnClip(&rgn);
-    REPORTER_ASSERT(reporter, rgn.isComplex());
-    REPORTER_ASSERT(reporter, rgn.getBounds() == SkIRect::MakeLTRB(3, 3, 7, 7));
-    canvas->restore();
 }

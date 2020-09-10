@@ -8,14 +8,13 @@
 #ifndef SkMaskFilter_DEFINED
 #define SkMaskFilter_DEFINED
 
-#include "SkBlurTypes.h"
-#include "SkCoverageMode.h"
-#include "SkFlattenable.h"
-#include "SkScalar.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkCoverageMode.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkScalar.h"
 
 class SkMatrix;
 struct SkRect;
-class SkString;
 
 /** \class SkMaskFilter
 

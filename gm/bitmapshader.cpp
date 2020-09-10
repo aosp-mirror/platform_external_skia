@@ -4,15 +4,23 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "gm.h"
 
-#include "SkBitmap.h"
-#include "SkPaint.h"
-#include "SkShader.h"
-
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
 
 namespace skiagm {
 
@@ -67,8 +75,7 @@ protected:
             }
 
             canvas->save();
-            paint.setShader(SkShader::MakeBitmapShader(fBitmap, SkShader::kClamp_TileMode,
-                                                       SkShader::kClamp_TileMode, &s));
+            paint.setShader(fBitmap.makeShader(&s));
 
             // draw the shader with a bitmap mask
             canvas->drawBitmap(fMask, 0, 0, &paint);
@@ -90,8 +97,7 @@ protected:
 
             canvas->translate(0, 25);
 
-            paint.setShader(SkShader::MakeBitmapShader(fMask, SkShader::kRepeat_TileMode,
-                                                       SkShader::kRepeat_TileMode, &s));
+            paint.setShader(fMask.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &s));
             paint.setColor(SK_ColorRED);
 
             // draw the mask using the shader and a color
@@ -129,8 +135,7 @@ DEF_SIMPLE_GM(hugebitmapshader, canvas, 100, 100) {
     }
     bitmap.setPixels(pixels);
 
-    paint.setShader(SkShader::MakeBitmapShader(bitmap,
-             SkShader::kMirror_TileMode, SkShader::kMirror_TileMode));
+    paint.setShader(bitmap.makeShader(SkTileMode::kMirror, SkTileMode::kMirror));
     paint.setColor(SK_ColorRED);
     paint.setAntiAlias(true);
     canvas->drawCircle(50, 50, 50, paint);

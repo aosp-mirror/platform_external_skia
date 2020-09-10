@@ -5,21 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestUtils.h"
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrShaderCaps.h"
-#include "GrSurfacePriv.h"
-#include "GrTexture.h"
-#include "GrTextureContext.h"
-#include "GrTexturePriv.h"
-#include "GrTextureProxyPriv.h"
-#include "gl/GLTestContext.h"
-#include "gl/GrGLGpu.h"
-#include "gl/GrGLUtil.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/GrTextureProxyPriv.h"
+#include "src/gpu/gl/GrGLGpu.h"
+#include "src/gpu/gl/GrGLUtil.h"
+#include "tests/Test.h"
+#include "tests/TestUtils.h"
+#include "tools/gpu/GrContextFactory.h"
+#include "tools/gpu/gl/GLTestContext.h"
+
+#ifdef SK_GL
 
 using sk_gpu_test::GLTestContext;
 
@@ -30,8 +31,7 @@ static void cleanup(GLTestContext* glctx0, GrGLuint texID0, GLTestContext* glctx
         glctx1->makeCurrent();
         if (grctx1) {
             if (backendTex1 && backendTex1->isValid()) {
-                GrGLGpu* gpu1 = static_cast<GrGLGpu*>(grctx1->priv().getGpu());
-                gpu1->deleteTestingOnlyBackendTexture(*backendTex1);
+                grctx1->deleteBackendTexture(*backendTex1);
             }
         }
         if (GR_EGL_NO_IMAGE != image1) {
@@ -85,13 +85,13 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
 
     // Use GL Context 1 to create a texture unknown to GrContext.
     context1->flush();
-    GrGpu* gpu1 = context1->priv().getGpu();
     static const int kSize = 100;
     backendTexture1 =
-        gpu1->createTestingOnlyBackendTexture(nullptr, kSize, kSize, GrColorType::kRGBA_8888,
-                                              false, GrMipMapped::kNo);
+        context1->createBackendTexture(kSize, kSize, kRGBA_8888_SkColorType,
+                                       SkColors::kTransparent,
+                                       GrMipMapped::kNo, GrRenderable::kNo, GrProtected::kNo);
 
-    if (!backendTexture1.isValid() || !gpu1->isTestingOnlyBackendTexture(backendTexture1)) {
+    if (!backendTexture1.isValid()) {
         ERRORF(reporter, "Error creating texture for EGL Image");
         cleanup(glCtx0, externalTexture.fID, glCtx1.get(), context1, &backendTexture1, image);
         return;
@@ -145,6 +145,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     glCtx0->makeCurrent();
     externalTexture.fTarget = GR_GL_TEXTURE_EXTERNAL;
     externalTexture.fID = glCtx0->eglImageToExternalTexture(image);
+    externalTexture.fFormat = GR_GL_RGBA8;
     if (0 == externalTexture.fID) {
         ERRORF(reporter, "Error converting EGL Image back to texture");
         cleanup(glCtx0, externalTexture.fID, glCtx1.get(), context1, &backendTexture1, image);
@@ -153,12 +154,24 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
 
     // Wrap this texture ID in a GrTexture
     GrBackendTexture backendTex(kSize, kSize, GrMipMapped::kNo, externalTexture);
-    backendTex.setPixelConfig(kRGBA_8888_GrPixelConfig);
 
+    GrColorType colorType = GrColorType::kRGBA_8888;
+    SkAlphaType alphaType = kPremul_SkAlphaType;
     // TODO: If I make this TopLeft origin to match resolve_origin calls for kDefault, this test
     // fails on the Nexus5. Why?
-    sk_sp<GrTextureContext> surfaceContext = context0->priv().makeBackendTextureContext(
-            backendTex, kBottomLeft_GrSurfaceOrigin, nullptr);
+    GrSurfaceOrigin origin = kBottomLeft_GrSurfaceOrigin;
+    sk_sp<GrSurfaceProxy> texProxy = context0->priv().proxyProvider()->wrapBackendTexture(
+            backendTex, colorType, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, kRW_GrIOType);
+    if (!texProxy) {
+        ERRORF(reporter, "Error wrapping external texture in GrTextureProxy.");
+        cleanup(glCtx0, externalTexture.fID, glCtx1.get(), context1, &backendTexture1, image);
+        return;
+    }
+    GrSwizzle swizzle =
+            context0->priv().caps()->getReadSwizzle(texProxy->backendFormat(), colorType);
+    GrSurfaceProxyView view(std::move(texProxy), origin, swizzle);
+    auto surfaceContext =
+            GrSurfaceContext::Make(context0, std::move(view), colorType, alphaType, nullptr);
 
     if (!surfaceContext) {
         ERRORF(reporter, "Error wrapping external texture in GrSurfaceContext.");
@@ -178,23 +191,24 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
 
     // Should not be able to wrap as a RT
     {
-        sk_sp<GrRenderTargetContext> temp =
-                context0->priv().makeBackendTextureRenderTargetContext(
-                        backendTex, kBottomLeft_GrSurfaceOrigin, 1, nullptr);
+        auto temp = GrRenderTargetContext::MakeFromBackendTexture(
+                context0, colorType, nullptr, backendTex, 1, origin, nullptr, nullptr, nullptr);
         if (temp) {
             ERRORF(reporter, "Should not be able to wrap an EXTERNAL texture as a RT.");
         }
     }
 
-    test_read_pixels(reporter, surfaceContext.get(), pixels.get(), "EGLImageTest-read");
+    TestReadPixels(reporter, surfaceContext.get(), pixels.get(), "EGLImageTest-read");
 
     // We should not be able to write to a EXTERNAL texture
-    test_write_pixels(reporter, surfaceContext.get(), false, "EGLImageTest-write");
+    TestWritePixels(reporter, surfaceContext.get(), false, "EGLImageTest-write");
 
     // Only test RT-config
     // TODO: why do we always need to draw to copy from an external texture?
-    test_copy_from_surface(reporter, context0, surfaceContext->asSurfaceProxy(),
-                           pixels.get(), true, "EGLImageTest-copy");
+    TestCopyFromSurface(reporter, context0, surfaceContext->asSurfaceProxy(),
+                        surfaceContext->origin(), colorType, pixels.get(), "EGLImageTest-copy");
 
     cleanup(glCtx0, externalTexture.fID, glCtx1.get(), context1, &backendTexture1, image);
 }
+
+#endif  // SK_GL

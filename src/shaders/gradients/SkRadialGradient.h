@@ -8,7 +8,7 @@
 #ifndef SkRadialGradient_DEFINED
 #define SkRadialGradient_DEFINED
 
-#include "SkGradientShaderPriv.h"
+#include "src/shaders/gradients/SkGradientShaderPriv.h"
 
 class SkRadialGradient final : public SkGradientShaderBase {
 public:
@@ -22,10 +22,12 @@ public:
 protected:
     SkRadialGradient(SkReadBuffer& buffer);
     void flatten(SkWriteBuffer& buffer) const override;
-    sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override;
 
     void appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* tPipeline,
                               SkRasterPipeline* postPipeline) const override;
+
+    skvm::F32 transformT(skvm::Builder*, skvm::Uniforms*,
+                         skvm::F32 x, skvm::F32 y, skvm::I32* mask) const final;
 
 private:
     SK_FLATTENABLE_HOOKS(SkRadialGradient)
