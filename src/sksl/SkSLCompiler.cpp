@@ -856,6 +856,8 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
         std::unique_ptr<Expression> optimized = expr->constantPropagate(*fIRGenerator, definitions);
         if (optimized) {
             *outUpdated = true;
+            optimized = fIRGenerator->coerce(std::move(optimized), expr->fType);
+            SkASSERT(optimized);
             if (!try_replace_expression(&b, iter, &optimized)) {
                 *outNeedsRescan = true;
                 return;
@@ -1673,9 +1675,6 @@ bool Compiler::optimize(Program& program) {
                     madeChanges |= this->scanCFG(element.as<FunctionDefinition>());
                 }
             }
-
-            // Allow the inliner to analyze the program.
-            madeChanges |= fInliner.analyze(program);
 
             // Remove dead functions. We wait until after analysis so that we still report errors,
             // even in unused code.
