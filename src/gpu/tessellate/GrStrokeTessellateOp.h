@@ -35,7 +35,8 @@ private:
                                       bool hasMixedSampledCoverage, GrClampType) override;
     CombineResult onCombineIfPossible(GrOp*, GrRecordingContext::Arenas*, const GrCaps&) override;
     void onPrePrepare(GrRecordingContext*, const GrSurfaceProxyView*, GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override;
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override;
     void onPrepare(GrOpFlushState* state) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
 
@@ -56,7 +57,7 @@ private:
     GrProcessorSet fProcessors;
 
     // S=1 because we will almost always fit everything into one single chunk.
-    SkSTArray<1, GrStrokePatchBuilder::VertexChunk> fVertexChunks;
+    SkSTArray<1, GrStrokePatchBuilder::PatchChunk> fPatchChunks;
 
     friend class GrOpMemoryPool;  // For ctor.
 };
