@@ -119,6 +119,7 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
     SkSL::SharedCompiler compiler;
     SkSL::Program::Settings settings;
     settings.fInlineThreshold = compiler.getInlineThreshold();
+    settings.fAllowNarrowingConversions = true;
     auto program = compiler->convertProgram(SkSL::Program::kPipelineStage_Kind,
                                             SkSL::String(sksl.c_str(), sksl.size()),
                                             settings);
@@ -127,9 +128,6 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
     #define RETURN_FAILURE(...) return std::make_tuple(nullptr, SkStringPrintf(__VA_ARGS__))
 
     if (!program) {
-        RETURN_FAILURE("%s", compiler->errorText().c_str());
-    }
-    if (!compiler->optimize(*program)) {
         RETURN_FAILURE("%s", compiler->errorText().c_str());
     }
 
@@ -309,6 +307,7 @@ bool SkRuntimeEffect::toPipelineStage(const GrShaderCaps* shaderCaps,
     SkSL::Program::Settings settings;
     settings.fCaps = shaderCaps;
     settings.fInlineThreshold = compiler.getInlineThreshold();
+    settings.fAllowNarrowingConversions = true;
 
     auto program = compiler->convertProgram(SkSL::Program::kPipelineStage_Kind,
                                             SkSL::String(fSkSL.c_str(), fSkSL.size()),
