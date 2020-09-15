@@ -315,8 +315,26 @@ namespace skvm {
             case Op::shr_i32: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
             case Op::sra_i32: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
 
-            case Op:: eq_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
-            case Op:: gt_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op::eq_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op::gt_i32: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+
+
+            case Op::add_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op::sub_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op::mul_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+
+            case Op::shl_q14x2: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
+            case Op::shr_q14x2: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
+            case Op::sra_q14x2: write(o, V{id}, "=", op, V{x}, Shift{immy}, fs(id)...); break;
+
+            case Op:: min_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op:: max_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op::umin_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op::uavg_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+
+            case Op::eq_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+            case Op::gt_q14x2: write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...); break;
+
 
             case Op::bit_and  : write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
             case Op::bit_or   : write(o, V{id}, "=", op, V{x}, V{y}, fs(id)...      ); break;
@@ -441,8 +459,26 @@ namespace skvm {
                 case Op::shr_i32: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
                 case Op::sra_i32: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
 
-                case Op:: eq_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
-                case Op:: gt_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op::eq_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op::gt_i32: write(o, R{d}, "=", op, R{x}, R{y}); break;
+
+
+                case Op::add_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op::sub_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op::mul_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+
+                case Op::shl_q14x2: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
+                case Op::shr_q14x2: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
+                case Op::sra_q14x2: write(o, R{d}, "=", op, R{x}, Shift{immy}); break;
+
+                case Op:: min_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op:: max_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op::umin_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op::uavg_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+
+                case Op::eq_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+                case Op::gt_q14x2: write(o, R{d}, "=", op, R{x}, R{y}); break;
+
 
                 case Op::bit_and  : write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::bit_or   : write(o, R{d}, "=", op, R{x}, R{y}      ); break;
@@ -976,6 +1012,32 @@ namespace skvm {
     F32 Builder::max(F32 x, F32 y) {
         if (float X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(std::max(X,Y)); }
         return {this, this->push(Op::max_f32, x.id, y.id)};
+    }
+
+    // TODO: constant propagation and strength reduction for all these Q14x2 ops
+    Q14x2 Builder::add(Q14x2 x, Q14x2 y) { return {this, this->push(Op::add_q14x2, x.id, y.id)}; }
+    Q14x2 Builder::sub(Q14x2 x, Q14x2 y) { return {this, this->push(Op::sub_q14x2, x.id, y.id)}; }
+    Q14x2 Builder::mul(Q14x2 x, Q14x2 y) { return {this, this->push(Op::mul_q14x2, x.id, y.id)}; }
+
+    Q14x2 Builder::shl(Q14x2 x, int k) { return {this, this->push(Op::shl_q14x2, x.id,NA,NA,k)}; }
+    Q14x2 Builder::shr(Q14x2 x, int k) { return {this, this->push(Op::shr_q14x2, x.id,NA,NA,k)}; }
+    Q14x2 Builder::sra(Q14x2 x, int k) { return {this, this->push(Op::sra_q14x2, x.id,NA,NA,k)}; }
+
+    I32 Builder:: eq(Q14x2 x, Q14x2 y) { return {this, this->push(Op::eq_q14x2, x.id, y.id)}; }
+    I32 Builder::gt (Q14x2 x, Q14x2 y) { return {this, this->push(Op::gt_q14x2, x.id, y.id)}; }
+    I32 Builder::lt (Q14x2 x, Q14x2 y) { return  gt(y,x); }
+    I32 Builder::neq(Q14x2 x, Q14x2 y) { return ~eq(x,y); }
+    I32 Builder::gte(Q14x2 x, Q14x2 y) { return ~lt(x,y); }
+    I32 Builder::lte(Q14x2 x, Q14x2 y) { return ~gt(x,y); }
+
+    Q14x2 Builder::min(Q14x2 x, Q14x2 y) { return {this, this->push(Op::min_q14x2, x.id, y.id)}; }
+    Q14x2 Builder::max(Q14x2 x, Q14x2 y) { return {this, this->push(Op::max_q14x2, x.id, y.id)}; }
+
+    Q14x2 Builder::unsigned_avg(Q14x2 x, Q14x2 y) {
+        return {this, this->push(Op::uavg_q14x2, x.id, y.id)};
+    }
+    Q14x2 Builder::unsigned_min(Q14x2 x, Q14x2 y) {
+        return {this, this->push(Op::umin_q14x2, x.id, y.id)};
     }
 
     I32 Builder::add(I32 x, I32 y) {
@@ -2016,8 +2078,18 @@ namespace skvm {
     void Assembler::vpsubd (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xfa, dst,x,y); }
     void Assembler::vpmulld(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x380f,0x40, dst,x,y); }
 
-    void Assembler::vpsubw (Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0xf9, dst,x,y); }
-    void Assembler::vpmullw(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0xd5, dst,x,y); }
+    void Assembler::vpaddw   (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xfd, dst,x,y); }
+    void Assembler::vpsubw   (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xf9, dst,x,y); }
+    void Assembler::vpmullw  (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xd5, dst,x,y); }
+    void Assembler::vpavgw   (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xe3, dst,x,y); }
+    void Assembler::vpmulhrsw(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x380f,0x0b, dst,x,y); }
+    void Assembler::vpminsw  (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xea, dst,x,y); }
+    void Assembler::vpmaxsw  (Ymm dst, Ymm x, Operand y) { this->op(0x66,  0x0f,0xee, dst,x,y); }
+    void Assembler::vpminuw  (Ymm dst, Ymm x, Operand y) { this->op(0x66,0x380f,0x3a, dst,x,y); }
+    void Assembler::vpmaxuw  (Ymm dst, Ymm x, Operand y) { this->op(0x66,0x380f,0x3e, dst,x,y); }
+
+    void Assembler::vpabsw(Ymm dst, Operand x) { this->op(0x66,0x380f,0x1d, dst,x); }
+
 
     void Assembler::vpand (Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0xdb, dst,x,y); }
     void Assembler::vpor  (Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0xeb, dst,x,y); }
@@ -2050,7 +2122,9 @@ namespace skvm {
     void Assembler::vpunpckhdq(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x6a, dst,x,y); }
 
     void Assembler::vpcmpeqd(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x76, dst,x,y); }
+    void Assembler::vpcmpeqw(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x75, dst,x,y); }
     void Assembler::vpcmpgtd(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x66, dst,x,y); }
+    void Assembler::vpcmpgtw(Ymm dst, Ymm x, Operand y) { this->op(0x66,0x0f,0x65, dst,x,y); }
 
 
     void Assembler::imm_byte_after_operand(const Operand& operand, int imm) {
@@ -2089,8 +2163,16 @@ namespace skvm {
         this->op(0x66,0x0f,0x72,(Ymm)4, dst,x);
         this->byte(imm);
     }
+    void Assembler::vpsllw(Ymm dst, Ymm x, int imm) {
+        this->op(0x66,0x0f,0x71,(Ymm)6, dst,x);
+        this->byte(imm);
+    }
     void Assembler::vpsrlw(Ymm dst, Ymm x, int imm) {
         this->op(0x66,0x0f,0x71,(Ymm)2, dst,x);
+        this->byte(imm);
+    }
+    void Assembler::vpsraw(Ymm dst, Ymm x, int imm) {
+        this->op(0x66,0x0f,0x71,(Ymm)4, dst,x);
         this->byte(imm);
     }
 
@@ -3438,6 +3520,20 @@ namespace skvm {
                     // Make sure splat constants can be found by load_from_memory() or any().
                     (void)constants[immy];
                     break;
+
+                case Op:: add_q14x2:
+                case Op:: sub_q14x2:
+                case Op:: mul_q14x2:
+                case Op:: shl_q14x2:
+                case Op:: shr_q14x2:
+                case Op:: sra_q14x2:
+                case Op::  eq_q14x2:
+                case Op::  gt_q14x2:
+                case Op:: min_q14x2:
+                case Op:: max_q14x2:
+                case Op::uavg_q14x2:
+                case Op::umin_q14x2:
+                    return false; // TODO
 
             #if defined(__x86_64__) || defined(_M_X64)
                 case Op::assert_true: {
