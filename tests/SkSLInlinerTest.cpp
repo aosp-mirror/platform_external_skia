@@ -57,7 +57,7 @@ DEF_TEST(SkSLFunctionInlineThreshold, r) {
          "    ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x;"
          "    ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x; ++x;"
          "}"
-         "void main() { int x = 0; tooBig(x); }",
+         "void main() { int x = 0; tooBig(x); tooBig(x); }",
          "#version 400\n"
          "void tooBig(inout int x) {\n"
          "    ++x;\n    ++x;\n    ++x;\n    ++x;\n    ++x;\n    ++x;\n    ++x;\n    ++x;\n"
@@ -68,6 +68,7 @@ DEF_TEST(SkSLFunctionInlineThreshold, r) {
          "}\n"
          "void main() {\n"
          "    int x = 0;\n"
+         "    tooBig(x);\n"
          "    tooBig(x);\n"
          "}\n"
          );

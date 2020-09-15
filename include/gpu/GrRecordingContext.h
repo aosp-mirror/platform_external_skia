@@ -64,6 +64,21 @@ public:
     }
 
     /**
+     * Gets the maximum supported texture size.
+     */
+    SK_API int maxTextureSize() const;
+
+    /**
+     * Gets the maximum supported render target size.
+     */
+    SK_API int maxRenderTargetSize() const;
+
+    /**
+     * Can a SkImage be created with the given color type.
+     */
+    SK_API bool colorTypeSupportedAsImage(SkColorType) const;
+
+    /**
      * Gets the maximum supported sample count for a color type. 1 is returned if only non-MSAA
      * rendering is supported for the color type. 0 is returned if rendering to this color type
      * is not supported at all.
@@ -222,10 +237,10 @@ private:
 };
 
 /**
- * Safely cast a possibly-null recording context to direct context.
+ * Safely cast a possibly-null base context to direct context.
  */
-static inline GrDirectContext* GrAsDirectContext(GrRecordingContext* recording) {
-    return recording ? recording->asDirectContext() : nullptr;
+static inline GrDirectContext* GrAsDirectContext(GrContext_Base* base) {
+    return base ? base->asDirectContext() : nullptr;
 }
 
 #endif
