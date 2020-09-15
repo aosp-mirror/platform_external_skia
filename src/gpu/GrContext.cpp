@@ -17,6 +17,7 @@
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrGpu.h"
+#include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrPathRendererChain.h"
 #include "src/gpu/GrProxyProvider.h"
@@ -268,19 +269,6 @@ size_t GrContext::ComputeImageSize(sk_sp<SkImage> image, GrMipmapped mipMapped, 
     int colorSamplesPerPixel = 1;
     return GrSurface::ComputeSize(caps, proxy->backendFormat(), image->dimensions(),
                                   colorSamplesPerPixel, mipMapped, useNextPow2);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-int GrContext::maxTextureSize() const { return this->caps()->maxTextureSize(); }
-
-int GrContext::maxRenderTargetSize() const { return this->caps()->maxRenderTargetSize(); }
-
-bool GrContext::colorTypeSupportedAsImage(SkColorType colorType) const {
-    GrBackendFormat format =
-            this->caps()->getDefaultBackendFormat(SkColorTypeToGrColorType(colorType),
-                                                  GrRenderable::kNo);
-    return format.isValid();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

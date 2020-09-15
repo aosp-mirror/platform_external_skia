@@ -120,6 +120,11 @@ struct Program {
         // Functions smaller than this (measured in IR nodes) will be inlined. Default is arbitrary.
         // Set to 0 to disable inlining entirely.
         int fInlineThreshold = 50;
+        // true to enable optimization passes
+        bool fOptimize = true;
+        // If true, implicit conversions to lower precision numeric types are allowed
+        // (eg, float to half)
+        bool fAllowNarrowingConversions = false;
     };
 
     struct Inputs {
@@ -296,7 +301,6 @@ struct Program {
     // because destroying elements can modify reference counts in symbols
     std::shared_ptr<SymbolTable> fSymbols;
     Inputs fInputs;
-    bool fIsOptimized = false;
 
 private:
     std::vector<std::unique_ptr<ProgramElement>>* fInheritedElements;
