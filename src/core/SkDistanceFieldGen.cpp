@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkAutoMalloc.h"
-#include "SkColorData.h"
-#include "SkDistanceFieldGen.h"
-#include "SkMask.h"
-#include "SkPointPriv.h"
-#include "SkTemplates.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkDistanceFieldGen.h"
+#include "src/core/SkMask.h"
+#include "src/core/SkPointPriv.h"
 
 #include <utility>
 
@@ -327,7 +327,7 @@ static unsigned char pack_distance_field_val(float dist) {
     // The distance field is constructed as unsigned char values, so that the zero value is at 128,
     // Beside 128, we have 128 values in range [0, 128), but only 127 values in range (128, 255].
     // So we multiply distanceMagnitude by 127/128 at the latter range to avoid overflow.
-    dist = SkScalarPin(-dist, -distanceMagnitude, distanceMagnitude * 127.0f / 128.0f);
+    dist = SkTPin<float>(-dist, -distanceMagnitude, distanceMagnitude * 127.0f / 128.0f);
 
     // Scale into the positive range for unsigned distance.
     dist += distanceMagnitude;

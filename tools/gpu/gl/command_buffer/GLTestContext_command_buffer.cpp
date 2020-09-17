@@ -8,13 +8,13 @@
 
 #ifndef SK_NO_COMMAND_BUFFER
 
-#include "SkMutex.h"
-#include "SkOnce.h"
-#include "SkTLS.h"
-#include "gl/GrGLInterface.h"
-#include "gl/GrGLAssembleInterface.h"
-#include "gl/command_buffer/GLTestContext_command_buffer.h"
-#include "../ports/SkOSLibrary.h"
+#include "include/gpu/gl/GrGLAssembleInterface.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "include/private/SkMutex.h"
+#include "include/private/SkOnce.h"
+#include "src/core/SkTLS.h"
+#include "src/ports/SkOSLibrary.h"
+#include "tools/gpu/gl/command_buffer/GLTestContext_command_buffer.h"
 
 namespace {
 
@@ -335,6 +335,15 @@ void CommandBufferGLTestContext::destroyGLContext() {
         fSurface = EGL_NO_SURFACE;
     }
     fDisplay = EGL_NO_DISPLAY;
+}
+
+void CommandBufferGLTestContext::onPlatformMakeNotCurrent() const {
+    if (!gfFunctionsLoadedSuccessfully) {
+        return;
+    }
+    if (!TLSCurrentObjects::MakeCurrent(fDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT)) {
+        SkDebugf("Command Buffer: Could not null out current EGL context.\n");
+    }
 }
 
 void CommandBufferGLTestContext::onPlatformMakeCurrent() const {

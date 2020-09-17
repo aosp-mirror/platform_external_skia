@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkAutoMalloc.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkRegion.h"
-#include "Test.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRegion.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkAutoMalloc.h"
+#include "tests/Test.h"
 
 static void Union(SkRegion* rgn, const SkIRect& rect) {
     rgn->op(rect, SkRegion::kUnion_Op);
@@ -98,7 +98,7 @@ static void test_empties(skiatest::Reporter* reporter) {
     emptyPath.moveTo(1, 5);
     emptyPath.close();
     SkRegion openClip;
-    openClip.setRect(-16000, -16000, 16000, 16000);
+    openClip.setRect({-16000, -16000, 16000, 16000});
     empty.setPath(emptyPath, openClip);  // should not assert
 }
 
@@ -205,8 +205,8 @@ static void test_proc(skiatest::Reporter* reporter,
 static void rand_rect(SkIRect* rect, SkRandom& rand) {
     int bits = 6;
     int shift = 32 - bits;
-    rect->set(rand.nextU() >> shift, rand.nextU() >> shift,
-              rand.nextU() >> shift, rand.nextU() >> shift);
+    rect->setLTRB(rand.nextU() >> shift, rand.nextU() >> shift,
+                  rand.nextU() >> shift, rand.nextU() >> shift);
     rect->sort();
 }
 
@@ -285,13 +285,13 @@ DEF_TEST(Region_writeToMemory, r) {
     test_write(region, r);
 
     // Test a rectangular region
-    bool nonEmpty = region.setRect(0, 0, 50, 50);
+    bool nonEmpty = region.setRect({0, 0, 50, 50});
     REPORTER_ASSERT(r, nonEmpty);
     REPORTER_ASSERT(r, region.isRect());
     test_write(region, r);
 
     // Test a complex region
-    nonEmpty = region.op(50, 50, 100, 100, SkRegion::kUnion_Op);
+    nonEmpty = region.op({50, 50, 100, 100}, SkRegion::kUnion_Op);
     REPORTER_ASSERT(r, nonEmpty);
     REPORTER_ASSERT(r, region.isComplex());
     test_write(region, r);
@@ -421,7 +421,7 @@ DEF_TEST(region_toobig, reporter) {
 
 DEF_TEST(region_inverse_union_skbug_7491, reporter) {
     SkPath path;
-    path.setFillType(SkPath::kInverseWinding_FillType);
+    path.setFillType(SkPathFillType::kInverseWinding);
     path.moveTo(10, 20); path.lineTo(10, 30); path.lineTo(10.1f, 10); path.close();
 
     SkRegion clip;

@@ -5,15 +5,15 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "Resources.h"
+#include "samplecode/Sample.h"
+#include "tools/Resources.h"
 
-#include "SkCanvas.h"
-#include "SkFont.h"
-#include "SkImage.h"
-#include "SkPath.h"
-#include "SkPoint3.h"
-#include "SkShadowUtils.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint3.h"
+#include "include/utils/SkShadowUtils.h"
 
 ////////////////////////////////////////////////////////////////////////////
 // Sample to demonstrate tonal color shadows
@@ -44,14 +44,9 @@ protected:
         fRectPath.addRect(SkRect::MakeXYWH(-50, -50, 100, 100));
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "ShadowColor");
-            return true;
-        }
+    SkString name() override { return SkString("ShadowColor"); }
 
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    bool onChar(SkUnichar uni) override {
             bool handled = false;
             switch (uni) {
                 case 'W':
@@ -79,11 +74,11 @@ protected:
                     handled = true;
                     break;
                 case '>':
-                    fZIndex = SkTMin(9, fZIndex+1);
+                    fZIndex = std::min(9, fZIndex+1);
                     handled = true;
                     break;
                 case '<':
-                    fZIndex = SkTMax(0, fZIndex-1);
+                    fZIndex = std::max(0, fZIndex-1);
                     handled = true;
                     break;
                 default:
@@ -92,9 +87,9 @@ protected:
             if (handled) {
                 return true;
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
+
 
     void drawShadowedPath(SkCanvas* canvas, const SkPath& path,
                           const SkPoint3& zPlaneParams,
@@ -120,9 +115,9 @@ protected:
             if (paint.getColor() != SK_ColorBLACK) {
                 SkColor color = paint.getColor();
 
-                uint8_t max = SkTMax(SkTMax(SkColorGetR(color), SkColorGetG(color)),
+                uint8_t max = std::max(std::max(SkColorGetR(color), SkColorGetG(color)),
                                      SkColorGetB(color));
-                uint8_t min = SkTMin(SkTMin(SkColorGetR(color), SkColorGetG(color)),
+                uint8_t min = std::min(std::min(SkColorGetR(color), SkColorGetG(color)),
                                      SkColorGetB(color));
                 SkScalar luminance = 0.5f*(max + min) / 255.f;
                 SkScalar alpha = (.6 - .4*luminance)*luminance*luminance + 0.3f;

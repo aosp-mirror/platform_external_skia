@@ -8,9 +8,9 @@
 #ifndef GrGLUniformHandler_DEFINED
 #define GrGLUniformHandler_DEFINED
 
-#include "glsl/GrGLSLUniformHandler.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
-#include "gl/GrGLProgramDataManager.h"
+#include "src/gpu/gl/GrGLProgramDataManager.h"
 
 class GrGLCaps;
 
@@ -38,11 +38,15 @@ private:
                                           int arrayCount,
                                           const char** outName) override;
 
-    SamplerHandle addSampler(const GrTexture*, const GrSamplerState&, const char* name,
-                             const GrShaderCaps*) override;
+    void updateUniformVisibility(UniformHandle u, uint32_t visibility) override {
+        fUniforms[u.toIndex()].fVisibility |= visibility;
+    }
 
-    const GrShaderVar& samplerVariable(SamplerHandle handle) const override {
-        return fSamplers[handle.toIndex()].fVariable;
+    SamplerHandle addSampler(const GrSurfaceProxy*, GrSamplerState, const GrSwizzle&,
+                             const char* name, const GrShaderCaps*) override;
+
+    const char* samplerVariable(SamplerHandle handle) const override {
+        return fSamplers[handle.toIndex()].fVariable.c_str();
     }
 
     GrSwizzle samplerSwizzle(SamplerHandle handle) const override {
@@ -55,7 +59,7 @@ private:
     void bindUniformLocations(GrGLuint programID, const GrGLCaps& caps);
 
     // Updates the loction of the Uniforms if we cannot bind uniform locations manually
-    void getUniformLocations(GrGLuint programID, const GrGLCaps& caps);
+    void getUniformLocations(GrGLuint programID, const GrGLCaps& caps, bool force);
 
     const GrGLGpu* glGpu() const;
 

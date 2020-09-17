@@ -5,20 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkMatrix.h"
-#include "SkMatrixUtils.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkScalar.h"
-#include "SkShader.h"
-#include "SkSize.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkMatrixUtils.h"
+#include "tests/Test.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -139,8 +140,7 @@ static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
                   SkIntToScalar(239),
                   0, 0, SK_Scalar1);
     SkPaint paint;
-    paint.setShader(SkShader::MakeBitmapShader(bm, SkShader::kRepeat_TileMode,
-                                               SkShader::kRepeat_TileMode, &matrix));
+    paint.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &matrix));
 
     SkRect r = SkRect::MakeXYWH(681, 239, 695, 253);
     c.drawRect(r, paint);

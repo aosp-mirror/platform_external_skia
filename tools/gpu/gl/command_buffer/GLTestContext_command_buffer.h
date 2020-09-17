@@ -9,7 +9,7 @@
 #ifndef GLTestContext_command_buffer_DEFINED
 #define GLTestContext_command_buffer_DEFINED
 
-#include "gl/GLTestContext.h"
+#include "tools/gpu/gl/GLTestContext.h"
 
 namespace sk_gpu_test {
 class CommandBufferGLTestContext : public GLTestContext {
@@ -40,6 +40,7 @@ private:
 
     void destroyGLContext();
 
+    void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
 
     std::function<void()> onPlatformGetAutoContextRestore() const override;

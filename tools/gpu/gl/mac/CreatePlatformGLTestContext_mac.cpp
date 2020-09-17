@@ -5,9 +5,9 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
-#include "gl/GLTestContext.h"
+#include "tools/gpu/gl/GLTestContext.h"
 #include "AvailabilityMacros.h"
 
 #include <OpenGL/OpenGL.h>
@@ -28,6 +28,7 @@ public:
 private:
     void destroyGLContext();
 
+    void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
     void onPlatformSwapBuffers() const override;
@@ -104,6 +105,10 @@ void MacGLTestContext::destroyGLContext() {
     if (nullptr != fGLLibrary) {
         dlclose(fGLLibrary);
     }
+}
+
+void MacGLTestContext::onPlatformMakeNotCurrent() const {
+    CGLSetCurrentContext(nullptr);
 }
 
 void MacGLTestContext::onPlatformMakeCurrent() const {

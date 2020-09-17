@@ -8,9 +8,9 @@
 #ifndef SKSL_INTERFACEBLOCK
 #define SKSL_INTERFACEBLOCK
 
-#include "SkSLProgramElement.h"
-#include "SkSLSymbolTable.h"
-#include "SkSLVarDeclarations.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
 
 namespace SkSL {
 
@@ -46,6 +46,7 @@ struct InterfaceBlock : public ProgramElement {
                                                                   fTypeOwner));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         String result = fVariable.fModifiers.description() + fTypeName + " {\n";
         const Type* structType = &fVariable.fType;
@@ -68,6 +69,7 @@ struct InterfaceBlock : public ProgramElement {
         }
         return result + ";";
     }
+#endif
 
     const Variable& fVariable;
     const String fTypeName;

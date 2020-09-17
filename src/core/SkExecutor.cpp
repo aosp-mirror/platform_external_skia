@@ -5,17 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkExecutor.h"
-#include "SkMakeUnique.h"
-#include "SkMutex.h"
-#include "SkSemaphore.h"
-#include "SkSpinlock.h"
-#include "SkTArray.h"
+#include "include/core/SkExecutor.h"
+#include "include/private/SkMutex.h"
+#include "include/private/SkSemaphore.h"
+#include "include/private/SkSpinlock.h"
+#include "include/private/SkTArray.h"
 #include <deque>
 #include <thread>
 
 #if defined(SK_BUILD_FOR_WIN)
-    #include "SkLeanWindows.h"
+    #include "src/core/SkLeanWindows.h"
     static int num_cores() {
         SYSTEM_INFO sysinfo;
         GetNativeSystemInfo(&sysinfo);
@@ -37,14 +36,24 @@ class SkTrivialExecutor final : public SkExecutor {
     }
 };
 
-static SkTrivialExecutor gTrivial;
-static SkExecutor* gDefaultExecutor = &gTrivial;
+static SkExecutor* gDefaultExecutor = nullptr;
 
+void SetDefaultTrivialExecutor() {
+    static SkTrivialExecutor *gTrivial = new SkTrivialExecutor();
+    gDefaultExecutor = gTrivial;
+}
 SkExecutor& SkExecutor::GetDefault() {
+    if (!gDefaultExecutor) {
+        SetDefaultTrivialExecutor();
+    }
     return *gDefaultExecutor;
 }
 void SkExecutor::SetDefault(SkExecutor* executor) {
-    gDefaultExecutor = executor ? executor : &gTrivial;
+    if (executor) {
+        gDefaultExecutor = executor;
+    } else {
+        SetDefaultTrivialExecutor();
+    }
 }
 
 // We'll always push_back() new work, but pop from the front of deques or the back of SkTArray.
@@ -83,7 +92,7 @@ public:
     virtual void add(std::function<void(void)> work) override {
         // Add some work to our pile of work to do.
         {
-            SkAutoExclusive lock(fWorkLock);
+            SkAutoMutexExclusive lock(fWorkLock);
             fWork.emplace_back(std::move(work));
         }
         // Tell the Loop() threads to pick it up.
@@ -102,7 +111,7 @@ private:
     bool do_work() {
         std::function<void(void)> work;
         {
-            SkAutoExclusive lock(fWorkLock);
+            SkAutoMutexExclusive lock(fWorkLock);
             SkASSERT(!fWork.empty());        // TODO: if (fWork.empty()) { return true; } ?
             work = pop(&fWork);
         }
@@ -133,9 +142,9 @@ private:
 
 std::unique_ptr<SkExecutor> SkExecutor::MakeFIFOThreadPool(int threads) {
     using WorkList = std::deque<std::function<void(void)>>;
-    return skstd::make_unique<SkThreadPool<WorkList>>(threads > 0 ? threads : num_cores());
+    return std::make_unique<SkThreadPool<WorkList>>(threads > 0 ? threads : num_cores());
 }
 std::unique_ptr<SkExecutor> SkExecutor::MakeLIFOThreadPool(int threads) {
     using WorkList = SkTArray<std::function<void(void)>>;
-    return skstd::make_unique<SkThreadPool<WorkList>>(threads > 0 ? threads : num_cores());
+    return std::make_unique<SkThreadPool<WorkList>>(threads > 0 ? threads : num_cores());
 }

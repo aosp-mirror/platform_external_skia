@@ -8,10 +8,10 @@
 #ifndef SKSL_VARDECLARATIONS
 #define SKSL_VARDECLARATIONS
 
-#include "SkSLExpression.h"
-#include "SkSLProgramElement.h"
-#include "SkSLStatement.h"
-#include "SkSLVariable.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
+#include "src/sksl/ir/SkSLStatement.h"
+#include "src/sksl/ir/SkSLVariable.h"
 
 namespace SkSL {
 
@@ -42,6 +42,7 @@ struct VarDeclaration : public Statement {
                                                              fValue ? fValue->clone() : nullptr));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         String result = fVar->fName;
         for (const auto& size : fSizes) {
@@ -56,6 +57,7 @@ struct VarDeclaration : public Statement {
         }
         return result;
     }
+#endif
 
     const Variable* fVar;
     std::vector<std::unique_ptr<Expression>> fSizes;
@@ -87,6 +89,7 @@ struct VarDeclarations : public ProgramElement {
                                                                      std::move(cloned)));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         if (!fVars.size()) {
             return String();
@@ -101,6 +104,7 @@ struct VarDeclarations : public ProgramElement {
         }
         return result;
     }
+#endif
 
     const Type& fBaseType;
     // this *should* be a vector of unique_ptr<VarDeclaration>, but it significantly simplifies the

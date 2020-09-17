@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkDrawShadowInfo.h"
-#include "SkMatrix.h"
-#include "SkPath.h"
-#include "SkPolyUtils.h"
-#include "SkRect.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "src/core/SkDrawShadowInfo.h"
+#include "src/utils/SkPolyUtils.h"
 
 namespace SkDrawShadowMetrics {
 
@@ -121,11 +121,11 @@ void GetLocalBounds(const SkPath& path, const SkDrawShadowRec& rec, const SkMatr
         occluderZ = rec.fZPlaneParams.fZ;
     } else {
         occluderZ = compute_z(ambientBounds.fLeft, ambientBounds.fTop, rec.fZPlaneParams);
-        occluderZ = SkTMax(occluderZ, compute_z(ambientBounds.fRight, ambientBounds.fTop,
+        occluderZ = std::max(occluderZ, compute_z(ambientBounds.fRight, ambientBounds.fTop,
                                                 rec.fZPlaneParams));
-        occluderZ = SkTMax(occluderZ, compute_z(ambientBounds.fLeft, ambientBounds.fBottom,
+        occluderZ = std::max(occluderZ, compute_z(ambientBounds.fLeft, ambientBounds.fBottom,
                                                 rec.fZPlaneParams));
-        occluderZ = SkTMax(occluderZ, compute_z(ambientBounds.fRight, ambientBounds.fBottom,
+        occluderZ = std::max(occluderZ, compute_z(ambientBounds.fRight, ambientBounds.fBottom,
                                                 rec.fZPlaneParams));
     }
     SkScalar ambientBlur;

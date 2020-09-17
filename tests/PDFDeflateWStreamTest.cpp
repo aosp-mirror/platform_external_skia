@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "tests/Test.h"
 
 #ifdef SK_SUPPORT_PDF
 
-#include "SkDeflate.h"
-#include "SkRandom.h"
-#include "SkTo.h"
+#include "include/private/SkTo.h"
+#include "include/utils/SkRandom.h"
+#include "src/pdf/SkDeflate.h"
 
 namespace {
 
@@ -120,7 +120,7 @@ DEF_TEST(SkPDF_DeflateWStream, r) {
             uint32_t j = 0;
             while (j < size) {
                 uint32_t writeSize =
-                        SkTMin(size - j, random.nextRangeU(1, 400));
+                        std::min(size - j, random.nextRangeU(1, 400));
                 if (!deflateWStream.write(&buffer[j], writeSize)) {
                     ERRORF(r, "something went wrong.");
                     return;
@@ -151,7 +151,7 @@ DEF_TEST(SkPDF_DeflateWStream, r) {
 
             continue;
         }
-        uint32_t minLength = SkTMin(size,
+        uint32_t minLength = std::min(size,
                                     (uint32_t)(decompressed->getLength()));
         for (uint32_t i = 0; i < minLength; ++i) {
             uint8_t c;

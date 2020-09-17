@@ -5,34 +5,35 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "tests/Test.h"
 
 #ifdef SK_SUPPORT_PDF
 
-#include "Resources.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkClusterator.h"
-#include "SkData.h"
-#include "SkDeflate.h"
-#include "SkGlyphRun.h"
-#include "SkImageEncoder.h"
-#include "SkImageFilterPriv.h"
-#include "SkMakeUnique.h"
-#include "SkMatrix.h"
-#include "SkPDFDevice.h"
-#include "SkPDFDocumentPriv.h"
-#include "SkPDFFont.h"
-#include "SkPDFTypes.h"
-#include "SkPDFUnion.h"
-#include "SkPDFUtils.h"
-#include "SkReadBuffer.h"
-#include "SkScalar.h"
-#include "SkSpecialImage.h"
-#include "SkStream.h"
-#include "SkTo.h"
-#include "SkTypes.h"
-#include "sk_tool_utils.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageEncoder.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkMorphologyImageFilter.h"
+#include "include/effects/SkPerlinNoiseShader.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkGlyphRun.h"
+#include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/pdf/SkClusterator.h"
+#include "src/pdf/SkDeflate.h"
+#include "src/pdf/SkPDFDevice.h"
+#include "src/pdf/SkPDFDocumentPriv.h"
+#include "src/pdf/SkPDFFont.h"
+#include "src/pdf/SkPDFTypes.h"
+#include "src/pdf/SkPDFUnion.h"
+#include "src/pdf/SkPDFUtils.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
 #include <cstdlib>
 #include <cmath>
@@ -87,7 +88,7 @@ static void test_issue1083() {
     SkCanvas* canvas = doc->beginPage(100.0f, 100.0f);
 
     uint16_t glyphID = 65000;
-    canvas->drawSimpleText(&glyphID, 2, kGlyphID_SkTextEncoding, 0, 0, SkFont(), SkPaint());
+    canvas->drawSimpleText(&glyphID, 2, SkTextEncoding::kGlyphID, 0, 0, SkFont(), SkPaint());
 
     doc->close();
 }
@@ -143,6 +144,13 @@ static void TestPDFUnion(skiatest::Reporter* reporter) {
     SkString highBitString("\xDE\xAD" "be\xEF");
     SkPDFUnion highBitName = SkPDFUnion::Name(highBitString);
     assert_emit_eq(reporter, highBitName, "/#DE#ADbe#EF");
+
+    // https://bugs.skia.org/9508
+    // https://crbug.com/494913
+    // Trailing '\0' characters must be removed.
+    const char nameInput4[] = "Test name with nil\0";
+    SkPDFUnion name4 = SkPDFUnion::Name(SkString(nameInput4, strlen(nameInput4) + 1));
+    assert_emit_eq(reporter, name4, "/Test#20name#20with#20nil");
 }
 
 static void TestPDFArray(skiatest::Reporter* reporter) {
@@ -245,7 +253,7 @@ DEF_TEST(SkPDF_Primitives, reporter) {
 
 namespace {
 
-class DummyImageFilter : public SkImageFilter {
+class DummyImageFilter : public SkImageFilter_Base {
 public:
     static sk_sp<DummyImageFilter> Make(bool visited = false) {
         return sk_sp<DummyImageFilter>(new DummyImageFilter(visited));
@@ -254,14 +262,10 @@ public:
     bool visited() const { return fVisited; }
 
 protected:
-    sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* source, const Context&,
-                                        SkIPoint* offset) const override {
+    sk_sp<SkSpecialImage> onFilterImage(const Context& ctx, SkIPoint* offset) const override {
         fVisited = true;
         offset->fX = offset->fY = 0;
-        return sk_ref_sp<SkSpecialImage>(source);
-    }
-    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override {
-        return sk_ref_sp(const_cast<DummyImageFilter*>(this));
+        return sk_ref_sp<SkSpecialImage>(ctx.sourceImage());
     }
 
 private:
@@ -270,7 +274,7 @@ private:
 
     mutable bool fVisited;
 
-    typedef SkImageFilter INHERITED;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 sk_sp<SkFlattenable> DummyImageFilter::CreateProc(SkReadBuffer& buffer) {
@@ -314,8 +318,7 @@ DEF_TEST(SkPDF_FontCanEmbedTypeface, reporter) {
         REPORTER_ASSERT(reporter,
                         !SkPDFFont::CanEmbedTypeface(noEmbedTypeface.get(), &doc));
     }
-    sk_sp<SkTypeface> portableTypeface(
-            sk_tool_utils::create_portable_typeface(nullptr, SkFontStyle()));
+    sk_sp<SkTypeface> portableTypeface(ToolUtils::create_portable_typeface(nullptr, SkFontStyle()));
     REPORTER_ASSERT(reporter,
                     SkPDFFont::CanEmbedTypeface(portableTypeface.get(), &doc));
 }
@@ -440,4 +443,26 @@ DEF_TEST(SkPDF_Clusterator, reporter) {
     }
 }
 
+DEF_TEST(fuzz875632f0, reporter) {
+    SkNullWStream stream;
+    auto doc = SkPDF::MakeDocument(&stream);
+    REPORTER_ASSERT(reporter, doc);
+    SkCanvas* canvas = doc->beginPage(128, 160);
+
+    SkAutoCanvasRestore autoCanvasRestore(canvas, false);
+
+    SkPaint layerPaint({0, 0, 0, 0});
+    layerPaint.setImageFilter(SkDilateImageFilter::Make(536870912, 0, nullptr, nullptr));
+    layerPaint.setBlendMode(SkBlendMode::kClear);
+
+    canvas->saveLayer(nullptr, &layerPaint);
+    canvas->saveLayer(nullptr, nullptr);
+
+    SkPaint paint;
+    paint.setBlendMode(SkBlendMode::kDarken);
+    paint.setShader(SkPerlinNoiseShader::MakeFractalNoise(0, 0, 2, 0, nullptr));
+    paint.setColor4f(SkColor4f{0, 0, 0 ,0});
+
+    canvas->drawPath(SkPath(), paint);
+}
 #endif

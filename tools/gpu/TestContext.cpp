@@ -6,11 +6,11 @@
  * found in the LICENSE file.
  */
 
-#include "TestContext.h"
+#include "tools/gpu/TestContext.h"
 
-#include "GpuTimer.h"
+#include "tools/gpu/GpuTimer.h"
 
-#include "GrContext.h"
+#include "include/gpu/GrContext.h"
 
 namespace sk_gpu_test {
 TestContext::TestContext()
@@ -35,6 +35,7 @@ sk_sp<GrContext> TestContext::makeGrContext(const GrContextOptions&) {
     return nullptr;
 }
 
+void TestContext::makeNotCurrent() const { this->onPlatformMakeNotCurrent(); }
 void TestContext::makeCurrent() const { this->onPlatformMakeCurrent(); }
 
 SkScopeExit TestContext::makeCurrentAndAutoRestore() const {

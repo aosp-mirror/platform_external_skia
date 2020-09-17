@@ -5,19 +5,17 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "SkAnimTimer.h"
-#include "SkBlurMask.h"
-#include "SkBlurMaskFilter.h"
-#include "SkColorFilter.h"
-#include "SkCamera.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkPathOps.h"
-#include "SkPoint3.h"
-#include "SkShadowUtils.h"
-#include "SkUTF.h"
-#include "sk_tool_utils.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint3.h"
+#include "include/pathops/SkPathOps.h"
+#include "include/utils/SkCamera.h"
+#include "include/utils/SkShadowUtils.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkBlurMask.h"
+#include "src/utils/SkUTF.h"
+#include "tools/ToolUtils.h"
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -73,14 +71,9 @@ protected:
         fConcavePaths.back().cubicTo(0, -25, 40, -50, 50, 0);
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "ShadowUtils");
-            return true;
-        }
+    SkString name() override { return SkString("ShadowUtils"); }
 
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    bool onChar(SkUnichar uni) override {
             bool handled = false;
             switch (uni) {
                 case 'W':
@@ -117,8 +110,7 @@ protected:
             if (handled) {
                 return true;
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
 
     void drawBG(SkCanvas* canvas) {
@@ -185,7 +177,7 @@ protected:
         SkPaint paint;
         paint.setColor(SK_ColorGREEN);
         paint.setAntiAlias(true);
-        SkPoint3 zPlaneParams = SkPoint3::Make(0, 0, SkTMax(1.0f, kHeight + fZDelta));
+        SkPoint3 zPlaneParams = SkPoint3::Make(0, 0, std::max(1.0f, kHeight + fZDelta));
 
         // convex paths
         for (auto& m : matrices) {
@@ -211,7 +203,7 @@ protected:
 
                     canvas->translate(dx, 0);
                     x += dx;
-                    dy = SkTMax(dy, postMBounds.height() + kPad + kHeight);
+                    dy = std::max(dy, postMBounds.height() + kPad + kHeight);
                 }
             }
         }
@@ -237,7 +229,7 @@ protected:
 
                 canvas->translate(dx, 0);
                 x += dx;
-                dy = SkTMax(dy, postMBounds.height() + kPad + kHeight);
+                dy = std::max(dy, postMBounds.height() + kPad + kHeight);
             }
         }
 

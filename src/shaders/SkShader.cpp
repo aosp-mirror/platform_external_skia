@@ -5,25 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "SkArenaAlloc.h"
-#include "SkBitmapProcShader.h"
-#include "SkColorShader.h"
-#include "SkColorSpacePriv.h"
-#include "SkColorSpaceXformer.h"
-#include "SkEmptyShader.h"
-#include "SkMallocPixelRef.h"
-#include "SkPaint.h"
-#include "SkPicture.h"
-#include "SkPictureShader.h"
-#include "SkRasterPipeline.h"
-#include "SkReadBuffer.h"
-#include "SkScalar.h"
-#include "SkShaderBase.h"
-#include "SkTLazy.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkMallocPixelRef.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkScalar.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkColorSpaceXformSteps.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkTLazy.h"
+#include "src/core/SkVM.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/SkBitmapProcShader.h"
+#include "src/shaders/SkColorShader.h"
+#include "src/shaders/SkEmptyShader.h"
+#include "src/shaders/SkPictureShader.h"
+#include "src/shaders/SkShaderBase.h"
 
 #if SK_SUPPORT_GPU
-#include "GrFragmentProcessor.h"
+#include "src/gpu/GrFragmentProcessor.h"
 #endif
 
 SkShaderBase::SkShaderBase(const SkMatrix* localMatrix)
@@ -111,14 +112,15 @@ SkShaderBase::Context::Context(const SkShaderBase& shader, const ContextRec& rec
 SkShaderBase::Context::~Context() {}
 
 bool SkShaderBase::ContextRec::isLegacyCompatible(SkColorSpace* shaderColorSpace) const {
-    return sk_can_use_legacy_blits(shaderColorSpace, fDstColorSpace);
+    // In legacy pipelines, shaders always produce premul (or opaque) and the destination is also
+    // always premul (or opaque).  (And those "or opaque" caveats won't make any difference here.)
+    SkAlphaType shaderAT = kPremul_SkAlphaType,
+                   dstAT = kPremul_SkAlphaType;
+    return 0 == SkColorSpaceXformSteps{shaderColorSpace, shaderAT,
+                                         fDstColorSpace,    dstAT}.flags.mask();
 }
 
-const SkMatrix& SkShader::getLocalMatrix() const {
-    return as_SB(this)->getLocalMatrix();
-}
-
-SkImage* SkShader::isAImage(SkMatrix* localMatrix, TileMode xy[2]) const {
+SkImage* SkShader::isAImage(SkMatrix* localMatrix, SkTileMode xy[2]) const {
     return as_SB(this)->onIsAImage(localMatrix, xy);
 }
 
@@ -132,35 +134,29 @@ std::unique_ptr<GrFragmentProcessor> SkShaderBase::asFragmentProcessor(const GrF
 }
 #endif
 
-sk_sp<SkShader> SkShader::makeAsALocalMatrixShader(SkMatrix*) const {
+sk_sp<SkShader> SkShaderBase::makeAsALocalMatrixShader(SkMatrix*) const {
     return nullptr;
 }
 
-sk_sp<SkShader> SkShader::MakeEmptyShader() { return sk_make_sp<SkEmptyShader>(); }
+sk_sp<SkShader> SkShaders::Empty() { return sk_make_sp<SkEmptyShader>(); }
+sk_sp<SkShader> SkShaders::Color(SkColor color) { return sk_make_sp<SkColorShader>(color); }
 
-sk_sp<SkShader> SkShader::MakeColorShader(SkColor color) { return sk_make_sp<SkColorShader>(color); }
-
-sk_sp<SkShader> SkShader::MakeBitmapShader(const SkBitmap& src, TileMode tmx, TileMode tmy,
-                                           const SkMatrix* localMatrix) {
-    if (localMatrix && !localMatrix->invert(nullptr)) {
+sk_sp<SkShader> SkBitmap::makeShader(SkTileMode tmx, SkTileMode tmy, const SkMatrix* lm) const {
+    if (lm && !lm->invert(nullptr)) {
         return nullptr;
     }
-    return SkMakeBitmapShader(src, tmx, tmy, localMatrix, kIfMutable_SkCopyPixelsMode);
+    return SkMakeBitmapShader(*this, tmx, tmy, lm, kIfMutable_SkCopyPixelsMode);
 }
 
-sk_sp<SkShader> SkShader::MakePictureShader(sk_sp<SkPicture> src, TileMode tmx, TileMode tmy,
-                                            const SkMatrix* localMatrix, const SkRect* tile) {
-    if (localMatrix && !localMatrix->invert(nullptr)) {
-        return nullptr;
-    }
-    return SkPictureShader::Make(std::move(src), tmx, tmy, localMatrix, tile);
+sk_sp<SkShader> SkBitmap::makeShader(const SkMatrix* lm) const {
+    return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, lm);
 }
 
-bool SkShaderBase::appendStages(const StageRec& rec) const {
+bool SkShaderBase::appendStages(const SkStageRec& rec) const {
     return this->onAppendStages(rec);
 }
 
-bool SkShaderBase::onAppendStages(const StageRec& rec) const {
+bool SkShaderBase::onAppendStages(const SkStageRec& rec) const {
     // SkShader::Context::shadeSpan() handles the paint opacity internally,
     // but SkRasterPipelineBlitter applies it as a separate stage.
     // We skip the internal shadeSpan() step by forcing the paint opaque.
@@ -169,16 +165,15 @@ bool SkShaderBase::onAppendStages(const StageRec& rec) const {
         opaquePaint.writable()->setAlpha(SK_AlphaOPAQUE);
     }
 
-    ContextRec cr(*opaquePaint, rec.fCTM, rec.fLocalM, rec.fDstColorType, rec.fDstCS);
+    ContextRec cr(*opaquePaint, rec.fCTM, rec.fLocalM, rec.fDstColorType, sk_srgb_singleton());
 
     struct CallbackCtx : SkRasterPipeline_CallbackCtx {
-        sk_sp<SkShader> shader;
-        Context*        ctx;
+        sk_sp<const SkShader> shader;
+        Context*              ctx;
     };
     auto cb = rec.fAlloc->make<CallbackCtx>();
-    cb->shader = rec.fDstCS ? SkColorSpaceXformer::Make(sk_ref_sp(rec.fDstCS))->apply(this)
-                            : sk_ref_sp((SkShader*)this);
-    cb->ctx = as_SB(cb->shader)->makeContext(cr, rec.fAlloc);
+    cb->shader = sk_ref_sp(this);
+    cb->ctx = as_SB(this)->makeContext(cr, rec.fAlloc);
     cb->fn  = [](SkRasterPipeline_CallbackCtx* self, int active_pixels) {
         auto c = (CallbackCtx*)self;
         int x = (int)c->rgba[0],
@@ -195,13 +190,77 @@ bool SkShaderBase::onAppendStages(const StageRec& rec) const {
     if (cb->ctx) {
         rec.fPipeline->append(SkRasterPipeline::seed_shader);
         rec.fPipeline->append(SkRasterPipeline::callback, cb);
+        rec.fAlloc->make<SkColorSpaceXformSteps>(sk_srgb_singleton(), kPremul_SkAlphaType,
+                                                 rec.fDstCS,          kPremul_SkAlphaType)
+            ->apply(rec.fPipeline, true);
         return true;
     }
     return false;
 }
 
+bool SkShaderBase::program(skvm::Builder* p,
+                           const SkMatrix& ctm, const SkMatrix* localM,
+                           SkFilterQuality quality, SkColorSpace* dstCS,
+                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
+                           skvm::F32 x, skvm::F32 y,
+                           skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const {
+    // Force opaque alpha for all opaque shaders.
+    //
+    // This is primarily nice in that we usually have a 1.0f constant splat
+    // somewhere in the program anyway, and this will let us drop the work the
+    // shader notionally does to produce alpha, p->extract(...), etc. in favor
+    // of that simple hoistable splat.
+    //
+    // More subtly, it makes isOpaque() a parameter to all shader program
+    // generation, guaranteeing that is-opaque bit is mixed into the overall
+    // shader program hash and blitter Key.  This makes it safe for us to use
+    // that bit to make decisions when constructing an SkVMBlitter, like doing
+    // SrcOver -> Src strength reduction.
+    if (this->onProgram(p, ctm,localM, quality,dstCS, uniforms,alloc, x,y, r,g,b,a)) {
+        if (this->isOpaque()) {
+            *a = p->splat(1.0f);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool SkShaderBase::onProgram(skvm::Builder*,
+                             const SkMatrix& ctm, const SkMatrix* localM,
+                             SkFilterQuality quality, SkColorSpace* dstCS,
+                             skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
+                             skvm::F32 x, skvm::F32 y,
+                             skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const {
+    return false;
+}
+
+void SkShaderBase::ApplyMatrix(skvm::Builder* p, const SkMatrix& m,
+                               skvm::F32* x, skvm::F32* y, skvm::Uniforms* uniforms) {
+    if (m.isIdentity()) {
+        // That was easy.
+    } else if (m.isTranslate()) {
+        *x = p->add(*x, p->uniformF(uniforms->pushF(m[2])));
+        *y = p->add(*y, p->uniformF(uniforms->pushF(m[5])));
+    } else if (m.isScaleTranslate()) {
+        *x = p->mad(*x, p->uniformF(uniforms->pushF(m[0])), p->uniformF(uniforms->pushF(m[2])));
+        *y = p->mad(*y, p->uniformF(uniforms->pushF(m[4])), p->uniformF(uniforms->pushF(m[5])));
+    } else {  // Affine or perspective.
+        auto dot = [&,X=*x,Y=*y](int row) {
+            return p->mad(X, p->uniformF(uniforms->pushF(m[3*row+0])),
+                   p->mad(Y, p->uniformF(uniforms->pushF(m[3*row+1])),
+                             p->uniformF(uniforms->pushF(m[3*row+2]))));
+        };
+        *x = dot(0);
+        *y = dot(1);
+        if (m.hasPerspective()) {
+            *x = p->div(*x, dot(2));
+            *y = p->div(*y, dot(2));
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 sk_sp<SkFlattenable> SkEmptyShader::CreateProc(SkReadBuffer&) {
-    return SkShader::MakeEmptyShader();
+    return SkShaders::Empty();
 }

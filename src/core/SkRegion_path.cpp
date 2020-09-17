@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlitter.h"
-#include "SkPath.h"
-#include "SkRegionPriv.h"
-#include "SkSafeMath.h"
-#include "SkScan.h"
-#include "SkTDArray.h"
-#include "SkTSort.h"
-#include "SkTo.h"
+#include "include/core/SkPath.h"
+#include "include/private/SkTDArray.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkBlitter.h"
+#include "src/core/SkRegionPriv.h"
+#include "src/core/SkSafeMath.h"
+#include "src/core/SkScan.h"
+#include "src/core/SkTSort.h"
 
 // The rgnbuilder caller *seems* to pass short counts, possible often seens early failure, so
 // we may not want to promote this to a "std" routine just yet.
@@ -217,7 +217,7 @@ void SkRgnBuilder::copyToRect(SkIRect* r) const {
     const Scanline* line = (const Scanline*)fStorage;
     SkASSERT(line->fXCount == 2);
 
-    r->set(line->firstX()[0], fTop, line->firstX()[1], line->fLastY + 1);
+    r->setLTRB(line->firstX()[0], fTop, line->firstX()[1], line->fLastY + 1);
 }
 
 void SkRgnBuilder::copyToRgn(SkRegion::RunType runs[]) const {
@@ -281,7 +281,7 @@ static int count_path_runtype_values(const SkPath& path, int* itop, int* ibot) {
     SkScalar    top = SkIntToScalar(SK_MaxS16);
     SkScalar    bot = SkIntToScalar(SK_MinS16);
 
-    while ((verb = iter.next(pts, false)) != SkPath::kDone_Verb) {
+    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
         maxEdges += verb_to_max_edges(verb);
 
         int lastIndex = verb_to_initial_last_index(verb);
@@ -350,8 +350,8 @@ bool SkRegion::setPath(const SkPath& path, const SkRegion& clip) {
     int clipTop, clipBot;
     int clipTransitions = clip.count_runtype_values(&clipTop, &clipBot);
 
-    int top = SkMax32(pathTop, clipTop);
-    int bot = SkMin32(pathBot, clipBot);
+    int top = std::max(pathTop, clipTop);
+    int bot = std::min(pathBot, clipBot);
     if (top >= bot) {
         return check_inverse_on_empty_return(this, path, clip);
     }
@@ -359,7 +359,7 @@ bool SkRegion::setPath(const SkPath& path, const SkRegion& clip) {
     SkRgnBuilder builder;
 
     if (!builder.init(bot - top,
-                      SkMax32(pathTransitions, clipTransitions),
+                      std::max(pathTransitions, clipTransitions),
                       path.isInverseFillType())) {
         // can't allocate working space, so return false
         return this->setEmpty();
@@ -413,7 +413,7 @@ struct Edge {
     }
 
     int top() const {
-        return SkMin32(fY0, fY1);
+        return std::min(fY0, fY1);
     }
 };
 

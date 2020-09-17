@@ -8,8 +8,8 @@
 #ifndef SKSL_TERNARYEXPRESSION
 #define SKSL_TERNARYEXPRESSION
 
-#include "SkSLExpression.h"
-#include "../SkSLPosition.h"
+#include "src/sksl/SkSLPosition.h"
+#include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
 
@@ -26,8 +26,9 @@ struct TernaryExpression : public Expression {
         SkASSERT(fIfTrue->fType == fIfFalse->fType);
     }
 
-    bool hasSideEffects() const override {
-        return fTest->hasSideEffects() || fIfTrue->hasSideEffects() || fIfFalse->hasSideEffects();
+    bool hasProperty(Property property) const override {
+        return fTest->hasProperty(property) || fIfTrue->hasProperty(property) ||
+               fIfFalse->hasProperty(property);
     }
 
     std::unique_ptr<Expression> clone() const override {
@@ -36,10 +37,12 @@ struct TernaryExpression : public Expression {
                                                                  fIfFalse->clone()));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return "(" + fTest->description() + " ? " + fIfTrue->description() + " : " +
                fIfFalse->description() + ")";
     }
+#endif
 
     std::unique_ptr<Expression> fTest;
     std::unique_ptr<Expression> fIfTrue;

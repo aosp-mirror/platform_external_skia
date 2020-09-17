@@ -8,13 +8,12 @@
 #ifndef GrDeferredProxyUploader_DEFINED
 #define GrDeferredProxyUploader_DEFINED
 
-#include "SkAutoPixmapStorage.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkSemaphore.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/SkSemaphore.h"
+#include "src/core/SkAutoPixmapStorage.h"
 
-#include "GrOpFlushState.h"
-#include "GrTextureProxyPriv.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrTextureProxyPriv.h"
 
 /**
  * GrDeferredProxyUploader assists with threaded generation of textures. Currently used by both
@@ -98,7 +97,7 @@ class GrTDeferredProxyUploader : public GrDeferredProxyUploader {
 public:
     template <typename... Args>
     GrTDeferredProxyUploader(Args&&... args)
-        : fData(skstd::make_unique<T>(std::forward<Args>(args)...)) {
+        : fData(std::make_unique<T>(std::forward<Args>(args)...)) {
     }
 
     ~GrTDeferredProxyUploader() override {

@@ -8,7 +8,8 @@
 #ifndef GrTexturePriv_DEFINED
 #define GrTexturePriv_DEFINED
 
-#include "GrTexture.h"
+#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrSamplerState.h"
 
 /** Class that adds methods to GrTexture that are only intended for use internal to Skia.
     This class is purely a privileged window into GrTexture. It should never have additional data
@@ -25,12 +26,14 @@ public:
         fTexture->markMipMapsClean();
     }
 
+    GrMipMapsStatus mipMapsStatus() const { return fTexture->fMipMapsStatus; }
+
     bool mipMapsAreDirty() const {
-        return GrMipMapsStatus::kValid != fTexture->fMipMapsStatus;
+        return GrMipMapsStatus::kValid != this->mipMapsStatus();
     }
 
     GrMipMapped mipMapped() const {
-        if (GrMipMapsStatus::kNotAllocated != fTexture->fMipMapsStatus) {
+        if (GrMipMapsStatus::kNotAllocated != this->mipMapsStatus()) {
             return GrMipMapped::kYes;
         }
         return GrMipMapped::kNo;
@@ -44,17 +47,15 @@ public:
     bool hasRestrictedSampling() const {
         return GrTextureTypeHasRestrictedSampling(this->textureType());
     }
-    /** Filtering is clamped to this value. */
-    GrSamplerState::Filter highestFilterMode() const {
-        return this->hasRestrictedSampling() ? GrSamplerState::Filter::kBilerp
-                                             : GrSamplerState::Filter::kMipMap;
-    }
 
-    static void ComputeScratchKey(const GrSurfaceDesc&, GrScratchKey*);
-    static void ComputeScratchKey(GrPixelConfig config, int width, int height,
-                                  bool isRenderTarget, int sampleCnt,
-                                  GrMipMapped, GrScratchKey* key);
-
+    static void ComputeScratchKey(const GrCaps& caps,
+                                  const GrBackendFormat& format,
+                                  SkISize dimensions,
+                                  GrRenderable,
+                                  int sampleCnt,
+                                  GrMipMapped,
+                                  GrProtected,
+                                  GrScratchKey* key);
 
 private:
     GrTexturePriv(GrTexture* texture) : fTexture(texture) { }

@@ -8,11 +8,11 @@
 #ifndef SkBigPicture_DEFINED
 #define SkBigPicture_DEFINED
 
-#include "SkNoncopyable.h"
-#include "SkOnce.h"
-#include "SkPicture.h"
-#include "SkRect.h"
-#include "SkTemplates.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkRect.h"
+#include "include/private/SkNoncopyable.h"
+#include "include/private/SkOnce.h"
+#include "include/private/SkTemplates.h"
 
 class SkBBoxHierarchy;
 class SkMatrix;
@@ -35,9 +35,9 @@ public:
     };
 
     SkBigPicture(const SkRect& cull,
-                 SkRecord*,            // We take ownership of the caller's ref.
-                 SnapshotArray*,       // We take exclusive ownership.
-                 SkBBoxHierarchy*,     // We take ownership of the caller's ref.
+                 sk_sp<SkRecord>,
+                 std::unique_ptr<SnapshotArray>,
+                 sk_sp<SkBBoxHierarchy>,
                  size_t approxBytesUsedBySubPictures);
 
 

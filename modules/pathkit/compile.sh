@@ -10,6 +10,9 @@ BASE_DIR=`cd $(dirname ${BASH_SOURCE[0]}) && pwd`
 HTML_SHELL=$BASE_DIR/shell.html
 BUILD_DIR=${BUILD_DIR:="out/pathkit"}
 mkdir -p $BUILD_DIR
+# sometimes the .a files keep old symbols around - cleaning them out makes sure
+# we get a fresh build.
+rm -f $BUILD_DIR/*.a
 
 # This expects the environment variable EMSDK to be set
 if [[ ! -d $EMSDK ]]; then
@@ -56,10 +59,8 @@ if [[ $@ == *test* ]]; then
   RELEASE_CONF="-O2 --profiling -DPATHKIT_TESTING -DSK_RELEASE"
 elif [[ $@ == *debug* ]]; then
   echo "Building a Debug build"
-  # -g4 creates source maps that can apparently let you see the C++ code
-  # in the browser's debugger.
   EXTRA_CFLAGS="\"-DSK_DEBUG\""
-  RELEASE_CONF="-O0 --js-opts 0 -s SAFE_HEAP=1 -s ASSERTIONS=1 -g4 -DPATHKIT_TESTING -DSK_DEBUG"
+  RELEASE_CONF="-O0 --js-opts 0 -s SAFE_HEAP=1 -s ASSERTIONS=1 -g3 -DPATHKIT_TESTING -DSK_DEBUG"
 fi
 
 WASM_CONF="-s WASM=1"
@@ -73,7 +74,7 @@ OUTPUT="-o $BUILD_DIR/pathkit.js"
 source $EMSDK/emsdk_env.sh
 EMCC=`which emcc`
 EMCXX=`which em++`
-
+EMAR=`which emar`
 
 # Turn off exiting while we check for ninja (which may not be on PATH)
 set +e
@@ -91,32 +92,23 @@ echo "Compiling bitcode"
 ./bin/gn gen ${BUILD_DIR} \
   --args="cc=\"${EMCC}\" \
   cxx=\"${EMCXX}\" \
+  ar=\"${EMAR}\" \
   extra_cflags=[\"-DSK_DISABLE_READBUFFER=1\",\"-s\", \"WARN_UNALIGNED=1\",
+    \"-s\", \"MAIN_MODULE=1\",
     ${EXTRA_CFLAGS}
   ] \
   is_debug=false \
   is_official_build=true \
   is_component_build=false \
+  werror=true \
   target_cpu=\"wasm\" "
 
 ${NINJA} -C ${BUILD_DIR} libpathkit.a
 
 echo "Generating WASM"
 
-${EMCXX} $RELEASE_CONF -std=c++14 \
--Iinclude/config \
--Iinclude/core \
--Iinclude/effects \
--Iinclude/gpu \
--Iinclude/pathops \
--Iinclude/private \
--Iinclude/utils \
--Isrc/core \
--Isrc/gpu \
--Isrc/shaders \
--Isrc/opts \
--Isrc/utils \
--std=c++14 \
+${EMCXX} $RELEASE_CONF -std=c++17 \
+-I. \
 --bind \
 --pre-js $BASE_DIR/helper.js \
 --pre-js $BASE_DIR/chaining.js \
@@ -124,8 +116,6 @@ ${EMCXX} $RELEASE_CONF -std=c++14 \
 -DSK_DISABLE_READBUFFER=1 \
 -fno-rtti -fno-exceptions -DEMSCRIPTEN_HAS_UNBOUND_TYPE_NAMES=0 \
 $WASM_CONF \
--s BINARYEN_IGNORE_IMPLICIT_TRAPS=1 \
--s ERROR_ON_MISSING_LIBRARIES=1 \
 -s ERROR_ON_UNDEFINED_SYMBOLS=1 \
 -s EXPORT_NAME="PathKitInit" \
 -s MODULARIZE=1 \

@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkBmpStandardCodec.h"
-#include "SkCodecPriv.h"
-#include "SkColorData.h"
-#include "SkMathPriv.h"
-#include "SkStream.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkColorData.h"
+#include "src/codec/SkBmpStandardCodec.h"
+#include "src/codec/SkCodecPriv.h"
+#include "src/core/SkMathPriv.h"
 
 /*
  * Creates an instance of the decoder
@@ -71,7 +71,7 @@ SkCodec::Result SkBmpStandardCodec::onGetPixels(const SkImageInfo& dstInfo,
         uint32_t maxColors = 1 << this->bitsPerPixel();
         // Don't bother reading more than maxColors.
         const uint32_t numColorsToRead =
-            fNumColors == 0 ? maxColors : SkTMin(fNumColors, maxColors);
+            fNumColors == 0 ? maxColors : std::min(fNumColors, maxColors);
 
         // Read the color table from the stream
         colorBytes = numColorsToRead * fBytesPerColor;

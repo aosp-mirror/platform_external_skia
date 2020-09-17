@@ -8,21 +8,24 @@
 #ifndef GrSmallPathRenderer_DEFINED
 #define GrSmallPathRenderer_DEFINED
 
-#include "GrDrawOpAtlas.h"
-#include "GrOnFlushResourceProvider.h"
-#include "GrPathRenderer.h"
-#include "GrRect.h"
-#include "GrShape.h"
+#include "src/gpu/GrDrawOpAtlas.h"
+#include "src/gpu/GrOnFlushResourceProvider.h"
+#include "src/gpu/GrPathRenderer.h"
+#include "src/gpu/geometry/GrRect.h"
+#include "src/gpu/geometry/GrShape.h"
 
-#include "SkOpts.h"
-#include "SkTDynamicHash.h"
+#include "src/core/SkOpts.h"
+#include "src/core/SkTDynamicHash.h"
 
 class GrRecordingContext;
 
 class ShapeData;
 class ShapeDataKey;
 
-class GrSmallPathRenderer : public GrPathRenderer, public GrOnFlushCallbackObject {
+class GrSmallPathRenderer : public GrPathRenderer,
+                            public GrOnFlushCallbackObject,
+                            public GrDrawOpAtlas::EvictionCallback,
+                            public GrDrawOpAtlas::GenerationCounter {
 public:
     GrSmallPathRenderer();
     ~GrSmallPathRenderer() override;
@@ -33,15 +36,14 @@ public:
     // the list of active OnFlushBackkbackObjects in an freeGpuResources call (i.e., we accept the
     // default retainOnFreeGpuResources implementation).
 
-    void preFlush(GrOnFlushResourceProvider* onFlushResourceProvider, const uint32_t*, int,
-                  SkTArray<sk_sp<GrRenderTargetContext>>*) override {
+    void preFlush(GrOnFlushResourceProvider* onFlushRP, const uint32_t*, int) override {
         if (fAtlas) {
-            fAtlas->instantiate(onFlushResourceProvider);
+            fAtlas->instantiate(onFlushRP);
         }
     }
 
     void postFlush(GrDeferredUploadToken startTokenForNextFlush,
-                   const uint32_t* /*opListIDs*/, int /*numOpListIDs*/) override {
+                   const uint32_t* /*opsTaskIDs*/, int /*numOpsTaskIDs*/) override {
         if (fAtlas) {
             fAtlas->compact(startTokenForNextFlush);
         }
@@ -72,7 +74,7 @@ private:
 
     bool onDrawPath(const DrawPathArgs&) override;
 
-    static void HandleEviction(GrDrawOpAtlas::AtlasID, void*);
+    void evict(GrDrawOpAtlas::PlotLocator) override;
 
     std::unique_ptr<GrDrawOpAtlas> fAtlas;
     ShapeCache fShapeCache;

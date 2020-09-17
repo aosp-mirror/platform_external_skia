@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
+#include "bench/Benchmark.h"
 
-#include "SkCanvas.h"
-#include "SkImage.h"
-#include "SkRandom.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkSurface.h"
+#include "include/utils/SkRandom.h"
 
 /**
  * Draws a small set of small images multiple times each with no overlaps so that each image could
@@ -73,7 +73,9 @@ protected:
                 }
             }
             // Prevent any batching between "frames".
-            canvas->flush();
+            if (auto surf = canvas->getSurface()) {
+                surf->flush();
+            }
         }
     }
 

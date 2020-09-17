@@ -5,11 +5,11 @@
 * found in the LICENSE file.
 */
 
-#include "GrVkDescriptorSet.h"
+#include "src/gpu/vk/GrVkDescriptorSet.h"
 
-#include "GrVkDescriptorPool.h"
-#include "GrVkGpu.h"
-#include "GrVkResourceProvider.h"
+#include "src/gpu/vk/GrVkDescriptorPool.h"
+#include "src/gpu/vk/GrVkGpu.h"
+#include "src/gpu/vk/GrVkResourceProvider.h"
 
 GrVkDescriptorSet::GrVkDescriptorSet(VkDescriptorSet descSet,
                                      GrVkDescriptorPool* pool,
@@ -26,9 +26,5 @@ void GrVkDescriptorSet::freeGPUData(GrVkGpu* gpu) const {
 
 void GrVkDescriptorSet::onRecycle(GrVkGpu* gpu) const {
     gpu->resourceProvider().recycleDescriptorSet(this, fHandle);
-}
-
-void GrVkDescriptorSet::abandonGPUData() const {
-    fPool->unrefAndAbandon();
 }
 
