@@ -8,8 +8,8 @@
 #ifndef SKSL_WHILESTATEMENT
 #define SKSL_WHILESTATEMENT
 
-#include "SkSLExpression.h"
-#include "SkSLStatement.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 namespace SkSL {
 
@@ -28,9 +28,11 @@ struct WhileStatement : public Statement {
                                                              fStatement->clone()));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return "while (" + fTest->description() + ") " + fStatement->description();
     }
+#endif
 
     std::unique_ptr<Expression> fTest;
     std::unique_ptr<Statement> fStatement;

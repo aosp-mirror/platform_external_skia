@@ -5,20 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "SkCodec.h"
-#include "SkColorSpace.h"
-#include "SkColorSpacePriv.h"
-#include "SkData.h"
-#include "SkImageInfo.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
+#include "include/third_party/skcms/skcms.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
 
-#include "../third_party/skcms/skcms.h"
 #include "png.h"
 
+#include <string.h>
 #include <memory>
 #include <utility>
 
@@ -268,7 +269,7 @@ DEF_TEST(ColorSpace_Primaries, r) {
     p3.fBY = 0.060f;
     p3.fWX = 0.3127f;
     p3.fWY = 0.3290f;
-    space = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDCIP3);
+    space = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
     skcms_Matrix3x3 reference;
     SkAssertResult(space->toXYZD50(&reference));
     check_primaries(r, p3, reference);
@@ -332,4 +333,18 @@ DEF_TEST(ColorSpace_skcms_sRGB_exact, r) {
     sk_srgb_singleton()->toProfile(&profile);
 
     REPORTER_ASSERT(r, 0 == memcmp(&profile, skcms_sRGB_profile(), sizeof(skcms_ICCProfile)));
+}
+
+DEF_TEST(ColorSpace_classifyUnderflow, r) {
+    // crbug.com/1016183
+    skcms_TransferFunction fn;
+    fn.a = 1.0f;
+    fn.b = 0.0f;
+    fn.c = 0.0f;
+    fn.d = 0.0f;
+    fn.e = 0.0f;
+    fn.f = 0.0f;
+    fn.g = INT_MIN;
+    sk_sp<SkColorSpace> bad = SkColorSpace::MakeRGB(fn, SkNamedGamut::kSRGB);
+    REPORTER_ASSERT(r, bad == nullptr);
 }

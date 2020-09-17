@@ -5,21 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "SkAdvancedTypefaceMetrics.h"
-#include "SkData.h"
-#include "SkFixed.h"
-#include "SkFontDescriptor.h"
-#include "SkFontMgr.h"
-#include "SkMakeUnique.h"
-#include "SkOTTable_OS_2.h"
-#include "SkSFNTHeader.h"
-#include "SkStream.h"
-#include "SkRefCnt.h"
-#include "SkTestEmptyTypeface.h"
-#include "SkTypeface.h"
-#include "SkTypefaceCache.h"
-#include "Resources.h"
-#include "Test.h"
+#include "include/core/SkData.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypeface.h"
+#include "include/ports/SkTypeface_win.h"
+#include "include/private/SkFixed.h"
+#include "src/core/SkAdvancedTypefaceMetrics.h"
+#include "src/core/SkFontDescriptor.h"
+#include "src/core/SkFontMgrPriv.h"
+#include "src/core/SkFontPriv.h"
+#include "src/core/SkTypefaceCache.h"
+#include "src/sfnt/SkOTTable_OS_2.h"
+#include "src/sfnt/SkSFNTHeader.h"
+#include "src/utils/SkUTF.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
+#include "tools/fonts/TestEmptyTypeface.h"
 
 #include <memory>
 
@@ -114,8 +118,8 @@ DEF_TEST(TypefaceRoundTrip, reporter) {
 DEF_TEST(FontDescriptorNegativeVariationSerialize, reporter) {
     SkFontDescriptor desc;
     SkFixed axis = -SK_Fixed1;
-    auto font = skstd::make_unique<SkMemoryStream>("a", 1, false);
-    desc.setFontData(skstd::make_unique<SkFontData>(std::move(font), 0, &axis, 1));
+    auto font = std::make_unique<SkMemoryStream>("a", 1, false);
+    desc.setFontData(std::make_unique<SkFontData>(std::move(font), 0, &axis, 1));
 
     SkDynamicMemoryWStream stream;
     desc.serialize(&stream);
@@ -156,18 +160,20 @@ DEF_TEST(TypefaceAxes, reporter) {
     sk_sp<SkTypeface> typeface = fm->makeFromStream(std::move(distortable), params);
 
     if (!typeface) {
-        // Not all SkFontMgr can makeFromStream().
-        return;
+        return;  // Not all SkFontMgr can makeFromStream().
     }
 
     int count = typeface->getVariationDesignPosition(nullptr, 0);
     if (count == -1) {
-        return;
+        return;  // The number of axes is unknown.
     }
     REPORTER_ASSERT(reporter, count == numberOfAxesInDistortable);
 
     SkFontArguments::VariationPosition::Coordinate positionRead[numberOfAxesInDistortable];
     count = typeface->getVariationDesignPosition(positionRead, SK_ARRAY_COUNT(positionRead));
+    if (count == -1) {
+        return;  // The position cannot be determined.
+    }
     REPORTER_ASSERT(reporter, count == SK_ARRAY_COUNT(positionRead));
 
     REPORTER_ASSERT(reporter, positionRead[0].axis == position[1].axis);
@@ -175,7 +181,8 @@ DEF_TEST(TypefaceAxes, reporter) {
     // Convert to fixed for "almost equal".
     SkFixed fixedRead = SkScalarToFixed(positionRead[0].value);
     SkFixed fixedOriginal = SkScalarToFixed(position[1].value);
-    REPORTER_ASSERT(reporter, SkTAbs(fixedRead - fixedOriginal) < 2);
+    REPORTER_ASSERT(reporter, SkTAbs(fixedRead - fixedOriginal) < 2 || // variation set correctly
+                              SkTAbs(fixedRead - SK_Fixed1    ) < 2);  // variation remained default
 }
 
 DEF_TEST(TypefaceVariationIndex, reporter) {
@@ -237,7 +244,7 @@ DEF_TEST(TypefaceAxesParameters, reporter) {
     constexpr SkScalar minAxisInDistortable = 0.5;
     constexpr SkScalar defAxisInDistortable = 1;
     constexpr SkScalar maxAxisInDistortable = 2;
-    constexpr bool axisIsHiddenInDistortable = false;
+    constexpr bool axisIsHiddenInDistortable = true;
 
     sk_sp<SkFontMgr> fm = SkFontMgr::RefDefault();
 
@@ -245,8 +252,7 @@ DEF_TEST(TypefaceAxesParameters, reporter) {
     sk_sp<SkTypeface> typeface = fm->makeFromStream(std::move(distortable), params);
 
     if (!typeface) {
-        // Not all SkFontMgr can makeFromStream().
-        return;
+        return;  // Not all SkFontMgr can makeFromStream().
     }
 
     SkFontParameters::Variation::Axis parameter[numberOfAxesInDistortable];
@@ -260,8 +266,10 @@ DEF_TEST(TypefaceAxesParameters, reporter) {
     REPORTER_ASSERT(reporter, parameter[0].def == defAxisInDistortable);
     REPORTER_ASSERT(reporter, parameter[0].max == maxAxisInDistortable);
     REPORTER_ASSERT(reporter, parameter[0].tag == SkSetFourByteTag('w','g','h','t'));
-    REPORTER_ASSERT(reporter, parameter[0].isHidden() == axisIsHiddenInDistortable);
-
+    // This seems silly, but allows MSAN to ensure that isHidden is initialized.
+    // With GDI or before macOS 10.12, Win10, or FreeType 2.8.1 the API for hidden is missing.
+    REPORTER_ASSERT(reporter, parameter[0].isHidden() == axisIsHiddenInDistortable ||
+                              parameter[0].isHidden() == false);
 }
 
 static bool count_proc(SkTypeface* face, void* ctx) {
@@ -277,12 +285,12 @@ static int count(skiatest::Reporter* reporter, const SkTypefaceCache& cache) {
 }
 
 DEF_TEST(TypefaceCache, reporter) {
-    sk_sp<SkTypeface> t1(SkTestEmptyTypeface::Make());
+    sk_sp<SkTypeface> t1(TestEmptyTypeface::Make());
     {
         SkTypefaceCache cache;
         REPORTER_ASSERT(reporter, count(reporter, cache) == 0);
         {
-            sk_sp<SkTypeface> t0(SkTestEmptyTypeface::Make());
+            sk_sp<SkTypeface> t0(TestEmptyTypeface::Make());
             cache.add(t0);
             REPORTER_ASSERT(reporter, count(reporter, cache) == 1);
             cache.add(t1);
@@ -323,3 +331,55 @@ DEF_TEST(Typeface_serialize, reporter) {
 
 }
 
+DEF_TEST(Typeface_glyph_to_char, reporter) {
+    SkFont font(ToolUtils::emoji_typeface(), 12);
+    SkASSERT(font.getTypeface());
+    char const * text = ToolUtils::emoji_sample_text();
+    size_t const textLen = strlen(text);
+    size_t const codepointCount = SkUTF::CountUTF8(text, textLen);
+    char const * const textEnd = text + textLen;
+    std::unique_ptr<SkUnichar[]> originalCodepoints(new SkUnichar[codepointCount]);
+    for (size_t i = 0; i < codepointCount; ++i) {
+        originalCodepoints[i] = SkUTF::NextUTF8(&text, textEnd);
+    }
+    std::unique_ptr<SkGlyphID[]> glyphs(new SkGlyphID[codepointCount]);
+    font.unicharsToGlyphs(originalCodepoints.get(), codepointCount, glyphs.get());
+
+    std::unique_ptr<SkUnichar[]> newCodepoints(new SkUnichar[codepointCount]);
+    SkFontPriv::GlyphsToUnichars(font, glyphs.get(), codepointCount, newCodepoints.get());
+
+    SkString familyName;
+    font.getTypeface()->getFamilyName(&familyName);
+    for (size_t i = 0; i < codepointCount; ++i) {
+#if defined(SK_BUILD_FOR_WIN)
+        // GDI does not support character to glyph mapping outside BMP.
+        if (gSkFontMgr_DefaultFactory == &SkFontMgr_New_GDI &&
+            0xFFFF < originalCodepoints[i] && newCodepoints[i] == 0)
+        {
+            continue;
+        }
+#endif
+        // If two codepoints map to the same glyph then this assert is not valid.
+        // However, the emoji test font should never have multiple characters map to the same glyph.
+        REPORTER_ASSERT(reporter, originalCodepoints[i] == newCodepoints[i],
+                        "name:%s i:%d original:%d new:%d glyph:%d", familyName.c_str(), i,
+                        originalCodepoints[i], newCodepoints[i], glyphs[i]);
+    }
+}
+
+// This test makes sure the legacy typeface creation does not lose its specified
+// style. See https://bugs.chromium.org/p/skia/issues/detail?id=8447 for more
+// context.
+DEF_TEST(LegacyMakeTypeface, reporter) {
+    sk_sp<SkFontMgr> fm = SkFontMgr::RefDefault();
+    sk_sp<SkTypeface> typeface1 = fm->legacyMakeTypeface(nullptr, SkFontStyle::Italic());
+    sk_sp<SkTypeface> typeface2 = fm->legacyMakeTypeface(nullptr, SkFontStyle::Bold());
+    sk_sp<SkTypeface> typeface3 = fm->legacyMakeTypeface(nullptr, SkFontStyle::BoldItalic());
+
+    REPORTER_ASSERT(reporter, typeface1->isItalic());
+    REPORTER_ASSERT(reporter, !typeface1->isBold());
+    REPORTER_ASSERT(reporter, !typeface2->isItalic());
+    REPORTER_ASSERT(reporter, typeface2->isBold());
+    REPORTER_ASSERT(reporter, typeface3->isItalic());
+    REPORTER_ASSERT(reporter, typeface3->isBold());
+}

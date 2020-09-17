@@ -8,7 +8,7 @@
 #ifndef SkPicturePlayback_DEFINED
 #define SkPicturePlayback_DEFINED
 
-#include "SkPictureFlat.h"  // for DrawType
+#include "src/core/SkPictureFlat.h"
 
 class SkBitmap;
 class SkCanvas;
@@ -42,8 +42,6 @@ protected:
                   uint32_t size,
                   SkCanvas* canvas,
                   const SkMatrix& initialMatrix);
-
-    static DrawType ReadOpAndSize(SkReadBuffer* reader, uint32_t* size);
 
     class AutoResetOpID {
     public:

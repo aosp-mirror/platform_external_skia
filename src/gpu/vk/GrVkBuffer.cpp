@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "GrVkBuffer.h"
-#include "GrVkGpu.h"
-#include "GrVkMemory.h"
-#include "GrVkTransferBuffer.h"
-#include "GrVkUtil.h"
+#include "src/gpu/vk/GrVkBuffer.h"
+#include "src/gpu/vk/GrVkGpu.h"
+#include "src/gpu/vk/GrVkMemory.h"
+#include "src/gpu/vk/GrVkTransferBuffer.h"
+#include "src/gpu/vk/GrVkUtil.h"
 
 #define VK_CALL(GPU, X) GR_VK_CALL(GPU->vkInterface(), X)
 
@@ -19,7 +19,8 @@
 #define VALIDATE() do {} while(false)
 #endif
 
-const GrVkBuffer::Resource* GrVkBuffer::Create(const GrVkGpu* gpu, const Desc& desc) {
+const GrVkBuffer::Resource* GrVkBuffer::Create(GrVkGpu* gpu, const Desc& desc) {
+    SkASSERT(!gpu->protectedContext() || (gpu->protectedContext() == desc.fDynamic));
     VkBuffer       buffer;
     GrVkAlloc      alloc;
 
@@ -121,16 +122,6 @@ void GrVkBuffer::vkRelease(const GrVkGpu* gpu) {
     VALIDATE();
 }
 
-void GrVkBuffer::vkAbandon() {
-    fResource->unrefAndAbandon();
-    fResource = nullptr;
-    if (!fDesc.fDynamic) {
-        delete[] (unsigned char*)fMapPtr;
-    }
-    fMapPtr = nullptr;
-    VALIDATE();
-}
-
 VkAccessFlags buffer_type_to_access_flags(GrVkBuffer::Type type) {
     switch (type) {
         case GrVkBuffer::kIndex_Type:
@@ -186,6 +177,8 @@ void GrVkBuffer::internalMap(GrVkGpu* gpu, size_t size, bool* createdNewBuffer) 
 
 void GrVkBuffer::copyCpuDataToGpuBuffer(GrVkGpu* gpu, const void* src, size_t size) {
     SkASSERT(src);
+    // We should never call this method in protected contexts.
+    SkASSERT(!gpu->protectedContext());
     // The vulkan api restricts the use of vkCmdUpdateBuffer to updates that are less than or equal
     // to 65536 bytes and a size the is 4 byte aligned.
     if ((size <= 65536) && (0 == (size & 0x3)) && !gpu->vkCaps().avoidUpdateBuffers()) {

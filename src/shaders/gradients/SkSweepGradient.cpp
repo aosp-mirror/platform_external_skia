@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorSpaceXformer.h"
-#include "SkFloatingPoint.h"
-#include "SkRasterPipeline.h"
-#include "SkReadBuffer.h"
-#include "SkSweepGradient.h"
-#include "SkWriteBuffer.h"
+#include "include/private/SkFloatingPoint.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/gradients/SkSweepGradient.h"
 
 SkSweepGradient::SkSweepGradient(const SkPoint& center, SkScalar t0, SkScalar t1,
                                  const Descriptor& desc)
@@ -43,7 +42,7 @@ sk_sp<SkFlattenable> SkSweepGradient::CreateProc(SkReadBuffer& buffer) {
 
     SkScalar startAngle = 0,
                endAngle = 360;
-    if (!buffer.isVersionLT(SkReadBuffer::kTileInfoInSweepGradient_Version)) {
+    if (!buffer.isVersionLT(SkPicturePriv::kTileInfoInSweepGradient_Version)) {
         const auto tBias  = buffer.readScalar(),
                    tScale = buffer.readScalar();
         std::tie(startAngle, endAngle) = angles_from_t_coeff(tBias, tScale);
@@ -62,17 +61,6 @@ void SkSweepGradient::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalar(fTScale);
 }
 
-sk_sp<SkShader> SkSweepGradient::onMakeColorSpace(SkColorSpaceXformer* xformer) const {
-    const AutoXformColors xformedColors(*this, xformer);
-
-    SkScalar startAngle, endAngle;
-    std::tie(startAngle, endAngle) = angles_from_t_coeff(fTBias, fTScale);
-
-    return SkGradientShader::MakeSweep(fCenter.fX, fCenter.fY, xformedColors.fColors.get(),
-                                       fOrigPos, fColorCount, fTileMode, startAngle, endAngle,
-                                       fGradFlags, &this->getLocalMatrix());
-}
-
 void SkSweepGradient::appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* p,
                                            SkRasterPipeline*) const {
     p->append(SkRasterPipeline::xy_to_unit_angle);
@@ -80,11 +68,48 @@ void SkSweepGradient::appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline
                                              SkMatrix::MakeTrans(fTBias , 0)));
 }
 
+
+skvm::F32 SkSweepGradient::transformT(skvm::Builder* p, skvm::Uniforms* uniforms,
+                                      skvm::F32 x, skvm::F32 y, skvm::I32* mask) const {
+    skvm::F32 xabs = p->abs(x),
+              yabs = p->abs(y),
+             slope = p->div(p->min(xabs, yabs),
+                            p->max(xabs, yabs));
+    skvm::F32 s = p->mul(slope, slope);
+
+    // Use a 7th degree polynomial to approximate atan.
+    // This was generated using sollya.gforge.inria.fr.
+    // A float optimized polynomial was generated using the following command.
+    // P1 = fpminimax((1/(2*Pi))*atan(x),[|1,3,5,7|],[|24...|],[2^(-40),1],relative);
+    const float A = +0.15912117063999176025390625f,
+                B = -5.185396969318389892578125e-2f,
+                C = +2.476101927459239959716796875e-2f,
+                D = -7.0547382347285747528076171875e-3f;
+    skvm::F32 phi = p->mul(slope, p->mad(s,
+                                  p->mad(s,
+                                  p->mad(s, p->splat(D),
+                                            p->splat(C)),
+                                            p->splat(B)),
+                                            p->splat(A)));
+    phi = p->select(p->lt (xabs, yabs)       , p->sub(p->splat(1/4.0f), phi), phi);
+    phi = p->select(p->lt (x, p->splat(0.0f)), p->sub(p->splat(1/2.0f), phi), phi);
+    phi = p->select(p->lt (y, p->splat(0.0f)), p->sub(p->splat(1/1.0f), phi), phi);
+
+    skvm::F32 t = p->bit_cast(p->bit_and(p->bit_cast(phi),   // t = phi if phi != NaN
+                                         p->eq(phi, phi)));
+
+    if (fTScale != 1.0f || fTBias != 0.0f) {
+        t = p->mad(t, p->uniformF(uniforms->pushF(fTScale))
+                    , p->uniformF(uniforms->pushF(fTScale*fTBias)));
+    }
+    return t;
+}
+
 /////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
 
-#include "gradients/GrGradientShader.h"
+#include "src/gpu/gradients/GrGradientShader.h"
 
 std::unique_ptr<GrFragmentProcessor> SkSweepGradient::asFragmentProcessor(
         const GrFPArgs& args) const {

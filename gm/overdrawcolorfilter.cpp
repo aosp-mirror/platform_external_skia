@@ -5,9 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkOverdrawColorFilter.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkOverdrawColorFilter.h"
 
 static inline void set_bitmap(SkBitmap* bitmap, uint8_t alpha) {
     for (int y = 0; y < bitmap->height(); y++) {
@@ -21,25 +30,17 @@ static inline void set_bitmap(SkBitmap* bitmap, uint8_t alpha) {
 }
 
 class OverdrawColorFilter : public skiagm::GM {
-public:
-    OverdrawColorFilter() {}
+    SkString onShortName() override { return SkString("overdrawcolorfilter"); }
 
-protected:
-    virtual SkString onShortName() override {
-        return SkString("overdrawcolorfilter");
-    }
-
-    virtual SkISize onISize() override {
-        return SkISize::Make(200, 400);
-    }
+    SkISize onISize() override { return {200, 400}; }
 
     void onDraw(SkCanvas* canvas) override {
-        static const SkPMColor colors[SkOverdrawColorFilter::kNumColors] = {
-                0x80800000, 0x80008000, 0x80000080, 0x80808000, 0x80008080, 0x80800080,
+        static const SkColor colors[SkOverdrawColorFilter::kNumColors] = {
+                0x80FF0000, 0x8000FF00, 0x800000FF, 0x80FFFF00, 0x8000FFFF, 0x80FF00FF,
         };
 
         SkPaint paint;
-        sk_sp<SkColorFilter> colorFilter = SkOverdrawColorFilter::Make(colors);
+        sk_sp<SkColorFilter> colorFilter = SkOverdrawColorFilter::MakeWithSkColors(colors);
         paint.setColorFilter(colorFilter);
 
         SkImageInfo info = SkImageInfo::MakeA8(100, 100);
@@ -60,9 +61,6 @@ protected:
         set_bitmap(&bitmap, 6);
         canvas->drawBitmap(bitmap, 100, 200, &paint);
     }
-
-private:
-    typedef GM INHERITED;
 };
 
 DEF_GM(return new OverdrawColorFilter;)

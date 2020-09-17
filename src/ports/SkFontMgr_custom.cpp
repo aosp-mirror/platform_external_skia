@@ -5,20 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "SkFontArguments.h"
-#include "SkFontDescriptor.h"
-#include "SkFontHost_FreeType_common.h"
-#include "SkFontMgr.h"
-#include "SkFontMgr_custom.h"
-#include "SkFontStyle.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "SkString.h"
-#include "SkTArray.h"
-#include "SkTemplates.h"
-#include "SkTypeface.h"
-#include "SkTypes.h"
+#include "include/core/SkFontArguments.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkFontDescriptor.h"
+#include "src/ports/SkFontHost_FreeType_common.h"
+#include "src/ports/SkFontMgr_custom.h"
 
 #include <limits>
 #include <memory>
@@ -67,7 +66,7 @@ std::unique_ptr<SkStreamAsset> SkTypeface_Stream::onOpenStream(int* ttcIndex) co
 }
 
 std::unique_ptr<SkFontData> SkTypeface_Stream::onMakeFontData() const {
-    return skstd::make_unique<SkFontData>(*fData);
+    return std::make_unique<SkFontData>(*fData);
 }
 
 sk_sp<SkTypeface> SkTypeface_Stream::onMakeClone(const SkFontArguments& args) const {
@@ -227,7 +226,7 @@ SkTypeface* SkFontMgr_Custom::onMatchFaceStyle(const SkTypeface* familyMember,
 }
 
 sk_sp<SkTypeface> SkFontMgr_Custom::onMakeFromData(sk_sp<SkData> data, int ttcIndex) const {
-    return this->makeFromStream(skstd::make_unique<SkMemoryStream>(std::move(data)), ttcIndex);
+    return this->makeFromStream(std::make_unique<SkMemoryStream>(std::move(data)), ttcIndex);
 }
 
 sk_sp<SkTypeface> SkFontMgr_Custom::onMakeFromStreamIndex(std::unique_ptr<SkStreamAsset> stream,
@@ -252,7 +251,7 @@ sk_sp<SkTypeface> SkFontMgr_Custom::onMakeFromStreamArgs(std::unique_ptr<SkStrea
     SkAutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.count());
     Scanner::computeAxisValues(axisDefinitions, position, axisValues, name);
 
-    auto data = skstd::make_unique<SkFontData>(std::move(stream), args.getCollectionIndex(),
+    auto data = std::make_unique<SkFontData>(std::move(stream), args.getCollectionIndex(),
                                                axisValues.get(), axisDefinitions.count());
     return sk_sp<SkTypeface>(new SkTypeface_Stream(std::move(data), style, isFixedPitch, false, name));
 }

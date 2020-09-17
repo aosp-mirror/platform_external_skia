@@ -2,14 +2,36 @@
 # Builder: https://cloud.google.com/container-builder/docs/
 #
 steps:
-  # To test locally, first uncomment the last two lines of this comment block, then submit with:
+  # To test locally, first uncomment the last 8 lines of this comment block,
+  # update the /refs/changes/... value to reflect the CL you are testing and
+  # then run:
   #
   #    gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=COMMIT_SHA=b2acf0a93927a57cc1fa9323839e788379ae3366
   #
   # Where COMMIT_SHA is updated to the last commit into Skia.
   #
-  # - name: 'gcr.io/cloud-builders/git'
-  #   args: ['clone', 'https://github.com/google/skia.git', '.']
+  #- name: 'gcr.io/cloud-builders/git'
+  #  args: ['clone', 'https://github.com/google/skia.git', '.']
+  #
+  #- name: 'gcr.io/cloud-builders/git'
+  #  args: ['fetch', 'https://skia.googlesource.com/skia','refs/changes/56/248556/18']
+  #
+  #- name: 'gcr.io/cloud-builders/git'
+  #  args: ['checkout', 'FETCH_HEAD']
+
+  - name: 'debian:testing-slim'
+    args: ['mkdir', '-p', '--mode=0777', './__doxygen_staging']
+
+  - name: 'debian:testing-slim'
+    args: ['ls', '-al', '/']
+
+  - name: 'gcr.io/skia-public/doxygen:testing-slim'
+    dir: './tools/doxygen'
+    env:
+      - 'OUTPUT_DIRECTORY=/workspace/__doxygen_staging'
+    args: ['doxygen', 'ProdDoxyfile']
+    timeout: 600s
+
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/skia-release:prod', './docker/skia-release']
     timeout: 7200s
@@ -30,6 +52,22 @@ steps:
     dir: '/home/skia/golib/src/go.skia.org/infra/debugger'
     env:
       - 'ROOT=/workspace/__debugger_staging'
+      - 'SKIP_BUILD=1'
+    args: ['make', 'release_ci']
+    timeout: 600s
+
+  - name: 'gcr.io/skia-public/infra:prod'
+    dir: '/home/skia/golib/src/go.skia.org/infra/debugger-assets'
+    env:
+      - 'ROOT=/workspace/__debugger_assets_staging'
+      - 'SKIP_BUILD=1'
+    args: ['make', 'release_ci']
+    timeout: 600s
+
+  - name: 'gcr.io/skia-public/infra:prod'
+    dir: '/home/skia/golib/src/go.skia.org/infra/api'
+    env:
+      - 'ROOT=/workspace/__api_staging'
       - 'SKIP_BUILD=1'
     args: ['make', 'release_ci']
     timeout: 600s
@@ -65,6 +103,17 @@ steps:
     timeout: 600s
 
   - name: 'gcr.io/cloud-builders/docker'
+    args: ['run', '--volume', '/workspace/wasm-products:/OUT',
+           '--volume', '/workspace/__particles_staging:/workspace/__particles_staging',
+           '--env', 'ROOT=/workspace/__particles_staging',
+           '--env', 'SKIP_BUILD=1',
+           '--workdir', '/home/skia/golib/src/go.skia.org/infra/particles',
+           'gcr.io/skia-public/infra:prod',
+           'make', 'release_ci']
+    dir: 'wasm-products'
+    timeout: 600s
+
+  - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/fiddler:$COMMIT_SHA', '/workspace/__fiddler_staging']
     timeout: 600s
 
@@ -73,17 +122,32 @@ steps:
     timeout: 600s
 
   - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/particles:$COMMIT_SHA', '/workspace/__particles_staging']
+    timeout: 600s
+
+  - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/debugger:$COMMIT_SHA', '/workspace/__debugger_staging']
+    timeout: 600s
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/debugger-assets:$COMMIT_SHA', '/workspace/__debugger_assets_staging']
     timeout: 600s
 
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/jsfiddle:$COMMIT_SHA', '/workspace/__jsfiddle_staging']
     timeout: 600s
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/api:$COMMIT_SHA', '/workspace/__api_staging']
+    timeout: 600s
 images:
   - 'gcr.io/$PROJECT_ID/fiddler:$COMMIT_SHA'
   - 'gcr.io/$PROJECT_ID/skottie:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/particles:$COMMIT_SHA'
   - 'gcr.io/$PROJECT_ID/debugger:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/debugger-assets:$COMMIT_SHA'
   - 'gcr.io/$PROJECT_ID/jsfiddle:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/api:$COMMIT_SHA'
   - 'gcr.io/$PROJECT_ID/skia-release:prod'
   - 'gcr.io/$PROJECT_ID/skia-wasm-release:prod'
 timeout: 7200s

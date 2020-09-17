@@ -5,12 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "GrShaderVar.h"
-#include "GrShaderCaps.h"
-#include "GrSwizzle.h"
-#include "glsl/GrGLSLShaderBuilder.h"
-#include "glsl/GrGLSLColorSpaceXformHelper.h"
-#include "glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/glsl/GrGLSLShaderBuilder.h"
+
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/GrShaderVar.h"
+#include "src/gpu/GrSwizzle.h"
+#include "src/gpu/glsl/GrGLSLBlend.h"
+#include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
+#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
 
 GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
     : fProgramBuilder(program)
@@ -22,8 +24,6 @@ GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
     // We push back some dummy pointers which will later become our header
     for (int i = 0; i <= kCode; i++) {
         fShaderStrings.push_back();
-        fCompilerStrings.push_back(nullptr);
-        fCompilerStringLengths.push_back(0);
     }
 
     this->main() = "void main() {";
@@ -63,39 +63,49 @@ void GrGLSLShaderBuilder::emitFunction(GrSLType returnType,
 
 static inline void append_texture_swizzle(SkString* out, GrSwizzle swizzle) {
     if (swizzle != GrSwizzle::RGBA()) {
-        out->appendf(".%s", swizzle.c_str());
+        out->appendf(".%s", swizzle.asString().c_str());
     }
 }
 
 void GrGLSLShaderBuilder::appendTextureLookup(SkString* out,
                                               SamplerHandle samplerHandle,
-                                              const char* coordName,
-                                              GrSLType varyingType) const {
-    const GrShaderVar& sampler = fProgramBuilder->samplerVariable(samplerHandle);
-    out->appendf("texture(%s, %s)", sampler.c_str(), coordName);
+                                              const char* coordName) const {
+    const char* sampler = fProgramBuilder->samplerVariable(samplerHandle);
+    out->appendf("sample(%s, %s)", sampler, coordName);
     append_texture_swizzle(out, fProgramBuilder->samplerSwizzle(samplerHandle));
 }
 
 void GrGLSLShaderBuilder::appendTextureLookup(SamplerHandle samplerHandle,
                                               const char* coordName,
-                                              GrSLType varyingType,
                                               GrGLSLColorSpaceXformHelper* colorXformHelper) {
     SkString lookup;
-    this->appendTextureLookup(&lookup, samplerHandle, coordName, varyingType);
+    this->appendTextureLookup(&lookup, samplerHandle, coordName);
     this->appendColorGamutXform(lookup.c_str(), colorXformHelper);
 }
 
-void GrGLSLShaderBuilder::appendTextureLookupAndModulate(
-                                                    const char* modulation,
-                                                    SamplerHandle samplerHandle,
-                                                    const char* coordName,
-                                                    GrSLType varyingType,
-                                                    GrGLSLColorSpaceXformHelper* colorXformHelper) {
+void GrGLSLShaderBuilder::appendTextureLookupAndBlend(
+        const char* dst,
+        SkBlendMode mode,
+        SamplerHandle samplerHandle,
+        const char* coordName,
+        GrGLSLColorSpaceXformHelper* colorXformHelper) {
+    if (!dst) {
+        dst = "half4(1)";
+    }
     SkString lookup;
-    this->appendTextureLookup(&lookup, samplerHandle, coordName, varyingType);
-    this->appendColorGamutXform(lookup.c_str(), colorXformHelper);
-    if (modulation) {
-        this->codeAppendf(" * %s", modulation);
+    // This works around an issue in SwiftShader where the texture lookup is messed up
+    // if we use blend_modulate instead of simply operator * on dst and the sampled result.
+    // At this time it's unknown if the same problem exists for other modes.
+    if (mode == SkBlendMode::kModulate) {
+        this->codeAppend("(");
+        this->appendTextureLookup(&lookup, samplerHandle, coordName);
+        this->appendColorGamutXform(lookup.c_str(), colorXformHelper);
+        this->codeAppendf(" * %s)", dst);
+    } else {
+        this->codeAppendf("%s(", GrGLSLBlend::BlendFuncName(mode));
+        this->appendTextureLookup(&lookup, samplerHandle, coordName);
+        this->appendColorGamutXform(lookup.c_str(), colorXformHelper);
+        this->codeAppendf(", %s)", dst);
     }
 }
 
@@ -113,11 +123,13 @@ void GrGLSLShaderBuilder::appendColorGamutXform(SkString* out,
     // function, one for the (inverse) destination transfer function, and one for the gamut xform.
     // Any combination of these may be present, although some configurations are much more likely.
 
-    auto emitTFFunc = [=](const char* name, GrGLSLProgramDataManager::UniformHandle uniform) {
+    auto emitTFFunc = [=](const char* name, GrGLSLProgramDataManager::UniformHandle uniform,
+                          TFKind kind) {
         const GrShaderVar gTFArgs[] = { GrShaderVar("x", kHalf_GrSLType) };
         const char* coeffs = uniformHandler->getUniformCStr(uniform);
         SkString body;
-        // Temporaries to make evaluation line readable
+        // Temporaries to make evaluation line readable. We always use the sRGBish names, so the
+        // PQ and HLG math is confusing.
         body.appendf("half G = %s[0];", coeffs);
         body.appendf("half A = %s[1];", coeffs);
         body.appendf("half B = %s[2];", coeffs);
@@ -127,7 +139,24 @@ void GrGLSLShaderBuilder::appendColorGamutXform(SkString* out,
         body.appendf("half F = %s[6];", coeffs);
         body.append("half s = sign(x);");
         body.append("x = abs(x);");
-        body.appendf("return s * ((x < D) ? (C * x) + F : pow(A * x + B, G) + E);");
+        switch (kind) {
+            case TFKind::sRGBish_TF:
+                body.append("x = (x < D) ? (C * x) + F : pow(A * x + B, G) + E;");
+                break;
+            case TFKind::PQish_TF:
+                body.append("x = pow(max(A + B * pow(x, C), 0) / (D + E * pow(x, C)), F);");
+                break;
+            case TFKind::HLGish_TF:
+                body.append("x = (x*A <= 1) ? pow(x*A, B) : exp((x-E)*C) + D;");
+                break;
+            case TFKind::HLGinvish_TF:
+                body.append("x = (x <= 1) ? A * pow(x, B) : C * log(x - D) + E;");
+                break;
+            default:
+                SkASSERT(false);
+                break;
+        }
+        body.append("return s * x;");
         SkString funcName;
         this->emitFunction(kHalf_GrSLType, name, SK_ARRAY_COUNT(gTFArgs), gTFArgs, body.c_str(),
                            &funcName);
@@ -136,12 +165,14 @@ void GrGLSLShaderBuilder::appendColorGamutXform(SkString* out,
 
     SkString srcTFFuncName;
     if (colorXformHelper->applySrcTF()) {
-        srcTFFuncName = emitTFFunc("src_tf", colorXformHelper->srcTFUniform());
+        srcTFFuncName = emitTFFunc("src_tf", colorXformHelper->srcTFUniform(),
+                                   colorXformHelper->srcTFKind());
     }
 
     SkString dstTFFuncName;
     if (colorXformHelper->applyDstTF()) {
-        dstTFFuncName = emitTFFunc("dst_tf", colorXformHelper->dstTFUniform());
+        dstTFFuncName = emitTFFunc("dst_tf", colorXformHelper->dstTFUniform(),
+                                   colorXformHelper->dstTFKind());
     }
 
     SkString gamutXformFuncName;
@@ -160,7 +191,7 @@ void GrGLSLShaderBuilder::appendColorGamutXform(SkString* out,
         const GrShaderVar gColorXformArgs[] = { GrShaderVar("color", kHalf4_GrSLType) };
         SkString body;
         if (colorXformHelper->applyUnpremul()) {
-            body.append("half nonZeroAlpha = max(color.a, 0.00001);");
+            body.append("half nonZeroAlpha = max(color.a, 0.0001);");
             body.append("color = half4(color.rgb / nonZeroAlpha, nonZeroAlpha);");
         }
         if (colorXformHelper->applySrcTF()) {
@@ -234,14 +265,13 @@ void GrGLSLShaderBuilder::compileAndAppendLayoutQualifiers() {
         this->layoutQualifiers().appendf(") %s;\n", interfaceQualifierNames[interface]);
     }
 
-    GR_STATIC_ASSERT(0 == GrGLSLShaderBuilder::kIn_InterfaceQualifier);
-    GR_STATIC_ASSERT(1 == GrGLSLShaderBuilder::kOut_InterfaceQualifier);
-    GR_STATIC_ASSERT(SK_ARRAY_COUNT(interfaceQualifierNames) == kLastInterfaceQualifier + 1);
+    static_assert(0 == GrGLSLShaderBuilder::kIn_InterfaceQualifier);
+    static_assert(1 == GrGLSLShaderBuilder::kOut_InterfaceQualifier);
+    static_assert(SK_ARRAY_COUNT(interfaceQualifierNames) == kLastInterfaceQualifier + 1);
 }
 
 void GrGLSLShaderBuilder::finalize(uint32_t visibility) {
     SkASSERT(!fFinalized);
-    this->versionDecl() = fProgramBuilder->shaderCaps()->versionDeclString();
     this->compileAndAppendLayoutQualifiers();
     SkASSERT(visibility);
     fProgramBuilder->appendUniformDecls((GrShaderFlags) visibility, &this->uniforms());
@@ -252,8 +282,7 @@ void GrGLSLShaderBuilder::finalize(uint32_t visibility) {
     this->code().append("}");
 
     for (int i = 0; i <= fCodeIndex; i++) {
-        fCompilerStrings[i] = fShaderStrings[i].c_str();
-        fCompilerStringLengths[i] = (int)fShaderStrings[i].size();
+        fCompilerString.append(fShaderStrings[i].c_str(), fShaderStrings[i].size());
     }
 
     fFinalized = true;

@@ -5,19 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "SkContourMeasure.h"
-#include "SkPathMeasurePriv.h"
-#include "SkGeometry.h"
-#include "SkPath.h"
-#include "SkTSearch.h"
+#include "include/core/SkContourMeasure.h"
+#include "include/core/SkPath.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkPathMeasurePriv.h"
+#include "src/core/SkTSearch.h"
 
 #define kMaxTValue  0x3FFFFFFF
 
-static inline SkScalar tValue2Scalar(int t) {
+constexpr static inline SkScalar tValue2Scalar(int t) {
     SkASSERT((unsigned)t <= kMaxTValue);
-    const SkScalar kMaxTReciprocal = 1.0f / kMaxTValue;
+    // 1/kMaxTValue can't be represented as a float, but it's close and the limits work fine.
+    const SkScalar kMaxTReciprocal = 1.0f / (SkScalar)kMaxTValue;
     return t * kMaxTReciprocal;
 }
+
+static_assert(0.0f == tValue2Scalar(         0), "Lower limit should be exact.");
+static_assert(1.0f == tValue2Scalar(kMaxTValue), "Upper limit should be exact.");
 
 SkScalar SkContourMeasure::Segment::getScalarT() const {
     return tValue2Scalar(fTValue);
@@ -137,7 +141,7 @@ static bool quad_too_curvy(const SkPoint pts[3], SkScalar tolerance) {
     SkScalar dy = SkScalarHalf(pts[1].fY) -
                         SkScalarHalf(SkScalarHalf(pts[0].fY + pts[2].fY));
 
-    SkScalar dist = SkMaxScalar(SkScalarAbs(dx), SkScalarAbs(dy));
+    SkScalar dist = std::max(SkScalarAbs(dx), SkScalarAbs(dy));
     return dist > tolerance;
 }
 
@@ -146,13 +150,13 @@ static bool conic_too_curvy(const SkPoint& firstPt, const SkPoint& midTPt,
     SkPoint midEnds = firstPt + lastPt;
     midEnds *= 0.5f;
     SkVector dxy = midTPt - midEnds;
-    SkScalar dist = SkMaxScalar(SkScalarAbs(dxy.fX), SkScalarAbs(dxy.fY));
+    SkScalar dist = std::max(SkScalarAbs(dxy.fX), SkScalarAbs(dxy.fY));
     return dist > tolerance;
 }
 
 static bool cheap_dist_exceeds_limit(const SkPoint& pt, SkScalar x, SkScalar y,
                                      SkScalar tolerance) {
-    SkScalar dist = SkMaxScalar(SkScalarAbs(x - pt.fX), SkScalarAbs(y - pt.fY));
+    SkScalar dist = std::max(SkScalarAbs(x - pt.fX), SkScalarAbs(y - pt.fY));
     // just made up the 1/2
     return dist > tolerance;
 }

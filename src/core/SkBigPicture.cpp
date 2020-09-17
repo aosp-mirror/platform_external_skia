@@ -5,23 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "SkBBoxHierarchy.h"
-#include "SkBigPicture.h"
-#include "SkPictureCommon.h"
-#include "SkRecord.h"
-#include "SkRecordDraw.h"
-#include "SkTraceEvent.h"
+#include "include/core/SkBBHFactory.h"
+#include "src/core/SkBigPicture.h"
+#include "src/core/SkPictureCommon.h"
+#include "src/core/SkRecord.h"
+#include "src/core/SkRecordDraw.h"
+#include "src/core/SkTraceEvent.h"
 
 SkBigPicture::SkBigPicture(const SkRect& cull,
-                           SkRecord* record,
-                           SnapshotArray* drawablePicts,
-                           SkBBoxHierarchy* bbh,
+                           sk_sp<SkRecord> record,
+                           std::unique_ptr<SnapshotArray> drawablePicts,
+                           sk_sp<SkBBoxHierarchy> bbh,
                            size_t approxBytesUsedBySubPictures)
     : fCullRect(cull)
     , fApproxBytesUsedBySubPictures(approxBytesUsedBySubPictures)
-    , fRecord(record)               // Take ownership of caller's ref.
-    , fDrawablePicts(drawablePicts) // Take ownership.
-    , fBBH(bbh)                     // Take ownership of caller's ref.
+    , fRecord(std::move(record))
+    , fDrawablePicts(std::move(drawablePicts))
+    , fBBH(std::move(bbh))
 {}
 
 void SkBigPicture::playback(SkCanvas* canvas, AbortCallback* callback) const {

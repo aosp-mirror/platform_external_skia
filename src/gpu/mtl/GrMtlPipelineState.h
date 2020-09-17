@@ -8,13 +8,13 @@
 #ifndef GrMtlPipelineState_DEFINED
 #define GrMtlPipelineState_DEFINED
 
-#include "GrMtlBuffer.h"
-#include "GrMtlPipelineStateDataManager.h"
-#include "GrStencilSettings.h"
-#include "GrTypesPriv.h"
-#include "glsl/GrGLSLProgramBuilder.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrStencilSettings.h"
+#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/mtl/GrMtlBuffer.h"
+#include "src/gpu/mtl/GrMtlPipelineStateDataManager.h"
 
-#import <metal/metal.h>
+#import <Metal/Metal.h>
 
 class GrMtlGpu;
 class GrMtlPipelineStateDataManager;
@@ -37,8 +37,7 @@ public:
             MTLPixelFormat pixelFormat,
             const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
             const UniformInfoArray& uniforms,
-            sk_sp<GrMtlBuffer> geometryUniformBuffer,
-            sk_sp<GrMtlBuffer> fragmentUniformBuffer,
+            uint32_t uniformBufferSize,
             uint32_t numSamplers,
             std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
             std::unique_ptr<GrGLSLXferProcessor> xferPRocessor,
@@ -47,15 +46,21 @@ public:
 
     id<MTLRenderPipelineState> mtlPipelineState() { return fPipelineState; }
 
-    void setData(const GrRenderTarget*, GrSurfaceOrigin,
-                 const GrPrimitiveProcessor& primPRoc, const GrPipeline& pipeline,
-                 const GrTextureProxy* const primProcTextures[]);
+    void setData(const GrRenderTarget*, const GrProgramInfo&);
 
-    void bind(id<MTLRenderCommandEncoder>);
+    void setTextures(const GrProgramInfo& programInfo,
+                     const GrSurfaceProxy* const primProcTextures[]);
+    void bindTextures(id<MTLRenderCommandEncoder> renderCmdEncoder);
 
-    void setBlendConstants(id<MTLRenderCommandEncoder>, GrPixelConfig, const GrXferProcessor&);
+    void setDrawState(id<MTLRenderCommandEncoder>, const GrSwizzle& outputSwizzle,
+                      const GrXferProcessor&);
 
-    void setDepthStencilState(id<MTLRenderCommandEncoder> renderCmdEncoder);
+    static void SetDynamicScissorRectState(id<MTLRenderCommandEncoder> renderCmdEncoder,
+                                           const GrRenderTarget* renderTarget,
+                                           GrSurfaceOrigin rtOrigin,
+                                           SkIRect scissorRect);
+
+    bool doesntSampleAttachment(const MTLRenderPassAttachmentDescriptor*) const;
 
 private:
     /**
@@ -96,11 +101,17 @@ private:
 
     void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin);
 
+    void bindUniforms(id<MTLRenderCommandEncoder>);
+
+    void setBlendConstants(id<MTLRenderCommandEncoder>, const GrSwizzle&, const GrXferProcessor&);
+
+    void setDepthStencilState(id<MTLRenderCommandEncoder> renderCmdEncoder);
+
     struct SamplerBindings {
-        id<MTLSamplerState> fSampler;
+        GrMtlSampler*  fSampler;
         id<MTLTexture> fTexture;
 
-        SamplerBindings(const GrSamplerState& state, GrTexture* texture, GrMtlGpu*);
+        SamplerBindings(GrSamplerState state, GrTexture* texture, GrMtlGpu*);
     };
 
     GrMtlGpu* fGpu;
@@ -111,9 +122,6 @@ private:
     GrGLSLBuiltinUniformHandles fBuiltinUniformHandles;
 
     GrStencilSettings fStencil;
-
-    sk_sp<GrMtlBuffer> fGeometryUniformBuffer;
-    sk_sp<GrMtlBuffer> fFragmentUniformBuffer;
 
     int fNumSamplers;
     SkTArray<SamplerBindings> fSamplerBindings;

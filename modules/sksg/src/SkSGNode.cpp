@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkRectPriv.h"
-#include "SkSGNode.h"
-#include "SkSGInvalidationController.h"
+#include "modules/sksg/include/SkSGInvalidationController.h"
+#include "modules/sksg/include/SkSGNode.h"
+#include "src/core/SkRectPriv.h"
 
 #include <algorithm>
 
@@ -44,7 +44,8 @@ Node::Node(uint32_t invalTraits)
     : fInvalObserver(nullptr)
     , fBounds(SkRectPriv::MakeLargeS32())
     , fInvalTraits(invalTraits)
-    , fFlags(kInvalidated_Flag) {}
+    , fFlags(kInvalidated_Flag)
+    , fNodeFlags(0) {}
 
 Node::~Node() {
     if (fFlags & kObserverArray_Flag) {

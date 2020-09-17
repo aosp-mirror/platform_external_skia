@@ -9,9 +9,9 @@
 #ifndef GrVkTextureRenderTarget_DEFINED
 #define GrVkTextureRenderTarget_DEFINED
 
-#include "GrVkTexture.h"
-#include "GrVkRenderTarget.h"
-#include "vk/GrVkTypes.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/vk/GrVkRenderTarget.h"
+#include "src/gpu/vk/GrVkTexture.h"
 
 class GrVkGpu;
 
@@ -27,12 +27,14 @@ struct GrVkImageInfo;
 class GrVkTextureRenderTarget: public GrVkTexture, public GrVkRenderTarget {
 public:
     static sk_sp<GrVkTextureRenderTarget> MakeNewTextureRenderTarget(GrVkGpu*, SkBudgeted,
-                                                                     const GrSurfaceDesc&,
+                                                                     SkISize dimensions,
+                                                                     int sampleCnt,
                                                                      const GrVkImage::ImageDesc&,
                                                                      GrMipMapsStatus);
 
     static sk_sp<GrVkTextureRenderTarget> MakeWrappedTextureRenderTarget(GrVkGpu*,
-                                                                         const GrSurfaceDesc&,
+                                                                         SkISize dimensions,
+                                                                         int sampleCnt,
                                                                          GrWrapOwnership,
                                                                          GrWrapCacheable,
                                                                          const GrVkImageInfo&,
@@ -57,7 +59,8 @@ private:
     // MSAA, not-wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
                             SkBudgeted budgeted,
-                            const GrSurfaceDesc& desc,
+                            SkISize dimensions,
+                            int sampleCnt,
                             const GrVkImageInfo& info,
                             sk_sp<GrVkImageLayout> layout,
                             const GrVkImageView* texView,
@@ -70,7 +73,7 @@ private:
     // non-MSAA, not-wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
                             SkBudgeted budgeted,
-                            const GrSurfaceDesc& desc,
+                            SkISize dimensions,
                             const GrVkImageInfo& info,
                             sk_sp<GrVkImageLayout> layout,
                             const GrVkImageView* texView,
@@ -79,7 +82,8 @@ private:
 
     // MSAA, wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
-                            const GrSurfaceDesc& desc,
+                            SkISize dimensions,
+                            int sampleCnt,
                             const GrVkImageInfo& info,
                             sk_sp<GrVkImageLayout> layout,
                             const GrVkImageView* texView,
@@ -93,7 +97,7 @@ private:
 
     // non-MSAA, wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
-                            const GrSurfaceDesc& desc,
+                            SkISize dimensions,
                             const GrVkImageInfo& info,
                             sk_sp<GrVkImageLayout> layout,
                             const GrVkImageView* texView,

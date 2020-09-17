@@ -8,13 +8,13 @@
 #ifndef GrVkImage_DEFINED
 #define GrVkImage_DEFINED
 
-#include "GrBackendSurface.h"
-#include "GrTexture.h"
-#include "GrTypesPriv.h"
-#include "GrVkImageLayout.h"
-#include "GrVkResource.h"
-#include "SkTypes.h"
-#include "vk/GrVkTypes.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrTexture.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/vk/GrVkImageLayout.h"
+#include "src/gpu/vk/GrVkResource.h"
 
 class GrVkGpu;
 class GrVkTexture;
@@ -36,6 +36,7 @@ public:
         } else if (fIsBorrowed) {
             fResource = new BorrowedResource(info.fImage, info.fAlloc, info.fImageTiling);
         } else {
+            SkASSERT(VK_NULL_HANDLE != info.fAlloc.fMemory);
             fResource = new Resource(info.fImage, info.fAlloc, info.fImageTiling);
         }
     }
@@ -56,7 +57,7 @@ public:
     VkFormat imageFormat() const { return fInfo.fFormat; }
     GrBackendFormat getBackendFormat() const {
         if (fResource && this->ycbcrConversionInfo().isValid()) {
-            SkASSERT(this->imageFormat() == VK_FORMAT_UNDEFINED);
+            SkASSERT(this->imageFormat() == this->ycbcrConversionInfo().fFormat);
             return GrBackendFormat::MakeVk(this->ycbcrConversionInfo());
         }
         SkASSERT(this->imageFormat() != VK_FORMAT_UNDEFINED);
@@ -98,6 +99,9 @@ public:
     // family is not external or foreign.
     void prepareForPresent(GrVkGpu* gpu);
 
+    // Returns the image to its original queue family
+    void prepareForExternal(GrVkGpu* gpu);
+
     // This simply updates our tracking of the image layout and does not actually do any gpu work.
     // This is only used for mip map generation where we are manually changing the layouts as we
     // blit each layer, and then at the end need to update our tracking.
@@ -118,20 +122,22 @@ public:
         VkImageTiling       fImageTiling;
         VkImageUsageFlags   fUsageFlags;
         VkFlags             fMemProps;
+        GrProtected         fIsProtected;
 
         ImageDesc()
-            : fImageType(VK_IMAGE_TYPE_2D)
-            , fFormat(VK_FORMAT_UNDEFINED)
-            , fWidth(0)
-            , fHeight(0)
-            , fLevels(1)
-            , fSamples(1)
-            , fImageTiling(VK_IMAGE_TILING_OPTIMAL)
-            , fUsageFlags(0)
-            , fMemProps(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {}
+                : fImageType(VK_IMAGE_TYPE_2D)
+                , fFormat(VK_FORMAT_UNDEFINED)
+                , fWidth(0)
+                , fHeight(0)
+                , fLevels(1)
+                , fSamples(1)
+                , fImageTiling(VK_IMAGE_TILING_OPTIMAL)
+                , fUsageFlags(0)
+                , fMemProps(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+                , fIsProtected(GrProtected::kNo) {}
     };
 
-    static bool InitImageInfo(const GrVkGpu* gpu, const ImageDesc& imageDesc, GrVkImageInfo*);
+    static bool InitImageInfo(GrVkGpu* gpu, const ImageDesc& imageDesc, GrVkImageInfo*);
     // Destroys the internal VkImage and VkDeviceMemory in the GrVkImageInfo
     static void DestroyImageInfo(const GrVkGpu* gpu, GrVkImageInfo*);
 
@@ -151,7 +157,6 @@ public:
 
 protected:
     void releaseImage(GrVkGpu* gpu);
-    void abandonImage();
     bool hasResource() const { return fResource; }
 
     GrVkImageInfo          fInfo;
@@ -187,12 +192,15 @@ private:
         }
 
         /**
-         * These are used to coordinate calling the idle proc between the GrVkTexture and the
-         * Resource. If the GrVkTexture becomes purgeable and if there are no command buffers
-         * referring to the Resource then it calls the proc. Otherwise, the Resource calls it
-         * when the last command buffer reference goes away and the GrVkTexture is purgeable.
+         * These are used to coordinate calling the "finished" idle procs between the GrVkTexture
+         * and the Resource. If the GrVkTexture becomes purgeable and if there are no command
+         * buffers referring to the Resource then it calls the procs. Otherwise, the Resource calls
+         * them when the last command buffer reference goes away and the GrVkTexture is purgeable.
          */
-        void replaceIdleProc(GrVkTexture* owner, sk_sp<GrRefCntedCallback>) const;
+        void addIdleProc(GrVkTexture*, sk_sp<GrRefCntedCallback>) const;
+        int idleProcCnt() const;
+        sk_sp<GrRefCntedCallback> idleProc(int) const;
+        void resetIdleProcs() const;
         void removeOwningTexture() const;
 
         /**
@@ -216,16 +224,12 @@ private:
 
     private:
         void freeGPUData(GrVkGpu* gpu) const override;
-        void abandonGPUData() const override {
-            this->invokeReleaseProc();
-            SkASSERT(!fReleaseHelper);
-        }
 
         VkImage        fImage;
         GrVkAlloc      fAlloc;
         VkImageTiling  fImageTiling;
         mutable int fNumCommandBufferOwners = 0;
-        mutable sk_sp<GrRefCntedCallback> fIdleCallback;
+        mutable SkTArray<sk_sp<GrRefCntedCallback>> fIdleProcs;
         mutable GrVkTexture* fOwningTexture = nullptr;
 
         typedef GrVkResource INHERITED;
@@ -239,7 +243,6 @@ private:
         }
     private:
         void freeGPUData(GrVkGpu* gpu) const override;
-        void abandonGPUData() const override;
     };
 
     Resource* fResource;

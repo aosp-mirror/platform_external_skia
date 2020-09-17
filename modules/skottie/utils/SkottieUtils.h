@@ -8,54 +8,15 @@
 #ifndef SkottieUtils_DEFINED
 #define SkottieUtils_DEFINED
 
-#include "SkColor.h"
-#include "Skottie.h"
-#include "SkottieProperty.h"
-#include "SkString.h"
-#include "SkTHash.h"
+#include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/include/SkottieProperty.h"
 
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-class SkAnimCodecPlayer;
-class SkData;
-class SkImage;
-
 namespace skottie_utils {
-
-class MultiFrameImageAsset final : public skottie::ImageAsset {
-public:
-    static sk_sp<MultiFrameImageAsset> Make(sk_sp<SkData>);
-
-    bool isMultiFrame() override;
-
-    sk_sp<SkImage> getFrame(float t) override;
-
-private:
-    explicit MultiFrameImageAsset(std::unique_ptr<SkAnimCodecPlayer>);
-
-    std::unique_ptr<SkAnimCodecPlayer> fPlayer;
-
-    using INHERITED = skottie::ImageAsset;
-};
-
-class FileResourceProvider final : public skottie::ResourceProvider {
-public:
-    static sk_sp<FileResourceProvider> Make(SkString base_dir);
-
-    sk_sp<SkData> load(const char resource_path[], const char resource_name[]) const override;
-
-    sk_sp<skottie::ImageAsset> loadImageAsset(const char[], const char []) const override;
-
-private:
-    explicit FileResourceProvider(SkString);
-
-    const SkString fDir;
-
-    using INHERITED = skottie::ResourceProvider;
-};
 
 /**
  * CustomPropertyManager implements a property management scheme where color/opacity/transform
@@ -87,6 +48,10 @@ public:
     std::vector<PropKey> getTransformProps() const;
     skottie::TransformPropertyValue getTransform(const PropKey&) const;
     bool setTransform(const PropKey&, const skottie::TransformPropertyValue&);
+
+    std::vector<PropKey> getTextProps() const;
+    skottie::TextPropertyValue getText(const PropKey&) const;
+    bool setText(const PropKey&, const skottie::TextPropertyValue&);
 
     struct MarkerInfo {
         std::string name;
@@ -133,7 +98,9 @@ private:
     PropMap<skottie::ColorPropertyHandle>     fColorMap;
     PropMap<skottie::OpacityPropertyHandle>   fOpacityMap;
     PropMap<skottie::TransformPropertyHandle> fTransformMap;
+    PropMap<skottie::TextPropertyHandle>      fTextMap;
     std::vector<MarkerInfo>                   fMarkers;
+    std::string                               fCurrentNode;
 };
 
 } // namespace skottie_utils

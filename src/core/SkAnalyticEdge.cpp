@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkAnalyticEdge.h"
-#include "SkFDot6.h"
-#include "SkMathPriv.h"
-#include "SkTo.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkAnalyticEdge.h"
+#include "src/core/SkFDot6.h"
+#include "src/core/SkMathPriv.h"
 #include <utility>
 
 static const int kInverseTableSize = 1024; // SK_FDot6One * 16
@@ -383,10 +383,10 @@ bool SkAnalyticQuadraticEdge::updateQuadratic() {
                 SkFDot6 diffY = SkFixedToFDot6(newy - fSnappedY);
                 slope = diffY ? quick_div(SkFixedToFDot6(newx - fSnappedX), diffY)
                               : SK_MaxS32;
-                newSnappedY = SkTMin<SkFixed>(fQEdge.fQLastY, SkFixedRoundToFixed(newy));
+                newSnappedY = std::min<SkFixed>(fQEdge.fQLastY, SkFixedRoundToFixed(newy));
                 newSnappedX = newx - SkFixedMul(slope, newy - newSnappedY);
             } else {
-                newSnappedY = SkTMin(fQEdge.fQLastY, SnapY(newy));
+                newSnappedY = std::min(fQEdge.fQLastY, SnapY(newy));
                 newSnappedX = newx;
                 SkFDot6 diffY = SkFixedToFDot6(newSnappedY - fSnappedY);
                 slope = diffY ? quick_div(SkFixedToFDot6(newx - fSnappedX), diffY)

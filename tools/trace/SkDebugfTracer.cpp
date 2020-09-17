@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkDebugfTracer.h"
-#include "SkTraceEvent.h"
+#include "src/core/SkTraceEvent.h"
+#include "tools/trace/SkDebugfTracer.h"
 
 SkEventTracer::Handle SkDebugfTracer::addTraceEvent(char phase,
                                                     const uint8_t* categoryEnabledFlag,
@@ -51,7 +51,7 @@ SkEventTracer::Handle SkDebugfTracer::addTraceEvent(char phase,
                 if (newLineAt > 0) {
                     truncAt = newLineAt;
                 }
-                truncAt = SkTMin(truncAt, kMaxLen);
+                truncAt = std::min(truncAt, kMaxLen);
                 if (truncAt < string.size()) {
                     string.resize(truncAt);
                     string.append("...");

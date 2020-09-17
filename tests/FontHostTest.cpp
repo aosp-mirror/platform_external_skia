@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "SkAutoMalloc.h"
-#include "SkEndian.h"
-#include "SkFont.h"
-#include "SkFontStream.h"
-#include "SkOSFile.h"
-#include "SkPaint.h"
-#include "SkStream.h"
-#include "SkTypeface.h"
-#include "Test.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypeface.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkEndian.h"
+#include "src/core/SkFontStream.h"
+#include "src/core/SkOSFile.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
 
 //#define DUMP_TABLES
 //#define DUMP_TTC_TABLES
@@ -66,50 +66,6 @@ static void test_countGlyphs(skiatest::Reporter* reporter, const sk_sp<SkTypefac
 
     if (tableGlyphs >= 0) {
         REPORTER_ASSERT(reporter, tableGlyphs == nativeGlyphs);
-    }
-}
-
-// The following three are all the same code points in various encodings.
-// a中Яיו𝄞a𠮟
-static uint8_t utf8Chars[] = { 0x61, 0xE4,0xB8,0xAD, 0xD0,0xAF, 0xD7,0x99, 0xD7,0x95, 0xF0,0x9D,0x84,0x9E, 0x61, 0xF0,0xA0,0xAE,0x9F };
-static uint16_t utf16Chars[] = { 0x0061, 0x4E2D, 0x042F, 0x05D9, 0x05D5, 0xD834,0xDD1E, 0x0061, 0xD842,0xDF9F };
-static uint32_t utf32Chars[] = { 0x00000061, 0x00004E2D, 0x0000042F, 0x000005D9, 0x000005D5, 0x0001D11E, 0x00000061, 0x00020B9F };
-
-struct CharsToGlyphs_TestData {
-    const void* chars;
-    int charCount;
-    size_t charsByteLength;
-    SkTypeface::Encoding typefaceEncoding;
-    const char* name;
-} static charsToGlyphs_TestData[] = {
-    { utf8Chars, 8, sizeof(utf8Chars), SkTypeface::kUTF8_Encoding, "Simple UTF-8" },
-    { utf16Chars, 8, sizeof(utf16Chars), SkTypeface::kUTF16_Encoding, "Simple UTF-16" },
-    { utf32Chars, 8, sizeof(utf32Chars), SkTypeface::kUTF32_Encoding, "Simple UTF-32" },
-};
-
-// Test that SkPaint::textToGlyphs agrees with SkTypeface::charsToGlyphs.
-static void test_charsToGlyphs(skiatest::Reporter* reporter, sk_sp<SkTypeface> face) {
-    uint16_t paintGlyphIds[256];
-    uint16_t faceGlyphIds[256];
-
-    for (size_t testIndex = 0; testIndex < SK_ARRAY_COUNT(charsToGlyphs_TestData); ++testIndex) {
-        CharsToGlyphs_TestData& test = charsToGlyphs_TestData[testIndex];
-        SkTextEncoding encoding = static_cast<SkTextEncoding>(test.typefaceEncoding);
-
-        SkFont font(face);
-        font.textToGlyphs(test.chars, test.charsByteLength, encoding,
-                          paintGlyphIds, SK_ARRAY_COUNT(paintGlyphIds));
-
-        face->charsToGlyphs(test.chars, test.typefaceEncoding, faceGlyphIds, test.charCount);
-
-        for (int i = 0; i < test.charCount; ++i) {
-            SkString name;
-            face->getFamilyName(&name);
-            SkString a;
-            a.appendf("%s, paintGlyphIds[%d] = %d, faceGlyphIds[%d] = %d, face = %s",
-                      test.name, i, (int)paintGlyphIds[i], i, (int)faceGlyphIds[i], name.c_str());
-            REPORTER_ASSERT(reporter, paintGlyphIds[i] == faceGlyphIds[i], a.c_str());
-        }
     }
 }
 
@@ -207,6 +163,9 @@ static void test_tables(skiatest::Reporter* reporter, const sk_sp<SkTypeface>& f
             SkAutoMalloc data(size);
             size_t size2 = face->getTableData(tags[i], 0, size, data.get());
             REPORTER_ASSERT(reporter, size2 == size);
+            sk_sp<SkData> data2 = face->copyTableData(tags[i]);
+            REPORTER_ASSERT(reporter, size == data2->size());
+            REPORTER_ASSERT(reporter, !memcmp(data.get(), data2->data(), size));
         }
     }
 }
@@ -230,7 +189,6 @@ static void test_tables(skiatest::Reporter* reporter) {
             test_tables(reporter, face);
             test_unitsPerEm(reporter, face);
             test_countGlyphs(reporter, face);
-            test_charsToGlyphs(reporter, face);
         }
     }
 }
@@ -251,15 +209,15 @@ static void test_advances(skiatest::Reporter* reporter) {
         bool            linear;
         bool            subpixel;
     } settings[] = {
-        { kNo_SkFontHinting,     false, false },
-        { kNo_SkFontHinting,     true,  false },
-        { kNo_SkFontHinting,     false, true  },
-        { kSlight_SkFontHinting, false, false },
-        { kSlight_SkFontHinting, true,  false },
-        { kSlight_SkFontHinting, false, true  },
-        { kNormal_SkFontHinting, false, false },
-        { kNormal_SkFontHinting, true,  false },
-        { kNormal_SkFontHinting, false, true  },
+        { SkFontHinting::kNone,   false, false },
+        { SkFontHinting::kNone,   true,  false },
+        { SkFontHinting::kNone,   false, true  },
+        { SkFontHinting::kSlight, false, false },
+        { SkFontHinting::kSlight, true,  false },
+        { SkFontHinting::kSlight, false, true  },
+        { SkFontHinting::kNormal, false, false },
+        { SkFontHinting::kNormal, true,  false },
+        { SkFontHinting::kNormal, false, true  },
     };
 
     static const struct {
@@ -274,7 +232,8 @@ static void test_advances(skiatest::Reporter* reporter) {
     };
 
     SkFont font;
-    char txt[] = "long.text.with.lots.of.dots.";
+    char const * const txt = "long.text.with.lots.of.dots.";
+    size_t textLen = strlen(txt);
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(faces); i++) {
         font.setTypeface(SkTypeface::MakeFromName(faces[i], SkFontStyle()));
@@ -292,10 +251,10 @@ static void test_advances(skiatest::Reporter* reporter) {
 
                 // For no hinting and light hinting this should take the
                 // optimized generateAdvance path.
-                SkScalar width1 = font.measureText(txt, strlen(txt), kUTF8_SkTextEncoding);
+                SkScalar width1 = font.measureText(txt, textLen, SkTextEncoding::kUTF8);
 
                 // Requesting the bounds forces a generateMetrics call.
-                SkScalar width2 = font.measureText(txt, strlen(txt), kUTF8_SkTextEncoding, &bounds);
+                SkScalar width2 = font.measureText(txt, textLen, SkTextEncoding::kUTF8, &bounds);
 
                 // SkDebugf("Font: %s, generateAdvance: %f, generateMetrics: %f\n",
                 //    faces[i], SkScalarToFloat(width1), SkScalarToFloat(width2));

@@ -7,12 +7,12 @@
 #ifndef skiatest_Test_DEFINED
 #define skiatest_Test_DEFINED
 
-#include "../tools/Registry.h"
-#include "GrContextFactory.h"
-#include "SkClipOpPriv.h"
-#include "SkString.h"
-#include "SkTraceEvent.h"
-#include "SkTypes.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "src/core/SkClipOpPriv.h"
+#include "src/core/SkTraceEvent.h"
+#include "tools/Registry.h"
+#include "tools/gpu/GrContextFactory.h"
 
 namespace skiatest {
 
@@ -94,7 +94,7 @@ typedef sk_tools::Registry<Test> TestRegistry;
 /*
     Use the following macros to make use of the skiatest classes, e.g.
 
-    #include "Test.h"
+    #include "tests/Test.h"
 
     DEF_TEST(TestName, reporter) {
         ...
@@ -119,7 +119,8 @@ extern bool IsGLContextType(GrContextFactoryContextType);
 extern bool IsVulkanContextType(GrContextFactoryContextType);
 extern bool IsMetalContextType(GrContextFactoryContextType);
 extern bool IsRenderingGLContextType(GrContextFactoryContextType);
-extern bool IsNullGLContextType(GrContextFactoryContextType);
+extern bool IsRenderingGLOrMetalContextType(GrContextFactoryContextType);
+extern bool IsMockContextType(GrContextFactoryContextType);
 void RunWithGPUTestContexts(GrContextTestFn*, GrContextTypeFilterFn*, Reporter*,
                             const GrContextOptions&);
 
@@ -196,8 +197,8 @@ private:
 #define DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(name, reporter, context_info)                 \
         DEF_GPUTEST_FOR_CONTEXTS(name, &skiatest::IsRenderingGLContextType,                 \
                                  reporter, context_info, nullptr)
-#define DEF_GPUTEST_FOR_NULLGL_CONTEXT(name, reporter, context_info)                        \
-        DEF_GPUTEST_FOR_CONTEXTS(name, &skiatest::IsNullGLContextType,                      \
+#define DEF_GPUTEST_FOR_MOCK_CONTEXT(name, reporter, context_info)                          \
+        DEF_GPUTEST_FOR_CONTEXTS(name, &skiatest::IsMockContextType,                        \
                                  reporter, context_info, nullptr)
 #define DEF_GPUTEST_FOR_VULKAN_CONTEXT(name, reporter, context_info)                        \
         DEF_GPUTEST_FOR_CONTEXTS(name, &skiatest::IsVulkanContextType,                      \
