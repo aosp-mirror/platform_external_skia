@@ -12,6 +12,7 @@
 #include "src/sksl/SkSLLexer.h"
 #include "src/sksl/SkSLString.h"
 
+#include <algorithm>
 #include <vector>
 
 namespace SkSL {
