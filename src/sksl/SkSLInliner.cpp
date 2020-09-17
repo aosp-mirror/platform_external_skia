@@ -263,6 +263,28 @@ void Inliner::reset(const Context& context, const Program::Settings& settings) {
     fInlineVarCounter = 0;
 }
 
+String Inliner::uniqueNameForInlineVar(const String& baseName, SymbolTable* symbolTable) {
+    // If the base name starts with an underscore, like "_coords", we can't append another
+    // underscore, because OpenGL disallows two consecutive underscores anywhere in the string. But
+    // in the general case, using the underscore as a splitter reads nicely enough that it's worth
+    // putting in this special case.
+    const char* splitter = baseName.startsWith("_") ? "" : "_";
+
+    // Append a unique numeric prefix to avoid name overlap. Check the symbol table to make sure
+    // we're not reusing an existing name. (Note that within a single compilation pass, this check
+    // isn't fully comprehensive, as code isn't always generated in top-to-bottom order.)
+    String uniqueName;
+    for (;;) {
+        uniqueName = String::printf("_%d%s%s", fInlineVarCounter++, splitter, baseName.c_str());
+        StringFragment frag{uniqueName.data(), uniqueName.length()};
+        if ((*symbolTable)[frag] == nullptr) {
+            break;
+        }
+    }
+
+    return uniqueName;
+}
+
 std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
                                                       VariableRewriteMap* varMap,
                                                       const Expression& expression) {
@@ -286,9 +308,9 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
         case Expression::Kind::kBinary: {
             const BinaryExpression& b = expression.as<BinaryExpression>();
             return std::make_unique<BinaryExpression>(offset,
-                                                      expr(b.fLeft),
-                                                      b.fOperator,
-                                                      expr(b.fRight),
+                                                      expr(b.leftPointer()),
+                                                      b.getOperator(),
+                                                      expr(b.rightPointer()),
                                                       &b.type());
         }
         case Expression::Kind::kBoolLiteral:
@@ -466,9 +488,11 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             }
             std::unique_ptr<Expression> initialValue = expr(decl.fValue);
             const Variable* old = decl.fVar;
-            // need to copy the var name in case the originating function is discarded and we lose
-            // its symbols
-            std::unique_ptr<String> name(new String(old->fName));
+            // We assign unique names to inlined variables--scopes hide most of the problems in this
+            // regard, but see `InlinerAvoidsVariableNameOverlap` for a counterexample where unique
+            // names are important.
+            auto name = std::make_unique<String>(
+                    this->uniqueNameForInlineVar(String(old->fName), symbolTableForStatement));
             const String* namePtr = symbolTableForStatement->takeOwnershipOfString(std::move(name));
             const Type* typePtr = copy_if_needed(&old->type(), *symbolTableForStatement);
             const Variable* clone = symbolTableForStatement->takeOwnershipOfSymbol(
@@ -551,25 +575,8 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
             type = fContext->fInt_Type.get();
         }
 
-        // If the base name starts with an underscore, like "_coords", we can't append another
-        // underscore, because some OpenGL platforms error out when they see two consecutive
-        // underscores (anywhere in the string!). But in the general case, using the underscore as
-        // a splitter reads nicely enough that it's worth putting in this special case.
-        const char* splitter = baseName.startsWith("_") ? "_X" : "_";
-
-        // Append a unique numeric prefix to avoid name overlap. Check the symbol table to make sure
-        // we're not reusing an existing name. (Note that within a single compilation pass, this
-        // check isn't fully comprehensive, as code isn't always generated in top-to-bottom order.)
-        String uniqueName;
-        for (;;) {
-            uniqueName = String::printf("_%d%s%s", fInlineVarCounter++, splitter, baseName.c_str());
-            StringFragment frag{uniqueName.data(), uniqueName.length()};
-            if ((*symbolTableForCall)[frag] == nullptr) {
-                break;
-            }
-        }
-
-        // Add our new variable's name to the symbol table.
+        // Provide our new variable with a unique name, and add it to our symbol table.
+        String uniqueName = this->uniqueNameForInlineVar(baseName, symbolTableForCall);
         const String* namePtr = symbolTableForCall->takeOwnershipOfString(
                 std::make_unique<String>(std::move(uniqueName)));
         StringFragment nameFrag{namePtr->c_str(), namePtr->length()};
@@ -931,7 +938,7 @@ bool Inliner::analyze(Program& program) {
 
                 case Expression::Kind::kBinary: {
                     BinaryExpression& binaryExpr = (*expr)->as<BinaryExpression>();
-                    this->visitExpression(&binaryExpr.fLeft);
+                    this->visitExpression(&binaryExpr.leftPointer());
 
                     // Logical-and and logical-or binary expressions do not inline the right side,
                     // because that would invalidate short-circuiting. That is, when evaluating
@@ -941,10 +948,11 @@ bool Inliner::analyze(Program& program) {
                     // It is illegal for side-effects from x() or y() to occur. The simplest way to
                     // enforce that rule is to avoid inlining the right side entirely. However, it
                     // is safe for other types of binary expression to inline both sides.
-                    bool shortCircuitable = (binaryExpr.fOperator == Token::Kind::TK_LOGICALAND ||
-                                             binaryExpr.fOperator == Token::Kind::TK_LOGICALOR);
+                    Token::Kind op = binaryExpr.getOperator();
+                    bool shortCircuitable = (op == Token::Kind::TK_LOGICALAND ||
+                                             op == Token::Kind::TK_LOGICALOR);
                     if (!shortCircuitable) {
-                        this->visitExpression(&binaryExpr.fRight);
+                        this->visitExpression(&binaryExpr.rightPointer());
                     }
                     break;
                 }

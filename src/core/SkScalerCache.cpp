@@ -40,13 +40,13 @@ SkScalerCache::SkScalerCache(
 std::tuple<SkGlyph*, size_t> SkScalerCache::makeGlyph(SkPackedGlyphID packedGlyphID) {
     size_t denseID = fGlyphForIndex.size();
     SkGlyph* glyph = fAlloc.make<SkGlyph>(packedGlyphID);
-    fIndexForPackedGlyphID.set(packedGlyphID, denseID);
+    fIndexForPackedGlyphID.set(packedGlyphID, SkGlyphIndex{denseID});
     fGlyphForIndex.push_back(glyph);
     return {glyph, sizeof(SkGlyph)};
 }
 
 std::tuple<SkGlyph*, size_t> SkScalerCache::glyph(SkPackedGlyphID packedGlyphID) {
-    int* denseID = fIndexForPackedGlyphID.find(packedGlyphID);
+    SkGlyphIndex* denseID = fIndexForPackedGlyphID.find(packedGlyphID);
 
     if (denseID != nullptr) {
         return {fGlyphForIndex[*denseID], 0};
@@ -112,19 +112,19 @@ std::tuple<const void*, size_t> SkScalerCache::prepareImage(SkGlyph* glyph) {
 std::tuple<SkGlyph*, size_t> SkScalerCache::mergeGlyphAndImage(
         SkPackedGlyphID toID, const SkGlyph& from) {
     SkAutoMutexExclusive lock{fMu};
+    // TODO(herb): remove finding the glyph when we are sure there are no glyph collisions.
+    SkGlyphIndex* denseID = fIndexForPackedGlyphID.find(toID);
     size_t delta = 0;
-    size_t imageDelta = 0;
-    int* denseID = fIndexForPackedGlyphID.find(toID);
     SkGlyph* glyph;
     if (denseID != nullptr) {
         glyph = fGlyphForIndex[*denseID];
+        // Since there is no search for replacement glyphs, this glyph should not exist yet.
+        SkDEBUGFAIL("This implies adding to an existing glyph. This should not happen.");
     } else {
         std::tie(glyph, delta) = this->makeGlyph(toID);
     }
-    if (glyph->setMetricsAndImage(&fAlloc, from)) {
-        imageDelta= glyph->imageSize();
-    }
-    return {glyph, delta + imageDelta};
+    delta += glyph->setMetricsAndImage(&fAlloc, from);
+    return {glyph, delta};
 }
 
 std::tuple<SkSpan<const SkGlyph*>, size_t> SkScalerCache::metrics(

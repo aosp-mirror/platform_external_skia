@@ -862,189 +862,12 @@ void GLSLCodeGenerator::writeFieldAccess(const FieldAccess& f) {
     }
 }
 
-void GLSLCodeGenerator::writeConstantSwizzle(const Swizzle& swizzle, const String& constants) {
-    this->writeType(swizzle.type());
-    this->write("(");
-    this->write(constants);
-    this->write(")");
-}
-
-void GLSLCodeGenerator::writeSwizzleMask(const Swizzle& swizzle, const String& mask) {
+void GLSLCodeGenerator::writeSwizzle(const Swizzle& swizzle) {
     this->writeExpression(*swizzle.fBase, kPostfix_Precedence);
     this->write(".");
-    this->write(mask);
-}
-
-void GLSLCodeGenerator::writeSwizzleConstructor(const Swizzle& swizzle, const String& constants,
-                                                const String& mask,
-                                                GLSLCodeGenerator::SwizzleOrder order) {
-    this->writeType(swizzle.type());
-    this->write("(");
-    if (order == SwizzleOrder::CONSTANTS_FIRST) {
-        this->write(constants);
-        this->write(", ");
-        this->writeSwizzleMask(swizzle, mask);
-    } else {
-        this->writeSwizzleMask(swizzle, mask);
-        this->write(", ");
-        this->write(constants);
-    }
-    this->write(")");
-}
-
-void GLSLCodeGenerator::writeSwizzleConstructor(const Swizzle& swizzle, const String& constants,
-                                                const String& mask, const String& reswizzle) {
-    this->writeSwizzleConstructor(swizzle, constants, mask, SwizzleOrder::MASK_FIRST);
-    this->write(".");
-    this->write(reswizzle);
-}
-
-// Writing a swizzle is complicated due to the handling of constant swizzle components. The most
-// problematic case is a mask like '.r00a'. A naive approach might turn that into
-// 'vec4(base.r, 0, 0, base.a)', but that would cause 'base' to be evaluated twice. We instead
-// group the swizzle mask ('ra') and constants ('0, 0') together and use a secondary swizzle to put
-// them back into the right order, so in this case we end up with something like
-// 'vec4(base4.ra, 0, 0).rbag'.
-void GLSLCodeGenerator::writeSwizzle(const Swizzle& swizzle) {
-    // has a 1 bit in every position for which the swizzle mask is a constant, so 'r0b1' would
-    // yield binary 0101.
-    int constantBits = 0;
-    String mask;
-    String constants;
-    // compute mask ("ra") and constant ("0, 0") strings, and fill in constantBits
     for (int c : swizzle.fComponents) {
-        constantBits <<= 1;
-        switch (c) {
-            case SKSL_SWIZZLE_0:
-                constantBits |= 1;
-                if (constants.length() > 0) {
-                    constants += ", ";
-                }
-                constants += "0";
-                break;
-            case SKSL_SWIZZLE_1:
-                constantBits |= 1;
-                if (constants.length() > 0) {
-                    constants += ", ";
-                }
-                constants += "1";
-                break;
-            case 0:
-                mask += "x";
-                break;
-            case 1:
-                mask += "y";
-                break;
-            case 2:
-                mask += "z";
-                break;
-            case 3:
-                mask += "w";
-                break;
-            default:
-                SkASSERT(false);
-        }
-    }
-    switch (swizzle.fComponents.size()) {
-        case 1:
-            if (constantBits == 1) {
-                this->write(constants);
-            }
-            else {
-                this->writeSwizzleMask(swizzle, mask);
-            }
-            break;
-        case 2:
-            switch (constantBits) {
-                case 0: // 00
-                    this->writeSwizzleMask(swizzle, mask);
-                    break;
-                case 1: // 01
-                    this->writeSwizzleConstructor(swizzle, constants, mask,
-                                                  SwizzleOrder::MASK_FIRST);
-                    break;
-                case 2: // 10
-                    this->writeSwizzleConstructor(swizzle, constants, mask,
-                                                  SwizzleOrder::CONSTANTS_FIRST);
-                    break;
-                case 3: // 11
-                    this->writeConstantSwizzle(swizzle, constants);
-                    break;
-                default:
-                    SkASSERT(false);
-            }
-            break;
-        case 3:
-            switch (constantBits) {
-                case 0: // 000
-                    this->writeSwizzleMask(swizzle, mask);
-                    break;
-                case 1: // 001
-                case 3: // 011
-                    this->writeSwizzleConstructor(swizzle, constants, mask,
-                                                  SwizzleOrder::MASK_FIRST);
-                    break;
-                case 4: // 100
-                case 6: // 110
-                    this->writeSwizzleConstructor(swizzle, constants, mask,
-                                                  SwizzleOrder::CONSTANTS_FIRST);
-                    break;
-                case 2: // 010
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "xzy");
-                    break;
-                case 5: // 101
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "yxz");
-                    break;
-                case 7: // 111
-                    this->writeConstantSwizzle(swizzle, constants);
-                    break;
-            }
-            break;
-        case 4:
-            switch (constantBits) {
-                case  0: // 0000
-                    this->writeSwizzleMask(swizzle, mask);
-                    break;
-                case  1: // 0001
-                case  3: // 0011
-                case  7: // 0111
-                    this->writeSwizzleConstructor(swizzle, constants, mask,
-                                                  SwizzleOrder::MASK_FIRST);
-                    break;
-                case  8: // 1000
-                case 12: // 1100
-                case 14: // 1110
-                    this->writeSwizzleConstructor(swizzle, constants, mask,
-                                                  SwizzleOrder::CONSTANTS_FIRST);
-                    break;
-                case  2: // 0010
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "xywz");
-                    break;
-                case  4: // 0100
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "xwyz");
-                    break;
-                case  5: // 0101
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "xzyw");
-                    break;
-                case  6: // 0110
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "xzwy");
-                    break;
-                case  9: // 1001
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "zxyw");
-                    break;
-                case 10: // 1010
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "zxwy");
-                    break;
-                case 11: // 1011
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "yxzw");
-                    break;
-                case 13: // 1101
-                    this->writeSwizzleConstructor(swizzle, constants, mask, "yzxw");
-                    break;
-                case 15: // 1111
-                    this->writeConstantSwizzle(swizzle, constants);
-                    break;
-            }
+        SkASSERT(c >= 0 && c <= 3);
+        this->write(&("x\0y\0z\0w\0"[c * 2]));
     }
 }
 
@@ -1090,31 +913,33 @@ GLSLCodeGenerator::Precedence GLSLCodeGenerator::GetBinaryPrecedence(Token::Kind
 
 void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                                               Precedence parentPrecedence) {
+    const Expression& left = b.left();
+    const Expression& right = b.right();
+    Token::Kind op = b.getOperator();
     if (fProgram.fSettings.fCaps->unfoldShortCircuitAsTernary() &&
-            (b.fOperator == Token::Kind::TK_LOGICALAND ||
-             b.fOperator == Token::Kind::TK_LOGICALOR)) {
+            (op == Token::Kind::TK_LOGICALAND || op == Token::Kind::TK_LOGICALOR)) {
         this->writeShortCircuitWorkaroundExpression(b, parentPrecedence);
         return;
     }
 
-    Precedence precedence = GetBinaryPrecedence(b.fOperator);
+    Precedence precedence = GetBinaryPrecedence(op);
     if (precedence >= parentPrecedence) {
         this->write("(");
     }
     bool positionWorkaround = fProgramKind == Program::Kind::kVertex_Kind &&
-                              Compiler::IsAssignment(b.fOperator) &&
-                              b.fLeft->kind() == Expression::Kind::kFieldAccess &&
-                              is_sk_position((FieldAccess&) *b.fLeft) &&
-                              !b.fRight->containsRTAdjust() &&
+                              Compiler::IsAssignment(op) &&
+                              left.kind() == Expression::Kind::kFieldAccess &&
+                              is_sk_position((FieldAccess&) left) &&
+                              !right.containsRTAdjust() &&
                               !fProgram.fSettings.fCaps->canUseFragCoord();
     if (positionWorkaround) {
         this->write("sk_FragCoord_Workaround = (");
     }
-    this->writeExpression(*b.fLeft, precedence);
+    this->writeExpression(left, precedence);
     this->write(" ");
-    this->write(Compiler::OperatorName(b.fOperator));
+    this->write(Compiler::OperatorName(op));
     this->write(" ");
-    this->writeExpression(*b.fRight, precedence);
+    this->writeExpression(right, precedence);
     if (positionWorkaround) {
         this->write(")");
     }
@@ -1132,20 +957,20 @@ void GLSLCodeGenerator::writeShortCircuitWorkaroundExpression(const BinaryExpres
     // Transform:
     // a && b  =>   a ? b : false
     // a || b  =>   a ? true : b
-    this->writeExpression(*b.fLeft, kTernary_Precedence);
+    this->writeExpression(b.left(), kTernary_Precedence);
     this->write(" ? ");
-    if (b.fOperator == Token::Kind::TK_LOGICALAND) {
-        this->writeExpression(*b.fRight, kTernary_Precedence);
+    if (b.getOperator() == Token::Kind::TK_LOGICALAND) {
+        this->writeExpression(b.right(), kTernary_Precedence);
     } else {
         BoolLiteral boolTrue(fContext, -1, true);
         this->writeBoolLiteral(boolTrue);
     }
     this->write(" : ");
-    if (b.fOperator == Token::Kind::TK_LOGICALAND) {
+    if (b.getOperator() == Token::Kind::TK_LOGICALAND) {
         BoolLiteral boolFalse(fContext, -1, false);
         this->writeBoolLiteral(boolFalse);
     } else {
-        this->writeExpression(*b.fRight, kTernary_Precedence);
+        this->writeExpression(b.right(), kTernary_Precedence);
     }
     if (kTernary_Precedence >= parentPrecedence) {
         this->write(")");

@@ -934,12 +934,14 @@ EMSCRIPTEN_BINDINGS(Skia) {
     class_<SkAnimatedImage>("SkAnimatedImage")
         .smart_ptr<sk_sp<SkAnimatedImage>>("sk_sp<SkAnimatedImage>")
         .function("decodeNextFrame", &SkAnimatedImage::decodeNextFrame)
+        // Deprecated; prefer makeImageAtCurrentFrame
         .function("getCurrentFrame", &SkAnimatedImage::getCurrentFrame)
         .function("getFrameCount", &SkAnimatedImage::getFrameCount)
         .function("getRepetitionCount", &SkAnimatedImage::getRepetitionCount)
         .function("height",  optional_override([](SkAnimatedImage& self)->int32_t {
             return self.dimensions().height();
         }))
+        .function("makeImageAtCurrentFrame", &SkAnimatedImage::getCurrentFrame)
         .function("reset", &SkAnimatedImage::reset)
         .function("width",  optional_override([](SkAnimatedImage& self)->int32_t {
             return self.dimensions().width();
@@ -1000,11 +1002,12 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                      uintptr_t /* float* */ innerPtr, const SkPaint& paint) {
             self.drawDRRect(ptrToSkRRect(outerPtr), ptrToSkRRect(innerPtr), paint);
         }))
-        .function("drawAnimatedImage",  optional_override([](SkCanvas& self, sk_sp<SkAnimatedImage>& aImg,
-                                                             SkScalar x, SkScalar y)->void {
-            self.drawDrawable(aImg.get(), x, y);
-        }), allow_raw_pointers())
         .function("drawImage", select_overload<void (const sk_sp<SkImage>&, SkScalar, SkScalar, const SkPaint*)>(&SkCanvas::drawImage), allow_raw_pointers())
+        .function("drawImageAtCurrentFrame", optional_override([](SkCanvas& self, sk_sp<SkAnimatedImage> aImg,
+                                                         SkScalar left, SkScalar top, const SkPaint* paint)->void {
+            auto img = aImg->getCurrentFrame();
+            self.drawImage(img, left, top, paint);
+        }), allow_raw_pointers())
         .function("_drawImageNine", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
                                                          uintptr_t /* int* */ centerPtr, uintptr_t /* float* */ dstPtr,
                                                          const SkPaint* paint)->void {
@@ -1631,7 +1634,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }), allow_raw_pointers())
 #ifdef SK_GL
         .function("reportBackendTypeIsGPU", optional_override([](SkSurface& self) -> bool {
-            return self.getCanvas()->getGrContext() != nullptr;
+            return self.getCanvas()->recordingContext() != nullptr;
         }))
         .function("sampleCnt", optional_override([](SkSurface& self)->int {
             auto backendRT = self.getBackendRenderTarget(SkSurface::kFlushRead_BackendHandleAccess);
@@ -1745,21 +1748,13 @@ EMSCRIPTEN_BINDINGS(Skia) {
     enum_<SkColorType>("ColorType")
         .value("Alpha_8", SkColorType::kAlpha_8_SkColorType)
         .value("RGB_565", SkColorType::kRGB_565_SkColorType)
-        .value("ARGB_4444", SkColorType::kARGB_4444_SkColorType)
         .value("RGBA_8888", SkColorType::kRGBA_8888_SkColorType)
-        .value("RGB_888x", SkColorType::kRGB_888x_SkColorType)
         .value("BGRA_8888", SkColorType::kBGRA_8888_SkColorType)
         .value("RGBA_1010102", SkColorType::kRGBA_1010102_SkColorType)
         .value("RGB_101010x", SkColorType::kRGB_101010x_SkColorType)
         .value("Gray_8", SkColorType::kGray_8_SkColorType)
         .value("RGBA_F16", SkColorType::kRGBA_F16_SkColorType)
-        .value("RGBA_F32", SkColorType::kRGBA_F32_SkColorType)
-        .value("R8G8_unorm", SkColorType::kR8G8_unorm_SkColorType)
-        .value("A16_unorm", SkColorType::kA16_unorm_SkColorType)
-        .value("R16G16_unorm", SkColorType::kR16G16_unorm_SkColorType)
-        .value("A16_float", SkColorType::kA16_float_SkColorType)
-        .value("R16G16_float", SkColorType::kR16G16_float_SkColorType)
-        .value("R16G16B16A16_unorm", SkColorType::kR16G16B16A16_unorm_SkColorType);
+        .value("RGBA_F32", SkColorType::kRGBA_F32_SkColorType);
 
     enum_<SkPathFillType>("FillType")
         .value("Winding",           SkPathFillType::kWinding)
