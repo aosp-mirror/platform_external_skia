@@ -64,6 +64,10 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                     static auto s_negativeFractCaps = Factory::CannotUseFractForNegativeValues();
                     settings->fCaps = s_negativeFractCaps.get();
                 }
+                if (settingsText.consumeSuffix(" CannotUseFragCoord")) {
+                    static auto s_noFragCoordCaps = Factory::CannotUseFragCoord();
+                    settings->fCaps = s_noFragCoordCaps.get();
+                }
                 if (settingsText.consumeSuffix(" CannotUseMinAndAbsTogether")) {
                     static auto s_minAbsCaps = Factory::CannotUseMinAndAbsTogether();
                     settings->fCaps = s_minAbsCaps.get();
@@ -76,13 +80,49 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                     static auto s_emulateAbsIntCaps = Factory::EmulateAbsIntFunction();
                     settings->fCaps = s_emulateAbsIntCaps.get();
                 }
+                if (settingsText.consumeSuffix(" FragCoordsOld")) {
+                    static auto s_fragCoordsOld = Factory::FragCoordsOld();
+                    settings->fCaps = s_fragCoordsOld.get();
+                }
+                if (settingsText.consumeSuffix(" FragCoordsNew")) {
+                    static auto s_fragCoordsNew = Factory::FragCoordsNew();
+                    settings->fCaps = s_fragCoordsNew.get();
+                }
+                if (settingsText.consumeSuffix(" GeometryShaderExtensionString")) {
+                    static auto s_geometryExtCaps = Factory::GeometryShaderExtensionString();
+                    settings->fCaps = s_geometryExtCaps.get();
+                }
+                if (settingsText.consumeSuffix(" GeometryShaderSupport")) {
+                    static auto s_geometryShaderCaps = Factory::GeometryShaderSupport();
+                    settings->fCaps = s_geometryShaderCaps.get();
+                }
+                if (settingsText.consumeSuffix(" GSInvocationsExtensionString")) {
+                    static auto s_gsInvocationCaps = Factory::GSInvocationsExtensionString();
+                    settings->fCaps = s_gsInvocationCaps.get();
+                }
+                if (settingsText.consumeSuffix(" IncompleteShortIntPrecision")) {
+                    static auto s_incompleteShortIntCaps = Factory::IncompleteShortIntPrecision();
+                    settings->fCaps = s_incompleteShortIntCaps.get();
+                }
                 if (settingsText.consumeSuffix(" MustForceNegatedAtanParamToFloat")) {
                     static auto s_negativeAtanCaps = Factory::MustForceNegatedAtanParamToFloat();
                     settings->fCaps = s_negativeAtanCaps.get();
                 }
+                if (settingsText.consumeSuffix(" NoGSInvocationsSupport")) {
+                    static auto s_noGSInvocations = Factory::NoGSInvocationsSupport();
+                    settings->fCaps = s_noGSInvocations.get();
+                }
                 if (settingsText.consumeSuffix(" RemovePowWithConstantExponent")) {
                     static auto s_powCaps = Factory::RemovePowWithConstantExponent();
                     settings->fCaps = s_powCaps.get();
+                }
+                if (settingsText.consumeSuffix(" RewriteDoWhileLoops")) {
+                    static auto s_rewriteLoopCaps = Factory::RewriteDoWhileLoops();
+                    settings->fCaps = s_rewriteLoopCaps.get();
+                }
+                if (settingsText.consumeSuffix(" ShaderDerivativeExtensionString")) {
+                    static auto s_derivativeCaps = Factory::ShaderDerivativeExtensionString();
+                    settings->fCaps = s_derivativeCaps.get();
                 }
                 if (settingsText.consumeSuffix(" UnfoldShortCircuitAsTernary")) {
                     static auto s_ternaryCaps = Factory::UnfoldShortCircuitAsTernary();
@@ -99,6 +139,9 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                 if (settingsText.consumeSuffix(" Version450Core")) {
                     static auto s_version450CoreCaps = Factory::Version450Core();
                     settings->fCaps = s_version450CoreCaps.get();
+                }
+                if (settingsText.consumeSuffix(" FlipY")) {
+                    settings->fFlipY = true;
                 }
                 if (settingsText.consumeSuffix(" ForceHighPrecision")) {
                     settings->fForceHighPrecision = true;
