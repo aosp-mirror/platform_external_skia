@@ -1,8 +1,6 @@
-uniform half4 color;
+/*#pragma settings Default*/
 
-// TODO(johnstiles): the skslc standalone caps bits do not enable do-while support, so this test
-// does not actually perform as described; the `returny` function is not inlined at all. This will
-// be fixed when customizable caps-bit support is added to the golden tests.
+uniform half4 color;
 
 inline half4 returny(half4 c) {
     if (c.x > c.y) return c.xxxx;
