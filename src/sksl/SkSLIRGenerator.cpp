@@ -513,42 +513,6 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
     return std::make_unique<ModifiersDeclaration>(modifiers);
 }
 
-static void ensure_scoped_blocks(Statement* stmt) {
-    // No changes necessary if this statement isn't actually a block.
-    if (stmt->kind() != Statement::Kind::kBlock) {
-        return;
-    }
-
-    Block& block = stmt->as<Block>();
-
-    // Occasionally, IR generation can lead to Blocks containing multiple statements, but no scope.
-    // If this block is used as the statement for a while/if/for, this isn't actually possible to
-    // represent textually; a scope must be added for the generated code to match the intent. In the
-    // case of Blocks nested inside other Blocks, we add the scope to the outermost block if needed.
-    // Zero-statement blocks have similar issues--if we don't represent the Block textually somehow,
-    // we run the risk of accidentally absorbing the following statement into our loop--so we also
-    // add a scope to these.
-    for (Block* nestedBlock = &block;; ) {
-        if (nestedBlock->fIsScope) {
-            // We found an explicit scope; all is well.
-            return;
-        }
-        if (nestedBlock->fStatements.size() != 1) {
-            // We found a block with multiple (or zero) statements, but no scope? Let's add a scope
-            // to the outermost block.
-            block.fIsScope = true;
-            return;
-        }
-        if (nestedBlock->fStatements[0]->kind() != Statement::Kind::kBlock) {
-            // This block has exactly one thing inside, and it's not another block. No need to scope
-            // it.
-            return;
-        }
-        // We have to go deeper.
-        nestedBlock = &nestedBlock->fStatements[0]->as<Block>();
-    }
-}
-
 std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     SkASSERT(n.fKind == ASTNode::Kind::kIf);
     auto iter = n.begin();
@@ -561,14 +525,12 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     if (!ifTrue) {
         return nullptr;
     }
-    ensure_scoped_blocks(ifTrue.get());
     std::unique_ptr<Statement> ifFalse;
     if (iter != n.end()) {
         ifFalse = this->convertStatement(*(iter++));
         if (!ifFalse) {
             return nullptr;
         }
-        ensure_scoped_blocks(ifFalse.get());
     }
     if (test->kind() == Expression::Kind::kBoolLiteral) {
         // static boolean value, fold down to a single branch
@@ -581,8 +543,11 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
             return std::make_unique<Nop>();
         }
     }
-    return std::make_unique<IfStatement>(n.fOffset, n.getBool(),
-                                         std::move(test), std::move(ifTrue), std::move(ifFalse));
+    auto ifStmt = std::make_unique<IfStatement>(n.fOffset, n.getBool(), std::move(test),
+                                                std::move(ifTrue), std::move(ifFalse));
+    fInliner->ensureScopedBlocks(ifStmt->fIfTrue.get(), ifStmt.get());
+    fInliner->ensureScopedBlocks(ifStmt->fIfFalse.get(), ifStmt.get());
+    return std::move(ifStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
@@ -621,9 +586,11 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
     if (!statement) {
         return nullptr;
     }
-    ensure_scoped_blocks(statement.get());
-    return std::make_unique<ForStatement>(f.fOffset, std::move(initializer), std::move(test),
-                                          std::move(next), std::move(statement), fSymbolTable);
+    auto forStmt = std::make_unique<ForStatement>(f.fOffset, std::move(initializer),
+                                                  std::move(test), std::move(next),
+                                                  std::move(statement), fSymbolTable);
+    fInliner->ensureScopedBlocks(forStmt->fStatement.get(), forStmt.get());
+    return std::move(forStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
@@ -642,8 +609,10 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     if (!statement) {
         return nullptr;
     }
-    ensure_scoped_blocks(statement.get());
-    return std::make_unique<WhileStatement>(w.fOffset, std::move(test), std::move(statement));
+    auto whileStmt = std::make_unique<WhileStatement>(w.fOffset, std::move(test),
+                                                      std::move(statement));
+    fInliner->ensureScopedBlocks(whileStmt->fStatement.get(), whileStmt.get());
+    return std::move(whileStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
@@ -654,7 +623,6 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (!statement) {
         return nullptr;
     }
-    ensure_scoped_blocks(statement.get());
     std::unique_ptr<Expression> test;
     {
         AutoDisableInline disableInline(this);
@@ -663,7 +631,9 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (!test) {
         return nullptr;
     }
-    return std::make_unique<DoStatement>(d.fOffset, std::move(statement), std::move(test));
+    auto doStmt = std::make_unique<DoStatement>(d.fOffset, std::move(statement), std::move(test));
+    fInliner->ensureScopedBlocks(doStmt->fStatement.get(), doStmt.get());
+    return std::move(doStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
@@ -767,7 +737,7 @@ std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
 std::unique_ptr<Statement> IRGenerator::convertBreak(const ASTNode& b) {
     SkASSERT(b.fKind == ASTNode::Kind::kBreak);
     if (fLoopLevel > 0 || fSwitchLevel > 0) {
-        return std::unique_ptr<Statement>(new BreakStatement(b.fOffset));
+        return std::make_unique<BreakStatement>(b.fOffset);
     } else {
         fErrors.error(b.fOffset, "break statement must be inside a loop or switch");
         return nullptr;
@@ -777,7 +747,7 @@ std::unique_ptr<Statement> IRGenerator::convertBreak(const ASTNode& b) {
 std::unique_ptr<Statement> IRGenerator::convertContinue(const ASTNode& c) {
     SkASSERT(c.fKind == ASTNode::Kind::kContinue);
     if (fLoopLevel > 0) {
-        return std::unique_ptr<Statement>(new ContinueStatement(c.fOffset));
+        return std::make_unique<ContinueStatement>(c.fOffset);
     } else {
         fErrors.error(c.fOffset, "continue statement must be inside a loop");
         return nullptr;
@@ -786,7 +756,7 @@ std::unique_ptr<Statement> IRGenerator::convertContinue(const ASTNode& c) {
 
 std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDiscard);
-    return std::unique_ptr<Statement>(new DiscardStatement(d.fOffset));
+    return std::make_unique<DiscardStatement>(d.fOffset);
 }
 
 std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<Block> main) {
@@ -1239,10 +1209,10 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
 bool IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
     switch (value.kind()) {
         case Expression::Kind::kIntLiteral:
-            *out = static_cast<const IntLiteral&>(value).fValue;
+            *out = value.as<IntLiteral>().fValue;
             return true;
         case Expression::Kind::kVariableReference: {
-            const Variable& var = static_cast<const VariableReference&>(value).fVariable;
+            const Variable& var = value.as<VariableReference>().fVariable;
             return (var.fModifiers.fFlags & Modifiers::kConst_Flag) &&
                    var.fInitialValue &&
                    this->getConstantInt(*var.fInitialValue, out);
@@ -1958,13 +1928,13 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
     const Type* rightType;
     const Type* resultType;
     const Type* rawLeftType;
-    if (left->kind() == Expression::Kind::kIntLiteral && right->type().isInteger()) {
+    if (left->is<IntLiteral>() && right->type().isInteger()) {
         rawLeftType = &right->type();
     } else {
         rawLeftType = &left->type();
     }
     const Type* rawRightType;
-    if (right->kind() == Expression::Kind::kIntLiteral && left->type().isInteger()) {
+    if (right->is<IntLiteral>() && left->type().isInteger()) {
         rawRightType = &left->type();
     } else {
         rawRightType = &right->type();
@@ -2062,7 +2032,25 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
     if (found != fIntrinsics->end() && !found->second.fAlreadyIncluded) {
         found->second.fAlreadyIncluded = true;
         FunctionDefinition& original = found->second.fIntrinsic->as<FunctionDefinition>();
-        for (const FunctionDeclaration* f : original.fReferencedIntrinsics) {
+
+        // Sort the referenced intrinsics into a consistent order; otherwise our output will become
+        // non-deterministic.
+        std::vector<const FunctionDeclaration*> intrinsics(original.fReferencedIntrinsics.begin(),
+                                                           original.fReferencedIntrinsics.end());
+        std::sort(intrinsics.begin(), intrinsics.end(),
+                  [](const FunctionDeclaration* a, const FunctionDeclaration* b) {
+                      if (a->fBuiltin != b->fBuiltin) {
+                          return a->fBuiltin < b->fBuiltin;
+                      }
+                      if (a->fOffset != b->fOffset) {
+                          return a->fOffset < b->fOffset;
+                      }
+                      if (a->fName != b->fName) {
+                          return a->fName < b->fName;
+                      }
+                      return a->description() < b->description();
+                  });
+        for (const FunctionDeclaration* f : intrinsics) {
             this->copyIntrinsicIfNeeded(*f);
         }
         fProgramElements->push_back(original.clone());
@@ -2240,28 +2228,24 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
     if (type == argType) {
         return std::move(args[0]);
     }
-    if (type.isFloat() && args.size() == 1 && args[0]->kind() == Expression::Kind::kFloatLiteral) {
+    if (type.isFloat() && args.size() == 1 && args[0]->is<FloatLiteral>()) {
         double value = args[0]->as<FloatLiteral>().fValue;
-        return std::unique_ptr<Expression>(new FloatLiteral(offset, value, &type));
+        return std::make_unique<FloatLiteral>(offset, value, &type);
     }
-    if (type.isFloat() && args.size() == 1 && args[0]->kind() == Expression::Kind::kIntLiteral) {
+    if (type.isFloat() && args.size() == 1 && args[0]->is<IntLiteral>()) {
         int64_t value = args[0]->as<IntLiteral>().fValue;
-        return std::unique_ptr<Expression>(new FloatLiteral(offset, (double) value, &type));
+        return std::make_unique<FloatLiteral>(offset, (double)value, &type);
     }
-    if (args[0]->kind() == Expression::Kind::kIntLiteral && (type == *fContext.fInt_Type ||
-        type == *fContext.fUInt_Type)) {
-        return std::unique_ptr<Expression>(new IntLiteral(offset,
-                                                          args[0]->as<IntLiteral>().fValue,
-                                                          &type));
+    if (args[0]->is<IntLiteral>() && (type == *fContext.fInt_Type ||
+                                      type == *fContext.fUInt_Type)) {
+        return std::make_unique<IntLiteral>(offset, args[0]->as<IntLiteral>().fValue, &type);
     }
     if (argType == *fContext.fBool_Type) {
         std::unique_ptr<IntLiteral> zero(new IntLiteral(fContext, offset, 0));
         std::unique_ptr<IntLiteral> one(new IntLiteral(fContext, offset, 1));
-        return std::unique_ptr<Expression>(
-                                     new TernaryExpression(offset, std::move(args[0]),
-                                                           this->coerce(std::move(one), type),
-                                                           this->coerce(std::move(zero),
-                                                                        type)));
+        return std::make_unique<TernaryExpression>(offset, std::move(args[0]),
+                                                   this->coerce(std::move(one), type),
+                                                   this->coerce(std::move(zero), type));
     }
     if (!argType.isNumber()) {
         fErrors.error(offset, "invalid argument to '" + type.displayName() +
@@ -2269,7 +2253,7 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
                               argType.displayName() + "')");
         return nullptr;
     }
-    return std::unique_ptr<Expression>(new Constructor(offset, &type, std::move(args)));
+    return std::make_unique<Constructor>(offset, &type, std::move(args));
 }
 
 static int component_count(const Type& type) {
@@ -2622,18 +2606,24 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
         switch (fields[i]) {
             case '0':
                 if (constantZeroIdx == -1) {
-                    // Synthesize a 'zero' argument at the end of the constructor.
-                    auto literal = std::make_unique<IntLiteral>(fContext, offset, /*value=*/0);
-                    constructorArgs.push_back(this->coerce(std::move(literal), *numberType));
+                    // Synthesize a 'type(0)' argument at the end of the constructor.
+                    auto zero = std::make_unique<Constructor>(
+                            offset, numberType, std::vector<std::unique_ptr<Expression>>{});
+                    zero->fArguments.push_back(std::make_unique<IntLiteral>(fContext, offset,
+                                                                            /*fValue=*/0));
+                    constructorArgs.push_back(std::move(zero));
                     constantZeroIdx = constantFieldIdx++;
                 }
                 swizzleComponents.push_back(constantZeroIdx);
                 break;
             case '1':
                 if (constantOneIdx == -1) {
-                    // Synthesize a 'one' argument at the end of the constructor.
-                    auto literal = std::make_unique<IntLiteral>(fContext, offset, /*value=*/1);
-                    constructorArgs.push_back(this->coerce(std::move(literal), *numberType));
+                    // Synthesize a 'type(1)' argument at the end of the constructor.
+                    auto one = std::make_unique<Constructor>(
+                            offset, numberType, std::vector<std::unique_ptr<Expression>>{});
+                    one->fArguments.push_back(std::make_unique<IntLiteral>(fContext, offset,
+                                                                           /*fValue=*/1));
+                    constructorArgs.push_back(std::move(one));
                     constantOneIdx = constantFieldIdx++;
                 }
                 swizzleComponents.push_back(constantOneIdx);

@@ -61,7 +61,7 @@ bool GrD3DTextureResource::InitTextureResourceInfo(GrD3DGpu* gpu, const D3D12_RE
         return false;
     }
 
-    info->fResource.Attach(resource);
+    info->fResource.reset(resource);
     info->fResourceState = initialState;
     info->fFormat = desc.Format;
     info->fLevelCount = desc.MipLevels;
@@ -112,6 +112,7 @@ std::pair<GrD3DTextureResourceInfo, sk_sp<GrD3DResourceState>> GrD3DTextureResou
 GrD3DTextureResource::~GrD3DTextureResource() {
     // Should have been reset() before
     SkASSERT(!fResource);
+    SkASSERT(!fInfo.fResource);
 }
 
 void GrD3DTextureResource::prepareForPresent(GrD3DGpu* gpu) {
@@ -122,8 +123,9 @@ void GrD3DTextureResource::releaseResource(GrD3DGpu* gpu) {
     // TODO: do we need to migrate resource state if we change queues?
     if (fResource) {
         fResource->removeOwningTexture();
-        fResource.reset(nullptr);
+        fResource.reset();
     }
+    fInfo.fResource.reset();
 }
 
 void GrD3DTextureResource::setResourceRelease(sk_sp<GrRefCntedCallback> releaseHelper) {
@@ -134,5 +136,5 @@ void GrD3DTextureResource::setResourceRelease(sk_sp<GrRefCntedCallback> releaseH
 
 void GrD3DTextureResource::Resource::freeGPUData() const {
     this->invokeReleaseProc();
-    fResource.Reset();  // Release our ref to the resource
+    fResource.reset();  // Release our ref to the resource
 }

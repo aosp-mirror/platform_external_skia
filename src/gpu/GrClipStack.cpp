@@ -125,6 +125,15 @@ static bool shape_contains_rect(
     if (!mixedAAMode && aToDevice == bToDevice) {
         // A and B are in the same coordinate space, so don't bother mapping
         return a.conservativeContains(b);
+    } else if (bToDevice.isIdentity() && aToDevice.isScaleTranslate()) {
+        // Optimize the common case of draws (B, with identity matrix) and axis-aligned shapes,
+        // instead of checking the four corners separately.
+        SkRect bInA = b;
+        if (mixedAAMode) {
+            bInA.outset(0.5f, 0.5f);
+        }
+        SkAssertResult(deviceToA.mapRect(&bInA));
+        return a.conservativeContains(bInA);
     }
 
     // Test each corner for contains; since a is convex, if all 4 corners of b's bounds are
@@ -1326,10 +1335,11 @@ GrClip::Effect GrClipStack::apply(GrRecordingContext* context, GrRenderTargetCon
     bool scissorIsNeeded = SkToBool(cs.shader());
 
     int remainingAnalyticFPs = kMaxAnalyticFPs;
-    if (rtc->numSamples() > 1 || aa == GrAAType::kMSAA || hasUserStencilSettings) {
-        // Disable analytic clips when we have MSAA. In MSAA we never conflate coverage and opacity.
+    if (hasUserStencilSettings) {
+        // Disable analytic clips when there are user stencil settings to ensure the clip is
+        // respected in the stencil buffer.
         remainingAnalyticFPs = 0;
-        // We disable MSAA when avoiding stencil so shouldn't get here.
+        // If we have user stencil settings, we shouldn't be avoiding the stencil buffer anyways.
         SkASSERT(!context->priv().caps()->avoidStencilBuffers());
     }
 
