@@ -542,6 +542,7 @@ cc_library_static {
           "src/gpu/GrAuditTrail.cpp",
           "src/gpu/GrBackendSemaphore.cpp",
           "src/gpu/GrBackendSurface.cpp",
+          "src/gpu/GrBackendSurfaceMutableState.cpp",
           "src/gpu/GrBackendTextureImageGenerator.cpp",
           "src/gpu/GrBitmapTextureMaker.cpp",
           "src/gpu/GrBlockAllocator.cpp",
