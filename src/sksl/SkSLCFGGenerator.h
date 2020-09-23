@@ -26,12 +26,17 @@ struct BasicBlock {
             kExpression_Kind
         };
 
-        Node(Kind kind, bool constantPropagation, std::unique_ptr<Expression>* expression,
-             std::unique_ptr<Statement>* statement)
-        : fKind(kind)
-        , fConstantPropagation(constantPropagation)
-        , fExpression(expression)
-        , fStatement(statement) {}
+        Node(std::unique_ptr<Statement>* statement)
+                : fKind(kStatement_Kind)
+                , fConstantPropagation(false)
+                , fExpression(nullptr)
+                , fStatement(statement) {}
+
+        Node(std::unique_ptr<Expression>* expression, bool constantPropagation)
+                : fKind(kExpression_Kind)
+                , fConstantPropagation(constantPropagation)
+                , fExpression(expression)
+                , fStatement(nullptr) {}
 
         std::unique_ptr<Expression>* expression() const {
             SkASSERT(fKind == kExpression_Kind);
@@ -81,6 +86,14 @@ struct BasicBlock {
         std::unique_ptr<Statement>* fStatement;
     };
 
+    static Node MakeStatement(std::unique_ptr<Statement>* stmt) {
+        return Node{stmt};
+    }
+
+    static Node MakeExpression(std::unique_ptr<Expression>* expr, bool constantPropagation) {
+        return Node{expr, constantPropagation};
+    }
+
     /**
      * Attempts to remove the expression (and its subexpressions) pointed to by the iterator. If the
      * expression can be cleanly removed, returns true and updates the iterator to point to the
@@ -112,6 +125,10 @@ struct BasicBlock {
     bool tryInsertExpression(std::vector<BasicBlock::Node>::iterator* iter,
                              std::unique_ptr<Expression>* expr);
 
+#ifdef SK_DEBUG
+    void dump() const;
+#endif
+
     std::vector<Node> fNodes;
     std::set<BlockId> fEntrances;
     std::set<BlockId> fExits;
@@ -124,7 +141,9 @@ struct CFG {
     BlockId fExit;
     std::vector<BasicBlock> fBlocks;
 
-    void dump();
+#ifdef SK_DEBUG
+    void dump() const;
+#endif
 
 private:
     BlockId fCurrent;
@@ -143,6 +162,9 @@ private:
     // just check to see if it has any entrances. This does require a bit of care in the order in
     // which we set the CFG up.
     void addExit(BlockId from, BlockId to);
+
+    // Convenience method to return the CFG's current block.
+    BasicBlock& currentBlock() { return fBlocks[fCurrent]; }
 
     friend class CFGGenerator;
 };
