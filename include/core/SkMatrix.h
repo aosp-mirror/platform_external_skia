@@ -97,6 +97,11 @@ public:
         m.setRotate(deg);
         return m;
     }
+    static SkMatrix SK_WARN_UNUSED_RESULT RotateDeg(SkScalar deg, SkPoint pt) {
+        SkMatrix m;
+        m.setRotate(deg, pt.x(), pt.y());
+        return m;
+    }
     static SkMatrix SK_WARN_UNUSED_RESULT RotateRad(SkScalar rad) {
         return RotateDeg(SkRadiansToDegrees(rad));
     }
@@ -305,7 +310,7 @@ public:
     */
     bool preservesRightAngles(SkScalar tol = SK_ScalarNearlyZero) const;
 
-    /** SkMatrix organizes its values in row order. These members correspond to
+    /** SkMatrix organizes its values in row-major order. These members correspond to
         each value in SkMatrix.
     */
     static constexpr int kMScaleX = 0; //!< horizontal scale factor
@@ -318,7 +323,7 @@ public:
     static constexpr int kMPersp1 = 7; //!< input y perspective factor
     static constexpr int kMPersp2 = 8; //!< perspective bias
 
-    /** Affine arrays are in column major order to match the matrix used by
+    /** Affine arrays are in column-major order to match the matrix used by
         PDF and XPS.
     */
     static constexpr int kAScaleX = 0; //!< horizontal scale factor
@@ -350,6 +355,19 @@ public:
     SkScalar get(int index) const {
         SkASSERT((unsigned)index < 9);
         return fMat[index];
+    }
+
+    /** Returns one matrix value from a particular row/column. Asserts if index is out
+        of range and SK_DEBUG is defined.
+
+        @param r  matrix row to fetch
+        @param c  matrix column to fetch
+        @return   value at the given matrix position
+    */
+    SkScalar rc(int r, int c) const {
+        SkASSERT(r >= 0 && r <= 2);
+        SkASSERT(c >= 0 && c <= 2);
+        return fMat[r*3 + c];
     }
 
     /** Returns scale factor multiplied by x-axis input, contributing to x-axis output.

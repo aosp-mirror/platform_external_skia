@@ -125,7 +125,6 @@ IRGenerator::IRGenerator(const Context* context, Inliner* inliner,
         : fContext(*context)
         , fInliner(inliner)
         , fCurrentFunction(nullptr)
-        , fRootSymbolTable(symbolTable)
         , fSymbolTable(symbolTable)
         , fLoopLevel(0)
         , fSwitchLevel(0)
@@ -164,10 +163,11 @@ static void fill_caps(const SkSL::ShaderCapsClass& caps,
 }
 
 void IRGenerator::start(const Program::Settings* settings,
+                        std::shared_ptr<SymbolTable> baseSymbolTable,
                         std::vector<std::unique_ptr<ProgramElement>>* inherited,
                         bool isBuiltinCode) {
     fSettings = settings;
-    fInherited = inherited;
+    fSymbolTable = std::move(baseSymbolTable);
     fIsBuiltinCode = isBuiltinCode;
     fCapsMap.clear();
     if (settings->fCaps) {
@@ -195,9 +195,7 @@ void IRGenerator::start(const Program::Settings* settings,
         }
     }
     SkASSERT(fIntrinsics);
-    for (auto& pair : *fIntrinsics) {
-        pair.second.fAlreadyIncluded = false;
-    }
+    fIntrinsics->resetAlreadyIncluded();
 }
 
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragment name) {
@@ -1209,10 +1207,10 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
 bool IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
     switch (value.kind()) {
         case Expression::Kind::kIntLiteral:
-            *out = static_cast<const IntLiteral&>(value).fValue;
+            *out = value.as<IntLiteral>().fValue;
             return true;
         case Expression::Kind::kVariableReference: {
-            const Variable& var = static_cast<const VariableReference&>(value).fVariable;
+            const Variable& var = value.as<VariableReference>().fVariable;
             return (var.fModifiers.fFlags & Modifiers::kConst_Flag) &&
                    var.fInitialValue &&
                    this->getConstantInt(*var.fInitialValue, out);
@@ -1928,13 +1926,13 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
     const Type* rightType;
     const Type* resultType;
     const Type* rawLeftType;
-    if (left->kind() == Expression::Kind::kIntLiteral && right->type().isInteger()) {
+    if (left->is<IntLiteral>() && right->type().isInteger()) {
         rawLeftType = &right->type();
     } else {
         rawLeftType = &left->type();
     }
     const Type* rawRightType;
-    if (right->kind() == Expression::Kind::kIntLiteral && left->type().isInteger()) {
+    if (right->is<IntLiteral>() && left->type().isInteger()) {
         rawRightType = &left->type();
     } else {
         rawRightType = &right->type();
@@ -2028,11 +2026,27 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
 }
 
 void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
-    auto found = fIntrinsics->find(function.description());
-    if (found != fIntrinsics->end() && !found->second.fAlreadyIncluded) {
-        found->second.fAlreadyIncluded = true;
-        FunctionDefinition& original = found->second.fIntrinsic->as<FunctionDefinition>();
-        for (const FunctionDeclaration* f : original.fReferencedIntrinsics) {
+    if (auto found = fIntrinsics->findAndInclude(function.description())) {
+        const FunctionDefinition& original = found->as<FunctionDefinition>();
+
+        // Sort the referenced intrinsics into a consistent order; otherwise our output will become
+        // non-deterministic.
+        std::vector<const FunctionDeclaration*> intrinsics(original.fReferencedIntrinsics.begin(),
+                                                           original.fReferencedIntrinsics.end());
+        std::sort(intrinsics.begin(), intrinsics.end(),
+                  [](const FunctionDeclaration* a, const FunctionDeclaration* b) {
+                      if (a->fBuiltin != b->fBuiltin) {
+                          return a->fBuiltin < b->fBuiltin;
+                      }
+                      if (a->fOffset != b->fOffset) {
+                          return a->fOffset < b->fOffset;
+                      }
+                      if (a->fName != b->fName) {
+                          return a->fName < b->fName;
+                      }
+                      return a->description() < b->description();
+                  });
+        for (const FunctionDeclaration* f : intrinsics) {
             this->copyIntrinsicIfNeeded(*f);
         }
         fProgramElements->push_back(original.clone());
@@ -2085,11 +2099,13 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         if (!arguments[i]) {
             return nullptr;
         }
-        if (arguments[i] && (function.fParameters[i]->fModifiers.fFlags & Modifiers::kOut_Flag)) {
-            this->setRefKind(*arguments[i],
-                             function.fParameters[i]->fModifiers.fFlags & Modifiers::kIn_Flag ?
-                             VariableReference::kReadWrite_RefKind :
-                             VariableReference::kPointer_RefKind);
+        const Modifiers& paramModifiers = function.fParameters[i]->fModifiers;
+        if (paramModifiers.fFlags & Modifiers::kOut_Flag) {
+            if (!this->setRefKind(*arguments[i], paramModifiers.fFlags & Modifiers::kIn_Flag
+                                                         ? VariableReference::kReadWrite_RefKind
+                                                         : VariableReference::kPointer_RefKind)) {
+                return nullptr;
+            }
         }
     }
 
@@ -2210,28 +2226,24 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
     if (type == argType) {
         return std::move(args[0]);
     }
-    if (type.isFloat() && args.size() == 1 && args[0]->kind() == Expression::Kind::kFloatLiteral) {
+    if (type.isFloat() && args.size() == 1 && args[0]->is<FloatLiteral>()) {
         double value = args[0]->as<FloatLiteral>().fValue;
-        return std::unique_ptr<Expression>(new FloatLiteral(offset, value, &type));
+        return std::make_unique<FloatLiteral>(offset, value, &type);
     }
-    if (type.isFloat() && args.size() == 1 && args[0]->kind() == Expression::Kind::kIntLiteral) {
+    if (type.isFloat() && args.size() == 1 && args[0]->is<IntLiteral>()) {
         int64_t value = args[0]->as<IntLiteral>().fValue;
-        return std::unique_ptr<Expression>(new FloatLiteral(offset, (double) value, &type));
+        return std::make_unique<FloatLiteral>(offset, (double)value, &type);
     }
-    if (args[0]->kind() == Expression::Kind::kIntLiteral && (type == *fContext.fInt_Type ||
-        type == *fContext.fUInt_Type)) {
-        return std::unique_ptr<Expression>(new IntLiteral(offset,
-                                                          args[0]->as<IntLiteral>().fValue,
-                                                          &type));
+    if (args[0]->is<IntLiteral>() && (type == *fContext.fInt_Type ||
+                                      type == *fContext.fUInt_Type)) {
+        return std::make_unique<IntLiteral>(offset, args[0]->as<IntLiteral>().fValue, &type);
     }
     if (argType == *fContext.fBool_Type) {
         std::unique_ptr<IntLiteral> zero(new IntLiteral(fContext, offset, 0));
         std::unique_ptr<IntLiteral> one(new IntLiteral(fContext, offset, 1));
-        return std::unique_ptr<Expression>(
-                                     new TernaryExpression(offset, std::move(args[0]),
-                                                           this->coerce(std::move(one), type),
-                                                           this->coerce(std::move(zero),
-                                                                        type)));
+        return std::make_unique<TernaryExpression>(offset, std::move(args[0]),
+                                                   this->coerce(std::move(one), type),
+                                                   this->coerce(std::move(zero), type));
     }
     if (!argType.isNumber()) {
         fErrors.error(offset, "invalid argument to '" + type.displayName() +
@@ -2239,7 +2251,7 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
                               argType.displayName() + "')");
         return nullptr;
     }
-    return std::unique_ptr<Expression>(new Constructor(offset, &type, std::move(args)));
+    return std::make_unique<Constructor>(offset, &type, std::move(args));
 }
 
 static int component_count(const Type& type) {
@@ -2349,23 +2361,23 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                 return nullptr;
             }
             return base;
+
         case Token::Kind::TK_MINUS:
-            if (base->kind() == Expression::Kind::kIntLiteral) {
-                return std::unique_ptr<Expression>(new IntLiteral(fContext, base->fOffset,
-                                                                  -base->as<IntLiteral>().fValue));
+            if (base->is<IntLiteral>()) {
+                return std::make_unique<IntLiteral>(fContext, base->fOffset,
+                                                    -base->as<IntLiteral>().fValue);
             }
-            if (base->kind() == Expression::Kind::kFloatLiteral) {
-                double value = -base->as<FloatLiteral>().fValue;
-                return std::unique_ptr<Expression>(new FloatLiteral(fContext, base->fOffset,
-                                                                    value));
+            if (base->is<FloatLiteral>()) {
+                return std::make_unique<FloatLiteral>(fContext, base->fOffset,
+                                                      -base->as<FloatLiteral>().fValue);
             }
             if (!baseType.isNumber() && baseType.typeKind() != Type::TypeKind::kVector) {
                 fErrors.error(expression.fOffset,
                               "'-' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
-            return std::unique_ptr<Expression>(new PrefixExpression(Token::Kind::TK_MINUS,
-                                                                    std::move(base)));
+            return std::make_unique<PrefixExpression>(Token::Kind::TK_MINUS, std::move(base));
+
         case Token::Kind::TK_PLUSPLUS:
             if (!baseType.isNumber()) {
                 fErrors.error(expression.fOffset,
@@ -2373,7 +2385,9 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                               "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
-            this->setRefKind(*base, VariableReference::kReadWrite_RefKind);
+            if (!this->setRefKind(*base, VariableReference::kReadWrite_RefKind)) {
+                return nullptr;
+            }
             break;
         case Token::Kind::TK_MINUSMINUS:
             if (!baseType.isNumber()) {
@@ -2382,7 +2396,9 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                               "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
-            this->setRefKind(*base, VariableReference::kReadWrite_RefKind);
+            if (!this->setRefKind(*base, VariableReference::kReadWrite_RefKind)) {
+                return nullptr;
+            }
             break;
         case Token::Kind::TK_LOGICALNOT:
             if (baseType != *fContext.fBool_Type) {
@@ -2392,8 +2408,8 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                 return nullptr;
             }
             if (base->kind() == Expression::Kind::kBoolLiteral) {
-                return std::unique_ptr<Expression>(
-                        new BoolLiteral(fContext, base->fOffset, !base->as<BoolLiteral>().fValue));
+                return std::make_unique<BoolLiteral>(fContext, base->fOffset,
+                                                     !base->as<BoolLiteral>().fValue);
             }
             break;
         case Token::Kind::TK_BITWISENOT:
@@ -2407,8 +2423,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
         default:
             ABORT("unsupported prefix operator\n");
     }
-    return std::unique_ptr<Expression>(new PrefixExpression(expression.getToken().fKind,
-                                                            std::move(base)));
+    return std::make_unique<PrefixExpression>(expression.getToken().fKind, std::move(base));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertIndex(std::unique_ptr<Expression> base,
@@ -2592,18 +2607,24 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
         switch (fields[i]) {
             case '0':
                 if (constantZeroIdx == -1) {
-                    // Synthesize a 'zero' argument at the end of the constructor.
-                    auto literal = std::make_unique<IntLiteral>(fContext, offset, /*value=*/0);
-                    constructorArgs.push_back(this->coerce(std::move(literal), *numberType));
+                    // Synthesize a 'type(0)' argument at the end of the constructor.
+                    auto zero = std::make_unique<Constructor>(
+                            offset, numberType, std::vector<std::unique_ptr<Expression>>{});
+                    zero->fArguments.push_back(std::make_unique<IntLiteral>(fContext, offset,
+                                                                            /*fValue=*/0));
+                    constructorArgs.push_back(std::move(zero));
                     constantZeroIdx = constantFieldIdx++;
                 }
                 swizzleComponents.push_back(constantZeroIdx);
                 break;
             case '1':
                 if (constantOneIdx == -1) {
-                    // Synthesize a 'one' argument at the end of the constructor.
-                    auto literal = std::make_unique<IntLiteral>(fContext, offset, /*value=*/1);
-                    constructorArgs.push_back(this->coerce(std::move(literal), *numberType));
+                    // Synthesize a 'type(1)' argument at the end of the constructor.
+                    auto one = std::make_unique<Constructor>(
+                            offset, numberType, std::vector<std::unique_ptr<Expression>>{});
+                    one->fArguments.push_back(std::make_unique<IntLiteral>(fContext, offset,
+                                                                           /*fValue=*/1));
+                    constructorArgs.push_back(std::move(one));
                     constantOneIdx = constantFieldIdx++;
                 }
                 swizzleComponents.push_back(constantOneIdx);
@@ -2647,17 +2668,12 @@ std::unique_ptr<Expression> IRGenerator::getCap(int offset, String name) {
 std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type& type,
                                                           StringFragment field) {
     // Find the Enum element that this type refers to (if any)
-    auto findEnum = [=](std::vector<std::unique_ptr<ProgramElement>>& elements) -> ProgramElement* {
-        for (const auto& e : elements) {
-            if (e->is<Enum>() && type.name() == e->as<Enum>().fTypeName) {
-                return e.get();
-            }
+    const ProgramElement* enumElement = nullptr;
+    for (const auto& e : *fProgramElements) {
+        if (e->is<Enum>() && type.name() == e->as<Enum>().fTypeName) {
+            enumElement = e.get();
+            break;
         }
-        return nullptr;
-    };
-    const ProgramElement* enumElement = findEnum(*fProgramElements);
-    if (fInherited && !enumElement) {
-        enumElement = findEnum(*fInherited);
     }
 
     if (enumElement) {
@@ -2679,11 +2695,8 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
         return result;
     } else {
         // No Enum element? Check the intrinsics, clone it into the program, try again.
-        auto found = fIntrinsics->find(type.fName);
-        if (found != fIntrinsics->end()) {
-            SkASSERT(!found->second.fAlreadyIncluded);
-            found->second.fAlreadyIncluded = true;
-            fProgramElements->push_back(found->second.fIntrinsic->clone());
+        if (auto found = fIntrinsics->findAndInclude(type.fName)) {
+            fProgramElements->push_back(found->clone());
             return this->convertTypeField(offset, type, field);
         }
         fErrors.error(offset,
@@ -2776,9 +2789,10 @@ std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode&
                       "' cannot operate on '" + baseType.displayName() + "'");
         return nullptr;
     }
-    this->setRefKind(*base, VariableReference::kReadWrite_RefKind);
-    return std::unique_ptr<Expression>(new PostfixExpression(std::move(base),
-                                                             expression.getToken().fKind));
+    if (!this->setRefKind(*base, VariableReference::kReadWrite_RefKind)) {
+        return nullptr;
+    }
+    return std::make_unique<PostfixExpression>(std::move(base), expression.getToken().fKind);
 }
 
 void IRGenerator::checkValid(const Expression& expr) {
@@ -2861,7 +2875,6 @@ void IRGenerator::convertProgram(Program::Kind kind,
     if (fErrors.errorCount()) {
         return;
     }
-    this->pushSymbolTable(); // this is popped by Compiler upon completion
     SkASSERT(fFile);
     for (const auto& decl : fFile->root()) {
         switch (decl.fKind) {
