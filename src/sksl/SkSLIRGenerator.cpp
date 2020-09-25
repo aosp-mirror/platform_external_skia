@@ -125,7 +125,6 @@ IRGenerator::IRGenerator(const Context* context, Inliner* inliner,
         : fContext(*context)
         , fInliner(inliner)
         , fCurrentFunction(nullptr)
-        , fRootSymbolTable(symbolTable)
         , fSymbolTable(symbolTable)
         , fLoopLevel(0)
         , fSwitchLevel(0)
@@ -164,9 +163,11 @@ static void fill_caps(const SkSL::ShaderCapsClass& caps,
 }
 
 void IRGenerator::start(const Program::Settings* settings,
+                        std::shared_ptr<SymbolTable> baseSymbolTable,
                         std::vector<std::unique_ptr<ProgramElement>>* inherited,
                         bool isBuiltinCode) {
     fSettings = settings;
+    fSymbolTable = std::move(baseSymbolTable);
     fIsBuiltinCode = isBuiltinCode;
     fCapsMap.clear();
     if (settings->fCaps) {
@@ -2098,11 +2099,13 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         if (!arguments[i]) {
             return nullptr;
         }
-        if (arguments[i] && (function.fParameters[i]->fModifiers.fFlags & Modifiers::kOut_Flag)) {
-            this->setRefKind(*arguments[i],
-                             function.fParameters[i]->fModifiers.fFlags & Modifiers::kIn_Flag ?
-                             VariableReference::kReadWrite_RefKind :
-                             VariableReference::kPointer_RefKind);
+        const Modifiers& paramModifiers = function.fParameters[i]->fModifiers;
+        if (paramModifiers.fFlags & Modifiers::kOut_Flag) {
+            if (!this->setRefKind(*arguments[i], paramModifiers.fFlags & Modifiers::kIn_Flag
+                                                         ? VariableReference::kReadWrite_RefKind
+                                                         : VariableReference::kPointer_RefKind)) {
+                return nullptr;
+            }
         }
     }
 
@@ -2358,23 +2361,23 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                 return nullptr;
             }
             return base;
+
         case Token::Kind::TK_MINUS:
-            if (base->kind() == Expression::Kind::kIntLiteral) {
-                return std::unique_ptr<Expression>(new IntLiteral(fContext, base->fOffset,
-                                                                  -base->as<IntLiteral>().fValue));
+            if (base->is<IntLiteral>()) {
+                return std::make_unique<IntLiteral>(fContext, base->fOffset,
+                                                    -base->as<IntLiteral>().fValue);
             }
-            if (base->kind() == Expression::Kind::kFloatLiteral) {
-                double value = -base->as<FloatLiteral>().fValue;
-                return std::unique_ptr<Expression>(new FloatLiteral(fContext, base->fOffset,
-                                                                    value));
+            if (base->is<FloatLiteral>()) {
+                return std::make_unique<FloatLiteral>(fContext, base->fOffset,
+                                                      -base->as<FloatLiteral>().fValue);
             }
             if (!baseType.isNumber() && baseType.typeKind() != Type::TypeKind::kVector) {
                 fErrors.error(expression.fOffset,
                               "'-' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
-            return std::unique_ptr<Expression>(new PrefixExpression(Token::Kind::TK_MINUS,
-                                                                    std::move(base)));
+            return std::make_unique<PrefixExpression>(Token::Kind::TK_MINUS, std::move(base));
+
         case Token::Kind::TK_PLUSPLUS:
             if (!baseType.isNumber()) {
                 fErrors.error(expression.fOffset,
@@ -2382,7 +2385,9 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                               "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
-            this->setRefKind(*base, VariableReference::kReadWrite_RefKind);
+            if (!this->setRefKind(*base, VariableReference::kReadWrite_RefKind)) {
+                return nullptr;
+            }
             break;
         case Token::Kind::TK_MINUSMINUS:
             if (!baseType.isNumber()) {
@@ -2391,7 +2396,9 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                               "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
-            this->setRefKind(*base, VariableReference::kReadWrite_RefKind);
+            if (!this->setRefKind(*base, VariableReference::kReadWrite_RefKind)) {
+                return nullptr;
+            }
             break;
         case Token::Kind::TK_LOGICALNOT:
             if (baseType != *fContext.fBool_Type) {
@@ -2401,8 +2408,8 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
                 return nullptr;
             }
             if (base->kind() == Expression::Kind::kBoolLiteral) {
-                return std::unique_ptr<Expression>(
-                        new BoolLiteral(fContext, base->fOffset, !base->as<BoolLiteral>().fValue));
+                return std::make_unique<BoolLiteral>(fContext, base->fOffset,
+                                                     !base->as<BoolLiteral>().fValue);
             }
             break;
         case Token::Kind::TK_BITWISENOT:
@@ -2416,8 +2423,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
         default:
             ABORT("unsupported prefix operator\n");
     }
-    return std::unique_ptr<Expression>(new PrefixExpression(expression.getToken().fKind,
-                                                            std::move(base)));
+    return std::make_unique<PrefixExpression>(expression.getToken().fKind, std::move(base));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertIndex(std::unique_ptr<Expression> base,
@@ -2783,9 +2789,10 @@ std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode&
                       "' cannot operate on '" + baseType.displayName() + "'");
         return nullptr;
     }
-    this->setRefKind(*base, VariableReference::kReadWrite_RefKind);
-    return std::unique_ptr<Expression>(new PostfixExpression(std::move(base),
-                                                             expression.getToken().fKind));
+    if (!this->setRefKind(*base, VariableReference::kReadWrite_RefKind)) {
+        return nullptr;
+    }
+    return std::make_unique<PostfixExpression>(std::move(base), expression.getToken().fKind);
 }
 
 void IRGenerator::checkValid(const Expression& expr) {
@@ -2868,7 +2875,6 @@ void IRGenerator::convertProgram(Program::Kind kind,
     if (fErrors.errorCount()) {
         return;
     }
-    this->pushSymbolTable(); // this is popped by Compiler upon completion
     SkASSERT(fFile);
     for (const auto& decl : fFile->root()) {
         switch (decl.fKind) {
