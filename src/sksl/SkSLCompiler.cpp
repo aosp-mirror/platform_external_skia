@@ -334,22 +334,14 @@ void Compiler::processIncludeFile(Program::Kind kind, const char* path,
                                   std::vector<std::unique_ptr<ProgramElement>>* outElements,
                                   std::shared_ptr<SymbolTable>* outSymbolTable) {
     std::ifstream in(path);
-    std::string stdText{std::istreambuf_iterator<char>(in),
-                        std::istreambuf_iterator<char>()};
+    std::unique_ptr<String> text = std::make_unique<String>(std::istreambuf_iterator<char>(in),
+                                                            std::istreambuf_iterator<char>());
     if (in.rdstate()) {
         printf("error reading %s\n", path);
         abort();
     }
-    if (!base) {
-        base = fIRGenerator->fSymbolTable;
-    }
-    SkASSERT(base);
-    const String* source = base->takeOwnershipOfString(std::make_unique<String>(stdText.c_str()));
+    const String* source = fRootSymbolTable->takeOwnershipOfString(std::move(text));
     fSource = source;
-    std::shared_ptr<SymbolTable> old = fIRGenerator->fSymbolTable;
-    if (base) {
-        fIRGenerator->fSymbolTable = std::move(base);
-    }
     Program::Settings settings;
 #if !defined(SKSL_STANDALONE) & SK_SUPPORT_GPU
     GrContextOptions opts;
@@ -358,7 +350,7 @@ void Compiler::processIncludeFile(Program::Kind kind, const char* path,
 #endif
     SkASSERT(fIRGenerator->fCanInline);
     fIRGenerator->fCanInline = false;
-    fIRGenerator->start(&settings, nullptr, true);
+    fIRGenerator->start(&settings, base ? base : fRootSymbolTable, nullptr, true);
     fIRGenerator->convertProgram(kind, source->c_str(), source->length(), outElements);
     fIRGenerator->fCanInline = true;
     if (this->fErrorCount) {
@@ -369,7 +361,7 @@ void Compiler::processIncludeFile(Program::Kind kind, const char* path,
 #ifdef SK_DEBUG
     fSource = nullptr;
 #endif
-    fIRGenerator->fSymbolTable = std::move(old);
+    fIRGenerator->finish();
 }
 
 // add the definition created by assigning to the lvalue to the definition set
@@ -435,11 +427,11 @@ void Compiler::addDefinitions(const BasicBlock::Node& node,
             switch (expr->kind()) {
                 case Expression::Kind::kBinary: {
                     BinaryExpression* b = &expr->as<BinaryExpression>();
-                    if (b->fOperator == Token::Kind::TK_EQ) {
-                        this->addDefinition(b->fLeft.get(), &b->fRight, definitions);
-                    } else if (Compiler::IsAssignment(b->fOperator)) {
+                    if (b->getOperator() == Token::Kind::TK_EQ) {
+                        this->addDefinition(&b->left(), &b->rightPointer(), definitions);
+                    } else if (Compiler::IsAssignment(b->getOperator())) {
                         this->addDefinition(
-                                      b->fLeft.get(),
+                                      &b->left(),
                                       (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                       definitions);
 
@@ -606,10 +598,10 @@ static bool is_dead(const Expression& lvalue) {
  * to a dead target and lack of side effects on the left hand side.
  */
 static bool dead_assignment(const BinaryExpression& b) {
-    if (!Compiler::IsAssignment(b.fOperator)) {
+    if (!Compiler::IsAssignment(b.getOperator())) {
         return false;
     }
-    return is_dead(*b.fLeft);
+    return is_dead(b.left());
 }
 
 void Compiler::computeDataFlow(CFG* cfg) {
@@ -704,14 +696,16 @@ static void delete_left(BasicBlock* b,
     *outUpdated = true;
     std::unique_ptr<Expression>* target = (*iter)->expression();
     BinaryExpression& bin = (*target)->as<BinaryExpression>();
-    SkASSERT(!bin.fLeft->hasSideEffects());
+    Expression& left = bin.left();
+    std::unique_ptr<Expression>& rightPointer = bin.rightPointer();
+    SkASSERT(!left.hasSideEffects());
     bool result;
-    if (bin.fOperator == Token::Kind::TK_EQ) {
-        result = b->tryRemoveLValueBefore(iter, bin.fLeft.get());
+    if (bin.getOperator() == Token::Kind::TK_EQ) {
+        result = b->tryRemoveLValueBefore(iter, &left);
     } else {
-        result = b->tryRemoveExpressionBefore(iter, bin.fLeft.get());
+        result = b->tryRemoveExpressionBefore(iter, &left);
     }
-    *target = std::move(bin.fRight);
+    *target = std::move(rightPointer);
     if (!result) {
         *outNeedsRescan = true;
         return;
@@ -722,7 +716,7 @@ static void delete_left(BasicBlock* b,
     }
     --(*iter);
     if ((*iter)->fKind != BasicBlock::Node::kExpression_Kind ||
-        (*iter)->expression() != &bin.fRight) {
+        (*iter)->expression() != &rightPointer) {
         *outNeedsRescan = true;
         return;
     }
@@ -741,20 +735,22 @@ static void delete_right(BasicBlock* b,
     *outUpdated = true;
     std::unique_ptr<Expression>* target = (*iter)->expression();
     BinaryExpression& bin = (*target)->as<BinaryExpression>();
-    SkASSERT(!bin.fRight->hasSideEffects());
-    if (!b->tryRemoveExpressionBefore(iter, bin.fRight.get())) {
-        *target = std::move(bin.fLeft);
+    std::unique_ptr<Expression>& leftPointer = bin.leftPointer();
+    Expression& right = bin.right();
+    SkASSERT(!right.hasSideEffects());
+    if (!b->tryRemoveExpressionBefore(iter, &right)) {
+        *target = std::move(leftPointer);
         *outNeedsRescan = true;
         return;
     }
-    *target = std::move(bin.fLeft);
+    *target = std::move(leftPointer);
     if (*iter == b->fNodes.begin()) {
         *outNeedsRescan = true;
         return;
     }
     --(*iter);
     if (((*iter)->fKind != BasicBlock::Node::kExpression_Kind ||
-        (*iter)->expression() != &bin.fLeft)) {
+        (*iter)->expression() != &leftPointer)) {
         *outNeedsRescan = true;
         return;
     }
@@ -807,7 +803,7 @@ static void vectorize_left(BasicBlock* b,
                            bool* outUpdated,
                            bool* outNeedsRescan) {
     BinaryExpression& bin = (*(*iter)->expression())->as<BinaryExpression>();
-    vectorize(b, iter, bin.fRight->type(), &bin.fLeft, outUpdated, outNeedsRescan);
+    vectorize(b, iter, bin.right().type(), &bin.leftPointer(), outUpdated, outNeedsRescan);
 }
 
 /**
@@ -819,7 +815,7 @@ static void vectorize_right(BasicBlock* b,
                             bool* outUpdated,
                             bool* outNeedsRescan) {
     BinaryExpression& bin = (*(*iter)->expression())->as<BinaryExpression>();
-    vectorize(b, iter, bin.fLeft->type(), &bin.fRight, outUpdated, outNeedsRescan);
+    vectorize(b, iter, bin.left().type(), &bin.rightPointer(), outUpdated, outNeedsRescan);
 }
 
 // Mark that an expression which we were writing to is no longer being written to
@@ -901,8 +897,10 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 delete_left(&b, iter, outUpdated, outNeedsRescan);
                 break;
             }
-            const Type& leftType = bin->fLeft->type();
-            const Type& rightType = bin->fRight->type();
+            Expression& left = bin->left();
+            Expression& right = bin->right();
+            const Type& leftType = left.type();
+            const Type& rightType = right.type();
             // collapse useless expressions like x * 1 or x + 0
             if (((leftType.typeKind() != Type::TypeKind::kScalar) &&
                  (leftType.typeKind() != Type::TypeKind::kVector)) ||
@@ -910,9 +908,9 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                  (rightType.typeKind() != Type::TypeKind::kVector))) {
                 break;
             }
-            switch (bin->fOperator) {
+            switch (bin->getOperator()) {
                 case Token::Kind::TK_STAR:
-                    if (is_constant(*bin->fLeft, 1)) {
+                    if (is_constant(left, 1)) {
                         if (leftType.typeKind() == Type::TypeKind::kVector &&
                             rightType.typeKind() == Type::TypeKind::kScalar) {
                             // float4(1) * x -> float4(x)
@@ -924,22 +922,22 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             delete_left(&b, iter, outUpdated, outNeedsRescan);
                         }
                     }
-                    else if (is_constant(*bin->fLeft, 0)) {
+                    else if (is_constant(left, 0)) {
                         if (leftType.typeKind() == Type::TypeKind::kScalar &&
                             rightType.typeKind() == Type::TypeKind::kVector &&
-                            !bin->fRight->hasSideEffects()) {
+                            !right.hasSideEffects()) {
                             // 0 * float4(x) -> float4(0)
                             vectorize_left(&b, iter, outUpdated, outNeedsRescan);
                         } else {
                             // 0 * x -> 0
                             // float4(0) * x -> float4(0)
                             // float4(0) * float4(x) -> float4(0)
-                            if (!bin->fRight->hasSideEffects()) {
+                            if (!right.hasSideEffects()) {
                                 delete_right(&b, iter, outUpdated, outNeedsRescan);
                             }
                         }
                     }
-                    else if (is_constant(*bin->fRight, 1)) {
+                    else if (is_constant(right, 1)) {
                         if (leftType.typeKind() == Type::TypeKind::kScalar &&
                             rightType.typeKind() == Type::TypeKind::kVector) {
                             // x * float4(1) -> float4(x)
@@ -951,24 +949,24 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             delete_right(&b, iter, outUpdated, outNeedsRescan);
                         }
                     }
-                    else if (is_constant(*bin->fRight, 0)) {
+                    else if (is_constant(right, 0)) {
                         if (leftType.typeKind() == Type::TypeKind::kVector &&
                             rightType.typeKind() == Type::TypeKind::kScalar &&
-                            !bin->fLeft->hasSideEffects()) {
+                            !left.hasSideEffects()) {
                             // float4(x) * 0 -> float4(0)
                             vectorize_right(&b, iter, outUpdated, outNeedsRescan);
                         } else {
                             // x * 0 -> 0
                             // x * float4(0) -> float4(0)
                             // float4(x) * float4(0) -> float4(0)
-                            if (!bin->fLeft->hasSideEffects()) {
+                            if (!left.hasSideEffects()) {
                                 delete_left(&b, iter, outUpdated, outNeedsRescan);
                             }
                         }
                     }
                     break;
                 case Token::Kind::TK_PLUS:
-                    if (is_constant(*bin->fLeft, 0)) {
+                    if (is_constant(left, 0)) {
                         if (leftType.typeKind() == Type::TypeKind::kVector &&
                             rightType.typeKind() == Type::TypeKind::kScalar) {
                             // float4(0) + x -> float4(x)
@@ -979,7 +977,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             // float4(0) + float4(x) -> float4(x)
                             delete_left(&b, iter, outUpdated, outNeedsRescan);
                         }
-                    } else if (is_constant(*bin->fRight, 0)) {
+                    } else if (is_constant(right, 0)) {
                         if (leftType.typeKind() == Type::TypeKind::kScalar &&
                             rightType.typeKind() == Type::TypeKind::kVector) {
                             // x + float4(0) -> float4(x)
@@ -993,7 +991,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     }
                     break;
                 case Token::Kind::TK_MINUS:
-                    if (is_constant(*bin->fRight, 0)) {
+                    if (is_constant(right, 0)) {
                         if (leftType.typeKind() == Type::TypeKind::kScalar &&
                             rightType.typeKind() == Type::TypeKind::kVector) {
                             // x - float4(0) -> float4(x)
@@ -1007,7 +1005,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     }
                     break;
                 case Token::Kind::TK_SLASH:
-                    if (is_constant(*bin->fRight, 1)) {
+                    if (is_constant(right, 1)) {
                         if (leftType.typeKind() == Type::TypeKind::kScalar &&
                             rightType.typeKind() == Type::TypeKind::kVector) {
                             // x / float4(1) -> float4(x)
@@ -1018,43 +1016,43 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             // float4(x) / float4(1) -> float4(x)
                             delete_right(&b, iter, outUpdated, outNeedsRescan);
                         }
-                    } else if (is_constant(*bin->fLeft, 0)) {
+                    } else if (is_constant(left, 0)) {
                         if (leftType.typeKind() == Type::TypeKind::kScalar &&
                             rightType.typeKind() == Type::TypeKind::kVector &&
-                            !bin->fRight->hasSideEffects()) {
+                            !right.hasSideEffects()) {
                             // 0 / float4(x) -> float4(0)
                             vectorize_left(&b, iter, outUpdated, outNeedsRescan);
                         } else {
                             // 0 / x -> 0
                             // float4(0) / x -> float4(0)
                             // float4(0) / float4(x) -> float4(0)
-                            if (!bin->fRight->hasSideEffects()) {
+                            if (!right.hasSideEffects()) {
                                 delete_right(&b, iter, outUpdated, outNeedsRescan);
                             }
                         }
                     }
                     break;
                 case Token::Kind::TK_PLUSEQ:
-                    if (is_constant(*bin->fRight, 0)) {
-                        clear_write(*bin->fLeft);
+                    if (is_constant(right, 0)) {
+                        clear_write(left);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
                     }
                     break;
                 case Token::Kind::TK_MINUSEQ:
-                    if (is_constant(*bin->fRight, 0)) {
-                        clear_write(*bin->fLeft);
+                    if (is_constant(right, 0)) {
+                        clear_write(left);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
                     }
                     break;
                 case Token::Kind::TK_STAREQ:
-                    if (is_constant(*bin->fRight, 1)) {
-                        clear_write(*bin->fLeft);
+                    if (is_constant(right, 1)) {
+                        clear_write(left);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
                     }
                     break;
                 case Token::Kind::TK_SLASHEQ:
-                    if (is_constant(*bin->fRight, 1)) {
-                        clear_write(*bin->fLeft);
+                    if (is_constant(right, 1)) {
+                        clear_write(left);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
                     }
                     break;
@@ -1564,16 +1562,13 @@ bool Compiler::scanCFG(FunctionDefinition& f) {
     return madeChanges;
 }
 
-void Compiler::registerExternalValue(ExternalValue* value) {
-    fIRGenerator->fRootSymbolTable->addWithoutOwnership(value->fName, value);
-}
+std::unique_ptr<Program> Compiler::convertProgram(
+        Program::Kind kind,
+        String text,
+        const Program::Settings& settings,
+        const std::vector<std::unique_ptr<ExternalValue>>* externalValues) {
+    SkASSERT(!externalValues || (kind == Program::kGeneric_Kind));
 
-const Symbol* Compiler::takeOwnership(std::unique_ptr<const Symbol> symbol) {
-    return fIRGenerator->fRootSymbolTable->takeOwnershipOfSymbol(std::move(symbol));
-}
-
-std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String text,
-                                                  const Program::Settings& settings) {
     fErrorText = "";
     fErrorCount = 0;
     fInliner.reset(context(), settings);
@@ -1582,22 +1577,19 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String tex
     switch (kind) {
         case Program::kVertex_Kind:
             inherited = &fVertexInclude;
-            fIRGenerator->fSymbolTable = fVertexSymbolTable;
             fIRGenerator->fIntrinsics = fGPUIntrinsics.get();
-            fIRGenerator->start(&settings, inherited);
+            fIRGenerator->start(&settings, fVertexSymbolTable, inherited);
             break;
         case Program::kFragment_Kind:
             inherited = &fFragmentInclude;
-            fIRGenerator->fSymbolTable = fFragmentSymbolTable;
             fIRGenerator->fIntrinsics = fGPUIntrinsics.get();
-            fIRGenerator->start(&settings, inherited);
+            fIRGenerator->start(&settings, fFragmentSymbolTable, inherited);
             break;
         case Program::kGeometry_Kind:
             this->loadGeometryIntrinsics();
             inherited = &fGeometryInclude;
-            fIRGenerator->fSymbolTable = fGeometrySymbolTable;
             fIRGenerator->fIntrinsics = fGPUIntrinsics.get();
-            fIRGenerator->start(&settings, inherited);
+            fIRGenerator->start(&settings, fGeometrySymbolTable, inherited);
             break;
         case Program::kFragmentProcessor_Kind: {
 #if !SKSL_STANDALONE
@@ -1612,14 +1604,13 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String tex
             grab_intrinsics(&fFPInclude, fFPIntrinsics.get());
 
             inherited = &fFPInclude;
-            fIRGenerator->fSymbolTable = fFPSymbolTable;
             fIRGenerator->fIntrinsics = fFPIntrinsics.get();
-            fIRGenerator->start(&settings, inherited);
+            fIRGenerator->start(&settings, fFPSymbolTable, inherited);
             break;
 #else
             inherited = nullptr;
-            fIRGenerator->fSymbolTable = fGpuSymbolTable;
-            fIRGenerator->start(&settings, /*inherited=*/nullptr, /*builtin=*/true);
+            fIRGenerator->start(&settings, fGpuSymbolTable, /*inherited=*/nullptr,
+                                /*builtin=*/true);
             fIRGenerator->fIntrinsics = fGPUIntrinsics.get();
             std::ifstream in(SKSL_FP_INCLUDE);
             std::string stdText{std::istreambuf_iterator<char>(in),
@@ -1628,7 +1619,7 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String tex
                 printf("error reading %s\n", SKSL_FP_INCLUDE);
                 abort();
             }
-            const String* source = fGpuSymbolTable->takeOwnershipOfString(
+            const String* source = fRootSymbolTable->takeOwnershipOfString(
                                                          std::make_unique<String>(stdText.c_str()));
             fIRGenerator->convertProgram(kind, source->c_str(), source->length(), &elements);
             fIRGenerator->fIsBuiltinCode = false;
@@ -1638,17 +1629,22 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String tex
         case Program::kPipelineStage_Kind:
             this->loadPipelineIntrinsics();
             inherited = &fPipelineInclude;
-            fIRGenerator->fSymbolTable = fPipelineSymbolTable;
             fIRGenerator->fIntrinsics = fGPUIntrinsics.get();
-            fIRGenerator->start(&settings, inherited);
+            fIRGenerator->start(&settings, fPipelineSymbolTable, inherited);
             break;
         case Program::kGeneric_Kind:
             this->loadInterpreterIntrinsics();
             inherited = nullptr;
-            fIRGenerator->fSymbolTable = fInterpreterSymbolTable;
             fIRGenerator->fIntrinsics = fInterpreterIntrinsics.get();
-            fIRGenerator->start(&settings, /*inherited=*/nullptr);
+            fIRGenerator->start(&settings, fInterpreterSymbolTable, /*inherited=*/nullptr);
             break;
+    }
+    if (externalValues) {
+        // Add any external values to the symbol table. IRGenerator::start() has pushed a table, so
+        // we're only making these visible to the current Program.
+        for (const auto& ev : *externalValues) {
+            fIRGenerator->fSymbolTable->addWithoutOwnership(ev->fName, ev.get());
+        }
     }
     std::unique_ptr<String> textPtr(new String(std::move(text)));
     fSource = textPtr.get();
@@ -1661,6 +1657,7 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String tex
                                             std::move(elements),
                                             fIRGenerator->fSymbolTable,
                                             fIRGenerator->fInputs);
+    fIRGenerator->finish();
     if (fErrorCount) {
         return nullptr;
     }

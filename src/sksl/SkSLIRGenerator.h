@@ -114,6 +114,7 @@ private:
      * settings.
      */
     void start(const Program::Settings* settings,
+               std::shared_ptr<SymbolTable> baseSymbolTable,
                std::vector<std::unique_ptr<ProgramElement>>* inherited,
                bool isBuiltinCode = false);
 
@@ -204,7 +205,6 @@ private:
     std::unique_ptr<ASTFile> fFile;
     const FunctionDeclaration* fCurrentFunction;
     std::unordered_map<String, Program::Settings::Value> fCapsMap;
-    std::shared_ptr<SymbolTable> fRootSymbolTable;
     std::shared_ptr<SymbolTable> fSymbolTable;
     // additional statements that need to be inserted before the one that convertStatement is
     // currently working on
