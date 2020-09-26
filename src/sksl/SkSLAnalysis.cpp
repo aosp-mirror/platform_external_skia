@@ -66,8 +66,8 @@ namespace {
 static bool is_sample_call_to_fp(const FunctionCall& fc, const Variable& fp) {
     const FunctionDeclaration& f = fc.fFunction;
     return f.fBuiltin && f.fName == "sample" && fc.fArguments.size() >= 1 &&
-            fc.fArguments[0]->kind() == Expression::Kind::kVariableReference &&
-            &((VariableReference&) *fc.fArguments[0]).fVariable == &fp;
+           fc.fArguments[0]->is<VariableReference>() &&
+           fc.fArguments[0]->as<VariableReference>().fVariable == &fp;
 }
 
 // Visitor that determines the merged SampleUsage for a given child 'fp' in the program.
@@ -78,7 +78,7 @@ public:
 
     SampleUsage visit(const Program& program) {
         fUsage = SampleUsage(); // reset to none
-        this->INHERITED::visit(program);
+        INHERITED::visit(program);
         return fUsage;
     }
 
@@ -125,7 +125,7 @@ protected:
             }
         }
 
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
     using INHERITED = ProgramVisitor;
@@ -137,11 +137,11 @@ public:
     BuiltinVariableVisitor(int builtin) : fBuiltin(builtin) {}
 
     bool visitExpression(const Expression& e) override {
-        if (e.kind() == Expression::Kind::kVariableReference) {
+        if (e.is<VariableReference>()) {
             const VariableReference& var = e.as<VariableReference>();
-            return var.fVariable.fModifiers.fLayout.fBuiltin == fBuiltin;
+            return var.fVariable->fModifiers.fLayout.fBuiltin == fBuiltin;
         }
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
     int fBuiltin;
@@ -160,17 +160,17 @@ public:
 
     bool visitExpression(const Expression& e) override {
         ++fCount;
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
     bool visitProgramElement(const ProgramElement& p) override {
         ++fCount;
-        return this->INHERITED::visitProgramElement(p);
+        return INHERITED::visitProgramElement(p);
     }
 
     bool visitStatement(const Statement& s) override {
         ++fCount;
-        return this->INHERITED::visitStatement(s);
+        return INHERITED::visitStatement(s);
     }
 
 private:
@@ -189,15 +189,15 @@ public:
     }
 
     bool visitExpression(const Expression& e) override {
-        if (e.kind() == Expression::Kind::kVariableReference) {
+        if (e.is<VariableReference>()) {
             const VariableReference& ref = e.as<VariableReference>();
-            if (&ref.fVariable == fVar && (ref.fRefKind == VariableReference::kWrite_RefKind ||
-                                           ref.fRefKind == VariableReference::kReadWrite_RefKind ||
-                                           ref.fRefKind == VariableReference::kPointer_RefKind)) {
+            if (ref.fVariable == fVar && (ref.fRefKind == VariableReference::kWrite_RefKind ||
+                                          ref.fRefKind == VariableReference::kReadWrite_RefKind ||
+                                          ref.fRefKind == VariableReference::kPointer_RefKind)) {
                 return true;
             }
         }
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
 private:
@@ -254,7 +254,6 @@ bool ProgramVisitor::visitExpression(const Expression& e) {
         case Expression::Kind::kBoolLiteral:
         case Expression::Kind::kDefined:
         case Expression::Kind::kExternalValue:
-        case Expression::Kind::kFieldAccess:
         case Expression::Kind::kFloatLiteral:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kIntLiteral:
@@ -279,6 +278,8 @@ bool ProgramVisitor::visitExpression(const Expression& e) {
                 if (this->visitExpression(*arg)) { return true; }
             }
             return false; }
+        case Expression::Kind::kFieldAccess:
+            return this->visitExpression(*e.as<FieldAccess>().fBase);
         case Expression::Kind::kFunctionCall: {
             const FunctionCall& c = e.as<FunctionCall>();
             for (const auto& arg : c.fArguments) {
