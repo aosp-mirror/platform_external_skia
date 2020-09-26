@@ -1934,6 +1934,27 @@ DEF_TEST(ArithmeticImageFilterBounds, reporter) {
     test_arithmetic_combinations(reporter, 0.5);
 }
 
+// Test SkDisplacementMapEffect::filterBounds.
+DEF_TEST(DisplacementMapBounds, reporter) {
+    SkPaint greenPaint;
+    greenPaint.setColor(SK_ColorGREEN);
+    SkIRect floodBounds(SkIRect::MakeXYWH(20, 30, 10, 10));
+    sk_sp<SkImageFilter> flood(SkImageFilters::Paint(greenPaint, &floodBounds));
+    SkIRect tilingBounds(SkIRect::MakeXYWH(0, 0, 200, 100));
+    sk_sp<SkImageFilter> tiling(SkImageFilters::Tile(SkRect::Make(floodBounds),
+                                                     SkRect::Make(tilingBounds),
+                                                     flood));
+    sk_sp<SkImageFilter> displace(SkImageFilters::DisplacementMap(SkColorChannel::kR,
+                                                                  SkColorChannel::kB,
+                                                                  20.0f, nullptr, tiling));
+    SkIRect input(SkIRect::MakeXYWH(20, 30, 40, 50));
+    // Expected: union(floodBounds, outset(input, 10))
+    SkIRect expected(SkIRect::MakeXYWH(10, 20, 60, 70));
+    REPORTER_ASSERT(reporter,
+                    expected == displace->filterBounds(input, SkMatrix::I(),
+                                                       SkImageFilter::kReverse_MapDirection));
+}
+
 // Test SkImageSource::filterBounds.
 DEF_TEST(ImageSourceBounds, reporter) {
     sk_sp<SkImage> image(SkImage::MakeFromBitmap(make_gradient_circle(64, 64)));
@@ -1980,3 +2001,53 @@ DEF_TEST(ImageSourceBounds, reporter) {
                                                              &input));
 }
 
+// Test SkPictureImageFilter::filterBounds.
+DEF_TEST(PictureImageSourceBounds, reporter) {
+    SkPictureRecorder recorder;
+    SkCanvas* recordingCanvas = recorder.beginRecording(64, 64);
+
+    SkPaint greenPaint;
+    greenPaint.setColor(SK_ColorGREEN);
+    recordingCanvas->drawRect(SkRect::Make(SkIRect::MakeXYWH(10, 10, 30, 20)), greenPaint);
+    sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
+
+    // Default target rect.
+    sk_sp<SkImageFilter> source1(SkImageFilters::Picture(picture));
+    SkIRect pictureBounds = SkIRect::MakeWH(64, 64);
+    SkIRect input(SkIRect::MakeXYWH(10, 20, 30, 40));
+    REPORTER_ASSERT(reporter,
+                    pictureBounds == source1->filterBounds(input, SkMatrix::I(),
+                                                           SkImageFilter::kForward_MapDirection,
+                                                           nullptr));
+    REPORTER_ASSERT(reporter,
+                    input == source1->filterBounds(input, SkMatrix::I(),
+                                                   SkImageFilter::kReverse_MapDirection, &input));
+    SkMatrix scale(SkMatrix::Scale(2, 2));
+    SkIRect scaledPictureBounds = SkIRect::MakeWH(128, 128);
+    REPORTER_ASSERT(reporter,
+                    scaledPictureBounds == source1->filterBounds(input, scale,
+                                                                 SkImageFilter::kForward_MapDirection,
+                                                                 nullptr));
+    REPORTER_ASSERT(reporter, input == source1->filterBounds(input, scale,
+                                                             SkImageFilter::kReverse_MapDirection,
+                                                             &input));
+
+    // Specified target rect.
+    SkRect targetRect(SkRect::MakeXYWH(9.5, 9.5, 31, 21));
+    sk_sp<SkImageFilter> source2(SkImageFilters::Picture(picture, targetRect));
+    REPORTER_ASSERT(reporter,
+                    targetRect.roundOut() == source2->filterBounds(input, SkMatrix::I(),
+                                                                   SkImageFilter::kForward_MapDirection,
+                                                                   nullptr));
+    REPORTER_ASSERT(reporter,
+                    input == source2->filterBounds(input, SkMatrix::I(),
+                                                   SkImageFilter::kReverse_MapDirection, &input));
+    scale.mapRect(&targetRect);
+    REPORTER_ASSERT(reporter,
+                    targetRect.roundOut() == source2->filterBounds(input, scale,
+                                                                   SkImageFilter::kForward_MapDirection,
+                                                                   nullptr));
+    REPORTER_ASSERT(reporter, input == source2->filterBounds(input, scale,
+                                                             SkImageFilter::kReverse_MapDirection,
+                                                             &input));
+}

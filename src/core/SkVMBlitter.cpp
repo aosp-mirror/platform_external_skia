@@ -29,7 +29,6 @@ namespace {
     struct BlitterUniforms {
         int       right;  // First device x + blit run length n, used to get device x coordinate.
         int       y;      // Device y coordinate.
-        SkColor4f paint;  // In device color space.
     };
     static_assert(SkIsAlign4(sizeof(BlitterUniforms)), "");
     static constexpr int kBlitterUniformsCount = sizeof(BlitterUniforms) / 4;
@@ -42,6 +41,7 @@ namespace {
         SkColorInfo             dst;
         SkBlendMode             blendMode;
         Coverage                coverage;
+        SkColor4f               paint;
         SkFilterQuality         quality;
         const SkMatrixProvider& matrices;
 
@@ -62,7 +62,7 @@ namespace {
                  blendMode,
                  coverage;
         uint32_t padding{0};
-        // Params::quality and Params::matrices are only passed to {shader,clip}->program(),
+        // Params::{paint,quality,matrices} are only passed to {shader,clip}->program(),
         // not used here by the blitter itself.  No need to include them in the key;
         // they'll be folded into the shader key if used.
 
@@ -110,30 +110,39 @@ namespace {
 
     static void release_program_cache() { }
 
+    static skvm::Coord device_coord(skvm::Builder* p, skvm::Uniforms* uniforms) {
+        skvm::I32 dx = p->uniform32(uniforms->base, offsetof(BlitterUniforms, right))
+                     - p->index(),
+                  dy = p->uniform32(uniforms->base, offsetof(BlitterUniforms, y));
+        return {
+            to_F32(dx) + 0.5f,
+            to_F32(dy) + 0.5f,
+        };
+    }
+
     // If build_program() can't build this program, cache_key() sets *ok to false.
     static Key cache_key(const Params& params,
                          skvm::Uniforms* uniforms, SkArenaAlloc* alloc, bool* ok) {
+        // Take care to match build_program()'s reuse of the paint color uniforms.
+        skvm::Uniform r = uniforms->pushF(params.paint.fR),
+                      g = uniforms->pushF(params.paint.fG),
+                      b = uniforms->pushF(params.paint.fB),
+                      a = uniforms->pushF(params.paint.fA);
         auto hash_shader = [&](const sk_sp<SkShader>& shader) {
             const SkShaderBase* sb = as_SB(shader);
             skvm::Builder p;
 
-            skvm::I32 dx = p.uniform32(uniforms->base, offsetof(BlitterUniforms, right))
-                         - p.index(),
-                      dy = p.uniform32(uniforms->base, offsetof(BlitterUniforms, y));
-            skvm::Coord device = {to_f32(dx) + 0.5f,
-                                  to_f32(dy) + 0.5f},
-                        local = device;
-
+            skvm::Coord device = device_coord(&p, uniforms);
             skvm::Color paint = {
-                p.uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fR)),
-                p.uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fG)),
-                p.uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fB)),
-                p.uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fA)),
+                p.uniformF(r),
+                p.uniformF(g),
+                p.uniformF(b),
+                p.uniformF(a),
             };
 
             uint64_t hash = 0;
             if (auto c = sb->program(&p,
-                                     device,local, paint,
+                                     device,/*local=*/device, paint,
                                      params.matrices, /*localM=*/nullptr,
                                      params.quality, params.dst,
                                      uniforms,alloc)) {
@@ -191,22 +200,11 @@ namespace {
         //    - MaskLCD16: 565 coverage varying
         //    - UniformA8: 8-bit coverage uniform
 
-        skvm::I32 dx = p->uniform32(uniforms->base, offsetof(BlitterUniforms, right))
-                     - p->index(),
-                  dy = p->uniform32(uniforms->base, offsetof(BlitterUniforms, y));
-        skvm::Coord device = {to_f32(dx) + 0.5f,
-                              to_f32(dy) + 0.5f},
-                    local = device;
+        skvm::Coord device = device_coord(p, uniforms);
+        skvm::Color paint = p->uniformColor(params.paint, uniforms);
 
-        skvm::Color paint = {
-            p->uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fR)),
-            p->uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fG)),
-            p->uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fB)),
-            p->uniformF(uniforms->base, offsetof(BlitterUniforms, paint.fA)),
-        };
-
-        // See note about arguments above... a SpriteShader will call p->arg() once here.
-        skvm::Color src = as_SB(params.shader)->program(p, device,local, paint,
+        // See note about arguments above: a SpriteShader will call p->arg() once during program().
+        skvm::Color src = as_SB(params.shader)->program(p, device,/*local=*/device, paint,
                                                         params.matrices, /*localM=*/nullptr,
                                                         params.quality, params.dst,
                                                         uniforms, alloc);
@@ -279,7 +277,7 @@ namespace {
             } break;
         }
         if (params.clip) {
-            skvm::Color clip = as_SB(params.clip)->program(p, device,local, paint,
+            skvm::Color clip = as_SB(params.clip)->program(p, device,/*local=*/device, paint,
                                                            params.matrices, /*localM=*/nullptr,
                                                            params.quality, params.dst,
                                                            uniforms, alloc);
@@ -449,7 +447,7 @@ namespace {
             // we can bake it in without hurting the cache hit rate.
             float scale = rate * (  2/128.0f),
                   bias  = rate * (-63/128.0f);
-            skvm::F32 dither = to_f32(M) * scale + bias;
+            skvm::F32 dither = to_F32(M) * scale + bias;
             c.r += dither;
             c.g += dither;
             c.b += dither;
@@ -512,12 +510,18 @@ namespace {
             blendMode =  SkBlendMode::kSrc;
         }
 
+        SkColor4f paintColor = paint.getColor4f();
+        SkColorSpaceXformSteps{sk_srgb_singleton(), kUnpremul_SkAlphaType,
+                               device.colorSpace(), kUnpremul_SkAlphaType}
+            .apply(paintColor.vec());
+
         return {
             std::move(shader),
             std::move(clip),
             { device.colorType(), device.alphaType(), device.refColorSpace() },
             blendMode,
             Coverage::Full,  // Placeholder... withCoverage() will change as needed.
+            paintColor,
             paint.getFilterQuality(),
             matrices,
         };
@@ -538,13 +542,7 @@ namespace {
             , fUniforms(kBlitterUniformsCount)
             , fParams(effective_params(device, sprite, paint, matrices, std::move(clip)))
             , fKey(cache_key(fParams, &fUniforms, &fAlloc, ok))
-            , fPaint([&]{
-                SkColor4f color = paint.getColor4f();
-                SkColorSpaceXformSteps{sk_srgb_singleton(), kUnpremul_SkAlphaType,
-                                       device.colorSpace(), kUnpremul_SkAlphaType}
-                    .apply(color.vec());
-                return color;
-            }()) {}
+        {}
 
         ~Blitter() override {
             if (SkLRUCache<Key, skvm::Program>* cache = try_acquire_program_cache()) {
@@ -576,7 +574,6 @@ namespace {
         SkArenaAlloc    fAlloc{2*sizeof(void*)};  // but a few effects need to ref large content.
         const Params    fParams;
         const Key       fKey;
-        const SkColor4f fPaint;
         skvm::Program   fBlitH,
                         fBlitAntiH,
                         fBlitMaskA8,
@@ -632,7 +629,7 @@ namespace {
         }
 
         void updateUniforms(int right, int y) {
-            BlitterUniforms uniforms{right, y, fPaint};
+            BlitterUniforms uniforms{right, y};
             memcpy(fUniforms.buf.data(), &uniforms, sizeof(BlitterUniforms));
         }
 
