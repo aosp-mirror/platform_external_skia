@@ -217,8 +217,8 @@ std::unique_ptr<ByteCodeFunction> ByteCodeGenerator::writeFunction(const Functio
 // If the expression is a reference to a builtin global variable, return the builtin ID.
 // Otherwise, return -1.
 static int expression_as_builtin(const Expression& e) {
-    if (e.kind() == Expression::Kind::kVariableReference) {
-        const Variable& var(e.as<VariableReference>().fVariable);
+    if (e.is<VariableReference>()) {
+        const Variable& var(*e.as<VariableReference>().fVariable);
         if (var.fStorage == Variable::kGlobal_Storage) {
             return var.fModifiers.fLayout.fBuiltin;
         }
@@ -606,7 +606,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Expression& exp
             }
         }
         case Expression::Kind::kVariableReference: {
-            const Variable& var = expr.as<VariableReference>().fVariable;
+            const Variable& var = *expr.as<VariableReference>().fVariable;
             return this->getLocation(var);
         }
         default:
@@ -1643,8 +1643,8 @@ std::unique_ptr<ByteCodeGenerator::LValue> ByteCodeGenerator::getLValue(const Ex
 }
 
 void ByteCodeGenerator::writeBlock(const Block& b) {
-    for (const auto& s : b.fStatements) {
-        this->writeStatement(*s);
+    for (const std::unique_ptr<Statement>& stmt : b.children()) {
+        this->writeStatement(*stmt);
     }
 }
 

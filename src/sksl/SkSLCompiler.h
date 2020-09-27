@@ -37,7 +37,6 @@
 #define SK_SAMPLEMASK_BUILTIN             20
 #define SK_VERTEXID_BUILTIN               42
 #define SK_INSTANCEID_BUILTIN             43
-#define SK_CLIPDISTANCE_BUILTIN            3
 #define SK_INVOCATIONID_BUILTIN            8
 #define SK_POSITION_BUILTIN                0
 
@@ -140,7 +139,7 @@ public:
 
     bool toMetal(Program& program, String* out);
 
-#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
+#if defined(SKSL_STANDALONE) || GR_TEST_UTILS
     bool toCPP(Program& program, String name, OutputStream& out);
 
     bool toH(Program& program, String name, OutputStream& out);

@@ -774,14 +774,14 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
     std::vector<std::unique_ptr<VarDeclaration>> variables;
     const Variable* loopIdx = &(*fSymbolTable)["sk_InvocationID"]->as<Variable>();
     std::unique_ptr<Expression> test(new BinaryExpression(-1,
-                    std::unique_ptr<Expression>(new VariableReference(-1, *loopIdx)),
+                    std::unique_ptr<Expression>(new VariableReference(-1, loopIdx)),
                     Token::Kind::TK_LT,
                     std::make_unique<IntLiteral>(fContext, -1, fInvocations),
                     fContext.fBool_Type.get()));
     std::unique_ptr<Expression> next(new PostfixExpression(
                 std::unique_ptr<Expression>(
                                       new VariableReference(-1,
-                                                            *loopIdx,
+                                                            loopIdx,
                                                             VariableReference::kReadWrite_RefKind)),
                 Token::Kind::TK_PLUSPLUS));
     ASTNode endPrimitiveID(&fFile->fNodes, -1, ASTNode::Kind::kIdentifier, "EndPrimitive");
@@ -799,7 +799,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
                                                      std::move(endPrimitive),
                                                      std::vector<std::unique_ptr<Expression>>()))));
     std::unique_ptr<Expression> assignment(new BinaryExpression(-1,
-                    std::unique_ptr<Expression>(new VariableReference(-1, *loopIdx,
+                    std::unique_ptr<Expression>(new VariableReference(-1, loopIdx,
                                                                 VariableReference::kWrite_RefKind)),
                     Token::Kind::TK_EQ,
                     std::make_unique<IntLiteral>(fContext, -1, 0),
@@ -823,9 +823,9 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     //                      sk_Position.w);
     SkASSERT(fSkPerVertex && fRTAdjust);
     #define REF(var) std::unique_ptr<Expression>(\
-                                  new VariableReference(-1, *var, VariableReference::kRead_RefKind))
+                                  new VariableReference(-1, var, VariableReference::kRead_RefKind))
     #define WREF(var) std::unique_ptr<Expression>(\
-                                 new VariableReference(-1, *var, VariableReference::kWrite_RefKind))
+                                 new VariableReference(-1, var, VariableReference::kWrite_RefKind))
     #define FIELD(var, idx) std::unique_ptr<Expression>(\
                     new FieldAccess(REF(var), idx, FieldAccess::kAnonymousInterfaceBlock_OwnerKind))
     #define POS std::unique_ptr<Expression>(new FieldAccess(WREF(fSkPerVertex), 0, \
@@ -1090,7 +1090,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             body = this->applyInvocationIDWorkaround(std::move(body));
         }
         if (Program::kVertex_Kind == fKind && funcData.fName == "main" && fRTAdjust) {
-            body->fStatements.insert(body->fStatements.end(), this->getNormalizeSkPositionCode());
+            body->children().push_back(this->getNormalizeSkPositionCode());
         }
         auto result = std::make_unique<FunctionDefinition>(f.fOffset, *decl, std::move(body),
                                                            std::move(fReferencedIntrinsics));
@@ -1210,7 +1210,7 @@ bool IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
             *out = value.as<IntLiteral>().fValue;
             return true;
         case Expression::Kind::kVariableReference: {
-            const Variable& var = value.as<VariableReference>().fVariable;
+            const Variable& var = *value.as<VariableReference>().fVariable;
             return (var.fModifiers.fFlags & Modifiers::kConst_Flag) &&
                    var.fInitialValue &&
                    this->getConstantInt(*var.fInitialValue, out);
@@ -1408,12 +1408,12 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
             }
             // default to kRead_RefKind; this will be corrected later if the variable is written to
             return std::make_unique<VariableReference>(identifier.fOffset,
-                                                       *var,
+                                                       var,
                                                        VariableReference::kRead_RefKind);
         }
         case Symbol::Kind::kField: {
             const Field* field = &result->as<Field>();
-            VariableReference* base = new VariableReference(identifier.fOffset, field->fOwner,
+            VariableReference* base = new VariableReference(identifier.fOffset, &field->fOwner,
                                                             VariableReference::kRead_RefKind);
             return std::unique_ptr<Expression>(new FieldAccess(
                                                   std::unique_ptr<Expression>(base),
@@ -2483,7 +2483,7 @@ std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression
         }
     }
     fErrors.error(base->fOffset, "type '" + baseType.displayName() + "' does not have a field "
-                                 "named '" + field + "");
+                                 "named '" + field + "'");
     return nullptr;
 }
 
@@ -2683,7 +2683,7 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
         std::unique_ptr<Expression> result = convertIdentifier(
                 ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier, field));
         if (result) {
-            const Variable& v = result->as<VariableReference>().fVariable;
+            const Variable& v = *result->as<VariableReference>().fVariable;
             SkASSERT(v.fInitialValue);
             result = std::make_unique<IntLiteral>(
                     offset, v.fInitialValue->as<IntLiteral>().fValue, &type);
@@ -2810,58 +2810,15 @@ void IRGenerator::checkValid(const Expression& expr) {
     }
 }
 
-bool IRGenerator::checkSwizzleWrite(const Swizzle& swizzle) {
-    int bits = 0;
-    for (int idx : swizzle.fComponents) {
-        SkASSERT(idx <= 3);
-        int bit = 1 << idx;
-        if (bits & bit) {
-            fErrors.error(swizzle.fOffset,
-                          "cannot write to the same swizzle field more than once");
-            return false;
-        }
-        bits |= bit;
+bool IRGenerator::setRefKind(Expression& expr, VariableReference::RefKind kind) {
+    std::vector<VariableReference*> assignableVars;
+    if (!Analysis::IsAssignable(expr, &assignableVars, fErrors)) {
+        return false;
+    }
+    for (VariableReference* v : assignableVars) {
+        v->setRefKind(kind);
     }
     return true;
-}
-
-bool IRGenerator::setRefKind(Expression& expr, VariableReference::RefKind kind) {
-    switch (expr.kind()) {
-        case Expression::Kind::kVariableReference: {
-            const Variable& var = expr.as<VariableReference>().fVariable;
-            if (var.fModifiers.fFlags &
-                (Modifiers::kConst_Flag | Modifiers::kUniform_Flag | Modifiers::kVarying_Flag)) {
-                fErrors.error(expr.fOffset, "cannot modify immutable variable '" + var.fName + "'");
-                return false;
-            }
-            expr.as<VariableReference>().setRefKind(kind);
-            return true;
-        }
-        case Expression::Kind::kFieldAccess:
-            return this->setRefKind(*expr.as<FieldAccess>().fBase, kind);
-        case Expression::Kind::kSwizzle: {
-            const Swizzle& swizzle = expr.as<Swizzle>();
-            return this->checkSwizzleWrite(swizzle) && this->setRefKind(*swizzle.fBase, kind);
-        }
-        case Expression::Kind::kIndex:
-            return this->setRefKind(*expr.as<IndexExpression>().fBase, kind);
-        case Expression::Kind::kTernary: {
-            const TernaryExpression& t = expr.as<TernaryExpression>();
-            return this->setRefKind(*t.fIfTrue, kind) && this->setRefKind(*t.fIfFalse, kind);
-        }
-        case Expression::Kind::kExternalValue: {
-            const ExternalValue& v = *expr.as<ExternalValueReference>().fValue;
-            if (!v.canWrite()) {
-                fErrors.error(expr.fOffset,
-                              "cannot modify immutable external value '" + v.fName + "'");
-                return false;
-            }
-            return true;
-        }
-        default:
-            fErrors.error(expr.fOffset, "cannot assign to this expression");
-            return false;
-    }
 }
 
 void IRGenerator::convertProgram(Program::Kind kind,

@@ -676,7 +676,7 @@ void MetalCodeGenerator::writeFragCoord() {
 }
 
 void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
-    switch (ref.fVariable.fModifiers.fLayout.fBuiltin) {
+    switch (ref.fVariable->fModifiers.fLayout.fBuiltin) {
         case SK_FRAGCOLOR_BUILTIN:
             this->write("_out->sk_FragColor");
             break;
@@ -695,19 +695,19 @@ void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
             this->write(fProgram.fSettings.fFlipY ? "_frontFacing" : "(!_frontFacing)");
             break;
         default:
-            if (Variable::kGlobal_Storage == ref.fVariable.fStorage) {
-                if (ref.fVariable.fModifiers.fFlags & Modifiers::kIn_Flag) {
+            if (Variable::kGlobal_Storage == ref.fVariable->fStorage) {
+                if (ref.fVariable->fModifiers.fFlags & Modifiers::kIn_Flag) {
                     this->write("_in.");
-                } else if (ref.fVariable.fModifiers.fFlags & Modifiers::kOut_Flag) {
+                } else if (ref.fVariable->fModifiers.fFlags & Modifiers::kOut_Flag) {
                     this->write("_out->");
-                } else if (ref.fVariable.fModifiers.fFlags & Modifiers::kUniform_Flag &&
-                           ref.fVariable.type().typeKind() != Type::TypeKind::kSampler) {
+                } else if (ref.fVariable->fModifiers.fFlags & Modifiers::kUniform_Flag &&
+                           ref.fVariable->type().typeKind() != Type::TypeKind::kSampler) {
                     this->write("_uniforms.");
                 } else {
                     this->write("_globals->");
                 }
             }
-            this->writeName(ref.fVariable.fName);
+            this->writeName(ref.fVariable->fName);
     }
 }
 
@@ -725,9 +725,6 @@ void MetalCodeGenerator::writeFieldAccess(const FieldAccess& f) {
         this->write(".");
     }
     switch (field->fModifiers.fLayout.fBuiltin) {
-        case SK_CLIPDISTANCE_BUILTIN:
-            this->write("gl_ClipDistance");
-            break;
         case SK_POSITION_BUILTIN:
             this->write("_out->sk_Position");
             break;
@@ -834,10 +831,9 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
     if (needParens) {
         this->write("(");
     }
-    if (Compiler::IsAssignment(op) &&
-        Expression::Kind::kVariableReference == left.kind() &&
-        Variable::kParameter_Storage == left.as<VariableReference>().fVariable.fStorage &&
-        left.as<VariableReference>().fVariable.fModifiers.fFlags & Modifiers::kOut_Flag) {
+    if (Compiler::IsAssignment(op) && left.is<VariableReference>() &&
+        left.as<VariableReference>().fVariable->fStorage == Variable::kParameter_Storage &&
+        left.as<VariableReference>().fVariable->fModifiers.fFlags & Modifiers::kOut_Flag) {
         // writing to an out parameter. Since we have to turn those into pointers, we have to
         // dereference it here.
         this->write("*");
@@ -942,7 +938,8 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
                 this->write("vertex Outputs vertexMain");
                 break;
             default:
-                SkDEBUGFAIL("unsupported kind of program");
+                fErrors.error(-1, "unsupported kind of program");
+                return;
         }
         this->write("(Inputs _in [[stage_in]]");
         if (-1 != fUniformBuffer) {
@@ -1070,7 +1067,12 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
     StringStream buffer;
     fOut = &buffer;
     fIndentation++;
-    this->writeStatements(((Block&) *f.fBody).fStatements);
+    for (const std::unique_ptr<Statement>& stmt : f.fBody->as<Block>().children()) {
+        if (!stmt->isEmpty()) {
+            this->writeStatement(*stmt);
+            this->writeLine();
+        }
+    }
     if ("main" == f.fDeclaration.fName) {
         switch (fProgram.fKind) {
             case Program::kFragment_Kind:
@@ -1292,22 +1294,19 @@ void MetalCodeGenerator::writeStatement(const Statement& s) {
     }
 }
 
-void MetalCodeGenerator::writeStatements(const std::vector<std::unique_ptr<Statement>>& statements) {
-    for (const auto& s : statements) {
-        if (!s->isEmpty()) {
-            this->writeStatement(*s);
-            this->writeLine();
-        }
-    }
-}
-
 void MetalCodeGenerator::writeBlock(const Block& b) {
-    if (b.fIsScope) {
+    bool isScope = b.isScope();
+    if (isScope) {
         this->writeLine("{");
         fIndentation++;
     }
-    this->writeStatements(b.fStatements);
-    if (b.fIsScope) {
+    for (const std::unique_ptr<Statement>& stmt : b.children()) {
+        if (!stmt->isEmpty()) {
+            this->writeStatement(*stmt);
+            this->writeLine();
+        }
+    }
+    if (isScope) {
         fIndentation--;
         this->write("}");
     }
@@ -1751,15 +1750,15 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Expressi
         case Expression::Kind::kVariableReference: {
             const VariableReference& v = e->as<VariableReference>();
             Requirements result = kNo_Requirements;
-            if (v.fVariable.fModifiers.fLayout.fBuiltin == SK_FRAGCOORD_BUILTIN) {
+            if (v.fVariable->fModifiers.fLayout.fBuiltin == SK_FRAGCOORD_BUILTIN) {
                 result = kGlobals_Requirement | kFragCoord_Requirement;
-            } else if (Variable::kGlobal_Storage == v.fVariable.fStorage) {
-                if (v.fVariable.fModifiers.fFlags & Modifiers::kIn_Flag) {
+            } else if (Variable::kGlobal_Storage == v.fVariable->fStorage) {
+                if (v.fVariable->fModifiers.fFlags & Modifiers::kIn_Flag) {
                     result = kInputs_Requirement;
-                } else if (v.fVariable.fModifiers.fFlags & Modifiers::kOut_Flag) {
+                } else if (v.fVariable->fModifiers.fFlags & Modifiers::kOut_Flag) {
                     result = kOutputs_Requirement;
-                } else if (v.fVariable.fModifiers.fFlags & Modifiers::kUniform_Flag &&
-                           v.fVariable.type().typeKind() != Type::TypeKind::kSampler) {
+                } else if (v.fVariable->fModifiers.fFlags & Modifiers::kUniform_Flag &&
+                           v.fVariable->type().typeKind() != Type::TypeKind::kSampler) {
                     result = kUniforms_Requirement;
                 } else {
                     result = kGlobals_Requirement;
@@ -1779,7 +1778,7 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Statemen
     switch (s->kind()) {
         case Statement::Kind::kBlock: {
             Requirements result = kNo_Requirements;
-            for (const auto& child : s->as<Block>().fStatements) {
+            for (const std::unique_ptr<Statement>& child : s->as<Block>().children()) {
                 result |= this->requirements(child.get());
             }
             return result;

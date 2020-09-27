@@ -8,6 +8,7 @@
 #include "src/sksl/SkSLAnalysis.h"
 
 #include "include/private/SkSLSampleUsage.h"
+#include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
@@ -66,8 +67,8 @@ namespace {
 static bool is_sample_call_to_fp(const FunctionCall& fc, const Variable& fp) {
     const FunctionDeclaration& f = fc.fFunction;
     return f.fBuiltin && f.fName == "sample" && fc.fArguments.size() >= 1 &&
-            fc.fArguments[0]->kind() == Expression::Kind::kVariableReference &&
-            &((VariableReference&) *fc.fArguments[0]).fVariable == &fp;
+           fc.fArguments[0]->is<VariableReference>() &&
+           fc.fArguments[0]->as<VariableReference>().fVariable == &fp;
 }
 
 // Visitor that determines the merged SampleUsage for a given child 'fp' in the program.
@@ -78,7 +79,7 @@ public:
 
     SampleUsage visit(const Program& program) {
         fUsage = SampleUsage(); // reset to none
-        this->INHERITED::visit(program);
+        INHERITED::visit(program);
         return fUsage;
     }
 
@@ -125,7 +126,7 @@ protected:
             }
         }
 
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
     using INHERITED = ProgramVisitor;
@@ -137,11 +138,11 @@ public:
     BuiltinVariableVisitor(int builtin) : fBuiltin(builtin) {}
 
     bool visitExpression(const Expression& e) override {
-        if (e.kind() == Expression::Kind::kVariableReference) {
+        if (e.is<VariableReference>()) {
             const VariableReference& var = e.as<VariableReference>();
-            return var.fVariable.fModifiers.fLayout.fBuiltin == fBuiltin;
+            return var.fVariable->fModifiers.fLayout.fBuiltin == fBuiltin;
         }
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
     int fBuiltin;
@@ -160,17 +161,17 @@ public:
 
     bool visitExpression(const Expression& e) override {
         ++fCount;
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
     bool visitProgramElement(const ProgramElement& p) override {
         ++fCount;
-        return this->INHERITED::visitProgramElement(p);
+        return INHERITED::visitProgramElement(p);
     }
 
     bool visitStatement(const Statement& s) override {
         ++fCount;
-        return this->INHERITED::visitStatement(s);
+        return INHERITED::visitStatement(s);
     }
 
 private:
@@ -189,15 +190,15 @@ public:
     }
 
     bool visitExpression(const Expression& e) override {
-        if (e.kind() == Expression::Kind::kVariableReference) {
+        if (e.is<VariableReference>()) {
             const VariableReference& ref = e.as<VariableReference>();
-            if (&ref.fVariable == fVar && (ref.fRefKind == VariableReference::kWrite_RefKind ||
-                                           ref.fRefKind == VariableReference::kReadWrite_RefKind ||
-                                           ref.fRefKind == VariableReference::kPointer_RefKind)) {
+            if (ref.fVariable == fVar && (ref.fRefKind == VariableReference::kWrite_RefKind ||
+                                          ref.fRefKind == VariableReference::kReadWrite_RefKind ||
+                                          ref.fRefKind == VariableReference::kPointer_RefKind)) {
                 return true;
             }
         }
-        return this->INHERITED::visitExpression(e);
+        return INHERITED::visitExpression(e);
     }
 
 private:
@@ -205,6 +206,85 @@ private:
 
     using INHERITED = ProgramVisitor;
 };
+
+// This isn't actually using ProgramVisitor, because it only considers a subset of the fields for
+// any given expression kind. For instance, when indexing an array (e.g. `x[1]`), we only want to
+// know if the base (`x`) is assignable; the index expression (`1`) doesn't need to be.
+class IsAssignableVisitor {
+public:
+    IsAssignableVisitor(std::vector<VariableReference*>* assignableVars, ErrorReporter& errors)
+        : fAssignableVars(assignableVars)
+        , fErrors(errors) {}
+
+    bool visit(Expression& expr) {
+        this->visitExpression(expr);
+        return fErrors.errorCount() == 0;
+    }
+
+    void visitExpression(Expression& expr) {
+        switch (expr.kind()) {
+            case Expression::Kind::kVariableReference: {
+                VariableReference& varRef = expr.as<VariableReference>();
+                const Variable* var = varRef.fVariable;
+                if (var->fModifiers.fFlags & (Modifiers::kConst_Flag | Modifiers::kUniform_Flag |
+                                              Modifiers::kVarying_Flag)) {
+                    fErrors.error(expr.fOffset,
+                                  "cannot modify immutable variable '" + var->fName + "'");
+                } else if (fAssignableVars) {
+                    fAssignableVars->push_back(&varRef);
+                }
+                break;
+            }
+            case Expression::Kind::kFieldAccess:
+                this->visitExpression(*expr.as<FieldAccess>().fBase);
+                break;
+
+            case Expression::Kind::kSwizzle: {
+                const Swizzle& swizzle = expr.as<Swizzle>();
+                this->checkSwizzleWrite(swizzle);
+                this->visitExpression(*swizzle.fBase);
+                break;
+            }
+            case Expression::Kind::kIndex:
+                this->visitExpression(*expr.as<IndexExpression>().fBase);
+                break;
+
+            case Expression::Kind::kExternalValue: {
+                const ExternalValue* var = expr.as<ExternalValueReference>().fValue;
+                if (!var->canWrite()) {
+                    fErrors.error(expr.fOffset,
+                                  "cannot modify immutable external value '" + var->fName + "'");
+                }
+                break;
+            }
+            default:
+                fErrors.error(expr.fOffset, "cannot assign to this expression");
+                break;
+        }
+    }
+
+private:
+    void checkSwizzleWrite(const Swizzle& swizzle) {
+        int bits = 0;
+        for (int idx : swizzle.fComponents) {
+            SkASSERT(idx <= 3);
+            int bit = 1 << idx;
+            if (bits & bit) {
+                fErrors.error(swizzle.fOffset,
+                              "cannot write to the same swizzle field more than once");
+                break;
+            }
+            bits |= bit;
+        }
+    }
+
+    std::vector<VariableReference*>* fAssignableVars;
+    ErrorReporter& fErrors;
+
+    using INHERITED = ProgramVisitor;
+};
+
+
 
 }  // namespace
 
@@ -237,6 +317,11 @@ bool Analysis::StatementWritesToVariable(const Statement& stmt, const Variable& 
     return VariableWriteVisitor(&var).visit(stmt);
 }
 
+bool Analysis::IsAssignable(Expression& expr, std::vector<VariableReference*>* assignableVars,
+                            ErrorReporter& errors) {
+    return IsAssignableVisitor{assignableVars, errors}.visit(expr);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ProgramVisitor
 
@@ -254,7 +339,6 @@ bool ProgramVisitor::visitExpression(const Expression& e) {
         case Expression::Kind::kBoolLiteral:
         case Expression::Kind::kDefined:
         case Expression::Kind::kExternalValue:
-        case Expression::Kind::kFieldAccess:
         case Expression::Kind::kFloatLiteral:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kIntLiteral:
@@ -279,6 +363,8 @@ bool ProgramVisitor::visitExpression(const Expression& e) {
                 if (this->visitExpression(*arg)) { return true; }
             }
             return false; }
+        case Expression::Kind::kFieldAccess:
+            return this->visitExpression(*e.as<FieldAccess>().fBase);
         case Expression::Kind::kFunctionCall: {
             const FunctionCall& c = e.as<FunctionCall>();
             for (const auto& arg : c.fArguments) {
@@ -314,8 +400,10 @@ bool ProgramVisitor::visitStatement(const Statement& s) {
             // Leaf statements just return false
             return false;
         case Statement::Kind::kBlock:
-            for (const std::unique_ptr<Statement>& blockStmt : s.as<Block>().fStatements) {
-                if (this->visitStatement(*blockStmt)) { return true; }
+            for (const std::unique_ptr<Statement>& stmt : s.as<Block>().children()) {
+                if (this->visitStatement(*stmt)) {
+                    return true;
+                }
             }
             return false;
         case Statement::Kind::kDo: {

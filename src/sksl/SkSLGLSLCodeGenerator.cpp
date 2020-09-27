@@ -782,7 +782,7 @@ void GLSLCodeGenerator::writeFragCoord() {
 }
 
 void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
-    switch (ref.fVariable.fModifiers.fLayout.fBuiltin) {
+    switch (ref.fVariable->fModifiers.fLayout.fBuiltin) {
         case SK_FRAGCOLOR_BUILTIN:
             if (fProgram.fSettings.fCaps->mustDeclareFragmentShaderOutput()) {
                 this->write("sk_FragColor");
@@ -812,9 +812,6 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
         case SK_INSTANCEID_BUILTIN:
             this->write("gl_InstanceID");
             break;
-        case SK_CLIPDISTANCE_BUILTIN:
-            this->write("gl_ClipDistance");
-            break;
         case SK_IN_BUILTIN:
             this->write("gl_in");
             break;
@@ -825,7 +822,7 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             this->write(fProgram.fSettings.fCaps->fbFetchColorName());
             break;
         default:
-            this->write(ref.fVariable.fName);
+            this->write(ref.fVariable->fName);
     }
 }
 
@@ -846,19 +843,13 @@ void GLSLCodeGenerator::writeFieldAccess(const FieldAccess& f) {
         this->write(".");
     }
     const Type& baseType = f.fBase->type();
-    switch (baseType.fields()[f.fFieldIndex].fModifiers.fLayout.fBuiltin) {
-        case SK_CLIPDISTANCE_BUILTIN:
-            this->write("gl_ClipDistance");
-            break;
-        default:
-            StringFragment name = baseType.fields()[f.fFieldIndex].fName;
-            if (name == "sk_Position") {
-                this->write("gl_Position");
-            } else if (name == "sk_PointSize") {
-                this->write("gl_PointSize");
-            } else {
-                this->write(baseType.fields()[f.fFieldIndex].fName);
-            }
+    StringFragment name = baseType.fields()[f.fFieldIndex].fName;
+    if (name == "sk_Position") {
+        this->write("gl_Position");
+    } else if (name == "sk_PointSize") {
+        this->write("gl_PointSize");
+    } else {
+        this->write(baseType.fields()[f.fFieldIndex].fName);
     }
 }
 
@@ -1081,7 +1072,12 @@ void GLSLCodeGenerator::writeFunction(const FunctionDefinition& f) {
     OutputStream* oldOut = fOut;
     StringStream buffer;
     fOut = &buffer;
-    this->writeStatements(f.fBody->as<Block>().fStatements);
+    for (const std::unique_ptr<Statement>& stmt : f.fBody->as<Block>().children()) {
+        if (!stmt->isEmpty()) {
+            this->writeStatement(*stmt);
+            this->writeLine();
+        }
+    }
 
     fIndentation--;
     this->writeLine("}");
@@ -1343,22 +1339,19 @@ void GLSLCodeGenerator::writeStatement(const Statement& s) {
     }
 }
 
-void GLSLCodeGenerator::writeStatements(const std::vector<std::unique_ptr<Statement>>& statements) {
-    for (const auto& s : statements) {
-        if (!s->isEmpty()) {
-            this->writeStatement(*s);
-            this->writeLine();
-        }
-    }
-}
-
 void GLSLCodeGenerator::writeBlock(const Block& b) {
-    if (b.fIsScope) {
+    bool isScope = b.isScope();
+    if (isScope) {
         this->writeLine("{");
         fIndentation++;
     }
-    this->writeStatements(b.fStatements);
-    if (b.fIsScope) {
+    for (const std::unique_ptr<Statement>& stmt : b.children()) {
+        if (!stmt->isEmpty()) {
+            this->writeStatement(*stmt);
+            this->writeLine();
+        }
+    }
+    if (isScope) {
         fIndentation--;
         this->write("}");
     }
