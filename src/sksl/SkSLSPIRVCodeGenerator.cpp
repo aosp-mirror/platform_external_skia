@@ -2534,11 +2534,11 @@ SpvId SPIRVCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     } else {
         SkASSERT(false);
     }
-    std::pair<ConstantValue, ConstantType> key(i.fValue, constantType);
+    std::pair<ConstantValue, ConstantType> key(i.value(), constantType);
     auto entry = fNumberConstants.find(key);
     if (entry == fNumberConstants.end()) {
         SpvId result = this->nextId();
-        this->writeInstruction(SpvOpConstant, this->getType(type), result, (SpvId) i.fValue,
+        this->writeInstruction(SpvOpConstant, this->getType(type), result, (SpvId) i.value(),
                                fConstantBuffer);
         fNumberConstants[key] = result;
         return result;
@@ -3025,12 +3025,12 @@ void SPIRVCodeGenerator::writeDoStatement(const DoStatement& d, OutputStream& ou
     this->writeInstruction(SpvOpLoopMerge, end, continueTarget, SpvLoopControlMaskNone, out);
     this->writeInstruction(SpvOpBranch, start, out);
     this->writeLabel(start, out);
-    this->writeStatement(*d.fStatement, out);
+    this->writeStatement(*d.statement(), out);
     if (fCurrentBlock) {
         this->writeInstruction(SpvOpBranch, next, out);
     }
     this->writeLabel(next, out);
-    SpvId test = this->writeExpression(*d.fTest, out);
+    SpvId test = this->writeExpression(*d.test(), out);
     this->writeInstruction(SpvOpBranchConditional, test, continueTarget, end, out);
     this->writeLabel(continueTarget, out);
     this->writeInstruction(SpvOpBranch, header, out);
@@ -3064,7 +3064,7 @@ void SPIRVCodeGenerator::writeSwitchStatement(const SwitchStatement& s, OutputSt
         if (!s.fCases[i]->fValue) {
             continue;
         }
-        this->writeWord(s.fCases[i]->fValue->as<IntLiteral>().fValue, out);
+        this->writeWord(s.fCases[i]->fValue->as<IntLiteral>().value(), out);
         this->writeWord(labels[i], out);
     }
     for (size_t i = 0; i < s.fCases.size(); ++i) {

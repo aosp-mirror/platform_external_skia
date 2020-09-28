@@ -912,9 +912,9 @@ void MetalCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
 
 void MetalCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     if (i.type() == *fContext.fUInt_Type) {
-        this->write(to_string(i.fValue & 0xffffffff) + "u");
+        this->write(to_string(i.value() & 0xffffffff) + "u");
     } else {
-        this->write(to_string((int32_t) i.fValue));
+        this->write(to_string((int32_t) i.value()));
     }
 }
 
@@ -1350,9 +1350,9 @@ void MetalCodeGenerator::writeWhileStatement(const WhileStatement& w) {
 
 void MetalCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->write("do ");
-    this->writeStatement(*d.fStatement);
+    this->writeStatement(*d.statement());
     this->write(" while (");
-    this->writeExpression(*d.fTest, kTopLevel_Precedence);
+    this->writeExpression(*d.test(), kTopLevel_Precedence);
     this->write(");");
 }
 
@@ -1821,8 +1821,8 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Statemen
         }
         case Statement::Kind::kDo: {
             const DoStatement& d = s->as<DoStatement>();
-            return this->requirements(d.fTest.get()) |
-                   this->requirements(d.fStatement.get());
+            return this->requirements(d.test().get()) |
+                   this->requirements(d.statement().get());
         }
         case Statement::Kind::kSwitch: {
             const SwitchStatement& sw = s->as<SwitchStatement>();
