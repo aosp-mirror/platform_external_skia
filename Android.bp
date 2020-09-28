@@ -1831,6 +1831,7 @@ cc_test {
         "tests/SkFixed15Test.cpp",
         "tests/SkGaussFilterTest.cpp",
         "tests/SkGlyphBufferTest.cpp",
+        "tests/SkGlyphTest.cpp",
         "tests/SkImageTest.cpp",
         "tests/SkNxTest.cpp",
         "tests/SkPEGTest.cpp",
