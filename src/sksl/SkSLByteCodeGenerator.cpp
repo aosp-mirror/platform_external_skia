@@ -1316,7 +1316,7 @@ void ByteCodeGenerator::writeFunctionCall(const FunctionCall& f) {
 
 void ByteCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     this->write(ByteCodeInstruction::kPushImmediate);
-    this->write32(i.fValue);
+    this->write32(i.value());
 }
 
 void ByteCodeGenerator::writeNullLiteral(const NullLiteral& n) {
@@ -1677,9 +1677,9 @@ void ByteCodeGenerator::writeContinueStatement(const ContinueStatement& c) {
 void ByteCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->write(ByteCodeInstruction::kLoopBegin);
     size_t start = fCode->size();
-    this->writeStatement(*d.fStatement);
+    this->writeStatement(*d.statement());
     this->write(ByteCodeInstruction::kLoopNext);
-    this->writeExpression(*d.fTest);
+    this->writeExpression(*d.test());
     this->write(ByteCodeInstruction::kLoopMask);
     // TODO: Could shorten this with kBranchIfAnyTrue
     this->write(ByteCodeInstruction::kBranchIfAllFalse);

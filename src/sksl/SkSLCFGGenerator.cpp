@@ -76,9 +76,7 @@ void BasicBlock::dump() const {
     printf("]\n");
     for (size_t j = 0; j < fNodes.size(); j++) {
         const BasicBlock::Node& n = fNodes[j];
-        printf("Node %zu (%p): %s\n", j, &n, n.fKind == BasicBlock::Node::kExpression_Kind
-                                                     ? (*n.expression())->description().c_str()
-                                                     : (*n.statement())->description().c_str());
+        printf("Node %zu (%p): %s\n", j, &n, n.description().c_str());
     }
     printf("Exits: [");
     separator = "";
@@ -96,7 +94,7 @@ bool BasicBlock::tryRemoveExpressionBefore(std::vector<BasicBlock::Node>::iterat
         return false;
     }
     bool result;
-    if ((*iter)->fKind == BasicBlock::Node::kExpression_Kind) {
+    if ((*iter)->isExpression()) {
         SkASSERT((*iter)->expression()->get() != e);
         Expression* old = (*iter)->expression()->get();
         do {
@@ -104,11 +102,11 @@ bool BasicBlock::tryRemoveExpressionBefore(std::vector<BasicBlock::Node>::iterat
                 return false;
             }
             --(*iter);
-        } while ((*iter)->fKind != BasicBlock::Node::kExpression_Kind ||
-                 (*iter)->expression()->get() != e);
+        } while (!(*iter)->isExpression() || (*iter)->expression()->get() != e);
+
         result = this->tryRemoveExpression(iter);
-        while ((*iter)->fKind != BasicBlock::Node::kExpression_Kind ||
-               (*iter)->expression()->get() != old) {
+
+        while (!(*iter)->isExpression() || (*iter)->expression()->get() != old) {
             SkASSERT(*iter != fNodes.end());
             ++(*iter);
         }
@@ -119,11 +117,11 @@ bool BasicBlock::tryRemoveExpressionBefore(std::vector<BasicBlock::Node>::iterat
                 return false;
             }
             --(*iter);
-        } while ((*iter)->fKind != BasicBlock::Node::kExpression_Kind ||
-                 (*iter)->expression()->get() != e);
+        } while (!(*iter)->isExpression() || (*iter)->expression()->get() != e);
+
         result = this->tryRemoveExpression(iter);
-        while ((*iter)->fKind != BasicBlock::Node::kStatement_Kind ||
-               (*iter)->statement()->get() != old) {
+
+        while (!(*iter)->isStatement() || (*iter)->statement()->get() != old) {
             SkASSERT(*iter != fNodes.end());
             ++(*iter);
         }
@@ -579,8 +577,8 @@ void CFGGenerator::addStatement(CFG& cfg, std::unique_ptr<Statement>* s) {
             fLoopContinues.push(loopStart);
             BlockId loopExit = cfg.newIsolatedBlock();
             fLoopExits.push(loopExit);
-            this->addStatement(cfg, &d.fStatement);
-            this->addExpression(cfg, &d.fTest, /*constantPropagate=*/true);
+            this->addStatement(cfg, &d.statement());
+            this->addExpression(cfg, &d.test(), /*constantPropagate=*/true);
             cfg.addExit(cfg.fCurrent, loopExit);
             cfg.addExit(cfg.fCurrent, loopStart);
             fLoopContinues.pop();
