@@ -96,6 +96,15 @@ static void grab_intrinsics(std::vector<std::unique_ptr<ProgramElement>>* src,
     }
 }
 
+static void reset_call_counts(std::vector<std::unique_ptr<ProgramElement>>* src) {
+    for (std::unique_ptr<ProgramElement>& element : *src) {
+        if (element->is<FunctionDefinition>()) {
+            const FunctionDeclaration& fnDecl = element->as<FunctionDefinition>().fDeclaration;
+            fnDecl.fCallCount = 0;
+        }
+    }
+}
+
 Compiler::Compiler(Flags flags)
 : fGPUIntrinsics(std::make_unique<IRIntrinsicMap>(/*parent=*/nullptr))
 , fInterpreterIntrinsics(std::make_unique<IRIntrinsicMap>(/*parent=*/nullptr))
@@ -266,6 +275,15 @@ Compiler::Compiler(Flags flags)
         fFragmentInclude = rehydrator.elements();
     }
 #endif
+    // Call counts are used to track dead-stripping and inlinability within the program being
+    // currently compiled, and always should start at zero for a new program. Zero out any call
+    // counts that were registered during the assembly of the intrinsics/include data. (If we
+    // actually use calls from inside the intrinsics, we will clone them into the program and they
+    // will get new call counts.)
+    reset_call_counts(&gpuIntrinsics);
+    reset_call_counts(&fVertexInclude);
+    reset_call_counts(&fFragmentInclude);
+
     grab_intrinsics(&gpuIntrinsics, fGPUIntrinsics.get());
     SkASSERT(gpuIntrinsics.empty());
 }
@@ -881,7 +899,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
             if (t->fTest->kind() == Expression::Kind::kBoolLiteral) {
                 // ternary has a constant test, replace it with either the true or
                 // false branch
-                if (t->fTest->as<BoolLiteral>().fValue) {
+                if (t->fTest->as<BoolLiteral>().value()) {
                     (*iter)->setExpression(std::move(t->fIfTrue));
                 } else {
                     (*iter)->setExpression(std::move(t->fIfFalse));
@@ -1292,7 +1310,7 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
             IfStatement& i = stmt->as<IfStatement>();
             if (i.fTest->kind() == Expression::Kind::kBoolLiteral) {
                 // constant if, collapse down to a single branch
-                if (i.fTest->as<BoolLiteral>().fValue) {
+                if (i.fTest->as<BoolLiteral>().value()) {
                     SkASSERT(i.fIfTrue);
                     (*iter)->setStatement(std::move(i.fIfTrue));
                 } else {

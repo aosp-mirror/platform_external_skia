@@ -122,9 +122,6 @@ public:
                                                   const SkScalerContextEffects& effects,
                                                   const SkTypeface& typeface) override;
 
-    static void AddGlyphForTesting(
-            RemoteStrike* strike, SkDrawableGlyphBuffer* drawables, SkSourceGlyphBuffer* rejects);
-
     void setMaxEntriesInDescriptorMapForTesting(size_t count) {
         fMaxEntriesInDescriptorMap = count;
     }
@@ -163,6 +160,8 @@ private:
     SkTHashSet<RemoteStrike*> fRemoteStrikesToSend;
     std::vector<WireTypeface> fTypefacesToSend;
 };
+
+class SkStrikeClientImpl;
 
 class SkStrikeClient {
 public:
@@ -220,15 +219,7 @@ public:
     SK_SPI bool readStrikeData(const volatile void* memory, size_t memorySize);
 
 private:
-    class DiscardableStrikePinner;
-
-    static bool ReadGlyph(SkTLazy<SkGlyph>& glyph, Deserializer* deserializer);
-    sk_sp<SkTypeface> addTypeface(const WireTypeface& wire);
-
-    SkTHashMap<SkFontID, sk_sp<SkTypeface>> fRemoteFontIdToTypeface;
-    sk_sp<DiscardableHandleManager> fDiscardableHandleManager;
-    SkStrikeCache* const fStrikeCache;
-    const bool fIsLogging;
+    std::unique_ptr<SkStrikeClientImpl> fImpl;
 };
 
 // For exposure to fuzzing only.
