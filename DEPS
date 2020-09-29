@@ -11,7 +11,7 @@ deps = {
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and glslang and shaderc for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@eec9edfd5769774d1becf6c2fa8f8241a474c4f4",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@ed2b465f860720be30eeba35a56088dc5ba66d46",
   "third_party/externals/glslang"         : "https://chromium.googlesource.com/external/github.com/KhronosGroup/glslang@4dcc12d1a441b29d5901bc708bb1343d29d6459f",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@b41863e42637544c2941b574c7877d3e1f663e25",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@8f45f5cfa0009d2a70589bcda0349b8cb2b72783",
@@ -45,7 +45,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@eaf99a4e2009b0e5759e6070ad1760ac1dd75461",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@6a3c229fa0dc87064c6d40f9d18a9d993d6cf889",
+    "url": "https://chromium.googlesource.com/chromium/src.git@8563523f5c7441a25830c0603ab3b5c9c091570c",
     "condition": "checkout_chromium",
   },
 }

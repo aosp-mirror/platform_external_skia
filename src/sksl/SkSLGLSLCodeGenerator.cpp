@@ -1008,19 +1008,19 @@ void GLSLCodeGenerator::writePostfixExpression(const PostfixExpression& p,
 }
 
 void GLSLCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
-    this->write(b.fValue ? "true" : "false");
+    this->write(b.value() ? "true" : "false");
 }
 
 void GLSLCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     const Type& type = i.type();
     if (type == *fContext.fUInt_Type) {
-        this->write(to_string(i.fValue & 0xffffffff) + "u");
+        this->write(to_string(i.value() & 0xffffffff) + "u");
     } else if (type == *fContext.fUShort_Type) {
-        this->write(to_string(i.fValue & 0xffff) + "u");
+        this->write(to_string(i.value() & 0xffff) + "u");
     } else if (type == *fContext.fUByte_Type) {
-        this->write(to_string(i.fValue & 0xff) + "u");
+        this->write(to_string(i.value() & 0xff) + "u");
     } else {
-        this->write(to_string((int32_t) i.fValue));
+        this->write(to_string((int32_t) i.value()));
     }
 }
 
@@ -1404,9 +1404,9 @@ void GLSLCodeGenerator::writeWhileStatement(const WhileStatement& w) {
 void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
     if (!fProgram.fSettings.fCaps->rewriteDoWhileLoops()) {
         this->write("do ");
-        this->writeStatement(*d.fStatement);
+        this->writeStatement(*d.statement());
         this->write(" while (");
-        this->writeExpression(*d.fTest, kTopLevel_Precedence);
+        this->writeExpression(*d.test(), kTopLevel_Precedence);
         this->write(");");
         return;
     }
@@ -1438,7 +1438,7 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->writeLine(") {");
     fIndentation++;
     this->write("if (!");
-    this->writeExpression(*d.fTest, kPrefix_Precedence);
+    this->writeExpression(*d.test(), kPrefix_Precedence);
     this->writeLine(") {");
     fIndentation++;
     this->writeLine("break;");
@@ -1448,7 +1448,7 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->writeLine("}");
     this->write(tmpVar);
     this->writeLine(" = true;");
-    this->writeStatement(*d.fStatement);
+    this->writeStatement(*d.statement());
     this->writeLine();
     fIndentation--;
     this->write("}");

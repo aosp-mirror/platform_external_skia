@@ -50,6 +50,10 @@ public:
 
     const Type& type() const {
         switch (fData.fKind) {
+            case NodeData::Kind::kBoolLiteral:
+                return *this->boolLiteralData().fType;
+            case NodeData::Kind::kIntLiteral:
+                return *this->intLiteralData().fType;
             case NodeData::Kind::kType:
                 return *this->typeData();
             case NodeData::Kind::kTypeToken:
@@ -68,52 +72,130 @@ protected:
         bool fIsScope;
     };
 
+    struct BoolLiteralData {
+        const Type* fType;
+        bool fValue;
+    };
+
+    struct IntLiteralData {
+        const Type* fType;
+        int64_t fValue;
+    };
+
     struct TypeTokenData {
         const Type* fType;
         Token::Kind fToken;
     };
 
     struct NodeData {
-        char fBytes[std::max({sizeof(BlockData),
-                              sizeof(Type*),
-                              sizeof(TypeTokenData)})];
-
         enum class Kind {
             kBlock,
+            kBoolLiteral,
+            kIntLiteral,
             kType,
             kTypeToken,
-        } fKind;
+        } fKind = Kind::kType;
+        // it doesn't really matter what kind we default to, as long as it's a POD type
 
-        NodeData() = default;
+        union Contents {
+            BlockData fBlock;
+            BoolLiteralData fBoolLiteral;
+            IntLiteralData fIntLiteral;
+            const Type* fType;
+            TypeTokenData fTypeToken;
 
-        NodeData(BlockData data)
+            Contents() {}
+
+            ~Contents() {}
+        } fContents;
+
+        NodeData(const BlockData& data)
             : fKind(Kind::kBlock) {
-            new(reinterpret_cast<BlockData*>(fBytes)) BlockData{std::move(data.fSymbolTable),
-                                                                data.fIsScope};
+            *(new(&fContents) BlockData) = data;
+        }
+
+        NodeData(const BoolLiteralData& data)
+            : fKind(Kind::kBoolLiteral) {
+            *(new(&fContents) BoolLiteralData) = data;
+        }
+
+        NodeData(IntLiteralData data)
+            : fKind(Kind::kIntLiteral) {
+            *(new(&fContents) IntLiteralData) = data;
         }
 
         NodeData(const Type* data)
             : fKind(Kind::kType) {
-            memcpy(fBytes, &data, sizeof(data));
+            *(new(&fContents) const Type*) = data;
         }
 
-        NodeData(TypeTokenData data)
+        NodeData(const TypeTokenData& data)
             : fKind(Kind::kTypeToken) {
-            memcpy(fBytes, &data, sizeof(data));
+            *(new(&fContents) TypeTokenData) = data;
+        }
+
+        NodeData(const NodeData& other) {
+            *this = other;
+        }
+
+        NodeData& operator=(const NodeData& other) {
+            this->cleanup();
+            fKind = other.fKind;
+            switch (fKind) {
+                case Kind::kBlock:
+                    *(new(&fContents) BlockData) = other.fContents.fBlock;
+                    break;
+                case Kind::kBoolLiteral:
+                    *(new(&fContents) BoolLiteralData) = other.fContents.fBoolLiteral;
+                    break;
+                case Kind::kIntLiteral:
+                    *(new(&fContents) IntLiteralData) = other.fContents.fIntLiteral;
+                    break;
+                case Kind::kType:
+                    *(new(&fContents) const Type*) = other.fContents.fType;
+                    break;
+                case Kind::kTypeToken:
+                    *(new(&fContents) TypeTokenData) = other.fContents.fTypeToken;
+                    break;
+            }
+            return *this;
         }
 
         ~NodeData() {
-            if (fKind == Kind::kBlock) {
-                reinterpret_cast<BlockData*>(fBytes)->~BlockData();
+            this->cleanup();
+        }
+
+    private:
+        void cleanup() {
+            switch (fKind) {
+                case Kind::kBlock:
+                    fContents.fBlock.~BlockData();
+                    break;
+                case Kind::kBoolLiteral:
+                    fContents.fBoolLiteral.~BoolLiteralData();
+                    break;
+                case Kind::kIntLiteral:
+                    fContents.fIntLiteral.~IntLiteralData();
+                    break;
+                case Kind::kType:
+                    break;
+                case Kind::kTypeToken:
+                    fContents.fTypeToken.~TypeTokenData();
+                    break;
             }
         }
     };
 
-    IRNode(int offset, int kind, BlockData data, std::vector<std::unique_ptr<Statement>> stmts);
+    IRNode(int offset, int kind, const BlockData& data,
+           std::vector<std::unique_ptr<Statement>> stmts);
+
+    IRNode(int offset, int kind, const BoolLiteralData& data);
+
+    IRNode(int offset, int kind, const IntLiteralData& data);
 
     IRNode(int offset, int kind, const Type* data = nullptr);
 
-    IRNode(int offset, int kind, TypeTokenData data);
+    IRNode(int offset, int kind, const TypeTokenData& data);
 
     IRNode(const IRNode& other);
 
@@ -158,22 +240,32 @@ protected:
 
     BlockData& blockData() {
         SkASSERT(fData.fKind == NodeData::Kind::kBlock);
-        return *reinterpret_cast<BlockData*>(fData.fBytes);
+        return fData.fContents.fBlock;
     }
 
     const BlockData& blockData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kBlock);
-        return *reinterpret_cast<const BlockData*>(fData.fBytes);
+        return fData.fContents.fBlock;
+    }
+
+    const BoolLiteralData& boolLiteralData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kBoolLiteral);
+        return fData.fContents.fBoolLiteral;
+    }
+
+    const IntLiteralData& intLiteralData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kIntLiteral);
+        return fData.fContents.fIntLiteral;
     }
 
     const Type* typeData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kType);
-        return *reinterpret_cast<const Type* const*>(fData.fBytes);
+        return fData.fContents.fType;
     }
 
     const TypeTokenData& typeTokenData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kTypeToken);
-        return *reinterpret_cast<const TypeTokenData*>(fData.fBytes);
+        return fData.fContents.fTypeToken;
     }
 
     int fKind;
