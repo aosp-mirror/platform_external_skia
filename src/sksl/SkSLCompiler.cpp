@@ -650,14 +650,14 @@ static bool try_replace_expression(BasicBlock* b,
  * Returns true if the expression is a constant numeric literal with the specified value, or a
  * constant vector with all elements equal to the specified value.
  */
-template <typename T = double>
+template <typename T = SKSL_FLOAT>
 static bool is_constant(const Expression& expr, T value) {
     switch (expr.kind()) {
         case Expression::Kind::kIntLiteral:
             return expr.as<IntLiteral>().value() == value;
 
         case Expression::Kind::kFloatLiteral:
-            return expr.as<FloatLiteral>().fValue == value;
+            return expr.as<FloatLiteral>().value() == value;
 
         case Expression::Kind::kConstructor: {
             const Constructor& constructor = expr.as<Constructor>();
@@ -682,8 +682,8 @@ static bool is_constant(const Expression& expr, T value) {
                         return true;
 
                     case Type::TypeKind::kScalar:
-                        SkASSERT(constructor.fArguments.size() == 1);
-                        return is_constant<T>(*constructor.fArguments[0], value);
+                        SkASSERT(constructor.arguments().size() == 1);
+                        return is_constant<T>(*constructor.arguments()[0], value);
 
                     default:
                         return false;

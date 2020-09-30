@@ -274,8 +274,8 @@ void Dehydrator::write(const Expression* e) {
                 const Constructor& c = e->as<Constructor>();
                 this->writeU8(Rehydrator::kConstructor_Command);
                 this->write(c.type());
-                this->writeU8(c.fArguments.size());
-                for (const auto& a : c.fArguments) {
+                this->writeU8(c.arguments().size());
+                for (const auto& a : c.arguments()) {
                     this->write(a.get());
                 }
                 break;
@@ -298,7 +298,7 @@ void Dehydrator::write(const Expression* e) {
                 const FloatLiteral& f = e->as<FloatLiteral>();
                 this->writeU8(Rehydrator::kFloatLiteral_Command);
                 FloatIntUnion u;
-                u.fFloat = f.fValue;
+                u.fFloat = f.value();
                 this->writeS32(u.fInt);
                 break;
             }

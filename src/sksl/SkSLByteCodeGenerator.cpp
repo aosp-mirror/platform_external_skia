@@ -905,11 +905,11 @@ void ByteCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
 }
 
 void ByteCodeGenerator::writeConstructor(const Constructor& c) {
-    for (const auto& arg : c.fArguments) {
+    for (const auto& arg : c.arguments()) {
         this->writeExpression(*arg);
     }
-    if (c.fArguments.size() == 1) {
-        const Type& inType = c.fArguments[0]->type();
+    if (c.arguments().size() == 1) {
+        const Type& inType = c.arguments()[0]->type();
         const Type& outType = c.type();
         TypeCategory inCategory = type_category(inType);
         TypeCategory outCategory = type_category(outType);
@@ -1022,7 +1022,7 @@ static inline uint32_t float_to_bits(float x) {
 
 void ByteCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
     this->write(ByteCodeInstruction::kPushImmediate);
-    this->write32(float_to_bits(f.fValue));
+    this->write32(float_to_bits(f.value()));
 }
 
 static bool is_generic_type(const Type* type, const Type* generic) {
@@ -1557,15 +1557,24 @@ public:
         // because the stack doesn't let us retain that address between stores. Dynamic locations
         // are rare though, and swizzled writes to those are even rarer, so we just live with this.
         for (int i = count; i-- > 0;) {
-            ByteCodeGenerator::Location location = fGenerator.getLocation(*fSwizzle.fBase);
+            // If we have a swizzle-of-swizzle lvalue, we need to flatten that down to the final
+            // component index. (getLocation can't handle this case).
+            const Expression* expr = &fSwizzle;
+            int component = i;
+            do {
+                component = expr->as<Swizzle>().fComponents[component];
+                expr = expr->as<Swizzle>().fBase.get();
+            } while (expr->is<Swizzle>());
+
+            ByteCodeGenerator::Location location = fGenerator.getLocation(*expr);
             if (!location.isOnStack()) {
                 fGenerator.write(location.selectStore(ByteCodeInstruction::kStore,
                                                       ByteCodeInstruction::kStoreGlobal),
                                  1);
-                fGenerator.write8(location.fSlot + fSwizzle.fComponents[i]);
+                fGenerator.write8(location.fSlot + component);
             } else {
                 fGenerator.write(ByteCodeInstruction::kPushImmediate);
-                fGenerator.write32(fSwizzle.fComponents[i]);
+                fGenerator.write32(component);
                 fGenerator.write(ByteCodeInstruction::kAddI, 1);
                 fGenerator.write(location.selectStore(ByteCodeInstruction::kStoreExtended,
                                                       ByteCodeInstruction::kStoreExtendedGlobal),
