@@ -274,8 +274,8 @@ void Dehydrator::write(const Expression* e) {
                 const Constructor& c = e->as<Constructor>();
                 this->writeU8(Rehydrator::kConstructor_Command);
                 this->write(c.type());
-                this->writeU8(c.fArguments.size());
-                for (const auto& a : c.fArguments) {
+                this->writeU8(c.arguments().size());
+                for (const auto& a : c.arguments()) {
                     this->write(a.get());
                 }
                 break;
@@ -298,7 +298,7 @@ void Dehydrator::write(const Expression* e) {
                 const FloatLiteral& f = e->as<FloatLiteral>();
                 this->writeU8(Rehydrator::kFloatLiteral_Command);
                 FloatIntUnion u;
-                u.fFloat = f.fValue;
+                u.fFloat = f.value();
                 this->writeS32(u.fInt);
                 break;
             }
@@ -323,7 +323,7 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kIntLiteral: {
                 const IntLiteral& i = e->as<IntLiteral>();
                 this->writeU8(Rehydrator::kIntLiteral_Command);
-                this->writeS32(i.fValue);
+                this->writeS32(i.value());
                 break;
             }
             case Expression::Kind::kNullLiteral:
@@ -413,8 +413,8 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kDo: {
                 const DoStatement& d = s->as<DoStatement>();
                 this->writeU8(Rehydrator::kDo_Command);
-                this->write(d.fStatement.get());
-                this->write(d.fTest.get());
+                this->write(d.statement().get());
+                this->write(d.test().get());
                 break;
             }
             case Statement::Kind::kExpression: {
@@ -517,7 +517,7 @@ void Dehydrator::write(const ProgramElement& e) {
                 Variable& v = (Variable&) *s;
                 SkASSERT(v.fInitialValue);
                 const IntLiteral& i = v.fInitialValue->as<IntLiteral>();
-                this->writeS32(i.fValue);
+                this->writeS32(i.value());
             }
             break;
         }

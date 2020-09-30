@@ -716,20 +716,20 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
 }
 
 void GLSLCodeGenerator::writeConstructor(const Constructor& c, Precedence parentPrecedence) {
-    if (c.fArguments.size() == 1 &&
-        (this->getTypeName(c.type()) == this->getTypeName(c.fArguments[0]->type()) ||
+    if (c.arguments().size() == 1 &&
+        (this->getTypeName(c.type()) == this->getTypeName(c.arguments()[0]->type()) ||
         (c.type().typeKind() == Type::TypeKind::kScalar &&
-         c.fArguments[0]->type() == *fContext.fFloatLiteral_Type))) {
+         c.arguments()[0]->type() == *fContext.fFloatLiteral_Type))) {
         // in cases like half(float), they're different types as far as SkSL is concerned but the
         // same type as far as GLSL is concerned. We avoid a redundant float(float) by just writing
         // out the inner expression here.
-        this->writeExpression(*c.fArguments[0], parentPrecedence);
+        this->writeExpression(*c.arguments()[0], parentPrecedence);
         return;
     }
     this->writeType(c.type());
     this->write("(");
     const char* separator = "";
-    for (const auto& arg : c.fArguments) {
+    for (const auto& arg : c.arguments()) {
         this->write(separator);
         separator = ", ";
         this->writeExpression(*arg, kSequence_Precedence);
@@ -1014,18 +1014,18 @@ void GLSLCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
 void GLSLCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     const Type& type = i.type();
     if (type == *fContext.fUInt_Type) {
-        this->write(to_string(i.fValue & 0xffffffff) + "u");
+        this->write(to_string(i.value() & 0xffffffff) + "u");
     } else if (type == *fContext.fUShort_Type) {
-        this->write(to_string(i.fValue & 0xffff) + "u");
+        this->write(to_string(i.value() & 0xffff) + "u");
     } else if (type == *fContext.fUByte_Type) {
-        this->write(to_string(i.fValue & 0xff) + "u");
+        this->write(to_string(i.value() & 0xff) + "u");
     } else {
-        this->write(to_string((int32_t) i.fValue));
+        this->write(to_string((int32_t) i.value()));
     }
 }
 
 void GLSLCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
-    this->write(to_string(f.fValue));
+    this->write(to_string(f.value()));
 }
 
 void GLSLCodeGenerator::writeSetting(const Setting& s) {
@@ -1404,9 +1404,9 @@ void GLSLCodeGenerator::writeWhileStatement(const WhileStatement& w) {
 void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
     if (!fProgram.fSettings.fCaps->rewriteDoWhileLoops()) {
         this->write("do ");
-        this->writeStatement(*d.fStatement);
+        this->writeStatement(*d.statement());
         this->write(" while (");
-        this->writeExpression(*d.fTest, kTopLevel_Precedence);
+        this->writeExpression(*d.test(), kTopLevel_Precedence);
         this->write(");");
         return;
     }
@@ -1438,7 +1438,7 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->writeLine(") {");
     fIndentation++;
     this->write("if (!");
-    this->writeExpression(*d.fTest, kPrefix_Precedence);
+    this->writeExpression(*d.test(), kPrefix_Precedence);
     this->writeLine(") {");
     fIndentation++;
     this->writeLine("break;");
@@ -1448,7 +1448,7 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->writeLine("}");
     this->write(tmpVar);
     this->writeLine(" = true;");
-    this->writeStatement(*d.fStatement);
+    this->writeStatement(*d.statement());
     this->writeLine();
     fIndentation--;
     this->write("}");

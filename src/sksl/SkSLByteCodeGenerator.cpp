@@ -905,11 +905,11 @@ void ByteCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
 }
 
 void ByteCodeGenerator::writeConstructor(const Constructor& c) {
-    for (const auto& arg : c.fArguments) {
+    for (const auto& arg : c.arguments()) {
         this->writeExpression(*arg);
     }
-    if (c.fArguments.size() == 1) {
-        const Type& inType = c.fArguments[0]->type();
+    if (c.arguments().size() == 1) {
+        const Type& inType = c.arguments()[0]->type();
         const Type& outType = c.type();
         TypeCategory inCategory = type_category(inType);
         TypeCategory outCategory = type_category(outType);
@@ -1022,7 +1022,7 @@ static inline uint32_t float_to_bits(float x) {
 
 void ByteCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
     this->write(ByteCodeInstruction::kPushImmediate);
-    this->write32(float_to_bits(f.fValue));
+    this->write32(float_to_bits(f.value()));
 }
 
 static bool is_generic_type(const Type* type, const Type* generic) {
@@ -1316,7 +1316,7 @@ void ByteCodeGenerator::writeFunctionCall(const FunctionCall& f) {
 
 void ByteCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     this->write(ByteCodeInstruction::kPushImmediate);
-    this->write32(i.fValue);
+    this->write32(i.value());
 }
 
 void ByteCodeGenerator::writeNullLiteral(const NullLiteral& n) {
@@ -1677,9 +1677,9 @@ void ByteCodeGenerator::writeContinueStatement(const ContinueStatement& c) {
 void ByteCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->write(ByteCodeInstruction::kLoopBegin);
     size_t start = fCode->size();
-    this->writeStatement(*d.fStatement);
+    this->writeStatement(*d.statement());
     this->write(ByteCodeInstruction::kLoopNext);
-    this->writeExpression(*d.fTest);
+    this->writeExpression(*d.test());
     this->write(ByteCodeInstruction::kLoopMask);
     // TODO: Could shorten this with kBranchIfAnyTrue
     this->write(ByteCodeInstruction::kBranchIfAllFalse);
