@@ -1294,7 +1294,7 @@ void GLSLCodeGenerator::writeStatement(const Statement& s) {
             this->writeBlock(s.as<Block>());
             break;
         case Statement::Kind::kExpression:
-            this->writeExpression(*s.as<ExpressionStatement>().fExpression, kTopLevel_Precedence);
+            this->writeExpression(*s.as<ExpressionStatement>().expression(), kTopLevel_Precedence);
             this->write(";");
             break;
         case Statement::Kind::kReturn:
@@ -1495,7 +1495,7 @@ void GLSLCodeGenerator::writeHeader() {
 void GLSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
     switch (e.kind()) {
         case ProgramElement::Kind::kExtension:
-            this->writeExtension(e.as<Extension>().fName);
+            this->writeExtension(e.as<Extension>().name());
             break;
         case ProgramElement::Kind::kVar: {
             const VarDeclarations& decl = e.as<VarDeclarations>();

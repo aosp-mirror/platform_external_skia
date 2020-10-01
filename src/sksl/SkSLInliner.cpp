@@ -222,13 +222,12 @@ static Statement* find_parent_statement(const std::vector<std::unique_ptr<Statem
 std::unique_ptr<Expression> clone_with_ref_kind(const Expression& expr,
                                                 VariableReference::RefKind refKind) {
     std::unique_ptr<Expression> clone = expr.clone();
-    class SetRefKindInExpression : public ProgramVisitor {
+    class SetRefKindInExpression : public ProgramWriter {
     public:
         SetRefKindInExpression(VariableReference::RefKind refKind) : fRefKind(refKind) {}
-        bool visitExpression(const Expression& expr) override {
+        bool visitExpression(Expression& expr) override {
             if (expr.is<VariableReference>()) {
-                // TODO: create a const-savvy ProgramVisitor and remove const_cast
-                const_cast<VariableReference&>(expr.as<VariableReference>()).setRefKind(fRefKind);
+                expr.as<VariableReference>().setRefKind(fRefKind);
             }
             return INHERITED::visitExpression(expr);
         }
@@ -236,11 +235,23 @@ std::unique_ptr<Expression> clone_with_ref_kind(const Expression& expr,
     private:
         VariableReference::RefKind fRefKind;
 
-        using INHERITED = ProgramVisitor;
+        using INHERITED = ProgramWriter;
     };
 
     SetRefKindInExpression{refKind}.visitExpression(*clone);
     return clone;
+}
+
+bool is_trivial_argument(const Expression& argument) {
+    return argument.is<VariableReference>() ||
+           (argument.is<Swizzle>() && is_trivial_argument(*argument.as<Swizzle>().fBase)) ||
+           (argument.is<FieldAccess>() && is_trivial_argument(*argument.as<FieldAccess>().fBase)) ||
+           (argument.is<Constructor>() &&
+            argument.as<Constructor>().arguments().size() == 1 &&
+            is_trivial_argument(*argument.as<Constructor>().arguments().front())) ||
+           (argument.is<IndexExpression>() &&
+            argument.as<IndexExpression>().fIndex->is<IntLiteral>() &&
+            is_trivial_argument(*argument.as<IndexExpression>().fBase));
 }
 
 }  // namespace
@@ -356,8 +367,8 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
         case Expression::Kind::kExternalFunctionCall: {
             const ExternalFunctionCall& externalCall = expression.as<ExternalFunctionCall>();
             return std::make_unique<ExternalFunctionCall>(offset, &externalCall.type(),
-                                                          externalCall.fFunction,
-                                                          argList(externalCall.fArguments));
+                                                          externalCall.function(),
+                                                          argList(externalCall.arguments()));
         }
         case Expression::Kind::kExternalValue:
             return expression.clone();
@@ -461,7 +472,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
         }
         case Statement::Kind::kExpression: {
             const ExpressionStatement& e = statement.as<ExpressionStatement>();
-            return std::make_unique<ExpressionStatement>(expr(e.fExpression));
+            return std::make_unique<ExpressionStatement>(expr(e.expression()));
         }
         case Statement::Kind::kFor: {
             const ForStatement& f = statement.as<ForStatement>();
@@ -661,12 +672,12 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         const Variable* param = function.fDeclaration.fParameters[i];
         bool isOutParam = param->fModifiers.fFlags & Modifiers::kOut_Flag;
 
-        // If this is a plain VariableReference...
-        if (arguments[i]->is<VariableReference>()) {
+        // If this argument can be inlined trivially (e.g. a swizzle, or a constant array index)...
+        if (is_trivial_argument(*arguments[i])) {
             // ... and it's an `out` param, or it isn't written to within the inline function...
             if (isOutParam || !Analysis::StatementWritesToVariable(*function.fBody, *param)) {
-                // ... we don't need to copy it at all! We can just use the existing variable.
-                varMap[param] = arguments[i]->as<VariableReference>().clone();
+                // ... we don't need to copy it at all! We can just use the existing expression.
+                varMap[param] = arguments[i]->clone();
                 continue;
             }
         }
@@ -859,7 +870,7 @@ bool Inliner::analyze(Program& program) {
                 }
                 case Statement::Kind::kExpression: {
                     ExpressionStatement& expr = (*stmt)->as<ExpressionStatement>();
-                    this->visitExpression(&expr.fExpression);
+                    this->visitExpression(&expr.expression());
                     break;
                 }
                 case Statement::Kind::kFor: {
@@ -1003,7 +1014,7 @@ bool Inliner::analyze(Program& program) {
                 }
                 case Expression::Kind::kExternalFunctionCall: {
                     ExternalFunctionCall& funcCallExpr = (*expr)->as<ExternalFunctionCall>();
-                    for (std::unique_ptr<Expression>& arg : funcCallExpr.fArguments) {
+                    for (std::unique_ptr<Expression>& arg : funcCallExpr.arguments()) {
                         this->visitExpression(&arg);
                     }
                     break;

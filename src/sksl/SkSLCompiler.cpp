@@ -84,7 +84,7 @@ static void grab_intrinsics(std::vector<std::unique_ptr<ProgramElement>>* src,
             }
             case ProgramElement::Kind::kEnum: {
                 Enum& e = element->as<Enum>();
-                target->insertOrDie(e.fTypeName, std::move(element));
+                target->insertOrDie(e.typeName(), std::move(element));
                 iter = src->erase(iter);
                 break;
             }
@@ -1393,9 +1393,9 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
         case Statement::Kind::kExpression: {
             ExpressionStatement& e = stmt->as<ExpressionStatement>();
             SkASSERT((*iter)->statement()->get() == &e);
-            if (!e.fExpression->hasSideEffects()) {
+            if (!e.expression()->hasSideEffects()) {
                 // Expression statement with no side effects, kill it
-                if (!b.tryRemoveExpressionBefore(iter, e.fExpression.get())) {
+                if (!b.tryRemoveExpressionBefore(iter, e.expression().get())) {
                     *outNeedsRescan = true;
                 }
                 SkASSERT((*iter)->statement()->get() == stmt);

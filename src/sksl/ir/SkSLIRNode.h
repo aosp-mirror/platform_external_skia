@@ -18,6 +18,7 @@
 namespace SkSL {
 
 struct Expression;
+class ExternalValue;
 struct Statement;
 class SymbolTable;
 class Type;
@@ -52,6 +53,8 @@ public:
         switch (fData.fKind) {
             case NodeData::Kind::kBoolLiteral:
                 return *this->boolLiteralData().fType;
+            case NodeData::Kind::kExternalValue:
+                return *this->externalValueData().fType;
             case NodeData::Kind::kIntLiteral:
                 return *this->intLiteralData().fType;
             case NodeData::Kind::kFloatLiteral:
@@ -79,6 +82,17 @@ protected:
         bool fValue;
     };
 
+    struct EnumData {
+        StringFragment fTypeName;
+        std::shared_ptr<SymbolTable> fSymbols;
+        bool fIsBuiltin;
+    };
+
+    struct ExternalValueData {
+        const Type* fType;
+        const ExternalValue* fValue;
+    };
+
     struct FloatLiteralData {
         const Type* fType;
         float fValue;
@@ -98,8 +112,11 @@ protected:
         enum class Kind {
             kBlock,
             kBoolLiteral,
+            kEnum,
+            kExternalValue,
             kFloatLiteral,
             kIntLiteral,
+            kString,
             kType,
             kTypeToken,
         } fKind = Kind::kType;
@@ -108,8 +125,11 @@ protected:
         union Contents {
             BlockData fBlock;
             BoolLiteralData fBoolLiteral;
+            EnumData fEnum;
+            ExternalValueData fExternalValue;
             FloatLiteralData fFloatLiteral;
             IntLiteralData fIntLiteral;
+            String fString;
             const Type* fType;
             TypeTokenData fTypeToken;
 
@@ -128,6 +148,16 @@ protected:
             *(new(&fContents) BoolLiteralData) = data;
         }
 
+        NodeData(const EnumData& data)
+            : fKind(Kind::kEnum) {
+            *(new(&fContents) EnumData) = data;
+        }
+
+        NodeData(const ExternalValueData& data)
+            : fKind(Kind::kExternalValue) {
+            *(new(&fContents) ExternalValueData) = data;
+        }
+
         NodeData(const FloatLiteralData& data)
             : fKind(Kind::kFloatLiteral) {
             *(new(&fContents) FloatLiteralData) = data;
@@ -136,6 +166,11 @@ protected:
         NodeData(IntLiteralData data)
             : fKind(Kind::kIntLiteral) {
             *(new(&fContents) IntLiteralData) = data;
+        }
+
+        NodeData(const String& data)
+            : fKind(Kind::kString) {
+            *(new(&fContents) String) = data;
         }
 
         NodeData(const Type* data)
@@ -162,11 +197,20 @@ protected:
                 case Kind::kBoolLiteral:
                     *(new(&fContents) BoolLiteralData) = other.fContents.fBoolLiteral;
                     break;
+                case Kind::kEnum:
+                    *(new(&fContents) EnumData) = other.fContents.fEnum;
+                    break;
+                case Kind::kExternalValue:
+                    *(new(&fContents) ExternalValueData) = other.fContents.fExternalValue;
+                    break;
                 case Kind::kFloatLiteral:
                     *(new(&fContents) FloatLiteralData) = other.fContents.fFloatLiteral;
                     break;
                 case Kind::kIntLiteral:
                     *(new(&fContents) IntLiteralData) = other.fContents.fIntLiteral;
+                    break;
+                case Kind::kString:
+                    *(new(&fContents) String) = other.fContents.fString;
                     break;
                 case Kind::kType:
                     *(new(&fContents) const Type*) = other.fContents.fType;
@@ -191,11 +235,20 @@ protected:
                 case Kind::kBoolLiteral:
                     fContents.fBoolLiteral.~BoolLiteralData();
                     break;
+                case Kind::kEnum:
+                    fContents.fEnum.~EnumData();
+                    break;
+                case Kind::kExternalValue:
+                    fContents.fExternalValue.~ExternalValueData();
+                    break;
                 case Kind::kFloatLiteral:
                     fContents.fFloatLiteral.~FloatLiteralData();
                     break;
                 case Kind::kIntLiteral:
                     fContents.fIntLiteral.~IntLiteralData();
+                    break;
+                case Kind::kString:
+                    fContents.fString.~String();
                     break;
                 case Kind::kType:
                     break;
@@ -211,9 +264,15 @@ protected:
 
     IRNode(int offset, int kind, const BoolLiteralData& data);
 
+    IRNode(int offset, int kind, const EnumData& data);
+
+    IRNode(int offset, int kind, const ExternalValueData& data);
+
     IRNode(int offset, int kind, const IntLiteralData& data);
 
     IRNode(int offset, int kind, const FloatLiteralData& data);
+
+    IRNode(int offset, int kind, const String& data);
 
     IRNode(int offset, int kind, const Type* data = nullptr);
 
@@ -275,6 +334,16 @@ protected:
         return fData.fContents.fBoolLiteral;
     }
 
+    const EnumData& enumData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kEnum);
+        return fData.fContents.fEnum;
+    }
+
+    const ExternalValueData& externalValueData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kExternalValue);
+        return fData.fContents.fExternalValue;
+    }
+
     const FloatLiteralData& floatLiteralData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kFloatLiteral);
         return fData.fContents.fFloatLiteral;
@@ -283,6 +352,11 @@ protected:
     const IntLiteralData& intLiteralData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kIntLiteral);
         return fData.fContents.fIntLiteral;
+    }
+
+    const String& stringData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kString);
+        return fData.fContents.fString;
     }
 
     const Type* typeData() const {
@@ -310,7 +384,6 @@ protected:
     // it's important to keep fStatements defined after (and thus destroyed before) fData,
     // because destroying statements can modify reference counts in a SymbolTable contained in fData
     std::vector<std::unique_ptr<Statement>> fStatementChildren;
-
 };
 
 }  // namespace SkSL
