@@ -180,10 +180,9 @@ public:
                             std::shared_ptr<SymbolTable>* outSymbolTable);
 
 private:
+    void loadFPIntrinsics();
     void loadGeometryIntrinsics();
-
     void loadInterpreterIntrinsics();
-
     void loadPipelineIntrinsics();
 
     void addDefinition(const Expression* lvalue, std::unique_ptr<Expression>* expr,
@@ -238,14 +237,16 @@ private:
 
     std::vector<std::unique_ptr<ProgramElement>> fVertexInclude;
     std::shared_ptr<SymbolTable> fVertexSymbolTable;
-    std::vector<std::unique_ptr<ProgramElement>> fFragmentInclude;
+
     std::shared_ptr<SymbolTable> fFragmentSymbolTable;
+    std::unique_ptr<IRIntrinsicMap> fFragmentIntrinsics;
+
     std::vector<std::unique_ptr<ProgramElement>> fGeometryInclude;
     std::shared_ptr<SymbolTable> fGeometrySymbolTable;
-    std::vector<std::unique_ptr<ProgramElement>> fPipelineInclude;
-    std::shared_ptr<SymbolTable> fPipelineSymbolTable;
 
-    std::vector<std::unique_ptr<ProgramElement>> fFPInclude;
+    std::shared_ptr<SymbolTable> fPipelineSymbolTable;
+    std::unique_ptr<IRIntrinsicMap> fPipelineIntrinsics;
+
     std::shared_ptr<SymbolTable> fFPSymbolTable;
     std::unique_ptr<IRIntrinsicMap> fFPIntrinsics;
 
