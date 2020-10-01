@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypeface_remote.h"
-#include "SkPaint.h"
-#include "SkRemoteGlyphCache.h"
-#include "SkStrike.h"
-#include "SkStrikeCache.h"
-#include "SkTraceEvent.h"
+#include "include/core/SkPaint.h"
+#include "src/core/SkRemoteGlyphCache.h"
+#include "src/core/SkScalerCache.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/core/SkTypeface_remote.h"
 
 SkScalerContextProxy::SkScalerContextProxy(sk_sp<SkTypeface> tf,
                                            const SkScalerContextEffects& effects,
@@ -19,22 +19,8 @@ SkScalerContextProxy::SkScalerContextProxy(sk_sp<SkTypeface> tf,
         : SkScalerContext{std::move(tf), effects, desc}
         , fDiscardableManager{std::move(manager)} {}
 
-void SkScalerContextProxy::initCache(SkStrike* cache, SkStrikeCache* strikeCache) {
-    SkASSERT(fCache == nullptr);
-    SkASSERT(cache != nullptr);
-
-    fCache = cache;
-    fStrikeCache = strikeCache;
-}
-
 unsigned SkScalerContextProxy::generateGlyphCount()  {
     SK_ABORT("Should never be called.");
-    return 0;
-}
-
-uint16_t SkScalerContextProxy::generateCharToGlyph(SkUnichar) {
-    SK_ABORT("Should never be called.");
-    return 0;
 }
 
 bool SkScalerContextProxy::generateAdvance(SkGlyph* glyph) {
@@ -48,27 +34,6 @@ void SkScalerContextProxy::generateMetrics(SkGlyph* glyph) {
     }
 
     glyph->fMaskFormat = fRec.fMaskFormat;
-
-    // Since the scaler context is being called, we don't have the needed data. Try to find a
-    // fallback before failing.
-    if (fCache && fCache->belongsToCache(glyph)) {
-        // First check the original cache, in case there is a sub-pixel pos mismatch.
-        if (const auto* fallback =
-                    fCache->getCachedGlyphAnySubPix(glyph->getGlyphID(), glyph->getPackedID())) {
-            fCache->initializeGlyphFromFallback(glyph, *fallback);
-            fDiscardableManager->notifyCacheMiss(
-                    SkStrikeClient::CacheMissType::kGlyphMetricsFallback);
-            return;
-        }
-
-        // Now check other caches for a desc mismatch.
-        if (fStrikeCache->desperationSearchForImage(fCache->getDescriptor(), glyph, fCache)) {
-            fDiscardableManager->notifyCacheMiss(
-                    SkStrikeClient::CacheMissType::kGlyphMetricsFallback);
-            return;
-        }
-    }
-
     glyph->zeroMetrics();
     fDiscardableManager->notifyCacheMiss(SkStrikeClient::CacheMissType::kGlyphMetrics);
 }
@@ -90,14 +55,8 @@ bool SkScalerContextProxy::generatePath(SkGlyphID glyphID, SkPath* path) {
         SkDebugf("GlyphCacheMiss generatePath: %s\n", this->getRec().dump().c_str());
     }
 
-    // Since the scaler context is being called, we don't have the needed data. Try to find a
-    // fallback before failing.
-    auto desc = SkScalerContext::DescriptorGivenRecAndEffects(this->getRec(), this->getEffects());
-    bool foundPath = fStrikeCache && fStrikeCache->desperationSearchForPath(*desc, glyphID, path);
-    fDiscardableManager->notifyCacheMiss(foundPath
-                                                 ? SkStrikeClient::CacheMissType::kGlyphPathFallback
-                                                 : SkStrikeClient::CacheMissType::kGlyphPath);
-    return foundPath;
+    fDiscardableManager->notifyCacheMiss(SkStrikeClient::CacheMissType::kGlyphPath);
+    return false;
 }
 
 void SkScalerContextProxy::generateFontMetrics(SkFontMetrics* metrics) {

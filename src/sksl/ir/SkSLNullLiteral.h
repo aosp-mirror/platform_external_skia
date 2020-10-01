@@ -8,8 +8,8 @@
 #ifndef SKSL_NULLLITERAL
 #define SKSL_NULLLITERAL
 
-#include "SkSLContext.h"
-#include "SkSLExpression.h"
+#include "src/sksl/SkSLContext.h"
+#include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
 
@@ -23,11 +23,13 @@ struct NullLiteral : public Expression {
     NullLiteral(int offset, const Type& type)
     : INHERITED(offset, kNullLiteral_Kind, type) {}
 
+#ifdef SK_DEBUG
     String description() const override {
         return "null";
     }
+#endif
 
-    bool hasSideEffects() const override {
+    bool hasProperty(Property property) const override {
         return false;
     }
 

@@ -8,11 +8,10 @@
 #ifndef GrPrimitiveProcessor_DEFINED
 #define GrPrimitiveProcessor_DEFINED
 
-#include "GrColor.h"
-#include "GrNonAtomicRef.h"
-#include "GrProcessor.h"
-#include "GrProxyRef.h"
-#include "GrShaderVar.h"
+#include "src/gpu/GrColor.h"
+#include "src/gpu/GrNonAtomicRef.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrShaderVar.h"
 
 class GrCoordTransform;
 
@@ -165,18 +164,19 @@ public:
     size_t vertexStride() const { return fVertexAttributes.fStride; }
     size_t instanceStride() const { return fInstanceAttributes.fStride; }
 
-    // Only the GrGeometryProcessor subclass actually has a geo shader or vertex attributes, but
-    // we put these calls on the base class to prevent having to cast
-    virtual bool willUseGeoShader() const = 0;
+    bool willUseTessellationShaders() const {
+        return fShaders & (kTessControl_GrShaderFlag | kTessEvaluation_GrShaderFlag);
+    }
+
+    bool willUseGeoShader() const {
+        return fShaders & kGeometry_GrShaderFlag;
+    }
 
     /**
-     * Computes a transformKey from an array of coord transforms. Will only look at the first
-     * <numCoords> transforms in the array.
-     *
-     * TODO: A better name for this function  would be "compute" instead of "get".
+     * Computes a key for the transforms owned by an FP based on the shader code that will be
+     * emitted by the primitive processor to implement them.
      */
-    uint32_t getTransformKey(const SkTArray<const GrCoordTransform*, true>& coords,
-                             int numCoords) const;
+    uint32_t computeCoordTransformsKey(const GrFragmentProcessor& fp) const;
 
     /**
      * Sets a unique key on the GrProcessorKeyBuilder that is directly associated with this geometry
@@ -210,6 +210,17 @@ public:
 
     virtual bool isPathRendering() const { return false; }
 
+    // We use these methods as a temporary back door to inject OpenGL tessellation code. Once
+    // tessellation is supported by SkSL we can remove these.
+    virtual SkString getTessControlShaderGLSL(const char* versionAndExtensionDecls,
+                                              const GrShaderCaps&) const {
+        SK_ABORT("Not implemented.");
+    }
+    virtual SkString getTessEvaluationShaderGLSL(const char* versionAndExtensionDecls,
+                                                 const GrShaderCaps&) const {
+        SK_ABORT("Not implemented.");
+    }
+
 protected:
     void setVertexAttributes(const Attribute* attrs, int attrCount) {
         fVertexAttributes.init(attrs, attrCount);
@@ -218,6 +229,10 @@ protected:
         SkASSERT(attrCount >= 0);
         fInstanceAttributes.init(attrs, attrCount);
     }
+    void setWillUseTessellationShaders() {
+        fShaders |= kTessControl_GrShaderFlag | kTessEvaluation_GrShaderFlag;
+    }
+    void setWillUseGeoShader() { fShaders |= kGeometry_GrShaderFlag; }
     void setTextureSamplerCnt(int cnt) {
         SkASSERT(cnt >= 0);
         fTextureSamplerCnt = cnt;
@@ -237,6 +252,8 @@ protected:
 private:
     virtual const TextureSampler& onTextureSampler(int) const { return IthTextureSampler(0); }
 
+    GrShaderFlags fShaders = kVertex_GrShaderFlag | kFragment_GrShaderFlag;
+
     AttributeSet fVertexAttributes;
     AttributeSet fInstanceAttributes;
 
@@ -247,42 +264,35 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 
 /**
- * Used to represent a texture that is required by a GrPrimitiveProcessor. It holds a GrTextureProxy
- * along with an associated GrSamplerState. TextureSamplers don't perform any coord manipulation to
- * account for texture origin.
+ * Used to capture the properties of the GrTextureProxies required/expected by a primitiveProcessor
+ * along with an associated GrSamplerState. The actual proxies used are stored in either the
+ * fixed or dynamic state arrays. TextureSamplers don't perform any coord manipulation to account
+ * for texture origin.
  */
 class GrPrimitiveProcessor::TextureSampler {
 public:
     TextureSampler() = default;
 
-    TextureSampler(GrTextureType, GrPixelConfig, const GrSamplerState&, uint32_t extraSamplerKey);
-
-    explicit TextureSampler(GrTextureType, GrPixelConfig,
-                            GrSamplerState::Filter = GrSamplerState::Filter::kNearest,
-                            GrSamplerState::WrapMode wrapXAndY = GrSamplerState::WrapMode::kClamp);
+    TextureSampler(GrSamplerState, const GrBackendFormat&, const GrSwizzle&);
 
     TextureSampler(const TextureSampler&) = delete;
     TextureSampler& operator=(const TextureSampler&) = delete;
 
-    void reset(GrTextureType, GrPixelConfig, const GrSamplerState&, uint32_t extraSamplerKey = 0);
-    void reset(GrTextureType, GrPixelConfig,
-               GrSamplerState::Filter,
-               GrSamplerState::WrapMode wrapXAndY);
+    void reset(GrSamplerState, const GrBackendFormat&, const GrSwizzle&);
 
-    GrTextureType textureType() const { return fTextureType; }
-    GrPixelConfig config() const { return fConfig; }
+    const GrBackendFormat& backendFormat() const { return fBackendFormat; }
+    GrTextureType textureType() const { return fBackendFormat.textureType(); }
 
-    const GrSamplerState& samplerState() const { return fSamplerState; }
+    GrSamplerState samplerState() const { return fSamplerState; }
+    const GrSwizzle& swizzle() const { return fSwizzle; }
 
-    uint32_t extraSamplerKey() const { return fExtraSamplerKey; }
-
-    bool isInitialized() const { return fConfig != kUnknown_GrPixelConfig; }
+    bool isInitialized() const { return fIsInitialized; }
 
 private:
-    GrSamplerState fSamplerState;
-    GrTextureType fTextureType = GrTextureType::k2D;
-    GrPixelConfig fConfig = kUnknown_GrPixelConfig;
-    uint32_t fExtraSamplerKey = 0;
+    GrSamplerState  fSamplerState;
+    GrBackendFormat fBackendFormat;
+    GrSwizzle       fSwizzle;
+    bool            fIsInitialized = false;
 };
 
 const GrPrimitiveProcessor::TextureSampler& GrPrimitiveProcessor::IthTextureSampler(int i) {
@@ -353,6 +363,10 @@ static constexpr inline size_t GrVertexAttribTypeSize(GrVertexAttribType type) {
             return sizeof(int32_t);
         case kUint_GrVertexAttribType:
             return sizeof(uint32_t);
+        case kUShort_norm_GrVertexAttribType:
+            return sizeof(uint16_t);
+        case kUShort4_norm_GrVertexAttribType:
+            return 4 * sizeof(uint16_t);
     }
     // GCC fails because SK_ABORT evaluates to non constexpr. clang and cl.exe think this is
     // unreachable and don't complain.

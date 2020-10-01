@@ -26,20 +26,23 @@ class AndroidFlavor(default.DefaultFlavor):
     # Data should go in android_data_dir, which may be preserved across runs.
     android_data_dir = '/sdcard/revenge_of_the_skiabot/'
     self.device_dirs = default.DeviceDirs(
-        bin_dir       = '/data/local/tmp/',
-        dm_dir        = android_data_dir + 'dm_out',
-        perf_data_dir = android_data_dir + 'perf',
-        resource_dir  = android_data_dir + 'resources',
-        images_dir    = android_data_dir + 'images',
-        lotties_dir   = android_data_dir + 'lotties',
-        skp_dir       = android_data_dir + 'skps',
-        svg_dir       = android_data_dir + 'svgs',
-        tmp_dir       = android_data_dir)
+        bin_dir        = '/data/local/tmp/',
+        dm_dir         = android_data_dir + 'dm_out',
+        perf_data_dir  = android_data_dir + 'perf',
+        resource_dir   = android_data_dir + 'resources',
+        images_dir     = android_data_dir + 'images',
+        lotties_dir    = android_data_dir + 'lotties',
+        skp_dir        = android_data_dir + 'skps',
+        svg_dir        = android_data_dir + 'svgs',
+        mskp_dir       = android_data_dir + 'mskp',
+        tmp_dir        = android_data_dir,
+        texttraces_dir = android_data_dir + 'text_blob_traces')
 
     # A list of devices we can't root.  If rooting fails and a device is not
     # on the list, we fail the task to avoid perf inconsistencies.
     self.rootable_blacklist = ['GalaxyS6', 'GalaxyS7_G930FD', 'GalaxyS9',
-                               'MotoG4', 'NVIDIA_Shield']
+                               'MotoG4', 'NVIDIA_Shield', 'P30',
+                               'TecnoSpark3Pro']
 
     # Maps device type -> CPU ids that should be scaled for nanobench.
     # Many devices have two (or more) different CPUs (e.g. big.LITTLE
@@ -52,7 +55,6 @@ class AndroidFlavor(default.DefaultFlavor):
     # frequency.  See also disable_for_nanobench.
     self.cpus_to_scale = {
       'Nexus5x': [4],
-      'NexusPlayer': [0, 2], # has 2 identical chips, so scale them both.
       'Pixel': [2],
       'Pixel2XL': [4]
     }
@@ -73,10 +75,6 @@ class AndroidFlavor(default.DefaultFlavor):
       "Nexus5":  450000000,
       "Nexus5x": 600000000,
     }
-
-  def _run(self, title, *cmd, **kwargs):
-    with self.m.context(cwd=self.m.path['start_dir'].join('skia')):
-      return self.m.run(self.m.step, title, cmd=list(cmd), **kwargs)
 
   def _adb(self, title, *cmd, **kwargs):
     # The only non-infra adb steps (dm / nanobench) happen to not use _adb().
@@ -129,6 +127,10 @@ class AndroidFlavor(default.DefaultFlavor):
       # AndroidOne doesn't support ondemand governor. hotplug is similar.
       if device == 'AndroidOne':
         self._set_governor(i, 'hotplug')
+      elif device in ['Pixel3a', 'Pixel4']:
+        # Pixel3a/4 have userspace powersave performance schedutil.
+        # performance seems like a reasonable choice.
+        self._set_governor(i, 'performance')
       else:
         self._set_governor(i, 'ondemand')
 
@@ -345,17 +347,19 @@ if actual_freq != str(freq):
         timeout=30)
 
 
+  def _asan_setup_path(self):
+    return self.m.vars.slave_dir.join(
+        'android_ndk_linux', 'toolchains', 'llvm', 'prebuilt', 'linux-x86_64',
+        'lib64', 'clang', '8.0.7', 'bin', 'asan_device_setup')
+
+
   def install(self):
     self._adb('mkdir ' + self.device_dirs.resource_dir,
               'shell', 'mkdir', '-p', self.device_dirs.resource_dir)
     if 'ASAN' in self.m.vars.extra_tokens:
       self._ever_ran_adb = True
-      asan_setup = self.m.vars.slave_dir.join(
-            'android_ndk_linux', 'toolchains', 'llvm', 'prebuilt',
-            'linux-x86_64', 'lib64', 'clang', '8.0.2', 'bin',
-            'asan_device_setup')
       self.m.run(self.m.python.inline, 'Setting up device to run ASAN',
-        program="""
+                 program="""
 import os
 import subprocess
 import sys
@@ -427,27 +431,24 @@ wait_for_device()
 # directory" when pushing resources to the device.
 time.sleep(60)
 """,
-        args = [self.ADB_BINARY, asan_setup],
-          infra_step=True,
-          timeout=300,
-          abort_on_failure=True)
+                 args = [self.ADB_BINARY, self._asan_setup_path()],
+                 infra_step=True,
+                 timeout=300,
+                 abort_on_failure=True)
 
 
   def cleanup_steps(self):
     if 'ASAN' in self.m.vars.extra_tokens:
       self._ever_ran_adb = True
       # Remove ASAN.
-      asan_setup = self.m.vars.slave_dir.join(
-            'android_ndk_linux', 'toolchains', 'llvm', 'prebuilt',
-            'linux-x86_64', 'lib64', 'clang', '8.0.2', 'bin',
-            'asan_device_setup')
       self.m.run(self.m.step,
                  'wait for device before uninstalling ASAN',
                  cmd=[self.ADB_BINARY, 'wait-for-device'], infra_step=True,
                  timeout=180, abort_on_failure=False,
                  fail_build_on_failure=False)
       self.m.run(self.m.step, 'uninstall ASAN',
-                 cmd=[asan_setup, '--revert'], infra_step=True, timeout=300,
+                 cmd=[self._asan_setup_path(), '--revert'],
+                 infra_step=True, timeout=300,
                  abort_on_failure=False, fail_build_on_failure=False)
 
     if self._ever_ran_adb:
@@ -463,8 +464,11 @@ time.sleep(60)
               addr, path = tokens[-2:]
               local = os.path.join(out, os.path.basename(path))
               if os.path.exists(local):
-                sym = subprocess.check_output(['addr2line', '-Cfpe', local, addr])
-                line = line.replace(addr, addr + ' ' + sym.strip())
+                try:
+                  sym = subprocess.check_output(['addr2line', '-Cfpe', local, addr])
+                  line = line.replace(addr, addr + ' ' + sym.strip())
+                except subprocess.CalledProcessError:
+                  pass
             print line
           """ % self.ADB_BINARY,
           args=[self.host_dirs.bin_dir],
@@ -489,13 +493,14 @@ time.sleep(60)
       self._adb('kill adb server', 'kill-server')
 
   def step(self, name, cmd, **kwargs):
-    if (cmd[0] == 'nanobench'):
-      self._scale_for_nanobench()
-    else:
-      self._scale_for_dm()
-    app = self.host_dirs.bin_dir.join(cmd[0])
-    self._adb('push %s' % cmd[0],
-              'push', app, self.device_dirs.bin_dir)
+    if not kwargs.get('skip_binary_push', False):
+      if (cmd[0] == 'nanobench'):
+        self._scale_for_nanobench()
+      else:
+        self._scale_for_dm()
+      app = self.host_dirs.bin_dir.join(cmd[0])
+      self._adb('push %s' % cmd[0],
+                'push', app, self.device_dirs.bin_dir)
 
     sh = '%s.sh' % cmd[0]
     self.m.run.writefile(self.m.vars.tmp_dir.join(sh),
@@ -526,37 +531,43 @@ time.sleep(60)
 
   def copy_directory_contents_to_device(self, host, device):
     # Copy the tree, avoiding hidden directories and resolving symlinks.
-    self.m.run(self.m.python.inline, 'push %s/* %s' % (host, device),
-               program="""
-    import os
-    import subprocess
-    import sys
-    host   = sys.argv[1]
-    device = sys.argv[2]
-    for d, _, fs in os.walk(host):
-      p = os.path.relpath(d, host)
-      if p != '.' and p.startswith('.'):
-        continue
-      for f in fs:
-        print os.path.join(p,f)
-        subprocess.check_call(['%s', 'push',
-                               os.path.realpath(os.path.join(host, p, f)),
-                               os.path.join(device, p, f)])
-    """ % self.ADB_BINARY, args=[host, device], infra_step=True)
+    sep = self.m.path.sep
+    host_str = str(host).rstrip(sep) + sep
+    device = device.rstrip('/')
+    with self.m.step.nest('push %s* %s' % (host_str, device)):
+      contents = self.m.file.listdir('list %s' % host, host, recursive=True,
+                                     test_data=['file1',
+                                                'subdir' + sep + 'file2',
+                                                '.file3',
+                                                '.ignore' + sep + 'file4'])
+      for path in contents:
+        path_str = str(path)
+        assert path_str.startswith(host_str), (
+            'expected %s to have %s as a prefix' % (path_str, host_str))
+        relpath = path_str[len(host_str):]
+        # NOTE(dogben): Previous logic used os.walk and skipped directories
+        # starting with '.', but not files starting with '.'. It's not clear
+        # what the reason was (maybe skipping .git?), but I'm keeping that
+        # behavior here.
+        if self.m.path.dirname(relpath).startswith('.'):
+          continue
+        device_path = device + '/' + relpath  # Android paths use /
+        self._adb('push %s' % path, 'push',
+                  self.m.path.realpath(path), device_path)
 
   def copy_directory_contents_to_host(self, device, host):
     # TODO(borenet): When all of our devices are on Android 6.0 and up, we can
     # switch to using tar to zip up the results before pulling.
     with self.m.step.nest('adb pull'):
-      with self.m.tempfile.temp_dir('adb_pull') as tmp:
-        self._adb('pull %s' % device, 'pull', device, tmp)
-        paths = self.m.file.glob_paths(
-            'list pulled files',
-            tmp,
-            self.m.path.basename(device) + self.m.path.sep + '*',
-            test_data=['%d.png' % i for i in (1, 2)])
-        for p in paths:
-          self.m.file.copy('copy %s' % self.m.path.basename(p), p, host)
+      tmp = self.m.path.mkdtemp('adb_pull')
+      self._adb('pull %s' % device, 'pull', device, tmp)
+      paths = self.m.file.glob_paths(
+          'list pulled files',
+          tmp,
+          self.m.path.basename(device) + self.m.path.sep + '*',
+          test_data=['%d.png' % i for i in (1, 2)])
+      for p in paths:
+        self.m.file.copy('copy %s' % self.m.path.basename(p), p, host)
 
   def read_file_on_device(self, path, **kwargs):
     rv = self._adb('read %s' % path,

@@ -6,18 +6,18 @@
  * found in the LICENSE file.
  */
 
-#include "VulkanWindowContext.h"
+#include "tools/sk_app/VulkanWindowContext.h"
 
-#include "GrBackendSemaphore.h"
-#include "GrBackendSurface.h"
-#include "GrContext.h"
-#include "SkAutoMalloc.h"
-#include "SkSurface.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrBackendSemaphore.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContext.h"
+#include "src/core/SkAutoMalloc.h"
 
-#include "vk/GrVkExtensions.h"
-#include "vk/GrVkImage.h"
-#include "vk/GrVkTypes.h"
-#include "vk/GrVkUtil.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/vk/GrVkImage.h"
+#include "src/gpu/vk/GrVkUtil.h"
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 // windows wants to define this as CreateSemaphoreA or CreateSemaphoreW
@@ -238,7 +238,7 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
         }
     }
     fDisplayParams = params;
-    fSampleCount = params.fMSAASampleCount;
+    fSampleCount = std::max(1, params.fMSAASampleCount);
     fStencilBits = 8;
 
     if (VK_FORMAT_UNDEFINED == surfaceFormat) {
@@ -252,7 +252,6 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
             colorType = kRGBA_8888_SkColorType;
             break;
         case VK_FORMAT_B8G8R8A8_UNORM: // fall through
-        case VK_FORMAT_B8G8R8A8_SRGB:
             colorType = kBGRA_8888_SkColorType;
             break;
         default:
@@ -262,12 +261,18 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
     // If mailbox mode is available, use it, as it is the lowest-latency non-
     // tearing mode. If not, fall back to FIFO which is always available.
     VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
+    bool hasImmediate = false;
     for (uint32_t i = 0; i < presentModeCount; ++i) {
         // use mailbox
         if (VK_PRESENT_MODE_MAILBOX_KHR == presentModes[i]) {
-            mode = presentModes[i];
-            break;
+            mode = VK_PRESENT_MODE_MAILBOX_KHR;
         }
+        if (VK_PRESENT_MODE_IMMEDIATE_KHR == presentModes[i]) {
+            hasImmediate = true;
+        }
+    }
+    if (params.fDisableVsync && hasImmediate) {
+        mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
     }
 
     VkSwapchainCreateInfoKHR swapchainCreateInfo;
@@ -338,14 +343,21 @@ void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType) 
         info.fLevelCount = 1;
         info.fCurrentQueueFamily = fPresentQueueIndex;
 
-        GrBackendRenderTarget backendRT(fWidth, fHeight, fSampleCount, info);
+        if (fSampleCount == 1) {
+            GrBackendRenderTarget backendRT(fWidth, fHeight, fSampleCount, info);
 
-        fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(fContext.get(),
-                                                              backendRT,
-                                                              kTopLeft_GrSurfaceOrigin,
-                                                              colorType,
-                                                              fDisplayParams.fColorSpace,
-                                                              &fDisplayParams.fSurfaceProps);
+            fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(
+                    fContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, colorType,
+                    fDisplayParams.fColorSpace, &fDisplayParams.fSurfaceProps);
+        } else {
+            GrBackendTexture backendTexture(fWidth, fHeight, info);
+
+            // We don't set the sampled usage bit on the swapchain so this can't be a GrTexture.
+            fSurfaces[i] = SkSurface::MakeFromBackendTextureAsRenderTarget(
+                    fContext.get(), backendTexture, kTopLeft_GrSurfaceOrigin, fSampleCount,
+                    colorType, fDisplayParams.fColorSpace, &fDisplayParams.fSurfaceProps);
+
+        }
     }
 
     // set up the backbuffers
@@ -360,9 +372,10 @@ void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType) 
     fBackbuffers = new BackbufferInfo[fImageCount + 1];
     for (uint32_t i = 0; i < fImageCount + 1; ++i) {
         fBackbuffers[i].fImageIndex = -1;
-        GR_VK_CALL_ERRCHECK(fInterface,
-                            CreateSemaphore(fDevice, &semaphoreInfo,
-                                            nullptr, &fBackbuffers[i].fRenderSemaphore));
+        SkDEBUGCODE(VkResult result = )GR_VK_CALL(fInterface,
+                CreateSemaphore(fDevice, &semaphoreInfo, nullptr,
+                                &fBackbuffers[i].fRenderSemaphore));
+        SkASSERT(result == VK_SUCCESS);
     }
     fCurrentBackbufferIndex = fImageCount;
 }
@@ -458,8 +471,9 @@ sk_sp<SkSurface> VulkanWindowContext::getBackbufferSurface() {
     semaphoreInfo.pNext = nullptr;
     semaphoreInfo.flags = 0;
     VkSemaphore semaphore;
-    GR_VK_CALL_ERRCHECK(fInterface, CreateSemaphore(fDevice, &semaphoreInfo,
-                                                    nullptr, &semaphore));
+    SkDEBUGCODE(VkResult result = )GR_VK_CALL(fInterface, CreateSemaphore(fDevice, &semaphoreInfo,
+                                                                          nullptr, &semaphore));
+    SkASSERT(result == VK_SUCCESS);
 
     // acquire the image
     VkResult res = fAcquireNextImageKHR(fDevice, fSwapchain, UINT64_MAX,
@@ -508,8 +522,10 @@ void VulkanWindowContext::swapBuffers() {
     GrBackendSemaphore beSemaphore;
     beSemaphore.initVulkan(backbuffer->fRenderSemaphore);
 
-    surface->flush(SkSurface::BackendSurfaceAccess::kPresent, kNone_GrFlushFlags,
-                   1, &beSemaphore);
+    GrFlushInfo info;
+    info.fNumSemaphores = 1;
+    info.fSignalSemaphores = &beSemaphore;
+    surface->flush(SkSurface::BackendSurfaceAccess::kPresent, info);
 
     // Submit present operation to present queue
     const VkPresentInfoKHR presentInfo =

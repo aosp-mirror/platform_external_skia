@@ -11,17 +11,16 @@
       }
 
       function makeWebGLContext(canvas, attrs) {
-        // These defaults come from the emscripten _emscripten_webgl_create_context
         var contextAttributes = {
           alpha: get(attrs, 'alpha', 1),
           depth: get(attrs, 'depth', 1),
-          stencil: get(attrs, 'stencil', 0),
+          stencil: get(attrs, 'stencil', 8),
           antialias: get(attrs, 'antialias', 1),
           premultipliedAlpha: get(attrs, 'premultipliedAlpha', 1),
           preserveDrawingBuffer: get(attrs, 'preserveDrawingBuffer', 0),
           preferLowPowerToHighPerformance: get(attrs, 'preferLowPowerToHighPerformance', 0),
           failIfMajorPerformanceCaveat: get(attrs, 'failIfMajorPerformanceCaveat', 0),
-          majorVersion: get(attrs, 'majorVersion', 1),
+          majorVersion: get(attrs, 'majorVersion', 2),
           minorVersion: get(attrs, 'minorVersion', 0),
           enableExtensionsByDefault: get(attrs, 'enableExtensionsByDefault', 1),
           explicitSwapControl: get(attrs, 'explicitSwapControl', 0),
@@ -38,7 +37,14 @@
         }
         // GL is an enscripten provided helper
         // See https://github.com/emscripten-core/emscripten/blob/incoming/src/library_webgl.js
-        return GL.createContext(canvas, contextAttributes);
+        var ctx = GL.createContext(canvas, contextAttributes);
+
+        if (!ctx && contextAttributes.majorVersion > 1) {
+          contextAttributes.majorVersion = 1;  // fall back to WebGL 1.0
+          contextAttributes.minorVersion = 0;
+          ctx = GL.createContext(canvas, contextAttributes);
+        }
+        return ctx;
       }
 
       CanvasKit.GetWebGLContext = function(canvas, attrs) {
@@ -61,7 +67,7 @@
           }
         }
         // we are ok with all the defaults
-        var ctx = CanvasKit.GetWebGLContext(canvas);
+        var ctx = this.GetWebGLContext(canvas);
 
         if (!ctx || ctx < 0) {
           throw 'failed to create webgl context: err ' + ctx;
@@ -72,6 +78,14 @@
         }
 
         var grcontext = this.MakeGrContext(ctx);
+
+        if (grcontext) {
+           // Bump the default resource cache limit.
+          var RESOURCE_CACHE_BYTES = 256 * 1024 * 1024;
+          grcontext.setResourceCacheLimitBytes(RESOURCE_CACHE_BYTES);
+        }
+
+
         // Maybe better to use clientWidth/height.  See:
         // https://webglfundamentals.org/webgl/lessons/webgl-anti-patterns.html
         var surface = this.MakeOnScreenGLSurface(grcontext,
@@ -79,8 +93,18 @@
                                                  height || canvas.height);
         if (!surface) {
           SkDebug('falling back from GPU implementation to a SW based one');
-          return CanvasKit.MakeSWCanvasSurface(arg);
+          // we need to throw away the old canvas (which was locked to
+          // a webGL context) and create a new one so we can
+          var newCanvas = canvas.cloneNode(true);
+          var parent = canvas.parentNode;
+          parent.replaceChild(newCanvas, canvas);
+          // add a class so the user can detect that it was replaced.
+          newCanvas.classList.add('ck-replaced');
+
+          return CanvasKit.MakeSWCanvasSurface(newCanvas);
         }
+        surface._context = ctx;
+        surface.grContext = grcontext;
         return surface;
       };
       // Default to trying WebGL first.

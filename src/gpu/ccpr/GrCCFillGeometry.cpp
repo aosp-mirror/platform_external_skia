@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "GrCCFillGeometry.h"
+#include "src/gpu/ccpr/GrCCFillGeometry.h"
 
-#include "GrTypes.h"
-#include "SkGeometry.h"
+#include "include/gpu/GrTypes.h"
+#include "src/core/SkGeometry.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -795,7 +795,7 @@ GrCCFillGeometry::PrimitiveTallies GrCCFillGeometry::endContour() {
         fVerbs.push_back(Verb::kEndOpenContour);
     }
 
-    fCurrContourTallies.fTriangles = SkTMax(fanSize - 2, 0);
+    fCurrContourTallies.fTriangles = std::max(fanSize - 2, 0);
 
     SkDEBUGCODE(fBuildingContour = false);
     return fCurrContourTallies;

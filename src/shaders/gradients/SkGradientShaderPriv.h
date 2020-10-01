@@ -8,16 +8,16 @@
 #ifndef SkGradientShaderPriv_DEFINED
 #define SkGradientShaderPriv_DEFINED
 
-#include "SkGradientShader.h"
+#include "include/effects/SkGradientShader.h"
 
-#include "SkArenaAlloc.h"
-#include "SkMatrix.h"
-#include "SkShaderBase.h"
-#include "SkTArray.h"
-#include "SkTemplates.h"
+#include "include/core/SkMatrix.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkVM.h"
+#include "src/shaders/SkShaderBase.h"
 
 class SkColorSpace;
-class SkColorSpaceXformer;
 class SkRasterPipeline;
 class SkReadBuffer;
 class SkWriteBuffer;
@@ -27,7 +27,7 @@ public:
     struct Descriptor {
         Descriptor() {
             sk_bzero(this, sizeof(*this));
-            fTileMode = SkShader::kClamp_TileMode;
+            fTileMode = SkTileMode::kClamp;
         }
 
         const SkMatrix*     fLocalMatrix;
@@ -35,7 +35,7 @@ public:
         sk_sp<SkColorSpace> fColorSpace;
         const SkScalar*     fPos;
         int                 fCount;
-        SkShader::TileMode  fTileMode;
+        SkTileMode          fTileMode;
         uint32_t            fGradFlags;
 
         void flatten(SkWriteBuffer&) const;
@@ -77,10 +77,21 @@ protected:
 
     bool onAsLuminanceColor(SkColor*) const override;
 
-    bool onAppendStages(const StageRec&) const override;
+    bool onAppendStages(const SkStageRec&) const override;
+
+    bool onProgram(skvm::Builder* p,
+                   const SkMatrix& ctm, const SkMatrix* localM,
+                   SkFilterQuality quality, SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
+                   skvm::F32 x, skvm::F32 y,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
 
     virtual void appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* tPipeline,
                                       SkRasterPipeline* postPipeline) const = 0;
+
+    // Produce t from (x,y), modifying mask if it should be anything other than ~0.
+    virtual skvm::F32 transformT(skvm::Builder*, skvm::Uniforms*,
+                                 skvm::F32 x, skvm::F32 y, skvm::I32* mask) const = 0;
 
     template <typename T, typename... Args>
     static Context* CheckedMakeContext(SkArenaAlloc* alloc, Args&&... args) {
@@ -91,14 +102,8 @@ protected:
         return ctx;
     }
 
-    struct AutoXformColors {
-        AutoXformColors(const SkGradientShaderBase&, SkColorSpaceXformer*);
-
-        SkAutoSTMalloc<8, SkColor> fColors;
-    };
-
     const SkMatrix fPtsToUnit;
-    TileMode       fTileMode;
+    SkTileMode      fTileMode;
     uint8_t        fGradFlags;
 
 public:
@@ -127,7 +132,7 @@ public:
 
     bool colorsAreOpaque() const { return fColorsAreOpaque; }
 
-    TileMode getTileMode() const { return fTileMode; }
+    SkTileMode getTileMode() const { return fTileMode; }
 
 private:
     // Reserve inline space for up to 4 stops.

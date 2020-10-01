@@ -6,6 +6,7 @@
 DEPS = [
   'build',
   'recipe_engine/path',
+  'recipe_engine/platform',
   'recipe_engine/properties',
   'recipe_engine/raw_io',
   'run',
@@ -25,19 +26,31 @@ def RunSteps(api):
 
 
 TEST_BUILDERS = [
+  'Build-Debian10-GCC-loongson3a-Release-Docker',
+  'Build-Debian10-GCC-x86-Debug-Docker',
+  'Build-Debian10-GCC-x86_64-Debug-Docker',
+  'Build-Debian10-GCC-x86_64-Release-NoGPU_Docker',
+  'Build-Debian10-GCC-x86_64-Release-Shared_Docker',
   'Build-Debian9-Clang-arm-Release-Android_API26',
   'Build-Debian9-Clang-arm-Release-Android_ASAN',
   'Build-Debian9-Clang-arm-Release-Chromebook_GLES',
   'Build-Debian9-Clang-arm-Release-Flutter_Android',
+  'Build-Debian9-Clang-arm64-Release-Android_Wuffs',
   'Build-Debian9-Clang-x86-devrel-Android_SKQP',
   'Build-Debian9-Clang-x86_64-Debug-Chromebook_GLES',
   'Build-Debian9-Clang-x86_64-Debug-Coverage',
   'Build-Debian9-Clang-x86_64-Debug-MSAN',
+  'Build-Debian9-Clang-x86_64-Debug-TSAN',
   'Build-Debian9-Clang-x86_64-Debug-OpenCL',
   'Build-Debian9-Clang-x86_64-Debug-SK_CPU_LIMIT_SSE41',
   'Build-Debian9-Clang-x86_64-Debug-SafeStack',
+  'Build-Debian9-Clang-x86_64-Debug-SkVM',
+  'Build-Debian9-Clang-x86_64-Debug-SkVM_ASAN',
+  'Build-Debian9-Clang-x86_64-Debug-SwiftShader_MSAN',
+  'Build-Debian9-Clang-x86_64-Debug-SwiftShader_TSAN',
   'Build-Debian9-Clang-x86_64-Debug-Tidy',
   'Build-Debian9-Clang-x86_64-Debug-Wuffs',
+  'Build-Debian9-Clang-x86_64-Release-ANGLE',
   'Build-Debian9-Clang-x86_64-Release-ASAN',
   'Build-Debian9-Clang-x86_64-Release-CMake',
   'Build-Debian9-Clang-x86_64-Release-Fast',
@@ -51,11 +64,7 @@ TEST_BUILDERS = [
   'Build-Debian9-EMCC-wasm-Debug-PathKit',
   'Build-Debian9-EMCC-wasm-Release-CanvasKit_CPU',
   'Build-Debian9-EMCC-wasm-Release-PathKit',
-  'Build-Debian9-GCC-arm-Release-Chromecast',
-  'Build-Debian9-GCC-loongson3a-Release',
-  'Build-Debian9-GCC-x86_64-Release-ANGLE',
-  'Build-Debian9-GCC-x86_64-Release-NoGPU',
-  'Build-Debian9-GCC-x86_64-Release-Shared',
+  'Build-Mac-Clang-arm-Debug-iOS',
   'Build-Mac-Clang-arm64-Debug-Android_Vulkan',
   'Build-Mac-Clang-arm64-Debug-iOS',
   'Build-Mac-Clang-x86_64-Debug-ASAN',
@@ -64,9 +73,10 @@ TEST_BUILDERS = [
   'Build-Mac-Clang-x86_64-Release-MoltenVK_Vulkan',
   'Build-Win-Clang-arm64-Release-Android',
   'Build-Win-Clang-x86-Debug-Exceptions',
+  'Build-Win-Clang-x86_64-Debug-ANGLE',
   'Build-Win-Clang-x86_64-Debug-OpenCL',
+  'Build-Win-Clang-x86_64-Release-Shared',
   'Build-Win-Clang-x86_64-Release-Vulkan',
-  'Build-Win-MSVC-x86_64-Debug-MSRTC',
   'Test-Debian9-Clang-GCE-CPU-AVX2-universal-devrel-All-Android_SKQP',
   'Housekeeper-PerCommit-CheckGeneratedFiles',
 ]
@@ -87,4 +97,12 @@ def GenTests(api):
       api.test(buildername) +
       api.properties(**defaultProps(buildername))
     )
+    if 'Win' in buildername and not 'LenovoYogaC630' in buildername:
+      test += api.platform('win', 64)
     yield test
+
+  yield (
+      api.test('unknown-docker-image') +
+      api.properties(**defaultProps('Build-Unix-GCC-x86_64-Release-Docker')) +
+      api.expect_exception('Exception')
+  )

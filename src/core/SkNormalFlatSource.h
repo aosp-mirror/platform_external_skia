@@ -8,9 +8,9 @@
 #ifndef SkNormalFlatSource_DEFINED
 #define SkNormalFlatSource_DEFINED
 
-#include "SkNormalSource.h"
+#include "src/core/SkNormalSource.h"
 
-class SK_API SkNormalFlatSourceImpl : public SkNormalSource {
+class SkNormalFlatSourceImpl : public SkNormalSource {
 public:
     SkNormalFlatSourceImpl(){}
 

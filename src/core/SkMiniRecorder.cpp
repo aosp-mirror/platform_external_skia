@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkTLazy.h"
-#include "SkMiniRecorder.h"
-#include "SkOnce.h"
-#include "SkPicture.h"
-#include "SkPictureCommon.h"
-#include "SkRecordDraw.h"
-#include "SkRectPriv.h"
-#include "SkTextBlob.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkTextBlob.h"
+#include "include/private/SkOnce.h"
+#include "src/core/SkMiniRecorder.h"
+#include "src/core/SkPictureCommon.h"
+#include "src/core/SkRecordDraw.h"
+#include "src/core/SkRectPriv.h"
+#include "src/core/SkTLazy.h"
 #include <new>
 
 using namespace SkRecords;
@@ -47,9 +47,9 @@ static SkRect bounds(const DrawTextBlob& op) {
 template <typename T>
 class SkMiniPicture final : public SkPicture {
 public:
-    SkMiniPicture(const SkRect* cull, T* op) : fCull(cull ? *cull : bounds(*op)) {
-        memcpy(&fOp, op, sizeof(fOp));  // We take ownership of op's guts.
-    }
+    SkMiniPicture(const SkRect* cull, T&& op)
+        : fCull(cull ? *cull : bounds(op))
+        , fOp(std::move(op)) {}
 
     void playback(SkCanvas* c, AbortCallback*) const override {
         SkRecords::Draw(c, nullptr, nullptr, 0, nullptr)(fOp);
@@ -96,10 +96,14 @@ bool SkMiniRecorder::drawTextBlob(const SkTextBlob* b, SkScalar x, SkScalar y, c
 
 
 sk_sp<SkPicture> SkMiniRecorder::detachAsPicture(const SkRect* cull) {
-#define CASE(Type)              \
-    case State::k##Type:        \
-        fState = State::kEmpty; \
-        return sk_make_sp<SkMiniPicture<Type>>(cull, reinterpret_cast<Type*>(fBuffer.get()))
+#define CASE(T)                                                        \
+    case State::k##T: {                                                \
+        T* op = reinterpret_cast<T*>(fBuffer.get());                   \
+        auto pic = sk_make_sp<SkMiniPicture<T>>(cull, std::move(*op)); \
+        op->~T();                                                      \
+        fState = State::kEmpty;                                        \
+        return std::move(pic);                                         \
+    }
 
     static SkOnce once;
     static SkPicture* empty;
@@ -108,9 +112,9 @@ sk_sp<SkPicture> SkMiniRecorder::detachAsPicture(const SkRect* cull) {
         case State::kEmpty:
             once([]{ empty = new SkEmptyPicture; });
             return sk_ref_sp(empty);
-        CASE(DrawPath);
-        CASE(DrawRect);
-        CASE(DrawTextBlob);
+        CASE(DrawPath)
+        CASE(DrawRect)
+        CASE(DrawTextBlob)
     }
     SkASSERT(false);
     return nullptr;

@@ -8,8 +8,8 @@
 #ifndef SKSL_LAYOUT
 #define SKSL_LAYOUT
 
-#include "SkSLString.h"
-#include "SkSLUtil.h"
+#include "src/sksl/SkSLString.h"
+#include "src/sksl/SkSLUtil.h"
 
 namespace SkSL {
 
@@ -60,6 +60,7 @@ struct Layout {
         kR32F,
         kRGBA16F,
         kR16F,
+        kLUMINANCE16F,
         kRGBA8,
         kR8,
         kRGBA8I,
@@ -79,17 +80,22 @@ struct Layout {
 
     enum class CType {
         kDefault,
+        kBool,
         kFloat,
+        kFloat2,
+        kFloat3,
+        kFloat4,
         kInt32,
         kSkRect,
         kSkIRect,
         kSkPMColor4f,
         kSkPMColor,
+        kSkV4,
         kSkPoint,
         kSkIPoint,
         kSkMatrix,
-        kSkMatrix44,
-        kGrTextureProxy,
+        kSkM44,
+        kGrSurfaceProxyView,
         kGrFragmentProcessor,
     };
 
@@ -100,6 +106,7 @@ struct Layout {
             case Format::kR32F:         return "r32f";
             case Format::kRGBA16F:      return "rgba16f";
             case Format::kR16F:         return "r16f";
+            case Format::kLUMINANCE16F: return "lum16f";
             case Format::kRGBA8:        return "rgba8";
             case Format::kR8:           return "r8";
             case Format::kRGBA8I:       return "rgba8i";
@@ -121,6 +128,9 @@ struct Layout {
             return true;
         } else if (str == "r16f") {
             *format = Format::kR16F;
+            return true;
+        } else if (str == "lum16f") {
+            *format = Format::kLUMINANCE16F;
             return true;
         } else if (str == "rgba8") {
             *format = Format::kRGBA8;
@@ -157,16 +167,18 @@ struct Layout {
                 return "SkPMColor4f";
             case CType::kSkPMColor:
                 return "SkPMColor";
+            case CType::kSkV4:
+                return "SkV4";
             case CType::kSkPoint:
                 return "SkPoint";
             case CType::kSkIPoint:
                 return "SkIPoint";
             case CType::kSkMatrix:
                 return "SkMatrix";
-            case CType::kSkMatrix44:
-                return "SkMatrix44";
-            case CType::kGrTextureProxy:
-                return "sk_sp<GrTextureProxy>";
+            case CType::kSkM44:
+                return "SkM44";
+            case CType::kGrSurfaceProxyView:
+                return "GrSurfaceProxyView";
             case CType::kGrFragmentProcessor:
                 return "std::unique_ptr<GrFragmentProcessor>";
             default:
@@ -177,7 +189,7 @@ struct Layout {
 
     Layout(int flags, int location, int offset, int binding, int index, int set, int builtin,
            int inputAttachmentIndex, Format format, Primitive primitive, int maxVertices,
-           int invocations, String when, Key key, CType ctype)
+           int invocations, StringFragment when, Key key, CType ctype)
     : fFlags(flags)
     , fLocation(location)
     , fOffset(offset)
@@ -365,7 +377,7 @@ struct Layout {
             result += separator + "invocations = " + to_string(fInvocations);
             separator = ", ";
         }
-        if (fWhen.size()) {
+        if (fWhen.fLength) {
             result += separator + "when = " + fWhen;
             separator = ", ";
         }
@@ -413,7 +425,7 @@ struct Layout {
     Primitive fPrimitive;
     int fMaxVertices;
     int fInvocations;
-    String fWhen;
+    StringFragment fWhen;
     Key fKey;
     CType fCType;
 };

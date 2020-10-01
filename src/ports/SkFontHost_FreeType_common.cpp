@@ -6,14 +6,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkColorData.h"
-#include "SkFDot6.h"
-#include "SkFontHost_FreeType_common.h"
-#include "SkPath.h"
-#include "SkTo.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPath.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkFDot6.h"
+#include "src/ports/SkFontHost_FreeType_common.h"
 
 #include <utility>
 
@@ -68,16 +68,16 @@ FT_Pixel_Mode compute_pixel_mode(SkMask::Format format) {
 
 uint16_t packTriple(U8CPU r, U8CPU g, U8CPU b) {
 #ifdef SK_SHOW_TEXT_BLIT_COVERAGE
-    r = SkTMax(r, (U8CPU)0x40);
-    g = SkTMax(g, (U8CPU)0x40);
-    b = SkTMax(b, (U8CPU)0x40);
+    r = std::max(r, (U8CPU)0x40);
+    g = std::max(g, (U8CPU)0x40);
+    b = std::max(b, (U8CPU)0x40);
 #endif
     return SkPack888ToRGB16(r, g, b);
 }
 
 uint16_t grayToRGB16(U8CPU gray) {
 #ifdef SK_SHOW_TEXT_BLIT_COVERAGE
-    gray = SkTMax(gray, (U8CPU)0x40);
+    gray = std::max(gray, (U8CPU)0x40);
 #endif
     return SkPack888ToRGB16(gray, gray, gray);
 }
@@ -234,7 +234,7 @@ void copyFTBitmap(const FT_Bitmap& srcFTBitmap, SkMask& dstMask) {
     if ((FT_PIXEL_MODE_MONO == srcFormat && SkMask::kBW_Format == dstFormat) ||
         (FT_PIXEL_MODE_GRAY == srcFormat && SkMask::kA8_Format == dstFormat))
     {
-        size_t commonRowBytes = SkTMin(srcRowBytes, dstRowBytes);
+        size_t commonRowBytes = std::min(srcRowBytes, dstRowBytes);
         for (size_t y = height; y --> 0;) {
             memcpy(dst, src, commonRowBytes);
             src += srcPitch;
@@ -464,8 +464,7 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
                     return;
                 }
 
-                SkMask mask;
-                glyph.toMask(&mask);
+                SkMask mask = glyph.mask();
 #ifdef SK_SHOW_TEXT_BLIT_COVERAGE
                 memset(mask.fImage, 0x80, mask.fBounds.height() * mask.fRowBytes);
 #endif
@@ -555,7 +554,7 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
                 for (int y = 0; y < glyph.fHeight; ++y) {
                     for (int x = 0; x < glyph.fWidth; ++x) {
                         uint8_t& a = ((uint8_t*)glyph.fImage)[(glyph.rowBytes() * y) + x];
-                        a = SkTMax<uint8_t>(a, 0x20);
+                        a = std::max<uint8_t>(a, 0x20);
                     }
                 }
 #endif
@@ -579,8 +578,7 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
 
             // If no scaling needed, directly copy glyph bitmap.
             if (bitmapTransform.isIdentity()) {
-                SkMask dstMask;
-                glyph.toMask(&dstMask);
+                SkMask dstMask = glyph.mask();
                 copyFTBitmap(face->glyph->bitmap, dstMask);
                 break;
             }
@@ -597,7 +595,7 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
 
             SkMask unscaledBitmapAlias;
             unscaledBitmapAlias.fImage = reinterpret_cast<uint8_t*>(unscaledBitmap.getPixels());
-            unscaledBitmapAlias.fBounds.set(0, 0, unscaledBitmap.width(), unscaledBitmap.height());
+            unscaledBitmapAlias.fBounds.setWH(unscaledBitmap.width(), unscaledBitmap.height());
             unscaledBitmapAlias.fRowBytes = unscaledBitmap.rowBytes();
             unscaledBitmapAlias.fFormat = SkMaskFormat_for_SkColorType(unscaledBitmap.colorType());
             copyFTBitmap(face->glyph->bitmap, unscaledBitmapAlias);
@@ -648,8 +646,7 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
             // If the destination is BW or LCD, convert from A8.
             if (SkMask::kBW_Format == maskFormat) {
                 // Copy the A8 dstBitmap into the A1 glyph.fImage.
-                SkMask dstMask;
-                glyph.toMask(&dstMask);
+                SkMask dstMask = glyph.mask();
                 packA8ToA1(dstMask, dstBitmap.getAddr8(0, 0), dstBitmap.rowBytes());
             } else if (SkMask::kLCD16_Format == maskFormat) {
                 // Copy the A8 dstBitmap into the LCD16 glyph.fImage.
@@ -693,47 +690,81 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
 
 namespace {
 
-int move_proc(const FT_Vector* pt, void* ctx) {
-    SkPath* path = (SkPath*)ctx;
-    path->close();  // to close the previous contour (if any)
-    path->moveTo(SkFDot6ToScalar(pt->x), -SkFDot6ToScalar(pt->y));
-    return 0;
-}
+class SkFTGeometrySink {
+    SkPath* fPath;
+    bool fStarted;
+    FT_Vector fCurrent;
 
-int line_proc(const FT_Vector* pt, void* ctx) {
-    SkPath* path = (SkPath*)ctx;
-    path->lineTo(SkFDot6ToScalar(pt->x), -SkFDot6ToScalar(pt->y));
-    return 0;
-}
+    void goingTo(const FT_Vector* pt) {
+        if (!fStarted) {
+            fStarted = true;
+            fPath->moveTo(SkFDot6ToScalar(fCurrent.x), -SkFDot6ToScalar(fCurrent.y));
+        }
+        fCurrent = *pt;
+    }
 
-int quad_proc(const FT_Vector* pt0, const FT_Vector* pt1, void* ctx) {
-    SkPath* path = (SkPath*)ctx;
-    path->quadTo(SkFDot6ToScalar(pt0->x), -SkFDot6ToScalar(pt0->y),
-                 SkFDot6ToScalar(pt1->x), -SkFDot6ToScalar(pt1->y));
-    return 0;
-}
+    bool currentIsNot(const FT_Vector* pt) {
+        return fCurrent.x != pt->x || fCurrent.y != pt->y;
+    }
 
-int cubic_proc(const FT_Vector* pt0, const FT_Vector* pt1, const FT_Vector* pt2, void* ctx) {
-    SkPath* path = (SkPath*)ctx;
-    path->cubicTo(SkFDot6ToScalar(pt0->x), -SkFDot6ToScalar(pt0->y),
-                  SkFDot6ToScalar(pt1->x), -SkFDot6ToScalar(pt1->y),
-                  SkFDot6ToScalar(pt2->x), -SkFDot6ToScalar(pt2->y));
-    return 0;
-}
+    static int Move(const FT_Vector* pt, void* ctx) {
+        SkFTGeometrySink& self = *(SkFTGeometrySink*)ctx;
+        if (self.fStarted) {
+            self.fPath->close();
+            self.fStarted = false;
+        }
+        self.fCurrent = *pt;
+        return 0;
+    }
+
+    static int Line(const FT_Vector* pt, void* ctx) {
+        SkFTGeometrySink& self = *(SkFTGeometrySink*)ctx;
+        if (self.currentIsNot(pt)) {
+            self.goingTo(pt);
+            self.fPath->lineTo(SkFDot6ToScalar(pt->x), -SkFDot6ToScalar(pt->y));
+        }
+        return 0;
+    }
+
+    static int Quad(const FT_Vector* pt0, const FT_Vector* pt1, void* ctx) {
+        SkFTGeometrySink& self = *(SkFTGeometrySink*)ctx;
+        if (self.currentIsNot(pt0) || self.currentIsNot(pt1)) {
+            self.goingTo(pt1);
+            self.fPath->quadTo(SkFDot6ToScalar(pt0->x), -SkFDot6ToScalar(pt0->y),
+                               SkFDot6ToScalar(pt1->x), -SkFDot6ToScalar(pt1->y));
+        }
+        return 0;
+    }
+
+    static int Cubic(const FT_Vector* pt0, const FT_Vector* pt1, const FT_Vector* pt2, void* ctx) {
+        SkFTGeometrySink& self = *(SkFTGeometrySink*)ctx;
+        if (self.currentIsNot(pt0) || self.currentIsNot(pt1) || self.currentIsNot(pt2)) {
+            self.goingTo(pt2);
+            self.fPath->cubicTo(SkFDot6ToScalar(pt0->x), -SkFDot6ToScalar(pt0->y),
+                                SkFDot6ToScalar(pt1->x), -SkFDot6ToScalar(pt1->y),
+                                SkFDot6ToScalar(pt2->x), -SkFDot6ToScalar(pt2->y));
+        }
+        return 0;
+    }
+
+public:
+    SkFTGeometrySink(SkPath* path) : fPath{path}, fStarted{false}, fCurrent{0,0} {}
+
+    static constexpr const FT_Outline_Funcs Funcs{
+        /*move_to =*/ SkFTGeometrySink::Move,
+        /*line_to =*/ SkFTGeometrySink::Line,
+        /*conic_to =*/ SkFTGeometrySink::Quad,
+        /*cubic_to =*/ SkFTGeometrySink::Cubic,
+        /*shift = */ 0,
+        /*delta =*/ 0,
+    };
+};
 
 }  // namespace
 
 bool SkScalerContext_FreeType_Base::generateGlyphPath(FT_Face face, SkPath* path) {
-    FT_Outline_Funcs    funcs;
-
-    funcs.move_to   = move_proc;
-    funcs.line_to   = line_proc;
-    funcs.conic_to  = quad_proc;
-    funcs.cubic_to  = cubic_proc;
-    funcs.shift     = 0;
-    funcs.delta     = 0;
-
-    FT_Error err = FT_Outline_Decompose(&face->glyph->outline, &funcs, path);
+    SkFTGeometrySink sink{path};
+    FT_Error err = FT_Outline_Decompose(&face->glyph->outline, &SkFTGeometrySink::Funcs, &sink);
 
     if (err != 0) {
         path->reset();

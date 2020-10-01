@@ -5,20 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "sk_tool_utils.h"
-#include "DecodeFile.h"
-#include "Resources.h"
-#include "Sample.h"
-#include "SkBlurMask.h"
-#include "SkBlurDrawLooper.h"
-#include "SkCanvas.h"
-#include "SkColorPriv.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
-#include "SkStream.h"
-#include "SkString.h"
-#include "SkTypes.h"
-#include "SkUTF.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "samplecode/DecodeFile.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkBlurMask.h"
+#include "src/core/SkOSFile.h"
+#include "src/utils/SkOSPath.h"
+#include "src/utils/SkUTF.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
 /**
  *  Interprets c as an unpremultiplied color, and returns the
@@ -42,13 +41,9 @@ public:
     }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "unpremul");
-            return true;
-        }
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    SkString name() override { return SkString("unpremul"); }
+
+    bool onChar(SkUnichar uni) override {
             char utf8[SkUTF::kMaxBytesInUTF8Sequence];
             size_t size = SkUTF::ToUTF8(uni, utf8);
             // Only consider events for single char keys
@@ -64,12 +59,11 @@ protected:
                         break;
                 }
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
 
     void onDrawBackground(SkCanvas* canvas) override {
-        sk_tool_utils::draw_checkerboard(canvas, 0xFFCCCCCC, 0xFFFFFFFF, 12);
+        ToolUtils::draw_checkerboard(canvas, 0xFFCCCCCC, 0xFFFFFFFF, 12);
     }
 
     void onDrawContent(SkCanvas* canvas) override {
@@ -78,10 +72,6 @@ protected:
 
         SkFont font;
         font.setSize(24);
-        auto looper(
-            SkBlurDrawLooper::Make(SK_ColorBLUE, SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(2)),
-                                   0, 0));
-        paint.setLooper(looper);
         SkScalar height = font.getMetrics(nullptr);
         if (!fDecodeSucceeded) {
             SkString failure;

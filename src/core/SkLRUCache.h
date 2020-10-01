@@ -8,9 +8,9 @@
 #ifndef SkLRUCache_DEFINED
 #define SkLRUCache_DEFINED
 
-#include "SkChecksum.h"
-#include "SkTHash.h"
-#include "SkTInternalLList.h"
+#include "include/private/SkChecksum.h"
+#include "include/private/SkTHash.h"
+#include "src/core/SkTInternalLList.h"
 
 /**
  * A generic LRU cache.
@@ -69,12 +69,12 @@ public:
         return fMap.count();
     }
 
-    template <typename Fn>  // f(V*)
+    template <typename Fn>  // f(K*, V*)
     void foreach(Fn&& fn) {
         typename SkTInternalLList<Entry>::Iter iter;
         for (Entry* e = iter.init(fLRU, SkTInternalLList<Entry>::Iter::kHead_IterStart); e;
              e = iter.next()) {
-            fn(&e->fValue);
+            fn(&e->fKey, &e->fValue);
         }
     }
 

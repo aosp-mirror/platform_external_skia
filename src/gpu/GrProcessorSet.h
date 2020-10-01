@@ -8,11 +8,11 @@
 #ifndef GrProcessorSet_DEFINED
 #define GrProcessorSet_DEFINED
 
-#include "GrFragmentProcessor.h"
-#include "GrPaint.h"
-#include "GrProcessorAnalysis.h"
-#include "SkTemplates.h"
-#include "GrXferProcessor.h"
+#include "include/private/SkTemplates.h"
+#include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrProcessorAnalysis.h"
+#include "src/gpu/GrXferProcessor.h"
 
 struct GrUserStencilSettings;
 class GrAppliedClip;
@@ -121,7 +121,7 @@ public:
 
         friend class GrProcessorSet;
     };
-    GR_STATIC_ASSERT(sizeof(Analysis) <= sizeof(uint32_t));
+    static_assert(sizeof(Analysis) <= sizeof(uint32_t));
 
     /**
      * This analyzes the processors given an op's input color and coverage as well as a clip. The
@@ -137,9 +137,10 @@ public:
      * that owns a processor set is recorded to ensure pending and writes are propagated to
      * resources referred to by the processors. Otherwise, data hazards may occur.
      */
-    Analysis finalize(const GrProcessorAnalysisColor&, const GrProcessorAnalysisCoverage,
-                      const GrAppliedClip*, const GrUserStencilSettings*, GrFSAAType, const GrCaps&,
-                      GrClampType, SkPMColor4f* inputColorOverride);
+    Analysis finalize(
+            const GrProcessorAnalysisColor&, const GrProcessorAnalysisCoverage,
+            const GrAppliedClip*, const GrUserStencilSettings*, bool hasMixedSampledCoverage,
+            const GrCaps&, GrClampType, SkPMColor4f* inputColorOverride);
 
     bool isFinalized() const { return SkToBool(kFinalized_Flag & fFlags); }
 
@@ -152,14 +153,7 @@ public:
     SkString dumpProcessors() const;
 #endif
 
-    void visitProxies(const std::function<void(GrSurfaceProxy*)>& func) const {
-        for (int i = 0; i < this->numFragmentProcessors(); ++i) {
-            GrFragmentProcessor::TextureAccessIter iter(this->fragmentProcessor(i));
-            while (const GrFragmentProcessor::TextureSampler* sampler = iter.next()) {
-                func(sampler->proxy());
-            }
-        }
-    }
+    void visitProxies(const GrOp::VisitProxyFunc& func) const;
 
 private:
     GrProcessorSet(Empty) : fXP((const GrXferProcessor*)nullptr), fFlags(kFinalized_Flag) {}
@@ -193,7 +187,7 @@ private:
         return fXP.fFactory;
     }
 
-    SkAutoSTArray<4, std::unique_ptr<const GrFragmentProcessor>> fFragmentProcessors;
+    SkAutoSTArray<4, std::unique_ptr<GrFragmentProcessor>> fFragmentProcessors;
     XP fXP;
     uint8_t fColorFragmentProcessorCnt = 0;
     uint8_t fFragmentProcessorOffset = 0;
