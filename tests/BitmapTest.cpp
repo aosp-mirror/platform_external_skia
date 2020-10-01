@@ -5,17 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkColor.h"
-#include "SkImageInfo.h"
-#include "SkMallocPixelRef.h"
-#include "SkPixelRef.h"
-#include "SkPixmap.h"
-#include "SkRandom.h"
-#include "SkRefCnt.h"
-#include "SkTypes.h"
-#include "Test.h"
-#include "sk_tool_utils.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMallocPixelRef.h"
+#include "include/core/SkPixelRef.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkFloatingPoint.h"
+#include "include/utils/SkRandom.h"
+#include "tests/Test.h"
+#include "tools/ToolUtils.h"
+
+#include <initializer_list>
 
 static void test_peekpixels(skiatest::Reporter* reporter) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
@@ -88,6 +92,42 @@ static void test_allocpixels(skiatest::Reporter* reporter) {
     bool success = bm.setInfo(info, info.minRowBytes() - 1);   // invalid for 32bit
     REPORTER_ASSERT(reporter, !success);
     REPORTER_ASSERT(reporter, bm.isNull());
+
+    for (SkColorType ct : {
+        kAlpha_8_SkColorType,
+        kRGB_565_SkColorType,
+        kARGB_4444_SkColorType,
+        kRGBA_8888_SkColorType,
+        kBGRA_8888_SkColorType,
+        kRGB_888x_SkColorType,
+        kRGBA_1010102_SkColorType,
+        kRGB_101010x_SkColorType,
+        kGray_8_SkColorType,
+        kRGBA_F16Norm_SkColorType,
+        kRGBA_F16_SkColorType,
+        kRGBA_F32_SkColorType,
+        kR8G8_unorm_SkColorType,
+        kA16_unorm_SkColorType,
+        kR16G16_unorm_SkColorType,
+        kA16_float_SkColorType,
+        kR16G16_float_SkColorType,
+        kR16G16B16A16_unorm_SkColorType,
+    }) {
+        SkImageInfo imageInfo = info.makeColorType(ct);
+        for (int rowBytesPadding = 1; rowBytesPadding <= 17; rowBytesPadding++) {
+            bm.reset();
+            success = bm.setInfo(imageInfo, imageInfo.minRowBytes() + rowBytesPadding);
+            if (rowBytesPadding % imageInfo.bytesPerPixel() == 0) {
+                REPORTER_ASSERT(reporter, success);
+                success = bm.tryAllocPixels();
+                REPORTER_ASSERT(reporter, success);
+            } else {
+                // Not pixel aligned.
+                REPORTER_ASSERT(reporter, !success);
+                REPORTER_ASSERT(reporter, bm.isNull());
+            }
+        }
+    }
 }
 
 static void test_bigwidth(skiatest::Reporter* reporter) {
@@ -143,7 +183,7 @@ DEF_TEST(Bitmap_getColor_Swizzle, r) {
     };
     for (SkColorType ct : colorTypes) {
         SkBitmap copy;
-        if (!sk_tool_utils::copy_to(&copy, ct, source)) {
+        if (!ToolUtils::copy_to(&copy, ct, source)) {
             ERRORF(r, "SkBitmap::copy failed %d", (int)ct);
             continue;
         }
@@ -174,20 +214,9 @@ DEF_TEST(Bitmap_eraseColor_Premul, r) {
 
 // Test that SkBitmap::ComputeOpaque() is correct for various colortypes.
 DEF_TEST(Bitmap_compute_is_opaque, r) {
-    SkColorType colorTypes[] = {
-        kAlpha_8_SkColorType,
-        kRGB_565_SkColorType,
-        kARGB_4444_SkColorType,
-        kRGBA_8888_SkColorType,
-        kRGB_888x_SkColorType,
-        kBGRA_8888_SkColorType,
-        kRGBA_1010102_SkColorType,
-        kRGB_101010x_SkColorType,
-        kGray_8_SkColorType,
-        kRGBA_F16_SkColorType,
-        kRGBA_F32_SkColorType,
-    };
-    for (auto ct : colorTypes) {
+
+    for (int i = 1; i <= kLastEnum_SkColorType; ++i) {
+        SkColorType ct = (SkColorType) i;
         SkBitmap bm;
         SkAlphaType at = SkColorTypeIsAlwaysOpaque(ct) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
         bm.allocPixels(SkImageInfo::Make(13, 17, ct, at));
@@ -265,7 +294,7 @@ DEF_TEST(Bitmap_erase, r) {
 }
 
 static void check_alphas(skiatest::Reporter* reporter, const SkBitmap& bm,
-                         bool (*pred)(float expected, float actual)) {
+                         bool (*pred)(float expected, float actual), SkColorType ct) {
     SkASSERT(bm.width() == 16);
     SkASSERT(bm.height() == 16);
 
@@ -275,7 +304,8 @@ static void check_alphas(skiatest::Reporter* reporter, const SkBitmap& bm,
             float expected = alpha / 255.0f;
             float actual = bm.getAlphaf(x, y);
             if (!pred(expected, actual)) {
-                ERRORF(reporter, "got %g, want %g\n", actual, expected);
+                ERRORF(reporter, "%s: got %g, want %g\n",
+                       ToolUtils::colortype_name(ct), actual, expected);
             }
             alpha += 1;
         }
@@ -336,30 +366,35 @@ DEF_TEST(getalphaf, reporter) {
         SkColorType fColorType;
         bool (*fPred)(float, float);
     } recs[] = {
-        { kRGB_565_SkColorType,     opaque },
-        { kGray_8_SkColorType,      opaque },
-        { kRGB_888x_SkColorType,    opaque },
-        { kRGB_101010x_SkColorType, opaque },
+        { kRGB_565_SkColorType,            opaque },
+        { kGray_8_SkColorType,             opaque },
+        { kR8G8_unorm_SkColorType,         opaque },
+        { kR16G16_unorm_SkColorType,       opaque },
+        { kR16G16_float_SkColorType,       opaque },
+        { kRGB_888x_SkColorType,           opaque },
+        { kRGB_101010x_SkColorType,        opaque },
 
-        { kAlpha_8_SkColorType,     nearly },
-        { kRGBA_8888_SkColorType,   nearly },
-        { kBGRA_8888_SkColorType,   nearly },
-        { kRGBA_F16_SkColorType,    nearly_half },
-        { kRGBA_F32_SkColorType,    nearly },
+        { kAlpha_8_SkColorType,            nearly },
+        { kA16_unorm_SkColorType,          nearly },
+        { kA16_float_SkColorType,          nearly_half },
+        { kRGBA_8888_SkColorType,          nearly },
+        { kBGRA_8888_SkColorType,          nearly },
+        { kR16G16B16A16_unorm_SkColorType, nearly },
+        { kRGBA_F16_SkColorType,           nearly_half },
+        { kRGBA_F32_SkColorType,           nearly },
 
-        { kRGBA_1010102_SkColorType, nearly2bit },
+        { kRGBA_1010102_SkColorType,       nearly2bit },
 
-        { kARGB_4444_SkColorType,   nearly4bit },
+        { kARGB_4444_SkColorType,          nearly4bit },
     };
 
     for (const auto& rec : recs) {
         SkBitmap tmp;
         tmp.allocPixels(bm.info().makeColorType(rec.fColorType));
         if (bm.readPixels(tmp.pixmap())) {
-            check_alphas(reporter, tmp, rec.fPred);
+            check_alphas(reporter, tmp, rec.fPred, rec.fColorType);
         } else {
             SkDebugf("can't readpixels\n");
         }
     }
 }
-

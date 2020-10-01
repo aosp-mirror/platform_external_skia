@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "effects/GrCoverageSetOpXP.h"
-#include "GrCaps.h"
-#include "GrColor.h"
-#include "GrPipeline.h"
-#include "GrProcessor.h"
-#include "GrRenderTargetContext.h"
-#include "glsl/GrGLSLBlend.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLUniformHandler.h"
-#include "glsl/GrGLSLXferProcessor.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrColor.h"
+#include "src/gpu/GrPipeline.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/effects/GrCoverageSetOpXP.h"
+#include "src/gpu/glsl/GrGLSLBlend.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
+#include "src/gpu/glsl/GrGLSLXferProcessor.h"
 
 class CoverageSetOpXP : public GrXferProcessor {
 public:
@@ -204,7 +204,6 @@ const GrXPFactory* GrCoverageSetOpXPFactory::Get(SkRegion::Op regionOp, bool inv
     }
 #undef _CONSTEXPR_
     SK_ABORT("Unknown region op.");
-    return nullptr;
 }
 
 sk_sp<const GrXferProcessor> GrCoverageSetOpXPFactory::makeXferProcessor(
@@ -229,8 +228,7 @@ GR_DEFINE_XP_FACTORY_TEST(GrCoverageSetOpXPFactory);
 #if GR_TEST_UTILS
 const GrXPFactory* GrCoverageSetOpXPFactory::TestGet(GrProcessorTestData* d) {
     SkRegion::Op regionOp = SkRegion::Op(d->fRandom->nextULessThan(SkRegion::kLastOp + 1));
-    bool isMixedSamples = GrFSAAType::kMixedSamples == d->fRenderTargetContext->fsaaType();
-    bool invertCoverage = !isMixedSamples && d->fRandom->nextBool();
+    bool invertCoverage = d->fRandom->nextBool();
     return GrCoverageSetOpXPFactory::Get(regionOp, invertCoverage);
 }
 #endif

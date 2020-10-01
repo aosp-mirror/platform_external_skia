@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "GrColorSpaceXform.h"
-#include "SkColorSpace.h"
-#include "SkColorSpacePriv.h"
-#include "glsl/GrGLSLColorSpaceXformHelper.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "include/core/SkColorSpace.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 
 sk_sp<GrColorSpaceXform> GrColorSpaceXform::Make(SkColorSpace* src, SkAlphaType srcAT,
                                                  SkColorSpace* dst, SkAlphaType dstAT) {
@@ -65,8 +65,7 @@ public:
         fColorSpaceHelper.emitCode(uniformHandler, csxe.colorXform());
 
         if (this->numChildProcessors()) {
-            SkString childColor("src_color");
-            this->emitChild(0, &childColor, args);
+            SkString childColor = this->invokeChild(0, args);
 
             SkString xformedColor;
             fragBuilder->appendColorGamutXform(&xformedColor, childColor.c_str(), &fColorSpaceHelper);
@@ -125,7 +124,6 @@ GrGLSLFragmentProcessor* GrColorSpaceXformEffect::onCreateGLSLInstance() const {
 
 GrFragmentProcessor::OptimizationFlags GrColorSpaceXformEffect::OptFlags(
         const GrFragmentProcessor* child) {
-    // TODO: Implement constant output for constant input
     if (child) {
         OptimizationFlags flags = kNone_OptimizationFlags;
         if (child->compatibleWithCoverageAsAlpha()) {
@@ -134,11 +132,23 @@ GrFragmentProcessor::OptimizationFlags GrColorSpaceXformEffect::OptFlags(
         if (child->preservesOpaqueInput()) {
             flags |= kPreservesOpaqueInput_OptimizationFlag;
         }
+        if (child->hasConstantOutputForConstantInput()) {
+            flags |= kConstantOutputForConstantInput_OptimizationFlag;
+        }
         return flags;
     } else {
         return kCompatibleWithCoverageAsAlpha_OptimizationFlag |
-               kPreservesOpaqueInput_OptimizationFlag;
+               kPreservesOpaqueInput_OptimizationFlag |
+               kConstantOutputForConstantInput_OptimizationFlag;
     }
+}
+
+SkPMColor4f GrColorSpaceXformEffect::constantOutputForConstantInput(
+        const SkPMColor4f& input) const {
+    const auto c0 = this->numChildProcessors()
+                            ? ConstantOutputForConstantInput(this->childProcessor(0), input)
+                            : input;
+    return this->fColorXform->apply(c0.unpremul()).premul();
 }
 
 std::unique_ptr<GrFragmentProcessor> GrColorSpaceXformEffect::Make(SkColorSpace* src,

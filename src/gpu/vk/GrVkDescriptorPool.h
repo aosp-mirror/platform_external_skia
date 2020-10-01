@@ -8,8 +8,8 @@
 #ifndef GrVkDescriptorPool_DEFINED
 #define GrVkDescriptorPool_DEFINED
 
-#include "GrVkResource.h"
-#include "vk/GrVkTypes.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/vk/GrVkResource.h"
 
 class GrVkGpu;
 
@@ -20,11 +20,9 @@ class GrVkGpu;
  */
 class GrVkDescriptorPool : public GrVkResource {
 public:
-    GrVkDescriptorPool(const GrVkGpu* gpu, VkDescriptorType type, uint32_t count);
+    static GrVkDescriptorPool* Create(GrVkGpu* gpu, VkDescriptorType type, uint32_t count);
 
     VkDescriptorPool descPool() const { return fDescPool; }
-
-    void reset(const GrVkGpu* gpu);
 
     // Returns whether or not this descriptor pool could be used, assuming it gets fully reset and
     // not in use by another draw, to support the requested type and count.
@@ -38,6 +36,8 @@ public:
 #endif
 
 private:
+    GrVkDescriptorPool(VkDescriptorPool pool, VkDescriptorType type, uint32_t count);
+
     void freeGPUData(GrVkGpu* gpu) const override;
 
     VkDescriptorType     fType;

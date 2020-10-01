@@ -8,11 +8,11 @@
 #ifndef SkImageEncoderFns_DEFINED
 #define SkImageEncoderFns_DEFINED
 
-#include "../../third_party/skcms/skcms.h"
-#include "SkColor.h"
-#include "SkColorData.h"
-#include "SkICC.h"
-#include "SkTypes.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkICC.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkColorData.h"
+#include "include/third_party/skcms/skcms.h"
 
 typedef void (*transform_scanline_proc)(char* dst, const char* src, int width, int bpp);
 
@@ -110,6 +110,24 @@ static inline void transform_scanline_1010102(char* dst, const char* src, int wi
 static inline void transform_scanline_1010102_premul(char* dst, const char* src, int width, int) {
     skcms(dst, src, width,
           skcms_PixelFormat_RGBA_1010102,    skcms_AlphaFormat_PremulAsEncoded,
+          skcms_PixelFormat_RGBA_16161616BE, skcms_AlphaFormat_Unpremul);
+}
+
+static inline void transform_scanline_bgr_101010x(char* dst, const char* src, int width, int) {
+    skcms(dst, src, width,
+          skcms_PixelFormat_BGRA_1010102, skcms_AlphaFormat_Unpremul,
+          skcms_PixelFormat_RGB_161616BE, skcms_AlphaFormat_Unpremul);
+}
+
+static inline void transform_scanline_bgra_1010102(char* dst, const char* src, int width, int) {
+    skcms(dst, src, width,
+          skcms_PixelFormat_BGRA_1010102,    skcms_AlphaFormat_Unpremul,
+          skcms_PixelFormat_RGBA_16161616BE, skcms_AlphaFormat_Unpremul);
+}
+
+static inline void transform_scanline_bgra_1010102_premul(char* dst, const char* src, int width, int) {
+    skcms(dst, src, width,
+          skcms_PixelFormat_BGRA_1010102,    skcms_AlphaFormat_PremulAsEncoded,
           skcms_PixelFormat_RGBA_16161616BE, skcms_AlphaFormat_Unpremul);
 }
 

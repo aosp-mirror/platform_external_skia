@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkChecksum.h"
-#include "SkFont.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkString.h"
-#include "SkTemplates.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkString.h"
+#include "include/private/SkChecksum.h"
+#include "include/private/SkTemplates.h"
 
-#include "gUniqueGlyphIDs.h"
+#include "bench/gUniqueGlyphIDs.h"
 
 #define gUniqueGlyphIDs_Sentinel    0xFFFF
 
@@ -43,7 +43,7 @@ protected:
         while (*array != gUniqueGlyphIDs_Sentinel) {
             int count = count_glyphs(array);
             for (int i = 0; i < loops; ++i) {
-                (void)font.measureText(array, count * sizeof(uint16_t), kGlyphID_SkTextEncoding);
+                (void)font.measureText(array, count * sizeof(uint16_t), SkTextEncoding::kGlyphID);
             }
             array += count + 1;    // skip the sentinel
         }
@@ -125,7 +125,7 @@ protected:
                     int glyphs = 0;
                     const uint16_t* array = gUniqueGlyphIDs;
                     while (*array != gUniqueGlyphIDs_Sentinel) {
-                        int count = SkMin32(count_glyphs(array), limit);
+                        int count = std::min(count_glyphs(array), limit);
                         collisions += count_collisions(array, count, gRec[i].fHasher, hashMask);
                         glyphs += count;
                         array += count + 1;    // skip the sentinel

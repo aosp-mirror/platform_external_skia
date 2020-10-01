@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 #if defined(SK_BUILD_FOR_WIN) && !defined(_M_ARM64)
 
-#include "SkWGL.h"
+#include "src/utils/win/SkWGL.h"
 
-#include "SkOnce.h"
-#include "SkTDArray.h"
-#include "SkTSearch.h"
-#include "SkTSort.h"
+#include "include/private/SkOnce.h"
+#include "include/private/SkTDArray.h"
+#include "src/core/SkTSearch.h"
+#include "src/core/SkTSort.h"
 
 bool SkWGLExtensions::hasExtension(HDC dc, const char* ext) const {
     if (nullptr == this->fGetExtensionsString) {
@@ -147,7 +147,7 @@ int SkWGLExtensions::selectFormat(const int formats[],
                                      &kQueryAttr,
                                      &numSamples);
         rankedFormats[i].fFormat =  formats[i];
-        rankedFormats[i].fSampleCnt = SkTMax(1, numSamples);
+        rankedFormats[i].fSampleCnt = std::max(1, numSamples);
         rankedFormats[i].fChoosePixelFormatRank = i;
     }
     SkTQSort(rankedFormats.begin(),
@@ -336,7 +336,7 @@ static void get_pixel_formats_to_try(HDC dc, const SkWGLExtensions& extensions,
         unsigned int num;
         int formats[64];
         extensions.choosePixelFormat(dc, msaaIAttrs.begin(), fAttrs, 64, formats, &num);
-        num = SkTMin(num, 64U);
+        num = std::min(num, 64U);
         formatsToTry[0] = extensions.selectFormat(formats, num, dc, msaaSampleCount);
     }
 
@@ -410,10 +410,6 @@ static HGLRC create_gl_context(HDC dc, const SkWGLExtensions& extensions,
 
     wglMakeCurrent(prevDC, prevGLRC);
 
-    // This might help make the context non-vsynced.
-    if (extensions.hasExtension(dc, "WGL_EXT_swap_control")) {
-        extensions.swapInterval(-1);
-    }
     return glrc;
 }
 

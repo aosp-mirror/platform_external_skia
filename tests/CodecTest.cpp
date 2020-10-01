@@ -5,47 +5,50 @@
  * found in the LICENSE file.
  */
 
-#include "FakeStreams.h"
-#include "Resources.h"
-#include "SkAndroidCodec.h"
-#include "SkAutoMalloc.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkCodec.h"
-#include "SkCodecImageGenerator.h"
-#include "SkColor.h"
-#include "SkColorSpace.h"
-#include "SkColorSpacePriv.h"
-#include "SkData.h"
-#include "SkEncodedImageFormat.h"
-#include "SkFrontBufferedStream.h"
-#include "SkImage.h"
-#include "SkImageGenerator.h"
-#include "SkImageInfo.h"
-#include "SkJpegEncoder.h"
-#include "SkMD5.h"
-#include "SkMakeUnique.h"
-#include "SkMalloc.h"
-#include "SkPixmap.h"
-#include "SkPngChunkReader.h"
-#include "SkPngEncoder.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkSize.h"
-#include "SkStream.h"
-#include "SkStreamPriv.h"
-#include "SkString.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
-#include "SkUnPreMultiply.h"
-#include "SkWebpEncoder.h"
-#include "Test.h"
+#include "include/codec/SkAndroidCodec.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
+#include "include/core/SkImageGenerator.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPngChunkReader.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/core/SkUnPreMultiply.h"
+#include "include/encode/SkJpegEncoder.h"
+#include "include/encode/SkPngEncoder.h"
+#include "include/encode/SkWebpEncoder.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkTemplates.h"
+#include "include/third_party/skcms/skcms.h"
+#include "include/utils/SkFrontBufferedStream.h"
+#include "include/utils/SkRandom.h"
+#include "src/codec/SkCodecImageGenerator.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkMD5.h"
+#include "src/core/SkStreamPriv.h"
+#include "tests/FakeStreams.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
+
 #include "png.h"
-#include "sk_tool_utils.h"
 
 #include <setjmp.h>
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -57,14 +60,14 @@
     #define SK_PNG_DISABLE_TESTS
 #endif
 
-static void md5(const SkBitmap& bm, SkMD5::Digest* digest) {
+static SkMD5::Digest md5(const SkBitmap& bm) {
     SkASSERT(bm.getPixels());
     SkMD5 md5;
     size_t rowLen = bm.info().bytesPerPixel() * bm.width();
     for (int y = 0; y < bm.height(); ++y) {
         md5.write(bm.getAddr(0, y), rowLen);
     }
-    md5.finish(*digest);
+    return md5.finish();
 }
 
 /**
@@ -75,8 +78,7 @@ static void md5(const SkBitmap& bm, SkMD5::Digest* digest) {
  */
 static void compare_to_good_digest(skiatest::Reporter* r, const SkMD5::Digest& goodDigest,
                            const SkBitmap& bm) {
-    SkMD5::Digest digest;
-    md5(bm, &digest);
+    SkMD5::Digest digest = md5(bm);
     REPORTER_ASSERT(r, digest == goodDigest);
 }
 
@@ -148,7 +150,7 @@ static void test_in_stripes(skiatest::Reporter* r, SkCodec* codec, const SkImage
     for (int oddEven = 1; oddEven >= 0; oddEven--) {
         for (int y = oddEven * stripeHeight; y < height; y += 2 * stripeHeight) {
             SkIRect subset = SkIRect::MakeLTRB(0, y, info.width(),
-                                               SkTMin(y + stripeHeight, height));
+                                               std::min(y + stripeHeight, height));
             SkCodec::Options options;
             options.fSubset = &subset;
             if (SkCodec::kSuccess != codec->startIncrementalDecode(info, bm.getAddr(0, y),
@@ -178,7 +180,7 @@ static void test_codec(skiatest::Reporter* r, const char* path, Codec* codec, Sk
     SkCodec::Result result = codec->getPixels(info, bm.getPixels(), bm.rowBytes());
     REPORTER_ASSERT(r, result == expectedResult);
 
-    md5(bm, digest);
+    *digest = md5(bm);
     if (goodDigest) {
         REPORTER_ASSERT(r, *digest == *goodDigest);
     }
@@ -196,8 +198,7 @@ static void test_codec(skiatest::Reporter* r, const char* path, Codec* codec, Sk
 
             auto actualResult = codec->getPixels(info565, bm565.getPixels(), bm565.rowBytes());
             if (actualResult == expectedResult) {
-                SkMD5::Digest digest565;
-                md5(bm565, &digest565);
+                SkMD5::Digest digest565 = md5(bm565);
 
                 // A request for non-opaque should also succeed.
                 for (auto alpha : { kPremul_SkAlphaType, kUnpremul_SkAlphaType }) {
@@ -225,8 +226,7 @@ static void test_codec(skiatest::Reporter* r, const char* path, Codec* codec, Sk
         REPORTER_ASSERT(r, expectedResult == codec->getPixels(grayInfo,
                 grayBm.getPixels(), grayBm.rowBytes()));
 
-        SkMD5::Digest grayDigest;
-        md5(grayBm, &grayDigest);
+        SkMD5::Digest grayDigest = md5(grayBm);
 
         for (auto alpha : { kPremul_SkAlphaType, kUnpremul_SkAlphaType }) {
             grayInfo = grayInfo.makeAlphaType(alpha);
@@ -406,7 +406,7 @@ static void check(skiatest::Reporter* r,
         const bool supported = codec->getValidSubset(&subset);
         REPORTER_ASSERT(r, supported == supportsSubsetDecoding);
 
-        SkImageInfo subsetInfo = info.makeWH(subset.width(), subset.height());
+        SkImageInfo subsetInfo = info.makeDimensions(subset.size());
         SkBitmap bm;
         bm.allocPixels(subsetInfo);
         const auto result = codec->getPixels(bm.info(), bm.getPixels(), bm.rowBytes(), &opts);
@@ -541,9 +541,9 @@ DEF_TEST(Codec_raw, r) {
 static void test_invalid_stream(skiatest::Reporter* r, const void* stream, size_t len) {
     // Neither of these calls should return a codec. Bots should catch us if we leaked anything.
     REPORTER_ASSERT(r, !SkCodec::MakeFromStream(
-                                        skstd::make_unique<SkMemoryStream>(stream, len, false)));
+                                        std::make_unique<SkMemoryStream>(stream, len, false)));
     REPORTER_ASSERT(r, !SkAndroidCodec::MakeFromStream(
-                                        skstd::make_unique<SkMemoryStream>(stream, len, false)));
+                                        std::make_unique<SkMemoryStream>(stream, len, false)));
 }
 
 // Ensure that SkCodec::NewFromStream handles freeing the passed in SkStream,
@@ -593,7 +593,7 @@ static void test_dimensions(skiatest::Reporter* r, const char path[]) {
         // Scale the output dimensions
         SkISize scaledDims = codec->getSampledDimensions(sampleSize);
         SkImageInfo scaledInfo = codec->getInfo()
-                .makeWH(scaledDims.width(), scaledDims.height())
+                .makeDimensions(scaledDims)
                 .makeColorType(kN32_SkColorType);
 
         // Set up for the decode
@@ -702,8 +702,7 @@ DEF_TEST(Codec_pngChunkReader, r) {
     bm.setInfo(bmInfo);
     bm.allocPixels();
     bm.eraseColor(SK_ColorBLUE);
-    SkMD5::Digest goodDigest;
-    md5(bm, &goodDigest);
+    SkMD5::Digest goodDigest = md5(bm);
 
     // Write to a png file.
     png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
@@ -818,7 +817,7 @@ DEF_TEST(Codec_pngChunkReader, r) {
 
     if (decodedBm.colorType() != bm.colorType()) {
         SkBitmap tmp;
-        bool success = sk_tool_utils::copy_to(&tmp, bm.colorType(), decodedBm);
+        bool     success = ToolUtils::copy_to(&tmp, bm.colorType(), decodedBm);
         REPORTER_ASSERT(r, success);
         if (!success) {
             return;
@@ -848,7 +847,7 @@ public:
         , fLimit(limit) {}
 
     size_t peek(void* buf, size_t bytes) const override {
-        return fStream.peek(buf, SkTMin(bytes, fLimit));
+        return fStream.peek(buf, std::min(bytes, fLimit));
     }
     size_t read(void* buf, size_t bytes) override {
         return fStream.read(buf, bytes);
@@ -877,7 +876,7 @@ DEF_TEST(Codec_raw_notseekable, r) {
     }
 
     std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(
-                                           skstd::make_unique<NotAssetMemStream>(std::move(data))));
+                                           std::make_unique<NotAssetMemStream>(std::move(data))));
     REPORTER_ASSERT(r, codec);
 
     test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, nullptr);
@@ -896,13 +895,13 @@ DEF_TEST(Codec_webp_peek, r) {
 
     // The limit is less than webp needs to peek or read.
     std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(
-                                           skstd::make_unique<LimitedPeekingMemStream>(data, 25)));
+                                           std::make_unique<LimitedPeekingMemStream>(data, 25)));
     REPORTER_ASSERT(r, codec);
 
     test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, nullptr);
 
     // Similarly, a stream which does not peek should still succeed.
-    codec = SkCodec::MakeFromStream(skstd::make_unique<LimitedPeekingMemStream>(data, 0));
+    codec = SkCodec::MakeFromStream(std::make_unique<LimitedPeekingMemStream>(data, 0));
     REPORTER_ASSERT(r, codec);
 
     test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, nullptr);
@@ -1080,10 +1079,7 @@ static void check_round_trip(skiatest::Reporter* r, SkCodec* origCodec, const Sk
     result = codec->getPixels(info, bm2.getPixels(), bm2.rowBytes());
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
 
-    SkMD5::Digest d1, d2;
-    md5(bm1, &d1);
-    md5(bm2, &d2);
-    REPORTER_ASSERT(r, d1 == d2);
+    REPORTER_ASSERT(r, md5(bm1) == md5(bm2));
 }
 
 DEF_TEST(Codec_PngRoundTrip, r) {
@@ -1338,7 +1334,7 @@ DEF_TEST(Codec_reusePng, r) {
     SkAndroidCodec::AndroidOptions opts;
     opts.fSampleSize = 5;
     auto size = codec->getSampledDimensions(opts.fSampleSize);
-    auto info = codec->getInfo().makeWH(size.fWidth, size.fHeight).makeColorType(kN32_SkColorType);
+    auto info = codec->getInfo().makeDimensions(size).makeColorType(kN32_SkColorType);
     SkBitmap bm;
     bm.allocPixels(info);
     auto result = codec->getAndroidPixels(info, bm.getPixels(), bm.rowBytes(), &opts);
@@ -1433,7 +1429,7 @@ resources/invalid_images/skbug6046.gif is:
 00000030: 0021 f904 0000 0000 002c ff00 0000 ffcc  .!.......,......
 00000040: 1b36 5266 deba 543d                      .6Rf..T=
 
-It nominally contains 3 frames, but all of them are invalid. It came from a
+It nominally contains 3 frames, but only the first one is valid. It came from a
 fuzzer doing random mutations and copies. The breakdown:
 
 @000  6 bytes magic "GIF89a"
@@ -1449,7 +1445,7 @@ fuzzer doing random mutations and copies. The breakdown:
    - height    =     0
    - flags     =  0x40, interlaced
 @017  2 bytes Image Descriptor body (pixel data): 0x01 0x00
-   - lit_width =     1, INVALID, OUTSIDE THE RANGE [2, 8]
+   - lit_width =     1
    - 0x00 byte means "end of data" for this frame
 @019  8 bytes Graphic Control Extension: 0x21 0xF9 ... 0x00
    - valid, but irrelevant here.
@@ -1471,7 +1467,7 @@ fuzzer doing random mutations and copies. The breakdown:
    - height    = 13851
    - flags     =  0x52, INVALID, 0x80 BIT ZERO IMPLIES 0x07 BITS SHOULD BE ZERO
 @043  5 bytes Image Descriptor body (pixel data): 0x66 0xDE ... unexpected-EOF
-   - lit_width =   102, INVALID, OUTSIDE THE RANGE [2, 8]
+   - lit_width =   102, INVALID, GREATER THAN 8
    - 0xDE precedes a 222 byte block of data, INVALIDLY TRUNCATED
 
 On Image Descriptor flags INVALIDITY,
@@ -1479,16 +1475,14 @@ https://www.w3.org/Graphics/GIF/spec-gif89a.txt section 20.c says that "Size of
 Local Color Table [the low 3 bits]... should be 0 if there is no Local Color
 Table specified [the high bit]."
 
-On LZW literal width (also known as Minimum Code Size) INVALIDITY outside of
-the range [2, 8], https://www.w3.org/Graphics/GIF/spec-gif89a.txt Appendix F
-says that "Normally this will be the same as the number of [palette index]
-bits. Because of some algorithmic constraints however, black & white images
-which have one color bit must be indicated as having a code size of 2."
-
-In practice, some GIF decoders, including the old third_party/gif code, don't
-enforce this. It says: "currentFrame->setDataSize(this->getOneByte())" with the
-only further check being against an upper bound of SK_MAX_DICTIONARY_ENTRY_BITS
-(the constant 12).
+On LZW literal width (also known as Minimum Code Size) INVALIDITY,
+https://www.w3.org/Graphics/GIF/spec-gif89a.txt Appendix F says that "Normally
+this will be the same as the number of [palette index] bits. Because of some
+algorithmic constraints however, black & white images which have one color bit
+must be indicated as having a code size of 2." In practice, some GIF decoders,
+including both the old third_party/gif code and the Wuffs GIF decoder, don't
+enforce this "at least 2" constraint. Nonetheless, any width greater than 8 is
+invalid, as there are only 8 bits in a byte.
 */
 
 DEF_TEST(Codec_InvalidAnimated, r) {
@@ -1517,35 +1511,6 @@ DEF_TEST(Codec_InvalidAnimated, r) {
         opts.fPriorFrame = reqFrame == i - 1 ? reqFrame : SkCodec::kNoFrame;
         auto result = codec->startIncrementalDecode(info, bm.getPixels(), bm.rowBytes(), &opts);
 
-#ifdef SK_HAS_WUFFS_LIBRARY
-        // We are transitioning from an old GIF implementation to a new (Wuffs)
-        // GIF implementation.
-        //
-        // This test (without SK_HAS_WUFFS_LIBRARY) is overly specific to the
-        // old implementation. As a fuzzer-discovered test, it's likely that
-        // what's fundamentally being tested isn't that decoding an invalid GIF
-        // leads to kSuccess, but that decoding an invalid GIF doesn't lead to
-        // an ASAN violation.
-        //
-        // Each of the 3 frames of the source GIF image is fundamentally
-        // invalid, as per the "breakdown" comment above. The old
-        // implementation is happy to call startIncrementalDecode 3 times. The
-        // new implementation is happy for the first two times, but on the 3rd,
-        // SkCodec::startIncrementalDecode calls SkCodec::handleFrameIndex
-        // which calls SkCodec::getPixels on the requiredFrame (the 0'th
-        // frame), and the new implementation subsequently hits the
-        // invalid-ness and returns kErrorInInput instead of kSuccess.
-        //
-        // Once the transition is complete, we can remove the #ifdef and delete
-        // the rest of the test function.
-        if (i == 2) {
-            if (result != SkCodec::kErrorInInput) {
-                ERRORF(r, "Unexpected result for decoding frame %i (out of %i) with error %i\n", i,
-                       frameInfos.size(), result);
-            }
-            return;
-        }
-#endif
         if (result != SkCodec::kSuccess) {
             ERRORF(r, "Failed to start decoding frame %i (out of %i) with error %i\n", i,
                    frameInfos.size(), result);
@@ -1590,7 +1555,7 @@ static void test_encode_icc(skiatest::Reporter* r, SkEncodedImageFormat format) 
 
     // Test with P3 color space.
     SkDynamicMemoryWStream p3Buf;
-    sk_sp<SkColorSpace> p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDCIP3);
+    sk_sp<SkColorSpace> p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
     pixmap.setColorSpace(p3);
     encode_format(&p3Buf, pixmap, format);
     sk_sp<SkData> p3Data = p3Buf.detachAsData();
@@ -1743,7 +1708,7 @@ DEF_TEST(Codec_78329453, r) {
     // but the ones tested by DM happen to not.
     constexpr int kSampleSize = 19;
     const auto size = codec->getSampledDimensions(kSampleSize);
-    auto info = codec->getInfo().makeWH(size.width(), size.height());
+    auto info = codec->getInfo().makeDimensions(size);
     SkBitmap bm;
     bm.allocPixels(info);
     bm.eraseColor(SK_ColorTRANSPARENT);
@@ -1807,5 +1772,62 @@ DEF_TEST(Codec_crbug807324, r) {
             ERRORF(r, "image should not be transparent! %i, %i is 0", i, j);
             return;
         }
+    }
+}
+
+DEF_TEST(Codec_F16_noColorSpace, r) {
+    const char* path = "images/color_wheel.png";
+    auto data = GetResourceAsData(path);
+    if (!data) {
+        return;
+    }
+
+    auto codec = SkCodec::MakeFromData(std::move(data));
+    SkImageInfo info = codec->getInfo().makeColorType(kRGBA_F16_SkColorType)
+                                       .makeColorSpace(nullptr);
+    test_info(r, codec.get(), info, SkCodec::kSuccess, nullptr);
+}
+
+// These test images have ICC profiles that do not map to an SkColorSpace.
+// Verify that decoding them with a null destination space does not perform
+// color space transformations.
+DEF_TEST(Codec_noConversion, r) {
+    const struct Rec {
+        const char* name;
+        SkColor color;
+    } recs[] = {
+      { "images/cmyk_yellow_224_224_32.jpg", 0xFFD8FC04 },
+      { "images/wide_gamut_yellow_224_224_64.jpeg",0xFFE0E040 },
+    };
+
+    for (const auto& rec : recs) {
+        auto data = GetResourceAsData(rec.name);
+        if (!data) {
+            continue;
+        }
+
+        auto codec = SkCodec::MakeFromData(std::move(data));
+        if (!codec) {
+            ERRORF(r, "Failed to create a codec from %s", rec.name);
+            continue;
+        }
+
+        const auto* profile = codec->getICCProfile();
+        if (!profile) {
+            ERRORF(r, "Expected %s to have a profile", rec.name);
+            continue;
+        }
+
+        auto cs = SkColorSpace::Make(*profile);
+        REPORTER_ASSERT(r, !cs.get());
+
+        SkImageInfo info = codec->getInfo().makeColorSpace(nullptr);
+        SkBitmap bm;
+        bm.allocPixels(info);
+        if (codec->getPixels(info, bm.getPixels(), bm.rowBytes()) != SkCodec::kSuccess) {
+            ERRORF(r, "Failed to decode %s", rec.name);
+            continue;
+        }
+        REPORTER_ASSERT(r, bm.getColor(0, 0) == rec.color);
     }
 }

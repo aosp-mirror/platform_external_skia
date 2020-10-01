@@ -5,45 +5,50 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrContextOptions.h"
+#include "include/private/GrTypesPriv.h"
+#include "include/private/SkColorData.h"
+#include "src/core/SkAutoPixmapStorage.h"
+#include "src/gpu/GrColor.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrImageInfo.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
-#include "GrColor.h"
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#include "GrContextOptions.h"
-#include "GrContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrTypes.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkColorSpace.h"
-#include "SkImageInfo.h"
-#include "SkPaint.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkSurface.h"
-#include "Test.h"
-
-#include <cstring>
+#include <cstdint>
 #include <memory>
 
 static bool check_rect(GrRenderTargetContext* rtc, const SkIRect& rect, uint32_t expectedValue,
                        uint32_t* actualValue, int* failX, int* failY) {
     int w = rect.width();
     int h = rect.height();
-    std::unique_ptr<uint32_t[]> pixels(new uint32_t[w * h]);
-    memset(pixels.get(), ~expectedValue, sizeof(uint32_t) * w * h);
 
     SkImageInfo dstInfo = SkImageInfo::Make(w, h, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
-    if (!rtc->readPixels(dstInfo, pixels.get(), 0, rect.fLeft, rect.fTop)) {
+    SkAutoPixmapStorage readback;
+    readback.alloc(dstInfo);
+
+    readback.erase(~expectedValue);
+    if (!rtc->readPixels(readback.info(), readback.writable_addr(), readback.rowBytes(),
+                         {rect.fLeft, rect.fTop})) {
         return false;
     }
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            uint32_t pixel = pixels.get()[y * w + x];
+            uint32_t pixel = readback.addr32()[y * w + x];
             if (pixel != expectedValue) {
                 *actualValue = pixel;
                 *failX = x + rect.fLeft;
@@ -55,11 +60,9 @@ static bool check_rect(GrRenderTargetContext* rtc, const SkIRect& rect, uint32_t
     return true;
 }
 
-sk_sp<GrRenderTargetContext> newRTC(GrContext* context, int w, int h) {
-    const GrBackendFormat format =
-            context->priv().caps()->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
-    return context->priv().makeDeferredRenderTargetContext(format, SkBackingFit::kExact, w, h,
-                                                           kRGBA_8888_GrPixelConfig, nullptr);
+std::unique_ptr<GrRenderTargetContext> newRTC(GrContext* context, int w, int h) {
+    return GrRenderTargetContext::Make(
+            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact, {w, h});
 }
 
 static void clear_op_test(skiatest::Reporter* reporter, GrContext* context) {
@@ -67,7 +70,7 @@ static void clear_op_test(skiatest::Reporter* reporter, GrContext* context) {
     static const int kH = 10;
 
     SkIRect fullRect = SkIRect::MakeWH(kW, kH);
-    sk_sp<GrRenderTargetContext> rtContext;
+    std::unique_ptr<GrRenderTargetContext> rtContext;
 
     // A rectangle that is inset by one on all sides and the 1-pixel wide rectangles that surround
     // it.

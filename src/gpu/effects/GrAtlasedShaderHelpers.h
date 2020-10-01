@@ -8,18 +8,19 @@
 #ifndef GrAtlasedShaderHelpers_DEFINED
 #define GrAtlasedShaderHelpers_DEFINED
 
-#include "GrShaderCaps.h"
-#include "glsl/GrGLSLPrimitiveProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLVarying.h"
-#include "glsl/GrGLSLVertexGeoBuilder.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
+#include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 
 static void append_index_uv_varyings(GrGLSLPrimitiveProcessor::EmitArgs& args,
+                                     int numTextureSamplers,
                                      const char* inTexCoordsName,
-                                     const char* atlasSizeInvName,
-                                     GrGLSLVarying *uv,
-                                     GrGLSLVarying *texIdx,
-                                     GrGLSLVarying *st) {
+                                     const char* atlasDimensionsInvName,
+                                     GrGLSLVarying* uv,
+                                     GrGLSLVarying* texIdx,
+                                     GrGLSLVarying* st) {
     using Interpolation = GrGLSLVaryingHandler::Interpolation;
 
     // This extracts the texture index and texel coordinates from the same variable
@@ -28,19 +29,28 @@ static void append_index_uv_varyings(GrGLSLPrimitiveProcessor::EmitArgs& args,
     if (args.fShaderCaps->integerSupport()) {
         args.fVertBuilder->codeAppendf("int2 signedCoords = int2(%s.x, %s.y);",
                                        inTexCoordsName, inTexCoordsName);
-        args.fVertBuilder->codeAppend("int texIdx = 2*(signedCoords.x & 0x1) + (signedCoords.y & 0x1);");
         args.fVertBuilder->codeAppend("float2 unormTexCoords = float2(signedCoords.x/2, signedCoords.y/2);");
+        if (numTextureSamplers <= 1) {
+            args.fVertBuilder->codeAppend("int texIdx = 0;");
+        } else {
+            args.fVertBuilder->codeAppend("int texIdx = 2*(signedCoords.x & 0x1) + (signedCoords.y & 0x1);");
+        }
     } else {
         args.fVertBuilder->codeAppendf("float2 indexTexCoords = float2(%s.x, %s.y);",
                                        inTexCoordsName, inTexCoordsName);
         args.fVertBuilder->codeAppend("float2 unormTexCoords = floor(0.5*indexTexCoords);");
-        args.fVertBuilder->codeAppend("float2 diff = indexTexCoords - 2.0*unormTexCoords;");
-        args.fVertBuilder->codeAppend("float texIdx = 2.0*diff.x + diff.y;");
+        if (numTextureSamplers <= 1) {
+            args.fVertBuilder->codeAppend("float texIdx = 0;");
+        } else {
+            args.fVertBuilder->codeAppend("float2 diff = indexTexCoords - 2.0*unormTexCoords;");
+            args.fVertBuilder->codeAppend("float texIdx = 2.0*diff.x + diff.y;");
+        }
     }
 
-    // Multiply by 1/atlasSize to get normalized texture coordinates
+    // Multiply by 1/atlasDimensions to get normalized texture coordinates
     args.fVaryingHandler->addVarying("TextureCoords", uv);
-    args.fVertBuilder->codeAppendf("%s = unormTexCoords * %s;", uv->vsOut(), atlasSizeInvName);
+    args.fVertBuilder->codeAppendf("%s = unormTexCoords * %s;", uv->vsOut(),
+                                   atlasDimensionsInvName);
 
     args.fVaryingHandler->addVarying("TexIndex", texIdx, args.fShaderCaps->integerSupport()
                                                                  ? Interpolation::kMustBeFlat
@@ -58,16 +68,21 @@ static void append_multitexture_lookup(GrGLSLPrimitiveProcessor::EmitArgs& args,
                                        const GrGLSLVarying &texIdx,
                                        const char* coordName,
                                        const char* colorName) {
+    SkASSERT(numTextureSamplers > 0);
+    // This shouldn't happen, but will avoid a crash if it does
+    if (numTextureSamplers <= 0) {
+        args.fFragBuilder->codeAppendf("%s = float4(1, 1, 1, 1);", colorName);
+        return;
+    }
+
     // conditionally load from the indexed texture sampler
     for (int i = 0; i < numTextureSamplers-1; ++i) {
         args.fFragBuilder->codeAppendf("if (%s == %d) { %s = ", texIdx.fsIn(), i, colorName);
-        args.fFragBuilder->appendTextureLookup(args.fTexSamplers[i], coordName,
-                                               kFloat2_GrSLType);
+        args.fFragBuilder->appendTextureLookup(args.fTexSamplers[i], coordName);
         args.fFragBuilder->codeAppend("; } else ");
     }
     args.fFragBuilder->codeAppendf("{ %s = ", colorName);
-    args.fFragBuilder->appendTextureLookup(args.fTexSamplers[numTextureSamplers-1], coordName,
-                                           kFloat2_GrSLType);
+    args.fFragBuilder->appendTextureLookup(args.fTexSamplers[numTextureSamplers - 1], coordName);
     args.fFragBuilder->codeAppend("; }");
 }
 

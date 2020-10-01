@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "gl/GrGLUniformHandler.h"
+#include "src/gpu/gl/GrGLUniformHandler.h"
 
-#include "GrTexturePriv.h"
-#include "gl/GrGLCaps.h"
-#include "gl/GrGLGpu.h"
-#include "gl/builders/GrGLProgramBuilder.h"
-#include "SkSLCompiler.h"
+#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/gl/GrGLCaps.h"
+#include "src/gpu/gl/GrGLGpu.h"
+#include "src/gpu/gl/builders/GrGLProgramBuilder.h"
+#include "src/sksl/SkSLCompiler.h"
 
 #define GL_CALL(X) GR_GL_CALL(this->glGpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(this->glGpu()->glInterface(), R, X)
@@ -59,18 +59,19 @@ GrGLSLUniformHandler::UniformHandle GrGLUniformHandler::internalAddUniformArray(
     return GrGLSLUniformHandler::UniformHandle(fUniforms.count() - 1);
 }
 
-GrGLSLUniformHandler::SamplerHandle GrGLUniformHandler::addSampler(const GrTexture* texture,
-                                                                   const GrSamplerState&,
+GrGLSLUniformHandler::SamplerHandle GrGLUniformHandler::addSampler(const GrSurfaceProxy* texture,
+                                                                   GrSamplerState,
+                                                                   const GrSwizzle& swizzle,
                                                                    const char* name,
                                                                    const GrShaderCaps* shaderCaps) {
     SkASSERT(name && strlen(name));
+    SkASSERT(texture->asTextureProxy());
 
     SkString mangleName;
     char prefix = 'u';
     fProgramBuilder->nameVariable(&mangleName, prefix, name, true);
 
-    GrSwizzle swizzle = shaderCaps->configTextureSwizzle(texture->config());
-    GrTextureType type = texture->texturePriv().textureType();
+    GrTextureType type = texture->backendFormat().textureType();
 
     UniformInfo& sampler = fSamplers.push_back();
     sampler.fVariable.setType(GrSLCombinedSamplerTypeForTextureType(type));
@@ -78,8 +79,10 @@ GrGLSLUniformHandler::SamplerHandle GrGLUniformHandler::addSampler(const GrTextu
     sampler.fVariable.setName(mangleName);
     sampler.fLocation = -1;
     sampler.fVisibility = kFragment_GrShaderFlag;
-    fSamplerSwizzles.push_back(swizzle);
-    SkASSERT(fSamplers.count() == fSamplerSwizzles.count());
+    if (shaderCaps->textureSwizzleAppliedInShader()) {
+        fSamplerSwizzles.push_back(swizzle);
+        SkASSERT(fSamplers.count() == fSamplerSwizzles.count());
+    }
     return GrGLSLUniformHandler::SamplerHandle(fSamplers.count() - 1);
 }
 
@@ -112,8 +115,8 @@ void GrGLUniformHandler::bindUniformLocations(GrGLuint programID, const GrGLCaps
     }
 }
 
-void GrGLUniformHandler::getUniformLocations(GrGLuint programID, const GrGLCaps& caps) {
-    if (!caps.bindUniformLocationSupport()) {
+void GrGLUniformHandler::getUniformLocations(GrGLuint programID, const GrGLCaps& caps, bool force) {
+    if (!caps.bindUniformLocationSupport() || force) {
         int count = fUniforms.count();
         for (int i = 0; i < count; ++i) {
             GrGLint location;

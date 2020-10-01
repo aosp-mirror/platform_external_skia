@@ -8,8 +8,8 @@
 #ifndef SKSL_MODIFIERDECLARATION
 #define SKSL_MODIFIERDECLARATION
 
-#include "SkSLProgramElement.h"
-#include "SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
 
 namespace SkSL {
 
@@ -27,9 +27,11 @@ struct ModifiersDeclaration : public ProgramElement {
         return std::unique_ptr<ProgramElement>(new ModifiersDeclaration(fModifiers));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return fModifiers.description() + ";";
     }
+#endif
 
     Modifiers fModifiers;
 

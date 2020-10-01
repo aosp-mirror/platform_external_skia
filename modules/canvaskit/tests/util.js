@@ -11,9 +11,20 @@ function reportSurface(surface, testname, done) {
     pixels = new Uint8ClampedArray(pixels.buffer);
     const imageData = new ImageData(pixels, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    let reportingCanvas =  document.getElementById('report');
+    const reportingCanvas = document.getElementById('report');
     reportingCanvas.getContext('2d').putImageData(imageData, 0, 0);
     reportCanvas(reportingCanvas, testname).then(() => {
         done();
     }).catch(reportError(done));
+}
+
+
+function starPath(CanvasKit, X=128, Y=128, R=116) {
+    let p = new CanvasKit.SkPath();
+    p.moveTo(X + R, Y);
+    for (let i = 1; i < 8; i++) {
+      let a = 2.6927937 * i;
+      p.lineTo(X + R * Math.cos(a), Y + R * Math.sin(a));
+    }
+    return p;
 }
