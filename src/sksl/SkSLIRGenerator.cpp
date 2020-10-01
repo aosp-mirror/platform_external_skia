@@ -243,7 +243,7 @@ std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& st
             std::unique_ptr<Statement> result = this->convertExpressionStatement(statement);
             if (fRTAdjust && fKind == Program::kGeometry_Kind) {
                 SkASSERT(result->kind() == Statement::Kind::kExpression);
-                Expression& expr = *result->as<ExpressionStatement>().fExpression;
+                Expression& expr = *result->as<ExpressionStatement>().expression();
                 if (expr.kind() == Expression::Kind::kFunctionCall) {
                     FunctionCall& fc = expr.as<FunctionCall>();
                     if (fc.fFunction.fBuiltin && fc.fFunction.fName == "EmitVertex") {
@@ -441,7 +441,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
             }
         }
         auto var = std::make_unique<Variable>(varDecl.fOffset, modifiers, varData.fName, type,
-                                              storage);
+                                              fIsBuiltinCode, storage);
         if (var->fName == Compiler::RTADJUST_NAME) {
             SkASSERT(!fRTAdjust);
             SkASSERT(var->type() == *fContext.fFloat4_Type);
@@ -952,8 +952,9 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             return;
         }
         StringFragment name = pd.fName;
-        const Variable* var = fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Variable>(
-                param.fOffset, pd.fModifiers, name, type, Variable::kParameter_Storage));
+        const Variable* var = fSymbolTable->takeOwnershipOfSymbol(
+                std::make_unique<Variable>(param.fOffset, pd.fModifiers, name, type,
+                                           fIsBuiltinCode, Variable::kParameter_Storage));
         parameters.push_back(var);
     }
 
@@ -1185,6 +1186,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
                                        id.fModifiers,
                                        id.fInstanceName.fLength ? id.fInstanceName : id.fTypeName,
                                        type,
+                                       fIsBuiltinCode,
                                        Variable::kGlobal_Storage));
     if (foundRTAdjust) {
         fRTAdjustInterfaceBlock = var;
@@ -1253,9 +1255,10 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         }
         value = std::unique_ptr<Expression>(new IntLiteral(fContext, e.fOffset, currentValue));
         ++currentValue;
-        fSymbolTable->add(child.getString(),
-                          std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), type,
-                                                     Variable::kGlobal_Storage, value.get()));
+        fSymbolTable->add(
+                child.getString(),
+                std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), type,
+                                           fIsBuiltinCode, Variable::kGlobal_Storage, value.get()));
         fSymbolTable->takeOwnershipOfIRNode(std::move(value));
     }
     // Now we orphanize the Enum's symbol table, so that future lookups in it are strict
@@ -2112,7 +2115,8 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
     auto funcCall = std::make_unique<FunctionCall>(offset, returnType, function,
                                                    std::move(arguments));
     if (fCanInline && fInliner->isSafeToInline(*funcCall, fSettings->fInlineThreshold)) {
-        Inliner::InlinedCall inlinedCall = fInliner->inlineCall(funcCall.get(), fSymbolTable.get());
+        Inliner::InlinedCall inlinedCall =
+                fInliner->inlineCall(funcCall.get(), fSymbolTable.get(), fCurrentFunction);
         if (inlinedCall.fInlinedBody) {
             fExtraStatements.push_back(std::move(inlinedCall.fInlinedBody));
         }
@@ -2670,7 +2674,7 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
     // Find the Enum element that this type refers to (if any)
     const ProgramElement* enumElement = nullptr;
     for (const auto& e : *fProgramElements) {
-        if (e->is<Enum>() && type.name() == e->as<Enum>().fTypeName) {
+        if (e->is<Enum>() && type.name() == e->as<Enum>().typeName()) {
             enumElement = e.get();
             break;
         }
@@ -2679,7 +2683,7 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
     if (enumElement) {
         // We found the Enum element. Look for 'field' as a member.
         std::shared_ptr<SymbolTable> old = fSymbolTable;
-        fSymbolTable = enumElement->as<Enum>().fSymbols;
+        fSymbolTable = enumElement->as<Enum>().symbols();
         std::unique_ptr<Expression> result = convertIdentifier(
                 ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier, field));
         if (result) {

@@ -1875,6 +1875,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                                                    Modifiers(layout, Modifiers::kUniform_Flag),
                                                    name,
                                                    &intfStruct,
+                                                   /*builtin=*/false,
                                                    Variable::kGlobal_Storage));
                 InterfaceBlock intf(-1, intfVar, name, String(""),
                                     std::vector<std::unique_ptr<Expression>>(), st);
@@ -2873,7 +2874,7 @@ void SPIRVCodeGenerator::writeStatement(const Statement& s, OutputStream& out) {
             this->writeBlock((Block&) s, out);
             break;
         case Statement::Kind::kExpression:
-            this->writeExpression(*s.as<ExpressionStatement>().fExpression, out);
+            this->writeExpression(*s.as<ExpressionStatement>().expression(), out);
             break;
         case Statement::Kind::kReturn:
             this->writeReturnStatement(s.as<ReturnStatement>(), out);
@@ -3272,7 +3273,7 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     }
     for (const auto& e : program) {
         if (e.kind() == ProgramElement::Kind::kExtension) {
-            this->writeInstruction(SpvOpSourceExtension, ((Extension&) e).fName.c_str(), out);
+            this->writeInstruction(SpvOpSourceExtension, ((Extension&) e).name().c_str(), out);
         }
     }
 

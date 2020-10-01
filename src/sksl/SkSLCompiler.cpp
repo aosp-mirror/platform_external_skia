@@ -84,7 +84,7 @@ static void grab_intrinsics(std::vector<std::unique_ptr<ProgramElement>>* src,
             }
             case ProgramElement::Kind::kEnum: {
                 Enum& e = element->as<Enum>();
-                target->insertOrDie(e.fTypeName, std::move(element));
+                target->insertOrDie(e.typeName(), std::move(element));
                 iter = src->erase(iter);
                 break;
             }
@@ -240,11 +240,13 @@ Compiler::Compiler(Flags flags)
     StringFragment fpAliasName("shader");
     fRootSymbolTable->addWithoutOwnership(fpAliasName, fContext->fFragmentProcessor_Type.get());
 
+    // sk_Caps is "builtin", but all references to it are resolved to Settings, so we don't need to
+    // treat it as builtin (ie, no need to clone it into the Program).
     StringFragment skCapsName("sk_Caps");
-    fRootSymbolTable->add(
-            skCapsName,
-            std::make_unique<Variable>(/*offset=*/-1, Modifiers(), skCapsName,
-                                       fContext->fSkCaps_Type.get(), Variable::kGlobal_Storage));
+    fRootSymbolTable->add(skCapsName,
+                          std::make_unique<Variable>(/*offset=*/-1, Modifiers(), skCapsName,
+                                                     fContext->fSkCaps_Type.get(),
+                                                     /*builtin=*/false, Variable::kGlobal_Storage));
 
     fIRGenerator->fIntrinsics = fGPUIntrinsics.get();
     std::vector<std::unique_ptr<ProgramElement>> gpuIntrinsics;
@@ -1393,9 +1395,9 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
         case Statement::Kind::kExpression: {
             ExpressionStatement& e = stmt->as<ExpressionStatement>();
             SkASSERT((*iter)->statement()->get() == &e);
-            if (!e.fExpression->hasSideEffects()) {
+            if (!e.expression()->hasSideEffects()) {
                 // Expression statement with no side effects, kill it
-                if (!b.tryRemoveExpressionBefore(iter, e.fExpression.get())) {
+                if (!b.tryRemoveExpressionBefore(iter, e.expression().get())) {
                     *outNeedsRescan = true;
                 }
                 SkASSERT((*iter)->statement()->get() == stmt);

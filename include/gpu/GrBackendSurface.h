@@ -437,6 +437,10 @@ public:
 #ifdef SK_METAL
     GrBackendRenderTarget(int width,
                           int height,
+                          const GrMtlTextureInfo& mtlInfo);
+    /** Deprecated. Sample count is ignored and is instead retrieved from the MtlTexture. */
+    GrBackendRenderTarget(int width,
+                          int height,
                           int sampleCnt,
                           const GrMtlTextureInfo& mtlInfo);
 #endif
@@ -444,7 +448,6 @@ public:
 #ifdef SK_DIRECT3D
     GrBackendRenderTarget(int width,
                           int height,
-                          int sampleCnt,
                           const GrD3DTextureResourceInfo& d3dInfo);
 #endif
 
@@ -542,8 +545,10 @@ private:
 #ifdef SK_DIRECT3D
     friend class GrD3DGpu;
     friend class GrD3DRenderTarget;
-    GrBackendRenderTarget(int width, int height, int sampleCnt,
-                          const GrD3DTextureResourceInfo& d3dInfo, sk_sp<GrD3DResourceState> state);
+    GrBackendRenderTarget(int width,
+                          int height,
+                          const GrD3DTextureResourceInfo& d3dInfo,
+                          sk_sp<GrD3DResourceState> state);
     sk_sp<GrD3DResourceState> getGrD3DResourceState() const;
 #endif
 
