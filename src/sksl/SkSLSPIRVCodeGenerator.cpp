@@ -1875,6 +1875,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                                                    Modifiers(layout, Modifiers::kUniform_Flag),
                                                    name,
                                                    &intfStruct,
+                                                   /*builtin=*/false,
                                                    Variable::kGlobal_Storage));
                 InterfaceBlock intf(-1, intfVar, name, String(""),
                                     std::vector<std::unique_ptr<Expression>>(), st);
@@ -2554,8 +2555,8 @@ SpvId SPIRVCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
     } else {
         constantType = ConstantType::kFloat;
     }
-    float value = (float) f.value();
-    std::pair<ConstantValue, ConstantType> key(f.value(), constantType);
+    float value = (float) f.fValue;
+    std::pair<ConstantValue, ConstantType> key(f.fValue, constantType);
     auto entry = fNumberConstants.find(key);
     if (entry == fNumberConstants.end()) {
         SpvId result = this->nextId();

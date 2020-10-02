@@ -182,7 +182,6 @@ void IRGenerator::start(const Program::Settings* settings,
     fSkPerVertex = nullptr;
     fRTAdjust = nullptr;
     fRTAdjustInterfaceBlock = nullptr;
-    fTmpSwizzleCounter = 0;
     if (inherited) {
         for (const auto& e : *inherited) {
             if (e->kind() == ProgramElement::Kind::kInterfaceBlock) {
@@ -441,7 +440,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
             }
         }
         auto var = std::make_unique<Variable>(varDecl.fOffset, modifiers, varData.fName, type,
-                                              storage);
+                                              fIsBuiltinCode, storage);
         if (var->fName == Compiler::RTADJUST_NAME) {
             SkASSERT(!fRTAdjust);
             SkASSERT(var->type() == *fContext.fFloat4_Type);
@@ -952,8 +951,9 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             return;
         }
         StringFragment name = pd.fName;
-        const Variable* var = fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Variable>(
-                param.fOffset, pd.fModifiers, name, type, Variable::kParameter_Storage));
+        const Variable* var = fSymbolTable->takeOwnershipOfSymbol(
+                std::make_unique<Variable>(param.fOffset, pd.fModifiers, name, type,
+                                           fIsBuiltinCode, Variable::kParameter_Storage));
         parameters.push_back(var);
     }
 
@@ -1185,6 +1185,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
                                        id.fModifiers,
                                        id.fInstanceName.fLength ? id.fInstanceName : id.fTypeName,
                                        type,
+                                       fIsBuiltinCode,
                                        Variable::kGlobal_Storage));
     if (foundRTAdjust) {
         fRTAdjustInterfaceBlock = var;
@@ -1253,9 +1254,10 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         }
         value = std::unique_ptr<Expression>(new IntLiteral(fContext, e.fOffset, currentValue));
         ++currentValue;
-        fSymbolTable->add(child.getString(),
-                          std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), type,
-                                                     Variable::kGlobal_Storage, value.get()));
+        fSymbolTable->add(
+                child.getString(),
+                std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), type,
+                                           fIsBuiltinCode, Variable::kGlobal_Storage, value.get()));
         fSymbolTable->takeOwnershipOfIRNode(std::move(value));
     }
     // Now we orphanize the Enum's symbol table, so that future lookups in it are strict
@@ -1825,8 +1827,8 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
     }
     if (left.kind() == Expression::Kind::kFloatLiteral &&
         right.kind() == Expression::Kind::kFloatLiteral) {
-        SKSL_FLOAT leftVal  = left.as<FloatLiteral>().value();
-        SKSL_FLOAT rightVal = right.as<FloatLiteral>().value();
+        double leftVal  = left.as<FloatLiteral>().fValue;
+        double rightVal = right.as<FloatLiteral>().fValue;
         switch (op) {
             case Token::Kind::TK_PLUS:  return RESULT(Float, +);
             case Token::Kind::TK_MINUS: return RESULT(Float, -);
@@ -1853,8 +1855,8 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
         std::vector<std::unique_ptr<Expression>> args;
         #define RETURN_VEC_COMPONENTWISE_RESULT(op)                              \
             for (int i = 0; i < leftType.columns(); i++) {                       \
-                SKSL_FLOAT value = left.getFVecComponent(i) op                        \
-                                   right.getFVecComponent(i);                         \
+                float value = left.getFVecComponent(i) op                        \
+                              right.getFVecComponent(i);                         \
                 args.emplace_back(new FloatLiteral(fContext, -1, value));        \
             }                                                                    \
             return std::unique_ptr<Expression>(new Constructor(-1, &leftType,    \
@@ -1876,7 +1878,7 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
                         fErrors.error(right.fOffset, "division by zero");
                         return nullptr;
                     }
-                    SKSL_FLOAT value = left.getFVecComponent(i) / rvalue;
+                    float value = left.getFVecComponent(i) / rvalue;
                     args.emplace_back(new FloatLiteral(fContext, -1, value));
                 }
                 return std::unique_ptr<Expression>(new Constructor(-1, &leftType,
@@ -2112,7 +2114,8 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
     auto funcCall = std::make_unique<FunctionCall>(offset, returnType, function,
                                                    std::move(arguments));
     if (fCanInline && fInliner->isSafeToInline(*funcCall, fSettings->fInlineThreshold)) {
-        Inliner::InlinedCall inlinedCall = fInliner->inlineCall(funcCall.get(), fSymbolTable.get());
+        Inliner::InlinedCall inlinedCall =
+                fInliner->inlineCall(funcCall.get(), fSymbolTable.get(), fCurrentFunction);
         if (inlinedCall.fInlinedBody) {
             fExtraStatements.push_back(std::move(inlinedCall.fInlinedBody));
         }
@@ -2227,12 +2230,12 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
         return std::move(args[0]);
     }
     if (type.isFloat() && args.size() == 1 && args[0]->is<FloatLiteral>()) {
-        SKSL_FLOAT value = args[0]->as<FloatLiteral>().value();
+        double value = args[0]->as<FloatLiteral>().fValue;
         return std::make_unique<FloatLiteral>(offset, value, &type);
     }
     if (type.isFloat() && args.size() == 1 && args[0]->is<IntLiteral>()) {
         int64_t value = args[0]->as<IntLiteral>().value();
-        return std::make_unique<FloatLiteral>(offset, (float)value, &type);
+        return std::make_unique<FloatLiteral>(offset, (double)value, &type);
     }
     if (args[0]->is<IntLiteral>() && (type == *fContext.fInt_Type ||
                                       type == *fContext.fUInt_Type)) {
@@ -2369,7 +2372,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
             }
             if (base->is<FloatLiteral>()) {
                 return std::make_unique<FloatLiteral>(fContext, base->fOffset,
-                                                      -base->as<FloatLiteral>().value());
+                                                      -base->as<FloatLiteral>().fValue);
             }
             if (!baseType.isNumber() && baseType.typeKind() != Type::TypeKind::kVector) {
                 fErrors.error(expression.fOffset,

@@ -568,8 +568,7 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(SkISize dimensions,
     }
 
     if (levelClearMask) {
-        this->clearTexture(tex.get(), this->mtlCaps().bytesPerPixel(mtlPixelFormat),
-                           levelClearMask);
+        this->clearTexture(tex.get(), GrMtlFormatBytesPerBlock(mtlPixelFormat), levelClearMask);
     }
 
     return std::move(tex);
@@ -713,6 +712,10 @@ sk_sp<GrTexture> GrMtlGpu::onWrapBackendTexture(const GrBackendTexture& backendT
     if (!mtlTexture) {
         return nullptr;
     }
+    // We don't currently support sampling from a MSAA texture in shaders.
+    if (mtlTexture.sampleCount != 1) {
+        return nullptr;
+    }
 
     return GrMtlTexture::MakeWrappedTexture(this, backendTex.dimensions(), mtlTexture, cacheable,
                                             ioType);
@@ -723,6 +726,10 @@ sk_sp<GrTexture> GrMtlGpu::onWrapCompressedBackendTexture(const GrBackendTexture
                                                           GrWrapCacheable cacheable) {
     id<MTLTexture> mtlTexture = get_texture_from_backend(backendTex);
     if (!mtlTexture) {
+        return nullptr;
+    }
+    // We don't currently support sampling from a MSAA texture in shaders.
+    if (mtlTexture.sampleCount != 1) {
         return nullptr;
     }
 
@@ -736,6 +743,10 @@ sk_sp<GrTexture> GrMtlGpu::onWrapRenderableBackendTexture(const GrBackendTexture
                                                           GrWrapCacheable cacheable) {
     id<MTLTexture> mtlTexture = get_texture_from_backend(backendTex);
     if (!mtlTexture) {
+        return nullptr;
+    }
+    // We don't currently support sampling from a MSAA texture in shaders.
+    if (mtlTexture.sampleCount != 1) {
         return nullptr;
     }
 
@@ -930,7 +941,7 @@ bool GrMtlGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
             backendTexture.getBackendFormat());
 
     // Create a transfer buffer and fill with data.
-    size_t bytesPerPixel = fMtlCaps->bytesPerPixel(mtlFormat);
+    size_t bytesPerPixel = GrMtlFormatBytesPerBlock(mtlFormat);
     SkSTArray<16, size_t> individualMipOffsets;
     size_t combinedBufferSize;
 
@@ -1104,7 +1115,7 @@ GrBackendRenderTarget GrMtlGpu::createTestingOnlyBackendRenderTarget(int w, int 
         return {};
     }
 
-    GrBackendRenderTarget backendRT(w, h, 1, info);
+    GrBackendRenderTarget backendRT(w, h, info);
     return backendRT;
 }
 
@@ -1277,7 +1288,7 @@ bool GrMtlGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int wid
     if (offset % bpp) {
         return false;
     }
-    if (this->mtlCaps().bytesPerPixel(texture->backendFormat()) != bpp) {
+    if (GrBackendFormatBytesPerPixel(texture->backendFormat()) != bpp) {
         return false;
     }
 
@@ -1312,7 +1323,7 @@ bool GrMtlGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int w
     if (offset % bpp) {
         return false;
     }
-    if (this->mtlCaps().bytesPerPixel(surface->backendFormat()) != bpp) {
+    if (GrBackendFormatBytesPerPixel(surface->backendFormat()) != bpp) {
         return false;
     }
 
