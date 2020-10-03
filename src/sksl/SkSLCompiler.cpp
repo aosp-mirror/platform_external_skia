@@ -95,7 +95,7 @@ static void grab_intrinsics(std::vector<std::unique_ptr<ProgramElement>>* src,
                 const VarDeclarations& vd = element->as<VarDeclarations>();
                 SkASSERT(vd.fVars.size() == 1);
                 const Variable* var = vd.fVars[0]->as<VarDeclaration>().fVar;
-                target->insertOrDie(var->fName, std::move(element));
+                target->insertOrDie(var->name(), std::move(element));
                 iter = src->erase(iter);
                 break;
             }
@@ -126,7 +126,7 @@ Compiler::Compiler(Flags flags)
     fRootSymbolTable = std::make_shared<SymbolTable>(this);
     fIRGenerator =
             std::make_unique<IRGenerator>(fContext.get(), &fInliner, fRootSymbolTable, *this);
-    #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f ## t ## _Type->fName, \
+    #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f ## t ## _Type->name(), \
                                                               fContext->f ## t ## _Type.get())
     ADD_TYPE(Void);
     ADD_TYPE(Float);
@@ -688,14 +688,14 @@ static bool try_replace_expression(BasicBlock* b,
  * Returns true if the expression is a constant numeric literal with the specified value, or a
  * constant vector with all elements equal to the specified value.
  */
-template <typename T = double>
+template <typename T = SKSL_FLOAT>
 static bool is_constant(const Expression& expr, T value) {
     switch (expr.kind()) {
         case Expression::Kind::kIntLiteral:
             return expr.as<IntLiteral>().value() == value;
 
         case Expression::Kind::kFloatLiteral:
-            return expr.as<FloatLiteral>().fValue == value;
+            return expr.as<FloatLiteral>().value() == value;
 
         case Expression::Kind::kConstructor: {
             const Constructor& constructor = expr.as<Constructor>();
@@ -919,7 +919,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 (*undefinedVariables).find(var) == (*undefinedVariables).end()) {
                 (*undefinedVariables).insert(var);
                 this->error(expr->fOffset,
-                            "'" + var->fName + "' has not been assigned");
+                            "'" + var->name() + "' has not been assigned");
             }
             break;
         }
@@ -1596,7 +1596,7 @@ bool Compiler::scanCFG(FunctionDefinition& f) {
     // check for missing return
     if (f.fDeclaration.fReturnType != *fContext->fVoid_Type) {
         if (cfg.fBlocks[cfg.fExit].fIsReachable) {
-            this->error(f.fOffset, String("function '" + String(f.fDeclaration.fName) +
+            this->error(f.fOffset, String("function '" + String(f.fDeclaration.name()) +
                                           "' can exit without returning a value"));
         }
     }
@@ -1656,7 +1656,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
         // Add any external values to the symbol table. IRGenerator::start() has pushed a table, so
         // we're only making these visible to the current Program.
         for (const auto& ev : *externalValues) {
-            fIRGenerator->fSymbolTable->addWithoutOwnership(ev->fName, ev.get());
+            fIRGenerator->fSymbolTable->addWithoutOwnership(ev->name(), ev.get());
         }
     }
     std::unique_ptr<String> textPtr(new String(std::move(text)));
@@ -1710,7 +1710,7 @@ bool Compiler::optimize(Program& program) {
                                        }
                                        const auto& fn = element->as<FunctionDefinition>();
                                        bool dead = fn.fDeclaration.fCallCount == 0 &&
-                                                   fn.fDeclaration.fName != "main";
+                                                   fn.fDeclaration.name() != "main";
                                        madeChanges |= dead;
                                        return dead;
                                    }),

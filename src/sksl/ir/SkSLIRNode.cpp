@@ -33,12 +33,27 @@ IRNode::IRNode(int offset, int kind, const ExternalValueData& data)
 , fKind(kind)
 , fData(data) {}
 
+IRNode::IRNode(int offset, int kind, const FieldData& data)
+: fOffset(offset)
+, fKind(kind)
+, fData(data) {}
+
 IRNode::IRNode(int offset, int kind, const IntLiteralData& data)
 : fOffset(offset)
 , fKind(kind)
 , fData(data) {}
 
+IRNode::IRNode(int offset, int kind, const FloatLiteralData& data)
+: fOffset(offset)
+, fKind(kind)
+, fData(data) {}
+
 IRNode::IRNode(int offset, int kind, const String& data)
+: fOffset(offset)
+, fKind(kind)
+, fData(data) {}
+
+IRNode::IRNode(int offset, int kind, const SymbolData& data)
 : fOffset(offset)
 , fKind(kind)
 , fData(data) {}
