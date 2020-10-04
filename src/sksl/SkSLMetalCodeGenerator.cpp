@@ -919,7 +919,7 @@ void MetalCodeGenerator::writeIntLiteral(const IntLiteral& i) {
 }
 
 void MetalCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
-    this->write(to_string(f.fValue));
+    this->write(to_string(f.value()));
 }
 
 void MetalCodeGenerator::writeSetting(const Setting& s) {
@@ -958,8 +958,14 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
                         if (var.fVar->fModifiers.fLayout.fBinding < 0) {
                             fErrors.error(decls.fOffset,
                                           "Metal samplers must have 'layout(binding=...)'");
+                            return;
                         }
-                        this->write(", texture2d<float> "); // FIXME - support other texture types
+                        if (var.fVar->type().dimensions() != SpvDim2D) {
+                            // TODO: Support other texture types (skbug.com/10797)
+                            fErrors.error(decls.fOffset, "Unsupported texture dimensions");
+                            return;
+                        }
+                        this->write(", texture2d<float> ");
                         this->writeName(var.fVar->fName);
                         this->write("[[texture(");
                         this->write(to_string(var.fVar->fModifiers.fLayout.fBinding));
@@ -1045,7 +1051,7 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
         this->write(" ");
         this->writeName(param->fName);
         for (int s : sizes) {
-            if (s <= 0) {
+            if (s == Type::kUnsizedArray) {
                 this->write("[]");
             } else {
                 this->write("[" + to_string(s) + "]");
@@ -1185,7 +1191,7 @@ void MetalCodeGenerator::writeFields(const std::vector<Type::Field>& fields, int
         this->write(" ");
         this->writeName(field.fName);
         for (int s : sizes) {
-            if (s <= 0) {
+            if (s == Type::kUnsizedArray) {
                 this->write("[]");
             } else {
                 this->write("[" + to_string(s) + "]");

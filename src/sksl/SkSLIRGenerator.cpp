@@ -435,7 +435,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
                 sizes.push_back(std::move(size));
             } else {
                 type = fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Type>(
-                        type->name() + "[]", Type::TypeKind::kArray, *type, /*columns=*/-1));
+                        type->name() + "[]", Type::TypeKind::kArray, *type, Type::kUnsizedArray));
                 sizes.push_back(nullptr);
             }
         }
@@ -1143,7 +1143,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
                               "initializers are not permitted on interface block fields");
             }
             if (vd.fVar->type().typeKind() == Type::TypeKind::kArray &&
-                vd.fVar->type().columns() == -1) {
+                vd.fVar->type().columns() == Type::kUnsizedArray) {
                 haveRuntimeArray = true;
             }
         }
@@ -1176,8 +1176,10 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
                     std::make_unique<Type>(name, Type::TypeKind::kArray, *type, (int)count));
             sizes.push_back(std::move(converted));
         } else {
-            fErrors.error(intf.fOffset, "array size must be specified");
-            return nullptr;
+            String name = String(type->fName) + "[]";
+            type = symbols->takeOwnershipOfSymbol(std::make_unique<Type>(
+                    name, Type::TypeKind::kArray, *type, Type::kUnsizedArray));
+            sizes.push_back(nullptr);
         }
     }
     const Variable* var = old->takeOwnershipOfSymbol(
@@ -1300,8 +1302,9 @@ const Type* IRGenerator::convertType(const ASTNode& type, bool allowVoid) {
                 name += to_string(size.getInt());
             }
             name += "]";
-            result = fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Type>(
-                    name, Type::TypeKind::kArray, result->as<Type>(), size ? size.getInt() : 0));
+            result = fSymbolTable->takeOwnershipOfSymbol(
+                    std::make_unique<Type>(name, Type::TypeKind::kArray, result->as<Type>(),
+                                           size ? size.getInt() : Type::kUnsizedArray));
         }
         return &result->as<Type>();
     }
@@ -1827,8 +1830,8 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
     }
     if (left.kind() == Expression::Kind::kFloatLiteral &&
         right.kind() == Expression::Kind::kFloatLiteral) {
-        double leftVal  = left.as<FloatLiteral>().fValue;
-        double rightVal = right.as<FloatLiteral>().fValue;
+        SKSL_FLOAT leftVal  = left.as<FloatLiteral>().value();
+        SKSL_FLOAT rightVal = right.as<FloatLiteral>().value();
         switch (op) {
             case Token::Kind::TK_PLUS:  return RESULT(Float, +);
             case Token::Kind::TK_MINUS: return RESULT(Float, -);
@@ -1855,8 +1858,8 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
         std::vector<std::unique_ptr<Expression>> args;
         #define RETURN_VEC_COMPONENTWISE_RESULT(op)                              \
             for (int i = 0; i < leftType.columns(); i++) {                       \
-                float value = left.getFVecComponent(i) op                        \
-                              right.getFVecComponent(i);                         \
+                SKSL_FLOAT value = left.getFVecComponent(i) op                        \
+                                   right.getFVecComponent(i);                         \
                 args.emplace_back(new FloatLiteral(fContext, -1, value));        \
             }                                                                    \
             return std::unique_ptr<Expression>(new Constructor(-1, &leftType,    \
@@ -1878,7 +1881,7 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
                         fErrors.error(right.fOffset, "division by zero");
                         return nullptr;
                     }
-                    float value = left.getFVecComponent(i) / rvalue;
+                    SKSL_FLOAT value = left.getFVecComponent(i) / rvalue;
                     args.emplace_back(new FloatLiteral(fContext, -1, value));
                 }
                 return std::unique_ptr<Expression>(new Constructor(-1, &leftType,
@@ -2113,9 +2116,11 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
 
     auto funcCall = std::make_unique<FunctionCall>(offset, returnType, function,
                                                    std::move(arguments));
-    if (fCanInline && fInliner->isSafeToInline(*funcCall, fSettings->fInlineThreshold)) {
-        Inliner::InlinedCall inlinedCall =
-                fInliner->inlineCall(funcCall.get(), fSymbolTable.get(), fCurrentFunction);
+    if (fCanInline &&
+        fInliner->isSafeToInline(funcCall->fFunction.fDefinition) &&
+        !fInliner->isLargeFunction(funcCall->fFunction.fDefinition)) {
+        Inliner::InlinedCall inlinedCall = fInliner->inlineCall(funcCall.get(), fSymbolTable.get(),
+                                                                fCurrentFunction);
         if (inlinedCall.fInlinedBody) {
             fExtraStatements.push_back(std::move(inlinedCall.fInlinedBody));
         }
@@ -2230,12 +2235,12 @@ std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(
         return std::move(args[0]);
     }
     if (type.isFloat() && args.size() == 1 && args[0]->is<FloatLiteral>()) {
-        double value = args[0]->as<FloatLiteral>().fValue;
+        SKSL_FLOAT value = args[0]->as<FloatLiteral>().value();
         return std::make_unique<FloatLiteral>(offset, value, &type);
     }
     if (type.isFloat() && args.size() == 1 && args[0]->is<IntLiteral>()) {
         int64_t value = args[0]->as<IntLiteral>().value();
-        return std::make_unique<FloatLiteral>(offset, (double)value, &type);
+        return std::make_unique<FloatLiteral>(offset, (float)value, &type);
     }
     if (args[0]->is<IntLiteral>() && (type == *fContext.fInt_Type ||
                                       type == *fContext.fUInt_Type)) {
@@ -2372,7 +2377,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
             }
             if (base->is<FloatLiteral>()) {
                 return std::make_unique<FloatLiteral>(fContext, base->fOffset,
-                                                      -base->as<FloatLiteral>().fValue);
+                                                      -base->as<FloatLiteral>().value());
             }
             if (!baseType.isNumber() && baseType.typeKind() != Type::TypeKind::kVector) {
                 fErrors.error(expression.fOffset,
@@ -2720,7 +2725,7 @@ std::unique_ptr<Expression> IRGenerator::convertIndexExpression(const ASTNode& i
     } else if (base->kind() == Expression::Kind::kTypeReference) {
         const Type& oldType = base->as<TypeReference>().fValue;
         const Type* newType = fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Type>(
-                oldType.name() + "[]", Type::TypeKind::kArray, oldType, /*columns=*/-1));
+                oldType.name() + "[]", Type::TypeKind::kArray, oldType, Type::kUnsizedArray));
         return std::make_unique<TypeReference>(fContext, base->fOffset, newType);
     }
     fErrors.error(index.fOffset, "'[]' must follow a type name");
@@ -2824,6 +2829,75 @@ bool IRGenerator::setRefKind(Expression& expr, VariableReference::RefKind kind) 
     return true;
 }
 
+void IRGenerator::cloneBuiltinVariables() {
+    class BuiltinVariableRemapper : public ProgramWriter {
+    public:
+        BuiltinVariableRemapper(IRGenerator* generator) : fGenerator(generator) {}
+
+        bool visitExpression(Expression& e) override {
+            // Look for references to builtin variables.
+            if (e.is<VariableReference>() && e.as<VariableReference>().fVariable->fBuiltin) {
+                const Variable* sharedVar = e.as<VariableReference>().fVariable;
+
+                // If this is the *first* time we've seen this builtin, findAndInclude will return
+                // the corresponding ProgramElement.
+                if (const ProgramElement* sharedDecls =
+                            fGenerator->fIntrinsics->findAndInclude(sharedVar->fName)) {
+                    // Clone the VarDeclarations ProgramElement that declares this variable
+                    std::unique_ptr<ProgramElement> clonedDecls = sharedDecls->clone();
+                    SkASSERT(clonedDecls->is<VarDeclarations>());
+                    VarDeclarations& varDecls = clonedDecls->as<VarDeclarations>();
+                    SkASSERT(varDecls.fVars.size() == 1);
+                    VarDeclaration& varDecl = varDecls.fVars.front()->as<VarDeclaration>();
+
+                    // Now clone the Variable, and add the clone to the Program's symbol table.
+                    // Any initial value expression was cloned as part of the VarDeclarations,
+                    // so we're pointing at a Program-owned expression.
+                    const Variable* clonedVar = fGenerator->fSymbolTable->takeOwnershipOfSymbol(
+                            std::make_unique<Variable>(sharedVar->fOffset, sharedVar->fModifiers,
+                                                       sharedVar->fName, &sharedVar->type(),
+                                                       /*builtin=*/false, sharedVar->fStorage,
+                                                       varDecl.fValue.get()));
+
+                    // Go back and update the VarDeclaration to point at the cloned Variable.
+                    varDecl.fVar = clonedVar;
+
+                    // Remember this new re-mapping...
+                    fRemap.insert({sharedVar, clonedVar});
+
+                    // Add the VarDeclarations to this Program
+                    fNewElements.push_back(std::move(clonedDecls));
+                }
+
+                // TODO: SkASSERT(found), once all pre-includes are converted?
+                auto found = fRemap.find(sharedVar);
+                if (found != fRemap.end()) {
+                    e.as<VariableReference>().setVariable(found->second);
+                }
+            }
+
+            return INHERITED::visitExpression(e);
+        }
+
+        IRGenerator* fGenerator;
+        std::unordered_map<const Variable*, const Variable*> fRemap;
+        std::vector<std::unique_ptr<ProgramElement>> fNewElements;
+
+        using INHERITED = ProgramWriter;
+        using INHERITED::visitProgramElement;
+    };
+
+    if (!fIsBuiltinCode) {
+        BuiltinVariableRemapper remapper(this);
+        for (auto& e : *fProgramElements) {
+            remapper.visitProgramElement(*e);
+        }
+        fProgramElements->insert(fProgramElements->begin(),
+                                 std::make_move_iterator(remapper.fNewElements.begin()),
+                                 std::make_move_iterator(remapper.fNewElements.end()));
+    }
+}
+
 void IRGenerator::convertProgram(Program::Kind kind,
                                  const char* text,
                                  size_t length,
@@ -2891,6 +2965,9 @@ void IRGenerator::convertProgram(Program::Kind kind,
                 break;
         }
     }
+
+    // Any variables defined in the pre-includes need to be cloned into the Program
+    this->cloneBuiltinVariables();
 
     // Do a final pass looking for dangling FunctionReference or TypeReference expressions
     class FindIllegalExpressions : public ProgramVisitor {

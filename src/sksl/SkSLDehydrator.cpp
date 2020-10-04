@@ -174,7 +174,7 @@ void Dehydrator::write(const Symbol& s) {
                     this->writeU8(Rehydrator::kArrayType_Command);
                     this->writeId(&t);
                     this->write(t.componentType());
-                    this->writeU8(t.columns());
+                    this->writeS8(t.columns());
                     break;
                 case Type::TypeKind::kEnum:
                     this->writeU8(Rehydrator::kEnumType_Command);
@@ -298,7 +298,7 @@ void Dehydrator::write(const Expression* e) {
                 const FloatLiteral& f = e->as<FloatLiteral>();
                 this->writeU8(Rehydrator::kFloatLiteral_Command);
                 FloatIntUnion u;
-                u.fFloat = f.fValue;
+                u.fFloat = f.value();
                 this->writeS32(u.fInt);
                 break;
             }

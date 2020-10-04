@@ -14,7 +14,6 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkImagePriv.h"
-#include "src/core/SkScopeExit.h"
 #include "src/gpu/GrAHardwareBufferUtils.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
@@ -607,6 +606,13 @@ bool validate_backend_render_target(const GrCaps* caps, const GrBackendRenderTar
     if (!caps->isFormatAsColorTypeRenderable(grCT, rt.getBackendFormat(), rt.sampleCnt())) {
         return false;
     }
+
+    // We require the stencil bits to be either 0, 8, or 16.
+    int stencilBits = rt.stencilBits();
+    if (stencilBits != 0 && stencilBits != 8 && stencilBits != 16) {
+        return false;
+    }
+
     return true;
 }
 
@@ -618,11 +624,10 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendRenderTarget(GrContext* context,
                                                         const SkSurfaceProps* props,
                                                         SkSurface::RenderTargetReleaseProc relProc,
                                                         SkSurface::ReleaseContext releaseContext) {
-    SkScopeExit callProc([&] {
-        if (relProc) {
-            relProc(releaseContext);
-        }
-    });
+    sk_sp<GrRefCntedCallback> releaseHelper;
+    if (relProc) {
+        releaseHelper.reset(new GrRefCntedCallback(relProc, releaseContext));
+    }
 
     if (!context) {
         return nullptr;
@@ -638,13 +643,15 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendRenderTarget(GrContext* context,
         return nullptr;
     }
 
-    auto rtc = GrRenderTargetContext::MakeFromBackendRenderTarget(
-            context, grColorType, std::move(colorSpace), rt, origin, props, relProc,
-            releaseContext);
+    auto rtc = GrRenderTargetContext::MakeFromBackendRenderTarget(context,
+                                                                  grColorType,
+                                                                  std::move(colorSpace),
+                                                                  rt,
+                                                                  origin,
+                                                                  props, std::move(releaseHelper));
     if (!rtc) {
         return nullptr;
     }
-    callProc.clear();
 
     auto device = SkGpuDevice::Make(context, std::move(rtc), SkGpuDevice::kUninit_InitContents);
     if (!device) {
