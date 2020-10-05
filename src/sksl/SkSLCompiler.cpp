@@ -33,6 +33,7 @@
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
+#include "src/utils/SkBitSet.h"
 
 #include <fstream>
 
@@ -95,7 +96,7 @@ static void grab_intrinsics(std::vector<std::unique_ptr<ProgramElement>>* src,
                 const VarDeclarations& vd = element->as<VarDeclarations>();
                 SkASSERT(vd.fVars.size() == 1);
                 const Variable* var = vd.fVars[0]->as<VarDeclaration>().fVar;
-                target->insertOrDie(var->fName, std::move(element));
+                target->insertOrDie(var->name(), std::move(element));
                 iter = src->erase(iter);
                 break;
             }
@@ -123,7 +124,7 @@ Compiler::Compiler(Flags flags)
     fRootSymbolTable = std::make_shared<SymbolTable>(this);
     fIRGenerator =
             std::make_unique<IRGenerator>(fContext.get(), &fInliner, fRootSymbolTable, *this);
-    #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f ## t ## _Type->fName, \
+    #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f ## t ## _Type->name(), \
                                                               fContext->f ## t ## _Type.get())
     ADD_TYPE(Void);
     ADD_TYPE(Float);
@@ -550,7 +551,7 @@ void Compiler::addDefinitions(const BasicBlock::Node& node,
     }
 }
 
-void Compiler::scanCFG(CFG* cfg, BlockId blockId, std::set<BlockId>* workList) {
+void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
     BasicBlock& block = cfg->fBlocks[blockId];
 
     // compute definitions after this block
@@ -569,15 +570,15 @@ void Compiler::scanCFG(CFG* cfg, BlockId blockId, std::set<BlockId>* workList) {
             std::unique_ptr<Expression>* e1 = pair.second;
             auto found = exit.fBefore.find(pair.first);
             if (found == exit.fBefore.end()) {
-                // exit has no definition for it, just copy it
-                workList->insert(exitId);
+                // exit has no definition for it, just copy it and reprocess exit block
+                processedSet->reset(exitId);
                 exit.fBefore[pair.first] = e1;
             } else {
                 // exit has a (possibly different) value already defined
                 std::unique_ptr<Expression>* e2 = exit.fBefore[pair.first];
                 if (e1 != e2) {
-                    // definition has changed, merge and add exit block to worklist
-                    workList->insert(exitId);
+                    // definition has changed, merge and reprocess the exit block
+                    processedSet->reset(exitId);
                     if (e1 && e2) {
                         exit.fBefore[pair.first] =
                                       (std::unique_ptr<Expression>*) &fContext->fDefined_Expression;
@@ -655,14 +656,12 @@ static bool dead_assignment(const BinaryExpression& b) {
 
 void Compiler::computeDataFlow(CFG* cfg) {
     cfg->fBlocks[cfg->fStart].fBefore = compute_start_state(*cfg);
-    std::set<BlockId> workList;
-    for (BlockId i = 0; i < cfg->fBlocks.size(); i++) {
-        workList.insert(i);
-    }
-    while (workList.size()) {
-        BlockId next = *workList.begin();
-        workList.erase(workList.begin());
-        this->scanCFG(cfg, next, &workList);
+
+    // We set bits in the "processed" set after a block has been scanned.
+    SkBitSet processedSet(cfg->fBlocks.size());
+    while (SkBitSet::OptionalIndex blockId = processedSet.findFirstUnset()) {
+        processedSet.set(*blockId);
+        this->scanCFG(cfg, *blockId, &processedSet);
     }
 }
 
@@ -919,7 +918,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 (*undefinedVariables).find(var) == (*undefinedVariables).end()) {
                 (*undefinedVariables).insert(var);
                 this->error(expr->fOffset,
-                            "'" + var->fName + "' has not been assigned");
+                            "'" + var->name() + "' has not been assigned");
             }
             break;
         }
@@ -1596,7 +1595,7 @@ bool Compiler::scanCFG(FunctionDefinition& f) {
     // check for missing return
     if (f.fDeclaration.fReturnType != *fContext->fVoid_Type) {
         if (cfg.fBlocks[cfg.fExit].fIsReachable) {
-            this->error(f.fOffset, String("function '" + String(f.fDeclaration.fName) +
+            this->error(f.fOffset, String("function '" + String(f.fDeclaration.name()) +
                                           "' can exit without returning a value"));
         }
     }
@@ -1656,7 +1655,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
         // Add any external values to the symbol table. IRGenerator::start() has pushed a table, so
         // we're only making these visible to the current Program.
         for (const auto& ev : *externalValues) {
-            fIRGenerator->fSymbolTable->addWithoutOwnership(ev->fName, ev.get());
+            fIRGenerator->fSymbolTable->addWithoutOwnership(ev->name(), ev.get());
         }
     }
     std::unique_ptr<String> textPtr(new String(std::move(text)));
@@ -1710,7 +1709,7 @@ bool Compiler::optimize(Program& program) {
                                        }
                                        const auto& fn = element->as<FunctionDefinition>();
                                        bool dead = fn.fDeclaration.fCallCount == 0 &&
-                                                   fn.fDeclaration.fName != "main";
+                                                   fn.fDeclaration.name() != "main";
                                        madeChanges |= dead;
                                        return dead;
                                    }),
