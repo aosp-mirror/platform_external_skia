@@ -172,7 +172,7 @@ static bool contains_recursive_call(const FunctionDeclaration& funcDecl) {
         }
 
         bool visitExpression(const Expression& expr) override {
-            if (expr.is<FunctionCall>() && expr.as<FunctionCall>().fFunction.matches(*fFuncDecl)) {
+            if (expr.is<FunctionCall>() && expr.as<FunctionCall>().function().matches(*fFuncDecl)) {
                 return true;
             }
             return INHERITED::visitExpression(expr);
@@ -382,8 +382,8 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
         }
         case Expression::Kind::kFunctionCall: {
             const FunctionCall& funcCall = expression.as<FunctionCall>();
-            return std::make_unique<FunctionCall>(offset, &funcCall.type(), funcCall.fFunction,
-                                                  argList(funcCall.fArguments));
+            return std::make_unique<FunctionCall>(offset, &funcCall.type(), &funcCall.function(),
+                                                  argList(funcCall.arguments()));
         }
         case Expression::Kind::kFunctionReference:
             return expression.clone();
@@ -483,9 +483,9 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             const ForStatement& f = statement.as<ForStatement>();
             // need to ensure initializer is evaluated first so that we've already remapped its
             // declarations by the time we evaluate test & next
-            std::unique_ptr<Statement> initializer = stmt(f.fInitializer);
-            return std::make_unique<ForStatement>(offset, std::move(initializer), expr(f.fTest),
-                                                  expr(f.fNext), stmt(f.fStatement), f.fSymbols);
+            std::unique_ptr<Statement> initializer = stmt(f.initializer());
+            return std::make_unique<ForStatement>(offset, std::move(initializer), expr(f.test()),
+                                                  expr(f.next()), stmt(f.statement()), f.symbols());
         }
         case Statement::Kind::kIf: {
             const IfStatement& i = statement.as<IfStatement>();
@@ -595,11 +595,11 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     SkASSERT(fSettings);
     SkASSERT(fContext);
     SkASSERT(call);
-    SkASSERT(this->isSafeToInline(call->fFunction.fDefinition));
+    SkASSERT(this->isSafeToInline(call->function().fDefinition));
 
-    std::vector<std::unique_ptr<Expression>>& arguments = call->fArguments;
+    std::vector<std::unique_ptr<Expression>>& arguments = call->arguments();
     const int offset = call->fOffset;
-    const FunctionDefinition& function = *call->fFunction.fDefinition;
+    const FunctionDefinition& function = *call->function().fDefinition;
     const bool hasEarlyReturn = has_early_return(function);
 
     InlinedCall inlinedCall;
@@ -615,7 +615,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
                                    arguments.size() + // Function arguments (copy out-params back)
                                    1);                // Inlined code (Block or do-while loop)
 
-    inlinedBody.children().push_back(std::make_unique<InlineMarker>(call->fFunction));
+    inlinedBody.children().push_back(std::make_unique<InlineMarker>(call->function()));
 
     auto makeInlineVar =
             [&](const String& baseName, const Type* type, Modifiers modifiers,
@@ -884,14 +884,14 @@ public:
             }
             case Statement::Kind::kFor: {
                 ForStatement& forStmt = (*stmt)->as<ForStatement>();
-                if (forStmt.fSymbols) {
-                    fSymbolTableStack.push_back(forStmt.fSymbols.get());
+                if (forStmt.symbols()) {
+                    fSymbolTableStack.push_back(forStmt.symbols().get());
                 }
 
                 // The initializer and loop body are candidates for inlining.
-                this->visitStatement(&forStmt.fInitializer,
+                this->visitStatement(&forStmt.initializer(),
                                      /*isViableAsEnclosingStatement=*/false);
-                this->visitStatement(&forStmt.fStatement);
+                this->visitStatement(&forStmt.statement());
 
                 // The inliner isn't smart enough to inline the test- or increment-expressions
                 // of a for loop loop at this time. There are a handful of limitations:
@@ -1028,7 +1028,7 @@ public:
             }
             case Expression::Kind::kFunctionCall: {
                 FunctionCall& funcCallExpr = (*expr)->as<FunctionCall>();
-                for (std::unique_ptr<Expression>& arg : funcCallExpr.fArguments) {
+                for (std::unique_ptr<Expression>& arg : funcCallExpr.arguments()) {
                     this->visitExpression(&arg);
                 }
                 this->addInlineCandidate(expr);
@@ -1080,7 +1080,8 @@ public:
 };
 
 bool Inliner::candidateCanBeInlined(const InlineCandidate& candidate, InlinabilityCache* cache) {
-    const FunctionDeclaration& funcDecl = (*candidate.fCandidateExpr)->as<FunctionCall>().fFunction;
+    const FunctionDeclaration& funcDecl =
+                                         (*candidate.fCandidateExpr)->as<FunctionCall>().function();
 
     auto [iter, wasInserted] = cache->insert({&funcDecl, false});
     if (wasInserted) {
@@ -1097,7 +1098,8 @@ bool Inliner::isLargeFunction(const FunctionDefinition* functionDef) {
 }
 
 bool Inliner::isLargeFunction(const InlineCandidate& candidate, LargeFunctionCache* cache) {
-    const FunctionDeclaration& funcDecl = (*candidate.fCandidateExpr)->as<FunctionCall>().fFunction;
+    const FunctionDeclaration& funcDecl =
+                                         (*candidate.fCandidateExpr)->as<FunctionCall>().function();
 
     auto [iter, wasInserted] = cache->insert({&funcDecl, false});
     if (wasInserted) {
@@ -1143,7 +1145,7 @@ bool Inliner::analyze(Program& program) {
     bool madeChanges = false;
     for (const InlineCandidate& candidate : candidateList.fCandidates) {
         FunctionCall& funcCall = (*candidate.fCandidateExpr)->as<FunctionCall>();
-        const FunctionDeclaration* funcDecl = &funcCall.fFunction;
+        const FunctionDeclaration* funcDecl = &funcCall.function();
 
         // If the function is large, not marked `inline`, and is called more than once, it's a bad
         // idea to inline it.
