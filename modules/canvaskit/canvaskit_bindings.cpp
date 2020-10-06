@@ -629,6 +629,7 @@ static sk_sp<SkTextBlob> do_shaping(const ShapedTextOpts& opts, SkPoint* pt) {
     return builder.makeBlob();
 }
 
+// TODO(kjlubick) ShapedText is a very thin veneer around SkTextBlob - can probably remove it.
 class ShapedText {
  public:
     ShapedText(ShapedTextOpts opts) : fOpts(opts) {}
@@ -783,6 +784,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         // Adds a little helper because emscripten doesn't expose default params.
         return SkMaskFilter::MakeBlur(style, sigma, respectCTM);
     }), allow_raw_pointers());
+    // TODO(kjlubick) deprecate these path constructors and move them to class functions.
 #ifdef SK_INCLUDE_PATHOPS
     function("MakePathFromOp", &MakePathFromOp);
 #endif
@@ -1085,7 +1087,30 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("drawTextBlob", select_overload<void (const sk_sp<SkTextBlob>&, SkScalar, SkScalar, const SkPaint&)>(&SkCanvas::drawTextBlob))
 #endif
         .function("drawVertices", select_overload<void (const sk_sp<SkVertices>&, SkBlendMode, const SkPaint&)>(&SkCanvas::drawVertices))
-        .function("flush", &SkCanvas::flush)
+        .function("_findMarkedCTM", optional_override([](SkCanvas& self, std::string marker, uintptr_t /* SkScalar* */ mPtr) -> bool {
+            SkScalar* sixteenMatrixValues = reinterpret_cast<SkScalar*>(mPtr);
+            if (!sixteenMatrixValues) {
+                return false; // matrix cannot be null
+            }
+            SkM44 m;
+            if (self.findMarkedCTM(marker.c_str(), &m)) {
+                m.getRowMajor(sixteenMatrixValues);
+                return true;
+            }
+            return false;
+        }))
+        .function("flush", &SkCanvas::flush) // Deprecated - will be removed
+        // 4x4 matrix functions
+        // Just like with getTotalMatrix, we allocate the buffer for the 16 floats to go in from
+        // interface.js, so it can also free them when its done.
+        .function("_getLocalToDevice", optional_override([](const SkCanvas& self, uintptr_t /* SkScalar*  */ mPtr) {
+            SkScalar* sixteenMatrixValues = reinterpret_cast<SkScalar*>(mPtr);
+            if (!sixteenMatrixValues) {
+                return; // matrix cannot be null
+            }
+            SkM44 m = self.getLocalToDevice();
+            m.getRowMajor(sixteenMatrixValues);
+        }))
         .function("getSaveCount", &SkCanvas::getSaveCount)
         // We allocate room for the matrix from the JS side and free it there so as to not have
         // an awkward moment where we malloc something here and "just know" to free it on the
@@ -1104,18 +1129,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("markCTM", optional_override([](SkCanvas& self, std::string marker) {
             self.markCTM(marker.c_str());
         }))
-        .function("_findMarkedCTM", optional_override([](SkCanvas& self, std::string marker, uintptr_t /* SkScalar* */ mPtr) -> bool {
-            SkScalar* sixteenMatrixValues = reinterpret_cast<SkScalar*>(mPtr);
-            if (!sixteenMatrixValues) {
-                return false; // matrix cannot be null
-            }
-            SkM44 m;
-            if (self.findMarkedCTM(marker.c_str(), &m)) {
-                m.getRowMajor(sixteenMatrixValues);
-                return true;
-            }
-            return false;
-        }))
+
         .function("_readPixels", optional_override([](SkCanvas& self, SimpleImageInfo di,
                                                       uintptr_t /* uint8_t* */ pPtr,
                                                       size_t dstRowBytes, int srcX, int srcY) {
@@ -1143,17 +1157,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
             SkImageInfo dstInfo = toSkImageInfo(di);
 
             return self.writePixels(dstInfo, pixels, srcRowBytes, dstX, dstY);
-        }))
-        // 4x4 matrix functions
-        // Just like with getTotalMatrix, we allocate the buffer for the 16 floats to go in from
-        // interface.js, so it can also free them when its done.
-        .function("_getLocalToDevice", optional_override([](const SkCanvas& self, uintptr_t /* SkScalar*  */ mPtr) {
-            SkScalar* sixteenMatrixValues = reinterpret_cast<SkScalar*>(mPtr);
-            if (!sixteenMatrixValues) {
-                return; // matrix cannot be null
-            }
-            SkM44 m = self.getLocalToDevice();
-            m.getRowMajor(sixteenMatrixValues);
         }));
 
     class_<SkColorFilter>("SkColorFilter")
@@ -1202,6 +1205,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .smart_ptr<sk_sp<SkData>>("sk_sp<SkData>>")
         .function("size", &SkData::size);
 
+    // TODO(kjlubick) I think this can be deleted since AnimatedImage is no longer around.
     class_<SkDrawable>("SkDrawable")
         .smart_ptr<sk_sp<SkDrawable>>("sk_sp<SkDrawable>>");
 
@@ -1437,8 +1441,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }), allow_raw_pointers())
         .class_function("MakeDiscrete", &SkDiscretePathEffect::Make);
 
+    // TODO(kjlubick, reed) Make SkPath immutable and only creatable via a factory/builder.
     class_<SkPath>("SkPath")
         .constructor<>()
+        // TODO(kjlubick) remove this constructor in favor of the .copy() method.
         .constructor<const SkPath&>()
         .class_function("_MakeFromCmds", &MakePathFromCmds)
         .class_function("_MakeFromVerbsPointsWeights", &MakePathFromVerbsPointsWeights)
@@ -1538,6 +1544,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
 #endif
         ;
 
+    // TODO(kjlubick) remove this now that we have SkContourMeasureIter
     class_<SkPathMeasure>("SkPathMeasure")
         .constructor<const SkPath&, bool, SkScalar>()
         .function("getLength", &SkPathMeasure::getLength)
