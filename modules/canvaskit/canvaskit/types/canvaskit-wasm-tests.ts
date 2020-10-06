@@ -4,14 +4,10 @@ import CanvasKitInit from "canvaskit-wasm/bin/canvaskit";
 import {
     CanvasKit,
     Paragraph,
-    PathCommand,
-    PosTan,
     ShapedText,
     SkAnimatedImage,
     SkCanvas,
     SkColorFilter,
-    SkContourMeasure,
-    SkContourMeasureIter,
     SkFont,
     SkFontMgr,
     SkImage,
@@ -22,17 +18,10 @@ import {
     SkPath,
     SkPathEffect,
     SkPicture,
-    SkPictureRecorder,
-    SkPoint,
     SkShader,
-    SkSurface,
     SkTextBlob,
     SkTypeface,
     SkVertices,
-    TonalColorsOutput,
-    TypedArray,
-    Vector3,
-    VectorN,
 } from "canvaskit-wasm";
 
 CanvasKitInit({locateFile: (file: string) => '/node_modules/canvaskit/bin/' + file}).then((CK: CanvasKit) => {
@@ -51,11 +40,15 @@ CanvasKitInit({locateFile: (file: string) => '/node_modules/canvaskit/bin/' + fi
     maskFilterTests(CK);
     matrixTests(CK);
     paintTests(CK);
+    paragraphTests(CK);
+    paragraphBuilderTests(CK);
+    particlesTests(CK);
     pathEffectTests(CK);
     pathTests(CK);
     pictureTests(CK);
     rectangleTests(CK);
     runtimeEffectTests(CK);
+    skottieTests(CK);
     shaderTests(CK);
     shapedTextTests(CK);
     surfaceTests(CK);
@@ -445,6 +438,98 @@ function pathTests(CK: CanvasKit) {
     path.trim(0.1, 0.7, false);
 }
 
+function paragraphTests(CK: CanvasKit, p?: Paragraph) {
+    if (!p) return;
+    const a = p.didExceedMaxLines(); // $ExpectType boolean
+    const b = p.getAlphabeticBaseline(); // $ExpectType number
+    const c = p.getGlyphPositionAtCoordinate(10, 3); // $ExpectType PositionWithAffinity
+    const d = p.getHeight(); // $ExpectType number
+    const e = p.getIdeographicBaseline(); // $ExpectType number
+    const f = p.getLongestLine(); // $ExpectType number
+    const g = p.getMaxIntrinsicWidth(); // $ExpectType number
+    const h = p.getMaxWidth(); // $ExpectType number
+    const i = p.getMinIntrinsicWidth(); // $ExpectType number
+    const j = p.getRectsForPlaceholders(); // $ExpectType Float32Array
+    const k = p.getRectsForRange(2, 10, CK.RectHeightStyle.Max,  // $ExpectType Float32Array
+        CK.RectWidthStyle.Tight);
+    const l = p.getWordBoundary(10); // $ExpectType URange
+    p.layout(300);
+}
+
+function paragraphBuilderTests(CK: CanvasKit, fontMgr?: SkFontMgr, paint?: SkPaint) {
+    if (!fontMgr || !paint) return;
+    const paraStyle = new CK.ParagraphStyle({ // $ExpectType ParagraphStyle
+        textStyle: {
+            color: CK.BLACK,
+            fontFamilies: ['Noto Serif'],
+            fontSize: 20,
+        },
+        textAlign: CK.TextAlign.Center,
+        maxLines: 8,
+        ellipsis: '.._.',
+        strutStyle: {
+            strutEnabled: true,
+            fontFamilies: ['Roboto'],
+            fontSize: 28,
+            heightMultiplier: 1.5,
+            forceStrutHeight: true,
+        },
+    });
+    const blueText = new CK.TextStyle({ // $ExpectType TextStyle
+        backgroundColor: CK.Color(234, 208, 232), // light pink
+        color: CK.Color(48, 37, 199),
+        fontFamilies: ['Noto Serif'],
+        decoration: CK.LineThroughDecoration,
+        decorationThickness: 1.5, // multiplier based on font size
+        fontSize: 24,
+        fontFeatures: [{name: 'smcp', value: 1}],
+        shadows: [{color: CK.BLACK, blurRadius: 15},
+                  {color: CK.RED, blurRadius: 5, offset: [10, 10]}],
+    });
+
+    const builder = CK.ParagraphBuilder.Make(paraStyle, fontMgr); // $ExpectType ParagraphBuilder
+
+    builder.pushStyle(blueText);
+    builder.addText('VAVAVAVAVAVAVA\nVAVA\n');
+    builder.pop();
+    const paragraph = builder.build(); // $ExpectType Paragraph
+
+    const buf = new ArrayBuffer(10);
+    const fontSrc = CK.TypefaceFontProvider.Make(); // $ExpectType TypefaceFontProvider
+    fontSrc.registerFont(buf, 'sans-serif');
+    const builder2 = CK.ParagraphBuilder.MakeFromFontProvider(// $ExpectType ParagraphBuilder
+                                paraStyle, fontSrc);
+    builder2.pushPaintStyle(blueText, paint, paint);
+    builder2.addPlaceholder();
+    builder2.addPlaceholder(10, 20, CK.PlaceholderAlignment.Top, CK.TextBaseline.Ideographic, 3);
+}
+
+function particlesTests(CK: CanvasKit, canvas?: SkCanvas) {
+    if (!canvas) return;
+
+    const par = CK.MakeParticles('some json'); // $ExpectType Particles
+    par.draw(canvas);
+    par.effectUniforms()[0] = 1.2;
+    const a = par.getEffectUniform(1); // $ExpectType ParticlesUniform
+    const b = par.getEffectUniformCount(); // $ExpectType number
+    const c = par.getEffectUniformFloatCount(); // $ExpectType number
+    const d = par.getEffectUniformName(3); // $ExpectType string
+    const e = par.getParticleUniform(3); // $ExpectType ParticlesUniform
+    const f = par.getParticleUniformCount(); // $ExpectType number
+    const g = par.getParticleUniformFloatCount(); // $ExpectType number
+    const h = par.getParticleUniformName(3); // $ExpectType string
+    par.particleUniforms()[2] = 4.5;
+    par.setPosition([3, 5]);
+    par.setRate(3);
+    par.start(0, true);
+    par.update(2);
+
+    const buff = new ArrayBuffer(10);
+    const par2 = CK.MakeParticles('other json', { // $ExpectType Particles
+        'flightAnim.gif': buff,
+    });
+}
+
 function pathEffectTests(CK: CanvasKit) {
     const pe1 = CK.SkPathEffect.MakeCorner(2); // $ExpectType SkPathEffect | null
     const pe2 = CK.SkPathEffect.MakeDash([2, 4]); // $ExpectType SkPathEffect
@@ -527,6 +612,32 @@ function runtimeEffectTests(CK: CanvasKit) {
     const s2 = rt.makeShader([0, 1], true, someMatr); // $ExpectType SkShader
     const s3 = rt.makeShaderWithChildren([4, 5], true, [s1, s2]); // $ExpectType SkShader
     const s4 = rt.makeShaderWithChildren([4, 5], true, [s1, s2], someMatr); // $ExpectType SkShader
+}
+
+function skottieTests(CK: CanvasKit, canvas?: SkCanvas) {
+    if (!canvas) return;
+
+    const anim = CK.MakeAnimation('some json'); // $ExpectType SkottieAnimation
+    const a = anim.duration(); // $ExpectType number
+    const b = anim.fps(); // $ExpectType number
+    const c = anim.version(); // $ExpectType string
+    const d = anim.size(); // $ExpectType SkPoint
+    const rect = anim.seek(0.5);
+    anim.seek(0.6, rect);
+    const rect2 = anim.seekFrame(12.3);
+    anim.seekFrame(12.3, rect2);
+    anim.render(canvas);
+    anim.render(canvas, rect);
+
+    const buff = new ArrayBuffer(10);
+    const mAnim = CK.MakeManagedAnimation('other json', { // $ExpectType ManagedSkottieAnimation
+        'flightAnim.gif': buff,
+    });
+    mAnim.setColor('slider', CK.WHITE);
+    mAnim.setOpacity('slider', 0.8);
+    const e = mAnim.getMarkers();  // $ExpectType object[]
+    const f = mAnim.getColorProps();  // $ExpectType object[]
+    const g = mAnim.getOpacityProps();  // $ExpectType object[]
 }
 
 function shaderTests(CK: CanvasKit) {
