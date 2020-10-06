@@ -8,6 +8,7 @@
 #ifndef SKSL_EXPRESSION
 #define SKSL_EXPRESSION
 
+#include "src/sksl/SkSLTinyUnorderedMap.h"
 #include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLType.h"
 
@@ -19,7 +20,7 @@ struct Expression;
 class IRGenerator;
 struct Variable;
 
-typedef std::unordered_map<const Variable*, std::unique_ptr<Expression>*> DefinitionMap;
+using DefinitionMap = TinyUnorderedMap<const Variable*, std::unique_ptr<Expression>*>;
 
 /**
  * Abstract supertype of all expressions.
@@ -60,17 +61,19 @@ struct Expression : public IRNode {
         : INHERITED(offset, (int) Kind::kBoolLiteral, data) {
     }
 
-    Expression(int offset, const IntLiteralData& data)
-        : INHERITED(offset, (int) Kind::kIntLiteral, data) {
-    }
-
-    Expression(int offset, FloatLiteralData data)
-        : INHERITED(offset, (int) Kind::kFloatLiteral, data) {
-    }
-
-    Expression(int offset, Kind kind, ExternalValueData data)
+    Expression(int offset, Kind kind, const ExternalValueData& data)
         : INHERITED(offset, (int) kind, data) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
+    }
+
+    Expression(int offset, const FloatLiteralData& data)
+        : INHERITED(offset, (int) Kind::kFloatLiteral, data) {}
+
+    Expression(int offset, const FunctionCallData& data)
+        : INHERITED(offset, (int) Kind::kFunctionCall, data) {}
+
+    Expression(int offset, const IntLiteralData& data)
+        : INHERITED(offset, (int) Kind::kIntLiteral, data) {
     }
 
     Expression(int offset, Kind kind, const Type* type)

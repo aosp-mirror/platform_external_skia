@@ -40,6 +40,8 @@
 #define SK_INVOCATIONID_BUILTIN            8
 #define SK_POSITION_BUILTIN                0
 
+class SkBitSet;
+
 namespace SkSL {
 
 class ByteCode;
@@ -190,7 +192,7 @@ private:
 
     void addDefinitions(const BasicBlock::Node& node, DefinitionMap* definitions);
 
-    void scanCFG(CFG* cfg, BlockId block, std::set<BlockId>* workList);
+    void scanCFG(CFG* cfg, BlockId block, SkBitSet* processedSet);
 
     void computeDataFlow(CFG* cfg);
 
@@ -237,8 +239,10 @@ private:
 
     std::vector<std::unique_ptr<ProgramElement>> fVertexInclude;
     std::shared_ptr<SymbolTable> fVertexSymbolTable;
-    std::vector<std::unique_ptr<ProgramElement>> fFragmentInclude;
+
     std::shared_ptr<SymbolTable> fFragmentSymbolTable;
+    std::unique_ptr<IRIntrinsicMap> fFragmentIntrinsics;
+
     std::vector<std::unique_ptr<ProgramElement>> fGeometryInclude;
     std::shared_ptr<SymbolTable> fGeometrySymbolTable;
 
