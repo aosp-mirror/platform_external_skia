@@ -3,6 +3,10 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef GR_OP_ALLOCATE_USE_NEW
+#define GR_OP_ALLOCATE_USE_NEW
+#endif
+
 #ifndef SK_CODEC_DECODES_JPEG
 #define SK_CODEC_DECODES_JPEG
 #endif

@@ -33,7 +33,7 @@
 
 #ifdef SK_GL
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
 #include "include/gpu/gl/GrGLTypes.h"
 
@@ -436,7 +436,7 @@ sk_sp<GrContext> MakeGrContext(EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context)
         return nullptr;
     }
     // setup contexts
-    sk_sp<GrContext> grContext(GrContext::MakeGL(interface));
+    sk_sp<GrContext> grContext(GrDirectContext::MakeGL(interface));
     return grContext;
 }
 
@@ -557,7 +557,9 @@ EMSCRIPTEN_BINDINGS(my_module) {
     .smart_ptr<sk_sp<SkSurface>>("sk_sp<SkSurface>")
     .function("width", &SkSurface::width)
     .function("height", &SkSurface::height)
-    .function("_flush", select_overload<void()>(&SkSurface::flushAndSubmit))
+    .function("_flush", optional_override([](SkSurface& self) {
+            self.flushAndSubmit(false);
+        }))
     .function("getCanvas", &SkSurface::getCanvas, allow_raw_pointers());
   class_<SkCanvas>("SkCanvas")
     .function("clear", optional_override([](SkCanvas& self, JSColor color)->void {
