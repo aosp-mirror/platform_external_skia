@@ -49,7 +49,6 @@
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
-#include "src/sksl/ir/SkSLVarDeclarationsStatement.h"
 #include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/ir/SkSLWhileStatement.h"
@@ -302,9 +301,11 @@ void Inliner::ensureScopedBlocks(Statement* inlinedBody, Statement* parentStmt) 
     }
 }
 
-void Inliner::reset(const Context& context, const Program::Settings& settings) {
-    fContext = &context;
-    fSettings = &settings;
+void Inliner::reset(const Context* context, ModifiersPool* modifiers,
+                    const Program::Settings* settings) {
+    fContext = context;
+    fModifiers = modifiers;
+    fSettings = settings;
     fInlineVarCounter = 0;
 }
 
@@ -547,29 +548,19 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             auto name = std::make_unique<String>(
                     this->uniqueNameForInlineVar(String(old->name()), symbolTableForStatement));
             const String* namePtr = symbolTableForStatement->takeOwnershipOfString(std::move(name));
+            const Type* baseTypePtr = copy_if_needed(&decl.fBaseType, *symbolTableForStatement);
             const Type* typePtr = copy_if_needed(&old->type(), *symbolTableForStatement);
             const Variable* clone = symbolTableForStatement->takeOwnershipOfSymbol(
                     std::make_unique<Variable>(offset,
-                                               old->fModifiers,
+                                               old->modifiersHandle(),
                                                namePtr->c_str(),
                                                typePtr,
                                                isBuiltinCode,
-                                               old->fStorage,
+                                               old->storage(),
                                                initialValue.get()));
             (*varMap)[old] = std::make_unique<VariableReference>(offset, clone);
-            return std::make_unique<VarDeclaration>(clone, std::move(sizes),
+            return std::make_unique<VarDeclaration>(clone, baseTypePtr, std::move(sizes),
                                                     std::move(initialValue));
-        }
-        case Statement::Kind::kVarDeclarations: {
-            const VarDeclarations& decls = *statement.as<VarDeclarationsStatement>().fDeclaration;
-            std::vector<std::unique_ptr<Statement>> vars;
-            vars.reserve(decls.fVars.size());
-            for (const auto& var : decls.fVars) {
-                vars.push_back(stmt(var));
-            }
-            const Type* typePtr = copy_if_needed(&decls.fBaseType, *symbolTableForStatement);
-            return std::unique_ptr<Statement>(new VarDeclarationsStatement(
-                    std::make_unique<VarDeclarations>(offset, typePtr, std::move(vars))));
         }
         case Statement::Kind::kWhile: {
             const WhileStatement& w = statement.as<WhileStatement>();
@@ -639,27 +630,27 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         StringFragment nameFrag{namePtr->c_str(), namePtr->length()};
 
         // Add our new variable to the symbol table.
-        auto newVar = std::make_unique<Variable>(/*offset=*/-1, Modifiers(), nameFrag, type,
-                                                 caller->fBuiltin, Variable::kLocal_Storage,
-                                                 initialValue->get());
+        auto newVar = std::make_unique<Variable>(/*offset=*/-1,
+                                                 fModifiers->handle(Modifiers()),
+                                                 nameFrag, type, caller->fBuiltin,
+                                                 Variable::kLocal_Storage, initialValue->get());
         const Variable* variableSymbol = symbolTableForCall->add(nameFrag, std::move(newVar));
 
         // Prepare the variable declaration (taking extra care with `out` params to not clobber any
         // initial value).
-        std::vector<std::unique_ptr<Statement>> variables;
+        std::unique_ptr<Statement> variable;
         if (initialValue && (modifiers.fFlags & Modifiers::kOut_Flag)) {
-            variables.push_back(std::make_unique<VarDeclaration>(
-                    variableSymbol, /*sizes=*/std::vector<std::unique_ptr<Expression>>{},
-                    (*initialValue)->clone()));
+            variable = std::make_unique<VarDeclaration>(
+                    variableSymbol, type, /*sizes=*/std::vector<std::unique_ptr<Expression>>{},
+                    (*initialValue)->clone());
         } else {
-            variables.push_back(std::make_unique<VarDeclaration>(
-                    variableSymbol, /*sizes=*/std::vector<std::unique_ptr<Expression>>{},
-                    std::move(*initialValue)));
+            variable = std::make_unique<VarDeclaration>(
+                    variableSymbol, type, /*sizes=*/std::vector<std::unique_ptr<Expression>>{},
+                    std::move(*initialValue));
         }
 
         // Add the new variable-declaration statement to our block of extra statements.
-        inlinedBody.children().push_back(std::make_unique<VarDeclarationsStatement>(
-                std::make_unique<VarDeclarations>(offset, type, std::move(variables))));
+        inlinedBody.children().push_back(std::move(variable));
 
         return std::make_unique<VariableReference>(offset, variableSymbol);
     };
@@ -679,7 +670,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     std::vector<int> argsToCopyBack;
     for (int i = 0; i < (int) arguments.size(); ++i) {
         const Variable* param = function.fDeclaration.fParameters[i];
-        bool isOutParam = param->fModifiers.fFlags & Modifiers::kOut_Flag;
+        bool isOutParam = param->modifiers().fFlags & Modifiers::kOut_Flag;
 
         // If this argument can be inlined trivially (e.g. a swizzle, or a constant array index)...
         if (is_trivial_argument(*arguments[i])) {
@@ -696,7 +687,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         }
 
         varMap[param] = makeInlineVar(String(param->name()), &arguments[i]->type(),
-                                      param->fModifiers, &arguments[i]);
+                                      param->modifiers(), &arguments[i]);
     }
 
     const Block& body = function.fBody->as<Block>();
@@ -742,7 +733,8 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     } else {
         // It's a void function, so it doesn't actually result in anything, but we have to return
         // something non-null as a standin.
-        inlinedCall.fReplacementExpr = std::make_unique<BoolLiteral>(*fContext, offset,
+        inlinedCall.fReplacementExpr = std::make_unique<BoolLiteral>(*fContext,
+                                                                     offset,
                                                                      /*value=*/false);
     }
 
@@ -941,13 +933,6 @@ public:
                 VarDeclaration& varDeclStmt = (*stmt)->as<VarDeclaration>();
                 // Don't need to scan the declaration's sizes; those are always IntLiterals.
                 this->visitExpression(&varDeclStmt.fValue);
-                break;
-            }
-            case Statement::Kind::kVarDeclarations: {
-                VarDeclarationsStatement& varDecls = (*stmt)->as<VarDeclarationsStatement>();
-                for (std::unique_ptr<Statement>& varDecl : varDecls.fDeclaration->fVars) {
-                    this->visitStatement(&varDecl, /*isViableAsEnclosingStatement=*/false);
-                }
                 break;
             }
             case Statement::Kind::kWhile: {

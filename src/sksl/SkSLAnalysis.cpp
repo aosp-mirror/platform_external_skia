@@ -35,7 +35,6 @@
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
-#include "src/sksl/ir/SkSLVarDeclarationsStatement.h"
 #include "src/sksl/ir/SkSLWhileStatement.h"
 
 // Expressions
@@ -140,7 +139,7 @@ public:
     bool visitExpression(const Expression& e) override {
         if (e.is<VariableReference>()) {
             const VariableReference& var = e.as<VariableReference>();
-            return var.fVariable->fModifiers.fLayout.fBuiltin == fBuiltin;
+            return var.fVariable->modifiers().fLayout.fBuiltin == fBuiltin;
         }
         return INHERITED::visitExpression(e);
     }
@@ -241,8 +240,8 @@ public:
             case Expression::Kind::kVariableReference: {
                 VariableReference& varRef = expr.as<VariableReference>();
                 const Variable* var = varRef.fVariable;
-                if (var->fModifiers.fFlags & (Modifiers::kConst_Flag | Modifiers::kUniform_Flag |
-                                              Modifiers::kVarying_Flag)) {
+                if (var->modifiers().fFlags & (Modifiers::kConst_Flag | Modifiers::kUniform_Flag |
+                                               Modifiers::kVarying_Flag)) {
                     fErrors->error(expr.fOffset,
                                    "cannot modify immutable variable '" + var->name() + "'");
                 } else if (fAssignableVar) {
@@ -486,10 +485,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
             }
             return v.fValue && this->visitExpression(*v.fValue);
         }
-        case Statement::Kind::kVarDeclarations:
-            return this->visitProgramElement(
-                    *s.template as<VarDeclarationsStatement>().fDeclaration);
-
         case Statement::Kind::kWhile: {
             auto& w = s.template as<WhileStatement>();
             return this->visitExpression(*w.fTest) || this->visitStatement(*w.fStatement);
@@ -520,11 +515,9 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitProgramElement(ELEM pe) {
             }
             return false;
 
-        case ProgramElement::Kind::kVar:
-            for (auto& v : pe.template as<VarDeclarations>().fVars) {
-                if (this->visitStatement(*v)) {
-                    return true;
-                }
+        case ProgramElement::Kind::kGlobalVar:
+            if (this->visitStatement(*pe.template as<GlobalVarDeclaration>().fDecl)) {
+                return true;
             }
             return false;
 

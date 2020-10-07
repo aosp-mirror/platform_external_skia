@@ -45,15 +45,12 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         int index = 0;
         bool found = false;
         for (const auto& p : fProgram) {
-            if (p.kind() == ProgramElement::Kind::kVar) {
-                const VarDeclarations& decls = p.as<VarDeclarations>();
-                for (const std::unique_ptr<Statement>& raw : decls.fVars) {
-                    VarDeclaration& decl = raw->as<VarDeclaration>();
-                    if (decl.fVar == arguments[0]->as<VariableReference>().fVariable) {
-                        found = true;
-                    } else if (decl.fVar->type() == *fContext.fFragmentProcessor_Type) {
-                        ++index;
-                    }
+            if (p.is<GlobalVarDeclaration>()) {
+                const VarDeclaration& decl = *p.as<GlobalVarDeclaration>().fDecl;
+                if (decl.fVar == arguments[0]->as<VariableReference>().fVariable) {
+                    found = true;
+                } else if (decl.fVar->type() == *fContext.fFragmentProcessor_Type) {
+                    ++index;
                 }
             }
             if (found) {
@@ -110,7 +107,7 @@ void PipelineStageCodeGenerator::writeIntLiteral(const IntLiteral& i) {
 }
 
 void PipelineStageCodeGenerator::writeVariableReference(const VariableReference& ref) {
-    switch (ref.fVariable->fModifiers.fLayout.fBuiltin) {
+    switch (ref.fVariable->modifiers().fLayout.fBuiltin) {
         case SK_OUTCOLOR_BUILTIN:
             this->write(Compiler::kFormatArgPlaceholderStr);
             fArgs->fFormatArgs.push_back(Compiler::FormatArg(Compiler::FormatArg::Kind::kOutput));
@@ -127,17 +124,14 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
                     if (found) {
                         break;
                     }
-                    if (e.kind() == ProgramElement::Kind::kVar) {
-                        const VarDeclarations& decls = e.as<VarDeclarations>();
-                        for (const auto& decl : decls.fVars) {
-                            const Variable& var = *decl->as<VarDeclaration>().fVar;
-                            if (&var == ref.fVariable) {
-                                found = true;
-                                break;
-                            }
-                            if (var.fModifiers.fFlags & flag) {
-                                ++index;
-                            }
+                    if (e.is<GlobalVarDeclaration>()) {
+                        const Variable& var = *e.as<GlobalVarDeclaration>().fDecl->fVar;
+                        if (&var == ref.fVariable) {
+                            found = true;
+                            break;
+                        }
+                        if (var.modifiers().fFlags & flag) {
+                            ++index;
                         }
                     }
                 }
@@ -145,12 +139,12 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
                 return index;
             };
 
-            if (ref.fVariable->fModifiers.fFlags & Modifiers::kUniform_Flag) {
+            if (ref.fVariable->modifiers().fFlags & Modifiers::kUniform_Flag) {
                 this->write(Compiler::kFormatArgPlaceholderStr);
                 fArgs->fFormatArgs.push_back(
                         Compiler::FormatArg(Compiler::FormatArg::Kind::kUniform,
                                             varIndexByFlag(Modifiers::kUniform_Flag)));
-            } else if (ref.fVariable->fModifiers.fFlags & Modifiers::kVarying_Flag) {
+            } else if (ref.fVariable->modifiers().fFlags & Modifiers::kVarying_Flag) {
                 this->write("_vtx_attr_");
                 this->write(to_string(varIndexByFlag(Modifiers::kVarying_Flag)));
             } else {
@@ -215,18 +209,14 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
 }
 
 void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& p) {
-    if (p.kind() == ProgramElement::Kind::kSection) {
+    if (p.is<Section>()) {
         return;
     }
-    if (p.kind() == ProgramElement::Kind::kVar) {
-        const VarDeclarations& decls = p.as<VarDeclarations>();
-        if (!decls.fVars.size()) {
-            return;
-        }
-        const Variable& var = *decls.fVars[0]->as<VarDeclaration>().fVar;
-        if (var.fModifiers.fFlags &
+    if (p.is<GlobalVarDeclaration>()) {
+        const Variable& var = *p.as<GlobalVarDeclaration>().fDecl->fVar;
+        if (var.modifiers().fFlags &
                     (Modifiers::kIn_Flag | Modifiers::kUniform_Flag | Modifiers::kVarying_Flag) ||
-            -1 != var.fModifiers.fLayout.fBuiltin) {
+            var.modifiers().fLayout.fBuiltin == -1) {
             return;
         }
     }
