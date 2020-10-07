@@ -19,9 +19,11 @@ namespace SkSL {
 
 struct Expression;
 class ExternalValue;
+struct FunctionDeclaration;
 struct Statement;
 class SymbolTable;
 class Type;
+struct Variable;
 
 /**
  * Represents a node in the intermediate representation (IR) tree. The IR is a fully-resolved
@@ -55,10 +57,16 @@ public:
                 return *this->boolLiteralData().fType;
             case NodeData::Kind::kExternalValue:
                 return *this->externalValueData().fType;
-            case NodeData::Kind::kIntLiteral:
-                return *this->intLiteralData().fType;
+            case NodeData::Kind::kField:
+                return *this->fieldData().fType;
             case NodeData::Kind::kFloatLiteral:
                 return *this->floatLiteralData().fType;
+            case NodeData::Kind::kFunctionCall:
+                return *this->functionCallData().fType;
+            case NodeData::Kind::kIntLiteral:
+                return *this->intLiteralData().fType;
+            case NodeData::Kind::kSymbol:
+                return *this->symbolData().fType;
             case NodeData::Kind::kType:
                 return *this->typeData();
             case NodeData::Kind::kTypeToken:
@@ -93,14 +101,35 @@ protected:
         const ExternalValue* fValue;
     };
 
+    struct FieldData {
+        StringFragment fName;
+        const Type* fType;
+        const Variable* fOwner;
+        int fFieldIndex;
+    };
+
     struct FloatLiteralData {
         const Type* fType;
         float fValue;
     };
 
+    struct ForStatementData {
+        std::shared_ptr<SymbolTable> fSymbolTable;
+    };
+
+    struct FunctionCallData {
+        const Type* fType;
+        const FunctionDeclaration* fFunction;
+    };
+
     struct IntLiteralData {
         const Type* fType;
         int64_t fValue;
+    };
+
+    struct SymbolData {
+        StringFragment fName;
+        const Type* fType;
     };
 
     struct TypeTokenData {
@@ -114,9 +143,13 @@ protected:
             kBoolLiteral,
             kEnum,
             kExternalValue,
+            kField,
             kFloatLiteral,
+            kForStatement,
+            kFunctionCall,
             kIntLiteral,
             kString,
+            kSymbol,
             kType,
             kTypeToken,
         } fKind = Kind::kType;
@@ -127,9 +160,13 @@ protected:
             BoolLiteralData fBoolLiteral;
             EnumData fEnum;
             ExternalValueData fExternalValue;
+            FieldData fField;
             FloatLiteralData fFloatLiteral;
+            ForStatementData fForStatement;
+            FunctionCallData fFunctionCall;
             IntLiteralData fIntLiteral;
             String fString;
+            SymbolData fSymbol;
             const Type* fType;
             TypeTokenData fTypeToken;
 
@@ -158,9 +195,24 @@ protected:
             *(new(&fContents) ExternalValueData) = data;
         }
 
+        NodeData(const FieldData& data)
+            : fKind(Kind::kField) {
+            *(new(&fContents) FieldData) = data;
+        }
+
         NodeData(const FloatLiteralData& data)
             : fKind(Kind::kFloatLiteral) {
             *(new(&fContents) FloatLiteralData) = data;
+        }
+
+        NodeData(const ForStatementData& data)
+            : fKind(Kind::kForStatement) {
+            *(new(&fContents) ForStatementData) = data;
+        }
+
+        NodeData(const FunctionCallData& data)
+            : fKind(Kind::kFunctionCall) {
+            *(new(&fContents) FunctionCallData) = data;
         }
 
         NodeData(IntLiteralData data)
@@ -171,6 +223,11 @@ protected:
         NodeData(const String& data)
             : fKind(Kind::kString) {
             *(new(&fContents) String) = data;
+        }
+
+        NodeData(const SymbolData& data)
+            : fKind(Kind::kSymbol) {
+            *(new(&fContents) SymbolData) = data;
         }
 
         NodeData(const Type* data)
@@ -203,14 +260,26 @@ protected:
                 case Kind::kExternalValue:
                     *(new(&fContents) ExternalValueData) = other.fContents.fExternalValue;
                     break;
+                case Kind::kField:
+                    *(new(&fContents) FieldData) = other.fContents.fField;
+                    break;
                 case Kind::kFloatLiteral:
                     *(new(&fContents) FloatLiteralData) = other.fContents.fFloatLiteral;
+                    break;
+                case Kind::kForStatement:
+                    *(new(&fContents) ForStatementData) = other.fContents.fForStatement;
+                    break;
+                case Kind::kFunctionCall:
+                    *(new(&fContents) FunctionCallData) = other.fContents.fFunctionCall;
                     break;
                 case Kind::kIntLiteral:
                     *(new(&fContents) IntLiteralData) = other.fContents.fIntLiteral;
                     break;
                 case Kind::kString:
                     *(new(&fContents) String) = other.fContents.fString;
+                    break;
+                case Kind::kSymbol:
+                    *(new(&fContents) SymbolData) = other.fContents.fSymbol;
                     break;
                 case Kind::kType:
                     *(new(&fContents) const Type*) = other.fContents.fType;
@@ -241,14 +310,26 @@ protected:
                 case Kind::kExternalValue:
                     fContents.fExternalValue.~ExternalValueData();
                     break;
+                case Kind::kField:
+                    fContents.fField.~FieldData();
+                    break;
                 case Kind::kFloatLiteral:
                     fContents.fFloatLiteral.~FloatLiteralData();
+                    break;
+                case Kind::kForStatement:
+                    fContents.fForStatement.~ForStatementData();
+                    break;
+                case Kind::kFunctionCall:
+                    fContents.fFunctionCall.~FunctionCallData();
                     break;
                 case Kind::kIntLiteral:
                     fContents.fIntLiteral.~IntLiteralData();
                     break;
                 case Kind::kString:
                     fContents.fString.~String();
+                    break;
+                case Kind::kSymbol:
+                    fContents.fSymbol.~SymbolData();
                     break;
                 case Kind::kType:
                     break;
@@ -268,11 +349,19 @@ protected:
 
     IRNode(int offset, int kind, const ExternalValueData& data);
 
-    IRNode(int offset, int kind, const IntLiteralData& data);
+    IRNode(int offset, int kind, const FieldData& data);
 
     IRNode(int offset, int kind, const FloatLiteralData& data);
 
+    IRNode(int offset, int kind, const ForStatementData& data);
+
+    IRNode(int offset, int kind, const FunctionCallData& data);
+
+    IRNode(int offset, int kind, const IntLiteralData& data);
+
     IRNode(int offset, int kind, const String& data);
+
+    IRNode(int offset, int kind, const SymbolData& data);
 
     IRNode(int offset, int kind, const Type* data = nullptr);
 
@@ -344,9 +433,24 @@ protected:
         return fData.fContents.fExternalValue;
     }
 
+    const FieldData& fieldData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kField);
+        return fData.fContents.fField;
+    }
+
     const FloatLiteralData& floatLiteralData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kFloatLiteral);
         return fData.fContents.fFloatLiteral;
+    }
+
+    const ForStatementData& forStatementData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kForStatement);
+        return fData.fContents.fForStatement;
+    }
+
+    const FunctionCallData& functionCallData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kFunctionCall);
+        return fData.fContents.fFunctionCall;
     }
 
     const IntLiteralData& intLiteralData() const {
@@ -357,6 +461,16 @@ protected:
     const String& stringData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kString);
         return fData.fContents.fString;
+    }
+
+    SymbolData& symbolData() {
+        SkASSERT(fData.fKind == NodeData::Kind::kSymbol);
+        return fData.fContents.fSymbol;
+    }
+
+    const SymbolData& symbolData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kSymbol);
+        return fData.fContents.fSymbol;
     }
 
     const Type* typeData() const {

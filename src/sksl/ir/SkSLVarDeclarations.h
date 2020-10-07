@@ -45,7 +45,7 @@ struct VarDeclaration : public Statement {
     }
 
     String description() const override {
-        String result = fVar->fModifiers.description() + fVar->type().name() + " " + fVar->fName;
+        String result = fVar->fModifiers.description() + fVar->type().name() + " " + fVar->name();
         for (const auto& size : fSizes) {
             if (size) {
                 result += "[" + size->description() + "]";
@@ -72,23 +72,25 @@ struct VarDeclaration : public Statement {
 struct VarDeclarations : public ProgramElement {
     static constexpr Kind kProgramElementKind = Kind::kVar;
 
-    VarDeclarations(int offset, const Type* baseType,
-                    std::vector<std::unique_ptr<VarDeclaration>> vars)
-    : INHERITED(offset, kProgramElementKind)
-    , fBaseType(*baseType) {
-        for (auto& var : vars) {
-            fVars.push_back(std::unique_ptr<Statement>(var.release()));
+    // vars must be a vector of unique_ptr<VarDeclaration>, but to simplify the CFG, we store
+    // (and thus are constructed with) Statements.
+    VarDeclarations(int offset, const Type* baseType, std::vector<std::unique_ptr<Statement>> vars)
+            : INHERITED(offset, kProgramElementKind), fBaseType(*baseType)
+            , fVars(std::move(vars)) {
+#if defined(SK_DEBUG)
+        for (auto& var : fVars) {
+            SkASSERT(var->is<VarDeclaration>());
         }
+#endif
     }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        std::vector<std::unique_ptr<VarDeclaration>> cloned;
+        std::vector<std::unique_ptr<Statement>> cloned;
+        cloned.reserve(fVars.size());
         for (const auto& v : fVars) {
-            cloned.push_back(std::unique_ptr<VarDeclaration>(
-                                                           (VarDeclaration*) v->clone().release()));
+            cloned.push_back(v->clone());
         }
-        return std::unique_ptr<ProgramElement>(new VarDeclarations(fOffset, &fBaseType,
-                                                                     std::move(cloned)));
+        return std::make_unique<VarDeclarations>(fOffset, &fBaseType, std::move(cloned));
     }
 
     String description() const override {
@@ -113,7 +115,7 @@ struct VarDeclarations : public ProgramElement {
             VarDeclaration& var = (VarDeclaration&) *rawVar;
             result += separator;
             separator = ", ";
-            result += var.fVar->fName;
+            result += var.fVar->name();
             if (var.fValue) {
                 result += " = " + var.fValue->description();
             }

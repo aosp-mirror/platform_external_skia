@@ -17,19 +17,20 @@ static TypeCategory type_category(const Type& type) {
         case Type::TypeKind::kMatrix:
             return type_category(type.componentType());
         default:
-            if (type.fName == "bool") {
+            const StringFragment& name = type.name();
+            if (name == "bool") {
                 return TypeCategory::kBool;
-            } else if (type.fName == "int" ||
-                       type.fName == "short" ||
-                       type.fName == "$intLiteral") {
+            } else if (name == "int" ||
+                       name == "short" ||
+                       name == "$intLiteral") {
                 return TypeCategory::kSigned;
-            } else if (type.fName == "uint" ||
-                       type.fName == "ushort") {
+            } else if (name == "uint" ||
+                       name == "ushort") {
                 return TypeCategory::kUnsigned;
             } else {
-                SkASSERT(type.fName == "float" ||
-                         type.fName == "half" ||
-                         type.fName == "$floatLiteral");
+                SkASSERT(name == "float" ||
+                         name == "half" ||
+                         name == "$floatLiteral");
                 return TypeCategory::kFloat;
             }
             ABORT("unsupported type: %s\n", type.displayName().c_str());
@@ -169,7 +170,7 @@ bool ByteCodeGenerator::generateCode() {
                         continue;
                     }
                     if (is_uniform(*declVar)) {
-                        this->gatherUniforms(declVar->type(), declVar->fName);
+                        this->gatherUniforms(declVar->type(), declVar->name());
                     } else {
                         fOutput->fGlobalSlotCount += SlotCount(declVar->type());
                     }
@@ -1031,15 +1032,15 @@ static bool is_generic_type(const Type* type, const Type* generic) {
 }
 
 void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
-    auto found = fIntrinsics.find(c.fFunction.fName);
+    auto found = fIntrinsics.find(c.function().name());
     if (found == fIntrinsics.end()) {
         fErrors.error(c.fOffset, String::printf("Unsupported intrinsic: '%s'",
-                                                String(c.fFunction.fName).c_str()));
+                                                String(c.function().name()).c_str()));
         return;
     }
     Intrinsic intrin = found->second;
 
-    const auto& args = c.fArguments;
+    const auto& args = c.arguments();
     const size_t nargs = args.size();
     SkASSERT(nargs >= 1);
 
@@ -1241,7 +1242,7 @@ void ByteCodeGenerator::writeFunctionCall(const FunctionCall& f) {
     // before they're defined. This is an easy-to-understand rule that prevents recursion.
     int idx = -1;
     for (size_t i = 0; i < fFunctions.size(); ++i) {
-        if (f.fFunction.matches(fFunctions[i]->fDeclaration)) {
+        if (f.function().matches(fFunctions[i]->fDeclaration)) {
             idx = i;
             break;
         }
@@ -1265,11 +1266,11 @@ void ByteCodeGenerator::writeFunctionCall(const FunctionCall& f) {
         this->write(ByteCodeInstruction::kReserve, returnCount);
     }
 
-    int argCount = f.fArguments.size();
+    int argCount = f.arguments().size();
     std::vector<std::unique_ptr<LValue>> lvalues;
     for (int i = 0; i < argCount; ++i) {
-        const auto& param = f.fFunction.fParameters[i];
-        const auto& arg = f.fArguments[i];
+        const auto& param = f.function().fParameters[i];
+        const auto& arg = f.arguments()[i];
         if (param->fModifiers.fFlags & Modifiers::kOut_Flag) {
             lvalues.emplace_back(this->getLValue(*arg));
             lvalues.back()->load();
@@ -1301,8 +1302,8 @@ void ByteCodeGenerator::writeFunctionCall(const FunctionCall& f) {
     };
 
     for (int i = argCount - 1; i >= 0; --i) {
-        const auto& param = f.fFunction.fParameters[i];
-        const auto& arg = f.fArguments[i];
+        const auto& param = f.function().fParameters[i];
+        const auto& arg = f.arguments()[i];
         if (param->fModifiers.fFlags & Modifiers::kOut_Flag) {
             pop();
             lvalues.back()->store(true);
@@ -1702,21 +1703,21 @@ void ByteCodeGenerator::writeDoStatement(const DoStatement& d) {
 void ByteCodeGenerator::writeForStatement(const ForStatement& f) {
     fContinueTargets.emplace();
     fBreakTargets.emplace();
-    if (f.fInitializer) {
-        this->writeStatement(*f.fInitializer);
+    if (f.initializer()) {
+        this->writeStatement(*f.initializer());
     }
     this->write(ByteCodeInstruction::kLoopBegin);
     size_t start = fCode->size();
-    if (f.fTest) {
-        this->writeExpression(*f.fTest);
+    if (f.test()) {
+        this->writeExpression(*f.test());
         this->write(ByteCodeInstruction::kLoopMask);
     }
     this->write(ByteCodeInstruction::kBranchIfAllFalse);
     DeferredLocation endLocation(this);
-    this->writeStatement(*f.fStatement);
+    this->writeStatement(*f.statement());
     this->write(ByteCodeInstruction::kLoopNext);
-    if (f.fNext) {
-        this->writeExpression(*f.fNext, true);
+    if (f.next()) {
+        this->writeExpression(*f.next(), true);
     }
     this->write(ByteCodeInstruction::kBranch);
     this->write16(start);
@@ -1838,7 +1839,7 @@ void ByteCodeGenerator::writeStatement(const Statement& s) {
 }
 
 ByteCodeFunction::ByteCodeFunction(const FunctionDeclaration* declaration)
-        : fName(declaration->fName) {
+        : fName(declaration->name()) {
     fParameterCount = 0;
     for (const auto& p : declaration->fParameters) {
         int slots = ByteCodeGenerator::SlotCount(p->type());
