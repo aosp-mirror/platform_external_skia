@@ -408,8 +408,8 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
         }
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = expression.as<TernaryExpression>();
-            return std::make_unique<TernaryExpression>(offset, expr(t.fTest),
-                                                       expr(t.fIfTrue), expr(t.fIfFalse));
+            return std::make_unique<TernaryExpression>(offset, expr(t.test()),
+                                                       expr(t.ifTrue()), expr(t.ifFalse()));
         }
         case Expression::Kind::kTypeReference:
             return expression.clone();
@@ -490,8 +490,8 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
         }
         case Statement::Kind::kIf: {
             const IfStatement& i = statement.as<IfStatement>();
-            return std::make_unique<IfStatement>(offset, i.fIsStatic, expr(i.fTest),
-                                                 stmt(i.fIfTrue), stmt(i.fIfFalse));
+            return std::make_unique<IfStatement>(offset, i.isStatic(), expr(i.test()),
+                                                 stmt(i.ifTrue()), stmt(i.ifFalse()));
         }
         case Statement::Kind::kInlineMarker:
         case Statement::Kind::kNop:
@@ -630,11 +630,10 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         StringFragment nameFrag{namePtr->c_str(), namePtr->length()};
 
         // Add our new variable to the symbol table.
-        auto newVar = std::make_unique<Variable>(/*offset=*/-1,
-                                                 fModifiers->handle(Modifiers()),
+        const Variable* variableSymbol = symbolTableForCall->add(std::make_unique<Variable>(
+                                                 /*offset=*/-1, fModifiers->handle(Modifiers()),
                                                  nameFrag, type, caller->fBuiltin,
-                                                 Variable::kLocal_Storage, initialValue->get());
-        const Variable* variableSymbol = symbolTableForCall->add(nameFrag, std::move(newVar));
+                                                 Variable::kLocal_Storage, initialValue->get()));
 
         // Prepare the variable declaration (taking extra care with `out` params to not clobber any
         // initial value).
@@ -904,9 +903,9 @@ public:
             }
             case Statement::Kind::kIf: {
                 IfStatement& ifStmt = (*stmt)->as<IfStatement>();
-                this->visitExpression(&ifStmt.fTest);
-                this->visitStatement(&ifStmt.fIfTrue);
-                this->visitStatement(&ifStmt.fIfFalse);
+                this->visitExpression(&ifStmt.test());
+                this->visitStatement(&ifStmt.ifTrue());
+                this->visitStatement(&ifStmt.ifFalse());
                 break;
             }
             case Statement::Kind::kReturn: {
@@ -1044,7 +1043,7 @@ public:
             case Expression::Kind::kTernary: {
                 TernaryExpression& ternaryExpr = (*expr)->as<TernaryExpression>();
                 // The test expression is a candidate for inlining.
-                this->visitExpression(&ternaryExpr.fTest);
+                this->visitExpression(&ternaryExpr.test());
                 // The true- and false-expressions cannot be inlined, because we are only allowed to
                 // evaluate one side.
                 break;

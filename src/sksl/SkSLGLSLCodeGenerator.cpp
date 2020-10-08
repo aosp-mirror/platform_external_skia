@@ -976,11 +976,11 @@ void GLSLCodeGenerator::writeTernaryExpression(const TernaryExpression& t,
     if (kTernary_Precedence >= parentPrecedence) {
         this->write("(");
     }
-    this->writeExpression(*t.fTest, kTernary_Precedence);
+    this->writeExpression(*t.test(), kTernary_Precedence);
     this->write(" ? ");
-    this->writeExpression(*t.fIfTrue, kTernary_Precedence);
+    this->writeExpression(*t.ifTrue(), kTernary_Precedence);
     this->write(" : ");
-    this->writeExpression(*t.fIfFalse, kTernary_Precedence);
+    this->writeExpression(*t.ifFalse(), kTernary_Precedence);
     if (kTernary_Precedence >= parentPrecedence) {
         this->write(")");
     }
@@ -1177,10 +1177,10 @@ void GLSLCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     if (intf.fTypeName == "sk_PerVertex") {
         return;
     }
-    this->writeModifiers(intf.fVariable.modifiers(), true);
+    this->writeModifiers(intf.fVariable->modifiers(), true);
     this->writeLine(intf.fTypeName + " {");
     fIndentation++;
-    const Type* structType = &intf.fVariable.type();
+    const Type* structType = &intf.fVariable->type();
     while (structType->typeKind() == Type::TypeKind::kArray) {
         structType = &structType->componentType();
     }
@@ -1347,12 +1347,12 @@ void GLSLCodeGenerator::writeBlock(const Block& b) {
 
 void GLSLCodeGenerator::writeIfStatement(const IfStatement& stmt) {
     this->write("if (");
-    this->writeExpression(*stmt.fTest, kTopLevel_Precedence);
+    this->writeExpression(*stmt.test(), kTopLevel_Precedence);
     this->write(") ");
-    this->writeStatement(*stmt.fIfTrue);
-    if (stmt.fIfFalse) {
+    this->writeStatement(*stmt.ifTrue());
+    if (stmt.ifFalse()) {
         this->write(" else ");
-        this->writeStatement(*stmt.fIfFalse);
+        this->writeStatement(*stmt.ifFalse());
     }
 }
 

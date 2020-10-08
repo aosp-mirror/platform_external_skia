@@ -31,7 +31,7 @@ static inline bool check_ref(const Expression& expr) {
             return check_ref(*expr.as<Swizzle>().fBase);
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = expr.as<TernaryExpression>();
-            return check_ref(*t.fIfTrue) && check_ref(*t.fIfFalse);
+            return check_ref(*t.ifTrue()) && check_ref(*t.ifFalse());
         }
         case Expression::Kind::kVariableReference: {
             const VariableReference& ref = expr.as<VariableReference>();
@@ -46,7 +46,8 @@ static inline bool check_ref(const Expression& expr) {
 /**
  * A binary operation.
  */
-struct BinaryExpression : public Expression {
+class BinaryExpression : public Expression {
+public:
     static constexpr Kind kExpressionKind = Kind::kBinary;
 
     BinaryExpression(int offset, std::unique_ptr<Expression> left, Token::Kind op,

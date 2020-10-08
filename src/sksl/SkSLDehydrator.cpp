@@ -247,7 +247,6 @@ void Dehydrator::write(const SymbolTable& symbols) {
         ordered.insert(p);
     }
     for (std::pair<StringFragment, const Symbol*> p : ordered) {
-        this->write(p.first);
         bool found = false;
         for (size_t i = 0; i < symbols.fOwnedSymbols.size(); ++i) {
             if (symbols.fOwnedSymbols[i].get() == p.second) {
@@ -371,9 +370,9 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kTernary: {
                 const TernaryExpression& t = e->as<TernaryExpression>();
                 this->writeU8(Rehydrator::kTernary_Command);
-                this->write(t.fTest.get());
-                this->write(t.fIfTrue.get());
-                this->write(t.fIfFalse.get());
+                this->write(t.test().get());
+                this->write(t.ifTrue().get());
+                this->write(t.ifFalse().get());
                 break;
             }
             case Expression::Kind::kVariableReference: {
@@ -444,10 +443,10 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kIf: {
                 const IfStatement& i = s->as<IfStatement>();
                 this->writeU8(Rehydrator::kIf_Command);
-                this->writeU8(i.fIsStatic);
-                this->write(i.fTest.get());
-                this->write(i.fIfTrue.get());
-                this->write(i.fIfFalse.get());
+                this->writeU8(i.isStatic());
+                this->write(i.test().get());
+                this->write(i.ifTrue().get());
+                this->write(i.ifFalse().get());
                 break;
             }
             case Statement::Kind::kInlineMarker: {
@@ -546,7 +545,7 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kInterfaceBlock: {
             const InterfaceBlock& i = e.as<InterfaceBlock>();
             this->writeU8(Rehydrator::kInterfaceBlock_Command);
-            this->write(i.fVariable);
+            this->write(*i.fVariable);
             this->write(i.fTypeName);
             this->write(i.fInstanceName);
             this->writeU8(i.fSizes.size());
