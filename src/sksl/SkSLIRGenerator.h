@@ -48,6 +48,14 @@ public:
         fIntrinsics[key] = Intrinsic{std::move(element), false};
     }
 
+    const ProgramElement* find(const String& key) {
+        auto iter = fIntrinsics.find(key);
+        if (iter == fIntrinsics.end()) {
+            return fParent ? fParent->find(key) : nullptr;
+        }
+        return iter->second.fIntrinsic.get();
+    }
+
     // Only returns an intrinsic that isn't already marked as included, and then marks it.
     const ProgramElement* findAndInclude(const String& key) {
         auto iter = fIntrinsics.find(key);
@@ -115,7 +123,6 @@ private:
      */
     void start(const Program::Settings* settings,
                std::shared_ptr<SymbolTable> baseSymbolTable,
-               std::vector<std::unique_ptr<ProgramElement>>* inherited,
                bool isBuiltinCode = false);
 
     /**
