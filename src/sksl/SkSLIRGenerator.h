@@ -123,12 +123,17 @@ private:
      */
     void finish();
 
+    /**
+     * Relinquishes ownership of the Modifiers that have been collected so far and returns them.
+     */
+    std::unique_ptr<ModifiersPool> releaseModifiers();
+
     void pushSymbolTable();
     void popSymbolTable();
 
     void checkModifiers(int offset, const Modifiers& modifiers, int permitted);
-    std::unique_ptr<VarDeclarations> convertVarDeclarations(const ASTNode& decl,
-                                                            Variable::Storage storage);
+    std::vector<std::unique_ptr<Statement>> convertVarDeclarations(const ASTNode& decl,
+                                                                   Variable::Storage storage);
     void convertFunction(const ASTNode& f);
     std::unique_ptr<Statement> convertSingleStatement(const ASTNode& statement);
     std::unique_ptr<Statement> convertStatement(const ASTNode& statement);
@@ -224,6 +229,7 @@ private:
     bool fCanInline = true;
     // true if we are currently processing one of the built-in SkSL include files
     bool fIsBuiltinCode;
+    std::unique_ptr<ModifiersPool> fModifiers;
 
     friend class AutoSymbolTable;
     friend class AutoLoopLevel;
