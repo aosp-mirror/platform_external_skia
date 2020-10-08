@@ -876,11 +876,11 @@ void MetalCodeGenerator::writeTernaryExpression(const TernaryExpression& t,
     if (kTernary_Precedence >= parentPrecedence) {
         this->write("(");
     }
-    this->writeExpression(*t.fTest, kTernary_Precedence);
+    this->writeExpression(*t.test(), kTernary_Precedence);
     this->write(" ? ");
-    this->writeExpression(*t.fIfTrue, kTernary_Precedence);
+    this->writeExpression(*t.ifTrue(), kTernary_Precedence);
     this->write(" : ");
-    this->writeExpression(*t.fIfFalse, kTernary_Precedence);
+    this->writeExpression(*t.ifFalse(), kTernary_Precedence);
     if (kTernary_Precedence >= parentPrecedence) {
         this->write(")");
     }
@@ -983,11 +983,11 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
                     continue;
                 }
                 this->write(", constant ");
-                this->writeType(intf.fVariable.type());
+                this->writeType(intf.fVariable->type());
                 this->write("& " );
                 this->write(fInterfaceBlockNameMap[&intf]);
                 this->write(" [[buffer(");
-                this->write(to_string(intf.fVariable.modifiers().fLayout.fBinding));
+                this->write(to_string(intf.fVariable->modifiers().fLayout.fBinding));
                 this->write(")]]");
             }
         }
@@ -1113,10 +1113,10 @@ void MetalCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     if ("sk_PerVertex" == intf.fTypeName) {
         return;
     }
-    this->writeModifiers(intf.fVariable.modifiers(), true);
+    this->writeModifiers(intf.fVariable->modifiers(), true);
     this->write("struct ");
     this->writeLine(intf.fTypeName + " {");
-    const Type* structType = &intf.fVariable.type();
+    const Type* structType = &intf.fVariable->type();
     fWrittenStructs.push_back(structType);
     while (structType->typeKind() == Type::TypeKind::kArray) {
         structType = &structType->componentType();
@@ -1307,12 +1307,12 @@ void MetalCodeGenerator::writeBlock(const Block& b) {
 
 void MetalCodeGenerator::writeIfStatement(const IfStatement& stmt) {
     this->write("if (");
-    this->writeExpression(*stmt.fTest, kTopLevel_Precedence);
+    this->writeExpression(*stmt.test(), kTopLevel_Precedence);
     this->write(") ");
-    this->writeStatement(*stmt.fIfTrue);
-    if (stmt.fIfFalse) {
+    this->writeStatement(*stmt.ifTrue());
+    if (stmt.ifFalse()) {
         this->write(" else ");
-        this->writeStatement(*stmt.fIfFalse);
+        this->writeStatement(*stmt.ifFalse());
     }
 }
 
@@ -1711,8 +1711,8 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Expressi
             return this->requirements(e->as<PostfixExpression>().fOperand.get());
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = e->as<TernaryExpression>();
-            return this->requirements(t.fTest.get()) | this->requirements(t.fIfTrue.get()) |
-                   this->requirements(t.fIfFalse.get());
+            return this->requirements(t.test().get()) | this->requirements(t.ifTrue().get()) |
+                   this->requirements(t.ifFalse().get());
         }
         case Expression::Kind::kVariableReference: {
             const VariableReference& v = e->as<VariableReference>();
@@ -1763,9 +1763,9 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Statemen
         }
         case Statement::Kind::kIf: {
             const IfStatement& i = s->as<IfStatement>();
-            return this->requirements(i.fTest.get()) |
-                   this->requirements(i.fIfTrue.get()) |
-                   this->requirements(i.fIfFalse.get());
+            return this->requirements(i.test().get()) |
+                   this->requirements(i.ifTrue().get()) |
+                   this->requirements(i.ifFalse().get());
         }
         case Statement::Kind::kFor: {
             const ForStatement& f = s->as<ForStatement>();

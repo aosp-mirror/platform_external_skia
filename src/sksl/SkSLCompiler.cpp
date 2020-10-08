@@ -120,8 +120,7 @@ Compiler::Compiler(Flags flags)
     fRootSymbolTable = std::make_shared<SymbolTable>(this);
     fIRGenerator =
             std::make_unique<IRGenerator>(fContext.get(), &fInliner, fRootSymbolTable, *this);
-    #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f ## t ## _Type->name(), \
-                                                              fContext->f ## t ## _Type.get())
+    #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f ## t ## _Type.get())
     ADD_TYPE(Void);
     ADD_TYPE(Float);
     ADD_TYPE(Float2);
@@ -249,8 +248,7 @@ Compiler::Compiler(Flags flags)
     // sk_Caps is "builtin", but all references to it are resolved to Settings, so we don't need to
     // treat it as builtin (ie, no need to clone it into the Program).
     StringFragment skCapsName("sk_Caps");
-    fRootSymbolTable->add(skCapsName,
-                          std::make_unique<Variable>(/*offset=*/-1,
+    fRootSymbolTable->add(std::make_unique<Variable>(/*offset=*/-1,
                                                      fIRGenerator->fModifiers->handle(Modifiers()),
                                                      skCapsName, fContext->fSkCaps_Type.get(),
                                                      /*builtin=*/false, Variable::kGlobal_Storage));
@@ -468,10 +466,10 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
             // To simplify analysis, we just pretend that we write to both sides of the ternary.
             // This allows for false positives (meaning we fail to detect that a variable might not
             // have been assigned), but is preferable to false negatives.
-            this->addDefinition(lvalue->as<TernaryExpression>().fIfTrue.get(),
+            this->addDefinition(lvalue->as<TernaryExpression>().ifTrue().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
-            this->addDefinition(lvalue->as<TernaryExpression>().fIfFalse.get(),
+            this->addDefinition(lvalue->as<TernaryExpression>().ifFalse().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
             break;
@@ -635,7 +633,7 @@ static bool is_dead(const Expression& lvalue) {
         }
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = lvalue.as<TernaryExpression>();
-            return !t.fTest->hasSideEffects() && is_dead(*t.fIfTrue) && is_dead(*t.fIfFalse);
+            return !t.test()->hasSideEffects() && is_dead(*t.ifTrue()) && is_dead(*t.ifFalse());
         }
         case Expression::Kind::kExternalValue:
             return false;
@@ -928,13 +926,13 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
         }
         case Expression::Kind::kTernary: {
             TernaryExpression* t = &expr->as<TernaryExpression>();
-            if (t->fTest->kind() == Expression::Kind::kBoolLiteral) {
+            if (t->test()->is<BoolLiteral>()) {
                 // ternary has a constant test, replace it with either the true or
                 // false branch
-                if (t->fTest->as<BoolLiteral>().value()) {
-                    (*iter)->setExpression(std::move(t->fIfTrue));
+                if (t->test()->as<BoolLiteral>().value()) {
+                    (*iter)->setExpression(std::move(t->ifTrue()));
                 } else {
-                    (*iter)->setExpression(std::move(t->fIfFalse));
+                    (*iter)->setExpression(std::move(t->ifFalse()));
                 }
                 *outUpdated = true;
                 *outNeedsRescan = true;
@@ -1340,14 +1338,14 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
         }
         case Statement::Kind::kIf: {
             IfStatement& i = stmt->as<IfStatement>();
-            if (i.fTest->kind() == Expression::Kind::kBoolLiteral) {
+            if (i.test()->kind() == Expression::Kind::kBoolLiteral) {
                 // constant if, collapse down to a single branch
-                if (i.fTest->as<BoolLiteral>().value()) {
-                    SkASSERT(i.fIfTrue);
-                    (*iter)->setStatement(std::move(i.fIfTrue));
+                if (i.test()->as<BoolLiteral>().value()) {
+                    SkASSERT(i.ifTrue());
+                    (*iter)->setStatement(std::move(i.ifTrue()));
                 } else {
-                    if (i.fIfFalse) {
-                        (*iter)->setStatement(std::move(i.fIfFalse));
+                    if (i.ifFalse()) {
+                        (*iter)->setStatement(std::move(i.ifFalse()));
                     } else {
                         (*iter)->setStatement(std::unique_ptr<Statement>(new Nop()));
                     }
@@ -1356,18 +1354,18 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
                 *outNeedsRescan = true;
                 break;
             }
-            if (i.fIfFalse && i.fIfFalse->isEmpty()) {
+            if (i.ifFalse() && i.ifFalse()->isEmpty()) {
                 // else block doesn't do anything, remove it
-                i.fIfFalse.reset();
+                i.ifFalse().reset();
                 *outUpdated = true;
                 *outNeedsRescan = true;
             }
-            if (!i.fIfFalse && i.fIfTrue->isEmpty()) {
+            if (!i.ifFalse() && i.ifTrue()->isEmpty()) {
                 // if block doesn't do anything, no else block
-                if (i.fTest->hasSideEffects()) {
+                if (i.test()->hasSideEffects()) {
                     // test has side effects, keep it
                     (*iter)->setStatement(std::unique_ptr<Statement>(
-                                                      new ExpressionStatement(std::move(i.fTest))));
+                                                     new ExpressionStatement(std::move(i.test()))));
                 } else {
                     // no if, no else, no test side effects, kill the whole if
                     // statement
@@ -1542,7 +1540,7 @@ bool Compiler::scanCFG(FunctionDefinition& f) {
                 const Statement& s = **iter->statement();
                 switch (s.kind()) {
                     case Statement::Kind::kIf:
-                        if (s.as<IfStatement>().fIsStatic &&
+                        if (s.as<IfStatement>().isStatic() &&
                             !(fFlags & kPermitInvalidStaticTests_Flag)) {
                             this->error(s.fOffset, "static if has non-static test");
                         }
@@ -1628,7 +1626,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
         // Add any external values to the symbol table. IRGenerator::start() has pushed a table, so
         // we're only making these visible to the current Program.
         for (const auto& ev : *externalValues) {
-            fIRGenerator->fSymbolTable->addWithoutOwnership(ev->name(), ev.get());
+            fIRGenerator->fSymbolTable->addWithoutOwnership(ev.get());
         }
     }
     std::unique_ptr<String> textPtr(new String(std::move(text)));

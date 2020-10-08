@@ -1788,18 +1788,18 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
         }
         case Expression::Kind::kTernary: {
             TernaryExpression& t = (TernaryExpression&) expr;
-            SpvId test = this->writeExpression(*t.fTest, out);
+            SpvId test = this->writeExpression(*t.test(), out);
             SpvId end = this->nextId();
             SpvId ifTrueLabel = this->nextId();
             SpvId ifFalseLabel = this->nextId();
             this->writeInstruction(SpvOpSelectionMerge, end, SpvSelectionControlMaskNone, out);
             this->writeInstruction(SpvOpBranchConditional, test, ifTrueLabel, ifFalseLabel, out);
             this->writeLabel(ifTrueLabel, out);
-            SpvId ifTrue = this->getLValue(*t.fIfTrue, out)->getPointer();
+            SpvId ifTrue = this->getLValue(*t.ifTrue(), out)->getPointer();
             SkASSERT(ifTrue);
             this->writeInstruction(SpvOpBranch, end, out);
             ifTrueLabel = fCurrentBlock;
-            SpvId ifFalse = this->getLValue(*t.fIfFalse, out)->getPointer();
+            SpvId ifFalse = this->getLValue(*t.ifFalse(), out)->getPointer();
             SkASSERT(ifFalse);
             ifFalseLabel = fCurrentBlock;
             this->writeInstruction(SpvOpBranch, end, out);
@@ -2389,14 +2389,14 @@ SpvId SPIRVCodeGenerator::writeLogicalOr(const BinaryExpression& o, OutputStream
 
 SpvId SPIRVCodeGenerator::writeTernaryExpression(const TernaryExpression& t, OutputStream& out) {
     const Type& type = t.type();
-    SpvId test = this->writeExpression(*t.fTest, out);
-    if (t.fIfTrue->type().columns() == 1 &&
-        t.fIfTrue->isCompileTimeConstant() &&
-        t.fIfFalse->isCompileTimeConstant()) {
+    SpvId test = this->writeExpression(*t.test(), out);
+    if (t.ifTrue()->type().columns() == 1 &&
+        t.ifTrue()->isCompileTimeConstant() &&
+        t.ifFalse()->isCompileTimeConstant()) {
         // both true and false are constants, can just use OpSelect
         SpvId result = this->nextId();
-        SpvId trueId = this->writeExpression(*t.fIfTrue, out);
-        SpvId falseId = this->writeExpression(*t.fIfFalse, out);
+        SpvId trueId = this->writeExpression(*t.ifTrue(), out);
+        SpvId falseId = this->writeExpression(*t.ifFalse(), out);
         this->writeInstruction(SpvOpSelect, this->getType(type), result, test, trueId, falseId,
                                out);
         return result;
@@ -2412,10 +2412,10 @@ SpvId SPIRVCodeGenerator::writeTernaryExpression(const TernaryExpression& t, Out
     this->writeInstruction(SpvOpSelectionMerge, end, SpvSelectionControlMaskNone, out);
     this->writeInstruction(SpvOpBranchConditional, test, trueLabel, falseLabel, out);
     this->writeLabel(trueLabel, out);
-    this->writeInstruction(SpvOpStore, var, this->writeExpression(*t.fIfTrue, out), out);
+    this->writeInstruction(SpvOpStore, var, this->writeExpression(*t.ifTrue(), out), out);
     this->writeInstruction(SpvOpBranch, end, out);
     this->writeLabel(falseLabel, out);
-    this->writeInstruction(SpvOpStore, var, this->writeExpression(*t.fIfFalse, out), out);
+    this->writeInstruction(SpvOpStore, var, this->writeExpression(*t.ifFalse(), out), out);
     this->writeInstruction(SpvOpBranch, end, out);
     this->writeLabel(end, out);
     SpvId result = this->nextId();
@@ -2693,14 +2693,14 @@ static void update_sk_in_count(const Modifiers& m, int* outSkInCount) {
 }
 
 SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool appendRTHeight) {
-    bool isBuffer = (0 != (intf.fVariable.modifiers().fFlags & Modifiers::kBuffer_Flag));
-    bool pushConstant = (0 != (intf.fVariable.modifiers().fLayout.fFlags &
+    bool isBuffer = (0 != (intf.fVariable->modifiers().fFlags & Modifiers::kBuffer_Flag));
+    bool pushConstant = (0 != (intf.fVariable->modifiers().fLayout.fFlags &
                                Layout::kPushConstant_Flag));
     MemoryLayout memoryLayout = (pushConstant || isBuffer) ?
                                 MemoryLayout(MemoryLayout::k430_Standard) :
                                 fDefaultLayout;
     SpvId result = this->nextId();
-    const Type* type = &intf.fVariable.type();
+    const Type* type = &intf.fVariable->type();
     if (fProgram.fInputs.fRTHeight && appendRTHeight) {
         SkASSERT(fRTHeightStructId == (SpvId) -1);
         SkASSERT(fRTHeightFieldIndex == (SpvId) -1);
@@ -2711,7 +2711,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
         type = new Type(type->fOffset, type->name(), fields);
     }
     SpvId typeId;
-    Modifiers intfModifiers = intf.fVariable.modifiers();
+    Modifiers intfModifiers = intf.fVariable->modifiers();
     if (intfModifiers.fLayout.fBuiltin == SK_IN_BUILTIN) {
         for (const auto& e : fProgram) {
             if (e.kind() == ProgramElement::Kind::kModifiers) {
@@ -2720,7 +2720,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
             }
         }
         typeId = this->getType(Type("sk_in", Type::TypeKind::kArray,
-                                    intf.fVariable.type().componentType(),
+                                    intf.fVariable->type().componentType(),
                                     fSkInCount),
                                memoryLayout);
     } else {
@@ -2740,7 +2740,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
         layout.fSet = 0;
     }
     this->writeLayout(layout, result);
-    fVariableMap[&intf.fVariable] = result;
+    fVariableMap[intf.fVariable] = result;
     if (fProgram.fInputs.fRTHeight && appendRTHeight) {
         delete type;
     }
@@ -2918,20 +2918,20 @@ void SPIRVCodeGenerator::writeBlock(const Block& b, OutputStream& out) {
 }
 
 void SPIRVCodeGenerator::writeIfStatement(const IfStatement& stmt, OutputStream& out) {
-    SpvId test = this->writeExpression(*stmt.fTest, out);
+    SpvId test = this->writeExpression(*stmt.test(), out);
     SpvId ifTrue = this->nextId();
     SpvId ifFalse = this->nextId();
-    if (stmt.fIfFalse) {
+    if (stmt.ifFalse()) {
         SpvId end = this->nextId();
         this->writeInstruction(SpvOpSelectionMerge, end, SpvSelectionControlMaskNone, out);
         this->writeInstruction(SpvOpBranchConditional, test, ifTrue, ifFalse, out);
         this->writeLabel(ifTrue, out);
-        this->writeStatement(*stmt.fIfTrue, out);
+        this->writeStatement(*stmt.ifTrue(), out);
         if (fCurrentBlock) {
             this->writeInstruction(SpvOpBranch, end, out);
         }
         this->writeLabel(ifFalse, out);
-        this->writeStatement(*stmt.fIfFalse, out);
+        this->writeStatement(*stmt.ifFalse(), out);
         if (fCurrentBlock) {
             this->writeInstruction(SpvOpBranch, end, out);
         }
@@ -2940,7 +2940,7 @@ void SPIRVCodeGenerator::writeIfStatement(const IfStatement& stmt, OutputStream&
         this->writeInstruction(SpvOpSelectionMerge, ifFalse, SpvSelectionControlMaskNone, out);
         this->writeInstruction(SpvOpBranchConditional, test, ifTrue, ifFalse, out);
         this->writeLabel(ifTrue, out);
-        this->writeStatement(*stmt.fIfTrue, out);
+        this->writeStatement(*stmt.ifTrue(), out);
         if (fCurrentBlock) {
             this->writeInstruction(SpvOpBranch, ifFalse, out);
         }
@@ -3194,7 +3194,7 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     for (const auto& e : program) {
         if (e.kind() == ProgramElement::Kind::kInterfaceBlock) {
             InterfaceBlock& intf = (InterfaceBlock&) e;
-            const Modifiers& modifiers = intf.fVariable.modifiers();
+            const Modifiers& modifiers = intf.fVariable->modifiers();
             if (SK_IN_BUILTIN == modifiers.fLayout.fBuiltin) {
                 SkASSERT(skInSize != -1);
                 intf.fSizes.emplace_back(new IntLiteral(fContext, -1, skInSize));
@@ -3203,7 +3203,7 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
             if (((modifiers.fFlags & Modifiers::kIn_Flag) ||
                 (modifiers.fFlags & Modifiers::kOut_Flag)) &&
                 modifiers.fLayout.fBuiltin == -1 &&
-                !is_dead(intf.fVariable)) {
+                !is_dead(*intf.fVariable)) {
                 interfaceVars.insert(id);
             }
         }

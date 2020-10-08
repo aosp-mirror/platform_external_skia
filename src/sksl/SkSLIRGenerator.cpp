@@ -186,9 +186,9 @@ void IRGenerator::start(const Program::Settings* settings,
         for (const auto& e : *inherited) {
             if (e->kind() == ProgramElement::Kind::kInterfaceBlock) {
                 InterfaceBlock& intf = e->as<InterfaceBlock>();
-                if (intf.fVariable.name() == Compiler::PERVERTEX_NAME) {
+                if (intf.fVariable->name() == Compiler::PERVERTEX_NAME) {
                     SkASSERT(!fSkPerVertex);
-                    fSkPerVertex = &intf.fVariable;
+                    fSkPerVertex = intf.fVariable;
                 }
             }
         }
@@ -481,10 +481,9 @@ std::vector<std::unique_ptr<Statement>> IRGenerator::convertVarDeclarations(
             // Already defined, just update the modifiers.
             symbol->as<Variable>().setModifiersHandle(var->modifiersHandle());
         } else {
-            varDecls.emplace_back(std::make_unique<VarDeclaration>(
+            varDecls.push_back(std::make_unique<VarDeclaration>(
                     var.get(), baseType, std::move(sizes), std::move(value)));
-            StringFragment name = var->name();
-            fSymbolTable->add(name, std::move(var));
+            fSymbolTable->add(std::move(var));
         }
     }
     return varDecls;
@@ -557,8 +556,8 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     }
     auto ifStmt = std::make_unique<IfStatement>(n.fOffset, n.getBool(), std::move(test),
                                                 std::move(ifTrue), std::move(ifFalse));
-    fInliner->ensureScopedBlocks(ifStmt->fIfTrue.get(), ifStmt.get());
-    fInliner->ensureScopedBlocks(ifStmt->fIfFalse.get(), ifStmt.get());
+    fInliner->ensureScopedBlocks(ifStmt->ifTrue().get(), ifStmt.get());
+    fInliner->ensureScopedBlocks(ifStmt->ifFalse().get(), ifStmt.get());
     return std::move(ifStmt);
 }
 
@@ -774,13 +773,13 @@ std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
 std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<Block> main) {
     Layout invokeLayout;
     Modifiers invokeModifiers(invokeLayout, Modifiers::kHasSideEffects_Flag);
-    const FunctionDeclaration* invokeDecl = fSymbolTable->add(
-            "_invoke", std::make_unique<FunctionDeclaration>(/*offset=*/-1,
-                                                             invokeModifiers,
-                                                             "_invoke",
-                                                             std::vector<Variable*>(),
-                                                             *fContext.fVoid_Type,
-                                                             /*builtin=*/false));
+    const FunctionDeclaration* invokeDecl =
+            fSymbolTable->add(std::make_unique<FunctionDeclaration>(/*offset=*/-1,
+                                                                    invokeModifiers,
+                                                                    "_invoke",
+                                                                    std::vector<Variable*>(),
+                                                                    *fContext.fVoid_Type,
+                                                                    /*builtin=*/false));
     fProgramElements->push_back(std::make_unique<FunctionDefinition>(/*offset=*/-1,
                                                                      *invokeDecl,
                                                                      std::move(main)));
@@ -1070,8 +1069,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
 
         // Create a new declaration.
-        decl = fSymbolTable->add(funcData.fName,
-                                 std::make_unique<FunctionDeclaration>(f.fOffset,
+        decl = fSymbolTable->add(std::make_unique<FunctionDeclaration>(f.fOffset,
                                                                        declModifiers,
                                                                        funcData.fName,
                                                                        parameters,
@@ -1094,7 +1092,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             }
         }
         for (size_t i = 0; i < parameters.size(); i++) {
-            fSymbolTable->addWithoutOwnership(parameters[i]->name(), decl->fParameters[i]);
+            fSymbolTable->addWithoutOwnership(decl->fParameters[i]);
         }
         bool needInvocationIDWorkaround = fInvocations != -1 && funcData.fName == "main" &&
                                           fSettings->fCaps &&
@@ -1210,10 +1208,10 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
         fRTAdjustInterfaceBlock = var;
     }
     if (id.fInstanceName.fLength) {
-        old->addWithoutOwnership(id.fInstanceName, var);
+        old->addWithoutOwnership(var);
     } else {
         for (size_t i = 0; i < fields.size(); i++) {
-            old->add(fields[i].fName, std::make_unique<Field>(intf.fOffset, var, (int)i));
+            old->add(std::make_unique<Field>(intf.fOffset, var, (int)i));
         }
     }
     return std::make_unique<InterfaceBlock>(intf.fOffset,
@@ -1272,11 +1270,9 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         }
         value = std::unique_ptr<Expression>(new IntLiteral(fContext, e.fOffset, currentValue));
         ++currentValue;
-        fSymbolTable->add(
-                child.getString(),
-                std::make_unique<Variable>(e.fOffset, fModifiers->handle(modifiers),
-                                           child.getString(), type, fIsBuiltinCode,
-                                           Variable::kGlobal_Storage, value.get()));
+        fSymbolTable->add(std::make_unique<Variable>(e.fOffset, fModifiers->handle(modifiers),
+                                                     child.getString(), type, fIsBuiltinCode,
+                                                     Variable::kGlobal_Storage, value.get()));
         fSymbolTable->takeOwnershipOfIRNode(std::move(value));
     }
     // Now we orphanize the Enum's symbol table, so that future lookups in it are strict
@@ -1437,12 +1433,11 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
         }
         case Symbol::Kind::kField: {
             const Field* field = &result->as<Field>();
-            VariableReference* base = new VariableReference(identifier.fOffset, &field->owner(),
+            auto base = std::make_unique<VariableReference>(identifier.fOffset, &field->owner(),
                                                             VariableReference::kRead_RefKind);
-            return std::unique_ptr<Expression>(new FieldAccess(
-                                                  std::unique_ptr<Expression>(base),
-                                                  field->fieldIndex(),
-                                                  FieldAccess::kAnonymousInterfaceBlock_OwnerKind));
+            return std::make_unique<FieldAccess>(std::move(base),
+                                                 field->fieldIndex(),
+                                                 FieldAccess::kAnonymousInterfaceBlock_OwnerKind);
         }
         case Symbol::Kind::kType: {
             const Type* t = &result->as<Type>();
