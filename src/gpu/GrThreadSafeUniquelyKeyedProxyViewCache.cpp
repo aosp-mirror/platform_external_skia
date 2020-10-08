@@ -7,6 +7,10 @@
 
 #include "src/gpu/GrThreadSafeUniquelyKeyedProxyViewCache.h"
 
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrResourceCache.h"
 
 GrThreadSafeUniquelyKeyedProxyViewCache::GrThreadSafeUniquelyKeyedProxyViewCache()
@@ -92,9 +96,8 @@ void GrThreadSafeUniquelyKeyedProxyViewCache::dropUniqueRefsOlderThan(
     }
 }
 
-GrSurfaceProxyView GrThreadSafeUniquelyKeyedProxyViewCache::find(const GrUniqueKey& key) {
-    SkAutoSpinlock lock{fSpinLock};
-
+std::tuple<GrSurfaceProxyView, sk_sp<SkData>> GrThreadSafeUniquelyKeyedProxyViewCache::internalFind(
+                                                       const GrUniqueKey& key) {
     Entry* tmp = fUniquelyKeyedProxyViewMap.find(key);
     if (tmp) {
         SkASSERT(fUniquelyKeyedProxyViewList.isInList(tmp));
@@ -102,10 +105,25 @@ GrSurfaceProxyView GrThreadSafeUniquelyKeyedProxyViewCache::find(const GrUniqueK
         tmp->fLastAccess = GrStdSteadyClock::now();
         fUniquelyKeyedProxyViewList.remove(tmp);
         fUniquelyKeyedProxyViewList.addToHead(tmp);
-        return tmp->fView;
+        return { tmp->fView, tmp->fKey.refCustomData() };
     }
 
     return {};
+}
+
+GrSurfaceProxyView GrThreadSafeUniquelyKeyedProxyViewCache::find(const GrUniqueKey& key) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    GrSurfaceProxyView view;
+    std::tie(view, std::ignore) = this->internalFind(key);
+    return view;
+}
+
+std::tuple<GrSurfaceProxyView, sk_sp<SkData>> GrThreadSafeUniquelyKeyedProxyViewCache::findWithData(
+                                                                        const GrUniqueKey& key) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    return this->internalFind(key);
 }
 
 GrThreadSafeUniquelyKeyedProxyViewCache::Entry*
@@ -141,7 +159,7 @@ void GrThreadSafeUniquelyKeyedProxyViewCache::recycleEntry(Entry* dead) {
     fFreeEntryList = dead;
 }
 
-GrSurfaceProxyView GrThreadSafeUniquelyKeyedProxyViewCache::internalAdd(
+std::tuple<GrSurfaceProxyView, sk_sp<SkData>> GrThreadSafeUniquelyKeyedProxyViewCache::internalAdd(
                                                                 const GrUniqueKey& key,
                                                                 const GrSurfaceProxyView& view) {
     Entry* tmp = fUniquelyKeyedProxyViewMap.find(key);
@@ -151,10 +169,20 @@ GrSurfaceProxyView GrThreadSafeUniquelyKeyedProxyViewCache::internalAdd(
         SkASSERT(fUniquelyKeyedProxyViewMap.find(key));
     }
 
-    return tmp->fView;
+    return { tmp->fView, tmp->fKey.refCustomData() };
 }
 
 GrSurfaceProxyView GrThreadSafeUniquelyKeyedProxyViewCache::add(const GrUniqueKey& key,
+                                                                const GrSurfaceProxyView& view) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    GrSurfaceProxyView newView;
+    std::tie(newView, std::ignore) = this->internalAdd(key, view);
+    return newView;
+}
+
+std::tuple<GrSurfaceProxyView, sk_sp<SkData>> GrThreadSafeUniquelyKeyedProxyViewCache::addWithData(
+                                                                const GrUniqueKey& key,
                                                                 const GrSurfaceProxyView& view) {
     SkAutoSpinlock lock{fSpinLock};
 
@@ -165,14 +193,24 @@ GrSurfaceProxyView GrThreadSafeUniquelyKeyedProxyViewCache::findOrAdd(const GrUn
                                                                       const GrSurfaceProxyView& v) {
     SkAutoSpinlock lock{fSpinLock};
 
-    Entry* tmp = fUniquelyKeyedProxyViewMap.find(key);
-    if (tmp) {
-        SkASSERT(fUniquelyKeyedProxyViewList.isInList(tmp));
-        // make the sought out entry the MRU
-        tmp->fLastAccess = GrStdSteadyClock::now();
-        fUniquelyKeyedProxyViewList.remove(tmp);
-        fUniquelyKeyedProxyViewList.addToHead(tmp);
-        return tmp->fView;
+    GrSurfaceProxyView view;
+    std::tie(view, std::ignore) = this->internalFind(key);
+    if (view) {
+        return view;
+    }
+
+    std::tie(view, std::ignore) = this->internalAdd(key, v);
+    return view;
+}
+
+std::tuple<GrSurfaceProxyView, sk_sp<SkData>> GrThreadSafeUniquelyKeyedProxyViewCache::findOrAddWithData(
+                                                                      const GrUniqueKey& key,
+                                                                      const GrSurfaceProxyView& v) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    auto [view, data] = this->internalFind(key);
+    if (view) {
+        return { std::move(view), std::move(data) };
     }
 
     return this->internalAdd(key, v);
@@ -187,4 +225,55 @@ void GrThreadSafeUniquelyKeyedProxyViewCache::remove(const GrUniqueKey& key) {
         fUniquelyKeyedProxyViewList.remove(tmp);
         this->recycleEntry(tmp);
     }
+}
+
+std::tuple<GrSurfaceProxyView, sk_sp<GrThreadSafeUniquelyKeyedProxyViewCache::Trampoline>>
+GrThreadSafeUniquelyKeyedProxyViewCache::CreateLazyView(GrDirectContext* dContext,
+                                                        SkISize dimensions,
+                                                        GrColorType origCT,
+                                                        GrSurfaceOrigin origin) {
+    GrProxyProvider* proxyProvider = dContext->priv().proxyProvider();
+
+    constexpr int kSampleCnt = 1;
+    auto [newCT, format] = GrRenderTargetContext::GetFallbackColorTypeAndFormat(
+            dContext, origCT, kSampleCnt);
+
+    if (newCT == GrColorType::kUnknown) {
+        return {GrSurfaceProxyView(nullptr), nullptr};
+    }
+
+    sk_sp<Trampoline> trampoline(new Trampoline);
+
+    GrProxyProvider::TextureInfo texInfo{ GrMipMapped::kNo, GrTextureType::k2D };
+
+    sk_sp<GrRenderTargetProxy> proxy = proxyProvider->createLazyRenderTargetProxy(
+            [trampoline](
+                    GrResourceProvider* resourceProvider,
+                    const GrSurfaceProxy::LazySurfaceDesc&) -> GrSurfaceProxy::LazyCallbackResult {
+                if (!resourceProvider || !trampoline->fProxy ||
+                    !trampoline->fProxy->isInstantiated()) {
+                    return GrSurfaceProxy::LazyCallbackResult(nullptr, true);
+                }
+
+                SkASSERT(!trampoline->fProxy->peekTexture()->getUniqueKey().isValid());
+                return GrSurfaceProxy::LazyCallbackResult(
+                        sk_ref_sp(trampoline->fProxy->peekTexture()));
+            },
+            format,
+            dimensions,
+            kSampleCnt,
+            GrInternalSurfaceFlags::kNone,
+            &texInfo,
+            GrMipmapStatus::kNotAllocated,
+            SkBackingFit::kExact,
+            SkBudgeted::kYes,
+            GrProtected::kNo,
+            /* wrapsVkSecondaryCB */ false,
+            GrSurfaceProxy::UseAllocator::kYes);
+
+    // TODO: It seems like this 'newCT' usage should be 'origCT' but this is
+    // what GrRenderTargetContext::MakeWithFallback does
+    GrSwizzle swizzle = dContext->priv().caps()->getReadSwizzle(format, newCT);
+
+    return {{std::move(proxy), origin, swizzle}, std::move(trampoline)};
 }
