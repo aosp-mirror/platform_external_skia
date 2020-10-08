@@ -81,14 +81,32 @@ public:
     void dropUniqueRefsOlderThan(GrStdSteadyClock::time_point purgeTime)  SK_EXCLUDES(fSpinLock);
 
     GrSurfaceProxyView find(const GrUniqueKey&)  SK_EXCLUDES(fSpinLock);
+    std::tuple<GrSurfaceProxyView, sk_sp<SkData>> findWithData(
+                                                      const GrUniqueKey&)  SK_EXCLUDES(fSpinLock);
 
     GrSurfaceProxyView add(const GrUniqueKey&, const GrSurfaceProxyView&)  SK_EXCLUDES(fSpinLock);
+    std::tuple<GrSurfaceProxyView, sk_sp<SkData>> addWithData(
+                            const GrUniqueKey&, const GrSurfaceProxyView&)  SK_EXCLUDES(fSpinLock);
 
     GrSurfaceProxyView findOrAdd(const GrUniqueKey&,
                                  const GrSurfaceProxyView&)  SK_EXCLUDES(fSpinLock);
+    std::tuple<GrSurfaceProxyView, sk_sp<SkData>> findOrAddWithData(
+                            const GrUniqueKey&, const GrSurfaceProxyView&)  SK_EXCLUDES(fSpinLock);
 
     void remove(const GrUniqueKey&)  SK_EXCLUDES(fSpinLock);
 
+    // To allow gpu-created resources to have priority, we pre-emptively place a lazy proxy
+    // in the thread-safe cache (with findOrAdd). The Trampoline object allows that lazy proxy to
+    // be instantiated with some later generated rendering result.
+    class Trampoline : public SkRefCnt {
+    public:
+        sk_sp<GrTextureProxy> fProxy;
+    };
+
+    static std::tuple<GrSurfaceProxyView, sk_sp<Trampoline>> CreateLazyView(GrDirectContext*,
+                                                                            SkISize dimensions,
+                                                                            GrColorType,
+                                                                            GrSurfaceOrigin);
 private:
     struct Entry {
         Entry(const GrUniqueKey& key, const GrSurfaceProxyView& view) : fKey(key), fView(view) {}
@@ -108,8 +126,10 @@ private:
     Entry* getEntry(const GrUniqueKey&, const GrSurfaceProxyView&) SK_REQUIRES(fSpinLock);
     void recycleEntry(Entry*)  SK_REQUIRES(fSpinLock);
 
-    GrSurfaceProxyView internalAdd(const GrUniqueKey&,
-                                   const GrSurfaceProxyView&)  SK_REQUIRES(fSpinLock);
+    std::tuple<GrSurfaceProxyView, sk_sp<SkData>> internalFind(
+                                                       const GrUniqueKey&)  SK_REQUIRES(fSpinLock);
+    std::tuple<GrSurfaceProxyView, sk_sp<SkData>> internalAdd(
+                            const GrUniqueKey&, const GrSurfaceProxyView&)  SK_REQUIRES(fSpinLock);
 
     mutable SkSpinlock fSpinLock;
 

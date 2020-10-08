@@ -72,6 +72,9 @@ config("skia_private") {
   visibility = [ ":*" ]
 
   defines = [ "SK_GAMMA_APPLY_TO_A8" ]
+  if (skia_enable_gpu) {
+    defines += [ "GR_OP_ALLOCATE_USE_NEW" ]
+  }
   if (skia_use_fixed_gamma_text) {
     defines += [
       "SK_GAMMA_EXPONENT=1.4",
@@ -1605,6 +1608,8 @@ if (skia_enable_tools) {
     deps = []
     public_deps = []
     sources = [
+      "tools/gpu/BackendSurfaceFactory.cpp",
+      "tools/gpu/BackendSurfaceFactory.h",
       "tools/gpu/BackendTextureImageFactory.cpp",
       "tools/gpu/BackendTextureImageFactory.h",
       "tools/gpu/FlushFinishTracker.cpp",
@@ -1879,6 +1884,7 @@ if (skia_enable_tools) {
       "modules/skparagraph:tests",
       "modules/sksg:tests",
       "modules/skshaper",
+      "//third_party/absl",
       "//third_party/libpng",
       "//third_party/libwebp",
       "//third_party/zlib",

@@ -26,9 +26,11 @@
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/flags/CommonFlags.h"
+#include "tools/gpu/BackendSurfaceFactory.h"
 #include "tools/gpu/GrContextFactory.h"
 #include "tools/gpu/MemoryCache.h"
 #include "tools/trace/EventTracingPriv.h"
+
 #include <chrono>
 #include <functional>
 #include <stdio.h>
@@ -338,16 +340,13 @@ static sk_sp<SkImage> draw_with_gpu(std::function<bool(SkCanvas*)> draw,
             break;
 
         case SurfaceType::kBackendRenderTarget:
-            backendRT = context->priv().getGpu()
-                ->createTestingOnlyBackendRenderTarget(info.width(),
-                                                       info.height(),
-                                                       SkColorTypeToGrColorType(info.colorType()));
-            surface = SkSurface::MakeFromBackendRenderTarget(context,
-                                                             backendRT,
-                                                             kBottomLeft_GrSurfaceOrigin,
-                                                             info.colorType(),
-                                                             info.refColorSpace(),
-                                                             &props);
+            surface = MakeBackendRenderTargetSurface(context,
+                                                     info.dimensions(),
+                                                     FLAGS_samples,
+                                                     kBottomLeft_GrSurfaceOrigin,
+                                                     info.colorType(),
+                                                     info.refColorSpace(),
+                                                     &props);
             break;
     }
 
@@ -632,7 +631,7 @@ int main(int argc, char** argv) {
             {
                 SkMD5 hash;
                 if (image) {
-                    hashAndEncode.write(&hash);
+                    hashAndEncode.feedHash(&hash);
                 } else {
                     hash.write(blob->data(), blob->size());
                 }
@@ -648,13 +647,13 @@ int main(int argc, char** argv) {
                 SkString path = SkStringPrintf("%s/%s%s",
                                                FLAGS_writePath[0], source.name.c_str(), ext);
 
+                SkFILEWStream file(path.c_str());
                 if (image) {
-                    if (!hashAndEncode.writePngTo(path.c_str(), md5.c_str(),
-                                                  FLAGS_key, FLAGS_properties)) {
+                    if (!hashAndEncode.encodePNG(&file, md5.c_str(),
+                                                 FLAGS_key, FLAGS_properties)) {
                         SK_ABORT("Could not write .png.");
                     }
                 } else {
-                    SkFILEWStream file(path.c_str());
                     file.write(blob->data(), blob->size());
                 }
             }
