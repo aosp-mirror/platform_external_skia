@@ -220,16 +220,17 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         return;
     }
     const StringFragment& name = function.name();
-    if (function.fBuiltin && name == "atan" && arguments.size() == 2) {
+    bool builtin = function.isBuiltin();
+    if (builtin && name == "atan" && arguments.size() == 2) {
         this->write("atan2");
-    } else if (function.fBuiltin && name == "inversesqrt") {
+    } else if (builtin && name == "inversesqrt") {
         this->write("rsqrt");
-    } else if (function.fBuiltin && name == "inverse") {
+    } else if (builtin && name == "inverse") {
         SkASSERT(arguments.size() == 1);
         this->writeInverseHack(*arguments[0]);
-    } else if (function.fBuiltin && name == "dFdx") {
+    } else if (builtin && name == "dFdx") {
         this->write("dfdx");
-    } else if (function.fBuiltin && name == "dFdy") {
+    } else if (builtin && name == "dFdy") {
         // Flipping Y also negates the Y derivatives.
         this->write((fProgram.fSettings.fFlipY) ? "-dfdy" : "dfdy");
     } else {
@@ -261,11 +262,12 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         this->write("_fragCoord");
         separator = ", ";
     }
+    const std::vector<Variable*>& parameters = function.parameters();
     for (size_t i = 0; i < arguments.size(); ++i) {
         const Expression& arg = *arguments[i];
         this->write(separator);
         separator = ", ";
-        if (function.fParameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
+        if (parameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
             this->write("&");
         }
         this->writeExpression(arg, kSequence_Precedence);
@@ -680,7 +682,7 @@ void MetalCodeGenerator::writeFragCoord() {
 }
 
 void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
-    switch (ref.fVariable->modifiers().fLayout.fBuiltin) {
+    switch (ref.variable()->modifiers().fLayout.fBuiltin) {
         case SK_FRAGCOLOR_BUILTIN:
             this->write("_out->sk_FragColor");
             break;
@@ -699,19 +701,20 @@ void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
             this->write(fProgram.fSettings.fFlipY ? "_frontFacing" : "(!_frontFacing)");
             break;
         default:
-            if (Variable::kGlobal_Storage == ref.fVariable->storage()) {
-                if (ref.fVariable->modifiers().fFlags & Modifiers::kIn_Flag) {
+            const Variable& var = *ref.variable();
+            if (var.storage() == Variable::kGlobal_Storage) {
+                if (var.modifiers().fFlags & Modifiers::kIn_Flag) {
                     this->write("_in.");
-                } else if (ref.fVariable->modifiers().fFlags & Modifiers::kOut_Flag) {
+                } else if (var.modifiers().fFlags & Modifiers::kOut_Flag) {
                     this->write("_out->");
-                } else if (ref.fVariable->modifiers().fFlags & Modifiers::kUniform_Flag &&
-                           ref.fVariable->type().typeKind() != Type::TypeKind::kSampler) {
+                } else if (var.modifiers().fFlags & Modifiers::kUniform_Flag &&
+                           var.type().typeKind() != Type::TypeKind::kSampler) {
                     this->write("_uniforms.");
                 } else {
                     this->write("_globals->");
                 }
             }
-            this->writeName(ref.fVariable->name());
+            this->writeName(var.name());
     }
 }
 
@@ -836,8 +839,8 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
         this->write("(");
     }
     if (Compiler::IsAssignment(op) && left.is<VariableReference>() &&
-        left.as<VariableReference>().fVariable->storage() == Variable::kParameter_Storage &&
-        left.as<VariableReference>().fVariable->modifiers().fFlags & Modifiers::kOut_Flag) {
+        left.as<VariableReference>().variable()->storage() == Variable::kParameter_Storage &&
+        left.as<VariableReference>().variable()->modifiers().fFlags & Modifiers::kOut_Flag) {
         // writing to an out parameter. Since we have to turn those into pointers, we have to
         // dereference it here.
         this->write("*");
@@ -1003,7 +1006,7 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
         }
         separator = ", ";
     } else {
-        this->writeType(f.fDeclaration.fReturnType);
+        this->writeType(f.fDeclaration.returnType());
         this->write(" ");
         this->writeName(f.fDeclaration.name());
         this->write("(");
@@ -1033,7 +1036,7 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
             separator = ", ";
         }
     }
-    for (const auto& param : f.fDeclaration.fParameters) {
+    for (const auto& param : f.fDeclaration.parameters()) {
         this->write(separator);
         separator = ", ";
         this->writeModifiers(param->modifiers(), false);
@@ -1716,17 +1719,17 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Expressi
         }
         case Expression::Kind::kVariableReference: {
             const VariableReference& v = e->as<VariableReference>();
-            const Modifiers& modifiers = v.fVariable->modifiers();
+            const Modifiers& modifiers = v.variable()->modifiers();
             Requirements result = kNo_Requirements;
             if (modifiers.fLayout.fBuiltin == SK_FRAGCOORD_BUILTIN) {
                 result = kGlobals_Requirement | kFragCoord_Requirement;
-            } else if (Variable::kGlobal_Storage == v.fVariable->storage()) {
+            } else if (Variable::kGlobal_Storage == v.variable()->storage()) {
                 if (modifiers.fFlags & Modifiers::kIn_Flag) {
                     result = kInputs_Requirement;
                 } else if (modifiers.fFlags & Modifiers::kOut_Flag) {
                     result = kOutputs_Requirement;
                 } else if (modifiers.fFlags & Modifiers::kUniform_Flag &&
-                           v.fVariable->type().typeKind() != Type::TypeKind::kSampler) {
+                           v.variable()->type().typeKind() != Type::TypeKind::kSampler) {
                     result = kUniforms_Requirement;
                 } else {
                     result = kGlobals_Requirement;
@@ -1800,7 +1803,7 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Statemen
 }
 
 MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const FunctionDeclaration& f) {
-    if (f.fBuiltin) {
+    if (f.isBuiltin()) {
         return kNo_Requirements;
     }
     auto found = fRequirements.find(&f);

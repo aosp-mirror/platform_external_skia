@@ -35,7 +35,7 @@ String PipelineStageCodeGenerator::getTypeName(const Type& type) {
 void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     const FunctionDeclaration& function = c.function();
     const std::vector<std::unique_ptr<Expression>>& arguments = c.arguments();
-    if (function.fBuiltin && function.name() == "sample" &&
+    if (function.isBuiltin() && function.name() == "sample" &&
         arguments[0]->type().typeKind() != Type::TypeKind::kSampler) {
         SkASSERT(arguments.size() <= 2);
         SkDEBUGCODE(const Type& arg0Type = arguments[0]->type());
@@ -47,7 +47,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         for (const auto& p : fProgram) {
             if (p.is<GlobalVarDeclaration>()) {
                 const VarDeclaration& decl = *p.as<GlobalVarDeclaration>().fDecl;
-                if (decl.fVar == arguments[0]->as<VariableReference>().fVariable) {
+                if (decl.fVar == arguments[0]->as<VariableReference>().variable()) {
                     found = true;
                 } else if (decl.fVar->type() == *fContext.fFragmentProcessor_Type) {
                     ++index;
@@ -76,7 +76,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         }
         return;
     }
-    if (function.fBuiltin) {
+    if (function.isBuiltin()) {
         INHERITED::writeFunctionCall(c);
     } else {
         int index = 0;
@@ -107,7 +107,7 @@ void PipelineStageCodeGenerator::writeIntLiteral(const IntLiteral& i) {
 }
 
 void PipelineStageCodeGenerator::writeVariableReference(const VariableReference& ref) {
-    switch (ref.fVariable->modifiers().fLayout.fBuiltin) {
+    switch (ref.variable()->modifiers().fLayout.fBuiltin) {
         case SK_OUTCOLOR_BUILTIN:
             this->write(Compiler::kFormatArgPlaceholderStr);
             fArgs->fFormatArgs.push_back(Compiler::FormatArg(Compiler::FormatArg::Kind::kOutput));
@@ -126,7 +126,7 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
                     }
                     if (e.is<GlobalVarDeclaration>()) {
                         const Variable& var = *e.as<GlobalVarDeclaration>().fDecl->fVar;
-                        if (&var == ref.fVariable) {
+                        if (&var == ref.variable()) {
                             found = true;
                             break;
                         }
@@ -139,16 +139,16 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
                 return index;
             };
 
-            if (ref.fVariable->modifiers().fFlags & Modifiers::kUniform_Flag) {
+            if (ref.variable()->modifiers().fFlags & Modifiers::kUniform_Flag) {
                 this->write(Compiler::kFormatArgPlaceholderStr);
                 fArgs->fFormatArgs.push_back(
                         Compiler::FormatArg(Compiler::FormatArg::Kind::kUniform,
                                             varIndexByFlag(Modifiers::kUniform_Flag)));
-            } else if (ref.fVariable->modifiers().fFlags & Modifiers::kVarying_Flag) {
+            } else if (ref.variable()->modifiers().fFlags & Modifiers::kVarying_Flag) {
                 this->write("_vtx_attr_");
                 this->write(to_string(varIndexByFlag(Modifiers::kVarying_Flag)));
             } else {
-                this->write(ref.fVariable->name());
+                this->write(ref.variable()->name());
             }
         }
     }
@@ -184,12 +184,12 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
     } else {
         const FunctionDeclaration& decl = f.fDeclaration;
         Compiler::GLSLFunction result;
-        if (!type_to_grsltype(fContext, decl.fReturnType, &result.fReturnType)) {
+        if (!type_to_grsltype(fContext, decl.returnType(), &result.fReturnType)) {
             fErrors.error(f.fOffset, "unsupported return type");
             return;
         }
         result.fName = decl.name();
-        for (const Variable* v : decl.fParameters) {
+        for (const Variable* v : decl.parameters()) {
             GrSLType paramSLType;
             if (!type_to_grsltype(fContext, v->type(), &paramSLType)) {
                 fErrors.error(v->fOffset, "unsupported parameter type");

@@ -148,13 +148,13 @@ void Dehydrator::write(const Symbol& s) {
             const FunctionDeclaration& f = s.as<FunctionDeclaration>();
             this->writeU8(Rehydrator::kFunctionDeclaration_Command);
             this->writeId(&f);
-            this->write(f.fModifiers);
+            this->write(f.modifiers());
             this->write(f.name());
-            this->writeU8(f.fParameters.size());
-            for (const Variable* p : f.fParameters) {
+            this->writeU8(f.parameters().size());
+            for (const Variable* p : f.parameters()) {
                 this->writeU16(this->symbolId(p));
             }
-            this->write(f.fReturnType);
+            this->write(f.returnType());
             break;
         }
         case Symbol::Kind::kSymbolAlias: {
@@ -378,8 +378,8 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kVariableReference: {
                 const VariableReference& v = e->as<VariableReference>();
                 this->writeU8(Rehydrator::kVariableReference_Command);
-                this->writeId(v.fVariable);
-                this->writeU8(v.fRefKind);
+                this->writeId(v.variable());
+                this->writeU8(v.refKind());
                 break;
             }
             case Expression::Kind::kFunctionReference:

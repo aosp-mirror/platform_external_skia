@@ -482,8 +482,8 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
 #ifndef SKSL_STANDALONE
     );
 #endif
-    const auto found = function.fBuiltin ? fFunctionClasses->find(function.name()) :
-                                           fFunctionClasses->end();
+    const auto found = function.isBuiltin() ? fFunctionClasses->find(function.name()) :
+                                              fFunctionClasses->end();
     bool isTextureFunctionWithBias = false;
     bool nameWritten = false;
     if (found != fFunctionClasses->end()) {
@@ -785,7 +785,7 @@ void GLSLCodeGenerator::writeFragCoord() {
 }
 
 void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
-    switch (ref.fVariable->modifiers().fLayout.fBuiltin) {
+    switch (ref.variable()->modifiers().fLayout.fBuiltin) {
         case SK_FRAGCOLOR_BUILTIN:
             if (fProgram.fSettings.fCaps->mustDeclareFragmentShaderOutput()) {
                 this->write("sk_FragColor");
@@ -825,7 +825,7 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             this->write(fProgram.fSettings.fCaps->fbFetchColorName());
             break;
         default:
-            this->write(ref.fVariable->name());
+            this->write(ref.variable()->name());
     }
 }
 
@@ -1043,11 +1043,11 @@ void GLSLCodeGenerator::writeFunction(const FunctionDefinition& f) {
     // accidentally end up here.
     SkASSERT(fProgramKind != Program::kPipelineStage_Kind);
 
-    this->writeTypePrecision(f.fDeclaration.fReturnType);
-    this->writeType(f.fDeclaration.fReturnType);
+    this->writeTypePrecision(f.fDeclaration.returnType());
+    this->writeType(f.fDeclaration.returnType());
     this->write(" " + f.fDeclaration.name() + "(");
     const char* separator = "";
-    for (const auto& param : f.fDeclaration.fParameters) {
+    for (const auto& param : f.fDeclaration.parameters()) {
         this->write(separator);
         separator = ", ";
         this->writeModifiers(param->modifiers(), false);

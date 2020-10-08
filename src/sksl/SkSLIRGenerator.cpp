@@ -164,7 +164,6 @@ static void fill_caps(const SkSL::ShaderCapsClass& caps,
 
 void IRGenerator::start(const Program::Settings* settings,
                         std::shared_ptr<SymbolTable> baseSymbolTable,
-                        std::vector<std::unique_ptr<ProgramElement>>* inherited,
                         bool isBuiltinCode) {
     fSettings = settings;
     fSymbolTable = std::move(baseSymbolTable);
@@ -182,19 +181,12 @@ void IRGenerator::start(const Program::Settings* settings,
     fSkPerVertex = nullptr;
     fRTAdjust = nullptr;
     fRTAdjustInterfaceBlock = nullptr;
-    if (inherited) {
-        for (const auto& e : *inherited) {
-            if (e->kind() == ProgramElement::Kind::kInterfaceBlock) {
-                InterfaceBlock& intf = e->as<InterfaceBlock>();
-                if (intf.fVariable->name() == Compiler::PERVERTEX_NAME) {
-                    SkASSERT(!fSkPerVertex);
-                    fSkPerVertex = intf.fVariable;
-                }
-            }
-        }
-    }
     if (fIntrinsics) {
         fIntrinsics->resetAlreadyIncluded();
+        if (const ProgramElement* perVertexDecl = fIntrinsics->find(Compiler::PERVERTEX_NAME)) {
+            SkASSERT(perVertexDecl->is<InterfaceBlock>());
+            fSkPerVertex = perVertexDecl->as<InterfaceBlock>().fVariable;
+        }
     }
 }
 
@@ -254,7 +246,7 @@ std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& st
                 Expression& expr = *result->as<ExpressionStatement>().expression();
                 if (expr.kind() == Expression::Kind::kFunctionCall) {
                     FunctionCall& fc = expr.as<FunctionCall>();
-                    if (fc.function().fBuiltin && fc.function().name() == "EmitVertex") {
+                    if (fc.function().isBuiltin() && fc.function().name() == "EmitVertex") {
                         std::vector<std::unique_ptr<Statement>> statements;
                         statements.push_back(getNormalizeSkPositionCode());
                         statements.push_back(std::move(result));
@@ -726,20 +718,20 @@ std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
         if (!result) {
             return nullptr;
         }
-        if (fCurrentFunction->fReturnType == *fContext.fVoid_Type) {
+        if (fCurrentFunction->returnType() == *fContext.fVoid_Type) {
             fErrors.error(result->fOffset, "may not return a value from a void function");
             return nullptr;
         } else {
-            result = this->coerce(std::move(result), fCurrentFunction->fReturnType);
+            result = this->coerce(std::move(result), fCurrentFunction->returnType());
             if (!result) {
                 return nullptr;
             }
         }
         return std::unique_ptr<Statement>(new ReturnStatement(std::move(result)));
     } else {
-        if (fCurrentFunction->fReturnType != *fContext.fVoid_Type) {
+        if (fCurrentFunction->returnType() != *fContext.fVoid_Type) {
             fErrors.error(r.fOffset, "expected function to return '" +
-                                     fCurrentFunction->fReturnType.displayName() + "'");
+                                     fCurrentFunction->returnType().displayName() + "'");
         }
         return std::unique_ptr<Statement>(new ReturnStatement(r.fOffset));
     }
@@ -774,12 +766,13 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
     Layout invokeLayout;
     Modifiers invokeModifiers(invokeLayout, Modifiers::kHasSideEffects_Flag);
     const FunctionDeclaration* invokeDecl =
-            fSymbolTable->add(std::make_unique<FunctionDeclaration>(/*offset=*/-1,
-                                                                    invokeModifiers,
-                                                                    "_invoke",
-                                                                    std::vector<Variable*>(),
-                                                                    *fContext.fVoid_Type,
-                                                                    /*builtin=*/false));
+            fSymbolTable->add(std::make_unique<FunctionDeclaration>(
+                                                                /*offset=*/-1,
+                                                                fModifiers->handle(invokeModifiers),
+                                                                "_invoke",
+                                                                std::vector<Variable*>(),
+                                                                fContext.fVoid_Type.get(),
+                                                                /*builtin=*/false));
     fProgramElements->push_back(std::make_unique<FunctionDefinition>(/*offset=*/-1,
                                                                      *invokeDecl,
                                                                      std::move(main)));
@@ -842,7 +835,7 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     #define FIELD(var, idx) std::unique_ptr<Expression>(\
                     new FieldAccess(REF(var), idx, FieldAccess::kAnonymousInterfaceBlock_OwnerKind))
     #define POS std::unique_ptr<Expression>(new FieldAccess(WREF(fSkPerVertex), 0, \
-                                                   FieldAccess::kAnonymousInterfaceBlock_OwnerKind))
+                                                FieldAccess::kAnonymousInterfaceBlock_OwnerKind))
     #define ADJUST (fRTAdjustInterfaceBlock ? \
                     FIELD(fRTAdjustInterfaceBlock, fRTAdjustFieldIndex) : \
                     REF(fRTAdjust))
@@ -1027,18 +1020,22 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
         for (const FunctionDeclaration* other : functions) {
             SkASSERT(other->name() == funcData.fName);
-            if (parameters.size() == other->fParameters.size()) {
+            if (parameters.size() == other->parameters().size()) {
                 bool match = true;
                 for (size_t i = 0; i < parameters.size(); i++) {
-                    if (parameters[i]->type() != other->fParameters[i]->type()) {
+                    if (parameters[i]->type() != other->parameters()[i]->type()) {
                         match = false;
                         break;
                     }
                 }
                 if (match) {
-                    if (*returnType != other->fReturnType) {
-                        FunctionDeclaration newDecl(f.fOffset, funcData.fModifiers, funcData.fName,
-                                                    parameters, *returnType, fIsBuiltinCode);
+                    if (*returnType != other->returnType()) {
+                        FunctionDeclaration newDecl(f.fOffset,
+                                                    fModifiers->handle(funcData.fModifiers),
+                                                    funcData.fName,
+                                                    parameters,
+                                                    returnType,
+                                                    fIsBuiltinCode);
                         fErrors.error(f.fOffset, "functions '" + newDecl.description() +
                                                  "' and '" + other->description() +
                                                  "' differ only in return type");
@@ -1046,14 +1043,14 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                     }
                     decl = other;
                     for (size_t i = 0; i < parameters.size(); i++) {
-                        if (parameters[i]->modifiers() != other->fParameters[i]->modifiers()) {
+                        if (parameters[i]->modifiers() != other->parameters()[i]->modifiers()) {
                             fErrors.error(f.fOffset, "modifiers on parameter " +
                                                      to_string((uint64_t) i + 1) +
                                                      " differ between declaration and definition");
                             return;
                         }
                     }
-                    if (other->fDefinition && !other->fBuiltin) {
+                    if (other->definition() && !other->isBuiltin()) {
                         fErrors.error(f.fOffset, "duplicate definition of " + other->description());
                     }
                     break;
@@ -1069,12 +1066,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
 
         // Create a new declaration.
-        decl = fSymbolTable->add(std::make_unique<FunctionDeclaration>(f.fOffset,
-                                                                       declModifiers,
-                                                                       funcData.fName,
-                                                                       parameters,
-                                                                       *returnType,
-                                                                       fIsBuiltinCode));
+        decl = fSymbolTable->add(std::make_unique<FunctionDeclaration>(
+                                                                  f.fOffset,
+                                                                  fModifiers->handle(declModifiers),
+                                                                  funcData.fName,
+                                                                  parameters,
+                                                                  returnType,
+                                                                  fIsBuiltinCode));
     }
     if (iter != f.end()) {
         // compile body
@@ -1091,8 +1089,9 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                 parameters[0]->setModifiersHandle(fModifiers->handle(m));
             }
         }
+        const std::vector<Variable*>& declParameters = decl->parameters();
         for (size_t i = 0; i < parameters.size(); i++) {
-            fSymbolTable->addWithoutOwnership(decl->fParameters[i]);
+            fSymbolTable->addWithoutOwnership(declParameters[i]);
         }
         bool needInvocationIDWorkaround = fInvocations != -1 && funcData.fName == "main" &&
                                           fSettings->fCaps &&
@@ -1110,7 +1109,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
         auto result = std::make_unique<FunctionDefinition>(f.fOffset, *decl, std::move(body),
                                                            std::move(fReferencedIntrinsics));
-        decl->fDefinition = result.get();
+        decl->setDefinition(result.get());
         result->fSource = &f;
         fProgramElements->push_back(std::move(result));
     }
@@ -1228,7 +1227,7 @@ bool IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
             *out = value.as<IntLiteral>().value();
             return true;
         case Expression::Kind::kVariableReference: {
-            const Variable& var = *value.as<VariableReference>().fVariable;
+            const Variable& var = *value.as<VariableReference>().variable();
             return (var.modifiers().fFlags & Modifiers::kConst_Flag) &&
                    var.initialValue() && this->getConstantInt(*var.initialValue(), out);
         }
@@ -2053,8 +2052,8 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
                                                            original.fReferencedIntrinsics.end());
         std::sort(intrinsics.begin(), intrinsics.end(),
                   [](const FunctionDeclaration* a, const FunctionDeclaration* b) {
-                      if (a->fBuiltin != b->fBuiltin) {
-                          return a->fBuiltin < b->fBuiltin;
+                      if (a->isBuiltin() != b->isBuiltin()) {
+                          return a->isBuiltin() < b->isBuiltin();
                       }
                       if (a->fOffset != b->fOffset) {
                           return a->fOffset < b->fOffset;
@@ -2074,26 +2073,26 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
 std::unique_ptr<Expression> IRGenerator::call(int offset,
                                               const FunctionDeclaration& function,
                                               std::vector<std::unique_ptr<Expression>> arguments) {
-    if (function.fBuiltin) {
-        if (function.fDefinition) {
+    if (function.isBuiltin()) {
+        if (function.definition()) {
             fReferencedIntrinsics.insert(&function);
         }
         if (!fIsBuiltinCode && fIntrinsics) {
             this->copyIntrinsicIfNeeded(function);
         }
     }
-    if (function.fParameters.size() != arguments.size()) {
+    if (function.parameters().size() != arguments.size()) {
         String msg = "call to '" + function.name() + "' expected " +
-                                 to_string((uint64_t) function.fParameters.size()) +
+                                 to_string((uint64_t) function.parameters().size()) +
                                  " argument";
-        if (function.fParameters.size() != 1) {
+        if (function.parameters().size() != 1) {
             msg += "s";
         }
         msg += ", but found " + to_string((uint64_t) arguments.size());
         fErrors.error(offset, msg);
         return nullptr;
     }
-    if (fKind == Program::kPipelineStage_Kind && !function.fDefinition && !function.fBuiltin) {
+    if (fKind == Program::kPipelineStage_Kind && !function.definition() && !function.isBuiltin()) {
         String msg = "call to undefined function '" + function.name() + "'";
         fErrors.error(offset, msg);
         return nullptr;
@@ -2117,7 +2116,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         if (!arguments[i]) {
             return nullptr;
         }
-        const Modifiers& paramModifiers = function.fParameters[i]->modifiers();
+        const Modifiers& paramModifiers = function.parameters()[i]->modifiers();
         if (paramModifiers.fFlags & Modifiers::kOut_Flag) {
             if (!this->setRefKind(*arguments[i], paramModifiers.fFlags & Modifiers::kIn_Flag
                                                          ? VariableReference::kReadWrite_RefKind
@@ -2130,8 +2129,8 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
     auto funcCall = std::make_unique<FunctionCall>(offset, returnType, &function,
                                                    std::move(arguments));
     if (fCanInline &&
-        fInliner->isSafeToInline(funcCall->function().fDefinition) &&
-        !fInliner->isLargeFunction(funcCall->function().fDefinition)) {
+        fInliner->isSafeToInline(funcCall->function().definition()) &&
+        !fInliner->isLargeFunction(funcCall->function().definition())) {
         Inliner::InlinedCall inlinedCall = fInliner->inlineCall(funcCall.get(), fSymbolTable.get(),
                                                                 fCurrentFunction);
         if (inlinedCall.fInlinedBody) {
@@ -2150,7 +2149,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
  */
 CoercionCost IRGenerator::callCost(const FunctionDeclaration& function,
                                    const std::vector<std::unique_ptr<Expression>>& arguments) {
-    if (function.fParameters.size() != arguments.size()) {
+    if (function.parameters().size() != arguments.size()) {
         return CoercionCost::Impossible();
     }
     std::vector<const Type*> types;
@@ -2704,7 +2703,7 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
         std::unique_ptr<Expression> result = convertIdentifier(
                 ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier, field));
         if (result) {
-            const Variable& v = *result->as<VariableReference>().fVariable;
+            const Variable& v = *result->as<VariableReference>().variable();
             SkASSERT(v.initialValue());
             result = std::make_unique<IntLiteral>(
                     offset, v.initialValue()->as<IntLiteral>().value(), &type);
@@ -2854,14 +2853,22 @@ void IRGenerator::cloneBuiltinVariables() {
         void cloneVariable(const String& name) {
             // If this is the *first* time we've seen this builtin, findAndInclude will return
             // the corresponding ProgramElement.
-            if (const ProgramElement* sharedDecls =
-                        fGenerator->fIntrinsics->findAndInclude(name)) {
-                SkASSERT(sharedDecls->is<GlobalVarDeclaration>());
+            if (const ProgramElement* sharedDecl = fGenerator->fIntrinsics->findAndInclude(name)) {
+                SkASSERT(sharedDecl->is<GlobalVarDeclaration>() ||
+                         sharedDecl->is<InterfaceBlock>());
 
-                // Clone the GlobalVarDeclaration ProgramElement that declares this variable
-                std::unique_ptr<ProgramElement> clonedDecls = sharedDecls->clone();
-                VarDeclaration& varDecl = *clonedDecls->as<GlobalVarDeclaration>().fDecl;
-                const Variable* sharedVar = varDecl.fVar;
+                // Clone the ProgramElement that declares this variable
+                std::unique_ptr<ProgramElement> clonedDecl = sharedDecl->clone();
+                const Variable* sharedVar = nullptr;
+                const Expression* initialValue = nullptr;
+
+                if (clonedDecl->is<GlobalVarDeclaration>()) {
+                    sharedVar = clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar;
+                    initialValue = clonedDecl->as<GlobalVarDeclaration>().fDecl->fValue.get();
+                } else {
+                    SkASSERT(clonedDecl->is<InterfaceBlock>());
+                    sharedVar = clonedDecl->as<InterfaceBlock>().fVariable;
+                }
 
                 // Now clone the Variable, and add the clone to the Program's symbol table.
                 // Any initial value expression was cloned as part of the GlobalVarDeclaration,
@@ -2870,23 +2877,27 @@ void IRGenerator::cloneBuiltinVariables() {
                         fGenerator->fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Variable>(
                                 sharedVar->fOffset, sharedVar->modifiersHandle(), sharedVar->name(),
                                 &sharedVar->type(), /*builtin=*/false, sharedVar->storage(),
-                                varDecl.fValue.get()));
+                                initialValue));
 
-                // Go back and update the VarDeclaration to point at the cloned Variable.
-                varDecl.fVar = clonedVar;
+                // Go back and update the declaring element to point at the cloned Variable.
+                if (clonedDecl->is<GlobalVarDeclaration>()) {
+                    clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar = clonedVar;
+                } else {
+                    clonedDecl->as<InterfaceBlock>().fVariable = clonedVar;
+                }
 
                 // Remember this new re-mapping...
                 fRemap.insert({sharedVar, clonedVar});
 
-                // Add the GlobalVarDeclaration to this Program
-                fNewElements.push_back(std::move(clonedDecls));
+                // Add the declaring element to this Program
+                fNewElements.push_back(std::move(clonedDecl));
             }
         }
 
         bool visitExpression(Expression& e) override {
             // Look for references to builtin variables.
-            if (e.is<VariableReference>() && e.as<VariableReference>().fVariable->isBuiltin()) {
-                const Variable* sharedVar = e.as<VariableReference>().fVariable;
+            if (e.is<VariableReference>() && e.as<VariableReference>().variable()->isBuiltin()) {
+                const Variable* sharedVar = e.as<VariableReference>().variable();
 
                 this->cloneVariable(sharedVar->name());
 
@@ -2925,8 +2936,8 @@ void IRGenerator::cloneBuiltinVariables() {
     }
 
     fProgramElements->insert(fProgramElements->begin(),
-                                std::make_move_iterator(remapper.fNewElements.begin()),
-                                std::make_move_iterator(remapper.fNewElements.end()));
+                             std::make_move_iterator(remapper.fNewElements.begin()),
+                             std::make_move_iterator(remapper.fNewElements.end()));
 }
 
 void IRGenerator::convertProgram(Program::Kind kind,

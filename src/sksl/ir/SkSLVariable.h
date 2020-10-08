@@ -35,7 +35,7 @@ public:
     };
 
     Variable(int offset, ModifiersPool::Handle modifiers, StringFragment name, const Type* type,
-             bool builtin, Storage storage, Expression* initialValue = nullptr)
+             bool builtin, Storage storage, const Expression* initialValue = nullptr)
     : INHERITED(offset, VariableData{name, type, initialValue, modifiers, /*readCount=*/0,
                                      /*writeCount=*/(int16_t) (initialValue ? 1 : 0),
                                      (int8_t) storage, builtin}) {}
@@ -46,6 +46,10 @@ public:
             --this->variableData().fWriteCount;
         }
         SkASSERT(!this->variableData().fReadCount && !this->variableData().fWriteCount);
+    }
+
+    const Type& type() const override {
+        return *this->variableData().fType;
     }
 
     const Modifiers& modifiers() const {
@@ -129,7 +133,7 @@ private:
 
     using INHERITED = Symbol;
 
-    friend struct VariableReference;
+    friend class VariableReference;
 };
 
 } // namespace SkSL
