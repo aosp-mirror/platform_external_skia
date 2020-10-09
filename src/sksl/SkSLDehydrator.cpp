@@ -45,7 +45,6 @@
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
-#include "src/sksl/ir/SkSLVarDeclarationsStatement.h"
 #include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/ir/SkSLWhileStatement.h"
 
@@ -149,13 +148,13 @@ void Dehydrator::write(const Symbol& s) {
             const FunctionDeclaration& f = s.as<FunctionDeclaration>();
             this->writeU8(Rehydrator::kFunctionDeclaration_Command);
             this->writeId(&f);
-            this->write(f.fModifiers);
+            this->write(f.modifiers());
             this->write(f.name());
-            this->writeU8(f.fParameters.size());
-            for (const Variable* p : f.fParameters) {
+            this->writeU8(f.parameters().size());
+            for (const Variable* p : f.parameters()) {
                 this->writeU16(this->symbolId(p));
             }
-            this->write(f.fReturnType);
+            this->write(f.returnType());
             break;
         }
         case Symbol::Kind::kSymbolAlias: {
@@ -217,10 +216,10 @@ void Dehydrator::write(const Symbol& s) {
             const Variable& v = s.as<Variable>();
             this->writeU8(Rehydrator::kVariable_Command);
             this->writeId(&v);
-            this->write(v.fModifiers);
+            this->write(v.modifiers());
             this->write(v.name());
             this->write(v.type());
-            this->writeU8(v.fStorage);
+            this->writeU8(v.storage());
             break;
         }
         case Symbol::Kind::kField: {
@@ -248,7 +247,6 @@ void Dehydrator::write(const SymbolTable& symbols) {
         ordered.insert(p);
     }
     for (std::pair<StringFragment, const Symbol*> p : ordered) {
-        this->write(p.first);
         bool found = false;
         for (size_t i = 0; i < symbols.fOwnedSymbols.size(); ++i) {
             if (symbols.fOwnedSymbols[i].get() == p.second) {
@@ -372,16 +370,16 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kTernary: {
                 const TernaryExpression& t = e->as<TernaryExpression>();
                 this->writeU8(Rehydrator::kTernary_Command);
-                this->write(t.fTest.get());
-                this->write(t.fIfTrue.get());
-                this->write(t.fIfFalse.get());
+                this->write(t.test().get());
+                this->write(t.ifTrue().get());
+                this->write(t.ifFalse().get());
                 break;
             }
             case Expression::Kind::kVariableReference: {
                 const VariableReference& v = e->as<VariableReference>();
                 this->writeU8(Rehydrator::kVariableReference_Command);
-                this->writeId(v.fVariable);
-                this->writeU8(v.fRefKind);
+                this->writeId(v.variable());
+                this->writeU8(v.refKind());
                 break;
             }
             case Expression::Kind::kFunctionReference:
@@ -445,10 +443,10 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kIf: {
                 const IfStatement& i = s->as<IfStatement>();
                 this->writeU8(Rehydrator::kIf_Command);
-                this->writeU8(i.fIsStatic);
-                this->write(i.fTest.get());
-                this->write(i.fIfTrue.get());
-                this->write(i.fIfFalse.get());
+                this->writeU8(i.isStatic());
+                this->write(i.test().get());
+                this->write(i.ifTrue().get());
+                this->write(i.ifFalse().get());
                 break;
             }
             case Statement::Kind::kInlineMarker: {
@@ -489,16 +487,12 @@ void Dehydrator::write(const Statement* s) {
                 const VarDeclaration& v = s->as<VarDeclaration>();
                 this->writeU8(Rehydrator::kVarDeclaration_Command);
                 this->writeU16(this->symbolId(v.fVar));
+                this->write(v.fBaseType);
                 this->writeU8(v.fSizes.size());
                 for (const std::unique_ptr<Expression>& sizeExpr : v.fSizes) {
                     this->write(sizeExpr.get());
                 }
                 this->write(v.fValue.get());
-                break;
-            }
-            case Statement::Kind::kVarDeclarations: {
-                const VarDeclarationsStatement& v = s->as<VarDeclarationsStatement>();
-                this->write(*v.fDeclaration);
                 break;
             }
             case Statement::Kind::kWhile: {
@@ -524,8 +518,8 @@ void Dehydrator::write(const ProgramElement& e) {
             for (const std::unique_ptr<const Symbol>& s : en.symbols()->fOwnedSymbols) {
                 SkASSERT(s->kind() == Symbol::Kind::kVariable);
                 Variable& v = (Variable&) *s;
-                SkASSERT(v.fInitialValue);
-                const IntLiteral& i = v.fInitialValue->as<IntLiteral>();
+                SkASSERT(v.initialValue());
+                const IntLiteral& i = v.initialValue()->as<IntLiteral>();
                 this->writeS32(i.value());
             }
             break;
@@ -551,7 +545,7 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kInterfaceBlock: {
             const InterfaceBlock& i = e.as<InterfaceBlock>();
             this->writeU8(Rehydrator::kInterfaceBlock_Command);
-            this->write(i.fVariable);
+            this->write(*i.fVariable);
             this->write(i.fTypeName);
             this->write(i.fInstanceName);
             this->writeU8(i.fSizes.size());
@@ -566,14 +560,10 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kSection:
             SkASSERT(false);
             break;
-        case ProgramElement::Kind::kVar: {
-            const VarDeclarations& v = e.as<VarDeclarations>();
+        case ProgramElement::Kind::kGlobalVar: {
+            const GlobalVarDeclaration& v = e.as<GlobalVarDeclaration>();
             this->writeU8(Rehydrator::kVarDeclarations_Command);
-            this->write(v.fBaseType);
-            this->writeU8(v.fVars.size());
-            for (const auto& var : v.fVars) {
-                this->write(var.get());
-            }
+            this->write(v.fDecl.get());
             break;
         }
     }

@@ -33,8 +33,8 @@
 
 namespace SkSL {
 
+class FunctionCall;
 struct Swizzle;
-struct FunctionCall;
 
 /**
  * Intrinsics are passed between the Compiler and the IRGenerator using IRIntrinsicMaps.
@@ -46,6 +46,14 @@ public:
     void insertOrDie(String key, std::unique_ptr<ProgramElement> element) {
         SkASSERT(fIntrinsics.find(key) == fIntrinsics.end());
         fIntrinsics[key] = Intrinsic{std::move(element), false};
+    }
+
+    const ProgramElement* find(const String& key) {
+        auto iter = fIntrinsics.find(key);
+        if (iter == fIntrinsics.end()) {
+            return fParent ? fParent->find(key) : nullptr;
+        }
+        return iter->second.fIntrinsic.get();
     }
 
     // Only returns an intrinsic that isn't already marked as included, and then marks it.
@@ -115,7 +123,6 @@ private:
      */
     void start(const Program::Settings* settings,
                std::shared_ptr<SymbolTable> baseSymbolTable,
-               std::vector<std::unique_ptr<ProgramElement>>* inherited,
                bool isBuiltinCode = false);
 
     /**
@@ -123,12 +130,17 @@ private:
      */
     void finish();
 
+    /**
+     * Relinquishes ownership of the Modifiers that have been collected so far and returns them.
+     */
+    std::unique_ptr<ModifiersPool> releaseModifiers();
+
     void pushSymbolTable();
     void popSymbolTable();
 
     void checkModifiers(int offset, const Modifiers& modifiers, int permitted);
-    std::unique_ptr<VarDeclarations> convertVarDeclarations(const ASTNode& decl,
-                                                            Variable::Storage storage);
+    std::vector<std::unique_ptr<Statement>> convertVarDeclarations(const ASTNode& decl,
+                                                                   Variable::Storage storage);
     void convertFunction(const ASTNode& f);
     std::unique_ptr<Statement> convertSingleStatement(const ASTNode& statement);
     std::unique_ptr<Statement> convertStatement(const ASTNode& statement);
@@ -224,6 +236,7 @@ private:
     bool fCanInline = true;
     // true if we are currently processing one of the built-in SkSL include files
     bool fIsBuiltinCode;
+    std::unique_ptr<ModifiersPool> fModifiers;
 
     friend class AutoSymbolTable;
     friend class AutoLoopLevel;

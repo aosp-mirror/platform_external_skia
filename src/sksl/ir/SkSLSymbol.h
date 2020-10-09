@@ -39,13 +39,22 @@ public:
     Symbol(int offset, const FieldData& data)
     : INHERITED(offset, (int) Kind::kField, data) {}
 
+    Symbol(int offset, const FunctionDeclarationData& data)
+    : INHERITED(offset, (int) Kind::kFunctionDeclaration, data) {}
+
     Symbol(int offset, const SymbolAliasData& data)
     : INHERITED(offset, (int) Kind::kSymbolAlias, data) {}
 
-    Symbol(const Symbol&) = default;
+    Symbol(int offset, const VariableData& data)
+    : INHERITED(offset, (int) Kind::kVariable, data) {}
+
     Symbol& operator=(const Symbol&) = default;
 
     ~Symbol() override {}
+
+    virtual const Type& type() const {
+        return *this->symbolData().fType;
+    }
 
     Kind kind() const {
         return (Kind) fKind;

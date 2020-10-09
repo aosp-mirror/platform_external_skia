@@ -234,23 +234,27 @@ private:
 
     std::shared_ptr<SymbolTable> fGpuSymbolTable;
     std::unique_ptr<IRIntrinsicMap> fGPUIntrinsics;
+
     std::shared_ptr<SymbolTable> fInterpreterSymbolTable;
     std::unique_ptr<IRIntrinsicMap> fInterpreterIntrinsics;
 
-    std::vector<std::unique_ptr<ProgramElement>> fVertexInclude;
     std::shared_ptr<SymbolTable> fVertexSymbolTable;
+    std::unique_ptr<IRIntrinsicMap> fVertexIntrinsics;
 
     std::shared_ptr<SymbolTable> fFragmentSymbolTable;
     std::unique_ptr<IRIntrinsicMap> fFragmentIntrinsics;
 
-    std::vector<std::unique_ptr<ProgramElement>> fGeometryInclude;
     std::shared_ptr<SymbolTable> fGeometrySymbolTable;
+    std::unique_ptr<IRIntrinsicMap> fGeometryIntrinsics;
 
     std::shared_ptr<SymbolTable> fPipelineSymbolTable;
     std::unique_ptr<IRIntrinsicMap> fPipelineIntrinsics;
 
     std::shared_ptr<SymbolTable> fFPSymbolTable;
     std::unique_ptr<IRIntrinsicMap> fFPIntrinsics;
+
+    // holds ModifiersPools belonging to the core includes for lifetime purposes
+    std::vector<std::unique_ptr<ModifiersPool>> fModifiers;
 
     Inliner fInliner;
     std::unique_ptr<IRGenerator> fIRGenerator;

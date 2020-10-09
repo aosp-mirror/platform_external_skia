@@ -35,7 +35,6 @@
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
-#include "src/sksl/ir/SkSLVarDeclarationsStatement.h"
 #include "src/sksl/ir/SkSLWhileStatement.h"
 
 // Expressions
@@ -66,9 +65,9 @@ namespace {
 
 static bool is_sample_call_to_fp(const FunctionCall& fc, const Variable& fp) {
     const FunctionDeclaration& f = fc.function();
-    return f.fBuiltin && f.name() == "sample" && fc.arguments().size() >= 1 &&
+    return f.isBuiltin() && f.name() == "sample" && fc.arguments().size() >= 1 &&
            fc.arguments()[0]->is<VariableReference>() &&
-           fc.arguments()[0]->as<VariableReference>().fVariable == &fp;
+           fc.arguments()[0]->as<VariableReference>().variable() == &fp;
 }
 
 // Visitor that determines the merged SampleUsage for a given child 'fp' in the program.
@@ -140,7 +139,7 @@ public:
     bool visitExpression(const Expression& e) override {
         if (e.is<VariableReference>()) {
             const VariableReference& var = e.as<VariableReference>();
-            return var.fVariable->fModifiers.fLayout.fBuiltin == fBuiltin;
+            return var.variable()->modifiers().fLayout.fBuiltin == fBuiltin;
         }
         return INHERITED::visitExpression(e);
     }
@@ -194,9 +193,9 @@ public:
     bool visitExpression(const Expression& e) override {
         if (e.is<VariableReference>()) {
             const VariableReference& ref = e.as<VariableReference>();
-            if (ref.fVariable == fVar && (ref.fRefKind == VariableReference::kWrite_RefKind ||
-                                          ref.fRefKind == VariableReference::kReadWrite_RefKind ||
-                                          ref.fRefKind == VariableReference::kPointer_RefKind)) {
+            if (ref.variable() == fVar && (ref.refKind() == VariableReference::kWrite_RefKind ||
+                                           ref.refKind() == VariableReference::kReadWrite_RefKind ||
+                                           ref.refKind() == VariableReference::kPointer_RefKind)) {
                 return true;
             }
         }
@@ -240,9 +239,9 @@ public:
         switch (expr.kind()) {
             case Expression::Kind::kVariableReference: {
                 VariableReference& varRef = expr.as<VariableReference>();
-                const Variable* var = varRef.fVariable;
-                if (var->fModifiers.fFlags & (Modifiers::kConst_Flag | Modifiers::kUniform_Flag |
-                                              Modifiers::kVarying_Flag)) {
+                const Variable* var = varRef.variable();
+                if (var->modifiers().fFlags & (Modifiers::kConst_Flag | Modifiers::kUniform_Flag |
+                                               Modifiers::kVarying_Flag)) {
                     fErrors->error(expr.fOffset,
                                    "cannot modify immutable variable '" + var->name() + "'");
                 } else if (fAssignableVar) {
@@ -409,8 +408,8 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitExpression(EXPR e) {
 
         case Expression::Kind::kTernary: {
             auto& t = e.template as<TernaryExpression>();
-            return this->visitExpression(*t.fTest) || this->visitExpression(*t.fIfTrue) ||
-                   this->visitExpression(*t.fIfFalse);
+            return this->visitExpression(*t.test()) || this->visitExpression(*t.ifTrue()) ||
+                   this->visitExpression(*t.ifFalse());
         }
         default:
             SkUNREACHABLE;
@@ -452,9 +451,9 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
         }
         case Statement::Kind::kIf: {
             auto& i = s.template as<IfStatement>();
-            return this->visitExpression(*i.fTest) ||
-                   this->visitStatement(*i.fIfTrue) ||
-                   (i.fIfFalse && this->visitStatement(*i.fIfFalse));
+            return this->visitExpression(*i.test()) ||
+                   this->visitStatement(*i.ifTrue()) ||
+                   (i.ifFalse() && this->visitStatement(*i.ifFalse()));
         }
         case Statement::Kind::kReturn: {
             auto& r = s.template as<ReturnStatement>();
@@ -486,10 +485,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
             }
             return v.fValue && this->visitExpression(*v.fValue);
         }
-        case Statement::Kind::kVarDeclarations:
-            return this->visitProgramElement(
-                    *s.template as<VarDeclarationsStatement>().fDeclaration);
-
         case Statement::Kind::kWhile: {
             auto& w = s.template as<WhileStatement>();
             return this->visitExpression(*w.fTest) || this->visitStatement(*w.fStatement);
@@ -520,11 +515,9 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitProgramElement(ELEM pe) {
             }
             return false;
 
-        case ProgramElement::Kind::kVar:
-            for (auto& v : pe.template as<VarDeclarations>().fVars) {
-                if (this->visitStatement(*v)) {
-                    return true;
-                }
+        case ProgramElement::Kind::kGlobalVar:
+            if (this->visitStatement(*pe.template as<GlobalVarDeclaration>().fDecl)) {
+                return true;
             }
             return false;
 
