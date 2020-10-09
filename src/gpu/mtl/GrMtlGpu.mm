@@ -183,7 +183,7 @@ void GrMtlGpu::destroyResources() {
 }
 
 GrOpsRenderPass* GrMtlGpu::getOpsRenderPass(
-            GrRenderTarget* renderTarget, GrStencilAttachment*,
+            GrRenderTarget* renderTarget, GrAttachment*,
             GrSurfaceOrigin origin, const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
             const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
@@ -497,7 +497,7 @@ bool GrMtlGpu::clearTexture(GrMtlTexture* tex, size_t bpp, uint32_t levelMask) {
     return true;
 }
 
-GrStencilAttachment* GrMtlGpu::createStencilAttachmentForRenderTarget(
+sk_sp<GrAttachment> GrMtlGpu::makeStencilAttachmentForRenderTarget(
         const GrRenderTarget* rt, SkISize dimensions, int numStencilSamples) {
     SkASSERT(numStencilSamples == rt->numSamples());
     SkASSERT(dimensions.width() >= rt->width());
@@ -507,12 +507,8 @@ GrStencilAttachment* GrMtlGpu::createStencilAttachmentForRenderTarget(
 
     MTLPixelFormat sFmt = this->mtlCaps().preferredStencilFormat();
 
-    GrMtlStencilAttachment* stencil(GrMtlStencilAttachment::Create(this,
-                                                                   dimensions,
-                                                                   samples,
-                                                                   sFmt));
     fStats.incStencilAttachmentCreates();
-    return stencil;
+    return GrMtlAttachment::GrMtlAttachment::MakeStencil(this, dimensions, samples, sFmt);
 }
 
 sk_sp<GrTexture> GrMtlGpu::onCreateTexture(SkISize dimensions,
@@ -1105,9 +1101,13 @@ bool GrMtlGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
 
 GrBackendRenderTarget GrMtlGpu::createTestingOnlyBackendRenderTarget(SkISize dimensions,
                                                                      GrColorType ct,
-                                                                     int sampleCnt) {
+                                                                     int sampleCnt,
+                                                                     GrProtected isProtected) {
     if (dimensions.width()  > this->caps()->maxRenderTargetSize() ||
         dimensions.height() > this->caps()->maxRenderTargetSize()) {
+        return {};
+    }
+    if (isProtected == GrProtected::kYes) {
         return {};
     }
 
