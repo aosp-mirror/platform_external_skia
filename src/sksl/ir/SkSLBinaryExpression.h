@@ -24,7 +24,7 @@ static inline bool check_ref(const Expression& expr) {
         case Expression::Kind::kExternalValue:
             return true;
         case Expression::Kind::kFieldAccess:
-            return check_ref(*expr.as<FieldAccess>().fBase);
+            return check_ref(*expr.as<FieldAccess>().base());
         case Expression::Kind::kIndex:
             return check_ref(*expr.as<IndexExpression>().base());
         case Expression::Kind::kSwizzle:
@@ -35,8 +35,8 @@ static inline bool check_ref(const Expression& expr) {
         }
         case Expression::Kind::kVariableReference: {
             const VariableReference& ref = expr.as<VariableReference>();
-            return ref.refKind() == VariableReference::kWrite_RefKind ||
-                   ref.refKind() == VariableReference::kReadWrite_RefKind;
+            return ref.refKind() == VariableReference::RefKind::kWrite ||
+                   ref.refKind() == VariableReference::RefKind::kReadWrite;
         }
         default:
             return false;

@@ -207,8 +207,10 @@ Compiler::Compiler(Flags flags)
     StringFragment skCapsName("sk_Caps");
     fRootSymbolTable->add(std::make_unique<Variable>(/*offset=*/-1,
                                                      fIRGenerator->fModifiers->handle(Modifiers()),
-                                                     skCapsName, fContext->fSkCaps_Type.get(),
-                                                     /*builtin=*/false, Variable::kGlobal_Storage));
+                                                     skCapsName,
+                                                     fContext->fSkCaps_Type.get(),
+                                                     /*builtin=*/false,
+                                                     Variable::Storage::kGlobal));
 
     fRootModule = {fRootSymbolTable, /*fIntrinsics=*/nullptr};
 
@@ -350,7 +352,7 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
     switch (lvalue->kind()) {
         case Expression::Kind::kVariableReference: {
             const Variable& var = *lvalue->as<VariableReference>().variable();
-            if (var.storage() == Variable::kLocal_Storage) {
+            if (var.storage() == Variable::Storage::kLocal) {
                 definitions->set(&var, expr);
             }
             break;
@@ -374,7 +376,7 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
             break;
         case Expression::Kind::kFieldAccess:
             // see comments in Swizzle
-            this->addDefinition(lvalue->as<FieldAccess>().fBase.get(),
+            this->addDefinition(lvalue->as<FieldAccess>().base().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
             break;
@@ -430,10 +432,10 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
             }
             case Expression::Kind::kPrefix: {
                 const PrefixExpression* p = &expr->as<PrefixExpression>();
-                if (p->fOperator == Token::Kind::TK_MINUSMINUS ||
-                    p->fOperator == Token::Kind::TK_PLUSPLUS) {
+                if (p->getOperator() == Token::Kind::TK_MINUSMINUS ||
+                    p->getOperator() == Token::Kind::TK_PLUSPLUS) {
                     this->addDefinition(
-                                  p->fOperand.get(),
+                                  p->operand().get(),
                                   (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                   definitions);
                 }
@@ -441,10 +443,10 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
             }
             case Expression::Kind::kPostfix: {
                 const PostfixExpression* p = &expr->as<PostfixExpression>();
-                if (p->fOperator == Token::Kind::TK_MINUSMINUS ||
-                    p->fOperator == Token::Kind::TK_PLUSPLUS) {
+                if (p->getOperator() == Token::Kind::TK_MINUSMINUS ||
+                    p->getOperator() == Token::Kind::TK_PLUSPLUS) {
                     this->addDefinition(
-                                  p->fOperand.get(),
+                                  p->operand().get(),
                                   (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                   definitions);
                 }
@@ -452,7 +454,7 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
             }
             case Expression::Kind::kVariableReference: {
                 const VariableReference* v = &expr->as<VariableReference>();
-                if (v->refKind() != VariableReference::kRead_RefKind) {
+                if (v->refKind() != VariableReference::RefKind::kRead) {
                     this->addDefinition(
                                   v,
                                   (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
@@ -540,7 +542,7 @@ static bool is_dead(const Expression& lvalue) {
         case Expression::Kind::kSwizzle:
             return is_dead(*lvalue.as<Swizzle>().fBase);
         case Expression::Kind::kFieldAccess:
-            return is_dead(*lvalue.as<FieldAccess>().fBase);
+            return is_dead(*lvalue.as<FieldAccess>().base());
         case Expression::Kind::kIndex: {
             const IndexExpression& idx = lvalue.as<IndexExpression>();
             return is_dead(*idx.base()) &&
@@ -785,11 +787,11 @@ static void vectorize_right(BasicBlock* b,
 static void clear_write(Expression& expr) {
     switch (expr.kind()) {
         case Expression::Kind::kVariableReference: {
-            expr.as<VariableReference>().setRefKind(VariableReference::kRead_RefKind);
+            expr.as<VariableReference>().setRefKind(VariableReference::RefKind::kRead);
             break;
         }
         case Expression::Kind::kFieldAccess:
-            clear_write(*expr.as<FieldAccess>().fBase);
+            clear_write(*expr.as<FieldAccess>().base());
             break;
         case Expression::Kind::kSwizzle:
             clear_write(*expr.as<Swizzle>().fBase);
@@ -829,9 +831,9 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
         case Expression::Kind::kVariableReference: {
             const VariableReference& ref = expr->as<VariableReference>();
             const Variable* var = ref.variable();
-            if (ref.refKind() != VariableReference::kWrite_RefKind &&
-                ref.refKind() != VariableReference::kPointer_RefKind &&
-                var->storage() == Variable::kLocal_Storage && !definitions[var] &&
+            if (ref.refKind() != VariableReference::RefKind::kWrite &&
+                ref.refKind() != VariableReference::RefKind::kPointer &&
+                var->storage() == Variable::Storage::kLocal && !definitions[var] &&
                 (*undefinedVariables).find(var) == (*undefinedVariables).end()) {
                 (*undefinedVariables).insert(var);
                 this->error(expr->fOffset,

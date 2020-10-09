@@ -218,7 +218,7 @@ std::unique_ptr<ByteCodeFunction> ByteCodeGenerator::writeFunction(const Functio
 static int expression_as_builtin(const Expression& e) {
     if (e.is<VariableReference>()) {
         const Variable& var(*e.as<VariableReference>().variable());
-        if (var.storage() == Variable::kGlobal_Storage) {
+        if (var.storage() == Variable::Storage::kGlobal) {
             return var.modifiers().fLayout.fBuiltin;
         }
     }
@@ -424,7 +424,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
     // given that we seldom have more than a couple of variables, linear search is probably the most
     // efficient way to handle lookups
     switch (var.storage()) {
-        case Variable::kLocal_Storage: {
+        case Variable::Storage::kLocal: {
             for (int i = fLocals.size() - 1; i >= 0; --i) {
                 if (fLocals[i] == &var) {
                     SkASSERT(fParameterCount + i <= 255);
@@ -439,7 +439,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             SkASSERT(result <= 255);
             return { result, Storage::kLocal };
         }
-        case Variable::kParameter_Storage: {
+        case Variable::Storage::kParameter: {
             int offset = 0;
             for (const auto& p : fFunction->fDeclaration.parameters()) {
                 if (p == &var) {
@@ -451,7 +451,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             SkASSERT(false);
             return Location::MakeInvalid();
         }
-        case Variable::kGlobal_Storage: {
+        case Variable::Storage::kGlobal: {
             if (var.type() == *fContext.fFragmentProcessor_Type) {
                 int offset = 0;
                 for (const auto& e : fProgram.elements()) {
@@ -512,10 +512,10 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Expression& exp
     switch (expr.kind()) {
         case Expression::Kind::kFieldAccess: {
             const FieldAccess& f = expr.as<FieldAccess>();
-            Location baseLoc = this->getLocation(*f.fBase);
+            Location baseLoc = this->getLocation(*f.base());
             int offset = 0;
-            for (int i = 0; i < f.fFieldIndex; ++i) {
-                offset += SlotCount(*f.fBase->type().fields()[i].fType);
+            for (int i = 0; i < f.fieldIndex(); ++i) {
+                offset += SlotCount(*f.base()->type().fields()[i].fType);
             }
             if (baseLoc.isOnStack()) {
                 if (offset != 0) {
@@ -964,16 +964,16 @@ void ByteCodeGenerator::writeExternalFunctionCall(const ExternalFunctionCall& f)
     this->write8(argumentCount);
     this->write8(SlotCount(f.type()));
     int index = fOutput->fExternalValues.size();
-    fOutput->fExternalValues.push_back(f.function());
+    fOutput->fExternalValues.push_back(&f.function());
     SkASSERT(index <= 255);
     this->write8(index);
 }
 
 void ByteCodeGenerator::writeExternalValue(const ExternalValueReference& e) {
-    int count = SlotCount(e.fValue->type());
+    int count = SlotCount(e.value().type());
     this->write(ByteCodeInstruction::kReadExternal, count);
     int index = fOutput->fExternalValues.size();
-    fOutput->fExternalValues.push_back(e.fValue);
+    fOutput->fExternalValues.push_back(&e.value());
     SkASSERT(index <= 255);
     this->write8(index);
 }
@@ -1322,16 +1322,16 @@ void ByteCodeGenerator::writeNullLiteral(const NullLiteral& n) {
 }
 
 bool ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p, bool discard) {
-    switch (p.fOperator) {
+    switch (p.getOperator()) {
         case Token::Kind::TK_PLUSPLUS: // fall through
         case Token::Kind::TK_MINUSMINUS: {
-            SkASSERT(SlotCount(p.fOperand->type()) == 1);
-            std::unique_ptr<LValue> lvalue = this->getLValue(*p.fOperand);
+            SkASSERT(SlotCount(p.operand()->type()) == 1);
+            std::unique_ptr<LValue> lvalue = this->getLValue(*p.operand());
             lvalue->load();
             this->write(ByteCodeInstruction::kPushImmediate);
             this->write32(type_category(p.type()) == TypeCategory::kFloat ? float_to_bits(1.0f)
                                                                           : 1);
-            if (p.fOperator == Token::Kind::TK_PLUSPLUS) {
+            if (p.getOperator() == Token::Kind::TK_PLUSPLUS) {
                 this->writeTypedInstruction(p.type(),
                                             ByteCodeInstruction::kAddI,
                                             ByteCodeInstruction::kAddI,
@@ -1349,22 +1349,23 @@ bool ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p, bool di
             break;
         }
         case Token::Kind::TK_MINUS: {
-            this->writeExpression(*p.fOperand);
+            this->writeExpression(*p.operand());
             this->writeTypedInstruction(p.type(),
                                         ByteCodeInstruction::kNegateI,
                                         ByteCodeInstruction::kNegateI,
                                         ByteCodeInstruction::kNegateF,
-                                        SlotCount(p.fOperand->type()));
+                                        SlotCount(p.operand()->type()));
             break;
         }
         case Token::Kind::TK_LOGICALNOT:
         case Token::Kind::TK_BITWISENOT: {
-            SkASSERT(SlotCount(p.fOperand->type()) == 1);
-            SkDEBUGCODE(TypeCategory tc = type_category(p.fOperand->type()));
-            SkASSERT((p.fOperator == Token::Kind::TK_LOGICALNOT && tc == TypeCategory::kBool) ||
-                     (p.fOperator == Token::Kind::TK_BITWISENOT && (tc == TypeCategory::kSigned ||
-                                                                 tc == TypeCategory::kUnsigned)));
-            this->writeExpression(*p.fOperand);
+            SkASSERT(SlotCount(p.operand()->type()) == 1);
+            SkDEBUGCODE(TypeCategory tc = type_category(p.operand()->type()));
+            SkASSERT((p.getOperator() == Token::Kind::TK_LOGICALNOT &&
+                      tc == TypeCategory::kBool) ||
+                     (p.getOperator() == Token::Kind::TK_BITWISENOT &&
+                      (tc == TypeCategory::kSigned || tc == TypeCategory::kUnsigned)));
+            this->writeExpression(*p.operand());
             this->write(ByteCodeInstruction::kNotB, 1);
             break;
         }
@@ -1375,11 +1376,11 @@ bool ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p, bool di
 }
 
 bool ByteCodeGenerator::writePostfixExpression(const PostfixExpression& p, bool discard) {
-    switch (p.fOperator) {
+    switch (p.getOperator()) {
         case Token::Kind::TK_PLUSPLUS: // fall through
         case Token::Kind::TK_MINUSMINUS: {
-            SkASSERT(SlotCount(p.fOperand->type()) == 1);
-            std::unique_ptr<LValue> lvalue = this->getLValue(*p.fOperand);
+            SkASSERT(SlotCount(p.operand()->type()) == 1);
+            std::unique_ptr<LValue> lvalue = this->getLValue(*p.operand());
             lvalue->load();
             // If we're not supposed to discard the result, then make a copy *before* the +/-
             if (!discard) {
@@ -1388,7 +1389,7 @@ bool ByteCodeGenerator::writePostfixExpression(const PostfixExpression& p, bool 
             this->write(ByteCodeInstruction::kPushImmediate);
             this->write32(type_category(p.type()) == TypeCategory::kFloat ? float_to_bits(1.0f)
                                                                           : 1);
-            if (p.fOperator == Token::Kind::TK_PLUSPLUS) {
+            if (p.getOperator() == Token::Kind::TK_PLUSPLUS) {
                 this->writeTypedInstruction(p.type(),
                                             ByteCodeInstruction::kAddI,
                                             ByteCodeInstruction::kAddI,
@@ -1623,11 +1624,11 @@ private:
 std::unique_ptr<ByteCodeGenerator::LValue> ByteCodeGenerator::getLValue(const Expression& e) {
     switch (e.kind()) {
         case Expression::Kind::kExternalValue: {
-            const ExternalValue* value = e.as<ExternalValueReference>().fValue;
+            const ExternalValue& value = e.as<ExternalValueReference>().value();
             int index = fOutput->fExternalValues.size();
-            fOutput->fExternalValues.push_back(value);
+            fOutput->fExternalValues.push_back(&value);
             SkASSERT(index <= 255);
-            return std::unique_ptr<LValue>(new ByteCodeExternalValueLValue(this, *value, index));
+            return std::unique_ptr<LValue>(new ByteCodeExternalValueLValue(this, value, index));
         }
         case Expression::Kind::kFieldAccess:
         case Expression::Kind::kIndex:
