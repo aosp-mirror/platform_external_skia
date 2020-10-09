@@ -514,11 +514,11 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                     arguments.size() == 2 &&
                     arguments[1]->kind() == Expression::Kind::kPrefix) {
                     const PrefixExpression& p = (PrefixExpression&) *arguments[1];
-                    if (p.fOperator == Token::Kind::TK_MINUS) {
+                    if (p.getOperator() == Token::Kind::TK_MINUS) {
                         this->write("atan(");
                         this->writeExpression(*arguments[0], kSequence_Precedence);
                         this->write(", -1.0 * ");
-                        this->writeExpression(*p.fOperand, kMultiplicative_Precedence);
+                        this->writeExpression(*p.operand(), kMultiplicative_Precedence);
                         this->write(")");
                         return;
                     }
@@ -838,22 +838,22 @@ void GLSLCodeGenerator::writeIndexExpression(const IndexExpression& expr) {
 }
 
 bool is_sk_position(const FieldAccess& f) {
-    return "sk_Position" == f.fBase->type().fields()[f.fFieldIndex].fName;
+    return "sk_Position" == f.base()->type().fields()[f.fieldIndex()].fName;
 }
 
 void GLSLCodeGenerator::writeFieldAccess(const FieldAccess& f) {
-    if (f.fOwnerKind == FieldAccess::kDefault_OwnerKind) {
-        this->writeExpression(*f.fBase, kPostfix_Precedence);
+    if (f.ownerKind() == FieldAccess::OwnerKind::kDefault) {
+        this->writeExpression(*f.base(), kPostfix_Precedence);
         this->write(".");
     }
-    const Type& baseType = f.fBase->type();
-    StringFragment name = baseType.fields()[f.fFieldIndex].fName;
+    const Type& baseType = f.base()->type();
+    StringFragment name = baseType.fields()[f.fieldIndex()].fName;
     if (name == "sk_Position") {
         this->write("gl_Position");
     } else if (name == "sk_PointSize") {
         this->write("gl_PointSize");
     } else {
-        this->write(baseType.fields()[f.fFieldIndex].fName);
+        this->write(baseType.fields()[f.fieldIndex()].fName);
     }
 }
 
@@ -992,8 +992,8 @@ void GLSLCodeGenerator::writePrefixExpression(const PrefixExpression& p,
     if (kPrefix_Precedence >= parentPrecedence) {
         this->write("(");
     }
-    this->write(Compiler::OperatorName(p.fOperator));
-    this->writeExpression(*p.fOperand, kPrefix_Precedence);
+    this->write(Compiler::OperatorName(p.getOperator()));
+    this->writeExpression(*p.operand(), kPrefix_Precedence);
     if (kPrefix_Precedence >= parentPrecedence) {
         this->write(")");
     }
@@ -1004,8 +1004,8 @@ void GLSLCodeGenerator::writePostfixExpression(const PostfixExpression& p,
     if (kPostfix_Precedence >= parentPrecedence) {
         this->write("(");
     }
-    this->writeExpression(*p.fOperand, kPostfix_Precedence);
-    this->write(Compiler::OperatorName(p.fOperator));
+    this->writeExpression(*p.operand(), kPostfix_Precedence);
+    this->write(Compiler::OperatorName(p.getOperator()));
     if (kPostfix_Precedence >= parentPrecedence) {
         this->write(")");
     }

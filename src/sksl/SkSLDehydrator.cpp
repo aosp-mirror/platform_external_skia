@@ -220,7 +220,7 @@ void Dehydrator::write(const Symbol& s) {
             this->write(v.modifiers());
             this->write(v.name());
             this->write(v.type());
-            this->writeU8(v.storage());
+            this->writeU8((int8_t) v.storage());
             break;
         }
         case Symbol::Kind::kField: {
@@ -296,9 +296,9 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kFieldAccess: {
                 const FieldAccess& f = e->as<FieldAccess>();
                 this->writeCommand(Rehydrator::kFieldAccess_Command);
-                this->write(f.fBase.get());
-                this->writeU8(f.fFieldIndex);
-                this->writeU8(f.fOwnerKind);
+                this->write(f.base().get());
+                this->writeU8(f.fieldIndex());
+                this->writeU8((int8_t) f.ownerKind());
                 break;
             }
             case Expression::Kind::kFloatLiteral: {
@@ -339,15 +339,15 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kPostfix: {
                 const PostfixExpression& p = e->as<PostfixExpression>();
                 this->writeCommand(Rehydrator::kPostfix_Command);
-                this->writeU8((int) p.fOperator);
-                this->write(p.fOperand.get());
+                this->writeU8((int) p.getOperator());
+                this->write(p.operand().get());
                 break;
             }
             case Expression::Kind::kPrefix: {
                 const PrefixExpression& p = e->as<PrefixExpression>();
                 this->writeCommand(Rehydrator::kPrefix_Command);
-                this->writeU8((int) p.fOperator);
-                this->write(p.fOperand.get());
+                this->writeU8((int) p.getOperator());
+                this->write(p.operand().get());
                 break;
             }
             case Expression::Kind::kSetting: {
@@ -379,7 +379,7 @@ void Dehydrator::write(const Expression* e) {
                 const VariableReference& v = e->as<VariableReference>();
                 this->writeCommand(Rehydrator::kVariableReference_Command);
                 this->writeId(v.variable());
-                this->writeU8(v.refKind());
+                this->writeU8((int8_t) v.refKind());
                 break;
             }
             case Expression::Kind::kFunctionReference:
