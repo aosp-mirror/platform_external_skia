@@ -1842,6 +1842,7 @@ cc_test {
         "tests/SkRemoteGlyphCacheTest.cpp",
         "tests/SkResourceCacheTest.cpp",
         "tests/SkRuntimeEffectTest.cpp",
+        "tests/SkSLCross.cpp",
         "tests/SkSLGLSLTestbed.cpp",
         "tests/SkSLInterpreterTest.cpp",
         "tests/SkSLMemoryLayoutTest.cpp",
