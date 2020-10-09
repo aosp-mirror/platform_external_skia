@@ -159,14 +159,17 @@ static void fill_caps(const SkSL::ShaderCapsClass& caps,
     CAP(canUseAnyFunctionInShader);
     CAP(floatIs32Bits);
     CAP(integerSupport);
+    CAP(builtinFMASupport);
+    CAP(builtinDeterminantSupport);
 #undef CAP
 }
 
 void IRGenerator::start(const Program::Settings* settings,
-                        std::shared_ptr<SymbolTable> baseSymbolTable,
+                        const ParsedModule& base,
                         bool isBuiltinCode) {
     fSettings = settings;
-    fSymbolTable = std::move(baseSymbolTable);
+    fSymbolTable = base.fSymbols;
+    fIntrinsics = base.fIntrinsics.get();
     fIsBuiltinCode = isBuiltinCode;
     fCapsMap.clear();
     if (settings->fCaps) {
@@ -614,7 +617,7 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     }
     auto whileStmt = std::make_unique<WhileStatement>(w.fOffset, std::move(test),
                                                       std::move(statement));
-    fInliner->ensureScopedBlocks(whileStmt->fStatement.get(), whileStmt.get());
+    fInliner->ensureScopedBlocks(whileStmt->statement().get(), whileStmt.get());
     return std::move(whileStmt);
 }
 

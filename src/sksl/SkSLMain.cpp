@@ -77,6 +77,10 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                     static auto s_addAndTrueCaps = Factory::AddAndTrueToLoopCondition();
                     settings->fCaps = s_addAndTrueCaps.get();
                 }
+                if (settingsText.consumeSuffix(" BlendModesFailRandomlyForAllZeroVec")) {
+                    static auto s_blendZeroCaps = Factory::BlendModesFailRandomlyForAllZeroVec();
+                    settings->fCaps = s_blendZeroCaps.get();
+                }
                 if (settingsText.consumeSuffix(" CannotUseFractForNegativeValues")) {
                     static auto s_negativeFractCaps = Factory::CannotUseFractForNegativeValues();
                     settings->fCaps = s_negativeFractCaps.get();
@@ -120,6 +124,10 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                 if (settingsText.consumeSuffix(" IncompleteShortIntPrecision")) {
                     static auto s_incompleteShortIntCaps = Factory::IncompleteShortIntPrecision();
                     settings->fCaps = s_incompleteShortIntCaps.get();
+                }
+                if (settingsText.consumeSuffix(" MustGuardDivisionEvenAfterExplicitZeroCheck")) {
+                    static auto s_div0Caps = Factory::MustGuardDivisionEvenAfterExplicitZeroCheck();
+                    settings->fCaps = s_div0Caps.get();
                 }
                 if (settingsText.consumeSuffix(" MustForceNegatedAtanParamToFloat")) {
                     static auto s_negativeAtanCaps = Factory::MustForceNegatedAtanParamToFloat();
@@ -322,9 +330,8 @@ int main(int argc, const char** argv) {
             printf("error writing '%s'\n", argv[2]);
             exit(4);
         }
-        std::shared_ptr<SkSL::SymbolTable> symbols;
-        std::vector<std::unique_ptr<SkSL::ProgramElement>> elements;
-        compiler.processIncludeFile(kind, argv[1], nullptr, &elements, &symbols);
+        auto [symbols, elements] =
+                compiler.loadModule(kind, SkSL::Compiler::MakeModulePath(argv[1]), nullptr);
         SkSL::Dehydrator dehydrator;
         dehydrator.write(*symbols);
         dehydrator.write(elements);
