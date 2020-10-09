@@ -52,7 +52,6 @@
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
-#include "src/sksl/ir/SkSLVarDeclarationsStatement.h"
 #include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/ir/SkSLWhileStatement.h"
@@ -128,7 +127,8 @@ IRGenerator::IRGenerator(const Context* context, Inliner* inliner,
         , fSymbolTable(symbolTable)
         , fLoopLevel(0)
         , fSwitchLevel(0)
-        , fErrors(errorReporter) {
+        , fErrors(errorReporter)
+        , fModifiers(new ModifiersPool()) {
     SkASSERT(fInliner);
 }
 
@@ -164,7 +164,6 @@ static void fill_caps(const SkSL::ShaderCapsClass& caps,
 
 void IRGenerator::start(const Program::Settings* settings,
                         std::shared_ptr<SymbolTable> baseSymbolTable,
-                        std::vector<std::unique_ptr<ProgramElement>>* inherited,
                         bool isBuiltinCode) {
     fSettings = settings;
     fSymbolTable = std::move(baseSymbolTable);
@@ -182,19 +181,12 @@ void IRGenerator::start(const Program::Settings* settings,
     fSkPerVertex = nullptr;
     fRTAdjust = nullptr;
     fRTAdjustInterfaceBlock = nullptr;
-    if (inherited) {
-        for (const auto& e : *inherited) {
-            if (e->kind() == ProgramElement::Kind::kInterfaceBlock) {
-                InterfaceBlock& intf = e->as<InterfaceBlock>();
-                if (intf.fVariable.name() == Compiler::PERVERTEX_NAME) {
-                    SkASSERT(!fSkPerVertex);
-                    fSkPerVertex = &intf.fVariable;
-                }
-            }
-        }
-    }
     if (fIntrinsics) {
         fIntrinsics->resetAlreadyIncluded();
+        if (const ProgramElement* perVertexDecl = fIntrinsics->find(Compiler::PERVERTEX_NAME)) {
+            SkASSERT(perVertexDecl->is<InterfaceBlock>());
+            fSkPerVertex = perVertexDecl->as<InterfaceBlock>().fVariable;
+        }
     }
 }
 
@@ -212,6 +204,14 @@ std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragm
 void IRGenerator::finish() {
     this->popSymbolTable();
     fSettings = nullptr;
+    // releaseModifiers should have been called before now
+    SkASSERT(fModifiers->empty());
+}
+
+std::unique_ptr<ModifiersPool> IRGenerator::releaseModifiers() {
+    std::unique_ptr<ModifiersPool> result = std::move(fModifiers);
+    fModifiers = std::make_unique<ModifiersPool>();
+    return result;
 }
 
 std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& statement) {
@@ -246,7 +246,7 @@ std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& st
                 Expression& expr = *result->as<ExpressionStatement>().expression();
                 if (expr.kind() == Expression::Kind::kFunctionCall) {
                     FunctionCall& fc = expr.as<FunctionCall>();
-                    if (fc.function().fBuiltin && fc.function().name() == "EmitVertex") {
+                    if (fc.function().isBuiltin() && fc.function().name() == "EmitVertex") {
                         std::vector<std::unique_ptr<Statement>> statements;
                         statements.push_back(getNormalizeSkPositionCode());
                         statements.push_back(std::move(result));
@@ -293,23 +293,28 @@ std::unique_ptr<Block> IRGenerator::convertBlock(const ASTNode& block) {
 
 std::unique_ptr<Statement> IRGenerator::convertVarDeclarationStatement(const ASTNode& s) {
     SkASSERT(s.fKind == ASTNode::Kind::kVarDeclarations);
-    auto decl = this->convertVarDeclarations(s, Variable::kLocal_Storage);
-    if (!decl) {
+    auto decls = this->convertVarDeclarations(s, Variable::kLocal_Storage);
+    if (decls.empty()) {
         return nullptr;
     }
-    return std::unique_ptr<Statement>(new VarDeclarationsStatement(std::move(decl)));
+    if (decls.size() == 1) {
+        return std::move(decls.front());
+    } else {
+        return std::make_unique<Block>(s.fOffset, std::move(decls), /*symbols=*/nullptr,
+                                       /*isScope=*/false);
+    }
 }
 
-std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNode& decls,
-                                                                     Variable::Storage storage) {
+std::vector<std::unique_ptr<Statement>> IRGenerator::convertVarDeclarations(
+        const ASTNode& decls, Variable::Storage storage) {
     SkASSERT(decls.fKind == ASTNode::Kind::kVarDeclarations);
     auto declarationsIter = decls.begin();
     const Modifiers& modifiers = declarationsIter++->getModifiers();
     const ASTNode& rawType = *(declarationsIter++);
-    std::vector<std::unique_ptr<Statement>> variables;
+    std::vector<std::unique_ptr<Statement>> varDecls;
     const Type* baseType = this->convertType(rawType);
     if (!baseType) {
-        return nullptr;
+        return {};
     }
     if (baseType->nonnullable() == *fContext.fFragmentProcessor_Type &&
         storage != Variable::kGlobal_Storage) {
@@ -416,7 +421,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
             if (rawSize) {
                 auto size = this->coerce(this->convertExpression(rawSize), *fContext.fInt_Type);
                 if (!size) {
-                    return nullptr;
+                    return {};
                 }
                 String name(type->name());
                 int64_t count;
@@ -424,12 +429,12 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
                     count = size->as<IntLiteral>().value();
                     if (count <= 0) {
                         fErrors.error(size->fOffset, "array size must be positive");
-                        return nullptr;
+                        return {};
                     }
                     name += "[" + to_string(count) + "]";
                 } else {
                     fErrors.error(size->fOffset, "array size must be specified");
-                    return nullptr;
+                    return {};
                 }
                 type = fSymbolTable->takeOwnershipOfSymbol(
                         std::make_unique<Type>(name, Type::TypeKind::kArray, *type, (int)count));
@@ -440,8 +445,8 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
                 sizes.push_back(nullptr);
             }
         }
-        auto var = std::make_unique<Variable>(varDecl.fOffset, modifiers, varData.fName, type,
-                                              fIsBuiltinCode, storage);
+        auto var = std::make_unique<Variable>(varDecl.fOffset, fModifiers->handle(modifiers),
+                                              varData.fName, type, fIsBuiltinCode, storage);
         if (var->name() == Compiler::RTADJUST_NAME) {
             SkASSERT(!fRTAdjust);
             SkASSERT(var->type() == *fContext.fFloat4_Type);
@@ -451,31 +456,29 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTNo
         if (iter != varDecl.end()) {
             value = this->convertExpression(*iter);
             if (!value) {
-                return nullptr;
+                return {};
             }
             value = this->coerce(std::move(value), *type);
             if (!value) {
-                return nullptr;
+                return {};
             }
-            var->fWriteCount = 1;
-            var->fInitialValue = value.get();
+            var->setInitialValue(value.get());
         }
-        const Symbol* symbol = (*fSymbolTable)[var->name()];
+        Symbol* symbol = (*fSymbolTable)[var->name()];
         if (symbol && storage == Variable::kGlobal_Storage && var->name() == "sk_FragColor") {
             // Already defined, ignore.
         } else if (symbol && storage == Variable::kGlobal_Storage &&
                    symbol->kind() == Symbol::Kind::kVariable &&
-                   symbol->as<Variable>().fModifiers.fLayout.fBuiltin >= 0) {
+                   symbol->as<Variable>().modifiers().fLayout.fBuiltin >= 0) {
             // Already defined, just update the modifiers.
-            symbol->as<Variable>().fModifiers = var->fModifiers;
+            symbol->as<Variable>().setModifiersHandle(var->modifiersHandle());
         } else {
-            variables.emplace_back(std::make_unique<VarDeclaration>(var.get(), std::move(sizes),
-                                                                    std::move(value)));
-            StringFragment name = var->name();
-            fSymbolTable->add(name, std::move(var));
+            varDecls.push_back(std::make_unique<VarDeclaration>(
+                    var.get(), baseType, std::move(sizes), std::move(value)));
+            fSymbolTable->add(std::move(var));
         }
     }
-    return std::make_unique<VarDeclarations>(decls.fOffset, baseType, std::move(variables));
+    return varDecls;
 }
 
 std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(const ASTNode& m) {
@@ -496,9 +499,11 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
         fInvocations = modifiers.fLayout.fInvocations;
         if (fSettings->fCaps && !fSettings->fCaps->gsInvocationsSupport()) {
             modifiers.fLayout.fInvocations = -1;
-            const Variable& invocationId = (*fSymbolTable)["sk_InvocationID"]->as<Variable>();
-            invocationId.fModifiers.fFlags = 0;
-            invocationId.fModifiers.fLayout.fBuiltin = -1;
+            Variable& invocationId = (*fSymbolTable)["sk_InvocationID"]->as<Variable>();
+            Modifiers modifiers = invocationId.modifiers();
+            modifiers.fFlags = 0;
+            modifiers.fLayout.fBuiltin = -1;
+            invocationId.setModifiersHandle(fModifiers->handle(modifiers));
             if (modifiers.fLayout.description() == "") {
                 return nullptr;
             }
@@ -543,8 +548,8 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     }
     auto ifStmt = std::make_unique<IfStatement>(n.fOffset, n.getBool(), std::move(test),
                                                 std::move(ifTrue), std::move(ifFalse));
-    fInliner->ensureScopedBlocks(ifStmt->fIfTrue.get(), ifStmt.get());
-    fInliner->ensureScopedBlocks(ifStmt->fIfFalse.get(), ifStmt.get());
+    fInliner->ensureScopedBlocks(ifStmt->ifTrue().get(), ifStmt.get());
+    fInliner->ensureScopedBlocks(ifStmt->ifFalse().get(), ifStmt.get());
     return std::move(ifStmt);
 }
 
@@ -713,20 +718,20 @@ std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
         if (!result) {
             return nullptr;
         }
-        if (fCurrentFunction->fReturnType == *fContext.fVoid_Type) {
+        if (fCurrentFunction->returnType() == *fContext.fVoid_Type) {
             fErrors.error(result->fOffset, "may not return a value from a void function");
             return nullptr;
         } else {
-            result = this->coerce(std::move(result), fCurrentFunction->fReturnType);
+            result = this->coerce(std::move(result), fCurrentFunction->returnType());
             if (!result) {
                 return nullptr;
             }
         }
         return std::unique_ptr<Statement>(new ReturnStatement(std::move(result)));
     } else {
-        if (fCurrentFunction->fReturnType != *fContext.fVoid_Type) {
+        if (fCurrentFunction->returnType() != *fContext.fVoid_Type) {
             fErrors.error(r.fOffset, "expected function to return '" +
-                                     fCurrentFunction->fReturnType.displayName() + "'");
+                                     fCurrentFunction->returnType().displayName() + "'");
         }
         return std::unique_ptr<Statement>(new ReturnStatement(r.fOffset));
     }
@@ -760,13 +765,14 @@ std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
 std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<Block> main) {
     Layout invokeLayout;
     Modifiers invokeModifiers(invokeLayout, Modifiers::kHasSideEffects_Flag);
-    const FunctionDeclaration* invokeDecl = fSymbolTable->add(
-            "_invoke", std::make_unique<FunctionDeclaration>(/*offset=*/-1,
-                                                             invokeModifiers,
-                                                             "_invoke",
-                                                             std::vector<const Variable*>(),
-                                                             *fContext.fVoid_Type,
-                                                             /*builtin=*/false));
+    const FunctionDeclaration* invokeDecl =
+            fSymbolTable->add(std::make_unique<FunctionDeclaration>(
+                                                                /*offset=*/-1,
+                                                                fModifiers->handle(invokeModifiers),
+                                                                "_invoke",
+                                                                std::vector<Variable*>(),
+                                                                fContext.fVoid_Type.get(),
+                                                                /*builtin=*/false));
     fProgramElements->push_back(std::make_unique<FunctionDefinition>(/*offset=*/-1,
                                                                      *invokeDecl,
                                                                      std::move(main)));
@@ -829,7 +835,7 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     #define FIELD(var, idx) std::unique_ptr<Expression>(\
                     new FieldAccess(REF(var), idx, FieldAccess::kAnonymousInterfaceBlock_OwnerKind))
     #define POS std::unique_ptr<Expression>(new FieldAccess(WREF(fSkPerVertex), 0, \
-                                                   FieldAccess::kAnonymousInterfaceBlock_OwnerKind))
+                                                FieldAccess::kAnonymousInterfaceBlock_OwnerKind))
     #define ADJUST (fRTAdjustInterfaceBlock ? \
                     FIELD(fRTAdjustInterfaceBlock, fRTAdjustFieldIndex) : \
                     REF(fRTAdjust))
@@ -926,7 +932,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     const ASTNode::FunctionData& funcData = f.getFunctionData();
     this->checkModifiers(f.fOffset, funcData.fModifiers, Modifiers::kHasSideEffects_Flag |
                                                          Modifiers::kInline_Flag);
-    std::vector<const Variable*> parameters;
+    std::vector<Variable*> parameters;
     for (size_t i = 0; i < funcData.fParameterCount; ++i) {
         const ASTNode& param = *(iter++);
         SkASSERT(param.fKind == ASTNode::Kind::kParameter);
@@ -952,15 +958,16 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             return;
         }
         StringFragment name = pd.fName;
-        const Variable* var = fSymbolTable->takeOwnershipOfSymbol(
-                std::make_unique<Variable>(param.fOffset, pd.fModifiers, name, type,
-                                           fIsBuiltinCode, Variable::kParameter_Storage));
+        Variable* var = fSymbolTable->takeOwnershipOfSymbol(
+                std::make_unique<Variable>(param.fOffset, fModifiers->handle(pd.fModifiers),
+                                           name, type, fIsBuiltinCode,
+                                           Variable::kParameter_Storage));
         parameters.push_back(var);
     }
 
     auto paramIsCoords = [&](int idx) {
         return parameters[idx]->type() == *fContext.fFloat2_Type &&
-               parameters[idx]->fModifiers.fFlags == 0;
+               parameters[idx]->modifiers().fFlags == 0;
     };
 
     if (funcData.fName == "main") {
@@ -1013,18 +1020,22 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
         for (const FunctionDeclaration* other : functions) {
             SkASSERT(other->name() == funcData.fName);
-            if (parameters.size() == other->fParameters.size()) {
+            if (parameters.size() == other->parameters().size()) {
                 bool match = true;
                 for (size_t i = 0; i < parameters.size(); i++) {
-                    if (parameters[i]->type() != other->fParameters[i]->type()) {
+                    if (parameters[i]->type() != other->parameters()[i]->type()) {
                         match = false;
                         break;
                     }
                 }
                 if (match) {
-                    if (*returnType != other->fReturnType) {
-                        FunctionDeclaration newDecl(f.fOffset, funcData.fModifiers, funcData.fName,
-                                                    parameters, *returnType, fIsBuiltinCode);
+                    if (*returnType != other->returnType()) {
+                        FunctionDeclaration newDecl(f.fOffset,
+                                                    fModifiers->handle(funcData.fModifiers),
+                                                    funcData.fName,
+                                                    parameters,
+                                                    returnType,
+                                                    fIsBuiltinCode);
                         fErrors.error(f.fOffset, "functions '" + newDecl.description() +
                                                  "' and '" + other->description() +
                                                  "' differ only in return type");
@@ -1032,14 +1043,14 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                     }
                     decl = other;
                     for (size_t i = 0; i < parameters.size(); i++) {
-                        if (parameters[i]->fModifiers != other->fParameters[i]->fModifiers) {
+                        if (parameters[i]->modifiers() != other->parameters()[i]->modifiers()) {
                             fErrors.error(f.fOffset, "modifiers on parameter " +
                                                      to_string((uint64_t) i + 1) +
                                                      " differ between declaration and definition");
                             return;
                         }
                     }
-                    if (other->fDefinition && !other->fBuiltin) {
+                    if (other->definition() && !other->isBuiltin()) {
                         fErrors.error(f.fOffset, "duplicate definition of " + other->description());
                     }
                     break;
@@ -1055,13 +1066,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
 
         // Create a new declaration.
-        decl = fSymbolTable->add(funcData.fName,
-                                 std::make_unique<FunctionDeclaration>(f.fOffset,
-                                                                       declModifiers,
-                                                                       funcData.fName,
-                                                                       parameters,
-                                                                       *returnType,
-                                                                       fIsBuiltinCode));
+        decl = fSymbolTable->add(std::make_unique<FunctionDeclaration>(
+                                                                  f.fOffset,
+                                                                  fModifiers->handle(declModifiers),
+                                                                  funcData.fName,
+                                                                  parameters,
+                                                                  returnType,
+                                                                  fIsBuiltinCode));
     }
     if (iter != f.end()) {
         // compile body
@@ -1073,11 +1084,14 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                                          fKind == Program::kFragmentProcessor_Kind)) {
             if (parameters.size() == 1) {
                 SkASSERT(paramIsCoords(0));
-                parameters[0]->fModifiers.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
+                Modifiers m = parameters[0]->modifiers();
+                m.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
+                parameters[0]->setModifiersHandle(fModifiers->handle(m));
             }
         }
+        const std::vector<Variable*>& declParameters = decl->parameters();
         for (size_t i = 0; i < parameters.size(); i++) {
-            fSymbolTable->addWithoutOwnership(parameters[i]->name(), decl->fParameters[i]);
+            fSymbolTable->addWithoutOwnership(declParameters[i]);
         }
         bool needInvocationIDWorkaround = fInvocations != -1 && funcData.fName == "main" &&
                                           fSettings->fCaps &&
@@ -1095,7 +1109,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
         auto result = std::make_unique<FunctionDefinition>(f.fOffset, *decl, std::move(body),
                                                            std::move(fReferencedIntrinsics));
-        decl->fDefinition = result.get();
+        decl->setDefinition(result.get());
         result->fSource = &f;
         fProgramElements->push_back(std::move(result));
     }
@@ -1119,29 +1133,28 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
     bool foundRTAdjust = false;
     auto iter = intf.begin();
     for (size_t i = 0; i < id.fDeclarationCount; ++i) {
-        std::unique_ptr<VarDeclarations> decl = this->convertVarDeclarations(
-                                                                 *(iter++),
-                                                                 Variable::kInterfaceBlock_Storage);
-        if (!decl) {
+        std::vector<std::unique_ptr<Statement>> decls =
+                this->convertVarDeclarations(*(iter++), Variable::kInterfaceBlock_Storage);
+        if (decls.empty()) {
             return nullptr;
         }
-        for (const auto& stmt : decl->fVars) {
-            VarDeclaration& vd = stmt->as<VarDeclaration>();
+        for (const auto& decl : decls) {
+            const VarDeclaration& vd = decl->as<VarDeclaration>();
             if (haveRuntimeArray) {
                 fErrors.error(decl->fOffset,
-                              "only the last entry in an interface block may be a runtime-sized "
-                              "array");
+                            "only the last entry in an interface block may be a runtime-sized "
+                            "array");
             }
             if (vd.fVar == fRTAdjust) {
                 foundRTAdjust = true;
                 SkASSERT(vd.fVar->type() == *fContext.fFloat4_Type);
                 fRTAdjustFieldIndex = fields.size();
             }
-            fields.push_back(Type::Field(vd.fVar->fModifiers, vd.fVar->name(),
-                                         &vd.fVar->type()));
+            fields.push_back(Type::Field(vd.fVar->modifiers(), vd.fVar->name(),
+                                        &vd.fVar->type()));
             if (vd.fValue) {
                 fErrors.error(decl->fOffset,
-                              "initializers are not permitted on interface block fields");
+                            "initializers are not permitted on interface block fields");
             }
             if (vd.fVar->type().typeKind() == Type::TypeKind::kArray &&
                 vd.fVar->type().columns() == Type::kUnsizedArray) {
@@ -1183,9 +1196,9 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
             sizes.push_back(nullptr);
         }
     }
-    const Variable* var = old->takeOwnershipOfSymbol(
+    Variable* var = old->takeOwnershipOfSymbol(
             std::make_unique<Variable>(intf.fOffset,
-                                       id.fModifiers,
+                                       fModifiers->handle(id.fModifiers),
                                        id.fInstanceName.fLength ? id.fInstanceName : id.fTypeName,
                                        type,
                                        fIsBuiltinCode,
@@ -1194,10 +1207,10 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
         fRTAdjustInterfaceBlock = var;
     }
     if (id.fInstanceName.fLength) {
-        old->addWithoutOwnership(id.fInstanceName, var);
+        old->addWithoutOwnership(var);
     } else {
         for (size_t i = 0; i < fields.size(); i++) {
-            old->add(fields[i].fName, std::make_unique<Field>(intf.fOffset, var, (int)i));
+            old->add(std::make_unique<Field>(intf.fOffset, var, (int)i));
         }
     }
     return std::make_unique<InterfaceBlock>(intf.fOffset,
@@ -1214,10 +1227,9 @@ bool IRGenerator::getConstantInt(const Expression& value, int64_t* out) {
             *out = value.as<IntLiteral>().value();
             return true;
         case Expression::Kind::kVariableReference: {
-            const Variable& var = *value.as<VariableReference>().fVariable;
-            return (var.fModifiers.fFlags & Modifiers::kConst_Flag) &&
-                   var.fInitialValue &&
-                   this->getConstantInt(*var.fInitialValue, out);
+            const Variable& var = *value.as<VariableReference>().variable();
+            return (var.modifiers().fFlags & Modifiers::kConst_Flag) &&
+                   var.initialValue() && this->getConstantInt(*var.initialValue(), out);
         }
         default:
             return false;
@@ -1257,10 +1269,9 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         }
         value = std::unique_ptr<Expression>(new IntLiteral(fContext, e.fOffset, currentValue));
         ++currentValue;
-        fSymbolTable->add(
-                child.getString(),
-                std::make_unique<Variable>(e.fOffset, modifiers, child.getString(), type,
-                                           fIsBuiltinCode, Variable::kGlobal_Storage, value.get()));
+        fSymbolTable->add(std::make_unique<Variable>(e.fOffset, fModifiers->handle(modifiers),
+                                                     child.getString(), type, fIsBuiltinCode,
+                                                     Variable::kGlobal_Storage, value.get()));
         fSymbolTable->takeOwnershipOfIRNode(std::move(value));
     }
     // Now we orphanize the Enum's symbol table, so that future lookups in it are strict
@@ -1373,7 +1384,8 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
         }
         case Symbol::Kind::kVariable: {
             const Variable* var = &result->as<Variable>();
-            switch (var->fModifiers.fLayout.fBuiltin) {
+            const Modifiers& modifiers = var->modifiers();
+            switch (modifiers.fLayout.fBuiltin) {
                 case SK_WIDTH_BUILTIN:
                     fInputs.fRTWidth = true;
                     break;
@@ -1391,10 +1403,10 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
 #endif
             }
             if (fKind == Program::kFragmentProcessor_Kind &&
-                (var->fModifiers.fFlags & Modifiers::kIn_Flag) &&
-                !(var->fModifiers.fFlags & Modifiers::kUniform_Flag) &&
-                !var->fModifiers.fLayout.fKey &&
-                var->fModifiers.fLayout.fBuiltin == -1 &&
+                (modifiers.fFlags & Modifiers::kIn_Flag) &&
+                !(modifiers.fFlags & Modifiers::kUniform_Flag) &&
+                !modifiers.fLayout.fKey &&
+                modifiers.fLayout.fBuiltin == -1 &&
                 var->type().nonnullable() != *fContext.fFragmentProcessor_Type &&
                 var->type().typeKind() != Type::TypeKind::kSampler) {
                 bool valid = false;
@@ -1420,12 +1432,11 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
         }
         case Symbol::Kind::kField: {
             const Field* field = &result->as<Field>();
-            VariableReference* base = new VariableReference(identifier.fOffset, &field->owner(),
+            auto base = std::make_unique<VariableReference>(identifier.fOffset, &field->owner(),
                                                             VariableReference::kRead_RefKind);
-            return std::unique_ptr<Expression>(new FieldAccess(
-                                                  std::unique_ptr<Expression>(base),
-                                                  field->fieldIndex(),
-                                                  FieldAccess::kAnonymousInterfaceBlock_OwnerKind));
+            return std::make_unique<FieldAccess>(std::move(base),
+                                                 field->fieldIndex(),
+                                                 FieldAccess::kAnonymousInterfaceBlock_OwnerKind);
         }
         case Symbol::Kind::kType: {
             const Type* t = &result->as<Type>();
@@ -1450,7 +1461,6 @@ std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
     return std::make_unique<Section>(s.fOffset, section.fName, section.fArgument,
                                                 section.fText);
 }
-
 
 std::unique_ptr<Expression> IRGenerator::coerce(std::unique_ptr<Expression> expr,
                                                 const Type& type) {
@@ -2042,8 +2052,8 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
                                                            original.fReferencedIntrinsics.end());
         std::sort(intrinsics.begin(), intrinsics.end(),
                   [](const FunctionDeclaration* a, const FunctionDeclaration* b) {
-                      if (a->fBuiltin != b->fBuiltin) {
-                          return a->fBuiltin < b->fBuiltin;
+                      if (a->isBuiltin() != b->isBuiltin()) {
+                          return a->isBuiltin() < b->isBuiltin();
                       }
                       if (a->fOffset != b->fOffset) {
                           return a->fOffset < b->fOffset;
@@ -2063,26 +2073,26 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
 std::unique_ptr<Expression> IRGenerator::call(int offset,
                                               const FunctionDeclaration& function,
                                               std::vector<std::unique_ptr<Expression>> arguments) {
-    if (function.fBuiltin) {
-        if (function.fDefinition) {
+    if (function.isBuiltin()) {
+        if (function.definition()) {
             fReferencedIntrinsics.insert(&function);
         }
         if (!fIsBuiltinCode && fIntrinsics) {
             this->copyIntrinsicIfNeeded(function);
         }
     }
-    if (function.fParameters.size() != arguments.size()) {
+    if (function.parameters().size() != arguments.size()) {
         String msg = "call to '" + function.name() + "' expected " +
-                                 to_string((uint64_t) function.fParameters.size()) +
+                                 to_string((uint64_t) function.parameters().size()) +
                                  " argument";
-        if (function.fParameters.size() != 1) {
+        if (function.parameters().size() != 1) {
             msg += "s";
         }
         msg += ", but found " + to_string((uint64_t) arguments.size());
         fErrors.error(offset, msg);
         return nullptr;
     }
-    if (fKind == Program::kPipelineStage_Kind && !function.fDefinition && !function.fBuiltin) {
+    if (fKind == Program::kPipelineStage_Kind && !function.definition() && !function.isBuiltin()) {
         String msg = "call to undefined function '" + function.name() + "'";
         fErrors.error(offset, msg);
         return nullptr;
@@ -2106,7 +2116,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         if (!arguments[i]) {
             return nullptr;
         }
-        const Modifiers& paramModifiers = function.fParameters[i]->fModifiers;
+        const Modifiers& paramModifiers = function.parameters()[i]->modifiers();
         if (paramModifiers.fFlags & Modifiers::kOut_Flag) {
             if (!this->setRefKind(*arguments[i], paramModifiers.fFlags & Modifiers::kIn_Flag
                                                          ? VariableReference::kReadWrite_RefKind
@@ -2119,8 +2129,8 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
     auto funcCall = std::make_unique<FunctionCall>(offset, returnType, &function,
                                                    std::move(arguments));
     if (fCanInline &&
-        fInliner->isSafeToInline(funcCall->function().fDefinition) &&
-        !fInliner->isLargeFunction(funcCall->function().fDefinition)) {
+        fInliner->isSafeToInline(funcCall->function().definition()) &&
+        !fInliner->isLargeFunction(funcCall->function().definition())) {
         Inliner::InlinedCall inlinedCall = fInliner->inlineCall(funcCall.get(), fSymbolTable.get(),
                                                                 fCurrentFunction);
         if (inlinedCall.fInlinedBody) {
@@ -2139,7 +2149,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
  */
 CoercionCost IRGenerator::callCost(const FunctionDeclaration& function,
                                    const std::vector<std::unique_ptr<Expression>>& arguments) {
-    if (function.fParameters.size() != arguments.size()) {
+    if (function.parameters().size() != arguments.size()) {
         return CoercionCost::Impossible();
     }
     std::vector<const Type*> types;
@@ -2664,15 +2674,28 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
     return expr;
 }
 
-std::unique_ptr<Expression> IRGenerator::getCap(int offset, String name) {
+const Type* IRGenerator::typeForSetting(int offset, String name) const {
     auto found = fCapsMap.find(name);
     if (found == fCapsMap.end()) {
         fErrors.error(offset, "unknown capability flag '" + name + "'");
         return nullptr;
     }
-    String fullName = "sk_Caps." + name;
-    return std::unique_ptr<Expression>(new Setting(offset, fullName,
-                                                   found->second.literal(fContext, offset)));
+    switch (found->second.fKind) {
+        case Program::Settings::Value::kBool_Kind:  return fContext.fBool_Type.get();
+        case Program::Settings::Value::kFloat_Kind: return fContext.fFloat_Type.get();
+        case Program::Settings::Value::kInt_Kind:   return fContext.fInt_Type.get();
+    }
+    SkUNREACHABLE;
+    return nullptr;
+}
+
+std::unique_ptr<Expression> IRGenerator::valueForSetting(int offset, String name) const {
+    auto found = fCapsMap.find(name);
+    if (found == fCapsMap.end()) {
+        fErrors.error(offset, "unknown capability flag '" + name + "'");
+        return nullptr;
+    }
+    return found->second.literal(fContext, offset);
 }
 
 std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type& type,
@@ -2693,10 +2716,10 @@ std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type
         std::unique_ptr<Expression> result = convertIdentifier(
                 ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier, field));
         if (result) {
-            const Variable& v = *result->as<VariableReference>().fVariable;
-            SkASSERT(v.fInitialValue);
+            const Variable& v = *result->as<VariableReference>().variable();
+            SkASSERT(v.initialValue());
             result = std::make_unique<IntLiteral>(
-                    offset, v.fInitialValue->as<IntLiteral>().value(), &type);
+                    offset, v.initialValue()->as<IntLiteral>().value(), &type);
         } else {
             fErrors.error(offset,
                           "type '" + type.name() + "' does not have a member named '" + field +
@@ -2764,7 +2787,11 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
     StringFragment field = fieldNode.getString();
     const Type& baseType = base->type();
     if (baseType == *fContext.fSkCaps_Type) {
-        return this->getCap(fieldNode.fOffset, field);
+        const Type* type = this->typeForSetting(fieldNode.fOffset, field);
+        if (!type) {
+            return nullptr;
+        }
+        return std::make_unique<Setting>(fieldNode.fOffset, field, type);
     }
     if (base->kind() == Expression::Kind::kExternalValue) {
         return this->convertField(std::move(base), field);
@@ -2843,41 +2870,51 @@ void IRGenerator::cloneBuiltinVariables() {
         void cloneVariable(const String& name) {
             // If this is the *first* time we've seen this builtin, findAndInclude will return
             // the corresponding ProgramElement.
-            if (const ProgramElement* sharedDecls =
-                        fGenerator->fIntrinsics->findAndInclude(name)) {
-                SkASSERT(sharedDecls->is<VarDeclarations>());
+            if (const ProgramElement* sharedDecl = fGenerator->fIntrinsics->findAndInclude(name)) {
+                SkASSERT(sharedDecl->is<GlobalVarDeclaration>() ||
+                         sharedDecl->is<InterfaceBlock>());
 
-                // Clone the VarDeclarations ProgramElement that declares this variable
-                std::unique_ptr<ProgramElement> clonedDecls = sharedDecls->clone();
-                VarDeclarations& varDecls = clonedDecls->as<VarDeclarations>();
-                SkASSERT(varDecls.fVars.size() == 1);
-                VarDeclaration& varDecl = varDecls.fVars.front()->as<VarDeclaration>();
-                const Variable* sharedVar = varDecl.fVar;
+                // Clone the ProgramElement that declares this variable
+                std::unique_ptr<ProgramElement> clonedDecl = sharedDecl->clone();
+                const Variable* sharedVar = nullptr;
+                const Expression* initialValue = nullptr;
+
+                if (clonedDecl->is<GlobalVarDeclaration>()) {
+                    sharedVar = clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar;
+                    initialValue = clonedDecl->as<GlobalVarDeclaration>().fDecl->fValue.get();
+                } else {
+                    SkASSERT(clonedDecl->is<InterfaceBlock>());
+                    sharedVar = clonedDecl->as<InterfaceBlock>().fVariable;
+                }
 
                 // Now clone the Variable, and add the clone to the Program's symbol table.
-                // Any initial value expression was cloned as part of the VarDeclarations,
+                // Any initial value expression was cloned as part of the GlobalVarDeclaration,
                 // so we're pointing at a Program-owned expression.
                 const Variable* clonedVar =
                         fGenerator->fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Variable>(
-                                sharedVar->fOffset, sharedVar->fModifiers, sharedVar->name(),
-                                &sharedVar->type(), /*builtin=*/false, sharedVar->fStorage,
-                                varDecl.fValue.get()));
+                                sharedVar->fOffset, sharedVar->modifiersHandle(), sharedVar->name(),
+                                &sharedVar->type(), /*builtin=*/false, sharedVar->storage(),
+                                initialValue));
 
-                // Go back and update the VarDeclaration to point at the cloned Variable.
-                varDecl.fVar = clonedVar;
+                // Go back and update the declaring element to point at the cloned Variable.
+                if (clonedDecl->is<GlobalVarDeclaration>()) {
+                    clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar = clonedVar;
+                } else {
+                    clonedDecl->as<InterfaceBlock>().fVariable = clonedVar;
+                }
 
                 // Remember this new re-mapping...
                 fRemap.insert({sharedVar, clonedVar});
 
-                // Add the VarDeclarations to this Program
-                fNewElements.push_back(std::move(clonedDecls));
+                // Add the declaring element to this Program
+                fNewElements.push_back(std::move(clonedDecl));
             }
         }
 
         bool visitExpression(Expression& e) override {
             // Look for references to builtin variables.
-            if (e.is<VariableReference>() && e.as<VariableReference>().fVariable->fBuiltin) {
-                const Variable* sharedVar = e.as<VariableReference>().fVariable;
+            if (e.is<VariableReference>() && e.as<VariableReference>().variable()->isBuiltin()) {
+                const Variable* sharedVar = e.as<VariableReference>().variable();
 
                 this->cloneVariable(sharedVar->name());
 
@@ -2916,8 +2953,8 @@ void IRGenerator::cloneBuiltinVariables() {
     }
 
     fProgramElements->insert(fProgramElements->begin(),
-                                std::make_move_iterator(remapper.fNewElements.begin()),
-                                std::make_move_iterator(remapper.fNewElements.end()));
+                             std::make_move_iterator(remapper.fNewElements.begin()),
+                             std::make_move_iterator(remapper.fNewElements.end()));
 }
 
 void IRGenerator::convertProgram(Program::Kind kind,
@@ -2935,11 +2972,11 @@ void IRGenerator::convertProgram(Program::Kind kind,
     for (const auto& decl : fFile->root()) {
         switch (decl.fKind) {
             case ASTNode::Kind::kVarDeclarations: {
-                std::unique_ptr<VarDeclarations> s = this->convertVarDeclarations(
-                                                                         decl,
-                                                                         Variable::kGlobal_Storage);
-                if (s) {
-                    fProgramElements->push_back(std::move(s));
+                std::vector<std::unique_ptr<Statement>> decls =
+                        this->convertVarDeclarations(decl, Variable::kGlobal_Storage);
+                for (auto& varDecl : decls) {
+                    fProgramElements->push_back(std::make_unique<GlobalVarDeclaration>(
+                            decl.fOffset, std::move(varDecl)));
                 }
                 break;
             }

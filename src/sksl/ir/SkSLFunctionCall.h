@@ -16,18 +16,23 @@ namespace SkSL {
 /**
  * A function invocation.
  */
-struct FunctionCall : public Expression {
+class FunctionCall : public Expression {
+public:
     static constexpr Kind kExpressionKind = Kind::kFunctionCall;
 
     FunctionCall(int offset, const Type* type, const FunctionDeclaration* function,
                  std::vector<std::unique_ptr<Expression>> arguments)
     : INHERITED(offset, FunctionCallData{type, function}) {
         fExpressionChildren = std::move(arguments);
-        ++this->function().fCallCount;
+        ++this->function().callCount();
     }
 
     ~FunctionCall() override {
-        --this->function().fCallCount;
+        --this->function().callCount();
+    }
+
+    const Type& type() const override {
+        return *this->functionCallData().fType;
     }
 
     const FunctionDeclaration& function() const {
@@ -43,7 +48,7 @@ struct FunctionCall : public Expression {
     }
 
     bool hasProperty(Property property) const override {
-        if (property == Property::kSideEffects && (this->function().fModifiers.fFlags &
+        if (property == Property::kSideEffects && (this->function().modifiers().fFlags &
                                                    Modifiers::kHasSideEffects_Flag)) {
             return true;
         }
@@ -76,6 +81,7 @@ struct FunctionCall : public Expression {
         return result;
     }
 
+private:
     using INHERITED = Expression;
 };
 

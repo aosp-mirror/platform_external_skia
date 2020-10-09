@@ -15,61 +15,63 @@
 namespace SkSL {
 
 VariableReference::VariableReference(int offset, const Variable* variable, RefKind refKind)
-        : INHERITED(offset, kExpressionKind, &variable->type())
-        , fVariable(variable)
-        , fRefKind(refKind) {
-    SkASSERT(fVariable);
-    this->incrementRefs();
+        : INHERITED(offset, VariableReferenceData{variable, (int8_t)refKind}) {
+    SkASSERT(this->variable());
+    this->variable()->referenceCreated(refKind);
 }
 
 VariableReference::~VariableReference() {
-    this->decrementRefs();
+    this->variable()->referenceDestroyed(this->refKind());
 }
 
-void VariableReference::incrementRefs() const {
-    if (fRefKind != kRead_RefKind) {
-        fVariable->fWriteCount++;
-    }
-    if (fRefKind != kWrite_RefKind) {
-        fVariable->fReadCount++;
+const Type& VariableReference::type() const {
+    return this->variableReferenceData().fVariable->type();
+}
+
+bool VariableReference::hasProperty(Property property) const {
+    switch (property) {
+        case Property::kSideEffects:      return false;
+        case Property::kContainsRTAdjust: return this->variable()->name() == "sk_RTAdjust";
+        default:
+            SkASSERT(false);
+            return false;
     }
 }
 
-void VariableReference::decrementRefs() const {
-    if (fRefKind != kRead_RefKind) {
-        fVariable->fWriteCount--;
-    }
-    if (fRefKind != kWrite_RefKind) {
-        fVariable->fReadCount--;
-    }
+bool VariableReference::isConstantOrUniform() const {
+    return (this->variable()->modifiers().fFlags & Modifiers::kUniform_Flag) != 0;
+}
+
+String VariableReference::description() const {
+    return this->variable()->name();
 }
 
 void VariableReference::setRefKind(RefKind refKind) {
-    this->decrementRefs();
-    fRefKind = refKind;
-    this->incrementRefs();
+    this->variable()->referenceDestroyed(this->refKind());
+    this->variableReferenceData().fRefKind = refKind;
+    this->variable()->referenceCreated(this->refKind());
 }
 
 void VariableReference::setVariable(const Variable* variable) {
-    this->decrementRefs();
-    fVariable = variable;
-    this->incrementRefs();
+    this->variable()->referenceDestroyed(this->refKind());
+    this->variableReferenceData().fVariable = variable;
+    this->variable()->referenceCreated(this->refKind());
 }
 
 std::unique_ptr<Expression> VariableReference::constantPropagate(const IRGenerator& irGenerator,
                                                                  const DefinitionMap& definitions) {
-    if (fRefKind != kRead_RefKind) {
+    if (this->refKind() != kRead_RefKind) {
         return nullptr;
     }
-    if ((fVariable->fModifiers.fFlags & Modifiers::kConst_Flag) && fVariable->fInitialValue &&
-        fVariable->fInitialValue->isCompileTimeConstant() &&
+    const Expression* initialValue = this->variable()->initialValue();
+    if ((this->variable()->modifiers().fFlags & Modifiers::kConst_Flag) && initialValue &&
+        initialValue->isCompileTimeConstant() &&
         this->type().typeKind() != Type::TypeKind::kArray) {
-        return fVariable->fInitialValue->clone();
+        return initialValue->clone();
     }
-    auto exprIter = definitions.find(fVariable);
-    if (exprIter != definitions.end() && exprIter->second &&
-        (*exprIter->second)->isCompileTimeConstant()) {
-        return (*exprIter->second)->clone();
+    std::unique_ptr<Expression>** exprPPtr = definitions.find(this->variable());
+    if (exprPPtr && *exprPPtr && (**exprPPtr)->isCompileTimeConstant()) {
+        return (**exprPPtr)->clone();
     }
     return nullptr;
 }

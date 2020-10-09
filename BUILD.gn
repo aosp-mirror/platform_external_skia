@@ -1184,11 +1184,6 @@ component("skia") {
     ":xml",
   ]
 
-  # This file (and all GN files in Skia) are designed to work with an
-  # empty sources assignment filter; we handle all that explicitly.
-  # We clear the filter here for clients who may have set up a global filter.
-  set_sources_assignment_filter([])
-
   public = skia_core_public
   public += skia_utils_public
   public += skia_effects_public
@@ -1350,11 +1345,6 @@ static_library("pathkit") {
     ":sse42",
     ":ssse3",
   ]
-
-  # This file (and all GN files in Skia) are designed to work with an
-  # empty sources assignment filter; we handle all that explicitly.
-  # We clear the filter here for clients who may have set up a global filter.
-  set_sources_assignment_filter([])
 
   sources = []
   sources += skia_pathops_sources
@@ -1981,6 +1971,17 @@ if (skia_enable_tools) {
       "modules/skshaper",
     ]
   }
+  test_lib("hash_and_encode") {
+    sources = [
+      "tools/HashAndEncode.cpp",
+      "tools/HashAndEncode.h",
+    ]
+    deps = [
+      ":flags",
+      ":skia",
+      "//third_party/libpng",
+    ]
+  }
   if (target_cpu != "wasm") {
     test_app("convert-to-nia") {
       sources = [ "tools/convert-to-nia.cpp" ]
@@ -1991,17 +1992,6 @@ if (skia_enable_tools) {
       deps = [
         ":skcms",
         ":skia",
-      ]
-    }
-    test_lib("hash_and_encode") {
-      sources = [
-        "tools/HashAndEncode.cpp",
-        "tools/HashAndEncode.h",
-      ]
-      deps = [
-        ":flags",
-        ":skia",
-        "//third_party/libpng",
       ]
     }
     test_app("fm") {

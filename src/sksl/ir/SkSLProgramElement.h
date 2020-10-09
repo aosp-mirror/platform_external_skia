@@ -17,7 +17,8 @@ namespace SkSL {
 /**
  * Represents a top-level element (e.g. function or global variable) in a program.
  */
-struct ProgramElement : public IRNode {
+class ProgramElement : public IRNode {
+public:
     enum class Kind {
         kEnum = 0,
         kExtension,
@@ -25,10 +26,10 @@ struct ProgramElement : public IRNode {
         kInterfaceBlock,
         kModifiers,
         kSection,
-        kVar,
+        kGlobalVar,
 
         kFirst = kEnum,
-        kLast = kVar
+        kLast = kGlobalVar
     };
 
     ProgramElement(int offset, Kind kind)
@@ -74,6 +75,7 @@ struct ProgramElement : public IRNode {
 
     virtual std::unique_ptr<ProgramElement> clone() const = 0;
 
+private:
     using INHERITED = IRNode;
 };
 

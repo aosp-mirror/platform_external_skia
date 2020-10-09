@@ -16,13 +16,13 @@
 namespace SkSL {
 
 class ErrorReporter;
-struct Expression;
+class Expression;
 struct FunctionDefinition;
 struct Program;
-struct ProgramElement;
-struct Statement;
-struct Variable;
-struct VariableReference;
+class ProgramElement;
+class Statement;
+class Variable;
+class VariableReference;
 
 /**
  * Provides utilities for analyzing SkSL statically before it's composed into a full program.
