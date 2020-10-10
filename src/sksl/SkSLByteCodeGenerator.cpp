@@ -147,20 +147,20 @@ void ByteCodeGenerator::gatherUniforms(const Type& type, const String& name) {
 }
 
 bool ByteCodeGenerator::generateCode() {
-    for (const auto& e : fProgram) {
-        switch (e.kind()) {
+    for (const auto& e : fProgram.elements()) {
+        switch (e->kind()) {
             case ProgramElement::Kind::kFunction: {
                 std::unique_ptr<ByteCodeFunction> f =
-                        this->writeFunction(e.as<FunctionDefinition>());
+                        this->writeFunction(e->as<FunctionDefinition>());
                 if (!f) {
                     return false;
                 }
                 fOutput->fFunctions.push_back(std::move(f));
-                fFunctions.push_back(&e.as<FunctionDefinition>());
+                fFunctions.push_back(&e->as<FunctionDefinition>());
                 break;
             }
             case ProgramElement::Kind::kGlobalVar: {
-                const GlobalVarDeclaration& decl = e.as<GlobalVarDeclaration>();
+                const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
                 const Variable* declVar = decl.fDecl->fVar;
                 if (declVar->type() == *fContext.fFragmentProcessor_Type) {
                     fOutput->fChildFPCount++;
@@ -218,7 +218,7 @@ std::unique_ptr<ByteCodeFunction> ByteCodeGenerator::writeFunction(const Functio
 static int expression_as_builtin(const Expression& e) {
     if (e.is<VariableReference>()) {
         const Variable& var(*e.as<VariableReference>().variable());
-        if (var.storage() == Variable::kGlobal_Storage) {
+        if (var.storage() == Variable::Storage::kGlobal) {
             return var.modifiers().fLayout.fBuiltin;
         }
     }
@@ -424,7 +424,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
     // given that we seldom have more than a couple of variables, linear search is probably the most
     // efficient way to handle lookups
     switch (var.storage()) {
-        case Variable::kLocal_Storage: {
+        case Variable::Storage::kLocal: {
             for (int i = fLocals.size() - 1; i >= 0; --i) {
                 if (fLocals[i] == &var) {
                     SkASSERT(fParameterCount + i <= 255);
@@ -439,7 +439,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             SkASSERT(result <= 255);
             return { result, Storage::kLocal };
         }
-        case Variable::kParameter_Storage: {
+        case Variable::Storage::kParameter: {
             int offset = 0;
             for (const auto& p : fFunction->fDeclaration.parameters()) {
                 if (p == &var) {
@@ -451,12 +451,12 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             SkASSERT(false);
             return Location::MakeInvalid();
         }
-        case Variable::kGlobal_Storage: {
+        case Variable::Storage::kGlobal: {
             if (var.type() == *fContext.fFragmentProcessor_Type) {
                 int offset = 0;
-                for (const auto& e : fProgram) {
-                    if (e.is<GlobalVarDeclaration>()) {
-                        const GlobalVarDeclaration& decl = e.as<GlobalVarDeclaration>();
+                for (const auto& e : fProgram.elements()) {
+                    if (e->is<GlobalVarDeclaration>()) {
+                        const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
                         const Variable* declVar = decl.fDecl->fVar;
                         if (declVar->type() != *fContext.fFragmentProcessor_Type) {
                             continue;
@@ -482,9 +482,9 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             }
             int offset = 0;
             bool isUniform = is_uniform(var);
-            for (const auto& e : fProgram) {
-                if (e.is<GlobalVarDeclaration>()) {
-                    const GlobalVarDeclaration& decl = e.as<GlobalVarDeclaration>();
+            for (const auto& e : fProgram.elements()) {
+                if (e->is<GlobalVarDeclaration>()) {
+                    const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
                     const Variable* declVar = decl.fDecl->fVar;
                     if (declVar->modifiers().fLayout.fBuiltin >= 0 || is_in(*declVar)) {
                         continue;
@@ -512,10 +512,10 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Expression& exp
     switch (expr.kind()) {
         case Expression::Kind::kFieldAccess: {
             const FieldAccess& f = expr.as<FieldAccess>();
-            Location baseLoc = this->getLocation(*f.fBase);
+            Location baseLoc = this->getLocation(*f.base());
             int offset = 0;
-            for (int i = 0; i < f.fFieldIndex; ++i) {
-                offset += SlotCount(*f.fBase->type().fields()[i].fType);
+            for (int i = 0; i < f.fieldIndex(); ++i) {
+                offset += SlotCount(*f.base()->type().fields()[i].fType);
             }
             if (baseLoc.isOnStack()) {
                 if (offset != 0) {
@@ -531,25 +531,27 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Expression& exp
         case Expression::Kind::kIndex: {
             const IndexExpression& i = expr.as<IndexExpression>();
             int stride = SlotCount(i.type());
-            int length = i.fBase->type().columns();
+            int length = i.base()->type().columns();
             SkASSERT(length <= 255);
             int offset = -1;
-            if (i.fIndex->isCompileTimeConstant()) {
-                int64_t index = i.fIndex->getConstantInt();
-                if (index < 0 || index >= length) {
-                    fErrors.error(i.fIndex->fOffset, "Array index out of bounds.");
+            const Expression& base = *i.base();
+            const Expression& index = *i.index();
+            if (index.isCompileTimeConstant()) {
+                int64_t indexValue = index.getConstantInt();
+                if (indexValue < 0 || indexValue >= length) {
+                    fErrors.error(index.fOffset, "Array index out of bounds.");
                     return Location::MakeInvalid();
                 }
-                offset = index * stride;
+                offset = indexValue * stride;
             } else {
-                if (i.fIndex->hasSideEffects()) {
+                if (index.hasSideEffects()) {
                     // Having a side-effect in an indexer is technically safe for an rvalue,
                     // but with lvalues we have to evaluate the indexer twice, so make it an error.
-                    fErrors.error(i.fIndex->fOffset,
+                    fErrors.error(index.fOffset,
                             "Index expressions with side-effects not supported in byte code.");
                     return Location::MakeInvalid();
                 }
-                this->writeExpression(*i.fIndex);
+                this->writeExpression(index);
                 this->write(ByteCodeInstruction::kClampIndex);
                 this->write8(length);
                 if (stride != 1) {
@@ -558,7 +560,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Expression& exp
                     this->write(ByteCodeInstruction::kMultiplyI, 1);
                 }
             }
-            Location baseLoc = this->getLocation(*i.fBase);
+            Location baseLoc = this->getLocation(base);
 
             // Are both components known statically?
             if (!baseLoc.isOnStack() && offset >= 0) {
@@ -962,16 +964,16 @@ void ByteCodeGenerator::writeExternalFunctionCall(const ExternalFunctionCall& f)
     this->write8(argumentCount);
     this->write8(SlotCount(f.type()));
     int index = fOutput->fExternalValues.size();
-    fOutput->fExternalValues.push_back(f.function());
+    fOutput->fExternalValues.push_back(&f.function());
     SkASSERT(index <= 255);
     this->write8(index);
 }
 
 void ByteCodeGenerator::writeExternalValue(const ExternalValueReference& e) {
-    int count = SlotCount(e.fValue->type());
+    int count = SlotCount(e.value().type());
     this->write(ByteCodeInstruction::kReadExternal, count);
     int index = fOutput->fExternalValues.size();
-    fOutput->fExternalValues.push_back(e.fValue);
+    fOutput->fExternalValues.push_back(&e.value());
     SkASSERT(index <= 255);
     this->write8(index);
 }
@@ -1320,16 +1322,16 @@ void ByteCodeGenerator::writeNullLiteral(const NullLiteral& n) {
 }
 
 bool ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p, bool discard) {
-    switch (p.fOperator) {
+    switch (p.getOperator()) {
         case Token::Kind::TK_PLUSPLUS: // fall through
         case Token::Kind::TK_MINUSMINUS: {
-            SkASSERT(SlotCount(p.fOperand->type()) == 1);
-            std::unique_ptr<LValue> lvalue = this->getLValue(*p.fOperand);
+            SkASSERT(SlotCount(p.operand()->type()) == 1);
+            std::unique_ptr<LValue> lvalue = this->getLValue(*p.operand());
             lvalue->load();
             this->write(ByteCodeInstruction::kPushImmediate);
             this->write32(type_category(p.type()) == TypeCategory::kFloat ? float_to_bits(1.0f)
                                                                           : 1);
-            if (p.fOperator == Token::Kind::TK_PLUSPLUS) {
+            if (p.getOperator() == Token::Kind::TK_PLUSPLUS) {
                 this->writeTypedInstruction(p.type(),
                                             ByteCodeInstruction::kAddI,
                                             ByteCodeInstruction::kAddI,
@@ -1347,22 +1349,23 @@ bool ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p, bool di
             break;
         }
         case Token::Kind::TK_MINUS: {
-            this->writeExpression(*p.fOperand);
+            this->writeExpression(*p.operand());
             this->writeTypedInstruction(p.type(),
                                         ByteCodeInstruction::kNegateI,
                                         ByteCodeInstruction::kNegateI,
                                         ByteCodeInstruction::kNegateF,
-                                        SlotCount(p.fOperand->type()));
+                                        SlotCount(p.operand()->type()));
             break;
         }
         case Token::Kind::TK_LOGICALNOT:
         case Token::Kind::TK_BITWISENOT: {
-            SkASSERT(SlotCount(p.fOperand->type()) == 1);
-            SkDEBUGCODE(TypeCategory tc = type_category(p.fOperand->type()));
-            SkASSERT((p.fOperator == Token::Kind::TK_LOGICALNOT && tc == TypeCategory::kBool) ||
-                     (p.fOperator == Token::Kind::TK_BITWISENOT && (tc == TypeCategory::kSigned ||
-                                                                 tc == TypeCategory::kUnsigned)));
-            this->writeExpression(*p.fOperand);
+            SkASSERT(SlotCount(p.operand()->type()) == 1);
+            SkDEBUGCODE(TypeCategory tc = type_category(p.operand()->type()));
+            SkASSERT((p.getOperator() == Token::Kind::TK_LOGICALNOT &&
+                      tc == TypeCategory::kBool) ||
+                     (p.getOperator() == Token::Kind::TK_BITWISENOT &&
+                      (tc == TypeCategory::kSigned || tc == TypeCategory::kUnsigned)));
+            this->writeExpression(*p.operand());
             this->write(ByteCodeInstruction::kNotB, 1);
             break;
         }
@@ -1373,11 +1376,11 @@ bool ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p, bool di
 }
 
 bool ByteCodeGenerator::writePostfixExpression(const PostfixExpression& p, bool discard) {
-    switch (p.fOperator) {
+    switch (p.getOperator()) {
         case Token::Kind::TK_PLUSPLUS: // fall through
         case Token::Kind::TK_MINUSMINUS: {
-            SkASSERT(SlotCount(p.fOperand->type()) == 1);
-            std::unique_ptr<LValue> lvalue = this->getLValue(*p.fOperand);
+            SkASSERT(SlotCount(p.operand()->type()) == 1);
+            std::unique_ptr<LValue> lvalue = this->getLValue(*p.operand());
             lvalue->load();
             // If we're not supposed to discard the result, then make a copy *before* the +/-
             if (!discard) {
@@ -1386,7 +1389,7 @@ bool ByteCodeGenerator::writePostfixExpression(const PostfixExpression& p, bool 
             this->write(ByteCodeInstruction::kPushImmediate);
             this->write32(type_category(p.type()) == TypeCategory::kFloat ? float_to_bits(1.0f)
                                                                           : 1);
-            if (p.fOperator == Token::Kind::TK_PLUSPLUS) {
+            if (p.getOperator() == Token::Kind::TK_PLUSPLUS) {
                 this->writeTypedInstruction(p.type(),
                                             ByteCodeInstruction::kAddI,
                                             ByteCodeInstruction::kAddI,
@@ -1621,11 +1624,11 @@ private:
 std::unique_ptr<ByteCodeGenerator::LValue> ByteCodeGenerator::getLValue(const Expression& e) {
     switch (e.kind()) {
         case Expression::Kind::kExternalValue: {
-            const ExternalValue* value = e.as<ExternalValueReference>().fValue;
+            const ExternalValue& value = e.as<ExternalValueReference>().value();
             int index = fOutput->fExternalValues.size();
-            fOutput->fExternalValues.push_back(value);
+            fOutput->fExternalValues.push_back(&value);
             SkASSERT(index <= 255);
-            return std::unique_ptr<LValue>(new ByteCodeExternalValueLValue(this, *value, index));
+            return std::unique_ptr<LValue>(new ByteCodeExternalValueLValue(this, value, index));
         }
         case Expression::Kind::kFieldAccess:
         case Expression::Kind::kIndex:
@@ -1741,8 +1744,8 @@ void ByteCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
         fErrors.error(r.fOffset, "return not allowed inside conditional or loop");
         return;
     }
-    int count = SlotCount(r.fExpression->type());
-    this->writeExpression(*r.fExpression);
+    int count = SlotCount(r.expression()->type());
+    this->writeExpression(*r.expression());
 
     // Technically, the kReturn also pops fOutput->fLocalCount values from the stack, too, but we
     // haven't counted pushing those (they're outside the scope of our stack tracking). Instead,
@@ -1771,11 +1774,11 @@ void ByteCodeGenerator::writeVarDeclaration(const VarDeclaration& decl) {
 void ByteCodeGenerator::writeWhileStatement(const WhileStatement& w) {
     this->write(ByteCodeInstruction::kLoopBegin);
     size_t cond = fCode->size();
-    this->writeExpression(*w.fTest);
+    this->writeExpression(*w.test());
     this->write(ByteCodeInstruction::kLoopMask);
     this->write(ByteCodeInstruction::kBranchIfAllFalse);
     DeferredLocation endLocation(this);
-    this->writeStatement(*w.fStatement);
+    this->writeStatement(*w.statement());
     this->write(ByteCodeInstruction::kLoopNext);
     this->write(ByteCodeInstruction::kBranch);
     this->write16(cond);

@@ -1565,7 +1565,7 @@ SpvStorageClass_ get_storage_class(const Expression& expr) {
     switch (expr.kind()) {
         case Expression::Kind::kVariableReference: {
             const Variable& var = *expr.as<VariableReference>().variable();
-            if (var.storage() != Variable::kGlobal_Storage) {
+            if (var.storage() != Variable::Storage::kGlobal) {
                 return SpvStorageClassFunction;
             }
             SpvStorageClass_ result = get_storage_class(var.modifiers());
@@ -1575,9 +1575,9 @@ SpvStorageClass_ get_storage_class(const Expression& expr) {
             return result;
         }
         case Expression::Kind::kFieldAccess:
-            return get_storage_class(*expr.as<FieldAccess>().fBase);
+            return get_storage_class(*expr.as<FieldAccess>().base());
         case Expression::Kind::kIndex:
-            return get_storage_class(*expr.as<IndexExpression>().fBase);
+            return get_storage_class(*expr.as<IndexExpression>().base());
         default:
             return SpvStorageClassFunction;
     }
@@ -1588,14 +1588,14 @@ std::vector<SpvId> SPIRVCodeGenerator::getAccessChain(const Expression& expr, Ou
     switch (expr.kind()) {
         case Expression::Kind::kIndex: {
             IndexExpression& indexExpr = (IndexExpression&) expr;
-            chain = this->getAccessChain(*indexExpr.fBase, out);
-            chain.push_back(this->writeExpression(*indexExpr.fIndex, out));
+            chain = this->getAccessChain(*indexExpr.base(), out);
+            chain.push_back(this->writeExpression(*indexExpr.index(), out));
             break;
         }
         case Expression::Kind::kFieldAccess: {
             FieldAccess& fieldExpr = (FieldAccess&) expr;
-            chain = this->getAccessChain(*fieldExpr.fBase, out);
-            IntLiteral index(fContext, -1, fieldExpr.fFieldIndex);
+            chain = this->getAccessChain(*fieldExpr.base(), out);
+            IntLiteral index(fContext, -1, fieldExpr.fieldIndex());
             chain.push_back(this->writeIntLiteral(index));
             break;
         }
@@ -1879,11 +1879,11 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                 Modifiers modifiers(layout, Modifiers::kUniform_Flag);
                 const Variable* intfVar = fSynthetics.takeOwnershipOfSymbol(
                         std::make_unique<Variable>(/*offset=*/-1,
-                                                   fModifiers.handle(modifiers),
+                                                   fProgram.fModifiers->handle(modifiers),
                                                    name,
                                                    &intfStruct,
                                                    /*builtin=*/false,
-                                                   Variable::kGlobal_Storage));
+                                                   Variable::Storage::kGlobal));
                 InterfaceBlock intf(-1, intfVar, name, String(""),
                                     std::vector<std::unique_ptr<Expression>>(), st);
 
@@ -1961,9 +1961,9 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
 }
 
 SpvId SPIRVCodeGenerator::writeIndexExpression(const IndexExpression& expr, OutputStream& out) {
-    if (expr.fBase->type().typeKind() == Type::TypeKind::kVector) {
-        SpvId base = this->writeExpression(*expr.fBase, out);
-        SpvId index = this->writeExpression(*expr.fIndex, out);
+    if (expr.base()->type().typeKind() == Type::TypeKind::kVector) {
+        SpvId base = this->writeExpression(*expr.base(), out);
+        SpvId index = this->writeExpression(*expr.index(), out);
         SpvId result = this->nextId();
         this->writeInstruction(SpvOpVectorExtractDynamic, this->getType(expr.type()), result, base,
                                index, out);
@@ -2427,10 +2427,10 @@ SpvId SPIRVCodeGenerator::writeTernaryExpression(const TernaryExpression& t, Out
 
 SpvId SPIRVCodeGenerator::writePrefixExpression(const PrefixExpression& p, OutputStream& out) {
     const Type& type = p.type();
-    if (p.fOperator == Token::Kind::TK_MINUS) {
+    if (p.getOperator() == Token::Kind::TK_MINUS) {
         SpvId result = this->nextId();
         SpvId typeId = this->getType(type);
-        SpvId expr = this->writeExpression(*p.fOperand, out);
+        SpvId expr = this->writeExpression(*p.operand(), out);
         if (is_float(fContext, type)) {
             this->writeInstruction(SpvOpFNegate, typeId, result, expr, out);
         } else if (is_signed(fContext, type)) {
@@ -2443,11 +2443,11 @@ SpvId SPIRVCodeGenerator::writePrefixExpression(const PrefixExpression& p, Outpu
         this->writePrecisionModifier(type, result);
         return result;
     }
-    switch (p.fOperator) {
+    switch (p.getOperator()) {
         case Token::Kind::TK_PLUS:
-            return this->writeExpression(*p.fOperand, out);
+            return this->writeExpression(*p.operand(), out);
         case Token::Kind::TK_PLUSPLUS: {
-            std::unique_ptr<LValue> lv = this->getLValue(*p.fOperand, out);
+            std::unique_ptr<LValue> lv = this->getLValue(*p.operand(), out);
             SpvId one = this->writeExpression(*create_literal_1(fContext, type), out);
             SpvId result = this->writeBinaryOperation(type, type, lv->load(out), one,
                                                       SpvOpFAdd, SpvOpIAdd, SpvOpIAdd, SpvOpUndef,
@@ -2456,7 +2456,7 @@ SpvId SPIRVCodeGenerator::writePrefixExpression(const PrefixExpression& p, Outpu
             return result;
         }
         case Token::Kind::TK_MINUSMINUS: {
-            std::unique_ptr<LValue> lv = this->getLValue(*p.fOperand, out);
+            std::unique_ptr<LValue> lv = this->getLValue(*p.operand(), out);
             SpvId one = this->writeExpression(*create_literal_1(fContext, type), out);
             SpvId result = this->writeBinaryOperation(type, type, lv->load(out), one, SpvOpFSub,
                                                       SpvOpISub, SpvOpISub, SpvOpUndef, out);
@@ -2464,16 +2464,16 @@ SpvId SPIRVCodeGenerator::writePrefixExpression(const PrefixExpression& p, Outpu
             return result;
         }
         case Token::Kind::TK_LOGICALNOT: {
-            SkASSERT(p.fOperand->type() == *fContext.fBool_Type);
+            SkASSERT(p.operand()->type() == *fContext.fBool_Type);
             SpvId result = this->nextId();
-            this->writeInstruction(SpvOpLogicalNot, this->getType(p.fOperand->type()), result,
-                                   this->writeExpression(*p.fOperand, out), out);
+            this->writeInstruction(SpvOpLogicalNot, this->getType(type), result,
+                                   this->writeExpression(*p.operand(), out), out);
             return result;
         }
         case Token::Kind::TK_BITWISENOT: {
             SpvId result = this->nextId();
-            this->writeInstruction(SpvOpNot, this->getType(p.fOperand->type()), result,
-                                   this->writeExpression(*p.fOperand, out), out);
+            this->writeInstruction(SpvOpNot, this->getType(type), result,
+                                   this->writeExpression(*p.operand(), out), out);
             return result;
         }
         default:
@@ -2486,10 +2486,10 @@ SpvId SPIRVCodeGenerator::writePrefixExpression(const PrefixExpression& p, Outpu
 
 SpvId SPIRVCodeGenerator::writePostfixExpression(const PostfixExpression& p, OutputStream& out) {
     const Type& type = p.type();
-    std::unique_ptr<LValue> lv = this->getLValue(*p.fOperand, out);
+    std::unique_ptr<LValue> lv = this->getLValue(*p.operand(), out);
     SpvId result = lv->load(out);
     SpvId one = this->writeExpression(*create_literal_1(fContext, type), out);
-    switch (p.fOperator) {
+    switch (p.getOperator()) {
         case Token::Kind::TK_PLUSPLUS: {
             SpvId temp = this->writeBinaryOperation(type, type, result, one, SpvOpFAdd,
                                                     SpvOpIAdd, SpvOpIAdd, SpvOpUndef, out);
@@ -2715,9 +2715,9 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
     SpvId typeId;
     Modifiers intfModifiers = intf.fVariable->modifiers();
     if (intfModifiers.fLayout.fBuiltin == SK_IN_BUILTIN) {
-        for (const auto& e : fProgram) {
-            if (e.kind() == ProgramElement::Kind::kModifiers) {
-                const Modifiers& m = ((ModifiersDeclaration&) e).fModifiers;
+        for (const auto& e : fProgram.elements()) {
+            if (e->is<ModifiersDeclaration>()) {
+                const Modifiers& m = e->as<ModifiersDeclaration>().fModifiers;
                 update_sk_in_count(m, &fSkInCount);
             }
         }
@@ -2998,10 +2998,10 @@ void SPIRVCodeGenerator::writeWhileStatement(const WhileStatement& w, OutputStre
     this->writeInstruction(SpvOpLoopMerge, end, continueTarget, SpvLoopControlMaskNone, out);
     this->writeInstruction(SpvOpBranch, start, out);
     this->writeLabel(start, out);
-    SpvId test = this->writeExpression(*w.fTest, out);
+    SpvId test = this->writeExpression(*w.test(), out);
     this->writeInstruction(SpvOpBranchConditional, test, body, end, out);
     this->writeLabel(body, out);
-    this->writeStatement(*w.fStatement, out);
+    this->writeStatement(*w.statement(), out);
     if (fCurrentBlock) {
         this->writeInstruction(SpvOpBranch, continueTarget, out);
     }
@@ -3081,8 +3081,8 @@ void SPIRVCodeGenerator::writeSwitchStatement(const SwitchStatement& s, OutputSt
 }
 
 void SPIRVCodeGenerator::writeReturnStatement(const ReturnStatement& r, OutputStream& out) {
-    if (r.fExpression) {
-        this->writeInstruction(SpvOpReturnValue, this->writeExpression(*r.fExpression, out),
+    if (r.expression()) {
+        this->writeInstruction(SpvOpReturnValue, this->writeExpression(*r.expression(), out),
                                out);
     } else {
         this->writeInstruction(SpvOpReturn, out);
@@ -3092,9 +3092,9 @@ void SPIRVCodeGenerator::writeReturnStatement(const ReturnStatement& r, OutputSt
 void SPIRVCodeGenerator::writeGeometryShaderExecutionMode(SpvId entryPoint, OutputStream& out) {
     SkASSERT(fProgram.fKind == Program::kGeometry_Kind);
     int invocations = 1;
-    for (const auto& e : fProgram) {
-        if (e.kind() == ProgramElement::Kind::kModifiers) {
-            const Modifiers& m = ((ModifiersDeclaration&) e).fModifiers;
+    for (const auto& e : fProgram.elements()) {
+        if (e->is<ModifiersDeclaration>()) {
+            const Modifiers& m = e->as<ModifiersDeclaration>().fModifiers;
             if (m.fFlags & Modifiers::kIn_Flag) {
                 if (m.fLayout.fInvocations != -1) {
                     invocations = m.fLayout.fInvocations;
@@ -3161,15 +3161,15 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     std::set<SpvId> interfaceVars;
     // assign IDs to functions, determine sk_in size
     int skInSize = -1;
-    for (const auto& e : program) {
-        switch (e.kind()) {
+    for (const auto& e : program.elements()) {
+        switch (e->kind()) {
             case ProgramElement::Kind::kFunction: {
-                FunctionDefinition& f = (FunctionDefinition&) e;
+                const FunctionDefinition& f = e->as<FunctionDefinition>();
                 fFunctionMap[&f.fDeclaration] = this->nextId();
                 break;
             }
             case ProgramElement::Kind::kModifiers: {
-                Modifiers& m = ((ModifiersDeclaration&) e).fModifiers;
+                Modifiers& m = e->as<ModifiersDeclaration>().fModifiers;
                 if (m.fFlags & Modifiers::kIn_Flag) {
                     switch (m.fLayout.fPrimitive) {
                         case Layout::kPoints_Primitive: // break
@@ -3193,9 +3193,9 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
                 break;
         }
     }
-    for (const auto& e : program) {
-        if (e.kind() == ProgramElement::Kind::kInterfaceBlock) {
-            InterfaceBlock& intf = (InterfaceBlock&) e;
+    for (const auto& e : program.elements()) {
+        if (e->is<InterfaceBlock>()) {
+            InterfaceBlock& intf = e->as<InterfaceBlock>();
             const Modifiers& modifiers = intf.fVariable->modifiers();
             if (SK_IN_BUILTIN == modifiers.fLayout.fBuiltin) {
                 SkASSERT(skInSize != -1);
@@ -3210,14 +3210,14 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
             }
         }
     }
-    for (const auto& e : program) {
-        if (e.is<GlobalVarDeclaration>()) {
-            this->writeGlobalVar(program.fKind, *e.as<GlobalVarDeclaration>().fDecl, body);
+    for (const auto& e : program.elements()) {
+        if (e->is<GlobalVarDeclaration>()) {
+            this->writeGlobalVar(program.fKind, *e->as<GlobalVarDeclaration>().fDecl, body);
         }
     }
-    for (const auto& e : program) {
-        if (e.kind() == ProgramElement::Kind::kFunction) {
-            this->writeFunction(((FunctionDefinition&) e), body);
+    for (const auto& e : program.elements()) {
+        if (e->is<FunctionDefinition>()) {
+            this->writeFunction(e->as<FunctionDefinition>(), body);
         }
     }
     const FunctionDeclaration* main = nullptr;
@@ -3232,7 +3232,7 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     }
     for (auto entry : fVariableMap) {
         const Variable* var = entry.first;
-        if (var->storage() == Variable::kGlobal_Storage &&
+        if (var->storage() == Variable::Storage::kGlobal &&
             ((var->modifiers().fFlags & Modifiers::kIn_Flag) ||
              (var->modifiers().fFlags & Modifiers::kOut_Flag)) && !is_dead(*var)) {
             interfaceVars.insert(entry.second);
@@ -3271,9 +3271,9 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
                                SpvExecutionModeOriginUpperLeft,
                                out);
     }
-    for (const auto& e : program) {
-        if (e.kind() == ProgramElement::Kind::kExtension) {
-            this->writeInstruction(SpvOpSourceExtension, ((Extension&) e).name().c_str(), out);
+    for (const auto& e : program.elements()) {
+        if (e->is<Extension>()) {
+            this->writeInstruction(SpvOpSourceExtension, e->as<Extension>().name().c_str(), out);
         }
     }
 

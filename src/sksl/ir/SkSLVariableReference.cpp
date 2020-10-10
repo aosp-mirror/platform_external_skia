@@ -15,7 +15,7 @@
 namespace SkSL {
 
 VariableReference::VariableReference(int offset, const Variable* variable, RefKind refKind)
-        : INHERITED(offset, VariableReferenceData{variable, (int8_t)refKind}) {
+        : INHERITED(offset, VariableReferenceData{variable, refKind}) {
     SkASSERT(this->variable());
     this->variable()->referenceCreated(refKind);
 }
@@ -60,7 +60,7 @@ void VariableReference::setVariable(const Variable* variable) {
 
 std::unique_ptr<Expression> VariableReference::constantPropagate(const IRGenerator& irGenerator,
                                                                  const DefinitionMap& definitions) {
-    if (this->refKind() != kRead_RefKind) {
+    if (this->refKind() != RefKind::kRead) {
         return nullptr;
     }
     const Expression* initialValue = this->variable()->initialValue();
@@ -69,10 +69,9 @@ std::unique_ptr<Expression> VariableReference::constantPropagate(const IRGenerat
         this->type().typeKind() != Type::TypeKind::kArray) {
         return initialValue->clone();
     }
-    auto exprIter = definitions.find(this->variable());
-    if (exprIter != definitions.end() && exprIter->second &&
-        (*exprIter->second)->isCompileTimeConstant()) {
-        return (*exprIter->second)->clone();
+    std::unique_ptr<Expression>** exprPPtr = definitions.find(this->variable());
+    if (exprPPtr && *exprPPtr && (**exprPPtr)->isCompileTimeConstant()) {
+        return (**exprPPtr)->clone();
     }
     return nullptr;
 }

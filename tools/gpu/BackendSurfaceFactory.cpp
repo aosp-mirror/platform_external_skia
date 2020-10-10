@@ -11,23 +11,57 @@
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpu.h"
+#include "tools/gpu/ManagedBackendTexture.h"
+
+namespace sk_gpu_test {
+
+sk_sp<SkSurface> MakeBackendTextureSurface(GrDirectContext* context,
+                                           SkISize dimensions,
+                                           GrSurfaceOrigin origin,
+                                           int sampleCnt,
+                                           SkColorType colorType,
+                                           sk_sp<SkColorSpace> colorSpace,
+                                           GrMipmapped mipMapped,
+                                           GrProtected isProtected,
+                                           const SkSurfaceProps* props) {
+    auto mbet = ManagedBackendTexture::MakeWithoutData(context,
+                                                       dimensions.fWidth,
+                                                       dimensions.fHeight,
+                                                       colorType,
+                                                       mipMapped,
+                                                       GrRenderable::kYes,
+                                                       isProtected);
+    if (!mbet) {
+        return nullptr;
+    }
+    return SkSurface::MakeFromBackendTexture(context,
+                                             mbet->texture(),
+                                             origin,
+                                             sampleCnt,
+                                             colorType,
+                                             std::move(colorSpace),
+                                             props,
+                                             ManagedBackendTexture::ReleaseProc,
+                                             mbet->releaseContext());
+}
 
 sk_sp<SkSurface> MakeBackendRenderTargetSurface(GrDirectContext* context,
                                                 SkISize dimensions,
-                                                int sampleCnt,
                                                 GrSurfaceOrigin origin,
+                                                int sampleCnt,
                                                 SkColorType colorType,
                                                 sk_sp<SkColorSpace> colorSpace,
+                                                GrProtected isProtected,
                                                 const SkSurfaceProps* props) {
     auto ct = SkColorTypeToGrColorType(colorType);
 
     struct ReleaseContext {
-        GrContext* fContext;
+        GrDirectContext* fContext;
         GrBackendRenderTarget fRenderTarget;
     };
 
     auto bert = context->priv().getGpu()->createTestingOnlyBackendRenderTarget(
-            dimensions, ct, sampleCnt);
+            dimensions, ct, sampleCnt, isProtected);
     auto rc = new ReleaseContext{context, bert};
     SkASSERT(!bert.isValid() || bert.sampleCnt() >= sampleCnt);
 
@@ -42,3 +76,5 @@ sk_sp<SkSurface> MakeBackendRenderTargetSurface(GrDirectContext* context,
     return SkSurface::MakeFromBackendRenderTarget(
             context, bert, origin, colorType, std::move(colorSpace), props, proc, rc);
 }
+
+}  // namespace sk_gpu_test

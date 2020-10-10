@@ -34,6 +34,7 @@
 namespace SkSL {
 
 class FunctionCall;
+struct ParsedModule;
 struct Swizzle;
 
 /**
@@ -111,6 +112,10 @@ public:
                                              Token::Kind op,
                                              const Expression& right) const;
 
+    // both of these functions return null and report an error if the setting does not exist
+    const Type* typeForSetting(int offset, String name) const;
+    std::unique_ptr<Expression> valueForSetting(int offset, String name) const;
+
     Program::Inputs fInputs;
     const Program::Settings* fSettings;
     const Context& fContext;
@@ -122,7 +127,7 @@ private:
      * settings.
      */
     void start(const Program::Settings* settings,
-               std::shared_ptr<SymbolTable> baseSymbolTable,
+               const ParsedModule& base,
                bool isBuiltinCode = false);
 
     /**
@@ -187,7 +192,6 @@ private:
     std::unique_ptr<Expression> convertPrefixExpression(const ASTNode& expression);
     std::unique_ptr<Statement> convertReturn(const ASTNode& r);
     std::unique_ptr<Section> convertSection(const ASTNode& e);
-    std::unique_ptr<Expression> getCap(int offset, String name);
     std::unique_ptr<Expression> convertCallExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertFieldExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertIndexExpression(const ASTNode& expression);
