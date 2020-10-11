@@ -204,6 +204,8 @@ public:
         return this->maxWindowRectangles() > 0 && this->onIsWindowRectanglesSupportedForRT(rt);
     }
 
+    uint32_t maxPushConstantsSize() const { return fMaxPushConstantsSize; }
+
     virtual bool isFormatSRGB(const GrBackendFormat&) const = 0;
 
     bool isFormatCompressed(const GrBackendFormat& format) const;
@@ -542,6 +544,7 @@ protected:
     int fMaxTileSize;
     int fMaxWindowRectangles;
     int fInternalMultisampleCount;
+    uint32_t fMaxPushConstantsSize = 0;
 
     GrDriverBugWorkarounds fDriverBugWorkarounds;
 

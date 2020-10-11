@@ -248,13 +248,14 @@ std::unique_ptr<Expression> clone_with_ref_kind(const Expression& expr,
 bool is_trivial_argument(const Expression& argument) {
     return argument.is<VariableReference>() ||
            (argument.is<Swizzle>() && is_trivial_argument(*argument.as<Swizzle>().fBase)) ||
-           (argument.is<FieldAccess>() && is_trivial_argument(*argument.as<FieldAccess>().fBase)) ||
+           (argument.is<FieldAccess>() &&
+            is_trivial_argument(*argument.as<FieldAccess>().base())) ||
            (argument.is<Constructor>() &&
             argument.as<Constructor>().arguments().size() == 1 &&
             is_trivial_argument(*argument.as<Constructor>().arguments().front())) ||
            (argument.is<IndexExpression>() &&
-            argument.as<IndexExpression>().fIndex->is<IntLiteral>() &&
-            is_trivial_argument(*argument.as<IndexExpression>().fBase));
+            argument.as<IndexExpression>().index()->is<IntLiteral>() &&
+            is_trivial_argument(*argument.as<IndexExpression>().base()));
 }
 
 }  // namespace
@@ -371,15 +372,14 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
         }
         case Expression::Kind::kExternalFunctionCall: {
             const ExternalFunctionCall& externalCall = expression.as<ExternalFunctionCall>();
-            return std::make_unique<ExternalFunctionCall>(offset, &externalCall.type(),
-                                                          externalCall.function(),
+            return std::make_unique<ExternalFunctionCall>(offset, &externalCall.function(),
                                                           argList(externalCall.arguments()));
         }
         case Expression::Kind::kExternalValue:
             return expression.clone();
         case Expression::Kind::kFieldAccess: {
             const FieldAccess& f = expression.as<FieldAccess>();
-            return std::make_unique<FieldAccess>(expr(f.fBase), f.fFieldIndex, f.fOwnerKind);
+            return std::make_unique<FieldAccess>(expr(f.base()), f.fieldIndex(), f.ownerKind());
         }
         case Expression::Kind::kFunctionCall: {
             const FunctionCall& funcCall = expression.as<FunctionCall>();
@@ -390,15 +390,16 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kIndex: {
             const IndexExpression& idx = expression.as<IndexExpression>();
-            return std::make_unique<IndexExpression>(*fContext, expr(idx.fBase), expr(idx.fIndex));
+            return std::make_unique<IndexExpression>(*fContext, expr(idx.base()),
+                                                     expr(idx.index()));
         }
         case Expression::Kind::kPrefix: {
             const PrefixExpression& p = expression.as<PrefixExpression>();
-            return std::make_unique<PrefixExpression>(p.fOperator, expr(p.fOperand));
+            return std::make_unique<PrefixExpression>(p.getOperator(), expr(p.operand()));
         }
         case Expression::Kind::kPostfix: {
             const PostfixExpression& p = expression.as<PostfixExpression>();
-            return std::make_unique<PostfixExpression>(expr(p.fOperand), p.fOperator);
+            return std::make_unique<PostfixExpression>(expr(p.operand()), p.getOperator());
         }
         case Expression::Kind::kSetting:
             return expression.clone();
@@ -498,14 +499,15 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             return statement.clone();
         case Statement::Kind::kReturn: {
             const ReturnStatement& r = statement.as<ReturnStatement>();
-            if (r.fExpression) {
+            if (r.expression()) {
                 SkASSERT(resultExpr);
                 auto assignment =
                         std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
                                 offset,
-                                clone_with_ref_kind(*resultExpr, VariableReference::kWrite_RefKind),
+                                clone_with_ref_kind(*resultExpr,
+                                                    VariableReference::RefKind::kWrite),
                                 Token::Kind::TK_EQ,
-                                expr(r.fExpression),
+                                expr(r.expression()),
                                 &resultExpr->type()));
                 if (haveEarlyReturns) {
                     std::vector<std::unique_ptr<Statement>> block;
@@ -564,7 +566,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
         }
         case Statement::Kind::kWhile: {
             const WhileStatement& w = statement.as<WhileStatement>();
-            return std::make_unique<WhileStatement>(offset, expr(w.fTest), stmt(w.fStatement));
+            return std::make_unique<WhileStatement>(offset, expr(w.test()), stmt(w.statement()));
         }
         default:
             SkASSERT(false);
@@ -633,7 +635,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         const Variable* variableSymbol = symbolTableForCall->add(std::make_unique<Variable>(
                                                  /*offset=*/-1, fModifiers->handle(Modifiers()),
                                                  nameFrag, type, caller->isBuiltin(),
-                                                 Variable::kLocal_Storage, initialValue->get()));
+                                                 Variable::Storage::kLocal, initialValue->get()));
 
         // Prepare the variable declaration (taking extra care with `out` params to not clobber any
         // initial value).
@@ -719,7 +721,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         inlinedBody.children().push_back(
                 std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
                         offset,
-                        clone_with_ref_kind(*arguments[i], VariableReference::kWrite_RefKind),
+                        clone_with_ref_kind(*arguments[i], VariableReference::RefKind::kWrite),
                         Token::Kind::TK_EQ,
                         std::move(varMap[p]),
                         &arguments[i]->type())));
@@ -727,7 +729,8 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
 
     if (resultExpr != nullptr) {
         // Return our result variable as our replacement expression.
-        SkASSERT(resultExpr->as<VariableReference>().refKind() == VariableReference::kRead_RefKind);
+        SkASSERT(resultExpr->as<VariableReference>().refKind() ==
+                 VariableReference::RefKind::kRead);
         inlinedCall.fReplacementExpr = std::move(resultExpr);
     } else {
         // It's a void function, so it doesn't actually result in anything, but we have to return
@@ -800,8 +803,8 @@ public:
         fCandidateList = candidateList;
         fSymbolTableStack.push_back(program.fSymbols.get());
 
-        for (ProgramElement& pe : program) {
-            this->visitProgramElement(&pe);
+        for (const auto& pe : program.elements()) {
+            this->visitProgramElement(pe.get());
         }
 
         fSymbolTableStack.pop_back();
@@ -910,7 +913,7 @@ public:
             }
             case Statement::Kind::kReturn: {
                 ReturnStatement& returnStmt = (*stmt)->as<ReturnStatement>();
-                this->visitExpression(&returnStmt.fExpression);
+                this->visitExpression(&returnStmt.expression());
                 break;
             }
             case Statement::Kind::kSwitch: {
@@ -937,7 +940,7 @@ public:
             case Statement::Kind::kWhile: {
                 WhileStatement& whileStmt = (*stmt)->as<WhileStatement>();
                 // The loop body is a candidate for inlining.
-                this->visitStatement(&whileStmt.fStatement);
+                this->visitStatement(&whileStmt.statement());
                 // The inliner isn't smart enough to inline the test-expression for a while loop at
                 // this time. There are two limitations:
                 // - We would need to insert the inlined-body block at the very beginning of the
@@ -1021,18 +1024,18 @@ public:
             }
             case Expression::Kind::kIndex:{
                 IndexExpression& indexExpr = (*expr)->as<IndexExpression>();
-                this->visitExpression(&indexExpr.fBase);
-                this->visitExpression(&indexExpr.fIndex);
+                this->visitExpression(&indexExpr.base());
+                this->visitExpression(&indexExpr.index());
                 break;
             }
             case Expression::Kind::kPostfix: {
                 PostfixExpression& postfixExpr = (*expr)->as<PostfixExpression>();
-                this->visitExpression(&postfixExpr.fOperand);
+                this->visitExpression(&postfixExpr.operand());
                 break;
             }
             case Expression::Kind::kPrefix: {
                 PrefixExpression& prefixExpr = (*expr)->as<PrefixExpression>();
-                this->visitExpression(&prefixExpr.fOperand);
+                this->visitExpression(&prefixExpr.operand());
                 break;
             }
             case Expression::Kind::kSwizzle: {

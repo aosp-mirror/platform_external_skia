@@ -14,6 +14,7 @@
 #include "src/sksl/SkSLString.h"
 
 #include <algorithm>
+#include <atomic>
 #include <vector>
 
 namespace SkSL {
@@ -28,6 +29,9 @@ class SymbolTable;
 class Type;
 class Variable;
 class VariableReference;
+enum class FieldAccessOwnerKind : int8_t;
+enum class VariableRefKind : int8_t;
+enum class VariableStorage : int8_t;
 
 /**
  * Represents a node in the intermediate representation (IR) tree. The IR is a fully-resolved
@@ -85,6 +89,12 @@ protected:
         const Type* fType;
         const Variable* fOwner;
         int fFieldIndex;
+    };
+
+    struct FieldAccessData {
+        const Type* fType;
+        int fFieldIndex;
+        FieldAccessOwnerKind fOwnerKind;
     };
 
     struct FloatLiteralData {
@@ -164,13 +174,13 @@ protected:
         // Tracks how many sites write to the variable. If this is zero, the variable is dead and
         // may be eliminated.
         mutable int16_t fWriteCount;
-        /*Variable::Storage*/int8_t fStorage;
+        VariableStorage fStorage;
         bool fBuiltin;
     };
 
     struct VariableReferenceData {
         const Variable* fVariable;
-        /*VariableReference::RefKind*/int8_t fRefKind;
+        VariableRefKind fRefKind;
     };
 
     struct NodeData {
@@ -180,6 +190,7 @@ protected:
             kEnum,
             kExternalValue,
             kField,
+            kFieldAccess,
             kFloatLiteral,
             kForStatement,
             kFunctionCall,
@@ -203,6 +214,7 @@ protected:
             EnumData fEnum;
             ExternalValueData fExternalValue;
             FieldData fField;
+            FieldAccessData fFieldAccess;
             FloatLiteralData fFloatLiteral;
             ForStatementData fForStatement;
             FunctionCallData fFunctionCall;
@@ -246,6 +258,11 @@ protected:
         NodeData(const FieldData& data)
             : fKind(Kind::kField) {
             *(new(&fContents) FieldData) = data;
+        }
+
+        NodeData(const FieldAccessData& data)
+            : fKind(Kind::kFieldAccess) {
+            *(new(&fContents) FieldAccessData) = data;
         }
 
         NodeData(const FloatLiteralData& data)
@@ -341,6 +358,9 @@ protected:
                 case Kind::kField:
                     *(new(&fContents) FieldData) = other.fContents.fField;
                     break;
+                case Kind::kFieldAccess:
+                    *(new(&fContents) FieldAccessData) = other.fContents.fFieldAccess;
+                    break;
                 case Kind::kFloatLiteral:
                     *(new(&fContents) FloatLiteralData) = other.fContents.fFloatLiteral;
                     break;
@@ -410,6 +430,9 @@ protected:
                 case Kind::kField:
                     fContents.fField.~FieldData();
                     break;
+                case Kind::kFieldAccess:
+                    fContents.fFieldAccess.~FieldAccessData();
+                    break;
                 case Kind::kFloatLiteral:
                     fContents.fFloatLiteral.~FloatLiteralData();
                     break;
@@ -465,6 +488,8 @@ protected:
     IRNode(int offset, int kind, const ExternalValueData& data);
 
     IRNode(int offset, int kind, const FieldData& data);
+
+    IRNode(int offset, int kind, const FieldAccessData& data);
 
     IRNode(int offset, int kind, const FloatLiteralData& data);
 
@@ -561,6 +586,11 @@ protected:
     const FieldData& fieldData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kField);
         return fData.fContents.fField;
+    }
+
+    const FieldAccessData& fieldAccessData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kFieldAccess);
+        return fData.fContents.fFieldAccess;
     }
 
     const FloatLiteralData& floatLiteralData() const {

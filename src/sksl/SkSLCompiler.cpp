@@ -46,8 +46,15 @@
 #include "spirv-tools/libspirv.hpp"
 #endif
 
-#if !SKSL_STANDALONE
+#if defined(SKSL_STANDALONE)
 
+// In standalone mode, we load the textual sksl source files. GN generates or copies these files
+// to the skslc executable directory. The "data" in this mode is just the filename.
+#define MODULE_DATA(name) MakeModulePath("sksl_" #name ".sksl")
+
+#else
+
+// At runtime, we load the dehydrated sksl data files. The data is a (pointer, size) pair.
 #include "src/sksl/generated/sksl_fp.dehydrated.sksl"
 #include "src/sksl/generated/sksl_frag.dehydrated.sksl"
 #include "src/sksl/generated/sksl_geom.dehydrated.sksl"
@@ -56,74 +63,33 @@
 #include "src/sksl/generated/sksl_pipeline.dehydrated.sksl"
 #include "src/sksl/generated/sksl_vert.dehydrated.sksl"
 
-#else
-
-// GN generates or copies all of these files to the skslc executable directory
-static const char SKSL_GPU_INCLUDE[]      = "sksl_gpu.sksl";
-static const char SKSL_INTERP_INCLUDE[]   = "sksl_interp.sksl";
-static const char SKSL_VERT_INCLUDE[]     = "sksl_vert.sksl";
-static const char SKSL_FRAG_INCLUDE[]     = "sksl_frag.sksl";
-static const char SKSL_GEOM_INCLUDE[]     = "sksl_geom.sksl";
-static const char SKSL_FP_INCLUDE[]       = "sksl_fp.sksl";
-static const char SKSL_PIPELINE_INCLUDE[] = "sksl_pipeline.sksl";
+#define MODULE_DATA(name) MakeModuleData(SKSL_INCLUDE_sksl_##name,\
+                                         SKSL_INCLUDE_sksl_##name##_LENGTH)
 
 #endif
 
 namespace SkSL {
 
-static void grab_intrinsics(std::vector<std::unique_ptr<ProgramElement>>* src,
-                            IRIntrinsicMap* target) {
-    for (std::unique_ptr<ProgramElement>& element : *src) {
-        switch (element->kind()) {
-            case ProgramElement::Kind::kFunction: {
-                const FunctionDefinition& f = element->as<FunctionDefinition>();
-                SkASSERT(f.fDeclaration.isBuiltin());
-                target->insertOrDie(f.fDeclaration.description(), std::move(element));
-                break;
-            }
-            case ProgramElement::Kind::kEnum: {
-                const Enum& e = element->as<Enum>();
-                SkASSERT(e.isBuiltin());
-                target->insertOrDie(e.typeName(), std::move(element));
-                break;
-            }
-            case ProgramElement::Kind::kGlobalVar: {
-                const Variable* var = element->as<GlobalVarDeclaration>().fDecl->fVar;
-                SkASSERT(var->isBuiltin());
-                target->insertOrDie(var->name(), std::move(element));
-                break;
-            }
-            case ProgramElement::Kind::kInterfaceBlock: {
-                const Variable* var = element->as<InterfaceBlock>().fVariable;
-                SkASSERT(var->isBuiltin());
-                target->insertOrDie(var->name(), std::move(element));
-                break;
-            }
-            default:
-                printf("Unsupported element: %s\n", element->description().c_str());
-                SkASSERT(false);
-                break;
-        }
+class AutoSource {
+public:
+    AutoSource(Compiler* compiler, const String* source)
+            : fCompiler(compiler), fOldSource(fCompiler->fSource) {
+        fCompiler->fSource = source;
     }
-}
 
-static void reset_call_counts(std::vector<std::unique_ptr<ProgramElement>>* src) {
-    for (std::unique_ptr<ProgramElement>& element : *src) {
-        if (element->is<FunctionDefinition>()) {
-            const FunctionDeclaration& fnDecl = element->as<FunctionDefinition>().fDeclaration;
-            fnDecl.callCount() = 0;
-        }
-    }
-}
+    ~AutoSource() { fCompiler->fSource = fOldSource; }
+
+    Compiler* fCompiler;
+    const String* fOldSource;
+};
 
 Compiler::Compiler(Flags flags)
 : fFlags(flags)
 , fContext(std::make_shared<Context>())
 , fErrorCount(0) {
     fRootSymbolTable = std::make_shared<SymbolTable>(this);
-    fIRGenerator =
-            std::make_unique<IRGenerator>(fContext.get(), &fInliner, fRootSymbolTable, *this);
-    #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f ## t ## _Type.get())
+    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), &fInliner, *this);
+#define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f##t##_Type.get())
     ADD_TYPE(Void);
     ADD_TYPE(Float);
     ADD_TYPE(Float2);
@@ -253,189 +219,158 @@ Compiler::Compiler(Flags flags)
     StringFragment skCapsName("sk_Caps");
     fRootSymbolTable->add(std::make_unique<Variable>(/*offset=*/-1,
                                                      fIRGenerator->fModifiers->handle(Modifiers()),
-                                                     skCapsName, fContext->fSkCaps_Type.get(),
-                                                     /*builtin=*/false, Variable::kGlobal_Storage));
+                                                     skCapsName,
+                                                     fContext->fSkCaps_Type.get(),
+                                                     /*builtin=*/false,
+                                                     Variable::Storage::kGlobal));
 
-    fIRGenerator->fIntrinsics = nullptr;
-    std::vector<std::unique_ptr<ProgramElement>> gpuElements;
-    std::vector<std::unique_ptr<ProgramElement>> vertElements;
-    std::vector<std::unique_ptr<ProgramElement>> fragElements;
-#if SKSL_STANDALONE
-    this->processIncludeFile(Program::kFragment_Kind, SKSL_GPU_INCLUDE, fRootSymbolTable,
-                             &gpuElements, &fGpuSymbolTable);
-    this->processIncludeFile(Program::kVertex_Kind, SKSL_VERT_INCLUDE, fGpuSymbolTable,
-                             &vertElements, &fVertexSymbolTable);
-    this->processIncludeFile(Program::kFragment_Kind, SKSL_FRAG_INCLUDE, fGpuSymbolTable,
-                             &fragElements, &fFragmentSymbolTable);
-#else
-    {
-        Rehydrator rehydrator(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(),
-                              fRootSymbolTable, this, SKSL_INCLUDE_sksl_gpu,
-                              SKSL_INCLUDE_sksl_gpu_LENGTH);
-        fGpuSymbolTable = rehydrator.symbolTable();
-        gpuElements = rehydrator.elements();
-        fModifiers.push_back(fIRGenerator->releaseModifiers());
-    }
-    {
-        Rehydrator rehydrator(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(),
-                              fGpuSymbolTable, this, SKSL_INCLUDE_sksl_vert,
-                              SKSL_INCLUDE_sksl_vert_LENGTH);
-        fVertexSymbolTable = rehydrator.symbolTable();
-        vertElements = rehydrator.elements();
-        fModifiers.push_back(fIRGenerator->releaseModifiers());
-    }
-    {
-        Rehydrator rehydrator(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(),
-                              fGpuSymbolTable, this, SKSL_INCLUDE_sksl_frag,
-                              SKSL_INCLUDE_sksl_frag_LENGTH);
-        fFragmentSymbolTable = rehydrator.symbolTable();
-        fragElements = rehydrator.elements();
-        fModifiers.push_back(fIRGenerator->releaseModifiers());
-    }
-#endif
-    // Call counts are used to track dead-stripping and inlinability within the program being
-    // currently compiled, and always should start at zero for a new program. Zero out any call
-    // counts that were registered during the assembly of the intrinsics/include data. (If we
-    // actually use calls from inside the intrinsics, we will clone them into the program and they
-    // will get new call counts.)
-    reset_call_counts(&gpuElements);
-    reset_call_counts(&vertElements);
-    reset_call_counts(&fragElements);
+    fRootModule = {fRootSymbolTable, /*fIntrinsics=*/nullptr};
 
-    fGPUIntrinsics = std::make_unique<IRIntrinsicMap>(/*parent=*/nullptr);
-    grab_intrinsics(&gpuElements, fGPUIntrinsics.get());
-
-    fVertexIntrinsics = std::make_unique<IRIntrinsicMap>(fGPUIntrinsics.get());
-    grab_intrinsics(&vertElements, fVertexIntrinsics.get());
-
-    fFragmentIntrinsics = std::make_unique<IRIntrinsicMap>(fGPUIntrinsics.get());
-    grab_intrinsics(&fragElements, fFragmentIntrinsics.get());
+    fGPUModule = this->parseModule(Program::kFragment_Kind, MODULE_DATA(gpu), fRootModule);
+    fVertexModule = this->parseModule(Program::kVertex_Kind, MODULE_DATA(vert), fGPUModule);
+    fFragmentModule = this->parseModule(Program::kFragment_Kind, MODULE_DATA(frag), fGPUModule);
 }
 
 Compiler::~Compiler() {}
 
-void Compiler::loadGeometryIntrinsics() {
-    if (fGeometrySymbolTable) {
-        return;
+const ParsedModule& Compiler::loadGeometryModule() {
+    if (!fGeometryModule.fSymbols) {
+        fGeometryModule = this->parseModule(Program::kGeometry_Kind, MODULE_DATA(geom), fGPUModule);
     }
-    fGeometryIntrinsics = std::make_unique<IRIntrinsicMap>(fGPUIntrinsics.get());
-    std::vector<std::unique_ptr<ProgramElement>> geomElements;
-    #if !SKSL_STANDALONE
-        {
-            Rehydrator rehydrator(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(),
-                                  fGpuSymbolTable, this, SKSL_INCLUDE_sksl_geom,
-                                  SKSL_INCLUDE_sksl_geom_LENGTH);
-            fGeometrySymbolTable = rehydrator.symbolTable();
-            geomElements = rehydrator.elements();
-            fModifiers.push_back(fIRGenerator->releaseModifiers());
-        }
-    #else
-        this->processIncludeFile(Program::kGeometry_Kind, SKSL_GEOM_INCLUDE, fGpuSymbolTable,
-                                 &geomElements, &fGeometrySymbolTable);
-    #endif
-    grab_intrinsics(&geomElements, fGeometryIntrinsics.get());
+    return fGeometryModule;
 }
 
-void Compiler::loadFPIntrinsics() {
-    if (fFPSymbolTable) {
-        return;
+const ParsedModule& Compiler::loadFPModule() {
+    if (!fFPModule.fSymbols) {
+        fFPModule =
+                this->parseModule(Program::kFragmentProcessor_Kind, MODULE_DATA(fp), fGPUModule);
     }
-    fFPIntrinsics = std::make_unique<IRIntrinsicMap>(fGPUIntrinsics.get());
-    std::vector<std::unique_ptr<ProgramElement>> fpElements;
-    #if !SKSL_STANDALONE
-        {
-            Rehydrator rehydrator(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(),
-                                  fGpuSymbolTable, this, SKSL_INCLUDE_sksl_fp,
-                                  SKSL_INCLUDE_sksl_fp_LENGTH);
-            fFPSymbolTable = rehydrator.symbolTable();
-            fpElements = rehydrator.elements();
-        }
-    #else
-        this->processIncludeFile(Program::kFragmentProcessor_Kind, SKSL_FP_INCLUDE, fGpuSymbolTable,
-                                 &fpElements, &fFPSymbolTable);
-    #endif
-    grab_intrinsics(&fpElements, fFPIntrinsics.get());
+    return fFPModule;
 }
 
-void Compiler::loadPipelineIntrinsics() {
-    if (fPipelineSymbolTable) {
-        return;
+const ParsedModule& Compiler::loadPipelineModule() {
+    if (!fPipelineModule.fSymbols) {
+        fPipelineModule =
+                this->parseModule(Program::kPipelineStage_Kind, MODULE_DATA(pipeline), fGPUModule);
     }
-    fPipelineIntrinsics = std::make_unique<IRIntrinsicMap>(fGPUIntrinsics.get());
-    std::vector<std::unique_ptr<ProgramElement>> pipelineIntrinics;
-    #if !SKSL_STANDALONE
-        {
-            Rehydrator rehydrator(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(),
-                                  fGpuSymbolTable, this, SKSL_INCLUDE_sksl_pipeline,
-                                  SKSL_INCLUDE_sksl_pipeline_LENGTH);
-            fPipelineSymbolTable = rehydrator.symbolTable();
-            pipelineIntrinics = rehydrator.elements();
-            fModifiers.push_back(fIRGenerator->releaseModifiers());
-        }
-    #else
-        this->processIncludeFile(Program::kPipelineStage_Kind, SKSL_PIPELINE_INCLUDE,
-                                 fGpuSymbolTable, &pipelineIntrinics, &fPipelineSymbolTable);
-    #endif
-    grab_intrinsics(&pipelineIntrinics, fPipelineIntrinsics.get());
+    return fPipelineModule;
 }
 
-void Compiler::loadInterpreterIntrinsics() {
-    if (fInterpreterSymbolTable) {
-        return;
+const ParsedModule& Compiler::loadInterpreterModule() {
+    if (!fInterpreterModule.fSymbols) {
+        fInterpreterModule =
+                this->parseModule(Program::kGeneric_Kind, MODULE_DATA(interp), fRootModule);
     }
-    fInterpreterIntrinsics = std::make_unique<IRIntrinsicMap>(/*parent=*/nullptr);
-    std::vector<std::unique_ptr<ProgramElement>> interpElements;
-    #if !SKSL_STANDALONE
-        {
-            Rehydrator rehydrator(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(),
-                                  fRootSymbolTable, this, SKSL_INCLUDE_sksl_interp,
-                                  SKSL_INCLUDE_sksl_interp_LENGTH);
-            fInterpreterSymbolTable = rehydrator.symbolTable();
-            interpElements = rehydrator.elements();
-            fModifiers.push_back(fIRGenerator->releaseModifiers());
-        }
-    #else
-        this->processIncludeFile(Program::kGeneric_Kind, SKSL_INTERP_INCLUDE,
-                                 fIRGenerator->fSymbolTable, &interpElements,
-                                 &fInterpreterSymbolTable);
-    #endif
-    grab_intrinsics(&interpElements, fInterpreterIntrinsics.get());
+    return fInterpreterModule;
 }
 
-void Compiler::processIncludeFile(Program::Kind kind, const char* path,
-                                  std::shared_ptr<SymbolTable> base,
-                                  std::vector<std::unique_ptr<ProgramElement>>* outElements,
-                                  std::shared_ptr<SymbolTable>* outSymbolTable) {
-    std::ifstream in(path);
+const ParsedModule& Compiler::moduleForProgramKind(Program::Kind kind) {
+    switch (kind) {
+        case Program::kVertex_Kind:            return fVertexModule;                 break;
+        case Program::kFragment_Kind:          return fFragmentModule;               break;
+        case Program::kGeometry_Kind:          return this->loadGeometryModule();    break;
+        case Program::kFragmentProcessor_Kind: return this->loadFPModule();          break;
+        case Program::kPipelineStage_Kind:     return this->loadPipelineModule();    break;
+        case Program::kGeneric_Kind:           return this->loadInterpreterModule(); break;
+    }
+    SkUNREACHABLE;
+}
+
+LoadedModule Compiler::loadModule(Program::Kind kind,
+                                  ModuleData data,
+                                  std::shared_ptr<SymbolTable> base) {
+    if (!base) {
+        base = fRootSymbolTable;
+    }
+
+#if defined(SKSL_STANDALONE)
+    SkASSERT(data.fPath);
+    std::ifstream in(data.fPath);
     std::unique_ptr<String> text = std::make_unique<String>(std::istreambuf_iterator<char>(in),
                                                             std::istreambuf_iterator<char>());
     if (in.rdstate()) {
-        printf("error reading %s\n", path);
+        printf("error reading %s\n", data.fPath);
         abort();
     }
     const String* source = fRootSymbolTable->takeOwnershipOfString(std::move(text));
-    fSource = source;
+    AutoSource as(this, source);
     Program::Settings settings;
-#if !defined(SKSL_STANDALONE) & SK_SUPPORT_GPU
-    GrContextOptions opts;
-    GrShaderCaps caps(opts);
-    settings.fCaps = &caps;
-#endif
     SkASSERT(fIRGenerator->fCanInline);
     fIRGenerator->fCanInline = false;
-    fIRGenerator->start(&settings, base ? base : fRootSymbolTable, true);
-    fIRGenerator->convertProgram(kind, source->c_str(), source->length(), outElements);
+    ParsedModule baseModule = {base, /*fIntrinsics=*/nullptr};
+    IRGenerator::IRBundle ir = fIRGenerator->convertProgram(
+            kind, &settings, baseModule, /*isBuiltinCode=*/true, source->c_str(), source->length(),
+            /*externalValues=*/nullptr);
+    LoadedModule module = { std::move(ir.fSymbolTable), std::move(ir.fElements) };
     fIRGenerator->fCanInline = true;
     if (this->fErrorCount) {
         printf("Unexpected errors: %s\n", this->fErrorText.c_str());
-        SkDEBUGFAILF("%s %s\n", path, this->fErrorText.c_str());
+        SkDEBUGFAILF("%s %s\n", data.fPath, this->fErrorText.c_str());
     }
-    *outSymbolTable = fIRGenerator->fSymbolTable;
-#ifdef SK_DEBUG
-    fSource = nullptr;
-#endif
+    fModifiers.push_back(std::move(ir.fModifiers));
+#else
+    SkASSERT(data.fData && (data.fSize != 0));
+    Rehydrator rehydrator(fContext.get(), fIRGenerator->fModifiers.get(), base, this,
+                          data.fData, data.fSize);
+    LoadedModule module = { rehydrator.symbolTable(), rehydrator.elements() };
     fModifiers.push_back(fIRGenerator->releaseModifiers());
-    fIRGenerator->finish();
+#endif
+
+    return module;
+}
+
+ParsedModule Compiler::parseModule(Program::Kind kind, ModuleData data, const ParsedModule& base) {
+    auto [symbols, elements] = this->loadModule(kind, data, base.fSymbols);
+
+    // For modules that just declare (but don't define) intrinsic functions, there will be no new
+    // program elements. In that case, we can share our parent's intrinsic map:
+    if (elements.empty()) {
+        return {symbols, base.fIntrinsics};
+    }
+
+    auto intrinsics = std::make_shared<IRIntrinsicMap>(base.fIntrinsics.get());
+
+    // Now, transfer all of the program elements to an intrinsic map. This maps certain types of
+    // global objects to the declaring ProgramElement.
+    for (std::unique_ptr<ProgramElement>& element : elements) {
+        switch (element->kind()) {
+            case ProgramElement::Kind::kFunction: {
+                const FunctionDefinition& f = element->as<FunctionDefinition>();
+                SkASSERT(f.fDeclaration.isBuiltin());
+                // Call counts are used to track dead-stripping and inlinability within the program
+                // being compiled, and should start at zero for a new program. Zero out any call
+                // counts internal to the include data. (If we actually use calls from inside the
+                // intrinsics, we will clone them into the program with new call counts.)
+                f.fDeclaration.callCount() = 0;
+                intrinsics->insertOrDie(f.fDeclaration.description(), std::move(element));
+                break;
+            }
+            case ProgramElement::Kind::kEnum: {
+                const Enum& e = element->as<Enum>();
+                SkASSERT(e.isBuiltin());
+                intrinsics->insertOrDie(e.typeName(), std::move(element));
+                break;
+            }
+            case ProgramElement::Kind::kGlobalVar: {
+                const Variable* var = element->as<GlobalVarDeclaration>().fDecl->fVar;
+                SkASSERT(var->isBuiltin());
+                intrinsics->insertOrDie(var->name(), std::move(element));
+                break;
+            }
+            case ProgramElement::Kind::kInterfaceBlock: {
+                const Variable* var = element->as<InterfaceBlock>().fVariable;
+                SkASSERT(var->isBuiltin());
+                intrinsics->insertOrDie(var->name(), std::move(element));
+                break;
+            }
+            default:
+                printf("Unsupported element: %s\n", element->description().c_str());
+                SkASSERT(false);
+                break;
+        }
+    }
+
+    return {symbols, std::move(intrinsics)};
 }
 
 // add the definition created by assigning to the lvalue to the definition set
@@ -444,7 +379,7 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
     switch (lvalue->kind()) {
         case Expression::Kind::kVariableReference: {
             const Variable& var = *lvalue->as<VariableReference>().variable();
-            if (var.storage() == Variable::kLocal_Storage) {
+            if (var.storage() == Variable::Storage::kLocal) {
                 definitions->set(&var, expr);
             }
             break;
@@ -462,13 +397,13 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
             break;
         case Expression::Kind::kIndex:
             // see comments in Swizzle
-            this->addDefinition(lvalue->as<IndexExpression>().fBase.get(),
+            this->addDefinition(lvalue->as<IndexExpression>().base().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
             break;
         case Expression::Kind::kFieldAccess:
             // see comments in Swizzle
-            this->addDefinition(lvalue->as<FieldAccess>().fBase.get(),
+            this->addDefinition(lvalue->as<FieldAccess>().base().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
             break;
@@ -524,10 +459,10 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
             }
             case Expression::Kind::kPrefix: {
                 const PrefixExpression* p = &expr->as<PrefixExpression>();
-                if (p->fOperator == Token::Kind::TK_MINUSMINUS ||
-                    p->fOperator == Token::Kind::TK_PLUSPLUS) {
+                if (p->getOperator() == Token::Kind::TK_MINUSMINUS ||
+                    p->getOperator() == Token::Kind::TK_PLUSPLUS) {
                     this->addDefinition(
-                                  p->fOperand.get(),
+                                  p->operand().get(),
                                   (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                   definitions);
                 }
@@ -535,10 +470,10 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
             }
             case Expression::Kind::kPostfix: {
                 const PostfixExpression* p = &expr->as<PostfixExpression>();
-                if (p->fOperator == Token::Kind::TK_MINUSMINUS ||
-                    p->fOperator == Token::Kind::TK_PLUSPLUS) {
+                if (p->getOperator() == Token::Kind::TK_MINUSMINUS ||
+                    p->getOperator() == Token::Kind::TK_PLUSPLUS) {
                     this->addDefinition(
-                                  p->fOperand.get(),
+                                  p->operand().get(),
                                   (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                   definitions);
                 }
@@ -546,7 +481,7 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
             }
             case Expression::Kind::kVariableReference: {
                 const VariableReference* v = &expr->as<VariableReference>();
-                if (v->refKind() != VariableReference::kRead_RefKind) {
+                if (v->refKind() != VariableReference::RefKind::kRead) {
                     this->addDefinition(
                                   v,
                                   (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
@@ -634,11 +569,11 @@ static bool is_dead(const Expression& lvalue) {
         case Expression::Kind::kSwizzle:
             return is_dead(*lvalue.as<Swizzle>().fBase);
         case Expression::Kind::kFieldAccess:
-            return is_dead(*lvalue.as<FieldAccess>().fBase);
+            return is_dead(*lvalue.as<FieldAccess>().base());
         case Expression::Kind::kIndex: {
             const IndexExpression& idx = lvalue.as<IndexExpression>();
-            return is_dead(*idx.fBase) &&
-                   !idx.fIndex->hasProperty(Expression::Property::kSideEffects);
+            return is_dead(*idx.base()) &&
+                   !idx.index()->hasProperty(Expression::Property::kSideEffects);
         }
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = lvalue.as<TernaryExpression>();
@@ -879,17 +814,17 @@ static void vectorize_right(BasicBlock* b,
 static void clear_write(Expression& expr) {
     switch (expr.kind()) {
         case Expression::Kind::kVariableReference: {
-            expr.as<VariableReference>().setRefKind(VariableReference::kRead_RefKind);
+            expr.as<VariableReference>().setRefKind(VariableReference::RefKind::kRead);
             break;
         }
         case Expression::Kind::kFieldAccess:
-            clear_write(*expr.as<FieldAccess>().fBase);
+            clear_write(*expr.as<FieldAccess>().base());
             break;
         case Expression::Kind::kSwizzle:
             clear_write(*expr.as<Swizzle>().fBase);
             break;
         case Expression::Kind::kIndex:
-            clear_write(*expr.as<IndexExpression>().fBase);
+            clear_write(*expr.as<IndexExpression>().base());
             break;
         default:
             ABORT("shouldn't be writing to this kind of expression\n");
@@ -923,9 +858,9 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
         case Expression::Kind::kVariableReference: {
             const VariableReference& ref = expr->as<VariableReference>();
             const Variable* var = ref.variable();
-            if (ref.refKind() != VariableReference::kWrite_RefKind &&
-                ref.refKind() != VariableReference::kPointer_RefKind &&
-                var->storage() == Variable::kLocal_Storage && !definitions[var] &&
+            if (ref.refKind() != VariableReference::RefKind::kWrite &&
+                ref.refKind() != VariableReference::RefKind::kPointer &&
+                var->storage() == Variable::Storage::kLocal && !definitions[var] &&
                 (*undefinedVariables).find(var) == (*undefinedVariables).end()) {
                 (*undefinedVariables).insert(var);
                 this->error(expr->fOffset,
@@ -1590,57 +1525,25 @@ std::unique_ptr<Program> Compiler::convertProgram(
 
     fErrorText = "";
     fErrorCount = 0;
-    fInliner.reset(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(), &settings);
-    std::vector<std::unique_ptr<ProgramElement>> elements;
-    switch (kind) {
-        case Program::kVertex_Kind:
-            fIRGenerator->fIntrinsics = fVertexIntrinsics.get();
-            fIRGenerator->start(&settings, fVertexSymbolTable);
-            break;
-        case Program::kFragment_Kind:
-            fIRGenerator->fIntrinsics = fFragmentIntrinsics.get();
-            fIRGenerator->start(&settings, fFragmentSymbolTable);
-            break;
-        case Program::kGeometry_Kind:
-            this->loadGeometryIntrinsics();
-            fIRGenerator->fIntrinsics = fGeometryIntrinsics.get();
-            fIRGenerator->start(&settings, fGeometrySymbolTable);
-            break;
-        case Program::kFragmentProcessor_Kind:
-            this->loadFPIntrinsics();
-            fIRGenerator->fIntrinsics = fFPIntrinsics.get();
-            fIRGenerator->start(&settings, fFPSymbolTable);
-            break;
-        case Program::kPipelineStage_Kind:
-            this->loadPipelineIntrinsics();
-            fIRGenerator->fIntrinsics = fPipelineIntrinsics.get();
-            fIRGenerator->start(&settings, fPipelineSymbolTable);
-            break;
-        case Program::kGeneric_Kind:
-            this->loadInterpreterIntrinsics();
-            fIRGenerator->fIntrinsics = fInterpreterIntrinsics.get();
-            fIRGenerator->start(&settings, fInterpreterSymbolTable);
-            break;
-    }
-    if (externalValues) {
-        // Add any external values to the symbol table. IRGenerator::start() has pushed a table, so
-        // we're only making these visible to the current Program.
-        for (const auto& ev : *externalValues) {
-            fIRGenerator->fSymbolTable->addWithoutOwnership(ev.get());
-        }
-    }
+    fInliner.reset(fContext.get(), fIRGenerator->fModifiers.get(), &settings);
+
+    // Not using AutoSource, because caller is likely to call errorText() if we fail to compile
     std::unique_ptr<String> textPtr(new String(std::move(text)));
     fSource = textPtr.get();
-    fIRGenerator->convertProgram(kind, textPtr->c_str(), textPtr->size(), &elements);
+
+    const ParsedModule& baseModule = this->moduleForProgramKind(kind);
+
+    IRGenerator::IRBundle ir =
+            fIRGenerator->convertProgram(kind, &settings, baseModule, /*isBuiltinCode=*/false,
+                                         textPtr->c_str(), textPtr->size(), externalValues);
     auto result = std::make_unique<Program>(kind,
                                             std::move(textPtr),
                                             settings,
                                             fContext,
-                                            std::move(elements),
-                                            fIRGenerator->releaseModifiers(),
-                                            fIRGenerator->fSymbolTable,
-                                            fIRGenerator->fInputs);
-    fIRGenerator->finish();
+                                            std::move(ir.fElements),
+                                            std::move(ir.fModifiers),
+                                            std::move(ir.fSymbolTable),
+                                            ir.fInputs);
     if (fErrorCount) {
         return nullptr;
     }
@@ -1659,9 +1562,9 @@ bool Compiler::optimize(Program& program) {
         bool madeChanges = false;
 
         // Scan and optimize based on the control-flow graph for each function.
-        for (ProgramElement& element : program) {
-            if (element.is<FunctionDefinition>()) {
-                madeChanges |= this->scanCFG(element.as<FunctionDefinition>());
+        for (const auto& element : program.elements()) {
+            if (element->is<FunctionDefinition>()) {
+                madeChanges |= this->scanCFG(element->as<FunctionDefinition>());
             }
         }
 
@@ -1707,7 +1610,6 @@ bool Compiler::optimize(Program& program) {
             break;
         }
     }
-    program.finish();
     return fErrorCount == 0;
 }
 
@@ -1716,11 +1618,9 @@ bool Compiler::optimize(Program& program) {
 bool Compiler::toSPIRV(Program& program, OutputStream& out) {
 #ifdef SK_ENABLE_SPIRV_VALIDATION
     StringStream buffer;
-    fSource = program.fSource.get();
-    SPIRVCodeGenerator cg(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(), &program, this,
-                          &buffer);
+    AutoSource as(this, program.fSource.get());
+    SPIRVCodeGenerator cg(fContext.get(), &program, this, &buffer);
     bool result = cg.generateCode();
-    fSource = nullptr;
     if (result) {
         spvtools::SpirvTools tools(SPV_ENV_VULKAN_1_0);
         const String& data = buffer.str();
@@ -1735,11 +1635,9 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
         out.write(data.c_str(), data.size());
     }
 #else
-    fSource = program.fSource.get();
-    SPIRVCodeGenerator cg(&fIRGenerator->fContext, fIRGenerator->fModifiers.get(), &program, this,
-                          &out);
+    AutoSource as(this, program.fSource.get());
+    SPIRVCodeGenerator cg(fContext.get(), &program, this, &out);
     bool result = cg.generateCode();
-    fSource = nullptr;
 #endif
     return result;
 }
@@ -1754,10 +1652,9 @@ bool Compiler::toSPIRV(Program& program, String* out) {
 }
 
 bool Compiler::toGLSL(Program& program, OutputStream& out) {
-    fSource = program.fSource.get();
+    AutoSource as(this, program.fSource.get());
     GLSLCodeGenerator cg(fContext.get(), &program, this, &out);
     bool result = cg.generateCode();
-    fSource = nullptr;
     return result;
 }
 
@@ -1796,18 +1693,16 @@ bool Compiler::toMetal(Program& program, String* out) {
 
 #if defined(SKSL_STANDALONE) || GR_TEST_UTILS
 bool Compiler::toCPP(Program& program, String name, OutputStream& out) {
-    fSource = program.fSource.get();
+    AutoSource as(this, program.fSource.get());
     CPPCodeGenerator cg(fContext.get(), &program, this, name, &out);
     bool result = cg.generateCode();
-    fSource = nullptr;
     return result;
 }
 
 bool Compiler::toH(Program& program, String name, OutputStream& out) {
-    fSource = program.fSource.get();
+    AutoSource as(this, program.fSource.get());
     HCodeGenerator cg(fContext.get(), &program, this, name, &out);
     bool result = cg.generateCode();
-    fSource = nullptr;
     return result;
 }
 #endif // defined(SKSL_STANDALONE) || GR_TEST_UTILS
@@ -1816,11 +1711,10 @@ bool Compiler::toH(Program& program, String name, OutputStream& out) {
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 bool Compiler::toPipelineStage(Program& program, PipelineStageArgs* outArgs) {
-    fSource = program.fSource.get();
+    AutoSource as(this, program.fSource.get());
     StringStream buffer;
     PipelineStageCodeGenerator cg(fContext.get(), &program, this, &buffer, outArgs);
     bool result = cg.generateCode();
-    fSource = nullptr;
     if (result) {
         outArgs->fCode = buffer.str();
     }
@@ -1830,11 +1724,10 @@ bool Compiler::toPipelineStage(Program& program, PipelineStageArgs* outArgs) {
 
 std::unique_ptr<ByteCode> Compiler::toByteCode(Program& program) {
 #if defined(SK_ENABLE_SKSL_INTERPRETER)
-    fSource = program.fSource.get();
+    AutoSource as(this, program.fSource.get());
     std::unique_ptr<ByteCode> result(new ByteCode());
     ByteCodeGenerator cg(fContext.get(), &program, this, result.get());
     bool success = cg.generateCode();
-    fSource = nullptr;
     if (success) {
         return result;
     }

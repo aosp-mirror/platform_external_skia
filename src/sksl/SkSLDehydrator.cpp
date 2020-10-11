@@ -220,7 +220,7 @@ void Dehydrator::write(const Symbol& s) {
             this->write(v.modifiers());
             this->write(v.name());
             this->write(v.type());
-            this->writeU8(v.storage());
+            this->writeU8((int8_t) v.storage());
             break;
         }
         case Symbol::Kind::kField: {
@@ -242,11 +242,11 @@ void Dehydrator::write(const SymbolTable& symbols) {
     for (const std::unique_ptr<const Symbol>& s : symbols.fOwnedSymbols) {
         this->write(*s);
     }
-    this->writeU16(symbols.fSymbols.size());
+    this->writeU16(symbols.fSymbols.count());
     std::map<StringFragment, const Symbol*> ordered;
-    for (std::pair<StringFragment, const Symbol*> p : symbols.fSymbols) {
-        ordered.insert(p);
-    }
+    symbols.foreach([&](StringFragment name, const Symbol* symbol) {
+        ordered.insert({name, symbol});
+    });
     for (std::pair<StringFragment, const Symbol*> p : ordered) {
         bool found = false;
         for (size_t i = 0; i < symbols.fOwnedSymbols.size(); ++i) {
@@ -296,9 +296,9 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kFieldAccess: {
                 const FieldAccess& f = e->as<FieldAccess>();
                 this->writeCommand(Rehydrator::kFieldAccess_Command);
-                this->write(f.fBase.get());
-                this->writeU8(f.fFieldIndex);
-                this->writeU8(f.fOwnerKind);
+                this->write(f.base().get());
+                this->writeU8(f.fieldIndex());
+                this->writeU8((int8_t) f.ownerKind());
                 break;
             }
             case Expression::Kind::kFloatLiteral: {
@@ -323,8 +323,8 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kIndex: {
                 const IndexExpression& i = e->as<IndexExpression>();
                 this->writeCommand(Rehydrator::kIndex_Command);
-                this->write(i.fBase.get());
-                this->write(i.fIndex.get());
+                this->write(i.base().get());
+                this->write(i.index().get());
                 break;
             }
             case Expression::Kind::kIntLiteral: {
@@ -339,15 +339,15 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kPostfix: {
                 const PostfixExpression& p = e->as<PostfixExpression>();
                 this->writeCommand(Rehydrator::kPostfix_Command);
-                this->writeU8((int) p.fOperator);
-                this->write(p.fOperand.get());
+                this->writeU8((int) p.getOperator());
+                this->write(p.operand().get());
                 break;
             }
             case Expression::Kind::kPrefix: {
                 const PrefixExpression& p = e->as<PrefixExpression>();
                 this->writeCommand(Rehydrator::kPrefix_Command);
-                this->writeU8((int) p.fOperator);
-                this->write(p.fOperand.get());
+                this->writeU8((int) p.getOperator());
+                this->write(p.operand().get());
                 break;
             }
             case Expression::Kind::kSetting: {
@@ -379,7 +379,7 @@ void Dehydrator::write(const Expression* e) {
                 const VariableReference& v = e->as<VariableReference>();
                 this->writeCommand(Rehydrator::kVariableReference_Command);
                 this->writeId(v.variable());
-                this->writeU8(v.refKind());
+                this->writeU8((int8_t) v.refKind());
                 break;
             }
             case Expression::Kind::kFunctionReference:
@@ -460,7 +460,7 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kReturn: {
                 const ReturnStatement& r = s->as<ReturnStatement>();
                 this->writeCommand(Rehydrator::kReturn_Command);
-                this->write(r.fExpression.get());
+                this->write(r.expression().get());
                 break;
             }
             case Statement::Kind::kSwitch: {
@@ -497,8 +497,8 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kWhile: {
                 const WhileStatement& w = s->as<WhileStatement>();
                 this->writeCommand(Rehydrator::kWhile_Command);
-                this->write(w.fTest.get());
-                this->write(w.fStatement.get());
+                this->write(w.test().get());
+                this->write(w.statement().get());
                 break;
             }
         }

@@ -300,7 +300,7 @@ void GLSLCodeGenerator::writeDeterminantHack(const Expression& mat) {
         }
     }
     else if (type == *fContext.fFloat4x4_Type || type == *fContext.fHalf4x4_Type) {
-        name = "_determinant3";
+        name = "_determinant4";
         if (fWrittenIntrinsics.find(name) == fWrittenIntrinsics.end()) {
             fWrittenIntrinsics.insert(name);
             fExtraFunctions.writeText((
@@ -514,11 +514,11 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                     arguments.size() == 2 &&
                     arguments[1]->kind() == Expression::Kind::kPrefix) {
                     const PrefixExpression& p = (PrefixExpression&) *arguments[1];
-                    if (p.fOperator == Token::Kind::TK_MINUS) {
+                    if (p.getOperator() == Token::Kind::TK_MINUS) {
                         this->write("atan(");
                         this->writeExpression(*arguments[0], kSequence_Precedence);
                         this->write(", -1.0 * ");
-                        this->writeExpression(*p.fOperand, kMultiplicative_Precedence);
+                        this->writeExpression(*p.operand(), kMultiplicative_Precedence);
                         this->write(")");
                         return;
                     }
@@ -536,12 +536,13 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                 if (!fFoundDerivatives &&
                     fProgram.fSettings.fCaps->shaderDerivativeExtensionString()) {
                     SkASSERT(fProgram.fSettings.fCaps->shaderDerivativeSupport());
-                    this->writeExtension(fProgram.fSettings.fCaps->shaderDerivativeExtensionString());
+                    this->writeExtension(
+                            fProgram.fSettings.fCaps->shaderDerivativeExtensionString());
                     fFoundDerivatives = true;
                 }
                 break;
             case FunctionClass::kDeterminant:
-                if (fProgram.fSettings.fCaps->generation() < k150_GrGLSLGeneration) {
+                if (!fProgram.fSettings.fCaps->builtinDeterminantSupport()) {
                     SkASSERT(arguments.size() == 1);
                     this->writeDeterminantHack(*arguments[0]);
                     return;
@@ -830,29 +831,29 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
 }
 
 void GLSLCodeGenerator::writeIndexExpression(const IndexExpression& expr) {
-    this->writeExpression(*expr.fBase, kPostfix_Precedence);
+    this->writeExpression(*expr.base(), kPostfix_Precedence);
     this->write("[");
-    this->writeExpression(*expr.fIndex, kTopLevel_Precedence);
+    this->writeExpression(*expr.index(), kTopLevel_Precedence);
     this->write("]");
 }
 
 bool is_sk_position(const FieldAccess& f) {
-    return "sk_Position" == f.fBase->type().fields()[f.fFieldIndex].fName;
+    return "sk_Position" == f.base()->type().fields()[f.fieldIndex()].fName;
 }
 
 void GLSLCodeGenerator::writeFieldAccess(const FieldAccess& f) {
-    if (f.fOwnerKind == FieldAccess::kDefault_OwnerKind) {
-        this->writeExpression(*f.fBase, kPostfix_Precedence);
+    if (f.ownerKind() == FieldAccess::OwnerKind::kDefault) {
+        this->writeExpression(*f.base(), kPostfix_Precedence);
         this->write(".");
     }
-    const Type& baseType = f.fBase->type();
-    StringFragment name = baseType.fields()[f.fFieldIndex].fName;
+    const Type& baseType = f.base()->type();
+    StringFragment name = baseType.fields()[f.fieldIndex()].fName;
     if (name == "sk_Position") {
         this->write("gl_Position");
     } else if (name == "sk_PointSize") {
         this->write("gl_PointSize");
     } else {
-        this->write(baseType.fields()[f.fFieldIndex].fName);
+        this->write(baseType.fields()[f.fieldIndex()].fName);
     }
 }
 
@@ -991,8 +992,8 @@ void GLSLCodeGenerator::writePrefixExpression(const PrefixExpression& p,
     if (kPrefix_Precedence >= parentPrecedence) {
         this->write("(");
     }
-    this->write(Compiler::OperatorName(p.fOperator));
-    this->writeExpression(*p.fOperand, kPrefix_Precedence);
+    this->write(Compiler::OperatorName(p.getOperator()));
+    this->writeExpression(*p.operand(), kPrefix_Precedence);
     if (kPrefix_Precedence >= parentPrecedence) {
         this->write(")");
     }
@@ -1003,8 +1004,8 @@ void GLSLCodeGenerator::writePostfixExpression(const PostfixExpression& p,
     if (kPostfix_Precedence >= parentPrecedence) {
         this->write("(");
     }
-    this->writeExpression(*p.fOperand, kPostfix_Precedence);
-    this->write(Compiler::OperatorName(p.fOperator));
+    this->writeExpression(*p.operand(), kPostfix_Precedence);
+    this->write(Compiler::OperatorName(p.getOperator()));
     if (kPostfix_Precedence >= parentPrecedence) {
         this->write(")");
     }
@@ -1384,9 +1385,9 @@ void GLSLCodeGenerator::writeForStatement(const ForStatement& f) {
 
 void GLSLCodeGenerator::writeWhileStatement(const WhileStatement& w) {
     this->write("while (");
-    this->writeExpression(*w.fTest, kTopLevel_Precedence);
+    this->writeExpression(*w.test(), kTopLevel_Precedence);
     this->write(") ");
-    this->writeStatement(*w.fStatement);
+    this->writeStatement(*w.statement());
 }
 
 void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
@@ -1468,9 +1469,9 @@ void GLSLCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
 
 void GLSLCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
     this->write("return");
-    if (r.fExpression) {
+    if (r.expression()) {
         this->write(" ");
-        this->writeExpression(*r.fExpression, kTopLevel_Precedence);
+        this->writeExpression(*r.expression(), kTopLevel_Precedence);
     }
     this->write(";");
 }
@@ -1559,8 +1560,8 @@ bool GLSLCodeGenerator::generateCode() {
     OutputStream* rawOut = fOut;
     StringStream body;
     fOut = &body;
-    for (const auto& e : fProgram) {
-        this->writeProgramElement(e);
+    for (const auto& e : fProgram.elements()) {
+        this->writeProgramElement(*e);
     }
     fOut = rawOut;
 
