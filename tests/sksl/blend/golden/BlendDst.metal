@@ -10,6 +10,9 @@ struct Outputs {
 };
 
 
+float4 blend_dst(float4 src, float4 dst) {
+    return dst;
+}
 fragment Outputs fragmentMain(Inputs _in [[stage_in]], bool _frontFacing [[front_facing]], float4 _fragCoord [[position]]) {
     Outputs _outputStruct;
     thread Outputs* _out = &_outputStruct;
@@ -17,7 +20,6 @@ fragment Outputs fragmentMain(Inputs _in [[stage_in]], bool _frontFacing [[front
     {
         _0_blend_dst = _in.dst;
     }
-
     _out->sk_FragColor = _0_blend_dst;
 
     return *_out;

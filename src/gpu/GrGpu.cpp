@@ -337,28 +337,6 @@ sk_sp<GrRenderTarget> GrGpu::wrapBackendRenderTarget(const GrBackendRenderTarget
     return rt;
 }
 
-sk_sp<GrRenderTarget> GrGpu::wrapBackendTextureAsRenderTarget(const GrBackendTexture& backendTex,
-                                                              int sampleCnt) {
-    this->handleDirtyContext();
-
-    const GrCaps* caps = this->caps();
-
-    int maxSize = caps->maxTextureSize();
-    if (backendTex.width() > maxSize || backendTex.height() > maxSize) {
-        return nullptr;
-    }
-
-    if (!caps->isFormatRenderable(backendTex.getBackendFormat(), sampleCnt)) {
-        return nullptr;
-    }
-
-    auto rt = this->onWrapBackendTextureAsRenderTarget(backendTex, sampleCnt);
-    if (rt && sampleCnt > 1 && !this->caps()->msaaResolvesAutomatically()) {
-        rt->setRequiresManualMSAAResolve();
-    }
-    return rt;
-}
-
 sk_sp<GrRenderTarget> GrGpu::wrapVulkanSecondaryCBAsRenderTarget(const SkImageInfo& imageInfo,
                                                                  const GrVkDrawableInfo& vkInfo) {
     return this->onWrapVulkanSecondaryCBAsRenderTarget(imageInfo, vkInfo);
@@ -724,8 +702,11 @@ void GrGpu::Stats::dump(SkString* out) {
     out->appendf("Transfers to Texture: %d\n", fTransfersToTexture);
     out->appendf("Transfers from Surface: %d\n", fTransfersFromSurface);
     out->appendf("Stencil Buffer Creates: %d\n", fStencilAttachmentCreates);
+    out->appendf("MSAA Attachment Creates: %d\n", fMSAAAttachmentCreates);
     out->appendf("Number of draws: %d\n", fNumDraws);
     out->appendf("Number of Scratch Textures reused %d\n", fNumScratchTexturesReused);
+    out->appendf("Number of Scratch MSAA Attachments reused %d\n",
+                 fNumScratchMSAAAttachmentsReused);
 
     SkASSERT(fNumInlineCompilationFailures == 0);
     out->appendf("Number of Inline compile failures %d\n", fNumInlineCompilationFailures);

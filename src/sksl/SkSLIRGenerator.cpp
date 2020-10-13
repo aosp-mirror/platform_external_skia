@@ -103,29 +103,10 @@ public:
     IRGenerator* fIR;
 };
 
-class AutoDisableInline {
-public:
-    AutoDisableInline(IRGenerator* ir, bool canInline = false)
-    : fIR(ir) {
-        fOldCanInline = ir->fCanInline;
-        fIR->fCanInline &= canInline;
-    }
-
-    ~AutoDisableInline() {
-        fIR->fCanInline = fOldCanInline;
-    }
-
-    IRGenerator* fIR;
-    bool fOldCanInline;
-};
-
-IRGenerator::IRGenerator(const Context* context, Inliner* inliner, ErrorReporter& errorReporter)
+IRGenerator::IRGenerator(const Context* context, ErrorReporter& errorReporter)
         : fContext(*context)
-        , fInliner(inliner)
         , fErrors(errorReporter)
-        , fModifiers(new ModifiersPool()) {
-    SkASSERT(fInliner);
-}
+        , fModifiers(new ModifiersPool()) {}
 
 void IRGenerator::pushSymbolTable() {
     fSymbolTable.reset(new SymbolTable(std::move(fSymbolTable)));
@@ -507,11 +488,8 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
             return std::make_unique<Nop>();
         }
     }
-    auto ifStmt = std::make_unique<IfStatement>(n.fOffset, n.getBool(), std::move(test),
-                                                std::move(ifTrue), std::move(ifFalse));
-    fInliner->ensureScopedBlocks(ifStmt->ifTrue().get(), ifStmt.get());
-    fInliner->ensureScopedBlocks(ifStmt->ifFalse().get(), ifStmt.get());
-    return std::move(ifStmt);
+    return std::make_unique<IfStatement>(n.fOffset, n.getBool(), std::move(test),
+                                         std::move(ifTrue), std::move(ifFalse));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
@@ -529,17 +507,14 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
     ++iter;
     std::unique_ptr<Expression> test;
     if (*iter) {
-        AutoDisableInline disableInline(this);
         test = this->coerce(this->convertExpression(*iter), *fContext.fBool_Type);
         if (!test) {
             return nullptr;
         }
-
     }
     ++iter;
     std::unique_ptr<Expression> next;
     if (*iter) {
-        AutoDisableInline disableInline(this);
         next = this->convertExpression(*iter);
         if (!next) {
             return nullptr;
@@ -550,22 +525,16 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
     if (!statement) {
         return nullptr;
     }
-    auto forStmt = std::make_unique<ForStatement>(f.fOffset, std::move(initializer),
-                                                  std::move(test), std::move(next),
-                                                  std::move(statement), fSymbolTable);
-    fInliner->ensureScopedBlocks(forStmt->statement().get(), forStmt.get());
-    return std::move(forStmt);
+    return std::make_unique<ForStatement>(f.fOffset, std::move(initializer), std::move(test),
+                                          std::move(next), std::move(statement), fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     SkASSERT(w.fKind == ASTNode::Kind::kWhile);
     AutoLoopLevel level(this);
-    std::unique_ptr<Expression> test;
     auto iter = w.begin();
-    {
-        AutoDisableInline disableInline(this);
-        test = this->coerce(this->convertExpression(*(iter++)), *fContext.fBool_Type);
-    }
+    std::unique_ptr<Expression> test = this->coerce(this->convertExpression(*(iter++)),
+                                                    *fContext.fBool_Type);
     if (!test) {
         return nullptr;
     }
@@ -573,10 +542,7 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     if (!statement) {
         return nullptr;
     }
-    auto whileStmt = std::make_unique<WhileStatement>(w.fOffset, std::move(test),
-                                                      std::move(statement));
-    fInliner->ensureScopedBlocks(whileStmt->statement().get(), whileStmt.get());
-    return std::move(whileStmt);
+    return std::make_unique<WhileStatement>(w.fOffset, std::move(test), std::move(statement));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
@@ -587,17 +553,12 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (!statement) {
         return nullptr;
     }
-    std::unique_ptr<Expression> test;
-    {
-        AutoDisableInline disableInline(this);
-        test = this->coerce(this->convertExpression(*(iter++)), *fContext.fBool_Type);
-    }
+    std::unique_ptr<Expression> test =
+            this->coerce(this->convertExpression(*(iter++)), *fContext.fBool_Type);
     if (!test) {
         return nullptr;
     }
-    auto doStmt = std::make_unique<DoStatement>(d.fOffset, std::move(statement), std::move(test));
-    fInliner->ensureScopedBlocks(doStmt->statement().get(), doStmt.get());
-    return std::move(doStmt);
+    return std::make_unique<DoStatement>(d.fOffset, std::move(statement), std::move(test));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
@@ -976,7 +937,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         std::vector<const FunctionDeclaration*> functions;
         switch (entry->kind()) {
             case Symbol::Kind::kUnresolvedFunction:
-                functions = entry->as<UnresolvedFunction>().fFunctions;
+                functions = entry->as<UnresolvedFunction>().functions();
                 break;
             case Symbol::Kind::kFunctionDeclaration:
                 functions.push_back(&entry->as<FunctionDeclaration>());
@@ -1347,7 +1308,8 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
         }
         case Symbol::Kind::kUnresolvedFunction: {
             const UnresolvedFunction* f = &result->as<UnresolvedFunction>();
-            return std::make_unique<FunctionReference>(fContext, identifier.fOffset, f->fFunctions);
+            return std::make_unique<FunctionReference>(fContext, identifier.fOffset,
+                                                       f->functions());
         }
         case Symbol::Kind::kVariable: {
             const Variable* var = &result->as<Variable>();
@@ -1895,14 +1857,7 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
         return nullptr;
     }
     Token::Kind op = expression.getToken().fKind;
-    std::unique_ptr<Expression> right;
-    {
-        // Can't inline the right side of a short-circuiting boolean, because our inlining
-        // approach runs things out of order.
-        AutoDisableInline disableInline(this, /*canInline=*/(op != Token::Kind::TK_LOGICALAND &&
-                                                             op != Token::Kind::TK_LOGICALOR));
-        right = this->convertExpression(*(iter++));
-    }
+    std::unique_ptr<Expression> right = this->convertExpression(*(iter++));
     if (!right) {
         return nullptr;
     }
@@ -1957,18 +1912,13 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
     if (!test) {
         return nullptr;
     }
-    std::unique_ptr<Expression> ifTrue;
-    std::unique_ptr<Expression> ifFalse;
-    {
-        AutoDisableInline disableInline(this);
-        ifTrue = this->convertExpression(*(iter++));
-        if (!ifTrue) {
-            return nullptr;
-        }
-        ifFalse = this->convertExpression(*(iter++));
-        if (!ifFalse) {
-            return nullptr;
-        }
+    std::unique_ptr<Expression> ifTrue = this->convertExpression(*(iter++));
+    if (!ifTrue) {
+        return nullptr;
+    }
+    std::unique_ptr<Expression> ifFalse = this->convertExpression(*(iter++));
+    if (!ifFalse) {
+        return nullptr;
     }
     const Type* trueType;
     const Type* falseType;
@@ -2093,20 +2043,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         }
     }
 
-    auto funcCall = std::make_unique<FunctionCall>(offset, returnType, &function,
-                                                   std::move(arguments));
-    if (fCanInline &&
-        fInliner->isSafeToInline(funcCall->function().definition()) &&
-        !fInliner->isLargeFunction(funcCall->function().definition())) {
-        Inliner::InlinedCall inlinedCall = fInliner->inlineCall(funcCall.get(), fSymbolTable.get(),
-                                                                fCurrentFunction);
-        if (inlinedCall.fInlinedBody) {
-            fExtraStatements.push_back(std::move(inlinedCall.fInlinedBody));
-        }
-        return std::move(inlinedCall.fReplacementExpr);
-    }
-
-    return std::move(funcCall);
+    return std::make_unique<FunctionCall>(offset, returnType, &function, std::move(arguments));
 }
 
 /**
@@ -2137,7 +2074,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
     switch (functionValue->kind()) {
         case Expression::Kind::kTypeReference:
             return this->convertConstructor(offset,
-                                            functionValue->as<TypeReference>().fValue,
+                                            functionValue->as<TypeReference>().value(),
                                             std::move(arguments));
         case Expression::Kind::kExternalValue: {
             const ExternalValue& v = functionValue->as<ExternalValueReference>().value();
@@ -2165,10 +2102,11 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         }
         case Expression::Kind::kFunctionReference: {
             const FunctionReference& ref = functionValue->as<FunctionReference>();
+            const std::vector<const FunctionDeclaration*>& functions = ref.functions();
             CoercionCost bestCost = CoercionCost::Impossible();
             const FunctionDeclaration* best = nullptr;
-            if (ref.fFunctions.size() > 1) {
-                for (const auto& f : ref.fFunctions) {
+            if (functions.size() > 1) {
+                for (const auto& f : functions) {
                     CoercionCost cost = this->callCost(*f, arguments);
                     if (cost < bestCost) {
                         bestCost = cost;
@@ -2178,7 +2116,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
                 if (best) {
                     return this->call(offset, *best, std::move(arguments));
                 }
-                String msg = "no match for " + ref.fFunctions[0]->name() + "(";
+                String msg = "no match for " + functions[0]->name() + "(";
                 String separator;
                 for (size_t i = 0; i < arguments.size(); i++) {
                     msg += separator;
@@ -2189,7 +2127,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
                 fErrors.error(offset, msg);
                 return nullptr;
             }
-            return this->call(offset, *ref.fFunctions[0], std::move(arguments));
+            return this->call(offset, *functions[0], std::move(arguments));
         }
         default:
             fErrors.error(offset, "not a function");
@@ -2416,7 +2354,7 @@ std::unique_ptr<Expression> IRGenerator::convertIndex(std::unique_ptr<Expression
                                                       const ASTNode& index) {
     if (base->kind() == Expression::Kind::kTypeReference) {
         if (index.fKind == ASTNode::Kind::kInt) {
-            const Type& oldType = base->as<TypeReference>().fValue;
+            const Type& oldType = base->as<TypeReference>().value();
             SKSL_INT size = index.getInt();
             const Type* newType = fSymbolTable->takeOwnershipOfSymbol(
                     std::make_unique<Type>(oldType.name() + "[" + to_string(size) + "]",
@@ -2718,7 +2656,7 @@ std::unique_ptr<Expression> IRGenerator::convertIndexExpression(const ASTNode& i
     if (iter != index.end()) {
         return this->convertIndex(std::move(base), *(iter++));
     } else if (base->kind() == Expression::Kind::kTypeReference) {
-        const Type& oldType = base->as<TypeReference>().fValue;
+        const Type& oldType = base->as<TypeReference>().value();
         const Type* newType = fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Type>(
                 oldType.name() + "[]", Type::TypeKind::kArray, oldType, Type::kUnsizedArray));
         return std::make_unique<TypeReference>(fContext, base->fOffset, newType);
@@ -2781,7 +2719,7 @@ std::unique_ptr<Expression> IRGenerator::convertScopeExpression(const ASTNode& s
         return nullptr;
     }
     StringFragment member = scopeNode.getString();
-    return this->convertTypeField(base->fOffset, base->as<TypeReference>().fValue, member);
+    return this->convertTypeField(base->fOffset, base->as<TypeReference>().value(), member);
 }
 
 std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode& expression) {

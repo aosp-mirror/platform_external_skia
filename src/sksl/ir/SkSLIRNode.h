@@ -134,6 +134,11 @@ protected:
         }
     };
 
+    struct FunctionReferenceData {
+        const Type* fType;
+        std::vector<const FunctionDeclaration*> fFunctions;
+     };
+
     struct IfStatementData {
         bool fIsStatic;
     };
@@ -141,6 +146,10 @@ protected:
     struct IntLiteralData {
         const Type* fType;
         int64_t fValue;
+    };
+
+    struct InlineMarkerData {
+        const FunctionDeclaration* fFunction;
     };
 
     struct SettingData {
@@ -158,9 +167,20 @@ protected:
         Symbol* fOrigSymbol;
     };
 
+    struct TypeReferenceData {
+        const Type* fType;
+        const Type* fValue;
+     };
+
     struct TypeTokenData {
         const Type* fType;
         Token::Kind fToken;
+    };
+
+    struct UnresolvedFunctionData {
+        // FIXME move this into the child vector after killing fExpressionChildren /
+        // fStatementChildren
+        std::vector<const FunctionDeclaration*> fFunctions;
     };
 
     struct VariableData {
@@ -195,14 +215,18 @@ protected:
             kForStatement,
             kFunctionCall,
             kFunctionDeclaration,
+            kFunctionReference,
             kIfStatement,
+            kInlineMarker,
             kIntLiteral,
             kSetting,
             kString,
             kSymbol,
             kSymbolAlias,
             kType,
+            kTypeReference,
             kTypeToken,
+            kUnresolvedFunction,
             kVariable,
             kVariableReference,
         } fKind = Kind::kType;
@@ -219,14 +243,18 @@ protected:
             ForStatementData fForStatement;
             FunctionCallData fFunctionCall;
             FunctionDeclarationData fFunctionDeclaration;
+            FunctionReferenceData fFunctionReference;
             IfStatementData fIfStatement;
+            InlineMarkerData fInlineMarker;
             IntLiteralData fIntLiteral;
             SettingData fSetting;
             String fString;
             SymbolData fSymbol;
             SymbolAliasData fSymbolAlias;
             const Type* fType;
+            TypeReferenceData fTypeReference;
             TypeTokenData fTypeToken;
+            UnresolvedFunctionData fUnresolvedFunction;
             VariableData fVariable;
             VariableReferenceData fVariableReference;
 
@@ -285,9 +313,19 @@ protected:
             *(new(&fContents) FunctionDeclarationData) = data;
         }
 
+        NodeData(const FunctionReferenceData& data)
+            : fKind(Kind::kFunctionReference) {
+            *(new(&fContents) FunctionReferenceData) = data;
+        }
+
         NodeData(IfStatementData data)
             : fKind(Kind::kIfStatement) {
             *(new(&fContents) IfStatementData) = data;
+        }
+
+        NodeData(InlineMarkerData data)
+            : fKind(Kind::kInlineMarker) {
+            *(new(&fContents) InlineMarkerData) = data;
         }
 
         NodeData(IntLiteralData data)
@@ -320,9 +358,19 @@ protected:
             *(new(&fContents) const Type*) = data;
         }
 
+        NodeData(const TypeReferenceData& data)
+            : fKind(Kind::kTypeReference) {
+            *(new(&fContents) TypeReferenceData) = data;
+        }
+
         NodeData(const TypeTokenData& data)
             : fKind(Kind::kTypeToken) {
             *(new(&fContents) TypeTokenData) = data;
+        }
+
+        NodeData(const UnresolvedFunctionData& data)
+            : fKind(Kind::kUnresolvedFunction) {
+            *(new(&fContents) UnresolvedFunctionData) = data;
         }
 
         NodeData(const VariableData& data)
@@ -374,8 +422,14 @@ protected:
                     *(new(&fContents) FunctionDeclarationData) =
                                                                other.fContents.fFunctionDeclaration;
                     break;
+                case Kind::kFunctionReference:
+                    *(new(&fContents) FunctionReferenceData) = other.fContents.fFunctionReference;
+                    break;
                 case Kind::kIfStatement:
                     *(new(&fContents) IfStatementData) = other.fContents.fIfStatement;
+                    break;
+                case Kind::kInlineMarker:
+                    *(new(&fContents) InlineMarkerData) = other.fContents.fInlineMarker;
                     break;
                 case Kind::kIntLiteral:
                     *(new(&fContents) IntLiteralData) = other.fContents.fIntLiteral;
@@ -395,8 +449,14 @@ protected:
                 case Kind::kType:
                     *(new(&fContents) const Type*) = other.fContents.fType;
                     break;
+                case Kind::kTypeReference:
+                    *(new(&fContents) TypeReferenceData) = other.fContents.fTypeReference;
+                    break;
                 case Kind::kTypeToken:
                     *(new(&fContents) TypeTokenData) = other.fContents.fTypeToken;
+                    break;
+                case Kind::kUnresolvedFunction:
+                    *(new(&fContents) UnresolvedFunctionData) = other.fContents.fUnresolvedFunction;
                     break;
                 case Kind::kVariable:
                     *(new(&fContents) VariableData) = other.fContents.fVariable;
@@ -442,11 +502,17 @@ protected:
                 case Kind::kFunctionCall:
                     fContents.fFunctionCall.~FunctionCallData();
                     break;
+                case Kind::kFunctionDeclaration:
+                    fContents.fFunctionDeclaration.~FunctionDeclarationData();
+                    break;
+                case Kind::kFunctionReference:
+                    fContents.fFunctionReference.~FunctionReferenceData();
+                    break;
                 case Kind::kIfStatement:
                     fContents.fIfStatement.~IfStatementData();
                     break;
-                case Kind::kFunctionDeclaration:
-                    fContents.fFunctionDeclaration.~FunctionDeclarationData();
+                case Kind::kInlineMarker:
+                    fContents.fInlineMarker.~InlineMarkerData();
                     break;
                 case Kind::kIntLiteral:
                     fContents.fIntLiteral.~IntLiteralData();
@@ -465,8 +531,14 @@ protected:
                     break;
                 case Kind::kType:
                     break;
+                case Kind::kTypeReference:
+                    fContents.fTypeReference.~TypeReferenceData();
+                    break;
                 case Kind::kTypeToken:
                     fContents.fTypeToken.~TypeTokenData();
+                    break;
+                case Kind::kUnresolvedFunction:
+                    fContents.fUnresolvedFunction.~UnresolvedFunctionData();
                     break;
                 case Kind::kVariable:
                     fContents.fVariable.~VariableData();
@@ -497,9 +569,13 @@ protected:
 
     IRNode(int offset, int kind, const FunctionCallData& data);
 
+    IRNode(int offset, int kind, const FunctionDeclarationData& data);
+
+    IRNode(int offset, int kind, const FunctionReferenceData& data);
+
     IRNode(int offset, int kind, const IfStatementData& data);
 
-    IRNode(int offset, int kind, const FunctionDeclarationData& data);
+    IRNode(int offset, int kind, const InlineMarkerData& data);
 
     IRNode(int offset, int kind, const IntLiteralData& data);
 
@@ -513,7 +589,11 @@ protected:
 
     IRNode(int offset, int kind, const Type* data = nullptr);
 
+    IRNode(int offset, int kind, const TypeReferenceData& data);
+
     IRNode(int offset, int kind, const TypeTokenData& data);
+
+    IRNode(int offset, int kind, const UnresolvedFunctionData& data);
 
     IRNode(int offset, int kind, const VariableData& data);
 
@@ -613,14 +693,24 @@ protected:
         return fData.fContents.fFunctionDeclaration;
     }
 
+    const FunctionDeclarationData& functionDeclarationData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kFunctionDeclaration);
+        return fData.fContents.fFunctionDeclaration;
+    }
+
+    const FunctionReferenceData& functionReferenceData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kFunctionReference);
+        return fData.fContents.fFunctionReference;
+    }
+
     const IfStatementData& ifStatementData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kIfStatement);
         return fData.fContents.fIfStatement;
     }
 
-    const FunctionDeclarationData& functionDeclarationData() const {
-        SkASSERT(fData.fKind == NodeData::Kind::kFunctionDeclaration);
-        return fData.fContents.fFunctionDeclaration;
+    const InlineMarkerData& inlineMarkerData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kInlineMarker);
+        return fData.fContents.fInlineMarker;
     }
 
     const IntLiteralData& intLiteralData() const {
@@ -658,9 +748,19 @@ protected:
         return fData.fContents.fType;
     }
 
+    const TypeReferenceData& typeReferenceData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kTypeReference);
+        return fData.fContents.fTypeReference;
+    }
+
     const TypeTokenData& typeTokenData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kTypeToken);
         return fData.fContents.fTypeToken;
+    }
+
+    const UnresolvedFunctionData& unresolvedFunctionData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kUnresolvedFunction);
+        return fData.fContents.fUnresolvedFunction;
     }
 
     VariableData& variableData() {

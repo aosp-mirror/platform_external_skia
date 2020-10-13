@@ -88,7 +88,7 @@ Compiler::Compiler(Flags flags)
 , fContext(std::make_shared<Context>())
 , fErrorCount(0) {
     fRootSymbolTable = std::make_shared<SymbolTable>(this);
-    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), &fInliner, *this);
+    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), *this);
 #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f##t##_Type.get())
     ADD_TYPE(Void);
     ADD_TYPE(Float);
@@ -337,11 +337,6 @@ ParsedModule Compiler::parseModule(Program::Kind kind, ModuleData data, const Pa
             case ProgramElement::Kind::kFunction: {
                 const FunctionDefinition& f = element->as<FunctionDefinition>();
                 SkASSERT(f.fDeclaration.isBuiltin());
-                // Call counts are used to track dead-stripping and inlinability within the program
-                // being compiled, and should start at zero for a new program. Zero out any call
-                // counts internal to the include data. (If we actually use calls from inside the
-                // intrinsics, we will clone them into the program with new call counts.)
-                f.fDeclaration.callCount() = 0;
                 intrinsics->insertOrDie(f.fDeclaration.description(), std::move(element));
                 break;
             }
