@@ -175,7 +175,7 @@ public:
     }
 
     void removeShuffle(int n) {
-        SkASSERT(n < fCount);
+        SkASSERT(n < this->count());
         int newCount = fCount - 1;
         fCount = newCount;
         fItemArray[n].~T();
@@ -297,7 +297,7 @@ public:
      */
     void pop_back_n(int n) {
         SkASSERT(n >= 0);
-        SkASSERT(fCount >= n);
+        SkASSERT(this->count() >= n);
         fCount -= n;
         for (int i = 0; i < n; ++i) {
             fItemArray[fCount + i].~T();
@@ -552,7 +552,7 @@ private:
     void checkRealloc(int delta) {
         SkASSERT(fCount >= 0);
         SkASSERT(fAllocCount >= 0);
-        SkASSERT(-delta <= fCount);
+        SkASSERT(-delta <= this->count());
 
         // Move into 64bit math temporarily, to avoid local overflows
         int64_t newCount = fCount + delta;
