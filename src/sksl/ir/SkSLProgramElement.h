@@ -40,10 +40,16 @@ public:
     ProgramElement(int offset, const EnumData& enumData)
     : INHERITED(offset, (int) Kind::kEnum, enumData) {}
 
+    ProgramElement(int offset, const ModifiersDeclarationData& enumData)
+    : INHERITED(offset, (int) Kind::kModifiers, enumData) {}
+
     ProgramElement(int offset, Kind kind, const String& data)
     : INHERITED(offset, (int) kind, data) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
+
+    ProgramElement(int offset, const SectionData& sectionData)
+    : INHERITED(offset, (int) Kind::kSection, sectionData) {}
 
     Kind kind() const {
         return (Kind) fKind;
