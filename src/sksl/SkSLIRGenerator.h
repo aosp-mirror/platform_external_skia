@@ -143,8 +143,7 @@ private:
     void popSymbolTable();
 
     void checkModifiers(int offset, const Modifiers& modifiers, int permitted);
-    std::vector<std::unique_ptr<Statement>> convertVarDeclarations(const ASTNode& decl,
-                                                                   Variable::Storage storage);
+    StatementArray convertVarDeclarations(const ASTNode& decl, Variable::Storage storage);
     void convertFunction(const ASTNode& f);
     std::unique_ptr<Statement> convertSingleStatement(const ASTNode& statement);
     std::unique_ptr<Statement> convertStatement(const ASTNode& statement);
@@ -154,26 +153,25 @@ private:
     const Type* convertType(const ASTNode& type, bool allowVoid = false);
     std::unique_ptr<Expression> call(int offset,
                                      const FunctionDeclaration& function,
-                                     std::vector<std::unique_ptr<Expression>> arguments);
+                                     ExpressionArray arguments);
     CoercionCost callCost(const FunctionDeclaration& function,
-                          const std::vector<std::unique_ptr<Expression>>& arguments);
-    std::unique_ptr<Expression> call(int offset, std::unique_ptr<Expression> function,
-                                     std::vector<std::unique_ptr<Expression>> arguments);
+                          const ExpressionArray& arguments);
+    std::unique_ptr<Expression> call(int offset,
+                                     std::unique_ptr<Expression> function,
+                                     ExpressionArray arguments);
     CoercionCost coercionCost(const Expression& expr, const Type& type);
     std::unique_ptr<Expression> coerce(std::unique_ptr<Expression> expr, const Type& type);
     std::unique_ptr<Block> convertBlock(const ASTNode& block);
     std::unique_ptr<Statement> convertBreak(const ASTNode& b);
-    std::unique_ptr<Expression> convertNumberConstructor(
-                                                   int offset,
-                                                   const Type& type,
-                                                   std::vector<std::unique_ptr<Expression>> params);
-    std::unique_ptr<Expression> convertCompoundConstructor(
-                                                   int offset,
-                                                   const Type& type,
-                                                   std::vector<std::unique_ptr<Expression>> params);
+    std::unique_ptr<Expression> convertNumberConstructor(int offset,
+                                                         const Type& type,
+                                                         ExpressionArray params);
+    std::unique_ptr<Expression> convertCompoundConstructor(int offset,
+                                                           const Type& type,
+                                                           ExpressionArray params);
     std::unique_ptr<Expression> convertConstructor(int offset,
                                                    const Type& type,
-                                                   std::vector<std::unique_ptr<Expression>> params);
+                                                   ExpressionArray params);
     std::unique_ptr<Statement> convertContinue(const ASTNode& c);
     std::unique_ptr<Statement> convertDiscard(const ASTNode& d);
     std::unique_ptr<Statement> convertDo(const ASTNode& d);
@@ -227,7 +225,7 @@ private:
     std::shared_ptr<SymbolTable> fSymbolTable = nullptr;
     // additional statements that need to be inserted before the one that convertStatement is
     // currently working on
-    std::vector<std::unique_ptr<Statement>> fExtraStatements;
+    StatementArray fExtraStatements;
     // Symbols which have definitions in the include files.
     IRIntrinsicMap* fIntrinsics = nullptr;
     std::unordered_set<const FunctionDeclaration*> fReferencedIntrinsics;
