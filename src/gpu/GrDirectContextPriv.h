@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrContextPriv_DEFINED
-#define GrContextPriv_DEFINED
+#ifndef GrDirectContextPriv_DEFINED
+#define GrDirectContextPriv_DEFINED
 
 #include "include/gpu/GrDirectContext.h"
 
@@ -22,10 +22,10 @@ class GrSurfaceProxy;
 class SkDeferredDisplayList;
 class SkTaskGroup;
 
-/** Class that adds methods to GrContext that are only intended for use internal to Skia.
-    This class is purely a privileged window into GrContext. It should never have additional
+/** Class that adds methods to GrDirectContext that are only intended for use internal to Skia.
+    This class is purely a privileged window into GrDirectContext. It should never have additional
     data members or virtual methods. */
-class GrContextPriv {
+class GrDirectContextPriv {
 public:
 
     // from GrContext_Base
@@ -168,23 +168,24 @@ public:
 #endif
 
 private:
-    explicit GrContextPriv(GrContext* context) : fContext(context) {}
-    GrContextPriv(const GrContextPriv&) = delete;
-    GrContextPriv& operator=(const GrContextPriv&) = delete;
+    explicit GrDirectContextPriv(GrDirectContext* context) : fContext(context) {}
+    GrDirectContextPriv(const GrDirectContextPriv&) = delete;
+    GrDirectContextPriv& operator=(const GrDirectContextPriv&) = delete;
 
     // No taking addresses of this type.
-    const GrContextPriv* operator&() const;
-    GrContextPriv* operator&();
+    const GrDirectContextPriv* operator&() const;
+    GrDirectContextPriv* operator&();
 
-    GrContext* fContext;
+    GrDirectContext* fContext;
 
-    friend class GrContext; // to construct/copy this type.
+    friend class GrDirectContext; // to construct/copy this type.
 };
 
-inline GrContextPriv GrContext::priv() { return GrContextPriv(this); }
+inline GrDirectContextPriv GrDirectContext::priv() { return GrDirectContextPriv(this); }
 
-inline const GrContextPriv GrContext::priv() const {  // NOLINT(readability-const-return-type)
-    return GrContextPriv(const_cast<GrContext*>(this));
+// NOLINTNEXTLINE(readability-const-return-type)
+inline const GrDirectContextPriv GrDirectContext::priv() const {
+    return GrDirectContextPriv(const_cast<GrDirectContext*>(this));
 }
 
 #endif
