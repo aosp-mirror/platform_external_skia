@@ -195,8 +195,7 @@ protected:
     bool matrixConstructHelperIsNeeded(const Constructor& c);
     String getMatrixConstructHelper(const Constructor& c);
     void assembleMatrixFromMatrix(const Type& sourceMatrix, int rows, int columns);
-    void assembleMatrixFromExpressions(const std::vector<std::unique_ptr<Expression>>& args,
-                                       int rows, int columns);
+    void assembleMatrixFromExpressions(const ExpressionArray& args, int rows, int columns);
 
     void writeMatrixTimesEqualHelper(const Type& left, const Type& right, const Type& result);
 
@@ -232,7 +231,7 @@ protected:
 
     void writeStatement(const Statement& s);
 
-    void writeStatements(const std::vector<std::unique_ptr<Statement>>& statements);
+    void writeStatements(const StatementArray& statements);
 
     void writeBlock(const Block& b);
 

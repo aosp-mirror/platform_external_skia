@@ -213,7 +213,7 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
 
 void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     const FunctionDeclaration& function = c.function();
-    const std::vector<std::unique_ptr<Expression>>& arguments = c.arguments();
+    const ExpressionArray& arguments = c.arguments();
     const auto& entry = fIntrinsicMap.find(function.name());
     if (entry != fIntrinsicMap.end()) {
         this->writeIntrinsicCall(c);
@@ -262,7 +262,7 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         this->write("_fragCoord");
         separator = ", ";
     }
-    const std::vector<Variable*>& parameters = function.parameters();
+    const std::vector<const Variable*>& parameters = function.parameters();
     for (size_t i = 0; i < arguments.size(); ++i) {
         const Expression& arg = *arguments[i];
         this->write(separator);
@@ -357,7 +357,7 @@ void MetalCodeGenerator::writeInverseHack(const Expression& mat) {
 }
 
 void MetalCodeGenerator::writeSpecialIntrinsic(const FunctionCall & c, SpecialIntrinsic kind) {
-    const std::vector<std::unique_ptr<Expression>>& arguments = c.arguments();
+    const ExpressionArray& arguments = c.arguments();
     switch (kind) {
         case kTexture_SpecialIntrinsic: {
             this->writeExpression(*arguments[0], kSequence_Precedence);
@@ -438,8 +438,8 @@ void MetalCodeGenerator::assembleMatrixFromMatrix(const Type& sourceMatrix, int 
 
 // Assembles a matrix of type floatRxC by concatenating an arbitrary mix of values, named `x0`,
 // `x1`, etc. An error is written if the expression list don't contain exactly R*C scalars.
-void MetalCodeGenerator::assembleMatrixFromExpressions(
-        const std::vector<std::unique_ptr<Expression>>& args, int rows, int columns) {
+void MetalCodeGenerator::assembleMatrixFromExpressions(const ExpressionArray& args,
+                                                       int rows, int columns) {
     size_t argIndex = 0;
     int argPosition = 0;
 
@@ -505,7 +505,7 @@ String MetalCodeGenerator::getMatrixConstructHelper(const Constructor& c) {
     const Type& matrix = c.type();
     int columns = matrix.columns();
     int rows = matrix.rows();
-    const std::vector<std::unique_ptr<Expression>>& args = c.arguments();
+    const ExpressionArray& args = c.arguments();
 
     // Create the helper-method name and use it as our lookup key.
     String name;
@@ -750,9 +750,9 @@ void MetalCodeGenerator::writeFieldAccess(const FieldAccess& f) {
 }
 
 void MetalCodeGenerator::writeSwizzle(const Swizzle& swizzle) {
-    this->writeExpression(*swizzle.fBase, kPostfix_Precedence);
+    this->writeExpression(*swizzle.base(), kPostfix_Precedence);
     this->write(".");
-    for (int c : swizzle.fComponents) {
+    for (int c : swizzle.components()) {
         SkASSERT(c >= 0 && c <= 3);
         this->write(&("x\0y\0z\0w\0"[c * 2]));
     }
@@ -1658,7 +1658,7 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
             this->writeFunction(e.as<FunctionDefinition>());
             break;
         case ProgramElement::Kind::kModifiers:
-            this->writeModifiers(e.as<ModifiersDeclaration>().fModifiers, true);
+            this->writeModifiers(e.as<ModifiersDeclaration>().modifiers(), true);
             this->writeLine(";");
             break;
         default:
@@ -1698,7 +1698,7 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Expressi
             return this->requirements(f.base().get());
         }
         case Expression::Kind::kSwizzle:
-            return this->requirements(e->as<Swizzle>().fBase.get());
+            return this->requirements(e->as<Swizzle>().base().get());
         case Expression::Kind::kBinary: {
             const BinaryExpression& bin = e->as<BinaryExpression>();
             return this->requirements(&bin.left()) |

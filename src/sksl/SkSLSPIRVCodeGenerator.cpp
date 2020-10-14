@@ -580,7 +580,7 @@ SpvId SPIRVCodeGenerator::getImageType(const Type& type) {
 SpvId SPIRVCodeGenerator::getFunctionType(const FunctionDeclaration& function) {
     String key = to_string(this->getType(function.returnType())) + "(";
     String separator;
-    const std::vector<Variable*>& parameters = function.parameters();
+    const std::vector<const Variable*>& parameters = function.parameters();
     for (size_t i = 0; i < parameters.size(); i++) {
         key += separator;
         separator = ", ";
@@ -693,7 +693,7 @@ SpvId SPIRVCodeGenerator::writeExpression(const Expression& expr, OutputStream& 
 
 SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream& out) {
     const FunctionDeclaration& function = c.function();
-    const std::vector<std::unique_ptr<Expression>>& arguments = c.arguments();
+    const ExpressionArray& arguments = c.arguments();
     auto intrinsic = fIntrinsicMap.find(function.name());
     SkASSERT(intrinsic != fIntrinsicMap.end());
     int32_t intrinsicId;
@@ -763,9 +763,7 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
     }
 }
 
-std::vector<SpvId> SPIRVCodeGenerator::vectorize(
-                                               const std::vector<std::unique_ptr<Expression>>& args,
-                                               OutputStream& out) {
+std::vector<SpvId> SPIRVCodeGenerator::vectorize(const ExpressionArray& args, OutputStream& out) {
     int vectorSize = 0;
     for (const auto& a : args) {
         if (a->type().typeKind() == Type::TypeKind::kVector) {
@@ -778,6 +776,7 @@ std::vector<SpvId> SPIRVCodeGenerator::vectorize(
         }
     }
     std::vector<SpvId> result;
+    result.reserve(args.size());
     for (const auto& arg : args) {
         const Type& argType = arg->type();
         SpvId raw = this->writeExpression(*arg, out);
@@ -823,7 +822,7 @@ void SPIRVCodeGenerator::writeGLSLExtendedInstruction(const Type& type, SpvId id
 
 SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIntrinsic kind,
                                                 OutputStream& out) {
-    const std::vector<std::unique_ptr<Expression>>& arguments = c.arguments();
+    const ExpressionArray& arguments = c.arguments();
     SpvId result = this->nextId();
     const Type& callType = c.type();
     switch (kind) {
@@ -856,9 +855,10 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
         }
         case kSubpassLoad_SpecialIntrinsic: {
             SpvId img = this->writeExpression(*arguments[0], out);
-            std::vector<std::unique_ptr<Expression>> args;
-            args.emplace_back(new IntLiteral(fContext, -1, 0));
-            args.emplace_back(new IntLiteral(fContext, -1, 0));
+            ExpressionArray args;
+            args.reserve(2);
+            args.push_back(std::make_unique<IntLiteral>(fContext, /*offset=*/-1, /*value=*/0));
+            args.push_back(std::make_unique<IntLiteral>(fContext, /*offset=*/-1, /*value=*/0));
             Constructor ctor(-1, fContext.fInt2_Type.get(), std::move(args));
             SpvId coords = this->writeConstantVector(ctor);
             if (arguments.size() == 1) {
@@ -1004,10 +1004,13 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
         }
         case kSaturate_SpecialIntrinsic: {
             SkASSERT(arguments.size() == 1);
-            std::vector<std::unique_ptr<Expression>> finalArgs;
+            ExpressionArray finalArgs;
+            finalArgs.reserve(3);
             finalArgs.push_back(arguments[0]->clone());
-            finalArgs.emplace_back(new FloatLiteral(fContext, -1, 0));
-            finalArgs.emplace_back(new FloatLiteral(fContext, -1, 1));
+            finalArgs.push_back(std::make_unique<FloatLiteral>(fContext, /*offset=*/-1,
+                                                               /*value=*/0));
+            finalArgs.push_back(std::make_unique<FloatLiteral>(fContext, /*offset=*/-1,
+                                                               /*value=*/1));
             std::vector<SpvId> spvArgs = this->vectorize(finalArgs, out);
             this->writeGLSLExtendedInstruction(callType, result, GLSLstd450FClamp, GLSLstd450SClamp,
                                                GLSLstd450UClamp, spvArgs, out);
@@ -1019,7 +1022,7 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
 
 SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream& out) {
     const FunctionDeclaration& function = c.function();
-    const std::vector<std::unique_ptr<Expression>>& arguments = c.arguments();
+    const ExpressionArray& arguments = c.arguments();
     const auto& entry = fFunctionMap.find(&function);
     if (entry == fFunctionMap.end()) {
         return this->writeIntrinsicCall(c, out);
@@ -1759,15 +1762,15 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
         }
         case Expression::Kind::kSwizzle: {
             Swizzle& swizzle = (Swizzle&) expr;
-            size_t count = swizzle.fComponents.size();
-            SpvId base = this->getLValue(*swizzle.fBase, out)->getPointer();
+            size_t count = swizzle.components().size();
+            SpvId base = this->getLValue(*swizzle.base(), out)->getPointer();
             SkASSERT(base);
             if (count == 1) {
-                IntLiteral index(fContext, -1, swizzle.fComponents[0]);
+                IntLiteral index(fContext, -1, swizzle.components()[0]);
                 SpvId member = this->nextId();
                 this->writeInstruction(SpvOpAccessChain,
                                        this->getPointerType(type,
-                                                            get_storage_class(*swizzle.fBase)),
+                                                            get_storage_class(*swizzle.base())),
                                        member,
                                        base,
                                        this->writeIntLiteral(index),
@@ -1781,8 +1784,8 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
                 return std::unique_ptr<SPIRVCodeGenerator::LValue>(new SwizzleLValue(
                                                                              *this,
                                                                              base,
-                                                                             swizzle.fComponents,
-                                                                             swizzle.fBase->type(),
+                                                                             swizzle.components(),
+                                                                             swizzle.base()->type(),
                                                                              type,
                                                                              precision));
             }
@@ -1884,8 +1887,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                                                    &intfStruct,
                                                    /*builtin=*/false,
                                                    Variable::Storage::kGlobal));
-                InterfaceBlock intf(-1, intfVar, name, String(""),
-                                    std::vector<std::unique_ptr<Expression>>(), st);
+                InterfaceBlock intf(-1, intfVar, name, String(""), ExpressionArray(), st);
 
                 fRTHeightStructId = this->writeInterfaceBlock(intf, false);
                 fRTHeightFieldIndex = 0;
@@ -1977,19 +1979,19 @@ SpvId SPIRVCodeGenerator::writeFieldAccess(const FieldAccess& f, OutputStream& o
 }
 
 SpvId SPIRVCodeGenerator::writeSwizzle(const Swizzle& swizzle, OutputStream& out) {
-    SpvId base = this->writeExpression(*swizzle.fBase, out);
+    SpvId base = this->writeExpression(*swizzle.base(), out);
     SpvId result = this->nextId();
-    size_t count = swizzle.fComponents.size();
+    size_t count = swizzle.components().size();
     if (count == 1) {
         this->writeInstruction(SpvOpCompositeExtract, this->getType(swizzle.type()), result, base,
-                               swizzle.fComponents[0], out);
+                               swizzle.components()[0], out);
     } else {
         this->writeOpCode(SpvOpVectorShuffle, 5 + (int32_t) count, out);
         this->writeWord(this->getType(swizzle.type()), out);
         this->writeWord(result, out);
         this->writeWord(base, out);
         this->writeWord(base, out);
-        for (int component : swizzle.fComponents) {
+        for (int component : swizzle.components()) {
             this->writeWord(component, out);
         }
     }
@@ -2583,7 +2585,7 @@ SpvId SPIRVCodeGenerator::writeFunctionStart(const FunctionDeclaration& f, Outpu
     this->writeInstruction(SpvOpFunction, this->getType(f.returnType()), result,
                            SpvFunctionControlMaskNone, this->getFunctionType(f), out);
     this->writeInstruction(SpvOpName, result, f.name(), fNameBuffer);
-    const std::vector<Variable*>& parameters = f.parameters();
+    const std::vector<const Variable*>& parameters = f.parameters();
     for (size_t i = 0; i < parameters.size(); i++) {
         SpvId id = this->nextId();
         fVariableMap[parameters[i]] = id;
@@ -2717,7 +2719,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
     if (intfModifiers.fLayout.fBuiltin == SK_IN_BUILTIN) {
         for (const auto& e : fProgram.elements()) {
             if (e->is<ModifiersDeclaration>()) {
-                const Modifiers& m = e->as<ModifiersDeclaration>().fModifiers;
+                const Modifiers& m = e->as<ModifiersDeclaration>().modifiers();
                 update_sk_in_count(m, &fSkInCount);
             }
         }
@@ -3094,7 +3096,7 @@ void SPIRVCodeGenerator::writeGeometryShaderExecutionMode(SpvId entryPoint, Outp
     int invocations = 1;
     for (const auto& e : fProgram.elements()) {
         if (e->is<ModifiersDeclaration>()) {
-            const Modifiers& m = e->as<ModifiersDeclaration>().fModifiers;
+            const Modifiers& m = e->as<ModifiersDeclaration>().modifiers();
             if (m.fFlags & Modifiers::kIn_Flag) {
                 if (m.fLayout.fInvocations != -1) {
                     invocations = m.fLayout.fInvocations;
@@ -3169,7 +3171,7 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
                 break;
             }
             case ProgramElement::Kind::kModifiers: {
-                Modifiers& m = e->as<ModifiersDeclaration>().fModifiers;
+                const Modifiers& m = e->as<ModifiersDeclaration>().modifiers();
                 if (m.fFlags & Modifiers::kIn_Flag) {
                     switch (m.fLayout.fPrimitive) {
                         case Layout::kPoints_Primitive: // break

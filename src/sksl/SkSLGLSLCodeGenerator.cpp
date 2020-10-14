@@ -455,7 +455,7 @@ std::unordered_map<StringFragment, GLSLCodeGenerator::FunctionClass>*
 
 void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     const FunctionDeclaration& function = c.function();
-    const std::vector<std::unique_ptr<Expression>>& arguments = c.arguments();
+    const ExpressionArray& arguments = c.arguments();
 #ifdef SKSL_STANDALONE
     if (!fFunctionClasses) {
 #else
@@ -858,9 +858,9 @@ void GLSLCodeGenerator::writeFieldAccess(const FieldAccess& f) {
 }
 
 void GLSLCodeGenerator::writeSwizzle(const Swizzle& swizzle) {
-    this->writeExpression(*swizzle.fBase, kPostfix_Precedence);
+    this->writeExpression(*swizzle.base(), kPostfix_Precedence);
     this->write(".");
-    for (int c : swizzle.fComponents) {
+    for (int c : swizzle.components()) {
         SkASSERT(c >= 0 && c <= 3);
         this->write(&("x\0y\0z\0w\0"[c * 2]));
     }
@@ -1515,7 +1515,7 @@ void GLSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
             this->writeFunction(e.as<FunctionDefinition>());
             break;
         case ProgramElement::Kind::kModifiers: {
-            const Modifiers& modifiers = e.as<ModifiersDeclaration>().fModifiers;
+            const Modifiers& modifiers = e.as<ModifiersDeclaration>().modifiers();
             if (!fFoundGSInvocations && modifiers.fLayout.fInvocations >= 0) {
                 if (fProgram.fSettings.fCaps->gsInvocationsExtensionString()) {
                     this->writeExtension(fProgram.fSettings.fCaps->gsInvocationsExtensionString());

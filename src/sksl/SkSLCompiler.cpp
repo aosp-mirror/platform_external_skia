@@ -88,7 +88,7 @@ Compiler::Compiler(Flags flags)
 , fContext(std::make_shared<Context>())
 , fErrorCount(0) {
     fRootSymbolTable = std::make_shared<SymbolTable>(this);
-    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), *this);
+    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), &fInliner, *this);
 #define ADD_TYPE(t) fRootSymbolTable->addWithoutOwnership(fContext->f##t##_Type.get())
     ADD_TYPE(Void);
     ADD_TYPE(Float);
@@ -211,9 +211,6 @@ Compiler::Compiler(Flags flags)
     ADD_TYPE(Sampler);
     ADD_TYPE(Texture2D);
 
-    StringFragment fpAliasName("shader");
-    fRootSymbolTable->addAlias(fpAliasName, fContext->fFragmentProcessor_Type.get());
-
     // sk_Caps is "builtin", but all references to it are resolved to Settings, so we don't need to
     // treat it as builtin (ie, no need to clone it into the Program).
     StringFragment skCapsName("sk_Caps");
@@ -252,6 +249,33 @@ const ParsedModule& Compiler::loadPipelineModule() {
     if (!fPipelineModule.fSymbols) {
         fPipelineModule =
                 this->parseModule(Program::kPipelineStage_Kind, MODULE_DATA(pipeline), fGPUModule);
+
+        // Add some aliases to the pipeline module so that it's friendlier, and more like GLSL
+        fPipelineModule.fSymbols->addAlias("shader", fContext->fFragmentProcessor_Type.get());
+
+        fPipelineModule.fSymbols->addAlias("vec2", fContext->fFloat2_Type.get());
+        fPipelineModule.fSymbols->addAlias("vec3", fContext->fFloat3_Type.get());
+        fPipelineModule.fSymbols->addAlias("vec4", fContext->fFloat4_Type.get());
+
+        fPipelineModule.fSymbols->addAlias("bvec2", fContext->fBool2_Type.get());
+        fPipelineModule.fSymbols->addAlias("bvec3", fContext->fBool3_Type.get());
+        fPipelineModule.fSymbols->addAlias("bvec4", fContext->fBool4_Type.get());
+
+        fPipelineModule.fSymbols->addAlias("mat2", fContext->fFloat2x2_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat3", fContext->fFloat3x3_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat4", fContext->fFloat4x4_Type.get());
+
+        fPipelineModule.fSymbols->addAlias("mat2x2", fContext->fFloat2x2_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat2x3", fContext->fFloat2x3_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat2x4", fContext->fFloat2x4_Type.get());
+
+        fPipelineModule.fSymbols->addAlias("mat3x2", fContext->fFloat3x2_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat3x3", fContext->fFloat3x3_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat3x4", fContext->fFloat3x4_Type.get());
+
+        fPipelineModule.fSymbols->addAlias("mat4x2", fContext->fFloat4x2_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat4x3", fContext->fFloat4x3_Type.get());
+        fPipelineModule.fSymbols->addAlias("mat4x4", fContext->fFloat4x4_Type.get());
     }
     return fPipelineModule;
 }
@@ -386,7 +410,7 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
             // (we write to foo.x, and then pass foo to a function which happens to only read foo.x,
             // but since we pass foo as a whole it is flagged as an error) unless we perform a much
             // more complicated whole-program analysis. This is probably good enough.
-            this->addDefinition(lvalue->as<Swizzle>().fBase.get(),
+            this->addDefinition(lvalue->as<Swizzle>().base().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
             break;
@@ -441,7 +465,7 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
             }
             case Expression::Kind::kFunctionCall: {
                 const FunctionCall& c = expr->as<FunctionCall>();
-                const std::vector<Variable*>& parameters = c.function().parameters();
+                const std::vector<const Variable*>& parameters = c.function().parameters();
                 for (size_t i = 0; i < parameters.size(); ++i) {
                     if (parameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
                         this->addDefinition(
@@ -562,7 +586,7 @@ static bool is_dead(const Expression& lvalue) {
         case Expression::Kind::kVariableReference:
             return lvalue.as<VariableReference>().variable()->dead();
         case Expression::Kind::kSwizzle:
-            return is_dead(*lvalue.as<Swizzle>().fBase);
+            return is_dead(*lvalue.as<Swizzle>().base());
         case Expression::Kind::kFieldAccess:
             return is_dead(*lvalue.as<FieldAccess>().base());
         case Expression::Kind::kIndex: {
@@ -749,7 +773,7 @@ static void delete_right(BasicBlock* b,
  * Constructs the specified type using a single argument.
  */
 static std::unique_ptr<Expression> construct(const Type* type, std::unique_ptr<Expression> v) {
-    std::vector<std::unique_ptr<Expression>> args;
+    ExpressionArray args;
     args.push_back(std::move(v));
     std::unique_ptr<Expression> result = std::make_unique<Constructor>(-1, type, std::move(args));
     return result;
@@ -816,7 +840,7 @@ static void clear_write(Expression& expr) {
             clear_write(*expr.as<FieldAccess>().base());
             break;
         case Expression::Kind::kSwizzle:
-            clear_write(*expr.as<Swizzle>().fBase);
+            clear_write(*expr.as<Swizzle>().base());
             break;
         case Expression::Kind::kIndex:
             clear_write(*expr.as<IndexExpression>().base());
@@ -1051,17 +1075,17 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
         case Expression::Kind::kSwizzle: {
             Swizzle& s = expr->as<Swizzle>();
             // detect identity swizzles like foo.rgba
-            if ((int) s.fComponents.size() == s.fBase->type().columns()) {
+            if ((int) s.components().size() == s.base()->type().columns()) {
                 bool identity = true;
-                for (int i = 0; i < (int) s.fComponents.size(); ++i) {
-                    if (s.fComponents[i] != i) {
+                for (int i = 0; i < (int) s.components().size(); ++i) {
+                    if (s.components()[i] != i) {
                         identity = false;
                         break;
                     }
                 }
                 if (identity) {
                     *outUpdated = true;
-                    if (!try_replace_expression(&b, iter, &s.fBase)) {
+                    if (!try_replace_expression(&b, iter, &s.base())) {
                         *outNeedsRescan = true;
                         return;
                     }
@@ -1070,14 +1094,14 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 }
             }
             // detect swizzles of swizzles, e.g. replace foo.argb.r000 with foo.a000
-            if (s.fBase->kind() == Expression::Kind::kSwizzle) {
-                Swizzle& base = s.fBase->as<Swizzle>();
+            if (s.base()->kind() == Expression::Kind::kSwizzle) {
+                Swizzle& base = s.base()->as<Swizzle>();
                 std::vector<int> final;
-                for (int c : s.fComponents) {
-                    final.push_back(base.fComponents[c]);
+                for (int c : s.components()) {
+                    final.push_back(base.components()[c]);
                 }
                 *outUpdated = true;
-                std::unique_ptr<Expression> replacement(new Swizzle(*fContext, base.fBase->clone(),
+                std::unique_ptr<Expression> replacement(new Swizzle(*fContext, base.base()->clone(),
                                                                     std::move(final)));
                 if (!try_replace_expression(&b, iter, &replacement)) {
                     *outNeedsRescan = true;
@@ -1148,14 +1172,13 @@ static bool contains_unconditional_break(Statement& stmt) {
     return ContainsUnconditionalBreak{}.visitStatement(stmt);
 }
 
-static void move_all_but_break(std::unique_ptr<Statement>& stmt,
-                               std::vector<std::unique_ptr<Statement>>* target) {
+static void move_all_but_break(std::unique_ptr<Statement>& stmt, StatementArray* target) {
     switch (stmt->kind()) {
         case Statement::Kind::kBlock: {
             // Recurse into the block.
             Block& block = static_cast<Block&>(*stmt);
 
-            std::vector<std::unique_ptr<Statement>> blockStmts;
+            StatementArray blockStmts;
             blockStmts.reserve(block.children().size());
             for (std::unique_ptr<Statement>& stmt : block.children()) {
                 move_all_but_break(stmt, &blockStmts);
@@ -1221,7 +1244,7 @@ static std::unique_ptr<Statement> block_for_case(SwitchStatement* switchStatemen
 
     // We fell off the bottom of the switch or encountered a break. We know the range of statements
     // that we need to move over, and we know it's safe to do so.
-    std::vector<std::unique_ptr<Statement>> caseStmts;
+    StatementArray caseStmts;
 
     // We can move over most of the statements as-is.
     while (startIter != iter) {
