@@ -287,9 +287,10 @@ void CPPCodeGenerator::writeIntLiteral(const IntLiteral& i) {
 
 void CPPCodeGenerator::writeSwizzle(const Swizzle& swizzle) {
     if (fCPPMode) {
-        SkASSERT(swizzle.fComponents.size() == 1); // no support for multiple swizzle components yet
-        this->writeExpression(*swizzle.fBase, kPostfix_Precedence);
-        switch (swizzle.fComponents[0]) {
+        // no support for multiple swizzle components yet
+        SkASSERT(swizzle.components().size() == 1);
+        this->writeExpression(*swizzle.base(), kPostfix_Precedence);
+        switch (swizzle.components()[0]) {
             case 0: this->write(".left()");   break;
             case 1: this->write(".top()");    break;
             case 2: this->write(".right()");  break;
@@ -647,7 +648,7 @@ void CPPCodeGenerator::writeSetting(const Setting& s) {
 bool CPPCodeGenerator::writeSection(const char* name, const char* prefix) {
     const Section* s = fSectionAndParameterHelper.getSection(name);
     if (s) {
-        this->writef("%s%s", prefix, s->fText.c_str());
+        this->writef("%s%s", prefix, s->text().c_str());
         return true;
     }
     return false;
@@ -993,7 +994,7 @@ bool CPPCodeGenerator::writeEmitCode(std::vector<const Variable*>& uniforms) {
 void CPPCodeGenerator::writeSetData(std::vector<const Variable*>& uniforms) {
     const char* fullName = fFullName.c_str();
     const Section* section = fSectionAndParameterHelper.getSection(kSetDataSection);
-    const char* pdman = section ? section->fArgument.c_str() : "pdman";
+    const char* pdman = section ? section->argument().c_str() : "pdman";
     this->writef("    void onSetData(const GrGLSLProgramDataManager& %s, "
                                     "const GrFragmentProcessor& _proc) override {\n",
                  pdman);
@@ -1230,7 +1231,7 @@ void CPPCodeGenerator::writeTest() {
                 "std::unique_ptr<GrFragmentProcessor> %s::TestCreate(GrProcessorTestData* %s) {\n",
                 fFullName.c_str(),
                 fFullName.c_str(),
-                test->fArgument.c_str());
+                test->argument().c_str());
         this->writeSection(kTestCodeSection);
         this->write("}\n"
                     "#endif\n");

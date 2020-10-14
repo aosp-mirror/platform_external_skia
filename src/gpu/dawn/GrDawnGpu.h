@@ -66,6 +66,17 @@ public:
                                                              SkISize dimensions,
                                                              int numStencilSamples) override;
 
+    GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) override {
+        return GrBackendFormat::MakeDawn(wgpu::TextureFormat::Depth24PlusStencil8);
+    }
+
+    sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
+                                           const GrBackendFormat& format,
+                                           int numSamples,
+                                           GrProtected isProtected) override {
+        return nullptr;
+    }
+
     GrOpsRenderPass* getOpsRenderPass(GrRenderTarget*,
                                       GrAttachment*,
                                       GrSurfaceOrigin,

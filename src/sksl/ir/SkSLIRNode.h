@@ -152,9 +152,24 @@ protected:
         const FunctionDeclaration* fFunction;
     };
 
+    struct ModifiersDeclarationData {
+        ModifiersPool::Handle fModifiersHandle;
+    };
+
+    struct SectionData {
+        String fName;
+        String fArgument;
+        String fText;
+    };
+
     struct SettingData {
         String fName;
         const Type* fType;
+    };
+
+    struct SwizzleData {
+        const Type* fType;
+        std::vector<int> fComponents;
     };
 
     struct SymbolData {
@@ -219,8 +234,11 @@ protected:
             kIfStatement,
             kInlineMarker,
             kIntLiteral,
+            kModifiersDeclaration,
+            kSection,
             kSetting,
             kString,
+            kSwizzle,
             kSymbol,
             kSymbolAlias,
             kType,
@@ -247,8 +265,11 @@ protected:
             IfStatementData fIfStatement;
             InlineMarkerData fInlineMarker;
             IntLiteralData fIntLiteral;
+            ModifiersDeclarationData fModifiersDeclaration;
+            SectionData fSection;
             SettingData fSetting;
             String fString;
+            SwizzleData fSwizzle;
             SymbolData fSymbol;
             SymbolAliasData fSymbolAlias;
             const Type* fType;
@@ -333,6 +354,16 @@ protected:
             *(new(&fContents) IntLiteralData) = data;
         }
 
+        NodeData(ModifiersDeclarationData data)
+            : fKind(Kind::kModifiersDeclaration) {
+            *(new(&fContents) ModifiersDeclarationData) = data;
+        }
+
+        NodeData(const SectionData& data)
+            : fKind(Kind::kSection) {
+            *(new(&fContents) SectionData) = data;
+        }
+
         NodeData(const SettingData& data)
             : fKind(Kind::kSetting) {
             *(new(&fContents) SettingData) = data;
@@ -341,6 +372,11 @@ protected:
         NodeData(const String& data)
             : fKind(Kind::kString) {
             *(new(&fContents) String) = data;
+        }
+
+        NodeData(const SwizzleData& data)
+            : fKind(Kind::kSwizzle) {
+            *(new(&fContents) SwizzleData) = data;
         }
 
         NodeData(const SymbolData& data)
@@ -434,11 +470,21 @@ protected:
                 case Kind::kIntLiteral:
                     *(new(&fContents) IntLiteralData) = other.fContents.fIntLiteral;
                     break;
+                case Kind::kModifiersDeclaration:
+                    *(new(&fContents) ModifiersDeclarationData) =
+                                                              other.fContents.fModifiersDeclaration;
+                    break;
+                case Kind::kSection:
+                    *(new(&fContents) SectionData) = other.fContents.fSection;
+                    break;
                 case Kind::kSetting:
                     *(new(&fContents) SettingData) = other.fContents.fSetting;
                     break;
                 case Kind::kString:
                     *(new(&fContents) String) = other.fContents.fString;
+                    break;
+                case Kind::kSwizzle:
+                    *(new(&fContents) SwizzleData) = other.fContents.fSwizzle;
                     break;
                 case Kind::kSymbol:
                     *(new(&fContents) SymbolData) = other.fContents.fSymbol;
@@ -517,11 +563,20 @@ protected:
                 case Kind::kIntLiteral:
                     fContents.fIntLiteral.~IntLiteralData();
                     break;
+                case Kind::kModifiersDeclaration:
+                    fContents.fModifiersDeclaration.~ModifiersDeclarationData();
+                    break;
+                case Kind::kSection:
+                    fContents.fSection.~SectionData();
+                    break;
                 case Kind::kSetting:
                     fContents.fSetting.~SettingData();
                     break;
                 case Kind::kString:
                     fContents.fString.~String();
+                    break;
+                case Kind::kSwizzle:
+                    fContents.fSwizzle.~SwizzleData();
                     break;
                 case Kind::kSymbol:
                     fContents.fSymbol.~SymbolData();
@@ -579,9 +634,15 @@ protected:
 
     IRNode(int offset, int kind, const IntLiteralData& data);
 
+    IRNode(int offset, int kind, const ModifiersDeclarationData& data);
+
+    IRNode(int offset, int kind, const SectionData& data);
+
     IRNode(int offset, int kind, const SettingData& data);
 
     IRNode(int offset, int kind, const String& data);
+
+    IRNode(int offset, int kind, const SwizzleData& data);
 
     IRNode(int offset, int kind, const SymbolData& data);
 
@@ -718,6 +779,16 @@ protected:
         return fData.fContents.fIntLiteral;
     }
 
+    const ModifiersDeclarationData& modifiersDeclarationData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kModifiersDeclaration);
+        return fData.fContents.fModifiersDeclaration;
+    }
+
+    const SectionData& sectionData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kSection);
+        return fData.fContents.fSection;
+    }
+
     const SettingData& settingData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kSetting);
         return fData.fContents.fSetting;
@@ -726,6 +797,16 @@ protected:
     const String& stringData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kString);
         return fData.fContents.fString;
+    }
+
+    SwizzleData& swizzleData() {
+        SkASSERT(fData.fKind == NodeData::Kind::kSwizzle);
+        return fData.fContents.fSwizzle;
+    }
+
+    const SwizzleData& swizzleData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kSwizzle);
+        return fData.fContents.fSwizzle;
     }
 
     SymbolData& symbolData() {

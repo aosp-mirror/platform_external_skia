@@ -103,10 +103,29 @@ public:
     IRGenerator* fIR;
 };
 
-IRGenerator::IRGenerator(const Context* context, ErrorReporter& errorReporter)
+class AutoDisableInline {
+public:
+    AutoDisableInline(IRGenerator* ir, bool canInline = false)
+    : fIR(ir) {
+        fOldCanInline = ir->fCanInline;
+        fIR->fCanInline &= canInline;
+    }
+
+    ~AutoDisableInline() {
+        fIR->fCanInline = fOldCanInline;
+    }
+
+    IRGenerator* fIR;
+    bool fOldCanInline;
+};
+
+IRGenerator::IRGenerator(const Context* context, Inliner* inliner, ErrorReporter& errorReporter)
         : fContext(*context)
+        , fInliner(inliner)
         , fErrors(errorReporter)
-        , fModifiers(new ModifiersPool()) {}
+        , fModifiers(new ModifiersPool()) {
+    SkASSERT(fInliner);
+}
 
 void IRGenerator::pushSymbolTable() {
     fSymbolTable.reset(new SymbolTable(std::move(fSymbolTable)));
@@ -406,14 +425,9 @@ std::vector<std::unique_ptr<Statement>> IRGenerator::convertVarDeclarations(
             }
             var->setInitialValue(value.get());
         }
-        Symbol* symbol = (*fSymbolTable)[var->name()];
+        const Symbol* symbol = (*fSymbolTable)[var->name()];
         if (symbol && storage == Variable::Storage::kGlobal && var->name() == "sk_FragColor") {
             // Already defined, ignore.
-        } else if (symbol && storage == Variable::Storage::kGlobal &&
-                   symbol->kind() == Symbol::Kind::kVariable &&
-                   symbol->as<Variable>().modifiers().fLayout.fBuiltin >= 0) {
-            // Already defined, just update the modifiers.
-            symbol->as<Variable>().setModifiersHandle(var->modifiersHandle());
         } else {
             varDecls.push_back(std::make_unique<VarDeclaration>(
                     var.get(), baseType, std::move(sizes), std::move(value)));
@@ -455,7 +469,7 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
         !fSettings->fCaps->gsInvocationsSupport()) {
         modifiers.fLayout.fMaxVertices *= fInvocations;
     }
-    return std::make_unique<ModifiersDeclaration>(modifiers);
+    return std::make_unique<ModifiersDeclaration>(fModifiers->handle(modifiers));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
@@ -488,8 +502,11 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
             return std::make_unique<Nop>();
         }
     }
-    return std::make_unique<IfStatement>(n.fOffset, n.getBool(), std::move(test),
-                                         std::move(ifTrue), std::move(ifFalse));
+    auto ifStmt = std::make_unique<IfStatement>(n.fOffset, n.getBool(), std::move(test),
+                                                std::move(ifTrue), std::move(ifFalse));
+    fInliner->ensureScopedBlocks(ifStmt->ifTrue().get(), ifStmt.get());
+    fInliner->ensureScopedBlocks(ifStmt->ifFalse().get(), ifStmt.get());
+    return std::move(ifStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
@@ -507,14 +524,17 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
     ++iter;
     std::unique_ptr<Expression> test;
     if (*iter) {
+        AutoDisableInline disableInline(this);
         test = this->coerce(this->convertExpression(*iter), *fContext.fBool_Type);
         if (!test) {
             return nullptr;
         }
+
     }
     ++iter;
     std::unique_ptr<Expression> next;
     if (*iter) {
+        AutoDisableInline disableInline(this);
         next = this->convertExpression(*iter);
         if (!next) {
             return nullptr;
@@ -525,16 +545,22 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
     if (!statement) {
         return nullptr;
     }
-    return std::make_unique<ForStatement>(f.fOffset, std::move(initializer), std::move(test),
-                                          std::move(next), std::move(statement), fSymbolTable);
+    auto forStmt = std::make_unique<ForStatement>(f.fOffset, std::move(initializer),
+                                                  std::move(test), std::move(next),
+                                                  std::move(statement), fSymbolTable);
+    fInliner->ensureScopedBlocks(forStmt->statement().get(), forStmt.get());
+    return std::move(forStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     SkASSERT(w.fKind == ASTNode::Kind::kWhile);
     AutoLoopLevel level(this);
+    std::unique_ptr<Expression> test;
     auto iter = w.begin();
-    std::unique_ptr<Expression> test = this->coerce(this->convertExpression(*(iter++)),
-                                                    *fContext.fBool_Type);
+    {
+        AutoDisableInline disableInline(this);
+        test = this->coerce(this->convertExpression(*(iter++)), *fContext.fBool_Type);
+    }
     if (!test) {
         return nullptr;
     }
@@ -542,7 +568,10 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     if (!statement) {
         return nullptr;
     }
-    return std::make_unique<WhileStatement>(w.fOffset, std::move(test), std::move(statement));
+    auto whileStmt = std::make_unique<WhileStatement>(w.fOffset, std::move(test),
+                                                      std::move(statement));
+    fInliner->ensureScopedBlocks(whileStmt->statement().get(), whileStmt.get());
+    return std::move(whileStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
@@ -553,12 +582,17 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (!statement) {
         return nullptr;
     }
-    std::unique_ptr<Expression> test =
-            this->coerce(this->convertExpression(*(iter++)), *fContext.fBool_Type);
+    std::unique_ptr<Expression> test;
+    {
+        AutoDisableInline disableInline(this);
+        test = this->coerce(this->convertExpression(*(iter++)), *fContext.fBool_Type);
+    }
     if (!test) {
         return nullptr;
     }
-    return std::make_unique<DoStatement>(d.fOffset, std::move(statement), std::move(test));
+    auto doStmt = std::make_unique<DoStatement>(d.fOffset, std::move(statement), std::move(test));
+    fInliner->ensureScopedBlocks(doStmt->statement().get(), doStmt.get());
+    return std::move(doStmt);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
@@ -885,17 +919,27 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                           "parameters of type '" + type->displayName() + "' not allowed");
             return;
         }
-        StringFragment name = pd.fName;
+
+        Modifiers m = pd.fModifiers;
+        if (funcData.fName == "main" && (fKind == Program::kPipelineStage_Kind ||
+                                         fKind == Program::kFragmentProcessor_Kind)) {
+            if (i == 0) {
+                // We verify that the type is correct later, for now, if there is a parameter to
+                // a .fp or runtime-effect main(), it's supposed to be the coords:
+                m.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
+            }
+        }
+
         Variable* var = fSymbolTable->takeOwnershipOfSymbol(
-                std::make_unique<Variable>(param.fOffset, fModifiers->handle(pd.fModifiers),
-                                           name, type, fIsBuiltinCode,
-                                           Variable::Storage::kParameter));
+                std::make_unique<Variable>(param.fOffset, fModifiers->handle(m), pd.fName, type,
+                                           fIsBuiltinCode, Variable::Storage::kParameter));
         parameters.push_back(var);
     }
 
     auto paramIsCoords = [&](int idx) {
         return parameters[idx]->type() == *fContext.fFloat2_Type &&
-               parameters[idx]->modifiers().fFlags == 0;
+               parameters[idx]->modifiers().fFlags == 0 &&
+               parameters[idx]->modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN;
     };
 
     if (funcData.fName == "main") {
@@ -1008,15 +1052,6 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         fCurrentFunction = decl;
         std::shared_ptr<SymbolTable> old = fSymbolTable;
         AutoSymbolTable table(this);
-        if (funcData.fName == "main" && (fKind == Program::kPipelineStage_Kind ||
-                                         fKind == Program::kFragmentProcessor_Kind)) {
-            if (parameters.size() == 1) {
-                SkASSERT(paramIsCoords(0));
-                Modifiers m = parameters[0]->modifiers();
-                m.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
-                parameters[0]->setModifiersHandle(fModifiers->handle(m));
-            }
-        }
         const std::vector<Variable*>& declParameters = decl->parameters();
         for (size_t i = 0; i < parameters.size(); i++) {
             fSymbolTable->addWithoutOwnership(declParameters[i]);
@@ -1857,7 +1892,14 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
         return nullptr;
     }
     Token::Kind op = expression.getToken().fKind;
-    std::unique_ptr<Expression> right = this->convertExpression(*(iter++));
+    std::unique_ptr<Expression> right;
+    {
+        // Can't inline the right side of a short-circuiting boolean, because our inlining
+        // approach runs things out of order.
+        AutoDisableInline disableInline(this, /*canInline=*/(op != Token::Kind::TK_LOGICALAND &&
+                                                             op != Token::Kind::TK_LOGICALOR));
+        right = this->convertExpression(*(iter++));
+    }
     if (!right) {
         return nullptr;
     }
@@ -1912,13 +1954,18 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
     if (!test) {
         return nullptr;
     }
-    std::unique_ptr<Expression> ifTrue = this->convertExpression(*(iter++));
-    if (!ifTrue) {
-        return nullptr;
-    }
-    std::unique_ptr<Expression> ifFalse = this->convertExpression(*(iter++));
-    if (!ifFalse) {
-        return nullptr;
+    std::unique_ptr<Expression> ifTrue;
+    std::unique_ptr<Expression> ifFalse;
+    {
+        AutoDisableInline disableInline(this);
+        ifTrue = this->convertExpression(*(iter++));
+        if (!ifTrue) {
+            return nullptr;
+        }
+        ifFalse = this->convertExpression(*(iter++));
+        if (!ifFalse) {
+            return nullptr;
+        }
     }
     const Type* trueType;
     const Type* falseType;
@@ -2014,7 +2061,7 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         fErrors.error(offset, msg);
         return nullptr;
     }
-    std::vector<const Type*> types;
+    FunctionDeclaration::ParamTypes types;
     const Type* returnType;
     if (!function.determineFinalTypes(arguments, &types, &returnType)) {
         String msg = "no match for " + function.name() + "(";
@@ -2043,7 +2090,20 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         }
     }
 
-    return std::make_unique<FunctionCall>(offset, returnType, &function, std::move(arguments));
+    auto funcCall = std::make_unique<FunctionCall>(offset, returnType, &function,
+                                                   std::move(arguments));
+    if (fCanInline &&
+        fInliner->isSafeToInline(funcCall->function().definition()) &&
+        !fInliner->isLargeFunction(funcCall->function().definition())) {
+        Inliner::InlinedCall inlinedCall = fInliner->inlineCall(funcCall.get(), fSymbolTable.get(),
+                                                                fCurrentFunction);
+        if (inlinedCall.fInlinedBody) {
+            fExtraStatements.push_back(std::move(inlinedCall.fInlinedBody));
+        }
+        return std::move(inlinedCall.fReplacementExpr);
+    }
+
+    return std::move(funcCall);
 }
 
 /**
@@ -2056,7 +2116,7 @@ CoercionCost IRGenerator::callCost(const FunctionDeclaration& function,
     if (function.parameters().size() != arguments.size()) {
         return CoercionCost::Impossible();
     }
-    std::vector<const Type*> types;
+    FunctionDeclaration::ParamTypes types;
     const Type* ignored;
     if (!function.determineFinalTypes(arguments, &types, &ignored)) {
         return CoercionCost::Impossible();

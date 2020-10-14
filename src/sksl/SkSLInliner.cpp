@@ -248,7 +248,7 @@ std::unique_ptr<Expression> clone_with_ref_kind(const Expression& expr,
 
 bool is_trivial_argument(const Expression& argument) {
     return argument.is<VariableReference>() ||
-           (argument.is<Swizzle>() && is_trivial_argument(*argument.as<Swizzle>().fBase)) ||
+           (argument.is<Swizzle>() && is_trivial_argument(*argument.as<Swizzle>().base())) ||
            (argument.is<FieldAccess>() &&
             is_trivial_argument(*argument.as<FieldAccess>().base())) ||
            (argument.is<Constructor>() &&
@@ -406,7 +406,7 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kSwizzle: {
             const Swizzle& s = expression.as<Swizzle>();
-            return std::make_unique<Swizzle>(*fContext, expr(s.fBase), s.fComponents);
+            return std::make_unique<Swizzle>(*fContext, expr(s.base()), s.components());
         }
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = expression.as<TernaryExpression>();
@@ -747,6 +747,11 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
 bool Inliner::isSafeToInline(const FunctionDefinition* functionDef) {
     SkASSERT(fSettings);
 
+    // A threshold of zero indicates that the inliner is completely disabled, so we can just return.
+    if (fSettings->fInlineThreshold <= 0) {
+        return false;
+    }
+
     if (functionDef == nullptr) {
         // Can't inline something if we don't actually have its definition.
         return false;
@@ -1041,7 +1046,7 @@ public:
             }
             case Expression::Kind::kSwizzle: {
                 Swizzle& swizzleExpr = (*expr)->as<Swizzle>();
-                this->visitExpression(&swizzleExpr.fBase);
+                this->visitExpression(&swizzleExpr.base());
                 break;
             }
             case Expression::Kind::kTernary: {
@@ -1069,25 +1074,30 @@ public:
 };
 
 bool Inliner::candidateCanBeInlined(const InlineCandidate& candidate, InlinabilityCache* cache) {
-    const FunctionDeclaration& fnDecl = (*candidate.fCandidateExpr)->as<FunctionCall>().function();
+    const FunctionDeclaration& funcDecl =
+                                         (*candidate.fCandidateExpr)->as<FunctionCall>().function();
 
-    auto [iter, wasInserted] = cache->insert({&fnDecl, false});
+    auto [iter, wasInserted] = cache->insert({&funcDecl, false});
     if (wasInserted) {
         // Recursion is forbidden here to avoid an infinite death spiral of inlining.
-        iter->second = this->isSafeToInline(fnDecl.definition()) &&
-                       !contains_recursive_call(fnDecl);
+        iter->second = this->isSafeToInline(funcDecl.definition()) &&
+                       !contains_recursive_call(funcDecl);
     }
 
     return iter->second;
 }
 
-bool Inliner::isLargeFunction(const InlineCandidate& candidate, LargeFunctionCache* cache) {
-    const FunctionDeclaration& fnDecl = (*candidate.fCandidateExpr)->as<FunctionCall>().function();
+bool Inliner::isLargeFunction(const FunctionDefinition* functionDef) {
+    return Analysis::NodeCountExceeds(*functionDef, fSettings->fInlineThreshold);
+}
 
-    auto [iter, wasInserted] = cache->insert({&fnDecl, false});
+bool Inliner::isLargeFunction(const InlineCandidate& candidate, LargeFunctionCache* cache) {
+    const FunctionDeclaration& funcDecl =
+                                         (*candidate.fCandidateExpr)->as<FunctionCall>().function();
+
+    auto [iter, wasInserted] = cache->insert({&funcDecl, false});
     if (wasInserted) {
-        iter->second = Analysis::NodeCountExceeds(*fnDecl.definition(),
-                                                  fSettings->fInlineThreshold);
+        iter->second = this->isLargeFunction(funcDecl.definition());
     }
 
     return iter->second;
