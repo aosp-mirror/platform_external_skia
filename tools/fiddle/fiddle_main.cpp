@@ -23,7 +23,7 @@ static DEFINE_double(frame, 1.0,
                      "A double value in [0, 1] that specifies the point in animation to draw.");
 
 #include "include/gpu/GrBackendSurface.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "tools/gpu/gl/GLTestContext.h"
@@ -119,7 +119,7 @@ static SkCanvas* prepare_canvas(SkCanvas * canvas) {
 }
 
 #ifdef SK_GL
-static bool setup_backend_objects(GrContext* context,
+static bool setup_backend_objects(GrDirectContext* context,
                                   const SkBitmap& bm,
                                   const DrawOptions& options) {
     if (!context) {

@@ -727,7 +727,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
                                                                 fContext.fVoid_Type.get(),
                                                                 /*builtin=*/false));
     fProgramElements->push_back(std::make_unique<FunctionDefinition>(/*offset=*/-1,
-                                                                     *invokeDecl,
+                                                                     invokeDecl,
                                                                      std::move(main)));
 
     std::vector<std::unique_ptr<VarDeclaration>> variables;
@@ -1061,10 +1061,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (Program::kVertex_Kind == fKind && funcData.fName == "main" && fRTAdjust) {
             body->children().push_back(this->getNormalizeSkPositionCode());
         }
-        auto result = std::make_unique<FunctionDefinition>(f.fOffset, *decl, std::move(body),
+        auto result = std::make_unique<FunctionDefinition>(f.fOffset, decl, std::move(body),
                                                            std::move(fReferencedIntrinsics));
         decl->setDefinition(result.get());
-        result->fSource = &f;
+        result->setSource(&f);
         fProgramElements->push_back(std::move(result));
     }
 }
@@ -1099,19 +1099,19 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
                             "only the last entry in an interface block may be a runtime-sized "
                             "array");
             }
-            if (vd.fVar == fRTAdjust) {
+            if (&vd.var() == fRTAdjust) {
                 foundRTAdjust = true;
-                SkASSERT(vd.fVar->type() == *fContext.fFloat4_Type);
+                SkASSERT(vd.var().type() == *fContext.fFloat4_Type);
                 fRTAdjustFieldIndex = fields.size();
             }
-            fields.push_back(Type::Field(vd.fVar->modifiers(), vd.fVar->name(),
-                                        &vd.fVar->type()));
-            if (vd.fValue) {
+            fields.push_back(Type::Field(vd.var().modifiers(), vd.var().name(),
+                                        &vd.var().type()));
+            if (vd.value()) {
                 fErrors.error(decl->fOffset,
                             "initializers are not permitted on interface block fields");
             }
-            if (vd.fVar->type().typeKind() == Type::TypeKind::kArray &&
-                vd.fVar->type().columns() == Type::kUnsizedArray) {
+            if (vd.var().type().typeKind() == Type::TypeKind::kArray &&
+                vd.var().type().columns() == Type::kUnsizedArray) {
                 haveRuntimeArray = true;
             }
         }
@@ -2001,8 +2001,8 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
 
         // Sort the referenced intrinsics into a consistent order; otherwise our output will become
         // non-deterministic.
-        std::vector<const FunctionDeclaration*> intrinsics(original.fReferencedIntrinsics.begin(),
-                                                           original.fReferencedIntrinsics.end());
+        std::vector<const FunctionDeclaration*> intrinsics(original.referencedIntrinsics().begin(),
+                                                           original.referencedIntrinsics().end());
         std::sort(intrinsics.begin(), intrinsics.end(),
                   [](const FunctionDeclaration* a, const FunctionDeclaration* b) {
                       if (a->isBuiltin() != b->isBuiltin()) {
@@ -2829,8 +2829,10 @@ void IRGenerator::cloneBuiltinVariables() {
                 const Expression* initialValue = nullptr;
 
                 if (clonedDecl->is<GlobalVarDeclaration>()) {
-                    sharedVar = clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar;
-                    initialValue = clonedDecl->as<GlobalVarDeclaration>().fDecl->fValue.get();
+                    GlobalVarDeclaration& global = clonedDecl->as<GlobalVarDeclaration>();
+                    VarDeclaration& decl = global.declaration()->as<VarDeclaration>();
+                    sharedVar = &decl.var();
+                    initialValue = decl.value().get();
                 } else {
                     SkASSERT(clonedDecl->is<InterfaceBlock>());
                     sharedVar = clonedDecl->as<InterfaceBlock>().fVariable;
@@ -2847,7 +2849,8 @@ void IRGenerator::cloneBuiltinVariables() {
 
                 // Go back and update the declaring element to point at the cloned Variable.
                 if (clonedDecl->is<GlobalVarDeclaration>()) {
-                    clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar = clonedVar;
+                    GlobalVarDeclaration& global = clonedDecl->as<GlobalVarDeclaration>();
+                    global.declaration()->as<VarDeclaration>().setVar(clonedVar);
                 } else {
                     clonedDecl->as<InterfaceBlock>().fVariable = clonedVar;
                 }
