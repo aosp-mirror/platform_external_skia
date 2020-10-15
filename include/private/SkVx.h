@@ -498,17 +498,19 @@ SI Vec<sizeof...(Ix),T> shuffle(const Vec<N,T>& x) {
 // or map(fn, x,y) for a vector of fn(x[i], y[i]), etc.
 
 template <typename Fn, typename... Args, size_t... I>
-#if defined(__clang__)
-// CFI, specifically -fsanitize=cfi-icall, seems to give a false positive here,
-// with errors like "control flow integrity check for type 'float (float)
-// noexcept' failed during indirect function call... note: sqrtf.cfi_jt defined
-// here".  But we can be quite sure fn is the right type: it's all inferred!
-// So, stifle CFI in this function.
-__attribute__((no_sanitize("cfi")))
-#endif
 SI auto map(std::index_sequence<I...>,
             Fn&& fn, const Args&... args) -> skvx::Vec<sizeof...(I), decltype(fn(args[0]...))> {
-    auto lane = [&](size_t i) { return fn(args[i]...); };
+    auto lane = [&](size_t i)
+#if defined(__clang__)
+    // CFI, specifically -fsanitize=cfi-icall, seems to give a false positive here,
+    // with errors like "control flow integrity check for type 'float (float)
+    // noexcept' failed during indirect function call... note: sqrtf.cfi_jt defined
+    // here".  But we can be quite sure fn is the right type: it's all inferred!
+    // So, stifle CFI in this function.
+    __attribute__((no_sanitize("cfi")))
+#endif
+    { return fn(args[i]...); };
+
     return { lane(I)... };
 }
 
@@ -518,20 +520,12 @@ auto map(Fn&& fn, const Vec<N,T>& first, const Rest&... rest) {
     return map(std::make_index_sequence<N>{}, fn, first,rest...);
 }
 
-// TODO: remove functions that are unlikely to ever vectorize (atan, sin, cos, tan, pow)?
-
-SIN Vec<N,float>  atan(const Vec<N,float>& x) { return map( atanf, x); }
 SIN Vec<N,float>  ceil(const Vec<N,float>& x) { return map( ceilf, x); }
 SIN Vec<N,float> floor(const Vec<N,float>& x) { return map(floorf, x); }
 SIN Vec<N,float> trunc(const Vec<N,float>& x) { return map(truncf, x); }
 SIN Vec<N,float> round(const Vec<N,float>& x) { return map(roundf, x); }
 SIN Vec<N,float>  sqrt(const Vec<N,float>& x) { return map( sqrtf, x); }
 SIN Vec<N,float>   abs(const Vec<N,float>& x) { return map( fabsf, x); }
-SIN Vec<N,float>   sin(const Vec<N,float>& x) { return map(  sinf, x); }
-SIN Vec<N,float>   cos(const Vec<N,float>& x) { return map(  cosf, x); }
-SIN Vec<N,float>   tan(const Vec<N,float>& x) { return map(  tanf, x); }
-SIN Vec<N,float>   pow(const Vec<N,float>& x,
-                       const Vec<N,float>& y) { return map(powf, x,y); }
 SIN Vec<N,float>   fma(const Vec<N,float>& x,
                        const Vec<N,float>& y,
                        const Vec<N,float>& z) {
