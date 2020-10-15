@@ -498,17 +498,19 @@ SI Vec<sizeof...(Ix),T> shuffle(const Vec<N,T>& x) {
 // or map(fn, x,y) for a vector of fn(x[i], y[i]), etc.
 
 template <typename Fn, typename... Args, size_t... I>
-#if defined(__clang__)
-// CFI, specifically -fsanitize=cfi-icall, seems to give a false positive here,
-// with errors like "control flow integrity check for type 'float (float)
-// noexcept' failed during indirect function call... note: sqrtf.cfi_jt defined
-// here".  But we can be quite sure fn is the right type: it's all inferred!
-// So, stifle CFI in this function.
-__attribute__((no_sanitize("cfi")))
-#endif
 SI auto map(std::index_sequence<I...>,
             Fn&& fn, const Args&... args) -> skvx::Vec<sizeof...(I), decltype(fn(args[0]...))> {
-    auto lane = [&](size_t i) { return fn(args[i]...); };
+    auto lane = [&](size_t i)
+#if defined(__clang__)
+    // CFI, specifically -fsanitize=cfi-icall, seems to give a false positive here,
+    // with errors like "control flow integrity check for type 'float (float)
+    // noexcept' failed during indirect function call... note: sqrtf.cfi_jt defined
+    // here".  But we can be quite sure fn is the right type: it's all inferred!
+    // So, stifle CFI in this function.
+    __attribute__((no_sanitize("cfi")))
+#endif
+    { return fn(args[i]...); };
+
     return { lane(I)... };
 }
 
@@ -518,20 +520,12 @@ auto map(Fn&& fn, const Vec<N,T>& first, const Rest&... rest) {
     return map(std::make_index_sequence<N>{}, fn, first,rest...);
 }
 
-// TODO: remove functions that are unlikely to ever vectorize (atan, sin, cos, tan, pow)?
-
-SIN Vec<N,float>  atan(const Vec<N,float>& x) { return map( atanf, x); }
 SIN Vec<N,float>  ceil(const Vec<N,float>& x) { return map( ceilf, x); }
 SIN Vec<N,float> floor(const Vec<N,float>& x) { return map(floorf, x); }
 SIN Vec<N,float> trunc(const Vec<N,float>& x) { return map(truncf, x); }
 SIN Vec<N,float> round(const Vec<N,float>& x) { return map(roundf, x); }
 SIN Vec<N,float>  sqrt(const Vec<N,float>& x) { return map( sqrtf, x); }
 SIN Vec<N,float>   abs(const Vec<N,float>& x) { return map( fabsf, x); }
-SIN Vec<N,float>   sin(const Vec<N,float>& x) { return map(  sinf, x); }
-SIN Vec<N,float>   cos(const Vec<N,float>& x) { return map(  cosf, x); }
-SIN Vec<N,float>   tan(const Vec<N,float>& x) { return map(  tanf, x); }
-SIN Vec<N,float>   pow(const Vec<N,float>& x,
-                       const Vec<N,float>& y) { return map(powf, x,y); }
 SIN Vec<N,float>   fma(const Vec<N,float>& x,
                        const Vec<N,float>& y,
                        const Vec<N,float>& z) {
@@ -558,9 +552,6 @@ SIN Vec<N,int> lrint(const Vec<N,float>& x) {
                 lrint(x.hi));
 }
 
-// TODO: new-style platform specializations for rcp() / rsqrt()?
-SIN Vec<N,float>   rcp(const Vec<N,float>& x) { return 1/x; }
-SIN Vec<N,float> rsqrt(const Vec<N,float>& x) { return rcp(sqrt(x)); }
 SIN Vec<N,float> fract(const Vec<N,float>& x) { return x - floor(x); }
 
 // The default logic for to_half/from_half is borrowed from skcms,
@@ -672,37 +663,6 @@ SIN Vec<N,uint8_t> approx_scale(const Vec<N,uint8_t>& x, const Vec<N,uint8_t>& y
              * cast<uint16_t>(y);
     }
 #endif
-
-#if !defined(SKNX_NO_SIMD)
-
-    // Platform-specific specializations and overloads can now drop in here.
-
-    #if defined(__AVX__)
-        SI Vec<8,float> rsqrt(const Vec<8,float>& x) {
-            return bit_pun<Vec<8,float>>(_mm256_rsqrt_ps(bit_pun<__m256>(x)));
-        }
-        SI Vec<8,float> rcp(const Vec<8,float>& x) {
-            return bit_pun<Vec<8,float>>(_mm256_rcp_ps(bit_pun<__m256>(x)));
-        }
-    #endif
-
-    #if defined(__SSE__)
-        SI Vec<4,float> rsqrt(const Vec<4,float>& x) {
-            return bit_pun<Vec<4,float>>(_mm_rsqrt_ps(bit_pun<__m128>(x)));
-        }
-        SI Vec<4,float> rcp(const Vec<4,float>& x) {
-            return bit_pun<Vec<4,float>>(_mm_rcp_ps(bit_pun<__m128>(x)));
-        }
-
-        SI Vec<2,float> rsqrt(const Vec<2,float>& x) {
-            return shuffle<0,1>(rsqrt(shuffle<0,1,0,1>(x)));
-        }
-        SI Vec<2,float>   rcp(const Vec<2,float>& x) {
-            return shuffle<0,1>(  rcp(shuffle<0,1,0,1>(x)));
-        }
-    #endif
-
-#endif // !defined(SKNX_NO_SIMD)
 
 }  // namespace skvx
 
