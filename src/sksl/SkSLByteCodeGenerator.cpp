@@ -161,17 +161,17 @@ bool ByteCodeGenerator::generateCode() {
             }
             case ProgramElement::Kind::kGlobalVar: {
                 const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
-                const Variable* declVar = decl.fDecl->fVar;
-                if (declVar->type() == *fContext.fFragmentProcessor_Type) {
+                const Variable& declVar = decl.declaration()->as<VarDeclaration>().var();
+                if (declVar.type() == *fContext.fFragmentProcessor_Type) {
                     fOutput->fChildFPCount++;
                 }
-                if (declVar->modifiers().fLayout.fBuiltin >= 0 || is_in(*declVar)) {
+                if (declVar.modifiers().fLayout.fBuiltin >= 0 || is_in(declVar)) {
                     continue;
                 }
-                if (is_uniform(*declVar)) {
-                    this->gatherUniforms(declVar->type(), declVar->name());
+                if (is_uniform(declVar)) {
+                    this->gatherUniforms(declVar.type(), declVar.name());
                 } else {
-                    fOutput->fGlobalSlotCount += SlotCount(declVar->type());
+                    fOutput->fGlobalSlotCount += SlotCount(declVar.type());
                 }
                 break;
             }
@@ -184,14 +184,14 @@ bool ByteCodeGenerator::generateCode() {
 
 std::unique_ptr<ByteCodeFunction> ByteCodeGenerator::writeFunction(const FunctionDefinition& f) {
     fFunction = &f;
-    std::unique_ptr<ByteCodeFunction> result(new ByteCodeFunction(&f.fDeclaration));
+    std::unique_ptr<ByteCodeFunction> result(new ByteCodeFunction(&f.declaration()));
     fParameterCount = result->fParameterCount;
     fLoopCount = fMaxLoopCount = 0;
     fConditionCount = fMaxConditionCount = 0;
     fStackCount = fMaxStackCount = 0;
     fCode = &result->fCode;
 
-    this->writeStatement(*f.fBody);
+    this->writeStatement(*f.body());
     if (0 == fErrors.errorCount()) {
         SkASSERT(fLoopCount == 0);
         SkASSERT(fConditionCount == 0);
@@ -204,7 +204,7 @@ std::unique_ptr<ByteCodeFunction> ByteCodeGenerator::writeFunction(const Functio
     result->fLoopCount      = fMaxLoopCount;
     result->fStackCount     = fMaxStackCount;
 
-    const Type& returnType = f.fDeclaration.returnType();
+    const Type& returnType = f.declaration().returnType();
     if (returnType != *fContext.fVoid_Type) {
         result->fReturnCount = SlotCount(returnType);
     }
@@ -441,7 +441,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
         }
         case Variable::Storage::kParameter: {
             int offset = 0;
-            for (const auto& p : fFunction->fDeclaration.parameters()) {
+            for (const auto& p : fFunction->declaration().parameters()) {
                 if (p == &var) {
                     SkASSERT(offset <= 255);
                     return { offset, Storage::kLocal };
@@ -457,11 +457,11 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
                 for (const auto& e : fProgram.elements()) {
                     if (e->is<GlobalVarDeclaration>()) {
                         const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
-                        const Variable* declVar = decl.fDecl->fVar;
-                        if (declVar->type() != *fContext.fFragmentProcessor_Type) {
+                        const Variable& declVar = decl.declaration()->as<VarDeclaration>().var();
+                        if (declVar.type() != *fContext.fFragmentProcessor_Type) {
                             continue;
                         }
-                        if (declVar == &var) {
+                        if (&declVar == &var) {
                             SkASSERT(offset <= 255);
                             return { offset, Storage::kChildFP };
                         }
@@ -485,18 +485,18 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             for (const auto& e : fProgram.elements()) {
                 if (e->is<GlobalVarDeclaration>()) {
                     const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
-                    const Variable* declVar = decl.fDecl->fVar;
-                    if (declVar->modifiers().fLayout.fBuiltin >= 0 || is_in(*declVar)) {
+                    const Variable& declVar = decl.declaration()->as<VarDeclaration>().var();
+                    if (declVar.modifiers().fLayout.fBuiltin >= 0 || is_in(declVar)) {
                         continue;
                     }
-                    if (isUniform != is_uniform(*declVar)) {
+                    if (isUniform != is_uniform(declVar)) {
                         continue;
                     }
-                    if (declVar == &var) {
+                    if (&declVar == &var) {
                         SkASSERT(offset <= 255);
                         return  { offset, isUniform ? Storage::kUniform : Storage::kGlobal };
                     }
-                    offset += SlotCount(declVar->type());
+                    offset += SlotCount(declVar.type());
                 }
             }
             SkASSERT(false);
@@ -1238,7 +1238,7 @@ void ByteCodeGenerator::writeFunctionCall(const FunctionCall& f) {
     // before they're defined. This is an easy-to-understand rule that prevents recursion.
     int idx = -1;
     for (size_t i = 0; i < fFunctions.size(); ++i) {
-        if (f.function().matches(fFunctions[i]->fDeclaration)) {
+        if (f.function().matches(fFunctions[i]->declaration())) {
             idx = i;
             break;
         }
@@ -1762,10 +1762,10 @@ void ByteCodeGenerator::writeSwitchStatement(const SwitchStatement& r) {
 
 void ByteCodeGenerator::writeVarDeclaration(const VarDeclaration& decl) {
     // we need to grab the location even if we don't use it, to ensure it has been allocated
-    Location location = this->getLocation(*decl.fVar);
-    if (decl.fValue) {
-        this->writeExpression(*decl.fValue);
-        int count = SlotCount(decl.fValue->type());
+    Location location = this->getLocation(decl.var());
+    if (decl.value()) {
+        this->writeExpression(*decl.value());
+        int count = SlotCount(decl.value()->type());
         this->write(ByteCodeInstruction::kStore, count);
         this->write8(location.fSlot);
     }
