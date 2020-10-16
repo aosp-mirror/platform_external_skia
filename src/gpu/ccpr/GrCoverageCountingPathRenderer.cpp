@@ -246,7 +246,7 @@ void GrCoverageCountingPathRenderer::preFlush(
 
     // Move the per-opsTask paths that are about to be flushed from fPendingPaths to fFlushingPaths,
     // and count them up so we can preallocate buffers.
-    fFlushingPaths.reserve(numOpsTaskIDs);
+    fFlushingPaths.reserve_back(numOpsTaskIDs);
     for (int i = 0; i < numOpsTaskIDs; ++i) {
         auto iter = fPendingPaths.find(opsTaskIDs[i]);
         if (fPendingPaths.end() == iter) {
@@ -272,7 +272,7 @@ void GrCoverageCountingPathRenderer::preFlush(
     // copy them to cached atlas(es).
     int numCopies = specs.fNumCopiedPaths[GrCCPerFlushResourceSpecs::kFillIdx] +
                     specs.fNumCopiedPaths[GrCCPerFlushResourceSpecs::kStrokeIdx];
-    auto doCopies = DoCopiesToA8Coverage(numCopies > 100 ||
+    auto doCopies = DoCopiesToA8Coverage(numCopies > kDoCopiesThreshold ||
                                          specs.fCopyAtlasSpecs.fApproxNumPixels > 256 * 256);
     if (numCopies && DoCopiesToA8Coverage::kNo == doCopies) {
         specs.cancelCopies();

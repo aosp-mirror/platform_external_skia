@@ -485,13 +485,13 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kVarDeclaration: {
                 const VarDeclaration& v = s->as<VarDeclaration>();
                 this->writeCommand(Rehydrator::kVarDeclaration_Command);
-                this->writeU16(this->symbolId(v.fVar));
-                this->write(v.fBaseType);
-                this->writeU8(v.fSizes.size());
-                for (const std::unique_ptr<Expression>& sizeExpr : v.fSizes) {
-                    this->write(sizeExpr.get());
+                this->writeU16(this->symbolId(&v.var()));
+                this->write(v.baseType());
+                this->writeU8(v.sizeCount());
+                for (int i = 0; i < v.sizeCount(); ++i) {
+                    this->write(v.size(i).get());
                 }
-                this->write(v.fValue.get());
+                this->write(v.value().get());
                 break;
             }
             case Statement::Kind::kWhile: {
@@ -529,11 +529,11 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kFunction: {
             const FunctionDefinition& f = e.as<FunctionDefinition>();
             this->writeCommand(Rehydrator::kFunctionDefinition_Command);
-            this->writeU16(this->symbolId(&f.fDeclaration));
-            this->write(f.fBody.get());
-            this->writeU8(f.fReferencedIntrinsics.size());
+            this->writeU16(this->symbolId(&f.declaration()));
+            this->write(f.body().get());
+            this->writeU8(f.referencedIntrinsics().size());
             std::set<uint16_t> ordered;
-            for (const FunctionDeclaration* ref : f.fReferencedIntrinsics) {
+            for (const FunctionDeclaration* ref : f.referencedIntrinsics()) {
                 ordered.insert(this->symbolId(ref));
             }
             for (uint16_t ref : ordered) {
@@ -562,7 +562,7 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kGlobalVar: {
             const GlobalVarDeclaration& v = e.as<GlobalVarDeclaration>();
             this->writeCommand(Rehydrator::kVarDeclarations_Command);
-            this->write(v.fDecl.get());
+            this->write(v.declaration().get());
             break;
         }
     }

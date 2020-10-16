@@ -209,7 +209,7 @@ std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& st
                     FunctionCall& fc = expr.as<FunctionCall>();
                     if (fc.function().isBuiltin() && fc.function().name() == "EmitVertex") {
                         StatementArray statements;
-                        statements.reserve(2);
+                        statements.reserve_back(2);
                         statements.push_back(getNormalizeSkPositionCode());
                         statements.push_back(std::move(result));
                         return std::make_unique<Block>(statement.fOffset, std::move(statements),
@@ -378,7 +378,7 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
         const ASTNode::VarData& varData = varDecl.getVarData();
         const Type* type = baseType;
         ExpressionArray sizes;
-        sizes.reserve(varData.fSizeCount);
+        sizes.reserve_back(varData.fSizeCount);
         auto iter = varDecl.begin();
         for (size_t i = 0; i < varData.fSizeCount; ++i, ++iter) {
             const ASTNode& rawSize = *iter;
@@ -727,7 +727,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
                                                                 fContext.fVoid_Type.get(),
                                                                 /*builtin=*/false));
     fProgramElements->push_back(std::make_unique<FunctionDefinition>(/*offset=*/-1,
-                                                                     *invokeDecl,
+                                                                     invokeDecl,
                                                                      std::move(main)));
 
     std::vector<std::unique_ptr<VarDeclaration>> variables;
@@ -746,7 +746,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
     SkASSERT(endPrimitive);
 
     StatementArray loopBody;
-    loopBody.reserve(2);
+    loopBody.reserve_back(2);
     loopBody.push_back(std::make_unique<ExpressionStatement>(this->call(
                                                     /*offset=*/-1, *invokeDecl,
                                                     ExpressionArray{})));
@@ -798,7 +798,7 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
                                    new BinaryExpression(-1, left, op, right, \
                                                         fContext.fFloat2_Type.get()))
     ExpressionArray children;
-    children.reserve(3);
+    children.reserve_back(3);
     children.push_back(OP(OP(SWIZZLE(POS, 0, 1), Token::Kind::TK_STAR, SWIZZLE(ADJUST, 0, 2)),
                           Token::Kind::TK_PLUS,
                           OP(SWIZZLE(POS, 3, 3), Token::Kind::TK_STAR, SWIZZLE(ADJUST, 1, 3))));
@@ -1061,10 +1061,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (Program::kVertex_Kind == fKind && funcData.fName == "main" && fRTAdjust) {
             body->children().push_back(this->getNormalizeSkPositionCode());
         }
-        auto result = std::make_unique<FunctionDefinition>(f.fOffset, *decl, std::move(body),
+        auto result = std::make_unique<FunctionDefinition>(f.fOffset, decl, std::move(body),
                                                            std::move(fReferencedIntrinsics));
         decl->setDefinition(result.get());
-        result->fSource = &f;
+        result->setSource(&f);
         fProgramElements->push_back(std::move(result));
     }
 }
@@ -1099,19 +1099,19 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
                             "only the last entry in an interface block may be a runtime-sized "
                             "array");
             }
-            if (vd.fVar == fRTAdjust) {
+            if (&vd.var() == fRTAdjust) {
                 foundRTAdjust = true;
-                SkASSERT(vd.fVar->type() == *fContext.fFloat4_Type);
+                SkASSERT(vd.var().type() == *fContext.fFloat4_Type);
                 fRTAdjustFieldIndex = fields.size();
             }
-            fields.push_back(Type::Field(vd.fVar->modifiers(), vd.fVar->name(),
-                                        &vd.fVar->type()));
-            if (vd.fValue) {
+            fields.push_back(Type::Field(vd.var().modifiers(), vd.var().name(),
+                                        &vd.var().type()));
+            if (vd.value()) {
                 fErrors.error(decl->fOffset,
                             "initializers are not permitted on interface block fields");
             }
-            if (vd.fVar->type().typeKind() == Type::TypeKind::kArray &&
-                vd.fVar->type().columns() == Type::kUnsizedArray) {
+            if (vd.var().type().typeKind() == Type::TypeKind::kArray &&
+                vd.var().type().columns() == Type::kUnsizedArray) {
                 haveRuntimeArray = true;
             }
         }
@@ -1120,7 +1120,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
     const Type* type =
             old->takeOwnershipOfSymbol(std::make_unique<Type>(intf.fOffset, id.fTypeName, fields));
     ExpressionArray sizes;
-    sizes.reserve(id.fSizeCount);
+    sizes.reserve_back(id.fSizeCount);
     for (size_t i = 0; i < id.fSizeCount; ++i) {
         const ASTNode& size = *(iter++);
         if (size) {
@@ -2001,8 +2001,8 @@ void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
 
         // Sort the referenced intrinsics into a consistent order; otherwise our output will become
         // non-deterministic.
-        std::vector<const FunctionDeclaration*> intrinsics(original.fReferencedIntrinsics.begin(),
-                                                           original.fReferencedIntrinsics.end());
+        std::vector<const FunctionDeclaration*> intrinsics(original.referencedIntrinsics().begin(),
+                                                           original.referencedIntrinsics().end());
         std::sort(intrinsics.begin(), intrinsics.end(),
                   [](const FunctionDeclaration* a, const FunctionDeclaration* b) {
                       if (a->isBuiltin() != b->isBuiltin()) {
@@ -2558,7 +2558,7 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
     // contiguously. The benefits are minor, so skip the optimization to keep the algorithm simple.
     // The constructor will have at most three arguments: { base value, constant 0, constant 1 }
     ExpressionArray constructorArgs;
-    constructorArgs.reserve(3);
+    constructorArgs.reserve_back(3);
     constructorArgs.push_back(std::move(expr));
 
     // Apply another swizzle to shuffle the constants into the correct place. Any constant values we
@@ -2829,8 +2829,10 @@ void IRGenerator::cloneBuiltinVariables() {
                 const Expression* initialValue = nullptr;
 
                 if (clonedDecl->is<GlobalVarDeclaration>()) {
-                    sharedVar = clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar;
-                    initialValue = clonedDecl->as<GlobalVarDeclaration>().fDecl->fValue.get();
+                    GlobalVarDeclaration& global = clonedDecl->as<GlobalVarDeclaration>();
+                    VarDeclaration& decl = global.declaration()->as<VarDeclaration>();
+                    sharedVar = &decl.var();
+                    initialValue = decl.value().get();
                 } else {
                     SkASSERT(clonedDecl->is<InterfaceBlock>());
                     sharedVar = clonedDecl->as<InterfaceBlock>().fVariable;
@@ -2847,7 +2849,8 @@ void IRGenerator::cloneBuiltinVariables() {
 
                 // Go back and update the declaring element to point at the cloned Variable.
                 if (clonedDecl->is<GlobalVarDeclaration>()) {
-                    clonedDecl->as<GlobalVarDeclaration>().fDecl->fVar = clonedVar;
+                    GlobalVarDeclaration& global = clonedDecl->as<GlobalVarDeclaration>();
+                    global.declaration()->as<VarDeclaration>().setVar(clonedVar);
                 } else {
                     clonedDecl->as<InterfaceBlock>().fVariable = clonedVar;
                 }

@@ -360,8 +360,8 @@ ParsedModule Compiler::parseModule(Program::Kind kind, ModuleData data, const Pa
         switch (element->kind()) {
             case ProgramElement::Kind::kFunction: {
                 const FunctionDefinition& f = element->as<FunctionDefinition>();
-                SkASSERT(f.fDeclaration.isBuiltin());
-                intrinsics->insertOrDie(f.fDeclaration.description(), std::move(element));
+                SkASSERT(f.declaration().isBuiltin());
+                intrinsics->insertOrDie(f.declaration().description(), std::move(element));
                 break;
             }
             case ProgramElement::Kind::kEnum: {
@@ -371,9 +371,10 @@ ParsedModule Compiler::parseModule(Program::Kind kind, ModuleData data, const Pa
                 break;
             }
             case ProgramElement::Kind::kGlobalVar: {
-                const Variable* var = element->as<GlobalVarDeclaration>().fDecl->fVar;
-                SkASSERT(var->isBuiltin());
-                intrinsics->insertOrDie(var->name(), std::move(element));
+                const GlobalVarDeclaration& global = element->as<GlobalVarDeclaration>();
+                const Variable& var = global.declaration()->as<VarDeclaration>().var();
+                SkASSERT(var.isBuiltin());
+                intrinsics->insertOrDie(var.name(), std::move(element));
                 break;
             }
             case ProgramElement::Kind::kInterfaceBlock: {
@@ -515,8 +516,8 @@ void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* defin
         Statement* stmt = node.statement()->get();
         if (stmt->is<VarDeclaration>()) {
             VarDeclaration& vd = stmt->as<VarDeclaration>();
-            if (vd.fValue) {
-                definitions->set(vd.fVar, &vd.fValue);
+            if (vd.value()) {
+                definitions->set(&vd.var(), &vd.value());
             }
         }
     }
@@ -570,7 +571,7 @@ static DefinitionMap compute_start_state(const CFG& cfg) {
             if (node.isStatement()) {
                 const Statement* s = node.statement()->get();
                 if (s->is<VarDeclaration>()) {
-                    result[s->as<VarDeclaration>().fVar] = nullptr;
+                    result[&s->as<VarDeclaration>().var()] = nullptr;
                 }
             }
         }
@@ -1179,7 +1180,7 @@ static void move_all_but_break(std::unique_ptr<Statement>& stmt, StatementArray*
             Block& block = static_cast<Block&>(*stmt);
 
             StatementArray blockStmts;
-            blockStmts.reserve(block.children().size());
+            blockStmts.reserve_back(block.children().size());
             for (std::unique_ptr<Statement>& stmt : block.children()) {
                 move_all_but_break(stmt, &blockStmts);
             }
@@ -1284,12 +1285,12 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
     switch (stmt->kind()) {
         case Statement::Kind::kVarDeclaration: {
             const auto& varDecl = stmt->as<VarDeclaration>();
-            if (varDecl.fVar->dead() &&
-                (!varDecl.fValue ||
-                 !varDecl.fValue->hasSideEffects())) {
-                if (varDecl.fValue) {
+            if (varDecl.var().dead() &&
+                (!varDecl.value() ||
+                 !varDecl.value()->hasSideEffects())) {
+                if (varDecl.value()) {
                     SkASSERT((*iter)->statement()->get() == stmt);
-                    if (!b.tryRemoveExpressionBefore(iter, varDecl.fValue.get())) {
+                    if (!b.tryRemoveExpressionBefore(iter, varDecl.value().get())) {
                         *outNeedsRescan = true;
                     }
                 }
@@ -1524,9 +1525,9 @@ bool Compiler::scanCFG(FunctionDefinition& f) {
     }
 
     // check for missing return
-    if (f.fDeclaration.returnType() != *fContext->fVoid_Type) {
+    if (f.declaration().returnType() != *fContext->fVoid_Type) {
         if (cfg.fBlocks[cfg.fExit].fIsReachable) {
-            this->error(f.fOffset, String("function '" + String(f.fDeclaration.name()) +
+            this->error(f.fOffset, String("function '" + String(f.declaration().name()) +
                                           "' can exit without returning a value"));
         }
     }
@@ -1600,8 +1601,8 @@ bool Compiler::optimize(Program& program) {
                                            return false;
                                        }
                                        const auto& fn = element->as<FunctionDefinition>();
-                                       bool dead = fn.fDeclaration.callCount() == 0 &&
-                                                   fn.fDeclaration.name() != "main";
+                                       bool dead = fn.declaration().callCount() == 0 &&
+                                                   fn.declaration().name() != "main";
                                        madeChanges |= dead;
                                        return dead;
                                    }),
@@ -1616,8 +1617,10 @@ bool Compiler::optimize(Program& program) {
                                        if (!element->is<GlobalVarDeclaration>()) {
                                            return false;
                                        }
-                                       const auto& varDecl = element->as<GlobalVarDeclaration>();
-                                       bool dead = varDecl.fDecl->fVar->dead();
+                                       const auto& global = element->as<GlobalVarDeclaration>();
+                                       const auto& varDecl =
+                                                         global.declaration()->as<VarDeclaration>();
+                                       bool dead = varDecl.var().dead();
                                        madeChanges |= dead;
                                        return dead;
                                    }),
