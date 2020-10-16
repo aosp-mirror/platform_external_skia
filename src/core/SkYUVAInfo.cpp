@@ -193,7 +193,7 @@ bool SkYUVAInfo::GetYUVAIndices(PlanarConfig config,
     }
     SkASSERT(locations);
     for (int i = 0; i < SkYUVAIndex::kIndexCount; ++i) {
-        const auto& [plane, chanIdx] = locations[i];
+        auto [plane, chanIdx] = locations[i];
         SkColorChannel channel;
         if (plane >= 0) {
             if (!channel_index_to_channel(planeChannelFlags[plane], chanIdx, &channel)) {
