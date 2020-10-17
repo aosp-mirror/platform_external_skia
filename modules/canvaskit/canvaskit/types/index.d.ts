@@ -201,19 +201,19 @@ export interface CanvasKit {
     GetWebGLContext(canvas: HTMLCanvasElement, opts?: WebGLOptions): WebGLContextHandle;
 
     /**
-     * Creates a GrContext from the given WebGL Context.
+     * Creates a GrDirectContext from the given WebGL Context.
      * @param ctx
      */
-    MakeGrContext(ctx: WebGLContextHandle): GrContext;
+    MakeGrContext(ctx: WebGLContextHandle): GrDirectContext;
 
     /**
-     * Creates a Surface that will be drawn to the given GrContext (and show up on screen).
+     * Creates a Surface that will be drawn to the given GrDirectContext (and show up on screen).
      * @param ctx
      * @param width - number of pixels of the width of the visible area.
      * @param height - number of pixels of the height of the visible area.
      * @param colorSpace
      */
-    MakeOnScreenGLSurface(ctx: GrContext, width: number, height: number,
+    MakeOnScreenGLSurface(ctx: GrDirectContext, width: number, height: number,
                           colorSpace: ColorSpace): Surface | null;
 
     /**
@@ -223,7 +223,7 @@ export interface CanvasKit {
      * @param width
      * @param height
      */
-    MakeRenderTarget(ctx: GrContext, width: number, height: number): Surface | null;
+    MakeRenderTarget(ctx: GrDirectContext, width: number, height: number): Surface | null;
 
     /**
      * Returns a (non-visible) Surface on the GPU. It has the settings provided by image info.
@@ -231,7 +231,7 @@ export interface CanvasKit {
      * @param ctx
      * @param info
      */
-    MakeRenderTarget(ctx: GrContext, info: ImageInfo): Surface | null;
+    MakeRenderTarget(ctx: GrDirectContext, info: ImageInfo): Surface | null;
 
     /**
      * Returns the current WebGLContext that the wasm code is configured to draw to. It is
@@ -541,9 +541,9 @@ export interface FontStyle {
 }
 
 /**
- * See GrContext.h for more on this class.
+ * See GrDirectContext.h for more on this class.
  */
-export interface GrContext extends EmbindObject<GrContext> {
+export interface GrDirectContext extends EmbindObject<GrDirectContext> {
     getResourceCacheLimitBytes(): number;
     getResourceCacheUsageBytes(): number;
     releaseResourcesAndAbandonContext(): void;
@@ -2924,7 +2924,6 @@ export interface RuntimeEffectFactory {
 
 /**
  * For more information, see SkShaders.h.
- * TODO(kjlubick) Rename these to Make* as per the convention
  */
 export interface ShaderFactory {
     /**
@@ -2933,14 +2932,39 @@ export interface ShaderFactory {
      * @param one
      * @param two
      */
-    Blend(mode: BlendMode, one: Shader, two: Shader): Shader;
+    MakeBlend(mode: BlendMode, one: Shader, two: Shader): Shader;
 
     /**
      * Returns a shader with a given color and colorspace.
      * @param color
      * @param space
      */
-    Color(color: InputColor, space: ColorSpace): Shader;
+    MakeColor(color: InputColor, space: ColorSpace): Shader;
+
+    /**
+     * Returns a shader with Perlin Fractal Noise.
+     * See SkPerlinNoiseShader.h for more details
+     * @param baseFreqX - base frequency in the X direction; range [0.0, 1.0]
+     * @param baseFreqY - base frequency in the Y direction; range [0.0, 1.0]
+     * @param octaves
+     * @param seed
+     * @param tileW - if this and tileH are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     * @param tileH - if this and tileW are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     */
+    MakeFractalNoise(baseFreqX: number, baseFreqY: number, octaves: number, seed: number,
+                     tileW: number, tileH: number): Shader;
+
+    /**
+     * Returns a shader with Improved Perlin Noise.
+     * See SkPerlinNoiseShader.h for more details
+     * @param baseFreqX - base frequency in the X direction; range [0.0, 1.0]
+     * @param baseFreqY - base frequency in the Y direction; range [0.0, 1.0]
+     * @param octaves
+     * @param z - like seed, but minor variations to z will only slightly change the noise.
+     */
+    MakeImprovedNoise(baseFreqX: number, baseFreqY: number, octaves: number, z: number): Shader;
 
     /**
      * Returns a shader is a linear interpolation combines the given shaders with a BlendMode.
@@ -2948,7 +2972,98 @@ export interface ShaderFactory {
      * @param one
      * @param two
      */
-    Lerp(t: number, one: Shader, two: Shader): Shader;
+    MakeLerp(t: number, one: Shader, two: Shader): Shader;
+
+    /**
+     * Returns a shader that generates a linear gradient between the two specified points.
+     * See SkGradientShader.h for more.
+     * @param start
+     * @param end
+     * @param colors - colors to be distributed between start and end.
+     * @param pos - May be null. The relative positions of colors. If supplied must be same length
+     *              as colors.
+     * @param mode
+     * @param localMatrix
+     * @param flags - By default gradients will interpolate their colors in unpremul space
+     *                and then premultiply each of the results. By setting this to 1, the
+     *                gradients will premultiply their colors first, and then interpolate
+     *                between them.
+     * @param colorSpace
+     */
+    MakeLinearGradient(start: Point, end: Point, colors: InputFlexibleColorArray,
+                       pos: number[] | null, mode: TileMode, localMatrix?: InputMatrix,
+                       flags?: number, colorSpace?: ColorSpace): Shader;
+
+    /**
+     * Returns a shader that generates a radial gradient given the center and radius.
+     * See SkGradientShader.h for more.
+     * @param center
+     * @param radius
+     * @param colors - colors to be distributed between the center and edge.
+     * @param pos - May be null. The relative positions of colors. If supplied must be same length
+     *              as colors. Range [0.0, 1.0]
+     * @param mode
+     * @param localMatrix
+     * @param flags - 0 to interpolate colors in unpremul, 1 to interpolate colors in premul.
+     * @param colorSpace
+     */
+    MakeRadialGradient(center: Point, radius: number, colors: InputFlexibleColorArray,
+                       pos: number[] | null, mode: TileMode, localMatrix?: InputMatrix,
+                       flags?: number, colorSpace?: ColorSpace): Shader;
+
+    /**
+     * Returns a shader that generates a sweep gradient given a center.
+     * See SkGradientShader.h for more.
+     * @param cx
+     * @param cy
+     * @param colors - colors to be distributed around the center, within the provided angles.
+     * @param pos - May be null. The relative positions of colors. If supplied must be same length
+     *              as colors. Range [0.0, 1.0]
+     * @param mode
+     * @param localMatrix
+     * @param flags - 0 to interpolate colors in unpremul, 1 to interpolate colors in premul.
+     * @param startAngle - angle corresponding to 0.0. Defaults to 0 degrees.
+     * @param endAngle - angle corresponding to 1.0. Defaults to 360 degrees.
+     * @param colorSpace
+     */
+    MakeSweepGradient(cx: number, cy: number, colors: InputFlexibleColorArray,
+                      pos: number[] | null, mode: TileMode, localMatrix?: InputMatrix | null,
+                      flags?: number, startAngle?: AngleInDegrees, endAngle?: AngleInDegrees,
+                      colorSpace?: ColorSpace): Shader;
+
+    /**
+     * Returns a shader with Perlin Turbulence.
+     * See SkPerlinNoiseShader.h for more details
+     * @param baseFreqX - base frequency in the X direction; range [0.0, 1.0]
+     * @param baseFreqY - base frequency in the Y direction; range [0.0, 1.0]
+     * @param octaves
+     * @param seed
+     * @param tileW - if this and tileH are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     * @param tileH - if this and tileW are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     */
+    MakeTurbulence(baseFreqX: number, baseFreqY: number, octaves: number, seed: number,
+                   tileW: number, tileH: number): Shader;
+
+    /**
+     * Returns a shader that generates a conical gradient given two circles.
+     * See SkGradientShader.h for more.
+     * @param start
+     * @param startRadius
+     * @param end
+     * @param endRadius
+     * @param colors
+     * @param pos
+     * @param mode
+     * @param localMatrix
+     * @param flags
+     * @param colorSpace
+     */
+    MakeTwoPointConicalGradient(start: Point, startRadius: number, end: Point, endRadius: number,
+                                colors: InputFlexibleColorArray, pos: number[] | null,
+                                mode: TileMode, localMatrix?: InputMatrix, flags?: number,
+                                colorSpace?: ColorSpace): Shader;
 }
 
 /**
@@ -3217,6 +3332,12 @@ export type InputFlattenedPointArray = MallocObj | FlattenedPointArray | number[
  * Length 4 * n for n rectangles.
  */
 export type InputFlattenedRectangleArray = MallocObj | FlattenedRectangleArray | number[];
+/**
+ * Some APIs accept a flattened array of colors in one of two ways - groups of 4 float values for
+ * r, g, b, a or just integers that have 8 bits for each these. CanvasKit will detect which one
+ * it is and act accordingly.
+ */
+export type InputFlexibleColorArray = Float32Array | Uint32Array;
 /**
  * CanvasKit APIs accept all of these matrix types. Under the hood, we generally use 4x4 matrices.
  */
