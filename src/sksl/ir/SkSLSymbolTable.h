@@ -25,11 +25,13 @@ class FunctionDeclaration;
  */
 class SymbolTable {
 public:
-    SymbolTable(ErrorReporter* errorReporter)
-    : fErrorReporter(*errorReporter) {}
+    SymbolTable(ErrorReporter* errorReporter, bool builtin)
+    : fBuiltin(builtin)
+    , fErrorReporter(*errorReporter) {}
 
-    SymbolTable(std::shared_ptr<SymbolTable> parent)
+    SymbolTable(std::shared_ptr<SymbolTable> parent, bool builtin)
     : fParent(parent)
+    , fBuiltin(builtin)
     , fErrorReporter(parent->fErrorReporter) {}
 
     const Symbol* operator[](StringFragment name);
@@ -70,6 +72,10 @@ public:
         return fSymbols.count();
     }
 
+    bool isBuiltin() const {
+        return fBuiltin;
+    }
+
     const String* takeOwnershipOfString(std::unique_ptr<String> n);
 
     std::shared_ptr<SymbolTable> fParent;
@@ -92,9 +98,10 @@ private:
         return SymbolKey{name, SkOpts::hash_fn(name.data(), name.size(), 0)};
     }
 
-    const Symbol* lookup(const SymbolKey& key);
+    const Symbol* lookup(SymbolTable* writableSymbolTable, const SymbolKey& key);
     static std::vector<const FunctionDeclaration*> GetFunctions(const Symbol& s);
 
+    bool fBuiltin = false;
     std::vector<std::unique_ptr<IRNode>> fOwnedNodes;
     std::vector<std::unique_ptr<String>> fOwnedStrings;
     SkTHashMap<SymbolKey, const Symbol*, SymbolKey::Hash> fSymbols;
