@@ -32,7 +32,6 @@
 #include <memory>
 #include <vector>
 
-class GrContext;
 class GrRecordingContext;
 class GrRenderTargetContext;
 class SkBaseDevice;
@@ -1142,9 +1141,9 @@ public:
     */
     void discard() { this->onDiscard(); }
 
-    /** Fills clip with SkPaint paint. SkPaint components SkMaskFilter, SkShader,
+    /** Fills clip with SkPaint paint. SkPaint components, SkShader,
         SkColorFilter, SkImageFilter, and SkBlendMode affect drawing;
-        SkPathEffect in paint is ignored.
+        SkMaskFilter and SkPathEffect in paint are ignored.
 
         @param paint  graphics state used to fill SkCanvas
 

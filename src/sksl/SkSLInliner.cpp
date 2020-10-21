@@ -467,7 +467,9 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
     switch (statement.kind()) {
         case Statement::Kind::kBlock: {
             const Block& b = statement.as<Block>();
-            return std::make_unique<Block>(offset, blockStmts(b), b.symbolTable(), b.isScope());
+            return std::make_unique<Block>(offset, blockStmts(b),
+                                           SymbolTable::WrapIfBuiltin(b.symbolTable()),
+                                           b.isScope());
         }
 
         case Statement::Kind::kBreak:
@@ -489,7 +491,8 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             // declarations by the time we evaluate test & next
             std::unique_ptr<Statement> initializer = stmt(f.initializer());
             return std::make_unique<ForStatement>(offset, std::move(initializer), expr(f.test()),
-                                                  expr(f.next()), stmt(f.statement()), f.symbols());
+                                                  expr(f.next()), stmt(f.statement()),
+                                                  SymbolTable::WrapIfBuiltin(f.symbols()));
         }
         case Statement::Kind::kIf: {
             const IfStatement& i = statement.as<IfStatement>();
@@ -538,7 +541,8 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
                                                              stmts(sc->fStatements)));
             }
             return std::make_unique<SwitchStatement>(offset, ss.fIsStatic, expr(ss.fValue),
-                                                     std::move(cases), ss.fSymbols);
+                                                     std::move(cases),
+                                                     SymbolTable::WrapIfBuiltin(ss.fSymbols));
         }
         case Statement::Kind::kVarDeclaration: {
             const VarDeclaration& decl = statement.as<VarDeclaration>();
@@ -595,6 +599,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     SkASSERT(fContext);
     SkASSERT(call);
     SkASSERT(this->isSafeToInline(call->function().definition()));
+    SkASSERT(!symbolTableForCall->isBuiltin());
 
     ExpressionArray& arguments = call->arguments();
     const int offset = call->fOffset;
@@ -607,11 +612,12 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
                                                        /*isScope=*/false);
 
     Block& inlinedBody = *inlinedCall.fInlinedBody;
-    inlinedBody.children().reserve_back(1 +                // Inline marker
-                                   1 +                // Result variable
-                                   arguments.size() + // Function arguments (passing in)
-                                   arguments.size() + // Function arguments (copy out-params back)
-                                   1);                // Inlined code (Block or do-while loop)
+    inlinedBody.children().reserve_back(
+            1 +                 // Inline marker
+            1 +                 // Result variable
+            arguments.size() +  // Function arguments (passing in)
+            arguments.size() +  // Function arguments (copy out-params back)
+            1);                 // Inlined code (Block or do-while loop)
 
     inlinedBody.children().push_back(std::make_unique<InlineMarker>(&call->function()));
 
@@ -822,8 +828,12 @@ public:
         switch (pe->kind()) {
             case ProgramElement::Kind::kFunction: {
                 FunctionDefinition& funcDef = pe->as<FunctionDefinition>();
-                fEnclosingFunction = &funcDef;
-                this->visitStatement(&funcDef.body());
+                // Don't attempt to mutate any builtin functions. (If we stop cloning builtins into
+                // the program, this check can become an assertion.)
+                if (!funcDef.isBuiltin()) {
+                    fEnclosingFunction = &funcDef;
+                    this->visitStatement(&funcDef.body());
+                }
                 break;
             }
             default:
@@ -1132,9 +1142,9 @@ void Inliner::buildCandidateList(Program& program, InlineCandidateList* candidat
 }
 
 static bool multiple_calls_to(const Program& program, const FunctionDeclaration* fn) {
-    class MulitpleCallVisitor : public ProgramVisitor {
+    class MultipleCallVisitor : public ProgramVisitor {
     public:
-        MulitpleCallVisitor(const FunctionDeclaration* function) : fFunction(function) {}
+        MultipleCallVisitor(const FunctionDeclaration* function) : fFunction(function) {}
 
         bool visitExpression(const Expression& e) override {
             if (e.is<FunctionCall>() && &e.as<FunctionCall>().function() == fFunction) {
@@ -1151,7 +1161,7 @@ static bool multiple_calls_to(const Program& program, const FunctionDeclaration*
         using INHERITED = ProgramVisitor;
     };
 
-    MulitpleCallVisitor visitor(fn);
+    MultipleCallVisitor visitor(fn);
     return visitor.visit(program);
 }
 
