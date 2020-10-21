@@ -607,11 +607,12 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
                                                        /*isScope=*/false);
 
     Block& inlinedBody = *inlinedCall.fInlinedBody;
-    inlinedBody.children().reserve_back(1 +                // Inline marker
-                                   1 +                // Result variable
-                                   arguments.size() + // Function arguments (passing in)
-                                   arguments.size() + // Function arguments (copy out-params back)
-                                   1);                // Inlined code (Block or do-while loop)
+    inlinedBody.children().reserve_back(
+            1 +                 // Inline marker
+            1 +                 // Result variable
+            arguments.size() +  // Function arguments (passing in)
+            arguments.size() +  // Function arguments (copy out-params back)
+            1);                 // Inlined code (Block or do-while loop)
 
     inlinedBody.children().push_back(std::make_unique<InlineMarker>(&call->function()));
 
@@ -822,8 +823,10 @@ public:
         switch (pe->kind()) {
             case ProgramElement::Kind::kFunction: {
                 FunctionDefinition& funcDef = pe->as<FunctionDefinition>();
-                fEnclosingFunction = &funcDef;
-                this->visitStatement(&funcDef.body());
+                if (!funcDef.isBuiltin()) {
+                    fEnclosingFunction = &funcDef;
+                    this->visitStatement(&funcDef.body());
+                }
                 break;
             }
             default:
@@ -1132,9 +1135,9 @@ void Inliner::buildCandidateList(Program& program, InlineCandidateList* candidat
 }
 
 static bool multiple_calls_to(const Program& program, const FunctionDeclaration* fn) {
-    class MulitpleCallVisitor : public ProgramVisitor {
+    class MultipleCallVisitor : public ProgramVisitor {
     public:
-        MulitpleCallVisitor(const FunctionDeclaration* function) : fFunction(function) {}
+        MultipleCallVisitor(const FunctionDeclaration* function) : fFunction(function) {}
 
         bool visitExpression(const Expression& e) override {
             if (e.is<FunctionCall>() && &e.as<FunctionCall>().function() == fFunction) {
@@ -1151,7 +1154,7 @@ static bool multiple_calls_to(const Program& program, const FunctionDeclaration*
         using INHERITED = ProgramVisitor;
     };
 
-    MulitpleCallVisitor visitor(fn);
+    MultipleCallVisitor visitor(fn);
     return visitor.visit(program);
 }
 

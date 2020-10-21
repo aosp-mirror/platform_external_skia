@@ -25,8 +25,8 @@ public:
     static constexpr Kind kProgramElementKind = Kind::kEnum;
 
     Enum(int offset, StringFragment typeName, std::shared_ptr<SymbolTable> symbols,
-         bool isBuiltin = true)
-    : INHERITED(offset, EnumData{typeName, std::move(symbols), isBuiltin}) {}
+         bool isSharedWithCpp, bool isBuiltin = true)
+    : INHERITED(offset, EnumData{typeName, std::move(symbols), isSharedWithCpp, isBuiltin}) {}
 
     StringFragment typeName() const {
         return this->enumData().fTypeName;
@@ -40,9 +40,14 @@ public:
         return this->enumData().fIsBuiltin;
     }
 
+    bool isSharedWithCpp() const {
+        return this->enumData().fIsSharedWithCpp;
+    }
+
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::unique_ptr<ProgramElement>(new Enum(fOffset, this->typeName(), this->symbols(),
-                                                        this->isBuiltin()));
+        return std::make_unique<Enum>(fOffset, this->typeName(),
+                                      SymbolTable::WrapIfBuiltin(this->symbols()),
+                                      this->isSharedWithCpp(), /*isBuiltin=*/false);
     }
 
     String code() const {
@@ -54,11 +59,9 @@ public:
             sortedSymbols.push_back(symbol);
         });
         std::sort(sortedSymbols.begin(), sortedSymbols.end(),
-                  [](const Symbol* a, const Symbol* b) { return a->name() < b->name(); });
-        for (const auto& s : sortedSymbols) {
-            const Expression& initialValue = *s->as<Variable>().initialValue();
-            result += separator + "    " + s->name() + " = " +
-                      to_string(initialValue.as<IntLiteral>().value());
+                  [](const Symbol* a, const Symbol* b) { return EnumValue(a) < EnumValue(b); });
+        for (const Symbol* s : sortedSymbols) {
+            result += separator + "    " + s->name() + " = " + to_string(EnumValue(s));
             separator = ",\n";
         }
         result += "\n};";
@@ -70,6 +73,10 @@ public:
     }
 
 private:
+    static int EnumValue(const Symbol* symbol) {
+        return symbol->as<Variable>().initialValue()->as<IntLiteral>().value();
+    }
+
     using INHERITED = ProgramElement;
 };
 

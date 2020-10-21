@@ -304,7 +304,8 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
                 v.setInitialValue(symbols->takeOwnershipOfIRNode(
                         std::make_unique<IntLiteral>(fContext, /*offset=*/-1, value)));
             }
-            return std::unique_ptr<ProgramElement>(new Enum(-1, typeName, std::move(symbols)));
+            return std::make_unique<Enum>(/*offset=*/-1, typeName, std::move(symbols),
+                                          /*isSharedWithCpp=*/true, /*isBuiltin=*/true);
         }
         case Rehydrator::kFunctionDefinition_Command: {
             const FunctionDeclaration* decl = this->symbolRef<FunctionDeclaration>(
@@ -316,10 +317,11 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
                 refs.insert(this->symbolRef<FunctionDeclaration>(
                                                                Symbol::Kind::kFunctionDeclaration));
             }
-            FunctionDefinition* result = new FunctionDefinition(-1, decl, std::move(body),
-                                                                std::move(refs));
-            decl->setDefinition(result);
-            return std::unique_ptr<ProgramElement>(result);
+            auto result = std::make_unique<FunctionDefinition>(/*offset=*/-1, decl,
+                                                               /*builtin=*/true, std::move(body),
+                                                               std::move(refs));
+            decl->setDefinition(result.get());
+            return std::move(result);
         }
         case Rehydrator::kInterfaceBlock_Command: {
             const Symbol* var = this->symbol();
