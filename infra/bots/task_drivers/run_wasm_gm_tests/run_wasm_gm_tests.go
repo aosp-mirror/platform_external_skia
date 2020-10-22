@@ -31,6 +31,7 @@ func main() {
 		goldKeys        = common.NewMultiStringFlag("gold_key", nil, "The keys that will tag this data")
 		nodeBinPath     = flag.String("node_bin_path", "", "Path to the node bin directory (should have npm also). This directory *must* be on the PATH when this executable is called, otherwise, the wrong node or npm version may be found (e.g. the one on the system), even if we are explicitly calling npm with the absolute path.")
 		projectID       = flag.String("project_id", "", "ID of the Google Cloud project.")
+		resourcePath    = flag.String("resource_path", "", "The directory housing the images, fonts, and other assets used by tests.")
 		taskID          = flag.String("task_id", "", "task id this data was generated on")
 		taskName        = flag.String("task_name", "", "Name of the task.")
 		testHarnessPath = flag.String("test_harness_path", "", "Path to test harness folder (tools/run-wasm-gm-tests)")
@@ -38,9 +39,11 @@ func main() {
 		workPath        = flag.String("work_path", "", "The directory to use to store temporary files (e.g. pngs and JSON)")
 
 		// Provided for tryjobs
-		changelistID  = flag.String("changelist_id", "", "The id the Gerrit CL. Omit for primary branch.")
-		tryjobID      = flag.String("tryjob_id", "", "The id of the Buildbucket job for tryjobs. Omit for primary branch.")
-		patchsetOrder = flag.Int("patchset_order", 0, "Represents if this is the nth patchset")
+		changelistID = flag.String("changelist_id", "", "The id the Gerrit CL. Omit for primary branch.")
+		tryjobID     = flag.String("tryjob_id", "", "The id of the Buildbucket job for tryjobs. Omit for primary branch.")
+		// Because we pass in patchset_order via a placeholder, it can be empty string. As such, we
+		// cannot use flag.Int, because that errors on "" being passed in.
+		patchsetOrder = flag.String("patchset_order", "0", "Represents if this is the nth patchset")
 
 		// Debugging flags.
 		local              = flag.Bool("local", false, "True if running locally (as opposed to on the bots)")
@@ -55,6 +58,7 @@ func main() {
 	builtAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *builtPath, "built_path")
 	goldctlAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *goldCtlPath, "gold_ctl_path")
 	nodeBinAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *nodeBinPath, "node_bin_path")
+	resourceAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *resourcePath, "resource_path")
 	testHarnessAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *testHarnessPath, "test_harness_path")
 	workAbsPath := td.MustGetAbsolutePathOfFlag(ctx, *workPath, "work_path")
 
@@ -65,6 +69,15 @@ func main() {
 	testsWorkPath := filepath.Join(workAbsPath, "tests")
 	if err := os_steps.MkdirAll(ctx, testsWorkPath); err != nil {
 		td.Fatal(ctx, err)
+	}
+
+	patchset := 0
+	if *patchsetOrder != "" {
+		p, err := strconv.Atoi(*patchsetOrder)
+		if err != nil {
+			td.Fatalf(ctx, "Invalid patchset_order %q", *patchsetOrder)
+		}
+		patchset = p
 	}
 
 	keys := *goldKeys
@@ -81,7 +94,7 @@ func main() {
 
 	// initialize goldctl
 	if err := setupGoldctl(ctx, *local, *gitCommit, *changelistID, *tryjobID, goldctlAbsPath, goldctlWorkPath,
-		*serviceAccountPath, keys, *patchsetOrder); err != nil {
+		*serviceAccountPath, keys, patchset); err != nil {
 		td.Fatal(ctx, err)
 	}
 
@@ -94,7 +107,7 @@ func main() {
 	// Run puppeteer tests. The input is a list of known hashes. The output will be a JSON array and
 	// any new images to be written to disk in the testsWorkPath. See WriteToDisk in DM for how that
 	// is done on the C++ side.
-	if err := runTests(ctx, builtAbsPath, nodeBinAbsPath, testHarnessAbsPath, testsWorkPath, *webGLVersion); err != nil {
+	if err := runTests(ctx, builtAbsPath, nodeBinAbsPath, resourceAbsPath, testHarnessAbsPath, testsWorkPath, *webGLVersion); err != nil {
 		td.Fatal(ctx, err)
 	}
 
@@ -176,7 +189,7 @@ func setupTests(ctx context.Context, nodeBinPath string, testHarnessPath string)
 	return nil
 }
 
-func runTests(ctx context.Context, builtPath, nodeBinPath, testHarnessPath, workPath string, webglVersion int) error {
+func runTests(ctx context.Context, builtPath, nodeBinPath, resourcePath, testHarnessPath, workPath string, webglVersion int) error {
 	ctx = td.StartStep(ctx, td.Props("run GMs and unit tests"))
 	defer td.EndStep(ctx)
 
@@ -189,6 +202,7 @@ func runTests(ctx context.Context, builtPath, nodeBinPath, testHarnessPath, work
 			"--known_hashes", filepath.Join(workPath, "hashes.txt"),
 			"--use_gpu", // TODO(kjlubick) use webglVersion and account for CPU
 			"--output", workPath,
+			"--resources", resourcePath,
 			"--timeout", "120", // 120 seconds per batch of 50 tests.
 		}
 

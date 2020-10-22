@@ -39,6 +39,7 @@ uniform half4 circleData;
 
 @cpp {
     #include "include/gpu/GrRecordingContext.h"
+    #include "src/core/SkGpuBlurUtils.h"
     #include "src/gpu/GrBitmapTextureMaker.h"
     #include "src/gpu/GrProxyProvider.h"
     #include "src/gpu/GrRecordingContextPriv.h"
@@ -283,6 +284,10 @@ uniform half4 circleData;
     std::unique_ptr<GrFragmentProcessor> GrCircleBlurFragmentProcessor::Make(
             std::unique_ptr<GrFragmentProcessor> inputFP, GrRecordingContext* context,
             const SkRect& circle, float sigma) {
+        if (SkGpuBlurUtils::IsEffectivelyZeroSigma(sigma)) {
+            return inputFP;
+        }
+
         float solidRadius;
         float textureRadius;
         std::unique_ptr<GrFragmentProcessor> profile = create_profile_effect(context, circle, sigma,
@@ -295,13 +300,13 @@ uniform half4 circleData;
     }
 }
 
-void main() {
+half4 main() {
     // We just want to compute "(length(vec) - circleData.z + 0.5) * circleData.w" but need to
     // rearrange to avoid passing large values to length() that would overflow.
     half2 vec = half2((sk_FragCoord.xy - circleData.xy) * circleData.w);
     half dist = length(vec) + (0.5 - circleData.z) * circleData.w;
     half4 inputColor = sample(inputFP);
-    sk_OutColor = inputColor * sample(blurProfile, half2(dist, 0.5)).a;
+    return inputColor * sample(blurProfile, half2(dist, 0.5)).a;
 }
 
 @test(testData) {
