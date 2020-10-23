@@ -26,6 +26,7 @@ public:
         kFontSize,
         kFontStyle,
         kFontWeight,
+        kGradientUnits,
         kLength,
         kLineCap,
         kLineJoin,
@@ -33,6 +34,7 @@ public:
         kPaint,
         kPath,
         kPoints,
+        kPreserveAspectRatio,
         kSpreadMethod,
         kStopColor,
         kString,
@@ -95,6 +97,8 @@ using SkSVGStringValue       = SkSVGWrapperValue<SkSVGStringType   , SkSVGValue:
 using SkSVGSpreadMethodValue = SkSVGWrapperValue<SkSVGSpreadMethod ,
                                                  SkSVGValue::Type::kSpreadMethod>;
 using SkSVGStopColorValue    = SkSVGWrapperValue<SkSVGStopColor    , SkSVGValue::Type::kStopColor >;
+using SkSVGGradientUnitsValue= SkSVGWrapperValue<SkSVGGradientUnits,
+                                                 SkSVGValue::Type::kGradientUnits>;
 using SkSVGVisibilityValue   = SkSVGWrapperValue<SkSVGVisibility   , SkSVGValue::Type::kVisibility>;
 using SkSVGDashArrayValue    = SkSVGWrapperValue<SkSVGDashArray    , SkSVGValue::Type::kDashArray >;
 
@@ -102,5 +106,8 @@ using SkSVGFontFamilyValue   = SkSVGWrapperValue<SkSVGFontFamily   , SkSVGValue:
 using SkSVGFontSizeValue     = SkSVGWrapperValue<SkSVGFontSize     , SkSVGValue::Type::kFontSize  >;
 using SkSVGFontStyleValue    = SkSVGWrapperValue<SkSVGFontStyle    , SkSVGValue::Type::kFontStyle >;
 using SkSVGFontWeightValue   = SkSVGWrapperValue<SkSVGFontWeight   , SkSVGValue::Type::kFontWeight>;
+
+using SkSVGPreserveAspectRatioValue = SkSVGWrapperValue<SkSVGPreserveAspectRatio,
+                                                        SkSVGValue::Type::kPreserveAspectRatio>;
 
 #endif // SkSVGValue_DEFINED

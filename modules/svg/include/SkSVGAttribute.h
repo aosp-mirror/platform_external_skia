@@ -29,6 +29,7 @@ enum class SkSVGAttribute {
     kFontWeight,
     kFx, // <radialGradient>: focal point x position
     kFy, // <radialGradient>: focal point y position
+    kGradientUnits,
     kGradientTransform,
     kHeight,
     kHref,
@@ -36,6 +37,7 @@ enum class SkSVGAttribute {
     kOpacity,
     kPatternTransform,
     kPoints,
+    kPreserveAspectRatio,
     kR,  // <circle>, <radialGradient>: radius
     kRx, // <ellipse>,<rect>: horizontal (corner) radius
     kRy, // <ellipse>,<rect>: vertical (corner) radius

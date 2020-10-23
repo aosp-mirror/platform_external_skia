@@ -29,8 +29,10 @@ public:
     bool parseIRI(SkSVGStringType*);
     bool parseSpreadMethod(SkSVGSpreadMethod*);
     bool parseStopColor(SkSVGStopColor*);
+    bool parseGradientUnits(SkSVGGradientUnits*);
     bool parseVisibility(SkSVGVisibility*);
     bool parseDashArray(SkSVGDashArray*);
+    bool parsePreserveAspectRatio(SkSVGPreserveAspectRatio*);
 
     bool parseFontFamily(SkSVGFontFamily*);
     bool parseFontSize(SkSVGFontSize*);
