@@ -1929,6 +1929,7 @@ cc_test {
         "tests/SkResourceCacheTest.cpp",
         "tests/SkRuntimeEffectTest.cpp",
         "tests/SkSLCross.cpp",
+        "tests/SkSLFPTestbed.cpp",
         "tests/SkSLGLSLTestbed.cpp",
         "tests/SkSLInterpreterTest.cpp",
         "tests/SkSLMemoryLayoutTest.cpp",
