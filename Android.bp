@@ -2105,7 +2105,6 @@ cc_test {
         "bench/ControlBench.cpp",
         "bench/CoverageBench.cpp",
         "bench/CreateBackendTextureBench.cpp",
-        "bench/CubicKLMBench.cpp",
         "bench/CubicMapBench.cpp",
         "bench/DDLRecorderBench.cpp",
         "bench/DashBench.cpp",
