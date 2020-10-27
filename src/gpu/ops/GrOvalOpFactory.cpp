@@ -397,15 +397,14 @@ private:
                     GrShaderVar("angleToEdge", kFloat_GrSLType),
                     GrShaderVar("diameter", kFloat_GrSLType),
             };
-            SkString fnName;
-            fragBuilder->emitFunction(kFloat_GrSLType, "coverage_from_dash_edge",
-                                      SK_ARRAY_COUNT(fnArgs), fnArgs, R"(
+            SkString fnName = fragBuilder->getMangledFunctionName("coverage_from_dash_edge");
+            fragBuilder->emitFunction(kFloat_GrSLType, fnName.c_str(),
+                                      {fnArgs, SK_ARRAY_COUNT(fnArgs)}, R"(
                     float linearDist;
                     angleToEdge = clamp(angleToEdge, -3.1415, 3.1415);
                     linearDist = diameter * sin(angleToEdge / 2);
                     return saturate(linearDist + 0.5);
-            )",
-                                      &fnName);
+            )");
             fragBuilder->codeAppend(R"(
                     float d = length(circleEdge.xy) * circleEdge.z;
 
