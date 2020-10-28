@@ -154,7 +154,7 @@ SkString GrGLSLFPFragmentBuilder::writeProcessorFunction(GrGLSLFragmentProcessor
     // second actual argument for _coords.
     // FIXME: An alternative would be to have all FP functions have a float2 argument, and the
     // parent FP invokes it with the varying reference when it's been lifted to the vertex shader.
-    int paramCount = 2;
+    size_t paramCount = 2;
     GrShaderVar params[] = { GrShaderVar(args.fInputColor, kHalf4_GrSLType),
                              GrShaderVar(args.fSampleCoord, kFloat2_GrSLType) };
 
@@ -197,12 +197,12 @@ SkString GrGLSLFPFragmentBuilder::writeProcessorFunction(GrGLSLFragmentProcessor
         this->codeAppendf("return %s;\n", args.fOutputColor);
     }
 
-    SkString result;
-    this->emitFunction(kHalf4_GrSLType, args.fFp.name(), paramCount, params,
-                       this->code().c_str(), &result, args.fForceInline);
+    SkString funcName = this->getMangledFunctionName(args.fFp.name());
+    this->emitFunction(kHalf4_GrSLType, funcName.c_str(), {params, paramCount},
+                       this->code().c_str(), args.fForceInline);
     this->deleteStage();
     this->onAfterChildProcEmitCode();
-    return result;
+    return funcName;
 }
 
 const char* GrGLSLFragmentShaderBuilder::dstColor() {

@@ -977,6 +977,7 @@ cc_defaults {
 cc_defaults {
     name: "skia_deps",
     shared_libs: [
+        "libcutils",
         "libdng_sdk",
         "libexpat",
         "libft2",
@@ -996,7 +997,6 @@ cc_defaults {
     target: {
       android: {
         shared_libs: [
-            "libcutils",
             "libEGL",
             "libGLESv2",
             "libheif",
@@ -1005,11 +1005,6 @@ cc_defaults {
         ],
         export_shared_lib_headers: [
             "libvulkan",
-        ],
-      },
-      host: {
-        static_libs: [
-          "libcutils",
         ],
       },
       darwin: {
@@ -1502,6 +1497,7 @@ cc_test {
         "modules/skottie/src/animator/TextKeyframeAnimator.cpp",
         "modules/skottie/src/animator/Vec2KeyframeAnimator.cpp",
         "modules/skottie/src/animator/VectorKeyframeAnimator.cpp",
+        "modules/skottie/src/effects/BlackAndWhiteEffect.cpp",
         "modules/skottie/src/effects/BrightnessContrastEffect.cpp",
         "modules/skottie/src/effects/CornerPinEffect.cpp",
         "modules/skottie/src/effects/DisplacementMapEffect.cpp",
@@ -1620,7 +1616,6 @@ cc_test {
         "modules/svg/src/SkSVGUse.cpp",
         "modules/svg/src/SkSVGValue.cpp",
         "tests/AAClipTest.cpp",
-        "tests/AbseilTest.cpp",
         "tests/AdvancedBlendTest.cpp",
         "tests/AndroidCodecTest.cpp",
         "tests/AnimatedImageTest.cpp",
@@ -2606,6 +2601,7 @@ cc_test {
         "modules/skottie/src/animator/TextKeyframeAnimator.cpp",
         "modules/skottie/src/animator/Vec2KeyframeAnimator.cpp",
         "modules/skottie/src/animator/VectorKeyframeAnimator.cpp",
+        "modules/skottie/src/effects/BlackAndWhiteEffect.cpp",
         "modules/skottie/src/effects/BrightnessContrastEffect.cpp",
         "modules/skottie/src/effects/CornerPinEffect.cpp",
         "modules/skottie/src/effects/DisplacementMapEffect.cpp",
