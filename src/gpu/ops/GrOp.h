@@ -73,9 +73,9 @@ public:
     #else
         struct DeleteFromPool {
             DeleteFromPool() : fPool{nullptr} {}
-            DeleteFromPool(GrOpMemoryPool* pool) : fPool{pool} {}
+            DeleteFromPool(GrMemoryPool* pool) : fPool{pool} {}
             void operator() (GrOp* op);
-            GrOpMemoryPool* fPool;
+            GrMemoryPool* fPool;
         };
         using Owner =  std::unique_ptr<GrOp, DeleteFromPool>;
     #endif
@@ -101,7 +101,7 @@ public:
         template<typename Op, typename... Args>
         static Owner MakeWithExtraMemory(
                 GrRecordingContext* context, size_t extraSize, Args&&... args) {
-            GrOpMemoryPool* pool = context->priv().opMemoryPool();
+            GrMemoryPool* pool = context->priv().opMemoryPool();
             void* mem = pool->allocate(sizeof(Op) + extraSize);
             GrOp* op = new (mem) Op(std::forward<Args>(args)...);
             return Owner{op, pool};
@@ -139,8 +139,7 @@ public:
     };
 
     // The arenas are the same as what was available when the op was created.
-    CombineResult combineIfPossible(GrOp* that, GrRecordingContext::Arenas* arena,
-                                    const GrCaps& caps);
+    CombineResult combineIfPossible(GrOp* that, SkArenaAlloc* alloc, const GrCaps& caps);
 
     const SkRect& bounds() const {
         SkASSERT(kUninitialized_BoundsFlag != fBoundsFlags);
@@ -336,7 +335,7 @@ private:
         return fBounds.joinPossiblyEmptyRect(that.fBounds);
     }
 
-    virtual CombineResult onCombineIfPossible(GrOp*, GrRecordingContext::Arenas*, const GrCaps&) {
+    virtual CombineResult onCombineIfPossible(GrOp*, SkArenaAlloc*, const GrCaps&) {
         return CombineResult::kCannotCombine;
     }
 

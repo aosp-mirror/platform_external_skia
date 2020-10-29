@@ -48,8 +48,8 @@ SkPath SkSVGNode::asPath(const SkSVGRenderContext& ctx) const {
     return path;
 }
 
-SkRect SkSVGNode::objectBoundingBox(const SkSVGLengthContext& lctx) const {
-    return this->onObjectBoundingBox(lctx);
+SkRect SkSVGNode::objectBoundingBox(const SkSVGRenderContext& ctx) const {
+    return this->onObjectBoundingBox(ctx);
 }
 
 bool SkSVGNode::onPrepareToRender(SkSVGRenderContext* ctx) const {
@@ -236,6 +236,11 @@ void SkSVGNode::onSetAttribute(SkSVGAttribute attr, const SkSVGValue& v) {
     case SkSVGAttribute::kStrokeWidth:
         if (const SkSVGLengthValue* strokeWidth = v.as<SkSVGLengthValue>()) {
             this->setStrokeWidth(*strokeWidth);
+        }
+        break;
+    case SkSVGAttribute::kTextAnchor:
+        if (const SkSVGTextAnchorValue* anchor = v.as<SkSVGTextAnchorValue>()) {
+            this->setTextAnchor(*anchor);
         }
         break;
     case SkSVGAttribute::kVisibility:

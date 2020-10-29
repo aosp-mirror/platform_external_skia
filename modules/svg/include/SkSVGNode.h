@@ -73,7 +73,7 @@ public:
     void render(const SkSVGRenderContext&) const;
     bool asPaint(const SkSVGRenderContext&, SkPaint*) const;
     SkPath asPath(const SkSVGRenderContext&) const;
-    SkRect objectBoundingBox(const SkSVGLengthContext&) const;
+    SkRect objectBoundingBox(const SkSVGRenderContext&) const;
 
     void setAttribute(SkSVGAttribute, const SkSVGValue&);
     bool setAttribute(const char* attributeName, const char* attributeValue);
@@ -99,6 +99,7 @@ public:
     SVG_PRES_ATTR(FontStyle , SkSVGFontStyle , true)
     SVG_PRES_ATTR(FontSize  , SkSVGFontSize  , true)
     SVG_PRES_ATTR(FontWeight, SkSVGFontWeight, true)
+    SVG_PRES_ATTR(TextAnchor, SkSVGTextAnchor, true)
 
 protected:
     SkSVGNode(SkSVGTag);
@@ -121,7 +122,7 @@ protected:
 
     virtual bool hasChildren() const { return false; }
 
-    virtual SkRect onObjectBoundingBox(const SkSVGLengthContext&) const {
+    virtual SkRect onObjectBoundingBox(const SkSVGRenderContext&) const {
         return SkRect::MakeEmpty();
     }
 

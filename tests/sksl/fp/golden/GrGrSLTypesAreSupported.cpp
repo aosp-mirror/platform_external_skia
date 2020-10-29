@@ -19,48 +19,54 @@ public:
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
         const GrGrSLTypesAreSupported& _outer = args.fFp.cast<GrGrSLTypesAreSupported>();
         (void) _outer;
-        SkString test_i_name;
-        const GrShaderVar test_i_args[] = { GrShaderVar("a", kInt_GrSLType)};
-        fragBuilder->emitFunction(kInt_GrSLType, "test_i", 1, test_i_args,
+        SkString test_i_name = fragBuilder->getMangledFunctionName("test_i");
+        const GrShaderVar test_i_args[] = { GrShaderVar("a", kInt_GrSLType) };
+        fragBuilder->emitFunctionPrototype(kInt_GrSLType, test_i_name.c_str(), {test_i_args, 1});
+        SkString test_i2_name = fragBuilder->getMangledFunctionName("test_i2");
+        const GrShaderVar test_i2_args[] = { GrShaderVar("a", kInt2_GrSLType) };
+        fragBuilder->emitFunctionPrototype(kInt2_GrSLType, test_i2_name.c_str(), {test_i2_args, 1});
+        SkString test_i3_name = fragBuilder->getMangledFunctionName("test_i3");
+        const GrShaderVar test_i3_args[] = { GrShaderVar("a", kInt3_GrSLType) };
+        fragBuilder->emitFunctionPrototype(kInt3_GrSLType, test_i3_name.c_str(), {test_i3_args, 1});
+        SkString test_i4_name = fragBuilder->getMangledFunctionName("test_i4");
+        const GrShaderVar test_i4_args[] = { GrShaderVar("a", kInt4_GrSLType) };
+        fragBuilder->emitFunctionPrototype(kInt4_GrSLType, test_i4_name.c_str(), {test_i4_args, 1});
+        SkString test_h3x4_name = fragBuilder->getMangledFunctionName("test_h3x4");
+        const GrShaderVar test_h3x4_args[] = { GrShaderVar("a", kHalf3x4_GrSLType) };
+        fragBuilder->emitFunctionPrototype(kHalf3x4_GrSLType, test_h3x4_name.c_str(), {test_h3x4_args, 1});
+        SkString test_f2x4_name = fragBuilder->getMangledFunctionName("test_f2x4");
+        const GrShaderVar test_f2x4_args[] = { GrShaderVar("a", kFloat2x4_GrSLType) };
+        fragBuilder->emitFunctionPrototype(kFloat2x4_GrSLType, test_f2x4_name.c_str(), {test_f2x4_args, 1});
+        fragBuilder->emitFunction(kInt_GrSLType, test_i_name.c_str(), {test_i_args, 1},
 R"SkSL(for (; ; ) {
     return a;
 }
-)SkSL", &test_i_name);
-        SkString test_i2_name;
-        const GrShaderVar test_i2_args[] = { GrShaderVar("a", kInt2_GrSLType)};
-        fragBuilder->emitFunction(kInt2_GrSLType, "test_i2", 1, test_i2_args,
+)SkSL");
+        fragBuilder->emitFunction(kInt2_GrSLType, test_i2_name.c_str(), {test_i2_args, 1},
 R"SkSL(for (; ; ) {
     return a;
 }
-)SkSL", &test_i2_name);
-        SkString test_i3_name;
-        const GrShaderVar test_i3_args[] = { GrShaderVar("a", kInt3_GrSLType)};
-        fragBuilder->emitFunction(kInt3_GrSLType, "test_i3", 1, test_i3_args,
+)SkSL");
+        fragBuilder->emitFunction(kInt3_GrSLType, test_i3_name.c_str(), {test_i3_args, 1},
 R"SkSL(for (; ; ) {
     return a;
 }
-)SkSL", &test_i3_name);
-        SkString test_i4_name;
-        const GrShaderVar test_i4_args[] = { GrShaderVar("a", kInt4_GrSLType)};
-        fragBuilder->emitFunction(kInt4_GrSLType, "test_i4", 1, test_i4_args,
+)SkSL");
+        fragBuilder->emitFunction(kInt4_GrSLType, test_i4_name.c_str(), {test_i4_args, 1},
 R"SkSL(for (; ; ) {
     return a;
 }
-)SkSL", &test_i4_name);
-        SkString test_h3x4_name;
-        const GrShaderVar test_h3x4_args[] = { GrShaderVar("a", kHalf3x4_GrSLType)};
-        fragBuilder->emitFunction(kHalf3x4_GrSLType, "test_h3x4", 1, test_h3x4_args,
+)SkSL");
+        fragBuilder->emitFunction(kHalf3x4_GrSLType, test_h3x4_name.c_str(), {test_h3x4_args, 1},
 R"SkSL(for (; ; ) {
     return a;
 }
-)SkSL", &test_h3x4_name);
-        SkString test_f2x4_name;
-        const GrShaderVar test_f2x4_args[] = { GrShaderVar("a", kFloat2x4_GrSLType)};
-        fragBuilder->emitFunction(kFloat2x4_GrSLType, "test_f2x4", 1, test_f2x4_args,
+)SkSL");
+        fragBuilder->emitFunction(kFloat2x4_GrSLType, test_f2x4_name.c_str(), {test_f2x4_args, 1},
 R"SkSL(for (; ; ) {
     return a;
 }
-)SkSL", &test_f2x4_name);
+)SkSL");
         fragBuilder->codeAppendf(
 R"SkSL(%s = half4(int4(%s(1)));
 %s = half4(%s(int2(1)).xxxx);

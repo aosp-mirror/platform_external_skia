@@ -72,6 +72,13 @@ public:
     }
 
     /**
+     * In debug mode, this reports the IDs of unfreed nodes via `SkDebugf`. This reporting is also
+     * performed automatically whenever a GrMemoryPool is destroyed.
+     * In release mode, this method is a no-op.
+     */
+    void reportLeaks() const;
+
+    /**
      * Returns the total allocated size of the GrMemoryPool minus any preallocated amount
      */
     size_t size() const { return fAllocator.totalSize() - fAllocator.preallocSize(); }
@@ -108,26 +115,5 @@ private:
 #endif
 
     GrBlockAllocator fAllocator; // Must be the last field, in order to use extra allocated space
-
-    friend class GrOpMemoryPool;
 };
-
-class GrOp;
-
-class GrOpMemoryPool {
-public:
-    static std::unique_ptr<GrOpMemoryPool> Make(size_t preallocSize, size_t minAllocSize);
-    void operator delete(void* p) { ::operator delete(p); }
-
-    void* allocate(size_t size) { return fPool.allocate(size); }
-    void release(void *);
-    bool isEmpty() const { return fPool.isEmpty(); }
-
-private:
-    GrOpMemoryPool(size_t preallocSize, size_t minAllocSize)
-            : fPool(preallocSize - offsetof(GrOpMemoryPool, fPool), minAllocSize) {}
-
-    GrMemoryPool fPool; // Must be the last field
-};
-
 #endif
