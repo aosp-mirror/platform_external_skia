@@ -10,10 +10,16 @@
 
 #include <memory>
 
+#include "src/sksl/SkSLMemoryPool.h"
+
 namespace SkSL {
 
-class IRNode;
-struct PoolData;
+/**
+ * Efficiently allocates memory for IRNodes in an SkSL program. Optimized for allocate/release
+ * performance over memory efficiency.
+ *
+ * All allocated IRNodes must be released back to the pool before it can be destroyed or recycled.
+ */
 
 class Pool {
 public:
@@ -24,14 +30,6 @@ public:
     // to take ownership of the pool and its nodes. Before destroying any of the program's nodes,
     // make sure to reattach the pool by calling pool->attachToThread() again.
     static std::unique_ptr<Pool> Create();
-
-    // Gives up ownership of a pool; conceptually, this deletes it. In practice, on some platforms,
-    // it is expensive to free and reallocate pools, so this gives us an opportunity to reuse the
-    // allocation for future Create calls.
-    static void Recycle(std::unique_ptr<Pool> pool);
-
-    // Explicitly frees a previously recycled pool (if any), reclaiming the memory.
-    static void FreeRecycledPool() { Recycle(nullptr); }
 
     // Attaches a pool to the current thread.
     // It is an error to call this while a pool is already attached.
@@ -53,7 +51,7 @@ private:
     void checkForLeaks();
 
     Pool() = default;  // use Create to make a pool
-    PoolData* fData = nullptr;
+    std::unique_ptr<SkSL::MemoryPool> fMemPool;
 };
 
 }  // namespace SkSL
