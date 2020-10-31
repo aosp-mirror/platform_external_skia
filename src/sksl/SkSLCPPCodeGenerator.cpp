@@ -70,8 +70,8 @@ String CPPCodeGenerator::getTypeName(const Type& type) {
 
 void CPPCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                                              Precedence parentPrecedence) {
-    const Expression& left = b.left();
-    const Expression& right = b.right();
+    const Expression& left = *b.left();
+    const Expression& right = *b.right();
     Token::Kind op = b.getOperator();
     if (op == Token::Kind::TK_PERCENT) {
         // need to use "%%" instead of "%" b/c the code will be inside of a printf
@@ -895,9 +895,15 @@ String CPPCodeGenerator::assembleCodeAndFormatArgPrintf(const String& code) {
     for (size_t index = 0; index < code.size(); ++index) {
         if ('%' == code[index]) {
             if (index == code.size() - 1) {
+                SkDEBUGFAIL("found a dangling format specifier at the end of a string");
                 break;
             }
-            if (code[index + 1] != '%') {
+            if (code[index + 1] == '%') {
+                // %% indicates a literal % sign, not a format argument. Skip over the next
+                // character to avoid mistakenly counting that one as an argument.
+                ++index;
+            } else {
+                // Count the format argument that we found.
                 ++argCount;
             }
         }
