@@ -7,10 +7,6 @@
 
 #include "src/sksl/SkSLPool.h"
 
-#include <bitset>
-
-#include "include/private/SkMutex.h"
-
 #define VLOG(...) // printf(__VA_ARGS__)
 
 namespace SkSL {
@@ -32,11 +28,11 @@ static pthread_key_t get_pthread_key() {
     return sKey;
 }
 
-static PoolData* get_thread_local_memory_pool() {
-    return static_cast<PoolData*>(pthread_getspecific(get_pthread_key()));
+static MemoryPool* get_thread_local_memory_pool() {
+    return static_cast<MemoryPool*>(pthread_getspecific(get_pthread_key()));
 }
 
-static void set_thread_local_memory_pool(PoolData* poolData) {
+static void set_thread_local_memory_pool(MemoryPool* poolData) {
     pthread_setspecific(get_pthread_key(), poolData);
 }
 
@@ -54,12 +50,6 @@ static void set_thread_local_memory_pool(MemoryPool* memPool) {
 
 #endif
 
-static Pool* sRecycledPool; // GUARDED_BY recycled_pool_mutex
-static SkMutex& recycled_pool_mutex() {
-    static SkMutex* mutex = new SkMutex;
-    return *mutex;
-}
-
 Pool::~Pool() {
     if (get_thread_local_memory_pool() == fMemPool.get()) {
         SkDEBUGFAIL("SkSL pool is being destroyed while it is still attached to the thread");
@@ -73,33 +63,10 @@ Pool::~Pool() {
 }
 
 std::unique_ptr<Pool> Pool::Create() {
-    SkAutoMutexExclusive lock(recycled_pool_mutex());
-    std::unique_ptr<Pool> pool;
-    if (sRecycledPool) {
-        pool = std::unique_ptr<Pool>(sRecycledPool);
-        sRecycledPool = nullptr;
-        VLOG("REUSE  Pool:0x%016llX\n", (uint64_t)pool->fMemPool.get());
-    } else {
-        pool = std::unique_ptr<Pool>(new Pool);
-        pool->fMemPool = MemoryPool::Make(/*preallocSize=*/65536, /*minAllocSize=*/32768);
-        VLOG("CREATE Pool:0x%016llX\n", (uint64_t)pool->fMemPool.get());
-    }
+    auto pool = std::unique_ptr<Pool>(new Pool);
+    pool->fMemPool = MemoryPool::Make(/*preallocSize=*/65536, /*minAllocSize=*/32768);
+    VLOG("CREATE Pool:0x%016llX\n", (uint64_t)pool->fMemPool.get());
     return pool;
-}
-
-void Pool::Recycle(std::unique_ptr<Pool> pool) {
-    if (pool) {
-        pool->fMemPool->reportLeaks();
-        SkASSERT(pool->fMemPool->isEmpty());
-    }
-
-    SkAutoMutexExclusive lock(recycled_pool_mutex());
-    if (sRecycledPool) {
-        delete sRecycledPool;
-    }
-
-    VLOG("STASH  Pool:0x%016llX\n", pool ? (uint64_t)pool->fMemPool.get() : 0ull);
-    sRecycledPool = pool.release();
 }
 
 void Pool::attachToThread() {
@@ -109,8 +76,10 @@ void Pool::attachToThread() {
 }
 
 void Pool::detachFromThread() {
-    VLOG("DETACH Pool:0x%016llX\n", (uint64_t)get_thread_local_memory_pool());
-    SkASSERT(get_thread_local_memory_pool() != nullptr);
+    MemoryPool* memPool = get_thread_local_memory_pool();
+    VLOG("DETACH Pool:0x%016llX\n", (uint64_t)memPool);
+    SkASSERT(memPool == fMemPool.get());
+    memPool->resetScratchSpace();
     set_thread_local_memory_pool(nullptr);
 }
 
