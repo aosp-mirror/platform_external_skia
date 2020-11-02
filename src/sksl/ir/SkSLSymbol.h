@@ -38,8 +38,6 @@ public:
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
 
-    Symbol& operator=(const Symbol&) = default;
-
     ~Symbol() override {}
 
     const Type& type() const {
