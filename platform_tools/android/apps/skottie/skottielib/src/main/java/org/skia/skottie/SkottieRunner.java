@@ -70,8 +70,8 @@ class SkottieRunner {
      * Create a new animation by feeding data from "is" and replaying in a TextureView.
      * TextureView is tracked internally for SurfaceTexture state.
      */
-    public SkottieAnimation createAnimation(TextureView view, InputStream is) {
-        return new SkottieAnimationImpl(view, is);
+    public SkottieAnimation createAnimation(TextureView view, InputStream is, int backgroundColor, int repeatCount) {
+        return new SkottieAnimationImpl(view, is, backgroundColor, repeatCount);
     }
 
     /**
@@ -87,8 +87,8 @@ class SkottieRunner {
      * Create a new animation by feeding data from "is" and replaying in a SurfaceView.
      * State is controlled internally by SurfaceHolder.
      */
-    public SkottieAnimation createAnimation(SurfaceView view, InputStream is, int backgroundColor) {
-        return new SkottieAnimationImpl(view, is, backgroundColor);
+    public SkottieAnimation createAnimation(SurfaceView view, InputStream is, int backgroundColor, int repeatCount) {
+        return new SkottieAnimationImpl(view, is, backgroundColor, repeatCount);
     }
 
     /**
@@ -289,6 +289,8 @@ class SkottieRunner {
         SurfaceHolder mSurfaceHolder;
         boolean mValidSurface = false;
 
+        private int mRepeatCount;
+        private int mRepeatCounter;
         private int mSurfaceWidth = 0;
         private int mSurfaceHeight = 0;
         private int mBackgroundColor;
@@ -303,19 +305,24 @@ class SkottieRunner {
             }
         }
 
-        SkottieAnimationImpl(TextureView view, InputStream is) {
+        SkottieAnimationImpl(TextureView view, InputStream is, int backgroundColor, int repeatCount) {
             if (init(is)) {
                 mSurfaceTexture = view.getSurfaceTexture();
             }
             view.setSurfaceTextureListener(this);
+            mBackgroundColor = backgroundColor;
+            mRepeatCount = repeatCount;
+            mRepeatCounter = mRepeatCount;
         }
 
-        SkottieAnimationImpl(SurfaceView view, InputStream is, int backgroundColor) {
+        SkottieAnimationImpl(SurfaceView view, InputStream is, int backgroundColor, int repeatCount) {
             if (init(is)) {
                 mSurfaceHolder = view.getHolder();
             }
             mSurfaceHolder.addCallback(this);
             mBackgroundColor = backgroundColor;
+            mRepeatCount = repeatCount;
+            mRepeatCounter = mRepeatCount;
         }
 
         private void setSurfaceTexture(SurfaceTexture s) {
@@ -390,6 +397,7 @@ class SkottieRunner {
                         mAnimationStartTime = currentTime - (long)(1000000 * mDuration * mProgress);
                         mIsRunning = true;
                         mNewSurface = true;
+                        mRepeatCounter = mRepeatCount;
                         doFrame(currentTime);
                     }
                 });
@@ -487,7 +495,9 @@ class SkottieRunner {
 
         private void drawFrame() {
             try {
+                boolean forceDraw = false;
                 if (mNewSurface) {
+                    forceDraw = true;
                     // if there is a new SurfaceTexture, we need to recreate the EGL surface.
                     if (mEglSurface != null) {
                         mEgl.eglDestroySurface(mEglDisplay, mEglSurface);
@@ -520,7 +530,7 @@ class SkottieRunner {
                     }
                     // only if nDrawFrames() returns true do we need to swap buffers
                     if(nDrawFrame(mNativeProxy, mSurfaceWidth, mSurfaceHeight, false,
-                            mProgress, mBackgroundColor)) {
+                            mProgress, mBackgroundColor, forceDraw)) {
                         if (!mEgl.eglSwapBuffers(mEglDisplay, mEglSurface)) {
                             int error = mEgl.eglGetError();
                             if (error == EGL10.EGL_BAD_SURFACE
@@ -581,6 +591,14 @@ class SkottieRunner {
                 mProgress = animationProgressNS / (float)durationNS;
                 if (timeSinceAnimationStartNS > durationNS) {
                     mAnimationStartTime += durationNS;  // prevents overflow
+                }
+                if (timeSinceAnimationStartNS > durationNS) {
+                    if (mRepeatCounter > 0) {
+                        mRepeatCounter--;
+                    } else if (mRepeatCounter == 0) {
+                        mIsRunning = false;
+                        mProgress = 1;
+                    }
                 }
             }
             if (mValidSurface) {
@@ -654,7 +672,7 @@ class SkottieRunner {
         private native void nDeleteProxy(long nativeProxy);
         private native boolean nDrawFrame(long nativeProxy, int width, int height,
                                           boolean wideColorGamut, float progress,
-                                          int backgroundColor);
+                                          int backgroundColor, boolean forceDraw);
         private native long nGetDuration(long nativeProxy);
     }
 
