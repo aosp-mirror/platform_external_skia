@@ -12,6 +12,7 @@
 #include "include/private/SkTArray.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPathPriv.h"
+#include "src/gpu/GrVx.h"
 
 class SkMatrix;
 
@@ -122,6 +123,44 @@ static const SkScalar kDefaultTolerance = SkDoubleToScalar(0.25);
 
 // We guarantee that no quad or cubic will ever produce more than this many points
 static const int kMaxPointsPerCurve = 1 << 10;
+
+// Converts the given line to a cubic bezier.
+// NOTE: This method interpolates at 1/3 and 2/3, but if suitable in context, the cubic
+// {p0, p0, p1, p1} may also work.
+inline void convertLineToCubic(SkPoint startPt, SkPoint endPt, SkPoint out[4]) {
+    using grvx::float2, skvx::bit_pun;
+    float2 p0 = bit_pun<float2>(startPt);
+    float2 p1 = bit_pun<float2>(endPt);
+    float2 v = (p0 - p1) * (1/3.f);
+    out[0] = bit_pun<SkPoint>(p0);
+    out[1] = bit_pun<SkPoint>(p0 + v);
+    out[2] = bit_pun<SkPoint>(p1 - v);
+    out[3] = bit_pun<SkPoint>(p1);
+}
+
+// Converts the given quadratic bezier to a cubic.
+inline void convertQuadToCubic(const SkPoint p[3], SkPoint out[4]) {
+    using grvx::float2, skvx::bit_pun;
+    float2 p0 = bit_pun<float2>(p[0]);
+    float2 p1 = bit_pun<float2>(p[1]);
+    float2 p2 = bit_pun<float2>(p[2]);
+    float2 c = p1 * (2/3.f);
+    out[0] = bit_pun<SkPoint>(p0);
+    out[1] = bit_pun<SkPoint>(grvx::fast_madd<2>(p0, 1/3.f, c));
+    out[2] = bit_pun<SkPoint>(grvx::fast_madd<2>(p2, 1/3.f, c));
+    out[3] = bit_pun<SkPoint>(p2);
+}
+
+// Finds 0, 1, or 2 T values at which to chop the given curve in order to guarantee the resulting
+// cubics are convex and rotate no more than 180 degrees.
+//
+//   - If the cubic is "serpentine", then the T values are any inflection points in [0 < T < 1].
+//
+//   - If the cubic is linear, then the T values are any 180-degree cusp points in [0 < T < 1].
+//
+//   - Otherwise the T value is the point at which rotation reaches 180 degrees, iff in [0 < T < 1].
+//
+int findCubicConvex180Chops(const SkPoint[], float T[2]);
 
 }  // namespace GrPathUtils
 

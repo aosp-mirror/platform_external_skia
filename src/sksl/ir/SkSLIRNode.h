@@ -34,6 +34,7 @@ class VariableReference;
 enum class VariableRefKind : int8_t;
 enum class VariableStorage : int8_t;
 
+using ComponentArray = SkSTArray<4, int8_t>; // for Swizzles
 using ExpressionArray = SkSTArray<2, std::unique_ptr<Expression>>;
 using StatementArray = SkSTArray<2, std::unique_ptr<Statement>>;
 
@@ -46,6 +47,10 @@ public:
     virtual ~IRNode() {}
 
     virtual String description() const = 0;
+
+    // No copy construction or assignment
+    IRNode(const IRNode&) = delete;
+    IRNode& operator=(const IRNode&) = delete;
 
     // character offset of this element within the program being compiled, for error reporting
     // purposes

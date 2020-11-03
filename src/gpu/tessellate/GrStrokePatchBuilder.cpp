@@ -13,16 +13,12 @@
 #include "src/core/SkGeometry.h"
 #include "src/core/SkMathPriv.h"
 #include "src/core/SkPathPriv.h"
+#include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/tessellate/GrStrokeTessellateShader.h"
 #include "src/gpu/tessellate/GrVectorXform.h"
 #include "src/gpu/tessellate/GrWangsFormula.h"
 
 using Patch = GrStrokeTessellateShader::Patch;
-
-static SkPoint lerp(const SkPoint& a, const SkPoint& b, float T) {
-    SkASSERT(1 != T);  // The below does not guarantee lerp(a, b, 1) === b.
-    return (b - a) * T + a;
-}
 
 static float num_combined_segments(float numParametricSegments, float numRadialSegments) {
     // The first and last edges are shared by both the parametric and radial sets of edges, so the
@@ -216,7 +212,8 @@ void GrStrokePatchBuilder::quadraticTo(const SkPoint p[3], JoinType prevJoinType
     }
 
     // Convert to a cubic.
-    SkPoint asCubic[4] = {p[0], lerp(p[0], p[1], 2/3.f), lerp(p[1], p[2], 1/3.f), p[2]};
+    SkPoint asCubic[4];
+    GrPathUtils::convertQuadToCubic(p, asCubic);
 
     // Ensure our hardware supports enough tessellation segments to render the curve. This early out
     // assumes a worst-case quadratic rotation of 180 degrees and a worst-case number of segments in
@@ -338,22 +335,20 @@ void GrStrokePatchBuilder::cubicTo(const SkPoint p[4], JoinType prevJoinType,
     SkPoint chops[10];
     if (convex180Status == Convex180Status::kUnknown) {
         float chopT[2];
-        int n = SkFindCubicInflections(p, chopT);
-        if (n == 0) {
-            // No inflections. Chop at midtangent to guarantee rotation <= 180 degrees.
-            chopT[0] = SkFindCubicMidTangent(p);
-            n = 1;
-        }
-        SkChopCubicAt(p, chops, chopT, n);
-        this->cubicTo(chops, prevJoinType, Convex180Status::kYes, maxDepth);
-        for (int i = 1; i <= n; ++i) {
-            // If we chopped at a cusp then rotation is not continuous between the two curves.
-            // Insert a double cuspe up for lost rotation. (This should not be possible from a
-            // purely mathematical standpoint, since an inflection is not a cusp, but we still check
-            // for the sake of robust handling of FP32 precision issues.)
-            JoinType nextJoinType = (cubic_chop_is_cusp(chops + (i - 1)*3)) ?
-                    JoinType::kCusp : JoinType::kFromStroke;
-            this->cubicTo(chops + i*3, nextJoinType, Convex180Status::kYes, maxDepth);
+        if (int n = GrPathUtils::findCubicConvex180Chops(p, chopT)) {
+            SkChopCubicAt(p, chops, chopT, n);
+            this->cubicTo(chops, prevJoinType, Convex180Status::kYes, maxDepth);
+            for (int i = 1; i <= n; ++i) {
+                // If we chopped at a cusp then rotation is not continuous between the two curves.
+                // Insert a double cusp to make up for lost rotation.
+                JoinType nextJoinType = (cubic_chop_is_cusp(chops + (i - 1)*3)) ?
+                        JoinType::kCusp : JoinType::kFromStroke;
+                this->cubicTo(chops + i*3, nextJoinType, Convex180Status::kYes, maxDepth);
+            }
+        } else {
+            // The cubic was Convex180Status::kYes after all. Try again when we can use 180-degree
+            // max segment limits instead of 360.
+            this->cubicTo(p, prevJoinType, Convex180Status::kYes, maxDepth);
         }
         return;
     }
@@ -410,7 +405,7 @@ void GrStrokePatchBuilder::joinTo(JoinType joinType, SkPoint nextControlPoint, i
         (fStroke.getJoin() == SkPaint::kRound_Join || joinType == JoinType::kCusp)) {
         SkVector tan0 = fCurrentPoint - fLastControlPoint;
         SkVector tan1 = nextControlPoint - fCurrentPoint;
-        float rotation = SkMeasureAngleInsideVectors(tan0, tan1);
+        float rotation = SkMeasureAngleBetweenVectors(tan0, tan1);
         float numRadialSegments = rotation * fNumRadialSegmentsPerRadian;
         if (numRadialSegments > fMaxTessellationSegments) {
             // This is a round join that requires more segments than the tessellator supports.

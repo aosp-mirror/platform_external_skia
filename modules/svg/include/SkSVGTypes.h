@@ -308,20 +308,22 @@ private:
     SkSVGColorType fColor;
 };
 
-class SkSVGGradientUnits {
+class SkSVGObjectBoundingBoxUnits {
 public:
     enum class Type {
         kUserSpaceOnUse,
         kObjectBoundingBox,
     };
 
-    SkSVGGradientUnits() : fType(Type::kUserSpaceOnUse) {}
-    explicit SkSVGGradientUnits(Type t) : fType(t) {}
+    SkSVGObjectBoundingBoxUnits() : fType(Type::kUserSpaceOnUse) {}
+    explicit SkSVGObjectBoundingBoxUnits(Type t) : fType(t) {}
 
-    bool operator==(const SkSVGGradientUnits& other) const {
+    bool operator==(const SkSVGObjectBoundingBoxUnits& other) const {
         return fType == other.fType;
     }
-    bool operator!=(const SkSVGGradientUnits& other) const { return !(*this == other); }
+    bool operator!=(const SkSVGObjectBoundingBoxUnits& other) const {
+        return !(*this == other);
+    }
 
     Type type() const { return fType; }
 
@@ -484,6 +486,33 @@ public:
 
 private:
     Type fType;
+};
+
+class SkSVGFilterType {
+public:
+    enum class Type {
+        kNone,
+        kIRI,
+        kInherit,
+    };
+
+    SkSVGFilterType() : fType(Type::kNone) {}
+    explicit SkSVGFilterType(Type t) : fType(t) {}
+    explicit SkSVGFilterType(const SkString& iri) : fType(Type::kIRI), fIRI(iri) {}
+
+    bool operator==(const SkSVGFilterType& other) const { return fType == other.fType; }
+    bool operator!=(const SkSVGFilterType& other) const { return !(*this == other); }
+
+    const SkString& iri() const {
+        SkASSERT(fType == Type::kIRI);
+        return fIRI;
+    }
+
+    Type type() const { return fType; }
+
+private:
+    Type fType;
+    SkString fIRI;
 };
 
 #endif // SkSVGTypes_DEFINED
