@@ -18,6 +18,7 @@ public:
     bool parseColor(SkSVGColorType*);
     bool parseClipPath(SkSVGClip*);
     bool parseFillRule(SkSVGFillRule*);
+    bool parseFilter(SkSVGFilterType*);
     bool parseNumber(SkSVGNumberType*);
     bool parseLength(SkSVGLength*);
     bool parseViewBox(SkSVGViewBoxType*);
@@ -29,7 +30,7 @@ public:
     bool parseIRI(SkSVGStringType*);
     bool parseSpreadMethod(SkSVGSpreadMethod*);
     bool parseStopColor(SkSVGStopColor*);
-    bool parseGradientUnits(SkSVGGradientUnits*);
+    bool parseObjectBoundingBoxUnits(SkSVGObjectBoundingBoxUnits*);
     bool parseVisibility(SkSVGVisibility*);
     bool parseDashArray(SkSVGDashArray*);
     bool parsePreserveAspectRatio(SkSVGPreserveAspectRatio*);

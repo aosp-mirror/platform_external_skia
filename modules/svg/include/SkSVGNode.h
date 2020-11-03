@@ -24,6 +24,7 @@ enum class SkSVGTag {
     kClipPath,
     kDefs,
     kEllipse,
+    kFilter,
     kG,
     kLine,
     kLinearGradient,
@@ -100,6 +101,7 @@ public:
     SVG_PRES_ATTR(FontSize  , SkSVGFontSize  , true)
     SVG_PRES_ATTR(FontWeight, SkSVGFontWeight, true)
     SVG_PRES_ATTR(TextAnchor, SkSVGTextAnchor, true)
+    SVG_PRES_ATTR(Filter    , SkSVGFilterType, false)
 
 protected:
     SkSVGNode(SkSVGTag);

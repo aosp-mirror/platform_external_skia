@@ -15,6 +15,7 @@
 #include "modules/svg/include/SkSVGDOM.h"
 #include "modules/svg/include/SkSVGDefs.h"
 #include "modules/svg/include/SkSVGEllipse.h"
+#include "modules/svg/include/SkSVGFilter.h"
 #include "modules/svg/include/SkSVGG.h"
 #include "modules/svg/include/SkSVGLine.h"
 #include "modules/svg/include/SkSVGLinearGradient.h"
@@ -200,15 +201,16 @@ bool SetStopColorAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
     return true;
 }
 
-bool SetGradientUnitsAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
-                               const char* stringValue) {
-    SkSVGGradientUnits gradientUnits;
+bool SetObjectBoundingBoxUnitsAttribute(const sk_sp<SkSVGNode>& node,
+                                        SkSVGAttribute attr,
+                                        const char* stringValue) {
+    SkSVGObjectBoundingBoxUnits objectBoundingBoxUnits;
     SkSVGAttributeParser parser(stringValue);
-    if (!parser.parseGradientUnits(&gradientUnits)) {
+    if (!parser.parseObjectBoundingBoxUnits(&objectBoundingBoxUnits)) {
         return false;
     }
 
-    node->setAttribute(attr, SkSVGGradientUnitsValue(gradientUnits));
+    node->setAttribute(attr, SkSVGObjectBoundingBoxUnitsValue(objectBoundingBoxUnits));
     return true;
 }
 
@@ -233,6 +235,18 @@ bool SetFillRuleAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
     }
 
     node->setAttribute(attr, SkSVGFillRuleValue(fillRule));
+    return true;
+}
+
+bool SetFilterAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
+                        const char* stringValue) {
+    SkSVGFilterType filter;
+    SkSVGAttributeParser parser(stringValue);
+    if (!parser.parseFilter(&filter)) {
+        return false;
+    }
+
+    node->setAttribute(attr, SkSVGFilterValue(filter));
     return true;
 }
 
@@ -420,6 +434,9 @@ SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "fill"               , { SkSVGAttribute::kFill             , SetPaintAttribute        }},
     { "fill-opacity"       , { SkSVGAttribute::kFillOpacity      , SetNumberAttribute       }},
     { "fill-rule"          , { SkSVGAttribute::kFillRule         , SetFillRuleAttribute     }},
+    { "filter"             , { SkSVGAttribute::kFilter           , SetFilterAttribute       }},
+    { "filterUnits"        , { SkSVGAttribute::kFilterUnits      ,
+                               SetObjectBoundingBoxUnitsAttribute }},
     { "font-family"        , { SkSVGAttribute::kFontFamily       , SetFontFamilyAttribute   }},
     { "font-size"          , { SkSVGAttribute::kFontSize         , SetFontSizeAttribute     }},
     { "font-style"         , { SkSVGAttribute::kFontStyle        , SetFontStyleAttribute    }},
@@ -428,7 +445,8 @@ SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "fx"                 , { SkSVGAttribute::kFx               , SetLengthAttribute       }},
     { "fy"                 , { SkSVGAttribute::kFy               , SetLengthAttribute       }},
     { "gradientTransform"  , { SkSVGAttribute::kGradientTransform, SetTransformAttribute    }},
-    { "gradientUnits"      , { SkSVGAttribute::kGradientUnits    , SetGradientUnitsAttribute}},
+    { "gradientUnits"      , { SkSVGAttribute::kGradientUnits    ,
+                               SetObjectBoundingBoxUnitsAttribute }},
     { "height"             , { SkSVGAttribute::kHeight           , SetLengthAttribute       }},
     { "offset"             , { SkSVGAttribute::kOffset           , SetLengthAttribute       }},
     { "opacity"            , { SkSVGAttribute::kOpacity          , SetNumberAttribute       }},
@@ -472,6 +490,7 @@ SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
     { "clipPath"      , []() -> sk_sp<SkSVGNode> { return SkSVGClipPath::Make();       }},
     { "defs"          , []() -> sk_sp<SkSVGNode> { return SkSVGDefs::Make();           }},
     { "ellipse"       , []() -> sk_sp<SkSVGNode> { return SkSVGEllipse::Make();        }},
+    { "filter"        , []() -> sk_sp<SkSVGNode> { return SkSVGFilter::Make();         }},
     { "g"             , []() -> sk_sp<SkSVGNode> { return SkSVGG::Make();              }},
     { "line"          , []() -> sk_sp<SkSVGNode> { return SkSVGLine::Make();           }},
     { "linearGradient", []() -> sk_sp<SkSVGNode> { return SkSVGLinearGradient::Make(); }},

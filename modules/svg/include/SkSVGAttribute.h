@@ -23,6 +23,8 @@ enum class SkSVGAttribute {
     kFill,
     kFillOpacity,
     kFillRule,
+    kFilter,
+    kFilterUnits,
     kFontFamily,
     kFontSize,
     kFontStyle,
@@ -102,6 +104,7 @@ struct SkSVGPresentationAttributes {
     // uninherited
     SkTLazy<SkSVGNumberType> fOpacity;
     SkTLazy<SkSVGClip>       fClipPath;
+    SkTLazy<SkSVGFilterType> fFilter;
 };
 
 #endif // SkSVGAttribute_DEFINED
