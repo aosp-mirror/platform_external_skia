@@ -364,6 +364,10 @@ ParsedModule Compiler::parseModule(Program::Kind kind, ModuleData data, const Pa
                 intrinsics->insertOrDie(f.declaration().description(), std::move(element));
                 break;
             }
+            case ProgramElement::Kind::kFunctionPrototype: {
+                // These are already in the symbol table.
+                break;
+            }
             case ProgramElement::Kind::kEnum: {
                 const Enum& e = element->as<Enum>();
                 SkASSERT(e.isBuiltin());
@@ -1456,6 +1460,7 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
     // check for dead code & undefined variables, perform constant propagation
     OptimizationContext optimizationContext;
     optimizationContext.fUsage = usage;
+    SkBitSet eliminatedBlockIds(cfg.fBlocks.size());
     do {
         if (optimizationContext.fNeedsRescan) {
             cfg = CFGGenerator().getCFG(f);
@@ -1463,23 +1468,37 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
             optimizationContext.fNeedsRescan = false;
         }
 
+        eliminatedBlockIds.reset();
         optimizationContext.fUpdated = false;
-        bool first = true;
-        for (BasicBlock& b : cfg.fBlocks) {
-            if (!first && !b.fIsReachable) {
+
+        for (BlockId blockId = 0; blockId < cfg.fBlocks.size(); ++blockId) {
+            if (eliminatedBlockIds.test(blockId)) {
+                // We reached a block ID that might have been eliminated. Be cautious and rescan.
+                optimizationContext.fUpdated = true;
+                optimizationContext.fNeedsRescan = true;
+                break;
+            }
+
+            BasicBlock& b = cfg.fBlocks[blockId];
+            if (blockId > 0 && !b.fIsReachable) {
                 // Block was reachable before optimization, but has since become unreachable. In
                 // addition to being dead code, it's broken - since control flow can't reach it, no
                 // prior variable definitions can reach it, and therefore variables might look to
                 // have not been properly assigned. Kill it by replacing all statements with Nops.
                 for (BasicBlock::Node& node : b.fNodes) {
                     if (node.isStatement() && !(*node.statement())->is<Nop>()) {
+                        // Eliminating a node runs the risk of eliminating that node's exits as
+                        // well. Keep track of this and do a rescan if we are about to access one
+                        // of these.
+                        for (BlockId id : b.fExits) {
+                            eliminatedBlockIds.set(id);
+                        }
                         node.setStatement(std::make_unique<Nop>(), usage);
                         madeChanges = true;
                     }
                 }
                 continue;
             }
-            first = false;
             DefinitionMap definitions = b.fBefore;
 
             for (auto iter = b.fNodes.begin(); iter != b.fNodes.end() &&
