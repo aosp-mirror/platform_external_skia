@@ -428,11 +428,17 @@ int CPPCodeGenerator::getChildFPIndex(const Variable& var) const {
     return 0;
 }
 
+String CPPCodeGenerator::getSampleVarName(const char* prefix, int sampleCounter) {
+    return String::printf("%s%zu", prefix, sampleCounter);
+}
+
 void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     const FunctionDeclaration& function = c.function();
     const ExpressionArray& arguments = c.arguments();
     if (function.isBuiltin() && function.name() == "sample" &&
         arguments[0]->type().typeKind() != Type::TypeKind::kSampler) {
+        int sampleCounter = fSampleCounter++;
+
         // Validity checks that are detected by function definition in sksl_fp.inc
         SkASSERT(arguments.size() >= 1 && arguments.size() <= 3);
         SkASSERT("fragmentProcessor"  == arguments[0]->type().name() ||
@@ -456,7 +462,7 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         if (arguments.size() > 1 && arguments[1]->type().name() == "half4") {
             // Use the invokeChild() variant that accepts an input color, so convert the 2nd
             // argument's expression into C++ code that produces sksl stored in an SkString.
-            String inputColorName = "_input" + to_string(c.fOffset);
+            String inputColorName = this->getSampleVarName("_input", sampleCounter);
             addExtraEmitCodeLine(convertSKSLExpressionToCPP(*arguments[1], inputColorName));
 
             // invokeChild() needs a char* and a pre-pended comma
@@ -467,7 +473,7 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         String invokeFunction = "invokeChild";
         if (arguments.back()->type().name() == "float2") {
             // Invoking child with explicit coordinates at this call site
-            inputCoord = "_coords" + to_string(c.fOffset);
+            inputCoord = this->getSampleVarName("_coords", sampleCounter);
             addExtraEmitCodeLine(convertSKSLExpressionToCPP(*arguments.back(), inputCoord));
             inputCoord.append(".c_str()");
         } else if (arguments.back()->type().name() == "float3x3") {
@@ -476,7 +482,7 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
             SampleUsage usage = Analysis::GetSampleUsage(fProgram, child);
 
             if (!usage.hasUniformMatrix()) {
-                inputCoord = "_matrix" + to_string(c.fOffset);
+                inputCoord = this->getSampleVarName("_matrix", sampleCounter);
                 addExtraEmitCodeLine(convertSKSLExpressionToCPP(*arguments.back(), inputCoord));
                 inputCoord.append(".c_str()");
             }
@@ -488,7 +494,7 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         }
 
         // Write the output handling after the possible input handling
-        String childName = "_sample" + to_string(c.fOffset);
+        String childName = this->getSampleVarName("_sample", sampleCounter);
         String childIndexStr = to_string(this->getChildFPIndex(child));
         addExtraEmitCodeLine("SkString " + childName + " = this->" + invokeFunction + "(" +
                              childIndexStr + inputColor + ", args" + inputCoord + ");");
@@ -594,8 +600,7 @@ static const char* glsltype_string(const Context& context, const Type& type) {
     return nullptr;
 }
 
-void CPPCodeGenerator::writeFunctionPrototype(const FunctionDefinition& f) {
-    const FunctionDeclaration& decl = f.declaration();
+void CPPCodeGenerator::prepareHelperFunction(const FunctionDeclaration& decl) {
     if (decl.isBuiltin() || decl.name() == "main") {
         return;
     }
@@ -617,7 +622,10 @@ void CPPCodeGenerator::writeFunctionPrototype(const FunctionDefinition& f) {
     args += " };";
 
     this->addExtraEmitCodeLine(args.c_str());
+}
 
+void CPPCodeGenerator::prototypeHelperFunction(const FunctionDeclaration& decl) {
+    String funcName = decl.name();
     this->addExtraEmitCodeLine(String::printf(
             "fragBuilder->emitFunctionPrototype(%s, %s_name.c_str(), {%s_args, %zu});",
             glsltype_string(fContext, decl.returnType()),
@@ -699,6 +707,11 @@ void CPPCodeGenerator::writeProgramElement(const ProgramElement& p) {
                 return;
             }
             break;
+        }
+        case ProgramElement::Kind::kFunctionPrototype: {
+            // Function prototypes are handled at the C++ level (in writeEmitCode).
+            // We don't want prototypes to be emitted inside the FP's main() function.
+            return;
         }
         default:
             break;
@@ -1030,9 +1043,24 @@ bool CPPCodeGenerator::writeEmitCode(std::vector<const Variable*>& uniforms) {
 
     this->newExtraEmitCodeBlock();
 
+    // Generate mangled names and argument lists for helper functions.
+    std::unordered_set<const FunctionDeclaration*> definedHelpers;
     for (const auto& p : fProgram.elements()) {
         if (p->is<FunctionDefinition>()) {
-            this->writeFunctionPrototype(p->as<FunctionDefinition>());
+            const FunctionDeclaration* decl = &p->as<FunctionDefinition>().declaration();
+            definedHelpers.insert(decl);
+            this->prepareHelperFunction(*decl);
+        }
+    }
+
+    // Emit prototypes for defined helper functions that originally had prototypes in the FP file.
+    // (If a function was prototyped but never defined, we skip it, since it wasn't prepared above.)
+    for (const auto& p : fProgram.elements()) {
+        if (p->is<FunctionPrototype>()) {
+            const FunctionDeclaration* decl = &p->as<FunctionPrototype>().declaration();
+            if (definedHelpers.find(decl) != definedHelpers.end()) {
+                this->prototypeHelperFunction(*decl);
+            }
         }
     }
 

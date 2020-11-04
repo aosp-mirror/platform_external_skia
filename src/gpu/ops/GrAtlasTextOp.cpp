@@ -118,26 +118,30 @@ GrProcessorSet::Analysis GrAtlasTextOp::finalize(
         GrClampType clampType) {
     GrProcessorAnalysisCoverage coverage;
     GrProcessorAnalysisColor color;
-    if (kColorBitmapMask_MaskType == fMaskType) {
+    if (fMaskType == MaskType::kColorBitmap) {
         color.setToUnknown();
     } else {
+        // finalize() is called before any merging is done, so at this point there's at most one
+        // Geometry with a color. Later, for non-bitmap ops, we may have mixed colors.
         color.setToConstant(this->color());
     }
+
     switch (fMaskType) {
-        case kGrayscaleCoverageMask_MaskType:
-        case kAliasedDistanceField_MaskType:
-        case kGrayscaleDistanceField_MaskType:
+        case MaskType::kGrayscaleCoverage:
+        case MaskType::kAliasedDistanceField:
+        case MaskType::kGrayscaleDistanceField:
             coverage = GrProcessorAnalysisCoverage::kSingleChannel;
             break;
-        case kLCDCoverageMask_MaskType:
-        case kLCDDistanceField_MaskType:
-        case kLCDBGRDistanceField_MaskType:
+        case MaskType::kLCDCoverage:
+        case MaskType::kLCDDistanceField:
+        case MaskType::kLCDBGRDistanceField:
             coverage = GrProcessorAnalysisCoverage::kLCD;
             break;
-        case kColorBitmapMask_MaskType:
+        case MaskType::kColorBitmap:
             coverage = GrProcessorAnalysisCoverage::kNone;
             break;
     }
+
     auto analysis = fProcessors.finalize(
             color, coverage, clip, &GrUserStencilSettings::kUnused, hasMixedSampledCoverage, caps,
             clampType, &fGeoData[0].fColor);
@@ -148,9 +152,11 @@ GrProcessorSet::Analysis GrAtlasTextOp::finalize(
 void GrAtlasTextOp::onPrepareDraws(Target* target) {
     auto resourceProvider = target->resourceProvider();
 
-    // if we have RGB, then we won't have any SkShaders so no need to use a localmatrix.
-    // TODO actually only invert if we don't have RGBA
-    SkMatrix localMatrix;
+    // If we need local coordinates, compute an inverse view matrix. If this is solid color, the
+    // processor analysis will not require local coords and the GPs will skip local coords when
+    // the matrix is identity. When the shaders require local coords, combineIfPossible requires all
+    // all geometries to have same draw matrix.
+    SkMatrix localMatrix = SkMatrix::I();
     if (this->usesLocalCoords() && !fGeoData[0].fDrawMatrix.invert(&localMatrix)) {
         return;
     }
@@ -187,7 +193,7 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
     if (this->usesDistanceFields()) {
         flushInfo.fGeometryProcessor = this->setupDfProcessor(target->allocator(),
                                                               *target->caps().shaderCaps(),
-                                                              views, numActiveViews);
+                                                              localMatrix, views, numActiveViews);
     } else {
         auto filter = fNeedsGlyphTransform ? GrSamplerState::Filter::kLinear
                                            : GrSamplerState::Filter::kNearest;
@@ -367,7 +373,7 @@ GrOp::CombineResult GrAtlasTextOp::onCombineIfPossible(GrOp* t, SkArenaAlloc*, c
             return CombineResult::kCannotCombine;
         }
     } else {
-        if (kColorBitmapMask_MaskType == fMaskType && this->color() != that->color()) {
+        if (fMaskType == MaskType::kColorBitmap && this->color() != that->color()) {
             return CombineResult::kCannotCombine;
         }
     }
@@ -399,26 +405,18 @@ GrOp::CombineResult GrAtlasTextOp::onCombineIfPossible(GrOp* t, SkArenaAlloc*, c
     return CombineResult::kMerged;
 }
 
-static const int kDistanceAdjustLumShift = 5;
 
 // TODO trying to figure out why lcd is so whack
 GrGeometryProcessor* GrAtlasTextOp::setupDfProcessor(SkArenaAlloc* arena,
                                                      const GrShaderCaps& caps,
+                                                     const SkMatrix& localMatrix,
                                                      const GrSurfaceProxyView* views,
                                                      unsigned int numActiveViews) const {
-    bool isLCD = this->isLCD();
-
-    SkMatrix localMatrix = SkMatrix::I();
-    if (this->usesLocalCoords()) {
-        // If this fails we'll just use I().
-        bool result = fGeoData[0].fDrawMatrix.invert(&localMatrix);
-        (void)result;
-    }
-
+    static constexpr int kDistanceAdjustLumShift = 5;
     auto dfAdjustTable = GrDistanceFieldAdjustTable::Get();
 
     // see if we need to create a new effect
-    if (isLCD) {
+    if (this->isLCD()) {
         float redCorrection = dfAdjustTable->getAdjustment(
                 SkColorGetR(fLuminanceColor) >> kDistanceAdjustLumShift,
                 fUseGammaCorrectDistanceTable);
@@ -437,7 +435,7 @@ GrGeometryProcessor* GrAtlasTextOp::setupDfProcessor(SkArenaAlloc* arena,
     } else {
 #ifdef SK_GAMMA_APPLY_TO_A8
         float correction = 0;
-        if (kAliasedDistanceField_MaskType != fMaskType) {
+        if (fMaskType != MaskType::kAliasedDistanceField) {
             U8CPU lum = SkColorSpaceLuminance::computeLuminance(SK_GAMMA_EXPONENT,
                                                                 fLuminanceColor);
             correction = dfAdjustTable->getAdjustment(lum >> kDistanceAdjustLumShift,
@@ -528,5 +526,3 @@ GR_DRAW_OP_TEST_DEFINE(GrAtlasTextOp) {
 }
 
 #endif
-
-
