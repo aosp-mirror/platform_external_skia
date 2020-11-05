@@ -83,8 +83,9 @@ public:
     const String* fOldSource;
 };
 
-Compiler::Compiler(Flags flags)
-: fFlags(flags)
+Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
+: fCaps(caps)
+, fFlags(flags)
 , fContext(std::make_shared<Context>())
 , fErrorCount(0) {
     fRootSymbolTable = std::make_shared<SymbolTable>(this, /*builtin=*/true);
@@ -322,10 +323,11 @@ LoadedModule Compiler::loadModule(Program::Kind kind,
     SkASSERT(fIRGenerator->fCanInline);
     fIRGenerator->fCanInline = false;
     ParsedModule baseModule = {base, /*fIntrinsics=*/nullptr};
-    IRGenerator::IRBundle ir = fIRGenerator->convertProgram(
-            kind, &settings, baseModule, /*isBuiltinCode=*/true, source->c_str(), source->length(),
-            /*externalValues=*/nullptr);
-    LoadedModule module = { std::move(ir.fSymbolTable), std::move(ir.fElements) };
+    IRGenerator::IRBundle ir =
+            fIRGenerator->convertProgram(kind, &settings, &standaloneCaps, baseModule,
+                                         /*isBuiltinCode=*/true, source->c_str(), source->length(),
+                                         /*externalValues=*/nullptr);
+    LoadedModule module = {std::move(ir.fSymbolTable), std::move(ir.fElements)};
     fIRGenerator->fCanInline = true;
     if (this->fErrorCount) {
         printf("Unexpected errors: %s\n", this->fErrorText.c_str());
@@ -362,6 +364,10 @@ ParsedModule Compiler::parseModule(Program::Kind kind, ModuleData data, const Pa
                 const FunctionDefinition& f = element->as<FunctionDefinition>();
                 SkASSERT(f.declaration().isBuiltin());
                 intrinsics->insertOrDie(f.declaration().description(), std::move(element));
+                break;
+            }
+            case ProgramElement::Kind::kFunctionPrototype: {
+                // These are already in the symbol table.
                 break;
             }
             case ProgramElement::Kind::kEnum: {
@@ -1456,6 +1462,7 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
     // check for dead code & undefined variables, perform constant propagation
     OptimizationContext optimizationContext;
     optimizationContext.fUsage = usage;
+    SkBitSet eliminatedBlockIds(cfg.fBlocks.size());
     do {
         if (optimizationContext.fNeedsRescan) {
             cfg = CFGGenerator().getCFG(f);
@@ -1463,23 +1470,37 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
             optimizationContext.fNeedsRescan = false;
         }
 
+        eliminatedBlockIds.reset();
         optimizationContext.fUpdated = false;
-        bool first = true;
-        for (BasicBlock& b : cfg.fBlocks) {
-            if (!first && !b.fIsReachable) {
+
+        for (BlockId blockId = 0; blockId < cfg.fBlocks.size(); ++blockId) {
+            if (eliminatedBlockIds.test(blockId)) {
+                // We reached a block ID that might have been eliminated. Be cautious and rescan.
+                optimizationContext.fUpdated = true;
+                optimizationContext.fNeedsRescan = true;
+                break;
+            }
+
+            BasicBlock& b = cfg.fBlocks[blockId];
+            if (blockId > 0 && !b.fIsReachable) {
                 // Block was reachable before optimization, but has since become unreachable. In
                 // addition to being dead code, it's broken - since control flow can't reach it, no
                 // prior variable definitions can reach it, and therefore variables might look to
                 // have not been properly assigned. Kill it by replacing all statements with Nops.
                 for (BasicBlock::Node& node : b.fNodes) {
                     if (node.isStatement() && !(*node.statement())->is<Nop>()) {
+                        // Eliminating a node runs the risk of eliminating that node's exits as
+                        // well. Keep track of this and do a rescan if we are about to access one
+                        // of these.
+                        for (BlockId id : b.fExits) {
+                            eliminatedBlockIds.set(id);
+                        }
                         node.setStatement(std::make_unique<Nop>(), usage);
                         madeChanges = true;
                     }
                 }
                 continue;
             }
-            first = false;
             DefinitionMap definitions = b.fBefore;
 
             for (auto iter = b.fNodes.begin(); iter != b.fNodes.end() &&
@@ -1556,7 +1577,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
 
     fErrorText = "";
     fErrorCount = 0;
-    fInliner.reset(fContext.get(), fIRGenerator->fModifiers.get(), &settings);
+    fInliner.reset(fContext.get(), fIRGenerator->fModifiers.get(), &settings, fCaps);
 
     // Not using AutoSource, because caller is likely to call errorText() if we fail to compile
     std::unique_ptr<String> textPtr(new String(std::move(text)));
@@ -1568,12 +1589,13 @@ std::unique_ptr<Program> Compiler::convertProgram(
     // The Program will take ownership of the pool.
     std::unique_ptr<Pool> pool = Pool::Create();
     pool->attachToThread();
-    IRGenerator::IRBundle ir =
-            fIRGenerator->convertProgram(kind, &settings, baseModule, /*isBuiltinCode=*/false,
-                                         textPtr->c_str(), textPtr->size(), externalValues);
+    IRGenerator::IRBundle ir = fIRGenerator->convertProgram(
+            kind, &settings, fCaps, baseModule, /*isBuiltinCode=*/false, textPtr->c_str(),
+            textPtr->size(), externalValues);
     auto program = std::make_unique<Program>(kind,
                                              std::move(textPtr),
                                              settings,
+                                             fCaps,
                                              fContext,
                                              std::move(ir.fElements),
                                              std::move(ir.fModifiers),

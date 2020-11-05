@@ -136,12 +136,12 @@ GrMtlGpu::GrMtlGpu(GrDirectContext* direct, const GrContextOptions& options,
         , fDevice(device)
         , fQueue(queue)
         , fOutstandingCommandBuffers(sizeof(OutstandingCommandBuffer), kDefaultOutstandingAllocCnt)
-        , fCompiler(new SkSL::Compiler())
         , fResourceProvider(this)
         , fStagingBufferManager(this)
         , fDisconnected(false) {
     fMtlCaps.reset(new GrMtlCaps(options, fDevice, featureSet));
     fCaps = fMtlCaps;
+    fCompiler.reset(new SkSL::Compiler(fMtlCaps->shaderCaps()));
     fCurrentCmdBuffer = GrMtlCommandBuffer::Make(fQueue);
 }
 
@@ -274,7 +274,9 @@ void GrMtlGpu::checkForFinishedCommandBuffers() {
 void GrMtlGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
                                GrGpuFinishedContext finishedContext) {
     SkASSERT(finishedProc);
-    this->addFinishedCallback(GrRefCntedCallback::Make(finishedProc, finishedContext));
+    sk_sp<GrRefCntedCallback> finishedCallback(
+            new GrRefCntedCallback(finishedProc, finishedContext));
+    this->addFinishedCallback(std::move(finishedCallback));
 }
 
 void GrMtlGpu::addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback) {

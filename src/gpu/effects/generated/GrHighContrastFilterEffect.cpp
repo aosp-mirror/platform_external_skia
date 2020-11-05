@@ -42,8 +42,6 @@ public:
         const GrShaderVar HSLToRGB_args[] = {GrShaderVar("p", kHalf_GrSLType),
                                              GrShaderVar("q", kHalf_GrSLType),
                                              GrShaderVar("t", kHalf_GrSLType)};
-        fragBuilder->emitFunctionPrototype(kHalf_GrSLType, HSLToRGB_name.c_str(),
-                                           {HSLToRGB_args, 3});
         fragBuilder->emitFunction(kHalf_GrSLType, HSLToRGB_name.c_str(), {HSLToRGB_args, 3},
                                   R"SkSL(if (t < 0.0) t += 1.0;
 if (t > 1.0) t -= 1.0;
@@ -51,7 +49,7 @@ return t < 0.1666666716337204 ? p + ((q - p) * 6.0) * t : (t < 0.5 ? q : (t < 0.
 )SkSL");
         fragBuilder->codeAppendf(
                 R"SkSL(;)SkSL");
-        SkString _sample896 = this->invokeChild(0, args);
+        SkString _sample0 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(
 half4 inColor = %s;
@@ -113,7 +111,7 @@ color = clamp(color, 0.0, 1.0);
 }
 %s = half4(color.xyz, 1.0) * inColor.w;
 )SkSL",
-                _sample896.c_str(), (_outer.linearize ? "true" : "false"),
+                _sample0.c_str(), (_outer.linearize ? "true" : "false"),
                 (_outer.grayscale ? "true" : "false"), (_outer.invertBrightness ? "true" : "false"),
                 (_outer.invertLightness ? "true" : "false"), HSLToRGB_name.c_str(),
                 HSLToRGB_name.c_str(), HSLToRGB_name.c_str(),

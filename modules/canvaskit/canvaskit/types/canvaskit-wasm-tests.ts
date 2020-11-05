@@ -141,6 +141,9 @@ function canvasTests(CK: CanvasKit, canvas?: Canvas, paint?: Paint, path?: Path,
     const pixels = canvas.readPixels(0, 1, 2, 3); // $ExpectType Uint8Array
     const pixelsTwo = canvas.readPixels(4, 5, 6, 7, CK.AlphaType.Opaque, CK.ColorType.RGBA_1010102,
                                         CK.ColorSpace.DISPLAY_P3, 16);
+    const m = CK.Malloc(Uint8Array, 20);
+    canvas.readPixels(4, 5, 6, 7, CK.AlphaType.Opaque, CK.ColorType.RGBA_1010102,
+                                        CK.ColorSpace.DISPLAY_P3, 16, m);
     canvas.restore();
     canvas.restoreToCount(2);
     canvas.rotate(1, 2, 3);
@@ -239,6 +242,14 @@ function imageTests(CK: CanvasKit, imgElement?: HTMLImageElement) {
         alphaType: CK.AlphaType.Unpremul,
         colorSpace: CK.ColorSpace.SRGB,
     }, 85, 1000);
+    const m = CK.Malloc(Uint8Array, 10);
+    img.readPixels({
+        width: 79,
+        height: 205,
+        colorType: CK.ColorType.RGBA_8888,
+        alphaType: CK.AlphaType.Unpremul,
+        colorSpace: CK.ColorSpace.SRGB,
+    }, 85, 1000, m);
     img.delete();
 }
 
@@ -454,6 +465,7 @@ function paragraphTests(CK: CanvasKit, p?: Paragraph) {
         CK.RectWidthStyle.Tight);
     const l = p.getWordBoundary(10); // $ExpectType URange
     p.layout(300);
+    const m = p.getLineMetrics(); // $ExpectType LineMetrics[]
 }
 
 function paragraphBuilderTests(CK: CanvasKit, fontMgr?: FontMgr, paint?: Paint) {
@@ -773,6 +785,14 @@ function surfaceTests(CK: CanvasKit) {
         enableExtensionsByDefault: 2,
     })!;
     const surfaceSeven = CK.MakeSurface(200, 200)!; // $ExpectType Surface
+    const m = CK.Malloc(Uint8Array, 5 * 5 * 4);
+    const surfaceEight = CK.MakeRasterDirectSurface({
+        width: 5,
+        height: 5,
+        colorType: CK.ColorType.RGBA_8888,
+        alphaType: CK.AlphaType.Premul,
+        colorSpace: CK.ColorSpace.SRGB,
+    }, m, 20);
 
     surfaceOne.flush();
     const canvas = surfaceTwo.getCanvas(); // $ExpectType Canvas
@@ -789,7 +809,7 @@ function surfaceTests(CK: CanvasKit) {
 
     const ctx = CK.GetWebGLContext(canvasEl); // $ExpectType number
     const grCtx = CK.MakeGrContext(ctx);
-    const surfaceEight = CK.MakeOnScreenGLSurface(grCtx, 100, 400, // $ExpectType Surface
+    const surfaceNine = CK.MakeOnScreenGLSurface(grCtx, 100, 400, // $ExpectType Surface
         CK.ColorSpace.ADOBE_RGB)!;
 
     const rt = CK.MakeRenderTarget(grCtx, 100, 200); // $ExpectType Surface | null
