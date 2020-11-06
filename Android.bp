@@ -435,6 +435,7 @@ cc_library_static {
         "src/sksl/SkSLString.cpp",
         "src/sksl/SkSLUtil.cpp",
         "src/sksl/ir/SkSLConstructor.cpp",
+        "src/sksl/ir/SkSLPrefixExpression.cpp",
         "src/sksl/ir/SkSLSetting.cpp",
         "src/sksl/ir/SkSLSymbolTable.cpp",
         "src/sksl/ir/SkSLType.cpp",
