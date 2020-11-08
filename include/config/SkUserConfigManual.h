@@ -21,6 +21,7 @@
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
+  #define SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
 
   // Staging flags
   #define SK_LEGACY_PATH_ARCTO_ENDPOINT
