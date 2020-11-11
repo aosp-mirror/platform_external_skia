@@ -11,21 +11,29 @@ fragment Outputs fragmentMain(Inputs _in [[stage_in]], bool _frontFacing [[front
     thread Outputs* _out = &_outputStruct;
     float x = 10.0;
     {
-        float _1_y[2];
-        float _2_z;
+        float _2_y[2];
+        float _3_z;
 
-        _1_y[0] = 10.0;
-        _1_y[1] = 20.0;
-        float _3_0_foo;
+        _2_y[0] = 10.0;
+        _2_y[1] = 20.0;
+        float _4_0_foo;
         {
-            _3_0_foo = _1_y[0] * _1_y[1];
+            _4_0_foo = _2_y[0] * _2_y[1];
         }
 
-        _2_z = _3_0_foo;
+        _3_z = _4_0_foo;
 
-        x = _2_z;
+        float _5_a[2][3];
+        _5_a[0][0] = 123.0;
+        _5_a[1][2] = 456.0;
+        float _6_1_arr;
+        {
+            _6_1_arr = _5_a[0][0] * _5_a[1][2];
+        }
+
+        x = _3_z + _6_1_arr;
+
     }
-
 
     _out->sk_FragColor = float4(x);
     return *_out;

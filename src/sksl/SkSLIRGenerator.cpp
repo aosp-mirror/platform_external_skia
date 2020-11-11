@@ -395,7 +395,7 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
                 }
                 String name(type->name());
                 int64_t count;
-                if (size->kind() == Expression::Kind::kIntLiteral) {
+                if (size->is<IntLiteral>()) {
                     count = size->as<IntLiteral>().value();
                     if (count <= 0) {
                         fErrors.error(size->fOffset, "array size must be positive");
@@ -427,6 +427,9 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
             value = this->convertExpression(*iter);
             if (!value) {
                 return {};
+            }
+            if (modifiers.fFlags & Modifiers::kIn_Flag) {
+                fErrors.error(value->fOffset, "'in' variables cannot use initializer expressions");
             }
             value = this->coerce(std::move(value), *type);
             if (!value) {
@@ -911,7 +914,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (!type) {
             return;
         }
-        for (int j = (int) pd.fSizeCount; j >= 1; j--) {
+        for (int j = 1; j <= (int) pd.fSizeCount; j++) {
             int size = (param.begin() + j)->getInt();
             String name = type->name() + "[" + to_string(size) + "]";
             type = fSymbolTable->takeOwnershipOfSymbol(

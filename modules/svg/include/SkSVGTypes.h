@@ -61,6 +61,10 @@ private:
     Unit     fUnit;
 };
 
+struct SkSVGIRI {
+    SkSVGStringType fIRI;
+};
+
 class SkSVGPaint {
 public:
     enum class Type {
@@ -501,7 +505,9 @@ public:
     explicit SkSVGFilterType(Type t) : fType(t) {}
     explicit SkSVGFilterType(const SkString& iri) : fType(Type::kIRI), fIRI(iri) {}
 
-    bool operator==(const SkSVGFilterType& other) const { return fType == other.fType; }
+    bool operator==(const SkSVGFilterType& other) const {
+        return fType == other.fType && fIRI == other.fIRI;
+    }
     bool operator!=(const SkSVGFilterType& other) const { return !(*this == other); }
 
     const SkString& iri() const {
@@ -516,6 +522,40 @@ private:
     SkString fIRI;
 };
 
+class SkSVGFeInputType {
+public:
+    enum class Type {
+        kSourceGraphic,
+        kSourceAlpha,
+        kBackgroundImage,
+        kBackgroundAlpha,
+        kFillPaint,
+        kStrokePaint,
+        kFilterPrimitiveReference,
+    };
+
+    SkSVGFeInputType() : fType(Type::kSourceGraphic) {}
+    explicit SkSVGFeInputType(Type t) : fType(t) {}
+    explicit SkSVGFeInputType(const SkSVGStringType& id)
+            : fType(Type::kFilterPrimitiveReference), fId(id) {}
+
+    bool operator==(const SkSVGFeInputType& other) const {
+        return fType == other.fType && fId == other.fId;
+    }
+    bool operator!=(const SkSVGFeInputType& other) const { return !(*this == other); }
+
+    const SkString& id() const {
+        SkASSERT(fType == Type::kFilterPrimitiveReference);
+        return fId;
+    }
+
+    Type type() const { return fType; }
+
+private:
+    Type fType;
+    SkString fId;
+};
+
 enum class SkSVGFeColorMatrixType {
     kMatrix,
     kSaturate,
@@ -524,6 +564,15 @@ enum class SkSVGFeColorMatrixType {
 };
 
 using SkSVGFeColorMatrixValues = SkTDArray<SkSVGNumberType>;
+
+enum class SkSVGFeCompositeOperator {
+    kOver,
+    kIn,
+    kOut,
+    kAtop,
+    kXor,
+    kArithmetic,
+};
 
 class SkSVGFeTurbulenceBaseFrequency {
 public:
