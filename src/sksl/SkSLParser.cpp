@@ -21,7 +21,25 @@
 
 namespace SkSL {
 
-#define MAX_PARSE_DEPTH 50
+static constexpr int kMaxParseDepth = 50;
+static constexpr int kMaxArrayDimensionality = 8;
+static constexpr int kMaxStructDepth = 8;
+
+static bool struct_is_too_deeply_nested(const Type& type, int limit) {
+    if (limit < 0) {
+        return true;
+    }
+
+    if (type.typeKind() == Type::TypeKind::kStruct) {
+        for (const Type::Field& f : type.fields()) {
+            if (struct_is_too_deeply_nested(*f.fType, limit - 1)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 class AutoDepth {
 public:
@@ -36,7 +54,7 @@ public:
     bool increase() {
         ++fDepth;
         ++fParser->fDepth;
-        if (fParser->fDepth > MAX_PARSE_DEPTH) {
+        if (fParser->fDepth > kMaxParseDepth) {
             fParser->error(fParser->peek(), String("exceeded max parse depth"));
             return false;
         }
@@ -540,7 +558,12 @@ ASTNode::ID Parser::structDeclaration() {
     if (!this->expect(Token::Kind::TK_RBRACE, "'}'")) {
         return ASTNode::ID::Invalid();
     }
-    fSymbols.add(std::make_unique<Type>(name.fOffset, this->text(name), fields));
+    auto newType = std::make_unique<Type>(name.fOffset, this->text(name), fields);
+    if (struct_is_too_deeply_nested(*newType, kMaxStructDepth)) {
+        this->error(name.fOffset, "struct '" + this->text(name) + "' is too deeply nested");
+        return ASTNode::ID::Invalid();
+    }
+    fSymbols.add(std::move(newType));
     RETURN_NODE(name.fOffset, ASTNode::Kind::kType,
                 ASTNode::TypeData(this->text(name), true, false));
 }
@@ -582,6 +605,10 @@ ASTNode::ID Parser::varDeclarationEnd(Modifiers mods, ASTNode::ID type, StringFr
             }
         }
         ++vd.fSizeCount;
+        if (vd.fSizeCount > kMaxArrayDimensionality) {
+            this->error(this->peek(), "array has too many dimensions");
+            return ASTNode::ID::Invalid();
+        }
     }
     getNode(currentVar).setVarData(vd);
     if (this->checkNext(Token::Kind::TK_EQ)) {
