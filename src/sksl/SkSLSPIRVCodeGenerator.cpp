@@ -77,8 +77,8 @@ void SPIRVCodeGenerator::setupIntrinsics() {
     fIntrinsicMap[String("dot")]           = std::make_tuple(kSPIRV_IntrinsicKind, SpvOpDot,
                                                              SpvOpUndef, SpvOpUndef, SpvOpUndef);
     fIntrinsicMap[String("mix")]           = SPECIAL(Mix);
-    fIntrinsicMap[String("step")]          = ALL_GLSL(Step);
-    fIntrinsicMap[String("smoothstep")]    = ALL_GLSL(SmoothStep);
+    fIntrinsicMap[String("step")]          = SPECIAL(Step);
+    fIntrinsicMap[String("smoothstep")]    = SPECIAL(SmoothStep);
     fIntrinsicMap[String("fma")]           = ALL_GLSL(Fma);
     fIntrinsicMap[String("frexp")]         = ALL_GLSL(Frexp);
     fIntrinsicMap[String("ldexp")]         = ALL_GLSL(Ldexp);
@@ -1019,6 +1019,20 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
                                                GLSLstd450UClamp, spvArgs, out);
             break;
         }
+        case kSmoothStep_SpecialIntrinsic: {
+            std::vector<SpvId> args = this->vectorize(arguments, out);
+            SkASSERT(args.size() == 3);
+            this->writeGLSLExtendedInstruction(callType, result, GLSLstd450SmoothStep, SpvOpUndef,
+                                               SpvOpUndef, args, out);
+            break;
+        }
+        case kStep_SpecialIntrinsic: {
+            std::vector<SpvId> args = this->vectorize(arguments, out);
+            SkASSERT(args.size() == 2);
+            this->writeGLSLExtendedInstruction(callType, result, GLSLstd450Step, SpvOpUndef,
+                                               SpvOpUndef, args, out);
+            break;
+        }
     }
     return result;
 }
@@ -1884,7 +1898,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                 Modifiers modifiers(layout, Modifiers::kUniform_Flag);
                 const Variable* intfVar = fSynthetics.takeOwnershipOfSymbol(
                         std::make_unique<Variable>(/*offset=*/-1,
-                                                   fProgram.fModifiers->handle(modifiers),
+                                                   fProgram.fModifiers->addToPool(modifiers),
                                                    name,
                                                    &intfStruct,
                                                    /*builtin=*/false,

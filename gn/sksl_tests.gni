@@ -113,6 +113,7 @@ sksl_error_tests = [
   "$_tests/sksl/errors/Ossfuzz26759.sksl",
   "$_tests/sksl/errors/OverflowIntLiteral.sksl",
   "$_tests/sksl/errors/OverflowUintLiteral.sksl",
+  "$_tests/sksl/errors/PrivateTypes.sksl",
   "$_tests/sksl/errors/ReturnDifferentType.sksl",
   "$_tests/sksl/errors/ReturnFromVoid.sksl",
   "$_tests/sksl/errors/ReturnMissingValue.sksl",
@@ -321,6 +322,7 @@ sksl_blend_tests = [
 
 sksl_settings_tests = [
   "$_tests/sksl/glsl/TypePrecision.sksl",
+  "$_tests/sksl/inliner/ExponentialGrowth.sksl",
   "$_tests/sksl/inliner/InlinerCanBeDisabled.sksl",
   "$_tests/sksl/inliner/InlinerWrapsEarlyReturnsWithDoWhileBlock.sksl",
   "$_tests/sksl/shared/CrossIntrinsic.sksl",
