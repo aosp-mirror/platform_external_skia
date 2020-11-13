@@ -763,13 +763,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         sk_sp<SkData> bytes = SkData::MakeFromMalloc(imgData, length);
         return SkImage::MakeFromEncoded(std::move(bytes));
     }), allow_raw_pointers());
-    function("_getRasterDirectSurface", optional_override([](const SimpleImageInfo ii,
-                                                             uintptr_t /* uint8_t*  */ pPtr,
-                                                             size_t rowBytes)->sk_sp<SkSurface> {
-        uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
-        SkImageInfo imageInfo = toSkImageInfo(ii);
-        return SkSurface::MakeRasterDirect(imageInfo, pixels, rowBytes, nullptr);
-    }), allow_raw_pointers());
 
     function("getDataBytes", &getSkDataBytes, allow_raw_pointers());
 
@@ -830,12 +823,13 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("getFrameCount", &SkAnimatedImage::getFrameCount)
         .function("getRepetitionCount", &SkAnimatedImage::getRepetitionCount)
         .function("height",  optional_override([](SkAnimatedImage& self)->int32_t {
-            return self.dimensions().height();
+            // getBounds returns an SkRect, but internally, the width and height are ints.
+            return SkScalarFloorToInt(self.getBounds().height());
         }))
         .function("makeImageAtCurrentFrame", &SkAnimatedImage::getCurrentFrame)
         .function("reset", &SkAnimatedImage::reset)
         .function("width",  optional_override([](SkAnimatedImage& self)->int32_t {
-            return self.dimensions().width();
+            return SkScalarFloorToInt(self.getBounds().width());
         }));
 
     class_<SkCanvas>("Canvas")
@@ -1147,7 +1141,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return true;
         }))
         .function("measureText", optional_override([](SkFont& self, std::string text) {
-            // TODO(kjlubick): This does not work well for non-ascii
+            // TODO(kjlubick): Remove this API
             // Need to maybe add a helper in interface.js that supports UTF-8
             // Otherwise, go with std::wstring and set UTF-32 encoding.
             return self.measureText(text.c_str(), text.length(), SkTextEncoding::kUTF8);
@@ -1650,6 +1644,13 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<SkSurface>("Surface")
         .smart_ptr<sk_sp<SkSurface>>("sk_sp<Surface>")
+        .class_function("_makeRasterDirect", optional_override([](const SimpleImageInfo ii,
+                                                                  uintptr_t /* uint8_t*  */ pPtr,
+                                                                  size_t rowBytes)->sk_sp<SkSurface> {
+            uint8_t* pixels = reinterpret_cast<uint8_t*>(pPtr);
+            SkImageInfo imageInfo = toSkImageInfo(ii);
+            return SkSurface::MakeRasterDirect(imageInfo, pixels, rowBytes, nullptr);
+        }), allow_raw_pointers())
         .function("_flush", optional_override([](SkSurface& self) {
             self.flushAndSubmit(false);
         }))

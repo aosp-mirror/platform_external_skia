@@ -7,14 +7,14 @@
   CanvasKit._extraInitializations.push(function() {
     // Takes in an html id or a canvas element
     CanvasKit.MakeSWCanvasSurface = function(idOrElement) {
-        var canvas = idOrElement;
-        if (canvas.tagName !== 'CANVAS') {
-          // TODO(nifong): unit test
-          canvas = document.getElementById(idOrElement);
-          if (!canvas) {
-            throw 'Canvas with id ' + idOrElement + ' was not found';
-          }
+      var canvas = idOrElement;
+      if (canvas.tagName !== 'CANVAS') {
+        // TODO(nifong): unit test
+        canvas = document.getElementById(idOrElement);
+        if (!canvas) {
+          throw 'Canvas with id ' + idOrElement + ' was not found';
         }
+      }
       // Maybe better to use clientWidth/height.  See:
       // https://webglfundamentals.org/webgl/lessons/webgl-anti-patterns.html
       var surface = CanvasKit.MakeSurface(canvas.width, canvas.height);
@@ -34,7 +34,6 @@
     // TODO(nifong): support WGC color spaces while still using an RGBA_8888 color type when
     // on a cpu backend.
     CanvasKit.MakeSurface = function(width, height) {
-      /* @dict */
       var imageInfo = {
         'width':  width,
         'height': height,
@@ -43,13 +42,16 @@
         // (and those pixels are un-premultiplied, i.e. straight r,g,b,a)
         'alphaType': CanvasKit.AlphaType.Unpremul,
         'colorSpace': CanvasKit.ColorSpace.SRGB,
-      }
+      };
       var pixelLen = width * height * 4; // it's 8888, so 4 bytes per pixel
       // Allocate the buffer of pixels to be drawn into.
       var pixelPtr = CanvasKit._malloc(pixelLen);
 
-      // TODO(kjlubick) don't use RDS, as it will always copy if snapping off an SkImage.
-      var surface = this._getRasterDirectSurface(imageInfo, pixelPtr, width*4);
+      // Experiments with using RasterDirect vs Raster showed a 10% slowdown
+      // over the traditional Surface::MakeRaster approach. This was exacerbated when
+      // the surface was drawing to Premul and we had to convert to Unpremul each frame
+      // (up to a 10x further slowdown).
+      var surface = CanvasKit.Surface._makeRasterDirect(imageInfo, pixelPtr, width*4);
       if (surface) {
         surface._canvas = null;
         surface._width = width;
@@ -65,7 +67,7 @@
     };
 
     CanvasKit.MakeRasterDirectSurface = function(imageInfo, mallocObj, bytesPerRow) {
-      return this._getRasterDirectSurface(imageInfo, mallocObj['byteOffset'], bytesPerRow);
+      return CanvasKit.Surface._makeRasterDirect(imageInfo, mallocObj['byteOffset'], bytesPerRow);
     };
 
     // For GPU builds, simply proxies to native code flush.  For CPU builds,
@@ -73,7 +75,7 @@
     CanvasKit.Surface.prototype.flush = function(dirtyRect) {
       this._flush();
       // Do we have an HTML canvas to write the pixels to?
-      // We will not if this a GPU build or a raster surface, for example.
+      // We will not have a canvas if this a GPU build, for example.
       if (this._canvas) {
         var pixels = new Uint8ClampedArray(CanvasKit.HEAPU8.buffer, this._pixelPtr, this._pixelLen);
         var imageData = new ImageData(pixels, this._width, this._height);
@@ -96,7 +98,7 @@
         CanvasKit._free(this._pixelPtr);
       }
       this.delete();
-    }
+    };
 
     CanvasKit.currentContext = CanvasKit.currentContext || function() {
       // no op if this is a cpu-only build.

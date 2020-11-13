@@ -20,22 +20,32 @@ $genType  cos($genType  angle);
 $genHType cos($genHType angle);
 $genType  tan($genType  angle);
 $genHType tan($genHType angle);
-// TODO: asin(x)
-// TODO: acos(y)
-// TODO: atan(y, x)
+
+$genType  asin($genType  x);
+$genHType asin($genHType x);
+$genType  acos($genType  x);
+$genHType acos($genHType x);
+$genType  atan($genType  y, $genType  x);
+$genHType atan($genHType y, $genHType x);
 $genType  atan($genType  y_over_x);
 $genHType atan($genHType y_over_x);
 
 // 8.2 : Exponential Functions
 $genType  pow($genType  x, $genType  y);
 $genHType pow($genHType x, $genHType y);
-// TODO: exp
-// TODO: log
-// TODO: exp2
-// TODO: log2
+$genType  exp($genType  x);
+$genHType exp($genHType x);
+$genType  log($genType  x);
+$genHType log($genHType x);
+$genType  exp2($genType  x);
+$genHType exp2($genHType x);
+$genType  log2($genType  x);
+$genHType log2($genHType x);
+
 $genType  sqrt($genType  x);
 $genHType sqrt($genHType x);
-// TODO: inversesqrt
+$genType  inversesqrt($genType  x);
+$genHType inversesqrt($genHType x);
 
 // 8.3 : Common Functions
 $genType  abs($genType  x);

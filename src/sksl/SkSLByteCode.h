@@ -26,7 +26,10 @@ enum class ByteCodeInstruction : uint8_t {
     kAddF,  // N
     kAddI,  // N
     kAndB,  // N
+    kACos,  // N
+    kASin,  // N
     kATan,  // N
+    kATan2, // N
     kBranch,
     // Followed by a byte indicating the index of the function to call
     kCall,
@@ -61,6 +64,8 @@ enum class ByteCodeInstruction : uint8_t {
     kDivideU,       // N
     // Duplicates the top N stack values
     kDup,    // N
+    kExp,    // N
+    kExp2,   // N
     kFloor,  // N
     kFract,  // N
     kInverse2x2,
@@ -77,6 +82,8 @@ enum class ByteCodeInstruction : uint8_t {
     kLoadExtendedUniform,  // N
     // Loads "sk_FragCoord" [X, Y, Z, 1/W]
     kLoadFragCoord,
+    kLog,   // N
+    kLog2,  // N
     // Followed by four bytes: srcCols, srcRows, dstCols, dstRows. Consumes the src matrix from the
     // stack, and replaces it with the dst matrix. Per GLSL rules, there are no restrictions on
     // dimensions. Any overlapping values are copied, and any other values are filled in with the
@@ -109,6 +116,7 @@ enum class ByteCodeInstruction : uint8_t {
     kReserve,
     // Followed by a byte indicating the number of slots being returned
     kReturn,
+    kInvSqrt,  // N
     // kSample* are followed by a byte indicating the FP slot to sample, and produce (R, G, B, A)
     // Does "pass-through" sampling at the same coords as the parent
     kSample,
