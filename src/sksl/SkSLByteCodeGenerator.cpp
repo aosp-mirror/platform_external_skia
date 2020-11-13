@@ -47,26 +47,33 @@ ByteCodeGenerator::ByteCodeGenerator(const Context* context, const Program* prog
     // sksl_public.sksl, so they're available to "generic" interpreter programs (eg particles).
     // You can probably copy the declarations from sksl_gpu.sksl.
     , fIntrinsics {
-        { "abs",       ByteCodeInstruction::kAbs },
-        { "atan",      ByteCodeInstruction::kATan },
-        { "ceil",      ByteCodeInstruction::kCeil },
-        { "clamp",     SpecialIntrinsic::kClamp },
-        { "cos",       ByteCodeInstruction::kCos },
-        { "dot",       SpecialIntrinsic::kDot },
-        { "floor",     ByteCodeInstruction::kFloor },
-        { "fract",     ByteCodeInstruction::kFract },
-        { "inverse",   ByteCodeInstruction::kInverse2x2 },
-        { "length",    SpecialIntrinsic::kLength },
-        { "max",       SpecialIntrinsic::kMax },
-        { "min",       SpecialIntrinsic::kMin },
-        { "mix",       SpecialIntrinsic::kMix },
-        { "normalize", SpecialIntrinsic::kNormalize },
-        { "pow",       ByteCodeInstruction::kPow },
-        { "sample",    SpecialIntrinsic::kSample },
-        { "saturate",  SpecialIntrinsic::kSaturate },
-        { "sin",       ByteCodeInstruction::kSin },
-        { "sqrt",      ByteCodeInstruction::kSqrt },
-        { "tan",       ByteCodeInstruction::kTan },
+        { "abs",         ByteCodeInstruction::kAbs },
+        { "acos",        ByteCodeInstruction::kACos },
+        { "asin",        ByteCodeInstruction::kASin },
+        { "atan",        SpecialIntrinsic::kATan },
+        { "ceil",        ByteCodeInstruction::kCeil },
+        { "clamp",       SpecialIntrinsic::kClamp },
+        { "cos",         ByteCodeInstruction::kCos },
+        { "dot",         SpecialIntrinsic::kDot },
+        { "exp",         ByteCodeInstruction::kExp },
+        { "exp2",        ByteCodeInstruction::kExp2 },
+        { "floor",       ByteCodeInstruction::kFloor },
+        { "fract",       ByteCodeInstruction::kFract },
+        { "inverse",     ByteCodeInstruction::kInverse2x2 },
+        { "inversesqrt", ByteCodeInstruction::kInvSqrt },
+        { "length",      SpecialIntrinsic::kLength },
+        { "log",         ByteCodeInstruction::kLog },
+        { "log2",        ByteCodeInstruction::kLog2 },
+        { "max",         SpecialIntrinsic::kMax },
+        { "min",         SpecialIntrinsic::kMin },
+        { "mix",         SpecialIntrinsic::kMix },
+        { "normalize",   SpecialIntrinsic::kNormalize },
+        { "pow",         ByteCodeInstruction::kPow },
+        { "sample",      SpecialIntrinsic::kSample },
+        { "saturate",    SpecialIntrinsic::kSaturate },
+        { "sin",         ByteCodeInstruction::kSin },
+        { "sqrt",        ByteCodeInstruction::kSqrt },
+        { "tan",         ByteCodeInstruction::kTan },
 
         { "lessThan",         { ByteCodeInstruction::kCompareFLT,
                                 ByteCodeInstruction::kCompareSLT,
@@ -280,11 +287,18 @@ int ByteCodeGenerator::StackUsage(ByteCodeInstruction inst, int count_) {
         VEC_UNARY(kConvertUtoF)
 
         VEC_UNARY(kAbs)
+        VEC_UNARY(kACos)
+        VEC_UNARY(kASin)
         VEC_UNARY(kATan)
         VEC_UNARY(kCeil)
         VEC_UNARY(kCos)
+        VEC_UNARY(kExp)
+        VEC_UNARY(kExp2)
         VEC_UNARY(kFloor)
         VEC_UNARY(kFract)
+        VEC_UNARY(kInvSqrt)
+        VEC_UNARY(kLog)
+        VEC_UNARY(kLog2)
         VEC_UNARY(kSin)
         VEC_UNARY(kSqrt)
         VEC_UNARY(kTan)
@@ -311,6 +325,8 @@ int ByteCodeGenerator::StackUsage(ByteCodeInstruction inst, int count_) {
 
         case ByteCodeInstruction::kAddI: return -count;
         case ByteCodeInstruction::kAddF: return -count;
+
+        case ByteCodeInstruction::kATan2: return -count;
 
         case ByteCodeInstruction::kCompareIEQ:   return -count;
         case ByteCodeInstruction::kCompareFEQ:   return -count;
@@ -1136,6 +1152,13 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
                 for (int i = count-1; i --> 0;) {
                     this->write(ByteCodeInstruction::kOrB, 1);
                 }
+            } break;
+
+            case SpecialIntrinsic::kATan: {
+                // GLSL uses "atan" for both 'atan' and 'atan2'
+                SkASSERT(nargs == 1 || (nargs == 2 && count == SlotCount(args[1]->type())));
+                this->write(nargs == 1 ? ByteCodeInstruction::kATan : ByteCodeInstruction::kATan2,
+                            count);
             } break;
 
             case SpecialIntrinsic::kDot: {

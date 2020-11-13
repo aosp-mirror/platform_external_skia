@@ -84,7 +84,6 @@ var CanvasKit = {
   _decodeAnimatedImage: function() {},
   _decodeImage: function() {},
   _drawShapedText: function() {},
-  _getRasterDirectSurface: function() {},
 
   // The testing object is meant to expose internal functions
   // for more fine-grained testing, e.g. parseColor
@@ -647,6 +646,7 @@ var CanvasKit = {
     // private API
     _flush: function() {},
     _makeImageSnapshot: function() {},
+    _makeRasterDirect: function() {},
     delete: function() {},
   },
 
