@@ -59,6 +59,10 @@
 #define SK_GL
 #endif
 
+#ifndef SK_HAS_ANDROID_CODEC
+#define SK_HAS_ANDROID_CODEC
+#endif
+
 #ifndef SK_HAS_HEIF_LIBRARY
 #define SK_HAS_HEIF_LIBRARY
 #endif
