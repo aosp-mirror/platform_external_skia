@@ -59,6 +59,10 @@
 #define SK_GAMMA_EXPONENT 1.4
 #endif
 
+#ifndef SK_HAS_ANDROID_CODEC
+#define SK_HAS_ANDROID_CODEC
+#endif
+
 #ifndef SK_SUPPORT_GPU
 #define SK_SUPPORT_GPU 0
 #endif
