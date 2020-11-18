@@ -1950,7 +1950,6 @@ cc_test {
         "tests/SkSLInterpreterTest.cpp",
         "tests/SkSLMemoryLayoutTest.cpp",
         "tests/SkSLMetalTestbed.cpp",
-        "tests/SkSLNodeArrayWrapperTest.cpp",
         "tests/SkSLSPIRVTest.cpp",
         "tests/SkScalerCacheTest.cpp",
         "tests/SkShaperJSONWriterTest.cpp",
