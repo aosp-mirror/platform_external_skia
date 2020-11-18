@@ -117,7 +117,8 @@ public:
     void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
 
     void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
-    void createDDLTask(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest);
+    void createDDLTask(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest,
+                       SkIPoint offset);
 
 private:
     GrDrawingManager(GrRecordingContext*,
@@ -142,7 +143,6 @@ private:
     void closeAllTasks();
 
     GrRenderTask* appendTask(sk_sp<GrRenderTask>);
-    void appendTasks(SkSpan<const sk_sp<GrRenderTask>>);
     GrRenderTask* insertTaskBeforeLast(sk_sp<GrRenderTask>);
 
     bool flush(SkSpan<GrSurfaceProxy*> proxies,
