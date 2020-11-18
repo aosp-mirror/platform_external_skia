@@ -15,7 +15,6 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkDeferredDisplayListPriv.h"
-#include "src/core/SkTTopoSort.h"
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrClientMappedBufferManager.h"
 #include "src/gpu/GrCopyRenderTask.h"
@@ -33,6 +32,7 @@
 #include "src/gpu/GrSoftwarePathRenderer.h"
 #include "src/gpu/GrSurfaceContext.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
+#include "src/gpu/GrTTopoSort.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureProxyPriv.h"
@@ -392,7 +392,7 @@ void GrDrawingManager::removeRenderTasks(int startIndex, int stopIndex) {
 }
 
 void GrDrawingManager::sortTasks() {
-    if (!SkTTopoSort<GrRenderTask, GrRenderTask::TopoSortTraits>(&fDAG)) {
+    if (!GrTTopoSort<GrRenderTask, GrRenderTask::TopoSortTraits>(&fDAG)) {
         SkDEBUGFAIL("Render task topo sort failed.");
         return;
     }
@@ -442,15 +442,6 @@ GrRenderTask* GrDrawingManager::appendTask(sk_sp<GrRenderTask> task) {
         return nullptr;
     }
     return fDAG.push_back(std::move(task)).get();
-}
-
-void GrDrawingManager::appendTasks(SkSpan<const sk_sp<GrRenderTask>> tasks) {
-#ifdef SK_DEBUG
-    for (const auto& task : tasks) {
-        SkASSERT(task && task->unique());
-    }
-#endif
-    fDAG.push_back_n(tasks.count(), tasks.begin());
 }
 
 static void resolve_and_mipmap(GrGpu* gpu, GrSurfaceProxy* proxy) {
@@ -591,7 +582,8 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
 }
 
 void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
-                                     GrRenderTargetProxy* newDest) {
+                                     GrRenderTargetProxy* newDest,
+                                     SkIPoint offset) {
     SkDEBUGCODE(this->validate());
 
     if (fActiveOpsTask) {
@@ -628,7 +620,8 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
     // Add a task to handle drawing and lifetime management of the DDL.
     SkDEBUGCODE(auto ddlTask =) this->appendTask(sk_make_sp<GrDDLTask>(this,
                                                                        sk_ref_sp(newDest),
-                                                                       std::move(ddl)));
+                                                                       std::move(ddl),
+                                                                       offset));
     SkASSERT(ddlTask->isClosed());
 
     SkDEBUGCODE(this->validate());
