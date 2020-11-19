@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkMatrix.h"
 #include "include/core/SkM44.h"
+#include "include/core/SkMatrix.h"
 #include "include/private/SkVx.h"
 
 typedef skvx::Vec<4, float> sk4f;
@@ -41,25 +41,20 @@ void SkM44::getRowMajor(SkScalar v[]) const {
     transpose_arrays(v, fMat);
 }
 
-SkM44& SkM44::setRowMajor(const SkScalar v[]) {
-    transpose_arrays(fMat, v);
-    return *this;
-}
-
-SkM44& SkM44::setConcat16(const SkM44& a, const SkScalar b[16]) {
+SkM44& SkM44::setConcat(const SkM44& a, const SkM44& b) {
     sk4f c0 = sk4f::Load(a.fMat +  0);
     sk4f c1 = sk4f::Load(a.fMat +  4);
     sk4f c2 = sk4f::Load(a.fMat +  8);
     sk4f c3 = sk4f::Load(a.fMat + 12);
 
     auto compute = [&](sk4f r) {
-        return skvx::mad(c0, r[0], skvx::mad(c1, r[1], skvx::mad(c2, r[2], c3 * r[3])));
+        return c0*r[0] + (c1*r[1] + (c2*r[2] + c3*r[3]));
     };
 
-    sk4f m0 = compute(sk4f::Load(b +  0));
-    sk4f m1 = compute(sk4f::Load(b +  4));
-    sk4f m2 = compute(sk4f::Load(b +  8));
-    sk4f m3 = compute(sk4f::Load(b + 12));
+    sk4f m0 = compute(sk4f::Load(b.fMat +  0));
+    sk4f m1 = compute(sk4f::Load(b.fMat +  4));
+    sk4f m2 = compute(sk4f::Load(b.fMat +  8));
+    sk4f m3 = compute(sk4f::Load(b.fMat + 12));
 
     m0.store(fMat +  0);
     m1.store(fMat +  4);
@@ -74,7 +69,7 @@ SkM44& SkM44::preConcat(const SkMatrix& b) {
     sk4f c3 = sk4f::Load(fMat + 12);
 
     auto compute = [&](float r0, float r1, float r3) {
-        return skvx::mad(c0, r0, skvx::mad(c1, r1, c3 * r3));
+        return (c0*r0 + (c1*r1 + c3*r3));
     };
 
     sk4f m0 = compute(b[0], b[3], b[6]);
@@ -87,13 +82,23 @@ SkM44& SkM44::preConcat(const SkMatrix& b) {
     return *this;
 }
 
-SkM44& SkM44::preTranslate(SkScalar x, SkScalar y) {
+SkM44& SkM44::preTranslate(SkScalar x, SkScalar y, SkScalar z) {
     sk4f c0 = sk4f::Load(fMat +  0);
     sk4f c1 = sk4f::Load(fMat +  4);
+    sk4f c2 = sk4f::Load(fMat +  8);
     sk4f c3 = sk4f::Load(fMat + 12);
 
     // only need to update the last column
-    skvx::mad(c0, x, skvx::mad(c1, y, c3)).store(fMat + 12);
+    (c0*x + (c1*y + (c2*z + c3))).store(fMat + 12);
+    return *this;
+}
+
+SkM44& SkM44::postTranslate(SkScalar x, SkScalar y, SkScalar z) {
+    sk4f t = { x, y, z, 0 };
+    (t * fMat[ 3] + sk4f::Load(fMat +  0)).store(fMat +  0);
+    (t * fMat[ 7] + sk4f::Load(fMat +  4)).store(fMat +  4);
+    (t * fMat[11] + sk4f::Load(fMat +  8)).store(fMat +  8);
+    (t * fMat[15] + sk4f::Load(fMat + 12)).store(fMat + 12);
     return *this;
 }
 
@@ -113,8 +118,23 @@ SkV4 SkM44::map(float x, float y, float z, float w) const {
     sk4f c3 = sk4f::Load(fMat + 12);
 
     SkV4 v;
-    skvx::mad(c0, x, skvx::mad(c1, y, skvx::mad(c2, z, c3 * w))).store(&v.x);
+    (c0*x + (c1*y + (c2*z + c3*w))).store(&v.x);
     return v;
+}
+
+void SkM44::normalizePerspective() {
+    // If the bottom row of the matrix is [0, 0, 0, not_one], we will treat the matrix as if it
+    // is in perspective, even though it stills behaves like its affine. If we divide everything
+    // by the not_one value, then it will behave the same, but will be treated as affine,
+    // and therefore faster (e.g. clients can forward-difference calculations).
+    if (fMat[15] != 1 && fMat[15] != 0 && fMat[3] == 0 && fMat[7] == 0 && fMat[11] == 0) {
+        double inv = 1.0 / fMat[15];
+        (sk4f::Load(fMat +  0) * inv).store(fMat +  0);
+        (sk4f::Load(fMat +  4) * inv).store(fMat +  4);
+        (sk4f::Load(fMat +  8) * inv).store(fMat +  8);
+        (sk4f::Load(fMat + 12) * inv).store(fMat + 12);
+        fMat[15] = 1.0f;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -123,43 +143,6 @@ SkV4 SkM44::map(float x, float y, float z, float w) const {
     precision along the way. This relies on the compiler automatically
     promoting our SkScalar values to double (if needed).
  */
-double SkM44::determinant() const {
-    double a00 = fMat[0];
-    double a01 = fMat[1];
-    double a02 = fMat[2];
-    double a03 = fMat[3];
-    double a10 = fMat[4];
-    double a11 = fMat[5];
-    double a12 = fMat[6];
-    double a13 = fMat[7];
-    double a20 = fMat[8];
-    double a21 = fMat[9];
-    double a22 = fMat[10];
-    double a23 = fMat[11];
-    double a30 = fMat[12];
-    double a31 = fMat[13];
-    double a32 = fMat[14];
-    double a33 = fMat[15];
-
-    double b00 = a00 * a11 - a01 * a10;
-    double b01 = a00 * a12 - a02 * a10;
-    double b02 = a00 * a13 - a03 * a10;
-    double b03 = a01 * a12 - a02 * a11;
-    double b04 = a01 * a13 - a03 * a11;
-    double b05 = a02 * a13 - a03 * a12;
-    double b06 = a20 * a31 - a21 * a30;
-    double b07 = a20 * a32 - a22 * a30;
-    double b08 = a20 * a33 - a23 * a30;
-    double b09 = a21 * a32 - a22 * a31;
-    double b10 = a21 * a33 - a23 * a31;
-    double b11 = a22 * a33 - a23 * a32;
-
-    // Calculate the determinant
-    return b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 bool SkM44::invert(SkM44* inverse) const {
     double a00 = fMat[0];
     double a01 = fMat[1];
@@ -195,12 +178,9 @@ bool SkM44::invert(SkM44* inverse) const {
     double det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
 
     double invdet = sk_ieee_double_divide(1.0, det);
-    // If det is zero, we want to return false. However, we also want to return false
-    // if 1/det overflows to infinity (i.e. det is denormalized). Both of these are
-    // handled by checking that 1/det is finite.
-    if (!SkScalarIsFinite(SkScalar(invdet))) {
-        return false;
-    }
+    // If det is zero, we want to return false. However, we also want to return false if 1/det
+    // overflows to infinity (i.e. det is denormalized). All of this is subsumed by our final check
+    // at the bottom (that all 16 scalar matrix entries are finite).
 
     b00 *= invdet;
     b01 *= invdet;
@@ -256,10 +236,11 @@ SkM44& SkM44::setRotateUnitSinCos(SkV3 axis, SkScalar sinAngle, SkScalar cosAngl
     SkScalar s = sinAngle;
     SkScalar t = 1 - c;
 
-    return this->set44(t*x*x + c,   t*x*y - s*z, t*x*z + s*y, 0,
-                       t*x*y + s*z, t*y*y + c,   t*y*z - s*x, 0,
-                       t*x*z - s*y, t*y*z + s*x, t*z*z + c,   0,
-                       0,           0,           0,           1);
+    *this = { t*x*x + c,   t*x*y - s*z, t*x*z + s*y, 0,
+              t*x*y + s*z, t*y*y + c,   t*y*z - s*x, 0,
+              t*x*z - s*y, t*y*z + s*x, t*z*z + c,   0,
+              0,           0,           0,           1 };
+    return *this;
 }
 
 SkM44& SkM44::setRotate(SkV3 axis, SkScalar radians) {

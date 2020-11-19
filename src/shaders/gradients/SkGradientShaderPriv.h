@@ -79,19 +79,17 @@ protected:
 
     bool onAppendStages(const SkStageRec&) const override;
 
-    bool onProgram(skvm::Builder* p,
-                   const SkMatrix& ctm, const SkMatrix* localM,
-                   SkFilterQuality quality, SkColorSpace* dstCS,
-                   skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
-                   skvm::F32 x, skvm::F32 y,
-                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
+    skvm::Color onProgram(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
+                          const SkMatrixProvider&, const SkMatrix* localM,
+                          SkFilterQuality quality, const SkColorInfo& dstCS,
+                          skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override;
 
     virtual void appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* tPipeline,
                                       SkRasterPipeline* postPipeline) const = 0;
 
     // Produce t from (x,y), modifying mask if it should be anything other than ~0.
     virtual skvm::F32 transformT(skvm::Builder*, skvm::Uniforms*,
-                                 skvm::F32 x, skvm::F32 y, skvm::I32* mask) const = 0;
+                                 skvm::Coord coord, skvm::I32* mask) const = 0;
 
     template <typename T, typename... Args>
     static Context* CheckedMakeContext(SkArenaAlloc* alloc, Args&&... args) {
@@ -143,7 +141,7 @@ private:
 
     bool                                        fColorsAreOpaque;
 
-    typedef SkShaderBase INHERITED;
+    using INHERITED = SkShaderBase;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

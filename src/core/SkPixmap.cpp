@@ -15,11 +15,13 @@
 #include "include/private/SkHalf.h"
 #include "include/private/SkImageInfoPriv.h"
 #include "include/private/SkNx.h"
+#include "include/private/SkTPin.h"
 #include "include/private/SkTemplates.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkMask.h"
+#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkPixmapPriv.h"
 #include "src/core/SkRasterClip.h"
 #include "src/core/SkUtils.h"
@@ -174,10 +176,10 @@ bool SkPixmap::erase(SkColor color, const SkIRect& subset) const {
     return this->erase(SkColor4f::FromColor(color), &subset);
 }
 
-bool SkPixmap::erase(const SkColor4f& color, const SkIRect* subset) const {
+bool SkPixmap::erase(const SkColor4f& color, SkColorSpace* cs, const SkIRect* subset) const {
     SkPaint paint;
     paint.setBlendMode(SkBlendMode::kSrc);
-    paint.setColor4f(color, this->colorSpace());
+    paint.setColor4f(color, cs);
 
     SkIRect clip = this->bounds();
     if (subset && !clip.intersect(*subset)) {
@@ -186,9 +188,10 @@ bool SkPixmap::erase(const SkColor4f& color, const SkIRect* subset) const {
     SkRasterClip rc{clip};
 
     SkDraw draw;
-    draw.fDst    = *this;
-    draw.fMatrix = &SkMatrix::I();
-    draw.fRC     = &rc;
+    SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
+    draw.fDst            = *this;
+    draw.fMatrixProvider = &matrixProvider;
+    draw.fRC             = &rc;
 
     draw.drawPaint(paint);
     return true;
@@ -230,7 +233,6 @@ bool SkPixmap::scalePixels(const SkPixmap& actualDst, SkFilterQuality quality) c
         return false;
     }
     bitmap.setImmutable();        // Don't copy when we create an image.
-    bitmap.setIsVolatile(true);   // Disable any caching.
 
     SkMatrix scale = SkMatrix::MakeRectToRect(SkRect::Make(src.bounds()),
                                               SkRect::Make(dst.bounds()),
@@ -241,6 +243,7 @@ bool SkPixmap::scalePixels(const SkPixmap& actualDst, SkFilterQuality quality) c
                                                  SkTileMode::kClamp,
                                                  SkTileMode::kClamp,
                                                  &scale,
+                                                 (SkImageShader::FilterEnum)quality,
                                                  clampAsIfUnpremul);
 
     sk_sp<SkSurface> surface = SkSurface::MakeRasterDirect(dst.info(),
@@ -565,7 +568,7 @@ static bool draw_orientation(const SkPixmap& dst, const SkPixmap& src, SkEncoded
     SkBitmap bm;
     bm.installPixels(src);
 
-    SkMatrix m = SkEncodedOriginToMatrix(origin, src.width(), src.height());
+    SkMatrix m = SkEncodedOriginToMatrix(origin, dst.width(), dst.height());
 
     SkPaint p;
     p.setBlendMode(SkBlendMode::kSrc);

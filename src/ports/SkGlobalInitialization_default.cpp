@@ -31,7 +31,6 @@
     #include "include/effects/SkShaderMaskFilter.h"
     #include "include/effects/SkTableColorFilter.h"
     #include "src/core/SkColorFilter_Matrix.h"
-    #include "src/core/SkNormalSource.h"
     #include "src/core/SkRecordedDrawable.h"
     #include "src/effects/SkDashImpl.h"
     #include "src/effects/SkEmbossMaskFilter.h"
@@ -43,7 +42,6 @@
     #include "src/shaders/SkComposeShader.h"
     #include "src/shaders/SkEmptyShader.h"
     #include "src/shaders/SkImageShader.h"
-    #include "src/shaders/SkLightingShader.h"
     #include "src/shaders/SkLocalMatrixShader.h"
     #include "src/shaders/SkPictureShader.h"
     #include "src/shaders/SkShaderBase.h"
@@ -66,21 +64,18 @@
         SK_REGISTER_FLATTENABLE(SkColorShader);
         SK_REGISTER_FLATTENABLE(SkShader_Blend);
         SK_REGISTER_FLATTENABLE(SkShader_Lerp);
-        SK_REGISTER_FLATTENABLE(SkShader_LerpRed);
         SK_REGISTER_FLATTENABLE(SkEmptyShader);
         SK_REGISTER_FLATTENABLE(SkLocalMatrixShader);
         SK_REGISTER_FLATTENABLE(SkPictureShader);
         SkGradientShader::RegisterFlattenables();
-        SkLightingShader::RegisterFlattenables();
         SkPerlinNoiseShader::RegisterFlattenables();
         SkShaderBase::RegisterFlattenables();
 
         // Color filters.
         SkColorFilter_Matrix::RegisterFlattenables();
-        SK_REGISTER_FLATTENABLE(SkLumaColorFilter);
-        SkColorFilter::RegisterFlattenables();
+        SkLumaColorFilter::RegisterFlattenable();
+        SkColorFilterBase::RegisterFlattenables();
         SkHighContrastFilter::RegisterFlattenables();
-        SkOverdrawColorFilter::RegisterFlattenables();
         SkTableColorFilter::RegisterFlattenables();
 
         // Shader & color filter.
@@ -101,13 +96,13 @@
         SK_REGISTER_FLATTENABLE(SkPath1DPathEffect);
         SK_REGISTER_FLATTENABLE(SkPath2DPathEffect);
         SK_REGISTER_FLATTENABLE(SkStrokePE);
+        SK_REGISTER_FLATTENABLE(SkStrokeAndFillPE);
         SK_REGISTER_FLATTENABLE(SkTrimPE);
         SkPathEffect::RegisterFlattenables();
 
         // Misc.
         SK_REGISTER_FLATTENABLE(SkLayerDrawLooper);
         SK_REGISTER_FLATTENABLE(SkRecordedDrawable);
-        SkNormalSource::RegisterFlattenables();
     }
 
     /*

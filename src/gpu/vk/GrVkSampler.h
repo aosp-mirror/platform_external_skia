@@ -10,14 +10,14 @@
 
 #include "include/gpu/vk/GrVkTypes.h"
 #include "src/core/SkOpts.h"
-#include "src/gpu/vk/GrVkResource.h"
+#include "src/gpu/vk/GrVkManagedResource.h"
 #include "src/gpu/vk/GrVkSamplerYcbcrConversion.h"
 #include <atomic>
 
 class GrSamplerState;
 class GrVkGpu;
 
-class GrVkSampler : public GrVkResource {
+class GrVkSampler : public GrVkManagedResource {
 public:
     static GrVkSampler* Create(GrVkGpu* gpu, GrSamplerState, const GrVkYcbcrConversionInfo&);
 
@@ -51,21 +51,22 @@ public:
 
     uint32_t uniqueID() const { return fUniqueID; }
 
-#ifdef SK_TRACE_VK_RESOURCES
+#ifdef SK_TRACE_MANAGED_RESOURCES
     void dumpInfo() const override {
         SkDebugf("GrVkSampler: %d (%d refs)\n", fSampler, this->getRefCnt());
     }
 #endif
 
 private:
-    GrVkSampler(VkSampler sampler, GrVkSamplerYcbcrConversion* ycbcrConversion, Key key)
-            : INHERITED()
+    GrVkSampler(const GrVkGpu* gpu, VkSampler sampler,
+                GrVkSamplerYcbcrConversion* ycbcrConversion, Key key)
+            : INHERITED(gpu)
             , fSampler(sampler)
             , fYcbcrConversion(ycbcrConversion)
             , fKey(key)
             , fUniqueID(GenID()) {}
 
-    void freeGPUData(GrVkGpu* gpu) const override;
+    void freeGPUData() const override;
 
     static uint32_t GenID() {
         static std::atomic<uint32_t> nextID{1};
@@ -81,7 +82,7 @@ private:
     Key                         fKey;
     uint32_t                    fUniqueID;
 
-    typedef GrVkResource INHERITED;
+    using INHERITED = GrVkManagedResource;
 };
 
 #endif

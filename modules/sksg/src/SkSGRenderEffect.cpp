@@ -14,63 +14,19 @@
 
 namespace sksg {
 
-MaskFilter::MaskFilter(sk_sp<SkMaskFilter> mf)
-    : INHERITED(kBubbleDamage_Trait)
-    , fMaskFilter(std::move(mf)) {}
-
-MaskFilter::~MaskFilter() = default;
-
-void MaskFilter::setMaskFilter(sk_sp<SkMaskFilter> mf) {
-    if (mf != fMaskFilter) {
-        fMaskFilter = std::move(mf);
-        this->invalidate();
-    }
-}
-
-SkRect MaskFilter::onRevalidate(InvalidationController* ic, const SkMatrix& ctm) {
-    SkASSERT(this->hasInval());
-
-    fMaskFilter = this->onRevalidateMask();
-    return SkRect::MakeEmpty();
-}
-
-sk_sp<SkMaskFilter> MaskFilter::onRevalidateMask() {
-    return fMaskFilter;
-}
-
-sk_sp<MaskFilterEffect> MaskFilterEffect::Make(sk_sp<RenderNode> child, sk_sp<MaskFilter> mf) {
-    return child ? sk_sp<MaskFilterEffect>(new MaskFilterEffect(std::move(child), std::move(mf)))
+sk_sp<MaskShaderEffect> MaskShaderEffect::Make(sk_sp<RenderNode> child, sk_sp<SkShader> sh) {
+    return child ? sk_sp<MaskShaderEffect>(new MaskShaderEffect(std::move(child), std::move(sh)))
                  : nullptr;
 }
 
-MaskFilterEffect::MaskFilterEffect(sk_sp<RenderNode> child, sk_sp<MaskFilter> mf)
-    // masks may override descendent damage
-    : INHERITED(std::move(child), kOverrideDamage_Trait)
-    , fMaskFilter(std::move(mf)) {
-    this->observeInval(fMaskFilter);
+MaskShaderEffect::MaskShaderEffect(sk_sp<RenderNode> child, sk_sp<SkShader> sh)
+    : INHERITED(std::move(child))
+    , fShader(std::move(sh)) {
 }
 
-MaskFilterEffect::~MaskFilterEffect() {
-    this->unobserveInval(fMaskFilter);
-}
-
-SkRect MaskFilterEffect::onRevalidate(InvalidationController* ic, const SkMatrix& ctm) {
-    auto bounds = this->INHERITED::onRevalidate(ic, ctm);
-
-    if (fMaskFilter) {
-        fMaskFilter->revalidate(ic, ctm);
-        if (const auto* mfb = as_MFB(fMaskFilter->getMaskFilter())) {
-            mfb->computeFastBounds(bounds, &bounds);
-        }
-    }
-
-    return bounds;
-}
-
-void MaskFilterEffect::onRender(SkCanvas* canvas, const RenderContext* ctx) const {
+void MaskShaderEffect::onRender(SkCanvas* canvas, const RenderContext* ctx) const {
     const auto local_ctx = ScopedRenderContext(canvas, ctx)
-            .modulateMaskFilter(fMaskFilter ? fMaskFilter->getMaskFilter() : nullptr,
-                                canvas->getTotalMatrix());
+            .modulateMaskShader(fShader, canvas->getTotalMatrix());
 
     this->INHERITED::onRender(canvas, local_ctx);
 }
@@ -152,7 +108,10 @@ SkRect ImageFilterEffect::onRevalidate(InvalidationController* ic, const SkMatri
     fImageFilter->revalidate(ic, ctm);
 
     const auto& filter = fImageFilter->getFilter();
-    SkASSERT(!filter || filter->canComputeFastBounds());
+
+    // Would be nice for this this to stick, but canComputeFastBounds()
+    // appears to be conservative (false negatives).
+    // SkASSERT(!filter || filter->canComputeFastBounds());
 
     const auto content_bounds = this->INHERITED::onRevalidate(ic, ctm);
 
@@ -208,6 +167,9 @@ SkRect ImageFilter::onRevalidate(InvalidationController*, const SkMatrix&) {
     return SkRect::MakeEmpty();
 }
 
+ExternalImageFilter:: ExternalImageFilter() = default;
+ExternalImageFilter::~ExternalImageFilter() = default;
+
 sk_sp<DropShadowImageFilter> DropShadowImageFilter::Make(sk_sp<ImageFilter> input) {
     return sk_sp<DropShadowImageFilter>(new DropShadowImageFilter(std::move(input)));
 }
@@ -260,6 +222,37 @@ void BlendModeEffect::onRender(SkCanvas* canvas, const RenderContext* ctx) const
 const RenderNode* BlendModeEffect::onNodeAt(const SkPoint& p) const {
     // TODO: we likely need to do something more sophisticated than delegate to descendants here.
     return this->INHERITED::onNodeAt(p);
+}
+
+sk_sp<LayerEffect> LayerEffect::Make(sk_sp<RenderNode> child, SkBlendMode mode) {
+    return child ? sk_sp<LayerEffect>(new LayerEffect(std::move(child), mode))
+                 : nullptr;
+}
+
+LayerEffect::LayerEffect(sk_sp<RenderNode> child, SkBlendMode mode)
+    : INHERITED(std::move(child))
+    , fMode(mode) {}
+
+LayerEffect::~LayerEffect() = default;
+
+void LayerEffect::onRender(SkCanvas* canvas, const RenderContext* ctx) const {
+    SkAutoCanvasRestore acr(canvas, false);
+
+    // Commit any potential pending paint effects to their own layer.
+    const auto local_ctx = ScopedRenderContext(canvas, ctx).setIsolation(this->bounds(),
+                                                                         canvas->getTotalMatrix(),
+                                                                         true);
+
+    SkPaint layer_paint;
+    if (ctx) {
+        // Apply all optional context overrides upfront.
+        ctx->modulatePaint(canvas->getTotalMatrix(), &layer_paint);
+    }
+    layer_paint.setBlendMode(fMode);
+
+    canvas->saveLayer(nullptr, &layer_paint);
+
+    this->INHERITED::onRender(canvas, nullptr);
 }
 
 } // namespace sksg

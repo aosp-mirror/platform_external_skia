@@ -3,12 +3,44 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef GR_OP_ALLOCATE_USE_NEW
+#define GR_OP_ALLOCATE_USE_NEW
+#endif
+
+#ifndef SK_CODEC_DECODES_JPEG
+#define SK_CODEC_DECODES_JPEG
+#endif
+
+#ifndef SK_CODEC_DECODES_PNG
+#define SK_CODEC_DECODES_PNG
+#endif
+
 #ifndef SK_CODEC_DECODES_RAW
 #define SK_CODEC_DECODES_RAW
 #endif
 
+#ifndef SK_CODEC_DECODES_WEBP
+#define SK_CODEC_DECODES_WEBP
+#endif
+
+#ifndef SK_ENABLE_ANDROID_UTILS
+#define SK_ENABLE_ANDROID_UTILS
+#endif
+
 #ifndef SK_ENABLE_SKSL_INTERPRETER
 #define SK_ENABLE_SKSL_INTERPRETER
+#endif
+
+#ifndef SK_ENCODE_JPEG
+#define SK_ENCODE_JPEG
+#endif
+
+#ifndef SK_ENCODE_PNG
+#define SK_ENCODE_PNG
+#endif
+
+#ifndef SK_ENCODE_WEBP
+#define SK_ENCODE_WEBP
 #endif
 
 #ifndef SK_GAMMA_APPLY_TO_A8
@@ -27,20 +59,12 @@
 #define SK_GL
 #endif
 
+#ifndef SK_HAS_ANDROID_CODEC
+#define SK_HAS_ANDROID_CODEC
+#endif
+
 #ifndef SK_HAS_HEIF_LIBRARY
 #define SK_HAS_HEIF_LIBRARY
-#endif
-
-#ifndef SK_HAS_JPEG_LIBRARY
-#define SK_HAS_JPEG_LIBRARY
-#endif
-
-#ifndef SK_HAS_PNG_LIBRARY
-#define SK_HAS_PNG_LIBRARY
-#endif
-
-#ifndef SK_HAS_WEBP_LIBRARY
-#define SK_HAS_WEBP_LIBRARY
 #endif
 
 #ifndef SK_SUPPORT_PDF
@@ -49,6 +73,10 @@
 
 #ifndef SK_USE_LIBGIFCODEC
 #define SK_USE_LIBGIFCODEC
+#endif
+
+#ifndef SK_USE_VMA
+#define SK_USE_VMA
 #endif
 
 #ifndef SK_VULKAN

@@ -9,6 +9,7 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/private/SkColorData.h"
+#include "include/private/SkTPin.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
@@ -17,10 +18,8 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
-#include "include/gpu/GrTexture.h"
 #include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrCoordTransform.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/effects/generated/GrMagnifierEffect.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -52,7 +51,7 @@ private:
     SkRect   fSrcRect;
     SkScalar fInset;
 
-    typedef SkImageFilter_Base INHERITED;
+    using INHERITED = SkImageFilter_Base;
 };
 
 } // end namespace
@@ -136,17 +135,18 @@ sk_sp<SkSpecialImage> SkMagnifierImageFilterImpl::onFilterImage(const Context& c
         bounds.offset(input->subset().x(), input->subset().y());
         SkRect srcRect = fSrcRect.makeOffset((1.f - invXZoom) * input->subset().x(),
                                              (1.f - invYZoom) * input->subset().y());
+        auto inputFP = GrTextureEffect::Make(std::move(inputView), kPremul_SkAlphaType);
 
-        // TODO: Update generated fp file Make functions to take views instead of proxies
-        auto fp = GrMagnifierEffect::Make(std::move(inputView),
+        auto fp = GrMagnifierEffect::Make(std::move(inputFP),
                                           bounds,
                                           srcRect,
                                           invXZoom,
                                           invYZoom,
                                           bounds.width() * invInset,
                                           bounds.height() * invInset);
-        fp = GrColorSpaceXformEffect::Make(std::move(fp), input->getColorSpace(),
-                                           input->alphaType(), ctx.colorSpace());
+        fp = GrColorSpaceXformEffect::Make(std::move(fp),
+                                           input->getColorSpace(), input->alphaType(),
+                                           ctx.colorSpace(), kPremul_SkAlphaType);
         if (!fp) {
             return nullptr;
         }
@@ -198,11 +198,13 @@ sk_sp<SkSpecialImage> SkMagnifierImageFilterImpl::onFilterImage(const Context& c
                 SkScalar dist = SkScalarSqrt(SkScalarSquare(x_dist) +
                                              SkScalarSquare(y_dist));
                 dist = std::max(kScalar2 - dist, 0.0f);
-                weight = std::min(SkScalarSquare(dist), SK_Scalar1);
+                // SkTPin rather than std::max to handle potential NaN
+                weight = SkTPin(SkScalarSquare(dist), 0.0f, SK_Scalar1);
             } else {
                 SkScalar sqDist = std::min(SkScalarSquare(x_dist),
-                                              SkScalarSquare(y_dist));
-                weight = std::min(sqDist, SK_Scalar1);
+                                           SkScalarSquare(y_dist));
+                // SkTPin rather than std::max to handle potential NaN
+                weight = SkTPin(sqDist, 0.0f, SK_Scalar1);
             }
 
             SkScalar x_interp = weight * (fSrcRect.x() + x * invXZoom) + (1 - weight) * x;

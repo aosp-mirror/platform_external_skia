@@ -457,19 +457,19 @@ bool SkGifImageReader::decode(int frameIndex, bool* frameComplete)
 }
 
 // Parse incoming GIF data stream into internal data structures.
-SkCodec::Result SkGifImageReader::parse(SkGifImageReader::SkGIFParseQuery query)
+SkCodec::Result SkGifImageReader::parse(int query)
 {
     if (m_parseCompleted) {
         return SkCodec::kSuccess;
     }
 
-    if (SkGIFLoopCountQuery == query && m_loopCount != cLoopCountNotSeen) {
+    if ((int) SkGIFLoopCountQuery == query && m_loopCount != cLoopCountNotSeen) {
         // Loop count has already been parsed.
         return SkCodec::kSuccess;
     }
 
     // SkGIFSizeQuery and SkGIFFrameCountQuery are negative, so this is only meaningful when >= 0.
-    const int lastFrameToParse = (int) query;
+    const int lastFrameToParse = query;
     if (lastFrameToParse >= 0 && m_frames.count() > lastFrameToParse
                 && m_frames[lastFrameToParse]->isComplete()) {
         // We have already parsed this frame.
@@ -720,7 +720,7 @@ SkCodec::Result SkGifImageReader::parse(SkGifImageReader::SkGIFParseQuery query)
 
                 GETN(1, SkGIFNetscapeExtensionBlock);
 
-                if (SkGIFLoopCountQuery == query) {
+                if ((int) SkGIFLoopCountQuery == query) {
                     m_streamBuffer.flush();
                     return SkCodec::kSuccess;
                 }
@@ -807,7 +807,7 @@ SkCodec::Result SkGifImageReader::parse(SkGifImageReader::SkGIFParseQuery query)
             SkGIFFrameContext* currentFrame = m_frames.back().get();
             currentFrame->setHeaderDefined();
 
-            if (query == SkGIFSizeQuery) {
+            if (query == (int) SkGIFSizeQuery) {
                 // The decoder needs to stop, so we return here, before
                 // flushing the buffer. Next time through, we'll be in the same
                 // state, requiring the same amount in the buffer.

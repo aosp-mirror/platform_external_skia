@@ -9,9 +9,9 @@
 #define GrSoftwarePathRenderer_DEFINED
 
 #include "src/gpu/GrPathRenderer.h"
+#include "src/gpu/GrSurfaceProxyView.h"
 
 class GrProxyProvider;
-class GrTextureProxy;
 
 /**
  * This class uses the software side to render a path to an SkBitmap and
@@ -19,14 +19,16 @@ class GrTextureProxy;
  */
 class GrSoftwarePathRenderer : public GrPathRenderer {
 public:
+    const char* name() const final { return "SW"; }
+
     GrSoftwarePathRenderer(GrProxyProvider* proxyProvider, bool allowCaching)
             : fProxyProvider(proxyProvider)
             , fAllowCaching(allowCaching) {
     }
 
     static bool GetShapeAndClipBounds(GrRenderTargetContext*,
-                                      const GrClip& clip,
-                                      const GrShape& shape,
+                                      const GrClip* clip,
+                                      const GrStyledShape& shape,
                                       const SkMatrix& matrix,
                                       SkIRect* unclippedDevShapeBounds,
                                       SkIRect* clippedDevShapeBounds,
@@ -36,14 +38,14 @@ private:
     static void DrawNonAARect(GrRenderTargetContext* renderTargetContext,
                               GrPaint&& paint,
                               const GrUserStencilSettings& userStencilSettings,
-                              const GrClip& clip,
+                              const GrClip* clip,
                               const SkMatrix& viewMatrix,
                               const SkRect& rect,
                               const SkMatrix& localMatrix);
     static void DrawAroundInvPath(GrRenderTargetContext* renderTargetContext,
                                   GrPaint&& paint,
                                   const GrUserStencilSettings& userStencilSettings,
-                                  const GrClip& clip,
+                                  const GrClip* clip,
                                   const SkMatrix& viewMatrix,
                                   const SkIRect& devClipBounds,
                                   const SkIRect& devPathBounds);
@@ -55,12 +57,12 @@ private:
                                           GrRenderTargetContext* renderTargetContext,
                                           GrPaint&& paint,
                                           const GrUserStencilSettings& userStencilSettings,
-                                          const GrClip& clip,
+                                          const GrClip* clip,
                                           const SkMatrix& viewMatrix,
                                           const SkIPoint& textureOriginInDeviceSpace,
                                           const SkIRect& deviceSpaceRectToDraw);
 
-    StencilSupport onGetStencilSupport(const GrShape&) const override {
+    StencilSupport onGetStencilSupport(const GrStyledShape&) const override {
         return GrPathRenderer::kNoSupport_StencilSupport;
     }
 
@@ -72,7 +74,7 @@ private:
     GrProxyProvider*       fProxyProvider;
     bool                   fAllowCaching;
 
-    typedef GrPathRenderer INHERITED;
+    using INHERITED = GrPathRenderer;
 };
 
 #endif

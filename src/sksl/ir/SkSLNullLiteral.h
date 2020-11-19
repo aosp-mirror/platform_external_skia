@@ -16,24 +16,25 @@ namespace SkSL {
 /**
  * Represents 'null'.
  */
-struct NullLiteral : public Expression {
+class NullLiteral final : public Expression {
+public:
+    static constexpr Kind kExpressionKind = Kind::kNullLiteral;
+
     NullLiteral(const Context& context, int offset)
-    : INHERITED(offset, kNullLiteral_Kind, *context.fNull_Type) {}
+    : INHERITED(offset, kExpressionKind, context.fNull_Type.get()) {}
 
-    NullLiteral(int offset, const Type& type)
-    : INHERITED(offset, kNullLiteral_Kind, type) {}
+    NullLiteral(int offset, const Type* type)
+    : INHERITED(offset, kExpressionKind, type) {}
 
-#ifdef SK_DEBUG
     String description() const override {
         return "null";
     }
-#endif
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-    bool isConstant() const override {
+    bool isCompileTimeConstant() const override {
         return true;
     }
 
@@ -42,12 +43,13 @@ struct NullLiteral : public Expression {
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new NullLiteral(fOffset, fType));
+        return std::unique_ptr<Expression>(new NullLiteral(fOffset, &this->type()));
     }
 
-    typedef Expression INHERITED;
+private:
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

@@ -8,12 +8,12 @@
 #ifndef GrGpuResourceCacheAccess_DEFINED
 #define GrGpuResourceCacheAccess_DEFINED
 
-#include "include/gpu/GrGpuResource.h"
+#include "src/gpu/GrGpuResource.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 
 namespace skiatest {
     class Reporter;
-}
+}  // namespace skiatest
 
 /**
  * This class allows GrResourceCache increased privileged access to GrGpuResource objects.
@@ -81,7 +81,7 @@ private:
 
     CacheAccess(GrGpuResource* resource) : fResource(resource) {}
     CacheAccess(const CacheAccess& that) : fResource(that.fResource) {}
-    CacheAccess& operator=(const CacheAccess&); // unimpl
+    CacheAccess& operator=(const CacheAccess&) = delete;
 
     // No taking addresses of this type.
     const CacheAccess* operator&() const = delete;
@@ -96,7 +96,7 @@ private:
 
 inline GrGpuResource::CacheAccess GrGpuResource::cacheAccess() { return CacheAccess(this); }
 
-inline const GrGpuResource::CacheAccess GrGpuResource::cacheAccess() const {
+inline const GrGpuResource::CacheAccess GrGpuResource::cacheAccess() const {  // NOLINT(readability-const-return-type)
     return CacheAccess(const_cast<GrGpuResource*>(this));
 }
 

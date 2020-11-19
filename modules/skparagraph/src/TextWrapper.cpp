@@ -8,9 +8,16 @@ namespace textlayout {
 namespace {
 SkScalar littleRound(SkScalar a) {
     // This rounding is done to match Flutter tests. Must be removed..
-  return SkScalarRoundToScalar(a * 100.0)/100.0;
+    auto val = std::fabs(a);
+    if (val < 10000) {
+        return SkScalarRoundToScalar(a * 100) * (1.0f/100);
+    } else if (val < 100000) {
+        return SkScalarRoundToScalar(a *  10) * (1.0f/10);
+    } else {
+        return SkScalarFloorToScalar(a);
+    }
 }
-}
+}  // namespace
 
 // Since we allow cluster clipping when they don't fit
 // we have to work with stretches - parts of clusters
@@ -34,6 +41,22 @@ void TextWrapper::lookAhead(SkScalar maxWidth, Cluster* endOfClusters) {
                 fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, getClustersTrimmedWidth());
                 fWords.extend(fClusters);
                 break;
+            } else if (cluster->run()->isPlaceholder()) {
+                if (!fClusters.empty()) {
+                    // Placeholder ends the previous word
+                    fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, getClustersTrimmedWidth());
+                    fWords.extend(fClusters);
+                }
+
+                if (cluster->width() > maxWidth) {
+                    // Placeholder is longer than the line; it does not count in fMinIntrinsicWidth
+                    fClusters.extend(cluster);
+                    fTooLongCluster = true;
+                    fTooLongWord = true;
+                } else {
+                    // Placeholder does not fit the line; it will be considered again on the next line
+                }
+                break;
             }
 
             // Walk further to see if there is a too long word, cluster or glyph
@@ -42,7 +65,16 @@ void TextWrapper::lookAhead(SkScalar maxWidth, Cluster* endOfClusters) {
                 if (further->isSoftBreak() || further->isHardBreak() || further->isWhitespaces()) {
                     break;
                 }
-                nextWordLength += further->width();
+                if (further->run()->isPlaceholder()) {
+                  // Placeholder ends the word
+                  break;
+                }
+                if (maxWidth == 0) {
+                    // This is a tricky flutter case: layout(width:0) places 1 cluster on each line
+                    nextWordLength = std::max(nextWordLength, further->width());
+                } else {
+                    nextWordLength += further->width();
+                }
             }
             if (nextWordLength > maxWidth) {
                 // If the word is too long we can break it right now and hope it's enough
@@ -64,12 +96,23 @@ void TextWrapper::lookAhead(SkScalar maxWidth, Cluster* endOfClusters) {
             break;
         }
 
-        fClusters.extend(cluster);
+        if (cluster->run()->isPlaceholder()) {
+            if (!fClusters.empty()) {
+                // Placeholder ends the previous word
+                fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, getClustersTrimmedWidth());
+                fWords.extend(fClusters);
+            }
 
-        // Keep adding clusters/words
-        if (fClusters.endOfWord()) {
-            fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, getClustersTrimmedWidth());
-            fWords.extend(fClusters);
+            // It also creates a separate word; it does not count in fMinIntrinsicWidth
+            fWords.extend(cluster);
+        } else {
+            fClusters.extend(cluster);
+
+            // Keep adding clusters/words
+            if (fClusters.endOfWord()) {
+                fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, getClustersTrimmedWidth());
+                fWords.extend(fClusters);
+            }
         }
 
         if ((fHardLineBreak = cluster->isHardBreak())) {
@@ -119,17 +162,20 @@ void TextWrapper::trimEndSpaces(TextAlign align) {
 
 SkScalar TextWrapper::getClustersTrimmedWidth() {
     // Move the end of the line to the left
-    SkScalar width = fClusters.width();
-    auto cluster = fClusters.endCluster();
-    for (; cluster > fClusters.startCluster() && cluster->isWhitespaces(); --cluster) {
-        width -= cluster->width();
-    }
-    if (cluster >= fClusters.startCluster()) {
-        if (cluster->isWhitespaces()) {
-            width -= cluster->width();
-        } else {
-            width -= (cluster->width() - cluster->trimmedWidth(cluster->endPos()));
+    SkScalar width = 0;
+    bool trailingSpaces = true;
+    for (auto cluster = fClusters.endCluster(); cluster >= fClusters.startCluster(); --cluster) {
+        if (cluster->run()->isPlaceholder()) {
+            continue;
         }
+        if (trailingSpaces) {
+            if (!cluster->isWhitespaces()) {
+                width += cluster->trimmedWidth(cluster->endPos());
+                trailingSpaces = false;
+            }
+            continue;
+        }
+        width += cluster->width();
     }
     return width;
 }
@@ -177,11 +223,10 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
         return;
     }
     auto maxLines = parent->paragraphStyle().getMaxLines();
-    auto& ellipsisStr = parent->paragraphStyle().getEllipsis();
     auto align = parent->paragraphStyle().effective_align();
     auto unlimitedLines = maxLines == std::numeric_limits<size_t>::max();
     auto endlessLine = !SkScalarIsFinite(maxWidth);
-    auto hasEllipsis = !ellipsisStr.isEmpty();
+    auto hasEllipsis = parent->paragraphStyle().ellipsized();
 
     SkScalar softLineMaxIntrinsicWidth = 0;
     fEndLine = TextStretch(span.begin(), span.begin(), parent->strutForceHeight());
@@ -297,16 +342,24 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
         while (cluster != end || cluster->endPos() < end->endPos()) {
             fExceededMaxLines = true;
             if (cluster->isHardBreak()) {
+                // Hard line break ends the word and the line
                 fMaxIntrinsicWidth = std::max(fMaxIntrinsicWidth, softLineMaxIntrinsicWidth);
                 softLineMaxIntrinsicWidth = 0;
                 fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, lastWordLength);
                 lastWordLength = 0;
             } else if (cluster->isWhitespaces()) {
-                SkASSERT(cluster->isWhitespaces());
+                // Whitespaces end the word
+                softLineMaxIntrinsicWidth += cluster->width();
+                fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, lastWordLength);
+                lastWordLength = 0;
+            } else if (cluster->run()->isPlaceholder()) {
+                // Placeholder ends the previous word and creates a separate one
+                // it does not count in fMinIntrinsicWidth
                 softLineMaxIntrinsicWidth += cluster->width();
                 fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, lastWordLength);
                 lastWordLength = 0;
             } else {
+                // Nothing out of ordinary - just add this cluster to the word and to the line
                 softLineMaxIntrinsicWidth += cluster->width();
                 lastWordLength += cluster->width();
             }

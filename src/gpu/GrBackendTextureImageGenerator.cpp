@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "include/gpu/GrContext.h"
-#include "include/gpu/GrTexture.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkMessageBus.h"
 #include "src/gpu/GrBackendTextureImageGenerator.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
@@ -19,7 +18,7 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrResourceProviderPriv.h"
 #include "src/gpu/GrSemaphore.h"
-#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxyPriv.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/gl/GrGLTexture.h"
@@ -45,7 +44,7 @@ std::unique_ptr<SkImageGenerator>
 GrBackendTextureImageGenerator::Make(sk_sp<GrTexture> texture, GrSurfaceOrigin origin,
                                      std::unique_ptr<GrSemaphore> semaphore, SkColorType colorType,
                                      SkAlphaType alphaType, sk_sp<SkColorSpace> colorSpace) {
-    GrContext* context = texture->getContext();
+    GrDirectContext* context = texture->getContext();
 
     // Attach our texture to this context's resource cache. This ensures that deletion will happen
     // in the correct thread/context. This adds the only ref to the texture that will persist from
@@ -94,8 +93,11 @@ void GrBackendTextureImageGenerator::ReleaseRefHelper_TextureReleaseProc(void* c
 }
 
 GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
-        GrRecordingContext* context, const SkImageInfo& info,
-        const SkIPoint& origin, bool willNeedMipMaps) {
+        GrRecordingContext* context,
+        const SkImageInfo& info,
+        const SkIPoint& origin,
+        GrMipmapped mipMapped,
+        GrImageTexGenPolicy texGenPolicy) {
     SkASSERT(context);
 
     if (context->backend() != fBackendTexture.backend()) {
@@ -125,8 +127,8 @@ GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
         // The ref we add to fRefHelper here will be passed into and owned by the
         // GrRefCntedCallback.
         fRefHelper->ref();
-        releaseProcHelper.reset(
-                new GrRefCntedCallback(ReleaseRefHelper_TextureReleaseProc, fRefHelper));
+        releaseProcHelper =
+                GrRefCntedCallback::Make(ReleaseRefHelper_TextureReleaseProc, fRefHelper);
         fRefHelper->fBorrowingContextReleaseProc = releaseProcHelper.get();
     }
     fRefHelper->fBorrowingContextID = context->priv().contextID();
@@ -144,83 +146,81 @@ GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
 
     GrColorType grColorType = SkColorTypeToGrColorType(info.colorType());
 
-    GrMipMapped mipMapped = fBackendTexture.hasMipMaps() ? GrMipMapped::kYes : GrMipMapped::kNo;
+    GrMipmapped textureIsMipMapped = fBackendTexture.hasMipmaps() ? GrMipmapped::kYes
+                                                                  : GrMipmapped::kNo;
 
     // Ganesh assumes that, when wrapping a mipmapped backend texture from a client, that its
     // mipmaps are fully fleshed out.
-    GrMipMapsStatus mipMapsStatus = fBackendTexture.hasMipMaps()
-            ? GrMipMapsStatus::kValid : GrMipMapsStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = fBackendTexture.hasMipmaps()
+            ? GrMipmapStatus::kValid : GrMipmapStatus::kNotAllocated;
 
     GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(backendFormat, grColorType);
 
     // Must make copies of member variables to capture in the lambda since this image generator may
     // be deleted before we actually execute the lambda.
     sk_sp<GrTextureProxy> proxy = proxyProvider->createLazyProxy(
-            [
-              refHelper = fRefHelper, releaseProcHelper, backendTexture = fBackendTexture,
-              grColorType
-            ](GrResourceProvider * resourceProvider)
-                    ->GrSurfaceProxy::LazyCallbackResult {
-                        if (refHelper->fSemaphore) {
-                            resourceProvider->priv().gpu()->waitSemaphore(
-                                    refHelper->fSemaphore.get());
-                        }
+            [refHelper = fRefHelper, releaseProcHelper, backendTexture = fBackendTexture](
+                    GrResourceProvider* resourceProvider,
+                    const GrSurfaceProxy::LazySurfaceDesc&) -> GrSurfaceProxy::LazyCallbackResult {
+                if (refHelper->fSemaphore) {
+                    resourceProvider->priv().gpu()->waitSemaphore(refHelper->fSemaphore.get());
+                }
 
-                        // If a client re-draws the same image multiple times, the texture we return
-                        // will be cached and re-used. If they draw a subset, though, we may be
-                        // re-called. In that case, we want to re-use the borrowed texture we've
-                        // previously created.
-                        sk_sp<GrTexture> tex;
-                        SkASSERT(refHelper->fBorrowedTextureKey.isValid());
-                        auto surf = resourceProvider->findByUniqueKey<GrSurface>(
-                                refHelper->fBorrowedTextureKey);
-                        if (surf) {
-                            SkASSERT(surf->asTexture());
-                            tex = sk_ref_sp(surf->asTexture());
-                        } else {
-                            // We just gained access to the texture. If we're on the original
-                            // context, we could use the original texture, but we'd have no way of
-                            // detecting that it's no longer in-use. So we always make a wrapped
-                            // copy, where the release proc informs us that the context is done with
-                            // it. This is unfortunate - we'll have two texture objects referencing
-                            // the same GPU object. However, no client can ever see the original
-                            // texture, so this should be safe. We make the texture uncacheable so
-                            // that the release proc is called ASAP.
-                            tex = resourceProvider->wrapBackendTexture(
-                                    backendTexture, grColorType, kBorrow_GrWrapOwnership,
-                                    GrWrapCacheable::kNo, kRead_GrIOType);
-                            if (!tex) {
-                                return {};
-                            }
-                            tex->setRelease(releaseProcHelper);
-                            tex->resourcePriv().setUniqueKey(refHelper->fBorrowedTextureKey);
-                        }
-                        // We use keys to avoid re-wrapping the GrBackendTexture in a GrTexture.
-                        // This is unrelated to the whatever SkImage key may be assigned to the
-                        // proxy.
-                        return {std::move(tex), true,
-                                GrSurfaceProxy::LazyInstantiationKeyMode::kUnsynced};
-                    },
-            backendFormat, fBackendTexture.dimensions(), readSwizzle, GrRenderable::kNo, 1,
-            mipMapped, mipMapsStatus, GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact,
-            SkBudgeted::kNo, GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
+                // If a client re-draws the same image multiple times, the texture we return
+                // will be cached and re-used. If they draw a subset, though, we may be
+                // re-called. In that case, we want to re-use the borrowed texture we've
+                // previously created.
+                sk_sp<GrTexture> tex;
+                SkASSERT(refHelper->fBorrowedTextureKey.isValid());
+                auto surf = resourceProvider->findByUniqueKey<GrSurface>(
+                        refHelper->fBorrowedTextureKey);
+                if (surf) {
+                    SkASSERT(surf->asTexture());
+                    tex = sk_ref_sp(surf->asTexture());
+                } else {
+                    // We just gained access to the texture. If we're on the original
+                    // context, we could use the original texture, but we'd have no way of
+                    // detecting that it's no longer in-use. So we always make a wrapped
+                    // copy, where the release proc informs us that the context is done with
+                    // it. This is unfortunate - we'll have two texture objects referencing
+                    // the same GPU object. However, no client can ever see the original
+                    // texture, so this should be safe. We make the texture uncacheable so
+                    // that the release proc is called ASAP.
+                    tex = resourceProvider->wrapBackendTexture(
+                            backendTexture, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo,
+                            kRead_GrIOType);
+                    if (!tex) {
+                        return {};
+                    }
+                    tex->setRelease(releaseProcHelper);
+                    tex->resourcePriv().setUniqueKey(refHelper->fBorrowedTextureKey);
+                }
+                // We use keys to avoid re-wrapping the GrBackendTexture in a GrTexture.
+                // This is unrelated to the whatever SkImage key may be assigned to the
+                // proxy.
+                return {std::move(tex), true, GrSurfaceProxy::LazyInstantiationKeyMode::kUnsynced};
+            },
+            backendFormat, fBackendTexture.dimensions(), textureIsMipMapped, mipmapStatus,
+            GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kNo,
+            GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
     if (!proxy) {
         return {};
     }
 
-    if (origin.isZero() && info.dimensions() == fBackendTexture.dimensions() &&
-        (!willNeedMipMaps || GrMipMapped::kYes == proxy->mipMapped())) {
+    if (texGenPolicy == GrImageTexGenPolicy::kDraw && origin.isZero() &&
+        info.dimensions() == fBackendTexture.dimensions() &&
+        (mipMapped == GrMipmapped::kNo || proxy->mipmapped() == GrMipmapped::kYes)) {
         // If the caller wants the entire texture and we have the correct mip support, we're done
         return GrSurfaceProxyView(std::move(proxy), fSurfaceOrigin, readSwizzle);
     } else {
-        // Otherwise, make a copy of the requested subset. Make sure our temporary is renderable,
-        // because Vulkan will want to do the copy as a draw. All other copies would require a
-        // layout change in Vulkan and we do not change the layout of borrowed images.
-        GrMipMapped mipMapped = willNeedMipMaps ? GrMipMapped::kYes : GrMipMapped::kNo;
         SkIRect subset = SkIRect::MakeXYWH(origin.fX, origin.fY, info.width(), info.height());
 
-        return GrSurfaceProxy::Copy(
-                context, proxy.get(), fSurfaceOrigin, grColorType, mipMapped, subset,
-                SkBackingFit::kExact, SkBudgeted::kYes);
+        SkBudgeted budgeted = texGenPolicy == GrImageTexGenPolicy::kNew_Uncached_Unbudgeted
+                                      ? SkBudgeted::kNo
+                                      : SkBudgeted::kYes;
+
+        auto copy = GrSurfaceProxy::Copy(context, proxy.get(), fSurfaceOrigin, mipMapped, subset,
+                                         SkBackingFit::kExact, budgeted);
+        return {std::move(copy), fSurfaceOrigin, readSwizzle};
     }
 }

@@ -96,17 +96,18 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromCodec(std::unique_ptr<Sk
         case SkEncodedImageFormat::kBMP:
         case SkEncodedImageFormat::kWBMP:
         case SkEncodedImageFormat::kHEIF:
+        case SkEncodedImageFormat::kAVIF:
             return std::make_unique<SkSampledCodec>(codec.release(), orientationBehavior);
 #ifdef SK_HAS_WUFFS_LIBRARY
         case SkEncodedImageFormat::kGIF:
 #endif
-#ifdef SK_HAS_WEBP_LIBRARY
+#ifdef SK_CODEC_DECODES_WEBP
         case SkEncodedImageFormat::kWEBP:
 #endif
 #ifdef SK_CODEC_DECODES_RAW
         case SkEncodedImageFormat::kDNG:
 #endif
-#if defined(SK_HAS_WEBP_LIBRARY) || defined(SK_CODEC_DECODES_RAW) || defined(SK_HAS_WUFFS_LIBRARY)
+#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || defined(SK_HAS_WUFFS_LIBRARY)
             return std::make_unique<SkAndroidCodecAdapter>(codec.release(), orientationBehavior);
 #endif
 
@@ -371,19 +372,33 @@ SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& requestInfo,
     AndroidOptions defaultOptions;
     if (!options) {
         options = &defaultOptions;
-    } else if (options->fSubset) {
-        if (!is_valid_subset(*options->fSubset, adjustedInfo.dimensions())) {
-            return SkCodec::kInvalidParameters;
+    } else {
+        if (options->fSubset) {
+            if (!is_valid_subset(*options->fSubset, adjustedInfo.dimensions())) {
+                return SkCodec::kInvalidParameters;
+            }
+
+            if (SkIRect::MakeSize(adjustedInfo.dimensions()) == *options->fSubset) {
+                // The caller wants the whole thing, rather than a subset. Modify
+                // the AndroidOptions passed to onGetAndroidPixels to not specify
+                // a subset.
+                defaultOptions = *options;
+                defaultOptions.fSubset = nullptr;
+                options = &defaultOptions;
+            }
         }
 
-        if (SkIRect::MakeSize(adjustedInfo.dimensions()) == *options->fSubset) {
-            // The caller wants the whole thing, rather than a subset. Modify
-            // the AndroidOptions passed to onGetAndroidPixels to not specify
-            // a subset.
-            defaultOptions = *options;
-            defaultOptions.fSubset = nullptr;
-            options = &defaultOptions;
+        // To simplify frame compositing, force the client to use kIgnore and
+        // handle orientation themselves.
+        if (options->fFrameIndex != 0 && fOrientationBehavior == ExifOrientationBehavior::kRespect
+                && fCodec->getOrigin() != kDefault_SkEncodedOrigin) {
+            return SkCodec::kInvalidParameters;
         }
+    }
+
+    if (auto result = fCodec->handleFrameIndex(requestInfo, requestPixels, requestRowBytes,
+            *options, this); result != SkCodec::kSuccess) {
+        return result;
     }
 
     if (ExifOrientationBehavior::kIgnore == fOrientationBehavior) {

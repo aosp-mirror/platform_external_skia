@@ -7,7 +7,7 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
-#include "modules/skottie/src/Animator.h"
+#include "include/private/SkTPin.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGRenderEffect.h"
 #include "src/utils/SkJSON.h"
@@ -41,9 +41,10 @@ private:
             kRepeatEdge_Index = 2,
         };
 
-        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kBlurriness_Index), &fBlurriness);
-        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kDimensions_Index), &fDimensions);
-        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kRepeatEdge_Index), &fRepeatEdge);
+        EffectBinder(jprops, *abuilder, this)
+                .bind(kBlurriness_Index, fBlurriness)
+                .bind(kDimensions_Index, fDimensions)
+                .bind(kRepeatEdge_Index, fRepeatEdge);
     }
 
     void onSync() override {
@@ -56,9 +57,7 @@ private:
         const auto dim_index = SkTPin<size_t>(static_cast<size_t>(fDimensions),
                                               1, SK_ARRAY_COUNT(kDimensionsMap)) - 1;
 
-        // Close enough to AE.
-        static constexpr SkScalar kBlurrinessToSigmaFactor = 0.3f;
-        const auto sigma = fBlurriness * kBlurrinessToSigmaFactor;
+        const auto sigma = fBlurriness * kBlurSizeToSigma;
 
         fBlur->setSigma({ sigma * kDimensionsMap[dim_index].x(),
                           sigma * kDimensionsMap[dim_index].y() });
@@ -81,7 +80,7 @@ private:
                 fRepeatEdge = 0; // 0 -> clamp, 1 -> repeat
 };
 
-} // anonymous ns
+}  // namespace
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachGaussianBlurEffect(
         const skjson::ArrayValue& jprops,

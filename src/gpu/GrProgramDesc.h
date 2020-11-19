@@ -88,10 +88,9 @@ protected:
      * @param programInfo   Program information need to build the key
      * @param caps          the caps
      **/
-    static bool Build(GrProgramDesc*, const GrRenderTarget*, const GrProgramInfo&, const GrCaps&);
+    static bool Build(GrProgramDesc*, GrRenderTarget*, const GrProgramInfo&, const GrCaps&);
 
-    // This is strictly an OpenGL call since the other backends have additional data in their
-    // keys
+    // This is strictly an OpenGL call since the other backends have additional data in their keys.
     static bool BuildFromData(GrProgramDesc* desc, const void* keyData, size_t keyLength) {
         if (!SkTFitsIn<int>(keyLength)) {
             return false;
@@ -104,7 +103,7 @@ protected:
     // TODO: this should be removed and converted to just data added to the key
     struct KeyHeader {
         // Set to uniquely identify any swizzling of the shader's output color(s).
-        uint16_t fOutputSwizzle;
+        uint16_t fWriteSwizzle;
         uint8_t fColorFragmentProcessorCnt; // Can be packed into 4 bits if required.
         uint8_t fCoverageFragmentProcessorCnt;
         // Set to uniquely identify the rt's origin, or 0 if the shader does not require this info.
@@ -134,7 +133,7 @@ protected:
     enum KeyOffsets {
         kHeaderOffset = 0,
         kHeaderSize = SkAlign4(sizeof(KeyHeader)),
-        // This is the offset into the backenend specific part of the key, which includes
+        // This is the offset into the backend-specific part of the key, which includes
         // per-processor keys.
         kProcessorKeysOffset = kHeaderOffset + kHeaderSize,
     };

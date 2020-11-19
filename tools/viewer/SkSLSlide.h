@@ -28,6 +28,7 @@ private:
     bool rebuild();
 
     SkString fSkSL;
+    bool fCodeIsDirty;
     sk_sp<SkRuntimeEffect> fEffect;
     SkAutoTMalloc<char> fInputs;
     SkTArray<sk_sp<SkShader>> fChildren;

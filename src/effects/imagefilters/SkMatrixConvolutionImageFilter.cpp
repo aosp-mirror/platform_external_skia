@@ -12,13 +12,15 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkUnPreMultiply.h"
 #include "include/private/SkColorData.h"
+#include "include/private/SkTPin.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/gpu/SkGr.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/effects/GrMatrixConvolutionEffect.h"
 #endif
@@ -94,7 +96,7 @@ private:
                             const SkIRect& rect,
                             const SkIRect& bounds) const;
 
-    typedef SkImageFilter_Base INHERITED;
+    using INHERITED = SkImageFilter_Base;
 };
 
 class UncheckedPixelFetcher {
@@ -232,12 +234,7 @@ sk_sp<SkFlattenable> SkMatrixConvolutionImageFilterImpl::CreateProc(SkReadBuffer
     kernelOffset.fX = buffer.readInt();
     kernelOffset.fY = buffer.readInt();
 
-    SkTileMode tileMode;
-    if (buffer.isVersionLT(SkPicturePriv::kCleanupImageFilterEnums_Version)) {
-        tileMode = to_sktilemode(buffer.read32LE(SkMatrixConvolutionImageFilter::kLast_TileMode));
-    } else {
-        tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
-    }
+    SkTileMode tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
     bool convolveAlpha = buffer.readBool();
 
     if (!buffer.isValid()) {
@@ -359,25 +356,6 @@ void SkMatrixConvolutionImageFilterImpl::filterBorderPixels(const SkBitmap& src,
     }
 }
 
-#if SK_SUPPORT_GPU
-
-static GrTextureDomain::Mode convert_tilemodes(SkTileMode tileMode) {
-    switch (tileMode) {
-    case SkTileMode::kClamp:
-        return GrTextureDomain::kClamp_Mode;
-    case SkTileMode::kMirror:
-        return GrTextureDomain::kMirrorRepeat_Mode;
-    case SkTileMode::kRepeat:
-        return GrTextureDomain::kRepeat_Mode;
-    case SkTileMode::kDecal:
-        return GrTextureDomain::kDecal_Mode;
-    default:
-        SkASSERT(false);
-    }
-    return GrTextureDomain::kIgnore_Mode;
-}
-#endif
-
 sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilterImpl::onFilterImage(const Context& ctx,
                                                                         SkIPoint* offset) const {
     SkIPoint inputOffset = SkIPoint::Make(0, 0);
@@ -408,9 +386,7 @@ sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilterImpl::onFilterImage(const Co
     }
 
 #if SK_SUPPORT_GPU
-    // Note: if the kernel is too big, the GPU path falls back to SW
-    if (ctx.gpuBacked() &&
-        fKernelSize.width() * fKernelSize.height() <= MAX_KERNEL_SIZE) {
+    if (ctx.gpuBacked()) {
         auto context = ctx.getContext();
 
         // Ensure the input is in the destination color space. Typically applyCropRect will have
@@ -431,15 +407,17 @@ sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilterImpl::onFilterImage(const Co
         // Map srcBounds from input's logical image domain to that of the proxy
         srcBounds.offset(input->subset().x(), input->subset().y());
 
-        auto fp = GrMatrixConvolutionEffect::Make(std::move(inputView),
+        auto fp = GrMatrixConvolutionEffect::Make(context,
+                                                  std::move(inputView),
                                                   srcBounds,
                                                   fKernelSize,
                                                   fKernel,
                                                   fGain,
                                                   fBias,
                                                   fKernelOffset,
-                                                  convert_tilemodes(fTileMode),
-                                                  fConvolveAlpha);
+                                                  SkTileModeToWrapMode(fTileMode),
+                                                  fConvolveAlpha,
+                                                  *ctx.getContext()->priv().caps());
         if (!fp) {
             return nullptr;
         }

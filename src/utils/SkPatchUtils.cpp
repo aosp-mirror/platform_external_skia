@@ -7,7 +7,9 @@
 
 #include "src/utils/SkPatchUtils.h"
 
+#include "include/core/SkVertices.h"
 #include "include/private/SkColorData.h"
+#include "include/private/SkTPin.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkColorSpacePriv.h"
@@ -44,7 +46,7 @@ namespace {
         kBottomRight_Corner,
         kBottomLeft_Corner
     };
-}
+}  // namespace
 
 /**
  * Evaluator to sample the values of a cubic bezier using forward differences.

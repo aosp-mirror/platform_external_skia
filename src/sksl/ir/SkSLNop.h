@@ -16,27 +16,29 @@ namespace SkSL {
 /**
  * A no-op statement that does nothing.
  */
-struct Nop : public Statement {
-    Nop()
-    : INHERITED(-1, kNop_Kind) {}
+class Nop final : public Statement {
+public:
+    static constexpr Kind kStatementKind = Kind::kNop;
 
-    virtual bool isEmpty() const override {
+    Nop()
+    : INHERITED(-1, kStatementKind) {}
+
+    bool isEmpty() const override {
         return true;
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return String(";");
     }
-#endif
 
     std::unique_ptr<Statement> clone() const override {
         return std::unique_ptr<Statement>(new Nop());
     }
 
-    typedef Statement INHERITED;
+private:
+    using INHERITED = Statement;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

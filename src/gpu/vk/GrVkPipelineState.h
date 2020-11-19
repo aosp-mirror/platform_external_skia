@@ -22,6 +22,7 @@ class GrVkDescriptorSet;
 class GrVkGpu;
 class GrVkImageView;
 class GrVkPipeline;
+class GrVkRenderTarget;
 class GrVkSampler;
 class GrVkTexture;
 class GrVkUniformBuffer;
@@ -47,8 +48,7 @@ public:
             const UniformInfoArray& samplers,
             std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
             std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
-            std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fragmentProcessors,
-            int fFragmentProcessorCnt);
+            std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fragmentProcessors);
 
     ~GrVkPipelineState();
 
@@ -62,15 +62,13 @@ public:
                             const GrSurfaceProxy* const primitiveProcessorTextures[],
                             GrVkCommandBuffer*);
 
-    void bindPipeline(const GrVkGpu* gpu, GrVkCommandBuffer* commandBuffer);
+    bool setAndBindInputAttachment(GrVkGpu*, GrVkRenderTarget* renderTarget, GrVkCommandBuffer*);
 
-    void addUniformResources(GrVkCommandBuffer&, GrVkSampler*[], GrVkTexture*[], int numTextures);
+    void bindPipeline(const GrVkGpu* gpu, GrVkCommandBuffer* commandBuffer);
 
     void freeGPUResources(GrVkGpu* gpu);
 
 private:
-    void writeUniformBuffers(const GrVkGpu* gpu);
-
     /**
      * We use the RT's size and origin to adjust from Skia device space to vulkan normalized device
      * space and to make device space positions have the correct origin for processors that require
@@ -110,10 +108,8 @@ private:
     // Helper for setData() that sets the view matrix and loads the render target height uniform
     void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin);
 
-    // GrVkResources
+    // GrManagedResources
     GrVkPipeline* fPipeline;
-
-    const GrVkDescriptorSet* fUniformDescriptorSet;
 
     const GrVkDescriptorSetManager::Handle fSamplerDSHandle;
 
@@ -129,7 +125,6 @@ private:
     std::unique_ptr<GrGLSLPrimitiveProcessor> fGeometryProcessor;
     std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
     std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
-    int fFragmentProcessorCnt;
 
     GrVkPipelineStateDataManager fDataManager;
 

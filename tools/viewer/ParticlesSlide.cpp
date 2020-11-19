@@ -7,6 +7,7 @@
 
 #include "tools/viewer/ParticlesSlide.h"
 
+#include "include/core/SkCanvas.h"
 #include "modules/particles/include/SkParticleEffect.h"
 #include "modules/particles/include/SkParticleSerialization.h"
 #include "modules/particles/include/SkReflected.h"
@@ -242,11 +243,10 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
         for (int i = 0; i < fLoaded.count(); ++i) {
             ImGui::PushID(i);
             if (fAnimated && ImGui::Button("Play")) {
-                sk_sp<SkParticleEffect> effect(new SkParticleEffect(fLoaded[i].fParams,
-                                                                    fRandom));
-                effect->start(fAnimationTime, looped);
+                sk_sp<SkParticleEffect> effect(new SkParticleEffect(fLoaded[i].fParams));
+                effect->start(fAnimationTime, looped, { 0, 0 }, { 0, -1 }, 1, { 0, 0 }, 0,
+                              { 1, 1, 1, 1 }, 0, 0, fRandom.nextU());
                 fRunning.push_back({ fLoaded[i].fName, effect, false });
-                fRandom.nextU();
             }
             ImGui::SameLine();
 

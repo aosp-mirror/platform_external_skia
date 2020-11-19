@@ -37,13 +37,14 @@ public:
         SkRect fDevBounds45;  // Bounding box in "| 1  -1 | * devCoords" space. See GrOctoBounds.
                               //                  | 1   1 |
         SkIVector fDevToAtlasOffset;  // Translation from device space to location in atlas.
-        uint64_t fColor;  // Color always stored as 4 x fp16
+        SkPMColor4f fColor;  // Color always stored as 4 x fp32
 
-        void set(const GrOctoBounds&, const SkIVector& devToAtlasOffset, uint64_t, GrFillRule);
-        void set(const GrCCPathCacheEntry&, const SkIVector& shift, uint64_t, GrFillRule);
+        void set(const GrOctoBounds&, const SkIVector& devToAtlasOffset, const SkPMColor4f&,
+                 GrFillRule);
+        void set(const GrCCPathCacheEntry&, const SkIVector& shift, const SkPMColor4f&, GrFillRule);
     };
 
-    static_assert(4 * 12 == sizeof(Instance));
+    static_assert(4 * 14 == sizeof(Instance));
 
     static sk_sp<const GrGpuBuffer> FindVertexBuffer(GrOnFlushResourceProvider*);
     static sk_sp<const GrGpuBuffer> FindIndexBuffer(GrOnFlushResourceProvider*);
@@ -63,12 +64,11 @@ public:
                       const SkMatrix& viewMatrixIfUsingLocalCoords = SkMatrix::I());
 
     const char* name() const override { return "GrCCPathProcessor"; }
-    void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
-        b->add32((uint32_t)fCoverageMode);
-    }
+    void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override;
+
     GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override;
 
-    void drawPaths(GrOpFlushState*, const GrPipeline&, const GrPipeline::FixedDynamicState*,
+    void drawPaths(GrOpFlushState*, const GrPipeline&, const GrSurfaceProxy& atlasProxy,
                    const GrCCPerFlushResources&, int baseInstance, int endInstance,
                    const SkRect& bounds) const;
 
@@ -85,7 +85,7 @@ private:
             {"devbounds", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
             {"devbounds45", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
             {"dev_to_atlas_offset", kInt2_GrVertexAttribType, kInt2_GrSLType},
-            {"color", kHalf4_GrVertexAttribType, kHalf4_GrSLType}
+            {"color", kFloat4_GrVertexAttribType, kHalf4_GrSLType}
     };
     static constexpr int kColorAttribIdx = 3;
     static constexpr Attribute kCornersAttrib =
@@ -93,11 +93,11 @@ private:
 
     class Impl;
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 inline void GrCCPathProcessor::Instance::set(
-        const GrOctoBounds& octoBounds, const SkIVector& devToAtlasOffset, uint64_t color,
+        const GrOctoBounds& octoBounds, const SkIVector& devToAtlasOffset, const SkPMColor4f& color,
         GrFillRule fillRule) {
     if (GrFillRule::kNonzero == fillRule) {
         // We cover "nonzero" paths with clockwise triangles, which is the default result from

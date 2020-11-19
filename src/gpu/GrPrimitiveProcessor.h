@@ -12,8 +12,7 @@
 #include "src/gpu/GrNonAtomicRef.h"
 #include "src/gpu/GrProcessor.h"
 #include "src/gpu/GrShaderVar.h"
-
-class GrCoordTransform;
+#include "src/gpu/GrSwizzle.h"
 
 /*
  * The GrPrimitiveProcessor represents some kind of geometric primitive.  This includes the shape
@@ -35,6 +34,7 @@ class GrCoordTransform;
  */
 
 class GrGLSLPrimitiveProcessor;
+class GrGLSLUniformHandler;
 
 /**
  * GrPrimitiveProcessor defines an interface which all subclasses must implement.  All
@@ -55,12 +55,14 @@ public:
         constexpr Attribute(const char* name,
                             GrVertexAttribType cpuType,
                             GrSLType gpuType)
-            : fName(name), fCPUType(cpuType), fGPUType(gpuType) {}
+                : fName(name), fCPUType(cpuType), fGPUType(gpuType) {
+            SkASSERT(name && gpuType != kVoid_GrSLType);
+        }
         constexpr Attribute(const Attribute&) = default;
 
         Attribute& operator=(const Attribute&) = default;
 
-        constexpr bool isInitialized() const { return SkToBool(fName); }
+        constexpr bool isInitialized() const { return fGPUType != kVoid_GrSLType; }
 
         constexpr const char* name() const { return fName; }
         constexpr GrVertexAttribType cpuType() const { return fCPUType; }
@@ -70,13 +72,13 @@ public:
         constexpr size_t sizeAlign4() const { return SkAlign4(this->size()); }
 
         GrShaderVar asShaderVar() const {
-            return {fName, fGPUType, GrShaderVar::kIn_TypeModifier};
+            return {fName, fGPUType, GrShaderVar::TypeModifier::In};
         }
 
     private:
         const char* fName = nullptr;
         GrVertexAttribType fCPUType = kFloat_GrVertexAttribType;
-        GrSLType fGPUType = kFloat_GrSLType;
+        GrSLType fGPUType = kVoid_GrSLType;
     };
 
     class Iter {
@@ -212,11 +214,15 @@ public:
 
     // We use these methods as a temporary back door to inject OpenGL tessellation code. Once
     // tessellation is supported by SkSL we can remove these.
-    virtual SkString getTessControlShaderGLSL(const char* versionAndExtensionDecls,
+    virtual SkString getTessControlShaderGLSL(const GrGLSLPrimitiveProcessor*,
+                                              const char* versionAndExtensionDecls,
+                                              const GrGLSLUniformHandler&,
                                               const GrShaderCaps&) const {
         SK_ABORT("Not implemented.");
     }
-    virtual SkString getTessEvaluationShaderGLSL(const char* versionAndExtensionDecls,
+    virtual SkString getTessEvaluationShaderGLSL(const GrGLSLPrimitiveProcessor*,
+                                                 const char* versionAndExtensionDecls,
+                                                 const GrGLSLUniformHandler&,
                                                  const GrShaderCaps&) const {
         SK_ABORT("Not implemented.");
     }
@@ -258,7 +264,7 @@ private:
     AttributeSet fInstanceAttributes;
 
     int fTextureSamplerCnt = 0;
-    typedef GrProcessor INHERITED;
+    using INHERITED = GrProcessor;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -322,8 +328,6 @@ static constexpr inline size_t GrVertexAttribTypeSize(GrVertexAttribType type) {
             return sizeof(uint16_t);
         case kHalf2_GrVertexAttribType:
             return 2 * sizeof(uint16_t);
-        case kHalf3_GrVertexAttribType:
-            return 3 * sizeof(uint16_t);
         case kHalf4_GrVertexAttribType:
             return 4 * sizeof(uint16_t);
         case kInt2_GrVertexAttribType:
@@ -336,16 +340,12 @@ static constexpr inline size_t GrVertexAttribTypeSize(GrVertexAttribType type) {
             return 1 * sizeof(char);
         case kByte2_GrVertexAttribType:
             return 2 * sizeof(char);
-        case kByte3_GrVertexAttribType:
-            return 3 * sizeof(char);
         case kByte4_GrVertexAttribType:
             return 4 * sizeof(char);
         case kUByte_GrVertexAttribType:
             return 1 * sizeof(char);
         case kUByte2_GrVertexAttribType:
             return 2 * sizeof(char);
-        case kUByte3_GrVertexAttribType:
-            return 3 * sizeof(char);
         case kUByte4_GrVertexAttribType:
             return 4 * sizeof(char);
         case kUByte_norm_GrVertexAttribType:

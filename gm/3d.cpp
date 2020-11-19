@@ -7,6 +7,7 @@
 
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
 
 struct Info {
     float   fNear = 0.05f;
@@ -49,7 +50,7 @@ static void do_draw(SkCanvas* canvas, SkColor color) {
 
     SkM44 m = SkM44::Rotate({0, 1, 0}, SK_ScalarPI/6);
 
-    canvas->concat44(make_ctm(info, m, {300, 300}));
+    canvas->concat(make_ctm(info, m, {300, 300}));
 
     canvas->translate(150, 150);
     SkPaint paint;

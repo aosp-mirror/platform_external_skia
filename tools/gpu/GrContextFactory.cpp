@@ -6,7 +6,8 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/GrContextPriv.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "tools/gpu/GrContextFactory.h"
 #ifdef SK_GL
 #include "tools/gpu/gl/GLTestContext.h"
@@ -90,7 +91,8 @@ void GrContextFactory::abandonContexts() {
                 auto restore = context.fTestContext->makeCurrentAndAutoRestore();
                 context.fTestContext->testAbandon();
             }
-            bool requiresEarlyAbandon = (context.fGrContext->backend() == GrBackendApi::kVulkan);
+            GrBackendApi api = context.fGrContext->backend();
+            bool requiresEarlyAbandon = api == GrBackendApi::kVulkan || api == GrBackendApi::kDawn;
             if (requiresEarlyAbandon) {
                 context.fGrContext->abandonContext();
             }
@@ -128,12 +130,13 @@ void GrContextFactory::releaseResourcesAndAbandonContexts() {
     }
 }
 
-GrContext* GrContextFactory::get(ContextType type, ContextOverrides overrides) {
-    return this->getContextInfo(type, overrides).grContext();
+GrDirectContext* GrContextFactory::get(ContextType type, ContextOverrides overrides) {
+    return this->getContextInfo(type, overrides).directContext();
 }
 
 ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOverrides overrides,
-                                                     GrContext* shareContext, uint32_t shareIndex) {
+                                                     GrDirectContext* shareContext,
+                                                     uint32_t shareIndex) {
     // (shareIndex != 0) -> (shareContext != nullptr)
     SkASSERT((shareIndex == 0) || (shareContext != nullptr));
 
@@ -150,16 +153,16 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
         }
     }
 
-    // If we're trying to create a context in a share group, find the master context
-    Context* masterContext = nullptr;
+    // If we're trying to create a context in a share group, find the primary context
+    Context* primaryContext = nullptr;
     if (shareContext) {
         for (int i = 0; i < fContexts.count(); ++i) {
             if (!fContexts[i].fAbandoned && fContexts[i].fGrContext == shareContext) {
-                masterContext = &fContexts[i];
+                primaryContext = &fContexts[i];
                 break;
             }
         }
-        SkASSERT(masterContext && masterContext->fType == type);
+        SkASSERT(primaryContext && primaryContext->fType == type);
     }
 
     std::unique_ptr<TestContext> testCtx;
@@ -167,8 +170,8 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
     switch (backend) {
 #ifdef SK_GL
         case GrBackendApi::kOpenGL: {
-            GLTestContext* glShareContext = masterContext
-                    ? static_cast<GLTestContext*>(masterContext->fTestContext) : nullptr;
+            GLTestContext* glShareContext = primaryContext
+                    ? static_cast<GLTestContext*>(primaryContext->fTestContext) : nullptr;
             GLTestContext* glCtx;
             switch (type) {
                 case kGL_ContextType:
@@ -181,6 +184,16 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
                 case kANGLE_D3D9_ES2_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kD3D9, ANGLEContextVersion::kES2,
                                                  glShareContext).release();
+                    // Chrome will only run on D3D9 with NVIDIA for 2012 and earlier drivers.
+                    // (<= 269.73). We get shader link failures when testing on recent drivers
+                    // using this backend.
+                    if (glCtx) {
+                        auto [backend, vendor, renderer] = GrGLGetANGLEInfo(glCtx->gl());
+                        if (vendor == GrGLANGLEVendor::kNVIDIA) {
+                            delete glCtx;
+                            return ContextInfo();
+                        }
+                    }
                     break;
                 case kANGLE_D3D11_ES2_ContextType:
                     glCtx = MakeANGLETestContext(ANGLEBackend::kD3D11, ANGLEContextVersion::kES2,
@@ -210,38 +223,42 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
             if (!glCtx) {
                 return ContextInfo();
             }
+            if (glCtx->gl()->fStandard == kGLES_GrGLStandard &&
+                (overrides & ContextOverrides::kFakeGLESVersionAs2)) {
+                glCtx->overrideVersion("OpenGL ES 2.0", "OpenGL ES GLSL ES 1.00");
+            }
             testCtx.reset(glCtx);
             break;
         }
 #endif  // SK_GL
 #ifdef SK_VULKAN
         case GrBackendApi::kVulkan: {
-            VkTestContext* vkSharedContext = masterContext
-                    ? static_cast<VkTestContext*>(masterContext->fTestContext) : nullptr;
+            VkTestContext* vkSharedContext = primaryContext
+                    ? static_cast<VkTestContext*>(primaryContext->fTestContext) : nullptr;
             SkASSERT(kVulkan_ContextType == type);
             testCtx.reset(CreatePlatformVkTestContext(vkSharedContext));
             if (!testCtx) {
                 return ContextInfo();
             }
 
-#ifdef SK_GL
-            // There is some bug (either in Skia or the NV Vulkan driver) where VkDevice
-            // destruction will hang occaisonally. For some reason having an existing GL
-            // context fixes this.
+            // We previously had an issue where the VkDevice destruction would occasionally hang
+            // on systems with NVIDIA GPUs and having an existing GL context fixed it. Now (March
+            // 2020) we still need the GL context to keep Vulkan/TSAN bots from running incredibly
+            // slow. Perhaps this prevents repeated driver loading/unloading? Note that keeping
+            // a persistent VkTestContext around instead was tried and did not work.
             if (!fSentinelGLContext) {
                 fSentinelGLContext.reset(CreatePlatformGLTestContext(kGL_GrGLStandard));
                 if (!fSentinelGLContext) {
                     fSentinelGLContext.reset(CreatePlatformGLTestContext(kGLES_GrGLStandard));
                 }
             }
-#endif
             break;
         }
 #endif
 #ifdef SK_METAL
         case GrBackendApi::kMetal: {
-            MtlTestContext* mtlSharedContext = masterContext
-                    ? static_cast<MtlTestContext*>(masterContext->fTestContext) : nullptr;
+            MtlTestContext* mtlSharedContext = primaryContext
+                    ? static_cast<MtlTestContext*>(primaryContext->fTestContext) : nullptr;
             SkASSERT(kMetal_ContextType == type);
             testCtx.reset(CreatePlatformMtlTestContext(mtlSharedContext));
             if (!testCtx) {
@@ -252,8 +269,8 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
 #endif
 #ifdef SK_DIRECT3D
         case GrBackendApi::kDirect3D: {
-            D3DTestContext* d3dSharedContext = masterContext
-                    ? static_cast<D3DTestContext*>(masterContext->fTestContext) : nullptr;
+            D3DTestContext* d3dSharedContext = primaryContext
+                    ? static_cast<D3DTestContext*>(primaryContext->fTestContext) : nullptr;
             SkASSERT(kDirect3D_ContextType == type);
             testCtx.reset(CreatePlatformD3DTestContext(d3dSharedContext));
             if (!testCtx) {
@@ -264,8 +281,8 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
 #endif
 #ifdef SK_DAWN
         case GrBackendApi::kDawn: {
-            DawnTestContext* dawnSharedContext = masterContext
-                    ? static_cast<DawnTestContext*>(masterContext->fTestContext) : nullptr;
+            DawnTestContext* dawnSharedContext = primaryContext
+                    ? static_cast<DawnTestContext*>(primaryContext->fTestContext) : nullptr;
             testCtx.reset(CreatePlatformDawnTestContext(dawnSharedContext));
             if (!testCtx) {
                 return ContextInfo();
@@ -274,7 +291,7 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
         }
 #endif
         case GrBackendApi::kMock: {
-            TestContext* sharedContext = masterContext ? masterContext->fTestContext : nullptr;
+            TestContext* sharedContext = primaryContext ? primaryContext->fTestContext : nullptr;
             SkASSERT(kMock_ContextType == type);
             testCtx.reset(CreateMockTestContext(sharedContext));
             if (!testCtx) {
@@ -291,12 +308,12 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
     if (ContextOverrides::kAvoidStencilBuffers & overrides) {
         grOptions.fAvoidStencilBuffers = true;
     }
-    sk_sp<GrContext> grCtx;
+    sk_sp<GrDirectContext> grCtx;
     {
         auto restore = testCtx->makeCurrentAndAutoRestore();
-        grCtx = testCtx->makeGrContext(grOptions);
+        grCtx = testCtx->makeContext(grOptions);
     }
-    if (!grCtx.get()) {
+    if (!grCtx) {
         return ContextInfo();
     }
 
@@ -320,7 +337,8 @@ ContextInfo GrContextFactory::getContextInfo(ContextType type, ContextOverrides 
     return this->getContextInfoInternal(type, overrides, nullptr, 0);
 }
 
-ContextInfo GrContextFactory::getSharedContextInfo(GrContext* shareContext, uint32_t shareIndex) {
+ContextInfo GrContextFactory::getSharedContextInfo(GrDirectContext* shareContext,
+                                                   uint32_t shareIndex) {
     SkASSERT(shareContext);
     for (int i = 0; i < fContexts.count(); ++i) {
         if (!fContexts[i].fAbandoned && fContexts[i].fGrContext == shareContext) {

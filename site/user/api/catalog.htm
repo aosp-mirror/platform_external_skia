@@ -1988,27 +1988,6 @@
     "name": "SkPath::Iter::setPath",
         "stdout": "quad open:\\nkMove_Verb {0, 0}, \\nkQuad_Verb {0, 0}, {10, 20}, {30, 40}, \\nkDone_Verb \\n\\nconic closed:\\nkMove_Verb {0, 0}, \\nkConic_Verb {0, 0}, {1, 2}, {3, 4}, weight = 0.5\\nkLine_Verb {3, 4}, {0, 0}, \\nkClose_Verb {0, 0}, \\nkDone_Verb \\n\\n"
     },
-        "SkPath_RawIter_conicWeight": {
-    "code": "void draw(SkCanvas* canvas) {\n   SkPath path;\n   path.conicTo(1, 2, 3, 4, .5f);\n   SkPath::RawIter iter(path);\n   SkPoint p[4];\n   SkDebugf(\"first verb is \" \"%s\" \"move\\n\", SkPath::kMove_Verb == iter.next(p) ? \"\" : \"not \");\n   SkDebugf(\"next verb is \" \"%s\" \"conic\\n\", SkPath::kConic_Verb == iter.next(p) ? \"\" : \"not \");\n   SkDebugf(\"conic points: {%g,%g}, {%g,%g}, {%g,%g}\\n\", p[0].fX, p[0].fY, p[1].fX, p[1].fY,\n                p[2].fX, p[2].fY);\n   SkDebugf(\"conic weight: %g\\n\", iter.conicWeight());\n}\n",
-    "hash": "69f360a0ba8f40c51ef4cd9f972c5893",
-    "file": "SkPath_Reference",
-    "name": "SkPath::RawIter::conicWeight",
-        "stdout": "first verb is move\\nnext verb is conic\\nconic points: {0,0}, {1,2}, {3,4}\\nconic weight: 0.5\\n"
-    },
-        "SkPath_RawIter_next": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkPath path;\n    path.moveTo(50, 60);\n    path.quadTo(10, 20, 30, 40);\n    path.close();\n    path.lineTo(30, 30);\n    path.conicTo(1, 2, 3, 4, .5f);\n    path.cubicTo(-1, -2, -3, -4, -5, -6);\n    SkPath::RawIter iter(path);\n    const char* verbStr[] =  { \"Move\", \"Line\", \"Quad\", \"Conic\", \"Cubic\", \"Close\", \"Done\" };\n    const int pointCount[] = {     1 ,     2 ,     3 ,      3 ,      4 ,      1 ,     0  };\n    SkPath::Verb verb;\n    do {\n        SkPoint points[4];\n        verb = iter.next(points);\n        SkDebugf(\"k%s_Verb \", verbStr[(int) verb]);\n        for (int i = 0; i < pointCount[(int) verb]; ++i) {\n            SkDebugf(\"{%1.8g, %1.8g}, \", points[i].fX, points[i].fY);\n        }\n        if (SkPath::kConic_Verb == verb) {\n            SkDebugf(\"weight = %g\", iter.conicWeight());\n        }\n        SkDebugf(\"\\n\");\n    } while (SkPath::kDone_Verb != verb);\n}\n",
-    "hash": "944a80c7ff8c04e1fecc4aec4a47ea60",
-    "file": "SkPath_Reference",
-    "name": "SkPath::RawIter::next()",
-        "stdout": "kMove_Verb {50, 60}, \\nkQuad_Verb {50, 60}, {10, 20}, {30, 40}, \\nkClose_Verb {50, 60}, \\nkMove_Verb {50, 60}, \\nkLine_Verb {50, 60}, {30, 30}, \\nkConic_Verb {30, 30}, {1, 2}, {3, 4}, weight = 0.5\\nkCubic_Verb {3, 4}, {-1, -2}, {-3, -4}, {-5, -6}, \\nkDone_Verb \\n"
-    },
-        "SkPath_RawIter_peek": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkPath path;\n    path.quadTo(10, 20, 30, 40);\n    path.conicTo(1, 2, 3, 4, .5f);\n    path.cubicTo(1, 2, 3, 4, .5, 6);\n    SkPath::RawIter iter(path);\n    SkPath::Verb verb, peek = iter.peek();\n    const char* verbStr[] =  { \"Move\", \"Line\", \"Quad\", \"Conic\", \"Cubic\", \"Close\", \"Done\" };\n    do {\n        SkPoint points[4];\n        verb = iter.next(points);\n        SkDebugf(\"peek %s %c= verb %s\\n\", verbStr[peek], peek == verb ? '=' : '!', verbStr[verb]);\n        peek = iter.peek();\n    } while (SkPath::kDone_Verb != verb);\n    SkDebugf(\"peek %s %c= verb %s\\n\", verbStr[peek], peek == verb ? '=' : '!', verbStr[verb]);\n}",
-    "hash": "eb5fa5bea23059ce538e883502f828f5",
-    "file": "SkPath_Reference",
-    "name": "SkPath::RawIter::peek()",
-        "stdout": "peek Move == verb Move\\npeek Quad == verb Quad\\npeek Conic == verb Conic\\npeek Cubic == verb Cubic\\npeek Done == verb Done\\npeek Done == verb Done\\n\\n"
-    },
         "SkPath_SegmentMask": {
     "code": "void draw(SkCanvas* canvas) {\n    SkPath path;\n    path.conicTo(10, 10, 20, 30, 1);\n    SkDebugf(\"Path kConic_SegmentMask is %s\\n\", path.getSegmentMasks() &\n          SkPath::kConic_SegmentMask ? \"set\" : \"clear\");\n    SkDebugf(\"Path kQuad_SegmentMask is %s\\n\", path.getSegmentMasks() &\n          SkPath::kQuad_SegmentMask ? \"set\" : \"clear\");\n}",
     "hash": "a61e5758574e28190ec4ed8c4ae7e7fa",
@@ -4846,7 +4825,7 @@
     "name": "SkCanvas::drawBitmap"
 },
     "SkCanvas_drawBitmapLattice": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkIRect center = { 20, 10, 50, 40 };\n    SkBitmap bitmap;\n    bitmap.allocPixels(SkImageInfo::MakeN32Premul(60, 60));\n    SkCanvas bitCanvas(bitmap);\n    SkPaint paint;\n    SkColor gray = 0xFF000000;\n    int left = 0;\n    for (auto right: { center.fLeft, center.fRight, bitmap.width() } ) {\n        int top = 0;\n        for (auto bottom: { center.fTop, center.fBottom, bitmap.height() } ) {\n            paint.setColor(gray);\n            bitCanvas.drawIRect(SkIRect::MakeLTRB(left, top, right, bottom), paint);\n            gray += 0x001f1f1f;\n            top = bottom;\n        }\n        left = right;\n    }\n    const int xDivs[] = { center.fLeft, center.fRight };\n    const int yDivs[] = { center.fTop, center.fBottom };\n    SkCanvas::Lattice::RectType fillTypes[3][3];\n    memset(fillTypes, 0, sizeof(fillTypes));\n    fillTypes[1][1] = SkCanvas::Lattice::kTransparent;\n    SkColor dummy[9];  // temporary pending bug fix\n    SkCanvas::Lattice lattice = { xDivs, yDivs, fillTypes[0], SK_ARRAY_COUNT(xDivs),\n         SK_ARRAY_COUNT(yDivs), nullptr, dummy };\n    for (auto dest: { 20, 30, 40, 60, 90 } ) {\n        canvas->drawBitmapLattice(bitmap, lattice, SkRect::MakeWH(dest, 110 - dest), nullptr);\n        canvas->translate(dest + 4, 0);\n    }\n}\n",
+    "code": "void draw(SkCanvas* canvas) {\n    SkIRect center = { 20, 10, 50, 40 };\n    SkBitmap bitmap;\n    bitmap.allocPixels(SkImageInfo::MakeN32Premul(60, 60));\n    SkCanvas bitCanvas(bitmap);\n    SkPaint paint;\n    SkColor gray = 0xFF000000;\n    int left = 0;\n    for (auto right: { center.fLeft, center.fRight, bitmap.width() } ) {\n        int top = 0;\n        for (auto bottom: { center.fTop, center.fBottom, bitmap.height() } ) {\n            paint.setColor(gray);\n            bitCanvas.drawIRect(SkIRect::MakeLTRB(left, top, right, bottom), paint);\n            gray += 0x001f1f1f;\n            top = bottom;\n        }\n        left = right;\n    }\n    const int xDivs[] = { center.fLeft, center.fRight };\n    const int yDivs[] = { center.fTop, center.fBottom };\n    SkCanvas::Lattice::RectType fillTypes[3][3];\n    memset(fillTypes, 0, sizeof(fillTypes));\n    fillTypes[1][1] = SkCanvas::Lattice::kTransparent;\n    SkColor placeholder[9];  // temporary pending bug fix\n    SkCanvas::Lattice lattice = { xDivs, yDivs, fillTypes[0], SK_ARRAY_COUNT(xDivs),\n         SK_ARRAY_COUNT(yDivs), nullptr, placeholder };\n    for (auto dest: { 20, 30, 40, 60, 90 } ) {\n        canvas->drawBitmapLattice(bitmap, lattice, SkRect::MakeWH(dest, 110 - dest), nullptr);\n        canvas->translate(dest + 4, 0);\n    }\n}\n",
     "width": 256,
     "height": 128,
     "hash": "c5bfa944e17ba4a4400dc799f032069c",
@@ -5269,13 +5248,13 @@
     "file": "SkCanvas_Reference",
     "name": "SkCanvas::drawVertices_2"
 },
-    "SkCanvas_getGrContext": {
-    "code": "void draw(SkCanvas* canvas) {\n    if (canvas->getGrContext()) {\n         canvas->clear(SK_ColorRED);\n    } else {\n         canvas->clear(SK_ColorBLUE);\n    }\n}\n",
+    "SkCanvas_recordingContext": {
+    "code": "void draw(SkCanvas* canvas) {\n    if (canvas->recordingContext()) {\n         canvas->clear(SK_ColorRED);\n    } else {\n         canvas->clear(SK_ColorBLUE);\n    }\n}\n",
     "width": 256,
     "height": 256,
     "hash": "c4ea949e5fa5a0630dcb6b0204bd498f",
     "file": "SkCanvas_Reference",
-    "name": "SkCanvas::getGrContext"
+    "name": "SkCanvas::recordingContext"
 },
     "SkCanvas_readPixels": {
     "code": "void draw(SkCanvas* canvas) {\n    canvas->clear(SK_ColorBLUE);\n    SkPaint paint;\n    canvas->drawCircle(32, 32, 28, paint);\n    SkImageInfo info = SkImageInfo::Make(64, 64, kBGRA_8888_SkColorType, kPremul_SkAlphaType);\n    sk_sp<SkData> data(SkData::MakeUninitialized(info.minRowBytes() * info.height()));\n    sk_bzero(data->writable_data(), info.minRowBytes() * info.height());\n    for (int x : { 32, -32 } ) {\n        for (int y : { 32, -32 } ) {\n            canvas->readPixels(info, data->writable_data(), info.minRowBytes(), x, y);\n        }\n    }\n    sk_sp<SkImage> image = SkImage::MakeRasterData(info, data, info.minRowBytes());\n    canvas->drawImage(image, 0, 0);\n}",
@@ -9140,14 +9119,6 @@
     "hash": "d3aec071998f871809f515e58abb1b0e",
     "file": "SkSurface_Reference",
     "name": "SkSurface::MakeFromBackendTexture"
-},
-    "SkSurface_MakeFromBackendTextureAsRenderTarget": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkPaint paint;\n    paint.setTextSize(32);\n    GrContext* context = canvas->getGrContext();\n    if (!context) {\n         canvas->drawString(\"GPU only!\", 20, 40, paint);\n         return;\n    }\n    sk_sp<SkSurface> gpuSurface = SkSurface::MakeFromBackendTextureAsRenderTarget(\n            context, backEndTexture, kTopLeft_GrSurfaceOrigin, 0,\n            kRGBA_8888_SkColorType, nullptr, nullptr);\n    auto surfaceCanvas = gpuSurface->getCanvas();\n    surfaceCanvas->drawString(\"GPU rocks!\", 20, 40, paint);\n    sk_sp<SkImage> image(gpuSurface->makeImageSnapshot());\n    canvas->drawImage(image, 0, 0);\n}",
-    "width": 256,
-    "height": 256,
-    "hash": "5e87093b9cbe95124ae14cbe77091eb7",
-    "file": "SkSurface_Reference",
-    "name": "SkSurface::MakeFromBackendTextureAsRenderTarget"
 },
     "SkSurface_MakeRenderTarget": {
     "code": "void draw(SkCanvas* canvas) {\n    SkPaint paint;\n    paint.setTextSize(32);\n    GrContext* context = canvas->getGrContext();\n    if (!context) {\n         canvas->drawString(\"GPU only!\", 20, 40, paint);\n         return;\n    }\n    SkImageInfo info = SkImageInfo::MakeN32(256, 64, kOpaque_SkAlphaType);\n    for (auto surfaceOrigin : { kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin } ) {\n        auto gpuSurface(SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info, 0,\n               surfaceOrigin, nullptr));\n        auto surfaceCanvas = gpuSurface->getCanvas();\n        surfaceCanvas->clear(SK_ColorWHITE);\n        surfaceCanvas->drawString(\"GPU rocks!\", 20, 40, paint);\n        sk_sp<SkImage> image(gpuSurface->makeImageSnapshot());\n        canvas->drawImage(image, 0, 0);\n       canvas->translate(0, 128);\n    }\n}",

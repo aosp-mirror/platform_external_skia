@@ -20,11 +20,11 @@ public:
     GrSurfaceProxyView() = default;
 
     GrSurfaceProxyView(sk_sp<GrSurfaceProxy> proxy, GrSurfaceOrigin origin, GrSwizzle swizzle)
-            : fProxy(proxy), fOrigin(origin), fSwizzle(swizzle) {}
+            : fProxy(std::move(proxy)), fOrigin(origin), fSwizzle(swizzle) {}
 
     // This entry point is used when we don't care about the origin or the swizzle.
     explicit GrSurfaceProxyView(sk_sp<GrSurfaceProxy> proxy)
-            : fProxy(proxy), fOrigin(kTopLeft_GrSurfaceOrigin) {}
+            : fProxy(std::move(proxy)), fOrigin(kTopLeft_GrSurfaceOrigin) {}
 
     GrSurfaceProxyView(GrSurfaceProxyView&& view) = default;
     GrSurfaceProxyView(const GrSurfaceProxyView&) = default;
@@ -74,6 +74,20 @@ public:
 
     void reset() {
         *this = {};
+    }
+
+    // Helper that copies a rect of a src view'' proxy and then creates a view for the copy with
+    // the same origin and swizzle as the src view.
+    static GrSurfaceProxyView Copy(GrRecordingContext* context,
+                                   GrSurfaceProxyView src,
+                                   GrMipmapped mipMapped,
+                                   SkIRect srcRect,
+                                   SkBackingFit fit,
+                                   SkBudgeted budgeted) {
+        auto origin = src.origin();
+        auto* proxy = src.proxy();
+        auto copy = GrSurfaceProxy::Copy(context, proxy, origin, mipMapped, srcRect, fit, budgeted);
+        return {std::move(copy), src.origin(), src.swizzle()};
     }
 
     // This does not reset the origin or swizzle, so the View can still be used to access those

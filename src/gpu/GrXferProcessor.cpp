@@ -31,7 +31,8 @@ bool GrXferProcessor::hasSecondaryOutput() const {
 }
 
 void GrXferProcessor::getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b,
-                                          const GrSurfaceOrigin* originIfDstTexture) const {
+                                          const GrSurfaceOrigin* originIfDstTexture,
+                                          GrDstSampleType dstSampleType) const {
     uint32_t key = this->willReadDstColor() ? 0x1 : 0x0;
     if (key) {
         if (originIfDstTexture) {
@@ -39,13 +40,18 @@ void GrXferProcessor::getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorK
             if (kTopLeft_GrSurfaceOrigin == *originIfDstTexture) {
                 key |= 0x4;
             }
+            // We don't just add the whole dstSampleType to the key because sampling a copy or the
+            // rt directly produces the same shader code.
+            if (dstSampleType == GrDstSampleType::kAsInputAttachment) {
+                key |= 0x8;
+            }
         }
         if (this->dstReadUsesMixedSamples()) {
-            key |= 0x8;
+            key |= 0x10;
         }
     }
     if (fIsLCD) {
-        key |= 0x10;
+        key |= 0x20;
     }
     b->add32(key);
     this->onGetGLSLProcessorKey(caps, b);
@@ -123,10 +129,6 @@ static const char* coeff_string(GrBlendCoeff coeff) {
             return "const_color";
         case kIConstC_GrBlendCoeff:
             return "inv_const_color";
-        case kConstA_GrBlendCoeff:
-            return "const_alpha";
-        case kIConstA_GrBlendCoeff:
-            return "inv_const_alpha";
         case kS2C_GrBlendCoeff:
             return "src2_color";
         case kIS2C_GrBlendCoeff:
@@ -165,6 +167,9 @@ GrXPFactory::AnalysisProperties GrXPFactory::GetAnalysisProperties(
     } else {
         result = GrPorterDuffXPFactory::SrcOverAnalysisProperties(color, coverage, caps,
                                                                   clampType);
+    }
+    if (coverage == GrProcessorAnalysisCoverage::kNone) {
+        result |= AnalysisProperties::kCompatibleWithCoverageAsAlpha;
     }
     SkASSERT(!(result & AnalysisProperties::kRequiresDstTexture));
     if ((result & AnalysisProperties::kReadsDstInShader) &&

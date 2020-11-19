@@ -15,7 +15,7 @@
 
 #include <string>
 
-#include "modules/canvaskit/WasmAliases.h"
+#include "modules/canvaskit/WasmCommon.h"
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
@@ -92,7 +92,7 @@ SimpleUniform fromUniform(SkSL::ByteCode::Uniform u) {
 }
 
 EMSCRIPTEN_BINDINGS(Particles) {
-    class_<SkParticleEffect>("SkParticleEffect")
+    class_<SkParticleEffect>("ParticleEffect")
         .smart_ptr<sk_sp<SkParticleEffect>>("sk_sp<SkParticleEffect>")
         .function("draw", &SkParticleEffect::draw, allow_raw_pointers())
         .function("_effectUniformPtr", optional_override([](SkParticleEffect& self)->uintptr_t {
@@ -197,14 +197,13 @@ EMSCRIPTEN_BINDINGS(Particles) {
             assets.push_back(std::make_pair(std::move(name), std::move(bytes)));
         }
 
-        SkRandom r;
         sk_sp<SkParticleEffectParams> params(new SkParticleEffectParams());
         skjson::DOM dom(json.c_str(), json.length());
         SkFromJsonVisitor fromJson(dom.root());
         params->visitFields(&fromJson);
         params->prepare(skresources::DataURIResourceProviderProxy::Make(
                             ParticleAssetProvider::Make(std::move(assets))).get());
-        return sk_sp<SkParticleEffect>(new SkParticleEffect(std::move(params), r));
+        return sk_sp<SkParticleEffect>(new SkParticleEffect(std::move(params)));
     }));
     constant("particles", true);
 

@@ -135,7 +135,8 @@ def _CopyrightChecks(input_api, output_api, source_file_filter=None):
       r'Copyright (\([cC]\) )?%s \w+' % years_pattern)
 
   for affected_file in input_api.AffectedSourceFiles(source_file_filter):
-    if 'third_party' in affected_file.LocalPath():
+    if ('third_party/' in affected_file.LocalPath() or
+        'tests/sksl/' in affected_file.LocalPath()):
       continue
     contents = input_api.ReadFile(affected_file, 'rb')
     if not re.search(copyright_pattern, contents):
@@ -163,7 +164,7 @@ def _InfraTests(input_api, output_api):
 def _CheckGNFormatted(input_api, output_api):
   """Make sure any .gn files we're changing have been formatted."""
   files = []
-  for f in input_api.AffectedFiles():
+  for f in input_api.AffectedFiles(include_deletes=False):
     if (f.LocalPath().endswith('.gn') or
         f.LocalPath().endswith('.gni')):
       files.append(f)
@@ -278,22 +279,17 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckCompileIsolate(input_api, output_api))
   results.extend(_CheckDEPSValid(input_api, output_api))
   results.extend(_CheckIncludesFormatted(input_api, output_api))
+  results.extend(_CheckGNFormatted(input_api, output_api))
   return results
 
 
 def CheckChangeOnUpload(input_api, output_api):
-  """Presubmit checks for the change on upload.
-
-  The following are the presubmit checks:
-  * Check change has one and only one EOL.
-  """
+  """Presubmit checks for the change on upload."""
   results = []
   results.extend(_CommonChecks(input_api, output_api))
   # Run on upload, not commit, since the presubmit bot apparently doesn't have
   # coverage or Go installed.
   results.extend(_InfraTests(input_api, output_api))
-
-  results.extend(_CheckGNFormatted(input_api, output_api))
   results.extend(_CheckReleaseNotesForPublicAPI(input_api, output_api))
   return results
 
@@ -524,14 +520,7 @@ def PostUploadHook(gerrit, change, output_api):
 
 
 def CheckChangeOnCommit(input_api, output_api):
-  """Presubmit checks for the change on commit.
-
-  The following are the presubmit checks:
-  * Check change has one and only one EOL.
-  * Ensures that the Skia tree is open in
-    http://skia-tree-status.appspot.com/. Shows a warning if it is in 'Caution'
-    state and an error if it is in 'Closed' state.
-  """
+  """Presubmit checks for the change on commit."""
   results = []
   results.extend(_CommonChecks(input_api, output_api))
   results.extend(_CheckLGTMsForPublicAPI(input_api, output_api))

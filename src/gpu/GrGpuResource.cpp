@@ -6,10 +6,10 @@
  */
 
 #include "include/core/SkTraceMemoryDump.h"
-#include "include/gpu/GrContext.h"
-#include "include/gpu/GrGpuResource.h"
-#include "src/gpu/GrContextPriv.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
+#include "src/gpu/GrGpuResource.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrResourceCache.h"
 #include <atomic>
@@ -109,7 +109,7 @@ SkString GrGpuResource::getResourceName() const {
     return resourceName;
 }
 
-const GrContext* GrGpuResource::getContext() const {
+const GrDirectContext* GrGpuResource::getContext() const {
     if (fGpu) {
         return fGpu->getContext();
     } else {
@@ -117,7 +117,7 @@ const GrContext* GrGpuResource::getContext() const {
     }
 }
 
-GrContext* GrGpuResource::getContext() {
+GrDirectContext* GrGpuResource::getContext() {
     if (fGpu) {
         return fGpu->getContext();
     } else {
@@ -201,7 +201,7 @@ uint32_t GrGpuResource::CreateUniqueID() {
     static std::atomic<uint32_t> nextID{1};
     uint32_t id;
     do {
-        id = nextID++;
+        id = nextID.fetch_add(1, std::memory_order_relaxed);
     } while (id == SK_InvalidUniqueID);
     return id;
 }

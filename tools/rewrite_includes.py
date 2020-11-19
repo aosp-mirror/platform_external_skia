@@ -51,7 +51,7 @@ for root in roots:
   for path, _, files in os.walk(root):
     if not any(snippet in fix_path(path) for snippet in ignorelist):
       for file_name in files:
-        if file_name.endswith('.h') and 'SkM44' not in file_name:
+        if file_name.endswith('.h'):
           if file_name in headers:
             print path, file_name, headers[file_name]
           assert file_name not in headers
@@ -70,7 +70,9 @@ def to_rewrite():
 # Rewrite any #includes relative to Skia's top-level directory.
 need_rewriting = []
 for file_path in to_rewrite():
-  if 'generated' in file_path or 'third_party/skcms' in file_path:
+  if ('/generated/' in file_path or
+      'tests/sksl/' in file_path or
+      'third_party/skcms' in file_path):
     continue
   if (file_path.endswith('.h') or
       file_path.endswith('.c') or

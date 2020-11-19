@@ -9,6 +9,7 @@
 #include "include/core/SkM44.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRRect.h"
+#include "include/core/SkVertices.h"
 #include "include/utils/SkRandom.h"
 #include "samplecode/Sample.h"
 #include "tools/Resources.h"
@@ -81,16 +82,16 @@ protected:
     SkV3    fCOA { 0, 0, 0 };
     SkV3    fUp  { 0, 1, 0 };
 
+    const char* kLocalToWorld = "local_to_world";
+
 public:
-    void saveCamera(SkCanvas* canvas, const SkRect& area, SkScalar zscale) {
+    void concatCamera(SkCanvas* canvas, const SkRect& area, SkScalar zscale) {
         SkM44 camera = Sk3LookAt(fEye, fCOA, fUp),
               perspective = Sk3Perspective(fNear, fFar, fAngle),
               viewport = SkM44::Translate(area.centerX(), area.centerY(), 0) *
                          SkM44::Scale(area.width()*0.5f, area.height()*0.5f, zscale);
 
-        // want "world" to be in our big coordinates (e.g. area), so apply this inverse
-        // as part of our "camera".
-        canvas->experimental_saveCamera(viewport * perspective, camera * inv(viewport));
+        canvas->concat(viewport * perspective * camera * inv(viewport));
     }
 };
 
@@ -228,9 +229,6 @@ class SampleCubeBase : public Sample3DView {
         DY = 300
     };
 
-    SkM44 fWorldToClick,
-          fClickToWorld;
-
     SkM44 fRotation;        // part of model
 
     RotateAnimator fRotateAnimator;
@@ -262,24 +260,15 @@ public:
 
     virtual void drawContent(SkCanvas* canvas, SkColor, int index, bool drawFront) = 0;
 
-    void setClickToWorld(SkCanvas* canvas, const SkM44& clickM) {
-        auto l2d = canvas->getLocalToDevice();
-        fWorldToClick = inv(clickM) * l2d;
-        fClickToWorld = inv(fWorldToClick);
-    }
-
     void onDrawContent(SkCanvas* canvas) override {
-        if (!canvas->getGrContext() && !(fFlags & kCanRunOnCPU)) {
+        if (!canvas->recordingContext() && !(fFlags & kCanRunOnCPU)) {
             return;
         }
-        SkM44 clickM = canvas->getLocalToDevice();
 
         canvas->save();
         canvas->translate(DX, DY);
 
-        this->saveCamera(canvas, {0, 0, 400, 400}, 200);
-
-        this->setClickToWorld(canvas, clickM);
+        this->concatCamera(canvas, {0, 0, 400, 400}, 200);
 
         for (bool drawFront : {false, true}) {
             int index = 0;
@@ -289,13 +278,17 @@ public:
                 SkM44 trans = SkM44::Translate(200, 200, 0);   // center of the rotation
                 SkM44 m = fRotateAnimator.rotation() * fRotation * f.asM44(200);
 
-                canvas->concat44(trans * m * inv(trans));
+                canvas->concat(trans);
+
+                // "World" space - content is centered at the origin, in device scale (+-200)
+                canvas->markCTM(kLocalToWorld);
+
+                canvas->concat(m * inv(trans));
                 this->drawContent(canvas, f.fColor, index++, drawFront);
             }
         }
 
-        canvas->restore();  // camera
-        canvas->restore();  // center the content in the window
+        canvas->restore();  // camera & center the content in the window
 
         if (fFlags & kShowLightDome){
             fLight.draw(canvas);
@@ -330,11 +323,6 @@ public:
         return nullptr;
     }
     bool onClick(Click* click) override {
-#if 0
-        auto L = fWorldToClick * fLight.fPos;
-        SkPoint c = project(fClickToWorld, {click->fCurr.fX, click->fCurr.fY, L.z/L.w, 1});
-        fLight.update(c.fX, c.fY);
-#endif
         if (click->fMeta.hasS32("type", 0)) {
             fLight.fLoc = fSphere.pinLoc({click->fCurr.fX, click->fCurr.fY});
             return true;
@@ -359,7 +347,7 @@ public:
     }
 
 private:
-    typedef Sample3DView INHERITED;
+    using INHERITED = Sample3DView;
 };
 
 class SampleBump3D : public SampleCubeBase {
@@ -368,23 +356,23 @@ class SampleBump3D : public SampleCubeBase {
     SkRRect                fRR;
 
 public:
-    SampleBump3D() : SampleCubeBase(kShowLightDome) {}
+    SampleBump3D() : SampleCubeBase(Flags(kCanRunOnCPU | kShowLightDome)) {}
 
     SkString name() override { return SkString("bump3d"); }
 
     void onOnceBeforeDraw() override {
         fRR = SkRRect::MakeRectXY({20, 20, 380, 380}, 50, 50);
         auto img = GetResourceAsImage("images/brickwork-texture.jpg");
-        fImgShader = img->makeShader(SkMatrix::MakeScale(2, 2));
+        fImgShader = img->makeShader(SkMatrix::Scale(2, 2));
         img = GetResourceAsImage("images/brickwork_normal-map.jpg");
-        fBmpShader = img->makeShader(SkMatrix::MakeScale(2, 2));
+        fBmpShader = img->makeShader(SkMatrix::Scale(2, 2));
 
         const char code[] = R"(
-            in fragmentProcessor color_map;
-            in fragmentProcessor normal_map;
+            uniform shader color_map;
+            uniform shader normal_map;
 
-            uniform float4x4 localToWorld;
-            uniform float4x4 localToWorldAdjInv;
+            layout (marker=local_to_world)          uniform float4x4 localToWorld;
+            layout (marker=normals(local_to_world)) uniform float4x4 localToWorldAdjInv;
             uniform float3   lightPos;
 
             float3 convert_normal_sample(half4 c) {
@@ -393,18 +381,18 @@ public:
                 return n;
             }
 
-            void main(float2 p, inout half4 color) {
+            half4 main(float2 p) {
                 float3 norm = convert_normal_sample(sample(normal_map, p));
-                float3 plane_norm = normalize(localToWorld * float4(norm, 0)).xyz;
+                float3 plane_norm = normalize(localToWorldAdjInv * norm.xyz0).xyz;
 
-                float3 plane_pos = (localToWorld * float4(p, 0, 1)).xyz;
+                float3 plane_pos = (localToWorld * p.xy01).xyz;
                 float3 light_dir = normalize(lightPos - plane_pos);
 
                 float ambient = 0.2;
                 float dp = dot(plane_norm, light_dir);
                 float scale = min(ambient + max(dp, 0), 1);
 
-                color = sample(color_map, p) * half4(float4(scale, scale, scale, 1));
+                return sample(color_map, p) * scale.xxx1;
             }
         )";
         auto [effect, error] = SkRuntimeEffect::Make(SkString(code));
@@ -419,32 +407,102 @@ public:
             return;
         }
 
-        auto adj_inv = [](const SkM44& m) {
-            SkM44 inv;
-            SkAssertResult(m.invert(&inv));
-            return inv.transpose();
-        };
+        SkRuntimeShaderBuilder builder(fEffect);
+        builder.uniform("lightPos") = fLight.computeWorldPos(fSphere);
+        // localToWorld matrices are automatically populated, via layout(marker)
 
-        struct Uniforms {
-            SkM44  fLocalToWorld;
-            SkM44  fLocalToWorldAdjInv;
-            SkV3   fLightPos;
-        } uni;
-        uni.fLocalToWorld = canvas->experimental_getLocalToWorld();
-        uni.fLocalToWorldAdjInv = adj_inv(uni.fLocalToWorld);
-        uni.fLightPos = fLight.computeWorldPos(fSphere);
-
-        sk_sp<SkData> data = SkData::MakeWithCopy(&uni, sizeof(uni));
-        sk_sp<SkShader> children[] = { fImgShader, fBmpShader };
+        builder.child("color_map")  = fImgShader;
+        builder.child("normal_map") = fBmpShader;
 
         SkPaint paint;
         paint.setColor(color);
-        paint.setShader(fEffect->makeShader(data, children, 2, nullptr, true));
+        paint.setShader(builder.makeShader(nullptr, true));
 
         canvas->drawRRect(fRR, paint);
     }
 };
 DEF_SAMPLE( return new SampleBump3D; )
+
+class SampleVerts3D : public SampleCubeBase {
+    sk_sp<SkRuntimeEffect> fEffect;
+    sk_sp<SkVertices>      fVertices;
+
+public:
+    SampleVerts3D() : SampleCubeBase(kShowLightDome) {}
+
+    SkString name() override { return SkString("verts3d"); }
+
+    void onOnceBeforeDraw() override {
+        using Attr = SkVertices::Attribute;
+        Attr attrs[] = {
+            Attr(Attr::Type::kFloat3, Attr::Usage::kNormalVector),
+        };
+
+        SkVertices::Builder builder(SkVertices::kTriangleFan_VertexMode, 66, 0, attrs, 1);
+
+        SkPoint* pos = builder.positions();
+        SkV3* nrm = (SkV3*)builder.customData();
+
+        SkPoint center = { 200, 200 };
+        SkScalar radius = 200;
+
+        pos[0] = center;
+        nrm[0] = { 0, 0, 1 };
+
+        for (int i = 0; i < 65; ++i) {
+            SkScalar t = (i / 64.0f) * 2 * SK_ScalarPI;
+            SkScalar s = SkScalarSin(t),
+                     c = SkScalarCos(t);
+            pos[i + 1] = center + SkPoint { c * radius, s * radius };
+            nrm[i + 1] = { c, s, 0 };
+        }
+
+        fVertices = builder.detach();
+
+        const char code[] = R"(
+            varying float3 vtx_normal;
+
+            layout (marker=local_to_world)          uniform float4x4 localToWorld;
+            layout (marker=normals(local_to_world)) uniform float4x4 localToWorldAdjInv;
+            uniform float3   lightPos;
+
+            half4 main(float2 p) {
+                float3 norm = normalize(vtx_normal);
+                float3 plane_norm = normalize(localToWorldAdjInv * norm.xyz0).xyz;
+
+                float3 plane_pos = (localToWorld * p.xy01).xyz;
+                float3 light_dir = normalize(lightPos - plane_pos);
+
+                float ambient = 0.2;
+                float dp = dot(plane_norm, light_dir);
+                float scale = min(ambient + max(dp, 0), 1);
+
+                return half4(0.7, 0.9, 0.3, 1) * scale.xxx1;
+            }
+        )";
+        auto [effect, error] = SkRuntimeEffect::Make(SkString(code));
+        if (!effect) {
+            SkDebugf("runtime error %s\n", error.c_str());
+        }
+        fEffect = effect;
+    }
+
+    void drawContent(SkCanvas* canvas, SkColor color, int index, bool drawFront) override {
+        if (!drawFront || !front(canvas->getLocalToDevice())) {
+            return;
+        }
+
+        SkRuntimeShaderBuilder builder(fEffect);
+        builder.uniform("lightPos") = fLight.computeWorldPos(fSphere);
+
+        SkPaint paint;
+        paint.setColor(color);
+        paint.setShader(builder.makeShader(nullptr, true));
+
+        canvas->drawVertices(fVertices, paint);
+    }
+};
+DEF_SAMPLE( return new SampleVerts3D; )
 
 #include "modules/skottie/include/Skottie.h"
 

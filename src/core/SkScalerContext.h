@@ -112,10 +112,11 @@ public:
         setContrast(0);
     }
 
-    uint8_t     fMaskFormat;
+    SkMask::Format fMaskFormat;
+
 private:
-    uint8_t     fStrokeJoin : 4;
-    uint8_t     fStrokeCap : 4;
+    uint8_t        fStrokeJoin : 4;
+    uint8_t        fStrokeCap  : 4;
 
 public:
     uint16_t    fFlags;
@@ -193,7 +194,7 @@ public:
     inline void setHinting(SkFontHinting);
 
     SkMask::Format getFormat() const {
-        return static_cast<SkMask::Format>(fMaskFormat);
+        return fMaskFormat;
     }
 
     SkColor getLuminanceColor() const {
@@ -269,7 +270,7 @@ public:
     SkTypeface* getTypeface() const { return fTypeface.get(); }
 
     SkMask::Format getMaskFormat() const {
-        return (SkMask::Format)fRec.fMaskFormat;
+        return fRec.fMaskFormat;
     }
 
     bool isSubpixel() const {
@@ -284,8 +285,7 @@ public:
     bool isVertical() const { return false; }
 
     unsigned    getGlyphCount() { return this->generateGlyphCount(); }
-    void        getAdvance(SkGlyph*);
-    void        getMetrics(SkGlyph*);
+    SkGlyph     makeGlyph(SkPackedGlyphID);
     void        getImage(const SkGlyph&);
     bool SK_WARN_UNUSED_RESULT getPath(SkPackedGlyphID, SkPath*);
     void        getFontMetrics(SkFontMetrics*);
@@ -316,7 +316,7 @@ public:
                                           SkScalerContextEffects* effects) {
         SkPaint paint;
         return MakeRecAndEffects(
-                font, paint, SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType),
+                font, paint, SkSurfaceProps(),
                 SkScalerContextFlags::kNone, SkMatrix::I(), rec, effects);
     }
 
@@ -372,7 +372,7 @@ protected:
     /** Generates the contents of glyph.fWidth, fHeight, fTop, fLeft,
      *  as well as fAdvanceX and fAdvanceY if not already set.
      *
-     *  TODO: fMaskFormat is set by getMetrics later; cannot be set here.
+     *  TODO: fMaskFormat is set by internalMakeGlyph later; cannot be set here.
      */
     virtual void generateMetrics(SkGlyph* glyph) = 0;
 
@@ -422,6 +422,7 @@ private:
 
     /** Returns false if the glyph has no path at all. */
     bool internalGetPath(SkPackedGlyphID id, SkPath* devPath);
+    SkGlyph internalMakeGlyph(SkPackedGlyphID packedID, SkMask::Format format);
 
     // SkMaskGamma::PreBlend converts linear masks to gamma correcting masks.
 protected:

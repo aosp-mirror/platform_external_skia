@@ -58,6 +58,7 @@ protected:
     void onOnceBeforeDraw() override {
         fBitmap = ToolUtils::create_checkerboard_bitmap(
                 kCellSize, kCellSize, SK_ColorBLUE, SK_ColorYELLOW, kCellSize / 10);
+        fBitmap.setImmutable();
 
         fBitmapShader = fBitmap.makeShader();
         SkPoint pts1[] = {
@@ -149,7 +150,7 @@ protected:
     }
 
     void onDraw(SkCanvas* canvas) override {
-        if (!fImage || !fImage->isValid(canvas->getGrContext())) {
+        if (!fImage || !fImage->isValid(canvas->recordingContext())) {
             fImage = make_image(canvas, kCellSize, kCellSize);
         }
 
@@ -176,11 +177,11 @@ private:
     sk_sp<SkImage>  fImage;
     SkBitmap        fBitmap;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 DEF_GM(return new PerspShadersGM(true);)
 DEF_GM(return new PerspShadersGM(false);)
-}
+}  // namespace skiagm
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -208,7 +209,7 @@ static SkPath make_path() {
 DEF_SIMPLE_GM(perspective_clip, canvas, 800, 800) {
     SkPath path = make_path();
     auto shader = GetResourceAsImage("images/mandrill_128.png")
-                                    ->makeShader(SkMatrix::MakeScale(3, 3));
+                                    ->makeShader(SkMatrix::Scale(3, 3));
 
     SkPaint paint;
     paint.setColor({0.75, 0.75, 0.75, 1});

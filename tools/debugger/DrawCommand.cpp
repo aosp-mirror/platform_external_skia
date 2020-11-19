@@ -28,8 +28,15 @@
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkTextBlobPriv.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/image/SkImage_Base.h"
 #include "tools/debugger/DebugLayerManager.h"
 #include "tools/debugger/JsonWriteBuffer.h"
+
+#ifdef SK_SUPPORT_GPU
+#include "include/gpu/GrDirectContext.h"
+#else
+class GrDirectContext;
+#endif
 
 #define DEBUGCANVAS_ATTRIBUTE_COMMAND "command"
 #define DEBUGCANVAS_ATTRIBUTE_VISIBLE "visible"
@@ -217,10 +224,9 @@ const char* DrawCommand::GetCommandString(OpType type) {
         case kClipRect_OpType: return "ClipRect";
         case kClipRRect_OpType: return "ClipRRect";
         case kConcat_OpType: return "Concat";
+        case kConcat44_OpType: return "Concat44";
         case kDrawAnnotation_OpType: return "DrawAnnotation";
         case kDrawBitmap_OpType: return "DrawBitmap";
-        case kDrawBitmapLattice_OpType: return "DrawBitmapLattice";
-        case kDrawBitmapNine_OpType: return "DrawBitmapNine";
         case kDrawBitmapRect_OpType: return "DrawBitmapRect";
         case kDrawDRRect_OpType: return "DrawDRRect";
         case kDrawImage_OpType: return "DrawImage";
@@ -315,53 +321,6 @@ void render_region(SkCanvas* canvas, const SkRegion& region) {
     p.setStyle(SkPaint::kStroke_Style);
 
     canvas->drawRegion(region, p);
-}
-
-void render_bitmap(SkCanvas* canvas, const SkBitmap& input, const SkRect* srcRect = nullptr) {
-    const SkISize& size = canvas->getBaseLayerSize();
-
-    SkScalar xScale = SkIntToScalar(size.fWidth - 2) / input.width();
-    SkScalar yScale = SkIntToScalar(size.fHeight - 2) / input.height();
-
-    if (input.width() > input.height()) {
-        yScale *= input.height() / (float)input.width();
-    } else {
-        xScale *= input.width() / (float)input.height();
-    }
-
-    SkRect dst = SkRect::MakeXYWH(
-            SK_Scalar1, SK_Scalar1, xScale * input.width(), yScale * input.height());
-
-    static const int kNumBlocks = 8;
-
-    canvas->clear(0xFFFFFFFF);
-    SkISize block = {canvas->imageInfo().width() / kNumBlocks,
-                     canvas->imageInfo().height() / kNumBlocks};
-    for (int y = 0; y < kNumBlocks; ++y) {
-        for (int x = 0; x < kNumBlocks; ++x) {
-            SkPaint paint;
-            paint.setColor((x + y) % 2 ? SK_ColorLTGRAY : SK_ColorDKGRAY);
-            SkRect r = SkRect::MakeXYWH(SkIntToScalar(x * block.width()),
-                                        SkIntToScalar(y * block.height()),
-                                        SkIntToScalar(block.width()),
-                                        SkIntToScalar(block.height()));
-            canvas->drawRect(r, paint);
-        }
-    }
-
-    canvas->drawBitmapRect(input, dst, nullptr);
-
-    if (srcRect) {
-        SkRect  r = SkRect::MakeLTRB(srcRect->fLeft * xScale + SK_Scalar1,
-                                    srcRect->fTop * yScale + SK_Scalar1,
-                                    srcRect->fRight * xScale + SK_Scalar1,
-                                    srcRect->fBottom * yScale + SK_Scalar1);
-        SkPaint p;
-        p.setColor(SK_ColorRED);
-        p.setStyle(SkPaint::kStroke_Style);
-
-        canvas->drawRect(r, p);
-    }
 }
 
 void render_rrect(SkCanvas* canvas, const SkRRect& rrect) {
@@ -514,6 +473,18 @@ void DrawCommand::MakeJsonMatrix(SkJSONWriter& writer, const SkMatrix& matrix) {
         writer.beginArray(nullptr, false);
         for (int c = 0; c < 3; ++c) {
             writer.appendFloat(matrix[r * 3 + c]);
+        }
+        writer.endArray();
+    }
+    writer.endArray();
+}
+
+void DrawCommand::MakeJsonMatrix44(SkJSONWriter& writer, const SkM44& matrix) {
+    writer.beginArray();
+    for (int r = 0; r < 4; ++r) {
+        writer.beginArray(nullptr, false);
+        for (int c = 0; c < 4; ++c) {
+            writer.appendFloat(matrix.rc(r, c));
         }
         writer.endArray();
     }
@@ -681,8 +652,13 @@ bool DrawCommand::flatten(const SkImage&  image,
     SkAutoMalloc buffer(rowBytes * image.height());
     SkImageInfo  dstInfo =
             SkImageInfo::Make(image.dimensions(), kN32_SkColorType, kPremul_SkAlphaType);
-    if (!image.readPixels(dstInfo, buffer.get(), rowBytes, 0, 0)) {
-        SkDebugf("readPixels failed\n");
+    // "cheat" for this debug tool and use image's context
+    GrDirectContext* dContext = nullptr;
+#ifdef SK_SUPPORT_GPU
+    dContext = GrAsDirectContext(as_IB(&image)->context());
+#endif
+    if (!image.readPixels(dContext, dstInfo, buffer.get(), rowBytes, 0, 0)) {
+        SkDebugf("DrawCommand::flatten SkImage: readPixels failed\n");
         return false;
     }
 
@@ -692,6 +668,15 @@ bool DrawCommand::flatten(const SkImage&  image,
     SkDynamicMemoryWStream out;
     DrawCommand::WritePNG(bm, out);
     sk_sp<SkData> encoded = out.detachAsData();
+    if (encoded == nullptr) {
+        SkDebugf("DrawCommand::flatten SkImage: could not encode image as PNG\n");
+        return false;
+    }
+    auto dataPtr = encoded->data();
+    if (!dataPtr) {
+      SkDebugf("DrawCommand::flatten SkImage: encoding as PNG produced zero length data\n");
+      return false;
+    }
     SkString      url = encode_data(encoded->data(), encoded->size(), "image/png", urlDataManager);
     writer.appendString(DEBUGCANVAS_ATTRIBUTE_DATA, url.c_str());
     return true;
@@ -1097,16 +1082,71 @@ void ClipRRectCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManag
     writer.appendBool(DEBUGCANVAS_ATTRIBUTE_ANTIALIAS, fDoAA);
 }
 
+ClipShaderCommand::ClipShaderCommand(sk_sp<SkShader> cs, SkClipOp op)
+        : INHERITED(kClipShader_OpType) {
+    fShader = cs;
+    fOp     = op;
+}
+
+void ClipShaderCommand::execute(SkCanvas* canvas) const { canvas->clipShader(fShader, fOp); }
+
+bool ClipShaderCommand::render(SkCanvas* canvas) const {
+    SkPaint paint;
+    paint.setShader(fShader);
+    canvas->drawPaint(paint);
+    return true;
+}
+
+void ClipShaderCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
+    INHERITED::toJSON(writer, urlDataManager);
+    apply_flattenable(DEBUGCANVAS_ATTRIBUTE_SHADER, fShader.get(), writer, urlDataManager);
+    writer.appendString(DEBUGCANVAS_ATTRIBUTE_REGIONOP, regionop_name(fOp));
+}
+
 ConcatCommand::ConcatCommand(const SkMatrix& matrix) : INHERITED(kConcat_OpType) {
     fMatrix = matrix;
 }
 
 void ConcatCommand::execute(SkCanvas* canvas) const { canvas->concat(fMatrix); }
 
+namespace {
+    void writeMatrixType(SkJSONWriter& writer, const SkMatrix& m) {
+        switch (m.getType()) {
+            case SkMatrix::kTranslate_Mask:
+                writer.appendString(DEBUGCANVAS_ATTRIBUTE_SHORTDESC, " (translate)");
+                break;
+            case SkMatrix::kScale_Mask:
+                writer.appendString(DEBUGCANVAS_ATTRIBUTE_SHORTDESC, " (scale)");
+                break;
+            case SkMatrix::kAffine_Mask:
+                writer.appendString(DEBUGCANVAS_ATTRIBUTE_SHORTDESC, " (rotation or skew)");
+                break;
+            case SkMatrix::kPerspective_Mask:
+                writer.appendString(DEBUGCANVAS_ATTRIBUTE_SHORTDESC, " (perspective)");
+                break;
+            default:
+                break;
+        }
+    }
+}
+
 void ConcatCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
     INHERITED::toJSON(writer, urlDataManager);
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_MATRIX);
     MakeJsonMatrix(writer, fMatrix);
+    writeMatrixType(writer, fMatrix);
+}
+
+Concat44Command::Concat44Command(const SkM44& matrix) : INHERITED(kConcat44_OpType) {
+    fMatrix = matrix;
+}
+
+void Concat44Command::execute(SkCanvas* canvas) const { canvas->concat(fMatrix); }
+
+void Concat44Command::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
+    INHERITED::toJSON(writer, urlDataManager);
+    writer.appendName(DEBUGCANVAS_ATTRIBUTE_MATRIX);
+    MakeJsonMatrix44(writer, fMatrix);
 }
 
 ////
@@ -1126,7 +1166,7 @@ void DrawAnnotationCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlData
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_COORDS);
     MakeJsonRect(writer, fRect);
     writer.appendString("key", fKey.c_str());
-    if (fValue.get()) {
+    if (fValue) {
         // TODO: dump out the "value"
     }
 
@@ -1136,159 +1176,6 @@ void DrawAnnotationCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlData
 }
 
 ////
-
-DrawBitmapCommand::DrawBitmapCommand(const SkBitmap& bitmap,
-                                     SkScalar        left,
-                                     SkScalar        top,
-                                     const SkPaint*  paint)
-        : INHERITED(kDrawBitmap_OpType), fBitmap(bitmap), fLeft(left), fTop(top), fPaint(paint) {}
-
-void DrawBitmapCommand::execute(SkCanvas* canvas) const {
-    canvas->drawBitmap(fBitmap, fLeft, fTop, fPaint.getMaybeNull());
-}
-
-bool DrawBitmapCommand::render(SkCanvas* canvas) const {
-    render_bitmap(canvas, fBitmap);
-    return true;
-}
-
-void DrawBitmapCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
-    INHERITED::toJSON(writer, urlDataManager);
-    writer.beginObject(DEBUGCANVAS_ATTRIBUTE_BITMAP);
-    flatten(fBitmap, writer, urlDataManager);
-    writer.endObject();
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_COORDS);
-    MakeJsonPoint(writer, fLeft, fTop);
-    if (fPaint.isValid()) {
-        writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
-        MakeJsonPaint(writer, *fPaint, urlDataManager);
-    }
-}
-
-DrawBitmapLatticeCommand::DrawBitmapLatticeCommand(const SkBitmap&          bitmap,
-                                                   const SkCanvas::Lattice& lattice,
-                                                   const SkRect&            dst,
-                                                   const SkPaint*           paint)
-        : INHERITED(kDrawBitmapLattice_OpType)
-        , fBitmap(bitmap)
-        , fLattice(lattice)
-        , fDst(dst)
-        , fPaint(paint) {}
-
-void DrawBitmapLatticeCommand::execute(SkCanvas* canvas) const {
-    canvas->drawBitmapLattice(fBitmap, fLattice, fDst, fPaint.getMaybeNull());
-}
-
-bool DrawBitmapLatticeCommand::render(SkCanvas* canvas) const {
-    SkAutoCanvasRestore acr(canvas, true);
-    canvas->clear(0xFFFFFFFF);
-
-    xlate_and_scale_to_bounds(canvas, fDst);
-
-    this->execute(canvas);
-    return true;
-}
-
-void DrawBitmapLatticeCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
-    INHERITED::toJSON(writer, urlDataManager);
-    writer.beginObject(DEBUGCANVAS_ATTRIBUTE_BITMAP);
-    flatten(fBitmap, writer, urlDataManager);
-    writer.endObject();  // bitmap
-
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_LATTICE);
-    MakeJsonLattice(writer, fLattice);
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_DST);
-    MakeJsonRect(writer, fDst);
-    if (fPaint.isValid()) {
-        writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
-        MakeJsonPaint(writer, *fPaint, urlDataManager);
-    }
-
-    SkString desc;
-    writer.appendString(DEBUGCANVAS_ATTRIBUTE_SHORTDESC, str_append(&desc, fDst)->c_str());
-}
-
-DrawBitmapNineCommand::DrawBitmapNineCommand(const SkBitmap& bitmap,
-                                             const SkIRect&  center,
-                                             const SkRect&   dst,
-                                             const SkPaint*  paint)
-        : INHERITED(kDrawBitmapNine_OpType)
-        , fBitmap(bitmap)
-        , fCenter(center)
-        , fDst(dst)
-        , fPaint(paint) {}
-
-void DrawBitmapNineCommand::execute(SkCanvas* canvas) const {
-    canvas->drawBitmapNine(fBitmap, fCenter, fDst, fPaint.getMaybeNull());
-}
-
-bool DrawBitmapNineCommand::render(SkCanvas* canvas) const {
-    SkRect tmp = SkRect::Make(fCenter);
-    render_bitmap(canvas, fBitmap, &tmp);
-    return true;
-}
-
-void DrawBitmapNineCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
-    INHERITED::toJSON(writer, urlDataManager);
-    writer.beginObject(DEBUGCANVAS_ATTRIBUTE_BITMAP);
-    flatten(fBitmap, writer, urlDataManager);
-    writer.endObject();  // bitmap
-
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_CENTER);
-    MakeJsonIRect(writer, fCenter);
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_DST);
-    MakeJsonRect(writer, fDst);
-    if (fPaint.isValid()) {
-        writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
-        MakeJsonPaint(writer, *fPaint, urlDataManager);
-    }
-}
-
-DrawBitmapRectCommand::DrawBitmapRectCommand(const SkBitmap&             bitmap,
-                                             const SkRect*               src,
-                                             const SkRect&               dst,
-                                             const SkPaint*              paint,
-                                             SkCanvas::SrcRectConstraint constraint)
-        : INHERITED(kDrawBitmapRect_OpType)
-        , fBitmap(bitmap)
-        , fSrc(src)
-        , fDst(dst)
-        , fPaint(paint)
-        , fConstraint(constraint) {}
-
-void DrawBitmapRectCommand::execute(SkCanvas* canvas) const {
-    canvas->legacy_drawBitmapRect(
-            fBitmap, fSrc.getMaybeNull(), fDst, fPaint.getMaybeNull(), fConstraint);
-}
-
-bool DrawBitmapRectCommand::render(SkCanvas* canvas) const {
-    render_bitmap(canvas, fBitmap, fSrc.getMaybeNull());
-    return true;
-}
-
-void DrawBitmapRectCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
-    INHERITED::toJSON(writer, urlDataManager);
-    writer.beginObject(DEBUGCANVAS_ATTRIBUTE_BITMAP);
-    flatten(fBitmap, writer, urlDataManager);
-    writer.endObject();  // bitmap
-
-    if (fSrc.isValid()) {
-        writer.appendName(DEBUGCANVAS_ATTRIBUTE_SRC);
-        MakeJsonRect(writer, *fSrc);
-    }
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_DST);
-    MakeJsonRect(writer, fDst);
-    if (fPaint.isValid()) {
-        writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
-        MakeJsonPaint(writer, *fPaint, urlDataManager);
-    }
-    if (fConstraint == SkCanvas::kStrict_SrcRectConstraint) {
-        writer.appendBool(DEBUGCANVAS_ATTRIBUTE_STRICT, true);
-    }
-
-    SkString desc;
-    writer.appendString(DEBUGCANVAS_ATTRIBUTE_SHORTDESC, str_append(&desc, fDst)->c_str());
-}
 
 DrawImageCommand::DrawImageCommand(const SkImage* image,
                                    SkScalar       left,
@@ -1316,13 +1203,15 @@ bool DrawImageCommand::render(SkCanvas* canvas) const {
     return true;
 }
 
+uint64_t DrawImageCommand::imageId(UrlDataManager& udm) const {
+    return udm.lookupImage(fImage.get());
+}
+
 void DrawImageCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
     INHERITED::toJSON(writer, urlDataManager);
-
-
     if (urlDataManager.hasImageIndex()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_IMAGE_INDEX);
-        writer.appendU64((uint64_t)urlDataManager.lookupImage(fImage.get()));
+        writer.appendU64(imageId(urlDataManager));
     } else {
         writer.beginObject(DEBUGCANVAS_ATTRIBUTE_IMAGE);
         flatten(*fImage, writer, urlDataManager);
@@ -1379,11 +1268,15 @@ bool DrawImageLatticeCommand::render(SkCanvas* canvas) const {
     return true;
 }
 
+uint64_t DrawImageLatticeCommand::imageId(UrlDataManager& udm) const {
+    return udm.lookupImage(fImage.get());
+}
+
 void DrawImageLatticeCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
     INHERITED::toJSON(writer, urlDataManager);
     if (urlDataManager.hasImageIndex()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_IMAGE_INDEX);
-        writer.appendU64((uint64_t)urlDataManager.lookupImage(fImage.get()));
+        writer.appendU64(imageId(urlDataManager));
     } else {
         writer.beginObject(DEBUGCANVAS_ATTRIBUTE_IMAGE);
         flatten(*fImage, writer, urlDataManager);
@@ -1430,11 +1323,15 @@ bool DrawImageRectCommand::render(SkCanvas* canvas) const {
     return true;
 }
 
+uint64_t DrawImageRectCommand::imageId(UrlDataManager& udm) const {
+    return udm.lookupImage(fImage.get());
+}
+
 void DrawImageRectCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
     INHERITED::toJSON(writer, urlDataManager);
     if (urlDataManager.hasImageIndex()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_IMAGE_INDEX);
-        writer.appendU64((uint64_t)urlDataManager.lookupImage(fImage.get()));
+        writer.appendU64(imageId(urlDataManager));
     } else {
         writer.beginObject(DEBUGCANVAS_ATTRIBUTE_IMAGE);
         flatten(*fImage, writer, urlDataManager);
@@ -1542,11 +1439,15 @@ bool DrawImageNineCommand::render(SkCanvas* canvas) const {
     return true;
 }
 
+uint64_t DrawImageNineCommand::imageId(UrlDataManager& udm) const {
+    return udm.lookupImage(fImage.get());
+}
+
 void DrawImageNineCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
     INHERITED::toJSON(writer, urlDataManager);
     if (urlDataManager.hasImageIndex()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_IMAGE_INDEX);
-        writer.appendU64((uint64_t)urlDataManager.lookupImage(fImage.get()));
+        writer.appendU64(imageId(urlDataManager));
     } else {
         writer.beginObject(DEBUGCANVAS_ATTRIBUTE_IMAGE);
         flatten(*fImage, writer, urlDataManager);
@@ -2207,4 +2108,5 @@ void SetMatrixCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManag
     INHERITED::toJSON(writer, urlDataManager);
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_MATRIX);
     MakeJsonMatrix(writer, fMatrix);
+    writeMatrixType(writer, fMatrix);
 }

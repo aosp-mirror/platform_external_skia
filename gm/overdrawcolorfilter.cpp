@@ -29,8 +29,10 @@ static inline void set_bitmap(SkBitmap* bitmap, uint8_t alpha) {
     bitmap->notifyPixelsChanged();
 }
 
-class OverdrawColorFilter : public skiagm::GM {
-    SkString onShortName() override { return SkString("overdrawcolorfilter"); }
+struct OverdrawColorFilter : public skiagm::GM {
+    SkString onShortName() override {
+        return SkString{"overdrawcolorfilter"};
+    }
 
     SkISize onISize() override { return {200, 400}; }
 
@@ -40,8 +42,7 @@ class OverdrawColorFilter : public skiagm::GM {
         };
 
         SkPaint paint;
-        sk_sp<SkColorFilter> colorFilter = SkOverdrawColorFilter::MakeWithSkColors(colors);
-        paint.setColorFilter(colorFilter);
+        paint.setColorFilter(SkOverdrawColorFilter::MakeWithSkColors(colors));
 
         SkImageInfo info = SkImageInfo::MakeA8(100, 100);
         SkBitmap bitmap;

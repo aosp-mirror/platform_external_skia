@@ -8,10 +8,12 @@
 #ifndef GrPathShader_DEFINED
 #define GrPathShader_DEFINED
 
+#include "src/core/SkArenaAlloc.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrProgramInfo.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
  // This is a common base class for shaders in the GPU tessellator.
 class GrPathShader : public GrGeometryProcessor {
@@ -27,29 +29,38 @@ public:
         }
     }
 
-    const SkMatrix& viewMatrix() const { return fViewMatrix; }
     GrPrimitiveType primitiveType() const { return fPrimitiveType; }
     int tessellationPatchVertexCount() const { return fTessellationPatchVertexCount; }
+    const SkMatrix& viewMatrix() const { return fViewMatrix; }
 
-    void issueDraw(GrOpFlushState* state, const GrPipeline* pipeline,
-                   const GrPipeline::FixedDynamicState* fixedDynamicState,
-                   sk_sp<const GrBuffer> vertexBuffer, int vertexCount, int baseVertex,
-                   const SkRect& bounds) {
-        GrMesh mesh;
-        mesh.setNonIndexedNonInstanced(vertexCount);
-        mesh.setVertexData(std::move(vertexBuffer), baseVertex);
-        this->issueDraw(state, pipeline, fixedDynamicState, mesh, bounds);
+    static GrProgramInfo* MakeProgramInfo(const GrPathShader* shader, SkArenaAlloc* arena,
+                                          const GrSurfaceProxyView* writeView,
+                                          GrPipeline::InputFlags pipelineFlags,
+                                          GrProcessorSet&& processors, GrAppliedClip&& appliedClip,
+                                          const GrXferProcessor::DstProxyView& dstProxyView,
+                                          GrXferBarrierFlags renderPassXferBarriers,
+                                          const GrUserStencilSettings* stencil,
+                                          const GrCaps& caps) {
+        auto* pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(
+                &caps, arena, writeView->swizzle(), std::move(appliedClip), dstProxyView,
+                std::move(processors), pipelineFlags);
+        return MakeProgramInfo(shader, arena, writeView, pipeline, dstProxyView,
+                               renderPassXferBarriers, stencil, caps);
     }
 
-    void issueDraw(GrOpFlushState* state, const GrPipeline* pipeline,
-                   const GrPipeline::FixedDynamicState* fixedDynamicState, const GrMesh& mesh,
-                   const SkRect& bounds) {
-        GrProgramInfo programInfo(state->proxy()->numSamples(), state->proxy()->numStencilSamples(),
-                                  state->proxy()->backendFormat(), state->view()->origin(),
-                                  pipeline, this, fixedDynamicState, nullptr, 0,
-                                  fPrimitiveType, fTessellationPatchVertexCount);
-        state->opsRenderPass()->bindPipeline(programInfo, bounds);
-        state->opsRenderPass()->drawMeshes(programInfo, &mesh, 1);
+    static GrProgramInfo* MakeProgramInfo(const GrPathShader* shader, SkArenaAlloc* arena,
+                                          const GrSurfaceProxyView* writeView,
+                                          const GrPipeline* pipeline,
+                                          const GrXferProcessor::DstProxyView& dstProxyView,
+                                          GrXferBarrierFlags renderPassXferBarriers,
+                                          const GrUserStencilSettings* stencil,
+                                          const GrCaps& caps) {
+        GrRenderTargetProxy* proxy = writeView->asRenderTargetProxy();
+        return arena->make<GrProgramInfo>(proxy->numSamples(), proxy->numStencilSamples(),
+                                          proxy->backendFormat(), writeView->origin(), pipeline,
+                                          stencil, shader, shader->fPrimitiveType,
+                                          shader->fTessellationPatchVertexCount,
+                                          renderPassXferBarriers);
     }
 
 private:

@@ -64,7 +64,6 @@ private:
     void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
-    void onPlatformSwapBuffers() const override;
     GrGLFuncPtr onPlatformGetProcAddress(const char*) const override;
 
     GLXContext fContext;
@@ -88,7 +87,7 @@ static Display* get_display() {
     };
     static std::unique_ptr<AutoDisplay> ad;
     static SkOnce once;
-    once([] { ad.reset(new AutoDisplay{}); });
+    once([] { ad = std::make_unique<AutoDisplay>(); });
     return ad->display();
 }
 
@@ -206,7 +205,7 @@ GLXGLTestContext::GLXGLTestContext(GrGLStandard forcedGpuAPI, GLXGLTestContext* 
     if (!gluCheckExtension(reinterpret_cast<const GLubyte*>("GLX_ARB_create_context"),
                            reinterpret_cast<const GLubyte*>(glxExts))) {
         if (kGLES_GrGLStandard != forcedGpuAPI) {
-            fContext = glXCreateNewContext(fDisplay, bestFbc, GLX_RGBA_TYPE, 0, True);
+            fContext = glXCreateNewContext(fDisplay, bestFbc, GLX_RGBA_TYPE, nullptr, True);
         }
     } else {
         if (kGLES_GrGLStandard == forcedGpuAPI) {
@@ -240,6 +239,7 @@ GLXGLTestContext::GLXGLTestContext(GrGLStandard forcedGpuAPI, GLXGLTestContext* 
         return;
     }
 
+#ifdef SK_GL
     auto gl = GrGLMakeNativeInterface();
     if (!gl) {
         SkDebugf("Failed to create gl interface");
@@ -254,6 +254,12 @@ GLXGLTestContext::GLXGLTestContext(GrGLStandard forcedGpuAPI, GLXGLTestContext* 
     }
 
     this->init(std::move(gl));
+#else
+    // Allow the GLTestContext creation to succeed without a GrGLInterface to support
+    // GrContextFactory's persistent GL context workaround for Vulkan. We won't need the
+    // GrGLInterface since we're not running the GL backend.
+    this->init(nullptr);
+#endif
 }
 
 
@@ -366,10 +372,6 @@ std::function<void()> GLXGLTestContext::onPlatformGetAutoContextRestore() const 
         return nullptr;
     }
     return context_restorer();
-}
-
-void GLXGLTestContext::onPlatformSwapBuffers() const {
-    glXSwapBuffers(fDisplay, fGlxPixmap);
 }
 
 GrGLFuncPtr GLXGLTestContext::onPlatformGetProcAddress(const char* procName) const {

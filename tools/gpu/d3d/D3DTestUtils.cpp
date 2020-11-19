@@ -9,7 +9,6 @@
 
 #ifdef SK_DIRECT3D
 #include <d3d12sdklayers.h>
-#include <dxgi1_4.h>
 
 #include "include/gpu/d3d/GrD3DBackendContext.h"
 
@@ -54,12 +53,12 @@ bool CreateD3DBackendContext(GrD3DBackendContext* ctx,
     }
 
     gr_cp<IDXGIAdapter1> hardwareAdapter;
-    get_hardware_adapter(factory.Get(), &hardwareAdapter);
+    get_hardware_adapter(factory.get(), &hardwareAdapter);
 
     gr_cp<ID3D12Device> device;
-    if (!SUCCEEDED(D3D12CreateDevice(hardwareAdapter.Get(),
-        D3D_FEATURE_LEVEL_11_0,
-        IID_PPV_ARGS(&device)))) {
+    if (!SUCCEEDED(D3D12CreateDevice(hardwareAdapter.get(),
+                                     D3D_FEATURE_LEVEL_11_0,
+                                     IID_PPV_ARGS(&device)))) {
         return false;
     }
 
@@ -73,6 +72,7 @@ bool CreateD3DBackendContext(GrD3DBackendContext* ctx,
         return false;
     }
 
+    ctx->fAdapter = hardwareAdapter;
     ctx->fDevice = device;
     ctx->fQueue = queue;
     // TODO: set up protected memory

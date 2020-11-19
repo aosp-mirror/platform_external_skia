@@ -167,7 +167,7 @@ const std::vector<SkUnichar>& SkPDFFont::GetUnicodeMap(const SkTypeface* typefac
 }
 
 SkAdvancedTypefaceMetrics::FontType SkPDFFont::FontType(const SkAdvancedTypefaceMetrics& metrics) {
-    if (SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kMultiMaster_FontFlag) ||
+    if (SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kVariable_FontFlag) ||
         SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag)) {
         // force Type3 fallback.
         return SkAdvancedTypefaceMetrics::kOther_Font;
@@ -435,7 +435,7 @@ private:
     const SkGlyphID fFirst;
     const SkGlyphID fLast;
 };
-}
+}  // namespace
 
 struct ImageAndOffset {
     sk_sp<SkImage> fImage;
@@ -539,11 +539,11 @@ static void emit_subset_type3(const SkPDFFont& pdfFont, SkPDFDocument* doc) {
     }
     int unitsPerEm;
     SkStrikeSpec strikeSpec = SkStrikeSpec::MakePDFVector(*typeface, &unitsPerEm);
-    auto cache = strikeSpec.findOrCreateExclusiveStrike();
-    SkASSERT(cache);
+    auto strike = strikeSpec.findOrCreateStrike();
+    SkASSERT(strike);
     SkScalar emSize = (SkScalar)unitsPerEm;
-    SkScalar xHeight = cache->getFontMetrics().fXHeight;
-    SkBulkGlyphMetricsAndPaths metricsAndPaths(std::move(cache));
+    SkScalar xHeight = strike->getFontMetrics().fXHeight;
+    SkBulkGlyphMetricsAndPaths metricsAndPaths(std::move(strike));
 
     SkStrikeSpec strikeSpecSmall = kBitmapFontSize > 0 ? make_small_strike(*typeface)
                                                        : strikeSpec;

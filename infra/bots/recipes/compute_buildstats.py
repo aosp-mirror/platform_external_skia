@@ -101,9 +101,8 @@ def RunSteps(api):
 
 def keys_and_props(api):
   keys = []
-  keys_blacklist = ['role']
   for k in sorted(api.vars.builder_cfg.keys()):
-      if not k in keys_blacklist:
+      if not k in ['role']:
         keys.extend([k, api.vars.builder_cfg[k]])
   keystr = ' '.join(keys)
 
@@ -222,7 +221,7 @@ def make_treemap(api, checkout_root, out_dir, files):
 
 
 def GenTests(api):
-  builder = 'BuildStats-Debian9-EMCC-wasm-Release-PathKit'
+  builder = 'BuildStats-Debian10-EMCC-wasm-Release-PathKit'
   yield (
     api.test('normal_bot') +
     api.properties(buildername=builder,

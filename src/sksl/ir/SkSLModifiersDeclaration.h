@@ -18,26 +18,32 @@ namespace SkSL {
  *
  * layout(blend_support_all_equations) out;
  */
-struct ModifiersDeclaration : public ProgramElement {
-    ModifiersDeclaration(Modifiers modifiers)
-    : INHERITED(-1, kModifiers_Kind)
-    , fModifiers(modifiers) {}
+class ModifiersDeclaration final : public ProgramElement {
+public:
+    static constexpr Kind kProgramElementKind = Kind::kModifiers;
+
+    ModifiersDeclaration(const Modifiers* modifiers)
+        : INHERITED(-1, kProgramElementKind)
+        , fModifiers(modifiers) {}
+
+    const Modifiers& modifiers() const {
+        return *fModifiers;
+    }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::unique_ptr<ProgramElement>(new ModifiersDeclaration(fModifiers));
+        return std::make_unique<ModifiersDeclaration>(&this->modifiers());
     }
 
-#ifdef SK_DEBUG
     String description() const override {
-        return fModifiers.description() + ";";
+        return this->modifiers().description() + ";";
     }
-#endif
 
-    Modifiers fModifiers;
+private:
+    const Modifiers* fModifiers;
 
-    typedef ProgramElement INHERITED;
+    using INHERITED = ProgramElement;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

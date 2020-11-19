@@ -38,6 +38,8 @@ struct SkCpu {
 
         // Handy alias for all the cool Skylake Xeon+ instructions.
         SKX = AVX512F  | AVX512DQ | AVX512CD | AVX512BW | AVX512VL,
+
+        ERMS       = 1 << 20,
     };
     enum {
         NEON     = 1 << 0,
@@ -83,6 +85,9 @@ inline bool SkCpu::Supports(uint32_t mask) {
     // F16C goes here if we add SK_CPU_SSE_LEVEL_F16C
     #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_AVX2
     features |= AVX2;
+    #endif
+    #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SKX
+    features |= (AVX512F | AVX512DQ | AVX512CD | AVX512BW | AVX512VL);
     #endif
     // FMA doesn't fit neatly into this total ordering.
     // It's available on Haswell+ just like AVX2, but it's technically a different bit.

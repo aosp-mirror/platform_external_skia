@@ -17,20 +17,20 @@
 #include <android/hardware_buffer.h>
 
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContext.h"
-#include "include/gpu/GrTexture.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/gl/GrGLTypes.h"
-#include "include/private/GrRecordingContext.h"
-#include "src/core/SkExchange.h"
 #include "src/core/SkMessageBus.h"
 #include "src/gpu/GrAHardwareBufferUtils.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrResourceCache.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrResourceProviderPriv.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
+#include "src/gpu/SkGr.h"
 #include "src/gpu/gl/GrGLDefines.h"
 
 #include <EGL/egl.h>
@@ -81,11 +81,11 @@ GrAHardwareBufferImageGenerator::~GrAHardwareBufferImageGenerator() {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext* context) {
-    if (context->priv().abandoned()) {
+    if (context->abandoned()) {
         return {};
     }
 
-    auto direct = context->priv().asDirectContext();
+    auto direct = context->asDirectContext();
     if (!direct) {
         return {};
     }
@@ -116,8 +116,6 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
     AHardwareBuffer* hardwareBuffer = fHardwareBuffer;
     AHardwareBuffer_acquire(hardwareBuffer);
 
-    const bool isProtectedContent = fIsProtectedContent;
-
     class AutoAHBRelease {
     public:
         AutoAHBRelease(AHardwareBuffer* ahb) : fAhb(ahb) {}
@@ -127,7 +125,7 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
         ~AutoAHBRelease() { fAhb ? AHardwareBuffer_release(fAhb) : void(); }
 
         AutoAHBRelease& operator=(AutoAHBRelease&& that) {
-            fAhb = skstd::exchange(that.fAhb, nullptr);
+            fAhb = std::exchange(that.fAhb, nullptr);
             return *this;
         }
         AutoAHBRelease& operator=(const AutoAHBRelease&) = delete;
@@ -138,24 +136,26 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
         AHardwareBuffer* fAhb;
     };
 
-    GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(backendFormat, grColorType);
-
     sk_sp<GrTextureProxy> texProxy = proxyProvider->createLazyProxy(
-            [direct, buffer = AutoAHBRelease(hardwareBuffer), width, height, isProtectedContent,
-             backendFormat, grColorType](
-                    GrResourceProvider* resourceProvider) -> GrSurfaceProxy::LazyCallbackResult {
+            [direct, buffer = AutoAHBRelease(hardwareBuffer)](
+                    GrResourceProvider* resourceProvider,
+                    const GrSurfaceProxy::LazySurfaceDesc& desc)
+                    -> GrSurfaceProxy::LazyCallbackResult {
                 GrAHardwareBufferUtils::DeleteImageProc deleteImageProc = nullptr;
                 GrAHardwareBufferUtils::UpdateImageProc updateImageProc = nullptr;
                 GrAHardwareBufferUtils::TexImageCtx texImageCtx = nullptr;
 
+                bool isProtected = desc.fProtected == GrProtected::kYes;
                 GrBackendTexture backendTex =
-                        GrAHardwareBufferUtils::MakeBackendTexture(direct, buffer.get(),
-                                                                   width, height,
+                        GrAHardwareBufferUtils::MakeBackendTexture(direct,
+                                                                   buffer.get(),
+                                                                   desc.fDimensions.width(),
+                                                                   desc.fDimensions.height(),
                                                                    &deleteImageProc,
                                                                    &updateImageProc,
                                                                    &texImageCtx,
-                                                                   isProtectedContent,
-                                                                   backendFormat,
+                                                                   isProtected,
+                                                                   desc.fFormat,
                                                                    false);
                 if (!backendTex.isValid()) {
                     return {};
@@ -166,8 +166,7 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
                 // is invoked. We know the owning SkIamge will send an invalidation message when the
                 // image is destroyed, so the texture will be removed at that time.
                 sk_sp<GrTexture> tex = resourceProvider->wrapBackendTexture(
-                        backendTex, grColorType, kBorrow_GrWrapOwnership, GrWrapCacheable::kYes,
-                        kRead_GrIOType);
+                        backendTex, kBorrow_GrWrapOwnership, GrWrapCacheable::kYes, kRead_GrIOType);
                 if (!tex) {
                     deleteImageProc(texImageCtx);
                     return {};
@@ -179,40 +178,44 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
 
                 return tex;
             },
-            backendFormat, {width, height}, readSwizzle, GrRenderable::kNo, 1, GrMipMapped::kNo,
-            GrMipMapsStatus::kNotAllocated, GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact,
-            SkBudgeted::kNo, GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
+            backendFormat, {width, height}, GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
+            GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kNo,
+            GrProtected(fIsProtectedContent), GrSurfaceProxy::UseAllocator::kYes);
+
+    GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(backendFormat, grColorType);
 
     return GrSurfaceProxyView(std::move(texProxy), fSurfaceOrigin, readSwizzle);
 }
 
 GrSurfaceProxyView GrAHardwareBufferImageGenerator::onGenerateTexture(
-        GrRecordingContext* context, const SkImageInfo& info,
-        const SkIPoint& origin, bool willNeedMipMaps) {
+        GrRecordingContext* context,
+        const SkImageInfo& info,
+        const SkIPoint& origin,
+        GrMipmapped mipMapped,
+        GrImageTexGenPolicy texGenPolicy) {
     GrSurfaceProxyView texProxyView = this->makeView(context);
     if (!texProxyView.proxy()) {
         return {};
     }
     SkASSERT(texProxyView.asTextureProxy());
 
-    if (0 == origin.fX && 0 == origin.fY &&
-        info.width() == this->getInfo().width() && info.height() == this->getInfo().height()) {
-        // If the caller wants the full texture we're done. The caller will handle making a copy for
-        // mip maps if that is required.
+    if (texGenPolicy == GrImageTexGenPolicy::kDraw && origin.isZero() &&
+        info.dimensions() == this->getInfo().dimensions() && mipMapped == GrMipmapped::kNo) {
+        // If the caller wants the full non-MIP mapped texture we're done.
         return texProxyView;
     }
-    // Otherwise, make a copy for the requested subset.
+    // Otherwise, make a copy for the requested subset and/or MIP maps.
     SkIRect subset = SkIRect::MakeXYWH(origin.fX, origin.fY, info.width(), info.height());
 
-    GrMipMapped mipMapped = willNeedMipMaps ? GrMipMapped::kYes : GrMipMapped::kNo;
+    SkBudgeted budgeted = texGenPolicy == GrImageTexGenPolicy::kNew_Uncached_Unbudgeted
+                                  ? SkBudgeted::kNo
+                                  : SkBudgeted::kYes;
 
-    GrColorType grColorType = SkColorTypeToGrColorType(this->getInfo().colorType());
-    return GrSurfaceProxy::Copy(context, texProxyView.proxy(), texProxyView.origin(), grColorType,
-                                mipMapped, subset, SkBackingFit::kExact,
-                                SkBudgeted::kYes);
+    return GrSurfaceProxyView::Copy(context, std::move(texProxyView), mipMapped, subset,
+                                    SkBackingFit::kExact, budgeted);
 }
 
-bool GrAHardwareBufferImageGenerator::onIsValid(GrContext* context) const {
+bool GrAHardwareBufferImageGenerator::onIsValid(GrRecordingContext* context) const {
     if (nullptr == context) {
         return false; //CPU backend is not supported, because hardware buffer can be swizzled
     }

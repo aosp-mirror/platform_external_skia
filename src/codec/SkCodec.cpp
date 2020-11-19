@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
@@ -17,7 +18,7 @@
 #endif
 #include "src/codec/SkIcoCodec.h"
 #include "src/codec/SkJpegCodec.h"
-#ifdef SK_HAS_PNG_LIBRARY
+#ifdef SK_CODEC_DECODES_PNG
 #include "src/codec/SkPngCodec.h"
 #endif
 #include "include/core/SkStream.h"
@@ -37,10 +38,10 @@ struct DecoderProc {
 
 static std::vector<DecoderProc>* decoders() {
     static auto* decoders = new std::vector<DecoderProc> {
-    #ifdef SK_HAS_JPEG_LIBRARY
+    #ifdef SK_CODEC_DECODES_JPEG
         { SkJpegCodec::IsJpeg, SkJpegCodec::MakeFromStream },
     #endif
-    #ifdef SK_HAS_WEBP_LIBRARY
+    #ifdef SK_CODEC_DECODES_WEBP
         { SkWebpCodec::IsWebp, SkWebpCodec::MakeFromStream },
     #endif
     #ifdef SK_HAS_WUFFS_LIBRARY
@@ -48,7 +49,7 @@ static std::vector<DecoderProc>* decoders() {
     #elif defined(SK_USE_LIBGIFCODEC)
         { SkGifCodec::IsGif, SkGifCodec::MakeFromStream },
     #endif
-    #ifdef SK_HAS_PNG_LIBRARY
+    #ifdef SK_CODEC_DECODES_PNG
         { SkIcoCodec::IsIco, SkIcoCodec::MakeFromStream },
     #endif
         { SkBmpCodec::IsBmp, SkBmpCodec::MakeFromStream },
@@ -112,7 +113,7 @@ std::unique_ptr<SkCodec> SkCodec::MakeFromStream(
 
     // PNG is special, since we want to be able to supply an SkPngChunkReader.
     // But this code follows the same pattern as the loop.
-#ifdef SK_HAS_PNG_LIBRARY
+#ifdef SK_CODEC_DECODES_PNG
     if (SkPngCodec::IsPng(buffer, bytesRead)) {
         return SkPngCodec::MakeFromStream(std::move(stream), outResult, chunkReader);
     } else
@@ -125,8 +126,10 @@ std::unique_ptr<SkCodec> SkCodec::MakeFromStream(
         }
 
 #ifdef SK_HAS_HEIF_LIBRARY
-        if (SkHeifCodec::IsHeif(buffer, bytesRead)) {
-            return SkHeifCodec::MakeFromStream(std::move(stream), selectionPolicy, outResult);
+        SkEncodedImageFormat format;
+        if (SkHeifCodec::IsSupported(buffer, bytesRead, &format)) {
+            return SkHeifCodec::MakeFromStream(std::move(stream), selectionPolicy,
+                    format, outResult);
         }
 #endif
 
@@ -163,9 +166,29 @@ SkCodec::SkCodec(SkEncodedInfo&& info, XformFormat srcFormat, std::unique_ptr<Sk
     , fOptions()
     , fCurrScanline(-1)
     , fStartedIncrementalDecode(false)
+    , fAndroidCodecHandlesFrameIndex(false)
 {}
 
 SkCodec::~SkCodec() {}
+
+bool SkCodec::queryYUVAInfo(const SkYUVAPixmapInfo::SupportedDataTypes& supportedDataTypes,
+                            SkYUVAPixmapInfo* yuvaPixmapInfo) const {
+    if (!yuvaPixmapInfo) {
+        return false;
+    }
+    return this->onQueryYUVAInfo(supportedDataTypes, yuvaPixmapInfo) &&
+           yuvaPixmapInfo->isSupported(supportedDataTypes);
+}
+
+SkCodec::Result SkCodec::getYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) {
+    if (!yuvaPixmaps.isValid()) {
+        return kInvalidInput;
+    }
+    if (!this->rewindIfNeeded()) {
+        return kCouldNotRewind;
+    }
+    return this->onGetYUVAPlanes(yuvaPixmaps);
+}
 
 bool SkCodec::conversionSupported(const SkImageInfo& dst, bool srcIsOpaque, bool needsColorXform) {
     if (!valid_alpha(dst.alphaType(), srcIsOpaque)) {
@@ -224,25 +247,21 @@ static SkIRect frame_rect_on_screen(SkIRect frameRect,
 
 bool zero_rect(const SkImageInfo& dstInfo, void* pixels, size_t rowBytes,
                SkISize srcDimensions, SkIRect prevRect) {
-    prevRect = frame_rect_on_screen(prevRect, SkIRect::MakeSize(srcDimensions));
-    if (prevRect.isEmpty()) {
-        return true;
-    }
     const auto dimensions = dstInfo.dimensions();
     if (dimensions != srcDimensions) {
         SkRect src = SkRect::Make(srcDimensions);
         SkRect dst = SkRect::Make(dimensions);
-        SkMatrix map = SkMatrix::MakeRectToRect(src, dst, SkMatrix::kCenter_ScaleToFit);
+        SkMatrix map = SkMatrix::MakeRectToRect(src, dst, SkMatrix::kFill_ScaleToFit);
         SkRect asRect = SkRect::Make(prevRect);
         if (!map.mapRect(&asRect)) {
             return false;
         }
-        asRect.roundIn(&prevRect);
-        if (prevRect.isEmpty()) {
-            // Down-scaling shrank the empty portion to nothing,
-            // so nothing to zero.
-            return true;
-        }
+        asRect.roundOut(&prevRect);
+    }
+
+    if (!prevRect.intersect(SkIRect::MakeSize(dimensions))) {
+        // Nothing to zero, due to scaling or bad frame rect.
+        return true;
     }
 
     const SkImageInfo info = dstInfo.makeDimensions(prevRect.size());
@@ -254,7 +273,19 @@ bool zero_rect(const SkImageInfo& dstInfo, void* pixels, size_t rowBytes,
 }
 
 SkCodec::Result SkCodec::handleFrameIndex(const SkImageInfo& info, void* pixels, size_t rowBytes,
-                                          const Options& options) {
+                                          const Options& options, SkAndroidCodec* androidCodec) {
+    if (androidCodec) {
+        // This is never set back to false. If SkAndroidCodec is calling this method, its fCodec
+        // should never call it directly.
+        fAndroidCodecHandlesFrameIndex = true;
+    } else if (fAndroidCodecHandlesFrameIndex) {
+        return kSuccess;
+    }
+
+    if (!this->rewindIfNeeded()) {
+        return kCouldNotRewind;
+    }
+
     const int index = options.fFrameIndex;
     if (0 == index) {
         return this->initializeColorXform(info, fEncodedInfo.alpha(), fEncodedInfo.opaque())
@@ -283,46 +314,55 @@ SkCodec::Result SkCodec::handleFrameIndex(const SkImageInfo& info, void* pixels,
 
     const int requiredFrame = frame->getRequiredFrame();
     if (requiredFrame != kNoFrame) {
-        if (options.fPriorFrame != kNoFrame) {
+        const SkFrame* preppedFrame = nullptr;
+        if (options.fPriorFrame == kNoFrame) {
+            Result result = kInternalError;
+            if (androidCodec) {
+#ifdef SK_HAS_ANDROID_CODEC
+                SkAndroidCodec::AndroidOptions prevFrameOptions(
+                        reinterpret_cast<const SkAndroidCodec::AndroidOptions&>(options));
+                prevFrameOptions.fFrameIndex = requiredFrame;
+                result = androidCodec->getAndroidPixels(info, pixels, rowBytes, &prevFrameOptions);
+#endif
+            } else {
+                Options prevFrameOptions(options);
+                prevFrameOptions.fFrameIndex = requiredFrame;
+                result = this->getPixels(info, pixels, rowBytes, &prevFrameOptions);
+            }
+            if (result != kSuccess) {
+                return result;
+            }
+            preppedFrame = frameHolder->getFrame(requiredFrame);
+        } else {
             // Check for a valid frame as a starting point. Alternatively, we could
             // treat an invalid frame as not providing one, but rejecting it will
             // make it easier to catch the mistake.
             if (options.fPriorFrame < requiredFrame || options.fPriorFrame >= index) {
                 return kInvalidParameters;
             }
-            const auto* prevFrame = frameHolder->getFrame(options.fPriorFrame);
-            switch (prevFrame->getDisposalMethod()) {
-                case SkCodecAnimation::DisposalMethod::kRestorePrevious:
-                    return kInvalidParameters;
-                case SkCodecAnimation::DisposalMethod::kRestoreBGColor:
-                    // If a frame after the required frame is provided, there is no
-                    // need to clear, since it must be covered by the desired frame.
-                    if (options.fPriorFrame == requiredFrame) {
-                        SkIRect prevRect = prevFrame->frameRect();
-                        if (!zero_rect(info, pixels, rowBytes, this->dimensions(), prevRect)) {
-                            return kInternalError;
-                        }
+            preppedFrame = frameHolder->getFrame(options.fPriorFrame);
+        }
+
+        SkASSERT(preppedFrame);
+        switch (preppedFrame->getDisposalMethod()) {
+            case SkCodecAnimation::DisposalMethod::kRestorePrevious:
+                SkASSERT(options.fPriorFrame != kNoFrame);
+                return kInvalidParameters;
+            case SkCodecAnimation::DisposalMethod::kRestoreBGColor:
+                // If a frame after the required frame is provided, there is no
+                // need to clear, since it must be covered by the desired frame.
+                // FIXME: If the required frame is kRestoreBGColor, we don't actually need to decode
+                // it, since we'll just clear it to transparent. Instead, we could decode *its*
+                // required frame and then clear.
+                if (preppedFrame->frameId() == requiredFrame) {
+                    SkIRect preppedRect = preppedFrame->frameRect();
+                    if (!zero_rect(info, pixels, rowBytes, this->dimensions(), preppedRect)) {
+                        return kInternalError;
                     }
-                    break;
-                default:
-                    break;
-            }
-        } else {
-            Options prevFrameOptions(options);
-            prevFrameOptions.fFrameIndex = requiredFrame;
-            prevFrameOptions.fZeroInitialized = kNo_ZeroInitialized;
-            const Result result = this->getPixels(info, pixels, rowBytes, &prevFrameOptions);
-            if (result != kSuccess) {
-                return result;
-            }
-            const auto* prevFrame = frameHolder->getFrame(requiredFrame);
-            const auto disposalMethod = prevFrame->getDisposalMethod();
-            if (disposalMethod == SkCodecAnimation::DisposalMethod::kRestoreBGColor) {
-                auto prevRect = prevFrame->frameRect();
-                if (!zero_rect(info, pixels, rowBytes, this->dimensions(), prevRect)) {
-                    return kInternalError;
                 }
-            }
+                break;
+            default:
+                break;
         }
     }
 
@@ -340,10 +380,6 @@ SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t
     }
     if (rowBytes < info.minRowBytes()) {
         return kInvalidParameters;
-    }
-
-    if (!this->rewindIfNeeded()) {
-        return kCouldNotRewind;
     }
 
     // Default options.
@@ -411,15 +447,6 @@ SkCodec::Result SkCodec::startIncrementalDecode(const SkImageInfo& info, void* p
         return kInvalidParameters;
     }
 
-    // FIXME: If the rows come after the rows of a previous incremental decode,
-    // we might be able to skip the rewind, but only the implementation knows
-    // that. (e.g. PNG will always need to rewind, since we called longjmp, but
-    // a bottom-up BMP could skip rewinding if the new rows are above the old
-    // rows.)
-    if (!this->rewindIfNeeded()) {
-        return kCouldNotRewind;
-    }
-
     // Set options.
     Options optsStorage;
     if (nullptr == options) {
@@ -474,10 +501,6 @@ SkCodec::Result SkCodec::startScanlineDecode(const SkImageInfo& info,
     // Reset fCurrScanline in case of failure.
     fCurrScanline = -1;
 
-    if (!this->rewindIfNeeded()) {
-        return kCouldNotRewind;
-    }
-
     // Set options.
     Options optsStorage;
     if (nullptr == options) {
@@ -516,6 +539,15 @@ SkCodec::Result SkCodec::startScanlineDecode(const SkImageInfo& info,
     if (result != SkCodec::kSuccess) {
         return result;
     }
+
+    // FIXME: See startIncrementalDecode. That method set fNeedsRewind to false
+    // so that when onStartScanlineDecode calls rewindIfNeeded it would not
+    // rewind. But it also relies on that call to rewindIfNeeded to set
+    // fNeedsRewind to true for future decodes. When
+    // fAndroidCodecHandlesFrameIndex is true, that call to rewindIfNeeded is
+    // skipped, so this method sets it back to true.
+    SkASSERT(fAndroidCodecHandlesFrameIndex || fNeedsRewind);
+    fNeedsRewind = true;
 
     fCurrScanline = 0;
     fDstInfo = info;

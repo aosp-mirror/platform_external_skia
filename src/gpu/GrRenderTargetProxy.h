@@ -15,7 +15,6 @@
 #include "src/gpu/GrSwizzle.h"
 
 class GrResourceProvider;
-class GrRenderTargetProxyPriv;
 
 // This class delays the acquisition of RenderTargets until they are actually
 // required
@@ -57,10 +56,16 @@ public:
 
     int maxWindowRectangles(const GrCaps& caps) const;
 
+    bool glRTFBOIDIs0() const { return fSurfaceFlags & GrInternalSurfaceFlags::kGLRTFBOIDIs0; }
+
     bool wrapsVkSecondaryCB() const { return fWrapsVkSecondaryCB == WrapsVkSecondaryCB::kYes; }
 
+    bool supportsVkInputAttachment() const {
+        return fSurfaceFlags & GrInternalSurfaceFlags::kVkRTSupportsInputAttachment;
+    }
+
     void markMSAADirty(const SkIRect& dirtyRect, GrSurfaceOrigin origin) {
-        SkASSERT(SkIRect::MakeSize(this->dimensions()).contains(dirtyRect));
+        SkASSERT(SkIRect::MakeSize(this->backingStoreDimensions()).contains(dirtyRect));
         SkASSERT(this->requiresManualMSAAResolve());
         auto nativeRect = GrNativeRect::MakeRelativeTo(
                 origin, this->backingStoreDimensions().height(), dirtyRect);
@@ -82,10 +87,6 @@ public:
     // TODO: move this to a priv class!
     bool refsWrappedObjects() const;
 
-    // Provides access to special purpose functions.
-    GrRenderTargetProxyPriv rtPriv();
-    const GrRenderTargetProxyPriv rtPriv() const;
-
 protected:
     friend class GrProxyProvider;  // for ctors
     friend class GrRenderTargetProxyPriv;
@@ -95,7 +96,6 @@ protected:
                         const GrBackendFormat&,
                         SkISize,
                         int sampleCount,
-                        const GrSwizzle& textureSwizzle,
                         SkBackingFit,
                         SkBudgeted,
                         GrProtected,
@@ -118,7 +118,6 @@ protected:
                         const GrBackendFormat&,
                         SkISize,
                         int sampleCount,
-                        const GrSwizzle& textureSwizzle,
                         SkBackingFit,
                         SkBudgeted,
                         GrProtected,
@@ -128,23 +127,18 @@ protected:
 
     // Wrapped version
     GrRenderTargetProxy(sk_sp<GrSurface>,
-                        const GrSwizzle& textureSwizzle,
                         UseAllocator,
                         WrapsVkSecondaryCB = WrapsVkSecondaryCB::kNo);
 
     sk_sp<GrSurface> createSurface(GrResourceProvider*) const override;
 
 private:
-    void setGLRTFBOIDIs0() {
-        fSurfaceFlags |= GrInternalSurfaceFlags::kGLRTFBOIDIs0;
-    }
-    bool glRTFBOIDIs0() const {
-        return fSurfaceFlags & GrInternalSurfaceFlags::kGLRTFBOIDIs0;
-    }
     bool canChangeStencilAttachment() const;
 
-    size_t onUninstantiatedGpuMemorySize(const GrCaps&) const override;
+    size_t onUninstantiatedGpuMemorySize() const override;
     SkDEBUGCODE(void onValidateSurface(const GrSurface*) override;)
+
+            LazySurfaceDesc callbackDesc() const override;
 
     // WARNING: Be careful when adding or removing fields here. ASAN is likely to trigger warnings
     // when instantiating GrTextureRenderTargetProxy. The std::function in GrSurfaceProxy makes
@@ -165,7 +159,7 @@ private:
     // will work, but we use 4 to be more explicit about getting it to 16 byte alignment.
     char               fDummyPadding[4];
 
-    typedef GrSurfaceProxy INHERITED;
+    using INHERITED = GrSurfaceProxy;
 };
 
 #endif

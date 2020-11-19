@@ -1,0 +1,2 @@
+buffer brokenA { float x[];              float y; };
+buffer brokenB { float x[] = float[](0); float y; };
