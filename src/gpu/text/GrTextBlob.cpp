@@ -518,9 +518,6 @@ GrSubRun* DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables
     GlyphVector::Variant* glyphIDs =
             alloc->makeArray<GlyphVector::Variant>(drawables.size());
 
-    // The lower bounds of drawing is always (0, 0). Since glyphs from the atlas can be at most
-    // 256x256, use kMinPos to eliminate glyphs that have no pixels on the device.
-    constexpr SkScalar kMinPos = 0 - SkStrikeCommon::kSkSideTooBigForAtlas;
     // Because this is the direct case, the maximum width or height is the size that fits in the
     // atlas. This boundary is checked below to ensure that the call to SkGlyphRect below will
     // not overflow.
@@ -533,7 +530,7 @@ GrSubRun* DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables
         // Ensure that the .offset() call below does not overflow. And, at this point none of the
         // rectangles are empty because they were culled before the run was created. Basically,
         // cull all the glyphs that can't appear on the screen.
-        if (kMinPos < x && x < kMaxPos && kMinPos  < y && y < kMaxPos) {
+        if (-kMaxPos < x && x < kMaxPos && -kMaxPos  < y && y < kMaxPos) {
             const SkGlyph* const skGlyph = variant;
             const SkGlyphRect deviceBounds =
                     skGlyph->glyphRect().offset(SkScalarRoundToInt(x), SkScalarRoundToInt(y));
@@ -1440,6 +1437,15 @@ void GrTextBlob::addMultiMaskFormat(
         const SkStrikeSpec& strikeSpec) {
     if (drawables.empty()) { return; }
 
+    auto addSameFormat = [&](const SkZip<SkGlyphVariant, SkPoint>& drawable, GrMaskFormat format) {
+        GrSubRun* subRun = addSingle(drawable, strikeSpec, format, this, &fAlloc);
+        if (subRun != nullptr) {
+            this->insertSubRun(subRun);
+        } else {
+            fSomeGlyphsExcluded = true;
+        }
+    };
+
     auto glyphSpan = drawables.get<0>();
     SkGlyph* glyph = glyphSpan[0];
     GrMaskFormat format = GrGlyph::FormatFromSkGlyph(glyph->maskFormat());
@@ -1449,23 +1455,13 @@ void GrTextBlob::addMultiMaskFormat(
         GrMaskFormat nextFormat = GrGlyph::FormatFromSkGlyph(glyph->maskFormat());
         if (format != nextFormat) {
             auto sameFormat = drawables.subspan(startIndex, i - startIndex);
-            GrSubRun* subRun = addSingle(sameFormat, strikeSpec, format, this, &fAlloc);
-            this->insertSubRun(subRun);
+            addSameFormat(sameFormat, format);
             format = nextFormat;
             startIndex = i;
         }
     }
     auto sameFormat = drawables.last(drawables.size() - startIndex);
-    GrSubRun* subRun = addSingle(sameFormat,
-                                 strikeSpec,
-                                 format,
-                                 this,
-                                 &fAlloc);
-    if (subRun != nullptr) {
-        this->insertSubRun(subRun);
-    } else {
-        fSomeGlyphsExcluded = true;
-    }
+    addSameFormat(sameFormat, format);
 }
 
 GrTextBlob::GrTextBlob(size_t allocSize,
