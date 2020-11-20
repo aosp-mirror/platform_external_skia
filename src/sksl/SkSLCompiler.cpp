@@ -292,6 +292,7 @@ LoadedModule Compiler::loadModule(Program::Kind kind,
             fIRGenerator->convertProgram(kind, &settings, &standaloneCaps, baseModule,
                                          /*isBuiltinCode=*/true, source->c_str(), source->length(),
                                          /*externalValues=*/nullptr);
+    SkASSERT(ir.fSharedElements.empty());
     LoadedModule module = {std::move(ir.fSymbolTable), std::move(ir.fElements)};
     fIRGenerator->fCanInline = true;
     if (this->fErrorCount) {
@@ -834,6 +835,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                                   OptimizationContext* optimizationContext) {
     Expression* expr = (*iter)->expression()->get();
     SkASSERT(expr);
+
     if ((*iter)->fConstantPropagation) {
         std::unique_ptr<Expression> optimized = expr->constantPropagate(*fIRGenerator,
                                                                         definitions);
@@ -1052,7 +1054,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
         }
         case Expression::Kind::kSwizzle: {
             Swizzle& s = expr->as<Swizzle>();
-            // detect identity swizzles like foo.rgba
+            // Detect identity swizzles like `foo.rgba`.
             if ((int) s.components().size() == s.base()->type().columns()) {
                 bool identity = true;
                 for (int i = 0; i < (int) s.components().size(); ++i) {
@@ -1072,8 +1074,8 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     break;
                 }
             }
-            // detect swizzles of swizzles, e.g. replace foo.argb.r000 with foo.a000
-            if (s.base()->kind() == Expression::Kind::kSwizzle) {
+            // Detect swizzles of swizzles, e.g. replace `foo.argb.r000` with `foo.a000`.
+            if (s.base()->is<Swizzle>()) {
                 Swizzle& base = s.base()->as<Swizzle>();
                 ComponentArray final;
                 for (int c : s.components()) {
@@ -1082,12 +1084,172 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 optimizationContext->fUpdated = true;
                 std::unique_ptr<Expression> replacement(new Swizzle(*fContext, base.base()->clone(),
                                                                     final));
-                // No fUsage change: foo.gbr.gbr and foo.brg have equivalent reference counts
+                // No fUsage change: `foo.gbr.gbr` and `foo.brg` have equivalent reference counts
                 if (!try_replace_expression(&b, iter, &replacement)) {
                     optimizationContext->fNeedsRescan = true;
                     return;
                 }
                 SkASSERT((*iter)->isExpression());
+                break;
+            }
+            // Optimize swizzles of constructors.
+            if (s.base()->is<Constructor>()) {
+                Constructor& base = s.base()->as<Constructor>();
+                std::unique_ptr<Expression> replacement;
+                const Type& componentType = base.type().componentType();
+                int swizzleSize = s.components().size();
+
+                // The IR generator has already converted any zero/one swizzle components into
+                // constructors containing zero/one args. Confirm that this is true by checking that
+                // our swizzle components are all `xyzw` (values 0 through 3).
+                SkASSERT(std::all_of(s.components().begin(), s.components().end(),
+                                     [](int8_t c) { return c >= 0 && c <= 3; }));
+
+                if (base.arguments().size() == 1 &&
+                    base.arguments().front()->type().typeKind() == Type::TypeKind::kScalar) {
+                    // `half4(scalar).zyy` can be optimized to `half3(scalar)`. The swizzle
+                    // components don't actually matter since all fields are the same.
+                    ExpressionArray newArgs;
+                    newArgs.push_back(base.arguments().front()->clone());
+                    replacement = std::make_unique<Constructor>(
+                            base.fOffset,
+                            &componentType.toCompound(*fContext, swizzleSize, /*rows=*/1),
+                            std::move(newArgs));
+
+                    // No fUsage change: `half4(foo).xy` and `half2(foo)` have equivalent reference
+                    // counts.
+                    optimizationContext->fUpdated = true;
+                    if (!try_replace_expression(&b, iter, &replacement)) {
+                        optimizationContext->fNeedsRescan = true;
+                        return;
+                    }
+                    SkASSERT((*iter)->isExpression());
+                    break;
+                }
+
+                // Swizzles can duplicate some elements and discard others, e.g.
+                // `half4(1, 2, 3, 4).xxz` --> `half3(1, 1, 3)`. However, there are constraints:
+                // - Expressions with side effects need to occur exactly once, even if they
+                //   would otherwise be swizzle-eliminated
+                // - Non-trivial expressions should not be repeated, but elimination is OK.
+                //
+                // Look up the argument for the constructor at each index. This is typically simple
+                // but for weird cases like `half4(bar.yz, half2(foo))`, it can be harder than it
+                // seems. This example would result in:
+                //     argMap[0] = {.fArgIndex = 0, .fComponent = 0}   (bar.yz     .x)
+                //     argMap[1] = {.fArgIndex = 0, .fComponent = 1}   (bar.yz     .y)
+                //     argMap[2] = {.fArgIndex = 1, .fComponent = 0}   (half2(foo) .x)
+                //     argMap[3] = {.fArgIndex = 1, .fComponent = 1}   (half2(foo) .y)
+                struct ConstructorArgMap {
+                    int8_t fArgIndex;
+                    int8_t fComponent;
+                };
+
+                int numConstructorArgs = base.type().columns();
+                ConstructorArgMap argMap[4] = {};
+                int writeIdx = 0;
+                for (int argIdx = 0; argIdx < (int) base.arguments().size(); ++argIdx) {
+                    const Expression& expr = *base.arguments()[argIdx];
+                    int argWidth = expr.type().columns();
+                    for (int componentIdx = 0; componentIdx < argWidth; ++componentIdx) {
+                        argMap[writeIdx].fArgIndex = argIdx;
+                        argMap[writeIdx].fComponent = componentIdx;
+                        ++writeIdx;
+                    }
+                }
+                SkASSERT(writeIdx == numConstructorArgs);
+
+                // Count up the number of times each constructor argument is used by the
+                // swizzle.
+                //    `half4(bar.yz, half2(foo)).xwxy` -> { 3, 1 }
+                // - bar.yz    is referenced 3 times, by `.x_xy`
+                // - half(foo) is referenced 1 time,  by `._w__`
+                int8_t exprUsed[4] = {};
+                for (int c : s.components()) {
+                    exprUsed[argMap[c].fArgIndex]++;
+                }
+
+                bool safeToOptimize = true;
+                for (int index = 0; index < numConstructorArgs; ++index) {
+                    int8_t constructorArgIndex = argMap[index].fArgIndex;
+                    const Expression& baseArg = *base.arguments()[constructorArgIndex];
+
+                    // Check that non-trivial expressions are not swizzled in more than once.
+                    if (exprUsed[constructorArgIndex] > 1 && !baseArg.isConstantOrUniform()) {
+                        safeToOptimize = false;
+                        break;
+                    }
+                    // Check that side-effect-bearing expressions are swizzled in exactly once.
+                    if (exprUsed[constructorArgIndex] != 1 && baseArg.hasSideEffects()) {
+                        safeToOptimize = false;
+                        break;
+                    }
+                }
+
+                if (safeToOptimize) {
+                    struct ReorderedArgument {
+                        int8_t fArgIndex;
+                        ComponentArray fComponents;
+                    };
+                    SkSTArray<4, ReorderedArgument> reorderedArgs;
+                    for (int c : s.components()) {
+                        const ConstructorArgMap& argument = argMap[c];
+                        const Expression& baseArg = *base.arguments()[argument.fArgIndex];
+
+                        if (baseArg.type().typeKind() == Type::TypeKind::kScalar) {
+                            // This argument is a scalar; add it to the list as-is.
+                            SkASSERT(argument.fComponent == 0);
+                            reorderedArgs.push_back({argument.fArgIndex,
+                                                     ComponentArray{}});
+                        } else {
+                            // This argument is a component from a vector.
+                            SkASSERT(argument.fComponent < baseArg.type().columns());
+                            if (reorderedArgs.empty() ||
+                                reorderedArgs.back().fArgIndex != argument.fArgIndex) {
+                                // This can't be combined with the previous argument. Add a new one.
+                                reorderedArgs.push_back({argument.fArgIndex,
+                                                         ComponentArray{argument.fComponent}});
+                            } else {
+                                // Since we know this argument uses components, it should already
+                                // have at least one component set.
+                                SkASSERT(!reorderedArgs.back().fComponents.empty());
+                                // Build up the current argument with one more component.
+                                reorderedArgs.back().fComponents.push_back(argument.fComponent);
+                            }
+                        }
+                    }
+
+                    // Convert our reordered argument list to an actual array of expressions, with
+                    // the new order and any new inner swizzles that need to be applied. Note that
+                    // we expect followup passes to clean up the inner swizzles.
+                    ExpressionArray newArgs;
+                    newArgs.reserve_back(swizzleSize);
+                    for (const ReorderedArgument& reorderedArg : reorderedArgs) {
+                        const Expression& baseArg = *base.arguments()[reorderedArg.fArgIndex];
+                        if (reorderedArg.fComponents.empty()) {
+                            newArgs.push_back(baseArg.clone());
+                        } else {
+                            newArgs.push_back(std::make_unique<Swizzle>(*fContext, baseArg.clone(),
+                                                                        reorderedArg.fComponents));
+                        }
+                    }
+
+                    // Create a new constructor.
+                    replacement = std::make_unique<Constructor>(
+                            base.fOffset,
+                            &componentType.toCompound(*fContext, swizzleSize, /*rows=*/1),
+                            std::move(newArgs));
+
+                    // Remove references within 'expr', add references within 'optimized'
+                    optimizationContext->fUpdated = true;
+                    optimizationContext->fUsage->replace(expr, replacement.get());
+                    if (!try_replace_expression(&b, iter, &replacement)) {
+                        optimizationContext->fNeedsRescan = true;
+                        return;
+                    }
+                    SkASSERT((*iter)->isExpression());
+                }
+                break;
             }
             break;
         }
@@ -1563,6 +1725,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
                                              fCaps,
                                              fContext,
                                              std::move(ir.fElements),
+                                             std::move(ir.fSharedElements),
                                              std::move(ir.fModifiers),
                                              std::move(ir.fSymbolTable),
                                              std::move(pool),
@@ -1591,7 +1754,7 @@ bool Compiler::optimize(Program& program) {
         bool madeChanges = false;
 
         // Scan and optimize based on the control-flow graph for each function.
-        for (const auto& element : program.elements()) {
+        for (const auto& element : program.ownedElements()) {
             if (element->is<FunctionDefinition>()) {
                 madeChanges |= this->scanCFG(element->as<FunctionDefinition>(), usage);
             }
@@ -1603,41 +1766,54 @@ bool Compiler::optimize(Program& program) {
         // Remove dead functions. We wait until after analysis so that we still report errors,
         // even in unused code.
         if (program.fSettings.fRemoveDeadFunctions) {
+            auto isDeadFunction = [&](const ProgramElement* element) {
+                if (!element->is<FunctionDefinition>()) {
+                    return false;
+                }
+                const FunctionDefinition& fn = element->as<FunctionDefinition>();
+                if (fn.declaration().name() != "main" && usage->get(fn.declaration()) == 0) {
+                    usage->remove(*element);
+                    madeChanges = true;
+                    return true;
+                }
+                return false;
+            };
             program.fElements.erase(
-                    std::remove_if(program.fElements.begin(),
-                                   program.fElements.end(),
+                    std::remove_if(program.fElements.begin(), program.fElements.end(),
                                    [&](const std::unique_ptr<ProgramElement>& element) {
-                                       if (!element->is<FunctionDefinition>()) {
-                                           return false;
-                                       }
-                                       const auto& fn = element->as<FunctionDefinition>();
-                                       bool dead = fn.declaration().name() != "main" &&
-                                                   usage->get(fn.declaration()) == 0;
-                                       if (dead) {
-                                           madeChanges = true;
-                                           usage->remove(*element);
-                                       }
-                                       return dead;
+                                       return isDeadFunction(element.get());
                                    }),
                     program.fElements.end());
+            program.fSharedElements.erase(
+                    std::remove_if(program.fSharedElements.begin(), program.fSharedElements.end(),
+                                   isDeadFunction),
+                    program.fSharedElements.end());
         }
 
         if (program.fKind != Program::kFragmentProcessor_Kind) {
             // Remove declarations of dead global variables
+            auto isDeadVariable = [&](const ProgramElement* element) {
+                if (!element->is<GlobalVarDeclaration>()) {
+                    return false;
+                }
+                const GlobalVarDeclaration& global = element->as<GlobalVarDeclaration>();
+                const VarDeclaration& varDecl = global.declaration()->as<VarDeclaration>();
+                if (usage->isDead(varDecl.var())) {
+                    madeChanges = true;
+                    return true;
+                }
+                return false;
+            };
             program.fElements.erase(
                     std::remove_if(program.fElements.begin(), program.fElements.end(),
                                    [&](const std::unique_ptr<ProgramElement>& element) {
-                                       if (!element->is<GlobalVarDeclaration>()) {
-                                           return false;
-                                       }
-                                       const auto& global = element->as<GlobalVarDeclaration>();
-                                       const auto& varDecl =
-                                                         global.declaration()->as<VarDeclaration>();
-                                       bool dead = usage->isDead(varDecl.var());
-                                       madeChanges |= dead;
-                                       return dead;
+                                       return isDeadVariable(element.get());
                                    }),
                     program.fElements.end());
+            program.fSharedElements.erase(
+                    std::remove_if(program.fSharedElements.begin(), program.fSharedElements.end(),
+                                   isDeadVariable),
+                    program.fSharedElements.end());
         }
 
         if (!madeChanges) {
@@ -1757,7 +1933,6 @@ bool Compiler::toPipelineStage(Program& program, PipelineStageArgs* outArgs) {
 #endif
 
 std::unique_ptr<ByteCode> Compiler::toByteCode(Program& program) {
-#if defined(SK_ENABLE_SKSL_INTERPRETER)
     AutoSource as(this, program.fSource.get());
     std::unique_ptr<ByteCode> result(new ByteCode());
     ByteCodeGenerator cg(fContext.get(), &program, this, result.get());
@@ -1765,9 +1940,6 @@ std::unique_ptr<ByteCode> Compiler::toByteCode(Program& program) {
     if (success) {
         return result;
     }
-#else
-    ABORT("ByteCode interpreter not enabled");
-#endif
     return nullptr;
 }
 

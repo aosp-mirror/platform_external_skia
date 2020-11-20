@@ -443,7 +443,6 @@ public:
     using DevicePosition = skvx::Vec<2, int16_t>;
 
     DirectMaskSubRun(GrMaskFormat format,
-                     SkPoint residual,
                      GrTextBlob* blob,
                      const SkRect& bounds,
                      SkSpan<const DevicePosition> devicePositions,
@@ -453,7 +452,6 @@ public:
     static GrSubRun* Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                           const SkStrikeSpec& strikeSpec,
                           GrMaskFormat format,
-                          SkPoint residual,
                           GrTextBlob* blob,
                           SkArenaAlloc* alloc);
 
@@ -487,7 +485,6 @@ private:
     SkRect deviceRect(const SkMatrix& drawMatrix, SkPoint drawOrigin) const;
 
     const GrMaskFormat fMaskFormat;
-    const SkPoint fInitialMappedOrigin;
     GrTextBlob* const fBlob;
     // The vertex bounds in device space. The bounds are the joined rectangles of all the glyphs.
     const SkRect fVertexBounds;
@@ -500,14 +497,12 @@ private:
 };
 
 DirectMaskSubRun::DirectMaskSubRun(GrMaskFormat format,
-                                   SkPoint residual,
                                    GrTextBlob* blob,
                                    const SkRect& bounds,
                                    SkSpan<const DevicePosition> devicePositions,
                                    GlyphVector glyphs,
                                    bool glyphsOutOfBounds)
         : fMaskFormat{format}
-        , fInitialMappedOrigin{residual}
         , fBlob{blob}
         , fVertexBounds{bounds}
         , fLeftTopDevicePos{devicePositions}
@@ -517,16 +512,12 @@ DirectMaskSubRun::DirectMaskSubRun(GrMaskFormat format,
 GrSubRun* DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                  const SkStrikeSpec& strikeSpec,
                                  GrMaskFormat format,
-                                 SkPoint residual,
                                  GrTextBlob* blob,
                                  SkArenaAlloc* alloc) {
     DevicePosition* glyphLeftTop = alloc->makeArrayDefault<DevicePosition>(drawables.size());
     GlyphVector::Variant* glyphIDs =
             alloc->makeArray<GlyphVector::Variant>(drawables.size());
 
-    // The lower bounds of drawing is always (0, 0). Since glyphs from the atlas can be at most
-    // 256x256, use kMinPos to eliminate glyphs that have no pixels on the device.
-    constexpr SkScalar kMinPos = 0 - SkStrikeCommon::kSkSideTooBigForAtlas;
     // Because this is the direct case, the maximum width or height is the size that fits in the
     // atlas. This boundary is checked below to ensure that the call to SkGlyphRect below will
     // not overflow.
@@ -539,7 +530,7 @@ GrSubRun* DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables
         // Ensure that the .offset() call below does not overflow. And, at this point none of the
         // rectangles are empty because they were culled before the run was created. Basically,
         // cull all the glyphs that can't appear on the screen.
-        if (kMinPos < x && x < kMaxPos && kMinPos  < y && y < kMaxPos) {
+        if (-kMaxPos < x && x < kMaxPos && -kMaxPos  < y && y < kMaxPos) {
             const SkGlyph* const skGlyph = variant;
             const SkGlyphRect deviceBounds =
                     skGlyph->glyphRect().offset(SkScalarRoundToInt(x), SkScalarRoundToInt(y));
@@ -560,7 +551,7 @@ GrSubRun* DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables
     bool glyphsExcluded = goodPosCount != drawables.size();
     SkSpan<const DevicePosition> leftTop{glyphLeftTop, goodPosCount};
     DirectMaskSubRun* subRun = alloc->make<DirectMaskSubRun>(
-            format, residual, blob, runBounds.rect(), leftTop,
+            format, blob, runBounds.rect(), leftTop,
             GlyphVector{strikeSpec, {glyphIDs, goodPosCount}}, glyphsExcluded);
 
     return subRun;
@@ -764,7 +755,7 @@ void DirectMaskSubRun::fillVertexData(void* vertexDst, int offset, int count, Gr
                          fLeftTopDevicePos.subspan(offset, count));
     };
 
-    SkPoint originOffset = drawMatrix.mapXY(drawOrigin.x(), drawOrigin.y()) - fInitialMappedOrigin;
+    SkPoint originOffset = drawMatrix.mapPoint(drawOrigin) - fBlob->initialMatrix().mapOrigin();
     SkIPoint integralOriginOffset =
             {SkScalarRoundToInt(originOffset.x()), SkScalarRoundToInt(originOffset.y())};
 
@@ -794,7 +785,8 @@ void DirectMaskSubRun::fillVertexData(void* vertexDst, int offset, int count, Gr
 SkRect DirectMaskSubRun::deviceRect(const SkMatrix& drawMatrix, SkPoint drawOrigin) const {
     SkRect outBounds = fVertexBounds;
 
-    SkPoint offset = drawMatrix.mapXY(drawOrigin.x(), drawOrigin.y()) - fInitialMappedOrigin;
+    // Calculate the offset from the initial device origin to the current device origin.
+    SkVector offset = drawMatrix.mapPoint(drawOrigin) - fBlob->initialMatrix().mapOrigin();
     // The vertex bounds are already {0, 0} based, so just add the new origin offset.
     outBounds.offset(offset);
 
@@ -823,7 +815,6 @@ public:
     static GrSubRun* Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                           const SkStrikeSpec& strikeSpec,
                           GrMaskFormat format,
-                          SkPoint residual,
                           GrTextBlob* blob,
                           SkArenaAlloc* alloc);
 
@@ -884,7 +875,6 @@ TransformedMaskSubRun::TransformedMaskSubRun(GrMaskFormat format,
 GrSubRun* TransformedMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                       const SkStrikeSpec& strikeSpec,
                                       GrMaskFormat format,
-                                      SkPoint residual,
                                       GrTextBlob* blob,
                                       SkArenaAlloc* alloc) {
     size_t vertexCount = drawables.size();
@@ -892,10 +882,10 @@ GrSubRun* TransformedMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& draw
     auto initializer = [&, strikeToSource=strikeSpec.strikeToSourceRatio()](size_t i) {
         auto [variant, pos] = drawables[i];
         SkGlyph* skGlyph = variant;
-        int16_t l = skGlyph->left();
-        int16_t t = skGlyph->top();
-        int16_t r = l + skGlyph->width();
-        int16_t b = t + skGlyph->height();
+        int16_t l = skGlyph->left(),
+                t = skGlyph->top(),
+                r = l + skGlyph->width(),
+                b = t + skGlyph->height();
         SkPoint lt = SkPoint::Make(l, t) * strikeToSource + pos,
                 rb = SkPoint::Make(r, b) * strikeToSource + pos;
 
@@ -1375,27 +1365,17 @@ void* GrTextBlob::operator new(size_t, void* p) { return p; }
 GrTextBlob::~GrTextBlob() = default;
 
 sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList, const SkMatrix& drawMatrix) {
-    // The difference in alignment from the storage of VertexData to SubRun;
-    union AllSubRuns {
-        ~AllSubRuns() = delete;  // MSVC warns this is implicit if we don't write it explicitly.
-        DirectMaskSubRun      d;
-        TransformedMaskSubRun t;
-        SDFTSubRun            s;
-        PathSubRun            p;
-    };
-    union AllVertexData {
-        DirectMaskSubRun     ::DevicePosition d;
-        TransformedMaskSubRun::VertexData     t;
-        SDFTSubRun           ::VertexData     s;
-    };
-
-    constexpr size_t alignDiff = alignof(AllSubRuns) - alignof(AllVertexData);
+    // The difference in alignment from the per-glyph data to the SubRun;
+    constexpr size_t alignDiff =
+            alignof(DirectMaskSubRun) - alignof(DirectMaskSubRun::DevicePosition);
     constexpr size_t vertexDataToSubRunPadding = alignDiff > 0 ? alignDiff : 0;
     size_t totalGlyphCount = glyphRunList.totalGlyphCount();
+
+    // The arenaSize is optimized for DirectMaskSubRun which is by far the most common case.
     size_t arenaSize =
-            totalGlyphCount * sizeof(AllVertexData)
+            totalGlyphCount * sizeof(DirectMaskSubRun::DevicePosition)
             + GlyphVector::GlyphVectorSize(totalGlyphCount)
-            + glyphRunList.runCount() * (sizeof(AllSubRuns) + vertexDataToSubRunPadding)
+            + glyphRunList.runCount() * (sizeof(DirectMaskSubRun) + vertexDataToSubRunPadding)
             + 32;  // Misc arena overhead.
 
     size_t allocationSize = sizeof(GrTextBlob) + arenaSize;
@@ -1454,9 +1434,17 @@ template<typename AddSingleMaskFormat>
 void GrTextBlob::addMultiMaskFormat(
         AddSingleMaskFormat addSingle,
         const SkZip<SkGlyphVariant, SkPoint>& drawables,
-        const SkStrikeSpec& strikeSpec,
-        SkPoint residual) {
+        const SkStrikeSpec& strikeSpec) {
     if (drawables.empty()) { return; }
+
+    auto addSameFormat = [&](const SkZip<SkGlyphVariant, SkPoint>& drawable, GrMaskFormat format) {
+        GrSubRun* subRun = addSingle(drawable, strikeSpec, format, this, &fAlloc);
+        if (subRun != nullptr) {
+            this->insertSubRun(subRun);
+        } else {
+            fSomeGlyphsExcluded = true;
+        }
+    };
 
     auto glyphSpan = drawables.get<0>();
     SkGlyph* glyph = glyphSpan[0];
@@ -1467,24 +1455,13 @@ void GrTextBlob::addMultiMaskFormat(
         GrMaskFormat nextFormat = GrGlyph::FormatFromSkGlyph(glyph->maskFormat());
         if (format != nextFormat) {
             auto sameFormat = drawables.subspan(startIndex, i - startIndex);
-            GrSubRun* subRun = addSingle(sameFormat, strikeSpec, format, residual, this, &fAlloc);
-            this->insertSubRun(subRun);
+            addSameFormat(sameFormat, format);
             format = nextFormat;
             startIndex = i;
         }
     }
     auto sameFormat = drawables.last(drawables.size() - startIndex);
-    GrSubRun* subRun = addSingle(sameFormat,
-                                 strikeSpec,
-                                 format,
-                                 residual,
-                                 this,
-                                 &fAlloc);
-    if (subRun != nullptr) {
-        this->insertSubRun(subRun);
-    } else {
-        fSomeGlyphsExcluded = true;
-    }
+    addSameFormat(sameFormat, format);
 }
 
 GrTextBlob::GrTextBlob(size_t allocSize,
@@ -1500,10 +1477,9 @@ void GrTextBlob::insertSubRun(GrSubRun* subRun) {
 }
 
 void GrTextBlob::processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                    const SkStrikeSpec& strikeSpec,
-                                    SkPoint residual) {
+                                    const SkStrikeSpec& strikeSpec) {
 
-    this->addMultiMaskFormat(DirectMaskSubRun::Make, drawables, strikeSpec, residual);
+    this->addMultiMaskFormat(DirectMaskSubRun::Make, drawables, strikeSpec);
 }
 
 void GrTextBlob::processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -1529,7 +1505,5 @@ void GrTextBlob::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawabl
 
 void GrTextBlob::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkStrikeSpec& strikeSpec) {
-    // In this case the residual is {0, 0} because it is not used to calculate the positions of
-    // transformed mask. Any value would do.
-    this->addMultiMaskFormat(TransformedMaskSubRun::Make, drawables, strikeSpec, {0, 0});
+    this->addMultiMaskFormat(TransformedMaskSubRun::Make, drawables, strikeSpec);
 }

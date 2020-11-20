@@ -99,7 +99,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
         sk_sp<GrSurfaceProxy> proxy,
         GrSurfaceOrigin origin,
         const SkSurfaceProps* surfaceProps,
-        bool managedOps) {
+        bool flushTimeOpsTask) {
     if (!proxy) {
         return nullptr;
     }
@@ -116,7 +116,8 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
 
     return std::make_unique<GrRenderTargetContext>(context, std::move(readView),
                                                    std::move(writeView), colorType,
-                                                   std::move(colorSpace), surfaceProps, managedOps);
+                                                   std::move(colorSpace), surfaceProps,
+                                                   flushTimeOpsTask);
 }
 
 std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
@@ -148,7 +149,7 @@ std::unique_ptr<GrRenderTargetContext> GrRenderTargetContext::Make(
     }
 
     auto rtc = GrRenderTargetContext::Make(context, colorType, std::move(colorSpace),
-                                           std::move(proxy), origin, surfaceProps, true);
+                                           std::move(proxy), origin, surfaceProps);
     if (!rtc) {
         return nullptr;
     }
@@ -301,12 +302,12 @@ GrRenderTargetContext::GrRenderTargetContext(GrRecordingContext* context,
                                              GrColorType colorType,
                                              sk_sp<SkColorSpace> colorSpace,
                                              const SkSurfaceProps* surfaceProps,
-                                             bool managedOpsTask)
+                                             bool flushTimeOpsTask)
         : GrSurfaceContext(context, std::move(readView), colorType, kPremul_SkAlphaType,
                            std::move(colorSpace))
         , fWriteView(std::move(writeView))
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
-        , fManagedOpsTask(managedOpsTask)
+        , fFlushTimeOpsTask(flushTimeOpsTask)
         , fGlyphPainter(*this) {
     fOpsTask = sk_ref_sp(context->priv().drawingManager()->getLastOpsTask(this->asSurfaceProxy()));
     SkASSERT(this->asSurfaceProxy() == fWriteView.proxy());
@@ -351,8 +352,8 @@ GrOpsTask* GrRenderTargetContext::getOpsTask() {
     SkDEBUGCODE(this->validate();)
 
     if (!fOpsTask || fOpsTask->isClosed()) {
-        sk_sp<GrOpsTask> newOpsTask =
-                this->drawingManager()->newOpsTask(this->writeSurfaceView(), fManagedOpsTask);
+        sk_sp<GrOpsTask> newOpsTask = this->drawingManager()->newOpsTask(this->writeSurfaceView(),
+                                                                         fFlushTimeOpsTask);
         if (fOpsTask && fNumStencilSamples > 0) {
             // Store the stencil values in memory upon completion of fOpsTask.
             fOpsTask->setMustPreserveStencil();
@@ -411,16 +412,14 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
     GrTextBlobCache* textBlobCache = fContext->priv().getTextBlobCache();
 
     // Get the first paint to use as the key paint.
-    const SkPaint& blobPaint = glyphRunList.paint();
-
-    SkPoint drawOrigin = glyphRunList.origin();
+    const SkPaint& drawPaint = glyphRunList.paint();
 
     SkMaskFilterBase::BlurRec blurRec;
     // It might be worth caching these things, but its not clear at this time
     // TODO for animated mask filters, this will fill up our cache.  We need a safeguard here
-    const SkMaskFilter* mf = blobPaint.getMaskFilter();
+    const SkMaskFilter* mf = drawPaint.getMaskFilter();
     bool canCache = glyphRunList.canCache() &&
-            !(blobPaint.getPathEffect() || (mf && !as_MFB(mf)->asABlur(&blurRec)));
+            !(drawPaint.getPathEffect() || (mf && !as_MFB(mf)->asABlur(&blurRec)));
 
     // If we're doing linear blending, then we can disable the gamma hacks.
     // Otherwise, leave them on. In either case, we still want the contrast boost:
@@ -438,15 +437,15 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
         SkPixelGeometry pixelGeometry =
                 hasLCD ? fSurfaceProps.pixelGeometry() : kUnknown_SkPixelGeometry;
 
-        GrColor canonicalColor = compute_canonical_color(blobPaint, hasLCD);
+        GrColor canonicalColor = compute_canonical_color(drawPaint, hasLCD);
 
         key.fPixelGeometry = pixelGeometry;
         key.fUniqueID = glyphRunList.uniqueID();
-        key.fStyle = blobPaint.getStyle();
+        key.fStyle = drawPaint.getStyle();
         if (key.fStyle != SkPaint::kFill_Style) {
-            key.fFrameWidth = blobPaint.getStrokeWidth();
-            key.fMiterLimit = blobPaint.getStrokeMiter();
-            key.fJoin = blobPaint.getStrokeJoin();
+            key.fFrameWidth = drawPaint.getStrokeWidth();
+            key.fMiterLimit = drawPaint.getStrokeMiter();
+            key.fJoin = drawPaint.getStrokeJoin();
         }
         key.fHasBlur = SkToBool(mf);
         if (key.fHasBlur) {
@@ -458,8 +457,9 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
     }
 
     SkMatrix drawMatrix(viewMatrix.localToDevice());
+    SkPoint drawOrigin = glyphRunList.origin();
     drawMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
-    if (blob == nullptr || !blob->canReuse(blobPaint, drawMatrix)) {
+    if (blob == nullptr || !blob->canReuse(drawPaint, drawMatrix)) {
         if (blob != nullptr) {
             // We have to remake the blob because changes may invalidate our masks.
             // TODO we could probably get away with reuse most of the time if the pointer is unique,
@@ -475,12 +475,16 @@ void GrRenderTargetContext::drawGlyphRunList(const GrClip* clip,
 
         // TODO(herb): redo processGlyphRunList to handle shifted draw matrix.
         bool supportsSDFT = fContext->priv().caps()->shaderCaps()->supportsDistanceFieldText();
-        fGlyphPainter.processGlyphRunList(glyphRunList,
-                                          viewMatrix.localToDevice(), // Use unshifted matrix.
+        for (auto& glyphRun : glyphRunList) {
+            fGlyphPainter.processGlyphRun(glyphRun,
+                                          viewMatrix.localToDevice(),
+                                          drawOrigin,
+                                          drawPaint,
                                           fSurfaceProps,
                                           supportsSDFT,
                                           options,
                                           blob.get());
+        }
     }
 
     for (GrSubRun* subRun : blob->subRunList()) {
