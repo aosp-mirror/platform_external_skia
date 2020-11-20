@@ -32,6 +32,7 @@ public:
     GrAppliedClip detachAppliedClip() override { return GrAppliedClip::Disabled(); }
     const GrXferProcessor::DstProxyView& dstProxyView() const override { return fDstProxyView; }
     GrXferBarrierFlags renderPassBarriers() const override { return GrXferBarrierFlags::kNone; }
+    GrLoadOp colorLoadOp() const override { return GrLoadOp::kLoad; }
 
     void* makeVertexSpace(size_t vertexSize, int vertexCount, sk_sp<const GrBuffer>*,
                           int* startVertex) override {
@@ -81,8 +82,8 @@ public:
     UNIMPL(uint16_t* makeIndexSpace(int, sk_sp<const GrBuffer>*, int*))
     UNIMPL(uint16_t* makeIndexSpaceAtLeast(int, int, sk_sp<const GrBuffer>*, int*, int*))
     UNIMPL(void putBackIndices(int))
-    UNIMPL(GrRenderTargetProxy* proxy() const)
-    UNIMPL(const GrSurfaceProxyView* writeView() const)
+    UNIMPL(GrRenderTargetProxy* rtProxy() const)
+    UNIMPL(const GrSurfaceProxyView& writeView() const)
     UNIMPL(const GrAppliedClip* appliedClip() const)
     UNIMPL(GrStrikeCache* strikeCache() const)
     UNIMPL(GrAtlasManager* atlasManager() const)

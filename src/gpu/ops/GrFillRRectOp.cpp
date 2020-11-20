@@ -102,10 +102,11 @@ private:
     // Create a GrProgramInfo object in the provided arena
     void onCreateProgramInfo(const GrCaps*,
                              SkArenaAlloc*,
-                             const GrSurfaceProxyView* writeView,
+                             const GrSurfaceProxyView& writeView,
                              GrAppliedClip&&,
                              const GrXferProcessor::DstProxyView&,
-                             GrXferBarrierFlags renderPassXferBarriers) final;
+                             GrXferBarrierFlags renderPassXferBarriers,
+                             GrLoadOp colorLoadOp) final;
 
     Helper         fHelper;
     SkPMColor4f    fColor;
@@ -852,16 +853,17 @@ GrGLSLPrimitiveProcessor* FillRRectOp::Processor::createGLSLInstance(
 
 void FillRRectOp::onCreateProgramInfo(const GrCaps* caps,
                                       SkArenaAlloc* arena,
-                                      const GrSurfaceProxyView* writeView,
+                                      const GrSurfaceProxyView& writeView,
                                       GrAppliedClip&& appliedClip,
                                       const GrXferProcessor::DstProxyView& dstProxyView,
-                                      GrXferBarrierFlags renderPassXferBarriers) {
+                                      GrXferBarrierFlags renderPassXferBarriers,
+                                      GrLoadOp colorLoadOp) {
     GrGeometryProcessor* gp = Processor::Make(arena, fHelper.aaType(), fProcessorFlags);
     SkASSERT(gp->instanceStride() == (size_t)fInstanceStride);
 
     fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
                                              dstProxyView, gp, GrPrimitiveType::kTriangles,
-                                             renderPassXferBarriers);
+                                             renderPassXferBarriers, colorLoadOp);
 }
 
 void FillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {

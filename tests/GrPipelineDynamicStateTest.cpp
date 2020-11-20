@@ -143,14 +143,15 @@ private:
         return GrProcessorSet::EmptySetAnalysis();
     }
     void onPrePrepare(GrRecordingContext*,
-                      const GrSurfaceProxyView* writeView,
+                      const GrSurfaceProxyView& writeView,
                       GrAppliedClip*,
                       const GrXferProcessor::DstProxyView&,
-                      GrXferBarrierFlags renderPassXferBarriers) override {}
+                      GrXferBarrierFlags renderPassXferBarriers,
+                      GrLoadOp colorLoadOp) override {}
     void onPrepare(GrOpFlushState*) override {}
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
         GrPipeline pipeline(fScissorTest, SkBlendMode::kSrc,
-                            flushState->drawOpArgs().writeSwizzle());
+                            flushState->drawOpArgs().writeView().swizzle());
         SkSTArray<kNumMeshes, GrSimpleMesh> meshes;
         for (int i = 0; i < kNumMeshes; ++i) {
             GrSimpleMesh& mesh = meshes.push_back();
@@ -159,15 +160,13 @@ private:
 
         auto geomProc = GrPipelineDynamicStateTestProcessor::Make(flushState->allocator());
 
-        GrProgramInfo programInfo(flushState->proxy()->numSamples(),
-                                  flushState->proxy()->numStencilSamples(),
-                                  flushState->proxy()->backendFormat(),
-                                  flushState->writeView()->origin(),
+        GrProgramInfo programInfo(flushState->writeView(),
                                   &pipeline,
                                   &GrUserStencilSettings::kUnused,
                                   geomProc,
                                   GrPrimitiveType::kTriangleStrip, 0,
-                                  flushState->renderPassBarriers());
+                                  flushState->renderPassBarriers(),
+                                  flushState->colorLoadOp());
 
         flushState->bindPipeline(programInfo, SkRect::MakeIWH(kScreenSize, kScreenSize));
         for (int i = 0; i < 4; ++i) {

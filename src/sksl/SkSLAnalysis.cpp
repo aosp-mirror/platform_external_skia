@@ -372,6 +372,15 @@ std::unique_ptr<ProgramUsage> Analysis::GetUsage(const Program& program) {
     return usage;
 }
 
+std::unique_ptr<ProgramUsage> Analysis::GetUsage(const LoadedModule& module) {
+    auto usage = std::make_unique<ProgramUsage>();
+    ProgramUsageVisitor addRefs(usage.get(), /*delta=*/+1);
+    for (const auto& element : module.fElements) {
+        addRefs.visitProgramElement(*element);
+    }
+    return usage;
+}
+
 ProgramUsage::VariableCounts ProgramUsage::get(const Variable& v) const {
     VariableCounts result = { 0, v.initialValue() ? 1 : 0 };
     if (const VariableCounts* counts = fVariableCounts.find(&v)) {
@@ -437,6 +446,25 @@ bool Analysis::IsAssignable(Expression& expr, VariableReference** assignableVar,
                             ErrorReporter* errors) {
     TrivialErrorReporter trivialErrors;
     return IsAssignableVisitor{assignableVar, errors ? errors : &trivialErrors}.visit(expr);
+}
+
+bool Analysis::IsTrivialExpression(const Expression& expr) {
+    return expr.is<IntLiteral>() ||
+           expr.is<FloatLiteral>() ||
+           expr.is<BoolLiteral>() ||
+           expr.is<VariableReference>() ||
+           (expr.is<Swizzle>() &&
+            IsTrivialExpression(*expr.as<Swizzle>().base())) ||
+           (expr.is<FieldAccess>() &&
+            IsTrivialExpression(*expr.as<FieldAccess>().base())) ||
+           (expr.is<Constructor>() &&
+            expr.as<Constructor>().arguments().size() == 1 &&
+            IsTrivialExpression(*expr.as<Constructor>().arguments().front())) ||
+           (expr.is<Constructor>() &&
+            expr.isConstantOrUniform()) ||
+           (expr.is<IndexExpression>() &&
+            expr.as<IndexExpression>().index()->is<IntLiteral>() &&
+            IsTrivialExpression(*expr.as<IndexExpression>().base()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

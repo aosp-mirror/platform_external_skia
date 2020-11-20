@@ -248,19 +248,6 @@ std::unique_ptr<Expression> clone_with_ref_kind(const Expression& expr,
     return clone;
 }
 
-bool is_trivial_argument(const Expression& argument) {
-    return argument.is<VariableReference>() ||
-           (argument.is<Swizzle>() && is_trivial_argument(*argument.as<Swizzle>().base())) ||
-           (argument.is<FieldAccess>() &&
-            is_trivial_argument(*argument.as<FieldAccess>().base())) ||
-           (argument.is<Constructor>() &&
-            argument.as<Constructor>().arguments().size() == 1 &&
-            is_trivial_argument(*argument.as<Constructor>().arguments().front())) ||
-           (argument.is<IndexExpression>() &&
-            argument.as<IndexExpression>().index()->is<IntLiteral>() &&
-            is_trivial_argument(*argument.as<IndexExpression>().base()));
-}
-
 }  // namespace
 
 void Inliner::ensureScopedBlocks(Statement* inlinedBody, Statement* parentStmt) {
@@ -305,12 +292,9 @@ void Inliner::ensureScopedBlocks(Statement* inlinedBody, Statement* parentStmt) 
     }
 }
 
-void Inliner::reset(const Context* context, ModifiersPool* modifiers,
-                    const Program::Settings* settings, const ShaderCapsClass* caps) {
-    fContext = context;
+void Inliner::reset(ModifiersPool* modifiers, const Program::Settings* settings) {
     fModifiers = modifiers;
     fSettings = settings;
-    fCaps = caps;
     fInlineVarCounter = 0;
     fInlinedStatementCounter = 0;
 }
@@ -606,7 +590,6 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     SkASSERT(fContext);
     SkASSERT(call);
     SkASSERT(this->isSafeToInline(call->function().definition()));
-    SkASSERT(!symbolTableForCall->isBuiltin());
 
     ExpressionArray& arguments = call->arguments();
     const int offset = call->fOffset;
@@ -689,7 +672,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         bool isOutParam = param->modifiers().fFlags & Modifiers::kOut_Flag;
 
         // If this argument can be inlined trivially (e.g. a swizzle, or a constant array index)...
-        if (is_trivial_argument(*arguments[i])) {
+        if (Analysis::IsTrivialExpression(*arguments[i])) {
             // ... and it's an `out` param, or it isn't written to within the inline function...
             if (isOutParam || !Analysis::StatementWritesToVariable(*function.body(), *param)) {
                 // ... we don't need to copy it at all! We can just use the existing expression.
@@ -824,11 +807,13 @@ public:
     // The function that we're currently processing (i.e. inlining into).
     FunctionDefinition* fEnclosingFunction = nullptr;
 
-    void visit(Program& program, InlineCandidateList* candidateList) {
+    void visit(const std::vector<std::unique_ptr<ProgramElement>>& elements,
+               SymbolTable* symbols,
+               InlineCandidateList* candidateList) {
         fCandidateList = candidateList;
-        fSymbolTableStack.push_back(program.fSymbols.get());
+        fSymbolTableStack.push_back(symbols);
 
-        for (const std::unique_ptr<ProgramElement>& pe : program.ownedElements()) {
+        for (const std::unique_ptr<ProgramElement>& pe : elements) {
             this->visitProgramElement(pe.get());
         }
 
@@ -840,12 +825,8 @@ public:
         switch (pe->kind()) {
             case ProgramElement::Kind::kFunction: {
                 FunctionDefinition& funcDef = pe->as<FunctionDefinition>();
-                // Don't attempt to mutate any builtin functions. (If we stop cloning builtins into
-                // the program, this check can become an assertion.)
-                if (!funcDef.isBuiltin()) {
-                    fEnclosingFunction = &funcDef;
-                    this->visitStatement(&funcDef.body());
-                }
+                fEnclosingFunction = &funcDef;
+                this->visitStatement(&funcDef.body());
                 break;
             }
             default:
@@ -1126,13 +1107,15 @@ bool Inliner::isLargeFunction(const InlineCandidate& candidate, LargeFunctionCac
     return iter->second;
 }
 
-void Inliner::buildCandidateList(Program& program, InlineCandidateList* candidateList) {
+void Inliner::buildCandidateList(const std::vector<std::unique_ptr<ProgramElement>>& elements,
+                                 SymbolTable* symbols,
+                                 InlineCandidateList* candidateList) {
     // This is structured much like a ProgramVisitor, but does not actually use ProgramVisitor.
     // The analyzer needs to keep track of the `unique_ptr<T>*` of statements and expressions so
     // that they can later be replaced, and ProgramVisitor does not provide this; it only provides a
     // `const T&`.
     InlineCandidateAnalyzer analyzer;
-    analyzer.visit(program, candidateList);
+    analyzer.visit(elements, symbols, candidateList);
 
     // Remove candidates that are not safe to inline.
     std::vector<InlineCandidate>& candidates = candidateList->fCandidates;
@@ -1153,7 +1136,9 @@ void Inliner::buildCandidateList(Program& program, InlineCandidateList* candidat
     }
 }
 
-bool Inliner::analyze(Program& program) {
+bool Inliner::analyze(const std::vector<std::unique_ptr<ProgramElement>>& elements,
+                      SymbolTable* symbols,
+                      ProgramUsage* usage) {
     // A threshold of zero indicates that the inliner is completely disabled, so we can just return.
     if (fSettings->fInlineThreshold <= 0) {
         return false;
@@ -1164,9 +1149,8 @@ bool Inliner::analyze(Program& program) {
         return false;
     }
 
-    ProgramUsage* usage = program.fUsage.get();
     InlineCandidateList candidateList;
-    this->buildCandidateList(program, &candidateList);
+    this->buildCandidateList(elements, symbols, &candidateList);
 
     // Inline the candidates where we've determined that it's safe to do so.
     std::unordered_set<const std::unique_ptr<Statement>*> enclosingStmtSet;
