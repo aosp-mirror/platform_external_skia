@@ -135,10 +135,11 @@ public:
 
     static GrProgramInfo* CreateProgramInfo(SkArenaAlloc*,
                                             const GrPipeline*,
-                                            const GrSurfaceProxyView* writeView,
+                                            const GrSurfaceProxyView& writeView,
                                             GrGeometryProcessor*,
                                             GrPrimitiveType,
                                             GrXferBarrierFlags renderPassXferBarriers,
+                                            GrLoadOp colorLoadOp,
                                             const GrUserStencilSettings*
                                                                 = &GrUserStencilSettings::kUnused);
 
@@ -147,13 +148,14 @@ public:
     //     it has no dynamic state besides the scissor clip
     static GrProgramInfo* CreateProgramInfo(const GrCaps*,
                                             SkArenaAlloc*,
-                                            const GrSurfaceProxyView* writeView,
+                                            const GrSurfaceProxyView& writeView,
                                             GrAppliedClip&&,
                                             const GrXferProcessor::DstProxyView&,
                                             GrGeometryProcessor*,
                                             GrProcessorSet&&,
                                             GrPrimitiveType,
                                             GrXferBarrierFlags renderPassXferBarriers,
+                                            GrLoadOp colorLoadOp,
                                             GrPipeline::InputFlags pipelineFlags
                                                                 = GrPipeline::InputFlags::kNone,
                                             const GrUserStencilSettings*
@@ -161,12 +163,13 @@ public:
 
     GrProgramInfo* createProgramInfo(const GrCaps*,
                                      SkArenaAlloc*,
-                                     const GrSurfaceProxyView* writeView,
+                                     const GrSurfaceProxyView& writeView,
                                      GrAppliedClip&&,
                                      const GrXferProcessor::DstProxyView&,
                                      GrGeometryProcessor*,
                                      GrPrimitiveType,
-                                     GrXferBarrierFlags renderPassXferBarriers);
+                                     GrXferBarrierFlags renderPassXferBarriers,
+                                     GrLoadOp colorLoadOp);
 
     GrProcessorSet detachProcessorSet() {
         return fProcessors ? std::move(*fProcessors) : GrProcessorSet::MakeEmptySet();

@@ -208,10 +208,11 @@ public:
      * onPrePrepare must be prepared to handle both cases (when onPrePrepare has been called
      * ahead of time and when it has not been called).
      */
-    void prePrepare(GrRecordingContext* context, GrSurfaceProxyView* dstView, GrAppliedClip* clip,
-                    const GrXferProcessor::DstProxyView& dstProxyView,
-                    GrXferBarrierFlags renderPassXferBarriers) {
-        this->onPrePrepare(context, dstView, clip, dstProxyView, renderPassXferBarriers);
+    void prePrepare(GrRecordingContext* context, const GrSurfaceProxyView& dstView,
+                    GrAppliedClip* clip, const GrXferProcessor::DstProxyView& dstProxyView,
+                    GrXferBarrierFlags renderPassXferBarriers, GrLoadOp colorLoadOp) {
+        this->onPrePrepare(context, dstView, clip, dstProxyView, renderPassXferBarriers,
+                           colorLoadOp);
     }
 
     /**
@@ -341,10 +342,11 @@ private:
 
     // TODO: the parameters to onPrePrepare mirror GrOpFlushState::OpArgs - fuse the two?
     virtual void onPrePrepare(GrRecordingContext*,
-                              const GrSurfaceProxyView* writeView,
+                              const GrSurfaceProxyView& writeView,
                               GrAppliedClip*,
                               const GrXferProcessor::DstProxyView&,
-                              GrXferBarrierFlags renderPassXferBarriers) = 0;
+                              GrXferBarrierFlags renderPassXferBarriers,
+                              GrLoadOp colorLoadOp) = 0;
     virtual void onPrepare(GrOpFlushState*) = 0;
     // If this op is chained then chainBounds is the union of the bounds of all ops in the chain.
     // Otherwise, this op's bounds.
