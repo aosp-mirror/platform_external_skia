@@ -1940,6 +1940,7 @@ cc_test {
         "tests/SkGlyphTest.cpp",
         "tests/SkImageTest.cpp",
         "tests/SkNxTest.cpp",
+        "tests/SkPathRangeIterTest.cpp",
         "tests/SkRasterPipelineTest.cpp",
         "tests/SkRemoteGlyphCacheTest.cpp",
         "tests/SkResourceCacheTest.cpp",
