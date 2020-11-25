@@ -63,8 +63,11 @@ public:
             SK_ABORT("FATAL: wanted %i static drawIndirect elements; only have %i.\n",
                      drawCount, staticBufferCount);
         }
+        *offsetInBytes = 0;
         return fStaticDrawIndirectData;
     }
+
+    void putBackIndirectDraws(int count) override { /* no-op */ }
 
     GrDrawIndexedIndirectCommand* makeDrawIndexedIndirectSpace(
             int drawCount, sk_sp<const GrBuffer>* buffer, size_t* offsetInBytes) override {
@@ -73,8 +76,11 @@ public:
             SK_ABORT("FATAL: wanted %i static drawIndexedIndirect elements; only have %i.\n",
                      drawCount, staticBufferCount);
         }
+        *offsetInBytes = 0;
         return fStaticDrawIndexedIndirectData;
     }
+
+    void putBackIndexedIndirectDraws(int count) override { /* no-op */ }
 
 #define UNIMPL(...) __VA_ARGS__ override { SK_ABORT("unimplemented."); }
     UNIMPL(void recordDraw(const GrGeometryProcessor*, const GrSimpleMesh[], int,
