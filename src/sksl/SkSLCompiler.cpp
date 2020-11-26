@@ -791,8 +791,8 @@ static void vectorize(BasicBlock* b,
                       std::unique_ptr<Expression>* otherExpression,
                       Compiler::OptimizationContext* optimizationContext) {
     SkASSERT((*(*iter)->expression())->kind() == Expression::Kind::kBinary);
-    SkASSERT(type.typeKind() == Type::TypeKind::kVector);
-    SkASSERT((*otherExpression)->type().typeKind() == Type::TypeKind::kScalar);
+    SkASSERT(type.isVector());
+    SkASSERT((*otherExpression)->type().isScalar());
     optimizationContext->fUpdated = true;
     std::unique_ptr<Expression>* target = (*iter)->expression();
     if (!b->tryRemoveExpression(iter)) {
@@ -918,17 +918,14 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
             const Type& leftType = left.type();
             const Type& rightType = right.type();
             // collapse useless expressions like x * 1 or x + 0
-            if (((leftType.typeKind() != Type::TypeKind::kScalar) &&
-                 (leftType.typeKind() != Type::TypeKind::kVector)) ||
-                ((rightType.typeKind() != Type::TypeKind::kScalar) &&
-                 (rightType.typeKind() != Type::TypeKind::kVector))) {
+            if ((!leftType.isScalar() && !leftType.isVector()) ||
+                (!rightType.isScalar() && !rightType.isVector())) {
                 break;
             }
             switch (bin->getOperator()) {
                 case Token::Kind::TK_STAR:
                     if (is_constant(left, 1)) {
-                        if (leftType.typeKind() == Type::TypeKind::kVector &&
-                            rightType.typeKind() == Type::TypeKind::kScalar) {
+                        if (leftType.isVector() && rightType.isScalar()) {
                             // float4(1) * x -> float4(x)
                             vectorize_right(&b, iter, optimizationContext);
                         } else {
@@ -939,8 +936,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     }
                     else if (is_constant(left, 0)) {
-                        if (leftType.typeKind() == Type::TypeKind::kScalar &&
-                            rightType.typeKind() == Type::TypeKind::kVector &&
+                        if (leftType.isScalar() && rightType.isVector() &&
                             !right.hasSideEffects()) {
                             // 0 * float4(x) -> float4(0)
                             vectorize_left(&b, iter, optimizationContext);
@@ -954,8 +950,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     }
                     else if (is_constant(right, 1)) {
-                        if (leftType.typeKind() == Type::TypeKind::kScalar &&
-                            rightType.typeKind() == Type::TypeKind::kVector) {
+                        if (leftType.isScalar() && rightType.isVector()) {
                             // x * float4(1) -> float4(x)
                             vectorize_left(&b, iter, optimizationContext);
                         } else {
@@ -966,9 +961,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     }
                     else if (is_constant(right, 0)) {
-                        if (leftType.typeKind() == Type::TypeKind::kVector &&
-                            rightType.typeKind() == Type::TypeKind::kScalar &&
-                            !left.hasSideEffects()) {
+                        if (leftType.isVector() && rightType.isScalar() && !left.hasSideEffects()) {
                             // float4(x) * 0 -> float4(0)
                             vectorize_right(&b, iter, optimizationContext);
                         } else {
@@ -983,8 +976,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     break;
                 case Token::Kind::TK_PLUS:
                     if (is_constant(left, 0)) {
-                        if (leftType.typeKind() == Type::TypeKind::kVector &&
-                            rightType.typeKind() == Type::TypeKind::kScalar) {
+                        if (leftType.isVector() && rightType.isScalar()) {
                             // float4(0) + x -> float4(x)
                             vectorize_right(&b, iter, optimizationContext);
                         } else {
@@ -994,8 +986,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             delete_left(&b, iter, optimizationContext);
                         }
                     } else if (is_constant(right, 0)) {
-                        if (leftType.typeKind() == Type::TypeKind::kScalar &&
-                            rightType.typeKind() == Type::TypeKind::kVector) {
+                        if (leftType.isScalar() && rightType.isVector()) {
                             // x + float4(0) -> float4(x)
                             vectorize_left(&b, iter, optimizationContext);
                         } else {
@@ -1008,8 +999,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     break;
                 case Token::Kind::TK_MINUS:
                     if (is_constant(right, 0)) {
-                        if (leftType.typeKind() == Type::TypeKind::kScalar &&
-                            rightType.typeKind() == Type::TypeKind::kVector) {
+                        if (leftType.isScalar() && rightType.isVector()) {
                             // x - float4(0) -> float4(x)
                             vectorize_left(&b, iter, optimizationContext);
                         } else {
@@ -1022,8 +1012,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     break;
                 case Token::Kind::TK_SLASH:
                     if (is_constant(right, 1)) {
-                        if (leftType.typeKind() == Type::TypeKind::kScalar &&
-                            rightType.typeKind() == Type::TypeKind::kVector) {
+                        if (leftType.isScalar() && rightType.isVector()) {
                             // x / float4(1) -> float4(x)
                             vectorize_left(&b, iter, optimizationContext);
                         } else {
@@ -1033,8 +1022,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             delete_right(&b, iter, optimizationContext);
                         }
                     } else if (is_constant(left, 0)) {
-                        if (leftType.typeKind() == Type::TypeKind::kScalar &&
-                            rightType.typeKind() == Type::TypeKind::kVector &&
+                        if (leftType.isScalar() && rightType.isVector() &&
                             !right.hasSideEffects()) {
                             // 0 / float4(x) -> float4(0)
                             vectorize_left(&b, iter, optimizationContext);
@@ -1182,8 +1170,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 SkASSERT(std::all_of(s.components().begin(), s.components().end(),
                                      [](int8_t c) { return c >= 0 && c <= 3; }));
 
-                if (base.arguments().size() == 1 &&
-                    base.arguments().front()->type().typeKind() == Type::TypeKind::kScalar) {
+                if (base.arguments().size() == 1 && base.arguments().front()->type().isScalar()) {
                     // `half4(scalar).zyy` can be optimized to `half3(scalar)`. The swizzle
                     // components don't actually matter since all fields are the same.
                     ExpressionArray newArgs;
@@ -1274,7 +1261,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         const ConstructorArgMap& argument = argMap[c];
                         const Expression& baseArg = *base.arguments()[argument.fArgIndex];
 
-                        if (baseArg.type().typeKind() == Type::TypeKind::kScalar) {
+                        if (baseArg.type().isScalar()) {
                             // This argument is a scalar; add it to the list as-is.
                             SkASSERT(argument.fComponent == 0);
                             reorderedArgs.push_back({argument.fArgIndex,
@@ -1944,13 +1931,30 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
         spvtools::SpirvTools tools(SPV_ENV_VULKAN_1_0);
         const String& data = buffer.str();
         SkASSERT(0 == data.size() % 4);
-        auto dumpmsg = [](spv_message_level_t, const char*, const spv_position_t&, const char* m) {
-            SkDebugf("SPIR-V validation error: %s\n", m);
+        String errors;
+        auto dumpmsg = [&errors](spv_message_level_t, const char*, const spv_position_t&,
+                                 const char* m) {
+            errors.appendf("SPIR-V validation error: %s\n", m);
         };
         tools.SetMessageConsumer(dumpmsg);
-        // Verify that the SPIR-V we produced is valid. If this SkASSERT fails, check the logs prior
-        // to the failure to see the validation errors.
-        SkAssertResult(tools.Validate((const uint32_t*) data.c_str(), data.size() / 4));
+
+        // Verify that the SPIR-V we produced is valid. At runtime, we will abort() with a message
+        // explaining the error. In standalone mode (skslc), we will send the message, plus the
+        // entire disassembled SPIR-V (for easier context & debugging) as *our* error message.
+        result = tools.Validate((const uint32_t*) data.c_str(), data.size() / 4);
+
+        if (!result) {
+#if defined(SKSL_STANDALONE)
+            // Convert the string-stream to a SPIR-V disassembly.
+            std::string disassembly;
+            if (tools.Disassemble((const uint32_t*)data.data(), data.size() / 4, &disassembly)) {
+                errors.append(disassembly);
+            }
+            this->error(-1, errors);
+#else
+            SkDEBUGFAILF("%s", errors.c_str());
+#endif
+        }
         out.write(data.c_str(), data.size());
     }
 #else
