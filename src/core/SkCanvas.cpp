@@ -497,7 +497,7 @@ void SkCanvas::resetForNextPicture(const SkIRect& bounds) {
     // We're peering through a lot of structs here.  Only at this scope do we
     // know that the device is a SkNoPixelsDevice.
     static_cast<SkNoPixelsDevice*>(fMCRec->fLayer->fDevice.get())->resetForNextPicture(bounds);
-    fQuickRejectBounds = qr_clip_bounds(SkRect::Make(bounds));
+    fQuickRejectBounds = qr_clip_bounds(this->computeDeviceClipBounds());
     fIsScaleTranslate = true;
 }
 
