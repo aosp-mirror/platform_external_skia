@@ -1951,7 +1951,7 @@ cc_test {
         "tests/SkSLInterpreterTest.cpp",
         "tests/SkSLMemoryLayoutTest.cpp",
         "tests/SkSLMetalTestbed.cpp",
-        "tests/SkSLSPIRVTest.cpp",
+        "tests/SkSLSPIRVTestbed.cpp",
         "tests/SkScalerCacheTest.cpp",
         "tests/SkShaperJSONWriterTest.cpp",
         "tests/SkSharedMutexTest.cpp",

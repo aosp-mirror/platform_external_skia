@@ -177,6 +177,12 @@ sksl_metal_tests = [
   "$_tests/sksl/metal/SamplerGlobals.sksl",
 ]
 
+sksl_spirv_tests = [
+  "$_tests/sksl/spirv/LayoutMultipleOf4.sksl",
+  "$_tests/sksl/spirv/LayoutOutOfOrder.sksl",
+  "$_tests/sksl/spirv/OpaqueTypeInArray.sksl",
+]
+
 sksl_shared_tests = [
   "$_tests/sksl/shared/ArrayConstructors.sksl",
   "$_tests/sksl/shared/ArrayIndexTypes.sksl",
@@ -195,9 +201,11 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/DeadDoWhileLoop.sksl",
   "$_tests/sksl/shared/DeadIfStatement.sksl",
   "$_tests/sksl/shared/DeadLoopVariable.sksl",
+  "$_tests/sksl/shared/DeadStripFunctions.sksl",
   "$_tests/sksl/shared/DependentInitializers.sksl",
   "$_tests/sksl/shared/DerivativesUnused.sksl",
   "$_tests/sksl/shared/Discard.sksl",
+  "$_tests/sksl/shared/Enum.sksl",
   "$_tests/sksl/shared/FloatFolding.sksl",
   "$_tests/sksl/shared/FrExp.sksl",
   "$_tests/sksl/shared/FragCoordsFlipY.sksl",
@@ -383,4 +391,5 @@ sksl_metal_tests_sources =
 
 # Tests in sksl_spirv_tests_sources will be compiled with --settings on, and are expected to
 # generate a .asm.(frag|vert|geom) output file.
-sksl_spirv_tests_sources = sksl_blend_tests + sksl_shared_tests
+sksl_spirv_tests_sources =
+    sksl_blend_tests + sksl_shared_tests + sksl_spirv_tests
