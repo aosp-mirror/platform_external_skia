@@ -110,10 +110,11 @@ public:
             return GrProcessorSet::EmptySetAnalysis();
         }
         void onPrePrepare(GrRecordingContext*,
-                          const GrSurfaceProxyView* writeView,
+                          const GrSurfaceProxyView& writeView,
                           GrAppliedClip*,
                           const GrXferProcessor::DstProxyView&,
-                          GrXferBarrierFlags renderPassXferBarriers) override {}
+                          GrXferBarrierFlags renderPassXferBarriers,
+                          GrLoadOp colorLoadOp) override {}
 
         void onPrepare(GrOpFlushState*) override {}
 
@@ -357,10 +358,11 @@ private:
         return GrProcessorSet::EmptySetAnalysis();
     }
     void onPrePrepare(GrRecordingContext*,
-                      const GrSurfaceProxyView* writeView,
+                      const GrSurfaceProxyView& writeView,
                       GrAppliedClip*,
                       const GrXferProcessor::DstProxyView&,
-                      GrXferBarrierFlags renderPassXferBarriers) override {}
+                      GrXferBarrierFlags renderPassXferBarriers,
+                      GrLoadOp colorLoadOp) override {}
     void onPrepare(GrOpFlushState*) override {}
     void onExecute(GrOpFlushState* state, const SkRect& chainBounds) override {
         *fTestExecuteValue = 2;

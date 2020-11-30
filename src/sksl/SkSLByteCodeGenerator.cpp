@@ -17,23 +17,23 @@ static TypeCategory type_category(const Type& type) {
         case Type::TypeKind::kMatrix:
             return type_category(type.componentType());
         default:
-            const StringFragment& name = type.name();
-            if (name == "bool") {
+            if (type.isBoolean()) {
                 return TypeCategory::kBool;
-            } else if (name == "int" ||
-                       name == "short" ||
-                       name == "$intLiteral") {
-                return TypeCategory::kSigned;
-            } else if (name == "uint" ||
-                       name == "ushort") {
-                return TypeCategory::kUnsigned;
-            } else {
-                SkASSERT(name == "float" ||
-                         name == "half" ||
-                         name == "$floatLiteral");
-                return TypeCategory::kFloat;
             }
-            ABORT("unsupported type: %s\n", type.displayName().c_str());
+            const StringFragment& name = type.name();
+            if (name == "int" ||
+                name == "short" ||
+                name == "$intLiteral") {
+                return TypeCategory::kSigned;
+            }
+            if (name == "uint" ||
+                name == "ushort") {
+                return TypeCategory::kUnsigned;
+            }
+            SkASSERT(name == "float" ||
+                     name == "half" ||
+                     name == "$floatLiteral");
+            return TypeCategory::kFloat;
     }
 }
 
@@ -55,6 +55,7 @@ ByteCodeGenerator::ByteCodeGenerator(const Context* context, const Program* prog
         { "ceil",        ByteCodeInstruction::kCeil },
         { "clamp",       SpecialIntrinsic::kClamp },
         { "cos",         ByteCodeInstruction::kCos },
+        { "distance",    SpecialIntrinsic::kDistance },
         { "dot",         SpecialIntrinsic::kDot },
         { "exp",         ByteCodeInstruction::kExp },
         { "exp2",        ByteCodeInstruction::kExp2 },
@@ -160,7 +161,7 @@ void ByteCodeGenerator::gatherUniforms(const Type& type, const String& name) {
 }
 
 bool ByteCodeGenerator::generateCode() {
-    for (const auto& e : fProgram.elements()) {
+    for (const ProgramElement* e : fProgram.elements()) {
         switch (e->kind()) {
             case ProgramElement::Kind::kFunction: {
                 std::unique_ptr<ByteCodeFunction> f =
@@ -480,7 +481,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
         case Variable::Storage::kGlobal: {
             if (var.type() == *fContext.fFragmentProcessor_Type) {
                 int offset = 0;
-                for (const auto& e : fProgram.elements()) {
+                for (const ProgramElement* e : fProgram.elements()) {
                     if (e->is<GlobalVarDeclaration>()) {
                         const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
                         const Variable& declVar = decl.declaration()->as<VarDeclaration>().var();
@@ -508,7 +509,7 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             }
             int offset = 0;
             bool isUniform = is_uniform(var);
-            for (const auto& e : fProgram.elements()) {
+            for (const ProgramElement* e : fProgram.elements()) {
                 if (e->is<GlobalVarDeclaration>()) {
                     const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
                     const Variable& declVar = decl.declaration()->as<VarDeclaration>().var();
@@ -716,10 +717,8 @@ bool ByteCodeGenerator::writeBinaryExpression(const BinaryExpression& b, bool di
     }
     const Type& lType = left.type();
     const Type& rType = right.type();
-    bool lVecOrMtx = (lType.typeKind() == Type::TypeKind::kVector ||
-                      lType.typeKind() == Type::TypeKind::kMatrix);
-    bool rVecOrMtx = (rType.typeKind() == Type::TypeKind::kVector ||
-                      rType.typeKind() == Type::TypeKind::kMatrix);
+    bool lVecOrMtx = (lType.isVector() || lType.isMatrix());
+    bool rVecOrMtx = (rType.isVector() || rType.isMatrix());
     std::unique_ptr<LValue> lvalue;
     if (Compiler::IsAssignment(op)) {
         lvalue = this->getLValue(left);
@@ -797,8 +796,7 @@ bool ByteCodeGenerator::writeBinaryExpression(const BinaryExpression& b, bool di
     }
     // Special case for M*V, V*M, M*M (but not V*V!)
     if (op == Token::Kind::TK_STAR && lVecOrMtx && rVecOrMtx &&
-        !(lType.typeKind() == Type::TypeKind::kVector &&
-          rType.typeKind() == Type::TypeKind::kVector)) {
+        !(lType.isVector() && rType.isVector())) {
         this->write(ByteCodeInstruction::kMatrixMultiply,
                     SlotCount(b.type()) - (SlotCount(lType) + SlotCount(rType)));
         int rCols = rType.columns(),
@@ -806,7 +804,7 @@ bool ByteCodeGenerator::writeBinaryExpression(const BinaryExpression& b, bool di
             lCols = lType.columns(),
             lRows = lType.rows();
         // M*V treats the vector as a column
-        if (rType.typeKind() == Type::TypeKind::kVector) {
+        if (rType.isVector()) {
             std::swap(rCols, rRows);
         }
         SkASSERT(lCols == rRows);
@@ -955,8 +953,7 @@ void ByteCodeGenerator::writeConstructor(const Constructor& c) {
                 SkASSERT(false);
             }
         }
-        if (inType.typeKind() == Type::TypeKind::kMatrix &&
-            outType.typeKind() == Type::TypeKind::kMatrix) {
+        if (inType.isMatrix() && outType.isMatrix()) {
             this->write(ByteCodeInstruction::kMatrixToMatrix,
                         SlotCount(outType) - SlotCount(inType));
             this->write8(inType.columns());
@@ -965,12 +962,12 @@ void ByteCodeGenerator::writeConstructor(const Constructor& c) {
             this->write8(outType.rows());
         } else if (inCount != outCount) {
             SkASSERT(inCount == 1);
-            if (outType.typeKind() == Type::TypeKind::kMatrix) {
+            if (outType.isMatrix()) {
                 this->write(ByteCodeInstruction::kScalarToMatrix, SlotCount(outType) - 1);
                 this->write8(outType.columns());
                 this->write8(outType.rows());
             } else {
-                SkASSERT(outType.typeKind() == Type::TypeKind::kVector);
+                SkASSERT(outType.isVector());
                 for (; inCount != outCount; ++inCount) {
                     this->write(ByteCodeInstruction::kDup, 1);
                 }
@@ -1248,6 +1245,19 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
     }
 
     if (intrin.is_special) {
+        auto doDotProduct = [count, this] {
+            this->write(ByteCodeInstruction::kMultiplyF, count);
+            for (int i = count - 1; i-- > 0;) {
+                this->write(ByteCodeInstruction::kAddF, 1);
+            }
+        };
+
+        auto doLength = [count, this, &doDotProduct] {
+            this->write(ByteCodeInstruction::kDup, count);
+            doDotProduct();
+            this->write(ByteCodeInstruction::kSqrt, 1);
+        };
+
         switch (intrin.special) {
             case SpecialIntrinsic::kAll: {
                 for (int i = count-1; i --> 0;) {
@@ -1268,23 +1278,20 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
                             count);
             } break;
 
+            case SpecialIntrinsic::kDistance: {
+                SkASSERT(nargs == 2 && count == SlotCount(args[1]->type()));
+                this->write(ByteCodeInstruction::kSubtractF, count);
+                doLength();
+            } break;
+
             case SpecialIntrinsic::kDot: {
-                SkASSERT(nargs == 2);
-                SkASSERT(count == SlotCount(args[1]->type()));
-                this->write(ByteCodeInstruction::kMultiplyF, count);
-                for (int i = count-1; i --> 0;) {
-                    this->write(ByteCodeInstruction::kAddF, 1);
-                }
+                SkASSERT(nargs == 2 && count == SlotCount(args[1]->type()));
+                doDotProduct();
             } break;
 
             case SpecialIntrinsic::kLength: {
                 SkASSERT(nargs == 1);
-                this->write(ByteCodeInstruction::kDup, count);
-                this->write(ByteCodeInstruction::kMultiplyF, count);
-                for (int i = count-1; i --> 0;) {
-                    this->write(ByteCodeInstruction::kAddF, 1);
-                }
-                this->write(ByteCodeInstruction::kSqrt, 1);
+                doLength();
             } break;
 
             case SpecialIntrinsic::kMax:
@@ -1334,12 +1341,7 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
             case SpecialIntrinsic::kNormalize: {
                 SkASSERT(nargs == 1);
                 this->write(ByteCodeInstruction::kDup, count);
-                this->write(ByteCodeInstruction::kDup, count);
-                this->write(ByteCodeInstruction::kMultiplyF, count);
-                for (int i = count-1; i --> 0;) {
-                    this->write(ByteCodeInstruction::kAddF, 1);
-                }
-                this->write(ByteCodeInstruction::kSqrt, 1);
+                doLength();
                 dupSmallerType(1);
                 this->write(ByteCodeInstruction::kDivideF, count);
             } break;

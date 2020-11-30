@@ -44,7 +44,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         SkASSERT(arguments[0]->is<VariableReference>());
         int index = 0;
         bool found = false;
-        for (const auto& p : fProgram.elements()) {
+        for (const ProgramElement* p : fProgram.elements()) {
             if (p->is<GlobalVarDeclaration>()) {
                 const GlobalVarDeclaration& global = p->as<GlobalVarDeclaration>();
                 const VarDeclaration& decl = global.declaration()->as<VarDeclaration>();
@@ -61,8 +61,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         SkASSERT(found);
         size_t childCallIndex = fArgs->fFormatArgs.size();
         this->write(Compiler::kFormatArgPlaceholderStr);
-        bool matrixCall = arguments.size() == 2 &&
-                          arguments[1]->type().typeKind() == Type::TypeKind::kMatrix;
+        bool matrixCall = arguments.size() == 2 && arguments[1]->type().isMatrix();
         fArgs->fFormatArgs.push_back(Compiler::FormatArg(
                 matrixCall ? Compiler::FormatArg::Kind::kChildProcessorWithMatrix
                            : Compiler::FormatArg::Kind::kChildProcessor,
@@ -81,7 +80,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         INHERITED::writeFunctionCall(c);
     } else {
         int index = 0;
-        for (const auto& e : fProgram.elements()) {
+        for (const ProgramElement* e : fProgram.elements()) {
             if (e->is<FunctionDefinition>()) {
                 if (&e->as<FunctionDefinition>().declaration() == &function) {
                     break;
@@ -117,7 +116,7 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
             auto varIndexByFlag = [this, &ref](uint32_t flag) {
                 int index = 0;
                 bool found = false;
-                for (const auto& e : fProgram.elements()) {
+                for (const ProgramElement* e : fProgram.elements()) {
                     if (found) {
                         break;
                     }

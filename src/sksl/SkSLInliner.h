@@ -36,12 +36,40 @@ class Variable;
  */
 class Inliner {
 public:
-    Inliner() {}
+    Inliner(const Context* context, const ShaderCapsClass* caps) : fContext(context), fCaps(caps) {}
 
-    void reset(const Context*,
-               ModifiersPool* modifiers,
-               const Program::Settings*,
-               const ShaderCapsClass* caps);
+    void reset(ModifiersPool* modifiers, const Program::Settings*);
+
+    /** Inlines any eligible functions that are found. Returns true if any changes are made. */
+    bool analyze(const std::vector<std::unique_ptr<ProgramElement>>& elements,
+                 SymbolTable* symbols,
+                 ProgramUsage* usage);
+
+private:
+    using VariableRewriteMap = std::unordered_map<const Variable*, std::unique_ptr<Expression>>;
+
+    String uniqueNameForInlineVar(const String& baseName, SymbolTable* symbolTable);
+
+    void buildCandidateList(const std::vector<std::unique_ptr<ProgramElement>>& elements,
+                            SymbolTable* symbols, ProgramUsage* usage,
+                            InlineCandidateList* candidateList);
+
+    std::unique_ptr<Expression> inlineExpression(int offset,
+                                                 VariableRewriteMap* varMap,
+                                                 const Expression& expression);
+    std::unique_ptr<Statement> inlineStatement(int offset,
+                                               VariableRewriteMap* varMap,
+                                               SymbolTable* symbolTableForStatement,
+                                               const Expression* resultExpr,
+                                               bool haveEarlyReturns,
+                                               const Statement& statement,
+                                               bool isBuiltinCode);
+
+    using InlinabilityCache = std::unordered_map<const FunctionDeclaration*, bool>;
+    bool candidateCanBeInlined(const InlineCandidate& candidate, InlinabilityCache* cache);
+
+    using FunctionSizeCache = std::unordered_map<const FunctionDeclaration*, int>;
+    int getFunctionSize(const FunctionDeclaration& fnDecl, FunctionSizeCache* cache);
 
     /**
      * Processes the passed-in FunctionCall expression. The FunctionCall expression should be
@@ -59,36 +87,6 @@ public:
 
     /** Checks whether inlining is viable for a FunctionCall, modulo recursion and function size. */
     bool isSafeToInline(const FunctionDefinition* functionDef);
-
-    /** Checks whether a function's size exceeds the inline threshold from Settings. */
-    bool isLargeFunction(const FunctionDefinition* functionDef);
-
-    /** Inlines any eligible functions that are found. Returns true if any changes are made. */
-    bool analyze(Program& program);
-
-private:
-    using VariableRewriteMap = std::unordered_map<const Variable*, std::unique_ptr<Expression>>;
-
-    String uniqueNameForInlineVar(const String& baseName, SymbolTable* symbolTable);
-
-    void buildCandidateList(Program& program, InlineCandidateList* candidateList);
-
-    std::unique_ptr<Expression> inlineExpression(int offset,
-                                                 VariableRewriteMap* varMap,
-                                                 const Expression& expression);
-    std::unique_ptr<Statement> inlineStatement(int offset,
-                                               VariableRewriteMap* varMap,
-                                               SymbolTable* symbolTableForStatement,
-                                               const Expression* resultExpr,
-                                               bool haveEarlyReturns,
-                                               const Statement& statement,
-                                               bool isBuiltinCode);
-
-    using InlinabilityCache = std::unordered_map<const FunctionDeclaration*, bool>;
-    bool candidateCanBeInlined(const InlineCandidate& candidate, InlinabilityCache* cache);
-
-    using LargeFunctionCache = std::unordered_map<const FunctionDeclaration*, bool>;
-    bool isLargeFunction(const InlineCandidate& candidate, LargeFunctionCache* cache);
 
     const Context* fContext = nullptr;
     ModifiersPool* fModifiers = nullptr;

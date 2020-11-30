@@ -32,6 +32,7 @@ public:
     GrAppliedClip detachAppliedClip() override { return GrAppliedClip::Disabled(); }
     const GrXferProcessor::DstProxyView& dstProxyView() const override { return fDstProxyView; }
     GrXferBarrierFlags renderPassBarriers() const override { return GrXferBarrierFlags::kNone; }
+    GrLoadOp colorLoadOp() const override { return GrLoadOp::kLoad; }
 
     void* makeVertexSpace(size_t vertexSize, int vertexCount, sk_sp<const GrBuffer>*,
                           int* startVertex) override {
@@ -62,8 +63,11 @@ public:
             SK_ABORT("FATAL: wanted %i static drawIndirect elements; only have %i.\n",
                      drawCount, staticBufferCount);
         }
+        *offsetInBytes = 0;
         return fStaticDrawIndirectData;
     }
+
+    void putBackIndirectDraws(int count) override { /* no-op */ }
 
     GrDrawIndexedIndirectCommand* makeDrawIndexedIndirectSpace(
             int drawCount, sk_sp<const GrBuffer>* buffer, size_t* offsetInBytes) override {
@@ -72,8 +76,11 @@ public:
             SK_ABORT("FATAL: wanted %i static drawIndexedIndirect elements; only have %i.\n",
                      drawCount, staticBufferCount);
         }
+        *offsetInBytes = 0;
         return fStaticDrawIndexedIndirectData;
     }
+
+    void putBackIndexedIndirectDraws(int count) override { /* no-op */ }
 
 #define UNIMPL(...) __VA_ARGS__ override { SK_ABORT("unimplemented."); }
     UNIMPL(void recordDraw(const GrGeometryProcessor*, const GrSimpleMesh[], int,
@@ -81,8 +88,8 @@ public:
     UNIMPL(uint16_t* makeIndexSpace(int, sk_sp<const GrBuffer>*, int*))
     UNIMPL(uint16_t* makeIndexSpaceAtLeast(int, int, sk_sp<const GrBuffer>*, int*, int*))
     UNIMPL(void putBackIndices(int))
-    UNIMPL(GrRenderTargetProxy* proxy() const)
-    UNIMPL(const GrSurfaceProxyView* writeView() const)
+    UNIMPL(GrRenderTargetProxy* rtProxy() const)
+    UNIMPL(const GrSurfaceProxyView& writeView() const)
     UNIMPL(const GrAppliedClip* appliedClip() const)
     UNIMPL(GrStrikeCache* strikeCache() const)
     UNIMPL(GrAtlasManager* atlasManager() const)

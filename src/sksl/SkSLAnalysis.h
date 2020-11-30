@@ -19,6 +19,7 @@ class ErrorReporter;
 class Expression;
 class FunctionDeclaration;
 class FunctionDefinition;
+struct LoadedModule;
 struct Program;
 class ProgramElement;
 class ProgramUsage;
@@ -37,13 +38,29 @@ struct Analysis {
     static bool ReferencesSampleCoords(const Program& program);
     static bool ReferencesFragCoords(const Program& program);
 
-    static bool NodeCountExceeds(const FunctionDefinition& function, int limit);
+    static int NodeCountUpToLimit(const FunctionDefinition& function, int limit);
 
     static std::unique_ptr<ProgramUsage> GetUsage(const Program& program);
+    static std::unique_ptr<ProgramUsage> GetUsage(const LoadedModule& module);
 
     static bool StatementWritesToVariable(const Statement& stmt, const Variable& var);
     static bool IsAssignable(Expression& expr, VariableReference** assignableVar,
                              ErrorReporter* errors = nullptr);
+
+    // A "trivial" expression is one where we'd feel comfortable cloning it multiple times in
+    // the code, without worrying about incurring a performance penalty. Examples:
+    // - true
+    // - 3.14159265
+    // - myIntVariable
+    // - myColor.rgb
+    // - myArray[123]
+    // - myStruct.myField
+    // - half4(0)
+    //
+    // Trivial-ness is stackable. Somewhat large expressions can occasionally make the cut:
+    // - half4(myColor.a)
+    // - myStruct.myArrayField[7].xyz
+    static bool IsTrivialExpression(const Expression& expr);
 };
 
 /**
@@ -66,8 +83,6 @@ class TProgramVisitor {
 public:
     virtual ~TProgramVisitor() = default;
 
-    bool visit(PROG program);
-
 protected:
     virtual bool visitExpression(EXPR expression);
     virtual bool visitStatement(STMT statement);
@@ -86,8 +101,14 @@ extern template class TProgramVisitor<Program&, Expression&, Statement&, Program
 #pragma clang diagnostic pop
 #endif
 
-using ProgramVisitor = TProgramVisitor<const Program&, const Expression&,
-                                       const Statement&, const ProgramElement&>;
+class ProgramVisitor : public TProgramVisitor<const Program&,
+                                              const Expression&,
+                                              const Statement&,
+                                              const ProgramElement&> {
+public:
+    bool visit(const Program& program);
+};
+
 using ProgramWriter = TProgramVisitor<Program&, Expression&, Statement&, ProgramElement&>;
 
 }  // namespace SkSL

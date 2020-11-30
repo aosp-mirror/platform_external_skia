@@ -45,6 +45,7 @@ public:
     ~GrVkGpu() override;
 
     void disconnect(DisconnectType) override;
+    bool disconnected() const { return fDisconnected; }
 
     const GrVkInterface* vkInterface() const { return fInterface.get(); }
     const GrVkCaps& vkCaps() const { return *fVkCaps; }
@@ -298,6 +299,8 @@ private:
             const GrBackendSurfaceMutableState* newState) override;
 
     bool onSubmitToGpu(bool syncCpu) override;
+
+    void onReportSubmitHistograms() override;
 
     // Ends and submits the current command buffer to the queue and then creates a new command
     // buffer and begins it. If sync is set to kForce_SyncQueue, the function will wait for all

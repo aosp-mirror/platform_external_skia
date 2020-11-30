@@ -460,15 +460,19 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrRenderTargetContext* rtc,
 
     sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, drawMatrix);
     SkGlyphRunListPainter* painter = rtc->priv().testingOnly_glyphRunPainter();
-    painter->processGlyphRunList(
-            glyphRunList, drawMatrix, rtc->surfaceProps(),
+    painter->processGlyphRun(
+            *glyphRunList.begin(),
+            drawMatrix, glyphRunList.origin(),
+            glyphRunList.paint(),
+            rtc->surfaceProps(),
             rContext->priv().caps()->shaderCaps()->supportsDistanceFieldText(),
             SDFOptions, blob.get());
     if (!blob->subRunList().head()) {
         return nullptr;
     }
 
-    GrAtlasSubRun* subRun = static_cast<GrAtlasSubRun*>(blob->subRunList().head());
+    GrAtlasSubRun* subRun = blob->subRunList().head()->testingOnly_atlasSubRun();
+    SkASSERT(subRun);
     GrOp::Owner op;
     std::tie(std::ignore, op) = subRun->makeAtlasTextOp(nullptr, mtxProvider, glyphRunList, rtc);
     return op;

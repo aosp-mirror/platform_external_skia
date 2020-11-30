@@ -14,6 +14,7 @@
 #include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
+#include <limits>
 
  // This is a common base class for shaders in the GPU tessellator.
 class GrPathShader : public GrGeometryProcessor {
@@ -34,33 +35,44 @@ public:
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
 
     static GrProgramInfo* MakeProgramInfo(const GrPathShader* shader, SkArenaAlloc* arena,
-                                          const GrSurfaceProxyView* writeView,
+                                          const GrSurfaceProxyView& writeView,
                                           GrPipeline::InputFlags pipelineFlags,
                                           GrProcessorSet&& processors, GrAppliedClip&& appliedClip,
                                           const GrXferProcessor::DstProxyView& dstProxyView,
                                           GrXferBarrierFlags renderPassXferBarriers,
+                                          GrLoadOp colorLoadOp,
                                           const GrUserStencilSettings* stencil,
                                           const GrCaps& caps) {
         auto* pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(
-                &caps, arena, writeView->swizzle(), std::move(appliedClip), dstProxyView,
+                &caps, arena, writeView.swizzle(), std::move(appliedClip), dstProxyView,
                 std::move(processors), pipelineFlags);
         return MakeProgramInfo(shader, arena, writeView, pipeline, dstProxyView,
-                               renderPassXferBarriers, stencil, caps);
+                               renderPassXferBarriers, colorLoadOp, stencil, caps);
     }
 
     static GrProgramInfo* MakeProgramInfo(const GrPathShader* shader, SkArenaAlloc* arena,
-                                          const GrSurfaceProxyView* writeView,
+                                          const GrSurfaceProxyView& writeView,
                                           const GrPipeline* pipeline,
                                           const GrXferProcessor::DstProxyView& dstProxyView,
                                           GrXferBarrierFlags renderPassXferBarriers,
+                                          GrLoadOp colorLoadOp,
                                           const GrUserStencilSettings* stencil,
                                           const GrCaps& caps) {
-        GrRenderTargetProxy* proxy = writeView->asRenderTargetProxy();
-        return arena->make<GrProgramInfo>(proxy->numSamples(), proxy->numStencilSamples(),
-                                          proxy->backendFormat(), writeView->origin(), pipeline,
-                                          stencil, shader, shader->fPrimitiveType,
+        return arena->make<GrProgramInfo>(writeView,
+                                          pipeline,
+                                          stencil,
+                                          shader,
+                                          shader->fPrimitiveType,
                                           shader->fTessellationPatchVertexCount,
-                                          renderPassXferBarriers);
+                                          renderPassXferBarriers, colorLoadOp);
+    }
+
+    // Fills in a 4-point patch in such a way that the shader will recognize it as a conic.
+    static void WriteConicPatch(const SkPoint pts[3], float w, SkPoint patch[4]) {
+        // Write out the 3 conic points to patch[0..2], the weight to patch[3].x, and then set
+        // patch[3].y as NaN to flag this patch as a conic.
+        memcpy(patch, pts, sizeof(SkPoint) * 3);
+        patch[3].set(w, std::numeric_limits<float>::quiet_NaN());
     }
 
 private:

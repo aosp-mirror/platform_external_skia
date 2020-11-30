@@ -85,6 +85,26 @@ public:
         return Compiler::OperatorName(this->getOperator()) + this->operand()->description();
     }
 
+    int64_t getConstantInt() const override {
+        SkASSERT(this->isNegationOfCompileTimeConstant());
+        return -this->operand()->getConstantInt();
+    }
+
+    SKSL_FLOAT getConstantFloat() const override {
+        SkASSERT(this->isNegationOfCompileTimeConstant());
+        return -this->operand()->getConstantFloat();
+    }
+
+    bool compareConstant(const Context& context, const Expression& other) const override {
+        // This expression and the other expression must be of the same kind. Since the only
+        // compile-time PrefixExpression we optimize for is negation, that means we're comparing
+        // -X == -Y. The negatives should cancel out, so we can just constant-compare the inner
+        // expressions.
+        SkASSERT(this->isNegationOfCompileTimeConstant());
+        SkASSERT(other.as<PrefixExpression>().isNegationOfCompileTimeConstant());
+        return this->operand()->compareConstant(context, *other.as<PrefixExpression>().operand());
+    }
+
 private:
     Token::Kind fOperator;
     std::unique_ptr<Expression> fOperand;

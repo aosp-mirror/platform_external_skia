@@ -451,10 +451,11 @@ void GrOpsTask::onPrePrepare(GrRecordingContext* context) {
     for (const auto& chain : fOpChains) {
         if (chain.shouldExecute()) {
             chain.head()->prePrepare(context,
-                                     &fTargets[0],
+                                     this->target(0),
                                      chain.appliedClip(),
                                      chain.dstProxyView(),
-                                     fRenderPassXferBarriers);
+                                     fRenderPassXferBarriers,
+                                     fColorLoadOp);
         }
     }
 }
@@ -481,10 +482,11 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
             TRACE_EVENT0("skia.gpu", chain.head()->name());
 #endif
             GrOpFlushState::OpArgs opArgs(chain.head(),
-                                          &fTargets[0],
+                                          this->target(0),
                                           chain.appliedClip(),
                                           chain.dstProxyView(),
-                                          fRenderPassXferBarriers);
+                                          fRenderPassXferBarriers,
+                                          fColorLoadOp);
 
             flushState->setOpArgs(&opArgs);
 
@@ -633,10 +635,11 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 #endif
 
         GrOpFlushState::OpArgs opArgs(chain.head(),
-                                      &fTargets[0],
+                                      this->target(0),
                                       chain.appliedClip(),
                                       chain.dstProxyView(),
-                                      fRenderPassXferBarriers);
+                                      fRenderPassXferBarriers,
+                                      fColorLoadOp);
 
         flushState->setOpArgs(&opArgs);
         chain.head()->execute(flushState, chain.bounds());

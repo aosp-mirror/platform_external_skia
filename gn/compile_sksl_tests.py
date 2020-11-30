@@ -8,6 +8,7 @@
 import os
 import subprocess
 import sys
+import tempfile
 
 skslc = sys.argv[1]
 lang = sys.argv[2]
@@ -20,15 +21,18 @@ def makeEmptyFile(path):
     except OSError:
         pass
 
+def extensionForSpirvAsm(ext):
+    return ext if (ext == '.frag' or ext == '.vert' or ext == '.geom') else '.frag'
+
 if settings != "--settings" and settings != "--nosettings":
     sys.exit("### Expected --settings or --nosettings, got " + settings)
 
-skslcArgs = [skslc]
 targets = []
+worklist = tempfile.NamedTemporaryFile(suffix='.worklist', delete=False)
 
 # Convert the list of command-line inputs into a worklist file sfor skslc.
 for input in inputs:
-    noExt, _ = os.path.splitext(input)
+    noExt, ext = os.path.splitext(input)
     head, tail = os.path.split(noExt)
     targetDir = os.path.join(head, "golden")
     if not os.path.isdir(targetDir):
@@ -41,36 +45,39 @@ for input in inputs:
     targets.append(target)
 
     if lang == "--fp":
-        skslcArgs.append("--")
-        skslcArgs.append(input)
-        skslcArgs.append(target + ".cpp")
-        skslcArgs.append(settings)
-        skslcArgs.append("--")
-        skslcArgs.append(input)
-        skslcArgs.append(target + ".h")
-        skslcArgs.append(settings)
+        worklist.write(input + "\n")
+        worklist.write(target + ".cpp\n")
+        worklist.write(settings + "\n\n")
+        worklist.write(input + "\n")
+        worklist.write(target + ".h\n")
+        worklist.write(settings + "\n\n")
     elif lang == "--glsl":
-        skslcArgs.append("--")
-        skslcArgs.append(input)
-        skslcArgs.append(target + ".glsl")
-        skslcArgs.append(settings)
+        worklist.write(input + "\n")
+        worklist.write(target + ".glsl\n")
+        worklist.write(settings + "\n\n")
     elif lang == "--metal":
-        skslcArgs.append("--")
-        skslcArgs.append(input)
-        skslcArgs.append(target + ".metal")
-        skslcArgs.append(settings)
+        worklist.write(input + "\n")
+        worklist.write(target + ".metal\n")
+        worklist.write(settings + "\n\n")
+    elif lang == "--spirv":
+        worklist.write(input + "\n")
+        worklist.write(target + ".asm" + extensionForSpirvAsm(ext) + "\n")
+        worklist.write(settings + "\n\n")
     else:
-        sys.exit("### Expected one of: --fp --glsl --metal, got " + lang)
+        sys.exit("### Expected one of: --fp --glsl --metal --spirv, got " + lang)
 
-# Invoke skslc on every target that needs to be compiled.
+# Invoke skslc, passing in the worklist.
+worklist.close()
 try:
-    output = subprocess.check_output(skslcArgs, stderr=subprocess.STDOUT)
+    output = subprocess.check_output([skslc, worklist.name], stderr=subprocess.STDOUT)
 except subprocess.CalledProcessError as err:
     if err.returncode != 1:
         print("### skslc error:\n")
         print("\n".join(err.output.splitlines()))
         sys.exit(err.returncode)
     pass  # Compile errors (exit code 1) are expected and normal in test code
+
+os.remove(worklist.name)
 
 # A special case cleanup pass, just for CPP and H files: if either one of these files starts with
 # `### Compilation failed`, its sibling should be replaced by an empty file. This improves clarity
