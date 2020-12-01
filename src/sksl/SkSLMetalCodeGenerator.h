@@ -121,6 +121,8 @@ protected:
         kGreaterThanEqual_MetalIntrinsic,
     };
 
+    static const char* OperatorName(Token::Kind op);
+
     class GlobalStructVisitor;
     void visitGlobalStruct(GlobalStructVisitor* visitor);
 
@@ -146,6 +148,8 @@ protected:
 
     void writeInterfaceBlocks();
 
+    void writeStructDefinitions();
+
     void writeFields(const std::vector<Type::Field>& fields, int parentOffset,
                      const InterfaceBlock* parentIntf = nullptr);
 
@@ -159,6 +163,8 @@ protected:
     void writePrecisionModifier();
 
     String typeName(const Type& type);
+
+    bool writeStructDefinition(const Type& type);
 
     void writeType(const Type& type);
 

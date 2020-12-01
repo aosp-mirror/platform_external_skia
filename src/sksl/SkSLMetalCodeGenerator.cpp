@@ -14,11 +14,19 @@
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLModifiersDeclaration.h"
 #include "src/sksl/ir/SkSLNop.h"
+#include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 
 #include <algorithm>
 
 namespace SkSL {
+
+const char* MetalCodeGenerator::OperatorName(Token::Kind op) {
+    switch (op) {
+        case Token::Kind::TK_LOGICALXOR:  return "!=";
+        default:                          return Compiler::OperatorName(op);
+    }
+}
 
 class MetalCodeGenerator::GlobalStructVisitor {
 public:
@@ -90,6 +98,8 @@ String MetalCodeGenerator::typeName(const Type& type) {
                                   to_string(type.rows());
         case Type::TypeKind::kSampler:
             return "texture2d<float>"; // FIXME - support other texture types;
+        case Type::TypeKind::kEnum:
+            return "int";
         default:
             if (type == *fContext.fHalf_Type) {
                 // FIXME - Currently only supporting floats in MSL to avoid type coercion issues.
@@ -104,21 +114,27 @@ String MetalCodeGenerator::typeName(const Type& type) {
     }
 }
 
+bool MetalCodeGenerator::writeStructDefinition(const Type& type) {
+    for (const Type* search : fWrittenStructs) {
+        if (*search == type) {
+            // already written
+            return false;
+        }
+    }
+    fWrittenStructs.push_back(&type);
+    this->writeLine("struct " + type.name() + " {");
+    fIndentation++;
+    this->writeFields(type.fields(), type.fOffset);
+    fIndentation--;
+    this->write("}");
+    return true;
+}
+
 void MetalCodeGenerator::writeType(const Type& type) {
     if (type.typeKind() == Type::TypeKind::kStruct) {
-        for (const Type* search : fWrittenStructs) {
-            if (*search == type) {
-                // already written
-                this->write(type.name());
-                return;
-            }
+        if (!this->writeStructDefinition(type)) {
+            this->write(type.name());
         }
-        fWrittenStructs.push_back(&type);
-        this->writeLine("struct " + type.name() + " {");
-        fIndentation++;
-        this->writeFields(type.fields(), type.fOffset);
-        fIndentation--;
-        this->write("}");
     } else {
         this->write(this->typeName(type));
     }
@@ -918,12 +934,12 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
         this->write(" = ");
         this->writeExpression(left, kAssignment_Precedence);
         this->write(" ");
-        String opName = Compiler::OperatorName(op);
+        String opName = OperatorName(op);
         SkASSERT(opName.endsWith("="));
         this->write(opName.substr(0, opName.size() - 1).c_str());
         this->write(" ");
     } else {
-        this->write(String(" ") + Compiler::OperatorName(op) + " ");
+        this->write(String(" ") + OperatorName(op) + " ");
     }
     this->writeExpression(right, precedence);
     if (needParens) {
@@ -951,7 +967,7 @@ void MetalCodeGenerator::writePrefixExpression(const PrefixExpression& p,
     if (kPrefix_Precedence >= parentPrecedence) {
         this->write("(");
     }
-    this->write(Compiler::OperatorName(p.getOperator()));
+    this->write(OperatorName(p.getOperator()));
     this->writeExpression(*p.operand(), kPrefix_Precedence);
     if (kPrefix_Precedence >= parentPrecedence) {
         this->write(")");
@@ -964,7 +980,7 @@ void MetalCodeGenerator::writePostfixExpression(const PostfixExpression& p,
         this->write("(");
     }
     this->writeExpression(*p.operand(), kPostfix_Precedence);
-    this->write(Compiler::OperatorName(p.getOperator()));
+    this->write(OperatorName(p.getOperator()));
     if (kPostfix_Precedence >= parentPrecedence) {
         this->write(")");
     }
@@ -1226,7 +1242,7 @@ void MetalCodeGenerator::writeFields(const std::vector<Type::Field>& fields, int
     for (const auto& field: fields) {
         int fieldOffset = field.fModifiers.fLayout.fOffset;
         const Type* fieldType = field.fType;
-        if (!memoryLayout.layoutIsSupported(*fieldType)) {
+        if (!MemoryLayout::LayoutIsSupported(*fieldType)) {
             fErrors.error(parentOffset, "type '" + fieldType->name() + "' is not permitted here");
             return;
         }
@@ -1580,6 +1596,26 @@ void MetalCodeGenerator::writeInterfaceBlocks() {
     }
 }
 
+void MetalCodeGenerator::writeStructDefinitions() {
+    for (const ProgramElement* e : fProgram.elements()) {
+        if (e->is<StructDefinition>()) {
+            if (this->writeStructDefinition(e->as<StructDefinition>().type())) {
+                this->writeLine(";");
+            }
+        } else if (e->is<GlobalVarDeclaration>()) {
+            // If a global var declaration introduces a struct type, we need to write that type
+            // here, since globals are all embedded in a sub-struct.
+            const Type* type = &e->as<GlobalVarDeclaration>().declaration()
+                                 ->as<VarDeclaration>().baseType();
+            if (type->typeKind() == Type::TypeKind::kStruct) {
+                if (this->writeStructDefinition(*type)) {
+                    this->writeLine(";");
+                }
+            }
+        }
+    }
+}
+
 void MetalCodeGenerator::visitGlobalStruct(GlobalStructVisitor* visitor) {
     // Visit the interface blocks.
     for (const auto& [interfaceType, interfaceName] : fInterfaceBlockNameMap) {
@@ -1730,6 +1766,9 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
         case ProgramElement::Kind::kInterfaceBlock:
             // handled in writeInterfaceBlocks, do nothing
             break;
+        case ProgramElement::Kind::kStructDefinition:
+            // Handled in writeStructDefinitions. Do nothing.
+            break;
         case ProgramElement::Kind::kFunction:
             this->writeFunction(e.as<FunctionDefinition>());
             break;
@@ -1739,6 +1778,8 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
         case ProgramElement::Kind::kModifiers:
             this->writeModifiers(e.as<ModifiersDeclaration>().modifiers(), true);
             this->writeLine(";");
+            break;
+        case ProgramElement::Kind::kEnum:
             break;
         default:
 #ifdef SK_DEBUG
@@ -1910,6 +1951,7 @@ bool MetalCodeGenerator::generateCode() {
     fOut = &fHeader;
     fProgramKind = fProgram.fKind;
     this->writeHeader();
+    this->writeStructDefinitions();
     this->writeUniformStruct();
     this->writeInputStruct();
     this->writeOutputStruct();
