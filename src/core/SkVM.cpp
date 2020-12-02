@@ -287,8 +287,8 @@ namespace skvm {
             case Op::ceil:      write(o, V{id}, "=", op, V{x}); break;
             case Op::floor:     write(o, V{id}, "=", op, V{x}); break;
             case Op::to_f32:    write(o, V{id}, "=", op, V{x}); break;
-            case Op::to_half:   write(o, V{id}, "=", op, V{x}); break;
-            case Op::from_half: write(o, V{id}, "=", op, V{x}); break;
+            case Op::to_fp16:   write(o, V{id}, "=", op, V{x}); break;
+            case Op::from_fp16: write(o, V{id}, "=", op, V{x}); break;
             case Op::trunc:     write(o, V{id}, "=", op, V{x}); break;
             case Op::round:     write(o, V{id}, "=", op, V{x}); break;
         }
@@ -397,8 +397,8 @@ namespace skvm {
                 case Op::ceil:      write(o, R{d}, "=", op, R{x}); break;
                 case Op::floor:     write(o, R{d}, "=", op, R{x}); break;
                 case Op::to_f32:    write(o, R{d}, "=", op, R{x}); break;
-                case Op::to_half:   write(o, R{d}, "=", op, R{x}); break;
-                case Op::from_half: write(o, R{d}, "=", op, R{x}); break;
+                case Op::to_fp16:   write(o, R{d}, "=", op, R{x}); break;
+                case Op::from_fp16: write(o, R{d}, "=", op, R{x}); break;
                 case Op::trunc:     write(o, R{d}, "=", op, R{x}); break;
                 case Op::round:     write(o, R{d}, "=", op, R{x}); break;
             }
@@ -744,10 +744,10 @@ namespace skvm {
     // See http://www.machinedlearnings.com/2011/06/fast-approximate-logarithm-exponential.html.
     F32 Builder::approx_log2(F32 x) {
         // e - 127 is a fair approximation of log2(x) in its own right...
-        F32 e = mul(to_F32(bit_cast(x)), splat(1.0f / (1<<23)));
+        F32 e = mul(to_F32(pun_to_I32(x)), splat(1.0f / (1<<23)));
 
         // ... but using the mantissa to refine its error is _much_ better.
-        F32 m = bit_cast(bit_or(bit_and(bit_cast(x), 0x007fffff),
+        F32 m = pun_to_F32(bit_or(bit_and(pun_to_I32(x), 0x007fffff),
                                 0x3f000000));
         F32 approx = sub(e,        124.225514990f);
             approx = sub(approx, mul(1.498030302f, m));
@@ -762,7 +762,7 @@ namespace skvm {
             approx = sub(approx, mul( 1.490129070f, f));
             approx = add(approx, div(27.728023300f, sub(4.84252568f, f)));
 
-        return bit_cast(round(mul(1.0f * (1<<23), approx)));
+        return pun_to_F32(round(mul(1.0f * (1<<23), approx)));
     }
 
     F32 Builder::approx_powf(F32 x, F32 y) {
@@ -1061,13 +1061,13 @@ namespace skvm {
         return {this, this->push(Op::round, x.id)};
     }
 
-    I32 Builder::to_half(F32 x) {
+    I32 Builder::to_fp16(F32 x) {
         if (float X; this->allImm(x.id,&X)) { return splat((int)SkFloatToHalf(X)); }
-        return {this, this->push(Op::to_half, x.id)};
+        return {this, this->push(Op::to_fp16, x.id)};
     }
-    F32 Builder::from_half(I32 x) {
+    F32 Builder::from_fp16(I32 x) {
         if (int X; this->allImm(x.id,&X)) { return splat(SkHalfToFloat(X)); }
-        return {this, this->push(Op::from_half, x.id)};
+        return {this, this->push(Op::from_fp16, x.id)};
     }
 
     F32 Builder::from_unorm(int bits, I32 x) {
@@ -1132,7 +1132,7 @@ namespace skvm {
             I32 channel = extract(x, shift, (1<<bits)-1);
             switch (f.encoding) {
                 case PixelFormat::UNORM: return from_unorm(bits, channel);
-                case PixelFormat::FLOAT: return from_half (      channel);
+                case PixelFormat::FLOAT: return from_fp16 (      channel);
             }
             SkUNREACHABLE;
         };
@@ -1205,10 +1205,10 @@ namespace skvm {
             case 16: {
                 assert_16byte_is_rgba_f32(f);
                 return {
-                    bit_cast(load128(ptr, 0)),
-                    bit_cast(load128(ptr, 1)),
-                    bit_cast(load128(ptr, 2)),
-                    bit_cast(load128(ptr, 3)),
+                    pun_to_F32(load128(ptr, 0)),
+                    pun_to_F32(load128(ptr, 1)),
+                    pun_to_F32(load128(ptr, 2)),
+                    pun_to_F32(load128(ptr, 3)),
                 };
             }
             default: SkUNREACHABLE;
@@ -1254,7 +1254,7 @@ namespace skvm {
             I32 encoded;
             switch (f.encoding) {
                 case PixelFormat::UNORM: encoded = to_unorm(bits, channel); break;
-                case PixelFormat::FLOAT: encoded = to_half (      channel); break;
+                case PixelFormat::FLOAT: encoded = to_fp16 (      channel); break;
             }
             packed = pack(packed, encoded, shift);
         };
@@ -1290,8 +1290,8 @@ namespace skvm {
             }
             case 16: {
                 assert_16byte_is_rgba_f32(f);
-                store128(ptr, bit_cast(c.r), bit_cast(c.g), 0);
-                store128(ptr, bit_cast(c.b), bit_cast(c.a), 1);
+                store128(ptr, pun_to_I32(c.r), pun_to_I32(c.g), 0);
+                store128(ptr, pun_to_I32(c.b), pun_to_I32(c.a), 1);
                 return true;
             }
             default: SkUNREACHABLE;
@@ -1301,7 +1301,7 @@ namespace skvm {
 
     void Builder::unpremul(F32* r, F32* g, F32* b, F32 a) {
         skvm::F32 invA = 1.0f / a,
-                  inf  = bit_cast(splat(0x7f800000));
+                  inf  = pun_to_F32(splat(0x7f800000));
         // If a is 0, so are *r,*g,*b, so set invA to 0 to avoid 0*inf=NaN (instead 0*0 = 0).
         invA = select(invA < inf, invA
                                 , 0.0f);
@@ -3704,12 +3704,12 @@ namespace skvm {
                     else           { a->vcvtps2dq(dst(), any(x)); }
                                      break;
 
-                case Op::to_half:
+                case Op::to_fp16:
                     a->vcvtps2ph(dst(x), r(x), A::CURRENT);  // f32 ymm -> f16 xmm
                     a->vpmovzxwd(dst(), dst());              // f16 xmm -> f16 ymm
                     break;
 
-                case Op::from_half:
+                case Op::from_fp16:
                     a->vpackusdw(dst(x), r(x), r(x));  // f16 ymm -> f16 xmm
                     a->vpermq   (dst(), dst(), 0xd8);  // swap middle two 64-bit lanes
                     a->vcvtph2ps(dst(), dst());        // f16 xmm -> f32 ymm
@@ -3720,8 +3720,8 @@ namespace skvm {
                 case Op::store128:
                 case Op::load64:
                 case Op::load128:
-                case Op::to_half:
-                case Op::from_half:
+                case Op::to_fp16:
+                case Op::from_fp16:
                     return false;  // TODO
 
                 case Op::assert_true: {
