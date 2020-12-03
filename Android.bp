@@ -1558,6 +1558,7 @@ cc_test {
         "modules/skottie/src/text/TextAnimator.cpp",
         "modules/skottie/src/text/TextValue.cpp",
         "modules/skottie/tests/AudioLayer.cpp",
+        "modules/skottie/tests/Image.cpp",
         "modules/skottie/tests/Keyframe.cpp",
         "modules/skottie/tests/Text.cpp",
         "modules/skottie/utils/SkottieUtils.cpp",
