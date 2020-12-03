@@ -19,7 +19,6 @@
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
-#include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBitmapTextGeoProc.h"
@@ -81,8 +80,10 @@ GrAtlasTextOp::GrAtlasTextOp(MaskType maskType,
 }
 
 void GrAtlasTextOp::Geometry::fillVertexData(void *dst, int offset, int count) const {
-    fSubRun.fillVertexData(dst, offset, count, fColor.toBytes_RGBA(),
-                           fDrawMatrix, fDrawOrigin, fClipRect);
+    SkMatrix positionMatrix = fDrawMatrix;
+    positionMatrix.preTranslate(fDrawOrigin.x(), fDrawOrigin.y());
+    fSubRun.fillVertexData(
+            dst, offset, count, fColor.toBytes_RGBA(), positionMatrix, fClipRect);
 }
 
 void GrAtlasTextOp::visitProxies(const VisitProxyFunc& func) const {
@@ -237,7 +238,7 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
 
     for (const Geometry& geo : fGeometries.items()) {
         const GrAtlasSubRun& subRun = geo.fSubRun;
-        SkASSERT((int)subRun.vertexStride() == vertexStride);
+        SkASSERT((int) subRun.vertexStride(geo.fDrawMatrix) == vertexStride);
 
         const int subRunEnd = subRun.glyphCount();
         for (int subRunCursor = 0; subRunCursor < subRunEnd;) {
@@ -454,12 +455,11 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrRenderTargetContext* rtc,
         return nullptr;
     }
 
-
-    auto rContext = rtc->priv().recordingContext();
+    auto rContext = rtc->recordingContext();
     GrSDFTOptions SDFOptions = rContext->priv().SDFTOptions();
 
     sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, drawMatrix);
-    SkGlyphRunListPainter* painter = rtc->priv().testingOnly_glyphRunPainter();
+    SkGlyphRunListPainter* painter = rtc->glyphRunPainter();
     painter->processGlyphRun(
             *glyphRunList.begin(),
             drawMatrix, glyphRunList.origin(),

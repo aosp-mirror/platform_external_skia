@@ -254,6 +254,8 @@ public:
         If SkCanvas is associated with GPU surface, resolves all pending GPU operations.
         If SkCanvas is associated with raster surface, has no effect; raster draw
         operations are never deferred.
+
+        DEPRECATED: Replace usage with GrDirectContext::flush()
     */
     void flush();
 
@@ -866,6 +868,9 @@ public:
 
         example: https://fiddle.skia.org/c/@Canvas_setMatrix
     */
+    void setMatrix(const SkM44& matrix);
+
+    // DEPRECATED -- use SkM44 version
     void setMatrix(const SkMatrix& matrix);
 
     /** Sets SkMatrix to the identity matrix.
@@ -2490,8 +2495,11 @@ protected:
 
     virtual void onMarkCTM(const char*) {}
     virtual void didConcat44(const SkM44&) {}
+    virtual void didSetM44(const SkM44&) {}
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
     virtual void didConcat(const SkMatrix& ) {}
     virtual void didSetMatrix(const SkMatrix& ) {}
+#endif
     virtual void didTranslate(SkScalar, SkScalar) {}
     virtual void didScale(SkScalar, SkScalar) {}
 
@@ -2661,7 +2669,7 @@ private:
 
     void doSave();
     void checkForDeferredSave();
-    void internalSetMatrix(const SkMatrix&);
+    void internalSetMatrix(const SkM44&);
 
     friend class SkAndroidFrameworkUtils;
     friend class SkCanvasPriv;      // needs kDontClipToLayer_PrivateSaveLayerFlag

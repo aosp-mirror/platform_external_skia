@@ -196,9 +196,10 @@ static bool contains_recursive_call(const FunctionDeclaration& funcDecl) {
 
 static const Type* copy_if_needed(const Type* src, SymbolTable& symbolTable) {
     if (src->typeKind() == Type::TypeKind::kArray) {
+        const Type* innerType = copy_if_needed(&src->componentType(), symbolTable);
         return symbolTable.takeOwnershipOfSymbol(std::make_unique<Type>(src->name(),
                                                                         src->typeKind(),
-                                                                        src->componentType(),
+                                                                        *innerType,
                                                                         src->columns()));
     }
     return src;
@@ -323,10 +324,11 @@ String Inliner::uniqueNameForInlineVar(const String& baseName, SymbolTable* symb
 
 std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
                                                       VariableRewriteMap* varMap,
+                                                      SymbolTable* symbolTableForExpression,
                                                       const Expression& expression) {
     auto expr = [&](const std::unique_ptr<Expression>& e) -> std::unique_ptr<Expression> {
         if (e) {
-            return this->inlineExpression(offset, varMap, *e);
+            return this->inlineExpression(offset, varMap, symbolTableForExpression, *e);
         }
         return nullptr;
     };
@@ -355,8 +357,8 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kConstructor: {
             const Constructor& constructor = expression.as<Constructor>();
-            return std::make_unique<Constructor>(offset, &constructor.type(),
-                                                 argList(constructor.arguments()));
+            const Type* type = copy_if_needed(&constructor.type(), *symbolTableForExpression);
+            return std::make_unique<Constructor>(offset, type, argList(constructor.arguments()));
         }
         case Expression::Kind::kExternalFunctionCall: {
             const ExternalFunctionCall& externalCall = expression.as<ExternalFunctionCall>();
@@ -448,7 +450,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
     };
     auto expr = [&](const std::unique_ptr<Expression>& e) -> std::unique_ptr<Expression> {
         if (e) {
-            return this->inlineExpression(offset, varMap, *e);
+            return this->inlineExpression(offset, varMap, symbolTableForStatement, *e);
         }
         return nullptr;
     };

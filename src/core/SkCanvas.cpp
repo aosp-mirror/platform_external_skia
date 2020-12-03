@@ -51,6 +51,7 @@
 #include <new>
 
 #if SK_SUPPORT_GPU
+#include "include/gpu/GrDirectContext.h"
 #include "src/gpu/SkGr.h"
 #endif
 
@@ -624,10 +625,13 @@ void SkCanvas::flush() {
 }
 
 void SkCanvas::onFlush() {
-    SkBaseDevice* device = this->getDevice();
-    if (device) {
-        device->flush();
+#if SK_SUPPORT_GPU
+    auto dContext = GrAsDirectContext(this->recordingContext());
+
+    if (dContext) {
+        dContext->flushAndSubmit();
     }
+#endif
 }
 
 SkSurface* SkCanvas::getSurface() const {
@@ -1099,7 +1103,7 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
             // The original filter couldn't support the CTM entirely
             SkASSERT(modifiedCTM.isScaleTranslate() || as_IFB(imageFilter)->canHandleComplexCTM());
             modifiedRec = fMCRec;
-            this->internalSetMatrix(modifiedCTM);
+            this->internalSetMatrix(SkM44(modifiedCTM));
             imageFilter = modifiedFilter.get();
             paint.writable()->setImageFilter(std::move(modifiedFilter));
         }
@@ -1292,7 +1296,7 @@ void SkCanvas::internalRestore() {
             // internalDrawDevice sees are the destinations that 'layer' is drawn into.
             this->internalDrawDevice(layer->fDevice.get(), layer->fPaint.get());
             // restore what we smashed in internalSaveLayer
-            this->internalSetMatrix(layer->fStashedMatrix);
+            this->internalSetMatrix(SkM44(layer->fStashedMatrix));
             delete layer;
         } else {
             // we're at the root
@@ -1506,6 +1510,7 @@ void SkCanvas::concat(const SkMatrix& matrix) {
         return;
     }
 
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
     this->checkForDeferredSave();
     fMCRec->fMatrix.preConcat(matrix);
 
@@ -1514,6 +1519,9 @@ void SkCanvas::concat(const SkMatrix& matrix) {
     FOR_EACH_TOP_DEVICE(device->setGlobalCTM(fMCRec->fMatrix));
 
     this->didConcat(matrix);
+#else
+    this->concat(SkM44(matrix));
+#endif
 }
 
 void SkCanvas::internalConcat44(const SkM44& m) {
@@ -1532,21 +1540,35 @@ void SkCanvas::concat(const SkM44& m) {
     this->didConcat44(m);
 }
 
-void SkCanvas::internalSetMatrix(const SkMatrix& matrix) {
-    fMCRec->fMatrix = SkM44(matrix);
-    fIsScaleTranslate = matrix.isScaleTranslate();
+void SkCanvas::internalSetMatrix(const SkM44& m) {
+    fMCRec->fMatrix = m;
+    fIsScaleTranslate = SkMatrixPriv::IsScaleTranslateAsM33(m);
 
     FOR_EACH_TOP_DEVICE(device->setGlobalCTM(fMCRec->fMatrix));
 }
 
 void SkCanvas::setMatrix(const SkMatrix& matrix) {
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
     this->checkForDeferredSave();
-    this->internalSetMatrix(matrix);
+    this->internalSetMatrix(SkM44(matrix));
     this->didSetMatrix(matrix);
+#else
+    this->setMatrix(SkM44(matrix));
+#endif
+}
+
+void SkCanvas::setMatrix(const SkM44& m) {
+    this->checkForDeferredSave();
+    this->internalSetMatrix(m);
+    this->didSetM44(m);
 }
 
 void SkCanvas::resetMatrix() {
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
     this->setMatrix(SkMatrix::I());
+#else
+    this->setMatrix(SkM44());
+#endif
 }
 
 void SkCanvas::markCTM(const char* name) {

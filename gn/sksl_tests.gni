@@ -110,6 +110,7 @@ sksl_error_tests = [
   "$_tests/sksl/errors/InvalidOutParams.sksl",
   "$_tests/sksl/errors/InvalidUnary.sksl",
   "$_tests/sksl/errors/ModifiersInStruct.sksl",
+  "$_tests/sksl/errors/OpaqueTypeInArray.sksl",
   "$_tests/sksl/errors/OpaqueTypeInInterfaceBlock.sksl",
   "$_tests/sksl/errors/OpaqueTypeInStruct.sksl",
   "$_tests/sksl/errors/OpenArray.sksl",
@@ -174,13 +175,21 @@ sksl_metal_tests = [
   "$_tests/sksl/metal/NumericGlobals.sksl",
   "$_tests/sksl/metal/OpaqueTypeInInterfaceBlock.sksl",
   "$_tests/sksl/metal/OpaqueTypeInStruct.sksl",
+  "$_tests/sksl/metal/OutVarsRequireLocation.sksl",
   "$_tests/sksl/metal/SamplerGlobals.sksl",
+]
+
+sksl_spirv_tests = [
+  "$_tests/sksl/spirv/LayoutMultipleOf4.sksl",
+  "$_tests/sksl/spirv/LayoutOutOfOrder.sksl",
+  "$_tests/sksl/spirv/OpaqueTypeInArray.sksl",
 ]
 
 sksl_shared_tests = [
   "$_tests/sksl/shared/ArrayConstructors.sksl",
   "$_tests/sksl/shared/ArrayIndexTypes.sksl",
   "$_tests/sksl/shared/ArrayMaxDimensions.sksl",
+  "$_tests/sksl/shared/ArrayReturnTypes.sksl",
   "$_tests/sksl/shared/ArrayTypes.sksl",
   "$_tests/sksl/shared/Assignment.sksl",
   "$_tests/sksl/shared/BoolFolding.sksl",
@@ -195,9 +204,11 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/DeadDoWhileLoop.sksl",
   "$_tests/sksl/shared/DeadIfStatement.sksl",
   "$_tests/sksl/shared/DeadLoopVariable.sksl",
+  "$_tests/sksl/shared/DeadStripFunctions.sksl",
   "$_tests/sksl/shared/DependentInitializers.sksl",
   "$_tests/sksl/shared/DerivativesUnused.sksl",
   "$_tests/sksl/shared/Discard.sksl",
+  "$_tests/sksl/shared/Enum.sksl",
   "$_tests/sksl/shared/FloatFolding.sksl",
   "$_tests/sksl/shared/FrExp.sksl",
   "$_tests/sksl/shared/FragCoordsFlipY.sksl",
@@ -235,6 +246,7 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/Operators.sksl",
   "$_tests/sksl/shared/Ossfuzz26167.sksl",
   "$_tests/sksl/shared/Ossfuzz27614.sksl",
+  "$_tests/sksl/shared/Ossfuzz28050.sksl",
   "$_tests/sksl/shared/OutParams.sksl",
   "$_tests/sksl/shared/OutParamsTricky.sksl",
   "$_tests/sksl/shared/RectangleTexture.sksl",
@@ -272,6 +284,7 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/UnusedVariables.sksl",
   "$_tests/sksl/shared/VectorConstructors.sksl",
   "$_tests/sksl/shared/VectorFolding.sksl",
+  "$_tests/sksl/shared/VertexEarlyReturn.vert",
   "$_tests/sksl/shared/VertexID.vert",
   "$_tests/sksl/shared/Width.sksl",
 ]
@@ -322,6 +335,7 @@ sksl_blend_tests = [
   "$_tests/sksl/blend/BlendDstIn.sksl",
   "$_tests/sksl/blend/BlendDstOut.sksl",
   "$_tests/sksl/blend/BlendDstOver.sksl",
+  "$_tests/sksl/blend/BlendEnum.sksl",
   "$_tests/sksl/blend/BlendExclusion.sksl",
   "$_tests/sksl/blend/BlendHardLight.sksl",
   "$_tests/sksl/blend/BlendHue.sksl",
@@ -383,4 +397,5 @@ sksl_metal_tests_sources =
 
 # Tests in sksl_spirv_tests_sources will be compiled with --settings on, and are expected to
 # generate a .asm.(frag|vert|geom) output file.
-sksl_spirv_tests_sources = sksl_blend_tests + sksl_shared_tests
+sksl_spirv_tests_sources =
+    sksl_blend_tests + sksl_shared_tests + sksl_spirv_tests
