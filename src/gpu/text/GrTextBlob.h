@@ -174,7 +174,7 @@ public:
 
     virtual ~GrAtlasSubRun() = default;
 
-    virtual size_t vertexStride() const = 0;
+    virtual size_t vertexStride(const SkMatrix& drawMatrix) const = 0;
     virtual int glyphCount() const = 0;
 
     virtual std::tuple<const GrClip*, GrOp::Owner>
@@ -184,7 +184,7 @@ public:
                     GrRenderTargetContext* rtc) const = 0;
     virtual void fillVertexData(
             void* vertexDst, int offset, int count,
-            GrColor color, const SkMatrix& drawMatrix, SkPoint drawOrigin,
+            GrColor color, const SkMatrix& positionMatrix,
             SkIRect clip) const = 0;
 
     virtual void testingOnly_packedGlyphIDToGrGlyph(GrStrikeCache* cache) = 0;
