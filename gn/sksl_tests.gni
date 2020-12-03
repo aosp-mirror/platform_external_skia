@@ -110,6 +110,7 @@ sksl_error_tests = [
   "$_tests/sksl/errors/InvalidOutParams.sksl",
   "$_tests/sksl/errors/InvalidUnary.sksl",
   "$_tests/sksl/errors/ModifiersInStruct.sksl",
+  "$_tests/sksl/errors/OpaqueTypeInArray.sksl",
   "$_tests/sksl/errors/OpaqueTypeInInterfaceBlock.sksl",
   "$_tests/sksl/errors/OpaqueTypeInStruct.sksl",
   "$_tests/sksl/errors/OpenArray.sksl",
@@ -174,6 +175,7 @@ sksl_metal_tests = [
   "$_tests/sksl/metal/NumericGlobals.sksl",
   "$_tests/sksl/metal/OpaqueTypeInInterfaceBlock.sksl",
   "$_tests/sksl/metal/OpaqueTypeInStruct.sksl",
+  "$_tests/sksl/metal/OutVarsRequireLocation.sksl",
   "$_tests/sksl/metal/SamplerGlobals.sksl",
 ]
 
@@ -279,9 +281,11 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/Texture2D.sksl",
   "$_tests/sksl/shared/TextureSharpen.sksl",
   "$_tests/sksl/shared/UnaryPositiveNegative.sksl",
+  "$_tests/sksl/shared/UniformArray.sksl",
   "$_tests/sksl/shared/UnusedVariables.sksl",
   "$_tests/sksl/shared/VectorConstructors.sksl",
   "$_tests/sksl/shared/VectorFolding.sksl",
+  "$_tests/sksl/shared/VertexEarlyReturn.vert",
   "$_tests/sksl/shared/VertexID.vert",
   "$_tests/sksl/shared/Width.sksl",
 ]
