@@ -32,6 +32,9 @@
 #include <memory>
 #include <vector>
 
+// Working on allow this to be undefined
+#define SK_SUPPORT_LEGACY_GETTOTALMATRIX
+
 class GrRecordingContext;
 class GrRenderTargetContext;
 class SkBaseDevice;
@@ -2433,7 +2436,16 @@ public:
      */
     SkM44 getLocalToDevice() const;
 
-    /** Legacy version of getLocalToDevice(), which strips away any Z information, and
+    /**
+     *  Throws away the 3rd row and column in the matrix, so be warned.
+     */
+    SkMatrix getLocalToDeviceAs3x3() const {
+        return this->getLocalToDevice().asM33();
+    }
+
+#ifdef SK_SUPPORT_LEGACY_GETTOTALMATRIX
+    /** DEPRECATED
+     *  Legacy version of getLocalToDevice(), which strips away any Z information, and
      *  just returns a 3x3 version.
      *
      *  @return 3x3 version of getLocalToDevice()
@@ -2442,6 +2454,7 @@ public:
      *  example: https://fiddle.skia.org/c/@Clip
      */
     SkMatrix getTotalMatrix() const;
+#endif
 
     ///////////////////////////////////////////////////////////////////////////
 

@@ -373,17 +373,15 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
         }
         const ASTNode::VarData& varData = varDecl.getVarData();
         const Type* type = baseType;
-        ExpressionArray sizes;
-        sizes.reserve_back(varData.fSizeCount);
+        int arraySize = 0;
         auto iter = varDecl.begin();
         if (iter != varDecl.end()) {
-            if (type->isOpaque()) {
-                fErrors.error(type->fOffset,
-                              "opaque type '" + type->name() + "' may not be used in an array");
-            }
-            SkSTArray<kMaxArrayDimensionality, int> dimensions;
-            for (size_t i = 0; i < varData.fSizeCount; ++i, ++iter) {
-                const ASTNode& rawSize = *iter;
+            if (varData.fIsArray) {
+                if (type->isOpaque()) {
+                    fErrors.error(type->fOffset,
+                                  "opaque type '" + type->name() + "' may not be used in an array");
+                }
+                const ASTNode& rawSize = *iter++;
                 if (rawSize) {
                     auto size = this->coerce(this->convertExpression(rawSize), *fContext.fInt_Type);
                     if (!size) {
@@ -400,17 +398,12 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
                         fErrors.error(size->fOffset, "array size must be positive");
                         return {};
                     }
-                    dimensions.push_back(count);
-                    sizes.push_back(std::move(size));
-                } else if (i == 0) {
-                    dimensions.push_back(Type::kUnsizedArray);
-                    sizes.push_back(nullptr);
+                    arraySize = count;
                 } else {
-                    fErrors.error(varDecl.fOffset, "array size must be specified");
-                    return {};
+                    arraySize = Type::kUnsizedArray;
                 }
+                type = fSymbolTable->addArrayDimension(type, arraySize);
             }
-            type = fSymbolTable->addArrayDimensions(type, dimensions);
         }
         auto var = std::make_unique<Variable>(varDecl.fOffset, fModifiers->addToPool(modifiers),
                                               varData.fName, type, fIsBuiltinCode, storage);
@@ -421,7 +414,7 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
         }
         std::unique_ptr<Expression> value;
         if (iter == varDecl.end()) {
-            if (varData.fSizeCount > 0 && sizes.front() == nullptr) {
+            if (arraySize == Type::kUnsizedArray) {
                 fErrors.error(varDecl.fOffset,
                               "arrays without an explicit size must use an initializer expression");
                 return {};
@@ -444,8 +437,8 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
         if (symbol && storage == Variable::Storage::kGlobal && var->name() == "sk_FragColor") {
             // Already defined, ignore.
         } else {
-            varDecls.push_back(std::make_unique<VarDeclaration>(
-                    var.get(), baseType, std::move(sizes), std::move(value)));
+            varDecls.push_back(std::make_unique<VarDeclaration>(var.get(), baseType, arraySize,
+                                                                std::move(value)));
             fSymbolTable->add(std::move(var));
         }
     }
@@ -877,7 +870,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     if (returnType == nullptr) {
         return;
     }
-    auto type_is_allowed = [&](const Type* t) {
+    auto typeIsAllowed = [&](const Type* t) {
 #if defined(SKSL_STANDALONE)
         return true;
 #else
@@ -887,7 +880,8 @@ void IRGenerator::convertFunction(const ASTNode& f) {
 #endif
     };
     if (returnType->nonnullable() == *fContext.fFragmentProcessor_Type ||
-        !type_is_allowed(returnType)) {
+        returnType->typeKind() == Type::TypeKind::kArray ||
+        !typeIsAllowed(returnType)) {
         fErrors.error(f.fOffset,
                       "functions may not return type '" + returnType->displayName() + "'");
         return;
@@ -907,16 +901,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (!type) {
             return;
         }
-        SkSTArray<kMaxArrayDimensionality, int> dimensions;
-        for (int j = 0; j < (int) pd.fSizeCount; ++j) {
-            int size = (paramIter++)->getInt();
-            dimensions.push_back(size);
+        if (pd.fIsArray) {
+            int arraySize = (paramIter++)->getInt();
+            type = fSymbolTable->addArrayDimension(type, arraySize);
         }
-        type = fSymbolTable->addArrayDimensions(type, dimensions);
-
         // Only the (builtin) declarations of 'sample' are allowed to have FP parameters
         if ((type->nonnullable() == *fContext.fFragmentProcessor_Type && !fIsBuiltinCode) ||
-            !type_is_allowed(type)) {
+            !typeIsAllowed(type)) {
             fErrors.error(param.fOffset,
                           "parameters of type '" + type->displayName() + "' not allowed");
             return;
@@ -1151,39 +1142,29 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
             }
         }
     }
-    const Type* type =
-            old->takeOwnershipOfSymbol(std::make_unique<Type>(intf.fOffset, id.fTypeName, fields));
-    ExpressionArray sizes;
-    sizes.reserve_back(id.fSizeCount);
-    for (size_t i = 0; i < id.fSizeCount; ++i) {
+    const Type* type = old->takeOwnershipOfSymbol(std::make_unique<Type>(intf.fOffset, id.fTypeName,
+                                                                         fields));
+    int arraySize = 0;
+    if (id.fIsArray) {
         const ASTNode& size = *(iter++);
         if (size) {
             std::unique_ptr<Expression> converted = this->convertExpression(size);
             if (!converted) {
                 return nullptr;
             }
-            String name = type->name();
-            int64_t count;
-            if (converted->kind() == Expression::Kind::kIntLiteral) {
-                count = converted->as<IntLiteral>().value();
-                if (count <= 0) {
-                    fErrors.error(converted->fOffset, "array size must be positive");
-                    return nullptr;
-                }
-                name += "[" + to_string(count) + "]";
-            } else {
+            if (!converted->is<IntLiteral>()) {
                 fErrors.error(intf.fOffset, "array size must be specified");
                 return nullptr;
             }
-            type = symbols->takeOwnershipOfSymbol(
-                    std::make_unique<Type>(name, Type::TypeKind::kArray, *type, (int)count));
-            sizes.push_back(std::move(converted));
+            arraySize = converted->as<IntLiteral>().value();
+            if (arraySize <= 0) {
+                fErrors.error(converted->fOffset, "array size must be positive");
+                return nullptr;
+            }
         } else {
-            String name = String(type->name()) + "[]";
-            type = symbols->takeOwnershipOfSymbol(std::make_unique<Type>(
-                    name, Type::TypeKind::kArray, *type, Type::kUnsizedArray));
-            sizes.push_back(nullptr);
+            arraySize = Type::kUnsizedArray;
         }
+        type = symbols->addArrayDimension(type, arraySize);
     }
     const Variable* var = old->takeOwnershipOfSymbol(
             std::make_unique<Variable>(intf.fOffset,
@@ -1206,7 +1187,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
                                             var,
                                             id.fTypeName,
                                             id.fInstanceName,
-                                            std::move(sizes),
+                                            arraySize,
                                             symbols);
 }
 
@@ -1336,12 +1317,9 @@ const Type* IRGenerator::convertType(const ASTNode& type, bool allowVoid) {
         return nullptr;
     }
     if (isArray) {
-        // Add array dimensions onto our base type.
-        SkSTArray<kMaxArrayDimensionality, int> dimensions;
-        for (const auto& size : type) {
-            dimensions.push_back(size ? size.getInt() : Type::kUnsizedArray);
-        }
-        result = fSymbolTable->addArrayDimensions(result, dimensions);
+        auto iter = type.begin();
+        int arraySize = *iter ? iter->getInt() : Type::kUnsizedArray;
+        result = fSymbolTable->addArrayDimension(result, arraySize);
     }
     return result;
 }
@@ -2479,12 +2457,11 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
 
 std::unique_ptr<Expression> IRGenerator::convertIndex(std::unique_ptr<Expression> base,
                                                       const ASTNode& index) {
-    if (base->kind() == Expression::Kind::kTypeReference) {
+    if (base->is<TypeReference>()) {
         if (index.fKind == ASTNode::Kind::kInt) {
-            const Type& oldType = base->as<TypeReference>().value();
-            SkSTArray<1, int> dimension = {index.getInt()};
-            const Type* newType = fSymbolTable->addArrayDimensions(&oldType, dimension);
-            return std::make_unique<TypeReference>(fContext, base->fOffset, newType);
+            const Type* type = &base->as<TypeReference>().value();
+            type = fSymbolTable->addArrayDimension(type, index.getInt());
+            return std::make_unique<TypeReference>(fContext, base->fOffset, type);
 
         } else {
             fErrors.error(base->fOffset, "array size must be a constant");
@@ -2776,11 +2753,11 @@ std::unique_ptr<Expression> IRGenerator::convertIndexExpression(const ASTNode& i
     }
     if (iter != index.end()) {
         return this->convertIndex(std::move(base), *(iter++));
-    } else if (base->kind() == Expression::Kind::kTypeReference) {
-        const Type& oldType = base->as<TypeReference>().value();
-        const Type* newType = fSymbolTable->takeOwnershipOfSymbol(std::make_unique<Type>(
-                oldType.name() + "[]", Type::TypeKind::kArray, oldType, Type::kUnsizedArray));
-        return std::make_unique<TypeReference>(fContext, base->fOffset, newType);
+    }
+    if (base->is<TypeReference>()) {
+        const Type* type = &base->as<TypeReference>().value();
+        type = fSymbolTable->addArrayDimension(type, Type::kUnsizedArray);
+        return std::make_unique<TypeReference>(fContext, base->fOffset, type);
     }
     fErrors.error(index.fOffset, "'[]' must follow a type name");
     return nullptr;
@@ -2978,8 +2955,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
                                               fContext.fInt_Type.get(), false,
                                               Variable::Storage::kGlobal);
         auto decl = std::make_unique<VarDeclaration>(var.get(), fContext.fInt_Type.get(),
-                                                     /*sizes=*/ExpressionArray{},
-                                                     /*value=*/nullptr);
+                                                     /*arraySize=*/0, /*value=*/nullptr);
         fSymbolTable->add(std::move(var));
         fProgramElements->push_back(
                 std::make_unique<GlobalVarDeclaration>(/*offset=*/-1, std::move(decl)));
