@@ -22,7 +22,6 @@
 namespace SkSL {
 
 static constexpr int kMaxParseDepth = 50;
-static constexpr int kMaxArrayDimensionality = 8;
 static constexpr int kMaxStructDepth = 8;
 
 static bool struct_is_too_deeply_nested(const Type& type, int limit) {
@@ -543,21 +542,25 @@ ASTNode::ID Parser::structDeclaration() {
         for (auto iter = declsNode.begin() + 2; iter != declsNode.end(); ++iter) {
             ASTNode& var = *iter;
             ASTNode::VarData vd = var.getVarData();
-            for (int j = vd.fSizeCount - 1; j >= 0; j--) {
-                const ASTNode& size = *(var.begin() + j);
+
+            // Read array size if one is present.
+            if (vd.fIsArray) {
+                const ASTNode& size = *var.begin();
                 if (!size || size.fKind != ASTNode::Kind::kInt) {
                     this->error(declsNode.fOffset, "array size in struct field must be a constant");
                     return ASTNode::ID::Invalid();
                 }
-                uint64_t columns = size.getInt();
-                String typeName = type->name() + "[" + to_string(columns) + "]";
-                type = fSymbols.takeOwnershipOfSymbol(
-                        std::make_unique<Type>(typeName, Type::TypeKind::kArray, *type,
-                                               (int)columns));
+                if (size.getInt() <= 0 || size.getInt() > INT_MAX) {
+                    this->error(declsNode.fOffset, "array size is invalid");
+                    return ASTNode::ID::Invalid();
+                }
+                // Add the array dimensions to our type.
+                int arraySize = size.getInt();
+                type = fSymbols.addArrayDimension(type, arraySize);
             }
 
             fields.push_back(Type::Field(modifiers, vd.fName, type));
-            if (vd.fSizeCount ? (var.begin() + (vd.fSizeCount - 1))->fNext : var.fFirstChild) {
+            if (vd.fIsArray ? var.begin()->fNext : var.fFirstChild) {
                 this->error(declsNode.fOffset, "initializers are not permitted on struct fields");
             }
         }
@@ -597,67 +600,70 @@ ASTNode::ID Parser::varDeclarationEnd(Modifiers mods, ASTNode::ID type, StringFr
     ASTNode::ID result = this->createNode(offset, ASTNode::Kind::kVarDeclarations);
     this->addChild(result, this->createNode(offset, ASTNode::Kind::kModifiers, mods));
     getNode(result).addChild(type);
-    ASTNode::ID currentVar = this->createNode(offset, ASTNode::Kind::kVarDeclaration);
-    ASTNode::VarData vd(name, 0);
-    getNode(result).addChild(currentVar);
-    while (this->checkNext(Token::Kind::TK_LBRACKET)) {
-        if (this->checkNext(Token::Kind::TK_RBRACKET)) {
-            this->createEmptyChild(currentVar);
-        } else {
-            ASTNode::ID size = this->expression();
-            if (!size) {
-                return ASTNode::ID::Invalid();
-            }
-            getNode(currentVar).addChild(size);
-            if (!this->expect(Token::Kind::TK_RBRACKET, "']'")) {
-                return ASTNode::ID::Invalid();
-            }
-        }
-        ++vd.fSizeCount;
-        if (vd.fSizeCount > kMaxArrayDimensionality) {
-            this->error(this->peek(), "array has too many dimensions");
-            return ASTNode::ID::Invalid();
-        }
-    }
-    getNode(currentVar).setVarData(vd);
-    if (this->checkNext(Token::Kind::TK_EQ)) {
-        ASTNode::ID value = this->assignmentExpression();
-        if (!value) {
-            return ASTNode::ID::Invalid();
-        }
-        getNode(currentVar).addChild(value);
-    }
-    while (this->checkNext(Token::Kind::TK_COMMA)) {
-        Token identifierName;
-        if (!this->expect(Token::Kind::TK_IDENTIFIER, "an identifier", &identifierName)) {
-            return ASTNode::ID::Invalid();
-        }
-        currentVar = ASTNode::ID(fFile->fNodes.size());
-        vd = ASTNode::VarData(this->text(identifierName), 0);
-        fFile->fNodes.emplace_back(&fFile->fNodes, offset, ASTNode::Kind::kVarDeclaration);
-        getNode(result).addChild(currentVar);
+
+    auto parseArrayDimensions = [this](ASTNode::ID currentVar, ASTNode::VarData* vd) -> bool {
         while (this->checkNext(Token::Kind::TK_LBRACKET)) {
+            if (vd->fIsArray) {
+                this->error(this->peek(), "multi-dimensional arrays are not supported");
+                return false;
+            }
             if (this->checkNext(Token::Kind::TK_RBRACKET)) {
                 this->createEmptyChild(currentVar);
             } else {
                 ASTNode::ID size = this->expression();
                 if (!size) {
-                    return ASTNode::ID::Invalid();
+                    return false;
                 }
                 getNode(currentVar).addChild(size);
                 if (!this->expect(Token::Kind::TK_RBRACKET, "']'")) {
-                    return ASTNode::ID::Invalid();
+                    return false;
                 }
             }
-            ++vd.fSizeCount;
+            vd->fIsArray = true;
         }
-        getNode(currentVar).setVarData(vd);
+        return true;
+    };
+
+    auto parseInitializer = [this](ASTNode::ID currentVar) -> bool {
         if (this->checkNext(Token::Kind::TK_EQ)) {
             ASTNode::ID value = this->assignmentExpression();
             if (!value) {
-                return ASTNode::ID::Invalid();
+                return false;
             }
             getNode(currentVar).addChild(value);
+        }
+        return true;
+    };
+
+    ASTNode::ID currentVar = this->createNode(offset, ASTNode::Kind::kVarDeclaration);
+    ASTNode::VarData vd{name, /*isArray=*/false};
+
+    getNode(result).addChild(currentVar);
+    if (!parseArrayDimensions(currentVar, &vd)) {
+        return ASTNode::ID::Invalid();
+    }
+    getNode(currentVar).setVarData(vd);
+    if (!parseInitializer(currentVar)) {
+        return ASTNode::ID::Invalid();
+    }
+
+    while (this->checkNext(Token::Kind::TK_COMMA)) {
+        Token identifierName;
+        if (!this->expect(Token::Kind::TK_IDENTIFIER, "an identifier", &identifierName)) {
+            return ASTNode::ID::Invalid();
+        }
+
+        currentVar = ASTNode::ID(fFile->fNodes.size());
+        vd = ASTNode::VarData{this->text(identifierName), /*isArray=*/false};
+        fFile->fNodes.emplace_back(&fFile->fNodes, offset, ASTNode::Kind::kVarDeclaration);
+
+        getNode(result).addChild(currentVar);
+        if (!parseArrayDimensions(currentVar, &vd)) {
+            return ASTNode::ID::Invalid();
+        }
+        getNode(currentVar).setVarData(vd);
+        if (!parseInitializer(currentVar)) {
+            return ASTNode::ID::Invalid();
         }
     }
     if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
@@ -681,6 +687,10 @@ ASTNode::ID Parser::parameter() {
     ASTNode::ParameterData pd(modifiers, this->text(name), 0);
     getNode(result).addChild(type);
     while (this->checkNext(Token::Kind::TK_LBRACKET)) {
+        if (pd.fIsArray) {
+            this->error(this->peek(), "multi-dimensional arrays are not supported");
+            return ASTNode::ID::Invalid();
+        }
         Token sizeToken;
         if (!this->expect(Token::Kind::TK_INT_LITERAL, "a positive integer", &sizeToken)) {
             return ASTNode::ID::Invalid();
@@ -690,7 +700,7 @@ ASTNode::ID Parser::parameter() {
         if (!this->expect(Token::Kind::TK_RBRACKET, "']'")) {
             return ASTNode::ID::Invalid();
         }
-        ++pd.fSizeCount;
+        pd.fIsArray = true;
     }
     getNode(result).setParameterData(pd);
     return result;
@@ -1145,7 +1155,12 @@ ASTNode::ID Parser::type() {
     }
     ASTNode::ID result = this->createNode(type.fOffset, ASTNode::Kind::kType);
     ASTNode::TypeData td(this->text(type), /*isStructDeclaration=*/false, /*isNullable=*/false);
+    bool isArray = false;
     while (this->checkNext(Token::Kind::TK_LBRACKET)) {
+        if (isArray) {
+            this->error(this->peek(), "multi-dimensional arrays are not supported");
+            return ASTNode::ID::Invalid();
+        }
         if (this->peek().fKind != Token::Kind::TK_RBRACKET) {
             SKSL_INT i;
             if (this->intLiteral(&i)) {
@@ -1157,6 +1172,7 @@ ASTNode::ID Parser::type() {
         } else {
             this->createEmptyChild(result);
         }
+        isArray = true;
         this->expect(Token::Kind::TK_RBRACKET, "']'");
     }
     td.fIsNullable = this->checkNext(Token::Kind::TK_QUESTION);
@@ -1202,6 +1218,10 @@ ASTNode::ID Parser::interfaceBlock(Modifiers mods) {
     if (this->checkNext(Token::Kind::TK_IDENTIFIER, &instanceNameToken)) {
         id.fInstanceName = this->text(instanceNameToken);
         while (this->checkNext(Token::Kind::TK_LBRACKET)) {
+            if (id.fIsArray) {
+                this->error(this->peek(), "multi-dimensional arrays are not supported");
+                return false;
+            }
             if (this->peek().fKind != Token::Kind::TK_RBRACKET) {
                 ASTNode::ID size = this->expression();
                 if (!size) {
@@ -1211,8 +1231,8 @@ ASTNode::ID Parser::interfaceBlock(Modifiers mods) {
             } else {
                 this->createEmptyChild(result);
             }
-            ++id.fSizeCount;
             this->expect(Token::Kind::TK_RBRACKET, "']'");
+            id.fIsArray = true;
         }
         instanceName = this->text(instanceNameToken);
     }

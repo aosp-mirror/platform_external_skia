@@ -82,7 +82,23 @@ bool GLSLCodeGenerator::usesPrecisionModifiers() const {
     return fProgram.fCaps->usesPrecisionModifiers();
 }
 
+// Returns the name of the type with array dimensions, e.g. `float[2][4]`.
 String GLSLCodeGenerator::getTypeName(const Type& type) {
+    String result = this->getBaseTypeName(type);
+
+    for (const Type* t = &type; t->typeKind() == Type::TypeKind::kArray; t = &t->componentType()) {
+        if (t->columns() == Type::kUnsizedArray) {
+            result += "[]";
+        } else {
+            result.appendf("[%d]", t->columns());
+        }
+    }
+
+    return result;
+}
+
+// Returns the name of the type without array dimensions, e.g. `float[2][4]` returns `float`.
+String GLSLCodeGenerator::getBaseTypeName(const Type& type) const {
     switch (type.typeKind()) {
         case Type::TypeKind::kVector: {
             const Type& component = type.componentType();
@@ -122,12 +138,7 @@ String GLSLCodeGenerator::getTypeName(const Type& type) {
             return result;
         }
         case Type::TypeKind::kArray: {
-            String result = this->getTypeName(type.componentType()) + "[";
-            if (type.columns() != Type::kUnsizedArray) {
-                result += to_string(type.columns());
-            }
-            result += "]";
-            return result;
+            return this->getBaseTypeName(type.componentType());
         }
         case Type::TypeKind::kScalar: {
             if (type == *fContext.fHalf_Type) {
@@ -1207,12 +1218,12 @@ void GLSLCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     if (intf.instanceName().size()) {
         this->write(" ");
         this->write(intf.instanceName());
-        for (const auto& size : intf.sizes()) {
+        if (intf.arraySize() > 0) {
             this->write("[");
-            if (size) {
-                this->writeExpression(*size, kTopLevel_Precedence);
-            }
+            this->write(to_string(intf.arraySize()));
             this->write("]");
+        } else if (intf.arraySize() == Type::kUnsizedArray){
+            this->write("[]");
         }
     }
     this->writeLine(";");
@@ -1262,12 +1273,12 @@ void GLSLCodeGenerator::writeVarDeclaration(const VarDeclaration& var, bool glob
     this->writeType(var.baseType());
     this->write(" ");
     this->write(var.var().name());
-    for (const std::unique_ptr<Expression>& size : var.sizes()) {
+    if (var.arraySize() > 0) {
         this->write("[");
-        if (size) {
-            this->writeExpression(*size, kTopLevel_Precedence);
-        }
+        this->write(to_string(var.arraySize()));
         this->write("]");
+    } else if (var.arraySize() == Type::kUnsizedArray){
+        this->write("[]");
     }
     if (var.value()) {
         this->write(" = ");

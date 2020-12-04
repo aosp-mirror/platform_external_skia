@@ -1774,12 +1774,16 @@ DEF_TEST(SkVM_Assembler, r) {
         a.fcvtns4s(A::v4, A::v3);
         a.frintp4s(A::v4, A::v3);
         a.frintm4s(A::v4, A::v3);
+        a.fcvtn   (A::v4, A::v3);
+        a.fcvtl   (A::v4, A::v3);
     },{
         0x64,0xd8,0x21,0x4e,
         0x64,0xb8,0xa1,0x4e,
         0x64,0xa8,0x21,0x4e,
         0x64,0x88,0xa1,0x4e,
         0x64,0x98,0x21,0x4e,
+        0x64,0x68,0x21,0x0e,
+        0x64,0x78,0x21,0x0e,
     });
 
     test_asm(r, [&](A& a) {
@@ -1988,17 +1992,29 @@ DEF_TEST(SkVM_Assembler, r) {
         a.ldrs(A::x0, A::x1, 3);   // ldr  w0, [x1, #12]
         a.ldrh(A::x0, A::x1, 3);   // ldrh w0, [x1, #6]
         a.ldrb(A::x0, A::x1, 3);   // ldrb w0, [x1, #3]
+
+        a.strs(A::x0, A::x1, 3);   // str  w0, [x1, #12]
     },{
         0x20,0x0c,0x40,0xf9,
         0x20,0x0c,0x40,0xb9,
         0x20,0x0c,0x40,0x79,
         0x20,0x0c,0x40,0x39,
+
+        0x20,0x0c,0x00,0xb9,
     });
 
     test_asm(r, [&](A& a) {
-        a.tbl(A::v0, A::v1, A::v2);
+        a.tbl   (A::v0, A::v1, A::v2);
+        a.uzp14s(A::v0, A::v1, A::v2);
+        a.uzp24s(A::v0, A::v1, A::v2);
+        a.zip14s(A::v0, A::v1, A::v2);
+        a.zip24s(A::v0, A::v1, A::v2);
     },{
         0x20,0x00,0x02,0x4e,
+        0x20,0x18,0x82,0x4e,
+        0x20,0x58,0x82,0x4e,
+        0x20,0x38,0x82,0x4e,
+        0x20,0x78,0x82,0x4e,
     });
 }
 

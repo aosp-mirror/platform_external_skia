@@ -43,23 +43,38 @@ struct SkCubicResampler {
 };
 
 struct SK_API SkSamplingOptions {
-    bool             fUseCubic = false;
-    SkCubicResampler fCubic    = {0, 0};
-    SkFilterMode     fFilter   = SkFilterMode::kNearest;
-    SkMipmapMode     fMipmap   = SkMipmapMode::kNone;
+    const bool             useCubic = false;
+    const SkCubicResampler cubic    = {0, 0};
+    const SkFilterMode     filter   = SkFilterMode::kNearest;
+    const SkMipmapMode     mipmap   = SkMipmapMode::kNone;
 
     SkSamplingOptions() = default;
+    SkSamplingOptions(const SkSamplingOptions&) = default;
+    SkSamplingOptions& operator=(const SkSamplingOptions& that) {
+        this->~SkSamplingOptions();   // A pedantic no-op.
+        new (this) SkSamplingOptions(that);
+        return *this;
+    }
 
     SkSamplingOptions(SkFilterMode fm, SkMipmapMode mm)
-        : fUseCubic(false)
-        , fFilter(fm)
-        , fMipmap(mm) {}
+        : useCubic(false)
+        , filter(fm)
+        , mipmap(mm) {}
 
-    explicit SkSamplingOptions(const SkCubicResampler& cubic)
-        : fUseCubic(true)
-        , fCubic(cubic) {}
+    explicit SkSamplingOptions(const SkCubicResampler& c)
+        : useCubic(true)
+        , cubic(c) {}
 
     explicit SkSamplingOptions(SkFilterQuality);
+
+    bool operator==(const SkSamplingOptions& other) const {
+        return useCubic == other.useCubic
+            && cubic.B  == other.cubic.B
+            && cubic.C  == other.cubic.C
+            && filter   == other.filter
+            && mipmap   == other.mipmap;
+    }
+    bool operator!=(const SkSamplingOptions& other) const { return !(*this == other); }
 };
 
 #endif

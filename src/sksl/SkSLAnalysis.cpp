@@ -612,11 +612,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
         }
         case Statement::Kind::kVarDeclaration: {
             auto& v = s.template as<VarDeclaration>();
-            for (const std::unique_ptr<Expression>& size : v.sizes()) {
-                if (size && this->visitExpression(*size)) {
-                    return true;
-                }
-            }
             return v.value() && this->visitExpression(*v.value());
         }
         case Statement::Kind::kWhile: {
@@ -634,6 +629,7 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitProgramElement(ELEM pe) {
         case ProgramElement::Kind::kEnum:
         case ProgramElement::Kind::kExtension:
         case ProgramElement::Kind::kFunctionPrototype:
+        case ProgramElement::Kind::kInterfaceBlock:
         case ProgramElement::Kind::kModifiers:
         case ProgramElement::Kind::kSection:
         case ProgramElement::Kind::kStructDefinition:
@@ -642,14 +638,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitProgramElement(ELEM pe) {
 
         case ProgramElement::Kind::kFunction:
             return this->visitStatement(*pe.template as<FunctionDefinition>().body());
-
-        case ProgramElement::Kind::kInterfaceBlock:
-            for (auto& e : pe.template as<InterfaceBlock>().sizes()) {
-                if (e && this->visitExpression(*e)) {
-                    return true;
-                }
-            }
-            return false;
 
         case ProgramElement::Kind::kGlobalVar:
             if (this->visitStatement(*pe.template as<GlobalVarDeclaration>().declaration())) {
