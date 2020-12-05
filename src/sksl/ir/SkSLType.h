@@ -189,7 +189,14 @@ public:
     , fColumns(columns)
     , fRows(1)
     , fDimensions(SpvDim1D) {
-        SkASSERT(fColumns > 0 || (fTypeKind == TypeKind::kArray && fColumns == kUnsizedArray));
+        if (this->isArray()) {
+            // Allow either explicitly-sized or unsized arrays.
+            SkASSERT(this->columns() > 0 || this->columns() == kUnsizedArray);
+            // Disallow multi-dimensional arrays.
+            SkASSERT(!this->componentType().isArray());
+        } else {
+            SkASSERT(this->columns() > 0);
+        }
         fName = StringFragment(fNameString.c_str(), fNameString.length());
     }
 
@@ -204,14 +211,14 @@ public:
     , fDimensions(SpvDim1D) {}
 
     // Create a texture type.
-    Type(const char* name, SpvDim_ dimensions, bool isDepth, bool isArrayed, bool isMultisampled,
-         bool isSampled)
+    Type(const char* name, SpvDim_ dimensions, bool isDepth, bool isArrayedTexture,
+         bool isMultisampled, bool isSampled)
     : INHERITED(-1, kSymbolKind, name)
     , fTypeKind(TypeKind::kTexture)
     , fNumberKind(NumberKind::kNonnumeric)
     , fDimensions(dimensions)
     , fIsDepth(isDepth)
-    , fIsArrayed(isArrayed)
+    , fIsArrayed(isArrayedTexture)
     , fIsMultisampled(isMultisampled)
     , fIsSampled(isSampled) {}
 
@@ -222,7 +229,7 @@ public:
     , fNumberKind(NumberKind::kNonnumeric)
     , fDimensions(textureType.dimensions())
     , fIsDepth(textureType.isDepth())
-    , fIsArrayed(textureType.isArrayed())
+    , fIsArrayed(textureType.isArrayedTexture())
     , fIsMultisampled(textureType.isMultisampled())
     , fIsSampled(textureType.isSampled())
     , fTextureType(&textureType) {}
@@ -376,8 +383,7 @@ public:
      * For all other types, causes an SkASSERTion failure.
      */
     int columns() const {
-        SkASSERT(fTypeKind == TypeKind::kScalar || fTypeKind == TypeKind::kVector ||
-                 fTypeKind == TypeKind::kMatrix || fTypeKind == TypeKind::kArray);
+        SkASSERT(this->isScalar() || this->isVector() || this->isMatrix() || this->isArray());
         return fColumns;
     }
 
@@ -391,7 +397,7 @@ public:
     }
 
     const std::vector<Field>& fields() const {
-        SkASSERT(fTypeKind == TypeKind::kStruct || fTypeKind == TypeKind::kOther);
+        SkASSERT(this->isStruct() || fTypeKind == TypeKind::kOther);
         return fFields;
     }
 
@@ -414,7 +420,7 @@ public:
         return fIsDepth;
     }
 
-    bool isArrayed() const {
+    bool isArrayedTexture() const {
         SkASSERT(TypeKind::kSampler == fTypeKind || TypeKind::kTexture == fTypeKind);
         return fIsArrayed;
     }
@@ -429,6 +435,14 @@ public:
 
     bool isMatrix() const {
         return fTypeKind == TypeKind::kMatrix;
+    }
+
+    bool isArray() const {
+        return fTypeKind == TypeKind::kArray;
+    }
+
+    bool isStruct() const {
+        return fTypeKind == TypeKind::kStruct;
     }
 
     bool isMultisampled() const {
