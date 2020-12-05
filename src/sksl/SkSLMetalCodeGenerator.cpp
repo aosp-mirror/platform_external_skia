@@ -32,10 +32,10 @@ const char* MetalCodeGenerator::OperatorName(Token::Kind op) {
 class MetalCodeGenerator::GlobalStructVisitor {
 public:
     virtual ~GlobalStructVisitor() = default;
-    virtual void VisitInterfaceBlock(const InterfaceBlock& block, const String& blockName) = 0;
-    virtual void VisitTexture(const Type& type, const String& name) = 0;
-    virtual void VisitSampler(const Type& type, const String& name) = 0;
-    virtual void VisitVariable(const Variable& var, const Expression* value) = 0;
+    virtual void visitInterfaceBlock(const InterfaceBlock& block, const String& blockName) = 0;
+    virtual void visitTexture(const Type& type, const String& name) = 0;
+    virtual void visitSampler(const Type& type, const String& name) = 0;
+    virtual void visitVariable(const Variable& var, const Expression* value) = 0;
 };
 
 void MetalCodeGenerator::setupIntrinsics() {
@@ -134,7 +134,7 @@ bool MetalCodeGenerator::writeStructDefinition(const Type& type) {
 // Flags an error if an array type is found. Meant to be used in places where an array type might
 // appear in the SkSL/IR, but can't be represented by Metal.
 void MetalCodeGenerator::disallowArrayTypes(const Type& type) {
-    if (type.typeKind() == Type::TypeKind::kArray) {
+    if (type.isArray()) {
         fErrors.error(type.fOffset, "Metal does not support array types in this context");
     }
 }
@@ -159,7 +159,7 @@ void MetalCodeGenerator::writeBaseType(const Type& type) {
 
 // Writes the array suffix of a type, if one exists. e.g. `float[2][4]` will output `[2][4]`.
 void MetalCodeGenerator::writeArrayDimensions(const Type& type) {
-    if (type.typeKind() == Type::TypeKind::kArray) {
+    if (type.isArray()) {
         this->write("[");
         if (type.columns() != Type::kUnsizedArray) {
             this->write(to_string(type.columns()));
@@ -279,17 +279,6 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     } else if (builtin && name == "inverse") {
         SkASSERT(arguments.size() == 1);
         this->writeInverseHack(*arguments[0]);
-    } else if (builtin && name == "frexp") {
-        // Our Metal codegen assumes that out params are pointers, but Metal's built-in frexp
-        // actually takes a reference for the exponent, not a pointer. We add in a helper function
-        // here to translate.
-        SkASSERT(arguments.size() == 2);
-        auto [iter, newlyCreated] = fHelpers.insert("frexp");
-        if (newlyCreated) {
-            fExtraFunctions.printf(
-                    "float frexp(float arg, thread int* exp) { return frexp(arg, *exp); }\n");
-        }
-        this->write("frexp");
     } else if (builtin && name == "dFdx") {
         this->write("dfdx");
     } else if (builtin && name == "dFdy") {
@@ -324,14 +313,10 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         this->write("_fragCoord");
         separator = ", ";
     }
-    const std::vector<const Variable*>& parameters = function.parameters();
     for (size_t i = 0; i < arguments.size(); ++i) {
         const Expression& arg = *arguments[i];
         this->write(separator);
         separator = ", ";
-        if (parameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
-            this->write("&");
-        }
         this->writeExpression(arg, kSequence_Precedence);
     }
     this->write(")");
@@ -943,13 +928,6 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
     if (needParens) {
         this->write("(");
     }
-    if (Compiler::IsAssignment(op) && left.is<VariableReference>() &&
-        left.as<VariableReference>().variable()->storage() == Variable::Storage::kParameter &&
-        left.as<VariableReference>().variable()->modifiers().fFlags & Modifiers::kOut_Flag) {
-        // writing to an out parameter. Since we have to turn those into pointers, we have to
-        // dereference it here.
-        this->write("*");
-    }
     if (op == Token::Kind::TK_STAREQ && leftType.isMatrix() && rightType.isMatrix()) {
         this->writeMatrixTimesEqualHelper(leftType, rightType, b.type());
     }
@@ -1089,6 +1067,11 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
                 if (intf.typeName() == "sk_PerVertex") {
                     continue;
                 }
+                if (intf.variable().modifiers().fLayout.fBinding < 0) {
+                    fErrors.error(intf.fOffset,
+                                  "Metal interface blocks must have 'layout(binding=...)'");
+                    return false;
+                }
                 this->write(", constant ");
                 this->writeBaseType(intf.variable().type());
                 this->write("& " );
@@ -1148,7 +1131,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
         const Type* type = &param->type();
         this->writeBaseType(*type);
         if (param->modifiers().fFlags & Modifiers::kOut_Flag) {
-            this->write("*");
+            this->write("&");
         }
         this->write(" ");
         this->writeName(param->name());
@@ -1246,7 +1229,7 @@ void MetalCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     this->write("struct ");
     this->writeLine(intf.typeName() + " {");
     const Type* structType = &intf.variable().type();
-    while (structType->typeKind() == Type::TypeKind::kArray) {
+    if (structType->isArray()) {
         structType = &structType->componentType();
     }
     fWrittenStructs.push_back(structType);
@@ -1664,7 +1647,7 @@ void MetalCodeGenerator::writeStructDefinitions() {
             // here, since globals are all embedded in a sub-struct.
             const Type* type = &e->as<GlobalVarDeclaration>().declaration()
                                  ->as<VarDeclaration>().baseType();
-            if (type->typeKind() == Type::TypeKind::kStruct) {
+            if (type->isStruct()) {
                 if (this->writeStructDefinition(*type)) {
                     this->writeLine(";");
                 }
@@ -1676,7 +1659,7 @@ void MetalCodeGenerator::writeStructDefinitions() {
 void MetalCodeGenerator::visitGlobalStruct(GlobalStructVisitor* visitor) {
     // Visit the interface blocks.
     for (const auto& [interfaceType, interfaceName] : fInterfaceBlockNameMap) {
-        visitor->VisitInterfaceBlock(*interfaceType, interfaceName);
+        visitor->visitInterfaceBlock(*interfaceType, interfaceName);
     }
     for (const ProgramElement* element : fProgram.elements()) {
         if (!element->is<GlobalVarDeclaration>()) {
@@ -1689,11 +1672,11 @@ void MetalCodeGenerator::visitGlobalStruct(GlobalStructVisitor* visitor) {
             var.type().typeKind() == Type::TypeKind::kSampler) {
             if (var.type().typeKind() == Type::TypeKind::kSampler) {
                 // Samplers are represented as a "texture/sampler" duo in the global struct.
-                visitor->VisitTexture(var.type(), var.name());
-                visitor->VisitSampler(var.type(), String(var.name()) + SAMPLER_SUFFIX);
+                visitor->visitTexture(var.type(), var.name());
+                visitor->visitSampler(var.type(), String(var.name()) + SAMPLER_SUFFIX);
             } else {
                 // Visit a regular variable.
-                visitor->VisitVariable(var, decl.value().get());
+                visitor->visitVariable(var, decl.value().get());
             }
         }
     }
@@ -1702,7 +1685,7 @@ void MetalCodeGenerator::visitGlobalStruct(GlobalStructVisitor* visitor) {
 void MetalCodeGenerator::writeGlobalStruct() {
     class : public GlobalStructVisitor {
     public:
-        void VisitInterfaceBlock(const InterfaceBlock& block, const String& blockName) override {
+        void visitInterfaceBlock(const InterfaceBlock& block, const String& blockName) override {
             this->AddElement();
             fCodeGen->write("    constant ");
             fCodeGen->write(block.typeName());
@@ -1710,7 +1693,7 @@ void MetalCodeGenerator::writeGlobalStruct() {
             fCodeGen->writeName(blockName);
             fCodeGen->write(";\n");
         }
-        void VisitTexture(const Type& type, const String& name) override {
+        void visitTexture(const Type& type, const String& name) override {
             this->AddElement();
             fCodeGen->write("    ");
             fCodeGen->writeBaseType(type);
@@ -1719,13 +1702,13 @@ void MetalCodeGenerator::writeGlobalStruct() {
             fCodeGen->writeArrayDimensions(type);
             fCodeGen->write(";\n");
         }
-        void VisitSampler(const Type&, const String& name) override {
+        void visitSampler(const Type&, const String& name) override {
             this->AddElement();
             fCodeGen->write("    sampler ");
             fCodeGen->writeName(name);
             fCodeGen->write(";\n");
         }
-        void VisitVariable(const Variable& var, const Expression* value) override {
+        void visitVariable(const Variable& var, const Expression* value) override {
             this->AddElement();
             fCodeGen->write("    ");
             fCodeGen->writeBaseType(var.type());
@@ -1759,21 +1742,21 @@ void MetalCodeGenerator::writeGlobalStruct() {
 void MetalCodeGenerator::writeGlobalInit() {
     class : public GlobalStructVisitor {
     public:
-        void VisitInterfaceBlock(const InterfaceBlock& blockType,
+        void visitInterfaceBlock(const InterfaceBlock& blockType,
                                  const String& blockName) override {
             this->AddElement();
             fCodeGen->write("&");
             fCodeGen->writeName(blockName);
         }
-        void VisitTexture(const Type&, const String& name) override {
+        void visitTexture(const Type&, const String& name) override {
             this->AddElement();
             fCodeGen->writeName(name);
         }
-        void VisitSampler(const Type&, const String& name) override {
+        void visitSampler(const Type&, const String& name) override {
             this->AddElement();
             fCodeGen->writeName(name);
         }
-        void VisitVariable(const Variable& var, const Expression* value) override {
+        void visitVariable(const Variable& var, const Expression* value) override {
             this->AddElement();
             if (value) {
                 fCodeGen->writeVarInitializer(var, *value);
