@@ -1146,30 +1146,27 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
         newDevice.reset(priorDevice->onCreateDevice(createInfo, paint));
     }
 
-    bool boundsAffectsClip = !(saveLayerFlags & SkCanvasPriv::kDontClipToLayer_SaveLayerFlag);
     if (!newDevice) {
         if (modifiedRec) {
             // In this case there will be no layer in which to stash the matrix so we need to
             // revert the prior MCRec to its earlier state.
             modifiedRec->fMatrix = SkM44(stashedMatrix);
         }
-        if (boundsAffectsClip) {
-            if (strategy == kNoLayer_SaveLayerStrategy) {
-                // replaceClip() serves two purposes here:
-                // 1. When 'ir' is empty, it forces the top level device to reject all subsequent
-                //    nested draw calls.
-                // 2. When 'ir' is not empty, this canvas represents a recording canvas, so the
-                //    replaceClip() simulates what a new top-level device's canvas would be in
-                //    the non-recording scenario. This allows the canvas to report the expanding
-                //    effects of image filters on the temporary clip bounds.
-                UPDATE_DEVICE_CLIP(device->replaceClip(ir));
-            } else {
-                // else the layer device failed to be created, so the saveLayer() effectively
-                // becomes just a save(). The clipRegion() explicitly applies the bounds of the
-                // failed layer, without resetting the clip of the prior device that all subsequent
-                // nested draw calls need to respect.
-                UPDATE_DEVICE_CLIP(device->clipRegion(SkRegion(ir), SkClipOp::kIntersect));
-            }
+        if (strategy == kNoLayer_SaveLayerStrategy) {
+            // replaceClip() serves two purposes here:
+            // 1. When 'ir' is empty, it forces the top level device to reject all subsequent
+            //    nested draw calls.
+            // 2. When 'ir' is not empty, this canvas represents a recording canvas, so the
+            //    replaceClip() simulates what a new top-level device's canvas would be in
+            //    the non-recording scenario. This allows the canvas to report the expanding
+            //    effects of image filters on the temporary clip bounds.
+            UPDATE_DEVICE_CLIP(device->replaceClip(ir));
+        } else {
+            // else the layer device failed to be created, so the saveLayer() effectively
+            // becomes just a save(). The clipRegion() explicitly applies the bounds of the
+            // failed layer, without resetting the clip of the prior device that all subsequent
+            // nested draw calls need to respect.
+            UPDATE_DEVICE_CLIP(device->clipRegion(SkRegion(ir), SkClipOp::kIntersect));
         }
         return;
     }
@@ -1177,8 +1174,7 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
     newDevice->setMarkerStack(fMarkerStack.get());
     DeviceCM* layer = new DeviceCM(newDevice, paint, stashedMatrix);
 
-    // only have a "next" if this new layer doesn't affect the clip (rare)
-    layer->fNext = boundsAffectsClip ? nullptr : fMCRec->fTopLayer;
+    layer->fNext = nullptr;
     fMCRec->fLayer = layer;
     fMCRec->fTopLayer = layer;    // this field is NOT an owner of layer
 
@@ -1189,17 +1185,6 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
 
     newDevice->setOrigin(fMCRec->fMatrix, ir.fLeft, ir.fTop);
     newDevice->androidFramework_setDeviceClipRestriction(&fClipRestrictionRect);
-
-    if (layer->fNext) {
-        // need to punch a hole in the previous device, so we don't draw there, given that
-        // the new top-layer will allow drawing to happen "below" it.
-        SkRegion hole(ir);
-        do {
-            layer = layer->fNext;
-            layer->fDevice->clipRegion(hole, SkClipOp::kDifference);
-        } while (layer->fNext);
-    }
-
     fQuickRejectBounds = qr_clip_bounds(this->computeDeviceClipBounds());
 }
 
@@ -2954,56 +2939,6 @@ void SkCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
     picture->playback(this);
 }
 #endif
-
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-
-SkCanvas::LayerIter::LayerIter(SkCanvas* canvas) {
-    static_assert(sizeof(fStorage) >= sizeof(SkDrawIter), "fStorage_too_small");
-
-    SkASSERT(canvas);
-
-    fImpl = new (fStorage) SkDrawIter(canvas);
-    // This advances the base iterator to the first device and caches its origin,
-    // correctly handling the case where there are no devices.
-    this->next();
-}
-
-SkCanvas::LayerIter::~LayerIter() {
-    fImpl->~SkDrawIter();
-}
-
-void SkCanvas::LayerIter::next() {
-    fDone = !fImpl->next();
-    if (!fDone) {
-        // Cache the device origin. LayerIter is only used in Android, which doesn't use image
-        // filters, so its devices will always be able to report the origin exactly.
-        fDeviceOrigin = fImpl->fDevice->getOrigin();
-    }
-}
-
-SkBaseDevice* SkCanvas::LayerIter::device() const {
-    return fImpl->fDevice;
-}
-
-const SkMatrix& SkCanvas::LayerIter::matrix() const {
-    return fImpl->fDevice->localToDevice();
-}
-
-const SkPaint& SkCanvas::LayerIter::paint() const {
-    const SkPaint* paint = fImpl->getPaint();
-    if (nullptr == paint) {
-        paint = &fDefaultPaint;
-    }
-    return *paint;
-}
-
-SkIRect SkCanvas::LayerIter::clipBounds() const {
-    return fImpl->fDevice->devClipBounds();
-}
-
-int SkCanvas::LayerIter::x() const { return fDeviceOrigin.fX; }
-int SkCanvas::LayerIter::y() const { return fDeviceOrigin.fY; }
 
 ///////////////////////////////////////////////////////////////////////////////
 
