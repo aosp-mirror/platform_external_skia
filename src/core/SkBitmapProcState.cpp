@@ -12,9 +12,9 @@
 #include "include/private/SkMacros.h"
 #include "include/private/SkTPin.h"
 #include "src/core/SkBitmapCache.h"
-#include "src/core/SkBitmapController.h"
 #include "src/core/SkBitmapProcState.h"
 #include "src/core/SkMipmap.h"
+#include "src/core/SkMipmapAccessor.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkResourceCache.h"
 #include "src/core/SkUtils.h"
@@ -192,13 +192,12 @@ bool SkBitmapProcState::init(const SkMatrix& inv, SkColor paintColor,
     fInvMatrix = inv;
     fBilerp = false;
 
-    auto* access = fAlloc.make<SkMipmapAccessor>(fImage, inv, sampling.mipmap);
-    std::tie(fPixmap, fInvMatrix) = access->level();
-
-    // Do we need this check?
-    if (fPixmap.info().isEmpty()) {
+    auto* access = SkMipmapAccessor::Make(&fAlloc, (const SkImage*)fImage, inv, sampling.mipmap);
+    if (!access) {
         return false;
     }
+    std::tie(fPixmap, fInvMatrix) = access->level();
+
     fPaintColor = paintColor;
     fBilerp = sampling.filter == SkFilterMode::kLinear;
     SkASSERT(fPixmap.addr());

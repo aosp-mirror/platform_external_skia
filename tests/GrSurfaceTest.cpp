@@ -267,9 +267,8 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                                                                      combo.fColorType);
                             GrSurfaceProxyView view(std::move(proxy), kTopLeft_GrSurfaceOrigin,
                                                     swizzle);
-                            auto texCtx = GrSurfaceContext::Make(dContext, std::move(view),
-                                                                 combo.fColorType,
-                                                                 kPremul_SkAlphaType, nullptr);
+                            GrColorInfo info(combo.fColorType, kPremul_SkAlphaType, nullptr);
+                            auto texCtx = GrSurfaceContext::Make(dContext, std::move(view), info);
 
                             readback.erase(kClearColor);
                             if (texCtx->readPixels(
@@ -295,11 +294,11 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                                     {desc.fWidth, desc.fHeight}, 1, GrMipmapped::kNo,
                                     GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
                         } else {
-                            surfCtx = GrSurfaceContext::Make(
-                                    dContext, {desc.fWidth, desc.fHeight}, combo.fFormat,
-                                    GrRenderable::kNo, 1, GrMipmapped::kNo, GrProtected::kNo,
-                                    kTopLeft_GrSurfaceOrigin, combo.fColorType,
-                                    kUnknown_SkAlphaType, nullptr, fit, SkBudgeted::kYes);
+                            GrImageInfo info(combo.fColorType,
+                                             kUnknown_SkAlphaType,
+                                             nullptr,
+                                             {desc.fHeight, desc.fHeight});
+                            surfCtx = GrSurfaceContext::Make(dContext, info, combo.fFormat, fit);
                         }
                         if (!surfCtx) {
                             continue;
@@ -360,7 +359,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture, reporter, context_info) {
     // kRead for the right reason.
     for (auto ioType : {kRead_GrIOType, kRW_GrIOType}) {
         auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithData(
-                dContext, srcPixmap, GrRenderable::kNo, GrProtected::kNo);
+                dContext, srcPixmap, kTopLeft_GrSurfaceOrigin, GrRenderable::kNo, GrProtected::kNo);
         if (!mbet) {
             ERRORF(reporter, "Could not make texture.");
             return;
@@ -371,9 +370,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture, reporter, context_info) {
         GrSwizzle swizzle = dContext->priv().caps()->getReadSwizzle(proxy->backendFormat(),
                                                                     GrColorType::kRGBA_8888);
         GrSurfaceProxyView view(proxy, kTopLeft_GrSurfaceOrigin, swizzle);
-        auto surfContext = GrSurfaceContext::Make(dContext, std::move(view), GrColorType::kRGBA_8888,
-                                                  kPremul_SkAlphaType, nullptr);
-
+        auto surfContext = GrSurfaceContext::Make(dContext, std::move(view), ii.colorInfo());
         // Read pixels should work with a read-only texture.
         {
             SkAutoPixmapStorage read;
