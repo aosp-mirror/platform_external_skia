@@ -8,11 +8,11 @@
 #include "src/shaders/SkImageShader.h"
 
 #include "src/core/SkArenaAlloc.h"
-#include "src/core/SkBitmapController.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixProvider.h"
+#include "src/core/SkMipmapAccessor.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
@@ -635,7 +635,10 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
     {
         sampling = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNearest);
     }
-    auto* access = alloc->make<SkMipmapAccessor>(as_IB(fImage.get()), matrix, sampling.mipmap);
+    auto* access = SkMipmapAccessor::Make(alloc, fImage.get(), matrix, sampling.mipmap);
+    if (!access) {
+        return false;
+    }
     SkPixmap pm;
     std::tie(pm, matrix) = access->level();
 
@@ -901,8 +904,10 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
     baseInv.normalizePerspective();
 
     auto sampling = fUseSamplingOptions ? fSampling : SkSamplingOptions(paintQuality);
-    auto* access = alloc->make<SkMipmapAccessor>(as_IB(fImage.get()), baseInv, sampling.mipmap);
-
+    auto* access = SkMipmapAccessor::Make(alloc, fImage.get(), baseInv, sampling.mipmap);
+    if (!access) {
+        return {};
+    }
     auto [upper, upperInv] = access->level();
     if (!sampling.useCubic) {
         sampling = tweak_filter_and_inv_matrix(sampling, &upperInv);

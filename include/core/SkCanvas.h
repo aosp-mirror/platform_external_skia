@@ -54,6 +54,7 @@ class SkPixmap;
 class SkRegion;
 class SkRRect;
 struct SkRSXform;
+struct SkSamplingOptions;
 class SkSurface;
 class SkSurface_Base;
 class SkTextBlob;
@@ -1640,6 +1641,11 @@ public:
         this->drawImageRect(image.get(), dst, paint);
     }
 
+    void drawImage(const SkImage*, SkScalar x, SkScalar y, const SkSamplingOptions&,
+                   const SkPaint* = nullptr);
+    void drawImageRect(const SkImage*, const SkRect& src, const SkRect& dst,
+                       const SkSamplingOptions&, const SkPaint* = nullptr);
+
     /** Draws SkImage image stretched proportionally to fit into SkRect dst.
         SkIRect center divides the image into nine sections: four sides, four corners, and
         the center. Corners are unmodified or scaled down proportionately if their sides
@@ -2686,6 +2692,11 @@ private:
      * to be public because it exposes decisions about layer sizes that are internal to the canvas.
      */
     SkIRect getTopLayerBounds() const;
+
+    // All base onDrawX() functions should call this and skip drawing if it returns true.
+    // If 'matrix' is non-null, it maps the paint's fast bounds before checking for quick rejection
+    bool internalQuickReject(const SkRect& bounds, const SkPaint& paint,
+                             const SkMatrix* matrix = nullptr);
 
     void internalDrawPaint(const SkPaint& paint);
     void internalSaveLayer(const SaveLayerRec&, SaveLayerStrategy);
