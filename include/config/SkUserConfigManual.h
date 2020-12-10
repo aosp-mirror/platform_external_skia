@@ -25,6 +25,8 @@
   // Staging flags
   #define SK_LEGACY_PATH_ARCTO_ENDPOINT
   #define SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
+  #define SK_SUPPORT_LEGACY_IMPLICIT_FILTERQUALITY
+
 
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
