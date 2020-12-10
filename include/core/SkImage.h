@@ -8,6 +8,10 @@
 #ifndef SkImage_DEFINED
 #define SkImage_DEFINED
 
+#ifndef SK_SUPPORT_LEGACY_IMPLICIT_FILTERQUALITY
+#define SK_SUPPORT_LEGACY_IMPLICIT_FILTERQUALITY
+#endif
+
 #include "include/core/SkFilterQuality.h"
 #include "include/core/SkImageEncoder.h"
 #include "include/core/SkImageInfo.h"
@@ -388,46 +392,6 @@ public:
                                                sk_sp<SkColorSpace> imageColorSpace = nullptr,
                                                TextureReleaseProc textureReleaseProc = nullptr,
                                                ReleaseContext releaseContext = nullptr);
-
-    /** Deprecated.
-        Creates an SkImage from YUV[A] planar textures by copying them to another caller-provided
-        texture and retaining that result texture in the SkImage.  However, this is deprecated and
-        instead clients should make a SkSurface from 'rgbaResultTexture` using
-        SkSurface::MakeFromBackendTexture, make an image from the planes using MakeFromYUVATextures,
-        and finally draw the image to the surface.
-
-        Note that the draw that converts to RGBA is not issued to the underlying API until a flush/
-        submit occurs so the YUVA textures are not safe to delete or overwrite until yuvaReleaseProc
-        is called.
-
-        The dimensions of the result RGBA texture must match the dimensions of the YUVA planar data.
-
-        @param context            GPU context
-        @param yuvaTextures       A set of textures containing YUVA data and a description of the
-                                  data and transformation to RGBA.
-        @param rgbaResultTexture  The renderable texture that will hold the result of the conversion
-                                  to RGBA and be retained in the resulting SkImage.
-        @param colorType          colorType of the result as stored in rgbaResultTexture. Must be
-                                  compatible with the texture's format.
-        @param imageColorSpace    range of colors of the resulting image after conversion to RGB;
-                                  may be nullptr
-        @param yuvaReleaseProc    called when the backend textures in 'yuvaTextures' can be released
-        @param yuvaReleaseContext state passed to yuvaReleaseProc
-        @param rgbaReleaseProc    called when the 'rgbaResultTexture' can be released
-        @param rgbaReleaseContext state passed to rgbaReleaseProc
-        @return                   created SkImage, or nullptr
-    */
-    static sk_sp<SkImage> MakeFromYUVATexturesCopyToExternal(
-            GrRecordingContext* context,
-            const GrYUVABackendTextures& yuvaTextures,
-            const GrBackendTexture& rgbaResultTexture,
-            SkColorType colorType,
-            sk_sp<SkColorSpace> imageColorSpace = nullptr,
-            TextureReleaseProc yuvaReleaseProc = nullptr,
-            ReleaseContext yuvaReleaseContext = nullptr,
-            TextureReleaseProc rgbaReleaseProc = nullptr,
-            ReleaseContext rgbaReleaseContext = nullptr);
-
     /**
         Deprecated. Use version that takes GrYUVABackendTextures.
 
@@ -657,8 +621,21 @@ public:
     sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkSamplingOptions&,
                                const SkMatrix* localMatrix = nullptr) const;
 
+    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkSamplingOptions& sampling,
+                               const SkMatrix& lm) const {
+        return this->makeShader(tmx, tmy, sampling, &lm);
+    }
+    sk_sp<SkShader> makeShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const {
+        return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, sampling, &lm);
+    }
+    sk_sp<SkShader> makeShader(const SkSamplingOptions& sampling,
+                               const SkMatrix* lm = nullptr) const {
+        return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, sampling, lm);
+    }
+
     using CubicResampler = SkCubicResampler;
 
+#ifdef SK_SUPPORT_LEGACY_IMPLICIT_FILTERQUALITY
     /** Creates SkShader from SkImage. SkShader dimensions are taken from SkImage. SkShader uses
         SkTileMode rules to fill drawn area outside SkImage. localMatrix permits
         transforming SkImage before SkCanvas matrix is applied.
@@ -677,13 +654,6 @@ public:
         return this->makeShader(tmx, tmy, &localMatrix);
     }
 
-#ifdef SK_SUPPORT_LEGACY_SCALEPIXELS_PARAM
-    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkMatrix* localMatrix,
-                               SkFilterQuality fq) const {
-        return this->makeShader(tmx, tmy, SkSamplingOptions(fq), localMatrix);
-    }
-#endif
-
     /** Creates SkShader from SkImage. SkShader dimensions are taken from SkImage. SkShader uses
         SkShader::kClamp_TileMode to fill drawn area outside SkImage. localMatrix permits
         transforming SkImage before SkCanvas matrix is applied.
@@ -697,6 +667,14 @@ public:
     sk_sp<SkShader> makeShader(const SkMatrix& localMatrix) const {
         return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, &localMatrix);
     }
+#endif
+
+#ifdef SK_SUPPORT_LEGACY_SCALEPIXELS_PARAM
+    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkMatrix* localMatrix,
+                               SkFilterQuality fq) const {
+        return this->makeShader(tmx, tmy, SkSamplingOptions(fq), localMatrix);
+    }
+#endif
 
     /** Copies SkImage pixel address, row bytes, and SkImageInfo to pixmap, if address
         is available, and returns true. If pixel address is not available, return
