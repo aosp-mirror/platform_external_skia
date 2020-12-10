@@ -1,6 +1,7 @@
 // defines built-in functions supported by SkSL when running on a GPU
 
 $genType radians($genType degrees);
+$genType degrees($genType radians);
 $genType sin($genType angle);
 $genType cos($genType angle);
 $genType tan($genType angle);
@@ -21,6 +22,7 @@ $genType exp2($genType x);
 $genType log2($genType x);
 $genType sqrt($genType x);
 $genHType radians($genHType degrees);
+$genHType degrees($genHType radians);
 $genHType sin($genHType angle);
 $genHType cos($genHType angle);
 $genHType tan($genHType angle);
@@ -41,6 +43,7 @@ $genHType exp2($genHType x);
 $genHType log2($genHType x);
 $genHType sqrt($genHType x);
 $genType inversesqrt($genType x);
+$genHType inversesqrt($genHType x);
 $genType abs($genType x);
 $genHType abs($genHType x);
 $genIType abs($genIType x);
@@ -109,7 +112,9 @@ $genType uintBitsTofloat($genUType value);
 $genType fma($genType a, $genType b, $genType c);
 $genHType fma($genHType a, $genHType b, $genHType c);
 sk_has_side_effects $genType frexp($genType x, out $genIType exp);
+sk_has_side_effects $genHType frexp($genHType x, out $genIType exp);
 $genType ldexp($genType x, in $genIType exp);
+$genHType ldexp($genHType x, in $genIType exp);
 uint packUnorm2x16(float2 v);
 uint packSnorm2x16(float2 v);
 uint packUnorm4x8(float4 v);

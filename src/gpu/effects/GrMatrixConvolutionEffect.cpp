@@ -229,7 +229,7 @@ void GrGLMatrixConvolutionEffect::emitCode(EmitArgs& args) {
     const char* bias = uniformHandler->getUniformCStr(fBiasUni);
 
     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-    fragBuilder->codeAppend("half4 sum = half4(0, 0, 0, 0);");
+    fragBuilder->codeAppend("half4 sum = half4(0);");
     fragBuilder->codeAppendf("float2 coord = %s - %s;", args.fSampleCoord, kernelOffset);
 
     if (mce.kernelIsSampled()) {
@@ -254,7 +254,6 @@ void GrGLMatrixConvolutionEffect::emitCode(EmitArgs& args) {
         fragBuilder->codeAppendf("%s.rgb = saturate(sum.rgb * %s + %s);", args.fOutputColor, gain, bias);
         fragBuilder->codeAppendf("%s.rgb *= %s.a;", args.fOutputColor, args.fOutputColor);
     }
-    fragBuilder->codeAppendf("%s *= %s;\n", args.fOutputColor, args.fInputColor);
 }
 
 void GrGLMatrixConvolutionEffect::GenKey(const GrProcessor& processor,
