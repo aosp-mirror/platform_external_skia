@@ -178,6 +178,11 @@ protected:
 
     void writeFunctionStart(const FunctionDeclaration& f);
 
+    void writeFunctionRequirementParams(const FunctionDeclaration& f,
+                                        const char*& separator);
+
+    void writeFunctionRequirementArgs(const FunctionDeclaration& f, const char*& separator);
+
     bool writeFunctionDeclaration(const FunctionDeclaration& f);
 
     void writeFunction(const FunctionDefinition& f);
@@ -204,9 +209,13 @@ protected:
 
     void writeMinAbsHack(Expression& absExpr, Expression& otherExpr);
 
-    String getOutParamHelper(const FunctionDeclaration& function, const ExpressionArray& arguments);
+    String getOutParamHelper(const FunctionCall& c,
+                             const ExpressionArray& arguments,
+                             const SkTArray<VariableReference*>& outVars);
 
     String getInverseHack(const Expression& mat);
+
+    String getBitcastIntrinsic(const Type& outType);
 
     void writeFunctionCall(const FunctionCall& c);
 
@@ -284,7 +293,6 @@ protected:
     int fPaddingCount = 0;
     const char* fLineEnding;
     const Context& fContext;
-    StringStream fHeader;
     String fFunctionHeader;
     StringStream fExtraFunctions;
     Program::Kind fProgramKind;
@@ -305,6 +313,8 @@ protected:
     int fUniformBuffer = -1;
     String fRTHeightName;
     const FunctionDeclaration* fCurrentFunction = nullptr;
+    int fSwizzleHelperCount = 0;
+    bool fIgnoreVariableReferenceModifiers = false;
 
     using INHERITED = CodeGenerator;
 };

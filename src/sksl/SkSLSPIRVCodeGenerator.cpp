@@ -66,10 +66,13 @@ void SPIRVCodeGenerator::setupIntrinsics() {
     fIntrinsicMap[String("sqrt")]          = ALL_GLSL(Sqrt);
     fIntrinsicMap[String("inverse")]       = ALL_GLSL(MatrixInverse);
     fIntrinsicMap[String("transpose")]     = ALL_SPIRV(Transpose);
+    fIntrinsicMap[String("isinf")]         = ALL_SPIRV(IsInf);
+    fIntrinsicMap[String("isnan")]         = ALL_SPIRV(IsNan);
     fIntrinsicMap[String("inversesqrt")]   = ALL_GLSL(InverseSqrt);
     fIntrinsicMap[String("determinant")]   = ALL_GLSL(Determinant);
     fIntrinsicMap[String("matrixInverse")] = ALL_GLSL(MatrixInverse);
     fIntrinsicMap[String("mod")]           = SPECIAL(Mod);
+    fIntrinsicMap[String("modf")]          = ALL_GLSL(Modf);
     fIntrinsicMap[String("min")]           = SPECIAL(Min);
     fIntrinsicMap[String("max")]           = SPECIAL(Max);
     fIntrinsicMap[String("clamp")]         = SPECIAL(Clamp);
@@ -109,6 +112,11 @@ void SPIRVCodeGenerator::setupIntrinsics() {
 
     fIntrinsicMap[String("sample")]      = SPECIAL(Texture);
     fIntrinsicMap[String("subpassLoad")] = SPECIAL(SubpassLoad);
+
+    fIntrinsicMap[String("floatBitsToInt")]  = ALL_SPIRV(Bitcast);
+    fIntrinsicMap[String("floatBitsToUint")] = ALL_SPIRV(Bitcast);
+    fIntrinsicMap[String("intBitsToFloat")]  = ALL_SPIRV(Bitcast);
+    fIntrinsicMap[String("uintBitsToFloat")] = ALL_SPIRV(Bitcast);
 
     fIntrinsicMap[String("any")]              = std::make_tuple(kSPIRV_IntrinsicKind, SpvOpUndef,
                                                                 SpvOpUndef, SpvOpUndef, SpvOpAny);
