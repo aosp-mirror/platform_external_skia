@@ -13,7 +13,7 @@
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/ops/GrFillRectOp.h"
 #include "src/gpu/tessellate/GrDrawAtlasPathOp.h"
@@ -141,17 +141,17 @@ GrPathRenderer::CanDrawPath GrTessellationPathRenderer::onCanDrawPath(
     shape.asPath(&path);
 
     if (!shape.style().isSimpleFill()) {
-        if (SkPathPriv::ConicWeightCnt(path)) {
-            return CanDrawPath::kNo;
-        }
-        SkPMColor4f constantColor;
         // These are only temporary restrictions while we bootstrap tessellated stroking. Every one
         // of them will eventually go away.
-        if (shape.style().strokeRec().getStyle() == SkStrokeRec::kStrokeAndFill_Style ||
-            GrAAType::kCoverage == args.fAAType ||
-            !args.fPaint->isConstantBlendedColor(&constantColor) ||
-            args.fPaint->hasCoverageFragmentProcessor()) {
+        if (shape.style().strokeRec().getStyle() == SkStrokeRec::kStrokeAndFill_Style) {
             return CanDrawPath::kNo;
+        }
+        if (shape.style().isSimpleHairline()) {
+            // For the time being we translate hairline paths to device space. We can't do this if
+            // it's possible the paint might use local coordinates.
+            if (args.fPaint->usesVaryingCoords()) {
+                return CanDrawPath::kNo;
+            }
         }
     }
 
@@ -163,8 +163,11 @@ static GrOp::Owner make_stroke_op(GrRecordingContext* context, GrAAType aaType,
                                   const SkPath& path, GrPaint&& paint,
                                   const GrShaderCaps& shaderCaps) {
     // Only use hardware tessellation if the path has a somewhat large number of verbs. Otherwise we
-    // seem to be better off using indirect draws.
-    if (shaderCaps.tessellationSupport() && path.countVerbs() > 50) {
+    // seem to be better off using indirect draws. Our back door for HW tessellation shaders isn't
+    // currently capable of passing varyings to the fragment shader either, so if the paint uses
+    // varyings we need to use indirect draws.
+    if (shaderCaps.tessellationSupport() && path.countVerbs() > 50 && !paint.usesVaryingCoords() &&
+        !SkPathPriv::ConicWeightCnt(path)) {
         return GrOp::Make<GrStrokeTessellateOp>(context, aaType, viewMatrix, stroke, path,
                                                 std::move(paint));
     } else {
@@ -174,7 +177,7 @@ static GrOp::Owner make_stroke_op(GrRecordingContext* context, GrAAType aaType,
 }
 
 bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
-    GrRenderTargetContext* renderTargetContext = args.fRenderTargetContext;
+    GrSurfaceDrawContext* renderTargetContext = args.fRenderTargetContext;
     const GrShaderCaps& shaderCaps = *args.fContext->priv().caps()->shaderCaps();
 
     SkPath path;
@@ -261,13 +264,10 @@ bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
     }
 
     if (args.fShape->style().isSimpleHairline()) {
-        // Pre-transform the path into device space and use a stroke width of 1.
-#ifdef SK_DEBUG
         // Since we will be transforming the path, just double check that we are still in a position
         // where the paint will not use local coordinates.
-        SkPMColor4f constantColor;
-        SkASSERT(args.fPaint.isConstantBlendedColor(&constantColor));
-#endif
+        SkASSERT(!args.fPaint.usesVaryingCoords());
+        // Pre-transform the path into device space and use a stroke width of 1.
         SkPath devPath;
         path.transform(*args.fViewMatrix, &devPath);
         SkStrokeRec devStroke = args.fShape->style().strokeRec();
