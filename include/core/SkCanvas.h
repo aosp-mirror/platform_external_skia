@@ -36,7 +36,7 @@
 #define SK_SUPPORT_LEGACY_GETTOTALMATRIX
 
 class GrRecordingContext;
-class GrRenderTargetContext;
+class GrSurfaceDrawContext;
 class SkBaseDevice;
 class SkBitmap;
 class SkData;
@@ -2457,7 +2457,7 @@ public:
     ///////////////////////////////////////////////////////////////////////////
 
     // don't call
-    virtual GrRenderTargetContext* internal_private_accessTopLayerRenderTargetContext();
+    virtual GrSurfaceDrawContext* internal_private_accessTopLayerRenderTargetContext();
     SkIRect internal_private_getTopLayerBounds() const { return getTopLayerBounds(); }
 
     // TEMP helpers until we switch virtual over to const& for src-rect
@@ -2507,10 +2507,6 @@ protected:
     virtual void onMarkCTM(const char*) {}
     virtual void didConcat44(const SkM44&) {}
     virtual void didSetM44(const SkM44&) {}
-#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
-    virtual void didConcat(const SkMatrix& ) {}
-    virtual void didSetMatrix(const SkMatrix& ) {}
-#endif
     virtual void didTranslate(SkScalar, SkScalar) {}
     virtual void didScale(SkScalar, SkScalar) {}
 
@@ -2645,7 +2641,6 @@ private:
 
     friend class SkAndroidFrameworkUtils;
     friend class SkCanvasPriv;      // needs to expose android functions for testing outside android
-    friend class SkDrawIter;        // needs getTopDevice()
     friend class AutoLayerForImageFilter;
     friend class SkSurface_Raster;  // needs getDevice()
     friend class SkNoDrawCanvas;    // needs resetForNextPicture()
