@@ -104,11 +104,16 @@ protected:
     };
 
     enum SpecialIntrinsic {
+        kBitcast_SpecialIntrinsic,
+        kDegrees_SpecialIntrinsic,
         kDistance_SpecialIntrinsic,
         kDot_SpecialIntrinsic,
+        kFaceforward_SpecialIntrinsic,
+        kFindLSB_SpecialIntrinsic,
         kLength_SpecialIntrinsic,
         kMod_SpecialIntrinsic,
         kNormalize_SpecialIntrinsic,
+        kRadians_SpecialIntrinsic,
         kTexture_SpecialIntrinsic,
     };
 
@@ -216,6 +221,8 @@ protected:
     String getInverseHack(const Expression& mat);
 
     String getBitcastIntrinsic(const Type& outType);
+
+    String getTempVariable(const Type& varType);
 
     void writeFunctionCall(const FunctionCall& c);
 
