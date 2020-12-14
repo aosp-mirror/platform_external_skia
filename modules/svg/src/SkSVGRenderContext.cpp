@@ -78,17 +78,15 @@ SkRect SkSVGLengthContext::resolveRect(const SkSVGLength& x, const SkSVGLength& 
 namespace {
 
 SkPaint::Cap toSkCap(const SkSVGLineCap& cap) {
-    switch (cap.type()) {
-    case SkSVGLineCap::Type::kButt:
+    switch (cap) {
+    case SkSVGLineCap::kButt:
         return SkPaint::kButt_Cap;
-    case SkSVGLineCap::Type::kRound:
+    case SkSVGLineCap::kRound:
         return SkPaint::kRound_Cap;
-    case SkSVGLineCap::Type::kSquare:
+    case SkSVGLineCap::kSquare:
         return SkPaint::kSquare_Cap;
-    default:
-        SkASSERT(false);
-        return SkPaint::kButt_Cap;
     }
+    SkUNREACHABLE;
 }
 
 SkPaint::Join toSkJoin(const SkSVGLineJoin& join) {
@@ -121,8 +119,7 @@ void applySvgPaint(const SkSVGRenderContext& ctx, const SkSVGPaint& svgPaint, Sk
         p->setColor(*ctx.presentationContext().fInherited.fColor);
         break;
     case SkSVGPaint::Type::kNone:
-        // Fall through.
-    case SkSVGPaint::Type::kInherit:
+        // Do nothing
         break;
     }
 }
@@ -141,20 +138,14 @@ template <>
 void commitToPaint<SkSVGAttribute::kFill>(const SkSVGPresentationAttributes& attrs,
                                           const SkSVGRenderContext& ctx,
                                           SkSVGPresentationContext* pctx) {
-    const auto& fill = *attrs.fFill;
-    SkASSERT(fill.type() != SkSVGPaint::Type::kInherit);
-
-    applySvgPaint(ctx, fill, &pctx->fFillPaint);
+    applySvgPaint(ctx, *attrs.fFill, &pctx->fFillPaint);
 }
 
 template <>
 void commitToPaint<SkSVGAttribute::kStroke>(const SkSVGPresentationAttributes& attrs,
                                             const SkSVGRenderContext& ctx,
                                             SkSVGPresentationContext* pctx) {
-    const auto& stroke = *attrs.fStroke;
-    SkASSERT(stroke.type() != SkSVGPaint::Type::kInherit);
-
-    applySvgPaint(ctx, stroke, &pctx->fStrokePaint);
+    applySvgPaint(ctx, *attrs.fStroke, &pctx->fStrokePaint);
 }
 
 template <>
@@ -209,10 +200,7 @@ template <>
 void commitToPaint<SkSVGAttribute::kStrokeLineCap>(const SkSVGPresentationAttributes& attrs,
                                                    const SkSVGRenderContext&,
                                                    SkSVGPresentationContext* pctx) {
-    const auto& cap = *attrs.fStrokeLineCap;
-    SkASSERT(cap.type() != SkSVGLineCap::Type::kInherit);
-
-    pctx->fStrokePaint.setStrokeCap(toSkCap(cap));
+    pctx->fStrokePaint.setStrokeCap(toSkCap(*attrs.fStrokeLineCap));
 }
 
 template <>
@@ -327,7 +315,7 @@ SkSVGPresentationContext::SkSVGPresentationContext()
     SkCanvas fakeCanvas(0, 0);
     SkSVGRenderContext fake(&fakeCanvas, nullptr, SkSVGIDMapper(),
                             SkSVGLengthContext(SkSize::Make(0, 0)),
-                            *this, nullptr);
+                            *this, nullptr, nullptr);
 
     commitToPaint<SkSVGAttribute::kFill>(fInherited, fake, this);
     commitToPaint<SkSVGAttribute::kFillOpacity>(fInherited, fake, this);
@@ -344,11 +332,13 @@ SkSVGRenderContext::SkSVGRenderContext(SkCanvas* canvas,
                                        const SkSVGIDMapper& mapper,
                                        const SkSVGLengthContext& lctx,
                                        const SkSVGPresentationContext& pctx,
+                                       SkSVGTextContext* tctx,
                                        const SkSVGNode* node)
     : fFontMgr(fmgr)
     , fIDMapper(mapper)
     , fLengthContext(lctx)
     , fPresentationContext(pctx)
+    , fTextContext(tctx)
     , fCanvas(canvas)
     , fCanvasSaveCount(canvas->getSaveCount())
     , fNode(node) {}
@@ -359,6 +349,7 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other)
                          other.fIDMapper,
                          *other.fLengthContext,
                          *other.fPresentationContext,
+                         other.fTextContext,
                          other.fNode) {}
 
 SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, SkCanvas* canvas)
@@ -367,6 +358,7 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, SkCanvas
                          other.fIDMapper,
                          *other.fLengthContext,
                          *other.fPresentationContext,
+                         other.fTextContext,
                          other.fNode) {}
 
 SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, const SkSVGNode* node)
@@ -375,7 +367,17 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, const Sk
                          other.fIDMapper,
                          *other.fLengthContext,
                          *other.fPresentationContext,
+                         other.fTextContext,
                          node) {}
+
+SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, SkSVGTextContext& tctx)
+    : SkSVGRenderContext(other.fCanvas,
+                         other.fFontMgr,
+                         other.fIDMapper,
+                         *other.fLengthContext,
+                         *other.fPresentationContext,
+                         &tctx,
+                         other.fNode) {}
 
 SkSVGRenderContext::~SkSVGRenderContext() {
     fCanvas->restoreToCount(fCanvasSaveCount);

@@ -32,10 +32,10 @@ const char* MetalCodeGenerator::OperatorName(Token::Kind op) {
 class MetalCodeGenerator::GlobalStructVisitor {
 public:
     virtual ~GlobalStructVisitor() = default;
-    virtual void VisitInterfaceBlock(const InterfaceBlock& block, const String& blockName) = 0;
-    virtual void VisitTexture(const Type& type, const String& name) = 0;
-    virtual void VisitSampler(const Type& type, const String& name) = 0;
-    virtual void VisitVariable(const Variable& var, const Expression* value) = 0;
+    virtual void visitInterfaceBlock(const InterfaceBlock& block, const String& blockName) = 0;
+    virtual void visitTexture(const Type& type, const String& name) = 0;
+    virtual void visitSampler(const Type& type, const String& name) = 0;
+    virtual void visitVariable(const Variable& var, const Expression* value) = 0;
 };
 
 void MetalCodeGenerator::setupIntrinsics() {
@@ -131,13 +131,42 @@ bool MetalCodeGenerator::writeStructDefinition(const Type& type) {
     return true;
 }
 
-void MetalCodeGenerator::writeType(const Type& type) {
-    if (type.typeKind() == Type::TypeKind::kStruct) {
-        if (!this->writeStructDefinition(type)) {
-            this->write(type.name());
+// Flags an error if an array type is found. Meant to be used in places where an array type might
+// appear in the SkSL/IR, but can't be represented by Metal.
+void MetalCodeGenerator::disallowArrayTypes(const Type& type) {
+    if (type.isArray()) {
+        fErrors.error(type.fOffset, "Metal does not support array types in this context");
+    }
+}
+
+// Writes the base type, stripping array suffixes. e.g. `float[2]` will output `float`.
+// Call `writeArrayDimensions` to write the type's accompanying array sizes.
+void MetalCodeGenerator::writeBaseType(const Type& type) {
+    switch (type.typeKind()) {
+        case Type::TypeKind::kStruct:
+            if (!this->writeStructDefinition(type)) {
+                this->write(type.name());
+            }
+            break;
+        case Type::TypeKind::kArray:
+            this->writeBaseType(type.componentType());
+            break;
+        default:
+            this->write(this->typeName(type));
+            break;
+    }
+}
+
+// Writes the array suffix of a type, if one exists. e.g. `float[2][4]` will output `[2][4]`.
+void MetalCodeGenerator::writeArrayDimensions(const Type& type) {
+    if (type.isArray()) {
+        this->write("[");
+        if (type.columns() != Type::kUnsizedArray) {
+            this->write(to_string(type.columns()));
         }
-    } else {
-        this->write(this->typeName(type));
+        this->write("]");
+
+        this->writeArrayDimensions(type.componentType());
     }
 }
 
@@ -203,7 +232,8 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
             return this->writeSpecialIntrinsic(c, (SpecialIntrinsic) intrinsicId);
             break;
         case kMetal_IntrinsicKind:
-            this->writeExpression(*c.arguments()[0], kSequence_Precedence);
+            this->write("(");
+            this->writeExpression(*c.arguments()[0], kRelational_Precedence);
             switch ((MetalIntrinsic) intrinsicId) {
                 case kEqual_MetalIntrinsic:
                     this->write(" == ");
@@ -224,13 +254,20 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
                     this->write(" >= ");
                     break;
                 default:
-                    ABORT("unsupported metal intrinsic kind");
+                    ABORT("unsupported Metal intrinsic kind");
             }
-            this->writeExpression(*c.arguments()[1], kSequence_Precedence);
+            this->writeExpression(*c.arguments()[1], kRelational_Precedence);
+            this->write(")");
             break;
         default:
             ABORT("unsupported intrinsic kind");
     }
+}
+
+String MetalCodeGenerator::getOutParamHelper(const FunctionDeclaration& function,
+                                             const ExpressionArray& arguments) {
+    // TODO: actually synthesize helper method.
+    return String::printf("/*needs swizzle fix*/ %s", String(function.name()).c_str());
 }
 
 void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
@@ -241,34 +278,47 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         this->writeIntrinsicCall(c);
         return;
     }
-    const StringFragment& name = function.name();
+    String name = function.name();
     bool builtin = function.isBuiltin();
+
     if (builtin && name == "atan" && arguments.size() == 2) {
-        this->write("atan2");
+        name = "atan2";
     } else if (builtin && name == "inversesqrt") {
-        this->write("rsqrt");
+        name = "rsqrt";
     } else if (builtin && name == "inverse") {
         SkASSERT(arguments.size() == 1);
-        this->writeInverseHack(*arguments[0]);
-    } else if (builtin && name == "frexp") {
-        // Our Metal codegen assumes that out params are pointers, but Metal's built-in frexp
-        // actually takes a reference for the exponent, not a pointer. We add in a helper function
-        // here to translate.
-        SkASSERT(arguments.size() == 2);
-        auto [iter, newlyCreated] = fHelpers.insert("frexp");
-        if (newlyCreated) {
-            fExtraFunctions.printf(
-                    "float frexp(float arg, thread int* exp) { return frexp(arg, *exp); }\n");
-        }
-        this->write("frexp");
+        name = this->getInverseHack(*arguments[0]);
     } else if (builtin && name == "dFdx") {
-        this->write("dfdx");
+        name = "dfdx";
     } else if (builtin && name == "dFdy") {
         // Flipping Y also negates the Y derivatives.
-        this->write((fProgram.fSettings.fFlipY) ? "-dfdy" : "dfdy");
-    } else {
-        this->writeName(name);
+        if (fProgram.fSettings.fFlipY) {
+            this->write("-");
+        }
+        name = "dfdy";
     }
+
+    // GLSL supports passing swizzled variables to out params; Metal doesn't. To emulate that
+    // support, we synthesize a helper function which performs the swizzle into a temporary
+    // variable, calls the original function, then writes the temp var back into the out param.
+    const std::vector<const Variable*>& parameters = function.parameters();
+    SkASSERT(arguments.size() == parameters.size());
+    for (size_t index = 0; index < arguments.size(); ++index) {
+        // If this is an out parameter...
+        if (parameters[index]->modifiers().fFlags & Modifiers::kOut_Flag) {
+            // Inspect the expression to see if it contains a swizzle.
+            Analysis::AssignmentInfo info;
+            bool outParamIsAssignable = Analysis::IsAssignable(*arguments[index], &info, nullptr);
+            SkASSERT(outParamIsAssignable);  // assignability was verified at IRGeneration time
+            if (outParamIsAssignable && info.fIsSwizzled) {
+                // Found a swizzle; we need to use a helper function here.
+                name = this->getOutParamHelper(function, arguments);
+                break;
+            }
+        }
+    }
+
+    this->write(name);
     this->write("(");
     const char* separator = "";
     if (this->requirements(function) & kInputs_Requirement) {
@@ -295,20 +345,16 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         this->write("_fragCoord");
         separator = ", ";
     }
-    const std::vector<const Variable*>& parameters = function.parameters();
     for (size_t i = 0; i < arguments.size(); ++i) {
         const Expression& arg = *arguments[i];
         this->write(separator);
         separator = ", ";
-        if (parameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
-            this->write("&");
-        }
         this->writeExpression(arg, kSequence_Precedence);
     }
     this->write(")");
 }
 
-void MetalCodeGenerator::writeInverseHack(const Expression& mat) {
+String MetalCodeGenerator::getInverseHack(const Expression& mat) {
     const Type& type = mat.type();
     const String& typeName = type.name();
     String name = typeName + "_inverse";
@@ -386,7 +432,7 @@ void MetalCodeGenerator::writeInverseHack(const Expression& mat) {
             ).c_str());
         }
     }
-    this->write(name);
+    return name;
 }
 
 void MetalCodeGenerator::writeSpecialIntrinsic(const FunctionCall & c, SpecialIntrinsic kind) {
@@ -722,7 +768,8 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
     }
 
     // Explicitly invoke the constructor, passing in the necessary arguments.
-    this->writeType(constructorType);
+    this->writeBaseType(constructorType);
+    this->disallowArrayTypes(constructorType);  // constructors of array types aren't valid exprs
     this->write("(");
     const char* separator = "";
     int scalarCount = 0;
@@ -734,7 +781,7 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
             argType.columns() < constructorType.rows()) {
             // Merge scalars and smaller vectors together.
             if (!scalarCount) {
-                this->writeType(constructorType.componentType());
+                this->writeBaseType(constructorType.componentType());
                 this->write(to_string(constructorType.rows()));
                 this->write("(");
             }
@@ -913,13 +960,6 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
     if (needParens) {
         this->write("(");
     }
-    if (Compiler::IsAssignment(op) && left.is<VariableReference>() &&
-        left.as<VariableReference>().variable()->storage() == Variable::Storage::kParameter &&
-        left.as<VariableReference>().variable()->modifiers().fFlags & Modifiers::kOut_Flag) {
-        // writing to an out parameter. Since we have to turn those into pointers, we have to
-        // dereference it here.
-        this->write("*");
-    }
     if (op == Token::Kind::TK_STAREQ && leftType.isMatrix() && rightType.isMatrix()) {
         this->writeMatrixTimesEqualHelper(leftType, rightType, b.type());
     }
@@ -1059,8 +1099,13 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
                 if (intf.typeName() == "sk_PerVertex") {
                     continue;
                 }
+                if (intf.variable().modifiers().fLayout.fBinding < 0) {
+                    fErrors.error(intf.fOffset,
+                                  "Metal interface blocks must have 'layout(binding=...)'");
+                    return false;
+                }
                 this->write(", constant ");
-                this->writeType(intf.variable().type());
+                this->writeBaseType(intf.variable().type());
                 this->write("& " );
                 this->write(fInterfaceBlockNameMap[&intf]);
                 this->write(" [[buffer(");
@@ -1080,7 +1125,8 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
         }
         separator = ", ";
     } else {
-        this->writeType(f.returnType());
+        this->writeBaseType(f.returnType());
+        this->disallowArrayTypes(f.returnType());  // return types can't be arrays in SkSL/GLSL
         this->write(" ");
         this->writeName(f.name());
         this->write("(");
@@ -1114,25 +1160,14 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
         this->write(separator);
         separator = ", ";
         this->writeModifiers(param->modifiers(), false);
-        std::vector<int> sizes;
         const Type* type = &param->type();
-        while (type->typeKind() == Type::TypeKind::kArray) {
-            sizes.push_back(type->columns());
-            type = &type->componentType();
-        }
-        this->writeType(*type);
+        this->writeBaseType(*type);
         if (param->modifiers().fFlags & Modifiers::kOut_Flag) {
-            this->write("*");
+            this->write("&");
         }
         this->write(" ");
         this->writeName(param->name());
-        for (int s : sizes) {
-            if (s == Type::kUnsizedArray) {
-                this->write("[]");
-            } else {
-                this->write("[" + to_string(s) + "]");
-            }
-        }
+        this->writeArrayDimensions(*type);
     }
     this->write(")");
     return true;
@@ -1183,27 +1218,26 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
     }
 
     fFunctionHeader = "";
-    OutputStream* oldOut = fOut;
     StringStream buffer;
-    fOut = &buffer;
-    fIndentation++;
-    for (const std::unique_ptr<Statement>& stmt : f.body()->as<Block>().children()) {
-        if (!stmt->isEmpty()) {
-            this->writeStatement(*stmt);
-            this->writeLine();
+    {
+        AutoOutputStream outputToBuffer(this, &buffer);
+        fIndentation++;
+        for (const std::unique_ptr<Statement>& stmt : f.body()->as<Block>().children()) {
+            if (!stmt->isEmpty()) {
+                this->writeStatement(*stmt);
+                this->writeLine();
+            }
         }
-    }
-    if (f.declaration().name() == "main") {
-        // If the main function doesn't end with a return, we need to synthesize one here.
-        if (!is_block_ending_with_return(f.body().get())) {
-            this->writeReturnStatementFromMain();
-            this->writeLine("");
+        if (f.declaration().name() == "main") {
+            // If the main function doesn't end with a return, we need to synthesize one here.
+            if (!is_block_ending_with_return(f.body().get())) {
+                this->writeReturnStatementFromMain();
+                this->writeLine("");
+            }
         }
+        fIndentation--;
+        this->writeLine("}");
     }
-    fIndentation--;
-    this->writeLine("}");
-
-    fOut = oldOut;
     this->write(fFunctionHeader);
     this->write(buffer.str());
 }
@@ -1226,12 +1260,12 @@ void MetalCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     this->write("struct ");
     this->writeLine(intf.typeName() + " {");
     const Type* structType = &intf.variable().type();
-    fWrittenStructs.push_back(structType);
-    while (structType->typeKind() == Type::TypeKind::kArray) {
+    if (structType->isArray()) {
         structType = &structType->componentType();
     }
+    fWrittenStructs.push_back(structType);
     fIndentation++;
-    writeFields(structType->fields(), structType->fOffset, &intf);
+    this->writeFields(structType->fields(), structType->fOffset, &intf);
     if (fProgram.fInputs.fRTHeight) {
         this->writeLine("float u_skRTHeight;");
     }
@@ -1240,12 +1274,12 @@ void MetalCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     if (intf.instanceName().size()) {
         this->write(" ");
         this->write(intf.instanceName());
-        for (const auto& size : intf.sizes()) {
+        if (intf.arraySize() > 0) {
             this->write("[");
-            if (size) {
-                this->writeExpression(*size, kTopLevel_Precedence);
-            }
+            this->write(to_string(intf.arraySize()));
             this->write("]");
+        } else if (intf.arraySize() == Type::kUnsizedArray){
+            this->write("[]");
         }
         fInterfaceBlockNameMap[&intf] = intf.instanceName();
     } else {
@@ -1293,22 +1327,11 @@ void MetalCodeGenerator::writeFields(const std::vector<Type::Field>& fields, int
             return;
         }
         currentOffset += fieldSize;
-        std::vector<int> sizes;
-        while (fieldType->typeKind() == Type::TypeKind::kArray) {
-            sizes.push_back(fieldType->columns());
-            fieldType = &fieldType->componentType();
-        }
         this->writeModifiers(field.fModifiers, false);
-        this->writeType(*fieldType);
+        this->writeBaseType(*fieldType);
         this->write(" ");
         this->writeName(field.fName);
-        for (int s : sizes) {
-            if (s == Type::kUnsizedArray) {
-                this->write("[]");
-            } else {
-                this->write("[" + to_string(s) + "]");
-            }
-        }
+        this->writeArrayDimensions(*fieldType);
         this->writeLine(";");
         if (parentIntf) {
             fInterfaceBlockMap[&field] = parentIntf;
@@ -1332,15 +1355,16 @@ void MetalCodeGenerator::writeVarDeclaration(const VarDeclaration& var, bool glo
         return;
     }
     this->writeModifiers(var.var().modifiers(), global);
-    this->writeType(var.baseType());
+    this->writeBaseType(var.baseType());
+    this->disallowArrayTypes(var.baseType());  // `float[2] x` shouldn't be possible (invalid SkSL)
     this->write(" ");
     this->writeName(var.var().name());
-    for (const std::unique_ptr<Expression>& size : var.sizes()) {
+    if (var.arraySize() > 0) {
         this->write("[");
-        if (size) {
-            this->writeExpression(*size, kTopLevel_Precedence);
-        }
+        this->write(to_string(var.arraySize()));
         this->write("]");
+    } else if (var.arraySize() == Type::kUnsizedArray){
+        this->write("[]");
     }
     if (var.value()) {
         this->write(" = ");
@@ -1543,9 +1567,10 @@ void MetalCodeGenerator::writeUniformStruct() {
                     }
                 }
                 this->write("    ");
-                this->writeType(var.type());
+                this->writeBaseType(var.type());
                 this->write(" ");
                 this->writeName(var.name());
+                this->writeArrayDimensions(var.type());
                 this->write(";\n");
             }
         }
@@ -1564,9 +1589,10 @@ void MetalCodeGenerator::writeInputStruct() {
             if (var.modifiers().fFlags & Modifiers::kIn_Flag &&
                 -1 == var.modifiers().fLayout.fBuiltin) {
                 this->write("    ");
-                this->writeType(var.type());
+                this->writeBaseType(var.type());
                 this->write(" ");
                 this->writeName(var.name());
+                this->writeArrayDimensions(var.type());
                 if (-1 != var.modifiers().fLayout.fLocation) {
                     if (fProgram.fKind == Program::kVertex_Kind) {
                         this->write("  [[attribute(" +
@@ -1597,9 +1623,10 @@ void MetalCodeGenerator::writeOutputStruct() {
             if (var.modifiers().fFlags & Modifiers::kOut_Flag &&
                 -1 == var.modifiers().fLayout.fBuiltin) {
                 this->write("    ");
-                this->writeType(var.type());
+                this->writeBaseType(var.type());
                 this->write(" ");
                 this->writeName(var.name());
+                this->writeArrayDimensions(var.type());
 
                 int location = var.modifiers().fLayout.fLocation;
                 if (location < 0) {
@@ -1651,7 +1678,7 @@ void MetalCodeGenerator::writeStructDefinitions() {
             // here, since globals are all embedded in a sub-struct.
             const Type* type = &e->as<GlobalVarDeclaration>().declaration()
                                  ->as<VarDeclaration>().baseType();
-            if (type->typeKind() == Type::TypeKind::kStruct) {
+            if (type->isStruct()) {
                 if (this->writeStructDefinition(*type)) {
                     this->writeLine(";");
                 }
@@ -1663,7 +1690,7 @@ void MetalCodeGenerator::writeStructDefinitions() {
 void MetalCodeGenerator::visitGlobalStruct(GlobalStructVisitor* visitor) {
     // Visit the interface blocks.
     for (const auto& [interfaceType, interfaceName] : fInterfaceBlockNameMap) {
-        visitor->VisitInterfaceBlock(*interfaceType, interfaceName);
+        visitor->visitInterfaceBlock(*interfaceType, interfaceName);
     }
     for (const ProgramElement* element : fProgram.elements()) {
         if (!element->is<GlobalVarDeclaration>()) {
@@ -1676,11 +1703,11 @@ void MetalCodeGenerator::visitGlobalStruct(GlobalStructVisitor* visitor) {
             var.type().typeKind() == Type::TypeKind::kSampler) {
             if (var.type().typeKind() == Type::TypeKind::kSampler) {
                 // Samplers are represented as a "texture/sampler" duo in the global struct.
-                visitor->VisitTexture(var.type(), var.name());
-                visitor->VisitSampler(var.type(), String(var.name()) + SAMPLER_SUFFIX);
+                visitor->visitTexture(var.type(), var.name());
+                visitor->visitSampler(var.type(), String(var.name()) + SAMPLER_SUFFIX);
             } else {
                 // Visit a regular variable.
-                visitor->VisitVariable(var, decl.value().get());
+                visitor->visitVariable(var, decl.value().get());
             }
         }
     }
@@ -1689,45 +1716,47 @@ void MetalCodeGenerator::visitGlobalStruct(GlobalStructVisitor* visitor) {
 void MetalCodeGenerator::writeGlobalStruct() {
     class : public GlobalStructVisitor {
     public:
-        void VisitInterfaceBlock(const InterfaceBlock& block, const String& blockName) override {
-            this->AddElement();
+        void visitInterfaceBlock(const InterfaceBlock& block, const String& blockName) override {
+            this->addElement();
             fCodeGen->write("    constant ");
             fCodeGen->write(block.typeName());
             fCodeGen->write("* ");
             fCodeGen->writeName(blockName);
             fCodeGen->write(";\n");
         }
-        void VisitTexture(const Type& type, const String& name) override {
-            this->AddElement();
+        void visitTexture(const Type& type, const String& name) override {
+            this->addElement();
             fCodeGen->write("    ");
-            fCodeGen->writeType(type);
+            fCodeGen->writeBaseType(type);
             fCodeGen->write(" ");
             fCodeGen->writeName(name);
+            fCodeGen->writeArrayDimensions(type);
             fCodeGen->write(";\n");
         }
-        void VisitSampler(const Type&, const String& name) override {
-            this->AddElement();
+        void visitSampler(const Type&, const String& name) override {
+            this->addElement();
             fCodeGen->write("    sampler ");
             fCodeGen->writeName(name);
             fCodeGen->write(";\n");
         }
-        void VisitVariable(const Variable& var, const Expression* value) override {
-            this->AddElement();
+        void visitVariable(const Variable& var, const Expression* value) override {
+            this->addElement();
             fCodeGen->write("    ");
-            fCodeGen->writeType(var.type());
+            fCodeGen->writeBaseType(var.type());
             fCodeGen->write(" ");
             fCodeGen->writeName(var.name());
+            fCodeGen->writeArrayDimensions(var.type());
             fCodeGen->write(";\n");
         }
-        void AddElement() {
+        void addElement() {
             if (fFirst) {
                 fCodeGen->write("struct Globals {\n");
                 fFirst = false;
             }
         }
-        void Finish() {
+        void finish() {
             if (!fFirst) {
-                fCodeGen->write("};");
+                fCodeGen->writeLine("};");
                 fFirst = true;
             }
         }
@@ -1738,35 +1767,35 @@ void MetalCodeGenerator::writeGlobalStruct() {
 
     visitor.fCodeGen = this;
     this->visitGlobalStruct(&visitor);
-    visitor.Finish();
+    visitor.finish();
 }
 
 void MetalCodeGenerator::writeGlobalInit() {
     class : public GlobalStructVisitor {
     public:
-        void VisitInterfaceBlock(const InterfaceBlock& blockType,
+        void visitInterfaceBlock(const InterfaceBlock& blockType,
                                  const String& blockName) override {
-            this->AddElement();
+            this->addElement();
             fCodeGen->write("&");
             fCodeGen->writeName(blockName);
         }
-        void VisitTexture(const Type&, const String& name) override {
-            this->AddElement();
+        void visitTexture(const Type&, const String& name) override {
+            this->addElement();
             fCodeGen->writeName(name);
         }
-        void VisitSampler(const Type&, const String& name) override {
-            this->AddElement();
+        void visitSampler(const Type&, const String& name) override {
+            this->addElement();
             fCodeGen->writeName(name);
         }
-        void VisitVariable(const Variable& var, const Expression* value) override {
-            this->AddElement();
+        void visitVariable(const Variable& var, const Expression* value) override {
+            this->addElement();
             if (value) {
                 fCodeGen->writeVarInitializer(var, *value);
             } else {
                 fCodeGen->write("{}");
             }
         }
-        void AddElement() {
+        void addElement() {
             if (fFirst) {
                 fCodeGen->write("    Globals globalStruct{");
                 fFirst = false;
@@ -1774,7 +1803,7 @@ void MetalCodeGenerator::writeGlobalInit() {
                 fCodeGen->write(", ");
             }
         }
-        void Finish() {
+        void finish() {
             if (!fFirst) {
                 fCodeGen->writeLine("};");
                 fCodeGen->writeLine("    thread Globals* _globals = &globalStruct;");
@@ -1787,7 +1816,7 @@ void MetalCodeGenerator::writeGlobalInit() {
 
     visitor.fCodeGen = this;
     this->visitGlobalStruct(&visitor);
-    visitor.Finish();
+    visitor.finish();
 }
 
 void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
@@ -1991,26 +2020,29 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Function
 }
 
 bool MetalCodeGenerator::generateCode() {
-    OutputStream* rawOut = fOut;
-    fOut = &fHeader;
     fProgramKind = fProgram.fKind;
-    this->writeHeader();
-    this->writeStructDefinitions();
-    this->writeUniformStruct();
-    this->writeInputStruct();
-    this->writeOutputStruct();
-    this->writeInterfaceBlocks();
-    this->writeGlobalStruct();
-    StringStream body;
-    fOut = &body;
-    for (const ProgramElement* e : fProgram.elements()) {
-        this->writeProgramElement(*e);
-    }
-    fOut = rawOut;
 
-    write_stringstream(fHeader, *rawOut);
-    write_stringstream(fExtraFunctions, *rawOut);
-    write_stringstream(body, *rawOut);
+    StringStream header;
+    {
+        AutoOutputStream outputToHeader(this, &header, &fIndentation);
+        this->writeHeader();
+        this->writeStructDefinitions();
+        this->writeUniformStruct();
+        this->writeInputStruct();
+        this->writeOutputStruct();
+        this->writeInterfaceBlocks();
+        this->writeGlobalStruct();
+    }
+    StringStream body;
+    {
+        AutoOutputStream outputToBody(this, &body, &fIndentation);
+        for (const ProgramElement* e : fProgram.elements()) {
+            this->writeProgramElement(*e);
+        }
+    }
+    write_stringstream(header, *fOut);
+    write_stringstream(fExtraFunctions, *fOut);
+    write_stringstream(body, *fOut);
     return 0 == fErrors.errorCount();
 }
 

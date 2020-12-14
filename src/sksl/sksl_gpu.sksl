@@ -1,6 +1,7 @@
 // defines built-in functions supported by SkSL when running on a GPU
 
 $genType radians($genType degrees);
+$genType degrees($genType radians);
 $genType sin($genType angle);
 $genType cos($genType angle);
 $genType tan($genType angle);
@@ -21,6 +22,7 @@ $genType exp2($genType x);
 $genType log2($genType x);
 $genType sqrt($genType x);
 $genHType radians($genHType degrees);
+$genHType degrees($genHType radians);
 $genHType sin($genHType angle);
 $genHType cos($genHType angle);
 $genHType tan($genHType angle);
@@ -41,6 +43,7 @@ $genHType exp2($genHType x);
 $genHType log2($genHType x);
 $genHType sqrt($genHType x);
 $genType inversesqrt($genType x);
+$genHType inversesqrt($genHType x);
 $genType abs($genType x);
 $genHType abs($genHType x);
 $genIType abs($genIType x);
@@ -109,7 +112,9 @@ $genType uintBitsTofloat($genUType value);
 $genType fma($genType a, $genType b, $genType c);
 $genHType fma($genHType a, $genHType b, $genHType c);
 sk_has_side_effects $genType frexp($genType x, out $genIType exp);
+sk_has_side_effects $genHType frexp($genHType x, out $genIType exp);
 $genType ldexp($genType x, in $genIType exp);
+$genHType ldexp($genHType x, in $genIType exp);
 uint packUnorm2x16(float2 v);
 uint packSnorm2x16(float2 v);
 uint packUnorm4x8(float4 v);
@@ -235,30 +240,30 @@ $genIType findLSB($genUType value);
 $genIType findMSB($genIType value);
 $genIType findMSB($genUType value);
 
-sampler2D makeSampler2D(texture2D texture, sampler sampler);
-int2 textureSize($gsampler2DRect sampler);
+sampler2D makeSampler2D(texture2D texture, sampler s);
+int2 textureSize($gsampler2DRect s);
 
-half4 sample($gsampler1D sampler, float P);
-half4 sample($gsampler1D sampler, float P, float bias);
-half4 sample($gsampler2D sampler, float2 P);
+half4 sample($gsampler1D s, float P);
+half4 sample($gsampler1D s, float P, float bias);
+half4 sample($gsampler2D s, float2 P);
 // The above currently only expand to handle the float/fixed case. So we also declare this integer
 // version of sample().
-int4 sample(isampler2D sampler, float2 P);
-half4 sample(samplerExternalOES sampler, float2 P, float bias);
-half4 sample(samplerExternalOES sampler, float2 P);
+int4 sample(isampler2D s, float2 P);
+half4 sample(samplerExternalOES s, float2 P, float bias);
+half4 sample(samplerExternalOES s, float2 P);
 
-half4 sample($gsampler2DRect sampler, float2 P);
-half4 sample($gsampler2DRect sampler, float3 P);
+half4 sample($gsampler2DRect s, float2 P);
+half4 sample($gsampler2DRect s, float3 P);
 
 // Currently we do not support the generic types of loading subpassInput so we have some explicit
 // versions that we currently use
 half4 subpassLoad(subpassInput subpass);
 half4 subpassLoad(subpassInputMS subpass, int sample);
 
-half4 sample($gsampler1D sampler, float2 P);
-half4 sample($gsampler1D sampler, float2 P, float bias);
-half4 sample($gsampler2D sampler, float3 P);
-half4 sample($gsampler2D sampler, float3 P, float bias);
+half4 sample($gsampler1D s, float2 P);
+half4 sample($gsampler1D s, float2 P, float bias);
+half4 sample($gsampler2D s, float3 P);
+half4 sample($gsampler2D s, float3 P, float bias);
 
 float4 imageLoad(image2D image, int2 P);
 int4 imageLoad(iimage2D image, int2 P);

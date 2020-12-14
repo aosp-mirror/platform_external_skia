@@ -20,6 +20,7 @@
 
 class SkCanvas;
 class SkSVGLength;
+class SkSVGTextContext;
 
 class SkSVGLengthContext {
 public:
@@ -61,16 +62,18 @@ class SkSVGRenderContext {
 public:
     SkSVGRenderContext(SkCanvas*, const sk_sp<SkFontMgr>&, const SkSVGIDMapper&,
                        const SkSVGLengthContext&, const SkSVGPresentationContext&,
-                       const SkSVGNode*);
+                       SkSVGTextContext*, const SkSVGNode*);
     SkSVGRenderContext(const SkSVGRenderContext&);
     SkSVGRenderContext(const SkSVGRenderContext&, SkCanvas*);
     SkSVGRenderContext(const SkSVGRenderContext&, const SkSVGNode*);
+    SkSVGRenderContext(const SkSVGRenderContext&, SkSVGTextContext&);
     ~SkSVGRenderContext();
 
     const SkSVGLengthContext& lengthContext() const { return *fLengthContext; }
     SkSVGLengthContext* writableLengthContext() { return fLengthContext.writable(); }
 
     const SkSVGPresentationContext& presentationContext() const { return *fPresentationContext; }
+    SkSVGTextContext* textContext() const { return fTextContext; }
 
     SkCanvas* canvas() const { return fCanvas; }
     void saveOnce();
@@ -129,6 +132,9 @@ public:
         return fFontMgr ? fFontMgr : SkFontMgr::RefDefault();
     }
 
+    SkSVGXmlSpace getXmlSpace() const { return fXmlSpace; }
+    void setXmlSpace(SkSVGXmlSpace xs) { fXmlSpace = xs; }
+
 private:
     // Stack-only
     void* operator new(size_t)                               = delete;
@@ -144,6 +150,7 @@ private:
     const SkSVGIDMapper&                          fIDMapper;
     SkTCopyOnFirstWrite<SkSVGLengthContext>       fLengthContext;
     SkTCopyOnFirstWrite<SkSVGPresentationContext> fPresentationContext;
+    SkSVGTextContext*                             fTextContext;
     SkCanvas*                                     fCanvas;
     // The save count on 'fCanvas' at construction time.
     // A restoreToCount() will be issued on destruction.
@@ -151,6 +158,8 @@ private:
 
     // clipPath, if present for the current context (not inherited).
     SkTLazy<SkPath>                               fClipPath;
+
+    SkSVGXmlSpace                                 fXmlSpace = SkSVGXmlSpace::kDefault;
 
     const SkSVGNode* fNode;
 };

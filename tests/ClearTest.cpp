@@ -266,8 +266,11 @@ static void clear_op_test(skiatest::Reporter* reporter, GrDirectContext* dContex
 
             const GrClearOp& clearOp = ops->getChain(0)->cast<GrClearOp>();
 
-            REPORTER_ASSERT(reporter, clearOp.color() == SK_PMColor4fBLACK);
+            constexpr std::array<float, 4> kExpected { 0, 0, 0, 1 };
+            REPORTER_ASSERT(reporter, clearOp.color() == kExpected);
             REPORTER_ASSERT(reporter, clearOp.stencilInsideMask());
+
+            dContext->flushAndSubmit();
         }
 
         // Try combining a pure-stencil clear w/ a combined stencil & color clear
@@ -289,8 +292,11 @@ static void clear_op_test(skiatest::Reporter* reporter, GrDirectContext* dContex
 
             const GrClearOp& clearOp = ops->getChain(0)->cast<GrClearOp>();
 
-            REPORTER_ASSERT(reporter, clearOp.color() == SK_PMColor4fWHITE);
+            constexpr std::array<float, 4> kExpected { 1, 1, 1, 1 };
+            REPORTER_ASSERT(reporter, clearOp.color() == kExpected);
             REPORTER_ASSERT(reporter, !clearOp.stencilInsideMask());
+
+            dContext->flushAndSubmit();
         }
     }
 }

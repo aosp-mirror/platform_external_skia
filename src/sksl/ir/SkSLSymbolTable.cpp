@@ -8,6 +8,7 @@
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
 #include "src/sksl/ir/SkSLSymbolAlias.h"
+#include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 
 namespace SkSL {
@@ -118,6 +119,19 @@ void SymbolTable::addWithoutOwnership(const Symbol* symbol) {
         refInSymbolTable = this->takeOwnershipOfSymbol(
                 std::make_unique<UnresolvedFunction>(std::move(functions)));
     }
+}
+
+const Type* SymbolTable::addArrayDimension(const Type* type, int arraySize) {
+    if (arraySize != 0) {
+        String baseName = type->name();
+        String arrayName = (arraySize != Type::kUnsizedArray)
+                                   ? String::printf("%s[%d]", baseName.c_str(), arraySize)
+                                   : String::printf("%s[]", baseName.c_str());
+        type = this->takeOwnershipOfSymbol(std::make_unique<Type>(std::move(arrayName),
+                                                                  Type::TypeKind::kArray,
+                                                                  *type, arraySize));
+    }
+    return type;
 }
 
 }  // namespace SkSL

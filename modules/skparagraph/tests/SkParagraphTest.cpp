@@ -1913,9 +1913,7 @@ DEF_TEST(SkParagraph_DecorationsParagraph, reporter) {
     }
 }
 
-DEF_TEST(SkParagraph_WavyDecorationParagraph, reporter) {
-    SkDebugf("TODO: Add test for wavy decorations\n");
-}
+// TODO: Add test for wavy decorations.
 
 DEF_TEST(SkParagraph_ItalicsParagraph, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
@@ -3623,10 +3621,6 @@ DEF_TEST(SkParagraph_EmojiMultiLineRectsParagraph, reporter) {
     result = paragraph->getRectsForRange(0, pos, rect_height_style, rect_width_style);
     REPORTER_ASSERT(reporter, result.size() == 2);
     canvas.drawRects(SK_ColorGREEN, result);
-}
-
-DEF_TEST(SkParagraph_HyphenBreakParagraph, reporter) {
-    SkDebugf("Hyphens are not implemented, and will not be implemented soon.\n");
 }
 
 // Checked: DIFF (line breaking)
@@ -5641,4 +5635,36 @@ DEF_TEST(SkParagraph_NoCache1, reporter) {
 
     // Make sure that different strings are not flagged as editing
     test("different strings", "0123456789 0123456789 0123456789 0123456789 0123456789", false);
+}
+
+DEF_TEST(SkParagraph_HeightCalculations, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_HeightCalculations.png");
+
+    auto draw = [&](TextHeightBehavior hb, const char* text, SkScalar height) {
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextHeightBehavior(hb);
+
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(14.0f);
+        text_style.setHeight(5.0f);
+        text_style.setHeightOverride(true);
+        text_style.setColor(SK_ColorBLACK);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+
+        auto paragraph = builder.Build();
+        paragraph->layout(500);
+        paragraph->paint(canvas.get(), 0, 0);
+        canvas.get()->translate(0, paragraph->getHeight());
+        REPORTER_ASSERT(reporter, SkScalarNearlyEqual(paragraph->getHeight(), height));
+    };
+
+    draw(TextHeightBehavior::kAll, "Hello\nLine 2\nLine 3", 210);
+    draw(TextHeightBehavior::kDisableAll, "Hello\nLine 2\nLine 3", 157);
+    draw(TextHeightBehavior::kDisableFirstAscent, "Hello", 28);
 }

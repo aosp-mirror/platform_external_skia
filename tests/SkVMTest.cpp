@@ -1774,12 +1774,16 @@ DEF_TEST(SkVM_Assembler, r) {
         a.fcvtns4s(A::v4, A::v3);
         a.frintp4s(A::v4, A::v3);
         a.frintm4s(A::v4, A::v3);
+        a.fcvtn   (A::v4, A::v3);
+        a.fcvtl   (A::v4, A::v3);
     },{
         0x64,0xd8,0x21,0x4e,
         0x64,0xb8,0xa1,0x4e,
         0x64,0xa8,0x21,0x4e,
         0x64,0x88,0xa1,0x4e,
         0x64,0x98,0x21,0x4e,
+        0x64,0x68,0x21,0x0e,
+        0x64,0x78,0x21,0x0e,
     });
 
     test_asm(r, [&](A& a) {
@@ -1988,17 +1992,29 @@ DEF_TEST(SkVM_Assembler, r) {
         a.ldrs(A::x0, A::x1, 3);   // ldr  w0, [x1, #12]
         a.ldrh(A::x0, A::x1, 3);   // ldrh w0, [x1, #6]
         a.ldrb(A::x0, A::x1, 3);   // ldrb w0, [x1, #3]
+
+        a.strs(A::x0, A::x1, 3);   // str  w0, [x1, #12]
     },{
         0x20,0x0c,0x40,0xf9,
         0x20,0x0c,0x40,0xb9,
         0x20,0x0c,0x40,0x79,
         0x20,0x0c,0x40,0x39,
+
+        0x20,0x0c,0x00,0xb9,
     });
 
     test_asm(r, [&](A& a) {
-        a.tbl(A::v0, A::v1, A::v2);
+        a.tbl   (A::v0, A::v1, A::v2);
+        a.uzp14s(A::v0, A::v1, A::v2);
+        a.uzp24s(A::v0, A::v1, A::v2);
+        a.zip14s(A::v0, A::v1, A::v2);
+        a.zip24s(A::v0, A::v1, A::v2);
     },{
         0x20,0x00,0x02,0x4e,
+        0x20,0x18,0x82,0x4e,
+        0x20,0x58,0x82,0x4e,
+        0x20,0x38,0x82,0x4e,
+        0x20,0x78,0x82,0x4e,
     });
 }
 
@@ -2345,6 +2361,58 @@ DEF_TEST(SkVM_64bit, r) {
             }
         });
     }
+}
+
+DEF_TEST(SkVM_128bit, r) {
+    float   floats[4*63];
+    uint8_t packed[4*63];
+
+    for (int i = 0; i < 4*63; i++) {
+        floats[i] = i * (1/255.0f);
+    }
+
+    skvm::PixelFormat rgba_ffff,
+                      rgba_8888;
+    skvm::SkColorType_to_PixelFormat(kRGBA_F32_SkColorType , &rgba_ffff);
+    skvm::SkColorType_to_PixelFormat(kRGBA_8888_SkColorType, &rgba_8888);
+
+    {  // Convert RGBA F32 to RGBA 8888, testing 128-bit loads.
+        skvm::Builder b;
+        {
+            skvm::Arg dst = b.arg( 4),
+                      src = b.arg(16);
+
+            skvm::Color c = b.load(rgba_ffff, src);
+            b.store(rgba_8888, dst, c);
+        }
+        test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+            memset(packed, 0, sizeof(packed));
+            program.eval(63, packed, floats);
+            for (int i = 0; i < 4*63; i++) {
+                REPORTER_ASSERT(r, packed[i] == i);
+            }
+        });
+    }
+
+
+    {  // Convert RGBA 8888 to RGBA F32, testing 128-bit stores.
+        skvm::Builder b;
+        {
+            skvm::Arg dst = b.arg(16),
+                      src = b.arg( 4);
+
+            skvm::Color c = b.load(rgba_8888, src);
+            b.store(rgba_ffff, dst, c);
+        }
+        test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+            memset(floats, 0, sizeof(floats));
+            program.eval(63, floats, packed);
+            for (int i = 0; i < 4*63; i++) {
+                REPORTER_ASSERT(r, floats[i] == i * (1/255.0f));
+            }
+        });
+    }
+
 }
 
 DEF_TEST(SkVM_is_NaN_is_finite, r) {

@@ -118,8 +118,9 @@ bool SkImage_GpuBase::getROPixels(GrDirectContext* dContext,
     GrColorType grColorType = SkColorTypeAndFormatToGrColorType(
             fContext->priv().caps(), this->colorType(), view->proxy()->backendFormat());
 
-    auto sContext = GrSurfaceContext::Make(dContext, *view, grColorType, this->alphaType(),
-                                           this->refColorSpace());
+    auto sContext = GrSurfaceContext::Make(dContext,
+                                           *view,
+                                           {grColorType, this->alphaType(), this->refColorSpace()});
     if (!sContext) {
         return false;
     }
@@ -174,8 +175,8 @@ bool SkImage_GpuBase::onReadPixels(GrDirectContext* dContext,
     GrColorType grColorType = SkColorTypeAndFormatToGrColorType(
             dContext->priv().caps(), this->colorType(), view->proxy()->backendFormat());
 
-    auto sContext = GrSurfaceContext::Make(dContext, *view, grColorType, this->alphaType(),
-                                           this->refColorSpace());
+    GrColorInfo colorInfo(grColorType, this->alphaType(), this->refColorSpace());
+    auto sContext = GrSurfaceContext::Make(dContext, *view, colorInfo);
     if (!sContext) {
         return false;
     }
@@ -261,75 +262,6 @@ bool SkImage_GpuBase::onIsValid(GrRecordingContext* context) const {
         return false;
     }
 
-    return true;
-}
-
-bool SkImage_GpuBase::MakeTempTextureProxies(GrRecordingContext* rContext,
-                                             const GrBackendTexture yuvaTextures[],
-                                             int numTextures,
-                                             const SkYUVAIndex yuvaIndices[4],
-                                             GrSurfaceOrigin imageOrigin,
-                                             GrSurfaceProxyView tempViews[4],
-                                             sk_sp<GrRefCntedCallback> releaseHelper) {
-    GrProxyProvider* proxyProvider = rContext->priv().proxyProvider();
-    for (int textureIndex = 0; textureIndex < numTextures; ++textureIndex) {
-        const GrBackendFormat& backendFormat = yuvaTextures[textureIndex].getBackendFormat();
-        if (!backendFormat.isValid()) {
-            return false;
-        }
-
-        SkASSERT(yuvaTextures[textureIndex].isValid());
-
-        auto proxy = proxyProvider->wrapBackendTexture(yuvaTextures[textureIndex],
-                                                       kBorrow_GrWrapOwnership,
-                                                       GrWrapCacheable::kNo, kRead_GrIOType,
-                                                       releaseHelper);
-        if (!proxy) {
-            return false;
-        }
-        tempViews[textureIndex] =
-                GrSurfaceProxyView(std::move(proxy), imageOrigin, GrSwizzle("rgba"));
-
-        // Check that each texture contains the channel data for the corresponding YUVA index
-        auto formatChannelMask = backendFormat.channelMask();
-        if (formatChannelMask & kGray_SkColorChannelFlag) {
-            formatChannelMask |= kRGB_SkColorChannelFlags;
-        }
-        for (int yuvaIndex = 0; yuvaIndex < SkYUVAIndex::kIndexCount; ++yuvaIndex) {
-            if (yuvaIndices[yuvaIndex].fIndex == textureIndex) {
-                uint32_t channelAsMask = 1 << static_cast<int>(yuvaIndices[yuvaIndex].fChannel);
-                if (!(channelAsMask & formatChannelMask)) {
-                    return false;
-                }
-            }
-        }
-    }
-
-    return true;
-}
-
-bool SkImage_GpuBase::RenderYUVAToRGBA(const GrCaps& caps,
-                                       GrRenderTargetContext* renderTargetContext,
-                                       const SkRect& rect, SkYUVColorSpace yuvColorSpace,
-                                       sk_sp<GrColorSpaceXform> colorSpaceXform,
-                                       GrSurfaceProxyView views[4],
-                                       const SkYUVAIndex yuvaIndices[4]) {
-    SkASSERT(renderTargetContext);
-    if (!renderTargetContext->asSurfaceProxy()) {
-        return false;
-    }
-
-    GrPaint paint;
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-
-    auto fp = GrYUVtoRGBEffect::Make(views, yuvaIndices, yuvColorSpace,
-                                     GrSamplerState::Filter::kNearest, caps);
-    if (colorSpaceXform) {
-        fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(colorSpaceXform));
-    }
-    paint.setColorFragmentProcessor(std::move(fp));
-
-    renderTargetContext->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(), rect);
     return true;
 }
 

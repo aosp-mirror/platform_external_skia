@@ -8,38 +8,71 @@
 #ifndef SkSVGText_DEFINED
 #define SkSVGText_DEFINED
 
-#include "include/utils/SkTextUtils.h"
-#include "modules/svg/include/SkSVGTransformableNode.h"
+#include "modules/svg/include/SkSVGContainer.h"
 #include "modules/svg/include/SkSVGTypes.h"
 
-class SkRRect;
+// Base class for nestable text containers (<text>, <tspan>, etc).
+class SkSVGTextContainer : public SkSVGContainer {
+public:
+    // TODO: these should be arrays
+    SVG_ATTR(X, SkSVGLength, SkSVGLength(0))
+    SVG_ATTR(Y, SkSVGLength, SkSVGLength(0))
 
-class SkSVGText final : public SkSVGTransformableNode {
- public:
-  ~SkSVGText() override = default;
-  static sk_sp<SkSVGText> Make() {
-    return sk_sp<SkSVGText>(new SkSVGText()); }
+    SVG_ATTR(XmlSpace, SkSVGXmlSpace, SkSVGXmlSpace::kDefault)
 
-  SVG_ATTR(X   , SkSVGLength    , SkSVGLength(0))
-  SVG_ATTR(Y   , SkSVGLength    , SkSVGLength(0))
-  SVG_ATTR(Text, SkSVGStringType, SkSVGStringType())
+protected:
+    explicit SkSVGTextContainer(SkSVGTag t) : INHERITED(t) {}
 
- protected:
-  void onSetAttribute(SkSVGAttribute, const SkSVGValue&) override;
+private:
+    void appendChild(sk_sp<SkSVGNode>) final;
+    bool onPrepareToRender(SkSVGRenderContext*) const final;
 
-  void onRender(const SkSVGRenderContext&) const override;
-  void appendChild(sk_sp<SkSVGNode>) override;
+    bool parseAndSetAttribute(const char*, const char*) override;
 
-  SkPath onAsPath(const SkSVGRenderContext&) const override;
+    using INHERITED = SkSVGContainer;
+};
 
-  void loadFont();
+class SkSVGText final : public SkSVGTextContainer {
+public:
+    static sk_sp<SkSVGText> Make() { return sk_sp<SkSVGText>(new SkSVGText()); }
 
- private:
-  SkSVGText();
+private:
+    SkSVGText() : INHERITED(SkSVGTag::kText) {}
 
-  SkFont resolveFont(const SkSVGRenderContext&) const;
+    void onRender(const SkSVGRenderContext&) const override;
 
-  using INHERITED = SkSVGTransformableNode;
+    using INHERITED = SkSVGTextContainer;
+};
+
+class SkSVGTSpan final : public SkSVGTextContainer {
+public:
+    static sk_sp<SkSVGTSpan> Make() { return sk_sp<SkSVGTSpan>(new SkSVGTSpan()); }
+
+private:
+    SkSVGTSpan() : INHERITED(SkSVGTag::kTSpan) {}
+
+    using INHERITED = SkSVGTextContainer;
+};
+
+class SkSVGTextLiteral final : public SkSVGNode {
+public:
+    ~SkSVGTextLiteral() override;
+
+    static sk_sp<SkSVGTextLiteral> Make() {
+        return sk_sp<SkSVGTextLiteral>(new SkSVGTextLiteral());
+    }
+
+    SVG_ATTR(Text, SkSVGStringType, SkSVGStringType())
+
+private:
+    SkSVGTextLiteral() : INHERITED(SkSVGTag::kTextLiteral) {}
+
+    void onRender(const SkSVGRenderContext&) const override;
+    SkPath onAsPath(const SkSVGRenderContext&) const override;
+
+    void appendChild(sk_sp<SkSVGNode>) override {}
+
+    using INHERITED = SkSVGNode;
 };
 
 #endif  // SkSVGText_DEFINED

@@ -1368,6 +1368,10 @@ SkPath& SkPath::addPath(const SkPath& srcPath, const SkMatrix& matrix, AddPathMo
         if (int numWeights = src->fPathRef->countWeights()) {
             memcpy(newWeights, src->fPathRef->conicWeights(), numWeights * sizeof(newWeights[0]));
         }
+        // fiddle with fLastMoveToIndex, as we do in SkPath::close()
+        if ((SkPathVerb)fPathRef->verbsEnd()[-1] == SkPathVerb::kClose) {
+            fLastMoveToIndex ^= ~fLastMoveToIndex >> (8 * sizeof(fLastMoveToIndex) - 1);
+        }
         return this->dirtyAfterEdit();
     }
 
@@ -1889,9 +1893,9 @@ static void append_params(SkString* str, const char label[], const SkPoint pts[]
     str->append("\n");
 }
 
-void SkPath::dump(SkWStream* wStream, bool forceClose, bool dumpAsHex) const {
+void SkPath::dump(SkWStream* wStream, bool dumpAsHex) const {
     SkScalarAsStringType asType = dumpAsHex ? kHex_SkScalarAsStringType : kDec_SkScalarAsStringType;
-    Iter    iter(*this, forceClose);
+    Iter    iter(*this, false);
     SkPoint pts[4];
     Verb    verb;
 
@@ -1939,14 +1943,75 @@ void SkPath::dump(SkWStream* wStream, bool forceClose, bool dumpAsHex) const {
     }
 }
 
-void SkPath::dump() const {
-    this->dump(nullptr, false, false);
-}
+void SkPath::dumpArrays(SkWStream* wStream, bool dumpAsHex) const {
+    SkString builder;
 
-void SkPath::dumpHex() const {
-    this->dump(nullptr, false, true);
-}
+    auto bool_str = [](bool v) { return v ? "true" : "false"; };
 
+    builder.appendf("// fBoundsIsDirty = %s\n", bool_str(fPathRef->fBoundsIsDirty));
+    builder.appendf("// fGenerationID = %d\n", fPathRef->fGenerationID);
+    builder.appendf("// fSegmentMask = %d\n", fPathRef->fSegmentMask);
+    builder.appendf("// fIsOval = %s\n", bool_str(fPathRef->fIsOval));
+    builder.appendf("// fIsRRect = %s\n", bool_str(fPathRef->fIsRRect));
+
+    auto append_scalar = [&](SkScalar v) {
+        if (dumpAsHex) {
+            builder.appendf("SkBits2Float(0x%08X) /* %g */", SkFloat2Bits(v), v);
+        } else {
+            builder.appendf("%g", v);
+        }
+    };
+
+    builder.append("const SkPoint path_points[] = {\n");
+    for (int i = 0; i < this->countPoints(); ++i) {
+        SkPoint p = this->getPoint(i);
+        builder.append("    { ");
+        append_scalar(p.fX);
+        builder.append(", ");
+        append_scalar(p.fY);
+        builder.append(" },\n");
+    }
+    builder.append("};\n");
+
+    const char* gVerbStrs[] = {
+        "Move", "Line", "Quad", "Conic", "Cubic", "Close"
+    };
+    builder.append("const uint8_t path_verbs[] = {\n    ");
+    for (auto v = fPathRef->verbsBegin(); v != fPathRef->verbsEnd(); ++v) {
+        builder.appendf("(uint8_t)SkPathVerb::k%s, ", gVerbStrs[*v]);
+    }
+    builder.append("\n};\n");
+
+    const int nConics = fPathRef->conicWeightsEnd() - fPathRef->conicWeights();
+    if (nConics) {
+        builder.append("const SkScalar path_conics[] = {\n    ");
+        for (auto c = fPathRef->conicWeights(); c != fPathRef->conicWeightsEnd(); ++c) {
+            append_scalar(*c);
+            builder.append(", ");
+        }
+        builder.append("\n};\n");
+    }
+
+    char const * const gFillTypeStrs[] = {
+        "Winding",
+        "EvenOdd",
+        "InverseWinding",
+        "InverseEvenOdd",
+    };
+
+    builder.appendf("SkPath path = SkPath::Make(path_points, %d, path_verbs, %d, %s, %d,\n",
+                    this->countPoints(), this->countVerbs(),
+                    nConics ? "path_conics" : "nullptr", nConics);
+    builder.appendf("                           SkPathFillType::k%s, %s);\n",
+                    gFillTypeStrs[(int)this->getFillType()],
+                    bool_str(fIsVolatile));
+
+    if (wStream) {
+        wStream->writeText(builder.c_str());
+    } else {
+        SkDebugf("%s\n", builder.c_str());
+    }
+}
 
 bool SkPath::isValidImpl() const {
     if ((fFillType & ~3) != 0) {

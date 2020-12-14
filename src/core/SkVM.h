@@ -286,7 +286,9 @@ namespace skvm {
                        sub8h,  mul8h,
               fadd4s, fsub4s, fmul4s, fdiv4s, fmin4s, fmax4s,
               fcmeq4s, fcmgt4s, fcmge4s,
-              tbl;
+              tbl,
+              uzp14s, uzp24s,
+              zip14s, zip24s;
 
         // TODO: there are also float ==,<,<=,>,>= instructions with an immediate 0.0f,
         // and the register comparison > and >= can also compare absolute values.  Interesting.
@@ -313,6 +315,8 @@ namespace skvm {
              fcvtns4s,  // round float -> int  (nearest even)
              frintp4s,  // round float -> int as float, toward plus infinity  (ceil)
              frintm4s,  // round float -> int as float, toward minus infinity (floor)
+             fcvtn,     // f32 -> f16 in low half
+             fcvtl,     // f16 in low half -> f32
              xtns2h,    // u32 -> u16
              xtnh2b,    // u16 -> u8
              uxtlb2h,   // u8 -> u16    (TODO: this is a special case of ushll.8h)
@@ -357,6 +361,8 @@ namespace skvm {
         void ldrs(V dst, X src, int imm12=0);  //  32-bit dst = *(src+imm12*4)
         void ldrh(V dst, X src, int imm12=0);  //  16-bit dst = *(src+imm12*2)
         void ldrb(V dst, X src, int imm12=0);  //   8-bit dst = *(src+imm12)
+
+        void strs(X src, X dst, int imm12=0);  // 32-bit *(dst+imm12*4) = src
 
         void strq(V src, X dst, int imm12=0);  // 128-bit *(dst+imm12*16) = src
         void strd(V src, X dst, int imm12=0);  //  64-bit *(dst+imm12*8)  = src
@@ -718,12 +724,6 @@ namespace skvm {
         I32   to_fp16(F32 x);
         F32 from_fp16(I32 x);
 
-        F32 norm(F32 x, F32 y) {
-            return sqrt(add(mul(x,x),
-                            mul(y,y)));
-        }
-        F32 norm(F32a x, F32a y) { return norm(_(x), _(y)); }
-
         I32  eq(F32, F32);  I32  eq(F32a x, F32a y) { return  eq(_(x), _(y)); }
         I32 neq(F32, F32);  I32 neq(F32a x, F32a y) { return neq(_(x), _(y)); }
         I32 lt (F32, F32);  I32 lt (F32a x, F32a y) { return lt (_(x), _(y)); }
@@ -1060,9 +1060,6 @@ namespace skvm {
     static inline F32 clamp(F32   x, F32a  lo, F32a hi) { return  x->clamp(x,lo,hi); }
     static inline F32 clamp(float x, F32   lo, F32a hi) { return lo->clamp(x,lo,hi); }
     static inline F32 clamp(float x, float lo, F32  hi) { return hi->clamp(x,lo,hi); }
-
-    static inline F32 norm(F32   x, F32a y) { return x->norm(x,y); }
-    static inline F32 norm(float x, F32  y) { return y->norm(x,y); }
 
     static inline I32 operator<<(I32 x, int bits) { return x->shl(x, bits); }
     static inline I32        shl(I32 x, int bits) { return x->shl(x, bits); }

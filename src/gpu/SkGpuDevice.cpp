@@ -950,6 +950,7 @@ void SkGpuDevice::drawShadow(const SkPath& path, const SkDrawShadowRec& rec) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// TODO: pass samplingoptions explicitly
 void SkGpuDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
                             const SkRect texRect[], const SkColor colors[], int count,
                             SkBlendMode mode, const SkPaint& paint) {
@@ -957,7 +958,7 @@ void SkGpuDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawAtlas", fContext.get());
 
     // Convert atlas to an image shader.
-    sk_sp<SkShader> shader = atlas->makeShader();
+    sk_sp<SkShader> shader = atlas->makeShader(SkSamplingOptions(paint.getFilterQuality()));
     if (!shader) {
         return;
     }
@@ -1011,7 +1012,7 @@ void SkGpuDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList) {
 void SkGpuDevice::drawDrawable(SkDrawable* drawable, const SkMatrix* matrix, SkCanvas* canvas) {
     GrBackendApi api = this->recordingContext()->backend();
     if (GrBackendApi::kVulkan == api) {
-        const SkMatrix& ctm = canvas->getTotalMatrix();
+        const SkMatrix& ctm = canvas->getLocalToDeviceAs3x3();
         const SkMatrix& combinedMatrix = matrix ? SkMatrix::Concat(ctm, *matrix) : ctm;
         std::unique_ptr<SkDrawable::GpuDrawHandler> gpuDraw =
                 drawable->snapGpuDrawHandler(api, combinedMatrix, canvas->getDeviceClipBounds(),

@@ -1,6 +1,6 @@
 ### Compilation failed:
 
-error: 1: SPIR-V validation error: If OpTypeBool is stored in conjunction with OpVariable, it can only be used with non-externally visible shader Storage Classes: Workgroup, CrossWorkgroup, Private, and Function
+error: SPIR-V validation error: If OpTypeBool is stored in conjunction with OpVariable, it can only be used with non-externally visible shader Storage Classes: Workgroup, CrossWorkgroup, Private, and Function
   %3 = OpVariable %_ptr_Uniform_testBlock Uniform
 
 OpCapability Shader
@@ -29,6 +29,7 @@ OpMemberDecorate %testBlock 2 RelaxedPrecision
 OpMemberDecorate %testBlock 3 Offset 96
 OpMemberDecorate %testBlock 3 RelaxedPrecision
 OpDecorate %testBlock Block
+OpDecorate %3 Binding 789
 OpDecorate %3 DescriptorSet 0
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0

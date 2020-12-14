@@ -1339,7 +1339,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(SkISize dimensions,
             this->flushScissorTest(GrScissorTest::kDisabled);
             this->disableWindowRectangles();
             this->flushColorWrite(true);
-            this->flushClearColor(SK_PMColor4fTRANSPARENT);
+            this->flushClearColor({0, 0, 0, 0});
             for (int i = 0; i < mipLevelCount; ++i) {
                 if (levelClearMask & (1U << i)) {
                     this->bindSurfaceFBOForPixelOps(tex.get(), i, GR_GL_FRAMEBUFFER,
@@ -1889,8 +1889,10 @@ GrGLenum GrGLGpu::bindBuffer(GrGpuBufferType type, const GrBuffer* buffer) {
     return bufferState->fGLTarget;
 }
 
-void GrGLGpu::clear(const GrScissorState& scissor, const SkPMColor4f& color,
-                    GrRenderTarget* target, GrSurfaceOrigin origin) {
+void GrGLGpu::clear(const GrScissorState& scissor,
+                    std::array<float, 4> color,
+                    GrRenderTarget* target,
+                    GrSurfaceOrigin origin) {
     // parent class should never let us get here with no RT
     SkASSERT(target);
     SkASSERT(!this->caps()->performColorClearsAsDraws());
@@ -2203,6 +2205,21 @@ void GrGLGpu::flushRenderTargetNoColorWrites(GrGLRenderTarget* target) {
 #endif
         fHWBoundRenderTargetUniqueID = rtID;
         this->flushViewport(target->width(), target->height());
+    }
+    if (this->caps()->workarounds().force_update_scissor_state_when_binding_fbo0 &&
+        fBoundDrawFramebuffer == 0) {
+        // The driver forgets the correct scissor state when using FBO 0.
+        if (!fHWScissorSettings.fRect.isInvalid()) {
+            const GrNativeRect& r = fHWScissorSettings.fRect;
+            GL_CALL(Scissor(r.fX, r.fY, r.fWidth, r.fHeight));
+        }
+        if (fHWScissorSettings.fEnabled == kYes_TriState) {
+            GL_CALL(Disable(GR_GL_SCISSOR_TEST));
+            GL_CALL(Enable(GR_GL_SCISSOR_TEST));
+        } else if (fHWScissorSettings.fEnabled == kNo_TriState) {
+            GL_CALL(Enable(GR_GL_SCISSOR_TEST));
+            GL_CALL(Disable(GR_GL_SCISSOR_TEST));
+        }
     }
 
     if (this->glCaps().srgbWriteControl()) {
@@ -2719,8 +2736,8 @@ void GrGLGpu::flushColorWrite(bool writeColor) {
     }
 }
 
-void GrGLGpu::flushClearColor(const SkPMColor4f& color) {
-    GrGLfloat r = color.fR, g = color.fG, b = color.fB, a = color.fA;
+void GrGLGpu::flushClearColor(std::array<float, 4> color) {
+    GrGLfloat r = color[0], g = color[1], b = color[2], a = color[3];
     if (this->glCaps().clearToBoundaryValuesIsBroken() &&
         (1 == r || 0 == r) && (1 == g || 0 == g) && (1 == b || 0 == b) && (1 == a || 0 == a)) {
         static const GrGLfloat safeAlpha1 = nextafter(1.f, 2.f);
@@ -2880,8 +2897,7 @@ void GrGLGpu::unbindSurfaceFBOForPixelOps(GrSurface* surface, int mipLevel, GrGL
 }
 
 void GrGLGpu::onFBOChanged() {
-    if (this->caps()->workarounds().flush_on_framebuffer_change ||
-        this->caps()->workarounds().restore_scissor_on_fbo_change) {
+    if (this->caps()->workarounds().flush_on_framebuffer_change) {
         this->flush(FlushType::kForce);
     }
 #ifdef SK_DEBUG
@@ -2898,15 +2914,6 @@ void GrGLGpu::bindFramebuffer(GrGLenum target, GrGLuint fboid) {
     if (target == GR_GL_FRAMEBUFFER || target == GR_GL_DRAW_FRAMEBUFFER) {
         fBoundDrawFramebuffer = fboid;
     }
-
-    if (this->caps()->workarounds().restore_scissor_on_fbo_change) {
-        // The driver forgets the correct scissor when modifying the FBO binding.
-        if (!fHWScissorSettings.fRect.isInvalid()) {
-            const GrNativeRect& r = fHWScissorSettings.fRect;
-            GL_CALL(Scissor(r.fX, r.fY, r.fWidth, r.fHeight));
-        }
-    }
-
     this->onFBOChanged();
 }
 
@@ -3130,7 +3137,7 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
     vshaderTxt.append(
         "// Mipmap Program VS\n"
         "void main() {"
-        "  sk_Position.xy = a_vertex * half2(2, 2) - half2(1, 1);"
+        "  sk_Position.xy = a_vertex * half2(2) - half2(1);"
         "  sk_Position.zw = half2(0, 1);"
     );
 

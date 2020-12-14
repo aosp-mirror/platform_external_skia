@@ -221,7 +221,6 @@ bool LazyYUVImage::ensureYUVImage(GrRecordingContext* rContext, Type type) {
             break;
         }
         case Type::kFromTextures:
-        case Type::kFromTexturesCopyToExternal:
             if (!rContext || rContext->abandoned()) {
                 return false;
             }
@@ -236,7 +235,11 @@ bool LazyYUVImage::ensureYUVImage(GrRecordingContext* rContext, Type type) {
                 GrBackendTexture textures[SkYUVAInfo::kMaxPlanes];
                 for (int i = 0; i < fPixmaps.numPlanes(); ++i) {
                     mbets[i] = sk_gpu_test::ManagedBackendTexture::MakeWithData(
-                            direct, fPixmaps.plane(i), GrRenderable::kNo, GrProtected::kNo);
+                            direct,
+                            fPixmaps.plane(i),
+                            kTopLeft_GrSurfaceOrigin,
+                            GrRenderable::kNo,
+                            GrProtected::kNo);
                     if (mbets[i]) {
                         textures[i] = mbets[i]->texture();
                     } else {
@@ -249,47 +252,14 @@ bool LazyYUVImage::ensureYUVImage(GrRecordingContext* rContext, Type type) {
                 if (!yuvaTextures.isValid()) {
                     return false;
                 }
-                if (type == Type::kFromTextures) {
-                    void* planeRelContext =
-                            sk_gpu_test::ManagedBackendTexture::MakeYUVAReleaseContext(mbets);
-                    fYUVImage[idx] = SkImage::MakeFromYUVATextures(
-                            direct,
-                            yuvaTextures,
-                            fColorSpace,
-                            sk_gpu_test::ManagedBackendTexture::ReleaseProc,
-                            planeRelContext);
-                } else {
-                    SkASSERT(type == Type::kFromTexturesCopyToExternal);
-                    sk_sp<sk_gpu_test::ManagedBackendTexture> rgbaMBET;
-                    for (auto ct : {SkYUVAPixmaps::RecommendedRGBAColorType(fPixmaps.dataType()),
-                                    kRGBA_8888_SkColorType}) {
-                        rgbaMBET = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(
-                                direct,
-                                fPixmaps.yuvaInfo().width(),
-                                fPixmaps.yuvaInfo().height(),
-                                kUnknown_SkColorType,
-                                GrMipmapped::kNo,
-                                GrRenderable::kYes);
-                        if (rgbaMBET) {
-                            void* planeRelContext =
-                                    sk_gpu_test::ManagedBackendTexture::MakeYUVAReleaseContext(
-                                            mbets);
-                            fYUVImage[idx] = SkImage::MakeFromYUVATexturesCopyToExternal(
-                                    direct,
-                                    yuvaTextures,
-                                    rgbaMBET->texture(),
-                                    ct,
-                                    fColorSpace,
-                                    sk_gpu_test::ManagedBackendTexture::ReleaseProc,
-                                    planeRelContext,
-                                    sk_gpu_test::ManagedBackendTexture::ReleaseProc,
-                                    rgbaMBET->releaseContext());
-                            if (fYUVImage[idx]) {
-                                break;
-                            }
-                        }
-                    }
-                }
+                void* planeRelContext =
+                        sk_gpu_test::ManagedBackendTexture::MakeYUVAReleaseContext(mbets);
+                fYUVImage[idx] = SkImage::MakeFromYUVATextures(
+                        direct,
+                        yuvaTextures,
+                        fColorSpace,
+                        sk_gpu_test::ManagedBackendTexture::ReleaseProc,
+                        planeRelContext);
             }
     }
     return fYUVImage[idx] != nullptr;

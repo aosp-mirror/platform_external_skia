@@ -166,7 +166,11 @@ protected:
 
     bool writeStructDefinition(const Type& type);
 
-    void writeType(const Type& type);
+    void disallowArrayTypes(const Type& type);
+
+    void writeBaseType(const Type& type);
+
+    void writeArrayDimensions(const Type& type);
 
     void writeExtension(const Extension& ext);
 
@@ -200,9 +204,11 @@ protected:
 
     void writeMinAbsHack(Expression& absExpr, Expression& otherExpr);
 
-    void writeFunctionCall(const FunctionCall& c);
+    String getOutParamHelper(const FunctionDeclaration& function, const ExpressionArray& arguments);
 
-    void writeInverseHack(const Expression& mat);
+    String getInverseHack(const Expression& mat);
+
+    void writeFunctionCall(const FunctionCall& c);
 
     bool matrixConstructHelperIsNeeded(const Constructor& c);
     String getMatrixConstructHelper(const Constructor& c);

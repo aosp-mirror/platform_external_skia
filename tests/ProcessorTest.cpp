@@ -129,8 +129,7 @@ private:
         public:
             TestGLSLFP() {}
             void emitCode(EmitArgs& args) override {
-                GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-                fragBuilder->codeAppendf("%s = %s;", args.fOutputColor, args.fInputColor);
+                args.fFragBuilder->codeAppendf("%s = half4(1);", args.fOutputColor);
             }
 
         private:
@@ -410,8 +409,7 @@ bool log_texture_view(GrDirectContext* dContext, GrSurfaceProxyView src, SkStrin
     SkImageInfo ii = SkImageInfo::Make(src.proxy()->dimensions(), kRGBA_8888_SkColorType,
                                        kLogAlphaType);
 
-    auto sContext = GrSurfaceContext::Make(dContext, std::move(src), GrColorType::kRGBA_8888,
-                                           kLogAlphaType, nullptr);
+    auto sContext = GrSurfaceContext::Make(dContext, std::move(src), ii.colorInfo());
     SkBitmap bm;
     SkAssertResult(bm.tryAllocPixels(ii));
     SkAssertResult(sContext->readPixels(dContext, ii, bm.getPixels(), bm.rowBytes(), {0, 0}));

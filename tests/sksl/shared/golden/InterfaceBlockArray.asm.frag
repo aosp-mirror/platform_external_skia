@@ -1,6 +1,6 @@
 ### Compilation failed:
 
-error: 1: SPIR-V validation error: Uniform id '5' is missing Block or BufferBlock decoration.
+error: SPIR-V validation error: Uniform id '5' is missing Block or BufferBlock decoration.
 From Vulkan spec, section 14.5.2:
 Such variables must be identified with a Block or BufferBlock decoration
   %testBlock = OpTypeStruct %float
@@ -18,6 +18,7 @@ OpName %main "main"
 OpMemberDecorate %testBlock 0 Offset 0
 OpDecorate %_arr_testBlock_int_2 ArrayStride 16
 OpDecorate %_arr_testBlock_int_2 Block
+OpDecorate %3 Binding 123
 OpDecorate %3 DescriptorSet 0
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0

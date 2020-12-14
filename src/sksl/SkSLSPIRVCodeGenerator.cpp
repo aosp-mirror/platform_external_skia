@@ -155,30 +155,28 @@ static bool is_float(const Context& context, const Type& type) {
     if (type.columns() > 1) {
         return is_float(context, type.componentType());
     }
-    return type == *context.fFloat_Type || type == *context.fHalf_Type;
+    return type.isFloat();
 }
 
 static bool is_signed(const Context& context, const Type& type) {
     if (type.isVector()) {
         return is_signed(context, type.componentType());
     }
-    return type == *context.fInt_Type || type == *context.fShort_Type ||
-           type == *context.fByte_Type;
+    return type.isSigned();
 }
 
 static bool is_unsigned(const Context& context, const Type& type) {
     if (type.isVector()) {
         return is_unsigned(context, type.componentType());
     }
-    return type == *context.fUInt_Type || type == *context.fUShort_Type ||
-           type == *context.fUByte_Type;
+    return type.isUnsigned();
 }
 
 static bool is_bool(const Context& context, const Type& type) {
     if (type.isVector()) {
         return is_bool(context, type.componentType());
     }
-    return type == *context.fBool_Type;
+    return type.isBoolean();
 }
 
 static bool is_out(const Variable& var) {
@@ -442,9 +440,7 @@ void SPIRVCodeGenerator::writeStruct(const Type& type, const MemoryLayout& memor
                                    SpvDecorationRelaxedPrecision, fDecorationBuffer);
         }
         offset += size;
-        Type::TypeKind kind = field.fType->typeKind();
-        if ((kind == Type::TypeKind::kArray || kind == Type::TypeKind::kStruct) &&
-            offset % alignment != 0) {
+        if ((field.fType->isArray() || field.fType->isStruct()) && offset % alignment != 0) {
             offset += alignment - offset % alignment;
         }
     }
@@ -483,7 +479,7 @@ SpvId SPIRVCodeGenerator::getType(const Type& type) {
 SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layout) {
     const Type& type = this->getActualType(rawType);
     String key = type.name();
-    if (type.typeKind() == Type::TypeKind::kStruct || type.typeKind() == Type::TypeKind::kArray) {
+    if (type.isStruct() || type.isArray()) {
         key += to_string((int)layout.fStd);
     }
     auto entry = fTypeMap.find(key);
@@ -566,7 +562,7 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
             case Type::TypeKind::kTexture: {
                 this->writeInstruction(SpvOpTypeImage, result,
                                        this->getType(*fContext.fFloat_Type, layout),
-                                       type.dimensions(), type.isDepth(), type.isArrayed(),
+                                       type.dimensions(), type.isDepth(), type.isArrayedTexture(),
                                        type.isMultisampled(), type.isSampled() ? 1 : 2,
                                        SpvImageFormatUnknown, fConstantBuffer);
                 fImageTypeMap[key] = result;
@@ -713,7 +709,10 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
     const FunctionDeclaration& function = c.function();
     const ExpressionArray& arguments = c.arguments();
     auto intrinsic = fIntrinsicMap.find(function.name());
-    SkASSERT(intrinsic != fIntrinsicMap.end());
+    if (intrinsic == fIntrinsicMap.end()) {
+        fErrors.error(c.fOffset, "unsupported intrinsic '" + function.description() + "'");
+        return -1;
+    }
     int32_t intrinsicId;
     if (arguments.size() > 0) {
         const Type& type = arguments[0]->type();
@@ -781,7 +780,8 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
         case kSpecial_IntrinsicKind:
             return this->writeSpecialIntrinsic(c, (SpecialIntrinsic) intrinsicId, out);
         default:
-            ABORT("unsupported intrinsic kind");
+            fErrors.error(c.fOffset, "unsupported intrinsic '" + function.description() + "'");
+            return -1;
     }
 }
 
@@ -1534,7 +1534,7 @@ SpvId SPIRVCodeGenerator::writeVectorConstructor(const Constructor& c, OutputStr
 
 SpvId SPIRVCodeGenerator::writeArrayConstructor(const Constructor& c, OutputStream& out) {
     const Type& type = c.type();
-    SkASSERT(type.typeKind() == Type::TypeKind::kArray);
+    SkASSERT(type.isArray());
     // go ahead and write the arguments so we don't try to write new instructions in the middle of
     // an instruction
     std::vector<SpvId> arguments;
@@ -1907,8 +1907,8 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                                                    &intfStruct,
                                                    /*builtin=*/false,
                                                    Variable::Storage::kGlobal));
-                InterfaceBlock intf(/*offset=*/-1, intfVar, name, /*instanceName=*/"",
-                                    /*sizes=*/ExpressionArray(),
+                InterfaceBlock intf(/*offset=*/-1, intfVar, name,
+                                    /*instanceName=*/"", /*arraySize=*/0,
                                     std::make_shared<SymbolTable>(&fErrors, /*builtin=*/false));
 
                 fRTHeightStructId = this->writeInterfaceBlock(intf, false);
@@ -2032,13 +2032,13 @@ SpvId SPIRVCodeGenerator::writeBinaryOperation(const Type& resultType,
         this->writeInstruction(ifInt, this->getType(resultType), result, lhs, rhs, out);
     } else if (is_unsigned(fContext, operandType)) {
         this->writeInstruction(ifUInt, this->getType(resultType), result, lhs, rhs, out);
-    } else if (operandType.isBoolean()) {
+    } else if (is_bool(fContext, operandType)) {
         this->writeInstruction(ifBool, this->getType(resultType), result, lhs, rhs, out);
         return result; // skip RelaxedPrecision check
     } else {
-#ifdef SK_DEBUG
-        ABORT("invalid operandType: %s", operandType.description().c_str());
-#endif
+        fErrors.error(operandType.fOffset,
+                      "unsupported operand for binary expression: " + operandType.description());
+        return result;
     }
     if (getActualType(resultType) == operandType && !resultType.highPrecision()) {
         this->writeInstruction(SpvOpDecorate, result, SpvDecorationRelaxedPrecision,
@@ -2134,6 +2134,10 @@ std::unique_ptr<Expression> create_literal_1(const Context& context, const Type&
 SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs, Token::Kind op,
                                                 const Type& rightType, SpvId rhs,
                                                 const Type& resultType, OutputStream& out) {
+    // The comma operator ignores the type of the left-hand side entirely.
+    if (op == Token::Kind::TK_COMMA) {
+        return rhs;
+    }
     // overall type we are operating on: float2, int, uint4...
     const Type* operandType;
     // IR allows mismatched types in expressions (e.g. float2 * float), but they need special
@@ -2323,8 +2327,6 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
         case Token::Kind::TK_BITWISEXOR:
             return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpUndef,
                                               SpvOpBitwiseXor, SpvOpBitwiseXor, SpvOpUndef, out);
-        case Token::Kind::TK_COMMA:
-            return rhs;
         default:
             fErrors.error(0, "unsupported token");
             return -1;

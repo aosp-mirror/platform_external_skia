@@ -601,13 +601,13 @@ DEF_TEST(SkSLInterpreterCompound, r) {
         "RectAndColor copy_big(RectAndColor r) { RectAndColor s; s = r; return s; }\n"
 
         // Same for arrays, including some non-constant indexing
-        "float tempFloats[8];\n"
         "int median(int a[15]) { return a[7]; }\n"
-        "float[8] sums(float a[8]) {\n"
-        "  float tempFloats[8];\n"
+
+        "float tempFloats[8];\n"
+        "float sums(float a[8]) {\n"
         "  tempFloats[0] = a[0];\n"
         "  for (int i = 1; i < 8; ++i) { tempFloats[i] = tempFloats[i - 1] + a[i]; }\n"
-        "  return tempFloats;\n"
+        "  return tempFloats[7];\n"
         "}\n"
 
         // Uniforms, array-of-structs, dynamic indices
@@ -671,11 +671,9 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 
     {
         float in[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
-        float out[8] = { 0 };
-        SkAssertResult(byteCode->run(sums, in, 8, out, 8, fRects, 16));
-        for (int i = 0; i < 8; ++i) {
-            REPORTER_ASSERT(r, out[i] == static_cast<float>((i + 1) * (i + 2) / 2));
-        }
+        float out = 0;
+        SkAssertResult(byteCode->run(sums, in, 8, &out, 1, fRects, 16));
+        REPORTER_ASSERT(r, out == static_cast<float>((7 + 1) * (7 + 2) / 2));
     }
 
     {
@@ -779,11 +777,10 @@ DEF_TEST(SkSLInterpreterEarlyReturn, r) {
 }
 
 DEF_TEST(SkSLInterpreterArrayBounds, r) {
-    // Out of bounds array access at compile time
-    expect_failure(r, "float main(float x[4]) { return x[-1]; }");
-    expect_failure(r, "float2 main(float2 x[2]) { return x[2]; }");
+    // Out of bounds array access at compile time prevents a program from being generated at all
+    // (tested in ArrayIndexOutOfRange.sksl).
 
-    // Out of bounds array access at runtime is pinned, and we don't update any inout data
+    // Out of bounds array access at runtime is pinned, and we don't update any inout data.
     float in[3] = { -1.0f, 1.0f, 2.0f };
     expect_run_failure(r, "void main(inout float data[3]) { data[int(data[0])] = 0; }", in);
     REPORTER_ASSERT(r, in[0] == -1.0f && in[1] == 1.0f && in[2] == 2.0f);

@@ -12,9 +12,9 @@
 #include "include/private/SkMacros.h"
 #include "include/private/SkTPin.h"
 #include "src/core/SkBitmapCache.h"
-#include "src/core/SkBitmapController.h"
 #include "src/core/SkBitmapProcState.h"
 #include "src/core/SkMipmap.h"
+#include "src/core/SkMipmapAccessor.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkResourceCache.h"
 #include "src/core/SkUtils.h"
@@ -143,9 +143,7 @@ SkBitmapProcState::SkBitmapProcState(const SkImage_Base* image, SkTileMode tmx, 
     : fImage(image)
     , fTileModeX(tmx)
     , fTileModeY(tmy)
-    , fBMState(nullptr)
 {}
-
 
 // true iff the matrix has a scale and no more than an optional translate.
 static bool matrix_only_scale_translate(const SkMatrix& m) {
@@ -187,23 +185,21 @@ bool SkBitmapProcState::init(const SkMatrix& inv, SkColor paintColor,
                              const SkSamplingOptions& sampling) {
     SkASSERT(!inv.hasPerspective());
     SkASSERT(SkOpts::S32_alpha_D32_filter_DXDY || inv.isScaleTranslate());
+    SkASSERT(!sampling.useCubic);
+    SkASSERT(sampling.mipmap != SkMipmapMode::kLinear);
 
     fPixmap.reset();
     fInvMatrix = inv;
     fBilerp = false;
 
-    fBMState = SkBitmapController::RequestBitmap(fImage, inv, sampling, &fAlloc);
-
-    // Note : we allow the controller to return an empty (zero-dimension) result. Should we?
-    if (nullptr == fBMState || fBMState->pixmap().info().isEmpty()) {
+    auto* access = SkMipmapAccessor::Make(&fAlloc, (const SkImage*)fImage, inv, sampling.mipmap);
+    if (!access) {
         return false;
     }
-    fPixmap = fBMState->pixmap();
-    fInvMatrix = fBMState->invMatrix();
+    std::tie(fPixmap, fInvMatrix) = access->level();
+
     fPaintColor = paintColor;
-    SkASSERT(!fBMState->sampling().fUseCubic);
-    SkASSERT(fBMState->sampling().fMipmap == SkMipmapMode::kNone);
-    fBilerp = fBMState->sampling().fFilter == SkFilterMode::kLinear;
+    fBilerp = sampling.filter == SkFilterMode::kLinear;
     SkASSERT(fPixmap.addr());
 
     bool integral_translate_only = just_trans_integral(fInvMatrix);

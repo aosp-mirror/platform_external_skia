@@ -136,12 +136,14 @@ SkColorSpace* SkImage::colorSpace() const { return fInfo.colorSpace(); }
 
 sk_sp<SkColorSpace> SkImage::refColorSpace() const { return fInfo.refColorSpace(); }
 
+#ifdef SK_SUPPORT_LEGACY_IMPLICIT_FILTERQUALITY
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkMatrix* localMatrix) const {
     const SkSamplingOptions* inherit_from_paint = nullptr;
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, inherit_from_paint,
                                localMatrix);
 }
+#endif
 
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkSamplingOptions& sampling,
@@ -634,23 +636,16 @@ sk_sp<SkImage> SkMipmapBuilder::attachTo(const SkImage* src) {
 SkSamplingOptions::SkSamplingOptions(SkFilterQuality fq) {
     switch (fq) {
         case SkFilterQuality::kHigh_SkFilterQuality:
-            fUseCubic = true;
-            fCubic = {1.0f/3, 1.0f/3};
+            *this = SkSamplingOptions(SkCubicResampler{1/3.0f, 1/3.0f});
             break;
         case SkFilterQuality::kMedium_SkFilterQuality:
-            fUseCubic = false;
-            fFilter = SkFilterMode::kLinear;
-            fMipmap = SkMipmapMode::kNearest;
+            *this = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNearest);
             break;
         case SkFilterQuality::kLow_SkFilterQuality:
-            fUseCubic = false;
-            fFilter = SkFilterMode::kLinear;
-            fMipmap = SkMipmapMode::kNone;
+            *this = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNone);
             break;
         case SkFilterQuality::kNone_SkFilterQuality:
-            fUseCubic = false;
-            fFilter = SkFilterMode::kNearest;
-            fMipmap = SkMipmapMode::kNone;
+            *this = SkSamplingOptions(SkFilterMode::kNearest, SkMipmapMode::kNone);
             break;
     }
 }
