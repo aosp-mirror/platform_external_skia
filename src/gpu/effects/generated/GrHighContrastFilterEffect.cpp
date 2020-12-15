@@ -54,9 +54,8 @@ return t < 0.1666666716337204 ? p + ((q - p) * 6.0) * t : (t < 0.5 ? q : (t < 0.
                 R"SkSL(
 half4 inColor = %s;
 half4 _0_unpremul;
-{
-    _0_unpremul = half4(inColor.xyz / max(inColor.w, 9.9999997473787516e-05), inColor.w);
-}
+_0_unpremul = half4(inColor.xyz / max(inColor.w, 9.9999997473787516e-05), inColor.w);
+
 half4 color = _0_unpremul;
 
 @if (%s) {
@@ -150,7 +149,6 @@ bool GrHighContrastFilterEffect::onIsEqual(const GrFragmentProcessor& other) con
     if (linearize != that.linearize) return false;
     return true;
 }
-bool GrHighContrastFilterEffect::usesExplicitReturn() const { return true; }
 GrHighContrastFilterEffect::GrHighContrastFilterEffect(const GrHighContrastFilterEffect& src)
         : INHERITED(kGrHighContrastFilterEffect_ClassID, src.optimizationFlags())
         , contrastMod(src.contrastMod)

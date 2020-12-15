@@ -960,7 +960,7 @@ void GrGLPerlinNoise::emitCode(EmitArgs& args) {
                              args.fSampleCoord, baseFrequencyUni);
 
     // Clear the color accumulator
-    fragBuilder->codeAppendf("%s = half4(0.0);", args.fOutputColor);
+    fragBuilder->codeAppendf("half4 color = half4(0);");
 
     if (pne.stitchTiles()) {
         // Set up TurbulenceInitial stitch values.
@@ -971,7 +971,7 @@ void GrGLPerlinNoise::emitCode(EmitArgs& args) {
 
     // Loop over all octaves
     fragBuilder->codeAppendf("for (int octave = 0; octave < %d; ++octave) {", pne.numOctaves());
-    fragBuilder->codeAppendf("    %s += ", args.fOutputColor);
+    fragBuilder->codeAppendf("    color += ");
     if (pne.type() != SkPerlinNoiseShaderImpl::kFractalNoise_Type) {
         fragBuilder->codeAppend("abs(");
     }
@@ -1014,17 +1014,14 @@ void GrGLPerlinNoise::emitCode(EmitArgs& args) {
     if (pne.type() == SkPerlinNoiseShaderImpl::kFractalNoise_Type) {
         // The value of turbulenceFunctionResult comes from ((turbulenceFunctionResult) + 1) / 2
         // by fractalNoise and (turbulenceFunctionResult) by turbulence.
-        fragBuilder->codeAppendf("%s = %s * half4(0.5) + half4(0.5);",
-                                 args.fOutputColor, args.fOutputColor);
+        fragBuilder->codeAppendf("color = color * half4(0.5) + half4(0.5);");
     }
 
     // Clamp values
-    fragBuilder->codeAppendf("%s = saturate(%s);", args.fOutputColor, args.fOutputColor);
+    fragBuilder->codeAppendf("color = saturate(color);");
 
     // Pre-multiply the result
-    fragBuilder->codeAppendf("%s = half4(%s.rgb * %s.aaa, %s.a);\n",
-                             args.fOutputColor, args.fOutputColor,
-                             args.fOutputColor, args.fOutputColor);
+    fragBuilder->codeAppendf("return half4(color.rgb * color.aaa, color.a);");
 }
 
 void GrGLPerlinNoise::GenKey(const GrProcessor& processor, const GrShaderCaps&,
@@ -1314,15 +1311,12 @@ void GrGLImprovedPerlinNoise::emitCode(EmitArgs& args) {
                              noiseOctavesFuncName.c_str(), zUni);
     fragBuilder->codeAppendf("half a = %s(half3(coords, %s + 0000.0));",
                              noiseOctavesFuncName.c_str(), zUni);
-    fragBuilder->codeAppendf("%s = half4(r, g, b, a);", args.fOutputColor);
 
     // Clamp values
-    fragBuilder->codeAppendf("%s = saturate(%s);", args.fOutputColor, args.fOutputColor);
+    fragBuilder->codeAppendf("half4 color = saturate(half4(r, g, b, a));");
 
     // Pre-multiply the result
-    fragBuilder->codeAppendf("\n\t\t%s = half4(%s.rgb * %s.aaa, %s.a);\n",
-                             args.fOutputColor, args.fOutputColor,
-                             args.fOutputColor, args.fOutputColor);
+    fragBuilder->codeAppendf("return half4(color.rgb * color.aaa, color.a);");
 }
 
 void GrGLImprovedPerlinNoise::GenKey(const GrProcessor& processor, const GrShaderCaps&,

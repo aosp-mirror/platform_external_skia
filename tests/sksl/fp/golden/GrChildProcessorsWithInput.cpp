@@ -34,9 +34,9 @@ half4 childOut1 = %s;)SkSL"
         fragBuilder->codeAppendf(
 R"SkSL(
 half4 childOut2 = %s;
-%s = childOut2;
+return childOut2;
 )SkSL"
-, _sample1.c_str(), args.fOutputColor);
+, _sample1.c_str());
     }
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman, const GrFragmentProcessor& _proc) override {
@@ -52,9 +52,6 @@ bool GrChildProcessorsWithInput::onIsEqual(const GrFragmentProcessor& other) con
     const GrChildProcessorsWithInput& that = other.cast<GrChildProcessorsWithInput>();
     (void) that;
     return true;
-}
-bool GrChildProcessorsWithInput::usesExplicitReturn() const {
-    return false;
 }
 GrChildProcessorsWithInput::GrChildProcessorsWithInput(const GrChildProcessorsWithInput& src)
 : INHERITED(kGrChildProcessorsWithInput_ClassID, src.optimizationFlags()) {
