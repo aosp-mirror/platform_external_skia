@@ -110,6 +110,7 @@ protected:
         kDot_SpecialIntrinsic,
         kFaceforward_SpecialIntrinsic,
         kFindLSB_SpecialIntrinsic,
+        kFindMSB_SpecialIntrinsic,
         kLength_SpecialIntrinsic,
         kMod_SpecialIntrinsic,
         kNormalize_SpecialIntrinsic,
@@ -171,7 +172,7 @@ protected:
 
     bool writeStructDefinition(const Type& type);
 
-    void disallowArrayTypes(const Type& type);
+    void disallowArrayTypes(const Type& type, int offset);
 
     void writeBaseType(const Type& type);
 

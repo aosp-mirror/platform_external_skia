@@ -50,6 +50,7 @@ void MetalCodeGenerator::setupIntrinsics() {
     fIntrinsicMap[String("dot")]                = SPECIAL(Dot);
     fIntrinsicMap[String("faceforward")]        = SPECIAL(Faceforward);
     fIntrinsicMap[String("findLSB")]            = SPECIAL(FindLSB);
+    fIntrinsicMap[String("findMSB")]            = SPECIAL(FindMSB);
     fIntrinsicMap[String("length")]             = SPECIAL(Length);
     fIntrinsicMap[String("mod")]                = SPECIAL(Mod);
     fIntrinsicMap[String("normalize")]          = SPECIAL(Normalize);
@@ -141,9 +142,9 @@ bool MetalCodeGenerator::writeStructDefinition(const Type& type) {
 
 // Flags an error if an array type is found. Meant to be used in places where an array type might
 // appear in the SkSL/IR, but can't be represented by Metal.
-void MetalCodeGenerator::disallowArrayTypes(const Type& type) {
+void MetalCodeGenerator::disallowArrayTypes(const Type& type, int offset) {
     if (type.isArray()) {
-        fErrors.error(type.fOffset, "Metal does not support array types in this context");
+        fErrors.error(offset, "Metal does not support array types in this context");
     }
 }
 
@@ -700,6 +701,54 @@ void MetalCodeGenerator::writeSpecialIntrinsic(const FunctionCall & c, SpecialIn
             this->write("(0)))");
             break;
         }
+        case kFindMSB_SpecialIntrinsic: {
+            // Create a temp variable to store the expression, to avoid double-evaluating it.
+            String skTemp1 = this->getTempVariable(arguments[0]->type());
+            String exprType = this->typeName(arguments[0]->type());
+
+            // GLSL findMSB is actually quite different from Metal's clz:
+            // - For signed negative numbers, it returns the first zero bit, not the first one bit!
+            // - For an empty input (0/~0 depending on sign), findMSB gives -1; clz is numbits(type)
+
+            // (_skTemp1 = (.....),
+            this->write("(");
+            this->write(skTemp1);
+            this->write(" = (");
+            this->writeExpression(*arguments[0], kSequence_Precedence);
+            this->write("), ");
+
+            // Signed input types might be negative; we need another helper variable to negate the
+            // input (since we can only find one bits, not zero bits).
+            String skTemp2;
+            if (arguments[0]->type().isSigned()) {
+                // ... _skTemp2 = (select(_skTemp1, ~_skTemp1, _skTemp1 < 0)),
+                skTemp2 = this->getTempVariable(arguments[0]->type());
+                this->write(skTemp2);
+                this->write(" = (select(");
+                this->write(skTemp1);
+                this->write(", ~");
+                this->write(skTemp1);
+                this->write(", ");
+                this->write(skTemp1);
+                this->write(" < 0)), ");
+            } else {
+                skTemp2 = skTemp1;
+            }
+
+            // ... select(int4(clz(_skTemp2)), int4(-1), _skTemp2 == int4(0)))
+            this->write("select(");
+            this->write(this->typeName(c.type()));
+            this->write("(clz(");
+            this->write(skTemp2);
+            this->write(")), ");
+            this->write(this->typeName(c.type()));
+            this->write("(-1), ");
+            this->write(skTemp2);
+            this->write(" == ");
+            this->write(exprType);
+            this->write("(0)))");
+            break;
+        }
         default:
             ABORT("unsupported special intrinsic kind");
     }
@@ -952,7 +1001,7 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
 
     // Explicitly invoke the constructor, passing in the necessary arguments.
     this->writeBaseType(constructorType);
-    this->disallowArrayTypes(constructorType);  // constructors of array types aren't valid exprs
+    this->disallowArrayTypes(constructorType, c.fOffset);
     this->write("(");
     const char* separator = "";
     int scalarCount = 0;
@@ -1377,7 +1426,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
         separator = ", ";
     } else {
         this->writeBaseType(f.returnType());
-        this->disallowArrayTypes(f.returnType());  // return types can't be arrays in SkSL/GLSL
+        this->disallowArrayTypes(f.returnType(), f.fOffset);
         this->write(" ");
         this->writeName(f.name());
         this->write("(");
@@ -1583,7 +1632,7 @@ void MetalCodeGenerator::writeVarDeclaration(const VarDeclaration& var, bool glo
     }
     this->writeModifiers(var.var().modifiers(), global);
     this->writeBaseType(var.baseType());
-    this->disallowArrayTypes(var.baseType());  // `float[2] x` shouldn't be possible (invalid SkSL)
+    this->disallowArrayTypes(var.baseType(), var.fOffset);
     this->write(" ");
     this->writeName(var.var().name());
     if (var.arraySize() > 0) {
