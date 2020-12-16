@@ -58,7 +58,7 @@ namespace {
 
 static constexpr int kInlinedStatementLimit = 2500;
 
-static int count_returns_up_to_limit(const FunctionDefinition& funcDef, int limit) {
+static bool contains_returns_above_limit(const FunctionDefinition& funcDef, int limit) {
     class CountReturnsWithLimit : public ProgramVisitor {
     public:
         CountReturnsWithLimit(const FunctionDefinition& funcDef, int limit) : fLimit(limit) {
@@ -69,7 +69,7 @@ static int count_returns_up_to_limit(const FunctionDefinition& funcDef, int limi
             switch (stmt.kind()) {
                 case Statement::Kind::kReturn:
                     ++fNumReturns;
-                    return (fNumReturns >= fLimit) || INHERITED::visitStatement(stmt);
+                    return (fNumReturns > fLimit) || INHERITED::visitStatement(stmt);
 
                 default:
                     return INHERITED::visitStatement(stmt);
@@ -81,7 +81,7 @@ static int count_returns_up_to_limit(const FunctionDefinition& funcDef, int limi
         using INHERITED = ProgramVisitor;
     };
 
-    return CountReturnsWithLimit{funcDef, limit}.fNumReturns;
+    return CountReturnsWithLimit{funcDef, limit}.fNumReturns > limit;
 }
 
 static int count_returns_at_end_of_control_flow(const FunctionDefinition& funcDef) {
@@ -156,6 +156,11 @@ static int count_returns_in_breakable_constructs(const FunctionDefinition& funcD
     };
 
     return CountReturnsInBreakableConstructs{funcDef}.fNumReturns;
+}
+
+static bool has_early_return(const FunctionDefinition& funcDef) {
+    int returnsAtEndOfControlFlow = count_returns_at_end_of_control_flow(funcDef);
+    return contains_returns_above_limit(funcDef, returnsAtEndOfControlFlow);
 }
 
 static bool contains_recursive_call(const FunctionDeclaration& funcDecl) {
@@ -244,16 +249,6 @@ std::unique_ptr<Expression> clone_with_ref_kind(const Expression& expr,
 
 }  // namespace
 
-Inliner::ReturnComplexity Inliner::GetReturnComplexity(const FunctionDefinition& funcDef) {
-    int returnsAtEndOfControlFlow = count_returns_at_end_of_control_flow(funcDef);
-    int numReturns = count_returns_up_to_limit(funcDef, returnsAtEndOfControlFlow + 1);
-
-    return (numReturns > returnsAtEndOfControlFlow)
-                   ? ReturnComplexity::kEarlyReturns
-                   : (numReturns > 1) ? ReturnComplexity::kReturnsAtEndOfControlFlow
-                                      : ReturnComplexity::kSingleReturn;
-}
-
 void Inliner::ensureScopedBlocks(Statement* inlinedBody, Statement* parentStmt) {
     // No changes necessary if this statement isn't actually a block.
     if (!inlinedBody || !inlinedBody->is<Block>()) {
@@ -303,19 +298,33 @@ void Inliner::reset(ModifiersPool* modifiers, const Program::Settings* settings)
     fInlinedStatementCounter = 0;
 }
 
-String Inliner::uniqueNameForInlineVar(const String& baseName, SymbolTable* symbolTable) {
-    // If the base name starts with an underscore, like "_coords", we can't append another
-    // underscore, because OpenGL disallows two consecutive underscores anywhere in the string. But
-    // in the general case, using the underscore as a splitter reads nicely enough that it's worth
-    // putting in this special case.
-    const char* splitter = baseName.startsWith("_") ? "" : "_";
+String Inliner::uniqueNameForInlineVar(String baseName, SymbolTable* symbolTable) {
+    // The inliner runs more than once, so the base name might already have a prefix like "_123_x".
+    // Let's strip that prefix off to make the generated code easier to read.
+    if (baseName.startsWith("_")) {
+        // Determine if we have a string of digits.
+        int offset = 1;
+        while (isdigit(baseName[offset])) {
+            ++offset;
+        }
+        // If we found digits, another underscore, and anything else, that's the inliner prefix.
+        // Strip it off.
+        if (offset > 1 && baseName[offset] == '_' && baseName[offset + 1] != '\0') {
+            baseName.erase(0, offset + 1);
+        } else {
+            // This name doesn't contain an inliner prefix, but it does start with an underscore.
+            // OpenGL disallows two consecutive underscores anywhere in the string, and we'll be
+            // adding one as part of the inliner prefix, so strip the leading underscore.
+            baseName.erase(0, 1);
+        }
+    }
 
     // Append a unique numeric prefix to avoid name overlap. Check the symbol table to make sure
     // we're not reusing an existing name. (Note that within a single compilation pass, this check
     // isn't fully comprehensive, as code isn't always generated in top-to-bottom order.)
     String uniqueName;
     for (;;) {
-        uniqueName = String::printf("_%d%s%s", fInlineVarCounter++, splitter, baseName.c_str());
+        uniqueName = String::printf("_%d_%s", fInlineVarCounter++, baseName.c_str());
         StringFragment frag{uniqueName.data(), uniqueName.length()};
         if ((*symbolTable)[frag] == nullptr) {
             break;
@@ -424,14 +433,14 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
 std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
                                                     VariableRewriteMap* varMap,
                                                     SymbolTable* symbolTableForStatement,
-                                                    std::unique_ptr<Expression>* resultExpr,
-                                                    ReturnComplexity returnComplexity,
+                                                    const Expression* resultExpr,
+                                                    bool haveEarlyReturns,
                                                     const Statement& statement,
                                                     bool isBuiltinCode) {
     auto stmt = [&](const std::unique_ptr<Statement>& s) -> std::unique_ptr<Statement> {
         if (s) {
             return this->inlineStatement(offset, varMap, symbolTableForStatement, resultExpr,
-                                         returnComplexity, *s, isBuiltinCode);
+                                         haveEarlyReturns, *s, isBuiltinCode);
         }
         return nullptr;
     };
@@ -500,50 +509,33 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             return statement.clone();
         case Statement::Kind::kReturn: {
             const ReturnStatement& r = statement.as<ReturnStatement>();
-            if (!r.expression()) {
-                if (returnComplexity >= ReturnComplexity::kEarlyReturns) {
-                    // This function doesn't return a value, but has early returns, so we've wrapped
-                    // it in a do-while block. Use a break to leave the inlined function early.
+            if (r.expression()) {
+                SkASSERT(resultExpr);
+                auto assignment =
+                        std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
+                                offset,
+                                clone_with_ref_kind(*resultExpr,
+                                                    VariableReference::RefKind::kWrite),
+                                Token::Kind::TK_EQ,
+                                expr(r.expression()),
+                                &resultExpr->type()));
+                if (haveEarlyReturns) {
+                    StatementArray block;
+                    block.reserve_back(2);
+                    block.push_back(std::move(assignment));
+                    block.push_back(std::make_unique<BreakStatement>(offset));
+                    return std::make_unique<Block>(offset, std::move(block), /*symbols=*/nullptr,
+                                                   /*isScope=*/true);
+                } else {
+                    return std::move(assignment);
+                }
+            } else {
+                if (haveEarlyReturns) {
                     return std::make_unique<BreakStatement>(offset);
                 } else {
-                    // This function doesn't exit early or return a value. A return statement at the
-                    // end is a no-op and can be treated as such.
                     return std::make_unique<Nop>();
                 }
             }
-
-            // For a function that only contains a single return, we don't need to store the result
-            // in a variable at all. Just move the return value right into the result expression.
-            SkASSERT(resultExpr);
-            SkASSERT(*resultExpr);
-            if (returnComplexity == ReturnComplexity::kSingleReturn) {
-                *resultExpr = expr(r.expression());
-                return std::make_unique<Nop>();
-            }
-
-            // For more complex functions, assign their result into a variable.
-            auto assignment =
-                    std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
-                            offset,
-                            clone_with_ref_kind(**resultExpr, VariableReference::RefKind::kWrite),
-                            Token::Kind::TK_EQ,
-                            expr(r.expression()),
-                            &resultExpr->get()->type()));
-
-            // Early returns are wrapped in a do-while block; we need to synthesize a break
-            // statement to "leave" the function.
-            if (returnComplexity >= ReturnComplexity::kEarlyReturns) {
-                StatementArray block;
-                block.reserve_back(2);
-                block.push_back(std::move(assignment));
-                block.push_back(std::make_unique<BreakStatement>(offset));
-                return std::make_unique<Block>(offset, std::move(block), /*symbols=*/nullptr,
-                                               /*isScope=*/true);
-            }
-            // Functions without early returns aren't wrapped by a do-while block and don't
-            // need to worry about breaking out of the control flow.
-            return std::move(assignment);
-
         }
         case Statement::Kind::kSwitch: {
             const SwitchStatement& ss = statement.as<SwitchStatement>();
@@ -558,27 +550,29 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
                                                      SymbolTable::WrapIfBuiltin(ss.symbols()));
         }
         case Statement::Kind::kVarDeclaration: {
-            // We've declared variables already via inlineVarDecls. So we don't want to emit a
-            // VarDeclaration; instead, we need to convert the vardecl's initial value into an
-            // assignment statement.
             const VarDeclaration& decl = statement.as<VarDeclaration>();
-            if (decl.value()) {
-                auto varMapIter = varMap->find(&decl.var());
-                if (varMapIter == varMap->end()) {
-                    SkDEBUGFAILF("inlined variable '%s' not found in VariableRewriteMap",
-                                 decl.var().description().c_str());
-                    return std::make_unique<Nop>();
-                }
-                std::unique_ptr<Expression>& varRef = varMapIter->second;
-                return std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
-                        offset,
-                        clone_with_ref_kind(*varRef, VariableReference::RefKind::kWrite),
-                        Token::Kind::TK_EQ,
-                        expr(decl.value()),
-                        &varRef->type()));
-            }
-            // No initial value? Nothing to do.
-            return std::make_unique<Nop>();
+            std::unique_ptr<Expression> initialValue = expr(decl.value());
+            int arraySize = decl.arraySize();
+            const Variable& old = decl.var();
+            // We assign unique names to inlined variables--scopes hide most of the problems in this
+            // regard, but see `InlinerAvoidsVariableNameOverlap` for a counterexample where unique
+            // names are important.
+            auto name = std::make_unique<String>(
+                    this->uniqueNameForInlineVar(String(old.name()), symbolTableForStatement));
+            const String* namePtr = symbolTableForStatement->takeOwnershipOfString(std::move(name));
+            const Type* baseTypePtr = copy_if_needed(&decl.baseType(), *symbolTableForStatement);
+            const Type* typePtr = copy_if_needed(&old.type(), *symbolTableForStatement);
+            const Variable* clone = symbolTableForStatement->takeOwnershipOfSymbol(
+                    std::make_unique<Variable>(offset,
+                                               &old.modifiers(),
+                                               namePtr->c_str(),
+                                               typePtr,
+                                               isBuiltinCode,
+                                               old.storage(),
+                                               initialValue.get()));
+            (*varMap)[&old] = std::make_unique<VariableReference>(offset, clone);
+            return std::make_unique<VarDeclaration>(clone, baseTypePtr, arraySize,
+                                                    std::move(initialValue));
         }
         case Statement::Kind::kWhile: {
             const WhileStatement& w = statement.as<WhileStatement>();
@@ -588,65 +582,6 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             SkASSERT(false);
             return nullptr;
     }
-}
-
-void Inliner::inlineVarDecls(const Block& body,
-                             Block* inlineBlock,
-                             VariableRewriteMap* varMap,
-                             SymbolTable* symbolTable,
-                             bool isBuiltinCode) {
-    // We assign unique names to inlined variables to avoid a variety of problems.
-    class InlineVarDeclsPass : public ProgramVisitor {
-    public:
-        InlineVarDeclsPass(Inliner* inliner,
-                           Block* inlineBlock,
-                           VariableRewriteMap* varMap,
-                           SymbolTable* symbolTable,
-                           bool isBuiltinCode)
-                : fInliner(inliner)
-                , fInlineBlock(inlineBlock)
-                , fVarMap(varMap)
-                , fSymbolTable(symbolTable)
-                , fIsBuiltinCode(isBuiltinCode) {}
-
-        bool visitStatement(const Statement& stmt) override {
-            if (stmt.is<VarDeclaration>()) {
-                fInlineBlock->children().push_back(this->inlineVarDecl(stmt.as<VarDeclaration>()));
-            }
-            return INHERITED::visitStatement(stmt);
-        }
-
-        std::unique_ptr<Statement> inlineVarDecl(const VarDeclaration& decl) {
-            int arraySize = decl.arraySize();
-            const Variable& old = decl.var();
-            int offset = decl.fOffset;
-            auto name = std::make_unique<String>(
-                    fInliner->uniqueNameForInlineVar(old.name(), fSymbolTable));
-            const String* namePtr = fSymbolTable->takeOwnershipOfString(std::move(name));
-            const Type* baseTypePtr = copy_if_needed(&decl.baseType(), *fSymbolTable);
-            const Type* typePtr = copy_if_needed(&old.type(), *fSymbolTable);
-            const Variable* clone = fSymbolTable->takeOwnershipOfSymbol(
-                    std::make_unique<Variable>(offset,
-                                               &old.modifiers(),
-                                               namePtr->c_str(),
-                                               typePtr,
-                                               fIsBuiltinCode,
-                                               old.storage(),
-                                               /*initialValue=*/nullptr));
-            (*fVarMap)[&old] = std::make_unique<VariableReference>(offset, clone);
-            return std::make_unique<VarDeclaration>(clone, baseTypePtr, arraySize,
-                                                    /*value=*/nullptr);
-        }
-
-        Inliner* fInliner;
-        Block* fInlineBlock;
-        VariableRewriteMap* fVarMap;
-        SymbolTable* fSymbolTable;
-        bool fIsBuiltinCode;
-
-        using INHERITED = ProgramVisitor;
-    };
-    InlineVarDeclsPass{this, inlineBlock, varMap, symbolTable, isBuiltinCode}.visitStatement(body);
 }
 
 Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
@@ -669,8 +604,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     ExpressionArray& arguments = call->arguments();
     const int offset = call->fOffset;
     const FunctionDefinition& function = *call->function().definition();
-    const ReturnComplexity returnComplexity = GetReturnComplexity(function);
-    bool hasEarlyReturn = (returnComplexity >= ReturnComplexity::kEarlyReturns);
+    const bool hasEarlyReturn = has_early_return(function);
 
     InlinedCall inlinedCall;
     inlinedCall.fInlinedBody = std::make_unique<Block>(offset, StatementArray{},
@@ -737,7 +671,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         resultExpr = makeInlineVar(String(function.declaration().name()),
                                    &function.declaration().returnType(),
                                    Modifiers{}, &noInitialValue);
-    }
+   }
 
     // Create variables in the extra statements to hold the arguments, and assign the arguments to
     // them.
@@ -769,15 +703,9 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     auto inlineBlock = std::make_unique<Block>(offset, StatementArray{},
                                                /*symbols=*/nullptr, /*isScope=*/hasEarlyReturn);
     inlineBlock->children().reserve_back(body.children().size());
-
-    // Declare the inlined function's variables at the very top of the block so that they don't get
-    // created in an inner scope.
-    this->inlineVarDecls(body, inlineBlock.get(), &varMap, symbolTableForCall, caller->isBuiltin());
-
-    // Inline the function.
     for (const std::unique_ptr<Statement>& stmt : body.children()) {
         inlineBlock->children().push_back(this->inlineStatement(offset, &varMap, symbolTableForCall,
-                                                                &resultExpr, returnComplexity,
+                                                                resultExpr.get(), hasEarlyReturn,
                                                                 *stmt, caller->isBuiltin()));
     }
     if (hasEarlyReturn) {
@@ -810,6 +738,8 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
 
     if (resultExpr != nullptr) {
         // Return our result variable as our replacement expression.
+        SkASSERT(resultExpr->as<VariableReference>().refKind() ==
+                 VariableReference::RefKind::kRead);
         inlinedCall.fReplacementExpr = std::move(resultExpr);
     } else {
         // It's a void function, so it doesn't actually result in anything, but we have to return
@@ -840,16 +770,14 @@ bool Inliner::isSafeToInline(const FunctionDefinition* functionDef) {
         return false;
     }
 
-    ReturnComplexity complexity = GetReturnComplexity(*functionDef);
-    bool hasEarlyReturn = (complexity >= ReturnComplexity::kEarlyReturns);
-
     if (!fCaps || !fCaps->canUseDoLoops()) {
+        // We don't have do-while loops. We use do-while loops to simulate early returns, so we
+        // can't inline functions that have an early return.
+        bool hasEarlyReturn = has_early_return(*functionDef);
+
         // If we didn't detect an early return, there shouldn't be any returns in breakable
         // constructs either.
         SkASSERT(hasEarlyReturn || count_returns_in_breakable_constructs(*functionDef) == 0);
-
-        // We don't have do-while loops. We use do-while loops to simulate early returns, so we
-        // can't inline functions that have an early return.
         return !hasEarlyReturn;
     }
     // We have do-while loops, but we don't have any mechanism to simulate early returns within a
@@ -857,7 +785,7 @@ bool Inliner::isSafeToInline(const FunctionDefinition* functionDef) {
     bool hasReturnInBreakableConstruct = (count_returns_in_breakable_constructs(*functionDef) > 0);
 
     // If we detected returns in breakable constructs, we should also detect an early return.
-    SkASSERT(!hasReturnInBreakableConstruct || hasEarlyReturn);
+    SkASSERT(!hasReturnInBreakableConstruct || has_early_return(*functionDef));
     return !hasReturnInBreakableConstruct;
 }
 
