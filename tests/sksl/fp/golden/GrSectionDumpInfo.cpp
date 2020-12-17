@@ -20,9 +20,9 @@ public:
         const GrSectionDumpInfo& _outer = args.fFp.cast<GrSectionDumpInfo>();
         (void) _outer;
         fragBuilder->codeAppendf(
-R"SkSL(%s = half4(1.0);
+R"SkSL(return half4(1.0);
 )SkSL"
-, args.fOutputColor);
+);
     }
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman, const GrFragmentProcessor& _proc) override {
@@ -37,9 +37,6 @@ bool GrSectionDumpInfo::onIsEqual(const GrFragmentProcessor& other) const {
     const GrSectionDumpInfo& that = other.cast<GrSectionDumpInfo>();
     (void) that;
     return true;
-}
-bool GrSectionDumpInfo::usesExplicitReturn() const {
-    return false;
 }
 GrSectionDumpInfo::GrSectionDumpInfo(const GrSectionDumpInfo& src)
 : INHERITED(kGrSectionDumpInfo_ClassID, src.optimizationFlags()) {

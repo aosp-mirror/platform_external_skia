@@ -130,7 +130,7 @@ private:
         public:
             TestGLSLFP() {}
             void emitCode(EmitArgs& args) override {
-                args.fFragBuilder->codeAppendf("%s = half4(1);", args.fOutputColor);
+                args.fFragBuilder->codeAppendf("return half4(1);");
             }
 
         private:

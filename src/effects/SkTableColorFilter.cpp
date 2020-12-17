@@ -312,12 +312,11 @@ GrGLSLFragmentProcessor* ColorTableEffect::onCreateGLSLInstance() const {
             SkString r = this->invokeChild(kTexEffectFPIndex, args, "half2(coord.r, 1.5)");
             SkString g = this->invokeChild(kTexEffectFPIndex, args, "half2(coord.g, 2.5)");
             SkString b = this->invokeChild(kTexEffectFPIndex, args, "half2(coord.b, 3.5)");
-            fragBuilder->codeAppendf("half4 coord = 255 * unpremul(%s) + 0.5;\n"
-                                     "%s = half4(%s.a, %s.a, %s.a, 1);\n"
-                                     "%s *= %s.a;\n",
-                                     inputColor.c_str(),
-                                     args.fOutputColor, r.c_str(), g.c_str(), b.c_str(),
-                                     args.fOutputColor, a.c_str());
+            fragBuilder->codeAppendf(
+                    "half4 coord = 255 * unpremul(%s) + 0.5;\n"
+                    "half4 color = half4(%s.a, %s.a, %s.a, 1);\n"
+                    "return color * %s.a;\n",
+                    inputColor.c_str(), r.c_str(), g.c_str(), b.c_str(), a.c_str());
         }
     };
     return new Impl;

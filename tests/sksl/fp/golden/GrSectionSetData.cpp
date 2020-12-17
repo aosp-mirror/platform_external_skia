@@ -23,9 +23,9 @@ public:
         (void) provided;
         calculatedVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag, kHalf_GrSLType, "calculated");
         fragBuilder->codeAppendf(
-R"SkSL(%s = half4(1.0);
+R"SkSL(return half4(1.0);
 )SkSL"
-, args.fOutputColor);
+);
     }
 private:
     void onSetData(const GrGLSLProgramDataManager& varName, const GrFragmentProcessor& _proc) override {
@@ -48,9 +48,6 @@ bool GrSectionSetData::onIsEqual(const GrFragmentProcessor& other) const {
     (void) that;
     if (provided != that.provided) return false;
     return true;
-}
-bool GrSectionSetData::usesExplicitReturn() const {
-    return false;
 }
 GrSectionSetData::GrSectionSetData(const GrSectionSetData& src)
 : INHERITED(kGrSectionSetData_ClassID, src.optimizationFlags())
