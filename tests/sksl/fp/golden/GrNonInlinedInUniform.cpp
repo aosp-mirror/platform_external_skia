@@ -23,9 +23,9 @@ public:
         (void) point;
         pointVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag, kHalf2_GrSLType, "point");
         fragBuilder->codeAppendf(
-R"SkSL(%s = half4(%s, %s);
+R"SkSL(return half4(%s, %s);
 )SkSL"
-, args.fOutputColor, args.fUniformHandler->getUniformCStr(pointVar), args.fUniformHandler->getUniformCStr(pointVar));
+, args.fUniformHandler->getUniformCStr(pointVar), args.fUniformHandler->getUniformCStr(pointVar));
     }
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman, const GrFragmentProcessor& _proc) override {
@@ -47,9 +47,6 @@ bool GrNonInlinedInUniform::onIsEqual(const GrFragmentProcessor& other) const {
     (void) that;
     if (point != that.point) return false;
     return true;
-}
-bool GrNonInlinedInUniform::usesExplicitReturn() const {
-    return false;
 }
 GrNonInlinedInUniform::GrNonInlinedInUniform(const GrNonInlinedInUniform& src)
 : INHERITED(kGrNonInlinedInUniform_ClassID, src.optimizationFlags())

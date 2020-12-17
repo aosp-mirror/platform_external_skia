@@ -20,9 +20,9 @@ public:
         const GrMainCoords& _outer = args.fFp.cast<GrMainCoords>();
         (void) _outer;
         fragBuilder->codeAppendf(
-R"SkSL(%s = half4(%s, %s);
+R"SkSL(return half4(%s, %s);
 )SkSL"
-, args.fOutputColor, args.fSampleCoord, args.fSampleCoord);
+, args.fSampleCoord, args.fSampleCoord);
     }
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman, const GrFragmentProcessor& _proc) override {
@@ -37,9 +37,6 @@ bool GrMainCoords::onIsEqual(const GrFragmentProcessor& other) const {
     const GrMainCoords& that = other.cast<GrMainCoords>();
     (void) that;
     return true;
-}
-bool GrMainCoords::usesExplicitReturn() const {
-    return false;
 }
 GrMainCoords::GrMainCoords(const GrMainCoords& src)
 : INHERITED(kGrMainCoords_ClassID, src.optimizationFlags()) {

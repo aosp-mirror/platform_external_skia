@@ -25,17 +25,13 @@ R"SkSL(float3x3 matrix = float3x3(float(%s.w));)SkSL"
 , args.fUniformHandler->getUniformCStr(colorVar));
         SkString _matrix0("matrix");
         SkString _sample0 = this->invokeChildWithMatrix(0, args, _matrix0.c_str());
-        fragBuilder->codeAppendf(
-R"SkSL(
-%s = %s;)SkSL"
-, args.fOutputColor, _sample0.c_str());
         SkString _coords1 = SkStringPrintf("%s / 2.0", args.fSampleCoord);
         SkString _sample1 = this->invokeChild(0, args, _coords1.c_str());
         fragBuilder->codeAppendf(
 R"SkSL(
-%s = %s;
+return %s * %s;
 )SkSL"
-, args.fOutputColor, _sample1.c_str());
+, _sample0.c_str(), _sample1.c_str());
     }
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman, const GrFragmentProcessor& _proc) override {
@@ -51,9 +47,6 @@ bool GrChildProcessorSampleMatrixAndCoords::onIsEqual(const GrFragmentProcessor&
     const GrChildProcessorSampleMatrixAndCoords& that = other.cast<GrChildProcessorSampleMatrixAndCoords>();
     (void) that;
     return true;
-}
-bool GrChildProcessorSampleMatrixAndCoords::usesExplicitReturn() const {
-    return false;
 }
 GrChildProcessorSampleMatrixAndCoords::GrChildProcessorSampleMatrixAndCoords(const GrChildProcessorSampleMatrixAndCoords& src)
 : INHERITED(kGrChildProcessorSampleMatrixAndCoords_ClassID, src.optimizationFlags()) {

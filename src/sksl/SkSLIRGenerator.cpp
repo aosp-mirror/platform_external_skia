@@ -697,6 +697,10 @@ std::unique_ptr<Statement> IRGenerator::convertContinue(const ASTNode& c) {
 
 std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDiscard);
+    if (fKind != Program::kFragment_Kind && fKind != Program::kFragmentProcessor_Kind) {
+        fErrors.error(d.fOffset, "discard statement is only permitted in fragment shaders");
+        return nullptr;
+    }
     return std::make_unique<DiscardStatement>(d.fOffset);
 }
 
@@ -942,16 +946,22 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                     fErrors.error(f.fOffset, "'main' must return: 'vec4', 'float4', or 'half4'");
                     return;
                 }
-                if (!(parameters.size() == 0 || (parameters.size() == 1 && paramIsCoords(0)))) {
+                bool validParams = (parameters.size() == 0) ||
+                                   (parameters.size() == 1 && paramIsCoords(0));
+                if (!validParams) {
                     fErrors.error(f.fOffset, "'main' parameters must be: (), (vec2), or (float2)");
                     return;
                 }
                 break;
             }
             case Program::kFragmentProcessor_Kind: {
-                bool valid = (parameters.size() == 0) ||
-                             (parameters.size() == 1 && paramIsCoords(0));
-                if (!valid) {
+                if (*returnType != *fContext.fHalf4_Type) {
+                    fErrors.error(f.fOffset, ".fp 'main' must return 'half4'");
+                    return;
+                }
+                bool validParams = (parameters.size() == 0) ||
+                                   (parameters.size() == 1 && paramIsCoords(0));
+                if (!validParams) {
                     fErrors.error(f.fOffset, ".fp 'main' must be declared main() or main(float2)");
                     return;
                 }
@@ -963,6 +973,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                 if (parameters.size()) {
                     fErrors.error(f.fOffset, "shader 'main' must have zero parameters");
                 }
+                break;
         }
     }
 
