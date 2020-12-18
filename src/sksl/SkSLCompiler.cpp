@@ -87,7 +87,7 @@ public:
 Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
         : fContext(std::make_shared<Context>())
         , fCaps(caps)
-        , fInliner(fContext.get(), fCaps)
+        , fInliner(fContext.get())
         , fFlags(flags)
         , fErrorCount(0) {
     SkASSERT(fCaps);
@@ -1629,7 +1629,7 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
     // check for unreachable code
     for (size_t i = 0; i < cfg.fBlocks.size(); i++) {
         const BasicBlock& block = cfg.fBlocks[i];
-        if (i != cfg.fStart && !block.fIsReachable && block.fNodes.size()) {
+        if (!block.fIsReachable && !block.fAllowUnreachable && block.fNodes.size()) {
             int offset;
             const BasicBlock::Node& node = block.fNodes[0];
             if (node.isStatement()) {
@@ -1813,6 +1813,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
 
 bool Compiler::optimize(LoadedModule& module) {
     SkASSERT(!fErrorCount);
+    const Program::Settings* oldSettings = fIRGenerator->fSettings;
     Program::Settings settings;
     fIRGenerator->fKind = module.fKind;
     fIRGenerator->fSettings = &settings;
@@ -1831,12 +1832,13 @@ bool Compiler::optimize(LoadedModule& module) {
         }
 
         // Perform inline-candidate analysis and inline any functions deemed suitable.
-        madeChanges |= fInliner.analyze(module.fElements, module.fSymbols.get(), usage.get());
+        madeChanges |= fInliner.analyze(module.fElements, module.fSymbols, usage.get());
 
         if (!madeChanges) {
             break;
         }
     }
+    fIRGenerator->fSettings = oldSettings;
     return fErrorCount == 0;
 }
 
@@ -1857,7 +1859,7 @@ bool Compiler::optimize(Program& program) {
         }
 
         // Perform inline-candidate analysis and inline any functions deemed suitable.
-        madeChanges |= fInliner.analyze(program.ownedElements(), program.fSymbols.get(), usage);
+        madeChanges |= fInliner.analyze(program.ownedElements(), program.fSymbols, usage);
 
         // Remove dead functions. We wait until after analysis so that we still report errors,
         // even in unused code.
@@ -2159,10 +2161,13 @@ void Compiler::error(int offset, String msg) {
     fErrorText += "error: " + (pos.fLine >= 1 ? to_string(pos.fLine) + ": " : "") + msg + "\n";
 }
 
-String Compiler::errorText() {
-    this->writeErrorCount();
+String Compiler::errorText(bool showCount) {
+    if (showCount) {
+        this->writeErrorCount();
+    }
     fErrorCount = 0;
     String result = fErrorText;
+    fErrorText = "";
     return result;
 }
 

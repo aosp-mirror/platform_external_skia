@@ -1955,7 +1955,10 @@ bool GrVkGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInf
     }
 
     GrVkRenderPass::LoadFromResolve loadFromResolve = GrVkRenderPass::LoadFromResolve::kNo;
-
+    if (programInfo.targetSupportsVkResolveLoad() && programInfo.colorLoadOp() == GrLoadOp::kLoad &&
+        this->vkCaps().preferDiscardableMSAAAttachment()) {
+        loadFromResolve = GrVkRenderPass::LoadFromResolve::kLoad;
+    }
     sk_sp<const GrVkRenderPass> renderPass(this->resourceProvider().findCompatibleRenderPass(
             &attachmentsDescriptor, attachmentFlags, selfDepFlags, loadFromResolve));
     if (!renderPass) {
@@ -2143,8 +2146,13 @@ void GrVkGpu::onReportSubmitHistograms() {
 #endif
 }
 
-static int get_surface_sample_cnt(GrSurface* surf) {
+static int get_surface_sample_cnt(GrSurface* surf, const GrVkCaps& caps) {
     if (const GrRenderTarget* rt = surf->asRenderTarget()) {
+        auto vkRT = static_cast<const GrVkRenderTarget*>(rt);
+        if (caps.preferDiscardableMSAAAttachment() && vkRT->resolveAttachmentView() &&
+            vkRT->supportsInputAttachmentUsage()) {
+            return 1;
+        }
         return rt->numSamples();
     }
     return 0;
@@ -2158,8 +2166,8 @@ void GrVkGpu::copySurfaceAsCopyImage(GrSurface* dst, GrSurface* src, GrVkImage* 
     }
 
 #ifdef SK_DEBUG
-    int dstSampleCnt = get_surface_sample_cnt(dst);
-    int srcSampleCnt = get_surface_sample_cnt(src);
+    int dstSampleCnt = get_surface_sample_cnt(dst, this->vkCaps());
+    int srcSampleCnt = get_surface_sample_cnt(src, this->vkCaps());
     bool dstHasYcbcr = dstImage->ycbcrConversionInfo().isValid();
     bool srcHasYcbcr = srcImage->ycbcrConversionInfo().isValid();
     VkFormat dstFormat = dstImage->imageFormat();
@@ -2219,8 +2227,8 @@ void GrVkGpu::copySurfaceAsBlit(GrSurface* dst, GrSurface* src, GrVkImage* dstIm
     }
 
 #ifdef SK_DEBUG
-    int dstSampleCnt = get_surface_sample_cnt(dst);
-    int srcSampleCnt = get_surface_sample_cnt(src);
+    int dstSampleCnt = get_surface_sample_cnt(dst, this->vkCaps());
+    int srcSampleCnt = get_surface_sample_cnt(src, this->vkCaps());
     bool dstHasYcbcr = dstImage->ycbcrConversionInfo().isValid();
     bool srcHasYcbcr = srcImage->ycbcrConversionInfo().isValid();
     VkFormat dstFormat = dstImage->imageFormat();
@@ -2303,8 +2311,10 @@ bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRe
         return false;
     }
 
-    int dstSampleCnt = get_surface_sample_cnt(dst);
-    int srcSampleCnt = get_surface_sample_cnt(src);
+    int dstSampleCnt = get_surface_sample_cnt(dst, this->vkCaps());
+    int srcSampleCnt = get_surface_sample_cnt(src, this->vkCaps());
+
+    bool useDiscardableMSAA = this->vkCaps().preferDiscardableMSAAAttachment();
 
     GrVkImage* dstImage;
     GrVkImage* srcImage;
@@ -2314,7 +2324,12 @@ bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRe
         if (vkRT->wrapsSecondaryCommandBuffer()) {
             return false;
         }
-        dstImage = vkRT->colorAttachmentImage();
+        if (useDiscardableMSAA && vkRT->resolveAttachmentView() &&
+            vkRT->supportsInputAttachmentUsage()) {
+            dstImage = vkRT;
+        } else {
+            dstImage = vkRT->colorAttachmentImage();
+        }
     } else {
         SkASSERT(dst->asTexture());
         dstImage = static_cast<GrVkTexture*>(dst->asTexture());
@@ -2322,7 +2337,12 @@ bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRe
     GrRenderTarget* srcRT = src->asRenderTarget();
     if (srcRT) {
         GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(srcRT);
-        srcImage = vkRT->colorAttachmentImage();
+        if (useDiscardableMSAA && vkRT->resolveAttachmentView() &&
+            vkRT->supportsInputAttachmentUsage()) {
+            srcImage = vkRT;
+        } else {
+            srcImage = vkRT->colorAttachmentImage();
+        }
     } else {
         SkASSERT(src->asTexture());
         srcImage = static_cast<GrVkTexture*>(src->asTexture());
