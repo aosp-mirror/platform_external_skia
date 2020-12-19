@@ -409,7 +409,8 @@ void SkBitmapDevice::drawBitmap(const SkBitmap& bitmap, const SkMatrix& matrix,
             bounds = &storage;
         }
     }
-    LOOP_TILER(drawBitmap(bitmap, matrix, dstOrNull, paint), bounds)
+    SkSamplingOptions sampling(paint.getFilterQuality());   // TODO, pass this in directly
+    LOOP_TILER(drawBitmap(bitmap, matrix, dstOrNull, sampling, paint), bounds)
 }
 
 static inline bool CanApplyDstMatrixAsCTM(const SkMatrix& m, const SkPaint& paint) {
@@ -421,9 +422,9 @@ static inline bool CanApplyDstMatrixAsCTM(const SkMatrix& m, const SkPaint& pain
     return m.getType() <= SkMatrix::kTranslate_Mask;
 }
 
-void SkBitmapDevice::drawImageRect(const SkImage* image,
-                                   const SkRect* src, const SkRect& dst,
-                                   const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
+void SkBitmapDevice::drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
+                                   const SkSamplingOptions& sampling, const SkPaint& paint,
+                                   SkCanvas::SrcRectConstraint constraint) {
     SkASSERT(dst.isFinite());
     SkASSERT(dst.isSorted());
 
@@ -469,7 +470,7 @@ void SkBitmapDevice::drawImageRect(const SkImage* image,
 
     if (src && !src->contains(bitmapBounds) &&
         SkCanvas::kFast_SrcRectConstraint == constraint &&
-        paint.getFilterQuality() != kNone_SkFilterQuality) {
+        sampling != SkSamplingOptions()) {
         // src is smaller than the bounds of the bitmap, and we are filtering, so we don't know
         // how much more of the bitmap we need, so we can't use extractSubset or drawBitmap,
         // but we must use a shader w/ dst bounds (which can access all of the bitmap needed).
@@ -529,7 +530,9 @@ void SkBitmapDevice::drawImageRect(const SkImage* image,
 
     // construct a shader, so we can call drawRect with the dst
     auto s = SkMakeBitmapShaderForPaint(paint, *bitmapPtr, SkTileMode::kClamp,
-                                        SkTileMode::kClamp, &matrix, kNever_SkCopyPixelsMode);
+                                        SkTileMode::kClamp,
+                                        SkSamplingOptions(paint.getFilterQuality()), &matrix,
+                                        kNever_SkCopyPixelsMode);
     if (!s) {
         return;
     }
@@ -579,8 +582,9 @@ void SkBitmapDevice::drawDevice(SkBaseDevice* device, const SkPaint& paint) {
         draw.fRC = &fRCStack.rc();
 
         SkPaint deviceAsShader = paint;
-        deviceAsShader.setShader(src->fBitmap.makeShader(SkSamplingOptions()));
-        draw.drawBitmap(*src->fCoverage, SkMatrix::I(), nullptr, deviceAsShader);
+        SkSamplingOptions sampling;    // nearest-neighbor, since we in sprite mode
+        deviceAsShader.setShader(src->fBitmap.makeShader(sampling));
+        draw.drawBitmap(*src->fCoverage, SkMatrix::I(), nullptr, sampling, deviceAsShader);
     } else {
         this->INHERITED::drawDevice(device, paint);
     }
@@ -600,7 +604,8 @@ void SkBitmapDevice::drawSpecial(SkSpecialImage* src,
         draw.fDst = fBitmap.pixmap();
         draw.fMatrixProvider = &matrixProvider;
         draw.fRC = &fRCStack.rc();
-        draw.drawBitmap(resultBM, SkMatrix::I(), nullptr, paint);
+        draw.drawBitmap(resultBM, SkMatrix::I(), nullptr,
+                        SkSamplingOptions(paint.getFilterQuality()), paint);
     }
 }
 sk_sp<SkSpecialImage> SkBitmapDevice::makeSpecial(const SkBitmap& bitmap) {
