@@ -439,6 +439,7 @@ cc_library_static {
         "src/sksl/SkSLSectionAndParameterHelper.cpp",
         "src/sksl/SkSLString.cpp",
         "src/sksl/SkSLUtil.cpp",
+        "src/sksl/SkSLVMGenerator.cpp",
         "src/sksl/ir/SkSLConstructor.cpp",
         "src/sksl/ir/SkSLPrefixExpression.cpp",
         "src/sksl/ir/SkSLSetting.cpp",
@@ -1040,7 +1041,7 @@ cc_defaults {
         "skia_pgo_no_profile_use"
     ],
     shared_libs: [
-        "libandroidicu",
+        "libicu",
         "libharfbuzz_ng",
     ],
     static_libs: [
@@ -1641,6 +1642,7 @@ cc_test {
         "modules/svg/src/SkSVGTransformableNode.cpp",
         "modules/svg/src/SkSVGUse.cpp",
         "modules/svg/src/SkSVGValue.cpp",
+        "modules/svg/tests/Text.cpp",
         "tests/AAClipTest.cpp",
         "tests/AdvancedBlendTest.cpp",
         "tests/AndroidCodecTest.cpp",
@@ -2030,7 +2032,6 @@ cc_test {
         "tools/Resources.cpp",
         "tools/SkMetaData.cpp",
         "tools/SkSharingProc.cpp",
-        "tools/SkVMBuilders.cpp",
         "tools/ToolUtils.cpp",
         "tools/UrlDataManager.cpp",
         "tools/debugger/DebugCanvas.cpp",
@@ -2204,7 +2205,6 @@ cc_test {
         "bench/SkGlyphCacheBench.cpp",
         "bench/SkSLBench.cpp",
         "bench/SkSLInterpreterBench.cpp",
-        "bench/SkVMBench.cpp",
         "bench/SortBench.cpp",
         "bench/StreamBench.cpp",
         "bench/StrokeBench.cpp",
@@ -2766,7 +2766,6 @@ cc_test {
         "tools/Resources.cpp",
         "tools/SkMetaData.cpp",
         "tools/SkSharingProc.cpp",
-        "tools/SkVMBuilders.cpp",
         "tools/ToolUtils.cpp",
         "tools/UrlDataManager.cpp",
         "tools/debugger/DebugCanvas.cpp",

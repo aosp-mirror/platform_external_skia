@@ -110,11 +110,10 @@ public:
                    const SkColor[], int count, SkBlendMode, const SkPaint&) override;
 
     void drawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
-                       const SkPaint&, SkCanvas::SrcRectConstraint) override;
-    void drawImageNine(const SkImage* image, const SkIRect& center,
-                       const SkRect& dst, const SkPaint& paint) override;
+                       const SkSamplingOptions&, const SkPaint&,
+                       SkCanvas::SrcRectConstraint) override;
     void drawImageLattice(const SkImage*, const SkCanvas::Lattice&,
-                          const SkRect& dst, const SkPaint&) override;
+                          const SkRect& dst, SkFilterMode, const SkPaint&) override;
 
     void drawDrawable(SkDrawable*, const SkMatrix*, SkCanvas* canvas) override;
 

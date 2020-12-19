@@ -23,7 +23,6 @@
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
-#include "src/sksl/ir/SkSLWhileStatement.h"
 
 namespace SkSL {
 
@@ -487,10 +486,6 @@ void CFGGenerator::addLValue(CFG& cfg, std::unique_ptr<Expression>* e) {
     }
 }
 
-static bool is_true(Expression& expr) {
-    return expr.is<BoolLiteral>() && expr.as<BoolLiteral>().value();
-}
-
 void CFGGenerator::addStatement(CFG& cfg, std::unique_ptr<Statement>* s) {
     switch ((*s)->kind()) {
         case Statement::Kind::kBlock: {
@@ -556,25 +551,6 @@ void CFGGenerator::addStatement(CFG& cfg, std::unique_ptr<Statement>* s) {
             cfg.addExit(cfg.fCurrent, fLoopContinues.top());
             cfg.fCurrent = cfg.newIsolatedBlock();
             break;
-        case Statement::Kind::kWhile: {
-            WhileStatement& w = (*s)->as<WhileStatement>();
-            BlockId loopStart = cfg.newBlock();
-            fLoopContinues.push(loopStart);
-            BlockId loopExit = cfg.newIsolatedBlock();
-            fLoopExits.push(loopExit);
-            this->addExpression(cfg, &w.test(), /*constantPropagate=*/true);
-            BlockId test = cfg.fCurrent;
-            if (!is_true(*w.test())) {
-                cfg.addExit(test, loopExit);
-            }
-            cfg.newBlock();
-            this->addStatement(cfg, &w.statement());
-            cfg.addExit(cfg.fCurrent, loopStart);
-            fLoopContinues.pop();
-            fLoopExits.pop();
-            cfg.fCurrent = loopExit;
-            break;
-        }
         case Statement::Kind::kDo: {
             DoStatement& d = (*s)->as<DoStatement>();
             BlockId loopStart = cfg.newBlock();
@@ -617,6 +593,11 @@ void CFGGenerator::addStatement(CFG& cfg, std::unique_ptr<Statement>* s) {
             if (f.next()) {
                 this->addExpression(cfg, &f.next(), /*constantPropagate=*/true);
             }
+            // The increment expression of a for loop is allowed to be unreachable, because GLSL
+            // ES2 requires us to provide an increment expression for our for-loops whether or not
+            // it can be reached. Reporting it as "unreachable" isn't helpful if the alternative
+            // is an invalid program.
+            cfg.currentBlock().fAllowUnreachable = true;
             cfg.addExit(cfg.fCurrent, loopStart);
             cfg.addExit(cfg.fCurrent, loopExit);
             fLoopContinues.pop();
@@ -668,6 +649,8 @@ CFG CFGGenerator::getCFG(FunctionDefinition& f) {
     CFG result;
     result.fStart = result.newBlock();
     result.fCurrent = result.fStart;
+    // The starting block is "reached" implicitly, even if nothing points to it.
+    result.currentBlock().fAllowUnreachable = true;
     this->addStatement(result, &f.body());
     result.newBlock();
     result.fExit = result.fCurrent;
