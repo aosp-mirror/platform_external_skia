@@ -1926,6 +1926,7 @@ cc_test {
         "tests/SVGDeviceTest.cpp",
         "tests/SafeMathTest.cpp",
         "tests/SamplePatternDictionaryTest.cpp",
+        "tests/SamplingTest.cpp",
         "tests/ScalarTest.cpp",
         "tests/ScaleToSidesTest.cpp",
         "tests/SerialProcsTest.cpp",
