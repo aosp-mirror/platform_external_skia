@@ -24,6 +24,8 @@
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 
+#include <tuple>
+
 namespace SkSL {
 
 void BasicBlock::Node::setExpression(std::unique_ptr<Expression> expr, ProgramUsage* usage) {
@@ -77,12 +79,12 @@ void CFG::dump() const {
 void BasicBlock::dump() const {
     printf("Before: [");
     const char* separator = "";
-    fBefore.foreach([&](const Variable* var, std::unique_ptr<Expression>* expr) {
+    for (const auto& [var, expr] : fBefore) {
         printf("%s%s = %s", separator,
                             var->description().c_str(),
                             expr ? (*expr)->description().c_str() : "<undefined>");
         separator = ", ";
-    });
+    }
     printf("]\nIs Reachable: [%s]\n", fIsReachable ? "yes" : "no");
     for (size_t j = 0; j < fNodes.size(); j++) {
         const BasicBlock::Node& n = fNodes[j];
@@ -106,7 +108,10 @@ bool BasicBlock::tryRemoveExpressionBefore(std::vector<BasicBlock::Node>::iterat
     bool result;
     if ((*iter)->isExpression()) {
         SkASSERT((*iter)->expression()->get() != e);
+        // Remember the expression that we started on.
         Expression* old = (*iter)->expression()->get();
+        // Back up `iter` until we find the expression that we want to remove. (If we don't find
+        // that expression at all, fail and rescan.)
         do {
             if ((*iter) == fNodes.begin()) {
                 return false;
@@ -114,14 +119,19 @@ bool BasicBlock::tryRemoveExpressionBefore(std::vector<BasicBlock::Node>::iterat
             --(*iter);
         } while (!(*iter)->isExpression() || (*iter)->expression()->get() != e);
 
+        // `iter` now points to our expression that needs removal. Erase it.
         result = this->tryRemoveExpression(iter);
 
+        // Move `iter` forward again until we find the expression we started on.
         while (!(*iter)->isExpression() || (*iter)->expression()->get() != old) {
             SkASSERT(*iter != fNodes.end());
             ++(*iter);
         }
     } else {
+        // Remember the statement that we started on.
         Statement* old = (*iter)->statement()->get();
+        // Back up `iter` until we find the expression that we want to remove. (If we don't find
+        // that expression at all, fail and rescan.)
         do {
             if ((*iter) == fNodes.begin()) {
                 return false;
@@ -129,8 +139,10 @@ bool BasicBlock::tryRemoveExpressionBefore(std::vector<BasicBlock::Node>::iterat
             --(*iter);
         } while (!(*iter)->isExpression() || (*iter)->expression()->get() != e);
 
+        // `iter` now points to our expression that needs removal. Erase it.
         result = this->tryRemoveExpression(iter);
 
+        // Move `iter` forward again until we find the statement we started on.
         while (!(*iter)->isStatement() || (*iter)->statement()->get() != old) {
             SkASSERT(*iter != fNodes.end());
             ++(*iter);

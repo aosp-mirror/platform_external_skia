@@ -332,6 +332,7 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/Ossfuzz26167.sksl",
   "$_tests/sksl/shared/Ossfuzz27614.sksl",
   "$_tests/sksl/shared/Ossfuzz28050.sksl",
+  "$_tests/sksl/shared/Ossfuzz28794.sksl",
   "$_tests/sksl/shared/OutParams.sksl",
   "$_tests/sksl/shared/OutParamsTricky.sksl",
   "$_tests/sksl/shared/RectangleTexture.sksl",
@@ -390,6 +391,9 @@ sksl_inliner_tests = [
   "$_tests/sksl/inliner/IfWithReturnsCanBeInlined.sksl",
   "$_tests/sksl/inliner/InlineKeywordOverridesThreshold.sksl",
   "$_tests/sksl/inliner/InlineThreshold.sksl",
+  "$_tests/sksl/inliner/InlinerElidesTempVarForReturnsInsideBlock.sksl",
+  "$_tests/sksl/inliner/InlinerUsesTempVarForMultipleReturns.sksl",
+  "$_tests/sksl/inliner/InlinerUsesTempVarForReturnsInsideBlockWithVar.sksl",
   "$_tests/sksl/inliner/InlineWithInoutArgument.sksl",
   "$_tests/sksl/inliner/InlineWithModifiedArgument.sksl",
   "$_tests/sksl/inliner/InlineWithNestedBigCalls.sksl",
@@ -463,6 +467,19 @@ sksl_settings_tests = [
   "$_tests/sksl/workarounds/TernaryShortCircuit.sksl",
 ]
 
+sksl_rte_tests = [
+  "$_tests/sksl/runtime/SampleWithConstantMatrix.rte",
+  "$_tests/sksl/runtime/SampleWithExplicitCoord.rte",
+  "$_tests/sksl/runtime/SampleWithUniformMatrix.rte",
+  "$_tests/sksl/runtime/SampleWithVariableMatrix.rte",
+]
+
+sksl_rte_error_tests = [
+  "$_tests/sksl/errors/Discard.rte",
+  "$_tests/sksl/errors/UnsupportedTypeSampler.rte",
+  "$_tests/sksl/errors/UnsupportedTypeTexture.rte",
+]
+
 # Tests in sksl_fp_tests_sources will be compiled with --settings on, and are expected to generate
 # a .cpp and a .h output file.
 sksl_fp_tests_sources = sksl_fp_error_tests + sksl_fp_tests
@@ -485,3 +502,7 @@ sksl_metal_tests_sources =
 # generate a .asm.(frag|vert|geom) output file.
 sksl_spirv_tests_sources =
     sksl_blend_tests + sksl_shared_tests + sksl_spirv_tests
+
+## Tests in sksl_skvm_tests_sources will be compiled with --settings on, and are expected to
+## generate a .skvm output file.
+sksl_skvm_tests_sources = sksl_rte_tests + sksl_rte_error_tests
