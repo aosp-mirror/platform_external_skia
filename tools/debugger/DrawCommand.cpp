@@ -24,6 +24,7 @@
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkPaintDefaults.h"
+#include "src/core/SkPaintPriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkTextBlobPriv.h"
@@ -720,7 +721,7 @@ static const char* alpha_type_name(SkAlphaType alphaType) {
 bool DrawCommand::flatten(const SkBitmap& bitmap,
                           SkJSONWriter&   writer,
                           UrlDataManager& urlDataManager) {
-    sk_sp<SkImage> image(SkImage::MakeFromBitmap(bitmap));
+    sk_sp<SkImage> image(bitmap.asImage());
     writer.appendString(DEBUGCANVAS_ATTRIBUTE_COLOR, color_type_name(bitmap.colorType()));
     writer.appendString(DEBUGCANVAS_ATTRIBUTE_ALPHA, alpha_type_name(bitmap.alphaType()));
     // Image will appear to have no uses, TODO(nifong): provide the user with a useful explanation
@@ -824,7 +825,7 @@ static void apply_paint_join(const SkPaint& paint, SkJSONWriter& writer) {
 }
 
 static void apply_paint_filterquality(const SkPaint& paint, SkJSONWriter& writer) {
-    SkFilterQuality quality = paint.getFilterQuality();
+    SkFilterQuality quality = SkPaintPriv::GetFQ(paint);
     switch (quality) {
         case kNone_SkFilterQuality: break;
         case kLow_SkFilterQuality:

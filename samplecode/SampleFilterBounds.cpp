@@ -7,6 +7,7 @@
 
 #include "samplecode/Sample.h"
 
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkFont.h"
@@ -168,8 +169,8 @@ public:
 
     void onOnceBeforeDraw() override {
         fBlur = SkImageFilters::Blur(8.f, 8.f, nullptr);
-        fImage = SkImage::MakeFromBitmap(ToolUtils::create_checkerboard_bitmap(
-                300, 300, SK_ColorMAGENTA, SK_ColorLTGRAY, 50));
+        fImage = ToolUtils::create_checkerboard_image(
+                300, 300, SK_ColorMAGENTA, SK_ColorLTGRAY, 50);
     }
 
     void onDrawContent(SkCanvas* canvas) override {
