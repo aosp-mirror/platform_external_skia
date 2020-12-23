@@ -60,8 +60,8 @@
 #include "src/sksl/generated/sksl_geom.dehydrated.sksl"
 #include "src/sksl/generated/sksl_gpu.dehydrated.sksl"
 #include "src/sksl/generated/sksl_interp.dehydrated.sksl"
-#include "src/sksl/generated/sksl_pipeline.dehydrated.sksl"
 #include "src/sksl/generated/sksl_public.dehydrated.sksl"
+#include "src/sksl/generated/sksl_runtime.dehydrated.sksl"
 #include "src/sksl/generated/sksl_vert.dehydrated.sksl"
 
 #define MODULE_DATA(name) MakeModuleData(SKSL_INCLUDE_sksl_##name,\
@@ -110,16 +110,14 @@ Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
         TYPE( UByte), TYPE( UByte2), TYPE( UByte3), TYPE( UByte4),
         TYPE(  Bool), TYPE(  Bool2), TYPE(  Bool3), TYPE(  Bool4),
 
-        TYPE(Float2x2), TYPE(Float2x3), TYPE(Float2x4),
-        TYPE(Float3x2), TYPE(Float3x3), TYPE(Float3x4),
-        TYPE(Float4x2), TYPE(Float4x3), TYPE(Float4x4),
+        TYPE(Float2x2), TYPE(Float3x3), TYPE(Float4x4),
 
         TYPE(Half2x2),  TYPE(Half2x3),  TYPE(Half2x4),
         TYPE(Half3x2),  TYPE(Half3x3),  TYPE(Half3x4),
         TYPE(Half4x2),  TYPE(Half4x3),  TYPE(Half4x4),
 
         TYPE(GenType), TYPE(GenHType), TYPE(GenIType), TYPE(GenUType), TYPE(GenBType),
-        TYPE(Mat), TYPE(MatH), TYPE(Vec),
+        TYPE(SquareMat), TYPE(SquareHMat), TYPE(Vec),
         TYPE(GVec), TYPE(GVec2), TYPE(GVec3), TYPE(GVec4),
         TYPE(HVec), TYPE(IVec), TYPE(UVec), TYPE(SVec), TYPE(USVec),
         TYPE(ByteVec), TYPE(UByteVec), TYPE(BVec),
@@ -128,6 +126,12 @@ Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
     };
 
     const SkSL::Symbol* privateTypes[] = {
+        TYPE(Float2x3), TYPE(Float2x4),
+        TYPE(Float3x2), TYPE(Float3x4),
+        TYPE(Float4x2), TYPE(Float4x3),
+
+        TYPE(Mat), TYPE(HMat),
+
         TYPE(Sampler1D), TYPE(Sampler2D), TYPE(Sampler3D),
         TYPE(SamplerExternalOES),
         TYPE(SamplerCube),
@@ -227,39 +231,39 @@ const ParsedModule& Compiler::loadPublicModule() {
     return fPublicModule;
 }
 
-const ParsedModule& Compiler::loadPipelineModule() {
-    if (!fPipelineModule.fSymbols) {
-        fPipelineModule = this->parseModule(Program::kPipelineStage_Kind, MODULE_DATA(pipeline),
-                                            this->loadPublicModule());
+const ParsedModule& Compiler::loadRuntimeEffectModule() {
+    if (!fRuntimeEffectModule.fSymbols) {
+        fRuntimeEffectModule = this->parseModule(Program::kRuntimeEffect_Kind, MODULE_DATA(runtime),
+                                                 this->loadPublicModule());
 
-        // Add some aliases to the pipeline module so that it's friendlier, and more like GLSL
-        fPipelineModule.fSymbols->addAlias("shader", fContext->fFragmentProcessor_Type.get());
+        // Add some aliases to the runtime effect module so that it's friendlier, and more like GLSL
+        fRuntimeEffectModule.fSymbols->addAlias("shader", fContext->fFragmentProcessor_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("vec2", fContext->fFloat2_Type.get());
-        fPipelineModule.fSymbols->addAlias("vec3", fContext->fFloat3_Type.get());
-        fPipelineModule.fSymbols->addAlias("vec4", fContext->fFloat4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec2", fContext->fFloat2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec3", fContext->fFloat3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec4", fContext->fFloat4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("bvec2", fContext->fBool2_Type.get());
-        fPipelineModule.fSymbols->addAlias("bvec3", fContext->fBool3_Type.get());
-        fPipelineModule.fSymbols->addAlias("bvec4", fContext->fBool4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec2", fContext->fBool2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec3", fContext->fBool3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec4", fContext->fBool4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat2", fContext->fFloat2x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat3", fContext->fFloat3x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat4", fContext->fFloat4x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2", fContext->fFloat2x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3", fContext->fFloat3x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4", fContext->fFloat4x4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat2x2", fContext->fFloat2x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat2x3", fContext->fFloat2x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat2x4", fContext->fFloat2x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x2", fContext->fFloat2x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x3", fContext->fFloat2x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x4", fContext->fFloat2x4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat3x2", fContext->fFloat3x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat3x3", fContext->fFloat3x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat3x4", fContext->fFloat3x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x2", fContext->fFloat3x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x3", fContext->fFloat3x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x4", fContext->fFloat3x4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat4x2", fContext->fFloat4x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat4x3", fContext->fFloat4x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat4x4", fContext->fFloat4x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x2", fContext->fFloat4x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x3", fContext->fFloat4x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x4", fContext->fFloat4x4_Type.get());
     }
-    return fPipelineModule;
+    return fRuntimeEffectModule;
 }
 
 const ParsedModule& Compiler::loadInterpreterModule() {
@@ -272,12 +276,12 @@ const ParsedModule& Compiler::loadInterpreterModule() {
 
 const ParsedModule& Compiler::moduleForProgramKind(Program::Kind kind) {
     switch (kind) {
-        case Program::kVertex_Kind:            return this->loadVertexModule();      break;
-        case Program::kFragment_Kind:          return this->loadFragmentModule();    break;
-        case Program::kGeometry_Kind:          return this->loadGeometryModule();    break;
-        case Program::kFragmentProcessor_Kind: return this->loadFPModule();          break;
-        case Program::kPipelineStage_Kind:     return this->loadPipelineModule();    break;
-        case Program::kGeneric_Kind:           return this->loadInterpreterModule(); break;
+        case Program::kVertex_Kind:            return this->loadVertexModule();        break;
+        case Program::kFragment_Kind:          return this->loadFragmentModule();      break;
+        case Program::kGeometry_Kind:          return this->loadGeometryModule();      break;
+        case Program::kFragmentProcessor_Kind: return this->loadFPModule();            break;
+        case Program::kRuntimeEffect_Kind:     return this->loadRuntimeEffectModule(); break;
+        case Program::kGeneric_Kind:           return this->loadInterpreterModule();   break;
     }
     SkUNREACHABLE;
 }
@@ -1180,14 +1184,12 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             &componentType.toCompound(*fContext, swizzleSize, /*rows=*/1),
                             std::move(newArgs));
 
-                    // No fUsage change: `half4(foo).xy` and `half2(foo)` have equivalent reference
-                    // counts.
+                    // We're replacing an expression with a cloned version; we'll need a rescan.
+                    // There's no fUsage change: `half4(foo).xy` and `half2(foo)` have equivalent
+                    // reference counts.
+                    try_replace_expression(&b, iter, &replacement);
                     optimizationContext->fUpdated = true;
-                    if (!try_replace_expression(&b, iter, &replacement)) {
-                        optimizationContext->fNeedsRescan = true;
-                        return;
-                    }
-                    SkASSERT((*iter)->isExpression());
+                    optimizationContext->fNeedsRescan = true;
                     break;
                 }
 
@@ -1305,14 +1307,13 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             &componentType.toCompound(*fContext, swizzleSize, /*rows=*/1),
                             std::move(newArgs));
 
-                    // Remove references within 'expr', add references within 'optimized'
-                    optimizationContext->fUpdated = true;
+                    // Remove references within 'expr', add references within 'replacement.'
                     optimizationContext->fUsage->replace(expr, replacement.get());
-                    if (!try_replace_expression(&b, iter, &replacement)) {
-                        optimizationContext->fNeedsRescan = true;
-                        return;
-                    }
-                    SkASSERT((*iter)->isExpression());
+
+                    // We're replacing an expression with a cloned version; we'll need a rescan.
+                    try_replace_expression(&b, iter, &replacement);
+                    optimizationContext->fUpdated = true;
+                    optimizationContext->fNeedsRescan = true;
                 }
                 break;
             }
