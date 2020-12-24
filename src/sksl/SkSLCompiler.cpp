@@ -103,59 +103,47 @@ Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
         TYPE( Float), TYPE( Float2), TYPE( Float3), TYPE( Float4),
         TYPE(  Half), TYPE(  Half2), TYPE(  Half3), TYPE(  Half4),
         TYPE(   Int), TYPE(   Int2), TYPE(   Int3), TYPE(   Int4),
-        TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
-        TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
-        TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
-        TYPE(  Byte), TYPE(  Byte2), TYPE(  Byte3), TYPE(  Byte4),
-        TYPE( UByte), TYPE( UByte2), TYPE( UByte3), TYPE( UByte4),
         TYPE(  Bool), TYPE(  Bool2), TYPE(  Bool3), TYPE(  Bool4),
 
         TYPE(Float2x2), TYPE(Float3x3), TYPE(Float4x4),
+        TYPE( Half2x2), TYPE( Half3x3), TYPE(Half4x4),
 
-        TYPE(Half2x2),  TYPE(Half2x3),  TYPE(Half2x4),
-        TYPE(Half3x2),  TYPE(Half3x3),  TYPE(Half3x4),
-        TYPE(Half4x2),  TYPE(Half4x3),  TYPE(Half4x4),
+        TYPE(SquareMat), TYPE(SquareHMat),
 
-        TYPE(GenType), TYPE(GenHType), TYPE(GenIType), TYPE(GenUType), TYPE(GenBType),
-        TYPE(SquareMat), TYPE(SquareHMat), TYPE(Vec),
-        TYPE(GVec), TYPE(GVec2), TYPE(GVec3), TYPE(GVec4),
-        TYPE(HVec), TYPE(IVec), TYPE(UVec), TYPE(SVec), TYPE(USVec),
-        TYPE(ByteVec), TYPE(UByteVec), TYPE(BVec),
+        TYPE(GenType), TYPE(GenHType), TYPE(GenIType), TYPE(GenBType),
+        TYPE(Vec),     TYPE(HVec),     TYPE(IVec),     TYPE(BVec),
 
         TYPE(FragmentProcessor),
     };
 
     const SkSL::Symbol* privateTypes[] = {
+        TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
+        TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
+        TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
+        TYPE(  Byte), TYPE(  Byte2), TYPE(  Byte3), TYPE(  Byte4),
+        TYPE( UByte), TYPE( UByte2), TYPE( UByte3), TYPE( UByte4),
+
+        TYPE(GenUType), TYPE(UVec),
+        TYPE(SVec), TYPE(USVec), TYPE(ByteVec), TYPE(UByteVec),
+
         TYPE(Float2x3), TYPE(Float2x4),
         TYPE(Float3x2), TYPE(Float3x4),
         TYPE(Float4x2), TYPE(Float4x3),
+
+        TYPE(Half2x3),  TYPE(Half2x4),
+        TYPE(Half3x2),  TYPE(Half3x4),
+        TYPE(Half4x2),  TYPE(Half4x3),
 
         TYPE(Mat), TYPE(HMat),
 
         TYPE(Sampler1D), TYPE(Sampler2D), TYPE(Sampler3D),
         TYPE(SamplerExternalOES),
-        TYPE(SamplerCube),
         TYPE(Sampler2DRect),
-        TYPE(Sampler1DArray), TYPE(Sampler2DArray), TYPE(SamplerCubeArray),
-        TYPE(SamplerBuffer),
-        TYPE(Sampler2DMS), TYPE(Sampler2DMSArray),
 
         TYPE(ISampler2D),
         TYPE(Image2D), TYPE(IImage2D),
         TYPE(SubpassInput), TYPE(SubpassInputMS),
 
-        TYPE(GSampler1D), TYPE(GSampler2D), TYPE(GSampler3D),
-        TYPE(GSamplerCube),
-        TYPE(GSampler2DRect),
-        TYPE(GSampler1DArray), TYPE(GSampler2DArray), TYPE(GSamplerCubeArray),
-        TYPE(GSamplerBuffer),
-        TYPE(GSampler2DMS), TYPE(GSampler2DMSArray),
-
-        TYPE(Sampler1DShadow), TYPE(Sampler2DShadow), TYPE(SamplerCubeShadow),
-        TYPE(Sampler2DRectShadow),
-        TYPE(Sampler1DArrayShadow), TYPE(Sampler2DArrayShadow), TYPE(SamplerCubeArrayShadow),
-
-        TYPE(GSampler2DArrayShadow), TYPE(GSamplerCubeArrayShadow),
         TYPE(Sampler),
         TYPE(Texture2D),
     };
@@ -537,8 +525,7 @@ void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
             continue;
         }
         BasicBlock& exit = cfg->fBlocks[exitId];
-        after.foreach([&](const Variable* var, std::unique_ptr<Expression>** e1Ptr) {
-            std::unique_ptr<Expression>* e1 = *e1Ptr;
+        for (const auto& [var, e1] : after) {
             std::unique_ptr<Expression>** exitDef = exit.fBefore.find(var);
             if (!exitDef) {
                 // exit has no definition for it, just copy it and reprocess exit block
@@ -557,7 +544,7 @@ void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
                     }
                 }
             }
-        });
+        }
     }
 }
 

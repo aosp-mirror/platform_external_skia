@@ -568,6 +568,7 @@ if (skia_compile_processors || skia_compile_sksl_tests) {
       "src/core/SkSemaphore.cpp",
       "src/core/SkStream.cpp",
       "src/core/SkString.cpp",
+      "src/core/SkStringUtils.cpp",
       "src/core/SkThreadID.cpp",
       "src/core/SkUtils.cpp",
       "src/core/SkVM.cpp",
@@ -786,7 +787,7 @@ if (skia_compile_sksl_tests) {
   compile_sksl("skvm_tests") {
     sources = sksl_skvm_tests_sources
     outputPatterns = [ [
-          "/golden",
+          "/golden/",
           ".skvm",
         ] ]
     lang = "--skvm"

@@ -43,7 +43,6 @@
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLLayout.h"
 #include "src/sksl/ir/SkSLNop.h"
-#include "src/sksl/ir/SkSLNullLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
@@ -274,8 +273,7 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
     if (!baseType) {
         return {};
     }
-    if (baseType->nonnullable() == *fContext.fFragmentProcessor_Type &&
-        storage != Variable::Storage::kGlobal) {
+    if (baseType->componentType().isOpaque() && storage != Variable::Storage::kGlobal) {
         fErrors.error(decls.fOffset,
                       "variables of type '" + baseType->displayName() + "' must be global");
     }
@@ -422,6 +420,11 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
             value = this->convertExpression(*iter);
             if (!value) {
                 return {};
+            }
+            if (type->isOpaque()) {
+                fErrors.error(
+                        value->fOffset,
+                        "opaque type '" + type->name() + "' cannot use initializer expressions");
             }
             if (modifiers.fFlags & Modifiers::kIn_Flag) {
                 fErrors.error(value->fOffset, "'in' variables cannot use initializer expressions");
@@ -883,10 +886,15 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                type_to_grsltype(fContext, *t, &unusedSLType);
 #endif
     };
-    if (returnType->isArray() || !typeIsAllowed(returnType) ||
-        returnType->nonnullable() == *fContext.fFragmentProcessor_Type) {
+    if (returnType->isArray() || !typeIsAllowed(returnType)) {
         fErrors.error(f.fOffset,
                       "functions may not return type '" + returnType->displayName() + "'");
+        return;
+    }
+    if (!fIsBuiltinCode && *returnType != *fContext.fVoid_Type &&
+        returnType->componentType().isOpaque()) {
+        fErrors.error(f.fOffset,
+                      "functions may not return opaque type '" + returnType->displayName() + "'");
         return;
     }
     const ASTNode::FunctionData& funcData = f.getFunctionData();
@@ -908,7 +916,9 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             int arraySize = (paramIter++)->getInt();
             type = fSymbolTable->addArrayDimension(type, arraySize);
         }
-        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters
+        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters.
+        // (You can pass other opaque types to functions safely; this restriction is
+        // fragment-processor specific.)
         if ((type->nonnullable() == *fContext.fFragmentProcessor_Type && !fIsBuiltinCode) ||
             !typeIsAllowed(type)) {
             fErrors.error(param.fOffset,
@@ -1298,8 +1308,7 @@ const Type* IRGenerator::convertType(const ASTNode& type, bool allowVoid) {
     if (td.fIsNullable) {
         if (*result == *fContext.fFragmentProcessor_Type) {
             if (isArray) {
-                fErrors.error(type.fOffset, "type '" + td.fName + "' may not be used in "
-                                            "an array");
+                fErrors.error(type.fOffset, "type '" + td.fName + "' may not be used in an array");
             }
             result = fSymbolTable->takeOwnershipOfSymbol(
                     Type::MakeNullableType(String(result->name()) + "?", *result));
@@ -1355,8 +1364,6 @@ std::unique_ptr<Expression> IRGenerator::convertExpression(const ASTNode& expr) 
         case ASTNode::Kind::kInt:
             return std::unique_ptr<Expression>(new IntLiteral(fContext, expr.fOffset,
                                                               expr.getInt()));
-        case ASTNode::Kind::kNull:
-            return std::unique_ptr<Expression>(new NullLiteral(fContext, expr.fOffset));
         case ASTNode::Kind::kPostfix:
             return this->convertPostfixExpression(expr);
         case ASTNode::Kind::kPrefix:
@@ -1488,10 +1495,6 @@ std::unique_ptr<Expression> IRGenerator::coerce(std::unique_ptr<Expression> expr
         fErrors.error(offset, "expected '" + type.displayName() + "', but found '" +
                               expr->type().displayName() + "'");
         return nullptr;
-    }
-    if (expr->is<NullLiteral>()) {
-        SkASSERT(type.typeKind() == Type::TypeKind::kNullable);
-        return std::make_unique<NullLiteral>(offset, &type);
     }
     ExpressionArray args;
     args.push_back(std::move(expr));
@@ -1788,11 +1791,19 @@ std::unique_ptr<Expression> IRGenerator::constantFoldVector(const Expression& le
 
     // Handle boolean operations: == !=
     if (op == Token::Kind::TK_EQEQ || op == Token::Kind::TK_NEQ) {
-        if (left.kind() == right.kind()) {
-            bool result = left.compareConstant(fContext, right) ^ (op == Token::Kind::TK_NEQ);
-            return std::make_unique<BoolLiteral>(fContext, left.fOffset, result);
+        bool equality = (op == Token::Kind::TK_EQEQ);
+
+        switch (left.compareConstant(fContext, right)) {
+            case Expression::ComparisonResult::kNotEqual:
+                equality = !equality;
+                [[fallthrough]];
+
+            case Expression::ComparisonResult::kEqual:
+                return std::make_unique<BoolLiteral>(fContext, left.fOffset, equality);
+
+            case Expression::ComparisonResult::kUnknown:
+                return nullptr;
         }
-        return nullptr;
     }
 
     // Handle floating-point arithmetic: + - * /
@@ -1952,15 +1963,28 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
             return constantFoldVector<SKSL_INT>(left, op, right);
         }
     }
-    if (leftType.isMatrix() && rightType.isMatrix() && left.kind() == right.kind()) {
+    if (leftType.isMatrix() && rightType.isMatrix()) {
+        bool equality;
         switch (op) {
             case Token::Kind::TK_EQEQ:
-                return std::make_unique<BoolLiteral>(fContext, left.fOffset,
-                                                     left.compareConstant(fContext, right));
+                equality = true;
+                break;
             case Token::Kind::TK_NEQ:
-                return std::make_unique<BoolLiteral>(fContext, left.fOffset,
-                                                     !left.compareConstant(fContext, right));
+                equality = false;
+                break;
             default:
+                return nullptr;
+        }
+
+        switch (left.compareConstant(fContext, right)) {
+            case Expression::ComparisonResult::kNotEqual:
+                equality = !equality;
+                [[fallthrough]];
+
+            case Expression::ComparisonResult::kEqual:
+                return std::make_unique<BoolLiteral>(fContext, left.fOffset, equality);
+
+            case Expression::ComparisonResult::kUnknown:
                 return nullptr;
         }
     }
@@ -2004,9 +2028,13 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
         return nullptr;
     }
     if (Compiler::IsAssignment(op)) {
+        if (leftType->componentType().isOpaque()) {
+            fErrors.error(expression.fOffset, "assignments to opaque type '" +
+                                              left->type().displayName() + "' are not permitted");
+        }
         if (!this->setRefKind(*left, op != Token::Kind::TK_EQ
-                                                            ? VariableReference::RefKind::kReadWrite
-                                                            : VariableReference::RefKind::kWrite)) {
+                                             ? VariableReference::RefKind::kReadWrite
+                                             : VariableReference::RefKind::kWrite)) {
             return nullptr;
         }
     }
@@ -2051,9 +2079,10 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
                                     ifFalse->type().displayName() + "'");
         return nullptr;
     }
-    if (trueType->nonnullable() == *fContext.fFragmentProcessor_Type) {
-        fErrors.error(node.fOffset,
-                      "ternary expression of type '" + trueType->displayName() + "' not allowed");
+    if (trueType->componentType().isOpaque()) {
+        fErrors.error(
+                node.fOffset,
+                "ternary expression of opaque type '" + trueType->displayName() + "' not allowed");
         return nullptr;
     }
     ifTrue = this->coerce(std::move(ifTrue), *trueType);
@@ -2359,8 +2388,7 @@ std::unique_ptr<Expression> IRGenerator::convertConstructor(int offset,
                                                             const Type& type,
                                                             ExpressionArray args) {
     // FIXME: add support for structs
-    if (args.size() == 1 && args[0]->type() == type &&
-        type.nonnullable() != *fContext.fFragmentProcessor_Type) {
+    if (args.size() == 1 && args[0]->type() == type && !type.componentType().isOpaque()) {
         // argument is already the right type, just return it
         return std::move(args[0]);
     }
