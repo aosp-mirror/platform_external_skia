@@ -8,6 +8,7 @@
 #include "modules/skresources/include/SkResources.h"
 
 #include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/private/SkTPin.h"
@@ -140,7 +141,7 @@ sk_sp<SkImage> MultiFrameImageAsset::generateFrame(float t) {
                                        SkSamplingOptions(SkFilterMode::kLinear,
                                                          SkMipmapMode::kNearest),
                                        SkImage::kDisallow_CachingHint)) {
-                image = SkImage::MakeFromBitmap(bm);
+                image = bm.asImage();
             }
         } else {
             // When the image size is OK, just force-decode.

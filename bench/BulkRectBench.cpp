@@ -6,12 +6,13 @@
  */
 
 #include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/utils/SkRandom.h"
-
+#include "src/core/SkCanvasPriv.h"
 #include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/SkGr.h"
 
@@ -144,12 +145,12 @@ protected:
         paint.setColor(SK_ColorWHITE);
         paint.setAntiAlias(true);
 
-        GrSurfaceDrawContext* rtc = canvas->internal_private_accessTopLayerRenderTargetContext();
+        GrSurfaceDrawContext* sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         SkMatrix view = canvas->getLocalToDeviceAs3x3();
         SkSimpleMatrixProvider matrixProvider(view);
         GrPaint grPaint;
-        SkPaintToGrPaint(context, rtc->colorInfo(), paint, matrixProvider, &grPaint);
-        rtc->drawQuadSet(nullptr, std::move(grPaint), GrAA::kYes, view, batch, kRectCount);
+        SkPaintToGrPaint(context, sdc->colorInfo(), paint, matrixProvider, &grPaint);
+        sdc->drawQuadSet(nullptr, std::move(grPaint), GrAA::kYes, view, batch, kRectCount);
     }
 
     void drawSolidColorsRef(SkCanvas* canvas) const {
@@ -220,7 +221,7 @@ protected:
             SkBitmap bm;
             bm.allocN32Pixels(256, 256);
             bm.eraseColor(fColors[i].toSkColor());
-            auto image = SkImage::MakeFromBitmap(bm);
+            auto image = bm.asImage();
 
             fImages[i] = direct ? image->makeTextureImage(direct) : std::move(image);
         }
