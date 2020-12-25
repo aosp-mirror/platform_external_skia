@@ -47,7 +47,6 @@ sksl_fp_tests = [
   "$_tests/sksl/fp/GrNestedCall.fp",
   "$_tests/sksl/fp/GrNestedChildProcessors.fp",
   "$_tests/sksl/fp/GrNonInlinedInUniform.fp",
-  "$_tests/sksl/fp/GrNullableChildProcessor.fp",
   "$_tests/sksl/fp/GrSectionClass.fp",
   "$_tests/sksl/fp/GrSectionConstructor.fp",
   "$_tests/sksl/fp/GrSectionConstructorParams.fp",
@@ -194,6 +193,7 @@ sksl_metal_tests = [
 ]
 
 sksl_spirv_tests = [
+  "$_tests/sksl/spirv/ConstantVectorFromVector.sksl",
   "$_tests/sksl/spirv/LayoutMultipleOf4.sksl",
   "$_tests/sksl/spirv/LayoutOutOfOrder.sksl",
   "$_tests/sksl/spirv/OpaqueTypeInArray.sksl",
@@ -336,6 +336,7 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/Ossfuzz27614.sksl",
   "$_tests/sksl/shared/Ossfuzz28050.sksl",
   "$_tests/sksl/shared/Ossfuzz28794.sksl",
+  "$_tests/sksl/shared/Ossfuzz28904.sksl",
   "$_tests/sksl/shared/OutParams.sksl",
   "$_tests/sksl/shared/OutParamsTricky.sksl",
   "$_tests/sksl/shared/RectangleTexture.sksl",
