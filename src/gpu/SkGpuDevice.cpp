@@ -174,8 +174,7 @@ bool SkGpuDevice::onReadPixels(const SkPixmap& pm, int x, int y) {
         return false;
     }
 
-    return fSurfaceDrawContext->readPixels(dContext, pm.info(), pm.writable_addr(), pm.rowBytes(),
-                                           {x, y});
+    return fSurfaceDrawContext->readPixels(dContext, pm, {x, y});
 }
 
 bool SkGpuDevice::onWritePixels(const SkPixmap& pm, int x, int y) {
@@ -187,7 +186,7 @@ bool SkGpuDevice::onWritePixels(const SkPixmap& pm, int x, int y) {
         return false;
     }
 
-    return fSurfaceDrawContext->writePixels(dContext, pm.info(), pm.addr(), pm.rowBytes(), {x, y});
+    return fSurfaceDrawContext->writePixels(dContext, pm, {x, y});
 }
 
 bool SkGpuDevice::onAccessPixels(SkPixmap* pmap) {
@@ -938,12 +937,10 @@ void SkGpuDevice::drawShadow(const SkPath& path, const SkDrawShadowRec& rec) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// TODO: pass samplingoptions explicitly
 void SkGpuDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
                             const SkRect texRect[], const SkColor colors[], int count,
-                            SkBlendMode mode, const SkPaint& paint) {
-    SkSamplingOptions sampling(paint.getFilterQuality(), SkSamplingOptions::kMedium_asMipmapLinear);
-
+                            SkBlendMode mode, const SkSamplingOptions& sampling,
+                            const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawAtlas", fContext.get());
 

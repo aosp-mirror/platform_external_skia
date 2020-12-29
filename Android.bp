@@ -45,9 +45,11 @@ cc_library_static {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
+        "modules/particles/include/",
         "modules/skottie/include/",
         "modules/skparagraph/include/",
         "modules/skshaper/include/",
+        "modules/svg/include/",
     ],
 
     local_include_dirs: [
