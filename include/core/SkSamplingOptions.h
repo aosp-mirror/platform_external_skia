@@ -9,16 +9,21 @@
 #define SkImageSampling_DEFINED
 
 #include "include/core/SkFilterQuality.h"
+#include <new>
 
 enum class SkFilterMode {
     kNearest,   // single sample point (nearest neighbor)
     kLinear,    // interporate between 2x2 sample points (bilinear interpolation)
+
+    kLast = kLinear,
 };
 
 enum class SkMipmapMode {
     kNone,      // ignore mipmap levels, sample from the "base"
     kNearest,   // sample from the nearest level
     kLinear,    // interpolate between the two nearest levels
+
+    kLast = kLinear,
 };
 
 /*
@@ -65,7 +70,11 @@ struct SK_API SkSamplingOptions {
         : useCubic(true)
         , cubic(c) {}
 
-    explicit SkSamplingOptions(SkFilterQuality);
+    enum MediumBehavior {
+        kMedium_asMipmapNearest,    // historic cpu behavior
+        kMedium_asMipmapLinear,     // historic gpu behavior
+    };
+    explicit SkSamplingOptions(SkFilterQuality, MediumBehavior = kMedium_asMipmapNearest);
 
     bool operator==(const SkSamplingOptions& other) const {
         return useCubic == other.useCubic

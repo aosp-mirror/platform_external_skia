@@ -489,7 +489,7 @@ SkVMGenerator::Slot SkVMGenerator::getSlot(const Expression& e) {
             const Expression& index = *i.index();
             SkASSERT(index.isCompileTimeConstant());
 
-            int64_t indexValue = index.getConstantInt();
+            SKSL_INT indexValue = index.getConstantInt();
             SkASSERT(indexValue >= 0 && indexValue < i.base()->type().columns());
 
             size_t stride = slot_count(i.type());
@@ -1032,13 +1032,21 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
         }
 
         case Intrinsic::kLessThan:
-            return binary([](skvm::F32 x, skvm::F32 y) { return x < y; });
+            return nk == Type::NumberKind::kFloat
+                           ? binary([](skvm::F32 x, skvm::F32 y) { return x < y; })
+                           : binary([](skvm::I32 x, skvm::I32 y) { return x < y; });
         case Intrinsic::kLessThanEqual:
-            return binary([](skvm::F32 x, skvm::F32 y) { return x <= y; });
+            return nk == Type::NumberKind::kFloat
+                           ? binary([](skvm::F32 x, skvm::F32 y) { return x <= y; })
+                           : binary([](skvm::I32 x, skvm::I32 y) { return x <= y; });
         case Intrinsic::kGreaterThan:
-            return binary([](skvm::F32 x, skvm::F32 y) { return x > y; });
+            return nk == Type::NumberKind::kFloat
+                           ? binary([](skvm::F32 x, skvm::F32 y) { return x > y; })
+                           : binary([](skvm::I32 x, skvm::I32 y) { return x > y; });
         case Intrinsic::kGreaterThanEqual:
-            return binary([](skvm::F32 x, skvm::F32 y) { return x >= y; });
+            return nk == Type::NumberKind::kFloat
+                           ? binary([](skvm::F32 x, skvm::F32 y) { return x >= y; })
+                           : binary([](skvm::I32 x, skvm::I32 y) { return x >= y; });
 
         case Intrinsic::kEqual:
             return nk == Type::NumberKind::kFloat
