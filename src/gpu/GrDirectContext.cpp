@@ -49,6 +49,12 @@
 #   endif
 #endif
 
+#ifdef SK_DISABLE_REDUCE_OPLIST_SPLITTING
+static const bool kDefaultReduceOpsTaskSplitting = false;
+#else
+static const bool kDefaultReduceOpsTaskSplitting = false;
+#endif
+
 #define ASSERT_SINGLE_OWNER GR_ASSERT_SINGLE_OWNER(this->singleOwner())
 
 GrDirectContext::GrDirectContext(GrBackendApi backend, const GrContextOptions& options)
@@ -206,6 +212,15 @@ bool GrDirectContext::init() {
     if (!fShaderErrorHandler) {
         fShaderErrorHandler = GrShaderUtils::DefaultShaderErrorHandler();
     }
+
+    bool reduceOpsTaskSplitting = kDefaultReduceOpsTaskSplitting;
+    if (GrContextOptions::Enable::kNo == this->options().fReduceOpsTaskSplitting) {
+        reduceOpsTaskSplitting = false;
+    } else if (GrContextOptions::Enable::kYes == this->options().fReduceOpsTaskSplitting) {
+        reduceOpsTaskSplitting = true;
+    }
+
+    this->setupDrawingManager(reduceOpsTaskSplitting);
 
     GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
     if (GrContextOptions::Enable::kNo == this->options().fAllowMultipleGlyphCacheTextures ||
@@ -491,24 +506,26 @@ static bool update_texture_with_pixmaps(GrGpu* gpu,
                                         GrSurfaceOrigin textureOrigin,
                                         sk_sp<GrRefCntedCallback> finishedCallback) {
     std::unique_ptr<char[]> tempStorage;
-    SkAutoSTArray<15, SkPixmap> tempPixmaps;
+    SkAutoSTArray<15, GrPixmap> tempPixmaps(numLevels);
     if (textureOrigin == kBottomLeft_GrSurfaceOrigin) {
         size_t size = 0;
         for (int i = 0; i < numLevels; ++i) {
             size += srcData[i].info().minRowBytes()*srcData[i].height();
         }
         tempStorage.reset(new char[size]);
-        tempPixmaps.reset(numLevels);
         size = 0;
         for (int i = 0; i < numLevels; ++i) {
             size_t tempRB = srcData[i].info().minRowBytes();
-            tempPixmaps[i].reset(srcData[i].info(), tempStorage.get() + size, tempRB);
+            tempPixmaps[i] = {srcData[i].info(), tempStorage.get() + size, tempRB};
             SkAssertResult(GrConvertPixels(tempPixmaps[i], srcData[i], /*flip*/ true));
             size += tempRB*srcData[i].height();
         }
-        srcData = tempPixmaps.get();
+    } else {
+        for (int i = 0; i < numLevels; ++i) {
+            tempPixmaps[i] = srcData[i];
+        }
     }
-    GrGpu::BackendTextureData data(srcData);
+    GrGpu::BackendTextureData data(tempPixmaps.get());
     return gpu->updateBackendTexture(backendTexture, std::move(finishedCallback), &data);
 }
 
