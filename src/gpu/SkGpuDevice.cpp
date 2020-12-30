@@ -174,8 +174,7 @@ bool SkGpuDevice::onReadPixels(const SkPixmap& pm, int x, int y) {
         return false;
     }
 
-    return fSurfaceDrawContext->readPixels(dContext, pm.info(), pm.writable_addr(), pm.rowBytes(),
-                                           {x, y});
+    return fSurfaceDrawContext->readPixels(dContext, pm, {x, y});
 }
 
 bool SkGpuDevice::onWritePixels(const SkPixmap& pm, int x, int y) {
@@ -187,7 +186,7 @@ bool SkGpuDevice::onWritePixels(const SkPixmap& pm, int x, int y) {
         return false;
     }
 
-    return fSurfaceDrawContext->writePixels(dContext, pm.info(), pm.addr(), pm.rowBytes(), {x, y});
+    return fSurfaceDrawContext->writePixels(dContext, pm, {x, y});
 }
 
 bool SkGpuDevice::onAccessPixels(SkPixmap* pmap) {
@@ -806,7 +805,7 @@ void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
     ASSERT_SINGLE_OWNER
     GrQuadAAFlags aaFlags = paint.isAntiAlias() ? GrQuadAAFlags::kAll : GrQuadAAFlags::kNone;
     this->drawImageQuad(image, src, &dst, nullptr, GrAA(paint.isAntiAlias()), aaFlags, nullptr,
-                        /*sampling*/paint, constraint);
+                        sampling, paint, constraint);
 }
 
 // When drawing nine-patches or n-patches, cap the filter quality at kLinear.
@@ -849,7 +848,12 @@ void SkGpuDevice::drawProducerLattice(GrTextureProducer* producer,
 
 void SkGpuDevice::drawImageLattice(const SkImage* image,
                                    const SkCanvas::Lattice& lattice, const SkRect& dst,
-                                   SkFilterMode filter, const SkPaint& paint) {
+                                   SkFilterMode filter, const SkPaint& origPaint) {
+    // TODO: plumb filter down rather than rely on deprecated filter-quality
+    SkPaint paint(origPaint);
+    paint.setFilterQuality(filter == SkFilterMode::kLinear ? kLow_SkFilterQuality
+                                                           : kNone_SkFilterQuality);
+
     ASSERT_SINGLE_OWNER
     uint32_t pinnedUniqueID;
     auto iter = std::make_unique<SkLatticeIter>(lattice, dst);
@@ -938,22 +942,22 @@ void SkGpuDevice::drawShadow(const SkPath& path, const SkDrawShadowRec& rec) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// TODO: pass samplingoptions explicitly
 void SkGpuDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
                             const SkRect texRect[], const SkColor colors[], int count,
-                            SkBlendMode mode, const SkPaint& paint) {
+                            SkBlendMode mode, const SkSamplingOptions& sampling,
+                            const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawAtlas", fContext.get());
 
     // Convert atlas to an image shader.
-    sk_sp<SkShader> shader = atlas->makeShader(SkSamplingOptions(paint.getFilterQuality()));
+    sk_sp<SkShader> shader = atlas->makeShader(sampling);
     if (!shader) {
         return;
     }
 
     // Create a fragment processor for atlas image. Filter-quality reduction is disabled because the
     // SkRSXform matrices might include scale or non-trivial rotation.
-    GrFPArgs fpArgs(fContext.get(), this->asMatrixProvider(), paint.getFilterQuality(),
+    GrFPArgs fpArgs(fContext.get(), this->asMatrixProvider(), sampling,
                     &fSurfaceDrawContext->colorInfo());
     fpArgs.fAllowFilterQualityReduction = false;
 
