@@ -1906,6 +1906,7 @@ cc_test {
         "tests/RTreeTest.cpp",
         "tests/RandomTest.cpp",
         "tests/ReadPixelsTest.cpp",
+        "tests/ReadWritePixelsGpuTest.cpp",
         "tests/RecordDrawTest.cpp",
         "tests/RecordOptsTest.cpp",
         "tests/RecordPatternTest.cpp",
