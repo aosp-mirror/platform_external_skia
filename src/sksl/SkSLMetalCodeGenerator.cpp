@@ -68,6 +68,7 @@ void MetalCodeGenerator::setupIntrinsics() {
     fIntrinsicMap[String("radians")]            = kRadians_IntrinsicKind;
     fIntrinsicMap[String("reflect")]            = kReflect_IntrinsicKind;
     fIntrinsicMap[String("refract")]            = kRefract_IntrinsicKind;
+    fIntrinsicMap[String("roundEven")]          = kRoundEven_IntrinsicKind;
     fIntrinsicMap[String("sample")]             = kTexture_IntrinsicKind;
 }
 
@@ -577,7 +578,7 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
         case kMod_IntrinsicKind: {
             // fmod(x, y) in metal calculates x - y * trunc(x / y) instead of x - y * floor(x / y)
             String tmpX = this->getTempVariable(arguments[0]->type());
-            String tmpY = this->getTempVariable(arguments[0]->type());
+            String tmpY = this->getTempVariable(arguments[1]->type());
             this->write("(" + tmpX + " = ");
             this->writeExpression(*arguments[0], kSequence_Precedence);
             this->write(", " + tmpY + " = ");
@@ -720,6 +721,11 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
             } else {
                 this->writeSimpleIntrinsic(c);
             }
+            break;
+        }
+        case kRoundEven_IntrinsicKind: {
+            this->write("rint");
+            this->writeArgumentList(c.arguments());
             break;
         }
         case kBitCount_IntrinsicKind: {
