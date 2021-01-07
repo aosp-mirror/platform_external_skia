@@ -570,8 +570,8 @@ void GrMtlCaps::initFormatTable() {
             auto& ctInfo = info->fColorTypeInfos[ctIdx++];
             ctInfo.fColorType = GrColorType::kAlpha_8;
             ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-            ctInfo.fReadSwizzle = GrSwizzle::RRRR();
-            ctInfo.fWriteSwizzle = GrSwizzle::AAAA();
+            ctInfo.fReadSwizzle = GrSwizzle("000r");
+            ctInfo.fWriteSwizzle = GrSwizzle("a000");
         }
         // Format: R8Unorm, Surface: kGray_8
         {
@@ -594,7 +594,6 @@ void GrMtlCaps::initFormatTable() {
             auto& ctInfo = info->fColorTypeInfos[ctIdx++];
             ctInfo.fColorType = GrColorType::kAlpha_8;
             ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-            ctInfo.fReadSwizzle = GrSwizzle::AAAA();
         }
     }
 
@@ -749,8 +748,8 @@ void GrMtlCaps::initFormatTable() {
             auto& ctInfo = info->fColorTypeInfos[ctIdx++];
             ctInfo.fColorType = GrColorType::kAlpha_F16;
             ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-            ctInfo.fReadSwizzle = GrSwizzle::RRRR();
-            ctInfo.fWriteSwizzle = GrSwizzle::AAAA();
+            ctInfo.fReadSwizzle = GrSwizzle("000r");
+            ctInfo.fWriteSwizzle = GrSwizzle("a000");
         }
     }
 
@@ -791,8 +790,8 @@ void GrMtlCaps::initFormatTable() {
             auto& ctInfo = info->fColorTypeInfos[ctIdx++];
             ctInfo.fColorType = GrColorType::kAlpha_16;
             ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-            ctInfo.fReadSwizzle = GrSwizzle::RRRR();
-            ctInfo.fWriteSwizzle = GrSwizzle::AAAA();
+            ctInfo.fReadSwizzle = GrSwizzle("000r");
+            ctInfo.fWriteSwizzle = GrSwizzle("a000");
         }
     }
 
@@ -1072,7 +1071,10 @@ GrCaps::SupportedRead GrMtlCaps::onSupportedReadPixelsColorType(
  * pipeline. This includes blending information and primitive type. The pipeline is immutable
  * so any remaining dynamic state is set via the MtlRenderCmdEncoder.
  */
-GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt, const GrProgramInfo& programInfo) const {
+GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
+                                  const GrProgramInfo& programInfo,
+                                  ProgramDescOverrideFlags overrideFlags) const {
+    SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
     GrProgramDesc desc;
     if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
         SkASSERT(!desc.isValid());

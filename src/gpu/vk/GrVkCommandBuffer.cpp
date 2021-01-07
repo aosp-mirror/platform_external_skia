@@ -60,21 +60,18 @@ void GrVkCommandBuffer::releaseResources() {
     SkASSERT(!fIsActive);
     for (int i = 0; i < fTrackedResources.count(); ++i) {
         fTrackedResources[i]->notifyFinishedWithWorkOnGpu();
-        fTrackedResources[i]->unref();
     }
+    fTrackedResources.reset();
     for (int i = 0; i < fTrackedRecycledResources.count(); ++i) {
         fTrackedRecycledResources[i]->notifyFinishedWithWorkOnGpu();
         fTrackedRecycledResources[i]->recycle();
     }
 
     if (++fNumResets > kNumRewindResetsBeforeFullReset) {
-        fTrackedResources.reset();
         fTrackedRecycledResources.reset();
-        fTrackedResources.setReserve(kInitialTrackedResourcesCount);
         fTrackedRecycledResources.setReserve(kInitialTrackedResourcesCount);
         fNumResets = 0;
     } else {
-        fTrackedResources.rewind();
         fTrackedRecycledResources.rewind();
     }
 
@@ -277,12 +274,12 @@ void GrVkCommandBuffer::bindDescriptorSets(const GrVkGpu* gpu,
                                                          dynamicOffsets));
 }
 
-void GrVkCommandBuffer::bindPipeline(const GrVkGpu* gpu, const GrVkPipeline* pipeline) {
+void GrVkCommandBuffer::bindPipeline(const GrVkGpu* gpu, sk_sp<const GrVkPipeline> pipeline) {
     SkASSERT(fIsActive);
     GR_VK_CALL(gpu->vkInterface(), CmdBindPipeline(fCmdBuffer,
                                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                    pipeline->pipeline()));
-    this->addResource(pipeline);
+    this->addResource(std::move(pipeline));
 }
 
 void GrVkCommandBuffer::drawIndexed(const GrVkGpu* gpu,
@@ -495,6 +492,15 @@ void GrVkPrimaryCommandBuffer::endRenderPass(const GrVkGpu* gpu) {
     this->addingWork(gpu);
     GR_VK_CALL(gpu->vkInterface(), CmdEndRenderPass(fCmdBuffer));
     fActiveRenderPass = nullptr;
+}
+
+
+void GrVkPrimaryCommandBuffer::nexSubpass(GrVkGpu* gpu, bool forSecondaryCB) {
+    SkASSERT(fIsActive);
+    SkASSERT(fActiveRenderPass);
+    VkSubpassContents contents = forSecondaryCB ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
+                                                : VK_SUBPASS_CONTENTS_INLINE;
+    GR_VK_CALL(gpu->vkInterface(), CmdNextSubpass(fCmdBuffer, contents));
 }
 
 void GrVkPrimaryCommandBuffer::executeCommands(const GrVkGpu* gpu,

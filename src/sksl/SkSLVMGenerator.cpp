@@ -98,7 +98,7 @@ public:
                   const FunctionDefinition& function,
                   skvm::Builder* builder,
                   SkSpan<skvm::Val> uniforms,
-                  SkSpan<skvm::Val> params,
+                  SkSpan<skvm::Val> arguments,
                   skvm::Coord device,
                   skvm::Coord local,
                   SampleChildFn sampleChild,
@@ -153,6 +153,7 @@ private:
         kNormalize,
 
         // Matrix
+        kMatrixCompMult,
         kInverse,
 
         // Vector Relational
@@ -255,6 +256,7 @@ private:
     std::vector<skvm::Val> fSlots;
     const skvm::Coord fLocalCoord;
     const SampleChildFn fSampleChild;
+    const SkSpan<skvm::Val> fArguments;
     const SkSpan<skvm::Val> fReturnValue;
 
     ErrorReporter& fErrors;
@@ -316,7 +318,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
                              const FunctionDefinition& function,
                              skvm::Builder* builder,
                              SkSpan<skvm::Val> uniforms,
-                             SkSpan<skvm::Val> params,
+                             SkSpan<skvm::Val> arguments,
                              skvm::Coord device,
                              skvm::Coord local,
                              SampleChildFn sampleChild,
@@ -327,6 +329,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
         , fBuilder(builder)
         , fLocalCoord(local)
         , fSampleChild(std::move(sampleChild))
+        , fArguments(arguments)
         , fReturnValue(outReturn)
         , fErrors(*errors)
         , fIntrinsics {
@@ -365,7 +368,8 @@ SkVMGenerator::SkVMGenerator(const Program& program,
             { "dot",       Intrinsic::kDot },
             { "normalize", Intrinsic::kNormalize },
 
-            { "inverse", Intrinsic::kInverse },
+            { "matrixCompMult", Intrinsic::kMatrixCompMult },
+            { "inverse",        Intrinsic::kInverse },
 
             { "lessThan",         Intrinsic::kLessThan },
             { "lessThanEqual",    Intrinsic::kLessThanEqual },
@@ -439,21 +443,36 @@ SkVMGenerator::SkVMGenerator(const Program& program,
     // Ensure that outReturn (where we place the return values) is the correct size
     SkASSERT(slot_count(decl.returnType()) == fReturnValue.size());
 
-    // Copy parameter IDs to our list of (all) variable IDs
-    size_t paramBase = fSlots.size(),
-           paramSlot = paramBase;
-    fSlots.insert(fSlots.end(), params.begin(), params.end());
+    // Copy argument IDs to our list of (all) variable IDs
+    size_t argBase = fSlots.size(),
+           argSlot = argBase;
+    fSlots.insert(fSlots.end(), fArguments.begin(), fArguments.end());
 
     // Compute where each parameter variable lives in the variable ID list
     for (const Variable* p : decl.parameters()) {
-        fVariableMap[p] = paramSlot;
-        paramSlot += slot_count(p->type());
+        fVariableMap[p] = argSlot;
+        argSlot += slot_count(p->type());
     }
-    SkASSERT(paramSlot == fSlots.size());
+    SkASSERT(argSlot == fSlots.size());
 }
 
 bool SkVMGenerator::generateCode() {
     this->writeStatement(*fFunction.body());
+
+    // Copy 'out' and 'inout' parameters back to their caller-supplied argument storage
+    size_t argIdx = 0;
+    for (const Variable* p : fFunction.declaration().parameters()) {
+        Slot paramSlot = this->getSlot(*p);
+        size_t nslots = slot_count(p->type());
+
+        if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
+            for (size_t i = 0; i < nslots; ++i) {
+                fArguments[argIdx + i] = fSlots[paramSlot + i];
+            }
+        }
+        argIdx += nslots;
+    }
+
     return 0 == fErrors.errorCount();
 }
 
@@ -688,7 +707,7 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
     const Type& srcType = c.arguments()[0]->type();
     const Type& dstType = c.type();
     Type::NumberKind srcKind = base_number_kind(srcType),
-                        dstKind = base_number_kind(dstType);
+                     dstKind = base_number_kind(dstType);
     Value src = this->writeExpression(*c.arguments()[0]);
     size_t dstSlots = slot_count(dstType);
 
@@ -697,25 +716,65 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
         return src;
     }
 
-    // TODO: Handle conversion to/from bool
-    // TODO: Handle signed vs. unsigned? GLSL ES 1.0 only has 'int', so no problem yet
+    // TODO: Handle signed vs. unsigned. GLSL ES 1.0 only has 'int', so no problem yet.
     if (srcKind != dstKind) {
         // One argument constructors can do type conversion
         Value dst(src.slots());
-        if (dstKind == Type::NumberKind::kFloat) {
-            SkASSERT(srcKind == Type::NumberKind::kSigned);
-            for (size_t i = 0; i < src.slots(); ++i) {
-                dst[i] = skvm::to_F32(i32(src[i]));
-            }
-        } else if (dstKind == Type::NumberKind::kSigned) {
-            SkASSERT(srcKind == Type::NumberKind::kFloat);
-            for (size_t i = 0; i < src.slots(); ++i) {
-                dst[i] = skvm::trunc(f32(src[i]));
-            }
-        } else {
-            SkDEBUGFAIL("Unsupported type conversion");
+        switch (dstKind) {
+            case Type::NumberKind::kFloat:
+                if (srcKind == Type::NumberKind::kSigned) {
+                    // int -> float
+                    for (size_t i = 0; i < src.slots(); ++i) {
+                        dst[i] = skvm::to_F32(i32(src[i]));
+                    }
+                    return dst;
+                } else if (srcKind == Type::NumberKind::kBoolean) {
+                    // bool -> float
+                    for (size_t i = 0; i < src.slots(); ++i) {
+                        dst[i] = skvm::select(i32(src[i]), 1.0f, 0.0f);
+                    }
+                    return dst;
+                }
+                break;
+
+            case Type::NumberKind::kSigned:
+                if (srcKind == Type::NumberKind::kFloat) {
+                    // float -> int
+                    for (size_t i = 0; i < src.slots(); ++i) {
+                        dst[i] = skvm::trunc(f32(src[i]));
+                    }
+                    return dst;
+                } else if (srcKind == Type::NumberKind::kBoolean) {
+                    // bool -> int
+                    for (size_t i = 0; i < src.slots(); ++i) {
+                        dst[i] = skvm::select(i32(src[i]), skvm::I32a(1), skvm::I32a(0));
+                    }
+                    return dst;
+                }
+                break;
+
+            case Type::NumberKind::kBoolean:
+                if (srcKind == Type::NumberKind::kSigned) {
+                    // int -> bool
+                    for (size_t i = 0; i < src.slots(); ++i) {
+                        dst[i] = i32(src[i]) != 0;
+                    }
+                    return dst;
+                } else if (srcKind == Type::NumberKind::kFloat) {
+                    // float -> bool
+                    for (size_t i = 0; i < src.slots(); ++i) {
+                        dst[i] = f32(src[i]) != 0.0;
+                    }
+                    return dst;
+                }
+                break;
+
+            default:
+                break;
         }
-        return dst;
+        SkDEBUGFAILF("Unsupported type conversion: %s -> %s", srcType.displayName().c_str(),
+                                                              dstType.displayName().c_str());
+        return {};
     }
 
     // Matrices can be constructed from scalars or other matrices
@@ -1020,6 +1079,8 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
             return unary(args[0], [&](skvm::F32 x) { return x * invLen; });
         }
 
+        case Intrinsic::kMatrixCompMult:
+            return binary([](skvm::F32 x, skvm::F32 y) { return x * y; });
         case Intrinsic::kInverse: {
             switch (args[0].slots()) {
                 case  4: return this->writeMatrixInverse2x2(args[0]);
@@ -1333,15 +1394,15 @@ skvm::Color ProgramToSkVM(const Program& program,
                           SampleChildFn sampleChild) {
     DebugfErrorReporter errors;
 
-    skvm::Val params[2] = {local.x.id, local.y.id};
+    skvm::Val args[2] = {local.x.id, local.y.id};
     skvm::Val result[4] = {skvm::NA, skvm::NA, skvm::NA, skvm::NA};
     size_t paramSlots = 0;
     for (const SkSL::Variable* param : function.declaration().parameters()) {
         paramSlots += slot_count(param->type());
     }
-    SkASSERT(paramSlots <= SK_ARRAY_COUNT(params));
+    SkASSERT(paramSlots <= SK_ARRAY_COUNT(args));
 
-    SkVMGenerator generator(program, function, builder, uniforms, {params, paramSlots},
+    SkVMGenerator generator(program, function, builder, uniforms, {args, paramSlots},
                             device, local, std::move(sampleChild), result, &errors);
 
     return generator.generateCode() ? skvm::Color{{builder, result[0]},
@@ -1351,19 +1412,91 @@ skvm::Color ProgramToSkVM(const Program& program,
                                     : skvm::Color{};
 }
 
+bool ProgramToSkVM(const Program& program,
+                   const FunctionDefinition& function,
+                   skvm::Builder* b,
+                   SkVMSignature* outSignature) {
+    DebugfErrorReporter errors;
+    SkVMSignature ignored,
+                  *signature = outSignature ? outSignature : &ignored;
+
+    skvm::Arg uniforms = b->uniform();
+    (void)uniforms;
+
+    std::vector<skvm::Arg> argPtrs;
+    std::vector<skvm::Val> argVals;
+
+    for (const Variable* p : function.declaration().parameters()) {
+        size_t slots = slot_count(p->type());
+        signature->fParameterSlots += slots;
+        for (size_t i = 0; i < slots; ++i) {
+            argPtrs.push_back(b->varying<float>());
+            argVals.push_back(b->loadF(argPtrs.back()).id);
+        }
+    }
+
+    std::vector<skvm::Arg> returnPtrs;
+    std::vector<skvm::Val> returnVals;
+
+    signature->fReturnSlots = slot_count(function.declaration().returnType());
+    for (size_t i = 0; i < signature->fReturnSlots; ++i) {
+        returnPtrs.push_back(b->varying<float>());
+        returnVals.push_back(b->splat(0.0f).id);
+    }
+
+    skvm::Coord zeroCoord = {b->splat(0.0f), b->splat(0.0f)};
+    SkVMGenerator generator(program, function, b, /*uniforms=*/{}, argVals, /*device=*/zeroCoord,
+                            /*local=*/zeroCoord, /*sampleChild=*/{}, returnVals, &errors);
+
+    if (!generator.generateCode()) {
+        return false;
+    }
+
+    // generateCode has updated the contents of 'argVals' for any 'out' or 'inout' parameters.
+    // Propagate those changes back to our varying buffers:
+    size_t argIdx = 0;
+    for (const Variable* p : function.declaration().parameters()) {
+        size_t nslots = slot_count(p->type());
+        if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
+            for (size_t i = 0; i < nslots; ++i) {
+                b->storeF(argPtrs[argIdx + i], skvm::F32{b, argVals[argIdx + i]});
+            }
+        }
+        argIdx += nslots;
+    }
+
+    // It's also updated the contents of 'returnVals' with the return value of the entry point.
+    // Store that as well:
+    for (size_t i = 0; i < signature->fReturnSlots; ++i) {
+        b->storeF(returnPtrs[i], skvm::F32{b, returnVals[i]});
+    }
+
+    return true;
+}
+
+const FunctionDefinition* Program_GetFunction(const Program& program, const char* function) {
+    for (const ProgramElement* e : program.elements()) {
+        if (e->is<FunctionDefinition>() &&
+            e->as<FunctionDefinition>().declaration().name() == function) {
+            return &e->as<FunctionDefinition>();
+        }
+    }
+    return nullptr;
+}
+
 /*
  * Testing utility function that emits program's "main" with a minimal harness. Used to create
  * representative skvm op sequences for SkSL tests.
  */
 bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* builder) {
-    const SkSL::FunctionDefinition* main = nullptr;
+    const SkSL::FunctionDefinition* main = Program_GetFunction(program, "main");
+    if (!main) {
+        return false;
+    }
+
     size_t uniformSlots = 0;
     int childSlots = 0;
     for (const SkSL::ProgramElement* e : program.elements()) {
-        if (e->is<SkSL::FunctionDefinition>() &&
-            e->as<SkSL::FunctionDefinition>().declaration().name() == "main") {
-            main = &e->as<SkSL::FunctionDefinition>();
-        }
         if (e->is<GlobalVarDeclaration>()) {
             const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
             const Variable& var = decl.declaration()->as<VarDeclaration>().var();
@@ -1374,7 +1507,6 @@ bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* buil
             }
         }
     }
-    if (!main) { return false; }
 
     skvm::Uniforms uniforms(0);
     uniforms.base = builder->uniform();

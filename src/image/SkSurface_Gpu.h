@@ -37,7 +37,7 @@ public:
     sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset) override;
     void onWritePixels(const SkPixmap&, int x, int y) override;
     void onAsyncRescaleAndReadPixels(const SkImageInfo& info, const SkIRect& srcRect,
-                                     RescaleGamma rescaleGamma, SkFilterQuality rescaleQuality,
+                                     RescaleGamma rescaleGamma, RescaleMode,
                                      ReadPixelsCallback callback,
                                      ReadPixelsContext context) override;
     void onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
@@ -45,7 +45,7 @@ public:
                                            const SkIRect& srcRect,
                                            const SkISize& dstSize,
                                            RescaleGamma rescaleGamma,
-                                           SkFilterQuality rescaleQuality,
+                                           RescaleMode,
                                            ReadPixelsCallback callback,
                                            ReadPixelsContext context) override;
 
@@ -57,7 +57,8 @@ public:
                  bool deleteSemaphoresAfterWait) override;
     bool onCharacterize(SkSurfaceCharacterization*) const override;
     bool onIsCompatible(const SkSurfaceCharacterization&) const override;
-    void onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPaint* paint) override;
+    void onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkSamplingOptions&,
+                const SkPaint* paint) override;
     bool onDraw(sk_sp<const SkDeferredDisplayList>, SkIPoint offset) override;
 
     SkGpuDevice* getDevice() { return fDevice.get(); }

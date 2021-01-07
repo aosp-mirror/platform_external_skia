@@ -9,8 +9,8 @@
 #define GrVkCommandBuffer_DEFINED
 
 #include "include/gpu/vk/GrVkTypes.h"
-#include "src/gpu/GrCommandBufferRef.h"
 #include "src/gpu/GrManagedResource.h"
+#include "src/gpu/GrRefCnt.h"
 #include "src/gpu/vk/GrVkGpu.h"
 #include "src/gpu/vk/GrVkSemaphore.h"
 #include "src/gpu/vk/GrVkUtil.h"
@@ -51,7 +51,7 @@ public:
 
     void bindIndexBuffer(GrVkGpu* gpu, sk_sp<const GrBuffer> buffer);
 
-    void bindPipeline(const GrVkGpu* gpu, const GrVkPipeline* pipeline);
+    void bindPipeline(const GrVkGpu* gpu, sk_sp<const GrVkPipeline> pipeline);
 
     void bindDescriptorSets(const GrVkGpu* gpu,
                             VkPipelineLayout layout,
@@ -107,11 +107,14 @@ public:
 
     // Add ref-counted resource that will be tracked and released when this command buffer finishes
     // execution
-    void addResource(const GrManagedResource* resource) {
+    void addResource(sk_sp<const GrManagedResource> resource) {
         SkASSERT(resource);
-        resource->ref();
         resource->notifyQueuedForWorkOnGpu();
-        fTrackedResources.append(1, &resource);
+        fTrackedResources.push_back(std::move(resource));
+    }
+    void addResource(const GrManagedResource* resource) {
+        this->addResource(sk_ref_sp(resource));
+        SkASSERT(resource);
     }
 
     // Add ref-counted resource that will be tracked and released when this command buffer finishes
@@ -140,7 +143,6 @@ protected:
     GrVkCommandBuffer(VkCommandBuffer cmdBuffer, bool isWrapped = false)
             : fCmdBuffer(cmdBuffer)
             , fIsWrapped(isWrapped) {
-        fTrackedResources.setReserve(kInitialTrackedResourcesCount);
         fTrackedRecycledResources.setReserve(kInitialTrackedResourcesCount);
         this->invalidateState();
     }
@@ -151,9 +153,14 @@ protected:
 
     void submitPipelineBarriers(const GrVkGpu* gpu, bool forSelfDependency = false);
 
-    SkTDArray<const GrManagedResource*>   fTrackedResources;
-    SkTDArray<const GrRecycledResource*>  fTrackedRecycledResources;
-    SkSTArray<16, sk_sp<const GrBuffer>>  fTrackedGpuBuffers;
+private:
+    static constexpr int kInitialTrackedResourcesCount = 32;
+
+protected:
+
+    SkSTArray<kInitialTrackedResourcesCount, sk_sp<const GrManagedResource>> fTrackedResources;
+    SkTDArray<const GrRecycledResource*> fTrackedRecycledResources;
+    SkSTArray<16, sk_sp<const GrBuffer>> fTrackedGpuBuffers;
     SkSTArray<16, gr_cb<const GrSurface>> fTrackedGpuSurfaces;
 
     // Tracks whether we are in the middle of a command buffer begin/end calls and thus can add
@@ -167,9 +174,6 @@ protected:
     const GrVkRenderPass*     fActiveRenderPass = nullptr;
 
     VkCommandBuffer           fCmdBuffer;
-
-private:
-    static const int kInitialTrackedResourcesCount = 32;
 
     virtual void onReleaseResources() {}
     virtual void onFreeGPUData(const GrVkGpu* gpu) const = 0;
@@ -221,6 +225,8 @@ public:
                          const SkIRect& bounds,
                          bool forSecondaryCB);
     void endRenderPass(const GrVkGpu* gpu);
+
+    void nexSubpass(GrVkGpu* gpu, bool forSecondaryCB);
 
     // Submits the SecondaryCommandBuffer into this command buffer. It is required that we are
     // currently inside a render pass that is compatible with the one used to create the

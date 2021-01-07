@@ -12,6 +12,7 @@
 #include <tuple>
 #include <unordered_map>
 
+#include "src/core/SkOpts.h"
 #include "src/sksl/SkSLCodeGenerator.h"
 #include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/SkSLStringStream.h"
@@ -41,10 +42,12 @@
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/spirv.h"
 
+namespace SkSL {
+
 union ConstantValue {
-    ConstantValue(int64_t i)
+    ConstantValue(SKSL_INT i)
         : fInt(i) {
-        SkASSERT(sizeof(*this) == sizeof(int64_t));
+        static_assert(sizeof(*this) == sizeof(SKSL_INT));
     }
 
     ConstantValue(SKSL_FLOAT f) {
@@ -56,34 +59,45 @@ union ConstantValue {
         return fInt == other.fInt;
     }
 
-    int64_t fInt;
+    SKSL_INT fInt;
     SKSL_FLOAT fFloat;
 };
 
-enum class ConstantType {
-    kInt,
-    kUInt,
-    kShort,
-    kUShort,
-    kFloat,
-    kDouble,
-    kHalf,
+using ConstantValuePair = std::pair<ConstantValue, SkSL::Type::NumberKind>;
+
+struct SPIRVVectorConstant {
+    bool operator==(const SPIRVVectorConstant& that) const {
+        return fTypeId     == that.fTypeId &&
+               fValueId[0] == that.fValueId[0] &&
+               fValueId[1] == that.fValueId[1] &&
+               fValueId[2] == that.fValueId[2] &&
+               fValueId[3] == that.fValueId[3];
+    }
+    SpvId fTypeId;
+    SpvId fValueId[4];
 };
+
+}  // namespace SkSL
 
 namespace std {
 
 template <>
-struct hash<std::pair<ConstantValue, ConstantType>> {
-    size_t operator()(const std::pair<ConstantValue, ConstantType>& key) const {
+struct hash<SkSL::ConstantValuePair> {
+    size_t operator()(const SkSL::ConstantValuePair& key) const {
         return key.first.fInt ^ (int) key.second;
+    }
+};
+
+template <>
+struct hash<SkSL::SPIRVVectorConstant> {
+    size_t operator()(const SkSL::SPIRVVectorConstant& key) const {
+        return SkOpts::hash(&key, sizeof(key));
     }
 };
 
 }  // namespace std
 
 namespace SkSL {
-
-#define kLast_Capability SpvCapabilityMultiViewport
 
 /**
  * Converts a Program into a SPIR-V binary.
@@ -390,7 +404,8 @@ private:
 
     SpvId fBoolTrue;
     SpvId fBoolFalse;
-    std::unordered_map<std::pair<ConstantValue, ConstantType>, SpvId> fNumberConstants;
+    std::unordered_map<ConstantValuePair, SpvId> fNumberConstants;
+    std::unordered_map<SPIRVVectorConstant, SpvId> fVectorConstants;
     bool fSetupFragPosition;
     // label of the current block, or 0 if we are not in a block
     SpvId fCurrentBlock;

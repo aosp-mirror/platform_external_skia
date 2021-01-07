@@ -468,62 +468,6 @@ namespace skvm {
         return program;
     }
 
-    // Impose a deterministic scheduling of Instructions based on data flow alone,
-    // eliminating any influence from original program order.  We'll schedule back-to-front,
-    // starting at the end of the program with Instructions that have side effects and
-    // recursing through arguments to Instructions that issue earlier in the program.
-    // We schedule each argument once all its users have been scheduled, which means it
-    // issues just before its first use.  We arbitrarily schedule x, then y, then z, and so
-    // issue z, then y, then x.
-    std::vector<Instruction> schedule(std::vector<Instruction> program) {
-
-        std::vector<int> uses(program.size());
-        for (const Instruction& inst : program) {
-            for (Val arg : {inst.x, inst.y, inst.z}) {
-                if (arg != NA) { uses[arg]++; }
-            }
-        }
-
-        std::vector<Val> new_id(program.size(), NA);
-        Val next = (Val)program.size();
-        auto reorder = [&](Val id, auto& recurse) -> void {
-            new_id[id] = --next;
-            const Instruction& inst = program[id];
-            for (Val arg : {inst.x, inst.y, inst.z}) {
-                if (arg != NA && --uses[arg] == 0) {
-                    recurse(arg, recurse);
-                }
-            }
-        };
-
-        for (Val id = 0; id < (Val)program.size(); id++) {
-            if (has_side_effect(program[id].op)) {
-                reorder(id, reorder);
-            }
-        }
-
-        // Remap each Instruction's arguments to their new IDs.
-        for (Instruction& inst : program) {
-            for (Val* arg : {&inst.x, &inst.y, &inst.z}) {
-                if (*arg != NA) {
-                    *arg = new_id[*arg];
-                    SkASSERT(*arg != NA);
-                }
-            }
-        }
-
-        // Finally, reorder the Instructions themselves according to the new schedule.
-        // This is O(N)... wish I had a good reference link breaking it down.
-        for (Val id = 0; id < (Val)program.size(); id++) {
-            while (id != new_id[id]) {
-                std::swap(program[id], program[new_id[id]]);
-                std::swap( new_id[id],  new_id[new_id[id]]);
-            }
-        }
-
-        return program;
-    }
-
     std::vector<OptimizedInstruction> finalize(const std::vector<Instruction> program) {
         std::vector<OptimizedInstruction> optimized(program.size());
         for (Val id = 0; id < (Val)program.size(); id++) {
@@ -573,7 +517,6 @@ namespace skvm {
     std::vector<OptimizedInstruction> Builder::optimize() const {
         std::vector<Instruction> program = this->program();
         program = eliminate_dead_code(std::move(program));
-        program = schedule           (std::move(program));
         return    finalize           (std::move(program));
     }
 
@@ -612,8 +555,14 @@ namespace skvm {
     Val Builder::push(Instruction inst) {
         // Basic common subexpression elimination:
         // if we've already seen this exact Instruction, use it instead of creating a new one.
-        if (Val* id = fIndex.find(inst)) {
-            return *id;
+        //
+        // But we never dedup loads or stores: an intervening store could change that memory.
+        // Uniforms and gathers touch only uniform memory, so they're fine to dedup,
+        // and index is varying but doesn't touch memory, so it's fine to dedup too.
+        if (!touches_varying_memory(inst.op)) {
+            if (Val* id = fIndex.find(inst)) {
+                return *id;
+            }
         }
         Val id = static_cast<Val>(fProgram.size());
         fProgram.push_back(inst);

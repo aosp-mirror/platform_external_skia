@@ -429,8 +429,8 @@ namespace skvm {
     #define SKVM_OPS(M)                                              \
         M(assert_true)                                               \
         M(store8)   M(store16)   M(store32) M(store64) M(store128)   \
-        M(index)                                                     \
         M(load8)    M(load16)    M(load32)  M(load64) M(load128)     \
+        M(index)                                                     \
         M(gather8)  M(gather16)  M(gather32)                         \
                                  M(uniform32)                        \
         M(splat)                                                     \
@@ -459,8 +459,11 @@ namespace skvm {
     static inline bool has_side_effect(Op op) {
         return op <= Op::store128;
     }
+    static inline bool touches_varying_memory(Op op) {
+        return Op::store8 <= op && op <= Op::load128;
+    }
     static inline bool is_always_varying(Op op) {
-        return op <= Op::gather32 && op != Op::assert_true;
+        return Op::store8 <= op && op <= Op::index;
     }
 
     using Val = int;
@@ -942,7 +945,6 @@ namespace skvm {
     // Optimization passes and data structures normally used by Builder::optimize(),
     // extracted here so they can be unit tested.
     std::vector<Instruction>          eliminate_dead_code(std::vector<Instruction>);
-    std::vector<Instruction>          schedule           (std::vector<Instruction>);
     std::vector<OptimizedInstruction> finalize           (std::vector<Instruction>);
 
     using Reg = int;

@@ -887,7 +887,7 @@ void GrGLPerlinNoise::emitCode(EmitArgs& args) {
     // can't see fInputColor (which is "_input" in the FP's outer function). skbug.com/10506
     SkString sampleX = this->invokeChild(0, "half4(1)", args, "half2(floorVal.x, 0.5)");
     SkString sampleY = this->invokeChild(0, "half4(1)", args, "half2(floorVal.z, 0.5)");
-    noiseCode.appendf("half2 latticeIdx = half2(%s.r, %s.r);", sampleX.c_str(), sampleY.c_str());
+    noiseCode.appendf("half2 latticeIdx = half2(%s.a, %s.a);", sampleX.c_str(), sampleY.c_str());
 
 #if defined(SK_BUILD_FOR_ANDROID)
     // Android rounding for Tegra devices, like, for example: Xoom (Tegra 2), Nexus 7 (Tegra 3).
@@ -1222,7 +1222,7 @@ void GrGLImprovedPerlinNoise::emitCode(EmitArgs& args) {
     };
     SkString samplePerm = this->invokeChild(0, "half4(1)", args, "float2(x, 0.5)");
     SkString permFuncName = fragBuilder->getMangledFunctionName("perm");
-    SkString permCode = SkStringPrintf("return %s.r * 255;", samplePerm.c_str());
+    SkString permCode = SkStringPrintf("return %s.a * 255;", samplePerm.c_str());
     fragBuilder->emitFunction(kHalf_GrSLType, permFuncName.c_str(),
                               {permArgs, SK_ARRAY_COUNT(permArgs)}, permCode.c_str());
 
@@ -1372,6 +1372,9 @@ std::unique_ptr<GrFragmentProcessor> SkPerlinNoiseShaderImpl::asFragmentProcesso
         const SkBitmap& gradientBitmap = paintingData->getGradientBitmap();
         SkASSERT(SkIsPow2(gradientBitmap.width()) && SkIsPow2(gradientBitmap.height()));
         auto gradientView = GrMakeCachedBitmapProxyView(context, gradientBitmap);
+        if (!permutationsView || !gradientView) {
+            return nullptr;
+        }
         return GrImprovedPerlinNoiseEffect::Make(fNumOctaves,
                                                  fSeed,
                                                  std::move(paintingData),

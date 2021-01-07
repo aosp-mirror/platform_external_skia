@@ -662,6 +662,41 @@ DEF_TEST(SkVM_select, r) {
     });
 }
 
+DEF_TEST(SkVM_swap, r) {
+    skvm::Builder b;
+    {
+        // This program is the equivalent of
+        //     x = *X
+        //     y = *Y
+        //     *X = y
+        //     *Y = x
+        // One rescheduling of the program based only on data flow of Op arguments is
+        //     x = *X
+        //     *Y = x
+        //     y = *Y
+        //     *X = y
+        // but this reordering does not produce the same results and is invalid.
+        skvm::Arg X = b.varying<int>(),
+                  Y = b.varying<int>();
+
+        skvm::I32 x = b.load32(X),
+                  y = b.load32(Y);
+
+        b.store32(X, y);
+        b.store32(Y, x);
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program) {
+        int b1[] = { 0,1,2,3 };
+        int b2[] = { 4,5,6,7 };
+        program.eval(SK_ARRAY_COUNT(b1), b1, b2);
+        for (int i = 0; i < (int)SK_ARRAY_COUNT(b1); i++) {
+            REPORTER_ASSERT(r, b1[i] == 4 + i);
+            REPORTER_ASSERT(r, b2[i] == i);
+        }
+    });
+}
+
 DEF_TEST(SkVM_NewOps, r) {
     // Exercise a somewhat arbitrary set of new ops.
     skvm::Builder b;
@@ -2338,4 +2373,92 @@ DEF_TEST(SkVM_features, r) {
         REPORTER_ASSERT(r, b.optimize().size() == 3
                         || b.optimize().size() == 4);
     }
+}
+
+DEF_TEST(SkVM_gather_can_hoist, r) {
+    // A gather instruction isn't necessarily varying... it's whatever its index is.
+    // First a typical gather scenario with varying index.
+    {
+        skvm::Builder b;
+        skvm::Arg uniforms = b.uniform(),
+                  buf      = b.varying<int>();
+        skvm::I32 ix = b.load32(buf);
+        b.store32(buf, b.gather32(uniforms,0, ix));
+
+        skvm::Program p = b.done();
+
+        // ix is varying, so the gather is too.
+        //
+        // loop:
+        //     v0 = load32 buf
+        //     v1 = gather32 uniforms+0 v0
+        //     store32 buf v1
+        REPORTER_ASSERT(r, p.instructions().size() == 3);
+        REPORTER_ASSERT(r, p.loop() == 0);
+    }
+
+    // Now the same but with a uniform index instead.
+    {
+        skvm::Builder b;
+        skvm::Arg uniforms = b.uniform(),
+                  buf      = b.varying<int>();
+        skvm::I32 ix = b.uniform32(uniforms,8);
+        b.store32(buf, b.gather32(uniforms,0, ix));
+
+        skvm::Program p = b.done();
+
+        // ix is uniform, so the gather is too.
+        //
+        // v0 = uniform32 uniforms+8
+        // v1 = gather32 uniforms+0 v0
+        // loop:
+        //     store32 buf v1
+        REPORTER_ASSERT(r, p.instructions().size() == 3);
+        REPORTER_ASSERT(r, p.loop() == 2);
+    }
+}
+
+DEF_TEST(SkVM_dont_dedup_loads, r) {
+    // We've been assuming that all Ops with the same arguments produce the same value
+    // and deduplicating them, which results in a simple common subexpression eliminator.
+    //
+    // But we can't soundly dedup two identical loads with a store between.
+    // If we dedup the loads in this test program it will always increment by 1, not K.
+    constexpr int K = 2;
+    skvm::Builder b;
+    {
+        skvm::Arg buf = b.varying<int>();
+        for (int i = 0; i < K; i++) {
+            b.store32(buf, b.load32(buf) + 1);
+        }
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+        int buf[] = { 0,1,2,3,4 };
+        program.eval(SK_ARRAY_COUNT(buf), buf);
+        for (int i = 0; i < (int)SK_ARRAY_COUNT(buf); i++) {
+            REPORTER_ASSERT(r, buf[i] == i+K);
+        }
+    });
+}
+
+DEF_TEST(SkVM_dont_dedup_stores, r) {
+    // Following a similar line of reasoning to SkVM_dont_dedup_loads,
+    // we cannot dedup stores either.  A different store between two identical stores
+    // will invalidate the first store, meaning we do need to reissue that store operation.
+    skvm::Builder b;
+    {
+        skvm::Arg buf = b.varying<int>();
+        b.store32(buf, b.splat(4));
+        b.store32(buf, b.splat(5));
+        b.store32(buf, b.splat(4));   // If we dedup'd, we'd skip this store.
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+        int buf[42];
+        program.eval(SK_ARRAY_COUNT(buf), buf);
+        for (int x : buf) {
+            REPORTER_ASSERT(r, x == 4);
+        }
+    });
 }

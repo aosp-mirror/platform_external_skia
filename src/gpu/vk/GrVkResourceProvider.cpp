@@ -11,6 +11,7 @@
 #include "src/core/SkTaskGroup.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrSamplerState.h"
+#include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkCommandPool.h"
 #include "src/gpu/vk/GrVkGpu.h"
@@ -28,6 +29,7 @@ GrVkResourceProvider::GrVkResourceProvider(GrVkGpu* gpu)
 GrVkResourceProvider::~GrVkResourceProvider() {
     SkASSERT(0 == fRenderPassArray.count());
     SkASSERT(0 == fExternalRenderPasses.count());
+    SkASSERT(0 == fMSAALoadPipelines.count());
     SkASSERT(VK_NULL_HANDLE == fPipelineCache);
     delete fPipelineStateCache;
 }
@@ -92,14 +94,15 @@ void GrVkResourceProvider::init() {
     fInputDSHandle = GrVkDescriptorSetManager::Handle(1);
 }
 
-GrVkPipeline* GrVkResourceProvider::createPipeline(const GrProgramInfo& programInfo,
-                                                   VkPipelineShaderStageCreateInfo* shaderStageInfo,
-                                                   int shaderStageCount,
-                                                   VkRenderPass compatibleRenderPass,
-                                                   VkPipelineLayout layout) {
-    return GrVkPipeline::Create(fGpu, programInfo, shaderStageInfo,
-                                shaderStageCount, compatibleRenderPass, layout,
-                                this->pipelineCache());
+sk_sp<const GrVkPipeline> GrVkResourceProvider::makePipeline(
+        const GrProgramInfo& programInfo,
+        VkPipelineShaderStageCreateInfo* shaderStageInfo,
+        int shaderStageCount,
+        VkRenderPass compatibleRenderPass,
+        VkPipelineLayout layout,
+        uint32_t subpass) {
+    return GrVkPipeline::Make(fGpu, programInfo, shaderStageInfo, shaderStageCount,
+                              compatibleRenderPass, layout, this->pipelineCache(), subpass);
 }
 
 // To create framebuffers, we first need to create a simple RenderPass that is
@@ -253,9 +256,11 @@ GrVkSamplerYcbcrConversion* GrVkResourceProvider::findOrCreateCompatibleSamplerY
 GrVkPipelineState* GrVkResourceProvider::findOrCreateCompatiblePipelineState(
         GrRenderTarget* renderTarget,
         const GrProgramInfo& programInfo,
-        VkRenderPass compatibleRenderPass) {
+        VkRenderPass compatibleRenderPass,
+        bool overrideSubpassForResolveLoad) {
     return fPipelineStateCache->findOrCreatePipelineState(renderTarget, programInfo,
-                                                          compatibleRenderPass);
+                                                          compatibleRenderPass,
+                                                          overrideSubpassForResolveLoad);
 }
 
 GrVkPipelineState* GrVkResourceProvider::findOrCreateCompatiblePipelineState(
@@ -273,6 +278,64 @@ GrVkPipelineState* GrVkResourceProvider::findOrCreateCompatiblePipelineState(
     }
 
     return tmp;
+}
+
+sk_sp<const GrVkPipeline> GrVkResourceProvider::findOrCreateMSAALoadPipeline(
+        const GrVkRenderPass& renderPass,
+        const GrVkRenderTarget* dst,
+        VkPipelineShaderStageCreateInfo* shaderStageInfo,
+        VkPipelineLayout pipelineLayout) {
+    // Find or Create a compatible pipeline
+    sk_sp<const GrVkPipeline> pipeline;
+    for (int i = 0; i < fMSAALoadPipelines.count() && !pipeline; ++i) {
+        if (fMSAALoadPipelines[i].fRenderPass->isCompatible(renderPass)) {
+            pipeline = fMSAALoadPipelines[i].fPipeline;
+        }
+    }
+    if (!pipeline) {
+        pipeline = GrVkPipeline::Make(
+                fGpu,
+                /*vertexAttribs=*/GrPrimitiveProcessor::AttributeSet(),
+                /*instanceAttribs=*/GrPrimitiveProcessor::AttributeSet(),
+                GrPrimitiveType::kTriangleStrip,
+                kTopLeft_GrSurfaceOrigin,
+                GrStencilSettings(),
+                dst->numSamples(),
+                /*isHWantialiasState=*/false,
+                /*isMixedSampled=*/false,
+                GrXferProcessor::BlendInfo(),
+                /*isWireframe=*/false,
+                /*useConservativeRaster=*/false,
+                /*subpass=*/0,
+                shaderStageInfo,
+                /*shaderStageCount=*/2,
+                renderPass.vkRenderPass(),
+                pipelineLayout,
+                /*ownsLayout=*/false,
+                this->pipelineCache());
+        if (!pipeline) {
+            return nullptr;
+        }
+        fMSAALoadPipelines.push_back({pipeline, &renderPass});
+    }
+    SkASSERT(pipeline);
+    return pipeline;
+}
+
+void GrVkResourceProvider::getZeroSamplerDescriptorSetHandle(
+        GrVkDescriptorSetManager::Handle* handle) {
+    SkASSERT(handle);
+    for (int i = 0; i < fDescriptorSetManagers.count(); ++i) {
+        if (fDescriptorSetManagers[i]->isZeroSampler()) {
+            *handle = GrVkDescriptorSetManager::Handle(i);
+            return;
+        }
+    }
+
+    GrVkDescriptorSetManager* dsm =
+            GrVkDescriptorSetManager::CreateZeroSamplerManager(fGpu);
+    fDescriptorSetManagers.emplace_back(dsm);
+    *handle = GrVkDescriptorSetManager::Handle(fDescriptorSetManagers.count() - 1);
 }
 
 void GrVkResourceProvider::getSamplerDescriptorSetHandle(VkDescriptorType type,
@@ -418,6 +481,9 @@ void GrVkResourceProvider::destroyResources(bool deviceLost) {
     if (taskGroup) {
         taskGroup->wait();
     }
+
+    // Release all msaa load pipelines
+    fMSAALoadPipelines.reset();
 
     // loop over all render pass sets to make sure we destroy all the internal VkRenderPasses
     for (int i = 0; i < fRenderPassArray.count(); ++i) {

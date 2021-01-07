@@ -351,6 +351,9 @@ static void draw_texture(GrSurfaceDrawContext* rtc,
                          SkCanvas::SrcRectConstraint constraint,
                          GrSurfaceProxyView view,
                          const GrColorInfo& srcColorInfo) {
+    if (GrColorTypeIsAlphaOnly(srcColorInfo.colorType())) {
+        view.concatSwizzle(GrSwizzle("aaaa"));
+    }
     const GrColorInfo& dstInfo(rtc->colorInfo());
     auto textureXform =
         GrColorSpaceXform::Make(srcColorInfo.colorSpace(), srcColorInfo.alphaType(),
@@ -448,7 +451,9 @@ static void draw_texture_producer(GrRecordingContext* context,
                      aaFlags,
                      constraint,
                      std::move(view),
-                     producer->colorInfo());
+                     {producer->colorType(),
+                      producer->alphaType(),
+                      sk_ref_sp(producer->colorSpace())});
         return;
     }
 
@@ -509,7 +514,11 @@ static void draw_texture_producer(GrRecordingContext* context,
     }
     fp = GrColorSpaceXformEffect::Make(std::move(fp), producer->colorSpace(), producer->alphaType(),
                                        rtc->colorInfo().colorSpace(), kPremul_SkAlphaType);
-    fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kModulate);
+    if (producer->isAlphaOnly()) {
+        fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kDstIn);
+    } else {
+        fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kSrcIn);
+    }
 
     GrPaint grPaint;
     if (!SkPaintToGrPaintWithTexture(context, rtc->colorInfo(), paint, matrixProvider,
@@ -653,8 +662,17 @@ void draw_tiled_bitmap(GrRecordingContext* context,
 
 //////////////////////////////////////////////////////////////////////////////
 
+static SkFilterMode downgrade_to_filter(const SkSamplingOptions& sampling) {
+    SkFilterMode filter = sampling.filter;
+    if (sampling.useCubic || sampling.mipmap != SkMipmapMode::kNone) {
+        // if we were "fancier" than just bilerp, only do bilerp
+        filter = SkFilterMode::kLinear;
+    }
+    return filter;
+}
+
 void SkGpuDevice::drawSpecial(SkSpecialImage* special, const SkMatrix& localToDevice,
-                              const SkPaint& paint) {
+                              const SkSamplingOptions& sampling, const SkPaint& paint) {
     SkASSERT(!paint.getMaskFilter() && !paint.getImageFilter());
     SkASSERT(special->isTextureBacked());
 
@@ -662,9 +680,7 @@ void SkGpuDevice::drawSpecial(SkSpecialImage* special, const SkMatrix& localToDe
     SkRect dst = SkRect::MakeWH(special->width(), special->height());
     SkMatrix srcToDst = SkMatrix::MakeRectToRect(src, dst, SkMatrix::kFill_ScaleToFit);
 
-    GrSamplerState sampler(GrSamplerState::WrapMode::kClamp,
-                           paint.getFilterQuality() >= kLow_SkFilterQuality ?
-                                GrSamplerState::Filter::kLinear : GrSamplerState::Filter::kNearest);
+    GrSamplerState sampler(GrSamplerState::WrapMode::kClamp, downgrade_to_filter(sampling));
     GrAA aa = paint.isAntiAlias() ? GrAA::kYes : GrAA::kNo;
     GrQuadAAFlags aaFlags = paint.isAntiAlias() ? GrQuadAAFlags::kAll : GrQuadAAFlags::kNone;
 
@@ -801,11 +817,8 @@ void SkGpuDevice::drawImageQuad(const SkImage* image, const SkRect* srcRect, con
 
 void SkGpuDevice::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry set[], int count,
                                      const SkPoint dstClips[], const SkMatrix preViewMatrices[],
-                                     const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
-    // TODO: pass in directly
-    //       pass sampling, or just filter?
-    SkSamplingOptions sampling(SkPaintPriv::GetFQ(paint));
-
+                                     const SkSamplingOptions& sampling, const SkPaint& paint,
+                                     SkCanvas::SrcRectConstraint constraint) {
     SkASSERT(count > 0);
     if (!can_use_draw_texture(paint, sampling.useCubic, sampling.mipmap)) {
         // Send every entry through drawImageQuad() to handle the more complicated paint
@@ -889,6 +902,10 @@ void SkGpuDevice::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry set[], int co
             view = image->refPinnedView(this->recordingContext(), &uniqueID);
             if (!view) {
                 view = image->refView(this->recordingContext(), GrMipmapped::kNo);
+            }
+            if (image->isAlphaOnly()) {
+                GrSwizzle swizzle = GrSwizzle::Concat(view.swizzle(), GrSwizzle("aaaa"));
+                view = {view.detachProxy(), view.origin(), swizzle};
             }
         }
 

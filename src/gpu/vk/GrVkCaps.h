@@ -208,7 +208,9 @@ public:
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 
-    GrProgramDesc makeDesc(GrRenderTarget*, const GrProgramInfo&) const override;
+    GrProgramDesc makeDesc(GrRenderTarget*,
+                           const GrProgramInfo&,
+                           ProgramDescOverrideFlags) const override;
 
     GrInternalSurfaceFlags getExtraSurfaceFlagsForDeferredRT() const override;
 
@@ -219,6 +221,10 @@ public:
     // like normal.
     // This flag is similar to enabling gl render to texture for msaa rendering.
     bool preferDiscardableMSAAAttachment() const { return fPreferDiscardableMSAAAttachment; }
+
+    bool mustLoadFullImageWithDiscardableMSAA() const {
+        return fMustLoadFullImageWithDiscardableMSAA;
+    }
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -361,6 +367,7 @@ private:
     bool fPreferCachedCpuMemory = true;
 
     bool fPreferDiscardableMSAAAttachment = false;
+    bool fMustLoadFullImageWithDiscardableMSAA = false;
 
     using INHERITED = GrCaps;
 };

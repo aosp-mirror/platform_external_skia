@@ -199,6 +199,7 @@ sksl_spirv_tests = [
   "$_tests/sksl/spirv/LayoutMultipleOf4.sksl",
   "$_tests/sksl/spirv/LayoutOutOfOrder.sksl",
   "$_tests/sksl/spirv/OpaqueTypeInArray.sksl",
+  "$_tests/sksl/errors/UndefinedFunction.sksl",
 ]
 
 sksl_shared_tests = [
@@ -332,6 +333,7 @@ sksl_shared_tests = [
   "$_tests/sksl/shared/NoFragCoordsPosRT.vert",
   "$_tests/sksl/shared/NormalizationGeo.geom",
   "$_tests/sksl/shared/NormalizationVert.vert",
+  "$_tests/sksl/shared/NumberCasts.sksl",
   "$_tests/sksl/shared/NumberConversions.sksl",
   "$_tests/sksl/shared/Offset.sksl",
   "$_tests/sksl/shared/Operators.sksl",
@@ -475,6 +477,7 @@ sksl_settings_tests = [
 ]
 
 sksl_rte_tests = [
+  "$_tests/sksl/runtime/ConversionConstructors.rte",
   "$_tests/sksl/runtime/SampleWithConstantMatrix.rte",
   "$_tests/sksl/runtime/SampleWithExplicitCoord.rte",
   "$_tests/sksl/runtime/SampleWithUniformMatrix.rte",
@@ -483,6 +486,7 @@ sksl_rte_tests = [
 
 sksl_rte_error_tests = [
   "$_tests/sksl/errors/Discard.rte",
+  "$_tests/sksl/errors/IllegalOperators.rte",
   "$_tests/sksl/errors/UnsupportedTypeSampler.rte",
   "$_tests/sksl/errors/UnsupportedTypeTexture.rte",
 ]
