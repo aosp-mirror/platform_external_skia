@@ -477,6 +477,7 @@ sksl_settings_tests = [
 ]
 
 sksl_rte_tests = [
+  "$_tests/sksl/runtime/ConversionConstructors.rte",
   "$_tests/sksl/runtime/SampleWithConstantMatrix.rte",
   "$_tests/sksl/runtime/SampleWithExplicitCoord.rte",
   "$_tests/sksl/runtime/SampleWithUniformMatrix.rte",
@@ -485,6 +486,7 @@ sksl_rte_tests = [
 
 sksl_rte_error_tests = [
   "$_tests/sksl/errors/Discard.rte",
+  "$_tests/sksl/errors/IllegalOperators.rte",
   "$_tests/sksl/errors/UnsupportedTypeSampler.rte",
   "$_tests/sksl/errors/UnsupportedTypeTexture.rte",
 ]

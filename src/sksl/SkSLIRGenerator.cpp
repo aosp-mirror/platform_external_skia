@@ -546,17 +546,26 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
                                           std::move(next), std::move(statement), fSymbolTable);
 }
 
-std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
-    SkASSERT(w.fKind == ASTNode::Kind::kWhile);
+std::unique_ptr<Statement> IRGenerator::convertWhile(int offset, std::unique_ptr<Expression> test,
+                                                     std::unique_ptr<Statement> statement) {
     if (this->strictES2Mode()) {
-        fErrors.error(w.fOffset, "while loops are not supported");
+        fErrors.error(offset, "while loops are not supported");
         return nullptr;
     }
 
+    test = this->coerce(std::move(test), *fContext.fBool_Type);
+    if (!test) {
+        return nullptr;
+    }
+    return std::make_unique<ForStatement>(offset, /*initializer=*/nullptr, std::move(test),
+                                          /*next=*/nullptr, std::move(statement), fSymbolTable);
+}
+
+std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
+    SkASSERT(w.fKind == ASTNode::Kind::kWhile);
     AutoLoopLevel level(this);
     auto iter = w.begin();
-    std::unique_ptr<Expression> test = this->coerce(this->convertExpression(*(iter++)),
-                                                    *fContext.fBool_Type);
+    std::unique_ptr<Expression> test = this->convertExpression(*(iter++));
     if (!test) {
         return nullptr;
     }
@@ -564,8 +573,7 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     if (!statement) {
         return nullptr;
     }
-    return std::make_unique<ForStatement>(w.fOffset, /*initializer=*/nullptr, std::move(test),
-                                          /*next=*/nullptr, std::move(statement), fSymbolTable);
+    return this->convertWhile(w.fOffset, std::move(test), std::move(statement));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
@@ -1378,11 +1386,10 @@ std::unique_ptr<Expression> IRGenerator::convertExpression(const ASTNode& expr) 
     }
 }
 
-std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identifier) {
-    SkASSERT(identifier.fKind == ASTNode::Kind::kIdentifier);
-    const Symbol* result = (*fSymbolTable)[identifier.getString()];
+std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFragment name) {
+    const Symbol* result = (*fSymbolTable)[name];
     if (!result) {
-        fErrors.error(identifier.fOffset, "unknown identifier '" + identifier.getString() + "'");
+        fErrors.error(offset, "unknown identifier '" + name + "'");
         return nullptr;
     }
     switch (result->kind()) {
@@ -1390,12 +1397,11 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
             std::vector<const FunctionDeclaration*> f = {
                 &result->as<FunctionDeclaration>()
             };
-            return std::make_unique<FunctionReference>(fContext, identifier.fOffset, f);
+            return std::make_unique<FunctionReference>(fContext, offset, f);
         }
         case Symbol::Kind::kUnresolvedFunction: {
             const UnresolvedFunction* f = &result->as<UnresolvedFunction>();
-            return std::make_unique<FunctionReference>(fContext, identifier.fOffset,
-                                                       f->functions());
+            return std::make_unique<FunctionReference>(fContext, offset, f->functions());
         }
         case Symbol::Kind::kVariable: {
             const Variable* var = &result->as<Variable>();
@@ -1434,19 +1440,18 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
                     }
                 }
                 if (!valid) {
-                    fErrors.error(identifier.fOffset, "'in' variable must be either 'uniform' or "
-                                                      "'layout(key)', or there must be a custom "
-                                                      "@setData function");
+                    fErrors.error(offset, "'in' variable must be either 'uniform' or 'layout(key)',"
+                                          " or there must be a custom @setData function");
                 }
             }
             // default to kRead_RefKind; this will be corrected later if the variable is written to
-            return std::make_unique<VariableReference>(identifier.fOffset,
+            return std::make_unique<VariableReference>(offset,
                                                        var,
                                                        VariableReference::RefKind::kRead);
         }
         case Symbol::Kind::kField: {
             const Field* field = &result->as<Field>();
-            auto base = std::make_unique<VariableReference>(identifier.fOffset, &field->owner(),
+            auto base = std::make_unique<VariableReference>(offset, &field->owner(),
                                                             VariableReference::RefKind::kRead);
             return std::make_unique<FieldAccess>(std::move(base),
                                                  field->fieldIndex(),
@@ -1454,15 +1459,19 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
         }
         case Symbol::Kind::kType: {
             const Type* t = &result->as<Type>();
-            return std::make_unique<TypeReference>(fContext, identifier.fOffset, t);
+            return std::make_unique<TypeReference>(fContext, offset, t);
         }
         case Symbol::Kind::kExternal: {
             const ExternalValue* r = &result->as<ExternalValue>();
-            return std::make_unique<ExternalValueReference>(identifier.fOffset, r);
+            return std::make_unique<ExternalValueReference>(offset, r);
         }
         default:
             ABORT("unsupported symbol type %d\n", (int) result->kind());
     }
+}
+
+std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identifier) {
+    return this->convertIdentifier(identifier.fOffset, identifier.getString());
 }
 
 std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
@@ -1501,14 +1510,11 @@ std::unique_ptr<Expression> IRGenerator::coerce(std::unique_ptr<Expression> expr
     }
     std::unique_ptr<Expression> ctor;
     if (type == *fContext.fFloatLiteral_Type) {
-        ctor = this->convertIdentifier(ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier,
-                                               "float"));
+        ctor = this->convertIdentifier(offset, "float");
     } else if (type == *fContext.fIntLiteral_Type) {
-        ctor = this->convertIdentifier(ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier,
-                                               "int"));
+        ctor = this->convertIdentifier(offset, "int");
     } else {
-        ctor = this->convertIdentifier(ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier,
-                                               type.name()));
+        ctor = this->convertIdentifier(offset, type.name());
     }
     if (!ctor) {
         fErrors.error(offset, "null identifier: " + type.name());
@@ -1594,6 +1600,16 @@ static bool op_valid_for_matrix_or_vector(Token::Kind op) {
         default:
             return false;
     }
+}
+
+/*
+ * Defines the set of operators allowed by The OpenGL ES Shading Language 1.00, Section 5.1.
+ * The set of illegal (reserved) operators are the ones that only make sense with integral types.
+ * This is not a coincidence: It's because ES2 doesn't require 'int' to be anything but syntactic
+ * sugar for floats with truncation after each operation).
+ */
+static bool op_allowed_in_strict_es2_mode(Token::Kind op) {
+    return !op_only_valid_for_integral_types(op);
 }
 
 /**
@@ -2002,6 +2018,17 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
     if (!right) {
         return nullptr;
     }
+    return this->convertBinaryExpression(std::move(left), op, std::move(right));
+}
+
+std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(
+                                                                std::unique_ptr<Expression> left,
+                                                                Token::Kind op,
+                                                                std::unique_ptr<Expression> right) {
+    if (!left || !right) {
+        return nullptr;
+    }
+    int offset = left->fOffset;
     const Type* leftType;
     const Type* rightType;
     const Type* resultType;
@@ -2017,18 +2044,23 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
     } else {
         rawRightType = &right->type();
     }
+    if (this->strictES2Mode() && !op_allowed_in_strict_es2_mode(op)) {
+        fErrors.error(offset,
+                      String("operator '") + Compiler::OperatorName(op) + "' is not allowed");
+        return nullptr;
+    }
     if (!determine_binary_type(fContext, fSettings->fAllowNarrowingConversions, op,
                                *rawLeftType, *rawRightType, &leftType, &rightType, &resultType)) {
-        fErrors.error(expression.fOffset, String("type mismatch: '") +
-                                          Compiler::OperatorName(expression.getToken().fKind) +
-                                          "' cannot operate on '" + left->type().displayName() +
-                                          "', '" + right->type().displayName() + "'");
+        fErrors.error(offset, String("type mismatch: '") +
+                                     Compiler::OperatorName(op) + "' cannot operate on '" +
+                                     left->type().displayName() + "', '" +
+                                     right->type().displayName() + "'");
         return nullptr;
     }
     if (Compiler::IsAssignment(op)) {
         if (leftType->componentType().isOpaque()) {
-            fErrors.error(expression.fOffset, "assignments to opaque type '" +
-                                              left->type().displayName() + "' are not permitted");
+            fErrors.error(offset, "assignments to opaque type '" + left->type().displayName() +
+                                  "' are not permitted");
         }
         if (!this->setRefKind(*left, op != Token::Kind::TK_EQ
                                              ? VariableReference::RefKind::kReadWrite
@@ -2043,28 +2075,21 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
     }
     std::unique_ptr<Expression> result = this->constantFold(*left, op, *right);
     if (!result) {
-        result = std::make_unique<BinaryExpression>(expression.fOffset, std::move(left), op,
-                                                    std::move(right), resultType);
+        result = std::make_unique<BinaryExpression>(offset, std::move(left), op, std::move(right),
+                                                    resultType);
     }
     return result;
 }
 
-std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode& node) {
-    SkASSERT(node.fKind == ASTNode::Kind::kTernary);
-    auto iter = node.begin();
-    std::unique_ptr<Expression> test = this->coerce(this->convertExpression(*(iter++)),
-                                                    *fContext.fBool_Type);
-    if (!test) {
+std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(
+                                                              std::unique_ptr<Expression> test,
+                                                              std::unique_ptr<Expression> ifTrue,
+                                                              std::unique_ptr<Expression> ifFalse) {
+    test = this->coerce(std::move(test), *fContext.fBool_Type);
+    if (!test || !ifTrue || !ifFalse) {
         return nullptr;
     }
-    std::unique_ptr<Expression> ifTrue = this->convertExpression(*(iter++));
-    if (!ifTrue) {
-        return nullptr;
-    }
-    std::unique_ptr<Expression> ifFalse = this->convertExpression(*(iter++));
-    if (!ifFalse) {
-        return nullptr;
-    }
+    int offset = test->fOffset;
     const Type* trueType;
     const Type* falseType;
     const Type* resultType;
@@ -2072,14 +2097,14 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
                                Token::Kind::TK_EQEQ, ifTrue->type(), ifFalse->type(),
                                &trueType, &falseType, &resultType) ||
         trueType != falseType) {
-        fErrors.error(node.fOffset, "ternary operator result mismatch: '" +
-                                    ifTrue->type().displayName() + "', '" +
-                                    ifFalse->type().displayName() + "'");
+        fErrors.error(offset, "ternary operator result mismatch: '" +
+                              ifTrue->type().displayName() + "', '" +
+                              ifFalse->type().displayName() + "'");
         return nullptr;
     }
     if (trueType->componentType().isOpaque()) {
         fErrors.error(
-                node.fOffset,
+                offset,
                 "ternary expression of opaque type '" + trueType->displayName() + "' not allowed");
         return nullptr;
     }
@@ -2099,10 +2124,28 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
             return ifFalse;
         }
     }
-    return std::make_unique<TernaryExpression>(node.fOffset,
+    return std::make_unique<TernaryExpression>(offset,
                                                std::move(test),
                                                std::move(ifTrue),
                                                std::move(ifFalse));
+}
+
+std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode& node) {
+    SkASSERT(node.fKind == ASTNode::Kind::kTernary);
+    auto iter = node.begin();
+    std::unique_ptr<Expression> test = this->convertExpression(*(iter++));
+    if (!test) {
+        return nullptr;
+    }
+    std::unique_ptr<Expression> ifTrue = this->convertExpression(*(iter++));
+    if (!ifTrue) {
+        return nullptr;
+    }
+    std::unique_ptr<Expression> ifFalse = this->convertExpression(*(iter++));
+    if (!ifFalse) {
+        return nullptr;
+    }
+    return this->convertTernaryExpression(std::move(test), std::move(ifTrue), std::move(ifFalse));
 }
 
 void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
@@ -2282,40 +2325,24 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
     }
 }
 
-std::unique_ptr<Expression> IRGenerator::convertNumberConstructor(int offset,
+std::unique_ptr<Expression> IRGenerator::convertScalarConstructor(int offset,
                                                                   const Type& type,
                                                                   ExpressionArray args) {
-    SkASSERT(type.isNumber());
+    SkASSERT(type.isNumber() || type.isBoolean());
     if (args.size() != 1) {
         fErrors.error(offset, "invalid arguments to '" + type.displayName() +
                               "' constructor, (expected exactly 1 argument, but found " +
                               to_string((uint64_t) args.size()) + ")");
         return nullptr;
     }
+
+    std::unique_ptr<Expression> converted = Constructor::SimplifyConversion(type, *args[0]);
+    if (converted) {
+        return converted;
+    }
+
     const Type& argType = args[0]->type();
-    if (type == argType) {
-        return std::move(args[0]);
-    }
-    if (type.isFloat() && args.size() == 1 && args[0]->is<FloatLiteral>()) {
-        SKSL_FLOAT value = args[0]->as<FloatLiteral>().value();
-        return std::make_unique<FloatLiteral>(offset, value, &type);
-    }
-    if (type.isFloat() && args.size() == 1 && args[0]->is<IntLiteral>()) {
-        SKSL_INT value = args[0]->as<IntLiteral>().value();
-        return std::make_unique<FloatLiteral>(offset, (SKSL_FLOAT)value, &type);
-    }
-    if (args[0]->is<IntLiteral>() && (type == *fContext.fInt_Type ||
-                                      type == *fContext.fUInt_Type)) {
-        return std::make_unique<IntLiteral>(offset, args[0]->as<IntLiteral>().value(), &type);
-    }
-    if (argType == *fContext.fBool_Type) {
-        std::unique_ptr<IntLiteral> zero(new IntLiteral(fContext, offset, 0));
-        std::unique_ptr<IntLiteral> one(new IntLiteral(fContext, offset, 1));
-        return std::make_unique<TernaryExpression>(offset, std::move(args[0]),
-                                                   this->coerce(std::move(one), type),
-                                                   this->coerce(std::move(zero), type));
-    }
-    if (!argType.isNumber()) {
+    if (!argType.isNumber() && !argType.isBoolean()) {
         fErrors.error(offset, "invalid argument to '" + type.displayName() +
                               "' constructor (expected a number or bool, but found '" +
                               argType.displayName() + "')");
@@ -2387,26 +2414,29 @@ std::unique_ptr<Expression> IRGenerator::convertConstructor(int offset,
                                                             ExpressionArray args) {
     // FIXME: add support for structs
     if (args.size() == 1 && args[0]->type() == type && !type.componentType().isOpaque()) {
-        // argument is already the right type, just return it
+        // Strip off redundant casts--i.e., convert Type(exprOfType) into exprOfType.
         return std::move(args[0]);
     }
-    if (type.isNumber()) {
-        return this->convertNumberConstructor(offset, type, std::move(args));
-    } else if (type.isArray()) {
+    if (type.isNumber() || type.isBoolean()) {
+        return this->convertScalarConstructor(offset, type, std::move(args));
+    }
+    if (type.isVector() || type.isMatrix()) {
+        return this->convertCompoundConstructor(offset, type, std::move(args));
+    }
+    if (type.isArray()) {
+        // Convert each constructor argument to the array's component type.
         const Type& base = type.componentType();
-        for (size_t i = 0; i < args.size(); i++) {
-            args[i] = this->coerce(std::move(args[i]), base);
-            if (!args[i]) {
+        for (std::unique_ptr<Expression>& argument : args) {
+            argument = this->coerce(std::move(argument), base);
+            if (!argument) {
                 return nullptr;
             }
         }
         return std::make_unique<Constructor>(offset, &type, std::move(args));
-    } else if (type.isVector() || type.isMatrix()) {
-        return this->convertCompoundConstructor(offset, type, std::move(args));
-    } else {
-        fErrors.error(offset, "cannot construct '" + type.displayName() + "'");
-        return nullptr;
     }
+
+    fErrors.error(offset, "cannot construct '" + type.displayName() + "'");
+    return nullptr;
 }
 
 std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& expression) {
@@ -2415,12 +2445,17 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
     if (!base) {
         return nullptr;
     }
+    return this->convertPrefixExpression(expression.getToken().fKind, std::move(base));
+}
+
+std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
+                                                                 std::unique_ptr<Expression> base) {
     const Type& baseType = base->type();
-    switch (expression.getToken().fKind) {
+    switch (op) {
         case Token::Kind::TK_PLUS:
             if (!baseType.isNumber() && !baseType.isVector() &&
                 baseType != *fContext.fFloatLiteral_Type) {
-                fErrors.error(expression.fOffset,
+                fErrors.error(base->fOffset,
                               "'+' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
@@ -2437,7 +2472,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
             }
             if (!baseType.isNumber() &&
                 !(baseType.isVector() && baseType.componentType().isNumber())) {
-                fErrors.error(expression.fOffset,
+                fErrors.error(base->fOffset,
                               "'-' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
@@ -2445,9 +2480,9 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
 
         case Token::Kind::TK_PLUSPLUS:
             if (!baseType.isNumber()) {
-                fErrors.error(expression.fOffset,
-                              String("'") + Compiler::OperatorName(expression.getToken().fKind) +
-                              "' cannot operate on '" + baseType.displayName() + "'");
+                fErrors.error(base->fOffset,
+                              String("'") + Compiler::OperatorName(op) + "' cannot operate on '" +
+                              baseType.displayName() + "'");
                 return nullptr;
             }
             if (!this->setRefKind(*base, VariableReference::RefKind::kReadWrite)) {
@@ -2456,9 +2491,9 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
             break;
         case Token::Kind::TK_MINUSMINUS:
             if (!baseType.isNumber()) {
-                fErrors.error(expression.fOffset,
-                              String("'") + Compiler::OperatorName(expression.getToken().fKind) +
-                              "' cannot operate on '" + baseType.displayName() + "'");
+                fErrors.error(base->fOffset,
+                              String("'") + Compiler::OperatorName(op) + "' cannot operate on '" +
+                              baseType.displayName() + "'");
                 return nullptr;
             }
             if (!this->setRefKind(*base, VariableReference::RefKind::kReadWrite)) {
@@ -2467,9 +2502,9 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
             break;
         case Token::Kind::TK_LOGICALNOT:
             if (!baseType.isBoolean()) {
-                fErrors.error(expression.fOffset,
-                              String("'") + Compiler::OperatorName(expression.getToken().fKind) +
-                              "' cannot operate on '" + baseType.displayName() + "'");
+                fErrors.error(base->fOffset,
+                              String("'") + Compiler::OperatorName(op) + "' cannot operate on '" +
+                              baseType.displayName() + "'");
                 return nullptr;
             }
             if (base->kind() == Expression::Kind::kBoolLiteral) {
@@ -2478,17 +2513,24 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
             }
             break;
         case Token::Kind::TK_BITWISENOT:
+            if (this->strictES2Mode()) {
+                // GLSL ES 1.00, Section 5.1
+                fErrors.error(base->fOffset,
+                              String("operator '") + Compiler::OperatorName(op) +
+                              "' is not allowed");
+                return nullptr;
+            }
             if (baseType != *fContext.fInt_Type && baseType != *fContext.fUInt_Type) {
-                fErrors.error(expression.fOffset,
-                              String("'") + Compiler::OperatorName(expression.getToken().fKind) +
-                              "' cannot operate on '" + baseType.displayName() + "'");
+                fErrors.error(base->fOffset,
+                              String("'") + Compiler::OperatorName(op) + "' cannot operate on '" +
+                              baseType.displayName() + "'");
                 return nullptr;
             }
             break;
         default:
             ABORT("unsupported prefix operator\n");
     }
-    return std::make_unique<PrefixExpression>(expression.getToken().fKind, std::move(base));
+    return std::make_unique<PrefixExpression>(op, std::move(base));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression> base,
@@ -2521,7 +2563,7 @@ std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression
 // secondary swizzle to put them back into the right order, so in this case we end up with
 // 'float4(base.xw, 1, 0).xzyw'.
 std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expression> base,
-                                                        StringFragment fields) {
+                                                        String fields) {
     const int offset = base->fOffset;
     const Type& baseType = base->type();
     if (!baseType.isVector() && !baseType.isNumber()) {
@@ -2529,13 +2571,13 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
         return nullptr;
     }
 
-    if (fields.fLength > 4) {
+    if (fields.length() > 4) {
         fErrors.error(offset, "too many components in swizzle mask '" + fields + "'");
         return nullptr;
     }
 
     ComponentArray maskComponents;
-    for (size_t i = 0; i < fields.fLength; i++) {
+    for (size_t i = 0; i < fields.length(); i++) {
         switch (fields[i]) {
             case '0':
             case '1':
@@ -2601,7 +2643,7 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
     }
 
     // If we have processed the entire swizzle, we're done.
-    if (maskComponents.size() == fields.fLength) {
+    if (maskComponents.size() == fields.length()) {
         return expr;
     }
 
@@ -2629,7 +2671,7 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
     int constantFieldIdx = maskComponents.size();
     int constantZeroIdx = -1, constantOneIdx = -1;
 
-    for (size_t i = 0; i < fields.fLength; i++) {
+    for (size_t i = 0; i < fields.length(); i++) {
         switch (fields[i]) {
             case '0':
                 if (constantZeroIdx == -1) {
@@ -2882,21 +2924,27 @@ std::unique_ptr<Expression> IRGenerator::convertScopeExpression(const ASTNode& s
 }
 
 std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode& expression) {
+    SkASSERT(expression.fKind == ASTNode::Kind::kPostfix);
     std::unique_ptr<Expression> base = this->convertExpression(*expression.begin());
     if (!base) {
         return nullptr;
     }
+    return this->convertPostfixExpression(std::move(base), expression.getToken().fKind);
+}
+
+std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(std::unique_ptr<Expression> base,
+                                                                  Token::Kind op) {
     const Type& baseType = base->type();
     if (!baseType.isNumber()) {
-        fErrors.error(expression.fOffset,
-                      "'" + String(Compiler::OperatorName(expression.getToken().fKind)) +
-                      "' cannot operate on '" + baseType.displayName() + "'");
+        fErrors.error(base->fOffset,
+                      "'" + String(Compiler::OperatorName(op)) + "' cannot operate on '" +
+                      baseType.displayName() + "'");
         return nullptr;
     }
     if (!this->setRefKind(*base, VariableReference::RefKind::kReadWrite)) {
         return nullptr;
     }
-    return std::make_unique<PostfixExpression>(std::move(base), expression.getToken().fKind);
+    return std::make_unique<PostfixExpression>(std::move(base), op);
 }
 
 void IRGenerator::checkValid(const Expression& expr) {
