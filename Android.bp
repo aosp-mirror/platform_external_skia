@@ -444,6 +444,7 @@ cc_library_static {
         "src/sksl/SkSLVMGenerator.cpp",
         "src/sksl/dsl/DSLCore.cpp",
         "src/sksl/dsl/DSLExpression.cpp",
+        "src/sksl/dsl/DSLType.cpp",
         "src/sksl/dsl/priv/DSLWriter.cpp",
         "src/sksl/ir/SkSLConstructor.cpp",
         "src/sksl/ir/SkSLPrefixExpression.cpp",
