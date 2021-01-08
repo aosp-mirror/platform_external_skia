@@ -33,7 +33,7 @@ public:
         kConstructor,
         kDefined,
         kExternalFunctionCall,
-        kExternalValue,
+        kExternalFunctionReference,
         kIntLiteral,
         kFieldAccess,
         kFloatLiteral,
@@ -135,6 +135,14 @@ public:
     }
 
     /**
+     * For an expression which evaluates to a constant Boolean, returns the value. Otherwise calls
+     * ABORT.
+     */
+    virtual bool getConstantBool() const {
+        ABORT("not a constant Boolean");
+    }
+
+    /**
      * Returns true if, given fixed values for uniforms, this expression always evaluates to the
      * same result with no side effects.
      */
@@ -171,20 +179,33 @@ public:
 
     /**
      * For a vector of floating point values, return the value of the n'th vector component. It is
-     * an error to call this method on an expression which is not a vector of FloatLiterals.
+     * an error to call this method on an expression which is not a vector of floating-point
+     * constant expressions.
      */
     virtual SKSL_FLOAT getFVecComponent(int n) const {
-        SkASSERT(false);
+        SkDEBUGFAILF("expression does not support getVecComponent: %s",
+                     this->description().c_str());
         return 0;
     }
 
     /**
      * For a vector of integer values, return the value of the n'th vector component. It is an error
-     * to call this method on an expression which is not a vector of IntLiterals.
+     * to call this method on an expression which is not a vector of integer constant expressions.
      */
     virtual SKSL_INT getIVecComponent(int n) const {
-        SkASSERT(false);
+        SkDEBUGFAILF("expression does not support getVecComponent: %s",
+                     this->description().c_str());
         return 0;
+    }
+
+    /**
+     * For a vector of Boolean values, return the value of the n'th vector component. It is an error
+     * to call this method on an expression which is not a vector of Boolean constant expressions.
+     */
+    virtual bool getBVecComponent(int n) const {
+        SkDEBUGFAILF("expression does not support getVecComponent: %s",
+                     this->description().c_str());
+        return false;
     }
 
     /**
@@ -217,6 +238,10 @@ template <> inline SKSL_FLOAT Expression::getVecComponent<SKSL_FLOAT>(int index)
 
 template <> inline SKSL_INT Expression::getVecComponent<SKSL_INT>(int index) const {
     return this->getIVecComponent(index);
+}
+
+template <> inline bool Expression::getVecComponent<bool>(int index) const {
+    return this->getBVecComponent(index);
 }
 
 }  // namespace SkSL
