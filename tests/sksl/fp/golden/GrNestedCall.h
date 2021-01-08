@@ -20,11 +20,10 @@ public:
     GrNestedCall(const GrNestedCall& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "NestedCall"; }
-    bool usesExplicitReturn() const override;
 private:
     GrNestedCall(std::unique_ptr<GrFragmentProcessor> fp)
     : INHERITED(kGrNestedCall_ClassID, kNone_OptimizationFlags) {
-        SkASSERT(fp);        this->registerChild(std::move(fp), SkSL::SampleUsage::PassThrough());    }
+        this->registerChild(std::move(fp), SkSL::SampleUsage::PassThrough());    }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;

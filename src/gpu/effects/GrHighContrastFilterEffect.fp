@@ -9,7 +9,7 @@
     #include "include/effects/SkHighContrastFilter.h"
 }
 
-in fragmentProcessor? inputFP;
+in fragmentProcessor inputFP;
 in uniform half contrastMod;
 layout(key) in bool hasContrast;
 layout(key) in bool grayscale;
@@ -29,7 +29,7 @@ half HSLToRGB(half p, half q, half t) {
                         p;
 }
 
-void main() {
+half4 main() {
     const half3 SK_ITU_BT709_LUM_COEFF = half3(0.2126, 0.7152, 0.0722);
 
     half4 inColor = sample(inputFP);
@@ -99,7 +99,7 @@ void main() {
         color.rgb = sqrt(color.rgb);
     }
 
-    sk_OutColor = color.rgb1 * inColor.a;
+    return color.rgb1 * inColor.a;
 }
 
 @optimizationFlags {

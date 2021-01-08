@@ -238,7 +238,7 @@ bool SkPixmap::scalePixels(const SkPixmap& actualDst, const SkSamplingOptions& s
                                               SkRect::Make(dst.bounds()),
                                               SkMatrix::kFill_ScaleToFit);
 
-    sk_sp<SkShader> shader = SkImageShader::Make(SkImage::MakeFromBitmap(bitmap),
+    sk_sp<SkShader> shader = SkImageShader::Make(bitmap.asImage(),
                                                  SkTileMode::kClamp,
                                                  SkTileMode::kClamp,
                                                  &sampling,
@@ -258,12 +258,6 @@ bool SkPixmap::scalePixels(const SkPixmap& actualDst, const SkSamplingOptions& s
     surface->getCanvas()->drawPaint(paint);
     return true;
 }
-
-#ifdef SK_SUPPORT_LEGACY_SCALEPIXELS_PARAM
-bool SkPixmap::scalePixels(const SkPixmap& dst, SkFilterQuality fq) const {
-    return this->scalePixels(dst, SkSamplingOptions(fq));
-}
-#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -589,7 +583,7 @@ bool SkPixmapPriv::Orient(const SkPixmap& dst, const SkPixmap& src, SkEncodedOri
 
     int w = src.width();
     int h = src.height();
-    if (ShouldSwapWidthHeight(origin)) {
+    if (SkEncodedOriginSwapsWidthHeight(origin)) {
         using std::swap;
         swap(w, h);
     }
@@ -605,11 +599,6 @@ bool SkPixmapPriv::Orient(const SkPixmap& dst, const SkPixmap& src, SkEncodedOri
         return kTopLeft_SkEncodedOrigin == origin;
     }
     return draw_orientation(dst, src, origin);
-}
-
-bool SkPixmapPriv::ShouldSwapWidthHeight(SkEncodedOrigin origin) {
-    // The last four SkEncodedOrigin values involve 90 degree rotations
-    return origin >= kLeftTop_SkEncodedOrigin;
 }
 
 SkImageInfo SkPixmapPriv::SwapWidthHeight(const SkImageInfo& info) {

@@ -7,7 +7,7 @@
 
 #include "modules/svg/include/SkSVGText.h"
 
-#include <vector>
+#include <limits>
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -17,6 +17,7 @@
 #include "modules/skshaper/include/SkShaper.h"
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGValue.h"
+#include "modules/svg/src/SkSVGTextPriv.h"
 #include "src/utils/SkUTF.h"
 
 namespace {
@@ -81,8 +82,21 @@ static SkFont ResolveFont(const SkSVGRenderContext& ctx) {
     return font;
 }
 
-static float ComputeAlignmentFactor(const SkSVGRenderContext& ctx) {
-    switch (ctx.presentationContext().fInherited.fTextAnchor->type()) {
+static std::vector<float> ResolveLengths(const SkSVGLengthContext& lctx,
+                                         const std::vector<SkSVGLength>& lengths,
+                                         SkSVGLengthContext::LengthType lt) {
+    std::vector<float> resolved;
+    resolved.reserve(lengths.size());
+
+    for (const auto& l : lengths) {
+        resolved.push_back(lctx.resolve(l, lt));
+    }
+
+    return resolved;
+}
+
+static float ComputeAlignmentFactor(const SkSVGPresentationContext& pctx) {
+    switch (pctx.fInherited.fTextAnchor->type()) {
     case SkSVGTextAnchor::Type::kStart : return  0.0f;
     case SkSVGTextAnchor::Type::kMiddle: return -0.5f;
     case SkSVGTextAnchor::Type::kEnd   : return -1.0f;
@@ -95,185 +109,262 @@ static float ComputeAlignmentFactor(const SkSVGRenderContext& ctx) {
 
 } // namespace
 
-// SkSVGTextContext is responsible for sequencing input text chars into "chunks".
-// A single text chunk can span multiple structural elements (<text>, <tspan>, etc),
-// and per [1] new chunks are emitted
-//
-//   a) for each top level text element (<text>, <textPath>)
-//   b) whenever a character with an explicit absolute position is encountered
-//
-// The implementation queues shaped run data until a full text chunk is resolved, at which
-// point we have enough information to perform final alignment and rendering.
-//
-// [1] https://www.w3.org/TR/SVG11/text.html#TextLayoutIntroduction
-class SkSVGTextContext final : SkShaper::RunHandler {
-public:
-    SkSVGTextContext(const SkSVGTextContainer& tcontainer, const SkSVGRenderContext& ctx)
-        : fShaper(SkShaper::Make(ctx.fontMgr()))
-        , fChunkPos{ ctx.lengthContext().resolve(tcontainer.getX(),
-                                                 SkSVGLengthContext::LengthType::kHorizontal),
-                     ctx.lengthContext().resolve(tcontainer.getY(),
-                                                 SkSVGLengthContext::LengthType::kVertical)}
-        , fChunkAlignmentFactor(ComputeAlignmentFactor(ctx))
-    {}
+SkSVGTextContext::ScopedPosResolver::ScopedPosResolver(const SkSVGTextContainer& txt,
+                                                       const SkSVGLengthContext& lctx,
+                                                       SkSVGTextContext* tctx,
+                                                       size_t charIndexOffset)
+    : fTextContext(tctx)
+    , fParent(tctx->fPosResolver)
+    , fCharIndexOffset(charIndexOffset)
+    , fX(ResolveLengths(lctx, txt.getX(), SkSVGLengthContext::LengthType::kHorizontal))
+    , fY(ResolveLengths(lctx, txt.getY(), SkSVGLengthContext::LengthType::kVertical))
+    , fDx(ResolveLengths(lctx, txt.getDx(), SkSVGLengthContext::LengthType::kHorizontal))
+    , fDy(ResolveLengths(lctx, txt.getDy(), SkSVGLengthContext::LengthType::kVertical))
+{
+    fTextContext->fPosResolver = this;
+}
 
-    // Queues codepoints for rendering.
-    void appendFragment(const SkString& txt, const SkSVGRenderContext& ctx) {
-        // https://www.w3.org/TR/SVG11/text.html#WhiteSpace
-        // https://www.w3.org/TR/2008/REC-xml-20081126/#NT-S
-        auto filterWSDefault = [this](SkUnichar ch) -> SkUnichar {
-            // Remove all newline chars.
-            if (ch == '\n') {
-                return -1;
-            }
+SkSVGTextContext::ScopedPosResolver::ScopedPosResolver(const SkSVGTextContainer& txt,
+                                                       const SkSVGLengthContext& lctx,
+                                                       SkSVGTextContext* tctx)
+    : ScopedPosResolver(txt, lctx, tctx, tctx->fCurrentCharIndex) {}
 
-            // Convert tab chars to space.
-            if (ch == '\t') {
-                ch = ' ';
-            }
+SkSVGTextContext::ScopedPosResolver::~ScopedPosResolver() {
+    fTextContext->fPosResolver = fParent;
+}
 
-            // Consolidate contiguous space chars and strip leading spaces (fPrevCharSpace
-            // starts off as true).
-            if (fPrevCharSpace && ch == ' ') {
-                return -1;
-            }
+SkSVGTextContext::PosAttrs SkSVGTextContext::ScopedPosResolver::resolve(size_t charIndex) const {
+    PosAttrs attrs;
 
-            // TODO: Strip trailing WS?  Doing this across chunks would require another buffering
-            //   layer.  In general, trailing WS should have no rendering side effects. Skipping
-            //   for now.
-            return ch;
-        };
-        auto filterWSPreserve = [](SkUnichar ch) -> SkUnichar {
-            // Convert newline and tab chars to space.
-            if (ch == '\n' || ch == '\t') {
-                ch = ' ';
-            }
-            return ch;
-        };
+    if (charIndex < fLastPosIndex) {
+        SkASSERT(charIndex >= fCharIndexOffset);
+        const auto localCharIndex = charIndex - fCharIndexOffset;
 
-        const auto xmlSpace = ctx.getXmlSpace();
-
-        SkSTArray<128, char, true> filtered;
-        filtered.reserve_back(SkToInt(txt.size()));
-
-        const char* ch_ptr = txt.c_str();
-        const char* ch_end = ch_ptr + txt.size();
-
-        while (ch_ptr < ch_end) {
-            auto ch = SkUTF::NextUTF8(&ch_ptr, ch_end);
-            ch = (xmlSpace == SkSVGXmlSpace::kDefault)
-                    ? filterWSDefault(ch)
-                    : filterWSPreserve(ch);
-
-            if (ch < 0) {
-                // invalid utf or char filtered out
-                continue;
-            }
-
-            char utf8_buf[SkUTF::kMaxBytesInUTF8Sequence];
-            filtered.push_back_n(SkToInt(SkUTF::ToUTF8(ch, utf8_buf)), utf8_buf);
-
-            fPrevCharSpace = (ch == ' ');
+        const auto hasAllLocal = localCharIndex < fX.size() &&
+                                 localCharIndex < fY.size() &&
+                                 localCharIndex < fDx.size() &&
+                                 localCharIndex < fDy.size();
+        if (!hasAllLocal && fParent) {
+            attrs = fParent->resolve(charIndex);
         }
 
-        // TODO: absolute positioned chars => chunk breaks
-
-        // Stash paints for access from SkShaper callbacks.
-        fCurrentFill   = ctx.fillPaint();
-        fCurrentStroke = ctx.strokePaint();
-
-        // TODO: directionality hints?
-        const auto LTR = true;
-
-        // Initiate shaping: this will generate a series of runs via callbacks.
-        fShaper->shape(filtered.data(), filtered.size(), ResolveFont(ctx), LTR, SK_ScalarMax, this);
-    }
-
-    // Perform actual rendering for queued codepoints.
-    void flushChunk(const SkSVGRenderContext& ctx) {
-        // The final rendering offset is determined by cumulative chunk advances and alignment.
-        const auto pos = fChunkPos + fChunkAdvance * fChunkAlignmentFactor;
-
-        SkTextBlobBuilder blobBuilder;
-
-        for (const auto& run : fRuns) {
-            const auto& buf = blobBuilder.allocRunPos(run.font, SkToInt(run.glyphCount));
-            std::copy(run.glyphs  .get(), run.glyphs  .get() + run.glyphCount, buf.glyphs);
-            std::copy(run.glyphPos.get(), run.glyphPos.get() + run.glyphCount, buf.points());
-
-            // Technically, blobs with compatible paints could be merged --
-            // but likely not worth the effort.
-            const auto blob = blobBuilder.make();
-            if (run.fillPaint) {
-                ctx.canvas()->drawTextBlob(blob, pos.fX, pos.fY, *run.fillPaint);
-            }
-            if (run.strokePaint) {
-                ctx.canvas()->drawTextBlob(blob, pos.fX, pos.fY, *run.strokePaint);
-            }
+        if (localCharIndex < fX.size()) {
+            attrs[PosAttrs::kX] = fX[localCharIndex];
+        }
+        if (localCharIndex < fY.size()) {
+            attrs[PosAttrs::kY] = fY[localCharIndex];
+        }
+        if (localCharIndex < fDx.size()) {
+            attrs[PosAttrs::kDx] = fDx[localCharIndex];
+        }
+        if (localCharIndex < fDy.size()) {
+            attrs[PosAttrs::kDy] = fDy[localCharIndex];
         }
 
-        fChunkPos += fChunkAdvance;
-        fChunkAdvance = {0,0};
-        fChunkAlignmentFactor = ComputeAlignmentFactor(ctx);
-
-        fRuns.clear();
+        if (!attrs.hasAny()) {
+            // Once we stop producing explicit position data, there is no reason to
+            // continue trying for higher indices.  We can suppress future lookups.
+            fLastPosIndex = charIndex;
+        }
     }
 
-private:
-    struct RunRec {
-        SkFont                       font;
-        std::unique_ptr<SkPaint>     fillPaint,
-                                     strokePaint;
-        std::unique_ptr<SkGlyphID[]> glyphs;
-        std::unique_ptr<SkPoint[]>   glyphPos;
-        size_t                       glyphCount;
-        SkVector                     advance;
+    return attrs;
+}
+
+void SkSVGTextContext::ShapeBuffer::append(SkUnichar ch, SkVector pos) {
+    // relative pos adjustments are cumulative
+    if (!fUtf8PosAdjust.empty()) {
+        pos += fUtf8PosAdjust.back();
+    }
+
+    char utf8_buf[SkUTF::kMaxBytesInUTF8Sequence];
+    const auto utf8_len = SkToInt(SkUTF::ToUTF8(ch, utf8_buf));
+    fUtf8         .push_back_n(utf8_len, utf8_buf);
+    fUtf8PosAdjust.push_back_n(utf8_len, pos);
+}
+
+void SkSVGTextContext::shapePendingBuffer(const SkFont& font) {
+    // TODO: directionality hints?
+    const auto LTR  = true;
+
+    // Initiate shaping: this will generate a series of runs via callbacks.
+    fShaper->shape(fShapeBuffer.fUtf8.data(), fShapeBuffer.fUtf8.size(),
+                   font, LTR, SK_ScalarMax, this);
+    fShapeBuffer.reset();
+}
+
+SkSVGTextContext::SkSVGTextContext(const SkSVGPresentationContext& pctx, sk_sp<SkFontMgr> fmgr)
+    : fShaper(SkShaper::Make(std::move(fmgr)))
+    , fChunkPos{ 0, 0 }
+    , fChunkAlignmentFactor(ComputeAlignmentFactor(pctx))
+{}
+
+void SkSVGTextContext::appendFragment(const SkString& txt, const SkSVGRenderContext& ctx,
+                                      SkSVGXmlSpace xs) {
+    // https://www.w3.org/TR/SVG11/text.html#WhiteSpace
+    // https://www.w3.org/TR/2008/REC-xml-20081126/#NT-S
+    auto filterWSDefault = [this](SkUnichar ch) -> SkUnichar {
+        // Remove all newline chars.
+        if (ch == '\n') {
+            return -1;
+        }
+
+        // Convert tab chars to space.
+        if (ch == '\t') {
+            ch = ' ';
+        }
+
+        // Consolidate contiguous space chars and strip leading spaces (fPrevCharSpace
+        // starts off as true).
+        if (fPrevCharSpace && ch == ' ') {
+            return -1;
+        }
+
+        // TODO: Strip trailing WS?  Doing this across chunks would require another buffering
+        //   layer.  In general, trailing WS should have no rendering side effects. Skipping
+        //   for now.
+        return ch;
+    };
+    auto filterWSPreserve = [](SkUnichar ch) -> SkUnichar {
+        // Convert newline and tab chars to space.
+        if (ch == '\n' || ch == '\t') {
+            ch = ' ';
+        }
+        return ch;
     };
 
-    // SkShaper callbacks
-    void beginLine() override {}
-    void runInfo(const RunInfo&) override {}
-    void commitRunInfo() override {}
-    Buffer runBuffer(const RunInfo& ri) override {
-        SkASSERT(ri.glyphCount);
+    // Stash paints for access from SkShaper callbacks.
+    fCurrentFill   = ctx.fillPaint();
+    fCurrentStroke = ctx.strokePaint();
 
-        fRuns.push_back({
-            ri.fFont,
-            fCurrentFill   ? std::make_unique<SkPaint>(*fCurrentFill)   : nullptr,
-            fCurrentStroke ? std::make_unique<SkPaint>(*fCurrentStroke) : nullptr,
-            std::make_unique<SkGlyphID[]>(ri.glyphCount),
-            std::make_unique<SkPoint[]  >(ri.glyphCount),
-            ri.glyphCount,
-            ri.fAdvance,
+    const auto font = ResolveFont(ctx);
+    fShapeBuffer.reserve(txt.size());
+
+    const char* ch_ptr = txt.c_str();
+    const char* ch_end = ch_ptr + txt.size();
+
+    while (ch_ptr < ch_end) {
+        auto ch = SkUTF::NextUTF8(&ch_ptr, ch_end);
+        ch = (xs == SkSVGXmlSpace::kDefault)
+                ? filterWSDefault(ch)
+                : filterWSPreserve(ch);
+
+        if (ch < 0) {
+            // invalid utf or char filtered out
+            continue;
+        }
+
+        SkASSERT(fPosResolver);
+        const auto pos = fPosResolver->resolve(fCurrentCharIndex++);
+
+        // Absolute position adjustments define a new chunk.
+        // (https://www.w3.org/TR/SVG11/text.html#TextLayoutIntroduction)
+        if (pos.has(PosAttrs::kX) || pos.has(PosAttrs::kY)) {
+            this->shapePendingBuffer(font);
+            this->flushChunk(ctx);
+
+            // New chunk position.
+            if (pos.has(PosAttrs::kX)) {
+                fChunkPos.fX = pos[PosAttrs::kX];
+            }
+            if (pos.has(PosAttrs::kY)) {
+                fChunkPos.fY = pos[PosAttrs::kY];
+            }
+        }
+
+        fShapeBuffer.append(ch, {
+            pos.has(PosAttrs::kDx) ? pos[PosAttrs::kDx] : 0,
+            pos.has(PosAttrs::kDy) ? pos[PosAttrs::kDy] : 0,
         });
 
-        return {
-            fRuns.back().glyphs.get(),
-            fRuns.back().glyphPos.get(),
-            nullptr,
-            nullptr,
-            fChunkAdvance,
-        };
+        fPrevCharSpace = (ch == ' ');
     }
-    void commitRunBuffer(const RunInfo& ri) override {
-        fChunkAdvance += ri.fAdvance;
+
+    this->shapePendingBuffer(font);
+
+    // Note: at this point we have shaped and buffered RunRecs for the current fragment.
+    // The active text chunk continues until an explicit or implicit flush.
+}
+
+void SkSVGTextContext::flushChunk(const SkSVGRenderContext& ctx) {
+    // The final rendering offset is determined by cumulative chunk advances and alignment.
+    const auto pos = fChunkPos + fChunkAdvance * fChunkAlignmentFactor;
+
+    SkTextBlobBuilder blobBuilder;
+
+    for (const auto& run : fRuns) {
+        const auto& buf = blobBuilder.allocRunPos(run.font, SkToInt(run.glyphCount));
+        std::copy(run.glyphs  .get(), run.glyphs  .get() + run.glyphCount, buf.glyphs);
+        std::copy(run.glyphPos.get(), run.glyphPos.get() + run.glyphCount, buf.points());
+
+        // Technically, blobs with compatible paints could be merged --
+        // but likely not worth the effort.
+        const auto blob = blobBuilder.make();
+        if (run.fillPaint) {
+            ctx.canvas()->drawTextBlob(blob, pos.fX, pos.fY, *run.fillPaint);
+        }
+        if (run.strokePaint) {
+            ctx.canvas()->drawTextBlob(blob, pos.fX, pos.fY, *run.strokePaint);
+        }
     }
-    void commitLine() override {}
 
-    // http://www.w3.org/TR/SVG11/text.html#TextLayout
-    const std::unique_ptr<SkShaper> fShaper;
-    std::vector<RunRec>             fRuns;
+    fChunkPos += fChunkAdvance;
+    fChunkAdvance = {0,0};
+    fChunkAlignmentFactor = ComputeAlignmentFactor(ctx.presentationContext());
 
-    SkPoint                         fChunkPos;             // current text chunk position
-    SkVector                        fChunkAdvance = {0,0}; // cumulative advance
-    float                           fChunkAlignmentFactor; // current chunk alignment
+    fRuns.clear();
+}
 
-    // cached for access from SkShaper callbacks.
-    const SkPaint*                  fCurrentFill;
-    const SkPaint*                  fCurrentStroke;
+SkShaper::RunHandler::Buffer SkSVGTextContext::runBuffer(const RunInfo& ri) {
+    SkASSERT(ri.glyphCount);
 
-    bool                            fPrevCharSpace = true; // WS filter state
-};
+    fRuns.push_back({
+        ri.fFont,
+        fCurrentFill   ? std::make_unique<SkPaint>(*fCurrentFill)   : nullptr,
+        fCurrentStroke ? std::make_unique<SkPaint>(*fCurrentStroke) : nullptr,
+        std::make_unique<SkGlyphID[]>(ri.glyphCount),
+        std::make_unique<SkPoint[]  >(ri.glyphCount),
+        ri.glyphCount,
+        ri.fAdvance,
+    });
+
+    // Ensure sufficient space to temporarily fetch cluster information.
+    fShapeClusterBuffer.resize(std::max(fShapeClusterBuffer.size(), ri.glyphCount));
+
+    return {
+        fRuns.back().glyphs.get(),
+        fRuns.back().glyphPos.get(),
+        nullptr,
+        fShapeClusterBuffer.data(),
+        fChunkAdvance,
+    };
+}
+
+void SkSVGTextContext::commitRunBuffer(const RunInfo& ri) {
+    // apply position adjustments
+    for (size_t i = 0; i < ri.glyphCount; ++i) {
+        const auto utf8_index = fShapeClusterBuffer[i];
+        fRuns.back().glyphPos[i] += fShapeBuffer.fUtf8PosAdjust[SkToInt(utf8_index)];
+    }
+
+    // Position adjustments are cumulative - we only need to advance the current chunk
+    // with the last value.
+    fChunkAdvance += ri.fAdvance + fShapeBuffer.fUtf8PosAdjust.back();
+}
+
+void SkSVGTextFragment::renderText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,
+                                   SkSVGXmlSpace xs) const {
+    SkSVGRenderContext localContext(ctx, this);
+
+    if (this->onPrepareToRender(&localContext)) {
+        this->onRenderText(localContext, tctx, xs);
+    }
+}
+
+SkPath SkSVGTextFragment::onAsPath(const SkSVGRenderContext&) const {
+    // TODO
+    return SkPath();
+}
 
 void SkSVGTextContainer::appendChild(sk_sp<SkSVGNode> child) {
     // Only allow text nodes.
@@ -281,16 +372,22 @@ void SkSVGTextContainer::appendChild(sk_sp<SkSVGNode> child) {
     case SkSVGTag::kText:
     case SkSVGTag::kTextLiteral:
     case SkSVGTag::kTSpan:
-        this->INHERITED::appendChild(child);
+        fChildren.push_back(
+            sk_sp<SkSVGTextFragment>(static_cast<SkSVGTextFragment*>(child.release())));
         break;
     default:
         break;
     }
 }
 
-bool SkSVGTextContainer::onPrepareToRender(SkSVGRenderContext* ctx) const {
-    ctx->setXmlSpace(this->getXmlSpace());
-    return this->INHERITED::onPrepareToRender(ctx);
+void SkSVGTextContainer::onRenderText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,
+                                      SkSVGXmlSpace) const {
+    const SkSVGTextContext::ScopedPosResolver resolver(*this, ctx.lengthContext(), tctx);
+
+    for (const auto& frag : fChildren) {
+        // Containers always override xml:space with the local value.
+        frag->renderText(ctx, tctx, this->getXmlSpace());
+    }
 }
 
 // https://www.w3.org/TR/SVG11/text.html#WhiteSpace
@@ -306,33 +403,25 @@ bool SkSVGAttributeParser::parse(SkSVGXmlSpace* xs) {
 
 bool SkSVGTextContainer::parseAndSetAttribute(const char* name, const char* value) {
     return INHERITED::parseAndSetAttribute(name, value) ||
-           this->setX(SkSVGAttributeParser::parse<SkSVGLength>("x", name, value)) ||
-           this->setY(SkSVGAttributeParser::parse<SkSVGLength>("y", name, value)) ||
+           this->setX(SkSVGAttributeParser::parse<std::vector<SkSVGLength>>("x", name, value)) ||
+           this->setY(SkSVGAttributeParser::parse<std::vector<SkSVGLength>>("y", name, value)) ||
+           this->setDx(SkSVGAttributeParser::parse<std::vector<SkSVGLength>>("dx", name, value)) ||
+           this->setDy(SkSVGAttributeParser::parse<std::vector<SkSVGLength>>("dy", name, value)) ||
            this->setXmlSpace(SkSVGAttributeParser::parse<SkSVGXmlSpace>("xml:space", name, value));
 }
 
-void SkSVGText::onRender(const SkSVGRenderContext& ctx) const {
-    // <text> establishes a new text layout context.
-    SkSVGTextContext tctx(*this, ctx);
+void SkSVGTextContainer::onRender(const SkSVGRenderContext& ctx) const {
+    // Root text nodes establish a new text layout context.
+    SkSVGTextContext tctx(ctx.presentationContext(), ctx.fontMgr());
 
-    SkSVGRenderContext local_ctx(ctx, tctx);
-    this->INHERITED::onRender(local_ctx);
+    this->onRenderText(ctx, &tctx, this->getXmlSpace());
 
     tctx.flushChunk(ctx);
 }
 
-void SkSVGTextLiteral::onRender(const SkSVGRenderContext& ctx) const {
-    auto* tctx = ctx.textContext();
-    if (!tctx) {
-        return;
-    }
+void SkSVGTextLiteral::onRenderText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,
+                                    SkSVGXmlSpace xs) const {
+    SkASSERT(tctx);
 
-    tctx->appendFragment(this->getText(), ctx);
+    tctx->appendFragment(this->getText(), ctx, xs);
 }
-
-SkPath SkSVGTextLiteral::onAsPath(const SkSVGRenderContext&) const {
-    // TODO
-    return SkPath();
-}
-
-SkSVGTextLiteral::~SkSVGTextLiteral() = default; // just to pin the vtable

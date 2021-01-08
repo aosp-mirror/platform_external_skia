@@ -11,8 +11,8 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrStyle.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
 #include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/ops/GrTriangulatingPathRenderer.h"
@@ -696,12 +696,13 @@ static std::unique_ptr<GrFragmentProcessor> create_linear_gradient_processor(
         pts, colors, nullptr, SK_ARRAY_COUNT(colors), SkTileMode::kClamp);
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
     SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
-    GrFPArgs args(rContext, matrixProvider, SkFilterQuality::kLow_SkFilterQuality, &colorInfo);
+    GrFPArgs args(rContext, matrixProvider, SkSamplingOptions(SkFilterMode::kLinear,
+                                                              SkMipmapMode::kNone), &colorInfo);
     return as_SB(shader)->asFragmentProcessor(args);
 }
 
 static void test_path(GrRecordingContext* rContext,
-                      GrRenderTargetContext* renderTargetContext,
+                      GrSurfaceDrawContext* surfaceDrawContext,
                       const SkPath& path,
                       const SkMatrix& matrix = SkMatrix::I(),
                       GrAAType aaType = GrAAType::kNone,
@@ -715,14 +716,14 @@ static void test_path(GrRecordingContext* rContext,
         paint.setColorFragmentProcessor(std::move(fp));
     }
 
-    SkIRect clipConservativeBounds = SkIRect::MakeWH(renderTargetContext->width(),
-                                                     renderTargetContext->height());
+    SkIRect clipConservativeBounds = SkIRect::MakeWH(surfaceDrawContext->width(),
+                                                     surfaceDrawContext->height());
     GrStyle style(SkStrokeRec::kFill_InitStyle);
     GrStyledShape shape(path, style);
     GrPathRenderer::DrawPathArgs args{rContext,
                                       std::move(paint),
                                       &GrUserStencilSettings::kUnused,
-                                      renderTargetContext,
+                                      surfaceDrawContext,
                                       nullptr,
                                       &clipConservativeBounds,
                                       &matrix,
@@ -734,7 +735,7 @@ static void test_path(GrRecordingContext* rContext,
 
 DEF_GPUTEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests, reporter, ctxInfo) {
     auto ctx = ctxInfo.directContext();
-    auto rtc = GrRenderTargetContext::Make(
+    auto rtc = GrSurfaceDrawContext::Make(
             ctx, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {800, 800}, 1,
             GrMipmapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
     if (!rtc) {

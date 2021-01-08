@@ -91,12 +91,13 @@ protected:
     void drawPath(const SkPath&, const SkPaint&, bool pathIsMutable) override;
 
     void drawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
-                       const SkPaint&, SkCanvas::SrcRectConstraint) override;
+                       const SkSamplingOptions&, const SkPaint&,
+                       SkCanvas::SrcRectConstraint) override;
 
     void drawGlyphRunList(const SkGlyphRunList& glyphRunList) override;
     void drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) override;
     void drawAtlas(const SkImage*, const SkRSXform[], const SkRect[], const SkColor[], int count,
-                   SkBlendMode, const SkPaint&) override;
+                   SkBlendMode, const SkSamplingOptions&, const SkPaint&) override;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -132,12 +133,11 @@ protected:
     SkIRect onDevClipBounds() const override;
 
     void drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect* dstOrNull,
-                    const SkPaint&);
+                    const SkSamplingOptions&, const SkPaint&);
 
 private:
     friend class SkCanvas;
     friend class SkDraw;
-    friend class SkDrawIter;
     friend class SkDrawTiler;
     friend class SkSurface_Raster;
 

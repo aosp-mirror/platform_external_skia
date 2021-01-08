@@ -383,7 +383,7 @@ ASTNode::ID Parser::enumDeclaration() {
     if (!this->expect(Token::Kind::TK_LBRACE, "'{'")) {
         return ASTNode::ID::Invalid();
     }
-    fSymbols.add(std::make_unique<Type>(this->text(name), Type::TypeKind::kEnum));
+    fSymbols.add(Type::MakeSimpleType(this->text(name), Type::TypeKind::kEnum));
     ASTNode::ID result = this->createNode(name.fOffset, ASTNode::Kind::kEnum, this->text(name));
     if (!this->checkNext(Token::Kind::TK_RBRACE)) {
         Token id;
@@ -580,7 +580,7 @@ ASTNode::ID Parser::structDeclaration() {
     if (!this->expect(Token::Kind::TK_RBRACE, "'}'")) {
         return ASTNode::ID::Invalid();
     }
-    auto newType = std::make_unique<Type>(name.fOffset, this->text(name), fields);
+    std::unique_ptr<Type> newType = Type::MakeStructType(name.fOffset, this->text(name), fields);
     if (struct_is_too_deeply_nested(*newType, kMaxStructDepth)) {
         this->error(name.fOffset, "struct '" + this->text(name) + "' is too deeply nested");
         return ASTNode::ID::Invalid();
@@ -588,7 +588,7 @@ ASTNode::ID Parser::structDeclaration() {
     fSymbols.add(std::move(newType));
     return this->createNode(name.fOffset, ASTNode::Kind::kType,
                             ASTNode::TypeData(this->text(name),
-                                              /*isStructDeclaration=*/true, /*isNullable=*/false));
+                                              /*isStructDeclaration=*/true));
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
@@ -707,8 +707,13 @@ ASTNode::ID Parser::parameter() {
         if (!this->expect(Token::Kind::TK_INT_LITERAL, "a positive integer", &sizeToken)) {
             return ASTNode::ID::Invalid();
         }
-        this->addChild(result, this->createNode(sizeToken.fOffset, ASTNode::Kind::kInt,
-                                                SkSL::stoi(this->text(sizeToken))));
+        StringFragment arraySizeFrag = this->text(sizeToken);
+        SKSL_INT arraySize;
+        if (!SkSL::stoi(arraySizeFrag, &arraySize)) {
+            this->error(sizeToken, "array size is too large: " + arraySizeFrag);
+            return ASTNode::ID::Invalid();
+        }
+        this->addChild(result, this->createNode(sizeToken.fOffset, ASTNode::Kind::kInt, arraySize));
         if (!this->expect(Token::Kind::TK_RBRACKET, "']'")) {
             return ASTNode::ID::Invalid();
         }
@@ -724,10 +729,16 @@ int Parser::layoutInt() {
         return -1;
     }
     Token resultToken;
-    if (this->expect(Token::Kind::TK_INT_LITERAL, "a non-negative integer", &resultToken)) {
-        return SkSL::stoi(this->text(resultToken));
+    if (!this->expect(Token::Kind::TK_INT_LITERAL, "a non-negative integer", &resultToken)) {
+        return -1;
     }
-    return -1;
+    StringFragment resultFrag = this->text(resultToken);
+    SKSL_INT resultValue;
+    if (!SkSL::stoi(resultFrag, &resultValue)) {
+        this->error(resultToken, "value in layout is too large: " + resultFrag);
+        return -1;
+    }
+    return resultValue;
 }
 
 /** EQ IDENTIFIER */
@@ -1166,7 +1177,7 @@ ASTNode::ID Parser::type() {
         return ASTNode::ID::Invalid();
     }
     ASTNode::ID result = this->createNode(type.fOffset, ASTNode::Kind::kType);
-    ASTNode::TypeData td(this->text(type), /*isStructDeclaration=*/false, /*isNullable=*/false);
+    ASTNode::TypeData td(this->text(type), /*isStructDeclaration=*/false);
     bool isArray = false;
     while (this->checkNext(Token::Kind::TK_LBRACKET)) {
         if (isArray) {
@@ -1187,7 +1198,6 @@ ASTNode::ID Parser::type() {
         isArray = true;
         this->expect(Token::Kind::TK_RBRACKET, "']'");
     }
-    td.fIsNullable = this->checkNext(Token::Kind::TK_QUESTION);
     getNode(result).setTypeData(td);
     return result;
 }
@@ -2180,7 +2190,7 @@ ASTNode::ID Parser::suffix(ASTNode::ID base) {
     }
 }
 
-/* IDENTIFIER | intLiteral | floatLiteral | boolLiteral | NULL_LITERAL | '(' expression ')' */
+/* IDENTIFIER | intLiteral | floatLiteral | boolLiteral | '(' expression ')' */
 ASTNode::ID Parser::term() {
     Token t = this->peek();
     switch (t.fKind) {
@@ -2213,9 +2223,6 @@ ASTNode::ID Parser::term() {
             }
             break;
         }
-        case Token::Kind::TK_NULL_LITERAL:
-            this->nextToken();
-            return this->createNode(t.fOffset, ASTNode::Kind::kNull);
         case Token::Kind::TK_LPAREN: {
             this->nextToken();
             AutoDepth depth(this);
@@ -2231,7 +2238,7 @@ ASTNode::ID Parser::term() {
         }
         default:
             this->nextToken();
-            this->error(t.fOffset,  "expected expression, but found '" + this->text(t) + "'");
+            this->error(t.fOffset, "expected expression, but found '" + this->text(t) + "'");
     }
     return ASTNode::ID::Invalid();
 }
@@ -2239,21 +2246,30 @@ ASTNode::ID Parser::term() {
 /* INT_LITERAL */
 bool Parser::intLiteral(SKSL_INT* dest) {
     Token t;
-    if (this->expect(Token::Kind::TK_INT_LITERAL, "integer literal", &t)) {
-        *dest = SkSL::stol(this->text(t));
-        return true;
+    if (!this->expect(Token::Kind::TK_INT_LITERAL, "integer literal", &t)) {
+        return false;
     }
-    return false;
+    StringFragment s = this->text(t);
+    if (!SkSL::stoi(s, dest)) {
+        this->error(t, "integer is too large: " + s);
+        return false;
+    }
+    return true;
 }
+
 
 /* FLOAT_LITERAL */
 bool Parser::floatLiteral(SKSL_FLOAT* dest) {
     Token t;
-    if (this->expect(Token::Kind::TK_FLOAT_LITERAL, "float literal", &t)) {
-        *dest = SkSL::stod(this->text(t));
-        return true;
+    if (!this->expect(Token::Kind::TK_FLOAT_LITERAL, "float literal", &t)) {
+        return false;
     }
-    return false;
+    StringFragment s = this->text(t);
+    if (!SkSL::stod(s, dest)) {
+        this->error(t, "floating-point value is too large: " + s);
+        return false;
+    }
+    return true;
 }
 
 /* TRUE_LITERAL | FALSE_LITERAL */

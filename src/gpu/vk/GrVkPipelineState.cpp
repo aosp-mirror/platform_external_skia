@@ -147,6 +147,7 @@ bool GrVkPipelineState::setAndBindTextures(GrVkGpu* gpu,
             const auto& samplerState = samplerBindings[0].fState;
             const GrVkDescriptorSet* descriptorSet = texture->cachedSingleDescSet(samplerState);
             if (descriptorSet) {
+                commandBuffer->addGrSurface(sk_ref_sp<const GrSurface>(texture));
                 commandBuffer->addResource(texture->textureView());
                 commandBuffer->addResource(texture->resource());
                 commandBuffer->addRecycledResource(descriptorSet);
@@ -225,7 +226,7 @@ bool GrVkPipelineState::setAndBindInputAttachment(GrVkGpu* gpu,
                                                   GrVkRenderTarget* renderTarget,
                                                   GrVkCommandBuffer* commandBuffer) {
     SkASSERT(renderTarget->supportsInputAttachmentUsage());
-    const GrVkDescriptorSet* descriptorSet = renderTarget->inputDescSet(gpu);
+    const GrVkDescriptorSet* descriptorSet = renderTarget->inputDescSet(gpu, /*forResolve=*/false);
     if (!descriptorSet) {
         return false;
     }

@@ -25,9 +25,9 @@ public:
         SkString _input0 = SkStringPrintf("%s * %s", args.fUniformHandler->getUniformCStr(colorVar), _sample1.c_str());
         SkString _sample0 = this->invokeChild(1, _input0.c_str(), args);
         fragBuilder->codeAppendf(
-R"SkSL(%s = %s;
+R"SkSL(return %s;
 )SkSL"
-, args.fOutputColor, _sample0.c_str());
+, _sample0.c_str());
     }
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman, const GrFragmentProcessor& _proc) override {
@@ -43,9 +43,6 @@ bool GrNestedChildProcessors::onIsEqual(const GrFragmentProcessor& other) const 
     const GrNestedChildProcessors& that = other.cast<GrNestedChildProcessors>();
     (void) that;
     return true;
-}
-bool GrNestedChildProcessors::usesExplicitReturn() const {
-    return false;
 }
 GrNestedChildProcessors::GrNestedChildProcessors(const GrNestedChildProcessors& src)
 : INHERITED(kGrNestedChildProcessors_ClassID, src.optimizationFlags()) {

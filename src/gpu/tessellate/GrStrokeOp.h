@@ -12,6 +12,8 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrSTArenaList.h"
 #include "src/gpu/ops/GrDrawOp.h"
+#include "src/gpu/tessellate/GrStrokeTessellateShader.h"
+#include <array>
 
 class GrStrokeTessellateShader;
 
@@ -28,16 +30,16 @@ protected:
                GrPaint&&);
 
     const char* name() const override { return "GrStrokeTessellateOp"; }
-    void visitProxies(const VisitProxyFunc& fn) const override { fProcessors.visitProxies(fn); }
+    void visitProxies(const VisitProxyFunc& fn) const override;
     FixedFunctionFlags fixedFunctionFlags() const override;
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
                                       bool hasMixedSampledCoverage, GrClampType) override;
     CombineResult onCombineIfPossible(GrOp*, SkArenaAlloc*, const GrCaps&) override;
 
-    void prePrepareColorProgram(SkArenaAlloc* arena, GrStrokeTessellateShader*,
-                                const GrSurfaceProxyView&, GrAppliedClip&&,
-                                const GrXferProcessor::DstProxyView&, GrXferBarrierFlags,
-                                GrLoadOp colorLoadOp, const GrCaps&);
+    void prePreparePrograms(GrStrokeTessellateShader::Mode, SkArenaAlloc*,
+                            const GrSurfaceProxyView&, GrAppliedClip&&,
+                            const GrXferProcessor::DstProxyView&, GrXferBarrierFlags,
+                            GrLoadOp colorLoadOp, const GrCaps&);
 
     static float NumCombinedSegments(float numParametricSegments, float numRadialSegments) {
         // The first and last edges are shared by both the parametric and radial sets of edges, so
@@ -64,24 +66,42 @@ protected:
         return std::max(numCombinedSegments + 1 - numRadialSegments, 0.f);
     }
 
+    // Returns the equivalent tolerances in (pre-viewMatrix) local path space that the tessellator
+    // will use when rendering this stroke.
+    GrStrokeTessellateShader::Tolerances preTransformTolerances() const {
+        std::array<float,2> matrixScales;
+        if (!fViewMatrix.getMinMaxScales(matrixScales.data())) {
+            matrixScales.fill(1);
+        }
+        auto [matrixMinScale, matrixMaxScale] = matrixScales;
+        float localStrokeWidth = fStroke.getWidth();
+        if (fStroke.isHairlineStyle()) {
+            // If the stroke is hairline then the tessellator will operate in post-transform space
+            // instead. But for the sake of CPU methods that need to conservatively approximate the
+            // number of segments to emit, we use localStrokeWidth ~= 1/matrixMinScale.
+            float approxScale = matrixMinScale;
+            // If the matrix has strong skew, don't let the scale shoot off to infinity. (This does
+            // not affect the tessellator; only the CPU methods that approximate the number of
+            // segments to emit.)
+            approxScale = std::max(matrixMinScale, matrixMaxScale * .25f);
+            localStrokeWidth = 1/approxScale;
+        }
+        return GrStrokeTessellateShader::Tolerances(matrixMaxScale, localStrokeWidth);
+    }
+
     const GrAAType fAAType;
     const SkMatrix fViewMatrix;
     const SkStrokeRec fStroke;
-    // Controls the number of parametric segments the tessellator adds for each curve. The
-    // tessellator will add enough parametric segments so that the center of each one falls within
-    // 1/parametricIntolerance local path units from the true curve.
-    const float fParametricIntolerance;
-    // Controls the number of radial segments the tessellator adds for each curve. The tessellator
-    // will add this number of radial segments for each radian of rotation, in order to guarantee
-    // smoothness.
-    const float fNumRadialSegmentsPerRadian;
     SkPMColor4f fColor;
+    bool fNeedsStencil = false;
     GrProcessorSet fProcessors;
 
     GrSTArenaList<SkPath> fPathList;
-    int fTotalCombinedVerbCnt;
+    int fTotalCombinedVerbCnt = 0;
+    int fTotalConicWeightCnt = 0;
 
-    const GrProgramInfo* fColorProgram = nullptr;
+    const GrProgramInfo* fStencilProgram = nullptr;
+    const GrProgramInfo* fFillProgram = nullptr;
 };
 
 #endif

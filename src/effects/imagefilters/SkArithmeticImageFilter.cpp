@@ -7,6 +7,7 @@
 
 #include "include/effects/SkArithmeticImageFilter.h"
 
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/effects/SkXfermodeImageFilter.h"
 #include "include/private/SkNx.h"
@@ -20,7 +21,7 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/generated/GrArithmeticProcessor.h"
@@ -331,8 +332,7 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
         isProtected = foregroundView.proxy()->isProtected();
     }
 
-    GrPaint paint;
-    std::unique_ptr<GrFragmentProcessor> bgFP;
+    std::unique_ptr<GrFragmentProcessor> fp;
     const auto& caps = *ctx.getContext()->priv().caps();
     GrSamplerState sampler(GrSamplerState::WrapMode::kClampToBorder,
                            GrSamplerState::Filter::kNearest);
@@ -342,13 +342,19 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
         SkMatrix backgroundMatrix = SkMatrix::Translate(
                 SkIntToScalar(bgSubset.left() - backgroundOffset.fX),
                 SkIntToScalar(bgSubset.top()  - backgroundOffset.fY));
-        bgFP = GrTextureEffect::MakeSubset(std::move(backgroundView), background->alphaType(),
-                                           backgroundMatrix, sampler, bgSubset, caps);
-        bgFP = GrColorSpaceXformEffect::Make(std::move(bgFP),
-                                             background->getColorSpace(), background->alphaType(),
-                                             ctx.colorSpace(), kPremul_SkAlphaType);
+        fp = GrTextureEffect::MakeSubset(std::move(backgroundView),
+                                         background->alphaType(),
+                                         backgroundMatrix,
+                                         sampler,
+                                         bgSubset,
+                                         caps);
+        fp = GrColorSpaceXformEffect::Make(std::move(fp),
+                                           background->getColorSpace(),
+                                           background->alphaType(),
+                                           ctx.colorSpace(),
+                                           kPremul_SkAlphaType);
     } else {
-        bgFP = GrConstColorProcessor::Make(SK_PMColor4fTRANSPARENT);
+        fp = GrConstColorProcessor::Make(SK_PMColor4fTRANSPARENT);
     }
 
     if (foreground) {
@@ -356,37 +362,41 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
         SkMatrix foregroundMatrix = SkMatrix::Translate(
                 SkIntToScalar(fgSubset.left() - foregroundOffset.fX),
                 SkIntToScalar(fgSubset.top()  - foregroundOffset.fY));
-        auto fgFP = GrTextureEffect::MakeSubset(std::move(foregroundView), foreground->alphaType(),
-                                                foregroundMatrix, sampler, fgSubset, caps);
+        auto fgFP = GrTextureEffect::MakeSubset(std::move(foregroundView),
+                                                foreground->alphaType(),
+                                                foregroundMatrix,
+                                                sampler,
+                                                fgSubset,
+                                                caps);
         fgFP = GrColorSpaceXformEffect::Make(std::move(fgFP),
-                                             foreground->getColorSpace(), foreground->alphaType(),
-                                             ctx.colorSpace(), kPremul_SkAlphaType);
-        paint.setColorFragmentProcessor(
-                GrArithmeticProcessor::Make(std::move(fgFP), std::move(bgFP), fInputs));
-    } else {
-        paint.setColorFragmentProcessor(std::move(bgFP));
+                                             foreground->getColorSpace(),
+                                             foreground->alphaType(),
+                                             ctx.colorSpace(),
+                                             kPremul_SkAlphaType);
+        fp = GrArithmeticProcessor::Make(std::move(fgFP), std::move(fp), fInputs);
     }
 
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-
-    auto renderTargetContext = GrRenderTargetContext::Make(
-            context, ctx.grColorType(), ctx.refColorSpace(), SkBackingFit::kApprox, bounds.size(),
-            1, GrMipmapped::kNo, isProtected, kBottomLeft_GrSurfaceOrigin);
-    if (!renderTargetContext) {
+    GrImageInfo info(ctx.grColorType(), kPremul_SkAlphaType, ctx.refColorSpace(), bounds.size());
+    auto surfaceFillContext = GrSurfaceFillContext::Make(context,
+                                                         info,
+                                                         SkBackingFit::kApprox,
+                                                         1,
+                                                         GrMipmapped::kNo,
+                                                         isProtected,
+                                                         kBottomLeft_GrSurfaceOrigin);
+    if (!surfaceFillContext) {
         return nullptr;
     }
 
-    SkMatrix matrix;
-    matrix.setTranslate(SkIntToScalar(-bounds.left()), SkIntToScalar(-bounds.top()));
-    renderTargetContext->drawRect(nullptr, std::move(paint), GrAA::kNo, matrix,
-                                  SkRect::Make(bounds));
+    surfaceFillContext->fillRectToRectWithFP(bounds, SkIRect::MakeSize(bounds.size()),
+                                             std::move(fp));
 
     return SkSpecialImage::MakeDeferredFromGpu(context,
                                                SkIRect::MakeWH(bounds.width(), bounds.height()),
                                                kNeedNewImageUniqueID_SpecialImage,
-                                               renderTargetContext->readSurfaceView(),
-                                               renderTargetContext->colorInfo().colorType(),
-                                               renderTargetContext->colorInfo().refColorSpace());
+                                               surfaceFillContext->readSurfaceView(),
+                                               surfaceFillContext->colorInfo().colorType(),
+                                               surfaceFillContext->colorInfo().refColorSpace());
 }
 #endif
 

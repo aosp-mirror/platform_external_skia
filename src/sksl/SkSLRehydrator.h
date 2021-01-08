@@ -102,9 +102,6 @@ public:
         kModifiers8Bit_Command,
         // Layout layout, uint32 flags
         kModifiers_Command,
-        // uint16 id, Type baseType
-        kNullableType_Command,
-        kNullLiteral_Command,
         // uint8 op, Expression operand
         kPostfix_Command,
         // uint8 op, Expression operand
@@ -144,8 +141,6 @@ public:
         // uint16 varId, uint8 refKind
         kVariableReference_Command,
         kVoid_Command,
-        // Expression test, Statement body
-        kWhile_Command,
     };
 
     // src must remain in memory as long as the objects created from it do

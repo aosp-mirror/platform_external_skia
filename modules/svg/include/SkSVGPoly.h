@@ -14,8 +14,6 @@
 // Handles <polygon> and <polyline> elements.
 class SkSVGPoly final : public SkSVGShape {
 public:
-    ~SkSVGPoly() override = default;
-
     static sk_sp<SkSVGPoly> MakePolygon() {
         return sk_sp<SkSVGPoly>(new SkSVGPoly(SkSVGTag::kPolygon));
     }
@@ -33,6 +31,8 @@ protected:
                 SkPathFillType) const override;
 
     SkPath onAsPath(const SkSVGRenderContext&) const override;
+
+    SkRect onObjectBoundingBox(const SkSVGRenderContext&) const override;
 
 private:
     SkSVGPoly(SkSVGTag);

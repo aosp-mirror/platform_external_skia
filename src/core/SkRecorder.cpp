@@ -204,6 +204,7 @@ void SkRecorder::onDrawPath(const SkPath& path, const SkPaint& paint) {
     this->append<SkRecords::DrawPath>(paint, path);
 }
 
+#ifdef SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
 void SkRecorder::onDrawImage(const SkImage* image, SkScalar left, SkScalar top,
                              const SkPaint* paint) {
     this->append<SkRecords::DrawImage>(this->copy(paint), sk_ref_sp(image), left, top);
@@ -214,13 +215,44 @@ void SkRecorder::onDrawImageRect(const SkImage* image, const SkRect* src, const 
     this->append<SkRecords::DrawImageRect>(this->copy(paint), sk_ref_sp(image), this->copy(src), dst, constraint);
 }
 
-void SkRecorder::onDrawImageNine(const SkImage* image, const SkIRect& center,
-                                 const SkRect& dst, const SkPaint* paint) {
-    this->append<SkRecords::DrawImageNine>(this->copy(paint), sk_ref_sp(image), center, dst);
-}
-
 void SkRecorder::onDrawImageLattice(const SkImage* image, const Lattice& lattice, const SkRect& dst,
                                     const SkPaint* paint) {
+    int flagCount = lattice.fRectTypes ? (lattice.fXCount + 1) * (lattice.fYCount + 1) : 0;
+    SkASSERT(lattice.fBounds);
+    this->append<SkRecords::DrawImageLattice>(this->copy(paint), sk_ref_sp(image),
+           lattice.fXCount, this->copy(lattice.fXDivs, lattice.fXCount),
+           lattice.fYCount, this->copy(lattice.fYDivs, lattice.fYCount),
+           flagCount, this->copy(lattice.fRectTypes, flagCount),
+           this->copy(lattice.fColors, flagCount), *lattice.fBounds, dst);
+}
+void SkRecorder::onDrawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],
+                             const SkColor colors[], int count, SkBlendMode mode,
+                             const SkRect* cull, const SkPaint* paint) {
+    this->append<SkRecords::DrawAtlas>(this->copy(paint),
+           sk_ref_sp(atlas),
+           this->copy(xform, count),
+           this->copy(tex, count),
+           this->copy(colors, count),
+           count,
+           mode,
+           this->copy(cull));
+}
+#endif
+
+void SkRecorder::onDrawImage2(const SkImage* image, SkScalar x, SkScalar y,
+                              const SkSamplingOptions& sampling, const SkPaint* paint) {
+    this->append<SkRecords::DrawImage2>(this->copy(paint), sk_ref_sp(image), x, y, sampling);
+}
+
+void SkRecorder::onDrawImageRect2(const SkImage* image, const SkRect& src, const SkRect& dst,
+                                  const SkSamplingOptions& sampling, const SkPaint* paint,
+                                  SrcRectConstraint constraint) {
+    this->append<SkRecords::DrawImageRect2>(this->copy(paint), sk_ref_sp(image), src, dst,
+                                            sampling, constraint);
+}
+
+void SkRecorder::onDrawImageLattice2(const SkImage* image, const Lattice& lattice, const SkRect& dst,
+                                     SkFilterMode filter, const SkPaint* paint) {
     int flagCount = lattice.fRectTypes ? (lattice.fXCount + 1) * (lattice.fYCount + 1) : 0;
     SkASSERT(lattice.fBounds);
     this->append<SkRecords::DrawImageLattice>(this->copy(paint), sk_ref_sp(image),
@@ -258,16 +290,18 @@ void SkRecorder::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
            bmode);
 }
 
-void SkRecorder::onDrawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],
-                             const SkColor colors[], int count, SkBlendMode mode,
-                             const SkRect* cull, const SkPaint* paint) {
-    this->append<SkRecords::DrawAtlas>(this->copy(paint),
+void SkRecorder::onDrawAtlas2(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],
+                              const SkColor colors[], int count, SkBlendMode mode,
+                              const SkSamplingOptions& sampling, const SkRect* cull,
+                              const SkPaint* paint) {
+    this->append<SkRecords::DrawAtlas2>(this->copy(paint),
            sk_ref_sp(atlas),
            this->copy(xform, count),
            this->copy(tex, count),
            this->copy(colors, count),
            count,
            mode,
+           sampling,
            this->copy(cull));
 }
 
@@ -337,16 +371,6 @@ void SkRecorder::didConcat44(const SkM44& m) {
 void SkRecorder::didSetM44(const SkM44& m) {
     this->append<SkRecords::SetM44>(m);
 }
-
-#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
-void SkRecorder::didConcat(const SkMatrix& matrix) {
-    this->append<SkRecords::Concat>(matrix);
-}
-
-void SkRecorder::didSetMatrix(const SkMatrix& matrix) {
-    this->append<SkRecords::SetMatrix>(matrix);
-}
-#endif
 
 void SkRecorder::didScale(SkScalar sx, SkScalar sy) {
     this->append<SkRecords::Scale>(sx, sy);

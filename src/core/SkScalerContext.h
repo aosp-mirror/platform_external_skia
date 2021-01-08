@@ -284,7 +284,6 @@ public:
     // DEPRECATED
     bool isVertical() const { return false; }
 
-    unsigned    getGlyphCount() { return this->generateGlyphCount(); }
     SkGlyph     makeGlyph(SkPackedGlyphID);
     void        getImage(const SkGlyph&);
     bool SK_WARN_UNUSED_RESULT getPath(SkPackedGlyphID, SkPath*);
@@ -320,10 +319,7 @@ public:
                 SkScalerContextFlags::kNone, SkMatrix::I(), rec, effects);
     }
 
-    static SkDescriptor*  MakeDescriptorForPaths(SkFontID fontID,
-                                                 SkAutoDescriptor* ad);
-
-    static SkScalerContext* MakeEmptyContext(
+    static std::unique_ptr<SkScalerContext> MakeEmpty(
             sk_sp<SkTypeface> typeface, const SkScalerContextEffects& effects,
             const SkDescriptor* desc);
 
@@ -395,9 +391,6 @@ protected:
 
     /** Retrieves font metrics. */
     virtual void generateFontMetrics(SkFontMetrics*) = 0;
-
-    /** Returns the number of glyphs in the font. */
-    virtual unsigned generateGlyphCount() = 0;
 
     void forceGenerateImageFromPath() { fGenerateImageFromPath = true; }
     void forceOffGenerateImageFromPath() { fGenerateImageFromPath = false; }

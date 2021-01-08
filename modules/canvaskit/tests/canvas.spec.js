@@ -639,9 +639,49 @@ describe('Canvas Behavior', () => {
         const paint = new CanvasKit.Paint();
 
         canvas.drawImageNine(img, CanvasKit.LTRBiRect(40, 40, 400, 300),
-            CanvasKit.LTRBRect(5, 5, 300, 650), paint);
+            CanvasKit.LTRBRect(5, 5, 300, 650), CanvasKit.FilterMode.Nearest, paint);
         paint.delete();
         img.delete();
+    }, '/assets/mandrill_512.png');
+
+        // This should be a nice, clear image.
+    gm('makeImageShaderCubic_canvas', (canvas, fetchedByteBuffers) => {
+        const img = CanvasKit.MakeImageFromEncoded(fetchedByteBuffers[0]);
+        expect(img).toBeTruthy();
+
+        canvas.clear(CanvasKit.WHITE);
+        const paint = new CanvasKit.Paint();
+        const shader = img.makeShaderCubic(CanvasKit.TileMode.Decal, CanvasKit.TileMode.Clamp,
+                                           1/3 /*B*/, 1/3 /*C*/,
+                                           CanvasKit.Matrix.rotated(0.1));
+        paint.setShader(shader);
+
+        canvas.drawPaint(paint);
+        paint.delete();
+        shader.delete();
+        img.delete();
+    }, '/assets/mandrill_512.png');
+
+    // This will look more blocky than the version above.
+    gm('makeImageShaderOptions_canvas', (canvas, fetchedByteBuffers) => {
+        const img = CanvasKit.MakeImageFromEncoded(fetchedByteBuffers[0]);
+        expect(img).toBeTruthy();
+        const imgWithMipMap = img.makeCopyWithDefaultMipmaps();
+
+        canvas.clear(CanvasKit.WHITE);
+        const paint = new CanvasKit.Paint();
+        const shader = imgWithMipMap.makeShaderOptions(CanvasKit.TileMode.Decal,
+                                                       CanvasKit.TileMode.Clamp,
+                                                       CanvasKit.FilterMode.Nearest,
+                                                       CanvasKit.MipmapMode.Linear,
+                                                       CanvasKit.Matrix.rotated(0.1));
+        paint.setShader(shader);
+
+        canvas.drawPaint(paint);
+        paint.delete();
+        shader.delete();
+        img.delete();
+        imgWithMipMap.delete();
     }, '/assets/mandrill_512.png');
 
     gm('drawvertices_canvas', (canvas) => {
@@ -699,7 +739,8 @@ describe('Canvas Behavior', () => {
         const vertices = CanvasKit.MakeVertices(CanvasKit.VertexMode.TrianglesStrip,
             points, textureCoordinates, null /* colors */, false /*isVolatile*/);
 
-        const shader = img.makeShader(CanvasKit.TileMode.Repeat, CanvasKit.TileMode.Mirror);
+        const shader = img.makeShaderCubic(CanvasKit.TileMode.Repeat, CanvasKit.TileMode.Mirror,
+            1/3 /*B*/, 1/3 /*C*/,);
         paint.setShader(shader);
         canvas.drawVertices(vertices, CanvasKit.BlendMode.Src, paint);
 

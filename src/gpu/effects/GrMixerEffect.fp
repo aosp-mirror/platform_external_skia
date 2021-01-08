@@ -7,9 +7,9 @@
 
 // Mixes the output of two FPs.
 
-in fragmentProcessor? inputFP;
+in fragmentProcessor inputFP;
 in fragmentProcessor  fp0;
-in fragmentProcessor? fp1;
+in fragmentProcessor fp1;
 in uniform half       weight;
 
 @class {
@@ -32,7 +32,7 @@ in uniform half       weight;
     ProcessorOptimizationFlags(fp0.get())
 }
 
-void main() {
+half4 main() {
     half4 inColor = sample(inputFP);
-    sk_OutColor = mix(sample(fp0, inColor), sample(fp1, inColor), weight);
+    return mix(sample(fp0, inColor), sample(fp1, inColor), weight);
 }

@@ -23,7 +23,7 @@
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrPaint.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 
@@ -441,10 +441,10 @@ protected:
 
 private:
 #if SK_SUPPORT_GPU
-    void drawRect(GrRenderTargetContext*,
+    void drawRect(GrSurfaceFillContext*,
                   GrSurfaceProxyView srcView,
                   const SkMatrix& matrix,
-                  const SkRect& dstRect,
+                  const SkIRect& dstRect,
                   BoundaryMode boundaryMode,
                   const SkIRect* srcBounds,
                   const SkIRect& bounds) const;
@@ -457,21 +457,17 @@ private:
 };
 
 #if SK_SUPPORT_GPU
-void SkLightingImageFilterInternal::drawRect(GrRenderTargetContext* renderTargetContext,
+void SkLightingImageFilterInternal::drawRect(GrSurfaceFillContext* surfaceFillContext,
                                              GrSurfaceProxyView srcView,
                                              const SkMatrix& matrix,
-                                             const SkRect& dstRect,
+                                             const SkIRect& dstRect,
                                              BoundaryMode boundaryMode,
                                              const SkIRect* srcBounds,
                                              const SkIRect& bounds) const {
-    SkRect srcRect = dstRect.makeOffset(SkIntToScalar(bounds.x()), SkIntToScalar(bounds.y()));
-    GrPaint paint;
+    SkIRect srcRect = dstRect.makeOffset(bounds.topLeft());
     auto fp = this->makeFragmentProcessor(std::move(srcView), matrix, srcBounds, boundaryMode,
-                                          *renderTargetContext->caps());
-    paint.setColorFragmentProcessor(std::move(fp));
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    renderTargetContext->fillRectToRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
-                                        dstRect, srcRect);
+                                          *surfaceFillContext->caps());
+    surfaceFillContext->fillRectToRectWithFP(srcRect, dstRect, std::move(fp));
 }
 
 sk_sp<SkSpecialImage> SkLightingImageFilterInternal::filterImageGPU(
@@ -486,55 +482,61 @@ sk_sp<SkSpecialImage> SkLightingImageFilterInternal::filterImageGPU(
     GrSurfaceProxyView inputView = input->view(context);
     SkASSERT(inputView.asTextureProxy());
 
-    auto renderTargetContext = GrRenderTargetContext::Make(
-            context, ctx.grColorType(), ctx.refColorSpace(), SkBackingFit::kApprox,
-            offsetBounds.size(), 1, GrMipmapped::kNo, inputView.proxy()->isProtected(),
-            kBottomLeft_GrSurfaceOrigin);
-    if (!renderTargetContext) {
+    GrImageInfo info(ctx.grColorType(),
+                     kPremul_SkAlphaType,
+                     ctx.refColorSpace(),
+                     offsetBounds.size());
+    auto surfaceFillContext = GrSurfaceFillContext::Make(context,
+                                                         info,
+                                                         SkBackingFit::kApprox,
+                                                         1,
+                                                         GrMipmapped::kNo,
+                                                         inputView.proxy()->isProtected(),
+                                                         kBottomLeft_GrSurfaceOrigin);
+    if (!surfaceFillContext) {
         return nullptr;
     }
 
-    SkIRect dstIRect = SkIRect::MakeWH(offsetBounds.width(), offsetBounds.height());
-    SkRect dstRect = SkRect::Make(dstIRect);
+    SkIRect dstRect = SkIRect::MakeWH(offsetBounds.width(), offsetBounds.height());
 
     const SkIRect inputBounds = SkIRect::MakeWH(input->width(), input->height());
-    SkRect topLeft = SkRect::MakeXYWH(0, 0, 1, 1);
-    SkRect top = SkRect::MakeXYWH(1, 0, dstRect.width() - 2, 1);
-    SkRect topRight = SkRect::MakeXYWH(dstRect.width() - 1, 0, 1, 1);
-    SkRect left = SkRect::MakeXYWH(0, 1, 1, dstRect.height() - 2);
-    SkRect interior = dstRect.makeInset(1, 1);
-    SkRect right = SkRect::MakeXYWH(dstRect.width() - 1, 1, 1, dstRect.height() - 2);
-    SkRect bottomLeft = SkRect::MakeXYWH(0, dstRect.height() - 1, 1, 1);
-    SkRect bottom = SkRect::MakeXYWH(1, dstRect.height() - 1, dstRect.width() - 2, 1);
-    SkRect bottomRight = SkRect::MakeXYWH(dstRect.width() - 1, dstRect.height() - 1, 1, 1);
+    SkIRect topLeft = SkIRect::MakeXYWH(0, 0, 1, 1);
+    SkIRect top = SkIRect::MakeXYWH(1, 0, dstRect.width() - 2, 1);
+    SkIRect topRight = SkIRect::MakeXYWH(dstRect.width() - 1, 0, 1, 1);
+    SkIRect left = SkIRect::MakeXYWH(0, 1, 1, dstRect.height() - 2);
+    SkIRect interior = dstRect.makeInset(1, 1);
+    SkIRect right = SkIRect::MakeXYWH(dstRect.width() - 1, 1, 1, dstRect.height() - 2);
+    SkIRect bottomLeft = SkIRect::MakeXYWH(0, dstRect.height() - 1, 1, 1);
+    SkIRect bottom = SkIRect::MakeXYWH(1, dstRect.height() - 1, dstRect.width() - 2, 1);
+    SkIRect bottomRight = SkIRect::MakeXYWH(dstRect.width() - 1, dstRect.height() - 1, 1, 1);
 
     const SkIRect* pSrcBounds = inputBounds.contains(offsetBounds) ? nullptr : &inputBounds;
-    this->drawRect(renderTargetContext.get(), inputView, matrix, topLeft,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, topLeft,
                    kTopLeft_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), inputView, matrix, top,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, top,
                    kTop_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), inputView, matrix, topRight,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, topRight,
                    kTopRight_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), inputView, matrix, left,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, left,
                    kLeft_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), inputView, matrix, interior,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, interior,
                    kInterior_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), inputView, matrix, right,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, right,
                    kRight_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), inputView, matrix, bottomLeft,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, bottomLeft,
                    kBottomLeft_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), inputView, matrix, bottom,
+    this->drawRect(surfaceFillContext.get(), inputView, matrix, bottom,
                    kBottom_BoundaryMode, pSrcBounds, offsetBounds);
-    this->drawRect(renderTargetContext.get(), std::move(inputView), matrix, bottomRight,
+    this->drawRect(surfaceFillContext.get(), std::move(inputView), matrix, bottomRight,
                    kBottomRight_BoundaryMode, pSrcBounds, offsetBounds);
 
     return SkSpecialImage::MakeDeferredFromGpu(
             context,
             SkIRect::MakeWH(offsetBounds.width(), offsetBounds.height()),
             kNeedNewImageUniqueID_SpecialImage,
-            renderTargetContext->readSurfaceView(),
-            renderTargetContext->colorInfo().colorType(),
-            renderTargetContext->colorInfo().refColorSpace());
+            surfaceFillContext->readSurfaceView(),
+            surfaceFillContext->colorInfo().colorType(),
+            surfaceFillContext->colorInfo().refColorSpace());
 }
 #endif
 
@@ -1475,65 +1477,65 @@ static SkString emitNormalFunc(BoundaryMode mode,
     SkString result;
     switch (mode) {
     case kTopLeft_BoundaryMode:
-        result.printf("\treturn %s(%s(0.0, 0.0, m[4], m[5], m[7], m[8], %g),\n"
-                      "\t          %s(0.0, 0.0, m[4], m[7], m[5], m[8], %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(0.0, 0.0, m[4], m[5], m[7], m[8], %g),"
+                      "          %s(0.0, 0.0, m[4], m[7], m[5], m[8], %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gTwoThirds,
                                          sobelFuncName, gTwoThirds);
         break;
     case kTop_BoundaryMode:
-        result.printf("\treturn %s(%s(0.0, 0.0, m[3], m[5], m[6], m[8], %g),\n"
-                      "\t          %s(0.0, 0.0, m[4], m[7], m[5], m[8], %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(0.0, 0.0, m[3], m[5], m[6], m[8], %g),"
+                      "          %s(0.0, 0.0, m[4], m[7], m[5], m[8], %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gOneThird,
                                          sobelFuncName, gOneHalf);
         break;
     case kTopRight_BoundaryMode:
-        result.printf("\treturn %s(%s( 0.0,  0.0, m[3], m[4], m[6], m[7], %g),\n"
-                      "\t          %s(m[3], m[6], m[4], m[7],  0.0,  0.0, %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s( 0.0,  0.0, m[3], m[4], m[6], m[7], %g),"
+                      "          %s(m[3], m[6], m[4], m[7],  0.0,  0.0, %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gTwoThirds,
                                          sobelFuncName, gTwoThirds);
         break;
     case kLeft_BoundaryMode:
-        result.printf("\treturn %s(%s(m[1], m[2], m[4], m[5], m[7], m[8], %g),\n"
-                      "\t          %s( 0.0,  0.0, m[1], m[7], m[2], m[8], %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(m[1], m[2], m[4], m[5], m[7], m[8], %g),"
+                      "          %s( 0.0,  0.0, m[1], m[7], m[2], m[8], %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gOneHalf,
                                          sobelFuncName, gOneThird);
         break;
     case kInterior_BoundaryMode:
-        result.printf("\treturn %s(%s(m[0], m[2], m[3], m[5], m[6], m[8], %g),\n"
-                      "\t          %s(m[0], m[6], m[1], m[7], m[2], m[8], %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(m[0], m[2], m[3], m[5], m[6], m[8], %g),"
+                      "          %s(m[0], m[6], m[1], m[7], m[2], m[8], %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gOneQuarter,
                                          sobelFuncName, gOneQuarter);
         break;
     case kRight_BoundaryMode:
-        result.printf("\treturn %s(%s(m[0], m[1], m[3], m[4], m[6], m[7], %g),\n"
-                      "\t          %s(m[0], m[6], m[1], m[7],  0.0,  0.0, %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(m[0], m[1], m[3], m[4], m[6], m[7], %g),"
+                      "          %s(m[0], m[6], m[1], m[7],  0.0,  0.0, %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gOneHalf,
                                          sobelFuncName, gOneThird);
         break;
     case kBottomLeft_BoundaryMode:
-        result.printf("\treturn %s(%s(m[1], m[2], m[4], m[5],  0.0,  0.0, %g),\n"
-                      "\t          %s( 0.0,  0.0, m[1], m[4], m[2], m[5], %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(m[1], m[2], m[4], m[5],  0.0,  0.0, %g),"
+                      "          %s( 0.0,  0.0, m[1], m[4], m[2], m[5], %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gTwoThirds,
                                          sobelFuncName, gTwoThirds);
         break;
     case kBottom_BoundaryMode:
-        result.printf("\treturn %s(%s(m[0], m[2], m[3], m[5],  0.0,  0.0, %g),\n"
-                      "\t          %s(m[0], m[3], m[1], m[4], m[2], m[5], %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(m[0], m[2], m[3], m[5],  0.0,  0.0, %g),"
+                      "          %s(m[0], m[3], m[1], m[4], m[2], m[5], %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gOneThird,
                                          sobelFuncName, gOneHalf);
         break;
     case kBottomRight_BoundaryMode:
-        result.printf("\treturn %s(%s(m[0], m[1], m[3], m[4],  0.0,  0.0, %g),\n"
-                      "\t          %s(m[0], m[3], m[1], m[4],  0.0,  0.0, %g),\n"
-                      "\t          surfaceScale);\n",
+        result.printf("return %s(%s(m[0], m[1], m[3], m[4],  0.0,  0.0, %g),"
+                      "          %s(m[0], m[3], m[1], m[4],  0.0,  0.0, %g),"
+                      "          surfaceScale);",
                       pointToNormalName, sobelFuncName, gTwoThirds,
                                          sobelFuncName, gTwoThirds);
         break;
@@ -1769,7 +1771,7 @@ void GrGLLightingEffect::emitCode(EmitArgs& args) {
     fragBuilder->emitFunction(kHalf_GrSLType,
                               sobelFuncName.c_str(),
                               {gSobelArgs, SK_ARRAY_COUNT(gSobelArgs)},
-                              "\treturn (-a + b - 2.0 * c + 2.0 * d -e + f) * scale;\n");
+                              "return (-a + b - 2.0 * c + 2.0 * d -e + f) * scale;");
     const GrShaderVar gPointToNormalArgs[] = {
         GrShaderVar("x", kHalf_GrSLType),
         GrShaderVar("y", kHalf_GrSLType),
@@ -1779,7 +1781,7 @@ void GrGLLightingEffect::emitCode(EmitArgs& args) {
     fragBuilder->emitFunction(kHalf3_GrSLType,
                               pointToNormalName.c_str(),
                               {gPointToNormalArgs, SK_ARRAY_COUNT(gPointToNormalArgs)},
-                              "\treturn normalize(half3(-x * scale, -y * scale, 1));\n");
+                              "return normalize(half3(-x * scale, -y * scale, 1));");
 
     const GrShaderVar gInteriorNormalArgs[] = {
         GrShaderVar("m", kHalf_GrSLType, 9),
@@ -1794,8 +1796,8 @@ void GrGLLightingEffect::emitCode(EmitArgs& args) {
                               {gInteriorNormalArgs, SK_ARRAY_COUNT(gInteriorNormalArgs)},
                               normalBody.c_str());
 
-    fragBuilder->codeAppendf("\t\tfloat2 coord = %s;\n", args.fSampleCoord);
-    fragBuilder->codeAppend("\t\thalf m[9];\n");
+    fragBuilder->codeAppendf("float2 coord = %s;", args.fSampleCoord);
+    fragBuilder->codeAppend("half m[9];");
 
     const char* surfScale = uniformHandler->getUniformCStr(fSurfaceScaleUni);
 
@@ -1809,15 +1811,15 @@ void GrGLLightingEffect::emitCode(EmitArgs& args) {
             index++;
         }
     }
-    fragBuilder->codeAppend("\t\thalf3 surfaceToLight = ");
+    fragBuilder->codeAppend("half3 surfaceToLight = ");
     SkString arg;
     arg.appendf("%s * m[4]", surfScale);
     fLight->emitSurfaceToLight(&le, uniformHandler, fragBuilder, arg.c_str());
-    fragBuilder->codeAppend(";\n");
-    fragBuilder->codeAppendf("\t\t%s = %s(%s(m, %s), surfaceToLight, ",
-                             args.fOutputColor, lightFunc.c_str(), normalName.c_str(), surfScale);
+    fragBuilder->codeAppend(";");
+    fragBuilder->codeAppendf("return %s(%s(m, %s), surfaceToLight, ",
+                             lightFunc.c_str(), normalName.c_str(), surfScale);
     fLight->emitLightColor(&le, uniformHandler, fragBuilder, "surfaceToLight");
-    fragBuilder->codeAppend(");\n");
+    fragBuilder->codeAppend(");");
 }
 
 void GrGLLightingEffect::GenKey(const GrProcessor& proc,
@@ -1856,8 +1858,8 @@ void GrGLDiffuseLightingEffect::emitLightFunc(const GrFragmentProcessor* owner,
         GrShaderVar("lightColor", kHalf3_GrSLType)
     };
     SkString lightBody;
-    lightBody.appendf("\thalf colorScale = %s * dot(normal, surfaceToLight);\n", kd);
-    lightBody.appendf("\treturn half4(lightColor * saturate(colorScale), 1.0);\n");
+    lightBody.appendf("half colorScale = %s * dot(normal, surfaceToLight);", kd);
+    lightBody.appendf("return half4(lightColor * saturate(colorScale), 1.0);");
     *funcName = fragBuilder->getMangledFunctionName("light");
     fragBuilder->emitFunction(kHalf4_GrSLType,
                               funcName->c_str(),
@@ -1961,11 +1963,11 @@ void GrGLSpecularLightingEffect::emitLightFunc(const GrFragmentProcessor* owner,
         GrShaderVar("lightColor", kHalf3_GrSLType)
     };
     SkString lightBody;
-    lightBody.appendf("\thalf3 halfDir = half3(normalize(surfaceToLight + half3(0, 0, 1)));\n");
-    lightBody.appendf("\thalf colorScale = half(%s * pow(dot(normal, halfDir), %s));\n",
+    lightBody.appendf("half3 halfDir = half3(normalize(surfaceToLight + half3(0, 0, 1)));");
+    lightBody.appendf("half colorScale = half(%s * pow(dot(normal, halfDir), %s));",
                       ks, shininess);
-    lightBody.appendf("\thalf3 color = lightColor * saturate(colorScale);\n");
-    lightBody.appendf("\treturn half4(color, max(max(color.r, color.g), color.b));\n");
+    lightBody.appendf("half3 color = lightColor * saturate(colorScale);");
+    lightBody.appendf("return half4(color, max(max(color.r, color.g), color.b));");
     *funcName = fragBuilder->getMangledFunctionName("light");
     fragBuilder->emitFunction(kHalf4_GrSLType,
                               funcName->c_str(),
@@ -2097,16 +2099,16 @@ void GrGLSpotLight::emitLightColor(const GrFragmentProcessor* owner,
         GrShaderVar("surfaceToLight", kHalf3_GrSLType)
     };
     SkString lightColorBody;
-    lightColorBody.appendf("\thalf cosAngle = -dot(surfaceToLight, %s);\n", s);
-    lightColorBody.appendf("\tif (cosAngle < %s) {\n", cosOuter);
-    lightColorBody.appendf("\t\treturn half3(0);\n");
-    lightColorBody.appendf("\t}\n");
-    lightColorBody.appendf("\thalf scale = pow(cosAngle, %s);\n", exponent);
-    lightColorBody.appendf("\tif (cosAngle < %s) {\n", cosInner);
-    lightColorBody.appendf("\t\treturn %s * scale * (cosAngle - %s) * %s;\n",
+    lightColorBody.appendf("half cosAngle = -dot(surfaceToLight, %s);", s);
+    lightColorBody.appendf("if (cosAngle < %s) {", cosOuter);
+    lightColorBody.appendf("return half3(0);");
+    lightColorBody.appendf("}");
+    lightColorBody.appendf("half scale = pow(cosAngle, %s);", exponent);
+    lightColorBody.appendf("if (cosAngle < %s) {", cosInner);
+    lightColorBody.appendf("return %s * scale * (cosAngle - %s) * %s;",
                            color, cosOuter, coneScale);
-    lightColorBody.appendf("\t}\n");
-    lightColorBody.appendf("\treturn %s;\n", color);
+    lightColorBody.appendf("}");
+    lightColorBody.appendf("return %s;", color);
     fLightColorFunc = fragBuilder->getMangledFunctionName("lightColor");
     fragBuilder->emitFunction(kHalf3_GrSLType,
                               fLightColorFunc.c_str(),

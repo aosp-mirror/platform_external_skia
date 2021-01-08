@@ -218,10 +218,6 @@ DEF_TEST(SkSLInterpreterDivide, r) {
 }
 
 DEF_TEST(SkSLInterpreterRemainder, r) {
-    test(r, "void main(inout half4 color) { color.r = color.r % color.g; }", 3.125, 2, 0, 0,
-         1.125, 2, 0, 0);
-    test(r, "void main(inout half4 color) { color %= half4(1, 2, 3, 4); }", 9.5, 9.5, 9.5, 9.5,
-         0.5, 1.5, 0.5, 1.5);
     test(r, "void main(inout half4 color) { color.r = int(color.r) % int(color.g); }", 8, 3, 0, 0,
          2, 3, 0, 0);
     test(r, "void main(inout half4 color) { color.rg = half2(int2(int(color.r), int(color.g)) % "
@@ -268,15 +264,6 @@ DEF_TEST(SkSLInterpreterBitwise, r) {
     test(r, "void main(inout half4 color) { color.r = half(~int(color.r) & 3); }",
          6, 0, 0, 0, 1, 0, 0, 0);
 
-    test(r, "void main(inout half4 color) { color.r = half(uint(color.r) | 3); }",
-         5, 0, 0, 0, 7, 0, 0, 0);
-    test(r, "void main(inout half4 color) { color.r = half(uint(color.r) & 3); }",
-         6, 0, 0, 0, 2, 0, 0, 0);
-    test(r, "void main(inout half4 color) { color.r = half(uint(color.r) ^ 3); }",
-         5, 0, 0, 0, 6, 0, 0, 0);
-    test(r, "void main(inout half4 color) { color.r = half(~uint(color.r) & 3); }",
-         6, 0, 0, 0, 1, 0, 0, 0);
-
     // Shift operators
     unsigned in = 0x80000011;
     unsigned out;
@@ -286,9 +273,6 @@ DEF_TEST(SkSLInterpreterBitwise, r) {
 
     out = 0xF0000002;
     test(r, "int main(int x) { return x >> 3; }", (float*)&in, (float*)&out);
-
-    out = 0x10000002;
-    test(r, "uint main(uint x) { return x >> 3; }", (float*)&in, (float*)&out);
 }
 
 DEF_TEST(SkSLInterpreterMatrix, r) {
@@ -296,18 +280,15 @@ DEF_TEST(SkSLInterpreterMatrix, r) {
     float expected[16];
 
     // Constructing matrix from scalar produces a diagonal matrix
-    in[0] = 1.0f;
-    expected[0] = 2.0f;
+    in[0] = 2.0f;
+    expected[0] = 4.0f;
     test(r, "float main(float x) { float4x4 m = float4x4(x); return m[1][1] + m[1][2] + m[2][2]; }",
          in, expected);
 
-    // With non-square matrix
-    test(r, "float main(float x) { float3x2 m = float3x2(x); return m[0][0] + m[1][1] + m[2][1]; }",
-         in, expected);
-
     // Constructing from a different-sized matrix fills the remaining space with the identity matrix
+    expected[0] = 3.0f;
     test(r, "float main(float x) {"
-         "float3x2 m = float3x2(x);"
+         "float2x2 m = float2x2(x);"
          "float4x4 m2 = float4x4(m);"
          "return m2[0][0] + m2[3][3]; }",
          in, expected);
@@ -338,8 +319,8 @@ DEF_TEST(SkSLInterpreterMatrix, r) {
     test(r, "float4x4 main(float4x4 m) { return 3.0 + m; }", in, expected);
 
     // M-M, M-S, S-M
-    for (int i = 0; i < 8; ++i) { expected[i] = 8.0f; }
-    test(r, "float4x2 main(float4x2 m1, float4x2 m2) { return m2 - m1; }", in, expected);
+    for (int i = 0; i < 4; ++i) { expected[i] = 4.0f; }
+    test(r, "float2x2 main(float2x2 m1, float2x2 m2) { return m2 - m1; }", in, expected);
     for (int i = 0; i < 16; ++i) { expected[i] = (float)(i - 3); }
     test(r, "float4x4 main(float4x4 m) { return m - 3.0; }", in, expected);
     for (int i = 0; i < 16; ++i) { expected[i] = (float)(3 - i); }
@@ -361,14 +342,14 @@ DEF_TEST(SkSLInterpreterMatrix, r) {
 #endif
 
     // M*V, V*M
-    for (int i = 0; i < 4; ++i) {
-        expected[i] = 12.0f*i + 13.0f*(i+4) + 14.0f*(i+8);
+    for (int i = 0; i < 3; ++i) {
+        expected[i] = 9.0f*i + 10.0f*(i+3) + 11.0f*(i+6);
     }
-    test(r, "float4 main(float3x4 m, float3 v) { return m * v; }", in, expected);
-    for (int i = 0; i < 4; ++i) {
-        expected[i] = 12.0f*(3*i) + 13.0f*(3*i+1) + 14.0f*(3*i+2);
+    test(r, "float3 main(float3x3 m, float3 v) { return m * v; }", in, expected);
+    for (int i = 0; i < 3; ++i) {
+        expected[i] = 9.0f*(3*i) + 10.0f*(3*i+1) + 11.0f*(3*i+2);
     }
-    test(r, "float4 main(float4x3 m, float3 v) { return v * m; }", in, expected);
+    test(r, "float3 main(float3x3 m, float3 v) { return v * m; }", in, expected);
 
     // M*M
     {
@@ -396,7 +377,6 @@ DEF_TEST(SkSLInterpreterTernary, r) {
 DEF_TEST(SkSLInterpreterCast, r) {
     union Val {
         float    f;
-        uint32_t u;
         int32_t  s;
     };
 
@@ -409,13 +389,6 @@ DEF_TEST(SkSLInterpreterCast, r) {
     expected[1].f = -5.0f;
     test(r, "float  main(int  x) { return float (x); }", (float*)input, (float*)expected);
     test(r, "float2 main(int2 x) { return float2(x); }", (float*)input, (float*)expected);
-
-    input[0].u = 3;
-    input[1].u = 5;
-    expected[0].f = 3.0f;
-    expected[1].f = 5.0f;
-    test(r, "float  main(uint  x) { return float (x); }", (float*)input, (float*)expected);
-    test(r, "float2 main(uint2 x) { return float2(x); }", (float*)input, (float*)expected);
 
     input[0].f = 3.0f;
     input[1].f = -5.0f;
@@ -737,7 +710,8 @@ DEF_TEST(SkSLInterpreterRestrictFunctionCalls, r) {
     expect_failure(r, "float foo(); float bar() { return foo(); } float foo() { return bar(); }");
 
     // returns are not allowed inside loops
-    expect_failure(r, "float main(float x) { while (x > 1) { return x; } return 0; }");
+    expect_failure(r, "float main(float x)"
+                      "{ while (x > 1) { if (x > 2) { return x; } } return 0; }");
 }
 
 DEF_TEST(SkSLInterpreterEarlyReturn, r) {

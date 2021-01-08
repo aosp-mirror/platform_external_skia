@@ -14,6 +14,7 @@
 #include "include/core/SkPath.h"
 #include "include/gpu/GrDirectContext.h"
 #include "samplecode/Sample.h"
+#include "src/core/SkCanvasPriv.h"
 #include "src/core/SkRectPriv.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
@@ -21,8 +22,8 @@
 #include "src/gpu/GrOnFlushResourceProvider.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/ccpr/GrCCCoverageProcessor.h"
 #include "src/gpu/ccpr/GrCCFillGeometry.h"
 #include "src/gpu/ccpr/GrGSCoverageProcessor.h"
@@ -121,9 +122,8 @@ public:
     }
 
 private:
-    const char* name() const override {
-        return "VisualizeCoverageCountFP";
-    }
+    const char* name() const override { return "VisualizeCoverageCountFP"; }
+
     std::unique_ptr<GrFragmentProcessor> clone() const override {
         return std::unique_ptr<GrFragmentProcessor>(new VisualizeCoverageCountFP(*this));
     }
@@ -144,8 +144,7 @@ private:
             static constexpr int kInputFPIndex = 0;
             SkString inputColor = this->invokeChild(kInputFPIndex, args);
             f->codeAppendf("half count = %s.a;", inputColor.c_str());
-            f->codeAppendf("%s = half4(clamp(-count, 0, 1), clamp(+count, 0, 1), 0, abs(count));",
-                           args.fOutputColor);
+            f->codeAppendf("return half4(saturate(-count), saturate(+count), 0, abs(count));");
         }
     };
 
@@ -193,15 +192,14 @@ void CCPRGeometryView::onDrawContent(SkCanvas* canvas) {
 
     if (fDoStroke) {
         caption.appendf(" (stroke_width=%f)", fStrokeWidth);
-    } else if (GrRenderTargetContext* rtc =
-            canvas->internal_private_accessTopLayerRenderTargetContext()) {
+    } else if (GrSurfaceDrawContext* sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas)) {
         // Render coverage count.
         auto ctx = canvas->recordingContext();
         SkASSERT(ctx);
 
         int width = this->width();
         int height = this->height();
-        auto ccbuff = GrRenderTargetContext::Make(
+        auto ccbuff = GrSurfaceDrawContext::Make(
                 ctx, GrColorType::kAlpha_F16, nullptr, SkBackingFit::kApprox, {width, height});
         SkASSERT(ccbuff);
         ccbuff->clear(SK_PMColor4fTRANSPARENT);
@@ -212,7 +210,7 @@ void CCPRGeometryView::onDrawContent(SkCanvas* canvas) {
         paint.setColorFragmentProcessor(VisualizeCoverageCountFP::Make(
                 GrTextureEffect::Make(ccbuff->readSurfaceView(), ccbuff->colorInfo().alphaType())));
         paint.setPorterDuffXPFactory(SkBlendMode::kSrcOver);
-        rtc->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
+        sdc->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
                       SkRect::MakeIWH(this->width(), this->height()));
     } else {
         caption = "Use GPU backend to visualize geometry.";
@@ -422,10 +420,10 @@ bool CCPRGeometryView::onChar(SkUnichar unichar) {
             return true;
         }
         float* valueToScale = nullptr;
-        if (fDoStroke) {
-            valueToScale = &fStrokeWidth;
-        } else if (PrimitiveType::kConics == fPrimitiveType) {
+        if (PrimitiveType::kConics == fPrimitiveType) {
             valueToScale = &fConicWeight;
+        } else if (fDoStroke) {
+            valueToScale = &fStrokeWidth;
         }
         if (valueToScale) {
             if (unichar == '+') {

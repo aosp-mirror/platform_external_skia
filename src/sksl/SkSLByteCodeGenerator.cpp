@@ -1457,11 +1457,6 @@ void ByteCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     this->write32(i.value());
 }
 
-void ByteCodeGenerator::writeNullLiteral(const NullLiteral& n) {
-    // not yet implemented
-    abort();
-}
-
 bool ByteCodeGenerator::writePrefixExpression(const PrefixExpression& p, bool discard) {
     switch (p.getOperator()) {
         case Token::Kind::TK_PLUSPLUS: // fall through
@@ -1612,9 +1607,6 @@ void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
             break;
         case Expression::Kind::kIntLiteral:
             this->writeIntLiteral(e.as<IntLiteral>());
-            break;
-        case Expression::Kind::kNullLiteral:
-            this->writeNullLiteral(e.as<NullLiteral>());
             break;
         case Expression::Kind::kPrefix:
             discard = this->writePrefixExpression(e.as<PrefixExpression>(), discard);
@@ -1912,21 +1904,6 @@ void ByteCodeGenerator::writeVarDeclaration(const VarDeclaration& decl) {
     }
 }
 
-void ByteCodeGenerator::writeWhileStatement(const WhileStatement& w) {
-    this->write(ByteCodeInstruction::kLoopBegin);
-    size_t cond = fCode->size();
-    this->writeExpression(*w.test());
-    this->write(ByteCodeInstruction::kLoopMask);
-    this->write(ByteCodeInstruction::kBranchIfAllFalse);
-    DeferredLocation endLocation(this);
-    this->writeStatement(*w.statement());
-    this->write(ByteCodeInstruction::kLoopNext);
-    this->write(ByteCodeInstruction::kBranch);
-    this->write16(cond);
-    endLocation.set();
-    this->write(ByteCodeInstruction::kLoopEnd);
-}
-
 void ByteCodeGenerator::writeStatement(const Statement& s) {
     switch (s.kind()) {
         case Statement::Kind::kBlock:
@@ -1961,9 +1938,6 @@ void ByteCodeGenerator::writeStatement(const Statement& s) {
             break;
         case Statement::Kind::kVarDeclaration:
             this->writeVarDeclaration(s.as<VarDeclaration>());
-            break;
-        case Statement::Kind::kWhile:
-            this->writeWhileStatement(s.as<WhileStatement>());
             break;
         case Statement::Kind::kInlineMarker:
         case Statement::Kind::kNop:

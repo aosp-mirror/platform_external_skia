@@ -18,8 +18,8 @@
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrSemaphore.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
@@ -75,7 +75,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrWrappedMipMappedTest, reporter, ctxInfo) {
                         mbet->releaseContext());
 
                 SkGpuDevice* device = ((SkSurface_Gpu*)surface.get())->getDevice();
-                proxy = device->accessRenderTargetContext()->asTextureProxyRef();
+                proxy = device->surfaceDrawContext()->asTextureProxyRef();
             } else {
                 image = SkImage::MakeFromTexture(dContext,
                                                  mbet->texture(),
@@ -292,7 +292,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrImageSnapshotMipMappedTest, reporter, ctxIn
             }
             REPORTER_ASSERT(reporter, surface);
             SkGpuDevice* device = ((SkSurface_Gpu*)surface.get())->getDevice();
-            GrTextureProxy* texProxy = device->accessRenderTargetContext()->asTextureProxy();
+            GrTextureProxy* texProxy = device->surfaceDrawContext()->asTextureProxy();
             REPORTER_ASSERT(reporter, mipMapped == texProxy->mipmapped());
 
             texProxy->instantiate(resourceProvider);
@@ -329,7 +329,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(Gr1x1TextureMipMappedTest, reporter, ctxInfo)
     SkPMColor* pixel = reinterpret_cast<SkPMColor*>(bmp.getPixels());
     *pixel = 0;
 
-    sk_sp<SkImage> bmpImage = SkImage::MakeFromBitmap(bmp);
+    sk_sp<SkImage> bmpImage = bmp.asImage();
 
     // Make sure we scale so we don't optimize out the use of mips.
     surface->getCanvas()->scale(0.5f, 0.5f);
@@ -348,7 +348,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(Gr1x1TextureMipMappedTest, reporter, ctxInfo)
 }
 
 // Create a new render target and draw 'mipmapView' into it using the provided 'filter'.
-static std::unique_ptr<GrRenderTargetContext> draw_mipmap_into_new_render_target(
+static std::unique_ptr<GrSurfaceDrawContext> draw_mipmap_into_new_render_target(
         GrRecordingContext* rContext,
         GrColorType colorType,
         SkAlphaType alphaType,
@@ -365,12 +365,12 @@ static std::unique_ptr<GrRenderTargetContext> draw_mipmap_into_new_render_target
                                        SkBudgeted::kYes,
                                        GrProtected::kNo);
 
-    auto rtc = GrRenderTargetContext::Make(rContext,
-                                           colorType,
-                                           nullptr,
-                                           std::move(renderTarget),
-                                           kTopLeft_GrSurfaceOrigin,
-                                           nullptr);
+    auto rtc = GrSurfaceDrawContext::Make(rContext,
+                                          colorType,
+                                          nullptr,
+                                          std::move(renderTarget),
+                                          kTopLeft_GrSurfaceOrigin,
+                                          nullptr);
 
     rtc->drawTexture(nullptr,
                      std::move(mipmapView),
@@ -426,10 +426,10 @@ DEF_GPUTEST(GrManyDependentsMipMappedTest, reporter, /* options */) {
         // dirty again until GrRenderTask::makeClosed().
         mipmapProxy->markMipmapsClean();
 
-        auto mipmapRTC = GrRenderTargetContext::Make(
+        auto mipmapRTC = GrSurfaceDrawContext::Make(
             dContext.get(), colorType, nullptr, mipmapProxy, kTopLeft_GrSurfaceOrigin, nullptr);
 
-        mipmapRTC->clear({.1f,.2f,.3f,.4f});
+        mipmapRTC->clear(SkPMColor4f{.1f, .2f, .3f, .4f});
         REPORTER_ASSERT(reporter, drawingManager->getLastRenderTask(mipmapProxy.get()));
         // mipmapProxy's last render task should now just be the opsTask containing the clear.
         REPORTER_ASSERT(reporter,
@@ -475,7 +475,7 @@ DEF_GPUTEST(GrManyDependentsMipMappedTest, reporter, /* options */) {
         REPORTER_ASSERT(reporter, rtc2Task->dependsOn(initialMipmapRegenTask));
 
         // Render something to dirty the mips.
-        mipmapRTC->clear({.1f,.2f,.3f,.4f});
+        mipmapRTC->clear(SkPMColor4f{.1f, .2f, .3f, .4f});
         auto mipmapRTCTask = sk_ref_sp(mipmapRTC->testingOnly_PeekLastOpsTask());
         REPORTER_ASSERT(reporter, mipmapRTCTask);
 

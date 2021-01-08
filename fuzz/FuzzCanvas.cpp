@@ -26,6 +26,7 @@
 #include "include/svg/SkSVGCanvas.h"
 #include "include/utils/SkNullCanvas.h"
 #include "src/core/SkOSFile.h"
+#include "src/core/SkPaintPriv.h"
 #include "src/core/SkPicturePriv.h"
 #include "tools/debugger/DebugCanvas.h"
 
@@ -209,7 +210,7 @@ static sk_sp<SkShader> make_fuzz_shader(Fuzz* fuzz, int depth) {
             if (useMatrix) {
                 FuzzNiceMatrix(fuzz, &matrix);
             }
-            return bitmap.makeShader(tmX, tmY, useMatrix ? &matrix : nullptr);
+            return bitmap.makeShader(tmX, tmY, SkSamplingOptions(), useMatrix ? &matrix : nullptr);
         case 5:
             shader1 = make_fuzz_shader(fuzz, depth - 1);  // limit recursion.
             FuzzNiceMatrix(fuzz, &matrix);
@@ -856,7 +857,7 @@ static void fuzz_paint(Fuzz* fuzz, SkPaint* paint, int depth) {
     paint->setDither(       make_fuzz_t<bool>(fuzz));
     paint->setColor(        make_fuzz_t<SkColor>(fuzz));
     paint->setBlendMode(    make_fuzz_enum_range<SkBlendMode>(fuzz, SkBlendMode::kLastMode));
-    paint->setFilterQuality(make_fuzz_enum_range<SkFilterQuality>(fuzz, kLast_SkFilterQuality));
+    SkPaintPriv::SetFQ(paint, make_fuzz_enum_range<SkFilterQuality>(fuzz, kLast_SkFilterQuality));
     paint->setStyle(        make_fuzz_enum_range<SkPaint::Style>(fuzz,
                                                  SkPaint::Style::kStrokeAndFill_Style));
     paint->setShader(       make_fuzz_shader(fuzz, depth - 1));

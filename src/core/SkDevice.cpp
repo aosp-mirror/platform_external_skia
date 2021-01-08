@@ -163,19 +163,8 @@ void SkBaseDevice::drawPatch(const SkPoint cubics[12], const SkColor colors[4],
     }
 }
 
-void SkBaseDevice::drawImageNine(const SkImage* image, const SkIRect& center,
-                                 const SkRect& dst, const SkPaint& paint) {
-    SkLatticeIter iter(image->width(), image->height(), center, dst);
-
-    SkRect srcR, dstR;
-    while (iter.next(&srcR, &dstR)) {
-        this->drawImageRect(image, &srcR, dstR, paint, SkCanvas::kStrict_SrcRectConstraint);
-    }
-}
-
-void SkBaseDevice::drawImageLattice(const SkImage* image,
-                                    const SkCanvas::Lattice& lattice, const SkRect& dst,
-                                    const SkPaint& paint) {
+void SkBaseDevice::drawImageLattice(const SkImage* image, const SkCanvas::Lattice& lattice,
+                                    const SkRect& dst, SkFilterMode filter, const SkPaint& paint) {
     SkLatticeIter iter(lattice, dst);
 
     SkRect srcR, dstR;
@@ -196,7 +185,9 @@ void SkBaseDevice::drawImageLattice(const SkImage* image,
                    this->drawRect(dstR, paintCopy);
               }
         } else {
-            this->drawImageRect(image, &srcR, dstR, paint, SkCanvas::kStrict_SrcRectConstraint);
+            SkSamplingOptions sampling(filter, SkMipmapMode::kNone);
+            this->drawImageRect(image, &srcR, dstR, sampling, paint,
+                                SkCanvas::kStrict_SrcRectConstraint);
         }
     }
 }
@@ -215,7 +206,8 @@ static SkPoint* quad_to_tris(SkPoint tris[6], const SkPoint quad[4]) {
 
 void SkBaseDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
                              const SkRect tex[], const SkColor colors[], int quadCount,
-                             SkBlendMode mode, const SkPaint& paint) {
+                             SkBlendMode mode, const SkSamplingOptions& sampling,
+                             const SkPaint& paint) {
     const int triCount = quadCount << 1;
     const int vertexCount = triCount * 3;
     uint32_t flags = SkVertices::kHasTexCoords_BuilderFlag;
@@ -241,7 +233,7 @@ void SkBaseDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
         }
     }
     SkPaint p(paint);
-    p.setShader(atlas->makeShader(SkSamplingOptions()));
+    p.setShader(atlas->makeShader(sampling));
     this->drawVertices(builder.detach().get(), mode, p);
 }
 
@@ -270,6 +262,8 @@ void SkBaseDevice::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry images[], in
     SkASSERT(paint.getStyle() == SkPaint::kFill_Style);
     SkASSERT(!paint.getPathEffect());
 
+    // TODO: pass this in directly
+    const SkSamplingOptions sampling(paint.getFilterQuality());
     SkPaint entryPaint = paint;
     const SkM44 baseLocalToDevice = this->localToDevice44();
     int clipIndex = 0;
@@ -302,7 +296,7 @@ void SkBaseDevice::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry images[], in
             clipIndex += 4;
         }
         this->drawImageRect(images[i].fImage.get(), &images[i].fSrcRect, images[i].fDstRect,
-                            entryPaint, constraint);
+                            sampling, entryPaint, constraint);
         if (needsRestore) {
             this->restoreLocal(baseLocalToDevice);
         }
@@ -401,6 +395,43 @@ bool SkBaseDevice::peekPixels(SkPixmap* pmap) {
 
 #include "src/core/SkUtils.h"
 
+
+// TODO: This does not work for arbitrary shader DAGs (when there is no single leaf local matrix).
+// What we really need is proper post-LM plumbing for shaders.
+static sk_sp<SkShader> make_post_inverse_lm(const SkShader* shader, const SkMatrix& m) {
+    SkMatrix inverse;
+    if (!shader || !m.invert(&inverse)) {
+        return nullptr;
+    }
+
+    // Normal LMs pre-compose.  In order to push a post local matrix, we shoot for
+    // something along these lines (where all new components are pre-composed):
+    //
+    //   new_lm X current_lm == current_lm X inv(current_lm) X new_lm X current_lm
+    //
+    // We also have two sources of local matrices:
+    //   - the actual shader lm
+    //   - outer lms applied via SkLocalMatrixShader
+
+    SkMatrix outer_lm;
+    const auto nested_shader = as_SB(shader)->makeAsALocalMatrixShader(&outer_lm);
+    if (nested_shader) {
+        // unfurl the shader
+        shader = nested_shader.get();
+    } else {
+        outer_lm.reset();
+    }
+
+    const auto lm = *as_SB(shader)->totalLocalMatrix(nullptr);
+    SkMatrix lm_inv;
+    if (!lm.invert(&lm_inv)) {
+        return nullptr;
+    }
+
+    // Note: since we unfurled the shader above, we don't need to apply an outer_lm inverse
+    return shader->makeWithLocalMatrix(lm_inv * inverse * lm * outer_lm);
+}
+
 void SkBaseDevice::drawGlyphRunRSXform(const SkFont& font, const SkGlyphID glyphs[],
                                        const SkRSXform xform[], int count, SkPoint origin,
                                        const SkPaint& paint) {
@@ -432,15 +463,7 @@ void SkBaseDevice::drawGlyphRunRSXform(const SkFont& font, const SkGlyphID glyph
         // (i.e. the shader that cares about the ctm) so we have to undo our little ctm trick
         // with a localmatrixshader so that the shader draws as if there was no change to the ctm.
         SkPaint transformingPaint{paint};
-        auto shader = transformingPaint.getShader();
-        if (shader) {
-            SkMatrix inverse;
-            if (glyphToDevice.invert(&inverse)) {
-                transformingPaint.setShader(shader->makeWithLocalMatrix(inverse));
-            } else {
-                transformingPaint.setShader(nullptr);  // can't handle this xform
-            }
-        }
+        transformingPaint.setShader(make_post_inverse_lm(paint.getShader(), glyphToDevice));
 
         this->setLocalToDevice(originalLocalToDevice * SkM44(glyphToDevice));
 

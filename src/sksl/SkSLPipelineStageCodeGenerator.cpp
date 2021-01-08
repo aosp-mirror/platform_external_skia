@@ -39,8 +39,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         arguments[0]->type().typeKind() != Type::TypeKind::kSampler) {
         SkASSERT(arguments.size() <= 2);
         SkDEBUGCODE(const Type& arg0Type = arguments[0]->type());
-        SkASSERT("fragmentProcessor"  == arg0Type.name() ||
-                 "fragmentProcessor?" == arg0Type.name());
+        SkASSERT("fragmentProcessor"  == arg0Type.name());
         SkASSERT(arguments[0]->is<VariableReference>());
         int index = 0;
         bool found = false;
@@ -128,7 +127,7 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
                         // Skip over fragmentProcessors (shaders).
                         // These are indexed separately from other globals.
                         if (var.modifiers().fFlags & flag &&
-                            var.type().nonnullable() != *fContext.fFragmentProcessor_Type) {
+                            var.type() != *fContext.fFragmentProcessor_Type) {
                             ++index;
                         }
                     }

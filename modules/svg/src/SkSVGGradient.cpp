@@ -53,25 +53,16 @@ void SkSVGGradient::collectColorStops(const SkSVGRenderContext& ctx,
 
 SkColor SkSVGGradient::resolveStopColor(const SkSVGRenderContext& ctx,
                                         const SkSVGStop& stop) const {
-    const SkSVGStopColor& stopColor = stop.stopColor();
-    SkColor color;
-    switch (stopColor.type()) {
-        case SkSVGStopColor::Type::kColor:
-            color = stopColor.color();
-            break;
-        case SkSVGStopColor::Type::kCurrentColor:
-            color = *ctx.presentationContext().fInherited.fColor;
-            break;
-        case SkSVGStopColor::Type::kICCColor:
-            SkDebugf("unimplemented 'icccolor' stop-color type\n");
-            color = SK_ColorBLACK;
-            break;
-        case SkSVGStopColor::Type::kInherit:
-            SkDebugf("unimplemented 'inherit' stop-color type\n");
-            color = SK_ColorBLACK;
-            break;
+    const auto& stopColor = stop.getStopColor();
+    const auto& stopOpacity = stop.getStopOpacity();
+    // Uninherited presentation attrs should have a concrete value at this point.
+    if (!stopColor.isValue() || !stopOpacity.isValue()) {
+        SkDebugf("unhandled: stop-color or stop-opacity has no value\n");
+        return SK_ColorBLACK;
     }
-    return SkColorSetA(color, SkScalarRoundToInt(stop.stopOpacity() * 255));
+
+    const SkColor color = ctx.resolveSvgColor(*stopColor);
+    return SkColorSetA(color, SkScalarRoundToInt(*stopOpacity * 255));
 }
 
 bool SkSVGGradient::onAsPaint(const SkSVGRenderContext& ctx, SkPaint* paint) const {

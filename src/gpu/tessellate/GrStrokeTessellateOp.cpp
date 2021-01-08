@@ -19,25 +19,27 @@ void GrStrokeTessellateOp::onPrePrepare(GrRecordingContext* context,
                                         const GrXferProcessor::DstProxyView& dstProxyView,
                                         GrXferBarrierFlags renderPassXferBarriers,
                                         GrLoadOp colorLoadOp) {
-    SkArenaAlloc* arena = context->priv().recordTimeAllocator();
-    auto* strokeTessellateShader = arena->make<GrStrokeTessellateShader>(
-                fStroke, fParametricIntolerance, fNumRadialSegmentsPerRadian, fViewMatrix, fColor);
-    this->prePrepareColorProgram(arena, strokeTessellateShader, writeView, std::move(*clip),
-                                 dstProxyView, renderPassXferBarriers, colorLoadOp,
-                                 *context->priv().caps());
-    context->priv().recordProgramInfo(fColorProgram);
+    this->prePreparePrograms(GrStrokeTessellateShader::Mode::kTessellation,
+                             context->priv().recordTimeAllocator(), writeView,
+                             (clip) ? std::move(*clip) : GrAppliedClip::Disabled(), dstProxyView,
+                             renderPassXferBarriers, colorLoadOp, *context->priv().caps());
+    if (fStencilProgram) {
+        context->priv().recordProgramInfo(fStencilProgram);
+    }
+    if (fFillProgram) {
+        context->priv().recordProgramInfo(fFillProgram);
+    }
 }
 
 void GrStrokeTessellateOp::onPrepare(GrOpFlushState* flushState) {
-    if (!fColorProgram) {
-        SkArenaAlloc* arena = flushState->allocator();
-        auto* strokeTessellateShader = arena->make<GrStrokeTessellateShader>(
-                fStroke, fParametricIntolerance, fNumRadialSegmentsPerRadian, fViewMatrix, fColor);
-        this->prePrepareColorProgram(flushState->allocator(), strokeTessellateShader,
-                                     flushState->writeView(), flushState->detachAppliedClip(),
-                                     flushState->dstProxyView(), flushState->renderPassBarriers(),
-                                     flushState->colorLoadOp(), flushState->caps());
+    if (!fFillProgram && !fStencilProgram) {
+        this->prePreparePrograms(GrStrokeTessellateShader::Mode::kTessellation,
+                                 flushState->allocator(), flushState->writeView(),
+                                 flushState->detachAppliedClip(), flushState->dstProxyView(),
+                                 flushState->renderPassBarriers(), flushState->colorLoadOp(),
+                                 flushState->caps());
     }
+    SkASSERT(fFillProgram || fStencilProgram);
 
     fTarget = flushState;
     this->prepareBuffers();
@@ -56,18 +58,20 @@ void GrStrokeTessellateOp::prepareBuffers() {
     // has the potential to introduce an extra segment.
     fMaxTessellationSegments = fTarget->caps().shaderCaps()->maxTessellationSegments() - 2;
 
+    fTolerances = this->preTransformTolerances();
+
     // Calculate the worst-case numbers of parametric segments our hardware can support for the
     // current stroke radius, in the event that there are also enough radial segments to rotate
     // 180 and 360 degrees respectively. These are used for "quick accepts" that allow us to
     // send almost all curves directly to the hardware without having to chop.
     float numRadialSegments180 = std::max(std::ceil(
-            SK_ScalarPI * fNumRadialSegmentsPerRadian), 1.f);
+            SK_ScalarPI * fTolerances.fNumRadialSegmentsPerRadian), 1.f);
     float maxParametricSegments180 = NumParametricSegments(fMaxTessellationSegments,
                                                            numRadialSegments180);
     fMaxParametricSegments180_pow4 = pow4(maxParametricSegments180);
 
     float numRadialSegments360 = std::max(std::ceil(
-            2*SK_ScalarPI * fNumRadialSegmentsPerRadian), 1.f);
+            2*SK_ScalarPI * fTolerances.fNumRadialSegmentsPerRadian), 1.f);
     float maxParametricSegments360 = NumParametricSegments(fMaxTessellationSegments,
                                                            numRadialSegments360);
     fMaxParametricSegments360_pow4 = pow4(maxParametricSegments360);
@@ -209,7 +213,8 @@ void GrStrokeTessellateOp::quadraticTo(const SkPoint p[3], JoinType prevJoinType
     //
     // An informal survey of skottie animations and gms revealed that even with a bare minimum of 64
     // tessellation segments, 99.9%+ of quadratics take this early out.
-    float numParametricSegments_pow4 = GrWangsFormula::quadratic_pow4(fParametricIntolerance, p);
+    float numParametricSegments_pow4 =
+            GrWangsFormula::quadratic_pow4(fTolerances.fParametricIntolerance, p);
     if (numParametricSegments_pow4 <= fMaxParametricSegments180_pow4_withJoin &&
         prevJoinType != JoinType::kCusp) {
         this->cubicToRaw(prevJoinType, asCubic);
@@ -230,7 +235,7 @@ void GrStrokeTessellateOp::quadraticTo(const SkPoint p[3], JoinType prevJoinType
 
     // We still might have enough tessellation segments to render the curve. Check again with the
     // actual rotation.
-    float numRadialSegments = SkMeasureQuadRotation(p) * fNumRadialSegmentsPerRadian;
+    float numRadialSegments = SkMeasureQuadRotation(p) * fTolerances.fNumRadialSegmentsPerRadian;
     numRadialSegments = std::max(std::ceil(numRadialSegments), 1.f);
     float numParametricSegments = GrWangsFormula::root4(numParametricSegments_pow4);
     numParametricSegments = std::max(std::ceil(numParametricSegments), 1.f);
@@ -295,7 +300,8 @@ void GrStrokeTessellateOp::cubicTo(const SkPoint p[4], JoinType prevJoinType,
     //
     // An informal survey of skottie animations revealed that with a bare minimum of 64 tessellation
     // segments, 95% of cubics take this early out.
-    float numParametricSegments_pow4 = GrWangsFormula::cubic_pow4(fParametricIntolerance, p);
+    float numParametricSegments_pow4 =
+            GrWangsFormula::cubic_pow4(fTolerances.fParametricIntolerance, p);
     if (numParametricSegments_pow4 <= fMaxParametricSegments360_pow4_withJoin &&
         prevJoinType != JoinType::kCusp) {
         this->cubicToRaw(prevJoinType, p);
@@ -343,7 +349,8 @@ void GrStrokeTessellateOp::cubicTo(const SkPoint p[4], JoinType prevJoinType,
 
     // We still might have enough tessellation segments to render the curve. Check again with
     // its actual rotation.
-    float numRadialSegments = SkMeasureNonInflectCubicRotation(p) * fNumRadialSegmentsPerRadian;
+    float numRadialSegments =
+            SkMeasureNonInflectCubicRotation(p) * fTolerances.fNumRadialSegmentsPerRadian;
     numRadialSegments = std::max(std::ceil(numRadialSegments), 1.f);
     float numParametricSegments = GrWangsFormula::root4(numParametricSegments_pow4);
     numParametricSegments = std::max(std::ceil(numParametricSegments), 1.f);
@@ -394,7 +401,7 @@ void GrStrokeTessellateOp::joinTo(JoinType joinType, SkPoint nextControlPoint, i
         SkVector tan0 = fCurrentPoint - fLastControlPoint;
         SkVector tan1 = nextControlPoint - fCurrentPoint;
         float rotation = SkMeasureAngleBetweenVectors(tan0, tan1);
-        float numRadialSegments = rotation * fNumRadialSegmentsPerRadian;
+        float numRadialSegments = rotation * fTolerances.fNumRadialSegmentsPerRadian;
         if (numRadialSegments > fMaxTessellationSegments) {
             // This is a round join that requires more segments than the tessellator supports.
             // Split it and recurse.
@@ -452,12 +459,6 @@ void GrStrokeTessellateOp::close() {
     SkDEBUGCODE(fHasCurrentPoint = false;)
 }
 
-static SkVector normalize(const SkVector& v) {
-    SkVector norm = v;
-    norm.normalize();
-    return norm;
-}
-
 void GrStrokeTessellateOp::cap() {
     SkASSERT(fHasCurrentPoint);
 
@@ -465,8 +466,32 @@ void GrStrokeTessellateOp::cap() {
         // We don't have any control points to orient the caps. In this case, square and round caps
         // are specified to be drawn as an axis-aligned square or circle respectively. Assign
         // default control points that achieve this.
-        fCurrContourFirstControlPoint = fCurrContourStartPoint - SkPoint{1,0};
-        fLastControlPoint = fCurrContourStartPoint + SkPoint{1,0};
+        SkVector outset;
+        if (!fStroke.isHairlineStyle()) {
+            outset = {1, 0};
+        } else {
+            // If the stroke is hairline, orient the square on the post-transform x-axis instead.
+            // We don't need to worry about the vector length since it will be normalized later.
+            // Since the matrix cannot have perspective, the below is equivalent to:
+            //
+            //    outset = inverse(|a b|) * |1| * arbitrary_scale
+            //                     |c d|    |0|
+            //
+            //    == 1/det * | d -b| * |1| * arbitrary_scale
+            //               |-c  a|   |0|
+            //
+            //    == 1/det * | d| * arbitrary_scale
+            //               |-c|
+            //
+            //    == | d|
+            //       |-c|
+            //
+            SkASSERT(!fViewMatrix.hasPerspective());
+            float c=fViewMatrix.getSkewY(), d=fViewMatrix.getScaleY();
+            outset = {d, -c};
+        }
+        fCurrContourFirstControlPoint = fCurrContourStartPoint - outset;
+        fLastControlPoint = fCurrContourStartPoint + outset;
         fCurrentPoint = fCurrContourStartPoint;
         fHasLastControlPoint = true;
     }
@@ -484,14 +509,28 @@ void GrStrokeTessellateOp::cap() {
             this->joinTo(roundCapJoinType, fCurrContourFirstControlPoint);
             break;
         }
-
         case SkPaint::kSquare_Cap: {
             // A square cap is the same as appending lineTos.
-            float rad = fStroke.getWidth() * .5f;
-            this->lineTo(fCurrentPoint + normalize(fCurrentPoint - fLastControlPoint) * rad);
+            SkVector lastTangent = fCurrentPoint - fLastControlPoint;
+            if (!fStroke.isHairlineStyle()) {
+                // Extend the cap by 1/2 stroke width.
+                lastTangent *= (.5f * fStroke.getWidth()) / lastTangent.length();
+            } else {
+                // Extend the cap by what will be 1/2 pixel after transformation.
+                lastTangent *= .5f / fViewMatrix.mapVector(lastTangent.fX, lastTangent.fY).length();
+            }
+            this->lineTo(fCurrentPoint + lastTangent);
             this->moveTo(fCurrContourStartPoint, fCurrContourFirstControlPoint);
-            this->lineTo(fCurrContourStartPoint +
-                         normalize(fCurrContourStartPoint - fCurrContourFirstControlPoint) * rad);
+            SkVector firstTangent = fCurrContourFirstControlPoint - fCurrContourStartPoint;
+            if (!fStroke.isHairlineStyle()) {
+                // Set the the cap back by 1/2 stroke width.
+                firstTangent *= (-.5f * fStroke.getWidth()) / firstTangent.length();
+            } else {
+                // Set the cap back by what will be 1/2 pixel after transformation.
+                firstTangent *=
+                        -.5f / fViewMatrix.mapVector(firstTangent.fX, firstTangent.fY).length();
+            }
+            this->lineTo(fCurrContourStartPoint + firstTangent);
             break;
         }
     }
@@ -583,15 +622,25 @@ void GrStrokeTessellateOp::allocPatchChunkAtLeast(int minPatchAllocCount) {
 }
 
 void GrStrokeTessellateOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {
-    SkASSERT(fColorProgram);
     SkASSERT(chainBounds == this->bounds());
-
-    flushState->bindPipelineAndScissorClip(*fColorProgram, this->bounds());
-    flushState->bindTextures(fColorProgram->primProc(), nullptr, fColorProgram->pipeline());
-    for (const auto& chunk : fPatchChunks) {
-        if (chunk.fPatchBuffer) {
-            flushState->bindBuffers(nullptr, nullptr, std::move(chunk.fPatchBuffer));
-            flushState->draw(chunk.fPatchCount, chunk.fBasePatch);
+    if (fStencilProgram) {
+        flushState->bindPipelineAndScissorClip(*fStencilProgram, this->bounds());
+        flushState->bindTextures(fStencilProgram->primProc(), nullptr, fStencilProgram->pipeline());
+        for (const auto& chunk : fPatchChunks) {
+            if (chunk.fPatchBuffer) {
+                flushState->bindBuffers(nullptr, nullptr, std::move(chunk.fPatchBuffer));
+                flushState->draw(chunk.fPatchCount, chunk.fBasePatch);
+            }
+        }
+    }
+    if (fFillProgram) {
+        flushState->bindPipelineAndScissorClip(*fFillProgram, this->bounds());
+        flushState->bindTextures(fFillProgram->primProc(), nullptr, fFillProgram->pipeline());
+        for (const auto& chunk : fPatchChunks) {
+            if (chunk.fPatchBuffer) {
+                flushState->bindBuffers(nullptr, nullptr, std::move(chunk.fPatchBuffer));
+                flushState->draw(chunk.fPatchCount, chunk.fBasePatch);
+            }
         }
     }
 }

@@ -17,8 +17,8 @@
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrSurfaceContext.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/text/GrTextBlobCache.h"
@@ -50,11 +50,7 @@ int GrRecordingContext::maxSurfaceSampleCountForColorType(SkColorType colorType)
     return this->caps()->maxRenderTargetSampleCount(format);
 }
 
-bool GrRecordingContext::init() {
-    if (!INHERITED::init()) {
-        return false;
-    }
-
+void GrRecordingContext::setupDrawingManager(bool reduceOpsTaskSplitting) {
     GrPathRendererChain::Options prcOptions;
     prcOptions.fAllowPathMaskCaching = this->options().fAllowPathMaskCaching;
 #if GR_TEST_UTILS
@@ -68,16 +64,9 @@ bool GrRecordingContext::init() {
         prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kSmall;
     }
 
-    bool reduceOpsTaskSplitting = false;
-    if (GrContextOptions::Enable::kYes == this->options().fReduceOpsTaskSplitting) {
-        reduceOpsTaskSplitting = true;
-    } else if (GrContextOptions::Enable::kNo == this->options().fReduceOpsTaskSplitting) {
-        reduceOpsTaskSplitting = false;
-    }
     fDrawingManager.reset(new GrDrawingManager(this,
                                                prcOptions,
                                                reduceOpsTaskSplitting));
-    return true;
 }
 
 void GrRecordingContext::abandonContext() {

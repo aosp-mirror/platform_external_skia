@@ -454,7 +454,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// Test GPU tessellation path renderer.
 		if b.extraConfig("GpuTess") {
 			configs = []string{glPrefix + "msaa4"}
-			args = append(args, "--pr", "tess")
+			args = append(args, "--hwtess", "--pr", "tess")
 		}
 
 		// Test non-nvpr on NVIDIA.
@@ -872,12 +872,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.extraConfig("MSAN") {
 		match = append(match, "~Once", "~Shared") // Not sure what's up with these tests.
-	}
-
-	if b.extraConfig("TSAN") {
-		match = append(match, "~ReadWriteAlpha")      // Flaky on TSAN-covered on nvidia bots.
-		match = append(match, "~RGBA4444TextureTest", // Flakier than they are important.
-			"~RGB565TextureTest")
 	}
 
 	// By default, we test with GPU threading enabled, unless specifically

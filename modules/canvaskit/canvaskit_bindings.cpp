@@ -29,6 +29,7 @@
 #include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkRRect.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkString.h"
@@ -51,6 +52,7 @@
 #include "include/utils/SkShadowUtils.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/core/SkFontMgrPriv.h"
+#include "src/core/SkImagePriv.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkResourceCache.h"
 #include "src/image/SkImage_Base.h"
@@ -751,10 +753,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                   size_t length)->sk_sp<SkAnimatedImage> {
         uint8_t* imgData = reinterpret_cast<uint8_t*>(iptr);
         auto bytes = SkData::MakeFromMalloc(imgData, length);
-        auto stream = SkMemoryStream::Make(std::move(bytes));
-        auto codec = SkCodec::MakeFromStream(std::move(stream), nullptr, nullptr);
-        auto aCodec = SkAndroidCodec::MakeFromCodec(std::move(codec),
-                                                    SkAndroidCodec::ExifOrientationBehavior::kRespect);
+        auto aCodec = SkAndroidCodec::MakeFromData(std::move(bytes));
         if (nullptr == aCodec) {
             return nullptr;
         }
@@ -892,18 +891,31 @@ EMSCRIPTEN_BINDINGS(Skia) {
             self.drawDRRect(ptrToSkRRect(outerPtr), ptrToSkRRect(innerPtr), paint);
         }))
         .function("drawImage", select_overload<void (const sk_sp<SkImage>&, SkScalar, SkScalar, const SkPaint*)>(&SkCanvas::drawImage), allow_raw_pointers())
+        .function("drawImageCubic",  optional_override([](SkCanvas& self, const sk_sp<SkImage>& img,
+                                                          SkScalar left, SkScalar top,
+                                                          float B, float C, // See SkSamplingOptions.h for docs.
+                                                          const SkPaint* paint)->void {
+            self.drawImage(img.get(), left, top, SkSamplingOptions({B, C}), paint);
+        }), allow_raw_pointers())
+        .function("drawImageOptions",  optional_override([](SkCanvas& self, const sk_sp<SkImage>& img,
+                                                          SkScalar left, SkScalar top,
+                                                          SkFilterMode filter, SkMipmapMode mipmap,
+                                                          const SkPaint* paint)->void {
+            self.drawImage(img.get(), left, top, {filter, mipmap}, paint);
+        }), allow_raw_pointers())
         .function("drawImageAtCurrentFrame", optional_override([](SkCanvas& self, sk_sp<SkAnimatedImage> aImg,
-                                                         SkScalar left, SkScalar top, const SkPaint* paint)->void {
+                                                                  SkScalar left, SkScalar top, const SkPaint* paint)->void {
             auto img = aImg->getCurrentFrame();
             self.drawImage(img, left, top, paint);
         }), allow_raw_pointers())
+
         .function("_drawImageNine", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
                                                          uintptr_t /* int* */ centerPtr, uintptr_t /* float* */ dstPtr,
-                                                         const SkPaint* paint)->void {
+                                                         SkFilterMode filter, const SkPaint* paint)->void {
             const SkIRect* center = reinterpret_cast<const SkIRect*>(centerPtr);
             const SkRect* dst = reinterpret_cast<const SkRect*>(dstPtr);
 
-            self.drawImageNine(image, *center, *dst, paint);
+            self.drawImageNine(image.get(), *center, *dst, filter, paint);
         }), allow_raw_pointers())
         .function("_drawImageRect", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
                                                          uintptr_t /* float* */ srcPtr, uintptr_t /* float* */ dstPtr,
@@ -913,6 +925,24 @@ EMSCRIPTEN_BINDINGS(Skia) {
             self.drawImageRect(image, *src, *dst, paint,
                                fastSample ? SkCanvas::kFast_SrcRectConstraint:
                                             SkCanvas::kStrict_SrcRectConstraint);
+        }), allow_raw_pointers())
+        .function("_drawImageRectCubic", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
+                                                              uintptr_t /* float* */ srcPtr, uintptr_t /* float* */ dstPtr,
+                                                              float B, float C, // See SkSamplingOptions.h for docs.
+                                                              const SkPaint* paint)->void {
+            const SkRect* src = reinterpret_cast<const SkRect*>(srcPtr);
+            const SkRect* dst = reinterpret_cast<const SkRect*>(dstPtr);
+            auto constraint = SkCanvas::kStrict_SrcRectConstraint;  // TODO: get from caller
+            self.drawImageRect(image.get(), *src, *dst, SkSamplingOptions({B, C}), paint, constraint);
+        }), allow_raw_pointers())
+        .function("_drawImageRectOptions", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
+                                                                uintptr_t /* float* */ srcPtr, uintptr_t /* float* */ dstPtr,
+                                                                SkFilterMode filter, SkMipmapMode mipmap,
+                                                                const SkPaint* paint)->void {
+            const SkRect* src = reinterpret_cast<const SkRect*>(srcPtr);
+            const SkRect* dst = reinterpret_cast<const SkRect*>(dstPtr);
+            auto constraint = SkCanvas::kStrict_SrcRectConstraint;  // TODO: get from caller
+            self.drawImageRect(image.get(), *src, *dst, {filter, mipmap}, paint, constraint);
         }), allow_raw_pointers())
         .function("drawLine", select_overload<void (SkScalar, SkScalar, SkScalar, SkScalar, const SkPaint&)>(&SkCanvas::drawLine))
         .function("_drawOval", optional_override([](SkCanvas& self, uintptr_t /* float* */ fPtr,
@@ -1226,14 +1256,22 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return result;
         }))
         .function("height", &SkImage::height)
-        .function("width", &SkImage::width)
         .function("_encodeToData", select_overload<sk_sp<SkData>()const>(&SkImage::encodeToData))
         .function("_encodeToDataWithFormat", select_overload<sk_sp<SkData>(SkEncodedImageFormat encodedImageFormat, int quality)const>(&SkImage::encodeToData))
-        .function("_makeShader", optional_override([](sk_sp<SkImage> self,
+        .function("makeCopyWithDefaultMipmaps", optional_override([](sk_sp<SkImage> self)->sk_sp<SkImage> {
+            return self->withDefaultMipmaps();
+        }))
+        .function("_makeShaderCubic", optional_override([](sk_sp<SkImage> self,
                                  SkTileMode tx, SkTileMode ty,
+                                 float B, float C, // See SkSamplingOptions.h for docs.
                                  uintptr_t /* SkScalar*  */ mPtr)->sk_sp<SkShader> {
-            OptionalMatrix localMatrix(mPtr);
-            return self->makeShader(tx, ty, &localMatrix);
+            return self->makeShader(tx, ty, SkSamplingOptions({B, C}), OptionalMatrix(mPtr));
+        }), allow_raw_pointers())
+        .function("_makeShaderOptions", optional_override([](sk_sp<SkImage> self,
+                                 SkTileMode tx, SkTileMode ty,
+                                 SkFilterMode filter, SkMipmapMode mipmap,
+                                 uintptr_t /* SkScalar*  */ mPtr)->sk_sp<SkShader> {
+            return self->makeShader(tx, ty, {filter, mipmap}, OptionalMatrix(mPtr));
         }), allow_raw_pointers())
         .function("_readPixels", optional_override([](sk_sp<SkImage> self,
                                  SimpleImageInfo sii, uintptr_t /* uint8_t*  */ pPtr,
@@ -1246,7 +1284,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
             dContext = GrAsDirectContext(as_IB(self.get())->context());
 #endif
             return self->readPixels(dContext, ii, pixels, dstRowBytes, srcX, srcY);
-        }), allow_raw_pointers());
+        }), allow_raw_pointers())
+        .function("width", &SkImage::width);
 
     class_<SkImageFilter>("ImageFilter")
         .smart_ptr<sk_sp<SkImageFilter>>("sk_sp<ImageFilter>")
@@ -1830,6 +1869,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("Winding",           SkPathFillType::kWinding)
         .value("EvenOdd",           SkPathFillType::kEvenOdd);
 
+    enum_<SkFilterMode>("FilterMode")
+        .value("Nearest",   SkFilterMode::kNearest)
+        .value("Linear",    SkFilterMode::kLinear);
+
     enum_<SkFilterQuality>("FilterQuality")
         .value("None",   SkFilterQuality::kNone_SkFilterQuality)
         .value("Low",    SkFilterQuality::kLow_SkFilterQuality)
@@ -1842,6 +1885,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("PNG",  SkEncodedImageFormat::kPNG)
         .value("JPEG",  SkEncodedImageFormat::kJPEG)
         .value("WEBP",  SkEncodedImageFormat::kWEBP);
+
+    enum_<SkMipmapMode>("MipmapMode")
+        .value("None",    SkMipmapMode::kNone)
+        .value("Nearest", SkMipmapMode::kNearest)
+        .value("Linear",  SkMipmapMode::kLinear);
 
     enum_<SkPaint::Style>("PaintStyle")
         .value("Fill",            SkPaint::Style::kFill_Style)

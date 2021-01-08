@@ -858,15 +858,6 @@ void SkScalerContextRec::setLuminanceColor(SkColor c) {
             SkColorSetRGB(SkColorGetR(c), SkColorGetG(c), SkColorGetB(c)));
 }
 
-extern SkScalerContext* SkCreateColorScalerContext(const SkDescriptor* desc);
-
-std::unique_ptr<SkScalerContext> SkTypeface::createScalerContext(
-        const SkScalerContextEffects& effects, const SkDescriptor* desc) const {
-    auto answer = std::unique_ptr<SkScalerContext>{this->onCreateScalerContext(effects, desc)};
-    SkASSERT(answer != nullptr);
-    return answer;
-}
-
 /*
  *  Return the scalar with only limited fractional precision. Used to consolidate matrices
  *  that vary only slightly when we create our key into the font cache, since the font scaler
@@ -1066,16 +1057,6 @@ void SkScalerContext::MakeRecAndEffects(const SkFont& font, const SkPaint& paint
     new (effects) SkScalerContextEffects{paint};
 }
 
-SkDescriptor* SkScalerContext::MakeDescriptorForPaths(SkFontID typefaceID,
-                                                      SkAutoDescriptor* ad) {
-    SkScalerContextRec rec;
-    memset((void*)&rec, 0, sizeof(rec));
-    rec.fFontID = typefaceID;
-    rec.fTextSize = SkFontPriv::kCanonicalTextSizeForPaths;
-    rec.fPreScaleX = rec.fPost2x2[0][0] = rec.fPost2x2[1][1] = SK_Scalar1;
-    return AutoDescriptorGivenRecAndEffects(rec, SkScalerContextEffects(), ad);
-}
-
 SkDescriptor* SkScalerContext::CreateDescriptorAndEffectsUsingPaint(
     const SkFont& font, const SkPaint& paint, const SkSurfaceProps& surfaceProps,
     SkScalerContextFlags scalerContextFlags, const SkMatrix& deviceMatrix, SkAutoDescriptor* ad,
@@ -1153,7 +1134,7 @@ bool SkScalerContext::CheckBufferSizeForRec(const SkScalerContextRec& rec,
     return size >= calculate_size_and_flatten(rec, effects, &buf);
 }
 
-SkScalerContext* SkScalerContext::MakeEmptyContext(
+std::unique_ptr<SkScalerContext> SkScalerContext::MakeEmpty(
         sk_sp<SkTypeface> typeface, const SkScalerContextEffects& effects,
         const SkDescriptor* desc) {
     class SkScalerContext_Empty : public SkScalerContext {
@@ -1163,9 +1144,6 @@ SkScalerContext* SkScalerContext::MakeEmptyContext(
                 : SkScalerContext(std::move(typeface), effects, desc) {}
 
     protected:
-        unsigned generateGlyphCount() override {
-            return 0;
-        }
         bool generateAdvance(SkGlyph* glyph) override {
             glyph->zeroMetrics();
             return true;
@@ -1186,7 +1164,7 @@ SkScalerContext* SkScalerContext::MakeEmptyContext(
         }
     };
 
-    return new SkScalerContext_Empty{std::move(typeface), effects, desc};
+    return std::make_unique<SkScalerContext_Empty>(std::move(typeface), effects, desc);
 }
 
 

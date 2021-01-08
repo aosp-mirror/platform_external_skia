@@ -19,8 +19,8 @@
 #include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrResourceAllocator.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/geometry/GrRect.h"
 #include "src/gpu/ops/GrClearOp.h"
@@ -603,7 +603,7 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
             break;
     }
 
-    // NOTE: If fMustPreserveStencil is set, then we are executing a renderTargetContext that split
+    // NOTE: If fMustPreserveStencil is set, then we are executing a surfaceDrawContext that split
     // its opsTask.
     //
     // FIXME: We don't currently flag render passes that don't use stencil at all. In that case

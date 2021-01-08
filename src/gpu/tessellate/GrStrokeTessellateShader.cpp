@@ -13,7 +13,7 @@
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/tessellate/GrWangsFormula.h"
 
-class GrStrokeTessellateShader::Impl : public GrGLSLGeometryProcessor {
+class GrStrokeTessellateShader::TessellationImpl : public GrGLSLGeometryProcessor {
 public:
     const char* getTessArgs1UniformName(const GrGLSLUniformHandler& uniformHandler) const {
         return uniformHandler.getUniformCStr(fTessArgs1Uniform);
@@ -32,6 +32,9 @@ private:
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
         const auto& shader = args.fGP.cast<GrStrokeTessellateShader>();
         auto* uniHandler = args.fUniformHandler;
+        auto* v = args.fVertBuilder;
+
+        SkASSERT(!shader.fHasConics);
 
         args.fVaryingHandler->emitAttributes(shader);
 
@@ -46,9 +49,17 @@ private:
         if (!shader.viewMatrix().isIdentity()) {
             fTranslateUniform = uniHandler->addUniform(nullptr, kTessEvaluation_GrShaderFlag,
                                                        kFloat2_GrSLType, "translate", nullptr);
-            fAffineMatrixUniform = uniHandler->addUniform(nullptr, kTessEvaluation_GrShaderFlag,
+            const char* affineMatrixName;
+            // Hairlines apply the affine matrix in their vertex shader, prior to tessellation.
+            // Otherwise the entire view matrix gets applied at the end of the tess eval shader.
+            auto affineMatrixVisibility = (shader.fStroke.isHairlineStyle()) ?
+                    kVertex_GrShaderFlag : kTessEvaluation_GrShaderFlag;
+            fAffineMatrixUniform = uniHandler->addUniform(nullptr, affineMatrixVisibility,
                                                           kFloat4_GrSLType, "affineMatrix",
-                                                          nullptr);
+                                                          &affineMatrixName);
+            if (affineMatrixVisibility & kVertex_GrShaderFlag) {
+                v->codeAppendf("float2x2 uAffineMatrix = float2x2(%s);\n", affineMatrixName);
+            }
         }
         const char* colorUniformName;
         fColorUniform = uniHandler->addUniform(nullptr, kFragment_GrShaderFlag, kHalf4_GrSLType,
@@ -62,7 +73,6 @@ private:
         // still don't have 3 sections after that then we just subdivide uniformly in parametric
         // space.
         using TypeModifier = GrShaderVar::TypeModifier;
-        auto* v = args.fVertBuilder;
         v->defineConstantf("float", "kParametricEpsilon", "1.0 / (%i * 128)",
                            args.fShaderCaps->maxTessellationSegments());  // 1/128 of a segment.
         v->declareGlobal(GrShaderVar("vsPts01", kFloat4_GrSLType, TypeModifier::Out));
@@ -85,7 +95,16 @@ private:
         v->codeAppendf(R"(
         // Unpack the control points.
         float4x2 P = float4x2(inputPts01, inputPts23);
-        float2 prevJoinTangent = P[0] - inputPrevCtrlPt;
+        float2 prevControlPoint = inputPrevCtrlPt;)");
+        if (shader.fStroke.isHairlineStyle() && !shader.viewMatrix().isIdentity()) {
+            // Hairline case. Transform the points before tessellation. We can still hold off on the
+            // translate until the end; we just need to perform the scale and skew right now.
+            v->codeAppend(R"(
+            P = uAffineMatrix * P;
+            prevControlPoint = uAffineMatrix * prevControlPoint;)");
+        }
+        v->codeAppendf(R"(
+        float2 prevJoinTangent = P[0] - prevControlPoint;
 
         // Find the beginning and ending tangents. It's imperative that we compute these tangents
         // form the original input points or else the seams might crack.
@@ -247,29 +266,39 @@ private:
     void setData(const GrGLSLProgramDataManager& pdman,
                  const GrPrimitiveProcessor& primProc) override {
         const auto& shader = primProc.cast<GrStrokeTessellateShader>();
+        const auto& stroke = shader.fStroke;
         float numSegmentsInJoin;
-        switch (shader.fStroke.getJoin()) {
+        switch (stroke.getJoin()) {
             case SkPaint::kBevel_Join:
                 numSegmentsInJoin = 1;
                 break;
             case SkPaint::kMiter_Join:
-                numSegmentsInJoin = (shader.fStroke.getMiter() > 0) ? 2 : 1;
+                numSegmentsInJoin = (stroke.getMiter() > 0) ? 2 : 1;
                 break;
             case SkPaint::kRound_Join:
                 numSegmentsInJoin = 0;  // Use the rotation to calculate the number of segments.
                 break;
         }
+        Tolerances tolerances;
+        if (!stroke.isHairlineStyle()) {
+            tolerances.set(shader.viewMatrix().getMaxScale(), stroke.getWidth());
+        } else {
+            // In the hairline case we transform prior to tessellation. Set up tolerances for an
+            // identity viewMatrix and a strokeWidth of 1.
+            tolerances.set(1, 1);
+        }
         float miterLimit = shader.fStroke.getMiter();
         pdman.set4f(fTessArgs1Uniform,
-            numSegmentsInJoin,  // uNumSegmentsInJoin
-            GrWangsFormula::length_term_pow2<3>(shader.fParametricIntolerance),  // uWangsTermPow2
-            shader.fNumRadialSegmentsPerRadian,  // uNumRadialSegmentsPerRadian
-            1 / (miterLimit * miterLimit));  // uMiterLimitInvPow2.
-        float strokeRadius = shader.fStroke.getWidth() * .5;
-        float joinTolerance = 1 / (strokeRadius * shader.fParametricIntolerance);
+                    numSegmentsInJoin,  // uNumSegmentsInJoin
+                    GrWangsFormula::length_term_pow2<3>(
+                            tolerances.fParametricIntolerance),  // uWangsTermPow2
+                    tolerances.fNumRadialSegmentsPerRadian,  // uNumRadialSegmentsPerRadian
+                    1 / (miterLimit * miterLimit));  // uMiterLimitInvPow2
+        float strokeRadius = (stroke.isHairlineStyle()) ? .5f : stroke.getWidth() * .5;
+        float joinTolerance = 1 / (strokeRadius * tolerances.fParametricIntolerance);
         pdman.set2f(fTessArgs2Uniform,
-                    joinTolerance * joinTolerance,  // uJoinTolerancePow2.
-                    strokeRadius);  // uStrokeRadius.
+                    joinTolerance * joinTolerance,  // uJoinTolerancePow2
+                    strokeRadius);  // uStrokeRadius
         const SkMatrix& m = shader.viewMatrix();
         if (!m.isIdentity()) {
             pdman.set2f(fTranslateUniform, m.getTranslateX(), m.getTranslateY());
@@ -287,24 +316,26 @@ private:
 };
 
 // The built-in atan() is undefined when x==0. This method relieves that restriction, but also can
-// return values larger than 2*kPI. This shouldn't matter for our purposes.
+// return values larger than 2*PI. This shouldn't matter for our purposes.
 static const char* kAtan2Fn = R"(
 float atan2(float2 v) {
     float bias = 0;
     if (abs(v.y) > abs(v.x)) {
         v = float2(v.y, -v.x);
-        bias = kPI/2;
+        bias = PI/2;
     }
     return atan(v.y, v.x) + bias;
+})";
+
+static const char* kLengthPow2Fn = R"(
+float length_pow2(float2 v) {
+    return dot(v, v);
 })";
 
 // Calculates the number of evenly spaced (in the parametric sense) segments to chop a cubic into.
 // (See GrWangsFormula::cubic() for more documentation on this formula.) The final tessellated strip
 // will be a composition of these parametric segments as well as radial segments.
 static const char* kWangsFormulaCubicFn = R"(
-float length_pow2(float2 v) {
-    return dot(v, v);
-}
 float wangs_formula_cubic(float4x2 P, float wangsTermPow2) {
     float m = max(length_pow2(fma(float2(-2), P[1], P[2]) + P[0]),
                   length_pow2(fma(float2(-2), P[2], P[3]) + P[1])) * wangsTermPow2;
@@ -322,7 +353,8 @@ float miter_extent(float cosTheta, float miterLimitInvPow2) {
 SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
         const GrGLSLPrimitiveProcessor* glslPrimProc, const char* versionAndExtensionDecls,
         const GrGLSLUniformHandler& uniformHandler, const GrShaderCaps& shaderCaps) const {
-    auto impl = static_cast<const GrStrokeTessellateShader::Impl*>(glslPrimProc);
+    SkASSERT(fMode == Mode::kTessellation);
+    auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslPrimProc);
 
     SkString code(versionAndExtensionDecls);
     // Run 4 invocations: 1 for the previous join plus 1 for each section that the vertex shader
@@ -335,9 +367,8 @@ SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
     code.appendf("#define float4 vec4\n");
     code.appendf("#define float2x2 mat2\n");
     code.appendf("#define float4x2 mat4x2\n");
-
-    code.appendf("const float kPI = 3.141592653589793238;\n");
-    code.appendf("const float kMaxTessellationSegments = %i;\n",
+    code.appendf("#define PI 3.141592653589793238\n");
+    code.appendf("#define MAX_TESSELLATION_SEGMENTS %i\n",
                  shaderCaps.maxTessellationSegments());
 
     const char* tessArgs1Name = impl->getTessArgs1UniformName(uniformHandler);
@@ -372,6 +403,7 @@ SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
     })");
 
     code.append(kAtan2Fn);
+    code.append(kLengthPow2Fn);
     code.append(kWangsFormulaCubicFn);
     code.append(kMiterExtentFn);
 
@@ -500,7 +532,7 @@ SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
                 ++numTotalCombinedSegments;
             }
 
-            numTotalCombinedSegments = min(numTotalCombinedSegments, kMaxTessellationSegments);
+            numTotalCombinedSegments = min(numTotalCombinedSegments, MAX_TESSELLATION_SEGMENTS);
             gl_TessLevelInner[0] = numTotalCombinedSegments;
             gl_TessLevelInner[1] = 2.0;
             gl_TessLevelOuter[0] = 2.0;
@@ -518,132 +550,178 @@ SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
 // precision than "a*(1 - t) + b*t" for things like chopping cubics on exact cusp points.
 // We override this result anyway when t==1 so it shouldn't be a problem.
 static const char* kUncheckedMixFn = R"(
-float2 unchecked_mix(float2 a, float2 b, float t) {
-    return fma(b - a, float2(t), a);
+float unchecked_mix(float a, float b, float T) {
+    return fma(b - a, T, a);
+}
+float2 unchecked_mix(float2 a, float2 b, float T) {
+    return fma(b - a, float2(T), a);
 })";
 
 // Computes the location and tangent direction of the stroke edge with the integral id
 // "combinedEdgeID", where combinedEdgeID is the sorted-order index of parametric and radial edges.
-static const char* kEvalStrokeEdgeFn = R"(
-void eval_stroke_edge(in float4x2 P, in float numParametricSegments, in float combinedEdgeID,
-                      in float2 tan0, in float radsPerSegment, in float angle0,
-                      out float2 tangent, out float2 position) {
-    // Start by finding the cubic's power basis coefficients. These define a tangent direction
-    // (scaled by uniform 1/3) as:
-    //                                                 |T^2|
-    //     Tangent_Direction(T) = dx,dy = |A  2B  C| * |T  |
-    //                                    |.   .  .|   |1  |
-    float2 C = P[1] - P[0];
-    float2 D = P[2] - P[1];
-    float2 E = P[3] - P[0];
-    float2 B = D - C;
-    float2 A = fma(float2(-3), D, E);
+static void append_eval_stroke_edge_fn(SkString* code, bool hasConics) {
+    code->append(R"(
+    void eval_stroke_edge(in float4x2 P, )");
+    if (hasConics) {
+        code->append(R"(
+                          in float w, )");
+    }
+    code->append(R"(
+                          in float numParametricSegments, in float combinedEdgeID, in float2 tan0,
+                          in float radsPerSegment, in float angle0, out float2 tangent,
+                          out float2 position) {
+        // Start by finding the tangent function's power basis coefficients. These define a tangent
+        // direction (scaled by some uniform value) as:
+        //                                                 |T^2|
+        //     Tangent_Direction(T) = dx,dy = |A  2B  C| * |T  |
+        //                                    |.   .  .|   |1  |
+        float2 A, B, C = P[1] - P[0];
+        float2 D = P[3] - P[0];)");
+    if (hasConics) {
+        code->append(R"(
+        if (w >= 0) {
+            // P0..P2 represent a conic and P3==P2. The derivative of a conic has a cumbersome
+            // order-4 denominator. However, this isn't necessary if we are only interested in a
+            // vector in the same *direction* as a given tangent line. Since the denominator scales
+            // dx and dy uniformly, we can throw it out completely after evaluating the derivative
+            // with the standard quotient rule. This leaves us with a simpler quadratic function
+            // that we use to find a tangent.
+            C *= w;
+            B = .5*D - C;
+            A = (w - 1) * D;
+            P[1] *= w;
+        } else {)");
+    } else {
+        code->append(R"(
+        {)");
+    }
+    code->append(R"(
+            float2 E = P[2] - P[1];
+            B = E - C;
+            A = fma(float2(-3), E, D);
+        }
 
-    // Now find the coefficients that give a tangent direction from a parametric edge ID:
-    //
-    //                                                                 |parametricEdgeID^2|
-    //     Tangent_Direction(parametricEdgeID) = dx,dy = |A  B_  C_| * |parametricEdgeID  |
-    //                                                   |.   .   .|   |1                 |
-    //
-    float2 B_ = B * (numParametricSegments * 2);
-    float2 C_ = C * (numParametricSegments * numParametricSegments);
+        // Now find the coefficients that give a tangent direction from a parametric edge ID:
+        //
+        //                                                                 |parametricEdgeID^2|
+        //     Tangent_Direction(parametricEdgeID) = dx,dy = |A  B_  C_| * |parametricEdgeID  |
+        //                                                   |.   .   .|   |1                 |
+        //
+        float2 B_ = B * (numParametricSegments * 2);
+        float2 C_ = C * (numParametricSegments * numParametricSegments);
 
-    // Run a binary search to determine the highest parametric edge that is located on or before the
-    // combinedEdgeID. A combined ID is determined by the sum of complete parametric and radial
-    // segments behind it. i.e., find the highest parametric edge where:
-    //
-    //    parametricEdgeID + floor(numRadialSegmentsAtParametricT) <= combinedEdgeID
-    //
-    float lastParametricEdgeID = 0;
-    float maxParametricEdgeID = min(numParametricSegments - 1, combinedEdgeID);
-    float2 tan0norm = normalize(tan0);
-    float negAbsRadsPerSegment = -abs(radsPerSegment);
-    float maxRotation0 = (1 + combinedEdgeID) * abs(radsPerSegment);
-    for (int exp = MAX_TESSELLATION_SEGMENTS_LOG2 - 1; exp >= 0; --exp) {
-        // Test the parametric edge at lastParametricEdgeID + 2^exp.
-        float testParametricID = lastParametricEdgeID + (1 << exp);
-        if (testParametricID <= maxParametricEdgeID) {
-            float2 testTan = fma(float2(testParametricID), A, B_);
-            testTan = fma(float2(testParametricID), testTan, C_);
-            float cosRotation = dot(normalize(testTan), tan0norm);
-            float maxRotation = fma(testParametricID, negAbsRadsPerSegment, maxRotation0);
-            maxRotation = min(maxRotation, kPI);
-            // Is rotation <= maxRotation? (i.e., is the number of complete radial segments
-            // behind testT, + testParametricID <= combinedEdgeID?)
-            if (cosRotation >= cos(maxRotation)) {
-                // testParametricID is on or before the combinedEdgeID. Keep it!
-                lastParametricEdgeID = testParametricID;
+        // Run a binary search to determine the highest parametric edge that is located on or before
+        // the combinedEdgeID. A combined ID is determined by the sum of complete parametric and
+        // radial segments behind it. i.e., find the highest parametric edge where:
+        //
+        //    parametricEdgeID + floor(numRadialSegmentsAtParametricT) <= combinedEdgeID
+        //
+        float lastParametricEdgeID = 0;
+        float maxParametricEdgeID = min(numParametricSegments - 1, combinedEdgeID);
+        float2 tan0norm = normalize(tan0);
+        float negAbsRadsPerSegment = -abs(radsPerSegment);
+        float maxRotation0 = (1 + combinedEdgeID) * abs(radsPerSegment);
+        for (int exp = MAX_PARAMETRIC_SEGMENTS_LOG2 - 1; exp >= 0; --exp) {
+            // Test the parametric edge at lastParametricEdgeID + 2^exp.
+            float testParametricID = lastParametricEdgeID + (1 << exp);
+            if (testParametricID <= maxParametricEdgeID) {
+                float2 testTan = fma(float2(testParametricID), A, B_);
+                testTan = fma(float2(testParametricID), testTan, C_);
+                float cosRotation = dot(normalize(testTan), tan0norm);
+                float maxRotation = fma(testParametricID, negAbsRadsPerSegment, maxRotation0);
+                maxRotation = min(maxRotation, PI);
+                // Is rotation <= maxRotation? (i.e., is the number of complete radial segments
+                // behind testT, + testParametricID <= combinedEdgeID?)
+                if (cosRotation >= cos(maxRotation)) {
+                    // testParametricID is on or before the combinedEdgeID. Keep it!
+                    lastParametricEdgeID = testParametricID;
+                }
             }
         }
+
+        // Find the T value of the parametric edge at lastParametricEdgeID.
+        float parametricT = lastParametricEdgeID / numParametricSegments;
+
+        // Now that we've identified the highest parametric edge on or before the combinedEdgeID,
+        // the highest radial edge is easy:
+        float lastRadialEdgeID = combinedEdgeID - lastParametricEdgeID;
+
+        // Find the tangent vector on the edge at lastRadialEdgeID.
+        float radialAngle = fma(lastRadialEdgeID, radsPerSegment, angle0);
+        tangent = float2(cos(radialAngle), sin(radialAngle));
+        float2 norm = float2(-tangent.y, tangent.x);
+
+        // Find the T value where the cubic's tangent is orthogonal to norm. This is a quadratic:
+        //
+        //     dot(norm, Tangent_Direction(T)) == 0
+        //
+        //                         |T^2|
+        //     norm * |A  2B  C| * |T  | == 0
+        //            |.   .  .|   |1  |
+        //
+        float3 coeffs = norm * float3x2(A,B,C);
+        float a=coeffs.x, b_over_2=coeffs.y, c=coeffs.z;
+        float discr_over_4 = max(b_over_2*b_over_2 - a*c, 0);
+        float q = sqrt(discr_over_4);
+        if (b_over_2 > 0) {
+            q = -q;
+        }
+        q -= b_over_2;
+
+        // Roots are q/a and c/q. Since each curve section does not inflect or rotate more than 180
+        // degrees, there can only be one tangent orthogonal to "norm" inside 0..1. Pick the root
+        // nearest .5.
+        float _5qa = -.5*q*a;
+        float2 root = (abs(fma(q,q,_5qa)) < abs(fma(a,c,_5qa))) ? float2(q,a) : float2(c,q);
+        float radialT = (root.t != 0) ? root.s / root.t : 0;
+        radialT = clamp(radialT, 0, 1);
+
+        if (lastRadialEdgeID == 0) {
+            // The root finder above can become unstable when lastRadialEdgeID == 0 (e.g., if there
+            // are roots at exatly 0 and 1 both). radialT should always == 0 in this case.
+            radialT = 0;
+        }
+
+        // Now that we've identified the T values of the last parametric and radial edges, our final
+        // T value for combinedEdgeID is whichever is larger.
+        float T = max(parametricT, radialT);
+
+        // Evaluate the cubic at T. Use De Casteljau's for its accuracy and stability.
+        float2 ab = unchecked_mix(P[0], P[1], T);
+        float2 bc = unchecked_mix(P[1], P[2], T);
+        float2 cd = unchecked_mix(P[2], P[3], T);
+        float2 abc = unchecked_mix(ab, bc, T);
+        float2 bcd = unchecked_mix(bc, cd, T);
+        float2 abcd = unchecked_mix(abc, bcd, T);)");
+
+    if (hasConics) {
+        code->append(R"(
+        // Evaluate the conic weights at T.
+        float u = unchecked_mix(1, w, T);
+        float v = unchecked_mix(w, 1, T);
+        float uv = unchecked_mix(u, v, T);)");
     }
 
-    // Find the T value of the parametric edge at lastParametricEdgeID.
-    float parametricT = lastParametricEdgeID / numParametricSegments;
+    code->appendf(R"(
+        position =%s abcd;)", (hasConics) ? " (w >= 0) ? abc/uv :" : "");
 
-    // Now that we've identified the highest parametric edge on or before the combinedEdgeID, the
-    // highest radial edge is easy:
-    float lastRadialEdgeID = combinedEdgeID - lastParametricEdgeID;
-
-    // Find the tangent vector on the edge at lastRadialEdgeID.
-    float radialAngle = fma(lastRadialEdgeID, radsPerSegment, angle0);
-    tangent = float2(cos(radialAngle), sin(radialAngle));
-    float2 norm = float2(-tangent.y, tangent.x);
-
-    // Find the T value where the cubic's tangent is orthogonal to norm. This is a quadratic:
-    //
-    //     dot(norm, Tangent_Direction(T)) == 0
-    //
-    //                         |T^2|
-    //     norm * |A  2B  C| * |T  | == 0
-    //            |.   .  .|   |1  |
-    //
-    float3 coeffs = norm * float3x2(A,B,C);
-    float a=coeffs.x, b_over_2=coeffs.y, c=coeffs.z;
-    float discr_over_4 = max(b_over_2*b_over_2 - a*c, 0);
-    float q = sqrt(discr_over_4);
-    if (b_over_2 > 0) {
-        q = -q;
-    }
-    q -= b_over_2;
-
-    // Roots are q/a and c/q. Since each curve section does not inflect or rotate more than 180
-    // degrees, there can only be one tangent orthogonal to "norm" inside 0..1. Pick the root
-    // nearest .5.
-    float _5qa = -.5*q*a;
-    float2 root = (abs(fma(q,q,_5qa)) < abs(fma(a,c,_5qa))) ? float2(q,a) : float2(c,q);
-    float radialT = (root.t != 0) ? root.s / root.t : 0;
-    radialT = clamp(radialT, 0, 1);
-
-    if (lastRadialEdgeID == 0) {
-        // The root finder above can become unstable when lastRadialEdgeID == 0 (e.g., if there
-        // are roots at exatly 0 and 1 both). radialT should always == 0 in this case.
-        radialT = 0;
-    }
-
-    // Now that we've identified the T values of the last parametric and radial edges, our final
-    // T value for combinedEdgeID is whichever is larger.
-    float T = max(parametricT, radialT);
-
-    // Evaluate the cubic at T. Use De Casteljau's for its accuracy and stability.
-    float2 ab = unchecked_mix(P[0], P[1], T);
-    float2 bc = unchecked_mix(P[1], P[2], T);
-    float2 cd = unchecked_mix(P[2], P[3], T);
-    float2 abc = unchecked_mix(ab, bc, T);
-    float2 bcd = unchecked_mix(bc, cd, T);
-    position = unchecked_mix(abc, bcd, T);
-
-    // If we went with T=parametricT, then update the tangent. Otherwise leave it at the radial
-    // tangent found previously. (In the event that parametricT == radialT, we keep the radial
-    // tangent.)
-    if (T != radialT) {
-        tangent = bcd - abc;
-    }
-})";
+    code->appendf(R"(
+        // If we went with T=parametricT, then update the tangent. Otherwise leave it at the radial
+        // tangent found previously. (In the event that parametricT == radialT, we keep the radial
+        // tangent.)
+        if (T != radialT) {)");
+    code->appendf(R"(
+            tangent =%s bcd - abc;)", (hasConics) ? " (w >= 0) ? bc*u - ab*v :" : "");
+    code->appendf(R"(
+        }
+    })");
+}
 
 SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
         const GrGLSLPrimitiveProcessor* glslPrimProc, const char* versionAndExtensionDecls,
         const GrGLSLUniformHandler& uniformHandler, const GrShaderCaps& shaderCaps) const {
-    auto impl = static_cast<const GrStrokeTessellateShader::Impl*>(glslPrimProc);
+    SkASSERT(fMode == Mode::kTessellation);
+    auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslPrimProc);
 
     SkString code(versionAndExtensionDecls);
     code.append("layout(quads, equal_spacing, ccw) in;\n");
@@ -657,10 +735,9 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
     code.appendf("#define float4x2 mat4x2\n");
 
     // Use a #define to make extra sure we don't prevent the loop from unrolling.
-    code.appendf("#define MAX_TESSELLATION_SEGMENTS_LOG2 %i\n",
+    code.appendf("#define MAX_PARAMETRIC_SEGMENTS_LOG2 %i\n",
                  SkNextLog2(shaderCaps.maxTessellationSegments()));
-
-    code.appendf("const float kPI = 3.141592653589793238;\n");
+    code.appendf("#define PI 3.141592653589793238\n");
 
     const char* tessArgs2Name = impl->getTessArgs2UniformName(uniformHandler);
     code.appendf("uniform vec2 %s;\n", tessArgs2Name);
@@ -670,9 +747,13 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
         const char* translateName = impl->getTranslateUniformName(uniformHandler);
         code.appendf("uniform vec2 %s;\n", translateName);
         code.appendf("#define uTranslate %s\n", translateName);
-        const char* affineMatrixName = impl->getAffineMatrixUniformName(uniformHandler);
-        code.appendf("uniform vec4 %s;\n", affineMatrixName);
-        code.appendf("#define uAffineMatrix %s\n", affineMatrixName);
+        if (!fStroke.isHairlineStyle()) {
+            // In the normal case we need the affine matrix too. (In the hairline case we already
+            // applied the affine matrix in the vertex shader.)
+            const char* affineMatrixName = impl->getAffineMatrixUniformName(uniformHandler);
+            code.appendf("uniform vec4 %s;\n", affineMatrixName);
+            code.appendf("#define uAffineMatrix mat2(%s)\n", affineMatrixName);
+        }
     }
 
     code.append(R"(
@@ -685,7 +766,7 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
     uniform vec4 sk_RTAdjust;)");
 
     code.append(kUncheckedMixFn);
-    code.append(kEvalStrokeEdgeFn);
+    append_eval_stroke_edge_fn(&code, false/*hasConics*/);
 
     code.append(R"(
     void main() {
@@ -759,10 +840,14 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
         vec2 vertexPos = position + normalize(vec2(-tangent.y, tangent.x)) * outset;
     )");
 
-    // Transform after tessellation. Stroke widths and normals are defined in (pre-transform) local
-    // path space.
     if (!this->viewMatrix().isIdentity()) {
-        code.append("vertexPos = mat2(uAffineMatrix) * vertexPos + uTranslate;");
+        if (!fStroke.isHairlineStyle()) {
+            // Normal case. Do the transform after tessellation.
+            code.append("vertexPos = uAffineMatrix * vertexPos + uTranslate;");
+        } else {
+            // Hairline case. The scale and skew already happened before tessellation.
+            code.append("vertexPos = vertexPos + uTranslate;");
+        }
     }
 
     code.append(R"(
@@ -773,7 +858,312 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
     return code;
 }
 
+class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
+    void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
+        const auto& shader = args.fGP.cast<GrStrokeTessellateShader>();
+        SkPaint::Join joinType = shader.fStroke.getJoin();
+        args.fVaryingHandler->emitAttributes(shader);
+
+        // Constants.
+        args.fVertBuilder->defineConstant("MAX_PARAMETRIC_SEGMENTS_LOG2",
+                                          GrTessellationPathRenderer::kMaxResolveLevel);
+        args.fVertBuilder->defineConstant("float", "PI", "3.141592653589793238");
+        args.fVertBuilder->defineConstant("QUAD_TERM_POW2",
+                                          GrWangsFormula::length_term_pow2<2>(1));
+        args.fVertBuilder->defineConstant("CUBIC_TERM_POW2",
+                                          GrWangsFormula::length_term_pow2<3>(1));
+
+        // Helper functions.
+        args.fVertBuilder->insertFunction(kAtan2Fn);
+        args.fVertBuilder->insertFunction(kLengthPow2Fn);
+        args.fVertBuilder->insertFunction(kMiterExtentFn);
+        args.fVertBuilder->insertFunction(kUncheckedMixFn);
+        append_eval_stroke_edge_fn(&args.fVertBuilder->functions(), shader.fHasConics);
+        args.fVertBuilder->insertFunction(R"(
+        float cosine_between_vectors(float2 a, float2 b) {
+            float ab_cosTheta = dot(a,b);
+            float ab_pow2 = dot(a,a) * dot(b,b);
+            return (ab_pow2 == 0) ? 1 : clamp(ab_cosTheta * inversesqrt(ab_pow2), -1, 1);
+        })");
+
+        // Tessellation control uniforms.
+        const char* tessArgsName;
+        fTessControlArgsUniform = args.fUniformHandler->addUniform(
+                nullptr, kVertex_GrShaderFlag, kFloat4_GrSLType, "tessControlArgs", &tessArgsName);
+        args.fVertBuilder->codeAppendf("float uParametricIntolerance = %s.x;\n", tessArgsName);
+        args.fVertBuilder->codeAppendf("float uNumRadialSegmentsPerRadian = %s.y;\n", tessArgsName);
+        args.fVertBuilder->codeAppendf("float uMiterLimitInvPow2 = %s.z;\n", tessArgsName);
+        args.fVertBuilder->codeAppendf("float uStrokeRadius = %s.w;\n", tessArgsName);
+
+        // View matrix uniforms.
+        if (!shader.viewMatrix().isIdentity()) {
+            const char* translateName, *affineMatrixName;
+            fAffineMatrixUniform = args.fUniformHandler->addUniform(
+                    nullptr, kVertex_GrShaderFlag, kFloat4_GrSLType, "affineMatrix",
+                    &affineMatrixName);
+            fTranslateUniform = args.fUniformHandler->addUniform(
+                    nullptr, kVertex_GrShaderFlag, kFloat2_GrSLType, "translate", &translateName);
+            args.fVertBuilder->codeAppendf("float2x2 uAffineMatrix = float2x2(%s);\n",
+                                           affineMatrixName);
+            args.fVertBuilder->codeAppendf("float2 uTranslate = %s;\n", translateName);
+        }
+
+        // Tessellation code.
+        args.fVertBuilder->codeAppend(R"(
+        float4x2 P = float4x2(pts01, pts23);
+        float2 lastControlPoint = args.xy;)");
+        if (shader.fHasConics) {
+            args.fVertBuilder->codeAppend(R"(
+            float w = -1;  // w<0 means the curve is an integral cubic.
+            if (isinf(P[3].y)) {
+                w = P[3].x;  // The curve is actually a conic.
+                P[3] = P[2];  // Setting p3 equal to p2 works for the remaining rotational logic.
+            })");
+        }
+        if (shader.fStroke.isHairlineStyle() && !shader.viewMatrix().isIdentity()) {
+            // Hairline case. Transform the points before tessellation. We can still hold off on the
+            // translate until the end; we just need to perform the scale and skew right now.
+            args.fVertBuilder->codeAppend(R"(
+            P = uAffineMatrix * P;
+            lastControlPoint = uAffineMatrix * lastControlPoint;)");
+        }
+        args.fVertBuilder->codeAppend(R"(
+        float numTotalEdges = abs(args.z);
+
+        // Use wang's formula to find how many parametric segments this stroke requires.
+        float l0 = length_pow2(fma(float2(-2), P[1], P[2]) + P[0]);
+        float l1 = length_pow2(fma(float2(-2), P[2], P[3]) + P[1]);)");
+
+        args.fVertBuilder->codeAppendf(R"(
+        float m =%s CUBIC_TERM_POW2 * max(l0, l1);)",
+                (shader.fHasConics) ? " (w >= 0) ? QUAD_TERM_POW2 * l0 :" : "");
+
+        args.fVertBuilder->codeAppend(R"(
+        float numParametricSegments = ceil(sqrt(uParametricIntolerance * sqrt(m)));
+        numParametricSegments = clamp(numParametricSegments, 1, 1 << MAX_PARAMETRIC_SEGMENTS_LOG2);
+        if (P[0] == P[1] && P[2] == P[3]) {
+            // This is how we describe lines, but Wang's formula does not return 1 in this case.
+            numParametricSegments = 1;
+        }
+
+        // Find the starting and ending tangents.
+        float2 tan0 = ((P[0] == P[1]) ? (P[1] == P[2]) ? P[3] : P[2] : P[1]) - P[0];
+        float2 tan1 = P[3] - ((P[3] == P[2]) ? (P[2] == P[1]) ? P[0] : P[1] : P[2]);
+        if (tan0 == float2(0)) {
+            // The stroke is a point. This special case tells us to draw a stroke-width circle as a
+            // 180 degree point stroke instead.
+            tan0 = float2(1,0);
+            tan1 = float2(-1,0);
+        })");
+
+        if (shader.fStroke.getJoin() == SkPaint::kRound_Join) {
+            args.fVertBuilder->codeAppend(R"(
+            // Determine how many edges to give to the round join. We emit the first and final edges
+            // of the join twice: once full width and once restricted to half width. This guarantees
+            // perfect seaming by matching the vertices from the join as well as from the strokes on
+            // either side.
+            float joinRads = acos(cosine_between_vectors(P[0] - lastControlPoint, tan0));
+            float numRadialSegmentsInJoin = max(ceil(joinRads * uNumRadialSegmentsPerRadian), 1);
+            // +2 because we emit the beginning and ending edges twice (see above comment).
+            float numEdgesInJoin = numRadialSegmentsInJoin + 2;
+            // The stroke section needs at least two edges. Don't assign more to the join than
+            // "numTotalEdges - 2".
+            numEdgesInJoin = min(numEdgesInJoin, numTotalEdges - 2);
+            // Lines give all their extra edges to the join.
+            if (numParametricSegments == 1) {
+                numEdgesInJoin = numTotalEdges - 2;
+            }
+            // Negative args.z means the join is a chop, and chop joins get exactly one segment.
+            if (args.z < 0) {
+                // +2 because we emit the beginning and ending edges twice (see above comment).
+                numEdgesInJoin = 1 + 2;
+            })");
+        } else {
+            args.fVertBuilder->codeAppendf(R"(
+            float numEdgesInJoin = %i;")", IndirectInstance::NumExtraEdgesInJoin(joinType));
+        }
+
+        args.fVertBuilder->codeAppend(R"(
+        // Find which direction the curve turns.
+        // NOTE: Since the curve is not allowed to inflect, we can just check F'(.5) x F''(.5).
+        // NOTE: F'(.5) x F''(.5) has the same sign as (P2 - P0) x (P3 - P1)
+        float turn = cross(P[2] - P[0], P[3] - P[1]);
+
+        float numCombinedSegments;
+        float outset = ((sk_VertexID & 1) == 0) ? +1 : -1;
+        float combinedEdgeID = float(sk_VertexID >> 1) - numEdgesInJoin;
+        if (combinedEdgeID < 0) {
+            // We belong to the preceding join. The first and final edges get duplicated, so we only
+            // have "numEdgesInJoin - 2" segments.
+            numCombinedSegments = numEdgesInJoin - 2;
+            numParametricSegments = 1;  // Joins don't have parametric segments.
+            P = float4x2(P[0], P[0], P[0], P[0]);  // Colocate all points on the junction point.
+            tan1 = tan0;
+            // Don't let tan0 become zero. The code as-is isn't built to handle that case. tan0=0
+            // means the join is disabled, and to disable it with the existing code we can leave
+            // tan0 equal to tan1.
+            if (lastControlPoint != P[0]) {
+                tan0 = P[0] - lastControlPoint;
+            }
+            turn = cross(tan0, tan1);
+            // Shift combinedEdgeID to the range [-1, numCombinedSegments]. This duplicates the
+            // first edge and lands one edge at the very end of the join. (The duplicated final edge
+            // will actually come from the section of our strip that belongs to the stroke.)
+            combinedEdgeID += numCombinedSegments + 1;
+            // We normally restrict the join on one side of the junction, but if the tangents are
+            // nearly equivalent this could theoretically result in bad seaming and/or cracks on the
+            // side we don't put it on. If the tangents are nearly equivalent then we leave the join
+            // double-sided.
+            float sinEpsilon = 1e-2;  // ~= sin(180deg / 3000)
+            bool tangentsNearlyParallel =
+                    (abs(turn) * inversesqrt(dot(tan0, tan0) * dot(tan1, tan1))) < sinEpsilon;
+            if (!tangentsNearlyParallel || dot(tan0, tan1) < 0) {
+                // There are two edges colocated at the beginning. Leave the first one double sided
+                // for seaming with the previous stroke. (The double sided edge at the end will
+                // actually come from the section of our strip that belongs to the stroke.)
+                if (combinedEdgeID >= 0) {
+                    outset = clamp(outset, (turn < 0) ? -1 : 0, (turn >= 0) ? 1 : 0);
+                }
+            }
+            combinedEdgeID = max(combinedEdgeID, 0);
+        } else {
+            // We belong to the stroke.
+            numCombinedSegments = numTotalEdges - numEdgesInJoin - 1;
+        }
+
+        // Don't take more parametric segments than there are total segments.
+        numParametricSegments = min(numParametricSegments, numCombinedSegments);
+
+        // Any leftover edges go to radial segments.
+        float numRadialSegments = numCombinedSegments + 1 - numParametricSegments;
+
+        // Calculate the curve's starting angle and rotation.
+        float angle0 = atan2(tan0);
+        float cosTheta = cosine_between_vectors(tan0, tan1);
+        float rotation = acos(cosTheta);
+        if (turn < 0) {
+            // Adjust sign of rotation to match the direction the curve turns.
+            rotation = -rotation;
+        }
+        float radsPerSegment = rotation / numRadialSegments;)");
+
+        if (joinType == SkPaint::kMiter_Join) {
+            args.fVertBuilder->codeAppend(R"(
+            // Vertices #4 and #5 belong to the edge of the join that extends to the miter point.
+            if ((sk_VertexID | 1) == (4 | 5)) {
+                outset *= miter_extent(cosTheta, uMiterLimitInvPow2);
+            })");
+        }
+
+        args.fVertBuilder->codeAppendf(R"(
+        float2 tangent, strokeCoord;
+        eval_stroke_edge(P,)");
+        if (shader.fHasConics) {
+            args.fVertBuilder->codeAppend(R"(
+                         w,)");
+        }
+        args.fVertBuilder->codeAppend(R"(
+                         numParametricSegments, combinedEdgeID, tan0, radsPerSegment, angle0,
+                         tangent, strokeCoord);)");
+
+        args.fVertBuilder->codeAppend(R"(
+        if (combinedEdgeID == 0) {
+            // Edges at the beginning of their section use P[0] and tan0. This ensures crack-free
+            // seaming between instances.
+            strokeCoord = P[0];
+            tangent = tan0;
+        }
+
+        if (combinedEdgeID == numCombinedSegments) {
+            // Edges at the end of their section use P[1] and tan1. This ensures crack-free seaming
+            // between instances.
+            strokeCoord = P[3];
+            tangent = tan1;
+        }
+
+        float2 ortho = normalize(float2(tangent.y, -tangent.x));
+        strokeCoord += ortho * (uStrokeRadius * outset);)");
+
+        if (shader.viewMatrix().isIdentity()) {
+            // No transform matrix.
+            gpArgs->fPositionVar.set(kFloat2_GrSLType, "strokeCoord");
+            gpArgs->fLocalCoordVar.set(kFloat2_GrSLType, "strokeCoord");
+        } else if (!shader.fStroke.isHairlineStyle()) {
+            // Normal case. Do the transform after tessellation.
+            args.fVertBuilder->codeAppend(R"(
+            float2 devCoord = uAffineMatrix * strokeCoord + uTranslate;)");
+            gpArgs->fPositionVar.set(kFloat2_GrSLType, "devCoord");
+            gpArgs->fLocalCoordVar.set(kFloat2_GrSLType, "strokeCoord");
+        } else {
+            // Hairline case. The scale and skew already happened before tessellation.
+            args.fVertBuilder->codeAppend(R"(
+            float2 devCoord = strokeCoord + uTranslate;
+            float2 localCoord = inverse(uAffineMatrix) * strokeCoord;)");
+            gpArgs->fPositionVar.set(kFloat2_GrSLType, "devCoord");
+            gpArgs->fLocalCoordVar.set(kFloat2_GrSLType, "localCoord");
+        }
+
+        // The fragment shader just outputs a uniform color.
+        const char* colorUniformName;
+        fColorUniform = args.fUniformHandler->addUniform(
+                nullptr, kFragment_GrShaderFlag, kHalf4_GrSLType, "color", &colorUniformName);
+        args.fFragBuilder->codeAppendf("%s = %s;", args.fOutputColor, colorUniformName);
+        args.fFragBuilder->codeAppendf("%s = half4(1);", args.fOutputCoverage);
+    }
+
+    void setData(const GrGLSLProgramDataManager& pdman,
+                 const GrPrimitiveProcessor& primProc) override {
+        const auto& shader = primProc.cast<GrStrokeTessellateShader>();
+        const auto& stroke = shader.fStroke;
+
+        // Set up the tessellation control uniforms.
+        Tolerances tolerances;
+        if (!stroke.isHairlineStyle()) {
+            tolerances.set(shader.viewMatrix().getMaxScale(), stroke.getWidth());
+        } else {
+            // In the hairline case we transform prior to tessellation. Set up tolerances for an
+            // identity viewMatrix and a strokeWidth of 1.
+            tolerances.set(1, 1);
+        }
+        float miterLimit = stroke.getMiter();
+        pdman.set4f(fTessControlArgsUniform,
+                    tolerances.fParametricIntolerance,  // uParametricIntolerance
+                    tolerances.fNumRadialSegmentsPerRadian,  // uNumRadialSegmentsPerRadian
+                    1 / (miterLimit * miterLimit),  // uMiterLimitInvPow2
+                    (stroke.isHairlineStyle()) ? .5f : stroke.getWidth() * .5);  // uStrokeRadius
+
+        // Set up the view matrix, if any.
+        const SkMatrix& m = shader.viewMatrix();
+        if (!m.isIdentity()) {
+            pdman.set2f(fTranslateUniform, m.getTranslateX(), m.getTranslateY());
+            pdman.set4f(fAffineMatrixUniform, m.getScaleX(), m.getSkewY(), m.getSkewX(),
+                        m.getScaleY());
+        }
+
+        pdman.set4fv(fColorUniform, 1, shader.fColor.vec());
+    }
+
+    GrGLSLUniformHandler::UniformHandle fTessControlArgsUniform;
+    GrGLSLUniformHandler::UniformHandle fTranslateUniform;
+    GrGLSLUniformHandler::UniformHandle fAffineMatrixUniform;
+    GrGLSLUniformHandler::UniformHandle fColorUniform;
+};
+
+void GrStrokeTessellateShader::getGLSLProcessorKey(const GrShaderCaps&,
+                                                   GrProcessorKeyBuilder* b) const {
+    uint32_t key = this->viewMatrix().isIdentity();
+    if (fMode == Mode::kIndirect) {
+        SkASSERT(fStroke.getJoin() >> 2 == 0);
+        key = (key << 2) | fStroke.getJoin();
+    }
+    key = (key << 1) | (uint32_t)fStroke.isHairlineStyle();
+    key = (key << 1) | (uint32_t)fHasConics;
+    key = (key << 1) | (uint32_t)fMode;  // Must be last.
+    b->add32(key);
+}
+
 GrGLSLPrimitiveProcessor* GrStrokeTessellateShader::createGLSLInstance(
         const GrShaderCaps&) const {
-    return new Impl;
+    return (fMode == Mode::kTessellation) ?
+            (GrGLSLPrimitiveProcessor*)new TessellationImpl : new IndirectImpl;
 }

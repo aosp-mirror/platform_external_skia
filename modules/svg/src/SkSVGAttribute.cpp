@@ -10,7 +10,7 @@
 SkSVGPresentationAttributes SkSVGPresentationAttributes::MakeInitial() {
     SkSVGPresentationAttributes result;
 
-    result.fFill.set(SkSVGPaint(SkSVGColorType(SK_ColorBLACK)));
+    result.fFill.set(SkSVGPaint(SkSVGColor(SK_ColorBLACK)));
     result.fFillOpacity.set(SkSVGNumberType(1));
     result.fFillRule.set(SkSVGFillRule(SkSVGFillRule::Type::kNonZero));
     result.fClipRule.set(SkSVGFillRule(SkSVGFillRule::Type::kNonZero));
@@ -33,6 +33,11 @@ SkSVGPresentationAttributes SkSVGPresentationAttributes::MakeInitial() {
     result.fFontSize.init(SkSVGLength(24));
     result.fFontWeight.init(SkSVGFontWeight::Type::kNormal);
     result.fTextAnchor.init(SkSVGTextAnchor::Type::kStart);
+
+    result.fStopColor.set(SkSVGColor(SK_ColorBLACK));
+    result.fStopOpacity.set(SkSVGNumberType(1));
+    result.fFloodColor.set(SkSVGColor(SK_ColorBLACK));
+    result.fFloodOpacity.set(SkSVGNumberType(1));
 
     return result;
 }

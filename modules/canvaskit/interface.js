@@ -904,9 +904,26 @@ CanvasKit.onRuntimeInitialized = function() {
     throw 'encodeToData expected to take 0 or 2 arguments. Got ' + arguments.length;
   };
 
-  CanvasKit.Image.prototype.makeShader = function(xTileMode, yTileMode, localMatrix) {
+  // makeShaderCubic returns a shader for a given image, allowing it to be used on
+  // a paint as well as other purposes. This shader will be higher quality than
+  // other shader functions. See CubicResampler in SkSamplingOptions.h for more information
+  // on the cubicResampler params.
+  CanvasKit.Image.prototype.makeShaderCubic = function(xTileMode, yTileMode,
+                                                       cubicResamplerB, cubicResamplerC,
+                                                       localMatrix) {
     var localMatrixPtr = copy3x3MatrixToWasm(localMatrix);
-    return this._makeShader(xTileMode, yTileMode, localMatrixPtr);
+    return this._makeShaderCubic(xTileMode, yTileMode, cubicResamplerB,
+                                 cubicResamplerC, localMatrixPtr);
+  };
+
+  // makeShaderCubic returns a shader for a given image, allowing it to be used on
+  // a paint as well as other purposes. This shader will draw more quickly than
+  // other shader functions, but at a lower quality.
+  CanvasKit.Image.prototype.makeShaderOptions = function(xTileMode, yTileMode,
+                                                         filterMode, mipmapMode,
+                                                         localMatrix) {
+    var localMatrixPtr = copy3x3MatrixToWasm(localMatrix);
+    return this._makeShaderOptions(xTileMode, yTileMode, filterMode, mipmapMode, localMatrixPtr);
   };
 
   function readPixels(source, srcX, srcY, imageInfo, destMallocObj, bytesPerRow) {
@@ -1084,16 +1101,28 @@ CanvasKit.onRuntimeInitialized = function() {
     this._drawDRRect(oPtr, iPtr, paint);
   };
 
-  CanvasKit.Canvas.prototype.drawImageNine = function(img, center, dest, paint) {
+  CanvasKit.Canvas.prototype.drawImageNine = function(img, center, dest, filter, paint) {
     var cPtr = copyIRectToWasm(center);
     var dPtr = copyRectToWasm(dest);
-    this._drawImageNine(img, cPtr, dPtr, paint);
+    this._drawImageNine(img, cPtr, dPtr, filter, paint || null);
   };
 
   CanvasKit.Canvas.prototype.drawImageRect = function(img, src, dest, paint, fastSample) {
     var sPtr = copyRectToWasm(src,  _scratchRectPtr);
     var dPtr = copyRectToWasm(dest, _scratchRect2Ptr);
     this._drawImageRect(img, sPtr, dPtr, paint, !!fastSample);
+  };
+
+  CanvasKit.Canvas.prototype.drawImageRectCubic = function(img, src, dest, B, C, paint) {
+    var sPtr = copyRectToWasm(src,  _scratchRectPtr);
+    var dPtr = copyRectToWasm(dest, _scratchRect2Ptr);
+    this._drawImageRectCubic(img, sPtr, dPtr, B, C, paint || null);
+  };
+
+  CanvasKit.Canvas.prototype.drawImageRectOptions = function(img, src, dest, filter, mipmap, paint) {
+    var sPtr = copyRectToWasm(src,  _scratchRectPtr);
+    var dPtr = copyRectToWasm(dest, _scratchRect2Ptr);
+    this._drawImageRectOptions(img, sPtr, dPtr, filter, mipmap, paint || null);
   };
 
   CanvasKit.Canvas.prototype.drawOval = function(oval, paint) {

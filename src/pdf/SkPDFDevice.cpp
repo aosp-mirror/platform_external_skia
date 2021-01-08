@@ -136,7 +136,8 @@ sk_sp<SkImage> alpha_image_to_greyscale_image(const SkImage* mask) {
                           greyBitmap.getPixels(), greyBitmap.rowBytes(), 0, 0)) {
         return nullptr;
     }
-    return SkImage::MakeFromBitmap(greyBitmap);
+    greyBitmap.setImmutable();
+    return greyBitmap.asImage();
 }
 
 static int add_resource(SkTHashSet<SkPDFIndirectReference>& resources, SkPDFIndirectReference ref) {
@@ -630,6 +631,7 @@ void SkPDFDevice::internalDrawPath(const SkClipStack& clipStack,
 void SkPDFDevice::drawImageRect(const SkImage* image,
                                 const SkRect* src,
                                 const SkRect& dst,
+                                const SkSamplingOptions&,   // ignored
                                 const SkPaint& paint,
                                 SkCanvas::SrcRectConstraint) {
     SkASSERT(image);
@@ -976,7 +978,9 @@ sk_sp<SkSurface> SkPDFDevice::makeSurface(const SkImageInfo& info, const SkSurfa
 static std::vector<SkPDFIndirectReference> sort(const SkTHashSet<SkPDFIndirectReference>& src) {
     std::vector<SkPDFIndirectReference> dst;
     dst.reserve(src.count());
-    src.foreach([&dst](SkPDFIndirectReference ref) { dst.push_back(ref); } );
+    for (SkPDFIndirectReference ref : src) {
+        dst.push_back(ref);
+    }
     std::sort(dst.begin(), dst.end(),
             [](SkPDFIndirectReference a, SkPDFIndirectReference b) { return a.fValue < b.fValue; });
     return dst;

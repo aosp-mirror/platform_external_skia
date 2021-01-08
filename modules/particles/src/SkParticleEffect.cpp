@@ -13,21 +13,10 @@
 #include "modules/particles/include/SkParticleDrawable.h"
 #include "modules/particles/include/SkReflected.h"
 #include "modules/skresources/include/SkResources.h"
+#include "src/core/SkPaintPriv.h"
 #include "src/sksl/SkSLByteCode.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLUtil.h"
-
-static inline float bits_to_float(uint32_t u) {
-    float f;
-    memcpy(&f, &u, sizeof(uint32_t));
-    return f;
-}
-
-static inline uint32_t float_to_bits(float f) {
-    uint32_t u;
-    memcpy(&u, &f, sizeof(uint32_t));
-    return u;
-}
 
 static const char* kCommonHeader =
 R"(
@@ -45,19 +34,17 @@ struct Effect {
   float  spin;
   float4 color;
   float  frame;
-  uint   flags;
-  uint   seed;
+  float  seed;
 };
 
 uniform float dt;
 
-// We use the LCG from Numerical Recipes. It's not great, but has nice properties for our situation:
-// It's fast (just integer mul + add), and only uses vectorized instructions. The modulus is 2^32,
-// so we can just rely on uint overflow. All output bits are used, again that simplifies the usage
-// here (although we shift down so that our float divisor retains precision).
-float rand(inout uint seed) {
-  seed = seed * 1664525 + 1013904223;
-  return float(seed >> 4) / 0xFFFFFFF;
+// We use a not-very-random pure-float PRNG. It does have nice properties for our situation:
+// It's fast-ish. Importantly, it only uses types and operations that exist in public SkSL's
+// minimum spec (no bitwise operations on integers).
+float rand(inout float seed) {
+  seed = sin(31*seed) + sin(19*seed + 1);
+  return fract(abs(10*seed));
 }
 )";
 
@@ -73,8 +60,7 @@ struct Particle {
   float  spin;
   float4 color;
   float  frame;
-  uint   flags;
-  uint   seed;
+  float  seed;
 };
 
 uniform Effect effect;
@@ -175,7 +161,7 @@ SkParticleEffect::SkParticleEffect(sk_sp<SkParticleEffectParams> params)
 
 void SkParticleEffect::start(double now, bool looping, SkPoint position, SkVector heading,
                              float scale, SkVector velocity, float spin, SkColor4f color,
-                             float frame, uint32_t flags, uint32_t seed) {
+                             float frame, float seed) {
     fCount = 0;
     fLastTime = now;
     fSpawnRemainder = 0.0f;
@@ -198,15 +184,14 @@ void SkParticleEffect::start(double now, bool looping, SkPoint position, SkVecto
     fState.fSpin     = spin;
     fState.fColor    = color;
     fState.fFrame    = frame;
-    fState.fFlags    = flags;
     fState.fRandom   = seed;
 
     // Defer running effectSpawn until the first update (to reuse the code when looping)
 }
 
-// Numerical Recipes
-static uint32_t nr_rand(uint32_t x) {
-    return x * 1664525 + 1013904223;
+// Just the update step from our "rand" function
+static float advance_seed(float x) {
+    return sinf(31*x) + sinf(19*x + 1);
 }
 
 // Spawns new effects that were requested by any *effect* script (copies default values from
@@ -214,11 +199,11 @@ static uint32_t nr_rand(uint32_t x) {
 void SkParticleEffect::processEffectSpawnRequests(double now) {
     for (const auto& spawnReq : fSpawnRequests) {
         sk_sp<SkParticleEffect> newEffect(new SkParticleEffect(std::move(spawnReq.fParams)));
-        fState.fRandom = nr_rand(fState.fRandom);
+        fState.fRandom = advance_seed(fState.fRandom);
 
         newEffect->start(now, spawnReq.fLoop, fState.fPosition, fState.fHeading, fState.fScale,
                          fState.fVelocity, fState.fSpin, fState.fColor, fState.fFrame,
-                         fState.fFlags, fState.fRandom);
+                         fState.fRandom);
         fSubEffects.push_back(std::move(newEffect));
     }
     fSpawnRequests.reset();
@@ -257,8 +242,7 @@ void SkParticleEffect::processParticleSpawnRequests(double now, int start) {
                            data[SkParticles::kColorB         ][idx],
                            data[SkParticles::kColorA         ][idx] },
                            data[SkParticles::kSpriteFrame    ][idx],
-             float_to_bits(data[SkParticles::kFlags          ][idx]),
-             float_to_bits(data[SkParticles::kRandom         ][idx]));
+                           data[SkParticles::kRandom         ][idx]);
         fSubEffects.push_back(std::move(newEffect));
     }
     fSpawnRequests.reset();
@@ -385,7 +369,7 @@ void SkParticleEffect::advanceTime(double now) {
 
         for (int i = 0; i < numToSpawn; ++i) {
             // Mutate our random seed so each particle definitely gets a different generator
-            fState.fRandom = nr_rand(fState.fRandom);
+            fState.fRandom = advance_seed(fState.fRandom);
             fParticles.fData[SkParticles::kAge            ][fCount] = 0.0f;
             fParticles.fData[SkParticles::kLifetime       ][fCount] = 0.0f;
             fParticles.fData[SkParticles::kPositionX      ][fCount] = fState.fPosition.fX;
@@ -401,8 +385,7 @@ void SkParticleEffect::advanceTime(double now) {
             fParticles.fData[SkParticles::kColorB         ][fCount] = fState.fColor.fB;
             fParticles.fData[SkParticles::kColorA         ][fCount] = fState.fColor.fA;
             fParticles.fData[SkParticles::kSpriteFrame    ][fCount] = fState.fFrame;
-            fParticles.fData[SkParticles::kFlags          ][fCount] = bits_to_float(fState.fFlags);
-            fParticles.fData[SkParticles::kRandom         ][fCount] = bits_to_float(fState.fRandom);
+            fParticles.fData[SkParticles::kRandom         ][fCount] = fState.fRandom;
             fCount++;
         }
 
@@ -462,7 +445,7 @@ void SkParticleEffect::update(double now) {
 void SkParticleEffect::draw(SkCanvas* canvas) {
     if (this->isAlive(false) && fParams->fDrawable) {
         SkPaint paint;
-        paint.setFilterQuality(SkFilterQuality::kMedium_SkFilterQuality);
+        SkPaintPriv::SetFQ(&paint, SkFilterQuality::kMedium_SkFilterQuality);
         fParams->fDrawable->draw(canvas, fParticles, fCount, paint);
     }
 

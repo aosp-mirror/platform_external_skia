@@ -20,11 +20,10 @@ public:
     GrChildProcessorAndGlobal(const GrChildProcessorAndGlobal& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "ChildProcessorAndGlobal"; }
-    bool usesExplicitReturn() const override;
 private:
     GrChildProcessorAndGlobal(std::unique_ptr<GrFragmentProcessor> child)
     : INHERITED(kGrChildProcessorAndGlobal_ClassID, kNone_OptimizationFlags) {
-        SkASSERT(child);        this->registerChild(std::move(child), SkSL::SampleUsage::PassThrough());    }
+        this->registerChild(std::move(child), SkSL::SampleUsage::PassThrough());    }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;

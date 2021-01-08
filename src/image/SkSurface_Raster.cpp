@@ -94,7 +94,7 @@ sk_sp<SkImage> SkSurface_Raster::onNewImageSnapshot(const SkIRect* subset) {
         dst.allocPixels(fBitmap.info().makeDimensions(subset->size()));
         SkAssertResult(fBitmap.readPixels(dst.pixmap(), subset->left(), subset->top()));
         dst.setImmutable(); // key, so MakeFromBitmap doesn't make a copy of the buffer
-        return SkImage::MakeFromBitmap(dst);
+        return dst.asImage();
     }
 
     SkCopyPixelsMode cpm = kIfMutable_SkCopyPixelsMode;
@@ -144,7 +144,7 @@ void SkSurface_Raster::onCopyOnWrite(ContentChangeMode mode) {
         // what is being used by the image. Next we update the canvas to use
         // this as its backend, so we can't modify the image's pixels anymore.
         SkASSERT(this->getCachedCanvas());
-        this->getCachedCanvas()->getDevice()->replaceBitmapBackendForRasterSurface(fBitmap);
+        this->getCachedCanvas()->baseDevice()->replaceBitmapBackendForRasterSurface(fBitmap);
     }
 }
 

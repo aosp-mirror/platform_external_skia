@@ -71,7 +71,8 @@ void DDLPromiseImageHelper::PromiseImageInfo::setMipLevels(const SkBitmap& baseL
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 PromiseImageCallbackContext::~PromiseImageCallbackContext() {
-    SkASSERT(fDoneCnt == fNumImages);
+    // See comment in release() about YUVA image creation failures.
+    // SkASSERT(fDoneCnt == fNumImages);1
     SkASSERT(!fTotalFulfills || fDoneCnt);
 
     if (fPromiseImageTexture) {
@@ -314,7 +315,7 @@ sk_sp<SkImage> DDLPromiseImageHelper::CreatePromiseImages(const void* rawData,
     // texture wouldn't fit on the GPU. Create a separate bitmap-backed image for each thread.
     if (!curImage.isYUV() && !curImage.callbackContext(0)) {
         SkASSERT(curImage.baseLevel().isImmutable());
-        return SkImage::MakeFromBitmap(curImage.baseLevel());
+        return curImage.baseLevel().asImage();
     }
 
     SkASSERT(curImage.index() == *indexPtr);
@@ -340,6 +341,9 @@ sk_sp<SkImage> DDLPromiseImageHelper::CreatePromiseImages(const void* rawData,
                 PromiseImageCallbackContext::PromiseImageFulfillProc,
                 PromiseImageCallbackContext::PromiseImageReleaseProc,
                 contexts);
+        if (!image) {
+            return nullptr;
+        }
         for (int i = 0; i < textureCount; ++i) {
             curImage.callbackContext(i)->wasAddedToImage();
         }

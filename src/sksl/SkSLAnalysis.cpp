@@ -35,7 +35,6 @@
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
-#include "src/sksl/ir/SkSLWhileStatement.h"
 
 // Expressions
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -50,7 +49,6 @@
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLInlineMarker.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
-#include "src/sksl/ir/SkSLNullLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLSetting.h"
@@ -490,7 +488,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitExpression(EXPR e) {
         case Expression::Kind::kFloatLiteral:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kIntLiteral:
-        case Expression::Kind::kNullLiteral:
         case Expression::Kind::kSetting:
         case Expression::Kind::kTypeReference:
         case Expression::Kind::kVariableReference:
@@ -615,10 +612,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
         case Statement::Kind::kVarDeclaration: {
             auto& v = s.template as<VarDeclaration>();
             return v.value() && this->visitExpression(*v.value());
-        }
-        case Statement::Kind::kWhile: {
-            auto& w = s.template as<WhileStatement>();
-            return this->visitExpression(*w.test()) || this->visitStatement(*w.statement());
         }
         default:
             SkUNREACHABLE;

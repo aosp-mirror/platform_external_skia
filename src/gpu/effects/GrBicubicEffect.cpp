@@ -99,7 +99,7 @@ void GrBicubicEffect::Impl::emitCode(EmitArgs& args) {
                     "bicubicColor.rgb = max(half3(0.0), min(bicubicColor.rgb, bicubicColor.aaa));");
             break;
     }
-    fragBuilder->codeAppendf("%s = bicubicColor;", args.fOutputColor);
+    fragBuilder->codeAppendf("return bicubicColor;");
 }
 
 #include "src/shaders/SkImageShader.h"
@@ -229,7 +229,10 @@ GrGLSLFragmentProcessor* GrBicubicEffect::onCreateGLSLInstance() const { return 
 
 bool GrBicubicEffect::onIsEqual(const GrFragmentProcessor& other) const {
     const auto& that = other.cast<GrBicubicEffect>();
-    return fDirection == that.fDirection && fClamp == that.fClamp;
+    return fDirection == that.fDirection &&
+           fClamp == that.fClamp         &&
+           fKernel.B == that.fKernel.B   &&
+           fKernel.C == that.fKernel.C;
 }
 
 SkPMColor4f GrBicubicEffect::constantOutputForConstantInput(const SkPMColor4f& input) const {

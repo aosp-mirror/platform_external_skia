@@ -29,7 +29,6 @@
 #include "src/sksl/ir/SkSLInlineMarker.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLNullLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
@@ -47,7 +46,6 @@
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
-#include "src/sksl/ir/SkSLWhileStatement.h"
 
 #ifdef SKSL_STANDALONE
 
@@ -191,11 +189,6 @@ void Dehydrator::write(const Symbol& s) {
                     this->writeId(&t);
                     this->write(t.name());
                     break;
-                case Type::TypeKind::kNullable:
-                    this->writeCommand(Rehydrator::kNullableType_Command);
-                    this->writeId(&t);
-                    this->write(t.componentType());
-                    break;
                 case Type::TypeKind::kStruct:
                     this->writeCommand(Rehydrator::kStructType_Command);
                     this->writeId(&t);
@@ -336,9 +329,6 @@ void Dehydrator::write(const Expression* e) {
                 this->writeS32(i.value());
                 break;
             }
-            case Expression::Kind::kNullLiteral:
-                this->writeCommand(Rehydrator::kNullLiteral_Command);
-                break;
             case Expression::Kind::kPostfix: {
                 const PostfixExpression& p = e->as<PostfixExpression>();
                 this->writeCommand(Rehydrator::kPostfix_Command);
@@ -492,13 +482,6 @@ void Dehydrator::write(const Statement* s) {
                 this->write(v.baseType());
                 this->writeS8(v.arraySize());
                 this->write(v.value().get());
-                break;
-            }
-            case Statement::Kind::kWhile: {
-                const WhileStatement& w = s->as<WhileStatement>();
-                this->writeCommand(Rehydrator::kWhile_Command);
-                this->write(w.test().get());
-                this->write(w.statement().get());
                 break;
             }
         }

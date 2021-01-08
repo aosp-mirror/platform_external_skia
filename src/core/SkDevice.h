@@ -198,6 +198,9 @@ public:
 
     virtual bool android_utils_clipWithStencil() { return false; }
 
+    virtual GrRecordingContext* recordingContext() const { return nullptr; }
+    virtual GrSurfaceDrawContext* surfaceDrawContext() { return nullptr; }
+
 protected:
     enum TileUsage {
         kPossible_TileUsage,    //!< the created device may be drawn tiled
@@ -265,11 +268,10 @@ protected:
                           bool pathIsMutable = false) = 0;
 
     virtual void drawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
-                               const SkPaint&, SkCanvas::SrcRectConstraint) = 0;
-    virtual void drawImageNine(const SkImage*, const SkIRect& center,
-                               const SkRect& dst, const SkPaint&);
+                               const SkSamplingOptions&, const SkPaint&,
+                               SkCanvas::SrcRectConstraint) = 0;
     virtual void drawImageLattice(const SkImage*, const SkCanvas::Lattice&,
-                                  const SkRect& dst, const SkPaint&);
+                                  const SkRect& dst, SkFilterMode, const SkPaint&);
 
     virtual void drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) = 0;
     virtual void drawShadow(const SkPath&, const SkDrawShadowRec&);
@@ -281,7 +283,8 @@ protected:
 
     // default implementation calls drawPath
     virtual void drawAtlas(const SkImage* atlas, const SkRSXform[], const SkRect[],
-                           const SkColor[], int count, SkBlendMode, const SkPaint&);
+                           const SkColor[], int count, SkBlendMode, const SkSamplingOptions&,
+                           const SkPaint&);
 
     virtual void drawAnnotation(const SkRect&, const char[], SkData*) {}
 
@@ -347,8 +350,6 @@ protected:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    virtual GrRecordingContext* recordingContext() const { return nullptr; }
-
     virtual sk_sp<SkSurface> makeSurface(const SkImageInfo&, const SkSurfaceProps&);
     virtual bool onPeekPixels(SkPixmap*) { return false; }
 
@@ -405,6 +406,10 @@ protected:
         return nullptr;
     }
 
+    // SkCanvas uses NoPixelsDevice when onCreateDevice fails; but then it needs to be able to
+    // inspect a layer's device to know if calling drawDevice() later is allowed.
+    virtual bool isNoPixelsDevice() const { return false; }
+
 private:
     friend class SkAndroidFrameworkUtils;
     friend class SkCanvas;
@@ -425,10 +430,6 @@ private:
 
     virtual bool forceConservativeRasterClip() const { return false; }
 
-    /**
-     * Don't call this!
-     */
-    virtual GrRenderTargetContext* accessRenderTargetContext() { return nullptr; }
 
     // Configure the device's coordinate spaces, specifying both how its device image maps back to
     // the global space (via 'deviceToGlobal') and the initial CTM of the device (via
@@ -517,7 +518,8 @@ protected:
     void drawPaint(const SkPaint& paint) override {}
     void drawPoints(SkCanvas::PointMode, size_t, const SkPoint[], const SkPaint&) override {}
     void drawImageRect(const SkImage*, const SkRect*, const SkRect&,
-                       const SkPaint&, SkCanvas::SrcRectConstraint) override {}
+                       const SkSamplingOptions&, const SkPaint&,
+                       SkCanvas::SrcRectConstraint) override {}
     void drawRect(const SkRect&, const SkPaint&) override {}
     void drawOval(const SkRect&, const SkPaint&) override {}
     void drawRRect(const SkRRect&, const SkPaint&) override {}
@@ -528,6 +530,8 @@ protected:
 
     void drawFilteredImage(const skif::Mapping& mapping, SkSpecialImage* src,
                            const SkImageFilter* filter, const SkPaint& paint) override {}
+
+    bool isNoPixelsDevice() const override { return true; }
 
 private:
 struct ClipState {

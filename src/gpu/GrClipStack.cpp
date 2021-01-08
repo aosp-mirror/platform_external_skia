@@ -375,7 +375,7 @@ static GrSurfaceProxyView render_sw_mask(GrRecordingContext* context, const SkIR
     }
 }
 
-static void render_stencil_mask(GrRecordingContext* context, GrRenderTargetContext* rtc,
+static void render_stencil_mask(GrRecordingContext* context, GrSurfaceDrawContext* rtc,
                                 uint32_t genID, const SkIRect& bounds,
                                 const GrClipStack::Element** elements, int count,
                                 GrAppliedClip* out) {
@@ -1255,7 +1255,7 @@ GrClip::PreClipResult GrClipStack::preApply(const SkRect& bounds, GrAA aa) const
     SkUNREACHABLE;
 }
 
-GrClip::Effect GrClipStack::apply(GrRecordingContext* context, GrRenderTargetContext* rtc,
+GrClip::Effect GrClipStack::apply(GrRecordingContext* context, GrSurfaceDrawContext* rtc,
                                   GrAAType aa, bool hasUserStencilSettings,
                                   GrAppliedClip* out, SkRect* bounds) const {
     // TODO: Once we no longer store SW masks, we don't need to sneak the provider in like this
@@ -1287,7 +1287,7 @@ GrClip::Effect GrClipStack::apply(GrRecordingContext* context, GrRenderTargetCon
     if (cs.shader()) {
         static const GrColorInfo kCoverageColorInfo{GrColorType::kUnknown, kPremul_SkAlphaType,
                                                     nullptr};
-        GrFPArgs args(context, *fMatrixProvider, kNone_SkFilterQuality, &kCoverageColorInfo);
+        GrFPArgs args(context, *fMatrixProvider, SkSamplingOptions(), &kCoverageColorInfo);
         clipFP = as_SB(cs.shader())->asFragmentProcessor(args);
         if (clipFP) {
             // The initial input is the coverage from the geometry processor, so this ensures it

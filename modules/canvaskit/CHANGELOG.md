@@ -6,19 +6,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+ - Improper error returned when a WebGL context could not be used.
+
+## [0.22.0] - 2020-12-17
+
+### Added
+ - `Canvas.drawImageCubic`, `Canvas.drawImageOptions`, `Canvas.drawImageRectCubic`,
+   `Canvas.drawImageRectOptions` to replace functionality that previously required FilterQuality.
+ - A copy of this changelog is published in NPM releases for easier discovery.
+
+### Breaking
+ - `Canvas.drawImageNine` now takes a required FilterMode (the Paint still is optional).
+
+## [0.21.0] - 2020-12-16
+
 ### Added
  - `getImageInfo()` and `getColorSpace()` to the `Image` type.
+ - `CanvasKit.deleteContext()` for deleting WebGL contexts when done with them, resizing, etc.
+ - `Image.makeCopyWithDefaultMipmaps()` for use with `Image.makeShaderOptions`; necessary if
+   choosing a `MipmapMode` that is not `None`.
 
 ### Breaking
  - `Path.addPoly()` no longer accepts a 2d array of points, but a flattened 1d array.
  - `MakeVertices()` no longer accepts 2d arrays of points or texture coordinates, but
    flattened 1d arrays in both places.
+ - `Paint.setFilterQuality`, `Paint.getFilterQuality`, `Image.makeShader` have been removed.
+   The new way to specify interpolation settings is with the newly added `Image.makeShader*`
+   methods. `Image.makeShaderCubic` is a replacement for high quality; `Image.makeShaderOptions`
+   is for medium/low.
 
 ### Changed
  - `MakeImage` is now documented in the Typescript types (index.d.ts). The parameters have been
    streamlined to align with other, similar APIs.
  - `MakeAnimatedImageFromEncoded` respects Exif metadata. `MakeImageFromEncoded` already did so
    (and continues to do so).
+ - The Canvas2D emulation layer always uses high quality image smoothing (this drastically
+   simplifies the underlying code).
+ - We now compile CanvasKit with emsdk 2.0.10 when testing and deploying to npm.
+ - Instead of shipping a "core" build to npm, we ship a "profiling" build, which is the same as
+   the main build, just with unmangled function calls and other debugging info useful for
+   determining where runtime is spent.
 
 ### Fixed
  - `Canvas.drawPoints` correctly takes a flattened Array or TypedArray of points (as the

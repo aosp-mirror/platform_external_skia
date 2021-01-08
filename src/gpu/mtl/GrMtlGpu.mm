@@ -22,7 +22,6 @@
 #include "src/gpu/mtl/GrMtlTexture.h"
 #include "src/gpu/mtl/GrMtlTextureRenderTarget.h"
 #include "src/gpu/mtl/GrMtlUtil.h"
-#include "src/sksl/SkSLCompiler.h"
 
 #import <simd/simd.h>
 
@@ -144,8 +143,7 @@ GrMtlGpu::GrMtlGpu(GrDirectContext* direct, const GrContextOptions& options,
         , fStagingBufferManager(this)
         , fDisconnected(false) {
     fMtlCaps.reset(new GrMtlCaps(options, fDevice, featureSet));
-    fCaps = fMtlCaps;
-    fCompiler.reset(new SkSL::Compiler(fMtlCaps->shaderCaps()));
+    this->initCapsAndCompiler(fMtlCaps);
     fCurrentCmdBuffer = GrMtlCommandBuffer::Make(fQueue);
 #if GR_METAL_SDK_VERSION >= 230
     if (@available(macOS 11.0, iOS 14.0, *)) {
@@ -846,8 +844,12 @@ static GrColorType mtl_format_to_backend_tex_clear_colortype(MTLPixelFormat form
     SkUNREACHABLE;
 }
 
-void copy_src_data(char* dst, size_t bytesPerPixel, const SkTArray<size_t>& individualMipOffsets,
-                   const SkPixmap srcData[], int numMipLevels, size_t bufferSize) {
+void copy_src_data(char* dst,
+                   size_t bytesPerPixel,
+                   const SkTArray<size_t>& individualMipOffsets,
+                   const GrPixmap srcData[],
+                   int numMipLevels,
+                   size_t bufferSize) {
     SkASSERT(srcData && numMipLevels);
     SkASSERT(individualMipOffsets.count() == numMipLevels);
 

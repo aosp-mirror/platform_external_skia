@@ -43,7 +43,6 @@
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
-#include "src/sksl/ir/SkSLWhileStatement.h"
 
 namespace SkSL {
 
@@ -104,11 +103,18 @@ protected:
     };
 
     enum SpecialIntrinsic {
+        kBitcast_SpecialIntrinsic,
+        kBitCount_SpecialIntrinsic,
+        kDegrees_SpecialIntrinsic,
         kDistance_SpecialIntrinsic,
         kDot_SpecialIntrinsic,
+        kFaceforward_SpecialIntrinsic,
+        kFindLSB_SpecialIntrinsic,
+        kFindMSB_SpecialIntrinsic,
         kLength_SpecialIntrinsic,
         kMod_SpecialIntrinsic,
         kNormalize_SpecialIntrinsic,
+        kRadians_SpecialIntrinsic,
         kTexture_SpecialIntrinsic,
     };
 
@@ -166,7 +172,7 @@ protected:
 
     bool writeStructDefinition(const Type& type);
 
-    void disallowArrayTypes(const Type& type);
+    void disallowArrayTypes(const Type& type, int offset);
 
     void writeBaseType(const Type& type);
 
@@ -177,6 +183,11 @@ protected:
     void writeInterfaceBlock(const InterfaceBlock& intf);
 
     void writeFunctionStart(const FunctionDeclaration& f);
+
+    void writeFunctionRequirementParams(const FunctionDeclaration& f,
+                                        const char*& separator);
+
+    void writeFunctionRequirementArgs(const FunctionDeclaration& f, const char*& separator);
 
     bool writeFunctionDeclaration(const FunctionDeclaration& f);
 
@@ -204,9 +215,15 @@ protected:
 
     void writeMinAbsHack(Expression& absExpr, Expression& otherExpr);
 
-    String getOutParamHelper(const FunctionDeclaration& function, const ExpressionArray& arguments);
+    String getOutParamHelper(const FunctionCall& c,
+                             const ExpressionArray& arguments,
+                             const SkTArray<VariableReference*>& outVars);
 
     String getInverseHack(const Expression& mat);
+
+    String getBitcastIntrinsic(const Type& outType);
+
+    String getTempVariable(const Type& varType);
 
     void writeFunctionCall(const FunctionCall& c);
 
@@ -257,8 +274,6 @@ protected:
 
     void writeForStatement(const ForStatement& f);
 
-    void writeWhileStatement(const WhileStatement& w);
-
     void writeDoStatement(const DoStatement& d);
 
     void writeSwitchStatement(const SwitchStatement& s);
@@ -284,7 +299,6 @@ protected:
     int fPaddingCount = 0;
     const char* fLineEnding;
     const Context& fContext;
-    StringStream fHeader;
     String fFunctionHeader;
     StringStream fExtraFunctions;
     Program::Kind fProgramKind;
@@ -305,6 +319,8 @@ protected:
     int fUniformBuffer = -1;
     String fRTHeightName;
     const FunctionDeclaration* fCurrentFunction = nullptr;
+    int fSwizzleHelperCount = 0;
+    bool fIgnoreVariableReferenceModifiers = false;
 
     using INHERITED = CodeGenerator;
 };

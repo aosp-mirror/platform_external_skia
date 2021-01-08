@@ -24,7 +24,7 @@
 #include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProducer.h"
 #include "src/gpu/SkGr.h"
@@ -205,18 +205,21 @@ void SkImage_GpuYUVA::flattenToRGB(GrRecordingContext* context) const {
     }
 
     // Needs to create a render target in order to draw to it for the yuv->rgb conversion.
-    auto renderTargetContext = GrRenderTargetContext::Make(
-            context, GrColorType::kRGBA_8888, this->refColorSpace(), SkBackingFit::kExact,
-            this->dimensions(), 1, GrMipmapped::kNo, GrProtected::kNo);
-    if (!renderTargetContext) {
+    GrImageInfo info(GrColorType::kRGBA_8888,
+                     kPremul_SkAlphaType,
+                     this->refColorSpace(),
+                     this->dimensions());
+    auto surfaceFillContext = GrSurfaceFillContext::Make(context,
+                                                         info,
+                                                         SkBackingFit::kExact,
+                                                         /*sample count*/ 1,
+                                                         GrMipmapped::kNo,
+                                                         GrProtected::kNo);
+    if (!surfaceFillContext) {
         return;
     }
 
-    const SkRect rect = SkRect::MakeIWH(this->width(), this->height());
     const GrCaps& caps = *context->priv().caps();
-
-    GrPaint paint;
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
     auto fp = GrYUVtoRGBEffect::Make(fViews,
                                      fYUVAIndices,
@@ -230,11 +233,10 @@ void SkImage_GpuYUVA::flattenToRGB(GrRecordingContext* context) const {
                                                        this->alphaType());
         fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(colorSpaceXform));
     }
-    paint.setColorFragmentProcessor(std::move(fp));
 
-    renderTargetContext->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(), rect);
+    surfaceFillContext->fillWithFP(std::move(fp));
 
-    fRGBView = renderTargetContext->readSurfaceView();
+    fRGBView = surfaceFillContext->readSurfaceView();
     SkASSERT(fRGBView.swizzle() == GrSwizzle());
     for (auto& v : fViews) {
         v.reset();
@@ -327,33 +329,6 @@ sk_sp<SkImage> SkImage::MakeFromYUVATextures(GrRecordingContext* context,
                                        numTextures,
                                        yuvaIndices,
                                        imageColorSpace);
-}
-
-sk_sp<SkImage> SkImage::MakeFromYUVATextures(GrRecordingContext* ctx,
-                                             SkYUVColorSpace colorSpace,
-                                             const GrBackendTexture yuvaTextures[],
-                                             const SkYUVAIndex yuvaIndices[4],
-                                             SkISize imageSize,
-                                             GrSurfaceOrigin textureOrigin,
-                                             sk_sp<SkColorSpace> imageColorSpace,
-                                             TextureReleaseProc textureReleaseProc,
-                                             ReleaseContext releaseContext) {
-    auto releaseHelper = GrRefCntedCallback::Make(textureReleaseProc, releaseContext);
-
-    int numTextures;
-    if (!SkYUVAIndex::AreValidIndices(yuvaIndices, &numTextures)) {
-        return nullptr;
-    }
-
-    GrSurfaceProxyView tempViews[4];
-    if (!SkImage_GpuYUVA::MakeTempTextureProxies(ctx, yuvaTextures, numTextures, yuvaIndices,
-                                                 textureOrigin, tempViews,
-                                                 std::move(releaseHelper))) {
-        return nullptr;
-    }
-
-    return sk_make_sp<SkImage_GpuYUVA>(sk_ref_sp(ctx), imageSize, kNeedNewImageUniqueID, colorSpace,
-                                       tempViews, numTextures, yuvaIndices, imageColorSpace);
 }
 
 sk_sp<SkImage> SkImage::MakeFromYUVAPixmaps(GrRecordingContext* context,
@@ -454,7 +429,7 @@ sk_sp<SkImage> SkImage_GpuYUVA::MakePromiseYUVATexture(
     if (yuvaBackendTextureInfo.yuvaInfo().origin() != SkEncodedOrigin::kDefault_SkEncodedOrigin) {
         // SkImage_GpuYUVA does not support this yet. This will get removed
         // when the old APIs are gone and we only have to support YUVA configs described by
-        // SkYUVAInfo.
+        // SkYUVAInfo. Fix with skbug.com/10632.
         return nullptr;
     }
 

@@ -20,11 +20,10 @@ public:
     GrNestedChildProcessors(const GrNestedChildProcessors& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "NestedChildProcessors"; }
-    bool usesExplicitReturn() const override;
 private:
     GrNestedChildProcessors(std::unique_ptr<GrFragmentProcessor> child1, std::unique_ptr<GrFragmentProcessor> child2)
     : INHERITED(kGrNestedChildProcessors_ClassID, kNone_OptimizationFlags) {
-        SkASSERT(child1);        this->registerChild(std::move(child1), SkSL::SampleUsage::PassThrough());        SkASSERT(child2);        this->registerChild(std::move(child2), SkSL::SampleUsage::PassThrough());    }
+        this->registerChild(std::move(child1), SkSL::SampleUsage::PassThrough());        this->registerChild(std::move(child2), SkSL::SampleUsage::PassThrough());    }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;

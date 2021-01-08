@@ -557,19 +557,33 @@ if (skia_compile_processors || skia_compile_sksl_tests) {
   executable("skslc") {
     defines = [
       "SKSL_STANDALONE",
-      "SK_ENABLE_SKSL_INTERPRETER",
       "SK_ENABLE_SPIRV_VALIDATION",
     ]
     sources = [
+      "src/core/SkCpu.cpp",
+      "src/core/SkData.cpp",
+      "src/core/SkHalf.cpp",
       "src/core/SkMalloc.cpp",
       "src/core/SkMath.cpp",
       "src/core/SkSemaphore.cpp",
+      "src/core/SkStream.cpp",
+      "src/core/SkString.cpp",
+      "src/core/SkStringUtils.cpp",
       "src/core/SkThreadID.cpp",
+      "src/core/SkUtils.cpp",
+      "src/core/SkVM.cpp",
       "src/gpu/GrBlockAllocator.cpp",
       "src/gpu/GrMemoryPool.cpp",
       "src/ports/SkMemory_malloc.cpp",
+      "src/ports/SkOSFile_stdio.cpp",
       "src/sksl/SkSLMain.cpp",
+      "src/utils/SkUTF.cpp",
     ]
+    if (is_win) {
+      sources += [ "src/ports/SkOSFile_win.cpp" ]
+    } else {
+      sources += [ "src/ports/SkOSFile_posix.cpp" ]
+    }
     sources += skia_sksl_sources
     sources += skia_sksl_gpu_sources
     include_dirs = [ "." ]
@@ -609,8 +623,8 @@ if (skia_compile_processors || skia_compile_sksl_tests) {
       "src/sksl/sksl_geom.sksl",
       "src/sksl/sksl_gpu.sksl",
       "src/sksl/sksl_interp.sksl",
-      "src/sksl/sksl_pipeline.sksl",
       "src/sksl/sksl_public.sksl",
+      "src/sksl/sksl_runtime.sksl",
       "src/sksl/sksl_vert.sksl",
     ]
     outputs = [ "$root_out_dir/{{source_file_part}}" ]
@@ -770,6 +784,15 @@ if (skia_compile_sksl_tests) {
     lang = "--metal"
     settings = "--settings"
   }
+  compile_sksl("skvm_tests") {
+    sources = sksl_skvm_tests_sources
+    outputPatterns = [ [
+          "/golden/",
+          ".skvm",
+        ] ]
+    lang = "--skvm"
+    settings = "--settings"
+  }
   compile_sksl("spirv_tests") {
     sources = sksl_spirv_tests_sources
     outputPatterns = [ [
@@ -788,6 +811,8 @@ if (skia_compile_sksl_tests) {
   }
   group("compile_sksl_metal_tests") {
   }
+  group("compile_sksl_skvm_tests") {
+  }
   group("compile_sksl_spirv_tests") {
   }
 }
@@ -800,6 +825,7 @@ optional("gpu") {
     ":compile_sksl_glsl_nosettings_tests",
     ":compile_sksl_glsl_tests",
     ":compile_sksl_metal_tests",
+    ":compile_sksl_skvm_tests",
     ":compile_sksl_spirv_tests",
     ":dehydrate_sksl",
     ":run_sksllex",
@@ -1459,9 +1485,11 @@ if (skia_enable_tools) {
     "include/svg",
     "include/utils",
     "include/utils/mac",
+    "modules/particles/include",
+    "modules/skottie/include",
     "modules/skparagraph/include",
     "modules/skshaper/include",
-    "modules/skottie/include",
+    "modules/svg/include",
   ]
 
   # Used by gn_to_bp.py to list our public include dirs.
@@ -1505,8 +1533,11 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":skia.h",
+        "modules/particles",
         "modules/skottie",
+        "modules/skparagraph",
         "modules/skshaper",
+        "modules/svg",
       ]
     }
   }
@@ -1873,13 +1904,6 @@ if (skia_enable_tools) {
     }
   }
 
-  test_lib("skvm_builders") {
-    sources = [
-      "tools/SkVMBuilders.cpp",
-      "tools/SkVMBuilders.h",
-    ]
-  }
-
   import("gn/tests.gni")
   test_lib("tests") {
     sources = tests_sources + pathops_tests_sources
@@ -1901,14 +1925,13 @@ if (skia_enable_tools) {
     deps = [
       ":flags",
       ":skia",
-      ":skvm_builders",
       ":tool_utils",
       "experimental/skrive:tests",
       "modules/skottie:tests",
       "modules/skparagraph:tests",
       "modules/sksg:tests",
       "modules/skshaper",
-      "modules/svg",
+      "modules/svg:tests",
       "//third_party/libpng",
       "//third_party/libwebp",
       "//third_party/zlib",
@@ -1926,7 +1949,6 @@ if (skia_enable_tools) {
       ":gm",
       ":gpu_tool_utils",
       ":skia",
-      ":skvm_builders",
       ":tool_utils",
       "modules/skparagraph:bench",
       "modules/skshaper",
@@ -2353,7 +2375,6 @@ if (skia_enable_tools) {
         ":skia",
         "modules/skottie",
         "modules/sksg:samples",
-        "//third_party/oboe",
       ]
     }
   }
@@ -2543,8 +2564,11 @@ if (skia_enable_tools) {
       deps = [
         ":skia",
         ":skia.h",
+        "modules/particles",
         "modules/skottie",
+        "modules/skparagraph",
         "modules/skshaper",
+        "modules/svg",
       ]
     }
   }
@@ -3108,4 +3132,10 @@ if (is_ios && skia_enable_skottie && !skia_enable_flutter_defines) {
   group("skottie_ios") {
     deps = [ "tools/skottie_ios_app" ]
   }
+}
+
+executable("skia_c_api_example") {
+  sources = [ "experimental/c-api-example/skia-c-example.c" ]
+  include_dirs = [ "." ]
+  deps = [ ":skia" ]
 }

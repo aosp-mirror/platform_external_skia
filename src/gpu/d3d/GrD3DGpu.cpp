@@ -65,10 +65,9 @@ GrD3DGpu::GrD3DGpu(GrDirectContext* direct, const GrContextOptions& contextOptio
         , fStagingBufferManager(this)
         , fConstantsRingBuffer(this, 128 * 1024, kConstantAlignment, GrGpuBufferType::kVertex)
         , fOutstandingCommandLists(sizeof(OutstandingCommandList), kDefaultOutstandingAllocCnt) {
-    fCaps.reset(new GrD3DCaps(contextOptions,
-                              backendContext.fAdapter.get(),
-                              backendContext.fDevice.get()));
-    fCompiler.reset(new SkSL::Compiler(fCaps->shaderCaps()));
+    this->initCapsAndCompiler(sk_make_sp<GrD3DCaps>(contextOptions,
+                                                    backendContext.fAdapter.get(),
+                                                    backendContext.fDevice.get()));
 
     fCurrentDirectCommandList = fResourceProvider.findOrCreateDirectCommandList();
     SkASSERT(fCurrentDirectCommandList);
@@ -1042,9 +1041,11 @@ GrBackendTexture GrD3DGpu::onCreateBackendTexture(SkISize dimensions,
     return GrBackendTexture(dimensions.width(), dimensions.height(), info);
 }
 
-static void copy_src_data(char* mapPtr, DXGI_FORMAT dxgiFormat,
+static void copy_src_data(char* mapPtr,
+                          DXGI_FORMAT dxgiFormat,
                           D3D12_PLACED_SUBRESOURCE_FOOTPRINT* placedFootprints,
-                          const SkPixmap srcData[], int numMipLevels) {
+                          const GrPixmap srcData[],
+                          int numMipLevels) {
     SkASSERT(srcData && numMipLevels);
     SkASSERT(!GrDxgiFormatIsCompressed(dxgiFormat));
     SkASSERT(mapPtr);

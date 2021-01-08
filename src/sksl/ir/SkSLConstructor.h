@@ -99,7 +99,8 @@ public:
         return true;
     }
 
-    bool compareConstant(const Context& context, const Expression& other) const override;
+    ComparisonResult compareConstant(const Context& context,
+                                     const Expression& other) const override;
 
     template <typename resultType>
     resultType getVecComponent(int index) const;
@@ -122,7 +123,7 @@ public:
 
     SKSL_FLOAT getMatComponent(int col, int row) const override;
 
-    int64_t getConstantInt() const override;
+    SKSL_INT getConstantInt() const override;
 
     SKSL_FLOAT getConstantFloat() const override;
 

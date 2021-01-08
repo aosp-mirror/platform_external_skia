@@ -31,7 +31,6 @@ public:
     GrRRectBlurEffect(const GrRRectBlurEffect& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "RRectBlurEffect"; }
-    bool usesExplicitReturn() const override;
     float sigma;
     SkRect rect;
     float cornerRadius;
@@ -50,7 +49,6 @@ private:
             , rect(rect)
             , cornerRadius(cornerRadius) {
         this->registerChild(std::move(inputFP), SkSL::SampleUsage::PassThrough());
-        SkASSERT(ninePatchFP);
         this->registerChild(std::move(ninePatchFP), SkSL::SampleUsage::Explicit());
     }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;

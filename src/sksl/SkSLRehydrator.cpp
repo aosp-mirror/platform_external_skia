@@ -31,7 +31,6 @@
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLModifiers.h"
-#include "src/sksl/ir/SkSLNullLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
@@ -49,7 +48,6 @@
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
-#include "src/sksl/ir/SkSLWhileStatement.h"
 
 namespace SkSL {
 
@@ -157,7 +155,7 @@ const Symbol* Rehydrator::symbol() {
                 name += "[" + to_string(count) + "]";
             }
             const Type* result = fSymbolTable->takeOwnershipOfSymbol(
-                    std::make_unique<Type>(name, Type::TypeKind::kArray, *componentType, count));
+                    Type::MakeArrayType(name, *componentType, count));
             this->addSymbol(id, result);
             return result;
         }
@@ -165,7 +163,7 @@ const Symbol* Rehydrator::symbol() {
             uint16_t id = this->readU16();
             StringFragment name = this->readString();
             const Type* result = fSymbolTable->takeOwnershipOfSymbol(
-                    std::make_unique<Type>(name, Type::TypeKind::kEnum));
+                    Type::MakeSimpleType(name, Type::TypeKind::kEnum));
             this->addSymbol(id, result);
             return result;
         }
@@ -194,14 +192,6 @@ const Symbol* Rehydrator::symbol() {
                     std::make_unique<Field>(/*offset=*/-1, owner, index));
             return result;
         }
-        case kNullableType_Command: {
-            uint16_t id = this->readU16();
-            const Type* base = this->type();
-            const Type* result = fSymbolTable->takeOwnershipOfSymbol(
-                    std::make_unique<Type>(base->name() + "?", Type::TypeKind::kNullable, *base));
-            this->addSymbol(id, result);
-            return result;
-        }
         case kStructType_Command: {
             uint16_t id = this->readU16();
             StringFragment name = this->readString();
@@ -215,7 +205,7 @@ const Symbol* Rehydrator::symbol() {
                 fields.emplace_back(m, fieldName, type);
             }
             const Type* result = fSymbolTable->takeOwnershipOfSymbol(
-                    std::make_unique<Type>(/*offset=*/-1, name, std::move(fields)));
+                    Type::MakeStructType(/*offset=*/-1, name, std::move(fields)));
             this->addSymbol(id, result);
             return result;
         }
@@ -445,12 +435,6 @@ std::unique_ptr<Statement> Rehydrator::statement() {
         }
         case Rehydrator::kVoid_Command:
             return nullptr;
-        case Rehydrator::kWhile_Command: {
-            std::unique_ptr<Expression> expr = this->expression();
-            std::unique_ptr<Statement> stmt = this->statement();
-            return std::unique_ptr<Statement>(new WhileStatement(-1, std::move(expr),
-                                                                 std::move(stmt)));
-        }
         default:
             printf("unsupported statement %d\n", kind);
             SkASSERT(false);
@@ -517,8 +501,6 @@ std::unique_ptr<Expression> Rehydrator::expression() {
             int value = this->readS32();
             return std::make_unique<IntLiteral>(-1, value, type);
         }
-        case Rehydrator::kNullLiteral_Command:
-            return std::make_unique<NullLiteral>(fContext, -1);
         case Rehydrator::kPostfix_Command: {
             Token::Kind op = (Token::Kind) this->readU8();
             std::unique_ptr<Expression> operand = this->expression();

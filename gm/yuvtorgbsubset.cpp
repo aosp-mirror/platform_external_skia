@@ -21,8 +21,8 @@
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrPaint.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrSamplerState.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/effects/GrYUVtoRGBEffect.h"
 
@@ -84,7 +84,7 @@ protected:
         }
     }
 
-    DrawResult onDraw(GrRecordingContext* context, GrRenderTargetContext* renderTargetContext,
+    DrawResult onDraw(GrRecordingContext* context, GrSurfaceDrawContext* surfaceDrawContext,
                       SkCanvas* canvas, SkString* errorMsg) override {
         GrSurfaceProxyView views[3];
 
@@ -135,7 +135,7 @@ protected:
                 if (fp) {
                     GrPaint grPaint;
                     grPaint.setColorFragmentProcessor(std::move(fp));
-                    renderTargetContext->drawRect(
+                    surfaceDrawContext->drawRect(
                             nullptr, std::move(grPaint), GrAA::kYes, ctm, rect);
                 }
                 x += rect.width() + kTestPad;

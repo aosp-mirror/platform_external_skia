@@ -351,8 +351,7 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* direct)
     // Toss out any pre-existing OOM that was hanging around before we got started.
     this->checkAndResetOOMed();
 
-    fCaps = sk_ref_sp(fGLContext->caps());
-    fCompiler = std::make_unique<SkSL::Compiler>(fCaps->shaderCaps());
+    this->initCapsAndCompiler(sk_ref_sp(fGLContext->caps()));
 
     fHWTextureUnitBindings.reset(this->numTextureUnits());
 
@@ -2206,8 +2205,7 @@ void GrGLGpu::flushRenderTargetNoColorWrites(GrGLRenderTarget* target) {
         fHWBoundRenderTargetUniqueID = rtID;
         this->flushViewport(target->width(), target->height());
     }
-    if (this->caps()->workarounds().force_update_scissor_state_when_binding_fbo0 &&
-        fBoundDrawFramebuffer == 0) {
+    if (this->caps()->workarounds().force_update_scissor_state_when_binding_fbo0) {
         // The driver forgets the correct scissor state when using FBO 0.
         if (!fHWScissorSettings.fRect.isInvalid()) {
             const GrNativeRect& r = fHWScissorSettings.fRect;
@@ -3633,7 +3631,7 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
     bool result = false;
     if (data->type() == BackendTextureData::Type::kPixmaps) {
         SkTDArray<GrMipLevel> texels;
-        GrColorType colorType = SkColorTypeToGrColorType(data->pixmap(0).colorType());
+        GrColorType colorType = data->pixmap(0).colorType();
         texels.append(numMipLevels);
         for (int i = 0; i < numMipLevels; ++i) {
             texels[i] = {data->pixmap(i).addr(), data->pixmap(i).rowBytes()};

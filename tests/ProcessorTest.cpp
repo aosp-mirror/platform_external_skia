@@ -15,13 +15,14 @@
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ops/GrFillRectOp.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
 #include "tests/TestUtils.h"
+
 #include <atomic>
 #include <random>
 
@@ -129,7 +130,7 @@ private:
         public:
             TestGLSLFP() {}
             void emitCode(EmitArgs& args) override {
-                args.fFragBuilder->codeAppendf("%s = half4(1);", args.fOutputColor);
+                args.fFragBuilder->codeAppendf("return half4(1);");
             }
 
         private:
@@ -156,7 +157,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
 
     for (bool makeClone : {false, true}) {
         for (int parentCnt = 0; parentCnt < 2; parentCnt++) {
-            auto renderTargetContext = GrRenderTargetContext::Make(
+            auto surfaceDrawContext = GrSurfaceDrawContext::Make(
                     context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1});
             {
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
@@ -175,10 +176,10 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
                         clone = fp->clone();
                     }
                     GrOp::Owner op = TestOp::Make(context, std::move(fp));
-                    renderTargetContext->addDrawOp(std::move(op));
+                    surfaceDrawContext->addDrawOp(std::move(op));
                     if (clone) {
                         op = TestOp::Make(context, std::move(clone));
-                        renderTargetContext->addDrawOp(std::move(op));
+                        surfaceDrawContext->addDrawOp(std::move(op));
                     }
                 }
 
@@ -227,7 +228,7 @@ static GrColor input_texel_color(int i, int j, SkScalar delta) {
 }
 
 void test_draw_op(GrRecordingContext* rContext,
-                  GrRenderTargetContext* rtc,
+                  GrSurfaceDrawContext* rtc,
                   std::unique_ptr<GrFragmentProcessor> fp) {
     GrPaint paint;
     paint.setColorFragmentProcessor(std::move(fp));
@@ -240,14 +241,14 @@ void test_draw_op(GrRecordingContext* rContext,
 
 // The output buffer must be the same size as the render-target context.
 void render_fp(GrDirectContext* dContext,
-               GrRenderTargetContext* rtc,
+               GrSurfaceDrawContext* rtc,
                std::unique_ptr<GrFragmentProcessor> fp,
                GrColor* outBuffer) {
     test_draw_op(dContext, rtc, std::move(fp));
     std::fill_n(outBuffer, rtc->width() * rtc->height(), 0);
-    rtc->readPixels(dContext, SkImageInfo::Make(rtc->width(), rtc->height(), kRGBA_8888_SkColorType,
-                                      kPremul_SkAlphaType),
-                    outBuffer, /*rowBytes=*/0, /*srcPt=*/{0, 0});
+    auto ii = SkImageInfo::Make(rtc->dimensions(), kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+    GrPixmap resultPM(ii, outBuffer, rtc->width()*sizeof(uint32_t));
+    rtc->readPixels(dContext, resultPM, {0, 0});
 }
 
 // This class is responsible for reproducibly generating a random fragment processor.
@@ -392,9 +393,9 @@ GrSurfaceProxyView make_input_texture(GrRecordingContext* context,
 
 // We tag logged data as unpremul to avoid conversion when encoding as PNG. The input texture
 // actually contains unpremul data. Also, even though we made the result data by rendering into
-// a "unpremul" GrRenderTargetContext, our input texture is unpremul and outside of the random
+// a "unpremul" GrSurfaceDrawContext, our input texture is unpremul and outside of the random
 // effect configuration, we didn't do anything to ensure the output is actually premul. We just
-// don't currently allow kUnpremul GrRenderTargetContexts.
+// don't currently allow kUnpremul GrSurfaceDrawContexts.
 static constexpr auto kLogAlphaType = kUnpremul_SkAlphaType;
 
 bool log_pixels(GrColor* pixels, int widthHeight, SkString* dst) {
@@ -412,7 +413,7 @@ bool log_texture_view(GrDirectContext* dContext, GrSurfaceProxyView src, SkStrin
     auto sContext = GrSurfaceContext::Make(dContext, std::move(src), ii.colorInfo());
     SkBitmap bm;
     SkAssertResult(bm.tryAllocPixels(ii));
-    SkAssertResult(sContext->readPixels(dContext, ii, bm.getPixels(), bm.rowBytes(), {0, 0}));
+    SkAssertResult(sContext->readPixels(dContext, bm.pixmap(), {0, 0}));
     return BipmapToBase64DataURI(bm, dst);
 }
 
@@ -544,7 +545,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
 
     // Make the destination context for the test.
     static constexpr int kRenderSize = 256;
-    auto rtc = GrRenderTargetContext::Make(
+    auto rtc = GrSurfaceDrawContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kRenderSize, kRenderSize});
 
@@ -909,7 +910,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
 
     // Make the destination context for the test.
     static constexpr int kRenderSize = 1024;
-    auto rtc = GrRenderTargetContext::Make(
+    auto rtc = GrSurfaceDrawContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kRenderSize, kRenderSize});
 

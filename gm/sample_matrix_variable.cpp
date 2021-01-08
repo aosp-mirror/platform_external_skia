@@ -57,8 +57,7 @@ class GLSLSampleMatrixVariableEffect : public GrGLSLFragmentProcessor {
                                                                       "%g, %g, 1)",
                                                                       smve.fXOffset,
                                                                       smve.fYOffset).c_str());
-        fragBuilder->codeAppendf("%s = (%s + %s) / 2;\n", args.fOutputColor, sample1.c_str(),
-                                 sample2.c_str());
+        fragBuilder->codeAppendf("return (%s + %s) / 2;\n", sample1.c_str(), sample2.c_str());
     }
 };
 
@@ -97,7 +96,7 @@ DEF_SIMPLE_GPU_GM(sample_matrix_variable, ctx, rtCtx, canvas, 512, 256) {
         SkMatrix matrix;
         SkSimpleMatrixProvider matrixProvider(matrix);
         GrColorInfo colorInfo;
-        GrFPArgs args(ctx, matrixProvider, kHigh_SkFilterQuality, &colorInfo);
+        GrFPArgs args(ctx, matrixProvider, SkSamplingOptions({1.0f/3, 1.0f/3}), &colorInfo);
         std::unique_ptr<GrFragmentProcessor> gradientFP = as_SB(shader)->asFragmentProcessor(args);
         draw(std::move(gradientFP), -128, 256, 256, 0);
     }

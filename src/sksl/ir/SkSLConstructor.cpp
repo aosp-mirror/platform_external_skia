@@ -14,7 +14,7 @@ std::unique_ptr<Expression> Constructor::constantPropagate(const IRGenerator& ir
     if (this->arguments().size() == 1 && this->arguments()[0]->is<IntLiteral>()) {
         const Context& context = irGenerator.fContext;
         const Type& type = this->type();
-        int64_t intValue = this->arguments()[0]->as<IntLiteral>().value();
+        SKSL_INT intValue = this->arguments()[0]->as<IntLiteral>().value();
 
         if (type.isFloat()) {
             // promote float(1) to 1.0
@@ -30,7 +30,11 @@ std::unique_ptr<Expression> Constructor::constantPropagate(const IRGenerator& ir
     return nullptr;
 }
 
-bool Constructor::compareConstant(const Context& context, const Expression& other) const {
+Expression::ComparisonResult Constructor::compareConstant(const Context& context,
+                                                          const Expression& other) const {
+    if (!other.is<Constructor>()) {
+        return ComparisonResult::kUnknown;
+    }
     const Constructor& c = other.as<Constructor>();
     const Type& myType = this->type();
     const Type& otherType = c.type();
@@ -41,13 +45,13 @@ bool Constructor::compareConstant(const Context& context, const Expression& othe
         for (int i = 0; i < myType.columns(); i++) {
             if (isFloat) {
                 if (this->getFVecComponent(i) != c.getFVecComponent(i)) {
-                    return false;
+                    return ComparisonResult::kNotEqual;
                 }
             } else if (this->getIVecComponent(i) != c.getIVecComponent(i)) {
-                return false;
+                return ComparisonResult::kNotEqual;
             }
         }
-        return true;
+        return ComparisonResult::kEqual;
     }
     // shouldn't be possible to have a constant constructor that isn't a vector or matrix;
     // a constant scalar constructor should have been collapsed down to the appropriate
@@ -56,11 +60,11 @@ bool Constructor::compareConstant(const Context& context, const Expression& othe
     for (int col = 0; col < myType.columns(); col++) {
         for (int row = 0; row < myType.rows(); row++) {
             if (getMatComponent(col, row) != c.getMatComponent(col, row)) {
-                return false;
+                return ComparisonResult::kNotEqual;
             }
         }
     }
-    return true;
+    return ComparisonResult::kEqual;
 }
 
 template <typename ResultType>
@@ -191,7 +195,7 @@ SKSL_FLOAT Constructor::getMatComponent(int col, int row) const {
     ABORT("can't happen, matrix component out of bounds");
 }
 
-int64_t Constructor::getConstantInt() const {
+SKSL_INT Constructor::getConstantInt() const {
     // We're looking for scalar integer constructors only, i.e. `int(1)`.
     SkASSERT(this->arguments().size() == 1);
     SkASSERT(this->type().columns() == 1);
@@ -200,7 +204,7 @@ int64_t Constructor::getConstantInt() const {
     // The inner argument might actually be a float! `int(1.0)` is a valid cast.
     const Expression& expr = *this->arguments().front();
     SkASSERT(expr.type().isScalar());
-    return expr.type().isInteger() ? expr.getConstantInt() : (int64_t)expr.getConstantFloat();
+    return expr.type().isInteger() ? expr.getConstantInt() : (SKSL_INT)expr.getConstantFloat();
 }
 
 SKSL_FLOAT Constructor::getConstantFloat() const {

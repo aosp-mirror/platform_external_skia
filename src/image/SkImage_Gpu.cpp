@@ -33,8 +33,8 @@
 #include "src/gpu/GrImageTextureMaker.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrSemaphore.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureAdjuster.h"
 #include "src/gpu/GrTextureProxy.h"
@@ -88,10 +88,11 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(SkColorType targetCT,
         return nullptr;
     }
 
-    auto renderTargetContext = GrRenderTargetContext::MakeWithFallback(
-            direct, SkColorTypeToGrColorType(targetCT), nullptr, SkBackingFit::kExact,
-            this->dimensions());
-    if (!renderTargetContext) {
+    auto info = this->imageInfo().makeColorType(targetCT).makeColorSpace(targetCS);
+    auto surfaceFillContext = GrSurfaceFillContext::MakeWithFallback(direct,
+                                                                     std::move(info),
+                                                                     SkBackingFit::kExact);
+    if (!surfaceFillContext) {
         return nullptr;
     }
 
@@ -101,20 +102,12 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(SkColorType targetCT,
                                                  targetCS.get(), this->alphaType());
     SkASSERT(colorFP);
 
-    GrPaint paint;
-    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    paint.setColorFragmentProcessor(std::move(colorFP));
+    surfaceFillContext->fillWithFP(std::move(colorFP));
+    SkASSERT(surfaceFillContext->asTextureProxy());
 
-    renderTargetContext->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
-                                  SkRect::MakeIWH(this->width(), this->height()));
-    if (!renderTargetContext->asTextureProxy()) {
-        return nullptr;
-    }
-
-    targetCT = GrColorTypeToSkColorType(renderTargetContext->colorInfo().colorType());
-    // MDB: this call is okay bc we know 'renderTargetContext' was exact
+    targetCT = GrColorTypeToSkColorType(surfaceFillContext->colorInfo().colorType());
     return sk_make_sp<SkImage_Gpu>(sk_ref_sp(direct), kNeedNewImageUniqueID,
-                                   renderTargetContext->readSurfaceView(), targetCT,
+                                   surfaceFillContext->readSurfaceView(), targetCT,
                                    this->alphaType(), std::move(targetCS));
 }
 
@@ -561,7 +554,7 @@ sk_sp<SkImage> SkImage::MakeFromAHardwareBufferWithData(GrDirectContext* dContex
 
     GrSurfaceContext surfaceContext(dContext, std::move(view), image->imageInfo().colorInfo());
 
-    surfaceContext.writePixels(dContext, pixmap.info(), pixmap.addr(), pixmap.rowBytes(), {0, 0});
+    surfaceContext.writePixels(dContext, pixmap, {0, 0});
 
     GrSurfaceProxy* p[1] = {surfaceContext.asSurfaceProxy()};
     drawingManager->flush(p, SkSurface::BackendSurfaceAccess::kNoAccess, {}, nullptr);

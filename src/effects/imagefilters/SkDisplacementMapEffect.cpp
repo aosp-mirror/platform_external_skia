@@ -19,7 +19,7 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
@@ -340,32 +340,33 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffectImpl::onFilterImage(const Context& 
         fp = GrColorSpaceXformEffect::Make(std::move(fp),
                                            color->getColorSpace(), color->alphaType(),
                                            ctx.colorSpace(), kPremul_SkAlphaType);
-
-        GrPaint paint;
-        paint.setColorFragmentProcessor(std::move(fp));
-        paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-        SkMatrix matrix;
-        matrix.setTranslate(-SkIntToScalar(colorBounds.x()), -SkIntToScalar(colorBounds.y()));
-
-        auto renderTargetContext = GrRenderTargetContext::Make(
-                context, ctx.grColorType(), ctx.refColorSpace(), SkBackingFit::kApprox,
-                bounds.size(), 1, GrMipmapped::kNo, isProtected, kBottomLeft_GrSurfaceOrigin);
-        if (!renderTargetContext) {
+        GrImageInfo info(ctx.grColorType(),
+                         kPremul_SkAlphaType,
+                         ctx.refColorSpace(),
+                         bounds.size());
+        auto surfaceFillContext = GrSurfaceFillContext::Make(context,
+                                                             info,
+                                                             SkBackingFit::kApprox,
+                                                             1,
+                                                             GrMipmapped::kNo,
+                                                             isProtected,
+                                                             kBottomLeft_GrSurfaceOrigin);
+        if (!surfaceFillContext) {
             return nullptr;
         }
 
-        renderTargetContext->drawRect(nullptr, std::move(paint), GrAA::kNo, matrix,
-                                      SkRect::Make(colorBounds));
+        surfaceFillContext->fillRectToRectWithFP(colorBounds,
+                                                 SkIRect::MakeSize(colorBounds.size()),
+                                                 std::move(fp));
 
         offset->fX = bounds.left();
         offset->fY = bounds.top();
-        return SkSpecialImage::MakeDeferredFromGpu(
-                context,
-                SkIRect::MakeWH(bounds.width(), bounds.height()),
-                kNeedNewImageUniqueID_SpecialImage,
-                renderTargetContext->readSurfaceView(),
-                renderTargetContext->colorInfo().colorType(),
-                renderTargetContext->colorInfo().refColorSpace());
+        return SkSpecialImage::MakeDeferredFromGpu(context,
+                                                   SkIRect::MakeWH(bounds.width(), bounds.height()),
+                                                   kNeedNewImageUniqueID_SpecialImage,
+                                                   surfaceFillContext->readSurfaceView(),
+                                                   surfaceFillContext->colorInfo().colorType(),
+                                                   surfaceFillContext->colorInfo().refColorSpace());
     }
 #endif
 
@@ -567,20 +568,11 @@ void GrDisplacementMapEffect::Impl::emitCode(EmitArgs& args) {
     fScaleUni = args.fUniformHandler->addUniform(&displacementMap, kFragment_GrShaderFlag,
                                                  kHalf2_GrSLType, "Scale");
     const char* scaleUni = args.fUniformHandler->getUniformCStr(fScaleUni);
-    static constexpr const char* dColor = "dColor";
-    static constexpr const char* cCoords = "cCoords";
-    static constexpr const char* nearZero = "1e-6";  // Since 6.10352e-5 is the smallest half float,
-                                                     // use a number smaller than that to
-                                                     // approximate 0, but leave room for 32-bit
-                                                     // float GPU rounding errors.
 
     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-    auto displacementSample = this->invokeChild(0, args);
-    fragBuilder->codeAppendf("half4 %s = %s;", dColor, displacementSample.c_str());
+    SkString displacementSample = this->invokeChild(/*childIndex=*/0, args);
+    fragBuilder->codeAppendf("half4 dColor = unpremul(%s);", displacementSample.c_str());
 
-    // Unpremultiply the displacement
-    fragBuilder->codeAppendf("%s.rgb = (%s.a < %s) ? half3(0.0) : saturate(%s.rgb / %s.a);",
-                             dColor, dColor, nearZero, dColor, dColor);
     auto chanChar = [](SkColorChannel c) {
         switch(c) {
             case SkColorChannel::kR: return 'r';
@@ -590,14 +582,14 @@ void GrDisplacementMapEffect::Impl::emitCode(EmitArgs& args) {
             default: SkUNREACHABLE;
         }
     };
-    fragBuilder->codeAppendf("float2 %s = %s + %s*(%s.%c%c - half2(0.5));",
-                             cCoords, args.fSampleCoord, scaleUni, dColor,
+    fragBuilder->codeAppendf("float2 cCoords = %s + %s * (dColor.%c%c - half2(0.5));",
+                             args.fSampleCoord, scaleUni,
                              chanChar(displacementMap.xChannelSelector()),
                              chanChar(displacementMap.yChannelSelector()));
 
-    auto colorSample = this->invokeChild(1, args, cCoords);
+    SkString colorSample = this->invokeChild(/*childIndex=*/1, args, "cCoords");
 
-    fragBuilder->codeAppendf("%s = %s;", args.fOutputColor, colorSample.c_str());
+    fragBuilder->codeAppendf("return %s;", colorSample.c_str());
 }
 
 void GrDisplacementMapEffect::Impl::onSetData(const GrGLSLProgramDataManager& pdman,

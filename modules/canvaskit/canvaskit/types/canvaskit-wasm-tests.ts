@@ -112,11 +112,17 @@ function canvasTests(CK: CanvasKit, canvas?: Canvas, paint?: Paint, path?: Path,
     canvas.drawImage(img, 0, -43, paint);
     canvas.drawImageAtCurrentFrame(aImg, 0, -43);
     canvas.drawImageAtCurrentFrame(aImg, 0, -43, paint);
-    canvas.drawImageNine(img, someRect, someRect, paint);
-    canvas.drawImageNine(img, CK.XYWHiRect(10, 20, 40, 40), someRect, paint);
+    canvas.drawImageCubic(img, 0, -43, 1 / 3, 1 / 4, null);
+    canvas.drawImageOptions(img, 0, -43, CK.FilterMode.Nearest, CK.MipmapMode.Nearest, paint);
+    canvas.drawImageNine(img, someRect, someRect, CK.FilterMode.Nearest);
+    canvas.drawImageNine(img, CK.XYWHiRect(10, 20, 40, 40), someRect, CK.FilterMode.Linear, paint);
     canvas.drawImageRect(img, someRect, someRect, paint);
     canvas.drawImageRect(img, CK.XYWHRect(90, 90, 40, 40), someRect, paint);
     canvas.drawImageRect(img, someRect, someRect, paint, true);
+    canvas.drawImageRectCubic(img, someRect, someRect, 1 / 5, 1 / 6);
+    canvas.drawImageRectCubic(img, someRect, someRect, 1 / 5, 1 / 6, paint);
+    canvas.drawImageRectOptions(img, someRect, someRect, CK.FilterMode.Linear, CK.MipmapMode.None);
+    canvas.drawImageRectOptions(img, someRect, someRect, CK.FilterMode.Linear, CK.MipmapMode.None, paint);
     canvas.drawLine(1, 2, 3, 4, paint);
     canvas.drawOval(someRect, paint);
     canvas.drawPaint(paint);
@@ -250,7 +256,11 @@ function imageTests(CK: CanvasKit, imgElement?: HTMLImageElement) {
     const bytes = CK.getDataBytes(dTwo); // $ExpectType Uint8Array
     const h = img.height();
     const w = img.width();
-    const shader = img.makeShader(CK.TileMode.Decal, CK.TileMode.Repeat); // $ExpectType Shader
+    const s1 = img.makeShaderCubic(CK.TileMode.Decal, CK.TileMode.Repeat, 1 / 3, 1 / 3); // $ExpectType Shader
+    const mm = img.makeCopyWithDefaultMipmaps(); // $ExpectType Image
+    const s2 = mm.makeShaderOptions(CK.TileMode.Decal, CK.TileMode.Repeat, // $ExpectType Shader
+        CK.FilterMode.Nearest, CK.MipmapMode.Linear,
+        CK.Matrix.identity());
     const pixels = img.readPixels(85, 1000, { // $ExpectType Float32Array | Uint8Array | null
         width: 79,
         height: 205,
@@ -344,6 +354,7 @@ function fontMgrTests(CK: CanvasKit) {
 function globalTests(CK: CanvasKit) {
     const ctx = CK.currentContext();
     CK.setCurrentContext(ctx);
+    CK.deleteContext(ctx);
     const n = CK.getDecodeCacheLimitBytes();
     const u = CK.getDecodeCacheUsedBytes();
     CK.setDecodeCacheLimitBytes(1000);
@@ -358,7 +369,6 @@ function paintTests(CK: CanvasKit, colorFilter?: ColorFilter, imageFilter?: Imag
     const newPaint = paint.copy(); // $ExpectType Paint
     const bm = paint.getBlendMode();
     const color = paint.getColor(); // $ExpectType Float32Array
-    const fq = paint.getFilterQuality();
     const sc = paint.getStrokeCap();
     const sj = paint.getStrokeJoin();
     const limit = paint.getStrokeMiter(); // $ExpectType number
@@ -373,7 +383,6 @@ function paintTests(CK: CanvasKit, colorFilter?: ColorFilter, imageFilter?: Imag
     paint.setColorFilter(colorFilter);
     paint.setColorInt(CK.ColorAsInt(20, 30, 40));
     paint.setColorInt(CK.ColorAsInt(20, 30, 40), CK.ColorSpace.SRGB);
-    paint.setFilterQuality(CK.FilterQuality.Medium);
     paint.setImageFilter(imageFilter);
     paint.setMaskFilter(maskFilter);
     paint.setPathEffect(pathEffect);

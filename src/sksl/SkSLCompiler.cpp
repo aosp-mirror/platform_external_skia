@@ -60,8 +60,8 @@
 #include "src/sksl/generated/sksl_geom.dehydrated.sksl"
 #include "src/sksl/generated/sksl_gpu.dehydrated.sksl"
 #include "src/sksl/generated/sksl_interp.dehydrated.sksl"
-#include "src/sksl/generated/sksl_pipeline.dehydrated.sksl"
 #include "src/sksl/generated/sksl_public.dehydrated.sksl"
+#include "src/sksl/generated/sksl_runtime.dehydrated.sksl"
 #include "src/sksl/generated/sksl_vert.dehydrated.sksl"
 
 #define MODULE_DATA(name) MakeModuleData(SKSL_INCLUDE_sksl_##name,\
@@ -87,7 +87,7 @@ public:
 Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
         : fContext(std::make_shared<Context>())
         , fCaps(caps)
-        , fInliner(fContext.get(), fCaps)
+        , fInliner(fContext.get())
         , fFlags(flags)
         , fErrorCount(0) {
     SkASSERT(fCaps);
@@ -103,55 +103,47 @@ Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
         TYPE( Float), TYPE( Float2), TYPE( Float3), TYPE( Float4),
         TYPE(  Half), TYPE(  Half2), TYPE(  Half3), TYPE(  Half4),
         TYPE(   Int), TYPE(   Int2), TYPE(   Int3), TYPE(   Int4),
-        TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
-        TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
-        TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
-        TYPE(  Byte), TYPE(  Byte2), TYPE(  Byte3), TYPE(  Byte4),
-        TYPE( UByte), TYPE( UByte2), TYPE( UByte3), TYPE( UByte4),
         TYPE(  Bool), TYPE(  Bool2), TYPE(  Bool3), TYPE(  Bool4),
 
-        TYPE(Float2x2), TYPE(Float2x3), TYPE(Float2x4),
-        TYPE(Float3x2), TYPE(Float3x3), TYPE(Float3x4),
-        TYPE(Float4x2), TYPE(Float4x3), TYPE(Float4x4),
+        TYPE(Float2x2), TYPE(Float3x3), TYPE(Float4x4),
+        TYPE( Half2x2), TYPE( Half3x3), TYPE(Half4x4),
 
-        TYPE(Half2x2),  TYPE(Half2x3),  TYPE(Half2x4),
-        TYPE(Half3x2),  TYPE(Half3x3),  TYPE(Half3x4),
-        TYPE(Half4x2),  TYPE(Half4x3),  TYPE(Half4x4),
+        TYPE(SquareMat), TYPE(SquareHMat),
 
-        TYPE(GenType), TYPE(GenHType), TYPE(GenIType), TYPE(GenUType), TYPE(GenBType),
-        TYPE(Mat), TYPE(Vec),
-        TYPE(GVec), TYPE(GVec2), TYPE(GVec3), TYPE(GVec4),
-        TYPE(HVec), TYPE(IVec), TYPE(UVec), TYPE(SVec), TYPE(USVec),
-        TYPE(ByteVec), TYPE(UByteVec), TYPE(BVec),
+        TYPE(GenType), TYPE(GenHType), TYPE(GenIType), TYPE(GenBType),
+        TYPE(Vec),     TYPE(HVec),     TYPE(IVec),     TYPE(BVec),
 
         TYPE(FragmentProcessor),
     };
 
     const SkSL::Symbol* privateTypes[] = {
+        TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
+        TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
+        TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
+        TYPE(  Byte), TYPE(  Byte2), TYPE(  Byte3), TYPE(  Byte4),
+        TYPE( UByte), TYPE( UByte2), TYPE( UByte3), TYPE( UByte4),
+
+        TYPE(GenUType), TYPE(UVec),
+        TYPE(SVec), TYPE(USVec), TYPE(ByteVec), TYPE(UByteVec),
+
+        TYPE(Float2x3), TYPE(Float2x4),
+        TYPE(Float3x2), TYPE(Float3x4),
+        TYPE(Float4x2), TYPE(Float4x3),
+
+        TYPE(Half2x3),  TYPE(Half2x4),
+        TYPE(Half3x2),  TYPE(Half3x4),
+        TYPE(Half4x2),  TYPE(Half4x3),
+
+        TYPE(Mat), TYPE(HMat),
+
         TYPE(Sampler1D), TYPE(Sampler2D), TYPE(Sampler3D),
         TYPE(SamplerExternalOES),
-        TYPE(SamplerCube),
         TYPE(Sampler2DRect),
-        TYPE(Sampler1DArray), TYPE(Sampler2DArray), TYPE(SamplerCubeArray),
-        TYPE(SamplerBuffer),
-        TYPE(Sampler2DMS), TYPE(Sampler2DMSArray),
 
         TYPE(ISampler2D),
         TYPE(Image2D), TYPE(IImage2D),
         TYPE(SubpassInput), TYPE(SubpassInputMS),
 
-        TYPE(GSampler1D), TYPE(GSampler2D), TYPE(GSampler3D),
-        TYPE(GSamplerCube),
-        TYPE(GSampler2DRect),
-        TYPE(GSampler1DArray), TYPE(GSampler2DArray), TYPE(GSamplerCubeArray),
-        TYPE(GSamplerBuffer),
-        TYPE(GSampler2DMS), TYPE(GSampler2DMSArray),
-
-        TYPE(Sampler1DShadow), TYPE(Sampler2DShadow), TYPE(SamplerCubeShadow),
-        TYPE(Sampler2DRectShadow),
-        TYPE(Sampler1DArrayShadow), TYPE(Sampler2DArrayShadow), TYPE(SamplerCubeArrayShadow),
-
-        TYPE(GSampler2DArrayShadow), TYPE(GSamplerCubeArrayShadow),
         TYPE(Sampler),
         TYPE(Texture2D),
     };
@@ -227,39 +219,39 @@ const ParsedModule& Compiler::loadPublicModule() {
     return fPublicModule;
 }
 
-const ParsedModule& Compiler::loadPipelineModule() {
-    if (!fPipelineModule.fSymbols) {
-        fPipelineModule = this->parseModule(Program::kPipelineStage_Kind, MODULE_DATA(pipeline),
-                                            this->loadPublicModule());
+const ParsedModule& Compiler::loadRuntimeEffectModule() {
+    if (!fRuntimeEffectModule.fSymbols) {
+        fRuntimeEffectModule = this->parseModule(Program::kRuntimeEffect_Kind, MODULE_DATA(runtime),
+                                                 this->loadPublicModule());
 
-        // Add some aliases to the pipeline module so that it's friendlier, and more like GLSL
-        fPipelineModule.fSymbols->addAlias("shader", fContext->fFragmentProcessor_Type.get());
+        // Add some aliases to the runtime effect module so that it's friendlier, and more like GLSL
+        fRuntimeEffectModule.fSymbols->addAlias("shader", fContext->fFragmentProcessor_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("vec2", fContext->fFloat2_Type.get());
-        fPipelineModule.fSymbols->addAlias("vec3", fContext->fFloat3_Type.get());
-        fPipelineModule.fSymbols->addAlias("vec4", fContext->fFloat4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec2", fContext->fFloat2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec3", fContext->fFloat3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec4", fContext->fFloat4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("bvec2", fContext->fBool2_Type.get());
-        fPipelineModule.fSymbols->addAlias("bvec3", fContext->fBool3_Type.get());
-        fPipelineModule.fSymbols->addAlias("bvec4", fContext->fBool4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec2", fContext->fBool2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec3", fContext->fBool3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec4", fContext->fBool4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat2", fContext->fFloat2x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat3", fContext->fFloat3x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat4", fContext->fFloat4x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2", fContext->fFloat2x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3", fContext->fFloat3x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4", fContext->fFloat4x4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat2x2", fContext->fFloat2x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat2x3", fContext->fFloat2x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat2x4", fContext->fFloat2x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x2", fContext->fFloat2x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x3", fContext->fFloat2x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x4", fContext->fFloat2x4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat3x2", fContext->fFloat3x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat3x3", fContext->fFloat3x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat3x4", fContext->fFloat3x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x2", fContext->fFloat3x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x3", fContext->fFloat3x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x4", fContext->fFloat3x4_Type.get());
 
-        fPipelineModule.fSymbols->addAlias("mat4x2", fContext->fFloat4x2_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat4x3", fContext->fFloat4x3_Type.get());
-        fPipelineModule.fSymbols->addAlias("mat4x4", fContext->fFloat4x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x2", fContext->fFloat4x2_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x3", fContext->fFloat4x3_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x4", fContext->fFloat4x4_Type.get());
     }
-    return fPipelineModule;
+    return fRuntimeEffectModule;
 }
 
 const ParsedModule& Compiler::loadInterpreterModule() {
@@ -272,12 +264,12 @@ const ParsedModule& Compiler::loadInterpreterModule() {
 
 const ParsedModule& Compiler::moduleForProgramKind(Program::Kind kind) {
     switch (kind) {
-        case Program::kVertex_Kind:            return this->loadVertexModule();      break;
-        case Program::kFragment_Kind:          return this->loadFragmentModule();    break;
-        case Program::kGeometry_Kind:          return this->loadGeometryModule();    break;
-        case Program::kFragmentProcessor_Kind: return this->loadFPModule();          break;
-        case Program::kPipelineStage_Kind:     return this->loadPipelineModule();    break;
-        case Program::kGeneric_Kind:           return this->loadInterpreterModule(); break;
+        case Program::kVertex_Kind:            return this->loadVertexModule();        break;
+        case Program::kFragment_Kind:          return this->loadFragmentModule();      break;
+        case Program::kGeometry_Kind:          return this->loadGeometryModule();      break;
+        case Program::kFragmentProcessor_Kind: return this->loadFPModule();            break;
+        case Program::kRuntimeEffect_Kind:     return this->loadRuntimeEffectModule(); break;
+        case Program::kGeneric_Kind:           return this->loadInterpreterModule();   break;
     }
     SkUNREACHABLE;
 }
@@ -533,8 +525,7 @@ void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
             continue;
         }
         BasicBlock& exit = cfg->fBlocks[exitId];
-        after.foreach([&](const Variable* var, std::unique_ptr<Expression>** e1Ptr) {
-            std::unique_ptr<Expression>* e1 = *e1Ptr;
+        for (const auto& [var, e1] : after) {
             std::unique_ptr<Expression>** exitDef = exit.fBefore.find(var);
             if (!exitDef) {
                 // exit has no definition for it, just copy it and reprocess exit block
@@ -553,7 +544,7 @@ void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
                     }
                 }
             }
-        });
+        }
     }
 }
 
@@ -1180,14 +1171,12 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             &componentType.toCompound(*fContext, swizzleSize, /*rows=*/1),
                             std::move(newArgs));
 
-                    // No fUsage change: `half4(foo).xy` and `half2(foo)` have equivalent reference
-                    // counts.
+                    // We're replacing an expression with a cloned version; we'll need a rescan.
+                    // There's no fUsage change: `half4(foo).xy` and `half2(foo)` have equivalent
+                    // reference counts.
+                    try_replace_expression(&b, iter, &replacement);
                     optimizationContext->fUpdated = true;
-                    if (!try_replace_expression(&b, iter, &replacement)) {
-                        optimizationContext->fNeedsRescan = true;
-                        return;
-                    }
-                    SkASSERT((*iter)->isExpression());
+                    optimizationContext->fNeedsRescan = true;
                     break;
                 }
 
@@ -1305,14 +1294,13 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                             &componentType.toCompound(*fContext, swizzleSize, /*rows=*/1),
                             std::move(newArgs));
 
-                    // Remove references within 'expr', add references within 'optimized'
-                    optimizationContext->fUpdated = true;
+                    // Remove references within 'expr', add references within 'replacement.'
                     optimizationContext->fUsage->replace(expr, replacement.get());
-                    if (!try_replace_expression(&b, iter, &replacement)) {
-                        optimizationContext->fNeedsRescan = true;
-                        return;
-                    }
-                    SkASSERT((*iter)->isExpression());
+
+                    // We're replacing an expression with a cloned version; we'll need a rescan.
+                    try_replace_expression(&b, iter, &replacement);
+                    optimizationContext->fUpdated = true;
+                    optimizationContext->fNeedsRescan = true;
                 }
                 break;
             }
@@ -1629,7 +1617,7 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
     // check for unreachable code
     for (size_t i = 0; i < cfg.fBlocks.size(); i++) {
         const BasicBlock& block = cfg.fBlocks[i];
-        if (i != cfg.fStart && !block.fIsReachable && block.fNodes.size()) {
+        if (!block.fIsReachable && !block.fAllowUnreachable && block.fNodes.size()) {
             int offset;
             const BasicBlock::Node& node = block.fNodes[0];
             if (node.isStatement()) {
@@ -1831,7 +1819,7 @@ bool Compiler::optimize(LoadedModule& module) {
         }
 
         // Perform inline-candidate analysis and inline any functions deemed suitable.
-        madeChanges |= fInliner.analyze(module.fElements, module.fSymbols.get(), usage.get());
+        madeChanges |= fInliner.analyze(module.fElements, module.fSymbols, usage.get());
 
         if (!madeChanges) {
             break;
@@ -1857,7 +1845,7 @@ bool Compiler::optimize(Program& program) {
         }
 
         // Perform inline-candidate analysis and inline any functions deemed suitable.
-        madeChanges |= fInliner.analyze(program.ownedElements(), program.fSymbols.get(), usage);
+        madeChanges |= fInliner.analyze(program.ownedElements(), program.fSymbols, usage);
 
         // Remove dead functions. We wait until after analysis so that we still report errors,
         // even in unused code.

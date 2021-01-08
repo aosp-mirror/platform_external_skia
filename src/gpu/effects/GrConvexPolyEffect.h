@@ -60,7 +60,6 @@ public:
     ~GrConvexPolyEffect() override;
 
     const char* name() const override { return "ConvexPoly"; }
-
     std::unique_ptr<GrFragmentProcessor> clone() const override;
 
     GrClipEdgeType getEdgeType() const { return fEdgeType; }

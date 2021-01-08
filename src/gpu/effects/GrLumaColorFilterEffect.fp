@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-in fragmentProcessor? inputFP;
+in fragmentProcessor inputFP;
 
 @optimizationFlags {
     (inputFP ? ProcessorOptimizationFlags(inputFP.get()) : kAll_OptimizationFlags) &
@@ -24,9 +24,9 @@ in fragmentProcessor? inputFP;
     }
 }
 
-void main() {
+half4 main() {
     half4 inputColor = sample(inputFP);
     const half3 SK_ITU_BT709_LUM_COEFF = half3(0.2126, 0.7152, 0.0722);
     half luma = saturate(dot(SK_ITU_BT709_LUM_COEFF, inputColor.rgb));
-    sk_OutColor = half4(0, 0, 0, luma);
+    return luma.000x;
 }

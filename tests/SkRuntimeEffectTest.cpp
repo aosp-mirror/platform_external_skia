@@ -39,10 +39,6 @@ DEF_TEST(SkRuntimeEffectInvalid, r) {
     test("in bool Flag; layout(when=Flag) uniform float Input;" EMPTY_MAIN, "when");
     test("layout(tracked) uniform float Input;"                 EMPTY_MAIN, "tracked");
 
-    // GLSL types like sampler2D and texture2D are not allowed anywhere:
-    test("uniform sampler2D s;" EMPTY_MAIN, "no type named 'sampler2D'");
-    test("uniform texture2D s;" EMPTY_MAIN, "no type named 'texture2D'");
-
     // Runtime SkSL supports a limited set of uniform types. No bool, or int, for example:
     test("uniform bool b;" EMPTY_MAIN, "uniform");
     test("uniform int i;"  EMPTY_MAIN, "uniform");
@@ -193,7 +189,7 @@ static sk_sp<SkShader> make_RGBW_shader() {
     bmp.pixmap().erase(SK_ColorGREEN, topLeft.makeOffset(1, 0));
     bmp.pixmap().erase(SK_ColorBLUE,  topLeft.makeOffset(0, 1));
     bmp.pixmap().erase(SK_ColorWHITE, topLeft.makeOffset(1, 1));
-    return bmp.makeShader();
+    return bmp.makeShader(SkSamplingOptions());
 }
 
 static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext* rContext) {

@@ -42,7 +42,7 @@ static const uint32_t kMaxKeySize = 1024;
 class GLBigKeyProcessor : public GrGLSLFragmentProcessor {
 public:
     void emitCode(EmitArgs& args) override {
-        args.fFragBuilder->codeAppendf("%s = half4(1);\n", args.fOutputColor);
+        args.fFragBuilder->codeAppendf("return half4(1);\n");
     }
 
     static void GenKey(const GrProcessor&, const GrShaderCaps&, GrProcessorKeyBuilder* b) {
@@ -110,7 +110,7 @@ private:
     public:
         void emitCode(EmitArgs& args) override {
             SkString temp = this->invokeChild(0, args);
-            args.fFragBuilder->codeAppendf("%s = %s;", args.fOutputColor, temp.c_str());
+            args.fFragBuilder->codeAppendf("return %s;", temp.c_str());
         }
 
     private:
@@ -137,7 +137,7 @@ private:
 static const int kRenderTargetHeight = 1;
 static const int kRenderTargetWidth = 1;
 
-static std::unique_ptr<GrRenderTargetContext> random_render_target_context(
+static std::unique_ptr<GrSurfaceDrawContext> random_render_target_context(
         GrRecordingContext* rContext,
         SkRandom* random,
         const GrCaps* caps) {
@@ -151,7 +151,7 @@ static std::unique_ptr<GrRenderTargetContext> random_render_target_context(
     // Above could be 0 if msaa isn't supported.
     sampleCnt = std::max(1, sampleCnt);
 
-    return GrRenderTargetContext::Make(
+    return GrSurfaceDrawContext::Make(
             rContext, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kRenderTargetWidth, kRenderTargetHeight}, sampleCnt, GrMipmapped::kNo,
             GrProtected::kNo, origin);
@@ -281,9 +281,9 @@ bool GrDrawingManager::ProgramUnitTest(GrDirectContext* direct, int maxStages, i
     static const int NUM_TESTS = 1024;
     for (int t = 0; t < NUM_TESTS; t++) {
         // setup random render target(can fail)
-        auto renderTargetContext = random_render_target_context(direct, &random, caps);
-        if (!renderTargetContext) {
-            SkDebugf("Could not allocate renderTargetContext");
+        auto surfaceDrawContext = random_render_target_context(direct, &random, caps);
+        if (!surfaceDrawContext) {
+            SkDebugf("Could not allocate surfaceDrawContext");
             return false;
         }
 
@@ -291,18 +291,18 @@ bool GrDrawingManager::ProgramUnitTest(GrDirectContext* direct, int maxStages, i
         GrProcessorTestData ptd(&random, direct, /*maxTreeDepth=*/1, SK_ARRAY_COUNT(views), views);
         set_random_color_coverage_stages(&paint, &ptd, maxStages, maxLevels);
         set_random_xpf(&paint, &ptd);
-        GrDrawRandomOp(&random, renderTargetContext.get(), std::move(paint));
+        GrDrawRandomOp(&random, surfaceDrawContext.get(), std::move(paint));
     }
     // Flush everything, test passes if flush is successful(ie, no asserts are hit, no crashes)
     direct->flush(GrFlushInfo());
     direct->submit(false);
 
     // Validate that GrFPs work correctly without an input.
-    auto renderTargetContext = GrRenderTargetContext::Make(
+    auto surfaceDrawContext = GrSurfaceDrawContext::Make(
             direct, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kRenderTargetWidth, kRenderTargetHeight});
-    if (!renderTargetContext) {
-        SkDebugf("Could not allocate a renderTargetContext");
+    if (!surfaceDrawContext) {
+        SkDebugf("Could not allocate a surfaceDrawContext");
         return false;
     }
 
@@ -318,7 +318,7 @@ bool GrDrawingManager::ProgramUnitTest(GrDirectContext* direct, int maxStages, i
             auto fp = GrFragmentProcessorTestFactory::MakeIdx(i, &ptd);
             auto blockFP = BlockInputFragmentProcessor::Make(std::move(fp));
             paint.setColorFragmentProcessor(std::move(blockFP));
-            GrDrawRandomOp(&random, renderTargetContext.get(), std::move(paint));
+            GrDrawRandomOp(&random, surfaceDrawContext.get(), std::move(paint));
 
             direct->flush(GrFlushInfo());
             direct->submit(false);

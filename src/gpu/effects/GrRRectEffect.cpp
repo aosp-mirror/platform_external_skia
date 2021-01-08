@@ -298,7 +298,7 @@ void GLCircularRRectEffect::emitCode(EmitArgs& args) {
 
     SkString inputSample = this->invokeChild(/*childIndex=*/0, args);
 
-    fragBuilder->codeAppendf("%s = %s * alpha;", args.fOutputColor, inputSample.c_str());
+    fragBuilder->codeAppendf("return %s * alpha;", inputSample.c_str());
 }
 
 void GLCircularRRectEffect::GenKey(const GrProcessor& processor, const GrShaderCaps&,
@@ -625,7 +625,7 @@ void GLEllipticalRRectEffect::emitCode(EmitArgs& args) {
 
     SkString inputSample = this->invokeChild(/*childIndex=*/0, args);
 
-    fragBuilder->codeAppendf("%s = %s * alpha;", args.fOutputColor, inputSample.c_str());
+    fragBuilder->codeAppendf("return %s * alpha;", inputSample.c_str());
 }
 
 void GLEllipticalRRectEffect::GenKey(const GrProcessor& effect, const GrShaderCaps&,

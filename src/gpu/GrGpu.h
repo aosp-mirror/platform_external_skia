@@ -17,16 +17,18 @@
 #include "src/gpu/GrAttachment.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrOpsRenderPass.h"
+#include "src/gpu/GrPixmap.h"
 #include "src/gpu/GrSamplePatternDictionary.h"
 #include "src/gpu/GrSwizzle.h"
 #include "src/gpu/GrTextureProducer.h"
 #include "src/gpu/GrXferProcessor.h"
 
+class GrAttachment;
 class GrBackendRenderTarget;
 class GrBackendSemaphore;
+struct GrContextOptions;
 class GrDirectContext;
 class GrGpuBuffer;
-struct GrContextOptions;
 class GrGLContext;
 class GrPath;
 class GrPathRenderer;
@@ -38,11 +40,14 @@ class GrRenderTarget;
 class GrRingBuffer;
 class GrSemaphore;
 class GrStagingBufferManager;
-class GrAttachment;
 class GrStencilSettings;
 class GrSurface;
 class GrTexture;
 class SkJSONWriter;
+
+namespace SkSL {
+    class Compiler;
+}
 
 class GrGpu : public SkRefCnt {
 public:
@@ -63,6 +68,8 @@ public:
     virtual GrStagingBufferManager* stagingBufferManager() { return nullptr; }
 
     virtual GrRingBuffer* uniformsRingBuffer() { return nullptr; }
+
+    SkSL::Compiler* shaderCompiler() const { return fCompiler.get(); }
 
     enum class DisconnectType {
         // No cleanup should be attempted, immediately cease making backend API calls
@@ -558,7 +565,7 @@ public:
         enum class Type { kColor, kPixmaps, kCompressed };
         BackendTextureData() = default;
         BackendTextureData(const SkColor4f& color) : fType(Type::kColor), fColor(color) {}
-        BackendTextureData(const SkPixmap pixmaps[]) : fType(Type::kPixmaps), fPixmaps(pixmaps) {
+        BackendTextureData(const GrPixmap pixmaps[]) : fType(Type::kPixmaps), fPixmaps(pixmaps) {
             SkASSERT(pixmaps);
         }
         BackendTextureData(const void* data, size_t size) : fType(Type::kCompressed) {
@@ -573,11 +580,11 @@ public:
             return fColor;
         }
 
-        const SkPixmap& pixmap(int i) const {
+        const GrPixmap& pixmap(int i) const {
             SkASSERT(this->type() == Type::kPixmaps);
             return fPixmaps[i];
         }
-        const SkPixmap* pixmaps() const {
+        const GrPixmap* pixmaps() const {
             SkASSERT(this->type() == Type::kPixmaps);
             return fPixmaps;
         }
@@ -591,12 +598,11 @@ public:
             return fCompressed.fSize;
         }
 
-
     private:
         Type fType = Type::kColor;
         union {
             SkColor4f fColor = {0, 0, 0, 0};
-            const SkPixmap* fPixmaps;
+            const GrPixmap* fPixmaps;
             struct {
                 const void*  fData;
                 size_t       fSize;
@@ -757,8 +763,9 @@ protected:
 
     Stats                            fStats;
     std::unique_ptr<GrPathRendering> fPathRendering;
-    // Subclass must initialize this in its constructor.
-    sk_sp<const GrCaps>              fCaps;
+
+    // Subclass must call this to initialize caps & compiler in its constructor.
+    void initCapsAndCompiler(sk_sp<const GrCaps> caps);
 
 private:
     virtual GrBackendTexture onCreateBackendTexture(SkISize dimensions,
@@ -897,6 +904,11 @@ private:
     }
 
     void callSubmittedProcs(bool success);
+
+    sk_sp<const GrCaps>             fCaps;
+    // Compiler used for compiling SkSL into backend shader code. We only want to create the
+    // compiler once, as there is significant overhead to the first compile.
+    std::unique_ptr<SkSL::Compiler> fCompiler;
 
     uint32_t fResetBits;
     // The context owns us, not vice-versa, so this ptr is not ref'ed by Gpu.

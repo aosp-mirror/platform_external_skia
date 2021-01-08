@@ -24,6 +24,7 @@
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkPaintDefaults.h"
+#include "src/core/SkPaintPriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkTextBlobPriv.h"
@@ -231,7 +232,6 @@ const char* DrawCommand::GetCommandString(OpType type) {
         case kDrawDRRect_OpType: return "DrawDRRect";
         case kDrawImage_OpType: return "DrawImage";
         case kDrawImageLattice_OpType: return "DrawImageLattice";
-        case kDrawImageNine_OpType: return "DrawImageNine";
         case kDrawImageRect_OpType: return "DrawImageRect";
         case kDrawImageRectLayer_OpType: return "DrawImageRectLayer";
         case kDrawOval_OpType: return "DrawOval";
@@ -721,7 +721,7 @@ static const char* alpha_type_name(SkAlphaType alphaType) {
 bool DrawCommand::flatten(const SkBitmap& bitmap,
                           SkJSONWriter&   writer,
                           UrlDataManager& urlDataManager) {
-    sk_sp<SkImage> image(SkImage::MakeFromBitmap(bitmap));
+    sk_sp<SkImage> image(bitmap.asImage());
     writer.appendString(DEBUGCANVAS_ATTRIBUTE_COLOR, color_type_name(bitmap.colorType()));
     writer.appendString(DEBUGCANVAS_ATTRIBUTE_ALPHA, alpha_type_name(bitmap.alphaType()));
     // Image will appear to have no uses, TODO(nifong): provide the user with a useful explanation
@@ -825,7 +825,7 @@ static void apply_paint_join(const SkPaint& paint, SkJSONWriter& writer) {
 }
 
 static void apply_paint_filterquality(const SkPaint& paint, SkJSONWriter& writer) {
-    SkFilterQuality quality = paint.getFilterQuality();
+    SkFilterQuality quality = SkPaintPriv::GetFQ(paint);
     switch (quality) {
         case kNone_SkFilterQuality: break;
         case kLow_SkFilterQuality:
@@ -1183,7 +1183,9 @@ void DrawAnnotationCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlData
     MakeJsonRect(writer, fRect);
     writer.appendString("key", fKey.c_str());
     if (fValue) {
-        // TODO: dump out the "value"
+        writer.appendString("value", std::string(
+            static_cast<const char*>(fValue->data()), fValue->size()
+            ).c_str());
     }
 
     SkString desc;
@@ -1405,47 +1407,6 @@ void DrawImageRectLayerCommand::toJSON(SkJSONWriter& writer, UrlDataManager& url
 
     SkString desc;
     writer.appendString(DEBUGCANVAS_ATTRIBUTE_SHORTDESC, str_append(&desc, fDst)->c_str());
-}
-
-DrawImageNineCommand::DrawImageNineCommand(const SkImage* image,
-                                           const SkIRect& center,
-                                           const SkRect&  dst,
-                                           const SkPaint* paint)
-        : INHERITED(kDrawImageNine_OpType)
-        , fImage(SkRef(image))
-        , fCenter(center)
-        , fDst(dst)
-        , fPaint(paint) {}
-
-void DrawImageNineCommand::execute(SkCanvas* canvas) const {
-    canvas->drawImageNine(fImage.get(), fCenter, fDst, fPaint.getMaybeNull());
-}
-
-bool DrawImageNineCommand::render(SkCanvas* canvas) const {
-    SkAutoCanvasRestore acr(canvas, true);
-    canvas->clear(0xFFFFFFFF);
-
-    xlate_and_scale_to_bounds(canvas, fDst);
-
-    this->execute(canvas);
-    return true;
-}
-
-uint64_t DrawImageNineCommand::imageId(UrlDataManager& udm) const {
-    return udm.lookupImage(fImage.get());
-}
-
-void DrawImageNineCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
-    INHERITED::toJSON(writer, urlDataManager);
-    flatten(*fImage, writer, urlDataManager);
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_CENTER);
-    MakeJsonIRect(writer, fCenter);
-    writer.appendName(DEBUGCANVAS_ATTRIBUTE_DST);
-    MakeJsonRect(writer, fDst);
-    if (fPaint.isValid()) {
-        writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
-        MakeJsonPaint(writer, *fPaint, urlDataManager);
-    }
 }
 
 DrawOvalCommand::DrawOvalCommand(const SkRect& oval, const SkPaint& paint)
