@@ -305,7 +305,7 @@ LoadedModule Compiler::loadModule(Program::Kind kind,
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule,
                                          /*isBuiltinCode=*/true, source->c_str(), source->length(),
-                                         /*externalValues=*/nullptr);
+                                         /*externalFunctions=*/nullptr);
     SkASSERT(ir.fSharedElements.empty());
     LoadedModule module = { kind, std::move(ir.fSymbolTable), std::move(ir.fElements) };
     fIRGenerator->fCanInline = true;
@@ -424,8 +424,6 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
             this->addDefinition(lvalue->as<TernaryExpression>().ifFalse().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
-            break;
-        case Expression::Kind::kExternalValue:
             break;
         default:
             // not an lvalue, can't happen
@@ -587,8 +585,6 @@ static bool is_dead(const Expression& lvalue, ProgramUsage* usage) {
                    is_dead(*t.ifTrue(), usage) &&
                    is_dead(*t.ifFalse(), usage);
         }
-        case Expression::Kind::kExternalValue:
-            return false;
         default:
 #ifdef SK_DEBUG
             ABORT("invalid lvalue: %s\n", lvalue.description().c_str());
@@ -1137,15 +1133,13 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 for (int c : s.components()) {
                     final.push_back(base.components()[c]);
                 }
-                optimizationContext->fUpdated = true;
                 std::unique_ptr<Expression> replacement(new Swizzle(*fContext, base.base()->clone(),
                                                                     final));
+                // We're replacing an expression with a cloned version; we'll need a rescan.
                 // No fUsage change: `foo.gbr.gbr` and `foo.brg` have equivalent reference counts
-                if (!try_replace_expression(&b, iter, &replacement)) {
-                    optimizationContext->fNeedsRescan = true;
-                    return;
-                }
-                SkASSERT((*iter)->isExpression());
+                try_replace_expression(&b, iter, &replacement);
+                optimizationContext->fUpdated = true;
+                optimizationContext->fNeedsRescan = true;
                 break;
             }
             // Optimize swizzles of constructors.
@@ -1752,8 +1746,8 @@ std::unique_ptr<Program> Compiler::convertProgram(
         Program::Kind kind,
         String text,
         const Program::Settings& settings,
-        const std::vector<std::unique_ptr<ExternalValue>>* externalValues) {
-    SkASSERT(!externalValues || (kind == Program::kGeneric_Kind));
+        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
+    SkASSERT(!externalFunctions || (kind == Program::kGeneric_Kind));
 
     // Loading and optimizing our base module might reset the inliner, so do that first,
     // *then* configure the inliner with the settings for this program.
@@ -1773,7 +1767,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
     pool->attachToThread();
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule, /*isBuiltinCode=*/false,
-                                         textPtr->c_str(), textPtr->size(), externalValues);
+                                         textPtr->c_str(), textPtr->size(), externalFunctions);
     auto program = std::make_unique<Program>(kind,
                                              std::move(textPtr),
                                              settings,
@@ -2147,10 +2141,13 @@ void Compiler::error(int offset, String msg) {
     fErrorText += "error: " + (pos.fLine >= 1 ? to_string(pos.fLine) + ": " : "") + msg + "\n";
 }
 
-String Compiler::errorText() {
-    this->writeErrorCount();
+String Compiler::errorText(bool showCount) {
+    if (showCount) {
+        this->writeErrorCount();
+    }
     fErrorCount = 0;
     String result = fErrorText;
+    fErrorText = "";
     return result;
 }
 
