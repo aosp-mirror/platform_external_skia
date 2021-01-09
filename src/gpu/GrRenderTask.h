@@ -10,6 +10,7 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/private/SkTArray.h"
+#include "src/core/SkTInternalLList.h"
 #include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureResolveManager.h"
@@ -83,7 +84,10 @@ public:
     /*
      * Dump out the GrRenderTask dependency DAG
      */
-    virtual void dump(bool printDependencies) const;
+    virtual void dump(const SkString& label,
+                      SkString indent,
+                      bool printDependencies,
+                      bool close) const;
     virtual const char* name() const = 0;
 #endif
 
@@ -121,6 +125,9 @@ public:
     // In addition to just the GrSurface being allocated, has the stencil buffer been allocated (if
     // it is required)?
     bool isInstantiated() const;
+
+    // Used by GrTCluster.
+    SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrRenderTask);
 
 protected:
     SkDEBUGCODE(bool deferredProxiesAreInstantiated() const;)
@@ -189,7 +196,7 @@ private:
 
     void addDependency(GrRenderTask* dependedOn);
     void addDependent(GrRenderTask* dependent);
-    SkDEBUGCODE(bool isDependedent(const GrRenderTask* dependent) const;)
+    SkDEBUGCODE(bool isDependent(const GrRenderTask* dependent) const;)
     SkDEBUGCODE(void validate() const;)
     void closeThoseWhoDependOnMe(const GrCaps&);
 
@@ -223,6 +230,23 @@ private:
         }
     };
 
+    struct ClusterTraits {
+        static int NumTargets(GrRenderTask* renderTask) {
+            return renderTask->numTargets();
+        }
+        static uint32_t GetTarget(GrRenderTask* renderTask, int index) {
+            return renderTask->target(index).proxy()->uniqueID().asUInt();
+        }
+        static int NumDependencies(const GrRenderTask* renderTask) {
+            return renderTask->fDependencies.count();
+        }
+        static GrRenderTask* Dependency(GrRenderTask* renderTask, int index) {
+            return renderTask->fDependencies[index];
+        }
+        static uint32_t GetID(GrRenderTask* renderTask) {
+            return renderTask->uniqueID();
+        }
+    };
 
     virtual void onPrePrepare(GrRecordingContext*) {} // Only the GrOpsTask currently overrides this
     virtual void onPrepare(GrOpFlushState*) {} // Only GrOpsTask and GrDDLTask override this virtual

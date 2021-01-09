@@ -27,7 +27,7 @@
 #include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExternalFunctionCall.h"
-#include "src/sksl/ir/SkSLExternalValueReference.h"
+#include "src/sksl/ir/SkSLExternalFunctionReference.h"
 #include "src/sksl/ir/SkSLField.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
@@ -1462,8 +1462,8 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
             return std::make_unique<TypeReference>(fContext, offset, t);
         }
         case Symbol::Kind::kExternal: {
-            const ExternalValue* r = &result->as<ExternalValue>();
-            return std::make_unique<ExternalValueReference>(offset, r);
+            const ExternalFunction* r = &result->as<ExternalFunction>();
+            return std::make_unique<ExternalFunctionReference>(offset, r);
         }
         default:
             ABORT("unsupported symbol type %d\n", (int) result->kind());
@@ -1771,29 +1771,30 @@ static bool determine_binary_type(const Context& context,
     return false;
 }
 
-static std::unique_ptr<Expression> short_circuit_boolean(const Context& context,
-                                                         const Expression& left,
+static std::unique_ptr<Expression> short_circuit_boolean(const Expression& left,
                                                          Token::Kind op,
                                                          const Expression& right) {
-    SkASSERT(left.kind() == Expression::Kind::kBoolLiteral);
+    SkASSERT(left.is<BoolLiteral>());
     bool leftVal = left.as<BoolLiteral>().value();
+
     if (op == Token::Kind::TK_LOGICALAND) {
         // (true && expr) -> (expr) and (false && expr) -> (false)
         return leftVal ? right.clone()
-                       : std::unique_ptr<Expression>(new BoolLiteral(context, left.fOffset, false));
-    } else if (op == Token::Kind::TK_LOGICALOR) {
-        // (true || expr) -> (true) and (false || expr) -> (expr)
-        return leftVal ? std::unique_ptr<Expression>(new BoolLiteral(context, left.fOffset, true))
-                       : right.clone();
-    } else if (op == Token::Kind::TK_LOGICALXOR) {
-        // (true ^^ expr) -> !(expr) and (false ^^ expr) -> (expr)
-        return leftVal ? std::unique_ptr<Expression>(new PrefixExpression(
-                                                                         Token::Kind::TK_LOGICALNOT,
-                                                                         right.clone()))
-                       : right.clone();
-    } else {
-        return nullptr;
+                       : std::make_unique<BoolLiteral>(left.fOffset, /*value=*/false, &left.type());
     }
+    if (op == Token::Kind::TK_LOGICALOR) {
+        // (true || expr) -> (true) and (false || expr) -> (expr)
+        return leftVal ? std::make_unique<BoolLiteral>(left.fOffset, /*value=*/true, &left.type())
+                       : right.clone();
+    }
+    if (op == Token::Kind::TK_LOGICALXOR) {
+        // (true ^^ expr) -> !(expr) and (false ^^ expr) -> (expr)
+        return leftVal ? std::make_unique<PrefixExpression>(Token::Kind::TK_LOGICALNOT,
+                                                            right.clone())
+                       : right.clone();
+    }
+
+    return nullptr;
 }
 
 template <typename T>
@@ -1807,7 +1808,7 @@ std::unique_ptr<Expression> IRGenerator::constantFoldVector(const Expression& le
     if (op == Token::Kind::TK_EQEQ || op == Token::Kind::TK_NEQ) {
         bool equality = (op == Token::Kind::TK_EQEQ);
 
-        switch (left.compareConstant(fContext, right)) {
+        switch (left.compareConstant(right)) {
             case Expression::ComparisonResult::kNotEqual:
                 equality = !equality;
                 [[fallthrough]];
@@ -1861,11 +1862,11 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
     // If the left side is a constant boolean literal, the right side does not need to be constant
     // for short circuit optimizations to allow the constant to be folded.
     if (left.is<BoolLiteral>() && !right.isCompileTimeConstant()) {
-        return short_circuit_boolean(fContext, left, op, right);
+        return short_circuit_boolean(left, op, right);
     } else if (right.is<BoolLiteral>() && !left.isCompileTimeConstant()) {
-        // There aren't side effects in SKSL within expressions, so (left OP right) is equivalent to
+        // There aren't side effects in SkSL within expressions, so (left OP right) is equivalent to
         // (right OP left) for short-circuit optimizations
-        return short_circuit_boolean(fContext, right, op, left);
+        return short_circuit_boolean(right, op, left);
     }
 
     // Other than the short-circuit cases above, constant folding requires both sides to be constant
@@ -1990,7 +1991,7 @@ std::unique_ptr<Expression> IRGenerator::constantFold(const Expression& left,
                 return nullptr;
         }
 
-        switch (left.compareConstant(fContext, right)) {
+        switch (left.compareConstant(right)) {
             case Expression::ComparisonResult::kNotEqual:
                 equality = !equality;
                 [[fallthrough]];
@@ -2266,13 +2267,9 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
             return this->convertConstructor(offset,
                                             functionValue->as<TypeReference>().value(),
                                             std::move(arguments));
-        case Expression::Kind::kExternalValue: {
-            const ExternalValue& v = functionValue->as<ExternalValueReference>().value();
-            if (!v.canCall()) {
-                fErrors.error(offset, "this external value is not a function");
-                return nullptr;
-            }
-            int count = v.callParameterCount();
+        case Expression::Kind::kExternalFunctionReference: {
+            const ExternalFunction& f = functionValue->as<ExternalFunctionReference>().function();
+            int count = f.callParameterCount();
             if (count != (int) arguments.size()) {
                 fErrors.error(offset, "external function expected " + to_string(count) +
                                       " arguments, but found " + to_string((int) arguments.size()));
@@ -2281,14 +2278,14 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
             static constexpr int PARAMETER_MAX = 16;
             SkASSERT(count < PARAMETER_MAX);
             const Type* types[PARAMETER_MAX];
-            v.getCallParameterTypes(types);
+            f.getCallParameterTypes(types);
             for (int i = 0; i < count; ++i) {
                 arguments[i] = this->coerce(std::move(arguments[i]), *types[i]);
                 if (!arguments[i]) {
                     return nullptr;
                 }
             }
-            return std::make_unique<ExternalFunctionCall>(offset, &v, std::move(arguments));
+            return std::make_unique<ExternalFunctionCall>(offset, &f, std::move(arguments));
         }
         case Expression::Kind::kFunctionReference: {
             const FunctionReference& ref = functionValue->as<FunctionReference>();
@@ -2453,8 +2450,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
     const Type& baseType = base->type();
     switch (op) {
         case Token::Kind::TK_PLUS:
-            if (!baseType.isNumber() && !baseType.isVector() &&
-                baseType != *fContext.fFloatLiteral_Type) {
+            if (!baseType.componentType().isNumber()) {
                 fErrors.error(base->fOffset,
                               "'+' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
@@ -2462,19 +2458,20 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
             return base;
 
         case Token::Kind::TK_MINUS:
-            if (base->is<IntLiteral>()) {
-                return std::make_unique<IntLiteral>(fContext, base->fOffset,
-                                                    -base->as<IntLiteral>().value());
-            }
-            if (base->is<FloatLiteral>()) {
-                return std::make_unique<FloatLiteral>(fContext, base->fOffset,
-                                                      -base->as<FloatLiteral>().value());
-            }
-            if (!baseType.isNumber() &&
-                !(baseType.isVector() && baseType.componentType().isNumber())) {
+            if (!baseType.componentType().isNumber()) {
                 fErrors.error(base->fOffset,
                               "'-' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
+            }
+            if (base->is<IntLiteral>()) {
+                return std::make_unique<IntLiteral>(base->fOffset,
+                                                    -base->as<IntLiteral>().value(),
+                                                    &base->type());
+            }
+            if (base->is<FloatLiteral>()) {
+                return std::make_unique<FloatLiteral>(base->fOffset,
+                                                      -base->as<FloatLiteral>().value(),
+                                                      &base->type());
             }
             return std::make_unique<PrefixExpression>(Token::Kind::TK_MINUS, std::move(base));
 
@@ -2507,9 +2504,10 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
                               baseType.displayName() + "'");
                 return nullptr;
             }
-            if (base->kind() == Expression::Kind::kBoolLiteral) {
-                return std::make_unique<BoolLiteral>(fContext, base->fOffset,
-                                                     !base->as<BoolLiteral>().value());
+            if (base->is<BoolLiteral>()) {
+                return std::make_unique<BoolLiteral>(base->fOffset,
+                                                     !base->as<BoolLiteral>().value(),
+                                                     &base->type());
             }
             break;
         case Token::Kind::TK_BITWISENOT:
@@ -2520,7 +2518,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
                               "' is not allowed");
                 return nullptr;
             }
-            if (baseType != *fContext.fInt_Type && baseType != *fContext.fUInt_Type) {
+            if (!baseType.isInteger()) {
                 fErrors.error(base->fOffset,
                               String("'") + Compiler::OperatorName(op) + "' cannot operate on '" +
                               baseType.displayName() + "'");
@@ -2535,16 +2533,6 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
 
 std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression> base,
                                                       StringFragment field) {
-    if (base->kind() == Expression::Kind::kExternalValue) {
-        const ExternalValue& ev = base->as<ExternalValueReference>().value();
-        ExternalValue* result = ev.getChild(String(field).c_str());
-        if (!result) {
-            fErrors.error(base->fOffset, "external value does not have a child named '" + field +
-                                         "'");
-            return nullptr;
-        }
-        return std::unique_ptr<Expression>(new ExternalValueReference(base->fOffset, result));
-    }
     const Type& baseType = base->type();
     auto fields = baseType.fields();
     for (size_t i = 0; i < fields.size(); i++) {
@@ -2898,9 +2886,6 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
         }
         return std::make_unique<Setting>(fieldNode.fOffset, field, type);
     }
-    if (base->kind() == Expression::Kind::kExternalValue) {
-        return this->convertField(std::move(base), field);
-    }
     switch (baseType.typeKind()) {
         case Type::TypeKind::kOther:
         case Type::TypeKind::kStruct:
@@ -3035,7 +3020,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
         bool isBuiltinCode,
         const char* text,
         size_t length,
-        const std::vector<std::unique_ptr<ExternalValue>>* externalValues) {
+        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
     fKind = kind;
     fSettings = settings;
     fSymbolTable = base.fSymbols;
@@ -3077,10 +3062,10 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
                 std::make_unique<GlobalVarDeclaration>(/*offset=*/-1, std::move(decl)));
     }
 
-    if (externalValues) {
+    if (externalFunctions) {
         // Add any external values to the new symbol table, so they're only visible to this Program
-        for (const auto& ev : *externalValues) {
-            fSymbolTable->addWithoutOwnership(ev.get());
+        for (const auto& ef : *externalFunctions) {
+            fSymbolTable->addWithoutOwnership(ef.get());
         }
     }
 
