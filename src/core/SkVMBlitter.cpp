@@ -191,7 +191,7 @@ namespace {
                               skvm::Uniforms* uniforms, SkArenaAlloc* alloc) {
         // First two arguments are always uniforms and the destination buffer.
         uniforms->base    = p->uniform();
-        skvm::Arg dst_ptr = p->arg(SkColorTypeBytesPerPixel(params.dst.colorType()));
+        skvm::Ptr dst_ptr = p->arg(SkColorTypeBytesPerPixel(params.dst.colorType()));
         // A SpriteShader (in this file) may next use one argument as its varying source.
         // Subsequent arguments depend on params.coverage:
         //    - Full:      (no more arguments)
@@ -563,7 +563,7 @@ namespace {
             : fDevice(device)
             , fSprite(sprite ? *sprite : SkPixmap{})
             , fSpriteOffset(spriteOffset)
-            , fUniforms(kBlitterUniformsCount)
+            , fUniforms(skvm::Ptr{0}, kBlitterUniformsCount)
             , fParams(effective_params(device, sprite, paint, matrices, std::move(clip)))
             , fKey(cache_key(fParams, &fUniforms, &fAlloc, ok))
         {}
