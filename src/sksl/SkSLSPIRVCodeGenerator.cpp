@@ -1151,23 +1151,29 @@ SpvId SPIRVCodeGenerator::writeConstantVector(const Constructor& c) {
     const Type& type = c.type();
     SkASSERT(type.isVector() && c.isCompileTimeConstant());
 
+    // Get each of the constructor components as SPIR-V constants.
     SPIRVVectorConstant key{this->getType(type),
                             /*fValueId=*/{SpvId(-1), SpvId(-1), SpvId(-1), SpvId(-1)}};
-    size_t numValues;
-    if (c.arguments().size() == 1) {
-        // GLSL automatically splats single-argument constructors across every column. In SPIR-V, we
-        // need to handle this splat ourselves.
-        numValues = type.columns();
-        key.fValueId[0] = this->writeExpression(*c.arguments()[0], fConstantBuffer);
-        for (size_t i = 1; i < numValues; i++) {
-            key.fValueId[i] = key.fValueId[0];
+
+    if (c.componentType().isFloat()) {
+        for (int i = 0; i < type.columns(); i++) {
+            FloatLiteral literal(c.fOffset, c.getFVecComponent(i), &c.componentType());
+            key.fValueId[i] = this->writeFloatLiteral(literal);
+        }
+    } else if (c.componentType().isInteger()) {
+        for (int i = 0; i < type.columns(); i++) {
+            IntLiteral literal(c.fOffset, c.getIVecComponent(i), &c.componentType());
+            key.fValueId[i] = this->writeIntLiteral(literal);
+        }
+    } else if (c.componentType().isBoolean()) {
+        for (int i = 0; i < type.columns(); i++) {
+            BoolLiteral literal(c.fOffset, c.getBVecComponent(i), &c.componentType());
+            key.fValueId[i] = this->writeBoolLiteral(literal);
         }
     } else {
-        // A multi-argument constructor fills in each argument in order.
-        numValues = c.arguments().size();
-        for (size_t i = 0; i < numValues; i++) {
-            key.fValueId[i] = this->writeExpression(*c.arguments()[i], fConstantBuffer);
-        }
+        SkDEBUGFAILF("unexpected vector component type: %s",
+                     c.componentType().displayName().c_str());
+        return SpvId(-1);
     }
 
     // Check to see if we've already synthesized this vector constant.
@@ -1175,10 +1181,10 @@ SpvId SPIRVCodeGenerator::writeConstantVector(const Constructor& c) {
     if (newlyCreated) {
         // Emit an OpConstantComposite instruction for this constant.
         SpvId result = this->nextId();
-        this->writeOpCode(SpvOpConstantComposite, 3 + numValues, fConstantBuffer);
+        this->writeOpCode(SpvOpConstantComposite, 3 + type.columns(), fConstantBuffer);
         this->writeWord(key.fTypeId, fConstantBuffer);
         this->writeWord(result, fConstantBuffer);
-        for (size_t i = 0; i < numValues; i++) {
+        for (int i = 0; i < type.columns(); i++) {
             this->writeWord(key.fValueId[i], fConstantBuffer);
         }
         iter->second = result;
@@ -2604,7 +2610,7 @@ SpvId SPIRVCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
 }
 
 SpvId SPIRVCodeGenerator::writeIntLiteral(const IntLiteral& i) {
-    ConstantValuePair key(i.value(), i.type().numberKind());
+    SPIRVNumberConstant key{i.value(), i.type().numberKind()};
     auto [iter, newlyCreated] = fNumberConstants.insert({key, (SpvId)-1});
     if (newlyCreated) {
         SpvId result = this->nextId();
@@ -2616,15 +2622,17 @@ SpvId SPIRVCodeGenerator::writeIntLiteral(const IntLiteral& i) {
 }
 
 SpvId SPIRVCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
-    ConstantValuePair key(f.value(), f.type().numberKind());
+    // Convert the float literal into its bit-representation.
+    float value = f.value();
+    uint32_t valueBits;
+    static_assert(sizeof(valueBits) == sizeof(value));
+    memcpy(&valueBits, &value, sizeof(value));
+
+    SPIRVNumberConstant key{valueBits, f.type().numberKind()};
     auto [iter, newlyCreated] = fNumberConstants.insert({key, (SpvId)-1});
     if (newlyCreated) {
         SpvId result = this->nextId();
-        float value = f.value();
-        uint32_t valueBits;
-        static_assert(sizeof(valueBits) == sizeof(value));
-        memcpy(&valueBits, &value, sizeof(valueBits));
-        this->writeInstruction(SpvOpConstant, this->getType(f.type()), result, valueBits,
+        this->writeInstruction(SpvOpConstant, this->getType(f.type()), result, (SpvId) valueBits,
                                fConstantBuffer);
         iter->second = result;
     }

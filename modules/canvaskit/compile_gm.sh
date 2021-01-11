@@ -25,12 +25,23 @@ EMCC=`which emcc`
 EMCXX=`which em++`
 EMAR=`which emar`
 
-RELEASE_CONF="-O3 -DSK_RELEASE --pre-js $BASE_DIR/release.js \
+if [[ $@ == *debug* ]]; then
+  echo "Building a Debug build"
+  DEBUG=true
+  EXTRA_CFLAGS="\"-DSK_DEBUG\", \"-DGR_TEST_UTILS\", "
+  RELEASE_CONF="-O0 --js-opts 0 -s DEMANGLE_SUPPORT=1 -s ASSERTIONS=1 -s GL_ASSERTIONS=1 -g3 \
+                -DSK_DEBUG --pre-js $BASE_DIR/debug.js"
+  BUILD_DIR=${BUILD_DIR:="out/wasm_gm_tests_debug"}
+else
+  echo "Building a release build"
+  DEBUG=false
+  BUILD_DIR=${BUILD_DIR:="out/wasm_gm_tests"}
+  RELEASE_CONF="-O3 -DSK_RELEASE --pre-js $BASE_DIR/release.js \
               -DGR_TEST_UTILS"
-EXTRA_CFLAGS="\"-DSK_RELEASE\", \"-DGR_TEST_UTILS\", "
-IS_OFFICIAL_BUILD="false"
+  EXTRA_CFLAGS="\"-DSK_RELEASE\", \"-DGR_TEST_UTILS\", "
+fi
 
-BUILD_DIR=${BUILD_DIR:="out/wasm_gm_tests"}
+IS_OFFICIAL_BUILD="false"
 
 mkdir -p $BUILD_DIR
 # sometimes the .a files keep old symbols around - cleaning them out makes sure
@@ -84,7 +95,7 @@ echo "Compiling bitcode"
     ${GN_GPU_FLAGS}
     ${EXTRA_CFLAGS}
   ] \
-  is_debug=false \
+  is_debug=${DEBUG} \
   is_official_build=${IS_OFFICIAL_BUILD} \
   is_component_build=false \
   werror=true \
@@ -134,6 +145,24 @@ ${NINJA} -C ${BUILD_DIR} libskia.a libskshaper.a \
   $(parse_targets $SHAPER_LIB $GM_LIB)
 
 echo "Generating final wasm"
+
+# Defines for the emscripten compilation step, which builds the tests
+# Aim to match the defines that would be set by gn for the skia compilation step.
+SKIA_DEFINES="
+-DSK_DISABLE_AAA \
+-DSK_FORCE_8_BYTE_ALIGNMENT \
+-DGR_OP_ALLOCATE_USE_NEW \
+-DSK_HAS_WUFFS_LIBRARY \
+-DSK_HAS_HEIF_LIBRARY \
+-DSK_ENCODE_WEBP \
+-DSK_CODEC_DECODES_WEBP \
+-DSK_ENCODE_PNG \
+-DSK_CODEC_DECODES_PNG \
+-DSK_ENCODE_JPEG \
+-DSK_CODEC_DECODES_JPEG \
+-DSK_SHAPER_HARFBUZZ_AVAILABLE \
+-DSK_UNICODE_AVAILABLE \
+-DSK_ENABLE_SVG"
 
 # Disable '-s STRICT=1' outside of Linux until
 # https://github.com/emscripten-core/emscripten/issues/12118 is resovled.
@@ -186,8 +215,8 @@ GLOBIGNORE+="tests/GrThreadSafeCacheTest.cpp"
 EMCC_DEBUG=1 ${EMCXX} \
     $RELEASE_CONF \
     -I. \
-    -DSK_DISABLE_AAA \
-    -DSK_FORCE_8_BYTE_ALIGNMENT \
+    -DGR_TEST_UTILS \
+    $SKIA_DEFINES \
     $WASM_GPU \
     -std=c++17 \
     --profiling-funcs \

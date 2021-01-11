@@ -8,7 +8,7 @@
 #include "include/core/SkM44.h"
 #include "src/sksl/SkSLByteCode.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/SkSLExternalValue.h"
+#include "src/sksl/SkSLExternalFunction.h"
 #include "src/sksl/SkSLVMGenerator.h"
 #include "src/utils/SkJSON.h"
 
@@ -20,6 +20,10 @@ struct ProgramBuilder {
     ProgramBuilder(skiatest::Reporter* r, const char* src)
             : fCaps(GrContextOptions{}), fCompiler(&fCaps) {
         SkSL::Program::Settings settings;
+        // The SkSL inliner is well tested in other contexts. Here, we disable inlining entirely,
+        // to stress-test the VM generator's handling of function calls with varying signatures.
+        settings.fInlineThreshold = 0;
+
         fProgram = fCompiler.convertProgram(SkSL::Program::kGeneric_Kind, SkSL::String(src),
                                             settings);
         if (!fProgram) {
@@ -58,18 +62,22 @@ static void verify_values(skiatest::Reporter* r,
                           const float* actual,
                           const float* expected,
                           int N,
-                          bool bitwiseCompare) {
-    auto nearly_equal = [](const float a[], const float b[], int count) {
-        for (int i = 0; i < count; ++i) {
-            if (!SkScalarNearlyEqual(a[i], b[i])) {
-                return false;
-            }
-        }
-        return true;
+                          bool exactCompare) {
+    auto exact_equiv = [](float x, float y) {
+        return x == y
+            || (isnan(x) && isnan(y));
     };
 
-    bool valid = bitwiseCompare ? !memcmp(actual, expected, sizeof(float) * N)
-                                : nearly_equal(actual, expected, N);
+    bool valid = true;
+    for (int i = 0; i < N; ++i) {
+        if (exactCompare && !exact_equiv(actual[i], expected[i])) {
+            valid = false;
+        }
+        if (!exactCompare && !SkScalarNearlyEqual(actual[i], expected[i])) {
+            valid = false;
+        }
+    }
+
     if (!valid) {
         printf("for program: %s\n", src);
         printf("    expected (");
@@ -90,7 +98,7 @@ static void verify_values(skiatest::Reporter* r,
 }
 
 void test_skvm(skiatest::Reporter* r, const char* src, float* in, const float* expected,
-               bool bitwiseCompare) {
+               bool exactCompare) {
     ProgramBuilder program(r, src);
     if (!program) { return; }
 
@@ -117,12 +125,12 @@ void test_skvm(skiatest::Reporter* r, const char* src, float* in, const float* e
     // TODO: Test with and without JIT?
     p.eval(1, args.get());
 
-    verify_values(r, src, out.get(), expected, sig.fReturnSlots, bitwiseCompare);
+    verify_values(r, src, out.get(), expected, sig.fReturnSlots, exactCompare);
 }
 
 void test(skiatest::Reporter* r, const char* src, float* in, const float* expected,
-          bool bitwiseCompare = true) {
-    test_skvm(r, src, in, expected, bitwiseCompare);
+          bool exactCompare = true) {
+    test_skvm(r, src, in, expected, exactCompare);
 
     ByteCodeBuilder byteCode(r, src);
     if (!byteCode) { return; }
@@ -133,7 +141,7 @@ void test(skiatest::Reporter* r, const char* src, float* in, const float* expect
     SkAssertResult(byteCode->run(main, in, main->getParameterCount(), out.get(), returnCount,
                                  nullptr, 0));
 
-    verify_values(r, src, out.get(), expected, returnCount, bitwiseCompare);
+    verify_values(r, src, out.get(), expected, returnCount, exactCompare);
 }
 
 void vec_test(skiatest::Reporter* r, const char* src) {
@@ -207,7 +215,7 @@ void test_skvm(skiatest::Reporter* r, const char* src,
     float actual[4]   = { inR, inG, inB, inA };
     float expected[4] = { exR, exG, exB, exA };
 
-    verify_values(r, src, actual, expected, 4, /*bitwiseCompare=*/true);
+    verify_values(r, src, actual, expected, 4, /*exactCompare=*/true);
 
     // TODO: vec_test with skvm
 }
@@ -229,7 +237,7 @@ void test(skiatest::Reporter* r, const char* src,
     const SkSL::ByteCodeFunction* main = byteCode->getFunction("main");
     SkAssertResult(byteCode->run(main, inoutColor, 4, nullptr, 0, nullptr, 0));
 
-    verify_values(r, src, inoutColor, expected, 4, /*bitwiseCompare=*/true);
+    verify_values(r, src, inoutColor, expected, 4, /*exactCompare=*/true);
 
     // Do additional testing of 4x1 vs 1x4 to stress divergent control flow, etc.
     vec_test(r, src);
@@ -286,15 +294,12 @@ DEF_TEST(SkSLInterpreterAnd, r) {
             "color = half4(color.a); }", 1, 1, 0, 3, 1, 1, 0, 3);
     test(r, "void main(inout half4 color) { if (color.r > color.g && color.g > color.b) "
             "color = half4(color.a); }", 2, 1, 1, 3, 2, 1, 1, 3);
-    // TODO: SkVM function call support
     test(r, "int global; bool update() { global = 123; return true; }"
             "void main(inout half4 color) { global = 0;  if (color.r > color.g && update()) "
-            "color = half4(color.a); color.a = global; }", 2, 1, 1, 3, 3, 3, 3, 123,
-            /*testWithSkVM=*/false);
+            "color = half4(color.a); color.a = global; }", 2, 1, 1, 3, 3, 3, 3, 123);
     test(r, "int global; bool update() { global = 123; return true; }"
             "void main(inout half4 color) { global = 0;  if (color.r > color.g && update()) "
-            "color = half4(color.a); color.a = global; }", 1, 1, 1, 3, 1, 1, 1, 0,
-            /*testWithSkVM=*/false);
+            "color = half4(color.a); color.a = global; }", 1, 1, 1, 3, 1, 1, 1, 0);
 }
 
 DEF_TEST(SkSLInterpreterOr, r) {
@@ -304,15 +309,12 @@ DEF_TEST(SkSLInterpreterOr, r) {
             "color = half4(color.a); }", 1, 1, 0, 3, 3, 3, 3, 3);
     test(r, "void main(inout half4 color) { if (color.r > color.g || color.g > color.b) "
             "color = half4(color.a); }", 1, 1, 1, 3, 1, 1, 1, 3);
-    // TODO: SkVM function call support
     test(r, "int global; bool update() { global = 123; return true; }"
             "void main(inout half4 color) { global = 0;  if (color.r > color.g || update()) "
-            "color = half4(color.a); color.a = global; }", 1, 1, 1, 3, 3, 3, 3, 123,
-            /*testWithSkVM=*/false);
+            "color = half4(color.a); color.a = global; }", 1, 1, 1, 3, 3, 3, 3, 123);
     test(r, "int global; bool update() { global = 123; return true; }"
             "void main(inout half4 color) { global = 0;  if (color.r > color.g || update()) "
-            "color = half4(color.a); color.a = global; }", 2, 1, 1, 3, 3, 3, 3, 0,
-            /*testWithSkVM=*/false);
+            "color = half4(color.a); color.a = global; }", 2, 1, 1, 3, 3, 3, 3, 0);
 }
 
 DEF_TEST(SkSLInterpreterMatrix, r) {
@@ -734,6 +736,33 @@ DEF_TEST(SkSLInterpreterRestrictFunctionCalls, r) {
                       "{ for (int i = 0; i < 1; i++) { if (x > 2) { return x; } } return 0; }");
 }
 
+DEF_TEST(SkSLInterpreterReturnThenCall, r) {
+    // Test that early returns disable execution in subsequently called functions
+    const char* src = R"(
+        float y;
+        void inc () { ++y; }
+        void maybe_inc() { if (y < 0) return; inc(); }
+        void main(inout float x) { y = x; maybe_inc(); x = y; }
+    )";
+
+    ProgramBuilder program(r, src);
+    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    REPORTER_ASSERT(r, main);
+
+    skvm::Builder b;
+    SkSL::ProgramToSkVM(*program, *main, &b);
+    skvm::Program p = b.done();
+
+    float xs[] = { -2.0f, 0.0f, 3.0f, -1.0f };
+    const void* uniforms = nullptr;
+    p.eval(4, uniforms, xs);
+
+    REPORTER_ASSERT(r, xs[0] == -2.0f);
+    REPORTER_ASSERT(r, xs[1] ==  1.0f);
+    REPORTER_ASSERT(r, xs[2] ==  4.0f);
+    REPORTER_ASSERT(r, xs[3] == -1.0f);
+}
+
 DEF_TEST(SkSLInterpreterEarlyReturn, r) {
     // Unlike returns in loops, returns in conditionals should work.
     const char* src = "float main(float x, float y) { if (x < y) { return x; } return y; }";
@@ -962,204 +991,38 @@ DEF_TEST(SkSLInterpreterDot, r) {
     test(r, "float main(float4 x, float4 y) { return dot(x, y); }", args, &expected);
 }
 
-static const SkSL::Type& type_of(const skjson::Value* value, SkSL::Compiler* compiler) {
-    switch (value->getType()) {
-        case skjson::Value::Type::kNumber: {
-            float f = *value->as<skjson::NumberValue>();
-            if (f == (float) (int) f) {
-                return *compiler->context().fInt_Type;
-            }
-            return *compiler->context().fFloat_Type;
-        }
-        case skjson::Value::Type::kBool:
-            return *compiler->context().fBool_Type;
-        default:
-            return *compiler->context().fVoid_Type;
-    }
-}
-
-class JSONExternalValue : public SkSL::ExternalValue {
+class ExternalSqrt : public SkSL::ExternalFunction {
 public:
-    JSONExternalValue(const char* name, const skjson::Value* value, SkSL::Compiler* compiler)
-        : INHERITED(name, type_of(value, compiler))
-        , fValue(*value)
-        , fCompiler(*compiler) {}
-
-    bool canRead() const override {
-        return type() != *fCompiler.context().fVoid_Type;
-    }
-
-    void read(int /*unusedIndex*/, float* target) const override {
-        if (type() == *fCompiler.context().fInt_Type) {
-            *(int*) target = *fValue.as<skjson::NumberValue>();
-        } else if (type() == *fCompiler.context().fFloat_Type) {
-            *(float*) target = *fValue.as<skjson::NumberValue>();
-        } else if (type() == *fCompiler.context().fBool_Type) {
-            // ByteCode "booleans" are actually bit-masks
-            *(int*) target = *fValue.as<skjson::BoolValue>() ? ~0 : 0;
-        } else {
-            SkASSERT(false);
-        }
-    }
-
-    SkSL::ExternalValue* getChild(const char* name) const override {
-        if (fValue.getType() == skjson::Value::Type::kObject) {
-            const skjson::Value& v = fValue.as<skjson::ObjectValue>()[name];
-            fOwned.push_back(std::make_unique<JSONExternalValue>(name, &v, &fCompiler));
-            return fOwned.back().get();
-        }
-        return nullptr;
-    }
-
-private:
-    const skjson::Value& fValue;
-    SkSL::Compiler& fCompiler;
-    mutable std::vector<std::unique_ptr<SkSL::ExternalValue>> fOwned;
-
-    using INHERITED = SkSL::ExternalValue;
-};
-
-class PointerExternalValue : public SkSL::ExternalValue {
-public:
-    PointerExternalValue(const char* name, const SkSL::Type& type, void* data, size_t size)
-        : INHERITED(name, type)
-        , fBytes(data)
-        , fSize(size) {}
-
-    bool canRead() const override {
-        return true;
-    }
-
-    bool canWrite() const override {
-        return true;
-    }
-
-    void read(int /*unusedIndex*/, float* target) const override {
-        memcpy(target, fBytes, fSize);
-    }
-
-    void write(int /*unusedIndex*/, float* src) const override {
-        memcpy(fBytes, src, fSize);
-    }
-
-
-private:
-    void* fBytes;
-    size_t fSize;
-
-    using INHERITED = SkSL::ExternalValue;
-};
-
-DEF_TEST(SkSLInterpreterExternalValues, r) {
-    const char* json = "{ \"value1\": 12, \"child\": { \"value2\": true, \"value3\": 5.5 } }";
-    skjson::DOM dom(json, strlen(json));
-    GrShaderCaps caps(GrContextOptions{});
-    SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
-    const char* src = "float main() {"
-                      "    outValue = 152;"
-                      "    return root.child.value2 ? root.value1 * root.child.value3 : -1;"
-                      "}";
-    int32_t outValue = -1;
-    std::vector<std::unique_ptr<SkSL::ExternalValue>> externalValues;
-    externalValues.push_back(std::make_unique<JSONExternalValue>("root", &dom.root(), &compiler));
-    externalValues.push_back(std::make_unique<PointerExternalValue>(
-            "outValue", *compiler.context().fInt_Type, &outValue, sizeof(outValue)));
-    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::Program::kGeneric_Kind, SkSL::String(src), settings, &externalValues);
-    REPORTER_ASSERT(r, program);
-    if (program) {
-        std::unique_ptr<SkSL::ByteCode> byteCode = compiler.toByteCode(*program);
-        REPORTER_ASSERT(r, !compiler.errorCount());
-        if (compiler.errorCount() > 0) {
-            printf("%s\n%s", src, compiler.errorText().c_str());
-            return;
-        }
-        const SkSL::ByteCodeFunction* main = byteCode->getFunction("main");
-        float out;
-        SkAssertResult(byteCode->run(main, nullptr, 0, &out, 1, nullptr, 0));
-        REPORTER_ASSERT(r, out == 66.0);
-        REPORTER_ASSERT(r, outValue == 152);
-    } else {
-        printf("%s\n%s", src, compiler.errorText().c_str());
-    }
-}
-
-DEF_TEST(SkSLInterpreterExternalValuesVector, r) {
-    GrShaderCaps caps(GrContextOptions{});
-    SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
-    const char* src = "void main() {"
-                      "    value *= 2;"
-                      "}";
-    int32_t value[4] = { 1, 2, 3, 4 };
-    std::vector<std::unique_ptr<SkSL::ExternalValue>> externalValues;
-    externalValues.push_back(std::make_unique<PointerExternalValue>(
-            "value", *compiler.context().fInt4_Type, value, sizeof(value)));
-    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::Program::kGeneric_Kind, SkSL::String(src), settings, &externalValues);
-    REPORTER_ASSERT(r, program);
-    if (program) {
-        std::unique_ptr<SkSL::ByteCode> byteCode = compiler.toByteCode(*program);
-        REPORTER_ASSERT(r, !compiler.errorCount());
-        if (compiler.errorCount() > 0) {
-            printf("%s\n%s", src, compiler.errorText().c_str());
-            return;
-        }
-        const SkSL::ByteCodeFunction* main = byteCode->getFunction("main");
-        SkAssertResult(byteCode->run(main, nullptr, 0, nullptr, 0, nullptr, 0));
-        REPORTER_ASSERT(r, value[0] == 2);
-        REPORTER_ASSERT(r, value[1] == 4);
-        REPORTER_ASSERT(r, value[2] == 6);
-        REPORTER_ASSERT(r, value[3] == 8);
-    } else {
-        printf("%s\n%s", src, compiler.errorText().c_str());
-    }
-}
-
-class FunctionExternalValue : public SkSL::ExternalValue {
-public:
-    FunctionExternalValue(const char* name, float(*function)(float), SkSL::Compiler& compiler)
+    ExternalSqrt(const char* name, SkSL::Compiler& compiler)
         : INHERITED(name, *compiler.context().fFloat_Type)
-        , fCompiler(compiler)
-        , fFunction(function) {}
+        , fCompiler(compiler) {}
 
-    bool canCall() const override {
-        return true;
-    }
-
-    int callParameterCount() const override {
-        return 1;
-    }
+    int callParameterCount() const override { return 1; }
 
     void getCallParameterTypes(const SkSL::Type** outTypes) const override {
         outTypes[0] = fCompiler.context().fFloat_Type.get();
     }
 
     void call(int /*unusedIndex*/, float* arguments, float* outReturn) const override {
-        outReturn[0] = fFunction(arguments[0]);
+        outReturn[0] = sqrt(arguments[0]);
     }
 
 private:
     SkSL::Compiler& fCompiler;
-
-    float (*fFunction)(float);
-
-    using INHERITED = SkSL::ExternalValue;
+    using INHERITED = SkSL::ExternalFunction;
 };
 
-DEF_TEST(SkSLInterpreterExternalValuesCall, r) {
+DEF_TEST(SkSLInterpreterExternalFunction, r) {
     GrShaderCaps caps(GrContextOptions{});
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src = "float main() {"
                       "    return external(25);"
                       "}";
-    std::vector<std::unique_ptr<SkSL::ExternalValue>> externalValues;
-    externalValues.push_back(std::make_unique<FunctionExternalValue>(
-            "external", [](float x) { return (float)sqrt(x); }, compiler));
+    std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFunctions;
+    externalFunctions.push_back(std::make_unique<ExternalSqrt>("external", compiler));
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::Program::kGeneric_Kind, SkSL::String(src), settings, &externalValues);
+            SkSL::Program::kGeneric_Kind, SkSL::String(src), settings, &externalFunctions);
     REPORTER_ASSERT(r, program);
     if (program) {
         std::unique_ptr<SkSL::ByteCode> byteCode = compiler.toByteCode(*program);
@@ -1177,40 +1040,32 @@ DEF_TEST(SkSLInterpreterExternalValuesCall, r) {
     }
 }
 
-class VectorFunctionExternalValue : public SkSL::ExternalValue {
+class ExternalSqrt4 : public SkSL::ExternalFunction {
 public:
-    VectorFunctionExternalValue(const char* name, void(*function)(float[4], float[4]),
-                                SkSL::Compiler& compiler)
+    ExternalSqrt4(const char* name, SkSL::Compiler& compiler)
         : INHERITED(name, *compiler.context().fFloat4_Type)
-        , fCompiler(compiler)
-        , fFunction(function) {}
+        , fCompiler(compiler) {}
 
-    bool canCall() const override {
-        return true;
-    }
-
-    int callParameterCount() const override {
-        return 1;
-    }
+    int callParameterCount() const override { return 1; }
 
     void getCallParameterTypes(const SkSL::Type** outTypes) const override {
         outTypes[0] = fCompiler.context().fFloat4_Type.get();
     }
 
     void call(int /*unusedIndex*/, float* arguments, float* outReturn) const override {
-        fFunction(arguments, outReturn);
+        outReturn[0] = sqrt(arguments[0]);
+        outReturn[1] = sqrt(arguments[1]);
+        outReturn[2] = sqrt(arguments[2]);
+        outReturn[3] = sqrt(arguments[3]);
     }
 
 private:
     SkSL::Compiler& fCompiler;
-
-    void (*fFunction)(float[4], float[4]);
-
-    using INHERITED = SkSL::ExternalValue;
+    using INHERITED = SkSL::ExternalFunction;
 };
 
 
-DEF_TEST(SkSLInterpreterExternalValuesVectorCall, r) {
+DEF_TEST(SkSLInterpreterExternalFunctionVector, r) {
     GrShaderCaps caps(GrContextOptions{});
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
@@ -1218,18 +1073,10 @@ DEF_TEST(SkSLInterpreterExternalValuesVectorCall, r) {
             "float4 main() {"
             "    return external(float4(1, 4, 9, 16));"
             "}";
-    std::vector<std::unique_ptr<SkSL::ExternalValue>> externalValues;
-    externalValues.push_back(std::make_unique<VectorFunctionExternalValue>(
-            "external",
-            [](float in[4], float out[4]) {
-                out[0] = sqrt(in[0]);
-                out[1] = sqrt(in[1]);
-                out[2] = sqrt(in[2]);
-                out[3] = sqrt(in[3]);
-            },
-            compiler));
+    std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFunctions;
+    externalFunctions.push_back(std::make_unique<ExternalSqrt4>("external", compiler));
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::Program::kGeneric_Kind, SkSL::String(src), settings, &externalValues);
+            SkSL::Program::kGeneric_Kind, SkSL::String(src), settings, &externalFunctions);
     REPORTER_ASSERT(r, program);
     if (program) {
         std::unique_ptr<SkSL::ByteCode> byteCode = compiler.toByteCode(*program);

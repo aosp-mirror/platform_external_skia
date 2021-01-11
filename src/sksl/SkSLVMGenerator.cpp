@@ -17,7 +17,7 @@
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExternalFunctionCall.h"
-#include "src/sksl/ir/SkSLExternalValueReference.h"
+#include "src/sksl/ir/SkSLExternalFunctionReference.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLForStatement.h"
@@ -44,18 +44,6 @@
 namespace SkSL {
 
 namespace {
-
-class DebugfErrorReporter : public ErrorReporter {
-public:
-    void error(int offset, String msg) override {
-        SkDebugf("%s\n", msg.c_str());
-        ++fErrorCount;
-    }
-    int errorCount() override { return fErrorCount; }
-
-private:
-    int fErrorCount = 0;
-};
 
 // Holds scalars, vectors, or matrices
 struct Value {
@@ -86,6 +74,8 @@ struct Value {
     ValRef    operator[](int i)       { return fVals[i]; }
     skvm::Val operator[](int i) const { return fVals[i]; }
 
+    SkSpan<skvm::Val> asSpan() { return fVals; }
+
 private:
     SkSTArray<4, skvm::Val, true> fVals;
 };
@@ -95,17 +85,15 @@ private:
 class SkVMGenerator {
 public:
     SkVMGenerator(const Program& program,
-                  const FunctionDefinition& function,
                   skvm::Builder* builder,
                   SkSpan<skvm::Val> uniforms,
-                  SkSpan<skvm::Val> arguments,
                   skvm::Coord device,
                   skvm::Coord local,
-                  SampleChildFn sampleChild,
-                  SkSpan<skvm::Val> outReturn,
-                  ErrorReporter* errors);
+                  SampleChildFn sampleChild);
 
-    bool generateCode();
+    void writeFunction(const FunctionDefinition& function,
+                       SkSpan<skvm::Val> arguments,
+                       SkSpan<skvm::Val> outReturn);
 
 private:
     enum class Intrinsic {
@@ -223,7 +211,12 @@ private:
         return result;
     }
 
-    skvm::I32 mask() { return fMask; }
+    skvm::I32 mask() {
+        // As we encounter (possibly conditional) return statements, fReturned is updated to store
+        // the lanes that have already returned. For the remainder of the current function, those
+        // lanes should be disabled.
+        return fMask & ~currentFunction().fReturned;
+    }
 
     Value writeExpression(const Expression& expr);
     Value writeBinaryExpression(const BinaryExpression& b);
@@ -248,26 +241,32 @@ private:
     Value writeMatrixInverse3x3(const Value& m);
     Value writeMatrixInverse4x4(const Value& m);
 
+    //
+    // Global state for the lifetime of the generator:
+    //
     const Program& fProgram;
-    const FunctionDefinition& fFunction;
-
     skvm::Builder* fBuilder;
 
-    std::vector<skvm::Val> fSlots;
     const skvm::Coord fLocalCoord;
     const SampleChildFn fSampleChild;
-    const SkSpan<skvm::Val> fArguments;
-    const SkSpan<skvm::Val> fReturnValue;
-
-    ErrorReporter& fErrors;
-
-    skvm::I32 fMask;
-    skvm::I32 fReturned;
+    const std::unordered_map<String, Intrinsic> fIntrinsics;
 
     // [Variable, first slot in fSlots]
     std::unordered_map<const Variable*, Slot> fVariableMap;
+    std::vector<skvm::Val> fSlots;
 
-    const std::unordered_map<String, Intrinsic> fIntrinsics;
+    // Conditional execution mask (changes are managed by AutoMask, and tied to control-flow scopes)
+    skvm::I32 fMask;
+
+    //
+    // State that's local to the generation of a single function:
+    //
+    struct Function {
+        const SkSpan<skvm::Val> fReturnValue;
+        skvm::I32               fReturned;
+    };
+    std::vector<Function> fFunctionStack;
+    Function& currentFunction() { return fFunctionStack.back(); }
 
     class AutoMask {
     public:
@@ -315,23 +314,15 @@ static size_t slot_count(const Type& type) {
 }
 
 SkVMGenerator::SkVMGenerator(const Program& program,
-                             const FunctionDefinition& function,
                              skvm::Builder* builder,
                              SkSpan<skvm::Val> uniforms,
-                             SkSpan<skvm::Val> arguments,
                              skvm::Coord device,
                              skvm::Coord local,
-                             SampleChildFn sampleChild,
-                             SkSpan<skvm::Val> outReturn,
-                             ErrorReporter* errors)
+                             SampleChildFn sampleChild)
         : fProgram(program)
-        , fFunction(function)
         , fBuilder(builder)
         , fLocalCoord(local)
         , fSampleChild(std::move(sampleChild))
-        , fArguments(arguments)
-        , fReturnValue(outReturn)
-        , fErrors(*errors)
         , fIntrinsics {
             { "sin", Intrinsic::kSin },
             { "cos", Intrinsic::kCos },
@@ -384,8 +375,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
 
             { "sample", Intrinsic::kSample },
         } {
-    fMask     = fBuilder->splat(0xffff'ffff);
-    fReturned = fBuilder->splat(0);
+    fMask = fBuilder->splat(0xffff'ffff);
 
     // Now, add storage for each global variable (including uniforms) to fSlots, and entries in
     // fVariableMap to remember where every variable is stored.
@@ -437,43 +427,47 @@ SkVMGenerator::SkVMGenerator(const Program& program,
         }
     }
     SkASSERT(uniformIter == uniforms.end());
-
-    const FunctionDeclaration& decl = fFunction.declaration();
-
-    // Ensure that outReturn (where we place the return values) is the correct size
-    SkASSERT(slot_count(decl.returnType()) == fReturnValue.size());
-
-    // Copy argument IDs to our list of (all) variable IDs
-    size_t argBase = fSlots.size(),
-           argSlot = argBase;
-    fSlots.insert(fSlots.end(), fArguments.begin(), fArguments.end());
-
-    // Compute where each parameter variable lives in the variable ID list
-    for (const Variable* p : decl.parameters()) {
-        fVariableMap[p] = argSlot;
-        argSlot += slot_count(p->type());
-    }
-    SkASSERT(argSlot == fSlots.size());
 }
 
-bool SkVMGenerator::generateCode() {
-    this->writeStatement(*fFunction.body());
+void SkVMGenerator::writeFunction(const FunctionDefinition& function,
+                                  SkSpan<skvm::Val> arguments,
+                                  SkSpan<skvm::Val> outReturn) {
+    const FunctionDeclaration& decl = function.declaration();
+    SkASSERT(slot_count(decl.returnType()) == outReturn.size());
 
-    // Copy 'out' and 'inout' parameters back to their caller-supplied argument storage
+    fFunctionStack.push_back({outReturn, /*returned=*/fBuilder->splat(0)});
+
+    // For all parameters, copy incoming argument IDs to our vector of (all) variable IDs
     size_t argIdx = 0;
-    for (const Variable* p : fFunction.declaration().parameters()) {
+    for (const Variable* p : decl.parameters()) {
         Slot paramSlot = this->getSlot(*p);
         size_t nslots = slot_count(p->type());
 
+        for (size_t i = 0; i < nslots; ++i) {
+            fSlots[paramSlot + i] = arguments[argIdx + i];
+        }
+        argIdx += nslots;
+    }
+    SkASSERT(argIdx == arguments.size());
+
+    this->writeStatement(*function.body());
+
+    // Copy 'out' and 'inout' parameters back to their caller-supplied argument storage
+    argIdx = 0;
+    for (const Variable* p : decl.parameters()) {
+        size_t nslots = slot_count(p->type());
+
         if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
+            Slot paramSlot = this->getSlot(*p);
             for (size_t i = 0; i < nslots; ++i) {
-                fArguments[argIdx + i] = fSlots[paramSlot + i];
+                arguments[argIdx + i] = fSlots[paramSlot + i];
             }
         }
         argIdx += nslots;
     }
+    SkASSERT(argIdx == arguments.size());
 
-    return 0 == fErrors.errorCount();
+    fFunctionStack.pop_back();
 }
 
 SkVMGenerator::Slot SkVMGenerator::getSlot(const Variable& v) {
@@ -595,8 +589,6 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
 
     size_t nslots = std::max(lVal.slots(), rVal.slots());
 
-    // TODO: This treats all unsigned types as signed. Need to pick a policy. (Either produce errors
-    // if a program uses unsigned types, or just silently convert everything to signed?)
     auto binary = [&](auto&& f_fn, auto&& i_fn) {
         Value result(nslots);
         for (size_t i = 0; i < nslots; ++i) {
@@ -1143,13 +1135,53 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
 }
 
 Value SkVMGenerator::writeFunctionCall(const FunctionCall& f) {
-    // TODO: Support calling other functions (by recursively generating their programs, eg inlining)
-    if (f.function().isBuiltin()) {
+    if (f.function().isBuiltin() && !f.function().definition()) {
         return this->writeIntrinsicCall(f);
     }
 
-    fErrors.error(-1, "Function calls not supported yet");
-    return {};
+    const FunctionDeclaration& decl = f.function();
+
+    // Evaluate all arguments, gather the results into a contiguous list of IDs
+    std::vector<skvm::Val> argVals;
+    for (const auto& arg : f.arguments()) {
+        Value v = this->writeExpression(*arg);
+        for (size_t i = 0; i < v.slots(); ++i) {
+            argVals.push_back(v[i]);
+        }
+    }
+
+    // Create storage for the return value
+    size_t nslots = slot_count(f.type());
+    Value result(nslots);
+    for (size_t i = 0; i < nslots; ++i) {
+        result[i] = fBuilder->splat(0.0f);
+    }
+
+    {
+        // This AutoMask merges currentFunction().fReturned into fMask. Lanes that conditionally
+        // returned in the current function would otherwise resume execution within the child.
+        AutoMask m(this, ~currentFunction().fReturned);
+        this->writeFunction(*f.function().definition(), argVals, result.asSpan());
+    }
+
+    // Propagate new values of any 'out' params back to the original arguments
+    const std::unique_ptr<Expression>* argIter = f.arguments().begin();
+    size_t valIdx = 0;
+    for (const Variable* p : decl.parameters()) {
+        size_t nslots = slot_count(p->type());
+        if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
+            Value v(nslots);
+            for (size_t i = 0; i < nslots; ++i) {
+                v[i] = argVals[valIdx + i];
+            }
+            const std::unique_ptr<Expression>& arg = *argIter;
+            this->writeStore(*arg, v);
+        }
+        valIdx += nslots;
+        argIter++;
+    }
+
+    return result;
 }
 
 Value SkVMGenerator::writePrefixExpression(const PrefixExpression& p) {
@@ -1281,7 +1313,7 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
         case Expression::Kind::kTernary:
             return this->writeTernaryExpression(e.as<TernaryExpression>());
         case Expression::Kind::kExternalFunctionCall:
-        case Expression::Kind::kExternalValue:
+        case Expression::Kind::kExternalFunctionReference:
         default:
             SkDEBUGFAIL("Unsupported expression");
             return {};
@@ -1328,18 +1360,19 @@ void SkVMGenerator::writeIfStatement(const IfStatement& i) {
 }
 
 void SkVMGenerator::writeReturnStatement(const ReturnStatement& r) {
-    // TODO: Can we suppress other side effects for lanes that have returned? fMask needs to
-    // fold in knowledge of conditional returns earlier in the function.
-    skvm::I32 returnsHere = bit_clear(this->mask(), fReturned);
+    skvm::I32 returnsHere = this->mask();
 
-    // TODO: returns with no expression
-    Value val = this->writeExpression(*r.expression());
+    if (r.expression()) {
+        Value val = this->writeExpression(*r.expression());
 
-    for (size_t i = 0; i < val.slots(); ++i) {
-        fReturnValue[i] = select(returnsHere, f32(val[i]), f32(fReturnValue[i])).id;
+        int i = 0;
+        for (skvm::Val& slot : currentFunction().fReturnValue) {
+            slot = select(returnsHere, f32(val[i]), f32(slot)).id;
+            i++;
+        }
     }
 
-    fReturned |= returnsHere;
+    currentFunction().fReturned |= returnsHere;
 }
 
 void SkVMGenerator::writeVarDeclaration(const VarDeclaration& decl) {
@@ -1375,7 +1408,7 @@ void SkVMGenerator::writeStatement(const Statement& s) {
         case Statement::Kind::kDo:
         case Statement::Kind::kFor:
         case Statement::Kind::kSwitch:
-            fErrors.error(s.fOffset, "Unsupported control flow");
+            SkDEBUGFAIL("Unsupported control flow");
             break;
         case Statement::Kind::kInlineMarker:
         case Statement::Kind::kNop:
@@ -1392,8 +1425,6 @@ skvm::Color ProgramToSkVM(const Program& program,
                           skvm::Coord device,
                           skvm::Coord local,
                           SampleChildFn sampleChild) {
-    DebugfErrorReporter errors;
-
     skvm::Val args[2] = {local.x.id, local.y.id};
     skvm::Val result[4] = {skvm::NA, skvm::NA, skvm::NA, skvm::NA};
     size_t paramSlots = 0;
@@ -1402,28 +1433,26 @@ skvm::Color ProgramToSkVM(const Program& program,
     }
     SkASSERT(paramSlots <= SK_ARRAY_COUNT(args));
 
-    SkVMGenerator generator(program, function, builder, uniforms, {args, paramSlots},
-                            device, local, std::move(sampleChild), result, &errors);
+    SkVMGenerator generator(program, builder, uniforms, device, local, std::move(sampleChild));
+    generator.writeFunction(function, {args, paramSlots}, result);
 
-    return generator.generateCode() ? skvm::Color{{builder, result[0]},
-                                                  {builder, result[1]},
-                                                  {builder, result[2]},
-                                                  {builder, result[3]}}
-                                    : skvm::Color{};
+    return skvm::Color{{builder, result[0]},
+                       {builder, result[1]},
+                       {builder, result[2]},
+                       {builder, result[3]}};
 }
 
 bool ProgramToSkVM(const Program& program,
                    const FunctionDefinition& function,
                    skvm::Builder* b,
                    SkVMSignature* outSignature) {
-    DebugfErrorReporter errors;
     SkVMSignature ignored,
                   *signature = outSignature ? outSignature : &ignored;
 
-    skvm::Arg uniforms = b->uniform();
+    skvm::Ptr uniforms = b->uniform();
     (void)uniforms;
 
-    std::vector<skvm::Arg> argPtrs;
+    std::vector<skvm::Ptr> argPtrs;
     std::vector<skvm::Val> argVals;
 
     for (const Variable* p : function.declaration().parameters()) {
@@ -1435,7 +1464,7 @@ bool ProgramToSkVM(const Program& program,
         }
     }
 
-    std::vector<skvm::Arg> returnPtrs;
+    std::vector<skvm::Ptr> returnPtrs;
     std::vector<skvm::Val> returnVals;
 
     signature->fReturnSlots = slot_count(function.declaration().returnType());
@@ -1445,12 +1474,9 @@ bool ProgramToSkVM(const Program& program,
     }
 
     skvm::Coord zeroCoord = {b->splat(0.0f), b->splat(0.0f)};
-    SkVMGenerator generator(program, function, b, /*uniforms=*/{}, argVals, /*device=*/zeroCoord,
-                            /*local=*/zeroCoord, /*sampleChild=*/{}, returnVals, &errors);
-
-    if (!generator.generateCode()) {
-        return false;
-    }
+    SkVMGenerator generator(program, b, /*uniforms=*/{}, /*device=*/zeroCoord, /*local=*/zeroCoord,
+                            /*sampleChild=*/{});
+    generator.writeFunction(function, argVals, returnVals);
 
     // generateCode has updated the contents of 'argVals' for any 'out' or 'inout' parameters.
     // Propagate those changes back to our varying buffers:
@@ -1508,8 +1534,7 @@ bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* buil
         }
     }
 
-    skvm::Uniforms uniforms(0);
-    uniforms.base = builder->uniform();
+    skvm::Uniforms uniforms(builder->uniform(), 0);
 
     auto new_uni = [&]() { return builder->uniformF(uniforms.pushF(0.0f)); };
 
