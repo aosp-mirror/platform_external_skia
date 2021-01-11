@@ -23,6 +23,8 @@ struct ProgramBuilder {
         // The SkSL inliner is well tested in other contexts. Here, we disable inlining entirely,
         // to stress-test the VM generator's handling of function calls with varying signatures.
         settings.fInlineThreshold = 0;
+        // For convenience, so we can test functions other than (and not called by) main.
+        settings.fRemoveDeadFunctions = false;
 
         fProgram = fCompiler.convertProgram(SkSL::Program::kGeneric_Kind, SkSL::String(src),
                                             settings);
@@ -691,15 +693,7 @@ static void expect_failure(skiatest::Reporter* r, const char* src) {
     SkSL::Program::Settings settings;
     auto program = compiler.convertProgram(SkSL::Program::kGeneric_Kind,
                                            SkSL::String(src), settings);
-    // Ideally, all failures would be detected by the IR generator, so this could be an assert.
-    // Some are still detected later (TODO: Fix this - skbug.com/11127).
-    if (!program) {
-        return;
-    }
-
-    auto byteCode = compiler.toByteCode(*program);
-    REPORTER_ASSERT(r, compiler.errorCount() > 0);
-    REPORTER_ASSERT(r, !byteCode);
+    REPORTER_ASSERT(r, !program);
 }
 
 static void expect_run_failure(skiatest::Reporter* r, const char* src, float* in) {
@@ -730,10 +724,6 @@ DEF_TEST(SkSLInterpreterRestrictFunctionCalls, r) {
 
     // Ensure that calls to undefined functions are not allowed (to prevent mutual recursion)
     expect_failure(r, "float foo(); float bar() { return foo(); } float foo() { return bar(); }");
-
-    // returns are not allowed inside loops
-    expect_failure(r, "float main(float x)"
-                      "{ for (int i = 0; i < 1; i++) { if (x > 2) { return x; } } return 0; }");
 }
 
 DEF_TEST(SkSLInterpreterReturnThenCall, r) {
@@ -773,8 +763,7 @@ DEF_TEST(SkSLInterpreterEarlyReturn, r) {
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::SkVMSignature sig;
-    SkSL::ProgramToSkVM(*program, *main, &b, &sig);
+    SkSL::ProgramToSkVM(*program, *main, &b);
     skvm::Program p = b.done();
 
     float xs[] = { 1.0f, 3.0f },
@@ -813,41 +802,36 @@ DEF_TEST(SkSLInterpreterFunctions, r) {
         "float dot3_test(float x) { return dot(float3(x, x + 1, x + 2), float3(1, -1, 2)); }\n"
         "float dot2_test(float x) { return dot(float2(x, x + 1), float2(1, -1)); }\n";
 
-    GrShaderCaps caps(GrContextOptions{});
-    SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
-    settings.fRemoveDeadFunctions = false;
-    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(SkSL::Program::kGeneric_Kind,
-                                                                     SkSL::String(src), settings);
-    REPORTER_ASSERT(r, program);
+    ProgramBuilder program(r, src);
 
-    std::unique_ptr<SkSL::ByteCode> byteCode = compiler.toByteCode(*program);
-    REPORTER_ASSERT(r, !compiler.errorCount());
-
-    auto sub = byteCode->getFunction("sub");
-    auto sqr = byteCode->getFunction("sqr");
-    auto main = byteCode->getFunction("main");
-    auto tan = byteCode->getFunction("tan");
-    auto dot3 = byteCode->getFunction("dot3_test");
-    auto dot2 = byteCode->getFunction("dot2_test");
+    auto sub  = SkSL::Program_GetFunction(*program, "sub");
+    auto sqr  = SkSL::Program_GetFunction(*program, "sqr");
+    auto main = SkSL::Program_GetFunction(*program, "main");
+    auto tan  = SkSL::Program_GetFunction(*program, "tan");
+    auto dot3 = SkSL::Program_GetFunction(*program, "dot3_test");
+    auto dot2 = SkSL::Program_GetFunction(*program, "dot2_test");
 
     REPORTER_ASSERT(r, sub);
     REPORTER_ASSERT(r, sqr);
     REPORTER_ASSERT(r, main);
-    REPORTER_ASSERT(r, !tan);
+    REPORTER_ASSERT(r, !tan);  // Getting a non-existent function should return nullptr
     REPORTER_ASSERT(r, dot3);
     REPORTER_ASSERT(r, dot2);
 
-    float out = 0.0f;
-    float in = 3.0f;
-    SkAssertResult(byteCode->run(main, &in, 1, &out, 1, nullptr, 0));
-    REPORTER_ASSERT(r, out = 6.0f);
+    auto test_fn = [&](const SkSL::FunctionDefinition* fn, float in, float expected) {
+        skvm::Builder b;
+        SkSL::ProgramToSkVM(*program, *fn, &b);
+        skvm::Program p = b.done();
 
-    SkAssertResult(byteCode->run(dot3, &in, 1, &out, 1, nullptr, 0));
-    REPORTER_ASSERT(r, out = 9.0f);
+        float out = 0.0f;
+        const void* uniforms = nullptr;
+        p.eval(1, uniforms, &in, &out);
+        REPORTER_ASSERT(r, out == expected);
+    };
 
-    SkAssertResult(byteCode->run(dot2, &in, 1, &out, 1, nullptr, 0));
-    REPORTER_ASSERT(r, out = -1.0f);
+    test_fn(main, 3.0f, 6.0f);
+    test_fn(dot3, 3.0f, 9.0f);
+    test_fn(dot2, 3.0f, -1.0f);
 }
 
 DEF_TEST(SkSLInterpreterOutParams, r) {
@@ -982,13 +966,13 @@ DEF_TEST(SkSLInterpreterDot, r) {
 class ExternalSqrt : public SkSL::ExternalFunction {
 public:
     ExternalSqrt(const char* name, SkSL::Compiler& compiler)
-        : INHERITED(name, *compiler.context().fFloat_Type)
+        : INHERITED(name, *compiler.context().fTypes.fFloat)
         , fCompiler(compiler) {}
 
     int callParameterCount() const override { return 1; }
 
     void getCallParameterTypes(const SkSL::Type** outTypes) const override {
-        outTypes[0] = fCompiler.context().fFloat_Type.get();
+        outTypes[0] = fCompiler.context().fTypes.fFloat.get();
     }
 
     void call(int /*unusedIndex*/, float* arguments, float* outReturn) const override {
@@ -1031,13 +1015,13 @@ DEF_TEST(SkSLInterpreterExternalFunction, r) {
 class ExternalSqrt4 : public SkSL::ExternalFunction {
 public:
     ExternalSqrt4(const char* name, SkSL::Compiler& compiler)
-        : INHERITED(name, *compiler.context().fFloat4_Type)
+        : INHERITED(name, *compiler.context().fTypes.fFloat4)
         , fCompiler(compiler) {}
 
     int callParameterCount() const override { return 1; }
 
     void getCallParameterTypes(const SkSL::Type** outTypes) const override {
-        outTypes[0] = fCompiler.context().fFloat4_Type.get();
+        outTypes[0] = fCompiler.context().fTypes.fFloat4.get();
     }
 
     void call(int /*unusedIndex*/, float* arguments, float* outReturn) const override {
