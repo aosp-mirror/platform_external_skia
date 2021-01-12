@@ -126,20 +126,13 @@ public:
             size_t length,
             const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions);
 
-    /**
-     * If both operands are compile-time constants and can be folded, returns an expression
-     * representing the folded value. Otherwise, returns null. Note that unlike most other functions
-     * here, null does not represent a compilation error.
-     */
-    std::unique_ptr<Expression> constantFold(const Expression& left,
-                                             Token::Kind op,
-                                             const Expression& right) const;
-
     // both of these functions return null and report an error if the setting does not exist
     const Type* typeForSetting(int offset, String name) const;
     std::unique_ptr<Expression> valueForSetting(int offset, String name) const;
 
     const Program::Settings* settings() const { return fSettings; }
+
+    ErrorReporter& errorReporter() const { return fErrors; }
 
     std::shared_ptr<SymbolTable>& symbolTable() {
         return fSymbolTable;
@@ -179,10 +172,6 @@ private:
                           const ExpressionArray& arguments);
     std::unique_ptr<Expression> coerce(std::unique_ptr<Expression> expr, const Type& type);
     CoercionCost coercionCost(const Expression& expr, const Type& type);
-    template <typename T>
-    std::unique_ptr<Expression> constantFoldVector(const Expression& left,
-                                                   Token::Kind op,
-                                                   const Expression& right) const;
     std::unique_ptr<Expression> convertBinaryExpression(std::unique_ptr<Expression> left,
                                                         Token::Kind op,
                                                         std::unique_ptr<Expression> right);
@@ -210,6 +199,10 @@ private:
     std::unique_ptr<Expression> convertIdentifier(int offset, StringFragment identifier);
     std::unique_ptr<Expression> convertIdentifier(const ASTNode& identifier);
     std::unique_ptr<Statement> convertIf(const ASTNode& s);
+    std::unique_ptr<Statement> convertIf(int offset, bool isStatic,
+                                         std::unique_ptr<Expression> test,
+                                         std::unique_ptr<Statement> ifTrue,
+                                         std::unique_ptr<Statement> ifFalse);
     std::unique_ptr<InterfaceBlock> convertInterfaceBlock(const ASTNode& s);
     Modifiers convertModifiers(const Modifiers& m);
     std::unique_ptr<Expression> convertPrefixExpression(const ASTNode& expression);
