@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLType.h"
 
@@ -20,11 +21,6 @@ namespace SkSL {
  */
 struct BuiltinTypes {
     BuiltinTypes();
-
-    const std::unique_ptr<Type> fInvalid;
-    const std::unique_ptr<Type> fVoid;
-    const std::unique_ptr<Type> fFloatLiteral;
-    const std::unique_ptr<Type> fIntLiteral;
 
     const std::unique_ptr<Type> fFloat;
     const std::unique_ptr<Type> fFloat2;
@@ -70,6 +66,11 @@ struct BuiltinTypes {
     const std::unique_ptr<Type> fBool2;
     const std::unique_ptr<Type> fBool3;
     const std::unique_ptr<Type> fBool4;
+
+    const std::unique_ptr<Type> fInvalid;
+    const std::unique_ptr<Type> fVoid;
+    const std::unique_ptr<Type> fFloatLiteral;
+    const std::unique_ptr<Type> fIntLiteral;
 
     const std::unique_ptr<Type> fFloat2x2;
     const std::unique_ptr<Type> fFloat2x3;
@@ -147,10 +148,13 @@ struct BuiltinTypes {
  */
 class Context {
 public:
-    Context();
+    Context(ErrorReporter& errors);
 
     // The Context holds all of the built-in types.
     BuiltinTypes fTypes;
+
+    // The Context holds a reference to our error reporter.
+    ErrorReporter& fErrors;
 
     // A sentinel expression used to mark that a variable has a value during dataflow analysis (when
     // it could have several different values, or the analyzer is otherwise unable to assign it a
