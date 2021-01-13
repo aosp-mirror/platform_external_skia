@@ -28,19 +28,7 @@ public:
     static int PathToTriangles(const SkPath& path, SkScalar tolerance, const SkRect& clipBounds,
                                GrEagerVertexAllocator* vertexAllocator, bool* isLinear) {
         GrTriangulator triangulator(path);
-        int count = triangulator.pathToTriangles(tolerance, clipBounds, vertexAllocator,
-                                                 path.getFillType());
-        *isLinear = triangulator.fIsLinear;
-        return count;
-    }
-
-    static int PathToAATriangles(const SkPath& path, SkScalar tolerance, const SkRect& clipBounds,
-                                 GrEagerVertexAllocator* vertexAllocator, bool* isLinear) {
-        GrTriangulator triangulator(path);
-        triangulator.fRoundVerticesToQuarterPixel = true;
-        triangulator.fEmitCoverage = true;
-        int count = triangulator.pathToTriangles(tolerance, clipBounds, vertexAllocator,
-                                                 SkPathFillType::kWinding);
+        int count = triangulator.pathToTriangles(tolerance, clipBounds, vertexAllocator);
         *isLinear = triangulator.fIsLinear;
         return count;
     }
@@ -51,8 +39,7 @@ public:
         GrTriangulator triangulator(path);
         triangulator.fCullCollinearVertices = false;
         triangulator.fSimpleInnerPolygons = true;
-        int count = triangulator.pathToTriangles(0, SkRect::MakeEmpty(), vertexAllocator,
-                                                 path.getFillType());
+        int count = triangulator.pathToTriangles(0, SkRect::MakeEmpty(), vertexAllocator);
         *isLinear = triangulator.fIsLinear;
         return count;
     }
@@ -86,8 +73,9 @@ public:
     struct Poly;
     struct Comparator;
 
-private:
+protected:
     GrTriangulator(const SkPath& path) : fPath(path) {}
+    virtual ~GrTriangulator() {}
 
     // There are six stages to the basic algorithm:
     //
@@ -98,6 +86,8 @@ private:
     void contoursToMesh(VertexList* contours, int contourCnt, VertexList* mesh, const Comparator&);
 
     // 3) Sort the vertices in Y (and secondarily in X) (merge_sort()).
+    static void SortedMerge(VertexList* front, VertexList* back, VertexList* result,
+                            const Comparator&);
     static void SortMesh(VertexList* vertices, const Comparator&);
 
     // 4) Simplify the mesh by inserting new vertices at intersecting edges:
@@ -110,22 +100,16 @@ private:
     SimplifyResult simplify(VertexList* mesh, const Comparator&);
 
     // 5) Tessellate the simplified mesh into monotone polygons:
-    Poly* tessellate(const VertexList& vertices);
+    virtual Poly* tessellate(const VertexList& vertices, const Comparator&);
 
     // 6) Triangulate the monotone polygons directly into a vertex buffer:
-    void* polysToTriangles(Poly* polys, void* data, SkPathFillType overrideFillType);
+    virtual int64_t countPoints(Poly* polys) const {
+        return this->countPointsImpl(polys, fPath.getFillType());
+    }
+    virtual void* polysToTriangles(Poly* polys, void* data) {
+        return this->polysToTrianglesImpl(polys, data, fPath.getFillType());
+    }
 
-    // For screenspace antialiasing, the algorithm is modified as follows:
-    //
-    // Run steps 1-5 above to produce polygons.
-    // 5b) Apply fill rules to extract boundary contours from the polygons (extract_boundaries()).
-    // 5c) Simplify boundaries to remove "pointy" vertices that cause inversions
-    //     (simplify_boundary()).
-    // 5d) Displace edges by half a pixel inward and outward along their normals. Intersect to find
-    //     new vertices, and set zero alpha on the exterior and one alpha on the interior. Build a
-    //     new antialiased mesh from those vertices (stroke_boundary()).
-    // Run steps 3-6 above on the new mesh, and produce antialiased triangles.
-    //
     // The vertex sorting in step (3) is a merge sort, since it plays well with the linked list
     // of vertices (and the necessity of inserting new vertices on intersection).
     //
@@ -173,24 +157,33 @@ private:
     void* emitMonotonePoly(const MonotonePoly*, void* data);
     void* emitTriangle(Vertex* prev, Vertex* curr, Vertex* next, int winding, void* data) const;
     void* emitPoly(const Poly*, void *data);
+    Poly* makePoly(Poly** head, Vertex* v, int winding);
     void appendPointToContour(const SkPoint& p, VertexList* contour);
     void appendQuadraticToContour(const SkPoint[3], SkScalar toleranceSqd, VertexList* contour);
     void generateCubicPoints(const SkPoint&, const SkPoint&, const SkPoint&, const SkPoint&,
                              SkScalar tolSqd, VertexList* contour, int pointsLeft);
+    bool applyFillType(int winding);
+    Edge* makeEdge(Vertex* prev, Vertex* next, EdgeType type, const Comparator&);
+    Edge* makeConnectingEdge(Vertex* prev, Vertex* next, EdgeType, const Comparator&,
+                             int windingScale = 1);
+    static void FindEnclosingEdges(Vertex* v, EdgeList* edges, Edge** left, Edge** right);
     bool splitEdge(Edge* edge, Vertex* v, EdgeList* activeEdges, Vertex** current,
                    const Comparator&);
     bool intersectEdgePair(Edge* left, Edge* right, EdgeList* activeEdges, Vertex** current,
                            const Comparator&);
+    Vertex* makeSortedVertex(const SkPoint&, uint8_t alpha, VertexList* mesh, Vertex* reference,
+                             const Comparator&);
+    void computeBisector(Edge* edge1, Edge* edge2, Vertex*);
     bool checkForIntersection(Edge* left, Edge* right, EdgeList* activeEdges, Vertex** current,
                               VertexList* mesh, const Comparator&);
     void sanitizeContours(VertexList* contours, int contourCnt);
     bool mergeCoincidentVertices(VertexList* mesh, const Comparator&);
     void buildEdges(VertexList* contours, int contourCnt, VertexList* mesh, const Comparator&);
-    Poly* contoursToPolys(VertexList* contours, int contourCnt, VertexList* outerMesh);
-    Poly* pathToPolys(float tolerance, const SkRect& clipBounds, int contourCnt,
-                      VertexList* outerMesh);
-    int pathToTriangles(float tolerance, const SkRect& clipBounds, GrEagerVertexAllocator*,
-                        SkPathFillType overrideFillType);
+    Poly* contoursToPolys(VertexList* contours, int contourCnt);
+    Poly* pathToPolys(float tolerance, const SkRect& clipBounds, int contourCnt);
+    int64_t countPointsImpl(Poly* polys, SkPathFillType overrideFillType) const;
+    void* polysToTrianglesImpl(Poly* polys, void* data, SkPathFillType overrideFillType);
+    int pathToTriangles(float tolerance, const SkRect& clipBounds, GrEagerVertexAllocator*);
 
     constexpr static int kArenaChunkSize = 16 * 1024;
     SkArenaAlloc fAlloc{kArenaChunkSize};
@@ -243,6 +236,7 @@ struct GrTriangulator::Vertex {
 #if TRIANGULATOR_LOGGING
     float   fID;                  // Identifier used for logging.
 #endif
+    bool isConnected() const { return this->fFirstEdgeAbove || this->fFirstEdgeBelow; }
 };
 
 struct GrTriangulator::VertexList {
@@ -272,6 +266,9 @@ struct GrTriangulator::VertexList {
             fHead->fPrev = fTail;
         }
     }
+#if TRIANGULATOR_LOGGING
+    void dump();
+#endif
 };
 
 // A line equation in implicit form. fA * x + fB * y + fC = 0, for all points (x, y) on the line.
@@ -368,6 +365,9 @@ struct GrTriangulator::Edge {
     bool isRightOf(Vertex* v) const { return fLine.dist(v->fPoint) < 0.0; }
     bool isLeftOf(Vertex* v) const { return fLine.dist(v->fPoint) > 0.0; }
     void recompute() { fLine = Line(fTop, fBottom); }
+    void insertAbove(Vertex*, const Comparator&);
+    void insertBelow(Vertex*, const Comparator&);
+    void disconnect();
     bool intersect(const Edge& other, SkPoint* p, uint8_t* alpha = nullptr) const;
 };
 
@@ -376,6 +376,7 @@ struct GrTriangulator::EdgeList {
     Edge* fHead;
     Edge* fTail;
     void insert(Edge* edge, Edge* prev, Edge* next);
+    void insert(Edge* edge, Edge* prev);
     void append(Edge* e) { insert(e, fTail, nullptr); }
     void remove(Edge* edge);
     void removeAll() {
