@@ -262,6 +262,13 @@ void commitToPaint<SkSVGAttribute::kColor>(const SkSVGPresentationAttributes&,
 }
 
 template <>
+void commitToPaint<SkSVGAttribute::kColorInterpolationFilters>(const SkSVGPresentationAttributes&,
+                                                               const SkSVGRenderContext&,
+                                                               SkSVGPresentationContext*) {
+    // Not part of the SkPaint state; applied at render time.
+}
+
+template <>
 void commitToPaint<SkSVGAttribute::kFontFamily>(const SkSVGPresentationAttributes&,
                                                 const SkSVGRenderContext&,
                                                 SkSVGPresentationContext*) {
@@ -406,6 +413,7 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
     ApplyLazyInheritedAttribute(TextAnchor);
     ApplyLazyInheritedAttribute(Visibility);
     ApplyLazyInheritedAttribute(Color);
+    ApplyLazyInheritedAttribute(ColorInterpolationFilters);
 
     // Local 'color' attribute: update paints for attributes that are set to 'currentColor'.
     if (attrs.fColor.isValue()) {
@@ -468,8 +476,8 @@ void SkSVGRenderContext::applyOpacity(SkScalar opacity, uint32_t flags) {
     }
 }
 
-void SkSVGRenderContext::applyFilter(const SkSVGFilterType& filter) {
-    if (filter.type() != SkSVGFilterType::Type::kIRI) {
+void SkSVGRenderContext::applyFilter(const SkSVGFuncIRI& filter) {
+    if (filter.type() != SkSVGFuncIRI::Type::kIRI) {
         return;
     }
 
@@ -497,8 +505,8 @@ void SkSVGRenderContext::saveOnce() {
     SkASSERT(fCanvas->getSaveCount() > fCanvasSaveCount);
 }
 
-void SkSVGRenderContext::applyClip(const SkSVGClip& clip) {
-    if (clip.type() != SkSVGClip::Type::kIRI) {
+void SkSVGRenderContext::applyClip(const SkSVGFuncIRI& clip) {
+    if (clip.type() != SkSVGFuncIRI::Type::kIRI) {
         return;
     }
 
