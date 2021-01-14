@@ -13,7 +13,9 @@
 #include "include/effects/SkDashPathEffect.h"
 #include "include/private/SkTo.h"
 #include "modules/svg/include/SkSVGAttribute.h"
+#include "modules/svg/include/SkSVGClipPath.h"
 #include "modules/svg/include/SkSVGFilter.h"
+#include "modules/svg/include/SkSVGMask.h"
 #include "modules/svg/include/SkSVGNode.h"
 #include "modules/svg/include/SkSVGTypes.h"
 
@@ -432,6 +434,10 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
         this->applyClip(*attrs.fClipPath);
     }
 
+    if (attrs.fMask.isValue()) {
+        this->applyMask(*attrs.fMask);
+    }
+
     // TODO: when both a filter and opacity are present, we can apply both with a single layer
     if (attrs.fFilter.isValue()) {
         this->applyFilter(*attrs.fFilter);
@@ -515,7 +521,7 @@ void SkSVGRenderContext::applyClip(const SkSVGFuncIRI& clip) {
         return;
     }
 
-    const SkPath clipPath = clipNode->asPath(*this);
+    const SkPath clipPath = static_cast<const SkSVGClipPath*>(clipNode.get())->resolveClip(*this);
 
     // We use the computed clip path in two ways:
     //
@@ -528,6 +534,38 @@ void SkSVGRenderContext::applyClip(const SkSVGFuncIRI& clip) {
 
     fCanvas->clipPath(clipPath, true);
     fClipPath.set(clipPath);
+}
+
+void SkSVGRenderContext::applyMask(const SkSVGFuncIRI& mask) {
+    if (mask.type() != SkSVGFuncIRI::Type::kIRI) {
+        return;
+    }
+
+    const auto node = this->findNodeById(mask.iri());
+    if (!node || node->tag() != SkSVGTag::kMask) {
+        return;
+    }
+
+    const auto* mask_node = static_cast<const SkSVGMask*>(node.get());
+    const auto mask_bounds = mask_node->bounds(*this);
+
+    // Isolation/mask layer.
+    fCanvas->saveLayer(mask_bounds, nullptr);
+
+    // Mask bounds act as a clip.
+    fCanvas->clipRect(mask_bounds, true);
+
+    // Render and filter mask content.
+    mask_node->renderMask(*this);
+
+    // Content layer
+    SkPaint masking_paint;
+    masking_paint.setBlendMode(SkBlendMode::kSrcIn);
+    fCanvas->saveLayer(mask_bounds, &masking_paint);
+
+    // At this point we're set up for content rendering.
+    // The pending layers are restored in the destructor (render context scope exit).
+    // Restoring triggers srcIn-compositing the content against the mask.
 }
 
 void SkSVGRenderContext::updatePaintsWithCurrentColor(const SkSVGPresentationAttributes& attrs) {
@@ -569,4 +607,25 @@ SkSVGColorType SkSVGRenderContext::resolveSvgColor(const SkSVGColor& color) cons
             return SK_ColorBLACK;
     }
     SkUNREACHABLE;
+}
+
+SkRect SkSVGRenderContext::resolveOBBRect(const SkSVGLength& x, const SkSVGLength& y,
+                                          const SkSVGLength& w, const SkSVGLength& h,
+                                          SkSVGObjectBoundingBoxUnits obbu) const {
+    SkTCopyOnFirstWrite<SkSVGLengthContext> lctx(fLengthContext);
+
+    if (obbu.type() == SkSVGObjectBoundingBoxUnits::Type::kObjectBoundingBox) {
+        *lctx.writable() = SkSVGLengthContext({1,1});
+    }
+
+    auto r = lctx->resolveRect(x, y, w, h);
+    if (obbu.type() == SkSVGObjectBoundingBoxUnits::Type::kObjectBoundingBox) {
+        const auto obb = fNode->objectBoundingBox(*this);
+        r = SkRect::MakeXYWH(obb.x() + r.x() * obb.width(),
+                             obb.y() + r.y() * obb.height(),
+                             r.width()  * obb.width(),
+                             r.height() * obb.height());
+    }
+
+    return r;
 }

@@ -240,6 +240,11 @@ private:
     SpvId castScalarToUnsignedInt(SpvId inputId, const Type& inputType, const Type& outputType,
                                   OutputStream& out);
 
+    SpvId writeBooleanConstructor(const Constructor& c, OutputStream& out);
+
+    SpvId castScalarToBoolean(SpvId inputId, const Type& inputType, const Type& outputType,
+                              OutputStream& out);
+
     /**
      * Writes a matrix with the diagonal entries all equal to the provided expression, and all other
      * entries equal to zero.
