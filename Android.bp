@@ -423,6 +423,7 @@ cc_library_static {
         "src/shaders/gradients/SkTwoPointConicalGradient.cpp",
         "src/sksl/SkSLASTNode.cpp",
         "src/sksl/SkSLAnalysis.cpp",
+        "src/sksl/SkSLBuiltinTypes.cpp",
         "src/sksl/SkSLByteCode.cpp",
         "src/sksl/SkSLByteCodeGenerator.cpp",
         "src/sksl/SkSLCFGGenerator.cpp",

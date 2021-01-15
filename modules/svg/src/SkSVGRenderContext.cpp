@@ -131,7 +131,9 @@ inline uint8_t opacity_to_alpha(SkScalar o) {
 template <SkSVGAttribute>
 void commitToPaint(const SkSVGPresentationAttributes&,
                    const SkSVGRenderContext&,
-                   SkSVGPresentationContext*);
+                   SkSVGPresentationContext*) {
+    // Default/no-op impl for properties which are not part of the SkPaint state.
+}
 
 template <>
 void commitToPaint<SkSVGAttribute::kFill>(const SkSVGPresentationAttributes& attrs,
@@ -189,13 +191,6 @@ void commitToPaint<SkSVGAttribute::kStrokeDashArray>(const SkSVGPresentationAttr
 }
 
 template <>
-void commitToPaint<SkSVGAttribute::kStrokeDashOffset>(const SkSVGPresentationAttributes&,
-                                                      const SkSVGRenderContext&,
-                                                      SkSVGPresentationContext*) {
-    // Applied via kStrokeDashArray.
-}
-
-template <>
 void commitToPaint<SkSVGAttribute::kStrokeLineCap>(const SkSVGPresentationAttributes& attrs,
                                                    const SkSVGRenderContext&,
                                                    SkSVGPresentationContext* pctx) {
@@ -233,83 +228,6 @@ void commitToPaint<SkSVGAttribute::kStrokeWidth>(const SkSVGPresentationAttribut
     auto strokeWidth = ctx.lengthContext().resolve(*attrs.fStrokeWidth,
                                                    SkSVGLengthContext::LengthType::kOther);
     pctx->fStrokePaint.setStrokeWidth(strokeWidth);
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kFillRule>(const SkSVGPresentationAttributes&,
-                                              const SkSVGRenderContext&,
-                                              SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied to the path at render time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kClipRule>(const SkSVGPresentationAttributes&,
-                                              const SkSVGRenderContext&,
-                                              SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied to the path at clip time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kVisibility>(const SkSVGPresentationAttributes&,
-                                                const SkSVGRenderContext&,
-                                                SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; queried to veto rendering.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kColor>(const SkSVGPresentationAttributes&,
-                                           const SkSVGRenderContext&,
-                                           SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied via 'currentColor' color value
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kColorInterpolationFilters>(const SkSVGPresentationAttributes&,
-                                                               const SkSVGRenderContext&,
-                                                               SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied at render time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kColorInterpolation>(const SkSVGPresentationAttributes&,
-                                                        const SkSVGRenderContext&,
-                                                        SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied at render time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kFontFamily>(const SkSVGPresentationAttributes&,
-                                                const SkSVGRenderContext&,
-                                                SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied at render time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kFontSize>(const SkSVGPresentationAttributes&,
-                                              const SkSVGRenderContext&,
-                                              SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied at render time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kFontStyle>(const SkSVGPresentationAttributes&,
-                                               const SkSVGRenderContext&,
-                                               SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied at render time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kFontWeight>(const SkSVGPresentationAttributes&,
-                                                const SkSVGRenderContext&,
-                                                SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied at render time.
-}
-
-template <>
-void commitToPaint<SkSVGAttribute::kTextAnchor>(const SkSVGPresentationAttributes&,
-                                                const SkSVGRenderContext&,
-                                                SkSVGPresentationContext*) {
-    // Not part of the SkPaint state; applied at render time.
 }
 
 }  // namespace
@@ -434,8 +352,9 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
 
     // Uninherited attributes.  Only apply to the current context.
 
+    const bool hasFilter = attrs.fFilter.isValue();
     if (attrs.fOpacity.isValue()) {
-        this->applyOpacity(*attrs.fOpacity, flags);
+        this->applyOpacity(*attrs.fOpacity, flags, hasFilter);
     }
 
     if (attrs.fClipPath.isValue()) {
@@ -447,7 +366,7 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
     }
 
     // TODO: when both a filter and opacity are present, we can apply both with a single layer
-    if (attrs.fFilter.isValue()) {
+    if (hasFilter) {
         this->applyFilter(*attrs.fFilter);
     }
 
@@ -460,7 +379,7 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
     // - flood-opacity
 }
 
-void SkSVGRenderContext::applyOpacity(SkScalar opacity, uint32_t flags) {
+void SkSVGRenderContext::applyOpacity(SkScalar opacity, uint32_t flags, bool hasFilter) {
     if (opacity >= 1) {
         return;
     }
@@ -468,11 +387,13 @@ void SkSVGRenderContext::applyOpacity(SkScalar opacity, uint32_t flags) {
     const bool hasFill   = SkToBool(this->fillPaint());
     const bool hasStroke = SkToBool(this->strokePaint());
 
-    // We can apply the opacity as paint alpha iif it only affects one atomic draw.
-    // For now, this means a) the target node doesn't have any descendants, and
-    // b) it only has a stroke or a fill (but not both).  Going forward, we may need
-    // to refine this heuristic (e.g. to accommodate markers).
-    if ((flags & kLeaf) && (hasFill ^ hasStroke)) {
+    // We can apply the opacity as paint alpha if it only affects one atomic draw.
+    // For now, this means all of the following must be true:
+    //   - the target node doesn't have any descendants;
+    //   - it only has a stroke or a fill (but not both);
+    //   - it does not have a filter.
+    // Going forward, we may needto refine this heuristic (e.g. to accommodate markers).
+    if ((flags & kLeaf) && (hasFill ^ hasStroke) && !hasFilter) {
         auto* pctx = fPresentationContext.writable();
         if (hasFill) {
             pctx->fFillPaint.setAlpha(
