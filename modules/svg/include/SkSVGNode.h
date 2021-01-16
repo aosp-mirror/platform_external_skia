@@ -25,10 +25,12 @@ enum class SkSVGTag {
     kClipPath,
     kDefs,
     kEllipse,
+    kFeBlend,
     kFeColorMatrix,
     kFeComposite,
     kFeFlood,
     kFeGaussianBlur,
+    kFeOffset,
     kFeTurbulence,
     kFilter,
     kG,
@@ -103,6 +105,7 @@ public:
     // inherited
     SVG_PRES_ATTR(ClipRule                 , SkSVGFillRule  , true)
     SVG_PRES_ATTR(Color                    , SkSVGColorType , true)
+    SVG_PRES_ATTR(ColorInterpolation       , SkSVGColorspace, true)
     SVG_PRES_ATTR(ColorInterpolationFilters, SkSVGColorspace, true)
     SVG_PRES_ATTR(FillRule                 , SkSVGFillRule  , true)
     SVG_PRES_ATTR(Fill                     , SkSVGPaint     , true)

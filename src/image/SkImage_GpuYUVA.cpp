@@ -273,11 +273,6 @@ sk_sp<SkImage> SkImage::MakeFromYUVAPixmaps(GrRecordingContext* context,
         return nullptr;
     }
 
-    // SkImage_GpuYUVA doesn't yet support different encoded origins.
-    if (pixmaps.yuvaInfo().origin() != kTopLeft_SkEncodedOrigin) {
-        return nullptr;
-    }
-
     if (!context->priv().caps()->mipmapSupport()) {
         buildMips = GrMipMapped::kNo;
     }
@@ -302,7 +297,7 @@ sk_sp<SkImage> SkImage::MakeFromYUVAPixmaps(GrRecordingContext* context,
         SkYUVAInfo newInfo = pixmaps.yuvaInfo().makeDimensions(newDimensions);
         SkYUVAPixmapInfo newPixmapInfo(newInfo, pixmaps.dataType(), /*row bytes*/ nullptr);
         tempPixmaps = SkYUVAPixmaps::Allocate(newPixmapInfo);
-        SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kNone);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
         if (!tempPixmaps.isValid()) {
             return nullptr;
         }
