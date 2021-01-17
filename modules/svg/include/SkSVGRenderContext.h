@@ -135,13 +135,15 @@ public:
                           const SkSVGLength& w, const SkSVGLength& h,
                           SkSVGObjectBoundingBoxUnits) const;
 
+    const SkSVGIDMapper& idMapper() const { return fIDMapper; }
+
 private:
     // Stack-only
     void* operator new(size_t)                               = delete;
     void* operator new(size_t, void*)                        = delete;
     SkSVGRenderContext& operator=(const SkSVGRenderContext&) = delete;
 
-    void applyOpacity(SkScalar opacity, uint32_t flags);
+    void applyOpacity(SkScalar opacity, uint32_t flags, bool hasFilter);
     void applyFilter(const SkSVGFuncIRI&);
     void applyClip(const SkSVGFuncIRI&);
     void applyMask(const SkSVGFuncIRI&);

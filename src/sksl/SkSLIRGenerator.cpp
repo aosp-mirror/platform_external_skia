@@ -648,15 +648,14 @@ std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
     if (!value) {
         return nullptr;
     }
-    if (value->type() != *fContext.fTypes.fUInt &&
-        value->type().typeKind() != Type::TypeKind::kEnum) {
+    if (!value->type().isEnum()) {
         value = this->coerce(std::move(value), *fContext.fTypes.fInt);
         if (!value) {
             return nullptr;
         }
     }
     AutoSymbolTable table(this);
-    std::unordered_set<int> caseValues;
+    SkTHashSet<SKSL_INT> caseValues;
     std::vector<std::unique_ptr<SwitchCase>> cases;
     for (; iter != s.end(); ++iter) {
         const ASTNode& c = *iter;
@@ -678,10 +677,10 @@ std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
                                             "case value must be a constant integer");
                 return nullptr;
             }
-            if (caseValues.find(v) != caseValues.end()) {
+            if (caseValues.contains(v)) {
                 this->errorReporter().error(caseValue->fOffset, "duplicate case value");
             }
-            caseValues.insert(v);
+            caseValues.add(v);
         }
         ++childIter;
         StatementArray statements;
@@ -2957,7 +2956,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
         this->findAndDeclareBuiltinVariables();
     }
 
-    // Do a final pass looking for dangling FunctionReference or TypeReference expressions
+    // Do a pass looking for dangling FunctionReference or TypeReference expressions
     class FindIllegalExpressions : public ProgramVisitor {
     public:
         FindIllegalExpressions(IRGenerator* generator) : fGenerator(generator) {}
@@ -2973,6 +2972,15 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
     };
     for (const auto& pe : *fProgramElements) {
         FindIllegalExpressions{this}.visitProgramElement(*pe);
+    }
+
+    // If we're in ES2 mode (runtime effects), do a pass to enforce Appendix A, Section 5 of the
+    // GLSL ES 1.00 spec -- Indexing. Don't bother if we've already found errors - this logic
+    // assumes that all loops meet the criteria of Section 4, and if they don't, could crash.
+    if (this->strictES2Mode() && this->errorReporter().errorCount() == 0) {
+        for (const auto& pe : *fProgramElements) {
+            Analysis::ValidateIndexingForES2(*pe, this->errorReporter());
+        }
     }
 
     fSettings = nullptr;
