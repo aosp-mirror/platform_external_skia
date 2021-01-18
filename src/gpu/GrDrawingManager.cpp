@@ -106,7 +106,7 @@ bool GrDrawingManager::flush(
             bool used = std::any_of(fDAG.begin(), fDAG.end(), [&](auto& task) {
                 return task && task->isUsed(proxy);
             });
-            return !used && !this->isDDLTarget(proxy);
+            return !used;
         });
         if (allUnused) {
             if (info.fSubmittedProc) {
@@ -250,7 +250,6 @@ bool GrDrawingManager::flush(
 #endif
     fLastRenderTasks.reset();
     fDAG.reset();
-    this->clearDDLTargets();
 
 #ifdef SK_DEBUG
     // In non-DDL mode this checks that all the flushed ops have been freed from the memory pool.
@@ -617,7 +616,7 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
 }
 
 void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
-                                     GrRenderTargetProxy* newDest,
+                                     sk_sp<GrRenderTargetProxy> newDest,
                                      SkIPoint offset) {
     SkDEBUGCODE(this->validate());
 
@@ -640,11 +639,9 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
         newTextureProxy->markMipmapsDirty();
     }
 
-    this->addDDLTarget(newDest, ddl->priv().targetProxy());
-
     // Here we jam the proxy that backs the current replay SkSurface into the LazyProxyData.
     // The lazy proxy that references it (in the DDL opsTasks) will then steal its GrTexture.
-    ddl->fLazyProxyData->fReplayDest = newDest;
+    ddl->fLazyProxyData->fReplayDest = newDest.get();
 
     if (ddl->fPendingPaths.size()) {
         GrCoverageCountingPathRenderer* ccpr = this->getCoverageCountingPathRenderer();
@@ -654,7 +651,7 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
 
     // Add a task to handle drawing and lifetime management of the DDL.
     SkDEBUGCODE(auto ddlTask =) this->appendTask(sk_make_sp<GrDDLTask>(this,
-                                                                       sk_ref_sp(newDest),
+                                                                       std::move(newDest),
                                                                        std::move(ddl),
                                                                        offset));
     SkASSERT(ddlTask->isClosed());

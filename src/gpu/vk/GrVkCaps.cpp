@@ -46,7 +46,6 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
     fGpuTracingSupport = false; //TODO: figure this out
     fOversizedStencilSupport = false; //TODO: figure this out
     fDrawInstancedSupport = true;
-    fNativeDrawIndirectSupport = true;
 
     fSemaphoreSupport = true;   // always available in Vulkan
     fFenceSyncSupport = true;   // always available in Vulkan
@@ -395,7 +394,18 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         fPreferCachedCpuMemory = false;
     }
 
-    fPreferDiscardableMSAAAttachment = true;
+    // On desktop GPUs we have found that this does not provide much benefit. The perf results show
+    // a mix of regressions, some improvements, and lots of no changes. Thus it is no worth enabling
+    // this (especially with the rendering artifacts) on desktop.
+    //
+    // On Adreno devices we were expecting to see perf gains. But instead there were actually a lot
+    // of perf regressions and only a few perf wins. This needs some follow up with qualcomm since
+    // we do expect this to be a big win on tilers.
+    //
+    // On ARM devices we are seeing an average perf win of around 50%-60% across the board.
+    if (kARM_VkVendor == properties.vendorID) {
+        fPreferDiscardableMSAAAttachment = true;
+    }
 
     this->initGrCaps(vkInterface, physDev, properties, memoryProperties, features, extensions);
     this->initShaderCaps(properties, features);
@@ -426,9 +436,15 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         fMaxPushConstantsSize = 0;
     }
 
-    if (kQualcomm_VkVendor == properties.vendorID) {
+    fNativeDrawIndirectSupport = features.features.drawIndirectFirstInstance;
+    if (properties.vendorID == kQualcomm_VkVendor) {
         // Indirect draws seem slow on QC. Disable until we can investigate. http://skbug.com/11139
         fNativeDrawIndirectSupport = false;
+    }
+
+    if (fNativeDrawIndirectSupport) {
+        fMaxDrawIndirectDrawCount = properties.limits.maxDrawIndirectCount;
+        SkASSERT(fMaxDrawIndirectDrawCount == 1 || features.features.multiDrawIndirect);
     }
 
     if (kARM_VkVendor == properties.vendorID) {
@@ -498,6 +514,10 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // using only primary command buffers. We also see issues on the P30 running android 28.
     if (kARM_VkVendor == properties.vendorID && androidAPIVersion <= 28) {
         fPreferPrimaryOverSecondaryCommandBuffers = false;
+        // If we are using secondary command buffers our code isn't setup to insert barriers into
+        // the secondary cb so we need to disable support for them.
+        fTextureBarrierSupport = false;
+        fBlendEquationSupport = kBasic_BlendEquationSupport;
     }
 
     // We've seen numerous driver bugs on qualcomm devices running on android P (api 28) or earlier
@@ -547,7 +567,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
 #endif
 
     if (kARM_VkVendor == properties.vendorID) {
-        fDrawInstancedSupport = false;
         fAvoidWritePixelsFastPath = true; // bugs.skia.org/8064
     }
 
@@ -560,6 +579,12 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // barriers.
     if (kQualcomm_VkVendor == properties.vendorID) {
         fTextureBarrierSupport = false;
+    }
+
+    // On ARM indirect draws are broken on Android 9 and earlier. This was tested on a P30 and
+    // Mate 20x running android 9.
+    if (properties.vendorID == kARM_VkVendor && androidAPIVersion <= 28) {
+        fNativeDrawIndirectSupport = false;
     }
 
     ////////////////////////////////////////////////////////////////////////////

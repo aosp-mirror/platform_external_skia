@@ -116,7 +116,8 @@ public:
     void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
 
     void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
-    void createDDLTask(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest,
+    void createDDLTask(sk_sp<const SkDeferredDisplayList>,
+                       sk_sp<GrRenderTargetProxy> newDest,
                        SkIPoint offset);
 
 private:
@@ -183,24 +184,6 @@ private:
     const bool                        fReduceOpsTaskSplitting;
 
     SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
-
-    void addDDLTarget(GrSurfaceProxy* newTarget, GrRenderTargetProxy* ddlTarget) {
-        fDDLTargets.set(newTarget->uniqueID().asUInt(), ddlTarget);
-    }
-    bool isDDLTarget(GrSurfaceProxy* newTarget) {
-        return SkToBool(fDDLTargets.find(newTarget->uniqueID().asUInt()));
-    }
-    GrRenderTargetProxy* getDDLTarget(GrSurfaceProxy* newTarget) {
-        auto entry = fDDLTargets.find(newTarget->uniqueID().asUInt());
-        return entry ? *entry : nullptr;
-    }
-    void clearDDLTargets() { fDDLTargets.reset(); }
-
-    // We play a trick with lazy proxies to retarget the base target of a DDL to the SkSurface
-    // it is replayed on. 'fDDLTargets' stores this mapping from SkSurface unique proxy ID
-    // to the DDL's lazy proxy.
-    // Note: we do not expect a whole lot of these per flush
-    SkTHashMap<uint32_t, GrRenderTargetProxy*> fDDLTargets;
 
     struct SurfaceIDKeyTraits {
         static uint32_t GetInvalidKey() {
