@@ -767,12 +767,6 @@ SkCodec::Result SkGifImageReader::parse(int query)
             if (currentFrameIsFirstFrame()) {
                 fScreenHeight = std::max(fScreenHeight, yOffset + height);
                 fScreenWidth = std::max(fScreenWidth, xOffset + width);
-            } else {
-                // If a non-first frame is offscreen, it will have no effect on
-                // the output image. Modify its offsets to be consistent with
-                // the Wuffs implementation.
-                if (xOffset > fScreenWidth) xOffset = fScreenWidth;
-                if (yOffset > fScreenHeight) yOffset = fScreenHeight;
             }
 
             // NOTE: Chromium placed this block after setHeaderDefined, down
@@ -820,8 +814,7 @@ SkCodec::Result SkGifImageReader::parse(int query)
                 return SkCodec::kSuccess;
             }
 
-            width  = std::min(width,  fScreenWidth  - xOffset);
-            height = std::min(height, fScreenHeight - yOffset);
+
             currentFrame->setXYWH(xOffset, yOffset, width, height);
             currentFrame->setInterlaced(SkToBool(currentComponent[8] & 0x40));
 
