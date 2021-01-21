@@ -130,6 +130,18 @@ bool SkLibGifCodec::onGetFrameInfo(int i, SkCodec::FrameInfo* frameInfo) const {
 
     if (frameInfo) {
         frameContext->fillIn(frameInfo, frameContext->isComplete());
+
+        auto* rect = &frameInfo->fFrameRect;
+        auto bounds = this->bounds();
+        if (!rect->intersect(bounds)) {
+            // If a frame is offscreen, it will have no effect on the output
+            // image. Modify its bounds to be consistent with the Wuffs
+            // implementation.
+            rect->setLTRB(std::min(rect->left(), bounds.right()),
+                          std::min(rect->top(), bounds.bottom()),
+                          std::min(rect->right(), bounds.right()),
+                          std::min(rect->bottom(), bounds.bottom()));
+        }
     }
     return true;
 }
@@ -225,9 +237,12 @@ void SkLibGifCodec::initializeSwizzler(const SkImageInfo& dstInfo, int frameInde
     // This is only called by prepareToDecode, which ensures frameIndex is in range.
     SkASSERT(frame);
 
-    // Swizzler::Make only reads left and right of this rect.
-    SkIRect swizzleRect = frame->frameRect();
-    SkASSERT(swizzleRect.right() <= fReader->screenWidth());
+    const int xBegin = frame->xOffset();
+    const int xEnd = std::min(frame->frameRect().right(), fReader->screenWidth());
+
+    // CreateSwizzler only reads left and right of the frame. We cannot use the frame's raw
+    // frameRect, since it might extend beyond the edge of the frame.
+    SkIRect swizzleRect = SkIRect::MakeLTRB(xBegin, 0, xEnd, 0);
 
     SkImageInfo swizzlerInfo = dstInfo;
     if (this->colorXform()) {
@@ -404,15 +419,15 @@ void SkLibGifCodec::haveDecodedRow(int frameIndex, const unsigned char* rowBegin
     const SkGIFFrameContext* frameContext = fReader->frameContext(frameIndex);
     // The pixel data and coordinates supplied to us are relative to the frame's
     // origin within the entire image size, i.e.
-    // (frameContext->xOffset, frameContext->yOffset).
+    // (frameContext->xOffset, frameContext->yOffset). There is no guarantee
+    // that width == (size().width() - frameContext->xOffset), so
+    // we must ensure we don't run off the end of either the source data or the
+    // row's X-coordinates.
     const int width = frameContext->width();
     const int xBegin = frameContext->xOffset();
     const int yBegin = frameContext->yOffset() + rowNumber;
-    const int xEnd = xBegin + width;
+    const int xEnd = std::min(xBegin + width, this->dimensions().width());
     const int yEnd = std::min(yBegin + repeatCount, this->dimensions().height());
-
-    SkASSERT(xEnd <= this->dimensions().width());
-
     // FIXME: No need to make the checks on width/xBegin/xEnd for every row. We could instead do
     // this once in prepareToDecode.
     if (!width || (xBegin < 0) || (yBegin < 0) || (xEnd <= xBegin) || (yEnd <= yBegin))

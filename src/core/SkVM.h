@@ -377,6 +377,11 @@ namespace skvm {
         void ld1r8h (V dst, X src);  // Each 16-bit lane = *src
         void ld1r16b(V dst, X src);  // Each  8-bit lane = *src
 
+        void ld24s(V dst, X src);  // deinterleave(dst,dst+1)             = 256-bit *src
+        void ld44s(V dst, X src);  // deinterleave(dst,dst+1,dst+2,dst+3) = 512-bit *src
+        void st24s(V src, X dst);  // 256-bit *dst = interleave_32bit_lanes(src,src+1)
+        void st44s(V src, X dst);  // 512-bit *dst = interleave_32bit_lanes(src,src+1,src+2,src+3)
+
     private:
         // TODO: can probably track two of these three?
         uint8_t* fCode;
@@ -546,9 +551,9 @@ namespace skvm {
 
     SK_BEGIN_REQUIRE_DENSE
     struct Instruction {
-        Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
-        Val x,y,z;      // Enough arguments for mad().
-        int immy,immz;  // Immediate bit pattern, shift count, argument index, etc.
+        Op  op;         // v* = op(x,y,z,w,immA,immB), where * == index of this Instruction.
+        Val x,y,z,w;    // Enough arguments for Op::store128.
+        int immA,immB;  // Immediate bit pattern, shift count, pointer index, byte offset, etc.
     };
     SK_END_REQUIRE_DENSE
 
@@ -559,8 +564,8 @@ namespace skvm {
 
     struct OptimizedInstruction {
         Op op;
-        Val x,y,z;
-        int immy,immz;
+        Val x,y,z,w;
+        int immA,immB;
 
         Val  death;
         bool can_hoist;
@@ -606,8 +611,8 @@ namespace skvm {
         void store16 (Ptr ptr, I32 val);
         void store32 (Ptr ptr, I32 val);
         void storeF  (Ptr ptr, F32 val) { store32(ptr, pun_to_I32(val)); }
-        void store64 (Ptr ptr, I32 lo, I32 hi);            // *ptr = lo|(hi<<32)
-        void store128(Ptr ptr, I32 lo, I32 hi, int lane);  // 64-bit lane 0-1 at ptr = lo|(hi<<32).
+        void store64 (Ptr ptr, I32 lo, I32 hi);              // *ptr = lo|(hi<<32)
+        void store128(Ptr ptr, I32 x, I32 y, I32 z, I32 w);  // *ptr = x|(y<<32)|(z<<64)|(w<<96)
 
         // Returns varying {n, n-1, n-2, ..., 1}, where n is the argument to Program::eval().
         I32 index();
@@ -897,15 +902,23 @@ namespace skvm {
         uint64_t hash() const;
 
         Val push(Instruction);
-    private:
-        Val push(Op op, Val x, Val y=NA, Val z=NA, int immy=0, int immz=0) {
-            return this->push(Instruction{op, x,y,z, immy,immz});
-        }
 
-        bool allImm() const;
+        bool allImm() const { return true; }
 
         template <typename T, typename... Rest>
-        bool allImm(Val, T* imm, Rest...) const;
+        bool allImm(Val id, T* imm, Rest... rest) const {
+            if (fProgram[id].op == Op::splat) {
+                static_assert(sizeof(T) == 4);
+                memcpy(imm, &fProgram[id].immA, 4);
+                return this->allImm(rest...);
+            }
+            return false;
+        }
+
+    private:
+        Val push(Op op, Val x=NA, Val y=NA, Val z=NA, Val w=NA, int immA=0, int immB=0) {
+            return this->push(Instruction{op, x,y,z,w, immA,immB});
+        }
 
         template <typename T>
         bool isImm(Val id, T want) const {
@@ -926,12 +939,11 @@ namespace skvm {
 
     using Reg = int;
 
-    // d = op(x, y/imm, z/imm)
+    // d = op(x,y,z,w, immA,immB)
     struct InterpreterInstruction {
         Op  op;
-        Reg d,x;
-        union { Reg y; int immy; };
-        union { Reg z; int immz; };
+        Reg d,x,y,z,w;
+        int immA,immB;
     };
 
     class Program {
@@ -1106,12 +1118,12 @@ namespace skvm {
     SI void assert_true(I32 cond, F32 debug) { cond->assert_true(cond,debug); }
     SI void assert_true(I32 cond)            { cond->assert_true(cond); }
 
-    SI void store8  (Ptr ptr, I32 val)                { val->store8  (ptr, val); }
-    SI void store16 (Ptr ptr, I32 val)                { val->store16 (ptr, val); }
-    SI void store32 (Ptr ptr, I32 val)                { val->store32 (ptr, val); }
-    SI void storeF  (Ptr ptr, F32 val)                { val->storeF  (ptr, val); }
-    SI void store64 (Ptr ptr, I32 lo, I32 hi)         { lo ->store64 (ptr, lo,hi); }
-    SI void store128(Ptr ptr, I32 lo, I32 hi, int ix) { lo ->store128(ptr, lo,hi, ix); }
+    SI void store8  (Ptr ptr, I32 val)                    { val->store8  (ptr, val); }
+    SI void store16 (Ptr ptr, I32 val)                    { val->store16 (ptr, val); }
+    SI void store32 (Ptr ptr, I32 val)                    { val->store32 (ptr, val); }
+    SI void storeF  (Ptr ptr, F32 val)                    { val->storeF  (ptr, val); }
+    SI void store64 (Ptr ptr, I32 lo, I32 hi)             { lo ->store64 (ptr, lo,hi); }
+    SI void store128(Ptr ptr, I32 x, I32 y, I32 z, I32 w) { x  ->store128(ptr, x,y,z,w); }
 
     SI I32 gather8 (Ptr ptr, int off, I32 ix) { return ix->gather8 (ptr, off, ix); }
     SI I32 gather16(Ptr ptr, int off, I32 ix) { return ix->gather16(ptr, off, ix); }
