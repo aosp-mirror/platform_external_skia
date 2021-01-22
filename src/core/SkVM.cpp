@@ -1725,14 +1725,13 @@ namespace skvm {
         return vex;
     }
 
-    Assembler::Assembler(void* buf) : fCode((uint8_t*)buf), fCurr(fCode), fSize(0) {}
+    Assembler::Assembler(void* buf) : fCode((uint8_t*)buf), fSize(0) {}
 
     size_t Assembler::size() const { return fSize; }
 
     void Assembler::bytes(const void* p, int n) {
-        if (fCurr) {
-            memcpy(fCurr, p, n);
-            fCurr += n;
+        if (fCode) {
+            memcpy(fCode+fSize, p, n);
         }
         fSize += n;
     }
@@ -1880,9 +1879,9 @@ namespace skvm {
         // from the end of the instruction and not the end of the displacement.
         if (operand.kind == Operand::LABEL && fCode) {
             int disp;
-            memcpy(&disp, fCurr-4, 4);
+            memcpy(&disp, fCode+fSize-4, 4);
             disp--;
-            memcpy(fCurr-4, &disp, 4);
+            memcpy(fCode+fSize-4, &disp, 4);
         }
         this->byte(imm);
     }
@@ -2318,6 +2317,11 @@ namespace skvm {
     void Assembler::ld1r16b(V dst, X src) {
         this->op(0b0'1'0011010'1'0'00000'110'0'00, src, dst);
     }
+
+    void Assembler::ld24s(V dst, X src) { this->op(0b0'1'0011000'1'000000'1000'10, src, dst); }
+    void Assembler::ld44s(V dst, X src) { this->op(0b0'1'0011000'1'000000'0000'10, src, dst); }
+    void Assembler::st24s(V src, X dst) { this->op(0b0'1'0011000'0'000000'1000'10, dst, src); }
+    void Assembler::st44s(V src, X dst) { this->op(0b0'1'0011000'0'000000'0000'10, dst, src); }
 
     void Assembler::label(Label* l) {
         if (fCode) {
