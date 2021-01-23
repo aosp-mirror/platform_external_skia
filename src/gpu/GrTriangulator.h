@@ -28,66 +28,8 @@ public:
     static int PathToTriangles(const SkPath& path, SkScalar tolerance, const SkRect& clipBounds,
                                GrEagerVertexAllocator* vertexAllocator, bool* isLinear) {
         GrTriangulator triangulator(path);
-        int count = triangulator.pathToTriangles(tolerance, clipBounds, vertexAllocator);
-        *isLinear = triangulator.fIsLinear;
-        return count;
-    }
-
-    // The breadcrumb triangles serve as a glue that erases T-junctions between a path's outer
-    // curves and its inner polygon triangulation. Drawing a path's outer curves, breadcrumb
-    // triangles, and inner polygon triangulation all together into the stencil buffer has the same
-    // identical rasterized effect as stenciling a classic Redbook fan.
-    //
-    // The breadcrumb triangles track all the edge splits that led from the original inner polygon
-    // edges to the final triangulation. Every time an edge splits, we emit a razor-thin breadcrumb
-    // triangle consisting of the edge's original endpoints and the split point. (We also add
-    // supplemental breadcrumb triangles to areas where abs(winding) > 1.)
-    //
-    //                a
-    //               /
-    //              /
-    //             /
-    //            x  <- Edge splits at x. New breadcrumb triangle is: [a, b, x].
-    //           /
-    //          /
-    //         b
-    //
-    // The opposite-direction shared edges between the triangulation and breadcrumb triangles should
-    // all cancel out, leaving just the set of edges from the original polygon.
-    class BreadcrumbTriangleCollector { public:
-        void push(SkPoint a, SkPoint b, SkPoint c, int winding) {
-            if (a != b && a != c && b != c) {
-                if (winding > 0) {
-                    this->onPush(a, b, c, winding);
-                } else if (winding < 0) {
-                    this->onPush(b, a, c, -winding);
-                }
-            }
-        }
-        virtual ~BreadcrumbTriangleCollector() {}
-    private:
-        virtual void onPush(SkPoint a, SkPoint b, SkPoint c, int winding) = 0;
-    };
-
-    static int TriangulateInnerPolygons(const SkPath& path, GrEagerVertexAllocator* vertexAllocator,
-                                        BreadcrumbTriangleCollector* breadcrumbTriangles, bool
-                                        *isLinear) {
-        GrTriangulator triangulator(path);
-        triangulator.fCullCollinearVertices = false;
-        triangulator.fBreadcrumbTriangles = breadcrumbTriangles;
-        int count = triangulator.pathToTriangles(0, SkRect::MakeEmpty(), vertexAllocator);
-        *isLinear = triangulator.fIsLinear;
-        return count;
-    }
-
-    static int TriangulateSimpleInnerPolygons(const SkPath& path,
-                                              GrEagerVertexAllocator* vertexAllocator,
-                                              bool *isLinear) {
-        GrTriangulator triangulator(path);
-        triangulator.fCullCollinearVertices = false;
-        triangulator.fDisallowSelfIntersection = true;
-        int count = triangulator.pathToTriangles(0, SkRect::MakeEmpty(), vertexAllocator);
-        *isLinear = triangulator.fIsLinear;
+        Poly* polys = triangulator.pathToPolys(tolerance, clipBounds, isLinear);
+        int count = triangulator.polysToTriangles(polys, vertexAllocator);
         return count;
     }
 
@@ -127,7 +69,8 @@ protected:
     // There are six stages to the basic algorithm:
     //
     // 1) Linearize the path contours into piecewise linear segments:
-    void pathToContours(float tolerance, const SkRect& clipBounds, VertexList* contours);
+    void pathToContours(float tolerance, const SkRect& clipBounds, VertexList* contours,
+                        bool* isLinear);
 
     // 2) Build a mesh of edges connecting the vertices:
     void contoursToMesh(VertexList* contours, int contourCnt, VertexList* mesh, const Comparator&);
@@ -150,12 +93,7 @@ protected:
     virtual Poly* tessellate(const VertexList& vertices, const Comparator&);
 
     // 6) Triangulate the monotone polygons directly into a vertex buffer:
-    virtual int64_t countPoints(Poly* polys) const {
-        return this->countPointsImpl(polys, fPath.getFillType());
-    }
-    virtual void* polysToTriangles(Poly* polys, void* data) {
-        return this->polysToTrianglesImpl(polys, data, fPath.getFillType());
-    }
+    void* polysToTriangles(Poly* polys, void* data, SkPathFillType overrideFillType);
 
     // The vertex sorting in step (3) is a merge sort, since it plays well with the linked list
     // of vertices (and the necessity of inserting new vertices on intersection).
@@ -237,21 +175,57 @@ protected:
     bool mergeCoincidentVertices(VertexList* mesh, const Comparator&);
     void buildEdges(VertexList* contours, int contourCnt, VertexList* mesh, const Comparator&);
     Poly* contoursToPolys(VertexList* contours, int contourCnt);
-    Poly* pathToPolys(float tolerance, const SkRect& clipBounds, int contourCnt);
-    int64_t countPointsImpl(Poly* polys, SkPathFillType overrideFillType) const;
-    void* polysToTrianglesImpl(Poly* polys, void* data, SkPathFillType overrideFillType);
-    int pathToTriangles(float tolerance, const SkRect& clipBounds, GrEagerVertexAllocator*);
+    Poly* pathToPolys(float tolerance, const SkRect& clipBounds, bool* isLinear);
+    static int64_t CountPoints(Poly* polys, SkPathFillType overrideFillType);
+    int polysToTriangles(Poly*, GrEagerVertexAllocator*);
 
     constexpr static int kArenaChunkSize = 16 * 1024;
     SkArenaAlloc fAlloc{kArenaChunkSize};
     const SkPath fPath;
-    bool fIsLinear = false;
 
     // Internal control knobs.
     bool fRoundVerticesToQuarterPixel = false;
     bool fEmitCoverage = false;
     bool fCullCollinearVertices = true;
     bool fDisallowSelfIntersection = false;
+
+    // The breadcrumb triangles serve as a glue that erases T-junctions between a path's outer
+    // curves and its inner polygon triangulation. Drawing a path's outer curves, breadcrumb
+    // triangles, and inner polygon triangulation all together into the stencil buffer has the same
+    // identical rasterized effect as stenciling a classic Redbook fan.
+    //
+    // The breadcrumb triangles track all the edge splits that led from the original inner polygon
+    // edges to the final triangulation. Every time an edge splits, we emit a razor-thin breadcrumb
+    // triangle consisting of the edge's original endpoints and the split point. (We also add
+    // supplemental breadcrumb triangles to areas where abs(winding) > 1.)
+    //
+    //                a
+    //               /
+    //              /
+    //             /
+    //            x  <- Edge splits at x. New breadcrumb triangle is: [a, b, x].
+    //           /
+    //          /
+    //         b
+    //
+    // The opposite-direction shared edges between the triangulation and breadcrumb triangles should
+    // all cancel out, leaving just the set of edges from the original polygon.
+    class BreadcrumbTriangleCollector {
+    public:
+        void push(SkPoint a, SkPoint b, SkPoint c, int winding) {
+            if (a != b && a != c && b != c) {
+                if (winding > 0) {
+                    this->onPush(a, b, c, winding);
+                } else if (winding < 0) {
+                    this->onPush(b, a, c, -winding);
+                }
+            }
+        }
+        virtual ~BreadcrumbTriangleCollector() {}
+    private:
+        virtual void onPush(SkPoint, SkPoint, SkPoint, int winding) = 0;
+    };
+
     BreadcrumbTriangleCollector* fBreadcrumbTriangles = nullptr;
 };
 
