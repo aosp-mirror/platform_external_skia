@@ -13,8 +13,8 @@ struct Outputs {
 
 
 fragment Outputs fragmentMain(Inputs _in [[stage_in]], bool _frontFacing [[front_facing]], float4 _fragCoord [[position]]) {
-    Outputs _outputStruct;
-    thread Outputs* _out = &_outputStruct;
-    _out->sk_FragColor.x = smoothstep(_in.a, _in.b, _in.c);
-    return *_out;
+    Outputs _out;
+    (void)_out;
+    _out.sk_FragColor.x = smoothstep(_in.a, _in.b, _in.c);
+    return _out;
 }
