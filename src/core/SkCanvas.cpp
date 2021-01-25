@@ -1852,15 +1852,16 @@ void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     this->onDrawPath(path, paint);
 }
 
-void SkCanvas::drawImage(const SkImage* image, SkScalar x, SkScalar y, const SkPaint* paint) {
-    this->drawImage(image, x, y, paint_to_sampling(paint, this->recordingContext()), paint);
-}
-
 // Returns true if the rect can be "filled" : non-empty and finite
 static bool fillable(const SkRect& r) {
     SkScalar w = r.width();
     SkScalar h = r.height();
     return SkScalarIsFinite(w) && w > 0 && SkScalarIsFinite(h) && h > 0;
+}
+
+#ifdef SK_SUPPORT_LEGACY_DRAWIMAGE_NOSAMPLING
+void SkCanvas::drawImage(const SkImage* image, SkScalar x, SkScalar y, const SkPaint* paint) {
+    this->drawImage(image, x, y, paint_to_sampling(paint, this->recordingContext()), paint);
 }
 
 void SkCanvas::drawImageRect(const SkImage* image, const SkRect& src, const SkRect& dst,
@@ -1880,6 +1881,7 @@ void SkCanvas::drawImageRect(const SkImage* image, const SkRect& dst, const SkPa
     this->drawImageRect(image, SkRect::MakeIWH(image->width(), image->height()), dst, paint,
                         kFast_SrcRectConstraint);
 }
+#endif
 
 static SkPaint clean_paint_for_lattice(const SkPaint* paint) {
     SkPaint cleaned;
@@ -1953,12 +1955,14 @@ static sk_sp<SkImage> bitmap_as_image(const SkBitmap& bitmap) {
 }
 
 void SkCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar dx, SkScalar dy, const SkPaint* paint) {
-    this->drawImage(bitmap_as_image(bitmap), dx, dy, paint);
+    this->drawImage(bitmap_as_image(bitmap), dx, dy,
+                    paint_to_sampling(paint, this->recordingContext()), paint);
 }
 
 void SkCanvas::drawBitmapRect(const SkBitmap& bitmap, const SkRect& src, const SkRect& dst,
                               const SkPaint* paint, SrcRectConstraint constraint) {
-    this->drawImageRect(bitmap_as_image(bitmap), src, dst, paint, constraint);
+    this->drawImageRect(bitmap_as_image(bitmap), src, dst,
+                        paint_to_sampling(paint, this->recordingContext()), paint, constraint);
 }
 
 void SkCanvas::drawBitmapRect(const SkBitmap& bitmap, const SkIRect& isrc, const SkRect& dst,
@@ -2362,11 +2366,10 @@ void SkCanvas::drawImageRect(const SkImage* image, const SkRect& src, const SkRe
 }
 
 void SkCanvas::drawImageRect(const SkImage* image, const SkRect& dst,
-                             const SkSamplingOptions& sampling, const SkPaint* paint,
-                             SrcRectConstraint constraint) {
+                             const SkSamplingOptions& sampling, const SkPaint* paint) {
     RETURN_ON_NULL(image);
     this->drawImageRect(image, SkRect::MakeIWH(image->width(), image->height()), dst, sampling,
-                        paint, constraint);
+                        paint, kFast_SrcRectConstraint);
 }
 
 void SkCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,

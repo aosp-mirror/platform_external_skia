@@ -78,7 +78,8 @@ void GrPathTessellateOp::prePreparePrograms(const PrePrepareArgs& args) {
     const SkRect& bounds = fPath.getBounds();
     float gpuFragmentWork = bounds.height() * scales[0] * bounds.width() * scales[1];
     float cpuTessellationWork = (float)numVerbs * SkNextLog2(numVerbs);  // N log N.
-    if (cpuTessellationWork * 500 + (256 * 256) < gpuFragmentWork) {  // Don't try below 256x256.
+    if (!(fOpFlags & OpFlags::kDisableInnerFanTriangulation) &&
+        cpuTessellationWork * 500 + (256 * 256) < gpuFragmentWork) {  // Don't try below 256x256.
         bool isLinear;
         // This will fail if the inner triangles do not form a simple polygon (e.g., self
         // intersection, double winding).
@@ -143,7 +144,7 @@ bool GrPathTessellateOp::prePrepareInnerPolygonTriangulation(const PrePrepareArg
     SkASSERT(fTriangleVertexCount == 0);
     SkASSERT(!fStencilTrianglesProgram);
     SkASSERT(!fFillTrianglesProgram);
-    fInnerFanTriangulator = args.fArena->make<GrInnerFanTriangulator>(fPath, nullptr);
+    fInnerFanTriangulator = args.fArena->make<GrInnerFanTriangulator>(fPath, args.fArena, nullptr);
     fInnerFanPolys = fInnerFanTriangulator->pathToPolys(isLinear);
     if (!fInnerFanPolys) {
         // pathToPolys will fail if the inner polygon(s) are not simple.
