@@ -9,6 +9,7 @@
 #define SKSL_BINARYEXPRESSION
 
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/SkSLLexer.h"
 #include "src/sksl/ir/SkSLExpression.h"
@@ -84,8 +85,7 @@ public:
 
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
                                                   const DefinitionMap& definitions) override {
-        return irGenerator.constantFold(*this->left(),
-                                        this->getOperator(),
+        return ConstantFolder::Simplify(irGenerator.fContext, *this->left(), this->getOperator(),
                                         *this->right());
     }
 

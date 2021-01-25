@@ -7,6 +7,7 @@
 
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
+#include "include/core/SkSurface.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/SkChecksum.h"
 #include "include/private/SkMutex.h"
@@ -31,8 +32,11 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrColorInfo.h"
 #include "src/gpu/GrFPArgs.h"
+#include "src/gpu/GrImageInfo.h"
+#include "src/gpu/GrSurfaceFillContext.h"
 #include "src/gpu/effects/GrMatrixEffect.h"
 #include "src/gpu/effects/GrSkSLFP.h"
+#include "src/image/SkImage_Gpu.h"
 #endif
 
 #include <algorithm>
@@ -124,20 +128,20 @@ static bool init_uniform_type(const SkSL::Context& ctx,
         return true;                                        \
     } while (false)
 
-    if (type == ctx.fFloat_Type.get())    { SET_TYPES(kFloat,    kFloat_GrSLType);    }
-    if (type == ctx.fHalf_Type.get())     { SET_TYPES(kFloat,    kHalf_GrSLType);     }
-    if (type == ctx.fFloat2_Type.get())   { SET_TYPES(kFloat2,   kFloat2_GrSLType);   }
-    if (type == ctx.fHalf2_Type.get())    { SET_TYPES(kFloat2,   kHalf2_GrSLType);    }
-    if (type == ctx.fFloat3_Type.get())   { SET_TYPES(kFloat3,   kFloat3_GrSLType);   }
-    if (type == ctx.fHalf3_Type.get())    { SET_TYPES(kFloat3,   kHalf3_GrSLType);    }
-    if (type == ctx.fFloat4_Type.get())   { SET_TYPES(kFloat4,   kFloat4_GrSLType);   }
-    if (type == ctx.fHalf4_Type.get())    { SET_TYPES(kFloat4,   kHalf4_GrSLType);    }
-    if (type == ctx.fFloat2x2_Type.get()) { SET_TYPES(kFloat2x2, kFloat2x2_GrSLType); }
-    if (type == ctx.fHalf2x2_Type.get())  { SET_TYPES(kFloat2x2, kHalf2x2_GrSLType);  }
-    if (type == ctx.fFloat3x3_Type.get()) { SET_TYPES(kFloat3x3, kFloat3x3_GrSLType); }
-    if (type == ctx.fHalf3x3_Type.get())  { SET_TYPES(kFloat3x3, kHalf3x3_GrSLType);  }
-    if (type == ctx.fFloat4x4_Type.get()) { SET_TYPES(kFloat4x4, kFloat4x4_GrSLType); }
-    if (type == ctx.fHalf4x4_Type.get())  { SET_TYPES(kFloat4x4, kHalf4x4_GrSLType);  }
+    if (type == ctx.fTypes.fFloat.get())    { SET_TYPES(kFloat,    kFloat_GrSLType);    }
+    if (type == ctx.fTypes.fHalf.get())     { SET_TYPES(kFloat,    kHalf_GrSLType);     }
+    if (type == ctx.fTypes.fFloat2.get())   { SET_TYPES(kFloat2,   kFloat2_GrSLType);   }
+    if (type == ctx.fTypes.fHalf2.get())    { SET_TYPES(kFloat2,   kHalf2_GrSLType);    }
+    if (type == ctx.fTypes.fFloat3.get())   { SET_TYPES(kFloat3,   kFloat3_GrSLType);   }
+    if (type == ctx.fTypes.fHalf3.get())    { SET_TYPES(kFloat3,   kHalf3_GrSLType);    }
+    if (type == ctx.fTypes.fFloat4.get())   { SET_TYPES(kFloat4,   kFloat4_GrSLType);   }
+    if (type == ctx.fTypes.fHalf4.get())    { SET_TYPES(kFloat4,   kHalf4_GrSLType);    }
+    if (type == ctx.fTypes.fFloat2x2.get()) { SET_TYPES(kFloat2x2, kFloat2x2_GrSLType); }
+    if (type == ctx.fTypes.fHalf2x2.get())  { SET_TYPES(kFloat2x2, kHalf2x2_GrSLType);  }
+    if (type == ctx.fTypes.fFloat3x3.get()) { SET_TYPES(kFloat3x3, kFloat3x3_GrSLType); }
+    if (type == ctx.fTypes.fHalf3x3.get())  { SET_TYPES(kFloat3x3, kHalf3x3_GrSLType);  }
+    if (type == ctx.fTypes.fFloat4x4.get()) { SET_TYPES(kFloat4x4, kFloat4x4_GrSLType); }
+    if (type == ctx.fTypes.fHalf4x4.get())  { SET_TYPES(kFloat4x4, kHalf4x4_GrSLType);  }
 
 #undef SET_TYPES
 
@@ -197,7 +201,7 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
                                             : 1});
             }
             // Fragment Processors (aka 'shader'): These are child effects
-            else if (&varType == ctx.fFragmentProcessor_Type.get()) {
+            else if (&varType == ctx.fTypes.fFragmentProcessor.get()) {
                 children.push_back(var.name());
                 sampleUsages.push_back(SkSL::Analysis::GetSampleUsage(*program, var));
             }
@@ -706,6 +710,90 @@ sk_sp<SkShader> SkRuntimeEffect::makeShader(sk_sp<SkData> uniforms,
         : nullptr;
 }
 
+sk_sp<SkImage> SkRuntimeEffect::makeImage(GrRecordingContext* recordingContext,
+                                          sk_sp<SkData> uniforms,
+                                          sk_sp<SkShader> children[],
+                                          size_t childCount,
+                                          const SkMatrix* localMatrix,
+                                          SkImageInfo resultInfo,
+                                          bool mipmapped) {
+    if (recordingContext) {
+#if SK_SUPPORT_GPU
+        auto fillContext = GrSurfaceFillContext::Make(recordingContext,
+                                                      resultInfo,
+                                                      SkBackingFit::kExact,
+                                                      /*sample count*/ 1,
+                                                      GrMipmapped(mipmapped));
+        if (!fillContext) {
+            return nullptr;
+        }
+        SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
+        uniforms = get_xformed_uniforms(this,
+                                        std::move(uniforms),
+                                        &matrixProvider,
+                                        resultInfo.colorSpace());
+        if (!uniforms) {
+            return nullptr;
+        }
+
+        auto fp = GrSkSLFP::Make(recordingContext,
+                                 sk_ref_sp(this),
+                                 "runtime_image",
+                                 std::move(uniforms));
+        GrColorInfo colorInfo(resultInfo.colorInfo());
+        GrFPArgs args(recordingContext,
+                      matrixProvider,
+                      SkSamplingOptions{},
+                      &colorInfo);
+        for (size_t i = 0; i < childCount; ++i) {
+            if (!children[i]) {
+                return nullptr;
+            }
+            auto childFP = as_SB(children[i])->asFragmentProcessor(args);
+            fp->addChild(std::move(childFP));
+        }
+        if (localMatrix) {
+            SkMatrix invLM;
+            if (!localMatrix->invert(&invLM)) {
+                return nullptr;
+            }
+            fillContext->fillWithFP(invLM, std::move(fp));
+        } else {
+            fillContext->fillWithFP(std::move(fp));
+        }
+        return sk_sp<SkImage>(new SkImage_Gpu(sk_ref_sp(recordingContext),
+                                              kNeedNewImageUniqueID,
+                                              fillContext->readSurfaceView(),
+                                              resultInfo.colorInfo()));
+#else
+        return nullptr;
+#endif
+    }
+    if (resultInfo.alphaType() == kUnpremul_SkAlphaType) {
+        // We don't have a good way of supporting this right now. In this case the runtime effect
+        // will produce a unpremul value. The shader generated from it is assumed to produce
+        // premul and RGB get pinned to A. Moreover, after the blend in premul the new dst is
+        // unpremul'ed, producing a double unpremul result.
+        return nullptr;
+    }
+    auto surf = SkSurface::MakeRaster(resultInfo);
+    if (!surf) {
+        return nullptr;
+    }
+    SkCanvas* canvas = surf->getCanvas();
+    SkTLazy<SkCanvas> tempCanvas;
+    auto shader = this->makeShader(std::move(uniforms), children, childCount, localMatrix, false);
+    if (!shader) {
+        return nullptr;
+    }
+    SkPaint paint;
+    paint.setShader(std::move(shader));
+    paint.setBlendMode(SkBlendMode::kSrc);
+    canvas->drawPaint(paint);
+    // TODO: Specify snapshot should have mip levels if mipmapped is true.
+    return surf->makeImageSnapshot();
+}
+
 sk_sp<SkColorFilter> SkRuntimeEffect::makeColorFilter(sk_sp<SkData> uniforms,
                                                       sk_sp<SkColorFilter> children[],
                                                       size_t childCount) {
@@ -748,6 +836,19 @@ void* SkRuntimeShaderBuilder::writableUniformData() {
 
 sk_sp<SkShader> SkRuntimeShaderBuilder::makeShader(const SkMatrix* localMatrix, bool isOpaque) {
     return fEffect->makeShader(fUniforms, fChildren.data(), fChildren.size(), localMatrix, isOpaque);
+}
+
+sk_sp<SkImage> SkRuntimeShaderBuilder::makeImage(GrRecordingContext* recordingContext,
+                                                 const SkMatrix* localMatrix,
+                                                 SkImageInfo resultInfo,
+                                                 bool mipmapped) {
+    return fEffect->makeImage(recordingContext,
+                              fUniforms,
+                              fChildren.data(),
+                              fChildren.size(),
+                              localMatrix,
+                              resultInfo,
+                              mipmapped);
 }
 
 SkRuntimeShaderBuilder::BuilderChild&

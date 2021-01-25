@@ -198,8 +198,8 @@ private:
                                   int x, int y) {
         canvas->save();
         canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
-        canvas->clipRect(SkRect::MakeIWH(bitmap.width(), bitmap.height()));
-        canvas->drawBitmap(bitmap, 0, 0, &paint);
+        canvas->clipIRect(bitmap.bounds());
+        canvas->drawImage(bitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);
         canvas->restore();
     }
 

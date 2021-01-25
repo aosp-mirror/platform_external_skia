@@ -23,14 +23,15 @@ class SkCanvas;
 class SkFieldVisitor;
 class SkParticleBinding;
 class SkParticleDrawable;
+struct SkParticleProgram;
 
 namespace skresources {
     class ResourceProvider;
 }  // namespace skresources
 
 namespace SkSL {
-    class ByteCode;
     class ExternalFunction;
+    struct UniformInfo;
 }  // namespace SkSL
 
 class SkParticleEffectParams : public SkRefCnt {
@@ -125,14 +126,8 @@ public:
 private:
     friend class SkParticleEffect;
 
-    // Cached
-    struct Program {
-        std::unique_ptr<SkSL::ByteCode> fByteCode;
-        std::vector<std::unique_ptr<SkSL::ExternalFunction>> fExternalValues;
-    };
-
-    Program fEffectProgram;
-    Program fParticleProgram;
+    std::unique_ptr<SkParticleProgram> fEffectProgram;
+    std::unique_ptr<SkParticleProgram> fParticleProgram;
 };
 
 class SkParticleEffect : public SkRefCnt {
@@ -159,10 +154,7 @@ public:
     void update(double now);
     void draw(SkCanvas* canvas);
 
-    bool isAlive(bool includeSubEffects = true) const {
-        return (fState.fAge >= 0 && fState.fAge <= 1)
-            || (includeSubEffects && !fSubEffects.empty());
-    }
+    bool isAlive() const { return (fState.fAge >= 0 && fState.fAge <= 1); }
     int getCount() const { return fCount; }
 
     float     getRate()     const { return fState.fRate;     }
@@ -185,8 +177,8 @@ public:
     void setColor   (SkColor4f c) { fState.fColor    = c; }
     void setFrame   (float     f) { fState.fFrame    = f; }
 
-    const SkSL::ByteCode* effectCode() const { return fParams->fEffectProgram.fByteCode.get(); }
-    const SkSL::ByteCode* particleCode() const { return fParams->fParticleProgram.fByteCode.get(); }
+    const SkSL::UniformInfo* effectUniformInfo() const;
+    const SkSL::UniformInfo* particleUniformInfo() const;
 
     float* effectUniforms() { return fEffectUniforms.data(); }
     float* particleUniforms() { return fParticleUniforms.data(); }
@@ -199,11 +191,13 @@ private:
     // Helpers to break down update
     void advanceTime(double now);
 
-    void processEffectSpawnRequests(double now);
-    void runEffectScript(double now, const char* entry);
+    enum class EntryPoint {
+        kSpawn,
+        kUpdate,
+    };
 
-    void processParticleSpawnRequests(double now, int start);
-    void runParticleScript(double now, const char* entry, int start, int count);
+    void runEffectScript(EntryPoint entryPoint);
+    void runParticleScript(EntryPoint entryPoint, int start, int count);
 
     sk_sp<SkParticleEffectParams>        fParams;
 
@@ -240,25 +234,6 @@ private:
     int fCapacity;
     SkTArray<float, true> fEffectUniforms;
     SkTArray<float, true> fParticleUniforms;
-
-    // Private interface used by SkEffectBinding and SkEffectExternalValue to spawn sub effects
-    friend class SkEffectExternalValue;
-    struct SpawnRequest {
-        SpawnRequest(int index, bool loop, sk_sp<SkParticleEffectParams> params)
-            : fIndex(index)
-            , fLoop(loop)
-            , fParams(std::move(params)) {}
-
-        int fIndex;
-        bool fLoop;
-        sk_sp<SkParticleEffectParams> fParams;
-    };
-    void addSpawnRequest(int index, bool loop, sk_sp<SkParticleEffectParams> params) {
-        fSpawnRequests.emplace_back(index, loop, std::move(params));
-    }
-    SkTArray<SpawnRequest> fSpawnRequests;
-
-    SkTArray<sk_sp<SkParticleEffect>> fSubEffects;
 };
 
 #endif // SkParticleEffect_DEFINED

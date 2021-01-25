@@ -5708,3 +5708,113 @@ DEF_TEST(SkParagraph_RTL_With_Styles, reporter) {
     paragraph->layout(300);
     paragraph->paint(canvas.get(), 0, 0);
 }
+
+DEF_TEST(SkParagraph_PositionInsideEmoji, reporter) {
+
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_PositionInsideEmoji.png");
+
+    std::u16string text = u"\U0001f469\u200D\U0001f469\u200D\U0001f467\u200D\U0001f467\U0001f469\U0001f469\U0001f467\U0001f467";
+
+    ParagraphStyle paragraph_style;
+    TextStyle text_style;
+    text_style.setColor(SK_ColorBLACK);
+    text_style.setFontFamilies({SkString("Noto Color Emoji")});
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    builder.pushStyle(text_style);
+    builder.addText(text);
+
+    auto paragraph = builder.Build();
+    paragraph->layout(TestCanvasWidth);
+    paragraph->paint(canvas.get(), 0, 0);
+
+    int32_t words[] = { 11, 13, 15, 17, 19, 21};
+    auto j = 0;
+    for (auto i :  words) {
+        auto rects = paragraph->getRectsForRange(j, i, RectHeightStyle::kTight, RectWidthStyle::kTight);
+        if (rects.empty()) {
+            continue;
+        }
+        auto X = rects[0].rect.fRight;
+        auto Y = rects[0].rect.fTop;
+        auto res = paragraph->getGlyphPositionAtCoordinate(X, Y);
+        //SkDebugf("[%d:%d) @%f,%f: %d %s\n", j, i, X, Y, res.position, res.affinity == Affinity::kDownstream ? "D" : "U");
+        REPORTER_ASSERT(reporter, i == res.position + (res.affinity == Affinity::kDownstream ? 0 : 1));
+        j = i;
+    }
+}
+
+DEF_TEST(SkParagraph_SingleLineHeight, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_SingleLineHeight.png");
+
+    auto paint = [&](const char* text) {
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextHeightBehavior(TextHeightBehavior::kDisableAll);
+        paragraph_style.setMaxLines(1);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Ahem")});
+        text_style.setFontSize(14);
+        text_style.setHeight(2);
+        text_style.setHeightOverride(true);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+        auto paragraph = builder.Build();
+        paragraph->layout(80);
+        paragraph->paint(canvas.get(), 0, 0);
+        REPORTER_ASSERT(reporter, paragraph->getHeight() == 14.0f);
+    };
+
+    paint("Loooooooooooooooooooooooooooooooooooong text");
+    paint("");
+}
+
+DEF_TEST(SkParagraph_PlaceholderWidth, reporter) {
+
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_PlaceholderWidth.png");
+
+    const char* text = "1 23 456 7890"; // 13 * 50 = 650
+
+    ParagraphStyle paragraph_style;
+    TextStyle text_style;
+    text_style.setColor(SK_ColorBLACK);
+    text_style.setFontSize(50);
+    text_style.setFontFamilies({SkString("Ahem")});
+    PlaceholderStyle placeholder(300, 50, PlaceholderAlignment::kBaseline, TextBaseline::kAlphabetic, 0);
+
+    auto draw = [&](bool withPlaceholder) {
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+        if (withPlaceholder) {
+            SkPaint red;
+            red.setColor(SK_ColorRED);
+            text_style.setBackgroundColor(red);
+            builder.pushStyle(text_style);
+            builder.addPlaceholder(placeholder);
+        }
+        builder.addText(text);
+
+        auto paragraph = builder.Build();
+        paragraph->layout(950);
+        paragraph->paint(canvas.get(), 0, 0);
+        canvas.get()->translate(0, paragraph->getHeight());
+        return paragraph->getMinIntrinsicWidth();
+    };
+
+    auto len1 = draw(true);
+    auto len2 = draw(false);
+
+    // placeholder: 300 "78901": 250
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(len1, 300.0f));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(len2, 250.0f));
+}

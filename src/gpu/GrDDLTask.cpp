@@ -24,7 +24,7 @@ GrDDLTask::GrDDLTask(GrDrawingManager* drawingMgr,
         SkASSERT(task->isClosed());
 
         for (int i = 0; i < task->numTargets(); ++i) {
-            drawingMgr->setLastRenderTask(task->target(i).proxy(), task.get());
+            drawingMgr->setLastRenderTask(task->target(i), task.get());
         }
     }
 
@@ -51,6 +51,10 @@ void GrDDLTask::disown(GrDrawingManager* drawingManager) {
 }
 
 bool GrDDLTask::onIsUsed(GrSurfaceProxy* proxy) const {
+    if (proxy == fDDLTarget.get()) {
+        return true;
+    }
+
     for (auto& task : fDDL->priv().renderTasks()) {
         if (task->isUsed(proxy)) {
             return true;

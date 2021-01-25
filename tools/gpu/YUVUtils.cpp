@@ -12,6 +12,7 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrYUVABackendTextures.h"
 #include "src/codec/SkCodecImageGenerator.h"
+#include "src/core/SkYUVAInfoLocation.h"
 #include "src/core/SkYUVMath.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrRecordingContextPriv.h"
@@ -32,11 +33,11 @@ static SkPMColor convert_yuva_to_rgba(const float mtx[20], uint8_t yuva[4]) {
     return SkPremultiplyARGBInline(a, r, g, b);
 }
 
-static uint8_t look_up(float x1, float y1, const SkPixmap& pmap, SkColorChannel channel) {
-    SkASSERT(x1 > 0 && x1 < 1.0f);
-    SkASSERT(y1 > 0 && y1 < 1.0f);
-    int x = SkScalarFloorToInt(x1 * pmap.width());
-    int y = SkScalarFloorToInt(y1 * pmap.height());
+static uint8_t look_up(SkPoint normPt, const SkPixmap& pmap, SkColorChannel channel) {
+    SkASSERT(normPt.x() > 0 && normPt.x() < 1.0f);
+    SkASSERT(normPt.y() > 0 && normPt.y() < 1.0f);
+    int x = SkScalarFloorToInt(normPt.x() * pmap.width());
+    int y = SkScalarFloorToInt(normPt.y() * pmap.height());
 
     auto ii = pmap.info().makeColorType(kRGBA_8888_SkColorType).makeWH(1, 1);
     uint32_t pixel;
@@ -65,27 +66,37 @@ protected:
 
             float mtx[20];
             SkColorMatrix_YUV2RGB(fPixmaps.yuvaInfo().yuvColorSpace(), mtx);
-            SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount];
-            SkAssertResult(fPixmaps.toYUVAIndices(yuvaIndices));
+            SkYUVAInfo::YUVALocations yuvaLocations = fPixmaps.toYUVALocations();
+            SkASSERT(SkYUVAInfo::YUVALocation::AreValidLocations(yuvaLocations));
 
+            SkMatrix om = fPixmaps.yuvaInfo().originMatrix();
+            SkAssertResult(om.invert(&om));
+            float normX = 1.f/info.width();
+            float normY = 1.f/info.height();
+            if (SkEncodedOriginSwapsWidthHeight(fPixmaps.yuvaInfo().origin())) {
+                using std::swap;
+                swap(normX, normY);
+            }
             for (int y = 0; y < info.height(); ++y) {
                 for (int x = 0; x < info.width(); ++x) {
-                    float x1 = (x + 0.5f) / info.width();
-                    float y1 = (y + 0.5f) / info.height();
+                    SkPoint xy1 {(x + 0.5f),
+                                 (y + 0.5f)};
+                    xy1 = om.mapPoint(xy1);
+                    xy1.fX *= normX;
+                    xy1.fY *= normY;
 
                     uint8_t yuva[4] = {0, 0, 0, 255};
 
-                    for (auto c : {SkYUVAIndex::kY_Index,
-                                   SkYUVAIndex::kU_Index,
-                                   SkYUVAIndex::kV_Index}) {
-                        const auto& pmap = fPixmaps.plane(yuvaIndices[c].fIndex);
-                        yuva[c] = look_up(x1, y1, pmap, yuvaIndices[c].fChannel);
+                    for (auto c : {SkYUVAInfo::YUVAChannels::kY,
+                                   SkYUVAInfo::YUVAChannels::kU,
+                                   SkYUVAInfo::YUVAChannels::kV}) {
+                        const auto& pmap = fPixmaps.plane(yuvaLocations[c].fPlane);
+                        yuva[c] = look_up(xy1, pmap, yuvaLocations[c].fChannel);
                     }
-                    if (yuvaIndices[SkYUVAIndex::kA_Index].fIndex >= 0) {
-                        const auto& pmap =
-                                fPixmaps.plane(yuvaIndices[SkYUVAIndex::kA_Index].fIndex);
-                        yuva[3] =
-                                look_up(x1, y1, pmap, yuvaIndices[SkYUVAIndex::kA_Index].fChannel);
+                    auto [aPlane, aChan] = yuvaLocations[SkYUVAInfo::YUVAChannels::kA];
+                    if (aPlane >= 0) {
+                        const auto& pmap = fPixmaps.plane(aPlane);
+                        yuva[3] = look_up(xy1, pmap, aChan);
                     }
 
                     // Making premul here.

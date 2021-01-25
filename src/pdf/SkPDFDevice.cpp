@@ -1419,7 +1419,7 @@ static sk_sp<SkImage> color_filter(const SkImage* image,
     canvas->clear(SK_ColorTRANSPARENT);
     SkPaint paint;
     paint.setColorFilter(sk_ref_sp(colorFilter));
-    canvas->drawImage(image, 0, 0, &paint);
+    canvas->drawImage(image, 0, 0, SkSamplingOptions(), &paint);
     return surface->makeImageSnapshot();
 }
 
@@ -1452,8 +1452,7 @@ void SkPDFDevice::internalDrawImageRect(SkKeyedImage imageSubset,
     // First, figure out the src->dst transform and subset the image if needed.
     SkIRect bounds = imageSubset.image()->bounds();
     SkRect srcRect = src ? *src : SkRect::Make(bounds);
-    SkMatrix transform;
-    transform.setRectToRect(srcRect, dst, SkMatrix::kFill_ScaleToFit);
+    SkMatrix transform = SkMatrix::RectToRect(srcRect, dst);
     if (src && *src != SkRect::Make(bounds)) {
         if (!srcRect.intersect(SkRect::Make(bounds))) {
             return;

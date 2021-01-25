@@ -6,6 +6,7 @@
  */
 
 #include "include/private/SkTArray.h"
+#include "include/private/SkTPin.h"
 #include "src/sksl/SkSLCodeGenerator.h"
 #include "src/sksl/SkSLVMGenerator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -195,8 +196,8 @@ private:
      */
     Slot getSlot(const Expression& e);
 
-    skvm::F32 f32(skvm::Val id) { return {fBuilder, id}; }
-    skvm::I32 i32(skvm::Val id) { return {fBuilder, id}; }
+    skvm::F32 f32(skvm::Val id) { SkASSERT(id != skvm::NA); return {fBuilder, id}; }
+    skvm::I32 i32(skvm::Val id) { SkASSERT(id != skvm::NA); return {fBuilder, id}; }
 
     // Shorthand for scalars
     skvm::F32 f32(const Value& v) { SkASSERT(v.slots() == 1); return f32(v[0]); }
@@ -215,13 +216,14 @@ private:
         // As we encounter (possibly conditional) return statements, fReturned is updated to store
         // the lanes that have already returned. For the remainder of the current function, those
         // lanes should be disabled.
-        return fMask & ~currentFunction().fReturned;
+        return fConditionMask & fLoopMask & ~currentFunction().fReturned;
     }
 
     Value writeExpression(const Expression& expr);
     Value writeBinaryExpression(const BinaryExpression& b);
     Value writeConstructor(const Constructor& c);
     Value writeFunctionCall(const FunctionCall& c);
+    Value writeExternalFunctionCall(const ExternalFunctionCall& c);
     Value writeIntrinsicCall(const FunctionCall& c);
     Value writePostfixExpression(const PostfixExpression& p);
     Value writePrefixExpression(const PrefixExpression& p);
@@ -231,6 +233,9 @@ private:
 
     void writeStatement(const Statement& s);
     void writeBlock(const Block& b);
+    void writeBreakStatement();
+    void writeContinueStatement();
+    void writeForStatement(const ForStatement& f);
     void writeIfStatement(const IfStatement& stmt);
     void writeReturnStatement(const ReturnStatement& r);
     void writeVarDeclaration(const VarDeclaration& decl);
@@ -255,8 +260,15 @@ private:
     std::unordered_map<const Variable*, Slot> fVariableMap;
     std::vector<skvm::Val> fSlots;
 
-    // Conditional execution mask (changes are managed by AutoMask, and tied to control-flow scopes)
-    skvm::I32 fMask;
+    // Conditional execution mask (managed by ScopedCondition, and tied to control-flow scopes)
+    skvm::I32 fConditionMask;
+
+    // Similar: loop execution masks. Each loop starts with all lanes active (fLoopMask).
+    // 'break' disables a lane in fLoopMask until the loop finishes
+    // 'continue' disables a lane in fLoopMask, and sets fContinueMask to be re-enabled on the next
+    //   iteration
+    skvm::I32 fLoopMask;
+    skvm::I32 fContinueMask;
 
     //
     // State that's local to the generation of a single function:
@@ -268,18 +280,18 @@ private:
     std::vector<Function> fFunctionStack;
     Function& currentFunction() { return fFunctionStack.back(); }
 
-    class AutoMask {
+    class ScopedCondition {
     public:
-        AutoMask(SkVMGenerator* generator, skvm::I32 mask)
-                : fGenerator(generator), fOldMask(fGenerator->fMask) {
-            fGenerator->fMask &= mask;
+        ScopedCondition(SkVMGenerator* generator, skvm::I32 mask)
+                : fGenerator(generator), fOldConditionMask(fGenerator->fConditionMask) {
+            fGenerator->fConditionMask &= mask;
         }
 
-        ~AutoMask() { fGenerator->fMask = fOldMask; }
+        ~ScopedCondition() { fGenerator->fConditionMask = fOldConditionMask; }
 
     private:
         SkVMGenerator* fGenerator;
-        skvm::I32 fOldMask;
+        skvm::I32 fOldConditionMask;
     };
 };
 
@@ -375,7 +387,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
 
             { "sample", Intrinsic::kSample },
         } {
-    fMask = fBuilder->splat(0xffff'ffff);
+    fConditionMask = fLoopMask = fBuilder->splat(0xffff'ffff);
 
     // Now, add storage for each global variable (including uniforms) to fSlots, and entries in
     // fVariableMap to remember where every variable is stored.
@@ -389,7 +401,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
 
             // For most variables, fVariableMap stores an index into fSlots, but for fragment
             // processors (child shaders), fVariableMap stores the index to pass to fSampleChild().
-            if (var.type() == *fProgram.fContext->fFragmentProcessor_Type) {
+            if (var.type() == *fProgram.fContext->fTypes.fFragmentProcessor) {
                 fVariableMap[&var] = fpCount++;
                 continue;
             }
@@ -499,11 +511,14 @@ SkVMGenerator::Slot SkVMGenerator::getSlot(const Expression& e) {
             const IndexExpression& i = e.as<IndexExpression>();
             Slot baseSlot = this->getSlot(*i.base());
 
-            const Expression& index = *i.index();
-            SkASSERT(index.isCompileTimeConstant());
+            Value index = this->writeExpression(*i.index());
+            int indexValue = -1;
+            SkAssertResult(fBuilder->allImm(index[0], &indexValue));
 
-            SKSL_INT indexValue = index.getConstantInt();
-            SkASSERT(indexValue >= 0 && indexValue < i.base()->type().columns());
+            // When indexing by a literal, the front-end guarantees that we don't go out of bounds.
+            // But when indexing by a loop variable, it's possible to generate out-of-bounds access.
+            // The GLSL spec leaves that behavior undefined - we'll just clamp everything here.
+            indexValue = SkTPin(indexValue, 0, i.base()->type().columns() - 1);
 
             size_t stride = slot_count(i.type());
             return baseSlot + indexValue * stride;
@@ -540,7 +555,7 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
             SkASSERT(!isAssignment);
             SkASSERT(nk == Type::NumberKind::kBoolean);
             skvm::I32 lVal = i32(this->writeExpression(left));
-            AutoMask shortCircuit(this, lVal);
+            ScopedCondition shortCircuit(this, lVal);
             skvm::I32 rVal = i32(this->writeExpression(right));
             return lVal & rVal;
         }
@@ -548,7 +563,7 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
             SkASSERT(!isAssignment);
             SkASSERT(nk == Type::NumberKind::kBoolean);
             skvm::I32 lVal = i32(this->writeExpression(left));
-            AutoMask shortCircuit(this, ~lVal);
+            ScopedCondition shortCircuit(this, ~lVal);
             skvm::I32 rVal = i32(this->writeExpression(right));
             return lVal | rVal;
         }
@@ -739,7 +754,7 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
                 } else if (srcKind == Type::NumberKind::kBoolean) {
                     // bool -> int
                     for (size_t i = 0; i < src.slots(); ++i) {
-                        dst[i] = skvm::select(i32(src[i]), skvm::I32a(1), skvm::I32a(0));
+                        dst[i] = skvm::select(i32(src[i]), 1, 0);
                     }
                     return dst;
                 }
@@ -922,9 +937,9 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
     if (found->second == Intrinsic::kSample) {
         // Sample is very special, the first argument is an FP, which can't be evaluated
         const Context& ctx = *fProgram.fContext;
-        if (nargs > 2 || c.arguments()[0]->type() != *ctx.fFragmentProcessor_Type ||
-            (nargs == 2 && (c.arguments()[1]->type() != *ctx.fFloat2_Type &&
-                            c.arguments()[1]->type() != *ctx.fFloat3x3_Type))) {
+        if (nargs > 2 || c.arguments()[0]->type() != *ctx.fTypes.fFragmentProcessor ||
+            (nargs == 2 && (c.arguments()[1]->type() != *ctx.fTypes.fFloat2 &&
+                            c.arguments()[1]->type() != *ctx.fTypes.fFloat3x3))) {
             SkDEBUGFAIL("Invalid call to sample");
             return {};
         }
@@ -1158,9 +1173,9 @@ Value SkVMGenerator::writeFunctionCall(const FunctionCall& f) {
     }
 
     {
-        // This AutoMask merges currentFunction().fReturned into fMask. Lanes that conditionally
+        // This merges currentFunction().fReturned into fConditionMask. Lanes that conditionally
         // returned in the current function would otherwise resume execution within the child.
-        AutoMask m(this, ~currentFunction().fReturned);
+        ScopedCondition m(this, ~currentFunction().fReturned);
         this->writeFunction(*f.function().definition(), argVals, result.asSpan());
     }
 
@@ -1182,6 +1197,31 @@ Value SkVMGenerator::writeFunctionCall(const FunctionCall& f) {
     }
 
     return result;
+}
+
+Value SkVMGenerator::writeExternalFunctionCall(const ExternalFunctionCall& c) {
+    // Evaluate all arguments, gather the results into a contiguous list of F32
+    std::vector<skvm::F32> args;
+    for (const auto& arg : c.arguments()) {
+        Value v = this->writeExpression(*arg);
+        for (size_t i = 0; i < v.slots(); ++i) {
+            args.push_back(f32(v[i]));
+        }
+    }
+
+    // Create storage for the return value
+    size_t nslots = slot_count(c.type());
+    std::vector<skvm::F32> result(nslots, fBuilder->splat(0.0f));
+
+    c.function().call(fBuilder, args.data(), result.data(), this->mask());
+
+    // Convert from 'vector of F32' to Value
+    Value resultVal(nslots);
+    for (size_t i = 0; i < nslots; ++i) {
+        resultVal[i] = result[i];
+    }
+
+    return resultVal;
 }
 
 Value SkVMGenerator::writePrefixExpression(const PrefixExpression& p) {
@@ -1268,11 +1308,11 @@ Value SkVMGenerator::writeTernaryExpression(const TernaryExpression& t) {
     Value ifTrue, ifFalse;
 
     {
-        AutoMask m(this, test);
+        ScopedCondition m(this, test);
         ifTrue = this->writeExpression(*t.ifTrue());
     }
     {
-        AutoMask m(this, ~test);
+        ScopedCondition m(this, ~test);
         ifFalse = this->writeExpression(*t.ifFalse());
     }
 
@@ -1302,6 +1342,8 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return fBuilder->splat(e.as<FloatLiteral>().value());
         case Expression::Kind::kFunctionCall:
             return this->writeFunctionCall(e.as<FunctionCall>());
+        case Expression::Kind::kExternalFunctionCall:
+            return this->writeExternalFunctionCall(e.as<ExternalFunctionCall>());
         case Expression::Kind::kIntLiteral:
             return fBuilder->splat(static_cast<int>(e.as<IntLiteral>().value()));
         case Expression::Kind::kPrefix:
@@ -1312,7 +1354,6 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return this->writeSwizzle(e.as<Swizzle>());
         case Expression::Kind::kTernary:
             return this->writeTernaryExpression(e.as<TernaryExpression>());
-        case Expression::Kind::kExternalFunctionCall:
         case Expression::Kind::kExternalFunctionReference:
         default:
             SkDEBUGFAIL("Unsupported expression");
@@ -1347,14 +1388,55 @@ void SkVMGenerator::writeBlock(const Block& b) {
     }
 }
 
+void SkVMGenerator::writeBreakStatement() {
+    // Any active lanes stop executing for the duration of the current loop
+    fLoopMask &= ~this->mask();
+}
+
+void SkVMGenerator::writeContinueStatement() {
+    // Any active lanes stop executing for the current iteration.
+    // Remember them in fContinueMask, to be re-enabled later.
+    skvm::I32 mask = this->mask();
+    fLoopMask &= ~mask;
+    fContinueMask |= mask;
+}
+
+void SkVMGenerator::writeForStatement(const ForStatement& f) {
+    // We require that all loops be ES2-compliant (unrollable), and actually unroll them here
+    Analysis::UnrollableLoopInfo loop;
+    SkAssertResult(Analysis::ForLoopIsValidForES2(f, &loop, /*errors=*/nullptr));
+    SkASSERT(slot_count(loop.fIndex->type()) == 1);
+
+    Slot index = this->getSlot(*loop.fIndex);
+    double val = loop.fStart;
+
+    skvm::I32 oldLoopMask     = fLoopMask,
+              oldContinueMask = fContinueMask;
+
+    for (int i = 0; i < loop.fCount; ++i) {
+        fSlots[index] = loop.fIndex->type().isInteger()
+                                ? fBuilder->splat(static_cast<int>(val)).id
+                                : fBuilder->splat(static_cast<float>(val)).id;
+
+        fContinueMask = fBuilder->splat(0);
+        this->writeStatement(*f.statement());
+        fLoopMask |= fContinueMask;
+
+        val += loop.fDelta;
+    }
+
+    fLoopMask     = oldLoopMask;
+    fContinueMask = oldContinueMask;
+}
+
 void SkVMGenerator::writeIfStatement(const IfStatement& i) {
     Value test = this->writeExpression(*i.test());
     {
-        AutoMask ifTrue(this, i32(test));
+        ScopedCondition ifTrue(this, i32(test));
         this->writeStatement(*i.ifTrue());
     }
     if (i.ifFalse()) {
-        AutoMask ifFalse(this, ~i32(test));
+        ScopedCondition ifFalse(this, ~i32(test));
         this->writeStatement(*i.ifFalse());
     }
 }
@@ -1390,8 +1472,17 @@ void SkVMGenerator::writeStatement(const Statement& s) {
         case Statement::Kind::kBlock:
             this->writeBlock(s.as<Block>());
             break;
+        case Statement::Kind::kBreak:
+            this->writeBreakStatement();
+            break;
+        case Statement::Kind::kContinue:
+            this->writeContinueStatement();
+            break;
         case Statement::Kind::kExpression:
             this->writeExpression(*s.as<ExpressionStatement>().expression());
+            break;
+        case Statement::Kind::kFor:
+            this->writeForStatement(s.as<ForStatement>());
             break;
         case Statement::Kind::kIf:
             this->writeIfStatement(s.as<IfStatement>());
@@ -1402,11 +1493,8 @@ void SkVMGenerator::writeStatement(const Statement& s) {
         case Statement::Kind::kVarDeclaration:
             this->writeVarDeclaration(s.as<VarDeclaration>());
             break;
-        case Statement::Kind::kBreak:
-        case Statement::Kind::kContinue:
         case Statement::Kind::kDiscard:
         case Statement::Kind::kDo:
-        case Statement::Kind::kFor:
         case Statement::Kind::kSwitch:
             SkDEBUGFAIL("Unsupported control flow");
             break;
@@ -1426,7 +1514,8 @@ skvm::Color ProgramToSkVM(const Program& program,
                           skvm::Coord local,
                           SampleChildFn sampleChild) {
     skvm::Val args[2] = {local.x.id, local.y.id};
-    skvm::Val result[4] = {skvm::NA, skvm::NA, skvm::NA, skvm::NA};
+    skvm::Val zero = builder->splat(0.0f).id;
+    skvm::Val result[4] = {zero,zero,zero,zero};
     size_t paramSlots = 0;
     for (const SkSL::Variable* param : function.declaration().parameters()) {
         paramSlots += slot_count(param->type());
@@ -1445,12 +1534,10 @@ skvm::Color ProgramToSkVM(const Program& program,
 bool ProgramToSkVM(const Program& program,
                    const FunctionDefinition& function,
                    skvm::Builder* b,
+                   SkSpan<skvm::Val> uniforms,
                    SkVMSignature* outSignature) {
     SkVMSignature ignored,
                   *signature = outSignature ? outSignature : &ignored;
-
-    skvm::Ptr uniforms = b->uniform();
-    (void)uniforms;
 
     std::vector<skvm::Ptr> argPtrs;
     std::vector<skvm::Val> argVals;
@@ -1474,7 +1561,7 @@ bool ProgramToSkVM(const Program& program,
     }
 
     skvm::Coord zeroCoord = {b->splat(0.0f), b->splat(0.0f)};
-    SkVMGenerator generator(program, b, /*uniforms=*/{}, /*device=*/zeroCoord, /*local=*/zeroCoord,
+    SkVMGenerator generator(program, b, uniforms, /*device=*/zeroCoord, /*local=*/zeroCoord,
                             /*sampleChild=*/{});
     generator.writeFunction(function, argVals, returnVals);
 
@@ -1510,6 +1597,46 @@ const FunctionDefinition* Program_GetFunction(const Program& program, const char
     return nullptr;
 }
 
+static void gather_uniforms(UniformInfo* info, const Type& type, const String& name) {
+    switch (type.typeKind()) {
+        case Type::TypeKind::kStruct:
+            for (const auto& f : type.fields()) {
+                gather_uniforms(info, *f.fType, name + "." + f.fName);
+            }
+            break;
+        case Type::TypeKind::kArray:
+            for (int i = 0; i < type.columns(); ++i) {
+                gather_uniforms(info, type.componentType(),
+                                String::printf("%s[%d]", name.c_str(), i));
+            }
+            break;
+        case Type::TypeKind::kScalar:
+        case Type::TypeKind::kVector:
+        case Type::TypeKind::kMatrix:
+            info->fUniforms.push_back({name, base_number_kind(type), type.rows(), type.columns(),
+                                       info->fUniformSlotCount});
+            info->fUniformSlotCount += type.columns() * type.rows();
+            break;
+        default:
+            break;
+    }
+}
+
+std::unique_ptr<UniformInfo> Program_GetUniformInfo(const Program& program) {
+    auto info = std::make_unique<UniformInfo>();
+    for (const ProgramElement* e : program.elements()) {
+        if (!e->is<GlobalVarDeclaration>()) {
+            continue;
+        }
+        const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
+        const Variable& var = decl.declaration()->as<VarDeclaration>().var();
+        if (var.modifiers().fFlags & Modifiers::kUniform_Flag) {
+            gather_uniforms(info.get(), var.type(), var.name());
+        }
+    }
+    return info;
+}
+
 /*
  * Testing utility function that emits program's "main" with a minimal harness. Used to create
  * representative skvm op sequences for SkSL tests.
@@ -1526,7 +1653,7 @@ bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* buil
         if (e->is<GlobalVarDeclaration>()) {
             const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
             const Variable& var = decl.declaration()->as<VarDeclaration>().var();
-            if (var.type() == *program.fContext->fFragmentProcessor_Type) {
+            if (var.type() == *program.fContext->fTypes.fFragmentProcessor) {
                 childSlots++;
             } else if (is_uniform(var)) {
                 uniformSlots += slot_count(var.type());

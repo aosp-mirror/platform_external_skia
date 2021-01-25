@@ -77,8 +77,10 @@ public:
     // values in the dst rect corresponding to the area clipped by the src rect are not overwritten.
     // This method is not guaranteed to succeed depending on the type of surface, formats, etc, and
     // the backend-specific limitations.
-    bool newCopyRenderTask(GrSurfaceProxyView srcView, const SkIRect& srcRect,
-                           GrSurfaceProxyView dstView, const SkIPoint& dstPoint);
+    bool newCopyRenderTask(sk_sp<GrSurfaceProxy> src,
+                           SkIRect srcRect,
+                           sk_sp<GrSurfaceProxy> dst,
+                           SkIPoint dstPoint);
 
     GrRecordingContext* getContext() { return fContext; }
 
@@ -116,7 +118,8 @@ public:
     void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
 
     void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
-    void createDDLTask(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest,
+    void createDDLTask(sk_sp<const SkDeferredDisplayList>,
+                       sk_sp<GrRenderTargetProxy> newDest,
                        SkIPoint offset);
 
 private:
@@ -183,24 +186,6 @@ private:
     const bool                        fReduceOpsTaskSplitting;
 
     SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
-
-    void addDDLTarget(GrSurfaceProxy* newTarget, GrRenderTargetProxy* ddlTarget) {
-        fDDLTargets.set(newTarget->uniqueID().asUInt(), ddlTarget);
-    }
-    bool isDDLTarget(GrSurfaceProxy* newTarget) {
-        return SkToBool(fDDLTargets.find(newTarget->uniqueID().asUInt()));
-    }
-    GrRenderTargetProxy* getDDLTarget(GrSurfaceProxy* newTarget) {
-        auto entry = fDDLTargets.find(newTarget->uniqueID().asUInt());
-        return entry ? *entry : nullptr;
-    }
-    void clearDDLTargets() { fDDLTargets.reset(); }
-
-    // We play a trick with lazy proxies to retarget the base target of a DDL to the SkSurface
-    // it is replayed on. 'fDDLTargets' stores this mapping from SkSurface unique proxy ID
-    // to the DDL's lazy proxy.
-    // Note: we do not expect a whole lot of these per flush
-    SkTHashMap<uint32_t, GrRenderTargetProxy*> fDDLTargets;
 
     struct SurfaceIDKeyTraits {
         static uint32_t GetInvalidKey() {

@@ -20,12 +20,22 @@ class GrRecordingContext;
 class GrTexture;
 
 class SkBitmap;
-struct SkYUVAIndex;
 
 class SkImage_Gpu : public SkImage_GpuBase {
 public:
     SkImage_Gpu(sk_sp<GrImageContext>, uint32_t uniqueID, GrSurfaceProxyView, SkColorType,
                 SkAlphaType, sk_sp<SkColorSpace>);
+    SkImage_Gpu(sk_sp<GrImageContext> context,
+                uint32_t uniqueID,
+                GrSurfaceProxyView view,
+                SkColorInfo info)
+            : SkImage_Gpu(std::move(context),
+                          uniqueID,
+                          std::move(view),
+                          info.colorType(),
+                          info.alphaType(),
+                          info.refColorSpace()) {}
+
     ~SkImage_Gpu() override;
 
     GrSemaphoresSubmitted onFlush(GrDirectContext*, const GrFlushInfo&) override;

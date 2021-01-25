@@ -1,0 +1,11 @@
+void main() {
+    float x;
+    float y;
+    float z;
+    x = y = z = 1;
+    sk_FragColor.x = half(z);
+
+    int a, b, c;
+    a = b = c = 2;
+    sk_FragColor.y = half(b);
+}

@@ -927,11 +927,26 @@ describe('Core canvas behavior', () => {
                           CanvasKit.BLACK, CanvasKit.MAGENTA, 0);
         canvas.drawText('Default Flags', 5, 250, textPaint, textFont);
 
+        let bounds = CanvasKit.getShadowLocalBounds(CanvasKit.Matrix.identity(),
+            path, zPlaneParams, lightPos, lightRadius, 0);
+        expectTypedArraysToEqual(bounds, Float32Array.of(-3.64462, -12.67541, 245.50, 242.59164));
+
+        bounds = CanvasKit.getShadowLocalBounds(CanvasKit.M44.identity(),
+            path, zPlaneParams, lightPos, lightRadius, 0);
+        expectTypedArraysToEqual(bounds, Float32Array.of(-3.64462, -12.67541, 245.50, 242.59164));
+
         canvas.translate(250, 250);
         canvas.drawShadow(path, zPlaneParams, lightPos, lightRadius,
                           CanvasKit.BLACK, CanvasKit.MAGENTA,
                           CanvasKit.ShadowTransparentOccluder | CanvasKit.ShadowGeometricOnly | CanvasKit.ShadowDirectionalLight);
         canvas.drawText('All Flags', 5, 250, textPaint, textFont);
+
+        const outBounds = new Float32Array(4);
+        CanvasKit.getShadowLocalBounds(CanvasKit.Matrix.rotated(Math.PI / 6),
+            path, zPlaneParams, lightPos, lightRadius,
+            CanvasKit.ShadowTransparentOccluder | CanvasKit.ShadowGeometricOnly | CanvasKit.ShadowDirectionalLight,
+            outBounds);
+        expectTypedArraysToEqual(outBounds, Float32Array.of(1.52207, -6.35035, 264.03445, 261.83294));
 
         path.delete();
         textFont.delete();
@@ -970,16 +985,6 @@ describe('Core canvas behavior', () => {
 
     gm('turbulance_tiled_shader', (canvas) => {
         const shader = CanvasKit.Shader.MakeTurbulence(0.1, 0.05, 2, 117, 80, 80);
-        const paint = new CanvasKit.Paint();
-        paint.setColor(CanvasKit.BLACK);
-        paint.setShader(shader);
-        canvas.drawPaint(paint);
-        paint.delete();
-        shader.delete();
-    });
-
-    gm('improved_noise_shader', (canvas) => {
-        const shader = CanvasKit.Shader.MakeImprovedNoise(0.1, 0.05, 2, 10);
         const paint = new CanvasKit.Paint();
         paint.setColor(CanvasKit.BLACK);
         paint.setShader(shader);

@@ -743,10 +743,12 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	badSerializeGMs = append(badSerializeGMs, "draw_image_set_alpha_only")
 	badSerializeGMs = append(badSerializeGMs, "compositor_quads_shader")
 	badSerializeGMs = append(badSerializeGMs, "wacky_yuv_formats_qtr")
+	badSerializeGMs = append(badSerializeGMs, "runtime_effect_image")
 
 	// This GM forces a path to be convex. That property doesn't survive
 	// serialization.
 	badSerializeGMs = append(badSerializeGMs, "analytic_antialias_convex")
+
 
 	for _, test := range badSerializeGMs {
 		skip("serialize-8888", "gm", "_", test)
@@ -783,7 +785,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		"async_rescale_and_read_dog_up",
 		"async_rescale_and_read_dog_down",
 		"async_rescale_and_read_rose",
-		"async_rescale_and_read_no_bleed"} {
+		"async_rescale_and_read_no_bleed",
+		"async_rescale_and_read_alpha_type",} {
 		skip("pic-8888", "gm", "_", test)
 		skip("serialize-8888", "gm", "_", test)
 

@@ -35,7 +35,10 @@
 
 // Working on allow this to be undefined
 #define SK_SUPPORT_LEGACY_GETTOTALMATRIX
-//#define SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
+
+#define SK_SUPPORT_LEGACY_DRAWBITMAP
+
+#define SK_SUPPORT_LEGACY_DRAWIMAGE_NOSAMPLING
 
 class GrBackendRenderTarget;
 class GrRecordingContext;
@@ -913,6 +916,10 @@ public:
         this->clipRect(rect, SkClipOp::kIntersect, doAntiAlias);
     }
 
+    void clipIRect(const SkIRect& irect, SkClipOp op = SkClipOp::kIntersect) {
+        this->clipRect(SkRect::Make(irect), op, false);
+    }
+
     /** Sets the maximum clip rectangle, which can be set by clipRect(), clipRRect() and
         clipPath() and intersect the current clip with the specified rect.
         The maximum clip affects only future clipping operations; it is not retroactive.
@@ -1425,6 +1432,14 @@ public:
     */
     void drawPath(const SkPath& path, const SkPaint& paint);
 
+    void drawImage(const SkImage* image, SkScalar left, SkScalar top) {
+        this->drawImage(image, left, top, SkSamplingOptions(), nullptr);
+    }
+    void drawImage(const sk_sp<SkImage>& image, SkScalar left, SkScalar top) {
+        this->drawImage(image.get(), left, top, SkSamplingOptions(), nullptr);
+    }
+
+#ifdef SK_SUPPORT_LEGACY_DRAWIMAGE_NOSAMPLING
     /** Draws SkImage image, with its top-left corner at (left, top),
         using clip, SkMatrix, and optional SkPaint paint.
 
@@ -1438,7 +1453,7 @@ public:
                       and so on; or nullptr
     */
     void drawImage(const SkImage* image, SkScalar left, SkScalar top,
-                   const SkPaint* paint = nullptr);
+                   const SkPaint* paint);
 
     /** Draws SkImage image, with its top-left corner at (left, top),
         using clip, SkMatrix, and optional SkPaint paint.
@@ -1453,9 +1468,10 @@ public:
                       and so on; or nullptr
     */
     void drawImage(const sk_sp<SkImage>& image, SkScalar left, SkScalar top,
-                   const SkPaint* paint = nullptr) {
+                   const SkPaint* paint) {
         this->drawImage(image.get(), left, top, paint);
     }
+#endif
 
     /** \enum SkCanvas::SrcRectConstraint
         SrcRectConstraint controls the behavior at the edge of source SkRect,
@@ -1472,6 +1488,7 @@ public:
         kFast_SrcRectConstraint,   //!< sample outside bounds; faster
     };
 
+#ifdef SK_SUPPORT_LEGACY_DRAWIMAGE_NOSAMPLING
     /** Draws SkRect src of SkImage image, scaled and translated to fill SkRect dst.
         Additionally transform draw using clip, SkMatrix, and optional SkPaint paint.
 
@@ -1642,11 +1659,27 @@ public:
     void drawImageRect(const sk_sp<SkImage>& image, const SkRect& dst, const SkPaint* paint) {
         this->drawImageRect(image.get(), dst, paint);
     }
+#endif
 
     void drawImage(const SkImage*, SkScalar x, SkScalar y, const SkSamplingOptions&,
                    const SkPaint* = nullptr);
+    void drawImage(const sk_sp<SkImage>& image, SkScalar x, SkScalar y,
+                   const SkSamplingOptions& sampling, const SkPaint* paint = nullptr) {
+        this->drawImage(image.get(), x, y, sampling, paint);
+    }
     void drawImageRect(const SkImage*, const SkRect& src, const SkRect& dst,
                        const SkSamplingOptions&, const SkPaint*, SrcRectConstraint);
+    void drawImageRect(const SkImage*, const SkRect& dst, const SkSamplingOptions&,
+                       const SkPaint* = nullptr);
+    void drawImageRect(const sk_sp<SkImage>& image, const SkRect& src, const SkRect& dst,
+                       const SkSamplingOptions& sampling, const SkPaint* paint,
+                       SrcRectConstraint constraint) {
+        this->drawImageRect(image.get(), src, dst, sampling, paint, constraint);
+    }
+    void drawImageRect(const sk_sp<SkImage>& image, const SkRect& dst,
+                       const SkSamplingOptions& sampling, const SkPaint* paint = nullptr) {
+        this->drawImageRect(image.get(), dst, sampling, paint);
+    }
 
     /** Draws SkImage image stretched proportionally to fit into SkRect dst.
         SkIRect center divides the image into nine sections: four sides, four corners, and
@@ -1684,6 +1717,11 @@ public:
         this->drawImageNine(image.get(), center, dst, paint);
     }
 
+#ifdef SK_SUPPORT_LEGACY_DRAWBITMAP
+public:
+#else
+private:
+#endif
     /** Draws SkBitmap bitmap, with its top-left corner at (left, top),
         using clip, SkMatrix, and optional SkPaint paint.
 
@@ -1785,6 +1823,7 @@ public:
     */
     void drawBitmapRect(const SkBitmap& bitmap, const SkRect& dst, const SkPaint* paint,
                         SrcRectConstraint constraint = kStrict_SrcRectConstraint);
+public:
 
     /** \struct SkCanvas::Lattice
         SkCanvas::Lattice divides SkBitmap or SkImage into a rectangular grid.
@@ -2458,11 +2497,6 @@ public:
     GrBackendRenderTarget topLayerBackendRenderTarget() const;
 #endif
 
-    // TEMP helpers until we switch virtual over to const& for src-rect
-    void legacy_drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                              const SkPaint* paint,
-                              SrcRectConstraint constraint = kStrict_SrcRectConstraint);
-
     /**
      *  Returns the global clip as a region. If the clip contains AA, then only the bounds
      *  of the clip may be returned.
@@ -2530,21 +2564,6 @@ protected:
     virtual void onDrawPoints(PointMode mode, size_t count, const SkPoint pts[],
                               const SkPaint& paint);
 
-#ifdef SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
-    virtual void onDrawImage(const SkImage* image, SkScalar dx, SkScalar dy, const SkPaint* paint);
-    virtual void onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                                 const SkPaint* paint, SrcRectConstraint constraint);
-    virtual void onDrawImageLattice(const SkImage* image, const Lattice& lattice, const SkRect& dst,
-                                    const SkPaint* paint);
-    virtual void onDrawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect rect[],
-                             const SkColor colors[], int count, SkBlendMode mode,
-                             const SkRect* cull, const SkPaint* paint);
-    // never called -- remove from clients' subclasses
-    virtual void onDrawImageNine(const SkImage*, const SkIRect&, const SkRect&, const SkPaint*) {}
-    virtual void onDrawEdgeAAImageSet(const ImageSetEntry imageSet[], int count,
-                                      const SkPoint dstClips[], const SkMatrix preViewMatrices[],
-                                      const SkPaint* paint, SrcRectConstraint constraint);
-#endif
     virtual void onDrawImage2(const SkImage*, SkScalar dx, SkScalar dy, const SkSamplingOptions&,
                               const SkPaint*);
     virtual void onDrawImageRect2(const SkImage*, const SkRect& src, const SkRect& dst,

@@ -103,7 +103,7 @@ SkShaderBase::Context::Context(const SkShaderBase& shader, const ContextRec& rec
     // invertible.
     SkAssertResult(fShader.computeTotalInverse(*rec.fMatrix, rec.fLocalMatrix, &fTotalInverse));
 
-    fPaintAlpha = rec.fPaint->getAlpha();
+    fPaintAlpha = rec.fPaintAlpha;
 }
 
 SkShaderBase::Context::~Context() {}
@@ -235,15 +235,6 @@ skvm::Color SkShaderBase::program(skvm::Builder* p,
         }
         return color;
     }
-    return {};
-}
-
-skvm::Color SkShaderBase::onProgram(skvm::Builder*,
-                                    skvm::Coord device, skvm::Coord local, skvm::Color paint,
-                                    const SkMatrixProvider&, const SkMatrix* localM,
-                                    SkFilterQuality quality, const SkColorInfo& dst,
-                                    skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
-    // SkDebugf("cannot onProgram %s\n", this->getTypeName());
     return {};
 }
 

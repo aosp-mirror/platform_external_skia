@@ -27,13 +27,13 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrRenderTask.h"
+#include "src/gpu/GrRenderTaskCluster.h"
 #include "src/gpu/GrResourceAllocator.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSoftwarePathRenderer.h"
 #include "src/gpu/GrSurfaceContext.h"
 #include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
-#include "src/gpu/GrTCluster.h"
 #include "src/gpu/GrTTopoSort.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
@@ -106,7 +106,7 @@ bool GrDrawingManager::flush(
             bool used = std::any_of(fDAG.begin(), fDAG.end(), [&](auto& task) {
                 return task && task->isUsed(proxy);
             });
-            return !used && !this->isDDLTarget(proxy);
+            return !used;
         });
         if (allUnused) {
             if (info.fSubmittedProc) {
@@ -250,7 +250,6 @@ bool GrDrawingManager::flush(
 #endif
     fLastRenderTasks.reset();
     fDAG.reset();
-    this->clearDDLTargets();
 
 #ifdef SK_DEBUG
     // In non-DDL mode this checks that all the flushed ops have been freed from the memory pool.
@@ -415,7 +414,7 @@ void GrDrawingManager::sortTasks() {
             GrOpsTask* curOpsTask = fDAG[i]->asOpsTask();
 
             if (prevOpsTask && curOpsTask) {
-                SkASSERT(prevOpsTask->target(0).proxy() != curOpsTask->target(0).proxy());
+                SkASSERT(prevOpsTask->target(0) != curOpsTask->target(0));
             }
 
             prevOpsTask = curOpsTask;
@@ -425,28 +424,55 @@ void GrDrawingManager::sortTasks() {
 }
 
 // Reorder the array to match the llist without reffing & unreffing sk_sp's.
-// Both args must contain the same objects.
+// The llist must contain a subset of the entries in the array.
 // This is basically a shim because clustering uses LList but the rest of drawmgr uses array.
+// Pointers in the array are not dereferenced.
 template <typename T>
 static void reorder_array_by_llist(const SkTInternalLList<T>& llist, SkTArray<sk_sp<T>>* array) {
+    for (sk_sp<T>& t : *array) {
+        [[maybe_unused]] T* old = t.release();
+    }
     int i = 0;
     for (T* t : llist) {
-        // Release the pointer that used to live here so it doesn't get unreffed.
-        [[maybe_unused]] T* old = array->at(i).release();
         array->at(i++).reset(t);
     }
-    SkASSERT(i == array->count());
+    SkASSERT(i <= array->count());
+    array->resize_back(i);
 }
 
 void GrDrawingManager::reorderTasks() {
     SkASSERT(fReduceOpsTaskSplitting);
     SkTInternalLList<GrRenderTask> llist;
-    bool clustered = GrTCluster<GrRenderTask, GrRenderTask::ClusterTraits>(fDAG, &llist);
+    bool clustered = GrClusterRenderTasks(fDAG, &llist);
     if (!clustered) {
         return;
     }
     // TODO: Handle case where proposed order would blow our memory budget.
     // Such cases are currently pathological, so we could just return here and keep current order.
+
+    // Merge adjacent ops tasks. Note: We remove (future) tasks from the list during iteration.
+    // This works out, however, because when we access the next element in llist it will be valid.
+    for (auto task : llist) {
+        auto opsTask = task->asOpsTask();
+        if (!opsTask) {
+            continue;
+        }
+
+        int removedCount = opsTask->mergeFromLList();
+        auto removedTask = opsTask->fNext;
+        for (int i = 0; i < removedCount; i++) {
+            auto next = removedTask->fNext;
+            llist.remove(removedTask);
+
+            // After this unref, there will be a dangling sk_sp to this task in fDAG somewhere.
+            // That dangling pointer will be removed in reorder_array_by_llist.
+            removedTask->disown(this);
+            removedTask->unref();
+
+            removedTask = next;
+        }
+    }
+
     reorder_array_by_llist(llist, &fDAG);
 }
 
@@ -617,7 +643,7 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
 }
 
 void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
-                                     GrRenderTargetProxy* newDest,
+                                     sk_sp<GrRenderTargetProxy> newDest,
                                      SkIPoint offset) {
     SkDEBUGCODE(this->validate());
 
@@ -632,19 +658,20 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
 
     // Propagate the DDL proxy's state information to the replay target.
     if (ddl->priv().targetProxy()->isMSAADirty()) {
-        newDest->markMSAADirty(ddl->priv().targetProxy()->msaaDirtyRect(),
-                               ddl->characterization().origin());
+        auto nativeRect = GrNativeRect::MakeIRectRelativeTo(
+                ddl->characterization().origin(),
+                ddl->priv().targetProxy()->backingStoreDimensions().height(),
+                ddl->priv().targetProxy()->msaaDirtyRect());
+        newDest->markMSAADirty(nativeRect);
     }
     GrTextureProxy* newTextureProxy = newDest->asTextureProxy();
     if (newTextureProxy && GrMipmapped::kYes == newTextureProxy->mipmapped()) {
         newTextureProxy->markMipmapsDirty();
     }
 
-    this->addDDLTarget(newDest, ddl->priv().targetProxy());
-
     // Here we jam the proxy that backs the current replay SkSurface into the LazyProxyData.
     // The lazy proxy that references it (in the DDL opsTasks) will then steal its GrTexture.
-    ddl->fLazyProxyData->fReplayDest = newDest;
+    ddl->fLazyProxyData->fReplayDest = newDest.get();
 
     if (ddl->fPendingPaths.size()) {
         GrCoverageCountingPathRenderer* ccpr = this->getCoverageCountingPathRenderer();
@@ -654,7 +681,7 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
 
     // Add a task to handle drawing and lifetime management of the DDL.
     SkDEBUGCODE(auto ddlTask =) this->appendTask(sk_make_sp<GrDDLTask>(this,
-                                                                       sk_ref_sp(newDest),
+                                                                       std::move(newDest),
                                                                        std::move(ddl),
                                                                        offset));
     SkASSERT(ddlTask->isClosed());
@@ -707,7 +734,7 @@ sk_sp<GrOpsTask> GrDrawingManager::newOpsTask(GrSurfaceProxyView surfaceView,
     sk_sp<GrOpsTask> opsTask(new GrOpsTask(this, fContext->priv().arenas(),
                                            std::move(surfaceView),
                                            fContext->priv().auditTrail()));
-    SkASSERT(this->getLastRenderTask(opsTask->target(0).proxy()) == opsTask.get());
+    SkASSERT(this->getLastRenderTask(opsTask->target(0)) == opsTask.get());
 
     if (flushTimeOpsTask) {
         fOnFlushRenderTasks.push_back(opsTask);
@@ -747,7 +774,7 @@ void GrDrawingManager::newWaitRenderTask(sk_sp<GrSurfaceProxy> proxy,
                                                                     std::move(semaphores),
                                                                     numSemaphores);
 
-    if (fActiveOpsTask && (fActiveOpsTask->target(0).proxy() == proxy.get())) {
+    if (fActiveOpsTask && (fActiveOpsTask->target(0) == proxy.get())) {
         SkASSERT(this->getLastRenderTask(proxy.get()) == fActiveOpsTask);
         this->insertTaskBeforeLast(waitTask);
         // In this case we keep the current renderTask open but just insert the new waitTask
@@ -810,28 +837,29 @@ void GrDrawingManager::newTransferFromRenderTask(sk_sp<GrSurfaceProxy> srcProxy,
     SkDEBUGCODE(this->validate());
 }
 
-bool GrDrawingManager::newCopyRenderTask(GrSurfaceProxyView srcView,
-                                         const SkIRect& srcRect,
-                                         GrSurfaceProxyView dstView,
-                                         const SkIPoint& dstPoint) {
+bool GrDrawingManager::newCopyRenderTask(sk_sp<GrSurfaceProxy> src,
+                                         SkIRect srcRect,
+                                         sk_sp<GrSurfaceProxy> dst,
+                                         SkIPoint dstPoint) {
     SkDEBUGCODE(this->validate());
     SkASSERT(fContext);
 
     this->closeActiveOpsTask();
     const GrCaps& caps = *fContext->priv().caps();
 
-    GrSurfaceProxy* srcProxy = srcView.proxy();
-
-    GrRenderTask* task =
-            this->appendTask(GrCopyRenderTask::Make(this, std::move(srcView), srcRect,
-                                                    std::move(dstView), dstPoint, &caps));
+    GrRenderTask* task = this->appendTask(GrCopyRenderTask::Make(this,
+                                                                 src,
+                                                                 srcRect,
+                                                                 std::move(dst),
+                                                                 dstPoint,
+                                                                 &caps));
     if (!task) {
         return false;
     }
 
     // We always say GrMipmapped::kNo here since we are always just copying from the base layer to
     // another base layer. We don't need to make sure the whole mip map chain is valid.
-    task->addDependency(this, srcProxy, GrMipmapped::kNo, GrTextureResolveManager(this), caps);
+    task->addDependency(this, src.get(), GrMipmapped::kNo, GrTextureResolveManager(this), caps);
     task->makeClosed(caps);
 
     // We have closed the previous active oplist but since a new oplist isn't being added there

@@ -4,9 +4,48 @@ This file includes a list of high level updates for each milestone release.
 
 * * *
 
+Milestone 90
+------------
+
+  * Added SkRuntimeEffect::makeImage() to capture the output of an SkRuntimeEffect in an SkImage.
+    https://review.skia.org/357284
+
+  * Deprecate (and ignore) SkAndroidCodec::ExifOrientation
+    https://review.skia.org/344763
+
+  * Fix several minor issues in lighting image filters:
+    - The spotlight falloff exponent is no longer clamped to [1, 128]. SVG 1.1 requires the specular
+      lighting effect's exponent (shininess) to be clamped; not the spotlight's falloff. Any such
+      parameter clamping is the client's responisibility, which makes Skia's lighting effect easily
+      adaptable to SVG 1.1 (clamp exponent) or SVG 2 (no clamp).
+    - Fix spotlight incorrectly scaling light within the cone angle.
+    - Move saturation of RGBA to after multiplying lighting intensity with the lighting color, which
+      improves rendering when diffuse and specular constants are greater than 1.
+    https://review.skia.org/355496
+
 Milestone 89
 ------------
-  * Removed deperated version of MakeFromYUVATextures. Use the version
+  * Removed SkYUVAIndex and SkYUVASizeInfo. These were no longer used in any
+    public APIs.
+    https://review.skia.org/352497
+
+  * Numerous changes to SkRuntimeEffect, aligning the capabilities and restrictions with
+    The OpenGL ES Shading Language 1.00 (aka, the shading language of OpenGL ES2 and WebGL 1.0).
+    All built-in functions from sections 8.1 through 8.6 implemented & tested on all backends.
+    Removed types and features that require newer versions of GLSL:
+      https://review.skia.org/346657  [Non-square matrices]
+      https://review.skia.org/347046  [uint, short, ushort, byte, ubyte]
+      https://review.skia.org/349056  [while and do-while loops]
+      https://review.skia.org/350030  [Bitwise operators and integer remainder]
+
+  * Add SkShadowUtils::GetLocalBounds. Generates bounding box for shadows
+    relative to path.
+    https://review.skia.org/351922
+
+  * Removed SkPerlinNoiseShader::MakeImprovedNoise.
+    https://review.skia.org/352057
+
+  * Removed deprecated version of MakeFromYUVATextures. Use the version
     that takes GrYUVABackendTextures instead.
     https://review.skia.org/345174
 

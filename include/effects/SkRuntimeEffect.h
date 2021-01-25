@@ -85,6 +85,14 @@ public:
                                const SkMatrix* localMatrix,
                                bool isOpaque);
 
+    sk_sp<SkImage> makeImage(GrRecordingContext*,
+                             sk_sp<SkData> uniforms,
+                             sk_sp<SkShader> children[],
+                             size_t childCount,
+                             const SkMatrix* localMatrix,
+                             SkImageInfo resultInfo,
+                             bool mipmapped);
+
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> uniforms);
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> uniforms,
                                          sk_sp<SkColorFilter> children[],
@@ -222,6 +230,22 @@ public:
             return *this;
         }
 
+        template <typename T>
+        bool set(const T val[], const int count) {
+            static_assert(std::is_trivially_copyable<T>::value, "Value must be trivial copyable");
+            if (!fVar) {
+                SkDEBUGFAIL("Assigning to missing variable");
+                return false;
+            } else if (sizeof(T) * count != fVar->sizeInBytes()) {
+                SkDEBUGFAIL("Incorrect value size");
+                return false;
+            } else {
+                memcpy(SkTAddOffset<void>(fOwner->writableUniformData(), fVar->fOffset),
+                       val, sizeof(T) * count);
+            }
+            return true;
+        }
+
         SkRuntimeShaderBuilder*         fOwner;
         const SkRuntimeEffect::Uniform* fVar;    // nullptr if the variable was not found
     };
@@ -239,6 +263,10 @@ public:
     BuilderChild child(const char* name) { return { this, fEffect->findChild(name) }; }
 
     sk_sp<SkShader> makeShader(const SkMatrix* localMatrix, bool isOpaque);
+    sk_sp<SkImage> makeImage(GrRecordingContext*,
+                             const SkMatrix* localMatrix,
+                             SkImageInfo resultInfo,
+                             bool mipmapped);
 
 private:
     void* writableUniformData();

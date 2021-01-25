@@ -222,7 +222,7 @@ Result BRDSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
             }
             alpha8_to_gray8(&bitmap);
 
-            canvas->drawBitmap(bitmap, 0, 0);
+            canvas->drawImage(bitmap.asImage(), 0, 0);
             return Result::Ok();
         }
         case kDivisor_Mode: {
@@ -278,7 +278,7 @@ Result BRDSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
                     }
 
                     alpha8_to_gray8(&bitmap);
-                    canvas->drawBitmapRect(bitmap,
+                    canvas->drawImageRect(bitmap.asImage().get(),
                             SkRect::MakeXYWH((SkScalar) scaledBorder, (SkScalar) scaledBorder,
                                     (SkScalar) (subsetWidth / fSampleSize),
                                     (SkScalar) (subsetHeight / fSampleSize)),
@@ -286,7 +286,8 @@ Result BRDSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
                                     (SkScalar) (top / fSampleSize),
                                     (SkScalar) (subsetWidth / fSampleSize),
                                     (SkScalar) (subsetHeight / fSampleSize)),
-                            nullptr);
+                            SkSamplingOptions(), nullptr,
+                            SkCanvas::kStrict_SrcRectConstraint);
                 }
             }
             return Result::Ok();
@@ -1223,9 +1224,8 @@ Result SkottieSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
             {
                 SkAutoCanvasRestore acr(canvas, true);
                 canvas->clipRect(dest, true);
-                canvas->concat(SkMatrix::MakeRectToRect(SkRect::MakeSize(animation->size()),
-                                                        dest,
-                                                        SkMatrix::kCenter_ScaleToFit));
+                canvas->concat(SkMatrix::RectToRect(SkRect::MakeSize(animation->size()), dest,
+                                                    SkMatrix::kCenter_ScaleToFit));
                 animation->seek(t);
                 animation->render(canvas);
             }
@@ -1280,9 +1280,8 @@ Result SkRiveSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
     if (!bounds.isEmpty()) {
         // TODO: tiled frames when we add animation support
         SkAutoCanvasRestore acr(canvas, true);
-        canvas->concat(SkMatrix::MakeRectToRect(bounds,
-                                                SkRect::MakeWH(kTargetSize, kTargetSize),
-                                                SkMatrix::kCenter_ScaleToFit ));
+        canvas->concat(SkMatrix::RectToRect(bounds, SkRect::MakeWH(kTargetSize, kTargetSize),
+                                            SkMatrix::kCenter_ScaleToFit));
         for (const auto& ab : skrive->artboards()) {
             ab->render(canvas);
         }
