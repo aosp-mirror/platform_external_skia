@@ -223,8 +223,10 @@ void SkSVGTextContext::shapePendingBuffer(const SkFont& font) {
     fShapeBuffer.reset();
 }
 
-SkSVGTextContext::SkSVGTextContext(const SkSVGRenderContext& ctx, const SkSVGTextPath* tpath)
+SkSVGTextContext::SkSVGTextContext(const SkSVGRenderContext& ctx, const ShapedTextCallback& cb,
+                                   const SkSVGTextPath* tpath)
     : fRenderContext(ctx)
+    , fCallback(cb)
     , fShaper(SkShaper::Make(ctx.fontMgr()))
     , fChunkAlignmentFactor(ComputeAlignmentFactor(ctx.presentationContext()))
 {
@@ -255,8 +257,8 @@ SkSVGTextContext::~SkSVGTextContext() {
     this->flushChunk(fRenderContext);
 }
 
-void SkSVGTextContext::appendFragment(const SkString& txt, const SkSVGRenderContext& ctx,
-                                      SkSVGXmlSpace xs) {
+void SkSVGTextContext::shapeFragment(const SkString& txt, const SkSVGRenderContext& ctx,
+                                     SkSVGXmlSpace xs) {
     // https://www.w3.org/TR/SVG11/text.html#WhiteSpace
     // https://www.w3.org/TR/2008/REC-xml-20081126/#NT-S
     auto filterWSDefault = [this](SkUnichar ch) -> SkUnichar {
@@ -417,15 +419,7 @@ void SkSVGTextContext::flushChunk(const SkSVGRenderContext& ctx) {
                                                       run.glyhPosAdjust[i]);
         }
 
-        // Technically, blobs with compatible paints could be merged --
-        // but likely not worth the effort.
-        const auto blob = blobBuilder.make();
-        if (run.fillPaint) {
-            ctx.canvas()->drawTextBlob(blob, 0, 0, *run.fillPaint);
-        }
-        if (run.strokePaint) {
-            ctx.canvas()->drawTextBlob(blob, 0, 0, *run.strokePaint);
-        }
+        fCallback(ctx, blobBuilder.make(), run.fillPaint.get(), run.strokePaint.get());
     }
 
     fChunkPos += fChunkAdvance;
@@ -480,7 +474,7 @@ void SkSVGTextFragment::renderText(const SkSVGRenderContext& ctx, SkSVGTextConte
     SkSVGRenderContext localContext(ctx, this);
 
     if (this->onPrepareToRender(&localContext)) {
-        this->onRenderText(localContext, tctx, xs);
+        this->onShapeText(localContext, tctx, xs);
     }
 }
 
@@ -490,9 +484,8 @@ SkPath SkSVGTextFragment::onAsPath(const SkSVGRenderContext&) const {
 }
 
 void SkSVGTextContainer::appendChild(sk_sp<SkSVGNode> child) {
-    // Only allow text nodes.
+    // Only allow text content child nodes.
     switch (child->tag()) {
-    case SkSVGTag::kText:
     case SkSVGTag::kTextLiteral:
     case SkSVGTag::kTextPath:
     case SkSVGTag::kTSpan:
@@ -504,12 +497,9 @@ void SkSVGTextContainer::appendChild(sk_sp<SkSVGNode> child) {
     }
 }
 
-void SkSVGTextContainer::onRenderText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,
-                                      SkSVGXmlSpace) const {
-    if (!tctx) {
-        // No text context => missing top-level <text> node.
-        return;
-    }
+void SkSVGTextContainer::onShapeText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,
+                                     SkSVGXmlSpace) const {
+    SkASSERT(tctx);
 
     const SkSVGTextContext::ScopedPosResolver resolver(*this, ctx.lengthContext(), tctx);
 
@@ -542,31 +532,40 @@ bool SkSVGTextContainer::parseAndSetAttribute(const char* name, const char* valu
            this->setXmlSpace(SkSVGAttributeParser::parse<SkSVGXmlSpace>("xml:space", name, value));
 }
 
-void SkSVGTextContainer::onRender(const SkSVGRenderContext& ctx) const {
-    this->onRenderText(ctx, nullptr, this->getXmlSpace());
-}
-
-void SkSVGTextLiteral::onRenderText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,
-                                    SkSVGXmlSpace xs) const {
+void SkSVGTextLiteral::onShapeText(const SkSVGRenderContext& ctx, SkSVGTextContext* tctx,
+                                   SkSVGXmlSpace xs) const {
     SkASSERT(tctx);
 
-    tctx->appendFragment(this->getText(), ctx, xs);
+    tctx->shapeFragment(this->getText(), ctx, xs);
 }
 
-void SkSVGText::onRenderText(const SkSVGRenderContext& ctx, SkSVGTextContext*,
-                             SkSVGXmlSpace xs) const {
-    // Root text nodes establish a new text layout context.
-    SkSVGTextContext tctx(ctx);
+void SkSVGText::onRender(const SkSVGRenderContext& ctx) const {
+    const SkSVGTextContext::ShapedTextCallback render_text = [](const SkSVGRenderContext& ctx,
+                                                                const sk_sp<SkTextBlob>& blob,
+                                                                const SkPaint* fill,
+                                                                const SkPaint* stroke) {
+        if (fill) {
+            ctx.canvas()->drawTextBlob(blob, 0, 0, *fill);
+        }
+        if (stroke) {
+            ctx.canvas()->drawTextBlob(blob, 0, 0, *stroke);
+        }
+    };
 
-    this->INHERITED::onRenderText(ctx, &tctx, xs);
+    // Root <text> nodes establish a text layout context.
+    SkSVGTextContext tctx(ctx, render_text);
+
+    this->onShapeText(ctx, &tctx, this->getXmlSpace());
 }
 
-void SkSVGTextPath::onRenderText(const SkSVGRenderContext& ctx, SkSVGTextContext*,
+void SkSVGTextPath::onShapeText(const SkSVGRenderContext& ctx, SkSVGTextContext* parent_tctx,
                                  SkSVGXmlSpace xs) const {
-    // Root text nodes establish a new text layout context.
-    SkSVGTextContext tctx(ctx, this);
+    SkASSERT(parent_tctx);
 
-    this->INHERITED::onRenderText(ctx, &tctx, xs);
+    // textPath nodes establish a new text layout context.
+    SkSVGTextContext tctx(ctx, parent_tctx->getCallback(), this);
+
+    this->INHERITED::onShapeText(ctx, &tctx, xs);
 }
 
 bool SkSVGTextPath::parseAndSetAttribute(const char* name, const char* value) {

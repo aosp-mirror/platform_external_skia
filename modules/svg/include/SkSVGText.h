@@ -23,8 +23,10 @@ public:
 protected:
     explicit SkSVGTextFragment(SkSVGTag t) : INHERITED(t) {}
 
-    virtual void onRenderText(const SkSVGRenderContext&, SkSVGTextContext*,
-                              SkSVGXmlSpace) const = 0;
+    virtual void onShapeText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const = 0;
+
+    // Text nodes other than the root <text> element are not rendered directly.
+    void onRender(const SkSVGRenderContext&) const override {}
 
 private:
     SkPath onAsPath(const SkSVGRenderContext&) const final;
@@ -48,13 +50,11 @@ public:
 protected:
     explicit SkSVGTextContainer(SkSVGTag t) : INHERITED(t) {}
 
-    void onRenderText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const override;
+    void onShapeText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const override;
 
     bool parseAndSetAttribute(const char*, const char*) override;
 
 private:
-    void onRender(const SkSVGRenderContext&) const final;
-
     std::vector<sk_sp<SkSVGTextFragment>> fChildren;
 
     using INHERITED = SkSVGTextFragment;
@@ -67,7 +67,7 @@ public:
 private:
     SkSVGText() : INHERITED(SkSVGTag::kText) {}
 
-    void onRenderText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const override;
+    void onRender(const SkSVGRenderContext&) const override;
 
     using INHERITED = SkSVGTextContainer;
 };
@@ -93,8 +93,7 @@ public:
 private:
     SkSVGTextLiteral() : INHERITED(SkSVGTag::kTextLiteral) {}
 
-    void onRender(const SkSVGRenderContext&) const override {}
-    void onRenderText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const override;
+    void onShapeText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const override;
 
     void appendChild(sk_sp<SkSVGNode>) override {}
 
@@ -111,7 +110,7 @@ public:
 private:
     SkSVGTextPath() : INHERITED(SkSVGTag::kTextPath) {}
 
-    void onRenderText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const override;
+    void onShapeText(const SkSVGRenderContext&, SkSVGTextContext*, SkSVGXmlSpace) const override;
     bool parseAndSetAttribute(const char*, const char*) override;
 
     using INHERITED = SkSVGTextContainer;

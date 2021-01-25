@@ -172,6 +172,11 @@ bool GrSurfaceContext::readPixels(GrDirectContext* dContext, GrPixmap dst, SkIPo
     if (!fContext->priv().matches(dContext)) {
         return false;
     }
+
+    if (dst.colorType() == GrColorType::kUnknown) {
+        return false;
+    }
+
     dst = dst.clip(this->dimensions(), &pt);
     if (!dst.hasPixels()) {
         return false;
@@ -355,6 +360,10 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
     }
 
     if (this->asSurfaceProxy()->readOnly()) {
+        return false;
+    }
+
+    if (src.colorType() == GrColorType::kUnknown) {
         return false;
     }
 
@@ -1036,22 +1045,11 @@ bool GrSurfaceContext::copy(sk_sp<GrSurfaceProxy> src, SkIRect srcRect, SkIPoint
         return false;
     }
 
-    if (!GrClipSrcRectAndDstPoint(this->dimensions(), src->dimensions(), srcRect, dstPoint,
-                                  &srcRect, &dstPoint)) {
-        return false;
-    }
-
-    if (this->origin() == kBottomLeft_GrSurfaceOrigin) {
-        int rectHeight = srcRect.height();
-        srcRect.fTop = src->backingStoreDimensions().height() - srcRect.fBottom;
-        srcRect.fBottom = srcRect.fTop + rectHeight;
-        dstPoint.fY = this->asSurfaceProxy()->backingStoreDimensions().height() -
-                      (dstPoint.fY + rectHeight);
-    }
     return this->drawingManager()->newCopyRenderTask(std::move(src),
                                                      srcRect,
                                                      this->asSurfaceProxyRef(),
-                                                     dstPoint);
+                                                     dstPoint,
+                                                     this->origin());
 }
 
 std::unique_ptr<GrSurfaceFillContext> GrSurfaceContext::rescale(const GrImageInfo& info,
