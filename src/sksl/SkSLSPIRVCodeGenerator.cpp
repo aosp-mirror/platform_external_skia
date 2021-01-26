@@ -496,6 +496,15 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
     String key = type.name();
     if (type.isStruct() || type.isArray()) {
         key += to_string((int)layout.fStd);
+#ifdef SK_DEBUG
+        SkASSERT(layout.fStd == MemoryLayout::Standard::k140_Standard ||
+                 layout.fStd == MemoryLayout::Standard::k430_Standard);
+        MemoryLayout::Standard otherStd = layout.fStd == MemoryLayout::Standard::k140_Standard
+                                                  ? MemoryLayout::Standard::k430_Standard
+                                                  : MemoryLayout::Standard::k140_Standard;
+        String otherKey = type.name() + to_string((int)otherStd);
+        SkASSERT(fTypeMap.find(otherKey) == fTypeMap.end());
+#endif
     }
     auto entry = fTypeMap.find(key);
     if (entry == fTypeMap.end()) {
@@ -1720,13 +1729,13 @@ std::vector<SpvId> SPIRVCodeGenerator::getAccessChain(const Expression& expr, Ou
     std::vector<SpvId> chain;
     switch (expr.kind()) {
         case Expression::Kind::kIndex: {
-            IndexExpression& indexExpr = (IndexExpression&) expr;
+            const IndexExpression& indexExpr = expr.as<IndexExpression>();
             chain = this->getAccessChain(*indexExpr.base(), out);
             chain.push_back(this->writeExpression(*indexExpr.index(), out));
             break;
         }
         case Expression::Kind::kFieldAccess: {
-            FieldAccess& fieldExpr = (FieldAccess&) expr;
+            const FieldAccess& fieldExpr = expr.as<FieldAccess>();
             chain = this->getAccessChain(*fieldExpr.base(), out);
             IntLiteral index(fContext, -1, fieldExpr.fieldIndex());
             chain.push_back(this->writeIntLiteral(index));
@@ -1865,7 +1874,7 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
                 typeId = this->getType(*Type::MakeArrayType("sk_in", var.type().componentType(),
                                                             fSkInCount));
             } else {
-                typeId = this->getType(type);
+                typeId = this->getType(type, this->memoryLayoutForVariable(var));
             }
             auto entry = fVariableMap.find(&var);
             SkASSERT(entry != fVariableMap.end());
@@ -1884,7 +1893,7 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
             return std::make_unique<PointerLValue>(*this, member, this->getType(type), precision);
         }
         case Expression::Kind::kSwizzle: {
-            Swizzle& swizzle = (Swizzle&) expr;
+            const Swizzle& swizzle = expr.as<Swizzle>();
             size_t count = swizzle.components().size();
             SpvId base = this->getLValue(*swizzle.base(), out)->getPointer();
             if (!base) {
@@ -1904,7 +1913,7 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
             }
         }
         case Expression::Kind::kTernary: {
-            TernaryExpression& t = (TernaryExpression&) expr;
+            const TernaryExpression& t = expr.as<TernaryExpression>();
             SpvId test = this->writeExpression(*t.test(), out);
             SpvId end = this->nextId();
             SpvId ifTrueLabel = this->nextId();
@@ -2683,7 +2692,7 @@ SpvId SPIRVCodeGenerator::writeFunction(const FunctionDefinition& f, OutputStrea
     fCurrentBlock = 0;
     this->writeLabel(this->nextId(), out);
     StringStream bodyBuffer;
-    this->writeBlock((Block&) *f.body(), bodyBuffer);
+    this->writeBlock(f.body()->as<Block>(), bodyBuffer);
     write_stringstream(fVariableBuffer, out);
     if (f.declaration().name() == "main") {
         write_stringstream(fGlobalInitializersBuffer, out);
@@ -2756,6 +2765,12 @@ void SPIRVCodeGenerator::writeLayout(const Layout& layout, SpvId target, int mem
     }
 }
 
+MemoryLayout SPIRVCodeGenerator::memoryLayoutForVariable(const Variable& v) const {
+    bool isBuffer     = ((v.modifiers().fFlags & Modifiers::kBuffer_Flag) != 0);
+    bool pushConstant = ((v.modifiers().fLayout.fFlags & Layout::kPushConstant_Flag) != 0);
+    return (pushConstant || isBuffer) ? MemoryLayout(MemoryLayout::k430_Standard) : fDefaultLayout;
+}
+
 static void update_sk_in_count(const Modifiers& m, int* outSkInCount) {
     switch (m.fLayout.fPrimitive) {
         case Layout::kPoints_Primitive:
@@ -2779,12 +2794,7 @@ static void update_sk_in_count(const Modifiers& m, int* outSkInCount) {
 }
 
 SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool appendRTHeight) {
-    bool isBuffer = ((intf.variable().modifiers().fFlags & Modifiers::kBuffer_Flag) != 0);
-    bool pushConstant = ((intf.variable().modifiers().fLayout.fFlags &
-                          Layout::kPushConstant_Flag) != 0);
-    MemoryLayout memoryLayout = (pushConstant || isBuffer) ?
-                                MemoryLayout(MemoryLayout::k430_Standard) :
-                                fDefaultLayout;
+    MemoryLayout memoryLayout = this->memoryLayoutForVariable(intf.variable());
     SpvId result = this->nextId();
     std::unique_ptr<Type> rtHeightStructType;
     const Type* type = &intf.variable().type();
@@ -2959,7 +2969,7 @@ void SPIRVCodeGenerator::writeStatement(const Statement& s, OutputStream& out) {
         case Statement::Kind::kNop:
             break;
         case Statement::Kind::kBlock:
-            this->writeBlock((Block&) s, out);
+            this->writeBlock(s.as<Block>(), out);
             break;
         case Statement::Kind::kExpression:
             this->writeExpression(*s.as<ExpressionStatement>().expression(), out);
