@@ -1982,6 +1982,7 @@ cc_test {
         "tests/SkSLMemoryLayoutTest.cpp",
         "tests/SkSLMetalTestbed.cpp",
         "tests/SkSLSPIRVTestbed.cpp",
+        "tests/SkSLTest.cpp",
         "tests/SkScalerCacheTest.cpp",
         "tests/SkShaperJSONWriterTest.cpp",
         "tests/SkSharedMutexTest.cpp",
