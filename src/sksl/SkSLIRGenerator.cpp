@@ -539,8 +539,7 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
 std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     SkASSERT(n.fKind == ASTNode::Kind::kIf);
     auto iter = n.begin();
-    std::unique_ptr<Expression> test = this->coerce(this->convertExpression(*(iter++)),
-                                                    *fContext.fTypes.fBool);
+    std::unique_ptr<Expression> test = this->convertExpression(*(iter++));
     if (!test) {
         return nullptr;
     }
@@ -564,7 +563,10 @@ std::unique_ptr<Statement> IRGenerator::convertIf(int offset, bool isStatic,
                                                   std::unique_ptr<Expression> test,
                                                   std::unique_ptr<Statement> ifTrue,
                                                   std::unique_ptr<Statement> ifFalse) {
-    SkASSERT(test->type().isBoolean());
+    test = this->coerce(std::move(test), *fContext.fTypes.fBool);
+    if (!test) {
+        return nullptr;
+    }
     if (test->is<BoolLiteral>()) {
         // Static Boolean values can fold down to a single branch.
         if (test->as<BoolLiteral>().value()) {
@@ -1119,7 +1121,8 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                 break;
             default:
                 if (parameters.size()) {
-                    this->errorReporter().error(f.fOffset, "shader 'main' must have zero parameters");
+                    this->errorReporter().error(f.fOffset,
+                                                "shader 'main' must have zero parameters");
                 }
                 break;
         }
@@ -1405,7 +1408,6 @@ void IRGenerator::convertEnum(const ASTNode& e) {
                                                             /*arraySize=*/0, std::move(value));
         var->setDeclaration(declaration.get());
         fSymbolTable->add(std::move(var));
-        fSymbolTable->takeOwnershipOfIRNode(std::move(value));
         fSymbolTable->takeOwnershipOfIRNode(std::move(declaration));
     }
     // Now we orphanize the Enum's symbol table, so that future lookups in it are strict

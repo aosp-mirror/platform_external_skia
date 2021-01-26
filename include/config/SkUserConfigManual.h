@@ -24,6 +24,7 @@
 
   // Staging flags
   #define SK_LEGACY_PATH_ARCTO_ENDPOINT
+  #define SK_SUPPORT_LEGACY_PAINT_QUALITY_APIS
 
 
   // Needed until we fix https://bug.skia.org/2440
