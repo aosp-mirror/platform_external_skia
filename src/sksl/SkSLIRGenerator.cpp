@@ -150,6 +150,38 @@ void IRGenerator::popSymbolTable() {
     fSymbolTable = fSymbolTable->fParent;
 }
 
+bool IRGenerator::detectVarDeclarationWithoutScope(const Statement& stmt) {
+    // Parsing an AST node containing a single variable declaration creates a lone VarDeclaration
+    // statement. An AST with multiple variable declarations creates an unscoped Block containing
+    // multiple VarDeclaration statements. We need to detect either case.
+    const Variable* var;
+    if (stmt.is<VarDeclaration>()) {
+        // The single-variable case. No blocks at all.
+        var = &stmt.as<VarDeclaration>().var();
+    } else if (stmt.is<Block>()) {
+        // The multiple-variable case: an unscoped, non-empty block...
+        const Block& block = stmt.as<Block>();
+        if (block.isScope() || block.children().empty()) {
+            return false;
+        }
+        // ... holding a variable declaration.
+        const Statement& innerStmt = *block.children().front();
+        if (!innerStmt.is<VarDeclaration>()) {
+            return false;
+        }
+        var = &innerStmt.as<VarDeclaration>().var();
+    } else {
+        // This statement wasn't a variable declaration. No problem.
+        return false;
+    }
+
+    // Report an error.
+    SkASSERT(var);
+    this->errorReporter().error(stmt.fOffset,
+                                "variable '" + var->name() + "' must be created in a scope");
+    return true;
+}
+
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragment name) {
     if (fKind != Program::kFragment_Kind &&
         fKind != Program::kVertex_Kind &&
@@ -567,6 +599,12 @@ std::unique_ptr<Statement> IRGenerator::convertIf(int offset, bool isStatic,
     if (!test) {
         return nullptr;
     }
+    if (this->detectVarDeclarationWithoutScope(*ifTrue)) {
+        return nullptr;
+    }
+    if (ifFalse && this->detectVarDeclarationWithoutScope(*ifFalse)) {
+        return nullptr;
+    }
     if (test->is<BoolLiteral>()) {
         // Static Boolean values can fold down to a single branch.
         if (test->as<BoolLiteral>().value()) {
@@ -655,6 +693,10 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(int offset, std::unique_ptr
     if (!test) {
         return nullptr;
     }
+    if (this->detectVarDeclarationWithoutScope(*statement)) {
+        return nullptr;
+    }
+
     return std::make_unique<ForStatement>(offset, /*initializer=*/nullptr, std::move(test),
                                           /*next=*/nullptr, std::move(statement), fSymbolTable);
 }
@@ -681,9 +723,11 @@ std::unique_ptr<Statement> IRGenerator::convertDo(std::unique_ptr<Statement> stm
         return nullptr;
     }
 
-    AutoLoopLevel level(this);
     test = this->coerce(std::move(test), *fContext.fTypes.fBool);
     if (!test) {
+        return nullptr;
+    }
+    if (this->detectVarDeclarationWithoutScope(*stmt)) {
         return nullptr;
     }
     return std::make_unique<DoStatement>(stmt->fOffset, std::move(stmt), std::move(test));
@@ -691,6 +735,8 @@ std::unique_ptr<Statement> IRGenerator::convertDo(std::unique_ptr<Statement> stm
 
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDo);
+    AutoLoopLevel level(this);
+
     auto iter = d.begin();
     std::unique_ptr<Statement> statement = this->convertStatement(*(iter++));
     if (!statement) {
@@ -796,14 +842,14 @@ std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
                 return nullptr;
             }
         }
-        return std::unique_ptr<Statement>(new ReturnStatement(std::move(result)));
+        return std::make_unique<ReturnStatement>(std::move(result));
     } else {
         if (fCurrentFunction->returnType() != *fContext.fTypes.fVoid) {
             this->errorReporter().error(r.fOffset,
                                         "expected function to return '" +
                                                 fCurrentFunction->returnType().displayName() + "'");
         }
-        return std::unique_ptr<Statement>(new ReturnStatement(r.fOffset));
+        return std::make_unique<ReturnStatement>(r.fOffset);
     }
 }
 
@@ -2872,6 +2918,19 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
             }
         }
 
+        bool visitProgramElement(const ProgramElement& pe) override {
+            if (pe.is<FunctionDefinition>()) {
+                const FunctionDefinition& funcDef = pe.as<FunctionDefinition>();
+                // We synthesize writes to sk_FragColor if main() returns a color, even if it's
+                // otherwise unreferenced. Check main's return type to see if it's half4.
+                if (funcDef.declaration().name() == "main" &&
+                    funcDef.declaration().returnType() == *fGenerator->fContext.fTypes.fHalf4) {
+                    fPreserveFragColor = true;
+                }
+            }
+            return INHERITED::visitProgramElement(pe);
+        }
+
         bool visitExpression(const Expression& e) override {
             if (e.is<VariableReference>() && e.as<VariableReference>().variable()->isBuiltin()) {
                 this->addDeclaringElement(e.as<VariableReference>().variable()->name());
@@ -2881,6 +2940,7 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
 
         IRGenerator* fGenerator;
         std::vector<const ProgramElement*> fNewElements;
+        bool fPreserveFragColor = false;
 
         using INHERITED = ProgramVisitor;
         using INHERITED::visitProgramElement;
@@ -2891,11 +2951,16 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
         scanner.visitProgramElement(*e);
     }
 
-    // Vulkan requires certain builtin variables be present, even if they're unused. At one time,
-    // validation errors would result if they were missing. Now, it's just (Adreno) driver bugs
-    // that drop or corrupt draws if they're missing.
+    if (scanner.fPreserveFragColor) {
+        // main() returns a half4, so make sure we don't dead-strip sk_FragColor.
+        scanner.addDeclaringElement("sk_FragColor");
+    }
+
     switch (fKind) {
         case Program::kFragment_Kind:
+            // Vulkan requires certain builtin variables be present, even if they're unused. At one
+            // time, validation errors would result if sk_Clockwise was missing. Now, it's just
+            // (Adreno) driver bugs that drop or corrupt draws if they're missing.
             scanner.addDeclaringElement("sk_Clockwise");
             break;
         default:
