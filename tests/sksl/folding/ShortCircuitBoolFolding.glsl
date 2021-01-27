@@ -1,6 +1,10 @@
 
+out vec4 sk_FragColor;
+uniform vec4 colorRed;
+uniform vec4 colorGreen;
+uniform float unknownInput;
 vec4 main() {
-    bool _1_expr = sqrt(1.0) > 0.0;
+    bool _1_expr = unknownInput > 0.0;
     int _2_ok = 0;
     int _3_bad = 0;
 
@@ -110,6 +114,6 @@ vec4 main() {
     } else {
         ++_3_bad;
     }
-    return _2_ok == 22 && _3_bad == 0 ? vec4(0.0, 1.0, 0.0, 1.0) : vec4(1.0, 0.0, 0.0, 1.0);
+    return _2_ok == 22 && _3_bad == 0 ? colorGreen : colorRed;
 
 }

@@ -42,6 +42,7 @@
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/GrTransferFromRenderTask.h"
 #include "src/gpu/GrWaitRenderTask.h"
+#include "src/gpu/GrWritePixelsRenderTask.h"
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
 #include "src/gpu/text/GrSDFTOptions.h"
 #include "src/image/SkSurface_Gpu.h"
@@ -447,6 +448,22 @@ void GrDrawingManager::reorderTasks() {
     // TODO: Handle case where proposed order would blow our memory budget.
     // Such cases are currently pathological, so we could just return here and keep current order.
     reorder_array_by_llist(llist, &fDAG);
+
+    int newCount = 0;
+    for (int i = 0; i < fDAG.count(); i++) {
+        sk_sp<GrRenderTask>& task = fDAG[i];
+        if (auto opsTask = task->asOpsTask()) {
+            size_t remaining = fDAG.size() - i - 1;
+            SkSpan<sk_sp<GrRenderTask>> nextTasks{fDAG.end() - remaining, remaining};
+            int removeCount = opsTask->mergeFrom(nextTasks);
+            for (const auto& removed : nextTasks.first(removeCount)) {
+                removed->disown(this);
+            }
+            i += removeCount;
+        }
+        fDAG[newCount++] = std::move(task);
+    }
+    fDAG.resize_back(newCount);
 }
 
 void GrDrawingManager::closeAllTasks() {
@@ -834,6 +851,49 @@ bool GrDrawingManager::newCopyRenderTask(sk_sp<GrSurfaceProxy> src,
     // We always say GrMipmapped::kNo here since we are always just copying from the base layer to
     // another base layer. We don't need to make sure the whole mip map chain is valid.
     task->addDependency(this, src.get(), GrMipmapped::kNo, GrTextureResolveManager(this), caps);
+    task->makeClosed(caps);
+
+    // We have closed the previous active oplist but since a new oplist isn't being added there
+    // shouldn't be an active one.
+    SkASSERT(!fActiveOpsTask);
+    SkDEBUGCODE(this->validate());
+    return true;
+}
+
+bool GrDrawingManager::newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
+                                          SkIRect rect,
+                                          GrColorType srcColorType,
+                                          GrColorType dstColorType,
+                                          const GrMipLevel levels[],
+                                          int levelCount,
+                                          sk_sp<SkData> owner) {
+    SkDEBUGCODE(this->validate());
+    SkASSERT(fContext);
+
+    this->closeActiveOpsTask();
+    const GrCaps& caps = *fContext->priv().caps();
+
+    // On platforms that prefer flushes over VRAM use (i.e., ANGLE) we're better off forcing a
+    // complete flush here.
+    if (!caps.preferVRAMUseOverFlushes()) {
+        this->flushSurfaces(SkSpan<GrSurfaceProxy*>{},
+                            SkSurface::BackendSurfaceAccess::kNoAccess,
+                            GrFlushInfo{},
+                            nullptr);
+    }
+
+    GrRenderTask* task = this->appendTask(GrWritePixelsTask::Make(this,
+                                                                  std::move(dst),
+                                                                  rect,
+                                                                  srcColorType,
+                                                                  dstColorType,
+                                                                  levels,
+                                                                  levelCount,
+                                                                  std::move(owner)));
+    if (!task) {
+        return false;
+    }
+
     task->makeClosed(caps);
 
     // We have closed the previous active oplist but since a new oplist isn't being added there
