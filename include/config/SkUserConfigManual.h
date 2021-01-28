@@ -24,7 +24,9 @@
 
   // Staging flags
   #define SK_LEGACY_PATH_ARCTO_ENDPOINT
-  #define SK_SUPPORT_LEGACY_PAINT_QUALITY_APIS
+  #define SK_SUPPORT_LEGACY_DRAWBITMAP
+  #define SK_SUPPORT_LEGACY_DRAWIMAGE_NOSAMPLING
+
 
 
   // Needed until we fix https://bug.skia.org/2440
