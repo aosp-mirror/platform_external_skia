@@ -9,6 +9,7 @@
 
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLIRGenerator.h"
+#include "src/sksl/dsl/DSLCore.h"
 #include "src/sksl/dsl/DSLVar.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -65,8 +66,44 @@ std::unique_ptr<SkSL::Expression> DSLExpression::release() {
     return std::move(fExpression);
 }
 
+DSLExpression DSLExpression::x() {
+    return Swizzle(this->release(), X);
+}
+
+DSLExpression DSLExpression::y() {
+    return Swizzle(this->release(), Y);
+}
+
+DSLExpression DSLExpression::z() {
+    return Swizzle(this->release(), Z);
+}
+
+DSLExpression DSLExpression::w() {
+    return Swizzle(this->release(), W);
+}
+
+DSLExpression DSLExpression::r() {
+    return Swizzle(this->release(), R);
+}
+
+DSLExpression DSLExpression::g() {
+    return Swizzle(this->release(), G);
+}
+
+DSLExpression DSLExpression::b() {
+    return Swizzle(this->release(), B);
+}
+
+DSLExpression DSLExpression::a() {
+    return Swizzle(this->release(), A);
+}
+
 DSLExpression DSLExpression::operator=(DSLExpression right) {
     return DSLWriter::ConvertBinary(this->release(), SkSL::Token::Kind::TK_EQ, right.release());
+}
+
+DSLExpression DSLExpression::operator[](DSLExpression right) {
+    return DSLWriter::ConvertIndex(this->release(), right.release());
 }
 
 #define OP(op, token)                                                                              \

@@ -10,6 +10,7 @@
 #include "src/sksl/GLSL.std.450.h"
 
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
@@ -1686,35 +1687,39 @@ SpvId SPIRVCodeGenerator::writeConstructor(const Constructor& c, OutputStream& o
     }
 }
 
-SpvStorageClass_ get_storage_class(const Modifiers& modifiers) {
+static SpvStorageClass_ get_storage_class(const Variable& var,
+                                          SpvStorageClass_ fallbackStorageClass) {
+    const Modifiers& modifiers = var.modifiers();
     if (modifiers.fFlags & Modifiers::kIn_Flag) {
         SkASSERT(!(modifiers.fLayout.fFlags & Layout::kPushConstant_Flag));
         return SpvStorageClassInput;
-    } else if (modifiers.fFlags & Modifiers::kOut_Flag) {
+    }
+    if (modifiers.fFlags & Modifiers::kOut_Flag) {
         SkASSERT(!(modifiers.fLayout.fFlags & Layout::kPushConstant_Flag));
         return SpvStorageClassOutput;
-    } else if (modifiers.fFlags & Modifiers::kUniform_Flag) {
+    }
+    if (modifiers.fFlags & Modifiers::kUniform_Flag) {
         if (modifiers.fLayout.fFlags & Layout::kPushConstant_Flag) {
             return SpvStorageClassPushConstant;
         }
+        if (var.type().typeKind() == Type::TypeKind::kSampler ||
+            var.type().typeKind() == Type::TypeKind::kSeparateSampler ||
+            var.type().typeKind() == Type::TypeKind::kTexture) {
+            return SpvStorageClassUniformConstant;
+        }
         return SpvStorageClassUniform;
-    } else {
-        return SpvStorageClassFunction;
     }
+    return fallbackStorageClass;
 }
 
-SpvStorageClass_ get_storage_class(const Expression& expr) {
+static SpvStorageClass_ get_storage_class(const Expression& expr) {
     switch (expr.kind()) {
         case Expression::Kind::kVariableReference: {
             const Variable& var = *expr.as<VariableReference>().variable();
             if (var.storage() != Variable::Storage::kGlobal) {
                 return SpvStorageClassFunction;
             }
-            SpvStorageClass_ result = get_storage_class(var.modifiers());
-            if (result == SpvStorageClassFunction) {
-                result = SpvStorageClassPrivate;
-            }
-            return result;
+            return get_storage_class(var, SpvStorageClassPrivate);
         }
         case Expression::Kind::kFieldAccess:
             return get_storage_class(*expr.as<FieldAccess>().base());
@@ -2206,7 +2211,7 @@ SpvId SPIRVCodeGenerator::writeComponentwiseMatrixBinary(const Type& operandType
     return result;
 }
 
-std::unique_ptr<Expression> create_literal_1(const Context& context, const Type& type) {
+static std::unique_ptr<Expression> create_literal_1(const Context& context, const Type& type) {
     if (type.isInteger()) {
         return std::unique_ptr<Expression>(new IntLiteral(-1, 1, &type));
     }
@@ -2802,8 +2807,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
         fErrors.error(type->fOffset, "type '" + type->name() + "' is not permitted here");
         return this->nextId();
     }
-    Modifiers intfModifiers = intf.variable().modifiers();
-    SpvStorageClass_ storageClass = get_storage_class(intfModifiers);
+    SpvStorageClass_ storageClass = get_storage_class(intf.variable(), SpvStorageClassFunction);
     if (fProgram.fInputs.fRTHeight && appendRTHeight) {
         SkASSERT(fRTHeightStructId == (SpvId) -1);
         SkASSERT(fRTHeightFieldIndex == (SpvId) -1);
@@ -2817,6 +2821,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
         type = rtHeightStructType.get();
     }
     SpvId typeId;
+    const Modifiers& intfModifiers = intf.variable().modifiers();
     if (intfModifiers.fLayout.fBuiltin == SK_IN_BUILTIN) {
         for (const ProgramElement* e : fProgram.elements()) {
             if (e->is<ModifiersDeclaration>()) {
@@ -2857,7 +2862,7 @@ void SPIRVCodeGenerator::writePrecisionModifier(Precision precision, SpvId id) {
     }
 }
 
-bool is_dead(const Variable& var, const ProgramUsage* usage) {
+static bool is_dead(const Variable& var, const ProgramUsage* usage) {
     ProgramUsage::VariableCounts counts = usage->get(var);
     if (counts.fRead || counts.fWrite) {
         return false;
@@ -2874,18 +2879,20 @@ bool is_dead(const Variable& var, const ProgramUsage* usage) {
     return var.modifiers().fLayout.fBuiltin == SK_SAMPLEMASK_BUILTIN;
 }
 
-#define BUILTIN_IGNORE 9999
 void SPIRVCodeGenerator::writeGlobalVar(Program::Kind kind, const VarDeclaration& varDecl,
                                         OutputStream& out) {
     const Variable& var = varDecl.var();
     // These haven't been implemented in our SPIR-V generator yet and we only currently use them
     // in the OpenGL backend.
     SkASSERT(!(var.modifiers().fFlags & (Modifiers::kReadOnly_Flag |
-                                          Modifiers::kWriteOnly_Flag |
-                                          Modifiers::kCoherent_Flag |
-                                          Modifiers::kVolatile_Flag |
-                                          Modifiers::kRestrict_Flag)));
-    if (var.modifiers().fLayout.fBuiltin == BUILTIN_IGNORE) {
+                                         Modifiers::kWriteOnly_Flag |
+                                         Modifiers::kCoherent_Flag |
+                                         Modifiers::kVolatile_Flag |
+                                         Modifiers::kRestrict_Flag)));
+    // 9999 is a sentinel value used in our built-in modules that causes us to ignore these
+    // declarations, beyond adding them to the symbol table.
+    constexpr int kBuiltinIgnore = 9999;
+    if (var.modifiers().fLayout.fBuiltin == kBuiltinIgnore) {
         return;
     }
     if (var.modifiers().fLayout.fBuiltin == SK_FRAGCOLOR_BUILTIN &&
@@ -2897,21 +2904,11 @@ void SPIRVCodeGenerator::writeGlobalVar(Program::Kind kind, const VarDeclaration
         return;
     }
     const Type& type = var.type();
-    SpvStorageClass_ storageClass;
-    if (var.modifiers().fFlags & Modifiers::kIn_Flag) {
-        storageClass = SpvStorageClassInput;
-    } else if (var.modifiers().fFlags & Modifiers::kOut_Flag) {
-        storageClass = SpvStorageClassOutput;
-    } else if (var.modifiers().fFlags & Modifiers::kUniform_Flag) {
-        if (type.typeKind() == Type::TypeKind::kSampler ||
-            type.typeKind() == Type::TypeKind::kSeparateSampler ||
-            type.typeKind() == Type::TypeKind::kTexture) {
-            storageClass = SpvStorageClassUniformConstant;
-        } else {
-            storageClass = SpvStorageClassUniform;
-        }
-    } else {
-        storageClass = SpvStorageClassPrivate;
+    SpvStorageClass_ storageClass = get_storage_class(var, SpvStorageClassPrivate);
+    Layout layout = var.modifiers().fLayout;
+    if (layout.fSet < 0 && (storageClass == SpvStorageClassUniform ||
+                            storageClass == SpvStorageClassUniformConstant)) {
+        layout.fSet = fProgram.fSettings.fDefaultUniformSet;
     }
     SpvId id = this->nextId();
     fVariableMap[&var] = id;
@@ -2933,7 +2930,7 @@ void SPIRVCodeGenerator::writeGlobalVar(Program::Kind kind, const VarDeclaration
         this->writeInstruction(SpvOpStore, id, value, fGlobalInitializersBuffer);
         fCurrentBlock = 0;
     }
-    this->writeLayout(var.modifiers().fLayout, id);
+    this->writeLayout(layout, id);
     if (var.modifiers().fFlags & Modifiers::kFlat_Flag) {
         this->writeInstruction(SpvOpDecorate, id, SpvDecorationFlat, fDecorationBuffer);
     }
@@ -3227,22 +3224,86 @@ void SPIRVCodeGenerator::writeGeometryShaderExecutionMode(SpvId entryPoint, Outp
                            invocations, out);
 }
 
+SPIRVCodeGenerator::EntrypointAdapter SPIRVCodeGenerator::writeEntrypointAdapter(
+        const FunctionDeclaration& main) {
+    // Our goal is to synthesize a tiny helper function which looks like this:
+    //     void _entrypoint() { sk_FragColor = main(); }
+
+    // Fish a symbol table out of main().
+    std::shared_ptr<SymbolTable> symbolTable =
+            main.definition()->body()->as<Block>().symbolTable()->fParent;
+
+    // Get `sk_FragColor` as a writable reference.
+    const Symbol* skFragColorSymbol = (*symbolTable)["sk_FragColor"];
+    SkASSERT(skFragColorSymbol);
+    const Variable& skFragColorVar = skFragColorSymbol->as<Variable>();
+    auto skFragColorRef = std::make_unique<VariableReference>(/*offset=*/-1, &skFragColorVar,
+                                                              VariableReference::RefKind::kWrite);
+    // Synthesize a call to the `main()` function.
+    if (main.returnType() != skFragColorRef->type()) {
+        fErrors.error(main.fOffset, "SPIR-V does not support returning '" +
+                                    main.returnType().description() + "' from main()");
+        return {};
+    }
+    auto callMainFn = std::make_unique<FunctionCall>(/*offset=*/-1, &main.returnType(), &main,
+                                                     /*arguments=*/ExpressionArray{});
+
+    // Synthesize `skFragColor = main()` as a BinaryExpression.
+    auto assignmentStmt = std::make_unique<ExpressionStatement>(std::make_unique<BinaryExpression>(
+            /*offset=*/-1,
+            std::move(skFragColorRef),
+            Token::Kind::TK_EQ,
+            std::move(callMainFn),
+            &main.returnType()));
+
+    // Function bodies are always wrapped in a Block.
+    StatementArray entrypointStmts;
+    entrypointStmts.push_back(std::move(assignmentStmt));
+    auto entrypointBlock = std::make_unique<Block>(/*offset=*/-1, std::move(entrypointStmts),
+                                                   symbolTable, /*isScope=*/true);
+    // Declare an entrypoint function.
+    EntrypointAdapter adapter;
+    adapter.fLayout = {};
+    adapter.fModifiers = Modifiers{adapter.fLayout, Modifiers::kHasSideEffects_Flag};
+    adapter.entrypointDecl =
+            std::make_unique<FunctionDeclaration>(/*offset=*/-1,
+                                                  &adapter.fModifiers,
+                                                  "_entrypoint",
+                                                  /*parameters=*/std::vector<const Variable*>{},
+                                                  /*returnType=*/fContext.fTypes.fVoid.get(),
+                                                  /*builtin=*/false);
+    // Define it.
+    adapter.entrypointDef =
+            std::make_unique<FunctionDefinition>(/*offset=*/-1, adapter.entrypointDecl.get(),
+                                                 /*builtin=*/false,
+                                                 /*body=*/std::move(entrypointBlock));
+
+    adapter.entrypointDecl->setDefinition(adapter.entrypointDef.get());
+    return adapter;
+}
+
 void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream& out) {
     fGLSLExtendedInstructions = this->nextId();
     StringStream body;
-    std::set<SpvId> interfaceVars;
-    // assign IDs to functions
+    // Assign SpvIds to functions.
+    const FunctionDeclaration* main = nullptr;
     for (const ProgramElement* e : program.elements()) {
-        switch (e->kind()) {
-            case ProgramElement::Kind::kFunction: {
-                const FunctionDefinition& f = e->as<FunctionDefinition>();
-                fFunctionMap[&f.declaration()] = this->nextId();
-                break;
+        if (e->is<FunctionDefinition>()) {
+            const FunctionDefinition& funcDef = e->as<FunctionDefinition>();
+            const FunctionDeclaration& funcDecl = funcDef.declaration();
+            fFunctionMap[&funcDecl] = this->nextId();
+            if (funcDecl.name() == "main") {
+                main = &funcDecl;
             }
-            default:
-                break;
         }
     }
+    // Make sure we have a main() function.
+    if (!main) {
+        fErrors.error(/*offset=*/0, "program does not contain a main() function");
+        return;
+    }
+    // Emit interface blocks.
+    std::set<SpvId> interfaceVars;
     for (const ProgramElement* e : program.elements()) {
         if (e->is<InterfaceBlock>()) {
             const InterfaceBlock& intf = e->as<InterfaceBlock>();
@@ -3250,13 +3311,14 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
 
             const Modifiers& modifiers = intf.variable().modifiers();
             if (((modifiers.fFlags & Modifiers::kIn_Flag) ||
-                (modifiers.fFlags & Modifiers::kOut_Flag)) &&
+                 (modifiers.fFlags & Modifiers::kOut_Flag)) &&
                 modifiers.fLayout.fBuiltin == -1 &&
                 !is_dead(intf.variable(), fProgram.fUsage.get())) {
                 interfaceVars.insert(id);
             }
         }
     }
+    // Emit global variable declarations.
     for (const ProgramElement* e : program.elements()) {
         if (e->is<GlobalVarDeclaration>()) {
             this->writeGlobalVar(program.fKind,
@@ -3264,21 +3326,24 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
                                  body);
         }
     }
+    // If main() returns a half4, synthesize a tiny entrypoint function which invokes the real
+    // main() and stores the result into sk_FragColor.
+    EntrypointAdapter adapter;
+    if (main->returnType() == *fContext.fTypes.fHalf4) {
+        adapter = this->writeEntrypointAdapter(*main);
+        if (adapter.entrypointDecl) {
+            fFunctionMap[adapter.entrypointDecl.get()] = this->nextId();
+            this->writeFunction(*adapter.entrypointDef, body);
+            main = adapter.entrypointDecl.get();
+        }
+    }
+    // Emit all the functions.
     for (const ProgramElement* e : program.elements()) {
         if (e->is<FunctionDefinition>()) {
             this->writeFunction(e->as<FunctionDefinition>(), body);
         }
     }
-    const FunctionDeclaration* main = nullptr;
-    for (auto entry : fFunctionMap) {
-        if (entry.first->name() == "main") {
-            main = entry.first;
-        }
-    }
-    if (!main) {
-        fErrors.error(0, "program does not contain a main() function");
-        return;
-    }
+    // Add global in/out variables to the list of interface variables.
     for (auto entry : fVariableMap) {
         const Variable* var = entry.first;
         if (var->storage() == Variable::Storage::kGlobal &&
