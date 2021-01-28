@@ -445,6 +445,7 @@ cc_library_static {
         "src/sksl/dsl/DSLBlock.cpp",
         "src/sksl/dsl/DSLCore.cpp",
         "src/sksl/dsl/DSLExpression.cpp",
+        "src/sksl/dsl/DSLFunction.cpp",
         "src/sksl/dsl/DSLStatement.cpp",
         "src/sksl/dsl/DSLType.cpp",
         "src/sksl/dsl/DSLVar.cpp",
