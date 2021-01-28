@@ -8,6 +8,7 @@
 #include "src/sksl/dsl/DSLVar.h"
 
 #include "src/sksl/SkSLUtil.h"
+#include "src/sksl/dsl/DSLModifiers.h"
 #include "src/sksl/dsl/DSLType.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -27,12 +28,14 @@ DSLVar::DSLVar(const char* name)
 }
 
 DSLVar::DSLVar(DSLType type, const char* name)
+    : DSLVar(DSLModifiers(), std::move(type), name) {}
+
+DSLVar::DSLVar(DSLModifiers modifiers, DSLType type, const char* name)
     : fName(DSLWriter::Name(name)) {
-    Modifiers modifiers;
-    DSLWriter::IRGenerator().checkVarDeclaration(/*offset=*/-1, modifiers, &type.skslType(),
-                                                 Variable::Storage::kLocal);
+    DSLWriter::IRGenerator().checkVarDeclaration(/*offset=*/-1, modifiers.fModifiers,
+                                                 &type.skslType(), Variable::Storage::kLocal);
     fDeclaration = DSLWriter::IRGenerator().convertVarDeclaration(/*offset=*/-1,
-                                                                  modifiers,
+                                                                  modifiers.fModifiers,
                                                                   &type.skslType(),
                                                                   fName,
                                                                   /*isArray=*/false,
@@ -40,6 +43,10 @@ DSLVar::DSLVar(DSLType type, const char* name)
                                                                   /*value=*/nullptr,
                                                                   Variable::Storage::kLocal);
     fVar = &fDeclaration->as<SkSL::VarDeclaration>().var();
+}
+
+DSLExpression DSLVar::operator[](DSLExpression&& index) {
+    return DSLExpression(*this)[std::move(index)];
 }
 
 DSLExpression DSLVar::operator=(DSLExpression expr) {

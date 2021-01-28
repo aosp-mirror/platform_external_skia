@@ -29,10 +29,14 @@ enum class SkSVGTag {
     kFeColorMatrix,
     kFeComposite,
     kFeDisplacementMap,
+    kFeDistantLight,
     kFeFlood,
     kFeGaussianBlur,
     kFeMorphology,
     kFeOffset,
+    kFePointLight,
+    kFeSpecularLighting,
+    kFeSpotLight,
     kFeTurbulence,
     kFilter,
     kG,
@@ -136,6 +140,7 @@ public:
     SVG_PRES_ATTR(StopOpacity              , SkSVGNumberType, false)
     SVG_PRES_ATTR(FloodColor               , SkSVGColor     , false)
     SVG_PRES_ATTR(FloodOpacity             , SkSVGNumberType, false)
+    SVG_PRES_ATTR(LightingColor            , SkSVGColor     , false)
 
 protected:
     SkSVGNode(SkSVGTag);
