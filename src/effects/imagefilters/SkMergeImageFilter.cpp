@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkMergeImageFilter.h"
+#include "src/effects/imagefilters/SkMergeImageFilter.h"
 
 #include "include/core/SkCanvas.h"
 #include "src/core/SkImageFilter_Base.h"
@@ -116,8 +116,7 @@ sk_sp<SkSpecialImage> SkMergeImageFilterImpl::onFilterImage(const Context& ctx,
         }
 
         inputs[i]->draw(canvas,
-                        SkIntToScalar(offsets[i].x() - x0), SkIntToScalar(offsets[i].y() - y0),
-                        nullptr);
+                        SkIntToScalar(offsets[i].x() - x0), SkIntToScalar(offsets[i].y() - y0));
     }
 
     offset->fX = bounds.left();

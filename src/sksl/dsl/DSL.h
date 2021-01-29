@@ -14,7 +14,11 @@ namespace SkSL {
 
 namespace dsl {
 
+using Block = DSLBlock;
 using Expression = DSLExpression;
+using Function = DSLFunction;
+using Modifiers = DSLModifiers;
+using Statement = DSLStatement;
 using Var = DSLVar;
 
 } // namespace dsl

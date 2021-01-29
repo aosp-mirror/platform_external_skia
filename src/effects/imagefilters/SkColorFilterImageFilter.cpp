@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkColorFilterImageFilter.h"
+#include "src/effects/imagefilters/SkColorFilterImageFilter.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
@@ -134,7 +134,7 @@ sk_sp<SkSpecialImage> SkColorFilterImageFilterImpl::onFilterImage(const Context&
         input->draw(canvas,
                     SkIntToScalar(inputOffset.fX - bounds.fLeft),
                     SkIntToScalar(inputOffset.fY - bounds.fTop),
-                    &paint);
+                    SkSamplingOptions(), &paint);
     }
 
     offset->fX = bounds.fLeft;

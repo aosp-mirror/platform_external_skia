@@ -8,6 +8,7 @@
 #include "src/sksl/dsl/DSLVar.h"
 
 #include "src/sksl/SkSLUtil.h"
+#include "src/sksl/dsl/DSLModifiers.h"
 #include "src/sksl/dsl/DSLType.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -20,38 +21,37 @@ namespace SkSL {
 namespace dsl {
 
 DSLVar::DSLVar(const char* name)
-    : fName(name) {}
-
-DSLVar::DSLVar(DSLType type, const char* name)
-    : fName(DSLWriter::Name(name)) {
-    fOwnedVar = std::make_unique<SkSL::Variable>(/*offset=*/-1,
-                                                 DSLWriter::Modifiers(Modifiers()),
-                                                 fName,
-                                                 &type.skslType(),
-                                                 /*builtin=*/false,
-                                                 SkSL::Variable::Storage::kLocal);
-    fVar = fOwnedVar.get();
+    : fName(name) {
+    const SkSL::Symbol* result = (*DSLWriter::SymbolTable())[fName];
+    SkASSERTF(result, "could not find '%s' in symbol table", fName);
+    fVar = &result->as<SkSL::Variable>();
 }
 
-const SkSL::Variable* DSLVar::var() const {
-    if (!fVar) {
-        const SkSL::Symbol* result = (*DSLWriter::SymbolTable())[fName];
-        SkASSERTF(result, "could not find '%s' in symbol table", fName);
-        fVar = &result->as<SkSL::Variable>();
-    }
-    return fVar;
+DSLVar::DSLVar(DSLType type, const char* name)
+    : DSLVar(DSLModifiers(), std::move(type), name) {}
+
+DSLVar::DSLVar(DSLModifiers modifiers, DSLType type, const char* name)
+    : fName(DSLWriter::Name(name)) {
+    DSLWriter::IRGenerator().checkVarDeclaration(/*offset=*/-1, modifiers.fModifiers,
+                                                 &type.skslType(), Variable::Storage::kLocal);
+    fDeclaration = DSLWriter::IRGenerator().convertVarDeclaration(/*offset=*/-1,
+                                                                  modifiers.fModifiers,
+                                                                  &type.skslType(),
+                                                                  fName,
+                                                                  /*isArray=*/false,
+                                                                  /*arraySize=*/nullptr,
+                                                                  /*value=*/nullptr,
+                                                                  Variable::Storage::kLocal);
+    fVar = &fDeclaration->as<SkSL::VarDeclaration>().var();
+}
+
+DSLExpression DSLVar::operator[](DSLExpression&& index) {
+    return DSLExpression(*this)[std::move(index)];
 }
 
 DSLExpression DSLVar::operator=(DSLExpression expr) {
-    const SkSL::Variable* var = this->var();
-    return DSLExpression(std::make_unique<SkSL::BinaryExpression>(
-                /*offset=*/-1,
-                std::make_unique<SkSL::VariableReference>(/*offset=*/-1,
-                                                          var,
-                                                          SkSL::VariableReference::RefKind::kWrite),
-                SkSL::Token::Kind::TK_EQ,
-                expr.coerceAndRelease(var->type()),
-                &var->type()));
+    return DSLWriter::ConvertBinary(DSLExpression(*this).release(), SkSL::Token::Kind::TK_EQ,
+                                    expr.release());
 }
 
 } // namespace dsl

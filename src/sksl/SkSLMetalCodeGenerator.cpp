@@ -1476,7 +1476,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
                 if (var.var().type().typeKind() == Type::TypeKind::kSampler) {
                     if (var.var().modifiers().fLayout.fBinding < 0) {
                         fErrors.error(decls.fOffset,
-                                        "Metal samplers must have 'layout(binding=...)'");
+                                      "Metal samplers must have 'layout(binding=...)'");
                         return false;
                     }
                     if (var.var().type().dimensions() != SpvDim2D) {
@@ -1800,7 +1800,9 @@ void MetalCodeGenerator::writeStatement(const Statement& s) {
 }
 
 void MetalCodeGenerator::writeBlock(const Block& b) {
-    bool isScope = b.isScope();
+    // Write scope markers if this block is a scope, or if the block is empty (since we need to emit
+    // something here to make the code valid).
+    bool isScope = b.isScope() || b.isEmpty();
     if (isScope) {
         this->writeLine("{");
         fIndentation++;
@@ -1904,7 +1906,14 @@ void MetalCodeGenerator::writeReturnStatementFromMain() {
 void MetalCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
     if (fCurrentFunction && fCurrentFunction->name() == "main") {
         if (r.expression()) {
-            fErrors.error(r.fOffset, "Metal does not support returning values from main()");
+            if (r.expression()->type() == *fContext.fTypes.fHalf4) {
+                this->write("_out.sk_FragColor = ");
+                this->writeExpression(*r.expression(), kTopLevel_Precedence);
+                this->writeLine(";");
+            } else {
+                fErrors.error(r.fOffset, "Metal does not support returning '" +
+                                         r.expression()->type().description() + "' from main()");
+            }
         }
         this->writeReturnStatementFromMain();
         return;
@@ -1931,17 +1940,19 @@ void MetalCodeGenerator::writeUniformStruct() {
             const Variable& var = decls.declaration()->as<VarDeclaration>().var();
             if (var.modifiers().fFlags & Modifiers::kUniform_Flag &&
                 var.type().typeKind() != Type::TypeKind::kSampler) {
+                // If the uniform has the `layout(set=N)` attribute, honor that. If not, use the
+                // default uniform-set value from settings.
+                int uniformSet = var.modifiers().fLayout.fSet;
+                if (uniformSet == -1) {
+                    uniformSet = fProgram.fSettings.fDefaultUniformSet;
+                }
+                // Make sure that the program's uniform-set value is consistent throughout.
                 if (-1 == fUniformBuffer) {
                     this->write("struct Uniforms {\n");
-                    fUniformBuffer = var.modifiers().fLayout.fSet;
-                    if (-1 == fUniformBuffer) {
-                        fErrors.error(decls.fOffset, "Metal uniforms must have 'layout(set=...)'");
-                    }
-                } else if (var.modifiers().fLayout.fSet != fUniformBuffer) {
-                    if (-1 == fUniformBuffer) {
-                        fErrors.error(decls.fOffset, "Metal backend requires all uniforms to have "
-                                    "the same 'layout(set=...)'");
-                    }
+                    fUniformBuffer = uniformSet;
+                } else if (uniformSet != fUniformBuffer) {
+                    fErrors.error(decls.fOffset, "Metal backend requires all uniforms to have "
+                                                 "the same 'layout(set=...)'");
                 }
                 this->write("    ");
                 this->writeBaseType(var.type());

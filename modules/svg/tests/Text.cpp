@@ -144,6 +144,9 @@ DEF_TEST(Svg_Text_PosProvider, r) {
         },
     };
 
+    const SkSVGTextContext::ShapedTextCallback mock_cb =
+        [](const SkSVGRenderContext&, const sk_sp<SkTextBlob>&, const SkPaint*, const SkPaint*) {};
+
     auto test = [&](const PosTestDesc& tst) {
         auto a = SkSVGText::Make();
         auto b = SkSVGTSpan::Make();
@@ -159,9 +162,10 @@ DEF_TEST(Svg_Text_PosProvider, r) {
         const SkSVGPresentationContext pctx;
         SkNoDrawCanvas canvas(0, 0);
         sk_sp<SkFontMgr> fmgr;
-        const SkSVGRenderContext ctx(&canvas, fmgr, mapper, lctx, pctx, nullptr);
+        sk_sp<skresources::ResourceProvider> rp;
+        const SkSVGRenderContext ctx(&canvas, fmgr, rp, mapper, lctx, pctx, nullptr);
 
-        SkSVGTextContext tctx(ctx);
+        SkSVGTextContext tctx(ctx, mock_cb);
         SkSVGTextContext::ScopedPosResolver pa(*a, lctx, &tctx, tst.offseta);
         SkSVGTextContext::ScopedPosResolver pb(*b, lctx, &tctx, tst.offsetb);
 

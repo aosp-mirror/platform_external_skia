@@ -395,7 +395,7 @@ static void extract_planes(const SkBitmap& origBM,
     SkMatrix matrix = SkEncodedOriginToMatrix(origin, origBM.width(), origBM.height());
     SkAssertResult(matrix.invert(&matrix));
     canvas.concat(matrix);
-    canvas.drawBitmap(origBM, 0, 0);
+    canvas.drawImage(origBM.asImage(), 0, 0);
 
     if (yuvColorSpace == kIdentity_SkYUVColorSpace) {
         // To test the identity color space we use JPEG YUV planes
@@ -921,9 +921,9 @@ protected:
             constraint = SkCanvas::kStrict_SrcRectConstraint;
         }
 
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
         for (int cs = kJPEG_SkYUVColorSpace; cs <= kLastEnum_SkYUVColorSpace; ++cs) {
             SkPaint paint;
-            paint.setFilterQuality(kLow_SkFilterQuality);
             if (kIdentity_SkYUVColorSpace == cs) {
                 // The identity color space needs post processing to appear correctly
                 paint.setColorFilter(yuv_to_rgb_colorfilter());
@@ -934,7 +934,8 @@ protected:
 
                 draw_col_label(canvas, dstRect.fLeft + cellWidth / 2, cs, opaque);
 
-                canvas->drawBitmapRect(fOriginalBMs[opaque], srcRect, dstRect, nullptr, constraint);
+                canvas->drawImageRect(fOriginalBMs[opaque].asImage(), srcRect, dstRect,
+                                      SkSamplingOptions(), nullptr, constraint);
                 dstRect.offset(0.f, cellHeight + kPad);
 
                 for (int format = kP016_YUVFormat; format <= kLast_YUVFormat; ++format) {
@@ -945,10 +946,11 @@ protected:
                         // operate on the YUV components rather than the RGB components.
                         sk_sp<SkImage> csImage =
                             fImages[opaque][cs][format]->makeColorSpace(fTargetColorSpace, direct);
-                        canvas->drawImageRect(csImage, srcRect, dstRect, &paint, constraint);
+                        canvas->drawImageRect(csImage, srcRect, dstRect, sampling,
+                                              &paint, constraint);
                     } else {
                         canvas->drawImageRect(fImages[opaque][cs][format], srcRect, dstRect,
-                                              &paint, constraint);
+                                              sampling, &paint, constraint);
                     }
                     dstRect.offset(0.f, cellHeight + kPad);
                 }
@@ -1125,7 +1127,7 @@ protected:
                     SkBitmap readBack;
                     readBack.allocPixels(yuv->imageInfo());
                     SkAssertResult(yuv->readPixels(dContext, readBack.pixmap(), 0, 0));
-                    canvas->drawBitmap(readBack, x, y);
+                    canvas->drawImage(readBack.asImage(), x, y);
                 }
                 x += kTileWidthHeight + kPad;
             }
@@ -1155,10 +1157,9 @@ static void draw_into_alpha(const SkImage* img, sk_sp<SkColorFilter> cf, const S
     auto canvas = SkCanvas::MakeRasterDirect(dst.info(), dst.writable_addr(), dst.rowBytes());
     canvas->scale(1.0f * dst.width() / img->width(), 1.0f * dst.height() / img->height());
     SkPaint paint;
-    paint.setFilterQuality(kLow_SkFilterQuality);
     paint.setColorFilter(cf);
     paint.setBlendMode(SkBlendMode::kSrc);
-    canvas->drawImage(img, 0, 0, &paint);
+    canvas->drawImage(img, 0, 0, SkSamplingOptions(SkFilterMode::kLinear), &paint);
 }
 
 static void split_into_yuv(const SkImage* img, SkYUVColorSpace cs, const SkPixmap dst[3]) {
@@ -1245,7 +1246,7 @@ protected:
                                                     /* limit to max tex size */ false,
                                                     /* color space */ nullptr);
             if (img) {
-                canvas->drawImage(img, 0, 0, nullptr);
+                canvas->drawImage(img, 0, 0);
                 draw_diff(canvas, 0, fOrig->height(), fOrig.get(), img.get());
             }
             canvas->translate(fOrig->width(), 0);
@@ -1253,10 +1254,10 @@ protected:
         canvas->restore();
         canvas->translate(-fOrig->width(), 0);
 
-        canvas->drawImage(SkImage::MakeRasterCopy(fPM[0]), 0, 0, nullptr);
-        canvas->drawImage(SkImage::MakeRasterCopy(fPM[1]), 0, fPM[0].height(), nullptr);
+        canvas->drawImage(SkImage::MakeRasterCopy(fPM[0]), 0, 0);
+        canvas->drawImage(SkImage::MakeRasterCopy(fPM[1]), 0, fPM[0].height());
         canvas->drawImage(SkImage::MakeRasterCopy(fPM[2]),
-                          0, fPM[0].height() + fPM[1].height(), nullptr);
+                          0, fPM[0].height() + fPM[1].height());
     }
 
 private:

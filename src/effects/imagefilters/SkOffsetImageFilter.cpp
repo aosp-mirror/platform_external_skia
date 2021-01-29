@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkOffsetImageFilter.h"
+#include "src/effects/imagefilters/SkOffsetImageFilter.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkMatrix.h"
@@ -120,7 +120,7 @@ sk_sp<SkSpecialImage> SkOffsetImageFilterImpl::onFilterImage(const Context& ctx,
         canvas->translate(SkIntToScalar(srcOffset.fX - bounds.fLeft),
                           SkIntToScalar(srcOffset.fY - bounds.fTop));
 
-        input->draw(canvas, vec.fX, vec.fY, &paint);
+        input->draw(canvas, vec.fX, vec.fY, SkSamplingOptions(), &paint);
 
         offset->fX = bounds.fLeft;
         offset->fY = bounds.fTop;

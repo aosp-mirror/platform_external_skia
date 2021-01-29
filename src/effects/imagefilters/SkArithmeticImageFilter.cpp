@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkArithmeticImageFilter.h"
+#include "src/effects/imagefilters/SkArithmeticImageFilter.h"
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/effects/SkXfermodeImageFilter.h"
 #include "include/private/SkNx.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/effects/imagefilters/SkXfermodeImageFilter.h"
 #if SK_SUPPORT_GPU
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrRecordingContext.h"
@@ -242,7 +242,7 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::onFilterImage(const Context& ct
         SkPaint paint;
         paint.setBlendMode(SkBlendMode::kSrc);
         background->draw(canvas, SkIntToScalar(backgroundOffset.fX),
-                         SkIntToScalar(backgroundOffset.fY), &paint);
+                         SkIntToScalar(backgroundOffset.fY), SkSamplingOptions(), &paint);
     }
 
     this->drawForeground(canvas, foreground.get(), foregroundBounds);

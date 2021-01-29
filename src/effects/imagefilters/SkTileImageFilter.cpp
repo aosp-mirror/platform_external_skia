@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkTileImageFilter.h"
+#include "src/effects/imagefilters/SkTileImageFilter.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
@@ -13,13 +13,13 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkSurface.h"
-#include "include/effects/SkOffsetImageFilter.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/core/SkValidationUtils.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/effects/imagefilters/SkOffsetImageFilter.h"
 
 namespace {
 
@@ -143,7 +143,7 @@ sk_sp<SkSpecialImage> SkTileImageFilterImpl::onFilterImage(const Context& ctx,
 
         input->draw(canvas,
                     SkIntToScalar(inputOffset.x()), SkIntToScalar(inputOffset.y()),
-                    &paint);
+                    SkSamplingOptions(), &paint);
 
         subset = surf->makeImageSnapshot();
     }
@@ -188,4 +188,3 @@ SkIRect SkTileImageFilterImpl::onFilterBounds(const SkIRect& src, const SkMatrix
 SkRect SkTileImageFilterImpl::computeFastBounds(const SkRect& src) const {
     return fDstRect;
 }
-

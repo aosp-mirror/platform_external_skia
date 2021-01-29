@@ -7,6 +7,7 @@
 
 #include "bench/Benchmark.h"
 #include "include/core/SkPath.h"
+#include "src/core/SkArenaAlloc.h"
 #include "src/gpu/GrEagerVertexAllocator.h"
 #include "src/gpu/GrInnerFanTriangulator.h"
 #include "src/gpu/GrTriangulator.h"
@@ -22,10 +23,7 @@ extern TigerPath kTigerPaths[];
 extern int kNumTigerPaths;
 constexpr float kTigerTolerance = 0.728769f;
 
-class TriangulatorBenchmark
-        : public Benchmark
-        , public GrEagerVertexAllocator
-        , public GrInnerFanTriangulator::BreadcrumbTriangleCollector {
+class TriangulatorBenchmark : public Benchmark, public GrEagerVertexAllocator {
 public:
     TriangulatorBenchmark(const char* name) {
         fName.printf("triangulator_%s", name);
@@ -84,15 +82,13 @@ protected:
 
     void unlock(int) override {}
 
-    // GrInnerFanTriangulator::BreadcrumbTriangleCollector.
-    void onPush(SkPoint, SkPoint, SkPoint, int) override {}
-
     virtual void doLoop() = 0;
 
     SkString fName;
     SkTArray<SkPath> fPaths;
     SkAutoTMalloc<char> fVertexData;
     size_t fVertexAllocSize = 0;
+    SkArenaAllocWithReset fArena{GrTriangulator::kArenaDefaultChunkSize};
 };
 
 class PathToTrianglesBench : public TriangulatorBenchmark {
@@ -117,8 +113,10 @@ public:
     void doLoop() override {
         bool isLinear;
         for (const SkPath& path : fPaths) {
-            GrInnerFanTriangulator(path, this).pathToTriangles(this, &isLinear);
+            GrInnerFanTriangulator::BreadcrumbTriangleList breadcrumbList;
+            GrInnerFanTriangulator(path, &fArena).pathToTriangles(this, &breadcrumbList, &isLinear);
         }
+        fArena.reset();
     }
 };
 

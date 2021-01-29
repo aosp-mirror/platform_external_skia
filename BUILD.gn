@@ -708,92 +708,82 @@ if (skia_compile_sksl_tests) {
         ":sksl_pre_includes",
         ":skslc(//gn/toolchain:$host_toolchain)",
       ]
-      sources = invoker.sources
+      sources = []
       outputs = []
-      foreach(src, sources) {
-        dir = get_path_info(src, "dir")
-        name = get_path_info(src, "name")
-        ext = get_path_info(src, "extension")
-        foreach(outputPattern, invoker.outputPatterns) {
-          outDirectory = outputPattern[0]
-          outExtension = outputPattern[1]
+      response_file_contents = []
+      args = [
+        rebase_path(skslc_path),
+        invoker.lang,
+        invoker.settings,
+        "{{response_file_name}}",
+      ]
 
+      testsDir = get_path_info("tests", "abspath")
+      resourcesDir = get_path_info("resources", "abspath")
+
+      foreach(partialPath, invoker.sources) {
+        dst = testsDir + partialPath
+        src = resourcesDir + partialPath
+
+        dir = get_path_info(dst, "dir")
+        name = get_path_info(dst, "name")
+        ext = get_path_info(dst, "extension")
+        response_file_contents += rebase_path([
+                                                src,
+                                                dir,
+                                              ])
+        sources += [ src ]
+
+        foreach(outExtension, invoker.outExtensions) {
           # SPIR-V uses separate extensions for .vert and .geom shaders.
           if (outExtension == ".asm.frag" && ext == "vert") {
             outExtension = ".asm.vert"
           } else if (outExtension == ".asm.frag" && ext == "geom") {
             outExtension = ".asm.geom"
           }
-          outputs += [ target_out_dir + "/" +
-                       rebase_path(dir + outDirectory + name + outExtension,
-                                   target_out_dir) ]
+          outputs +=
+              [ target_out_dir + "/" +
+                rebase_path(dir + "/" + name + outExtension, target_out_dir) ]
         }
       }
-      args = [
-        rebase_path(skslc_path),
-        invoker.lang,
-        invoker.settings,
-      ]
-      args += rebase_path(sources)
     }
   }
   compile_sksl("fp_tests") {
     sources = sksl_fp_tests_sources
-    outputPatterns = [
-      [
-        "/golden/",
-        ".cpp",
-      ],
-      [
-        "/golden/",
-        ".h",
-      ],
+    outExtensions = [
+      ".cpp",
+      ".h",
     ]
     lang = "--fp"
     settings = "--settings"
   }
   compile_sksl("glsl_tests") {
     sources = sksl_glsl_tests_sources + sksl_glsl_settings_tests_sources
-    outputPatterns = [ [
-          "/golden/",
-          ".glsl",
-        ] ]
+    outExtensions = [ ".glsl" ]
     lang = "--glsl"
     settings = "--settings"
   }
   compile_sksl("glsl_nosettings_tests") {
     sources = sksl_glsl_settings_tests_sources
-    outputPatterns = [ [
-          "/golden/",
-          "StandaloneSettings.glsl",
-        ] ]
+    outExtensions = [ "StandaloneSettings.glsl" ]
     lang = "--glsl"
     settings = "--nosettings"
   }
   compile_sksl("metal_tests") {
     sources = sksl_metal_tests_sources
-    outputPatterns = [ [
-          "/golden/",
-          ".metal",
-        ] ]
+    outExtensions = [ ".metal" ]
     lang = "--metal"
     settings = "--settings"
   }
   compile_sksl("skvm_tests") {
     sources = sksl_skvm_tests_sources
-    outputPatterns = [ [
-          "/golden/",
-          ".skvm",
-        ] ]
+    outExtensions = [ ".skvm" ]
     lang = "--skvm"
     settings = "--settings"
   }
   compile_sksl("spirv_tests") {
     sources = sksl_spirv_tests_sources
-    outputPatterns = [ [
-          "/golden/",
-          ".asm.frag",
-        ] ]
+    outExtensions = [ ".asm.frag" ]
     lang = "--spirv"
     settings = "--settings"
   }

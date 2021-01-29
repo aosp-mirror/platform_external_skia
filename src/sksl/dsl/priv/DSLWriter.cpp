@@ -57,6 +57,14 @@ const char* DSLWriter::Name(const char* name) {
     return name;
 }
 
+const SkSL::FunctionDeclaration* DSLWriter::CurrentFunction() {
+    return IRGenerator().fCurrentFunction;
+}
+
+void DSLWriter::SetCurrentFunction(const SkSL::FunctionDeclaration* fn) {
+    IRGenerator().fCurrentFunction = fn;
+}
+
 std::unique_ptr<SkSL::Expression> DSLWriter::Check(std::unique_ptr<SkSL::Expression> expr) {
     if (expr == nullptr) {
         if (DSLWriter::Compiler().errorCount()) {
@@ -110,6 +118,10 @@ void DSLWriter::ReportError(const char* msg) {
     } else {
         SK_ABORT("%sNo SkSL DSL error handler configured, treating this as a fatal error\n", msg);
     }
+}
+
+const SkSL::Variable& DSLWriter::Var(const DSLVar& var) {
+    return *var.var();
 }
 
 #if !SK_SUPPORT_GPU || defined(SKSL_STANDALONE)

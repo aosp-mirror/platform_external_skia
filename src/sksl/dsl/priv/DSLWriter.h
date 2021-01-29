@@ -59,6 +59,13 @@ public:
     static const SkSL::Context& Context();
 
     /**
+     * Returns the collection to which DSL program elements in this thread should be appended.
+     */
+    static std::vector<std::unique_ptr<SkSL::ProgramElement>>& ProgramElements() {
+        return Instance().fProgramElements;
+    }
+
+    /**
      * Returns the SymbolTable of the current thread's IRGenerator.
      */
     static const std::shared_ptr<SkSL::SymbolTable>& SymbolTable();
@@ -70,10 +77,25 @@ public:
     static const SkSL::Modifiers* Modifiers(SkSL::Modifiers modifiers);
 
     /**
+     * Returns the SkSL variable corresponding to a DSLVar.
+     */
+    static const SkSL::Variable& Var(const DSLVar& var);
+
+    /**
      * Returns the (possibly mangled) final name that should be used for an entity with the given
      * raw name.
      */
     static const char* Name(const char* name);
+
+    /**
+     * Returns the current function for which we are generating nodes.
+     */
+    static const SkSL::FunctionDeclaration* CurrentFunction();
+
+    /**
+     * Specifies the function for which we are generating nodes.
+     */
+    static void SetCurrentFunction(const SkSL::FunctionDeclaration* fn);
 
     /**
      * Reports an error if the argument is null. Returns its argument unmodified.
@@ -123,6 +145,7 @@ public:
 private:
     SkSL::Program::Settings fSettings;
     SkSL::Compiler* fCompiler;
+    std::vector<std::unique_ptr<SkSL::ProgramElement>> fProgramElements;
     ErrorHandler* fErrorHandler = nullptr;
     bool fMangle = true;
     Mangler fMangler;

@@ -9,7 +9,6 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkRect.h"
-#include "include/effects/SkComposeImageFilter.h"
 #include "include/private/SkSafe32.h"
 #include "src/core/SkFuzzLogging.h"
 #include "src/core/SkImageFilterCache.h"
@@ -413,7 +412,7 @@ static sk_sp<SkSpecialImage> pad_image(SkSpecialImage* src, const SkImageFilter_
 
     canvas->clear(0x0);
 
-    src->draw(canvas, offX, offY, nullptr);
+    src->draw(canvas, offX, offY);
 
     return surf->makeImageSnapshot();
 }
@@ -645,7 +644,7 @@ sk_sp<SkSpecialImage> SkImageFilter_Base::ImageToColorSpace(SkSpecialImage* src,
     SkASSERT(canvas);
     SkPaint p;
     p.setBlendMode(SkBlendMode::kSrc);
-    src->draw(canvas, 0, 0, &p);
+    src->draw(canvas, 0, 0, SkSamplingOptions(), &p);
     return surf->makeImageSnapshot();
 }
 #endif

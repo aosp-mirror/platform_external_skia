@@ -87,13 +87,15 @@ sk_sp<GrVkMemoryAllocator> GrVkAMDMemoryAllocator::Make(VkInstance instance,
     vmaCreateAllocator(&info, &allocator);
 
     return sk_sp<GrVkAMDMemoryAllocator>(new GrVkAMDMemoryAllocator(
-            allocator, std::move(interface)));
+            allocator, std::move(interface), caps->mustUseCoherentHostVisibleMemory()));
 }
 
 GrVkAMDMemoryAllocator::GrVkAMDMemoryAllocator(VmaAllocator allocator,
-                                               sk_sp<const GrVkInterface> interface)
+                                               sk_sp<const GrVkInterface> interface,
+                                               bool mustUseCoherentHostVisibleMemory)
         : fAllocator(allocator)
-        , fInterface(std::move(interface)) {}
+        , fInterface(std::move(interface))
+        , fMustUseCoherentHostVisibleMemory(mustUseCoherentHostVisibleMemory) {}
 
 GrVkAMDMemoryAllocator::~GrVkAMDMemoryAllocator() {
     vmaDestroyAllocator(fAllocator);
@@ -172,9 +174,13 @@ VkResult GrVkAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer, BufferUsa
             break;
         case BufferUsage::kGpuWritesCpuReads:
             info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            info.preferredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                                  VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
             break;
+    }
+
+    if (fMustUseCoherentHostVisibleMemory &&
+        (info.requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+        info.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     }
 
     if (AllocationPropertyFlags::kDedicatedAllocation & flags) {
@@ -259,7 +265,7 @@ VkResult GrVkAMDMemoryAllocator::invalidateMemory(const GrVkBackendMemory& memor
                                                   VkDeviceSize offset, VkDeviceSize size) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
-    return vmaFlushAllocation(fAllocator, allocation, offset, size);
+    return vmaInvalidateAllocation(fAllocator, allocation, offset, size);
 }
 
 uint64_t GrVkAMDMemoryAllocator::totalUsedMemory() const {

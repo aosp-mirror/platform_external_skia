@@ -150,6 +150,38 @@ void IRGenerator::popSymbolTable() {
     fSymbolTable = fSymbolTable->fParent;
 }
 
+bool IRGenerator::detectVarDeclarationWithoutScope(const Statement& stmt) {
+    // Parsing an AST node containing a single variable declaration creates a lone VarDeclaration
+    // statement. An AST with multiple variable declarations creates an unscoped Block containing
+    // multiple VarDeclaration statements. We need to detect either case.
+    const Variable* var;
+    if (stmt.is<VarDeclaration>()) {
+        // The single-variable case. No blocks at all.
+        var = &stmt.as<VarDeclaration>().var();
+    } else if (stmt.is<Block>()) {
+        // The multiple-variable case: an unscoped, non-empty block...
+        const Block& block = stmt.as<Block>();
+        if (block.isScope() || block.children().empty()) {
+            return false;
+        }
+        // ... holding a variable declaration.
+        const Statement& innerStmt = *block.children().front();
+        if (!innerStmt.is<VarDeclaration>()) {
+            return false;
+        }
+        var = &innerStmt.as<VarDeclaration>().var();
+    } else {
+        // This statement wasn't a variable declaration. No problem.
+        return false;
+    }
+
+    // Report an error.
+    SkASSERT(var);
+    this->errorReporter().error(stmt.fOffset,
+                                "variable '" + var->name() + "' must be created in a scope");
+    return true;
+}
+
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragment name) {
     if (fKind != Program::kFragment_Kind &&
         fKind != Program::kVertex_Kind &&
@@ -539,8 +571,7 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
 std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     SkASSERT(n.fKind == ASTNode::Kind::kIf);
     auto iter = n.begin();
-    std::unique_ptr<Expression> test = this->coerce(this->convertExpression(*(iter++)),
-                                                    *fContext.fTypes.fBool);
+    std::unique_ptr<Expression> test = this->convertExpression(*(iter++));
     if (!test) {
         return nullptr;
     }
@@ -564,7 +595,16 @@ std::unique_ptr<Statement> IRGenerator::convertIf(int offset, bool isStatic,
                                                   std::unique_ptr<Expression> test,
                                                   std::unique_ptr<Statement> ifTrue,
                                                   std::unique_ptr<Statement> ifFalse) {
-    SkASSERT(test->type().isBoolean());
+    test = this->coerce(std::move(test), *fContext.fTypes.fBool);
+    if (!test) {
+        return nullptr;
+    }
+    if (this->detectVarDeclarationWithoutScope(*ifTrue)) {
+        return nullptr;
+    }
+    if (ifFalse && this->detectVarDeclarationWithoutScope(*ifFalse)) {
+        return nullptr;
+    }
     if (test->is<BoolLiteral>()) {
         // Static Boolean values can fold down to a single branch.
         if (test->as<BoolLiteral>().value()) {
@@ -653,6 +693,10 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(int offset, std::unique_ptr
     if (!test) {
         return nullptr;
     }
+    if (this->detectVarDeclarationWithoutScope(*statement)) {
+        return nullptr;
+    }
+
     return std::make_unique<ForStatement>(offset, /*initializer=*/nullptr, std::move(test),
                                           /*next=*/nullptr, std::move(statement), fSymbolTable);
 }
@@ -679,9 +723,11 @@ std::unique_ptr<Statement> IRGenerator::convertDo(std::unique_ptr<Statement> stm
         return nullptr;
     }
 
-    AutoLoopLevel level(this);
     test = this->coerce(std::move(test), *fContext.fTypes.fBool);
     if (!test) {
+        return nullptr;
+    }
+    if (this->detectVarDeclarationWithoutScope(*stmt)) {
         return nullptr;
     }
     return std::make_unique<DoStatement>(stmt->fOffset, std::move(stmt), std::move(test));
@@ -689,6 +735,8 @@ std::unique_ptr<Statement> IRGenerator::convertDo(std::unique_ptr<Statement> stm
 
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDo);
+    AutoLoopLevel level(this);
+
     auto iter = d.begin();
     std::unique_ptr<Statement> statement = this->convertStatement(*(iter++));
     if (!statement) {
@@ -772,18 +820,14 @@ std::unique_ptr<Statement> IRGenerator::convertExpressionStatement(const ASTNode
     return std::unique_ptr<Statement>(new ExpressionStatement(std::move(e)));
 }
 
-std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
-    SkASSERT(r.fKind == ASTNode::Kind::kReturn);
+std::unique_ptr<Statement> IRGenerator::convertReturn(int offset,
+                                                      std::unique_ptr<Expression> result) {
     SkASSERT(fCurrentFunction);
     // early returns from a vertex main function will bypass the sk_Position normalization, so
     // SkASSERT that we aren't doing that. It is of course possible to fix this by adding a
     // normalization before each return, but it will probably never actually be necessary.
     SkASSERT(Program::kVertex_Kind != fKind || !fRTAdjust || "main" != fCurrentFunction->name());
-    if (r.begin() != r.end()) {
-        std::unique_ptr<Expression> result = this->convertExpression(*r.begin());
-        if (!result) {
-            return nullptr;
-        }
+    if (result) {
         if (fCurrentFunction->returnType() == *fContext.fTypes.fVoid) {
             this->errorReporter().error(result->fOffset,
                                         "may not return a value from a void function");
@@ -794,14 +838,27 @@ std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
                 return nullptr;
             }
         }
-        return std::unique_ptr<Statement>(new ReturnStatement(std::move(result)));
+        return std::make_unique<ReturnStatement>(std::move(result));
     } else {
         if (fCurrentFunction->returnType() != *fContext.fTypes.fVoid) {
-            this->errorReporter().error(r.fOffset,
-                                        "expected function to return '" +
+            this->errorReporter().error(offset, "expected function to return '" +
                                                 fCurrentFunction->returnType().displayName() + "'");
+            return nullptr;
         }
-        return std::unique_ptr<Statement>(new ReturnStatement(r.fOffset));
+        return std::make_unique<ReturnStatement>(offset);
+    }
+}
+
+std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
+    SkASSERT(r.fKind == ASTNode::Kind::kReturn);
+    if (r.begin() != r.end()) {
+        std::unique_ptr<Expression> value = this->convertExpression(*r.begin());
+        if (!value) {
+            return nullptr;
+        }
+        return this->convertReturn(r.fOffset, std::move(value));
+    } else {
+        return this->convertReturn(r.fOffset, /*result=*/nullptr);
     }
 }
 
@@ -1119,7 +1176,8 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                 break;
             default:
                 if (parameters.size()) {
-                    this->errorReporter().error(f.fOffset, "shader 'main' must have zero parameters");
+                    this->errorReporter().error(f.fOffset,
+                                                "shader 'main' must have zero parameters");
                 }
                 break;
         }
@@ -1371,8 +1429,7 @@ void IRGenerator::convertEnum(const ASTNode& e) {
     SkASSERT(e.fKind == ASTNode::Kind::kEnum);
     SKSL_INT currentValue = 0;
     Layout layout;
-    ASTNode enumType(e.fNodes, e.fOffset, ASTNode::Kind::kType,
-                     ASTNode::TypeData(e.getString(), /*isStructDeclaration=*/false));
+    ASTNode enumType(e.fNodes, e.fOffset, ASTNode::Kind::kType, e.getString());
     const Type* type = this->convertType(enumType);
     Modifiers modifiers(layout, Modifiers::kConst_Flag);
     std::shared_ptr<SymbolTable> oldTable = fSymbolTable;
@@ -1405,7 +1462,6 @@ void IRGenerator::convertEnum(const ASTNode& e) {
                                                             /*arraySize=*/0, std::move(value));
         var->setDeclaration(declaration.get());
         fSymbolTable->add(std::move(var));
-        fSymbolTable->takeOwnershipOfIRNode(std::move(value));
         fSymbolTable->takeOwnershipOfIRNode(std::move(declaration));
     }
     // Now we orphanize the Enum's symbol table, so that future lookups in it are strict
@@ -1432,10 +1488,10 @@ bool IRGenerator::typeContainsPrivateFields(const Type& type) {
 }
 
 const Type* IRGenerator::convertType(const ASTNode& type, bool allowVoid) {
-    ASTNode::TypeData td = type.getTypeData();
-    const Symbol* symbol = (*fSymbolTable)[td.fName];
+    StringFragment name = type.getString();
+    const Symbol* symbol = (*fSymbolTable)[name];
     if (!symbol || !symbol->is<Type>()) {
-        this->errorReporter().error(type.fOffset, "unknown type '" + td.fName + "'");
+        this->errorReporter().error(type.fOffset, "unknown type '" + name + "'");
         return nullptr;
     }
     const Type* result = &symbol->as<Type>();
@@ -1443,22 +1499,22 @@ const Type* IRGenerator::convertType(const ASTNode& type, bool allowVoid) {
     if (*result == *fContext.fTypes.fVoid) {
         if (!allowVoid) {
             this->errorReporter().error(type.fOffset,
-                                        "type '" + td.fName + "' not allowed in this context");
+                                        "type '" + name + "' not allowed in this context");
             return nullptr;
         }
         if (isArray) {
             this->errorReporter().error(type.fOffset,
-                                        "type '" + td.fName + "' may not be used in an array");
+                                        "type '" + name + "' may not be used in an array");
             return nullptr;
         }
     }
     if (!fIsBuiltinCode && this->typeContainsPrivateFields(*result)) {
-        this->errorReporter().error(type.fOffset, "type '" + td.fName + "' is private");
+        this->errorReporter().error(type.fOffset, "type '" + name + "' is private");
         return nullptr;
     }
     if (isArray && result->isOpaque()) {
         this->errorReporter().error(type.fOffset,
-                                    "opaque type '" + td.fName + "' may not be used in an array");
+                                    "opaque type '" + name + "' may not be used in an array");
         return nullptr;
     }
     if (isArray) {
@@ -2870,6 +2926,19 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
             }
         }
 
+        bool visitProgramElement(const ProgramElement& pe) override {
+            if (pe.is<FunctionDefinition>()) {
+                const FunctionDefinition& funcDef = pe.as<FunctionDefinition>();
+                // We synthesize writes to sk_FragColor if main() returns a color, even if it's
+                // otherwise unreferenced. Check main's return type to see if it's half4.
+                if (funcDef.declaration().name() == "main" &&
+                    funcDef.declaration().returnType() == *fGenerator->fContext.fTypes.fHalf4) {
+                    fPreserveFragColor = true;
+                }
+            }
+            return INHERITED::visitProgramElement(pe);
+        }
+
         bool visitExpression(const Expression& e) override {
             if (e.is<VariableReference>() && e.as<VariableReference>().variable()->isBuiltin()) {
                 this->addDeclaringElement(e.as<VariableReference>().variable()->name());
@@ -2879,6 +2948,7 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
 
         IRGenerator* fGenerator;
         std::vector<const ProgramElement*> fNewElements;
+        bool fPreserveFragColor = false;
 
         using INHERITED = ProgramVisitor;
         using INHERITED::visitProgramElement;
@@ -2889,11 +2959,16 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
         scanner.visitProgramElement(*e);
     }
 
-    // Vulkan requires certain builtin variables be present, even if they're unused. At one time,
-    // validation errors would result if they were missing. Now, it's just (Adreno) driver bugs
-    // that drop or corrupt draws if they're missing.
+    if (scanner.fPreserveFragColor) {
+        // main() returns a half4, so make sure we don't dead-strip sk_FragColor.
+        scanner.addDeclaringElement("sk_FragColor");
+    }
+
     switch (fKind) {
         case Program::kFragment_Kind:
+            // Vulkan requires certain builtin variables be present, even if they're unused. At one
+            // time, validation errors would result if sk_Clockwise was missing. Now, it's just
+            // (Adreno) driver bugs that drop or corrupt draws if they're missing.
             scanner.addDeclaringElement("sk_Clockwise");
             break;
         default:
