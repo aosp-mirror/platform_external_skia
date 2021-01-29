@@ -14,6 +14,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
+#include "modules/skresources/include/SkResources.h"
 #include "modules/svg/include/SkSVGAttribute.h"
 #include "modules/svg/include/SkSVGIDMapper.h"
 #include "src/core/SkTLazy.h"
@@ -55,7 +56,8 @@ struct SkSVGPresentationContext {
 
 class SkSVGRenderContext {
 public:
-    SkSVGRenderContext(SkCanvas*, const sk_sp<SkFontMgr>&, const SkSVGIDMapper&,
+    SkSVGRenderContext(SkCanvas*, const sk_sp<SkFontMgr>&,
+                       const sk_sp<skresources::ResourceProvider>&, const SkSVGIDMapper&,
                        const SkSVGLengthContext&, const SkSVGPresentationContext&,
                        const SkSVGNode*);
     SkSVGRenderContext(const SkSVGRenderContext&);
@@ -110,7 +112,7 @@ public:
 
     // Note: the id->node association is cleared for the lifetime of the returned value
     // (effectively breaks reference cycles, assuming appropriate return value scoping).
-    BorrowedNode findNodeById(const SkString&) const;
+    BorrowedNode findNodeById(const SkSVGIRI&) const;
 
     SkTLazy<SkPaint> fillPaint() const;
     SkTLazy<SkPaint> strokePaint() const;
@@ -145,6 +147,7 @@ private:
     SkTLazy<SkPaint> commonPaint(const SkSVGPaint&, float opacity) const;
 
     const sk_sp<SkFontMgr>&                       fFontMgr;
+    const sk_sp<skresources::ResourceProvider>&   fResourceProvider;
     const SkSVGIDMapper&                          fIDMapper;
     SkTCopyOnFirstWrite<SkSVGLengthContext>       fLengthContext;
     SkTCopyOnFirstWrite<SkSVGPresentationContext> fPresentationContext;
