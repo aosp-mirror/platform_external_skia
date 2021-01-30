@@ -246,6 +246,12 @@ struct SK_API GrContextOptions {
      */
 
     /**
+     * If non-zero, overrides the maximum size of a tile for sw-backed images and bitmaps rendered
+     * by SkGpuDevice.
+     */
+    int  fMaxTileSizeOverride = 0;
+
+    /**
      * Prevents use of dual source blending, to test that all xfer modes work correctly without it.
      */
     bool fSuppressDualSourceBlending = false;
@@ -285,6 +291,11 @@ struct SK_API GrContextOptions {
      * Randomly generate a (false) GL_OUT_OF_MEMORY error
      */
     bool fRandomGLOOM = false;
+
+    /**
+     * Force off support for write pixels row bytes in caps.
+     */
+    bool fDisallowWritePixelRowBytes = false;
 
     /**
      * Include or exclude specific GPU path renderers.
