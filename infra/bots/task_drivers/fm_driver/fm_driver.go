@@ -21,34 +21,55 @@ import (
 	"go.skia.org/infra/task_driver/go/td"
 )
 
-type work struct {
-	Sources []string
-	Flags   []string
+func filter(in []string, test func(string) bool) (out []string) {
+	for _, s := range in {
+		if test(s) {
+			out = append(out, s)
+		}
+	}
+	return
+}
+
+func botJobs(name string, gms []string, tests []string) (jobs [][]string) {
+	parts := strings.Split(name, "-")
+	OS := parts[1]
+
+	// For no reason but as a demo, skip GM aarectmodes and test GoodHash.
+	if OS == "Debian10" {
+		gms = filter(gms, func(s string) bool { return s != "aarectmodes" })
+		tests = filter(tests, func(s string) bool { return s != "GoodHash" })
+	}
+
+	jobs = append(jobs, append([]string{"b=cpu"}, gms...))
+	jobs = append(jobs, append([]string{"b=cpu"}, tests...))
+	jobs = append(jobs, append([]string{"b=cpu", "skvm=true"}, gms...))
+	return
 }
 
 func main() {
 	var (
 		projectId = flag.String("project_id", "", "ID of the Google Cloud project.")
 		taskId    = flag.String("task_id", "", "ID of this task.")
-		taskName  = flag.String("task_name", "", "Name of the task.")
-		local     = flag.Bool("local", true, "True if running locally (as opposed to on the bots)")
-		output    = flag.String("o", "", "If provided, dump a JSON blob of step data to the given file. Prints to stdout if '-' is given.")
+		bot       = flag.String("bot", "", "Name of the task.")
+		output    = flag.String("o", "", "Dump JSON step data to the given file, or stdout if -.")
+		local     = flag.Bool("local", true, "Running locally (else on the bots)?")
 
 		resources = flag.String("resources", "resources", "Passed to fm -i.")
+		script    = flag.String("script", "", "File (or - for stdin) with one job per line.")
 	)
-	ctx := td.StartRun(projectId, taskId, taskName, output, local)
+	ctx := td.StartRun(projectId, taskId, bot, output, local)
 	defer td.EndRun(ctx)
 
 	actualStderr := os.Stderr
 	if *local {
 		// Task Driver echoes every exec.Run() stdout and stderr to the console,
 		// which makes it hard to find failures (especially stdout).  Send them to /dev/null.
-		f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+		devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 		if err != nil {
 			td.Fatal(ctx, err)
 		}
-		os.Stdout = f
-		os.Stderr = f
+		os.Stdout = devnull
+		os.Stderr = devnull
 	}
 
 	if flag.NArg() < 1 {
@@ -56,7 +77,7 @@ func main() {
 	}
 	fm := flag.Arg(0)
 
-	// Run fm --flag to find the names of all linked GMs or tests.
+	// Run `fm <flag>` to find the names of all linked GMs or tests.
 	query := func(flag string) []string {
 		stdout := &bytes.Buffer{}
 		cmd := &exec.Command{Name: fm, Stdout: stdout}
@@ -78,6 +99,12 @@ func main() {
 	}
 	gms := query("--listGMs")
 	tests := query("--listTests")
+
+	// Parse a job like "gms b=cpu ct=8888" into a struct of Sources to run under given Flags.
+	type work struct {
+		Sources []string
+		Flags   []string
+	}
 
 	parse := func(job []string) *work {
 		w := &work{}
@@ -118,25 +145,34 @@ func main() {
 		return w
 	}
 
-	// TODO: this doesn't have to be hard coded, of course.
-	// TODO: add some .skps or images to demo that.
-	script := `
-	b=cpu tests
-	b=cpu gms
-	b=cpu gms skvm=true
+	// One job can go on the command line, handy for ad hoc local runs.
+	jobs := [][]string{flag.Args()[1:]}
 
-	#b=cpu gms skvm=true gamut=p3
-	#b=cpu gms skvm=true ct=565
-	`
-	jobs := [][]string{}
-	scanner := bufio.NewScanner(strings.NewReader(script))
-	for scanner.Scan() {
-		jobs = append(jobs, strings.Fields(scanner.Text()))
-	}
-	if err := scanner.Err(); err != nil {
-		td.Fatal(ctx, err)
+	// Any number of jobs can come from -script.
+	if *script != "" {
+		file := os.Stdin
+		if *script != "-" {
+			file, err := os.Open(*script)
+			if err != nil {
+				td.Fatal(ctx, err)
+			}
+			defer file.Close()
+		}
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			jobs = append(jobs, strings.Fields(scanner.Text()))
+		}
+		if err := scanner.Err(); err != nil {
+			td.Fatal(ctx, err)
+		}
 	}
 
+	// If we're a bot (or acting as if we are one), add its jobs.
+	if *bot != "" {
+		jobs = append(jobs, botJobs(*bot, gms, tests)...)
+	}
+
+	// We'll kick off workers to run FM with `-s <Sources...> <Flags...>` from parsed jobs.
 	var failures int32 = 0
 	wg := &sync.WaitGroup{}
 
@@ -146,10 +182,12 @@ func main() {
 			stderr := &bytes.Buffer{}
 			cmd := &exec.Command{Name: fm, Stdout: stdout, Stderr: stderr}
 			cmd.Args = append(cmd.Args, "-i", *resources)
-			cmd.Args = append(cmd.Args, w.Flags...)
 			cmd.Args = append(cmd.Args, "-s")
 			cmd.Args = append(cmd.Args, w.Sources...)
+			cmd.Args = append(cmd.Args, w.Flags...)
 			if err := exec.Run(ctx, cmd); err != nil {
+				// We optimistically run batches of Sources, but if a batch fails,
+				// we'll re-run one at a time to find the precise failures.
 				if len(w.Sources) == 1 {
 					// If a source ran alone and failed, that's just a failure.
 					atomic.AddInt32(&failures, 1)
@@ -170,8 +208,10 @@ func main() {
 							strings.Join(lines, "\n\t"))
 					}
 				} else {
-					// If a batch of sources ran and failed, split them up and try again.
+					// If a batch fails, retry each individually.
 					for _, source := range w.Sources {
+						// Requeuing work from the workers makes sizing the chan buffer tricky:
+						// we don't ever want this `queue <-` to block on a full buffer.
 						wg.Add(1)
 						queue <- work{[]string{source}, w.Flags}
 					}
@@ -182,7 +222,7 @@ func main() {
 	}
 
 	workers := runtime.NumCPU()
-	queue := make(chan work, 1<<20)
+	queue := make(chan work, 1<<20) // Huge buffer to avoid having to be smart about requeuing.
 	for i := 0; i < workers; i++ {
 		go worker(queue)
 	}
@@ -190,15 +230,16 @@ func main() {
 	for _, job := range jobs {
 		w := parse(job)
 		if len(w.Sources) == 0 {
-			continue
+			continue // A blank/commented line in the job script.
 		}
 
 		// Shuffle the sources randomly as a cheap way to approximate evenly expensive batches.
+		// (Intentionally not rand.Seed()'d to stay deterministically reproducible.)
 		rand.Shuffle(len(w.Sources), func(i, j int) {
 			w.Sources[i], w.Sources[j] = w.Sources[j], w.Sources[i]
 		})
 
-		// Round up so there's at least one source per batch.
+		// Round batch sizes up so there's at least one source per batch.
 		batch := (len(w.Sources) + workers - 1) / workers
 		util.ChunkIter(len(w.Sources), batch, func(start, end int) error {
 			wg.Add(1)
