@@ -14511,7 +14511,7 @@
         "skia-swarming-bots",
         "--task_id",
         "<(TASK_ID)",
-        "--task_name",
+        "--bot",
         "FM-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All",
         "build/fm"
       ],
@@ -15593,7 +15593,7 @@
         {
           "name": "skia/bots/mskp",
           "path": "mskp",
-          "version": "version:4"
+          "version": "version:5"
         }
       ],
       "command": [
@@ -23380,7 +23380,7 @@
         {
           "name": "skia/bots/mskp",
           "path": "mskp",
-          "version": "version:4"
+          "version": "version:5"
         },
         {
           "name": "skia/bots/skp",
@@ -23541,7 +23541,7 @@
         {
           "name": "skia/bots/mskp",
           "path": "mskp",
-          "version": "version:4"
+          "version": "version:5"
         },
         {
           "name": "skia/bots/skp",
@@ -23619,7 +23619,7 @@
         {
           "name": "skia/bots/mskp",
           "path": "mskp",
-          "version": "version:4"
+          "version": "version:5"
         },
         {
           "name": "skia/bots/skp",
