@@ -251,25 +251,7 @@ void GrVkGpu::destroyResources() {
     }
 
     // wait for all commands to finish
-    VkResult res = VK_CALL(QueueWaitIdle(fQueue));
-
-    // On windows, sometimes calls to QueueWaitIdle return before actually signalling the fences
-    // on the command buffers even though they have completed. This causes an assert to fire when
-    // destroying the command buffers. Currently this ony seems to happen on windows, so we add a
-    // sleep to make sure the fence signals.
-#ifdef SK_DEBUG
-    if (this->vkCaps().mustSleepOnTearDown()) {
-#if defined(SK_BUILD_FOR_WIN)
-        Sleep(10); // In milliseconds
-#else
-        sleep(1);  // In seconds
-#endif
-    }
-#endif
-
-#ifdef SK_DEBUG
-    SkASSERT(VK_SUCCESS == res || VK_ERROR_DEVICE_LOST == res);
-#endif
+    this->finishOutstandingGpuWork();
 
     if (fMainCmdPool) {
         fMainCmdPool->unref();
@@ -291,7 +273,7 @@ void GrVkGpu::destroyResources() {
     fMSAALoadManager.destroyResources(this);
 
     // must call this just before we destroy the command pool and VkDevice
-    fResourceProvider.destroyResources(VK_ERROR_DEVICE_LOST == res);
+    fResourceProvider.destroyResources();
 }
 
 GrVkGpu::~GrVkGpu() {
@@ -423,12 +405,12 @@ sk_sp<GrGpuBuffer> GrVkGpu::onCreateBuffer(size_t size, GrGpuBufferType type,
         case GrGpuBufferType::kXferCpuToGpu:
             SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
                      kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyRead_Type);
+            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyRead_Type, accessPattern);
             break;
         case GrGpuBufferType::kXferGpuToCpu:
             SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
                      kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyWrite_Type);
+            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyWrite_Type, accessPattern);
             break;
         default:
             SK_ABORT("Unknown buffer type.");
@@ -2148,6 +2130,24 @@ bool GrVkGpu::onSubmitToGpu(bool syncCpu) {
     } else {
         return this->submitCommandBuffer(kSkip_SyncQueue);
     }
+}
+
+void GrVkGpu::finishOutstandingGpuWork() {
+    VK_CALL(QueueWaitIdle(fQueue));
+
+    // On Windows and Imagination, sometimes calls to QueueWaitIdle return before actually
+    // signalling the fences on the command buffers even though they have completed. This causes an
+    // assert to fire when destroying the command buffers. Therefore we add asleep to make sure the
+    // fence signals.
+    #ifdef SK_DEBUG
+        if (this->vkCaps().mustSleepOnTearDown()) {
+    #if defined(SK_BUILD_FOR_WIN)
+            Sleep(10);  // In milliseconds
+    #else
+            sleep(1);  // In seconds
+    #endif
+        }
+    #endif
 }
 
 void GrVkGpu::onReportSubmitHistograms() {
