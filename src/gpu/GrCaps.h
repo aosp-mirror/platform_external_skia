@@ -156,6 +156,12 @@ public:
         return fShouldCollapseSrcOverToSrcWhenAble;
     }
 
+    // When abandoning the GrDirectContext do we need to sync the GPU before we start abandoning
+    // resources.
+    bool mustSyncGpuDuringAbandon() const {
+        return fMustSyncGpuDuringAbandon;
+    }
+
     /**
      * Indicates whether GPU->CPU memory mapping for GPU resources such as vertex buffers and
      * textures allows partial mappings or full mappings.
@@ -189,13 +195,6 @@ public:
     int maxPreferredRenderTargetSize() const { return fMaxPreferredRenderTargetSize; }
 
     int maxTextureSize() const { return fMaxTextureSize; }
-
-    /** This is the maximum tile size to use by GPU devices for rendering sw-backed images/bitmaps.
-        It is usually the max texture size, unless we're overriding it for testing. */
-    int maxTileSize() const {
-        SkASSERT(fMaxTileSize <= fMaxTextureSize);
-        return fMaxTileSize;
-    }
 
     int maxWindowRectangles() const { return fMaxWindowRectangles; }
 
@@ -526,6 +525,7 @@ protected:
     bool fWritePixelsRowBytesSupport                 : 1;
     bool fReadPixelsRowBytesSupport                  : 1;
     bool fShouldCollapseSrcOverToSrcWhenAble         : 1;
+    bool fMustSyncGpuDuringAbandon                   : 1;
 
     // Driver workaround
     bool fDriverDisableCCPR                          : 1;
@@ -562,7 +562,6 @@ protected:
     int fMaxPreferredRenderTargetSize;
     int fMaxVertexAttributes;
     int fMaxTextureSize;
-    int fMaxTileSize;
     int fMaxWindowRectangles;
     int fInternalMultisampleCount;
     uint32_t fMaxPushConstantsSize = 0;

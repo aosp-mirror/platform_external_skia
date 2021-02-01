@@ -1449,6 +1449,8 @@ bool GrGLGpu::onUpdateCompressedBackendTexture(const GrBackendTexture& backendTe
                                                const BackendTextureData* data) {
     SkASSERT(data && data->type() != BackendTextureData::Type::kPixmaps);
 
+    this->handleDirtyContext();
+
     GrGLTextureInfo info;
     SkAssertResult(backendTexture.getGLTextureInfo(&info));
 
@@ -3603,6 +3605,8 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
 bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
                                      sk_sp<GrRefCntedCallback> finishedCallback,
                                      const BackendTextureData* data) {
+    this->handleDirtyContext();
+
     GrGLTextureInfo info;
     SkAssertResult(backendTexture.getGLTextureInfo(&info));
 
@@ -3912,7 +3916,7 @@ void GrGLGpu::flush(FlushType flushType) {
 
 bool GrGLGpu::onSubmitToGpu(bool syncCpu) {
     if (syncCpu || (!fFinishCallbacks.empty() && !this->caps()->fenceSyncSupport())) {
-        GL_CALL(Finish());
+        this->finishOutstandingGpuWork();
         fFinishCallbacks.callAll(true);
     } else {
         this->flush();
@@ -4019,6 +4023,10 @@ void GrGLGpu::waitSemaphore(GrSemaphore* semaphore) {
 
 void GrGLGpu::checkFinishProcs() {
     fFinishCallbacks.check();
+}
+
+void GrGLGpu::finishOutstandingGpuWork() {
+    GL_CALL(Finish());
 }
 
 void GrGLGpu::clearErrorsAndCheckForOOM() {

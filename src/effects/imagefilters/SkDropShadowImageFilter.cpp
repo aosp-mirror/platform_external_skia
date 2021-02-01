@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkDropShadowImageFilter.h"
+#include "src/effects/imagefilters/SkDropShadowImageFilter.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/effects/SkBlurImageFilter.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/effects/imagefilters/SkBlurImageFilter.h"
 
 namespace {
 
@@ -21,7 +21,7 @@ class SkDropShadowImageFilterImpl final : public SkImageFilter_Base {
 public:
     SkDropShadowImageFilterImpl(SkScalar dx, SkScalar dy, SkScalar sigmaX, SkScalar sigmaY,
                                 SkColor color, bool shadowOnly, sk_sp<SkImageFilter> input,
-                                const CropRect* cropRect)
+                                const SkRect* cropRect)
             : INHERITED(&input, 1, cropRect)
             , fDx(dx)
             , fDy(dy)
@@ -55,7 +55,7 @@ sk_sp<SkImageFilter> SkDropShadowImageFilter::Make(SkScalar dx, SkScalar dy,
                                                    SkScalar sigmaX, SkScalar sigmaY,
                                                    SkColor color, ShadowMode shadowMode,
                                                    sk_sp<SkImageFilter> input,
-                                                   const SkImageFilter::CropRect* cropRect) {
+                                                   const SkRect* cropRect) {
     bool shadowOnly = shadowMode == SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode;
     return sk_sp<SkImageFilter>(new SkDropShadowImageFilterImpl(
             dx, dy, sigmaX, sigmaY, color, shadowOnly, std::move(input), cropRect));
@@ -84,7 +84,7 @@ sk_sp<SkFlattenable> SkDropShadowImageFilterImpl::CreateProc(SkReadBuffer& buffe
     // TODO (michaelludwig) - TODO: Call factory function once SkDropShadowImageFilter::Make no
     // longer takes the old enum as its argument
     return sk_sp<SkImageFilter>(new SkDropShadowImageFilterImpl(
-            dx, dy, sigmaX, sigmaY, color, shadowOnly, common.getInput(0), &common.cropRect()));
+            dx, dy, sigmaX, sigmaY, color, shadowOnly, common.getInput(0), common.cropRect()));
 }
 
 void SkDropShadowImageFilterImpl::flatten(SkWriteBuffer& buffer) const {
@@ -138,10 +138,10 @@ sk_sp<SkSpecialImage> SkDropShadowImageFilterImpl::onFilterImage(const Context& 
 
     canvas->translate(SkIntToScalar(inputOffset.fX) - SkIntToScalar(bounds.fLeft),
                       SkIntToScalar(inputOffset.fY) - SkIntToScalar(bounds.fTop));
-    input->draw(canvas, offsetVec.fX, offsetVec.fY, &paint);
+    input->draw(canvas, offsetVec.fX, offsetVec.fY, SkSamplingOptions(), &paint);
 
     if (!fShadowOnly) {
-        input->draw(canvas, 0, 0, nullptr);
+        input->draw(canvas, 0, 0);
     }
     offset->fX = bounds.fLeft;
     offset->fY = bounds.fTop;
@@ -180,4 +180,3 @@ SkIRect SkDropShadowImageFilterImpl::onFilterNodeBounds(
     }
     return dst;
 }
-

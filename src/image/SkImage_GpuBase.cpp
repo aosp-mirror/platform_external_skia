@@ -189,7 +189,6 @@ bool SkImage_GpuBase::onReadPixels(GrDirectContext* dContext,
 GrSurfaceProxyView SkImage_GpuBase::refView(GrRecordingContext* context,
                                             GrMipmapped mipMapped) const {
     if (!context || !fContext->priv().matches(context)) {
-        SkASSERT(0);
         return {};
     }
 
@@ -197,61 +196,6 @@ GrSurfaceProxyView SkImage_GpuBase::refView(GrRecordingContext* context,
     GrTextureAdjuster adjuster(context, *this->view(context), this->imageInfo().colorInfo(),
                                this->uniqueID());
     return adjuster.view(mipMapped);
-}
-
-GrBackendTexture SkImage_GpuBase::onGetBackendTexture(bool flushPendingGrContextIO,
-                                                      GrSurfaceOrigin* origin) const {
-    auto direct = fContext->asDirectContext();
-    if (!direct) {
-        // This image was created with a DDL context and cannot be instantiated.
-        return GrBackendTexture();  // invalid
-    }
-
-    const GrSurfaceProxyView* view = this->view(direct);
-    SkASSERT(view && *view);
-    GrSurfaceProxy* proxy = view->proxy();
-
-    if (!proxy->isInstantiated()) {
-        auto resourceProvider = direct->priv().resourceProvider();
-
-        if (!proxy->instantiate(resourceProvider)) {
-            return GrBackendTexture();  // invalid
-        }
-    }
-
-    GrTexture* texture = proxy->peekTexture();
-    if (texture) {
-        if (flushPendingGrContextIO) {
-            direct->priv().flushSurface(proxy);
-        }
-        if (origin) {
-            *origin = view->origin();
-        }
-        return texture->getBackendTexture();
-    }
-    return GrBackendTexture();  // invalid
-}
-
-GrTexture* SkImage_GpuBase::getTexture() const {
-    GrTextureProxy* proxy = this->peekProxy();
-    if (proxy && proxy->isInstantiated()) {
-        return proxy->peekTexture();
-    }
-
-    auto direct = fContext->asDirectContext();
-    if (!direct) {
-        // This image was created with a DDL context and cannot be instantiated.
-        return nullptr;
-    }
-
-    const GrSurfaceProxyView* view = this->view(direct);
-    SkASSERT(view && *view && !view->proxy()->isInstantiated());
-
-    if (!view->proxy()->instantiate(direct->priv().resourceProvider())) {
-        return nullptr;
-    }
-
-    return view->proxy()->peekTexture();
 }
 
 bool SkImage_GpuBase::onIsValid(GrRecordingContext* context) const {

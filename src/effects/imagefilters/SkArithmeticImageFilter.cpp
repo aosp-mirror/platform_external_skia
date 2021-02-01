@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkArithmeticImageFilter.h"
+#include "src/effects/imagefilters/SkArithmeticImageFilter.h"
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/effects/SkXfermodeImageFilter.h"
 #include "include/private/SkNx.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/effects/imagefilters/SkXfermodeImageFilter.h"
 #if SK_SUPPORT_GPU
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrRecordingContext.h"
@@ -37,7 +37,7 @@ namespace {
 class ArithmeticImageFilterImpl final : public SkImageFilter_Base {
 public:
     ArithmeticImageFilterImpl(float k1, float k2, float k3, float k4, bool enforcePMColor,
-                              sk_sp<SkImageFilter> inputs[2], const CropRect* cropRect)
+                              sk_sp<SkImageFilter> inputs[2], const SkRect* cropRect)
             : INHERITED(inputs, 2, cropRect), fInputs{k1, k2, k3, k4, enforcePMColor} {}
 
 protected:
@@ -76,7 +76,7 @@ sk_sp<SkImageFilter> SkArithmeticImageFilter::Make(float k1, float k2, float k3,
                                                    bool enforcePMColor,
                                                    sk_sp<SkImageFilter> background,
                                                    sk_sp<SkImageFilter> foreground,
-                                                   const SkImageFilter::CropRect* crop) {
+                                                   const SkRect* crop) {
     if (!SkScalarIsFinite(k1) || !SkScalarIsFinite(k2) || !SkScalarIsFinite(k3) ||
         !SkScalarIsFinite(k4)) {
         return nullptr;
@@ -121,7 +121,7 @@ sk_sp<SkFlattenable> ArithmeticImageFilterImpl::CreateProc(SkReadBuffer& buffer)
         return nullptr;
     }
     return SkArithmeticImageFilter::Make(k[0], k[1], k[2], k[3], enforcePMColor, common.getInput(0),
-                                         common.getInput(1), &common.cropRect());
+                                         common.getInput(1), common.cropRect());
 }
 
 void ArithmeticImageFilterImpl::flatten(SkWriteBuffer& buffer) const {
@@ -242,7 +242,7 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::onFilterImage(const Context& ct
         SkPaint paint;
         paint.setBlendMode(SkBlendMode::kSrc);
         background->draw(canvas, SkIntToScalar(backgroundOffset.fX),
-                         SkIntToScalar(backgroundOffset.fY), &paint);
+                         SkIntToScalar(backgroundOffset.fY), SkSamplingOptions(), &paint);
     }
 
     this->drawForeground(canvas, foreground.get(), foregroundBounds);

@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkXfermodeImageFilter.h"
+#include "src/effects/imagefilters/SkXfermodeImageFilter.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/private/SkColorData.h"
@@ -32,7 +32,7 @@ namespace {
 class SkXfermodeImageFilterImpl : public SkImageFilter_Base {
 public:
     SkXfermodeImageFilterImpl(SkBlendMode mode, sk_sp<SkImageFilter> inputs[2],
-                              const CropRect* cropRect)
+                              const SkRect* cropRect)
           : INHERITED(inputs, 2, cropRect)
           , fMode(mode) {}
 
@@ -69,7 +69,7 @@ private:
 sk_sp<SkImageFilter> SkXfermodeImageFilter::Make(SkBlendMode mode,
                                                  sk_sp<SkImageFilter> background,
                                                  sk_sp<SkImageFilter> foreground,
-                                                 const SkImageFilter::CropRect* cropRect) {
+                                                 const SkRect* cropRect) {
     sk_sp<SkImageFilter> inputs[2] = { std::move(background), std::move(foreground) };
     return sk_sp<SkImageFilter>(new SkXfermodeImageFilterImpl(mode, inputs, cropRect));
 }
@@ -95,7 +95,7 @@ sk_sp<SkFlattenable> SkXfermodeImageFilterImpl::CreateProc(SkReadBuffer& buffer)
         return nullptr;
     }
     return SkXfermodeImageFilter::Make((SkBlendMode)mode, common.getInput(0),
-                                       common.getInput(1), &common.cropRect());
+                                       common.getInput(1), common.cropRect());
 }
 
 void SkXfermodeImageFilterImpl::flatten(SkWriteBuffer& buffer) const {
@@ -159,7 +159,7 @@ sk_sp<SkSpecialImage> SkXfermodeImageFilterImpl::onFilterImage(const Context& ct
         paint.setBlendMode(SkBlendMode::kSrc);
         background->draw(canvas,
                          SkIntToScalar(backgroundOffset.fX), SkIntToScalar(backgroundOffset.fY),
-                         &paint);
+                         SkSamplingOptions(), &paint);
     }
 
     this->drawForeground(canvas, foreground.get(), foregroundBounds);
@@ -217,7 +217,8 @@ void SkXfermodeImageFilterImpl::drawForeground(SkCanvas* canvas, SkSpecialImage*
     SkPaint paint;
     paint.setBlendMode(fMode);
     if (img) {
-        img->draw(canvas, SkIntToScalar(fgBounds.fLeft), SkIntToScalar(fgBounds.fTop), &paint);
+        img->draw(canvas, SkIntToScalar(fgBounds.fLeft), SkIntToScalar(fgBounds.fTop),
+                  SkSamplingOptions(), &paint);
     }
 
     SkAutoCanvasRestore acr(canvas, true);

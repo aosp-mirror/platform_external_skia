@@ -118,6 +118,7 @@ public:
     void submit(GrOpsRenderPass* renderPass) override;
 
     void checkFinishProcs() override { this->checkForFinishedCommandLists(); }
+    void finishOutstandingGpuWork() override;
 
 private:
     enum class SyncQueue {
@@ -129,8 +130,6 @@ private:
              sk_sp<GrD3DMemoryAllocator>);
 
     void destroyResources();
-
-    void onResetContext(uint32_t resetBits) override {}
 
     sk_sp<GrTexture> onCreateTexture(SkISize,
                                      const GrBackendFormat&,

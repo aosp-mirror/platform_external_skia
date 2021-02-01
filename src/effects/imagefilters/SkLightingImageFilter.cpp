@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkLightingImageFilter.h"
+#include "src/effects/imagefilters/SkLightingImageFilter.h"
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkPoint3.h"
@@ -163,7 +163,6 @@ public:
     SkPMColor light(const SkPoint3& normal, const SkPoint3& surfaceTolight,
                     const SkPoint3& lightColor) const override {
         SkScalar colorScale = fKD * normal.dot(surfaceTolight);
-        colorScale = SkTPin(colorScale, 0.0f, SK_Scalar1);
         SkPoint3 color = lightColor.makeScale(colorScale);
         return SkPackARGB32(255,
                             SkTPin(SkScalarRoundToInt(color.fX), 0, 255),
@@ -188,7 +187,6 @@ public:
         halfDir.fZ += SK_Scalar1;        // eye position is always (0, 0, 1)
         fast_normalize(&halfDir);
         SkScalar colorScale = fKS * SkScalarPow(normal.dot(halfDir), fShininess);
-        colorScale = SkTPin(colorScale, 0.0f, SK_Scalar1);
         SkPoint3 color = lightColor.makeScale(colorScale);
         return SkPackARGB32(SkTPin(SkScalarRoundToInt(max_component(color)), 0, 255),
                             SkTPin(SkScalarRoundToInt(color.fX), 0, 255),
@@ -410,7 +408,7 @@ protected:
     SkLightingImageFilterInternal(sk_sp<SkImageFilterLight> light,
                                   SkScalar surfaceScale,
                                   sk_sp<SkImageFilter> input,
-                                  const CropRect* cropRect)
+                                  const SkRect* cropRect)
             : INHERITED(&input, 1, cropRect)
             , fLight(std::move(light))
             , fSurfaceScale(surfaceScale / 255) {}
@@ -546,14 +544,14 @@ public:
                                      SkScalar surfaceScale,
                                      SkScalar kd,
                                      sk_sp<SkImageFilter>,
-                                     const CropRect*);
+                                     const SkRect*);
 
     SkScalar kd() const { return fKD; }
 
 protected:
     SkDiffuseLightingImageFilter(sk_sp<SkImageFilterLight> light, SkScalar surfaceScale,
                                  SkScalar kd,
-                                 sk_sp<SkImageFilter> input, const CropRect* cropRect);
+                                 sk_sp<SkImageFilter> input, const SkRect* cropRect);
     void flatten(SkWriteBuffer& buffer) const override;
 
     sk_sp<SkSpecialImage> onFilterImage(const Context&, SkIPoint* offset) const override;
@@ -579,7 +577,7 @@ public:
     static sk_sp<SkImageFilter> Make(sk_sp<SkImageFilterLight> light,
                                      SkScalar surfaceScale,
                                      SkScalar ks, SkScalar shininess,
-                                     sk_sp<SkImageFilter>, const CropRect*);
+                                     sk_sp<SkImageFilter>, const SkRect*);
 
     SkScalar ks() const { return fKS; }
     SkScalar shininess() const { return fShininess; }
@@ -588,7 +586,7 @@ protected:
     SkSpecularLightingImageFilter(sk_sp<SkImageFilterLight> light,
                                   SkScalar surfaceScale, SkScalar ks,
                                   SkScalar shininess,
-                                  sk_sp<SkImageFilter> input, const CropRect*);
+                                  sk_sp<SkImageFilter> input, const SkRect*);
     void flatten(SkWriteBuffer& buffer) const override;
 
     sk_sp<SkSpecialImage> onFilterImage(const Context&, SkIPoint* offset) const override;
@@ -975,7 +973,7 @@ public:
      : INHERITED(color),
        fLocation(location),
        fTarget(target),
-       fSpecularExponent(SkTPin(specularExponent, kSpecularExponentMin, kSpecularExponentMax))
+       fSpecularExponent(specularExponent)
     {
        fS = target - location;
        fast_normalize(&fS);
@@ -1102,9 +1100,6 @@ protected:
     }
 
 private:
-    static const SkScalar kSpecularExponentMin;
-    static const SkScalar kSpecularExponentMax;
-
     SkPoint3 fLocation;
     SkPoint3 fTarget;
     SkScalar fSpecularExponent;
@@ -1115,11 +1110,6 @@ private:
 
     using INHERITED = SkImageFilterLight;
 };
-
-// According to the spec, the specular term should be in the range [1, 128] :
-// http://www.w3.org/TR/SVG/filters.html#feSpecularLightingSpecularExponentAttribute
-const SkScalar SkSpotLight::kSpecularExponentMin = 1.0f;
-const SkScalar SkSpotLight::kSpecularExponentMax = 128.0f;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1152,7 +1142,7 @@ void SkImageFilterLight::flattenLight(SkWriteBuffer& buffer) const {
 
 sk_sp<SkImageFilter> SkLightingImageFilter::MakeDistantLitDiffuse(
         const SkPoint3& direction, SkColor lightColor, SkScalar surfaceScale, SkScalar kd,
-        sk_sp<SkImageFilter> input, const SkImageFilter::CropRect* cropRect) {
+        sk_sp<SkImageFilter> input, const SkRect* cropRect) {
     sk_sp<SkImageFilterLight> light(new SkDistantLight(direction, lightColor));
     return SkDiffuseLightingImageFilter::Make(std::move(light), surfaceScale, kd,
                                               std::move(input), cropRect);
@@ -1160,7 +1150,7 @@ sk_sp<SkImageFilter> SkLightingImageFilter::MakeDistantLitDiffuse(
 
 sk_sp<SkImageFilter> SkLightingImageFilter::MakePointLitDiffuse(
         const SkPoint3& location, SkColor lightColor, SkScalar surfaceScale, SkScalar kd,
-        sk_sp<SkImageFilter> input, const SkImageFilter::CropRect* cropRect) {
+        sk_sp<SkImageFilter> input, const SkRect* cropRect) {
     sk_sp<SkImageFilterLight> light(new SkPointLight(location, lightColor));
     return SkDiffuseLightingImageFilter::Make(std::move(light), surfaceScale, kd,
                                               std::move(input), cropRect);
@@ -1169,7 +1159,7 @@ sk_sp<SkImageFilter> SkLightingImageFilter::MakePointLitDiffuse(
 sk_sp<SkImageFilter> SkLightingImageFilter::MakeSpotLitDiffuse(
         const SkPoint3& location, const SkPoint3& target, SkScalar specularExponent,
         SkScalar cutoffAngle, SkColor lightColor, SkScalar surfaceScale, SkScalar kd,
-        sk_sp<SkImageFilter> input, const SkImageFilter::CropRect* cropRect) {
+        sk_sp<SkImageFilter> input, const SkRect* cropRect) {
     sk_sp<SkImageFilterLight> light(
             new SkSpotLight(location, target, specularExponent, cutoffAngle, lightColor));
     return SkDiffuseLightingImageFilter::Make(std::move(light), surfaceScale, kd,
@@ -1178,7 +1168,7 @@ sk_sp<SkImageFilter> SkLightingImageFilter::MakeSpotLitDiffuse(
 
 sk_sp<SkImageFilter> SkLightingImageFilter::MakeDistantLitSpecular(
         const SkPoint3& direction,  SkColor lightColor,  SkScalar surfaceScale, SkScalar ks,
-        SkScalar shininess, sk_sp<SkImageFilter> input, const SkImageFilter::CropRect* cropRect) {
+        SkScalar shininess, sk_sp<SkImageFilter> input, const SkRect* cropRect) {
     sk_sp<SkImageFilterLight> light(new SkDistantLight(direction, lightColor));
     return SkSpecularLightingImageFilter::Make(std::move(light), surfaceScale, ks, shininess,
                                                std::move(input), cropRect);
@@ -1186,7 +1176,7 @@ sk_sp<SkImageFilter> SkLightingImageFilter::MakeDistantLitSpecular(
 
 sk_sp<SkImageFilter> SkLightingImageFilter::MakePointLitSpecular(
         const SkPoint3& location, SkColor lightColor, SkScalar surfaceScale, SkScalar ks,
-        SkScalar shininess, sk_sp<SkImageFilter> input, const SkImageFilter::CropRect* cropRect) {
+        SkScalar shininess, sk_sp<SkImageFilter> input, const SkRect* cropRect) {
     sk_sp<SkImageFilterLight> light(new SkPointLight(location, lightColor));
     return SkSpecularLightingImageFilter::Make(std::move(light), surfaceScale, ks, shininess,
                                                std::move(input), cropRect);
@@ -1195,7 +1185,7 @@ sk_sp<SkImageFilter> SkLightingImageFilter::MakePointLitSpecular(
 sk_sp<SkImageFilter> SkLightingImageFilter::MakeSpotLitSpecular(
         const SkPoint3& location, const SkPoint3& target, SkScalar specularExponent,
         SkScalar cutoffAngle, SkColor lightColor, SkScalar surfaceScale, SkScalar ks,
-        SkScalar shininess, sk_sp<SkImageFilter> input, const SkImageFilter::CropRect* cropRect) {
+        SkScalar shininess, sk_sp<SkImageFilter> input, const SkRect* cropRect) {
     sk_sp<SkImageFilterLight> light(
             new SkSpotLight(location, target, specularExponent, cutoffAngle, lightColor));
     return SkSpecularLightingImageFilter::Make(std::move(light), surfaceScale, ks, shininess,
@@ -1208,7 +1198,7 @@ sk_sp<SkImageFilter> SkDiffuseLightingImageFilter::Make(sk_sp<SkImageFilterLight
                                                         SkScalar surfaceScale,
                                                         SkScalar kd,
                                                         sk_sp<SkImageFilter> input,
-                                                        const CropRect* cropRect) {
+                                                        const SkRect* cropRect) {
     if (!light) {
         return nullptr;
     }
@@ -1228,7 +1218,7 @@ SkDiffuseLightingImageFilter::SkDiffuseLightingImageFilter(sk_sp<SkImageFilterLi
                                                            SkScalar surfaceScale,
                                                            SkScalar kd,
                                                            sk_sp<SkImageFilter> input,
-                                                           const CropRect* cropRect)
+                                                           const SkRect* cropRect)
     : INHERITED(std::move(light), surfaceScale, std::move(input), cropRect)
     , fKD(kd) {
 }
@@ -1240,7 +1230,7 @@ sk_sp<SkFlattenable> SkDiffuseLightingImageFilter::CreateProc(SkReadBuffer& buff
     SkScalar surfaceScale = buffer.readScalar();
     SkScalar kd = buffer.readScalar();
 
-    return Make(std::move(light), surfaceScale, kd, common.getInput(0), &common.cropRect());
+    return Make(std::move(light), surfaceScale, kd, common.getInput(0), common.cropRect());
 }
 
 void SkDiffuseLightingImageFilter::flatten(SkWriteBuffer& buffer) const {
@@ -1338,7 +1328,7 @@ sk_sp<SkImageFilter> SkSpecularLightingImageFilter::Make(sk_sp<SkImageFilterLigh
                                                          SkScalar ks,
                                                          SkScalar shininess,
                                                          sk_sp<SkImageFilter> input,
-                                                         const CropRect* cropRect) {
+                                                         const SkRect* cropRect) {
     if (!light) {
         return nullptr;
     }
@@ -1360,7 +1350,7 @@ SkSpecularLightingImageFilter::SkSpecularLightingImageFilter(sk_sp<SkImageFilter
                                                              SkScalar ks,
                                                              SkScalar shininess,
                                                              sk_sp<SkImageFilter> input,
-                                                             const CropRect* cropRect)
+                                                             const SkRect* cropRect)
     : INHERITED(std::move(light), surfaceScale, std::move(input), cropRect)
     , fKS(ks)
     , fShininess(shininess) {
@@ -1374,7 +1364,7 @@ sk_sp<SkFlattenable> SkSpecularLightingImageFilter::CreateProc(SkReadBuffer& buf
     SkScalar shine = buffer.readScalar();
 
     return Make(std::move(light), surfaceScale, ks, shine, common.getInput(0),
-                &common.cropRect());
+                common.cropRect());
 }
 
 void SkSpecularLightingImageFilter::flatten(SkWriteBuffer& buffer) const {
@@ -1859,7 +1849,7 @@ void GrGLDiffuseLightingEffect::emitLightFunc(const GrFragmentProcessor* owner,
     };
     SkString lightBody;
     lightBody.appendf("half colorScale = %s * dot(normal, surfaceToLight);", kd);
-    lightBody.appendf("return half4(lightColor * saturate(colorScale), 1.0);");
+    lightBody.appendf("return half4(saturate(lightColor * colorScale), 1.0);");
     *funcName = fragBuilder->getMangledFunctionName("light");
     fragBuilder->emitFunction(kHalf4_GrSLType,
                               funcName->c_str(),
@@ -1966,7 +1956,7 @@ void GrGLSpecularLightingEffect::emitLightFunc(const GrFragmentProcessor* owner,
     lightBody.appendf("half3 halfDir = half3(normalize(surfaceToLight + half3(0, 0, 1)));");
     lightBody.appendf("half colorScale = half(%s * pow(dot(normal, halfDir), %s));",
                       ks, shininess);
-    lightBody.appendf("half3 color = lightColor * saturate(colorScale);");
+    lightBody.appendf("half3 color = saturate(lightColor * colorScale);");
     lightBody.appendf("return half4(color, max(max(color.r, color.g), color.b));");
     *funcName = fragBuilder->getMangledFunctionName("light");
     fragBuilder->emitFunction(kHalf4_GrSLType,
@@ -2108,7 +2098,7 @@ void GrGLSpotLight::emitLightColor(const GrFragmentProcessor* owner,
     lightColorBody.appendf("return %s * scale * (cosAngle - %s) * %s;",
                            color, cosOuter, coneScale);
     lightColorBody.appendf("}");
-    lightColorBody.appendf("return %s;", color);
+    lightColorBody.appendf("return %s * scale;", color);
     fLightColorFunc = fragBuilder->getMangledFunctionName("lightColor");
     fragBuilder->emitFunction(kHalf3_GrSLType,
                               fLightColorFunc.c_str(),

@@ -9,7 +9,6 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkRect.h"
-#include "include/effects/SkComposeImageFilter.h"
 #include "include/private/SkSafe32.h"
 #include "src/core/SkFuzzLogging.h"
 #include "src/core/SkImageFilterCache.h"
@@ -156,11 +155,10 @@ static int32_t next_image_filter_unique_id() {
 }
 
 SkImageFilter_Base::SkImageFilter_Base(sk_sp<SkImageFilter> const* inputs,
-                                       int inputCount, const CropRect* cropRect)
+                                       int inputCount, const SkRect* cropRect)
         : fUsesSrcInput(false)
+        , fCropRect(cropRect)
         , fUniqueID(next_image_filter_unique_id()) {
-    fCropRect = cropRect ? *cropRect : CropRect(SkRect(), 0x0);
-
     fInputs.reset(inputCount);
 
     for (int i = 0; i < inputCount; ++i) {
@@ -204,7 +202,11 @@ bool SkImageFilter_Base::Common::unflatten(SkReadBuffer& buffer, int expectedCou
     }
 
     uint32_t flags = buffer.readUInt();
-    fCropRect = CropRect(rect, flags);
+    if (!buffer.isValid() ||
+        !buffer.validate(flags == 0x0 || flags == CropRect::kHasAll_CropEdge)) {
+        return false;
+    }
+    fCropRect = CropRect(flags ? &rect : nullptr);
     return buffer.isValid();
 }
 
@@ -336,8 +338,8 @@ bool SkImageFilter_Base::canHandleComplexCTM() const {
     return true;
 }
 
-void SkImageFilter::CropRect::applyTo(const SkIRect& imageBounds, const SkMatrix& ctm,
-                                      bool embiggen, SkIRect* cropped) const {
+void SkImageFilter_Base::CropRect::applyTo(const SkIRect& imageBounds, const SkMatrix& ctm,
+                                           bool embiggen, SkIRect* cropped) const {
     *cropped = imageBounds;
     if (fFlags) {
         SkRect devCropR;
@@ -413,7 +415,7 @@ static sk_sp<SkSpecialImage> pad_image(SkSpecialImage* src, const SkImageFilter_
 
     canvas->clear(0x0);
 
-    src->draw(canvas, offX, offY, nullptr);
+    src->draw(canvas, offX, offY);
 
     return surf->makeImageSnapshot();
 }
@@ -645,7 +647,7 @@ sk_sp<SkSpecialImage> SkImageFilter_Base::ImageToColorSpace(SkSpecialImage* src,
     SkASSERT(canvas);
     SkPaint p;
     p.setBlendMode(SkBlendMode::kSrc);
-    src->draw(canvas, 0, 0, &p);
+    src->draw(canvas, 0, 0, SkSamplingOptions(), &p);
     return surf->makeImageSnapshot();
 }
 #endif

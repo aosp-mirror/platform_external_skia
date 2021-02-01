@@ -63,6 +63,9 @@ GrDirectContext::~GrDirectContext() {
         this->flushAndSubmit();
     }
 
+    // We need to make sure all work is finished on the gpu before we start releasing resources.
+    this->syncAllOutstandingGpuWork(/*shouldExecuteWhileAbandoned=*/false);
+
     this->destroyDrawingManager();
     fMappedBufferManager.reset();
 
@@ -94,6 +97,9 @@ void GrDirectContext::abandonContext() {
     }
 
     INHERITED::abandonContext();
+
+    // We need to make sure all work is finished on the gpu before we start releasing resources.
+    this->syncAllOutstandingGpuWork(this->caps()->mustSyncGpuDuringAbandon());
 
     fStrikeCache->freeAll();
 
@@ -133,6 +139,9 @@ void GrDirectContext::releaseResourcesAndAbandonContext() {
     }
 
     INHERITED::abandonContext();
+
+    // We need to make sure all work is finished on the gpu before we start releasing resources.
+    this->syncAllOutstandingGpuWork(/*shouldExecuteWhileAbandoned=*/true);
 
     fMappedBufferManager.reset();
 
@@ -185,8 +194,7 @@ bool GrDirectContext::init() {
     SkASSERT(this->threadSafeCache());
 
     fStrikeCache = std::make_unique<GrStrikeCache>();
-    fResourceCache = std::make_unique<GrResourceCache>(this->caps(), this->singleOwner(),
-                                                       this->contextID());
+    fResourceCache = std::make_unique<GrResourceCache>(this->singleOwner(), this->contextID());
     fResourceCache->setProxyProvider(this->proxyProvider());
     fResourceCache->setThreadSafeCache(this->threadSafeCache());
     fResourceProvider = std::make_unique<GrResourceProvider>(fGpu.get(), fResourceCache.get(),
@@ -388,6 +396,13 @@ bool GrDirectContext::submit(bool syncCpu) {
 void GrDirectContext::checkAsyncWorkCompletion() {
     if (fGpu) {
         fGpu->checkFinishProcs();
+    }
+}
+
+void GrDirectContext::syncAllOutstandingGpuWork(bool shouldExecuteWhileAbandoned) {
+    if (fGpu && (!this->abandoned() || shouldExecuteWhileAbandoned)) {
+        fGpu->finishOutstandingGpuWork();
+        this->checkAsyncWorkCompletion();
     }
 }
 

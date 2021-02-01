@@ -21,7 +21,9 @@ public:
         return node->tag() == SkSVGTag::kFeTurbulence || node->tag() == SkSVGTag::kFeColorMatrix ||
                node->tag() == SkSVGTag::kFeComposite || node->tag() == SkSVGTag::kFeFlood ||
                node->tag() == SkSVGTag::kFeGaussianBlur || node->tag() == SkSVGTag::kFeOffset ||
-               node->tag() == SkSVGTag::kFeBlend || node->tag() == SkSVGTag::kFeMorphology;
+               node->tag() == SkSVGTag::kFeBlend || node->tag() == SkSVGTag::kFeMorphology ||
+               node->tag() == SkSVGTag::kFeDisplacementMap ||
+               node->tag() == SkSVGTag::kFeSpecularLighting;
     }
 
     sk_sp<SkImageFilter> makeImageFilter(const SkSVGRenderContext& ctx,
@@ -41,7 +43,7 @@ public:
     /** Propagates any inherited presentation attributes in the given context. */
     void applyProperties(SkSVGRenderContext*) const;
 
-    SVG_ATTR(In, SkSVGFeInputType, SkSVGFeInputType(SkSVGFeInputType::Type::kSourceGraphic))
+    SVG_ATTR(In, SkSVGFeInputType, SkSVGFeInputType())
     SVG_ATTR(Result, SkSVGStringType, SkSVGStringType())
     SVG_OPTIONAL_ATTR(X, SkSVGLength)
     SVG_OPTIONAL_ATTR(Y, SkSVGLength)

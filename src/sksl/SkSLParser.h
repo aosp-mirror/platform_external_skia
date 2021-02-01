@@ -172,6 +172,8 @@ private:
 
     ASTNode::ID declaration();
 
+    ASTNode::ID varDeclarationsOrExpressionStatement();
+
     ASTNode::ID varDeclarations();
 
     ASTNode::ID structDeclaration();
@@ -277,6 +279,30 @@ private:
     ASTNode::ID addChild(ASTNode::ID target, ASTNode::ID child);
 
     void createEmptyChild(ASTNode::ID target);
+
+    class Checkpoint {
+    public:
+        Checkpoint(Parser* p) : fParser(p) {
+            fPushbackCheckpoint = fParser->fPushback;
+            fLexerCheckpoint = fParser->fLexer.getCheckpoint();
+            fASTCheckpoint = fParser->fFile->fNodes.size();
+            fErrorCount = fParser->fErrors.errorCount();
+        }
+
+        void rewind() {
+            fParser->fPushback = fPushbackCheckpoint;
+            fParser->fLexer.rewindToCheckpoint(fLexerCheckpoint);
+            fParser->fFile->fNodes.resize(fASTCheckpoint);
+            fParser->fErrors.setErrorCount(fErrorCount);
+        }
+
+    private:
+        Parser* fParser;
+        Token fPushbackCheckpoint;
+        int32_t fLexerCheckpoint;
+        size_t fASTCheckpoint;
+        int fErrorCount;
+    };
 
     static std::unordered_map<String, LayoutToken>* layoutTokens;
 

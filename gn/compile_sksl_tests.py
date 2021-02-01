@@ -6,15 +6,23 @@
 # found in the LICENSE file.
 
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 
+batchCompile = True
+
 skslc = sys.argv[1]
 lang = sys.argv[2]
 settings = sys.argv[3]
-inputs = sys.argv[4:]
-batchCompile = True
+with open(sys.argv[4], 'r') as reader:
+    inputs = shlex.split(reader.read())
+
+def pairwise(iterable):
+    # Iterate over an array pairwise (two elements at a time).
+    a = iter(iterable)
+    return zip(a, a)
 
 def executeWorklist(input, worklist):
     # Invoke skslc, passing in the worklist.
@@ -46,11 +54,16 @@ if settings != "--settings" and settings != "--nosettings":
 targets = []
 worklist = tempfile.NamedTemporaryFile(suffix='.worklist', delete=False)
 
-# Convert the list of command-line inputs into a worklist file sfor skslc.
-for input in inputs:
+# The `inputs` array pairs off input files with their matching output directory, e.g.:
+#     //skia/tests/sksl/shared/test.sksl
+#     //skia/tests/sksl/shared/golden/
+#     //skia/tests/sksl/intrinsics/abs.sksl
+#     //skia/tests/sksl/intrinsics/golden/
+#     ... (etc) ...
+# Here we loop over these inputs and convert them into a worklist file for skslc.
+for input, targetDir in pairwise(inputs):
     noExt, ext = os.path.splitext(input)
     head, tail = os.path.split(noExt)
-    targetDir = os.path.join(head, "golden")
     if not os.path.isdir(targetDir):
         os.mkdir(targetDir)
 

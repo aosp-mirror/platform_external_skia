@@ -9,6 +9,7 @@
 #define SKSL_DSL_VAR
 
 #include "src/sksl/dsl/DSLExpression.h"
+#include "src/sksl/dsl/DSLModifiers.h"
 
 namespace SkSL {
 
@@ -28,7 +29,41 @@ public:
      */
     DSLVar(DSLType type, const char* name = "var");
 
+    DSLVar(DSLModifiers modifiers, DSLType type, const char* name = "var");
+
     DSLVar(DSLVar&&) = delete;
+
+    DSLExpression x() {
+        return DSLExpression(*this).x();
+    }
+
+    DSLExpression y() {
+        return DSLExpression(*this).y();
+    }
+
+    DSLExpression z() {
+        return DSLExpression(*this).z();
+    }
+
+    DSLExpression w() {
+        return DSLExpression(*this).w();
+    }
+
+    DSLExpression r() {
+        return DSLExpression(*this).r();
+    }
+
+    DSLExpression g() {
+        return DSLExpression(*this).g();
+    }
+
+    DSLExpression b() {
+        return DSLExpression(*this).b();
+    }
+
+    DSLExpression a() {
+        return DSLExpression(*this).a();
+    }
 
     DSLExpression operator=(const DSLVar& var) {
         return this->operator=(DSLExpression(var));
@@ -43,6 +78,8 @@ public:
     DSLExpression operator=(float expr) {
         return this->operator=(DSLExpression(expr));
     }
+
+    DSLExpression operator[](DSLExpression&& index);
 
     DSLExpression operator++() {
         return ++DSLExpression(*this);
@@ -59,18 +96,19 @@ private:
      */
     DSLVar(const char* name);
 
-    const SkSL::Variable* var() const;
+    const SkSL::Variable* var() const {
+        return fVar;
+    }
 
     const char* name() const {
         return fName;
     }
 
-    // this object owns the var until it is added to a symboltable
-    std::unique_ptr<SkSL::Variable> fOwnedVar;
-    // mutable to allow us to cache lookups of system vars
-    mutable const SkSL::Variable* fVar = nullptr;
+    std::unique_ptr<SkSL::Statement> fDeclaration;
+    const SkSL::Variable* fVar = nullptr;
     const char* fName;
 
+    friend class DSLCore;
     friend class DSLExpression;
     friend class DSLWriter;
 };

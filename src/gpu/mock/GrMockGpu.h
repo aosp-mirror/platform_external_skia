@@ -46,11 +46,10 @@ public:
     void submit(GrOpsRenderPass* renderPass) override;
 
     void checkFinishProcs() override {}
+    void finishOutstandingGpuWork() override {}
 
 private:
     GrMockGpu(GrDirectContext*, const GrMockOptions&, const GrContextOptions&);
-
-    void onResetContext(uint32_t resetBits) override {}
 
     void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>* sampleLocations) override;
 

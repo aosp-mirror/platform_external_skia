@@ -27,8 +27,12 @@ SkScalar length_size_for_type(const SkSize& viewport, SkSVGLengthContext::Length
         return viewport.width();
     case SkSVGLengthContext::LengthType::kVertical:
         return viewport.height();
-    case SkSVGLengthContext::LengthType::kOther:
-        return SkScalarSqrt(viewport.width() * viewport.height());
+    case SkSVGLengthContext::LengthType::kOther: {
+        // https://www.w3.org/TR/SVG11/coords.html#Units_viewport_percentage
+        constexpr SkScalar rsqrt2 = 1.0f / SK_ScalarSqrt2;
+        const SkScalar w = viewport.width(), h = viewport.height();
+        return rsqrt2 * SkScalarSqrt(w * w + h * h);
+    }
     }
 
     SkASSERT(false);  // Not reached.
@@ -141,11 +145,13 @@ SkSVGPresentationContext::SkSVGPresentationContext()
 
 SkSVGRenderContext::SkSVGRenderContext(SkCanvas* canvas,
                                        const sk_sp<SkFontMgr>& fmgr,
+                                       const sk_sp<skresources::ResourceProvider>& rp,
                                        const SkSVGIDMapper& mapper,
                                        const SkSVGLengthContext& lctx,
                                        const SkSVGPresentationContext& pctx,
                                        const SkSVGNode* node)
     : fFontMgr(fmgr)
+    , fResourceProvider(rp)
     , fIDMapper(mapper)
     , fLengthContext(lctx)
     , fPresentationContext(pctx)
@@ -156,6 +162,7 @@ SkSVGRenderContext::SkSVGRenderContext(SkCanvas* canvas,
 SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other)
     : SkSVGRenderContext(other.fCanvas,
                          other.fFontMgr,
+                         other.fResourceProvider,
                          other.fIDMapper,
                          *other.fLengthContext,
                          *other.fPresentationContext,
@@ -164,6 +171,7 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other)
 SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, SkCanvas* canvas)
     : SkSVGRenderContext(canvas,
                          other.fFontMgr,
+                         other.fResourceProvider,
                          other.fIDMapper,
                          *other.fLengthContext,
                          *other.fPresentationContext,
@@ -172,6 +180,7 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, SkCanvas
 SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, const SkSVGNode* node)
     : SkSVGRenderContext(other.fCanvas,
                          other.fFontMgr,
+                         other.fResourceProvider,
                          other.fIDMapper,
                          *other.fLengthContext,
                          *other.fPresentationContext,
@@ -181,8 +190,12 @@ SkSVGRenderContext::~SkSVGRenderContext() {
     fCanvas->restoreToCount(fCanvasSaveCount);
 }
 
-SkSVGRenderContext::BorrowedNode SkSVGRenderContext::findNodeById(const SkString& id) const {
-    return BorrowedNode(fIDMapper.find(id));
+SkSVGRenderContext::BorrowedNode SkSVGRenderContext::findNodeById(const SkSVGIRI& iri) const {
+    if (iri.type() != SkSVGIRI::Type::kLocal) {
+        SkDebugf("non-local iri references not currently supported");
+        return BorrowedNode(nullptr);
+    }
+    return BorrowedNode(fIDMapper.find(iri.iri()));
 }
 
 void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttributes& attrs,
@@ -250,6 +263,7 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
     // - stop-opacity
     // - flood-color
     // - flood-opacity
+    // - lighting-color
 }
 
 void SkSVGRenderContext::applyOpacity(SkScalar opacity, uint32_t flags, bool hasFilter) {
@@ -385,6 +399,7 @@ SkTLazy<SkPaint> SkSVGRenderContext::commonPaint(const SkSVGPaint& paint_selecto
         SkSVGPresentationContext pctx;
         SkSVGRenderContext local_ctx(fCanvas,
                                      fFontMgr,
+                                     fResourceProvider,
                                      fIDMapper,
                                      *fLengthContext,
                                      pctx,

@@ -67,6 +67,27 @@ public:
      */
     DSLExpression operator=(DSLExpression other);
 
+    DSLExpression x();
+
+    DSLExpression y();
+
+    DSLExpression z();
+
+    DSLExpression w();
+
+    DSLExpression r();
+
+    DSLExpression g();
+
+    DSLExpression b();
+
+    DSLExpression a();
+
+    /**
+     * Creates an SkSL array index expression.
+     */
+    DSLExpression operator[](DSLExpression index);
+
     /**
      * Invalidates this object and returns the SkSL expression it represents.
      */
@@ -83,6 +104,7 @@ private:
 
     std::unique_ptr<SkSL::Expression> fExpression;
 
+    friend class DSLCore;
     friend class DSLVar;
     friend class DSLWriter;
 };

@@ -488,10 +488,6 @@ ASTNode::ID Parser::declaration() {
     if (!type) {
         return ASTNode::ID::Invalid();
     }
-    if (getNode(type).getTypeData().fIsStructDeclaration &&
-        this->checkNext(Token::Kind::TK_SEMICOLON)) {
-        return ASTNode::ID::Invalid();
-    }
     Token name;
     if (!this->expectIdentifier(&name)) {
         return ASTNode::ID::Invalid();
@@ -531,8 +527,29 @@ ASTNode::ID Parser::declaration() {
     }
 }
 
+/* (varDeclarations | expressionStatement) */
+ASTNode::ID Parser::varDeclarationsOrExpressionStatement() {
+    if (this->isType(this->text(this->peek()))) {
+        // Statements that begin with a typename are most often variable declarations, but
+        // occasionally the type is part of a constructor, and these are actually expression-
+        // statements in disguise. First, attempt the common case: parse it as a vardecl.
+        Checkpoint checkpoint(this);
+        ASTNode::ID node = this->varDeclarations();
+        if (node) {
+            return node;
+        }
+
+        // If this statement wasn't actually a vardecl after all, rewind and try parsing it as an
+        // expression-statement instead.
+        checkpoint.rewind();
+    }
+
+    return this->expressionStatement();
+}
+
 /* modifiers type IDENTIFIER varDeclarationEnd */
 ASTNode::ID Parser::varDeclarations() {
+    Checkpoint checkpoint(this);
     Modifiers modifiers = this->modifiers();
     ASTNode::ID type = this->type();
     if (!type) {
@@ -572,7 +589,7 @@ ASTNode::ID Parser::structDeclaration() {
                         "modifier '" + desc + "' is not permitted on a struct field");
         }
 
-        const Symbol* symbol = fSymbols[(declsNode.begin() + 1)->getTypeData().fName];
+        const Symbol* symbol = fSymbols[(declsNode.begin() + 1)->getString()];
         SkASSERT(symbol);
         const Type* type = &symbol->as<Type>();
         if (type->isOpaque()) {
@@ -615,9 +632,7 @@ ASTNode::ID Parser::structDeclaration() {
         return ASTNode::ID::Invalid();
     }
     fSymbols.add(std::move(newType));
-    return this->createNode(name.fOffset, ASTNode::Kind::kType,
-                            ASTNode::TypeData(this->text(name),
-                                              /*isStructDeclaration=*/true));
+    return this->createNode(name.fOffset, ASTNode::Kind::kType, this->text(name));
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
@@ -1112,10 +1127,7 @@ ASTNode::ID Parser::statement() {
         case Token::Kind::TK_CONST:
             return this->varDeclarations();
         case Token::Kind::TK_IDENTIFIER:
-            if (this->isType(this->text(start))) {
-                return this->varDeclarations();
-            }
-            [[fallthrough]];
+            return this->varDeclarationsOrExpressionStatement();
         default:
             return this->expressionStatement();
     }
@@ -1131,8 +1143,7 @@ ASTNode::ID Parser::type() {
         this->error(type, ("no type named '" + this->text(type) + "'").c_str());
         return ASTNode::ID::Invalid();
     }
-    ASTNode::ID result = this->createNode(type.fOffset, ASTNode::Kind::kType);
-    ASTNode::TypeData td(this->text(type), /*isStructDeclaration=*/false);
+    ASTNode::ID result = this->createNode(type.fOffset, ASTNode::Kind::kType, this->text(type));
     bool isArray = false;
     while (this->checkNext(Token::Kind::TK_LBRACKET)) {
         if (isArray) {
@@ -1153,7 +1164,6 @@ ASTNode::ID Parser::type() {
         isArray = true;
         this->expect(Token::Kind::TK_RBRACKET, "']'");
     }
-    getNode(result).setTypeData(td);
     return result;
 }
 

@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/effects/SkOffsetImageFilter.h"
+#include "src/effects/imagefilters/SkOffsetImageFilter.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkMatrix.h"
@@ -22,7 +22,7 @@ namespace {
 class SkOffsetImageFilterImpl final : public SkImageFilter_Base {
 public:
     SkOffsetImageFilterImpl(SkScalar dx, SkScalar dy, sk_sp<SkImageFilter> input,
-                            const CropRect* cropRect)
+                            const SkRect* cropRect)
             : INHERITED(&input, 1, cropRect) {
         fOffset.set(dx, dy);
     }
@@ -48,7 +48,7 @@ private:
 
 sk_sp<SkImageFilter> SkOffsetImageFilter::Make(SkScalar dx, SkScalar dy,
                                                sk_sp<SkImageFilter> input,
-                                               const SkImageFilter::CropRect* cropRect) {
+                                               const SkRect* cropRect) {
     if (!SkScalarIsFinite(dx) || !SkScalarIsFinite(dy)) {
         return nullptr;
     }
@@ -69,7 +69,7 @@ sk_sp<SkFlattenable> SkOffsetImageFilterImpl::CreateProc(SkReadBuffer& buffer) {
     SkPoint offset;
     buffer.readPoint(&offset);
     return SkOffsetImageFilter::Make(offset.x(), offset.y(), common.getInput(0),
-                                     &common.cropRect());
+                                     common.cropRect());
 }
 
 void SkOffsetImageFilterImpl::flatten(SkWriteBuffer& buffer) const {
@@ -120,7 +120,7 @@ sk_sp<SkSpecialImage> SkOffsetImageFilterImpl::onFilterImage(const Context& ctx,
         canvas->translate(SkIntToScalar(srcOffset.fX - bounds.fLeft),
                           SkIntToScalar(srcOffset.fY - bounds.fTop));
 
-        input->draw(canvas, vec.fX, vec.fY, &paint);
+        input->draw(canvas, vec.fX, vec.fY, SkSamplingOptions(), &paint);
 
         offset->fX = bounds.fLeft;
         offset->fY = bounds.fTop;

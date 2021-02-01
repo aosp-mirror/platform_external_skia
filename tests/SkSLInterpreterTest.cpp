@@ -444,6 +444,27 @@ DEF_TEST(SkSLInterpreterGeneric, r) {
     test(r, "float2 main(float x, float y) { return float2(x * x, y * y); }", value2, expected2);
 }
 
+DEF_TEST(SkSLInterpreterFieldAccessComplex, r) {
+    const char* src = R"(
+        struct P { float x; float y; };
+        P make_point() { P p; p.x = 7; p.y = 3; return p; }
+        float main() { return make_point().y; }
+    )";
+
+    float expected = 3.0f;
+    test(r, src, /*in=*/nullptr, &expected);
+}
+
+DEF_TEST(SkSLInterpreterIndexComplex, r) {
+    const char* src = R"(
+        float2x2 make_mtx() { return float2x2(1, 2, 3, 4); }
+        float main() { return make_mtx()[1][0]; }
+    )";
+
+    float expected = 3.0f;
+    test(r, src, /*in=*/nullptr, &expected);
+}
+
 DEF_TEST(SkSLInterpreterCompound, r) {
     struct RectAndColor { SkIRect fRect; SkColor4f fColor; };
     struct ManyRects { int fNumRects; RectAndColor fRects[4]; };
@@ -733,17 +754,26 @@ DEF_TEST(SkSLInterpreterOutParams, r) {
 }
 
 DEF_TEST(SkSLInterpreterSwizzleSingleLvalue, r) {
-    // Add in your SkSL here.
     test(r,
          "void main(inout half4 color) { color.xywz = half4(1,2,3,4); }",
          0, 0, 0, 0, 1, 2, 4, 3);
 }
 
 DEF_TEST(SkSLInterpreterSwizzleDoubleLvalue, r) {
-    // Add in your SkSL here.
     test(r,
          "void main(inout half4 color) { color.xywz.yxzw = half4(1,2,3,4); }",
          0, 0, 0, 0, 2, 1, 4, 3);
+}
+
+DEF_TEST(SkSLInterpreterSwizzleIndexLvalue, r) {
+    const char* src = R"(
+        void main(inout half4 color) {
+            for (int i = 0; i < 4; i++) {
+                color.wzyx[i] += half(i);
+            }
+        }
+    )";
+    test(r, src, 0, 0, 0, 0, 3, 2, 1, 0);
 }
 
 DEF_TEST(SkSLInterpreterMathFunctions, r) {
