@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -106,29 +107,33 @@ func main() {
 		}()
 	}
 
-	// We'll kick off worker goroutines to run batches of work, and on failure,
-	// crash, or unknown hash, we'll split that batch into individual reruns to
-	// isolate those unusual results.
-	var failures int32 = 0
+	type Work struct {
+		Sources []string // Passed to FM -s: names of gms/tests, paths to image files, .skps, etc.
+		Flags   []string // Other flags to pass to FM: --ct 565, --msaa 16, etc.
+	}
+
+	queue := make(chan Work, 1<<20) // Arbitrarily huge buffer to avoid ever blocking.
 	wg := &sync.WaitGroup{}
+	var failures int32 = 0
 
 	var worker func([]string, []string)
-	worker = func(sources []string, flags []string) {
+	worker = func(sources, flags []string) {
 		defer wg.Done()
 
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
 		cmd := &exec.Command{Name: fm, Stdout: stdout, Stderr: stderr, Verbose: verbosity}
-		cmd.Args = append(cmd.Args, "-i", *resources, "-s")
-		cmd.Args = append(cmd.Args, sources...)
+		cmd.Args = append(cmd.Args, "-i", *resources)
 		cmd.Args = append(cmd.Args, flags...)
+		cmd.Args = append(cmd.Args, "-s")
+		cmd.Args = append(cmd.Args, sources...)
 
 		// Run our FM command.
 		err := exec.Run(ctx, cmd)
 
 		// On success, scan stdout for any unknown hashes.
 		unknownHash := func() string {
-			if err == nil && *bot != "" { // The map of known hashes is only filled when using -bot.
+			if err == nil && *bot != "" { // We only fetch known hashes when using -bot.
 				scanner := bufio.NewScanner(stdout)
 				for scanner.Scan() {
 					if parts := strings.Fields(scanner.Text()); len(parts) == 3 {
@@ -145,13 +150,10 @@ func main() {
 			return ""
 		}()
 
-		// If a batch failed or produced an unknown hash, isolate with individual runs.
+		// If a batch failed or produced an unknown hash, isolate with individual reruns.
 		if len(sources) > 1 && (err != nil || unknownHash != "") {
 			wg.Add(len(sources))
 			for i := range sources {
-				// We could kick off independent goroutines here for more parallelism,
-				// but the bots are already parallel enough that they'd exhaust their
-				// process limits, and I haven't seen any impact on local runs.
 				worker(sources[i:i+1], flags)
 			}
 			return
@@ -179,6 +181,7 @@ func main() {
 		}
 
 		// If an individual run succeeded but produced an unknown hash, TODO upload .png to Gold.
+		// For now just print out the command and the hash it produced.
 		if unknownHash != "" {
 			fmt.Fprintf(actualStdout, "%v %v #%v\n",
 				cmd.Name,
@@ -187,7 +190,15 @@ func main() {
 		}
 	}
 
-	// Start workers that run `FM -s sources... flags...` in small source batches for parallelism.
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			for w := range queue {
+				worker(w.Sources, w.Flags)
+			}
+		}()
+	}
+
+	// Get some work going, first breaking it into batches to increase our parallelism.
 	kickoff := func(sources, flags []string) {
 		if len(sources) == 0 {
 			return // A blank or commented job line from -script or the command line.
@@ -199,13 +210,11 @@ func main() {
 			sources[i], sources[j] = sources[j], sources[i]
 		})
 
-		// Round batch sizes up so there's at least one source per batch.
-		// Batch size is arbitrary, but nice to scale with the machine like this.
-		batches := runtime.NumCPU()
-		batch := (len(sources) + batches - 1) / batches
+		nbatches := runtime.NumCPU()                      // Arbitrary, nice to scale ~= cores.
+		batch := (len(sources) + nbatches - 1) / nbatches // Round up to avoid empty batches.
 		util.ChunkIter(len(sources), batch, func(start, end int) error {
 			wg.Add(1)
-			go worker(sources[start:end], flags)
+			queue <- Work{sources[start:end], flags}
 			return nil
 		})
 	}
@@ -269,29 +278,44 @@ func main() {
 		}
 	}
 
-	// If we're a bot (or acting as if we are one), add its work too.
+	// If we're a bot (or acting as if we are one), kick off its work.
 	if *bot != "" {
 		parts := strings.Split(*bot, "-")
-		OS := parts[1]
+		model, CPU_or_GPU := parts[3], parts[4]
 
-		// For no reason but as a demo, skip GM aarectmodes and test GoodHash.
-		filter := func(in []string, test func(string) bool) (out []string) {
-			for _, s := range in {
-				if test(s) {
-					out = append(out, s)
-				}
+		commonFlags := []string{
+			"--nativeFonts",
+			strconv.FormatBool(strings.Contains(*bot, "NativeFonts")),
+		}
+
+		run := func(sources []string, extraFlags string) {
+			kickoff(sources, append(strings.Fields(extraFlags), commonFlags...))
+		}
+
+		if CPU_or_GPU == "CPU" {
+			commonFlags = append(commonFlags, "-b", "cpu")
+
+			run(tests, "")
+			run(gms, "--ct 8888 --legacy") // Equivalent to DM --config 8888.
+
+			if model == "GCE" {
+				run(gms, "--ct g8 --legacy")                      // --config g8
+				run(gms, "--ct 565 --legacy")                     // --config 565
+				run(gms, "--ct 8888")                             // --config srgb
+				run(gms, "--ct f16")                              // --config esrgb
+				run(gms, "--ct f16 --tf linear")                  // --config f16
+				run(gms, "--ct 8888 --gamut p3")                  // --config p3
+				run(gms, "--ct 8888 --gamut narrow --tf 2.2")     // --config narrow
+				run(gms, "--ct f16 --gamut rec2020 --tf rec2020") // --config erec2020
+
+				run(gms, "--skvm")
+				run(gms, "--skvm --ct f16")
 			}
-			return
-		}
-		if OS == "Debian10" {
-			gms = filter(gms, func(s string) bool { return s != "aarectmodes" })
-			tests = filter(tests, func(s string) bool { return s != "GoodHash" })
-		}
 
-		// You could use parse() here if you like, but it's just as easy to kickoff() directly.
-		kickoff(tests, strings.Fields("-b cpu"))
-		kickoff(gms, strings.Fields("-b cpu"))
-		kickoff(gms, strings.Fields("-b cpu --skvm"))
+			// TODO: image/colorImage/svg tests
+			// TODO: pic-8888 equivalent?
+			// TODO: serialize-8888 equivalent?
+		}
 	}
 
 	wg.Wait()
