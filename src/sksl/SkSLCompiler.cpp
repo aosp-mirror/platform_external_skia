@@ -576,9 +576,7 @@ static bool is_dead(const Expression& lvalue, ProgramUsage* usage) {
                    is_dead(*t.ifFalse(), usage);
         }
         default:
-#ifdef SK_DEBUG
-            ABORT("invalid lvalue: %s\n", lvalue.description().c_str());
-#endif
+            SkDEBUGFAILF("invalid lvalue: %s\n", lvalue.description().c_str());
             return false;
     }
 }
@@ -826,7 +824,7 @@ static void clear_write(Expression& expr) {
             clear_write(*expr.as<IndexExpression>().base());
             break;
         default:
-            ABORT("shouldn't be writing to this kind of expression\n");
+            SK_ABORT("shouldn't be writing to this kind of expression\n");
             break;
     }
 }
@@ -1762,8 +1760,11 @@ std::unique_ptr<Program> Compiler::convertProgram(
 
     // Enable node pooling while converting and optimizing the program for a performance boost.
     // The Program will take ownership of the pool.
-    std::unique_ptr<Pool> pool = Pool::Create();
-    pool->attachToThread();
+    std::unique_ptr<Pool> pool;
+    if (fCaps->useNodePools()) {
+        pool = Pool::Create();
+        pool->attachToThread();
+    }
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule, /*isBuiltinCode=*/false,
                                          textPtr->c_str(), textPtr->size(), externalFunctions);
@@ -1788,7 +1789,9 @@ std::unique_ptr<Program> Compiler::convertProgram(
         success = true;
     }
 
-    program->fPool->detachFromThread();
+    if (program->fPool) {
+        program->fPool->detachFromThread();
+    }
     return success ? std::move(program) : nullptr;
 }
 
@@ -2064,7 +2067,7 @@ const char* Compiler::OperatorName(Token::Kind op) {
         case Token::Kind::TK_MINUSMINUS:   return "--";
         case Token::Kind::TK_COMMA:        return ",";
         default:
-            ABORT("unsupported operator: %d\n", (int) op);
+            SK_ABORT("unsupported operator: %d\n", (int) op);
     }
 }
 
