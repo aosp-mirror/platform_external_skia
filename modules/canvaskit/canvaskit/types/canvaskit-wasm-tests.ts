@@ -134,6 +134,8 @@ function canvasTests(CK: CanvasKit, canvas?: Canvas, paint?: Paint, path?: Path,
     canvas.drawRect4f(5, 6, 7, 8, paint);
     canvas.drawRRect(someRRect, paint);
     canvas.drawShadow(path, [1, 2, 3], [4, 5, 6], 7, someColor, CK.BLUE, 0);
+    const mallocedVector3 = CK.Malloc(Float32Array, 3);
+    canvas.drawShadow(path, mallocedVector3, mallocedVector3, 7, someColor, CK.BLUE, 0);
     canvas.drawText('foo', 1, 2, paint, font);
     canvas.drawText(shapedText, 1, 2, paint, font);
     canvas.drawTextBlob(textBlob, 10, 20, paint);
@@ -232,7 +234,8 @@ function contourMeasureTests(CK: CanvasKit, path?: Path) {
     const iter = new CK.ContourMeasureIter(path, true, 2); // $ExpectType ContourMeasureIter
     const contour = iter.next(); // $ExpectType ContourMeasure | null
     if (!contour) return;
-    const pt = contour.getPosTan(2); // $ExpectType PosTan
+    const pt = contour.getPosTan(2); // $ExpectType Float32Array
+    contour.getPosTan(2, pt);
     const segment = contour.getSegment(0, 20, true); // $ExpectType Path
     const closed = contour.isClosed(); // $ExpectType boolean
     const length = contour.length(); // $ExpectType number
@@ -364,6 +367,9 @@ function globalTests(CK: CanvasKit, path?: Path) {
     const matr = CK.Matrix.rotated(Math.PI / 6);
     const p = CK.getShadowLocalBounds(matr, path, [0, 0, 1], [500, 500, 20], 20,
         CK.ShadowDirectionalLight | CK.ShadowGeometricOnly | CK.ShadowDirectionalLight);
+    const mallocedVector3 = CK.Malloc(Float32Array, 3);
+    const q = CK.getShadowLocalBounds(matr, path, mallocedVector3, mallocedVector3, 20,
+    CK.ShadowDirectionalLight | CK.ShadowGeometricOnly | CK.ShadowDirectionalLight);
 }
 
 function paintTests(CK: CanvasKit, colorFilter?: ColorFilter, imageFilter?: ImageFilter,
@@ -448,7 +454,8 @@ function pathTests(CK: CanvasKit) {
     bounds = path.getBounds(); // $ExpectType Float32Array
     path.getBounds(bounds);
     const ft = path.getFillType();
-    const pt = path.getPoint(7); // $ExpectType Point
+    const pt = path.getPoint(7); // $ExpectType Float32Array
+    path.getPoint(8, pt);
     ok = path.isEmpty();
     ok = path.isVolatile();
     path.lineTo(10, -20);
@@ -663,7 +670,8 @@ function skottieTests(CK: CanvasKit, canvas?: Canvas) {
     const a = anim.duration(); // $ExpectType number
     const b = anim.fps(); // $ExpectType number
     const c = anim.version(); // $ExpectType string
-    const d = anim.size(); // $ExpectType Point
+    const d = anim.size(); // $ExpectType Float32Array
+    anim.size(d);
     const rect = anim.seek(0.5);
     anim.seek(0.6, rect);
     const rect2 = anim.seekFrame(12.3);

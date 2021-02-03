@@ -79,16 +79,22 @@ var _scratch3x3MatrixPtr = nullptr;
 var _scratch3x3Matrix;  // the result from CanvasKit.Malloc
 
 var _scratch4x4MatrixPtr = nullptr;
-var _scratch4x4Matrix; // the result from CanvasKit.Malloc
+var _scratch4x4Matrix;
 
 var _scratchColorPtr = nullptr;
-var _scratchColor; // the result from CanvasKit.Malloc
+var _scratchColor;
 
-var _scratchRect;
-var _scratchRectPtr = nullptr;
+var _scratchFourFloatsA;
+var _scratchFourFloatsAPtr = nullptr;
 
-var _scratchRect2;
-var _scratchRect2Ptr = nullptr;
+var _scratchFourFloatsB;
+var _scratchFourFloatsBPtr = nullptr;
+
+var _scratchThreeFloatsA;
+var _scratchThreeFloatsAPtr = nullptr;
+
+var _scratchThreeFloatsB;
+var _scratchThreeFloatsBPtr = nullptr;
 
 var _scratchIRect;
 var _scratchIRectPtr = nullptr;
@@ -354,7 +360,7 @@ function copyColorFromWasm(colorPtr) {
 // copies the given floats into the wasm heap as an SkRect. Unless a non-scratch pointer is
 // passed into ptr, callers do NOT need to free the returned pointer.
 function copyRectToWasm(fourFloats, ptr) {
-  return copy1dArray(fourFloats, 'HEAPF32', ptr || _scratchRectPtr);
+  return copy1dArray(fourFloats, 'HEAPF32', ptr || _scratchFourFloatsAPtr);
 }
 
 // copies the given ints into the wasm heap as an SkIRect. Unless a non-scratch pointer is
