@@ -128,6 +128,15 @@ bool SkImageFilter::asAColorFilter(SkColorFilter** filterPtr) const {
     return true;
 }
 
+#ifdef SK_SUPPORT_LEGACY_MATRIX_IMAGEFILTER
+sk_sp<SkImageFilter> SkImageFilter::MakeMatrixFilter(const SkMatrix& matrix,
+                                                     SkFilterQuality filterQuality,
+                                                     sk_sp<SkImageFilter> input) {
+    SkSamplingOptions sampling(filterQuality, SkSamplingOptions::kMedium_asMipmapLinear);
+    return SkMatrixImageFilter::Make(matrix, sampling, std::move(input));
+}
+#endif
+
 sk_sp<SkImageFilter> SkImageFilter::makeWithLocalMatrix(const SkMatrix& matrix) const {
     return SkLocalMatrixImageFilter::Make(matrix, this->refMe());
 }
@@ -716,7 +725,7 @@ static sk_sp<SkImageFilter> apply_ctm_to_filter(sk_sp<SkImageFilter> input, cons
         remainder->setIdentity();
     }
 
-    return SkMatrixImageFilter::Make(ctmToEmbed, kLow_SkFilterQuality, input);
+    return SkMatrixImageFilter::Make(ctmToEmbed, SkSamplingOptions(SkFilterMode::kLinear), input);
 }
 
 sk_sp<SkImageFilter> SkImageFilter_Base::applyCTM(const SkMatrix& ctm, SkMatrix* remainder) const {
