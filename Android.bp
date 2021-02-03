@@ -851,6 +851,7 @@ cc_library_static {
           "src/gpu/vk/GrVkAMDMemoryAllocator.cpp",
           "src/gpu/vk/GrVkAttachment.cpp",
           "src/gpu/vk/GrVkBuffer.cpp",
+          "src/gpu/vk/GrVkBuffer2.cpp",
           "src/gpu/vk/GrVkCaps.cpp",
           "src/gpu/vk/GrVkCommandBuffer.cpp",
           "src/gpu/vk/GrVkCommandPool.cpp",
