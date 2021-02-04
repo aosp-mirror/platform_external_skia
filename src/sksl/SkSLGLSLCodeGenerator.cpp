@@ -101,7 +101,7 @@ String GLSLCodeGenerator::getTypeName(const Type& type) {
                 result = "bvec";
             }
             else {
-                ABORT("unsupported vector type");
+                SK_ABORT("unsupported vector type");
             }
             result += to_string(type.columns());
             return result;
@@ -113,7 +113,7 @@ String GLSLCodeGenerator::getTypeName(const Type& type) {
                 result = "mat";
             }
             else {
-                ABORT("unsupported matrix type");
+                SK_ABORT("unsupported matrix type");
             }
             result += to_string(type.columns());
             if (type.columns() != type.rows()) {
@@ -224,9 +224,7 @@ void GLSLCodeGenerator::writeExpression(const Expression& expr, Precedence paren
             this->writeIndexExpression(expr.as<IndexExpression>());
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported expression: %s", expr.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported expression: %s", expr.description().c_str());
             break;
     }
 }
@@ -890,7 +888,7 @@ GLSLCodeGenerator::Precedence GLSLCodeGenerator::GetBinaryPrecedence(Token::Kind
         case Token::Kind::TK_BITWISEXOREQ: // fall through
         case Token::Kind::TK_BITWISEOREQ:  return GLSLCodeGenerator::kAssignment_Precedence;
         case Token::Kind::TK_COMMA:        return GLSLCodeGenerator::kSequence_Precedence;
-        default: ABORT("unsupported binary operator");
+        default: SK_ABORT("unsupported binary operator");
     }
 }
 
@@ -1021,7 +1019,7 @@ void GLSLCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
 }
 
 void GLSLCodeGenerator::writeSetting(const Setting& s) {
-    ABORT("internal error; setting was not folded to a constant during compilation\n");
+    SK_ABORT("internal error; setting was not folded to a constant during compilation\n");
 }
 
 void GLSLCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) {
@@ -1312,9 +1310,7 @@ void GLSLCodeGenerator::writeStatement(const Statement& s) {
             this->write(";");
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported statement: %s", s.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported statement: %s", s.description().c_str());
             break;
     }
 }
