@@ -218,9 +218,7 @@ void MetalCodeGenerator::writeExpression(const Expression& expr, Precedence pare
             this->writeIndexExpression(expr.as<IndexExpression>());
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported expression: %s", expr.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported expression: %s", expr.description().c_str());
             break;
     }
 }
@@ -827,14 +825,14 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
                     this->write(" >= ");
                     break;
                 default:
-                    ABORT("unsupported comparison intrinsic kind");
+                    SK_ABORT("unsupported comparison intrinsic kind");
             }
             this->writeExpression(*c.arguments()[1], kRelational_Precedence);
             this->write(")");
             break;
         }
         default:
-            ABORT("unsupported intrinsic kind");
+            SK_ABORT("unsupported intrinsic kind");
     }
 }
 
@@ -1240,14 +1238,16 @@ MetalCodeGenerator::Precedence MetalCodeGenerator::GetBinaryPrecedence(Token::Ki
         case Token::Kind::TK_BITWISEXOREQ: // fall through
         case Token::Kind::TK_BITWISEOREQ:  return MetalCodeGenerator::kAssignment_Precedence;
         case Token::Kind::TK_COMMA:        return MetalCodeGenerator::kSequence_Precedence;
-        default: ABORT("unsupported binary operator");
+        default: SK_ABORT("unsupported binary operator");
     }
 }
 
 void MetalCodeGenerator::writeMatrixTimesEqualHelper(const Type& left, const Type& right,
                                                      const Type& result) {
     String key = "TimesEqual" + this->typeName(left) + this->typeName(right);
-    if (fHelpers.find(key) == fHelpers.end()) {
+
+    auto [iter, wasInserted] = fHelpers.insert(key);
+    if (wasInserted) {
         fExtraFunctions.printf("thread %s& operator*=(thread %s& left, thread const %s& right) {\n"
                                "    left = left * right;\n"
                                "    return left;\n"
@@ -1374,7 +1374,7 @@ void MetalCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
 }
 
 void MetalCodeGenerator::writeSetting(const Setting& s) {
-    ABORT("internal error; setting was not folded to a constant during compilation\n");
+    SK_ABORT("internal error; setting was not folded to a constant during compilation\n");
 }
 
 void MetalCodeGenerator::writeFunctionRequirementArgs(const FunctionDeclaration& f,
@@ -1784,9 +1784,7 @@ void MetalCodeGenerator::writeStatement(const Statement& s) {
             this->write(";");
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported statement: %s", s.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported statement: %s", s.description().c_str());
             break;
     }
 }
@@ -2218,9 +2216,7 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
         case ProgramElement::Kind::kEnum:
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported program element: %s\n", e.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported program element: %s\n", e.description().c_str());
             break;
     }
 }
