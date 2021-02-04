@@ -109,15 +109,24 @@ void MetalCodeGenerator::writeExtension(const Extension& ext) {
 
 String MetalCodeGenerator::typeName(const Type& type) {
     switch (type.typeKind()) {
+        case Type::TypeKind::kArray:
+            SkASSERTF(type.columns() > 0, "invalid array size: %s", type.description().c_str());
+            return String::printf("array<%s, %d>",
+                                  this->typeName(type.componentType()).c_str(), type.columns());
+
         case Type::TypeKind::kVector:
             return this->typeName(type.componentType()) + to_string(type.columns());
+
         case Type::TypeKind::kMatrix:
             return this->typeName(type.componentType()) + to_string(type.columns()) + "x" +
                                   to_string(type.rows());
+
         case Type::TypeKind::kSampler:
             return "texture2d<float>"; // FIXME - support other texture types
+
         case Type::TypeKind::kEnum:
             return "int";
+
         default:
             if (type == *fContext.fTypes.fHalf) {
                 // FIXME - Currently only supporting floats in MSL to avoid type coercion issues.
@@ -141,36 +150,8 @@ void MetalCodeGenerator::writeStructDefinition(const StructDefinition& s) {
     this->writeLine("};");
 }
 
-// Flags an error if an array type is found. Meant to be used in places where an array type might
-// appear in the SkSL/IR, but can't be represented by Metal.
-void MetalCodeGenerator::disallowArrayTypes(const Type& type, int offset) {
-    if (type.isArray()) {
-        fErrors.error(offset, "Metal does not support array types in this context");
-    }
-}
-
-// Writes the base type, stripping array suffixes. e.g. `float[2]` will output `float`.
-// Call `writeArrayDimensions` to write the type's accompanying array sizes.
-void MetalCodeGenerator::writeBaseType(const Type& type) {
-    switch (type.typeKind()) {
-        case Type::TypeKind::kArray:
-            this->writeBaseType(type.componentType());
-            break;
-        default:
-            this->write(this->typeName(type));
-            break;
-    }
-}
-
-// Writes the array suffix of a type, if one exists. e.g. `float[2][4]` will output `[2][4]`.
-void MetalCodeGenerator::writeArrayDimensions(const Type& type) {
-    if (type.isArray()) {
-        this->write("[");
-        if (type.columns() != Type::kUnsizedArray) {
-            this->write(to_string(type.columns()));
-        }
-        this->write("]");
-    }
+void MetalCodeGenerator::writeType(const Type& type) {
+    this->write(this->typeName(type));
 }
 
 void MetalCodeGenerator::writeExpression(const Expression& expr, Precedence parentPrecedence) {
@@ -218,9 +199,7 @@ void MetalCodeGenerator::writeExpression(const Expression& expr, Precedence pare
             this->writeIndexExpression(expr.as<IndexExpression>());
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported expression: %s", expr.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported expression: %s", expr.description().c_str());
             break;
     }
 }
@@ -244,7 +223,7 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
     // `outVars` is non-null; in those places, we take the type of the VariableReference.
     //
     // float _skOutParamHelper0_originalFuncName(float _var0, float _var1, float& outParam) {
-    this->writeBaseType(call.type());
+    this->writeType(call.type());
     this->write(" ");
     this->write(name);
     this->write("(");
@@ -261,7 +240,7 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
         this->writeModifiers(param->modifiers(), /*globalContext=*/false);
 
         const Type* type = outVars[index] ? &outVars[index]->type() : &arguments[index]->type();
-        this->writeBaseType(*type);
+        this->writeType(*type);
 
         if (param->modifiers().fFlags & Modifiers::kOut_Flag) {
             this->write("&");
@@ -275,7 +254,6 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
             this->write(" _var");
             this->write(to_string(index));
         }
-        this->writeArrayDimensions(*type);
     }
     this->writeLine(") {");
 
@@ -285,7 +263,7 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
             continue;
         }
         // float3 _var2[ = outParam.zyx];
-        this->writeBaseType(arguments[index]->type());
+        this->writeType(arguments[index]->type());
         this->write(" _var");
         this->write(to_string(index));
 
@@ -303,7 +281,7 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
     // [int _skResult = ] myFunction(inputs, outputs, _globals, _var0, _var1, _var2, _var3);
     bool hasResult = (call.type().name() != "void");
     if (hasResult) {
-        this->writeBaseType(call.type());
+        this->writeType(call.type());
         this->write(" _skResult = ");
     }
 
@@ -827,14 +805,14 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
                     this->write(" >= ");
                     break;
                 default:
-                    ABORT("unsupported comparison intrinsic kind");
+                    SK_ABORT("unsupported comparison intrinsic kind");
             }
             this->writeExpression(*c.arguments()[1], kRelational_Precedence);
             this->write(")");
             break;
         }
         default:
-            ABORT("unsupported intrinsic kind");
+            SK_ABORT("unsupported intrinsic kind");
     }
 }
 
@@ -1084,9 +1062,8 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
     }
 
     // Explicitly invoke the constructor, passing in the necessary arguments.
-    this->writeBaseType(constructorType);
-    this->disallowArrayTypes(constructorType, c.fOffset);
-    this->write("(");
+    this->writeType(constructorType);
+    this->write(constructorType.isArray() ? "{" : "(");
     const char* separator = "";
     int scalarCount = 0;
     for (const std::unique_ptr<Expression>& arg : c.arguments()) {
@@ -1097,7 +1074,7 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
             argType.columns() < constructorType.rows()) {
             // Merge scalars and smaller vectors together.
             if (!scalarCount) {
-                this->writeBaseType(constructorType.componentType());
+                this->writeType(constructorType.componentType());
                 this->write(to_string(constructorType.rows()));
                 this->write("(");
             }
@@ -1109,7 +1086,7 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
             scalarCount = 0;
         }
     }
-    this->write(")");
+    this->write(constructorType.isArray() ? "}" : ")");
 }
 
 void MetalCodeGenerator::writeFragCoord() {
@@ -1240,14 +1217,16 @@ MetalCodeGenerator::Precedence MetalCodeGenerator::GetBinaryPrecedence(Token::Ki
         case Token::Kind::TK_BITWISEXOREQ: // fall through
         case Token::Kind::TK_BITWISEOREQ:  return MetalCodeGenerator::kAssignment_Precedence;
         case Token::Kind::TK_COMMA:        return MetalCodeGenerator::kSequence_Precedence;
-        default: ABORT("unsupported binary operator");
+        default: SK_ABORT("unsupported binary operator");
     }
 }
 
 void MetalCodeGenerator::writeMatrixTimesEqualHelper(const Type& left, const Type& right,
                                                      const Type& result) {
     String key = "TimesEqual" + this->typeName(left) + this->typeName(right);
-    if (fHelpers.find(key) == fHelpers.end()) {
+
+    auto [iter, wasInserted] = fHelpers.insert(key);
+    if (wasInserted) {
         fExtraFunctions.printf("thread %s& operator*=(thread %s& left, thread const %s& right) {\n"
                                "    left = left * right;\n"
                                "    return left;\n"
@@ -1374,7 +1353,7 @@ void MetalCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
 }
 
 void MetalCodeGenerator::writeSetting(const Setting& s) {
-    ABORT("internal error; setting was not folded to a constant during compilation\n");
+    SK_ABORT("internal error; setting was not folded to a constant during compilation\n");
 }
 
 void MetalCodeGenerator::writeFunctionRequirementArgs(const FunctionDeclaration& f,
@@ -1500,7 +1479,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
                     continue;
                 }
                 this->write(", constant ");
-                this->writeBaseType(intf.variable().type());
+                this->writeType(intf.variable().type());
                 this->write("& " );
                 this->write(fInterfaceBlockNameMap[&intf]);
                 this->write(" [[buffer(");
@@ -1520,8 +1499,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
         }
         separator = ", ";
     } else {
-        this->writeBaseType(f.returnType());
-        this->disallowArrayTypes(f.returnType(), f.fOffset);
+        this->writeType(f.returnType());
         this->write(" ");
         this->writeName(f.name());
         this->write("(");
@@ -1532,13 +1510,12 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
         separator = ", ";
         this->writeModifiers(param->modifiers(), /*globalContext=*/false);
         const Type* type = &param->type();
-        this->writeBaseType(*type);
+        this->writeType(*type);
         if (param->modifiers().fFlags & Modifiers::kOut_Flag) {
             this->write("&");
         }
         this->write(" ");
         this->writeName(param->name());
-        this->writeArrayDimensions(*type);
     }
     this->write(")");
     return true;
@@ -1698,10 +1675,9 @@ void MetalCodeGenerator::writeFields(const std::vector<Type::Field>& fields, int
         }
         currentOffset += fieldSize;
         this->writeModifiers(field.fModifiers, /*globalContext=*/false);
-        this->writeBaseType(*fieldType);
+        this->writeType(*fieldType);
         this->write(" ");
         this->writeName(field.fName);
-        this->writeArrayDimensions(*fieldType);
         this->writeLine(";");
         if (parentIntf) {
             fInterfaceBlockMap[&field] = parentIntf;
@@ -1720,25 +1696,17 @@ void MetalCodeGenerator::writeName(const String& name) {
     this->write(name);
 }
 
-void MetalCodeGenerator::writeVarDeclaration(const VarDeclaration& var, bool global) {
-    if (global && !(var.var().modifiers().fFlags & Modifiers::kConst_Flag)) {
+void MetalCodeGenerator::writeVarDeclaration(const VarDeclaration& varDecl, bool global) {
+    if (global && !(varDecl.var().modifiers().fFlags & Modifiers::kConst_Flag)) {
         return;
     }
-    this->writeModifiers(var.var().modifiers(), global);
-    this->writeBaseType(var.baseType());
-    this->disallowArrayTypes(var.baseType(), var.fOffset);
+    this->writeModifiers(varDecl.var().modifiers(), global);
+    this->writeType(varDecl.var().type());
     this->write(" ");
-    this->writeName(var.var().name());
-    if (var.arraySize() > 0) {
-        this->write("[");
-        this->write(to_string(var.arraySize()));
-        this->write("]");
-    } else if (var.arraySize() == Type::kUnsizedArray){
-        this->write("[]");
-    }
-    if (var.value()) {
+    this->writeName(varDecl.var().name());
+    if (varDecl.value()) {
         this->write(" = ");
-        this->writeVarInitializer(var.var(), *var.value());
+        this->writeVarInitializer(varDecl.var(), *varDecl.value());
     }
     this->write(";");
 }
@@ -1784,9 +1752,7 @@ void MetalCodeGenerator::writeStatement(const Statement& s) {
             this->write(";");
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported statement: %s", s.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported statement: %s", s.description().c_str());
             break;
     }
 }
@@ -1942,10 +1908,9 @@ void MetalCodeGenerator::writeUniformStruct() {
                                                  "the same 'layout(set=...)'");
                 }
                 this->write("    ");
-                this->writeBaseType(var.type());
+                this->writeType(var.type());
                 this->write(" ");
                 this->writeName(var.name());
-                this->writeArrayDimensions(var.type());
                 this->write(";\n");
             }
         }
@@ -1964,10 +1929,9 @@ void MetalCodeGenerator::writeInputStruct() {
             if (var.modifiers().fFlags & Modifiers::kIn_Flag &&
                 -1 == var.modifiers().fLayout.fBuiltin) {
                 this->write("    ");
-                this->writeBaseType(var.type());
+                this->writeType(var.type());
                 this->write(" ");
                 this->writeName(var.name());
-                this->writeArrayDimensions(var.type());
                 if (-1 != var.modifiers().fLayout.fLocation) {
                     if (fProgram.fKind == Program::kVertex_Kind) {
                         this->write("  [[attribute(" +
@@ -1998,10 +1962,9 @@ void MetalCodeGenerator::writeOutputStruct() {
             if (var.modifiers().fFlags & Modifiers::kOut_Flag &&
                 -1 == var.modifiers().fLayout.fBuiltin) {
                 this->write("    ");
-                this->writeBaseType(var.type());
+                this->writeType(var.type());
                 this->write(" ");
                 this->writeName(var.name());
-                this->writeArrayDimensions(var.type());
 
                 int location = var.modifiers().fLayout.fLocation;
                 if (location < 0) {
@@ -2090,10 +2053,9 @@ void MetalCodeGenerator::writeGlobalStruct() {
         void visitTexture(const Type& type, const String& name) override {
             this->addElement();
             fCodeGen->write("    ");
-            fCodeGen->writeBaseType(type);
+            fCodeGen->writeType(type);
             fCodeGen->write(" ");
             fCodeGen->writeName(name);
-            fCodeGen->writeArrayDimensions(type);
             fCodeGen->write(";\n");
         }
         void visitSampler(const Type&, const String& name) override {
@@ -2105,10 +2067,9 @@ void MetalCodeGenerator::writeGlobalStruct() {
         void visitVariable(const Variable& var, const Expression* value) override {
             this->addElement();
             fCodeGen->write("    ");
-            fCodeGen->writeBaseType(var.type());
+            fCodeGen->writeType(var.type());
             fCodeGen->write(" ");
             fCodeGen->writeName(var.name());
-            fCodeGen->writeArrayDimensions(var.type());
             fCodeGen->write(";\n");
         }
         void addElement() {
@@ -2218,9 +2179,7 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
         case ProgramElement::Kind::kEnum:
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported program element: %s\n", e.description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported program element: %s\n", e.description().c_str());
             break;
     }
 }
