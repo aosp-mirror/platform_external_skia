@@ -105,13 +105,15 @@ static void test_gpu(skiatest::Reporter* r, GrDirectContext* ctx, const char* te
     test_permutations(r, surface.get(), testFile);
 }
 
-#define SKSL_TEST(name, path)                                       \
+#define SKSL_TEST_CPU(name, path)                                   \
     DEF_TEST(name ## _CPU, r) {                                     \
         test_cpu(r, path);                                          \
-    }                                                               \
+    }
+#define SKSL_TEST_GPU(name, path)                                   \
     DEF_GPUTEST_FOR_RENDERING_CONTEXTS(name ## _GPU, r, ctxInfo) {  \
         test_gpu(r, ctxInfo.directContext(), path);                 \
     }
+#define SKSL_TEST(name, path) SKSL_TEST_CPU(name, path) SKSL_TEST_GPU(name, path)
 
 SKSL_TEST(SkSLBoolFolding,             "folding/BoolFolding.sksl")
 SKSL_TEST(SkSLIntFoldingES2,           "folding/IntFoldingES2.sksl")
@@ -129,6 +131,8 @@ SKSL_TEST(SkSLIntrinsicMinFloat,       "intrinsics/MinFloat.sksl")
 SKSL_TEST(SkSLIntrinsicMixFloat,       "intrinsics/MixFloat.sksl")
 SKSL_TEST(SkSLIntrinsicSignFloat,      "intrinsics/SignFloat.sksl")
 
+SKSL_TEST(SkSLArrayTypes,              "shared/ArrayTypes.sksl")
+SKSL_TEST(SkSLAssignment,              "shared/Assignment.sksl")
 SKSL_TEST(SkSLCastsRoundTowardZero,    "shared/CastsRoundTowardZero.sksl")
 SKSL_TEST(SkSLCommaMixedTypes,         "shared/CommaMixedTypes.sksl")
 SKSL_TEST(SkSLCommaSideEffects,        "shared/CommaSideEffects.sksl")
@@ -144,6 +148,7 @@ SKSL_TEST(SkSLFunctionReturnTypeMatch, "shared/FunctionReturnTypeMatch.sksl")
 SKSL_TEST(SkSLFunctions,               "shared/Functions.sksl")
 SKSL_TEST(SkSLGeometricIntrinsics,     "shared/GeometricIntrinsics.sksl")
 SKSL_TEST(SkSLHelloWorld,              "shared/HelloWorld.sksl")
+SKSL_TEST(SkSLHex,                     "shared/Hex.sksl")
 SKSL_TEST(SkSLMatrices,                "shared/Matrices.sksl")
 SKSL_TEST(SkSLOperatorsES2,            "shared/OperatorsES2.sksl")
 
@@ -159,12 +164,6 @@ SKSL_TEST(SkSLStructsInFunctions,      "shared/StructsInFunctions.sksl")
 */
 
 /*
-// TODO: fails on Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android
-// with "integer constant overflow" (even though these numbers do not overflow int)
-SKSL_TEST(SkSLHex,                     "shared/Hex.sksl")
-*/
-
-/*
 TODO(skia:11209): enable these tests when Runtime Effects have support for ES3
 
 SKSL_TEST(SkSLIntFoldingES3,           "folding/IntFoldingES3.sksl")
@@ -177,6 +176,7 @@ SKSL_TEST(SkSLIntrinsicMinInt,         "intrinsics/MinInt.sksl")
 SKSL_TEST(SkSLIntrinsicMixBool,        "intrinsics/MixBool.sksl")
 SKSL_TEST(SkSLIntrinsicSignInt,        "intrinsics/SignInt.sksl")
 
+SKSL_TEST(SkSLArrayConstructors,       "shared/ArrayConstructors.sksl")
 SKSL_TEST(SkSLDeadLoopVariable,        "shared/DeadLoopVariable.sksl")
 SKSL_TEST(SkSLDoWhileControlFlow,      "shared/DoWhileControlFlow.sksl")
 SKSL_TEST(SkSLEmptyBlocksES3,          "shared/EmptyBlocksES3.sksl")
