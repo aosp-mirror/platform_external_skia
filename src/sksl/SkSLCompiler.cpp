@@ -576,9 +576,7 @@ static bool is_dead(const Expression& lvalue, ProgramUsage* usage) {
                    is_dead(*t.ifFalse(), usage);
         }
         default:
-#ifdef SK_DEBUG
-            ABORT("invalid lvalue: %s\n", lvalue.description().c_str());
-#endif
+            SkDEBUGFAILF("invalid lvalue: %s\n", lvalue.description().c_str());
             return false;
     }
 }
@@ -826,7 +824,7 @@ static void clear_write(Expression& expr) {
             clear_write(*expr.as<IndexExpression>().base());
             break;
         default:
-            ABORT("shouldn't be writing to this kind of expression\n");
+            SK_ABORT("shouldn't be writing to this kind of expression\n");
             break;
     }
 }
@@ -1611,20 +1609,9 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
     for (size_t i = 0; i < cfg.fBlocks.size(); i++) {
         const BasicBlock& block = cfg.fBlocks[i];
         if (!block.fIsReachable && !block.fAllowUnreachable && block.fNodes.size()) {
-            int offset;
             const BasicBlock::Node& node = block.fNodes[0];
-            if (node.isStatement()) {
-                offset = (*node.statement())->fOffset;
-            } else {
-                offset = (*node.expression())->fOffset;
-                if ((*node.expression())->is<BoolLiteral>()) {
-                    // Function inlining can generate do { ... } while(false) loops which always
-                    // break, so the boolean condition is considered unreachable. Since not being
-                    // able to reach a literal is a non-issue in the first place, we don't report an
-                    // error in this case.
-                    continue;
-                }
-            }
+            int offset = node.isStatement() ? (*node.statement())->fOffset
+                                            : (*node.expression())->fOffset;
             this->error(offset, String("unreachable"));
         }
     }
@@ -1762,8 +1749,11 @@ std::unique_ptr<Program> Compiler::convertProgram(
 
     // Enable node pooling while converting and optimizing the program for a performance boost.
     // The Program will take ownership of the pool.
-    std::unique_ptr<Pool> pool = Pool::Create();
-    pool->attachToThread();
+    std::unique_ptr<Pool> pool;
+    if (fCaps->useNodePools()) {
+        pool = Pool::Create();
+        pool->attachToThread();
+    }
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule, /*isBuiltinCode=*/false,
                                          textPtr->c_str(), textPtr->size(), externalFunctions);
@@ -1788,7 +1778,9 @@ std::unique_ptr<Program> Compiler::convertProgram(
         success = true;
     }
 
-    program->fPool->detachFromThread();
+    if (program->fPool) {
+        program->fPool->detachFromThread();
+    }
     return success ? std::move(program) : nullptr;
 }
 
@@ -2064,7 +2056,7 @@ const char* Compiler::OperatorName(Token::Kind op) {
         case Token::Kind::TK_MINUSMINUS:   return "--";
         case Token::Kind::TK_COMMA:        return ",";
         default:
-            ABORT("unsupported operator: %d\n", (int) op);
+            SK_ABORT("unsupported operator: %d\n", (int) op);
     }
 }
 
