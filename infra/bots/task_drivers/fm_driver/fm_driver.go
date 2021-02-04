@@ -37,6 +37,7 @@ func main() {
 		skps      = flag.String("skps", "", "Shorthand `directory` contents as 'skps'.")
 		svgs      = flag.String("svgs", "", "Shorthand `directory` contents as 'svgs'.")
 		script    = flag.String("script", "", "File (or - for stdin) with one job per line.")
+		gold      = flag.Bool("gold", false, "Fetch known hashes, upload to Gold, etc.?")
 	)
 	flag.Parse()
 
@@ -156,7 +157,7 @@ func main() {
 	known := map[string]bool{
 		"0832f708a97acc6da385446384647a8f": true, // MD5 of passing unit test.
 	}
-	if *bot != "" {
+	if *gold {
 		func() {
 			url := "https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt"
 			resp, err := http.Get(url)
@@ -178,6 +179,7 @@ func main() {
 	}
 
 	type Work struct {
+		Ctx     context.Context
 		Sources []string // Passed to FM -s: names of gms/tests, paths to image files, .skps, etc.
 		Flags   []string // Other flags to pass to FM: --ct 565, --msaa 16, etc.
 	}
@@ -197,10 +199,10 @@ func main() {
 		// Run our FM command.
 		err := exec.Run(ctx, cmd)
 
-		// On success, scan stdout for any unknown hashes.
+		// On success, scan stdout for any unknown hashes if we're planning to upload to Gold.
 		sourcesWithUnknownHashes := []string{}
 		unknownHash := ""
-		if err == nil && *bot != "" { // We only fetch known hashes when using -bot.
+		if err == nil && *gold {
 			scanner := bufio.NewScanner(stdout)
 			for scanner.Scan() {
 				if parts := strings.Fields(scanner.Text()); len(parts) == 3 {
@@ -264,10 +266,7 @@ func main() {
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go func() {
 			for w := range queue {
-				name := fmt.Sprintf("%v (%v)",
-					strings.Join(w.Sources, " "),
-					strings.Join(w.Flags, " "))
-				ctx := startStep(ctx, td.Props(name))
+				ctx := startStep(w.Ctx, td.Props(strings.Join(w.Sources, " ")))
 				worker(ctx, w.Sources, w.Flags)
 				endStep(ctx)
 				wg.Done()
@@ -288,11 +287,14 @@ func main() {
 			sources[i], sources[j] = sources[j], sources[i]
 		})
 
+		ctx := startStep(ctx, td.Props(strings.Join(flags, " ")))
+		defer endStep(ctx)
+
 		nbatches := runtime.NumCPU()                      // Arbitrary, nice to scale ~= cores.
 		batch := (len(sources) + nbatches - 1) / nbatches // Round up to avoid empty batches.
 		util.ChunkIter(len(sources), batch, func(start, end int) error {
 			wg.Add(1)
-			queue <- Work{sources[start:end], flags}
+			queue <- Work{ctx, sources[start:end], flags}
 			return nil
 		})
 	}
