@@ -884,7 +884,6 @@ cc_library_static {
           "src/gpu/vk/GrVkTextureRenderTarget.cpp",
           "src/gpu/vk/GrVkTransferBuffer.cpp",
           "src/gpu/vk/GrVkTypesPriv.cpp",
-          "src/gpu/vk/GrVkUniformBuffer.cpp",
           "src/gpu/vk/GrVkUniformHandler.cpp",
           "src/gpu/vk/GrVkUtil.cpp",
           "src/gpu/vk/GrVkVaryingHandler.cpp",
