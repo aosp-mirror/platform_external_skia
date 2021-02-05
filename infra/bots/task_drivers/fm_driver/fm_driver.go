@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,25 +37,35 @@ func main() {
 		skps      = flag.String("skps", "", "Shorthand `directory` contents as 'skps'.")
 		svgs      = flag.String("svgs", "", "Shorthand `directory` contents as 'svgs'.")
 		script    = flag.String("script", "", "File (or - for stdin) with one job per line.")
+		gold      = flag.Bool("gold", false, "Fetch known hashes, upload to Gold, etc.?")
 	)
 	flag.Parse()
 
 	ctx := context.Background()
-	failStep := func(err error) { fmt.Fprintln(os.Stderr, err) }
-	fatal := func(err error) {
-		failStep(err)
+	startStep := func(ctx context.Context, _ *td.StepProperties) context.Context { return ctx }
+	endStep := func(_ context.Context) {}
+	failStep := func(_ context.Context, err error) error {
+		fmt.Fprintln(os.Stderr, err)
+		return err
+	}
+	fatal := func(ctx context.Context, err error) {
+		failStep(ctx, err)
 		os.Exit(1)
 	}
+	httpClient := func(_ context.Context) *http.Client { return http.DefaultClient }
 
 	if !*local {
 		ctx = td.StartRun(projectId, taskId, bot, output, local)
 		defer td.EndRun(ctx)
-		failStep = func(err error) { td.FailStep(ctx, err) }
-		fatal = func(err error) { td.Fatal(ctx, err) }
+		startStep = td.StartStep
+		endStep = td.EndStep
+		failStep = td.FailStep
+		fatal = td.Fatal
+		httpClient = func(ctx context.Context) *http.Client { return td.HttpClient(ctx, nil) }
 	}
 
 	if flag.NArg() < 1 {
-		fatal(fmt.Errorf("Please pass an fm binary."))
+		fatal(ctx, fmt.Errorf("Please pass an fm binary."))
 	}
 	fm := flag.Arg(0)
 
@@ -67,7 +76,7 @@ func main() {
 		cmd.Args = append(cmd.Args, "-i", *resources)
 		cmd.Args = append(cmd.Args, flag)
 		if err := exec.Run(ctx, cmd); err != nil {
-			fatal(err)
+			fatal(ctx, err)
 		}
 
 		lines := []string{}
@@ -76,7 +85,7 @@ func main() {
 			lines = append(lines, scanner.Text())
 		}
 		if err := scanner.Err(); err != nil {
-			fatal(err)
+			fatal(ctx, err)
 		}
 		return lines
 	}
@@ -100,7 +109,7 @@ func main() {
 			})
 
 			if err != nil {
-				fatal(err)
+				fatal(ctx, err)
 			}
 		}
 		return
@@ -150,12 +159,12 @@ func main() {
 	known := map[string]bool{
 		"0832f708a97acc6da385446384647a8f": true, // MD5 of passing unit test.
 	}
-	if *bot != "" {
+	if *gold {
 		func() {
 			url := "https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt"
-			resp, err := http.Get(url)
+			resp, err := httpClient(ctx).Get(url)
 			if err != nil {
-				fatal(err)
+				fatal(ctx, err)
 			}
 			defer resp.Body.Close()
 
@@ -164,7 +173,7 @@ func main() {
 				known[scanner.Text()] = true
 			}
 			if err := scanner.Err(); err != nil {
-				fatal(err)
+				fatal(ctx, err)
 			}
 
 			fmt.Fprintf(os.Stdout, "Gold knew %v unique hashes.\n", len(known))
@@ -172,18 +181,16 @@ func main() {
 	}
 
 	type Work struct {
+		Ctx     context.Context
+		WG      *sync.WaitGroup
 		Sources []string // Passed to FM -s: names of gms/tests, paths to image files, .skps, etc.
 		Flags   []string // Other flags to pass to FM: --ct 565, --msaa 16, etc.
 	}
 
-	queue := make(chan Work, 1<<20) // Arbitrarily huge buffer to avoid ever blocking.
-	wg := &sync.WaitGroup{}
 	var failures int32 = 0
 
-	var worker func([]string, []string)
-	worker = func(sources, flags []string) {
-		defer wg.Done()
-
+	var worker func(context.Context, []string, []string)
+	worker = func(ctx context.Context, sources, flags []string) {
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
 		cmd := &exec.Command{Name: fm, Stdout: stdout, Stderr: stderr}
@@ -195,30 +202,34 @@ func main() {
 		// Run our FM command.
 		err := exec.Run(ctx, cmd)
 
-		// On success, scan stdout for any unknown hashes.
-		unknownHash := func() string {
-			if err == nil && *bot != "" { // We only fetch known hashes when using -bot.
-				scanner := bufio.NewScanner(stdout)
-				for scanner.Scan() {
-					if parts := strings.Fields(scanner.Text()); len(parts) == 3 {
-						md5 := parts[1]
-						if !known[md5] {
-							return md5
-						}
+		// On success, scan stdout for any unknown hashes if we're planning to upload to Gold.
+		sourcesWithUnknownHashes := []string{}
+		unknownHash := ""
+		if err == nil && *gold {
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				if parts := strings.Fields(scanner.Text()); len(parts) == 3 {
+					name, md5 := parts[0], parts[1]
+					if !known[md5] {
+						sourcesWithUnknownHashes = append(sourcesWithUnknownHashes, name)
+						unknownHash = md5
 					}
 				}
-				if err := scanner.Err(); err != nil {
-					fatal(err)
-				}
 			}
-			return ""
-		}()
+			if err := scanner.Err(); err != nil {
+				fatal(ctx, err)
+			}
+		}
 
-		// If a batch failed or produced an unknown hash, isolate with individual reruns.
-		if len(sources) > 1 && (err != nil || unknownHash != "") {
-			wg.Add(len(sources))
-			for i := range sources {
-				worker(sources[i:i+1], flags)
+		// If a batch failed or produced any unknown hashes, isolate with individual reruns.
+		if len(sources) > 1 && (err != nil || len(sourcesWithUnknownHashes) > 0) {
+			reruns := sources
+			if err == nil {
+				reruns = sourcesWithUnknownHashes
+			}
+
+			for _, s := range reruns {
+				worker(ctx, []string{s}, flags)
 			}
 			return
 		}
@@ -233,12 +244,11 @@ func main() {
 				lines = append(lines, scanner.Text())
 			}
 			if err := scanner.Err(); err != nil {
-				fatal(err)
+				fatal(ctx, err)
 			}
 
-			failStep(fmt.Errorf("%v %v #failed:\n\t%v\n",
-				cmd.Name,
-				strings.Join(cmd.Args, " "),
+			failStep(ctx, fmt.Errorf("%v #failed:\n\t%v\n",
+				exec.DebugString(cmd),
 				strings.Join(lines, "\n\t")))
 
 			return
@@ -247,40 +257,67 @@ func main() {
 		// If an individual run succeeded but produced an unknown hash, TODO upload .png to Gold.
 		// For now just print out the command and the hash it produced.
 		if unknownHash != "" {
-			fmt.Fprintf(os.Stdout, "%v %v #%v\n",
-				cmd.Name,
-				strings.Join(cmd.Args, " "),
+			fmt.Fprintf(os.Stdout, "%v #%v\n",
+				exec.DebugString(cmd),
 				unknownHash)
 		}
 	}
 
+	queue := make(chan Work, 1<<20) // Arbitrarily huge buffer to avoid ever blocking.
+
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go func() {
 			for w := range queue {
-				worker(w.Sources, w.Flags)
+				func() {
+					defer w.WG.Done()
+					// For organizational purposes, create a step representing this batch,
+					// with the batch call to FM and any individual reruns all nested inside.
+					ctx := startStep(w.Ctx, td.Props(strings.Join(w.Sources, " ")))
+					defer endStep(ctx)
+					worker(ctx, w.Sources, w.Flags)
+				}()
 			}
 		}()
 	}
 
 	// Get some work going, first breaking it into batches to increase our parallelism.
+	pendingKickoffs := &sync.WaitGroup{}
 	kickoff := func(sources, flags []string) {
 		if len(sources) == 0 {
 			return // A blank or commented job line from -script or the command line.
 		}
+		pendingKickoffs.Add(1)
 
 		// Shuffle the sources randomly as a cheap way to approximate evenly expensive batches.
 		// (Intentionally not rand.Seed()'d to stay deterministically reproducible.)
+		sources = append([]string{}, sources...) // We'll be needing our own copy...
 		rand.Shuffle(len(sources), func(i, j int) {
 			sources[i], sources[j] = sources[j], sources[i]
 		})
 
-		nbatches := runtime.NumCPU()                      // Arbitrary, nice to scale ~= cores.
-		batch := (len(sources) + nbatches - 1) / nbatches // Round up to avoid empty batches.
-		util.ChunkIter(len(sources), batch, func(start, end int) error {
-			wg.Add(1)
-			queue <- Work{sources[start:end], flags}
+		// For organizational purposes, create a step representing this call to kickoff(),
+		// with each batch of sources nested inside.
+		ctx := startStep(ctx, td.Props(strings.Join(flags, " ")))
+		pendingBatches := &sync.WaitGroup{}
+
+		// Arbitrary, nice to scale ~= cores.
+		approxNumBatches := runtime.NumCPU()
+
+		// Round up batch size to avoid empty batches, making approxNumBatches approximate.
+		batchSize := (len(sources) + approxNumBatches - 1) / approxNumBatches
+
+		util.ChunkIter(len(sources), batchSize, func(start, end int) error {
+			pendingBatches.Add(1)
+			queue <- Work{ctx, pendingBatches, sources[start:end], flags}
 			return nil
 		})
+
+		// When the batches for this kickoff() are all done, this kickoff() is done.
+		go func() {
+			pendingBatches.Wait()
+			endStep(ctx)
+			pendingKickoffs.Done()
+		}()
 	}
 
 	// Parse a job like "gms b=cpu ct=8888" into sources and flags for kickoff().
@@ -324,7 +361,7 @@ func main() {
 		if *script != "-" {
 			file, err := os.Open(*script)
 			if err != nil {
-				fatal(err)
+				fatal(ctx, err)
 			}
 			defer file.Close()
 		}
@@ -333,7 +370,7 @@ func main() {
 			kickoff(parse(strings.Fields(scanner.Text())))
 		}
 		if err := scanner.Err(); err != nil {
-			fatal(err)
+			fatal(ctx, err)
 		}
 	}
 
@@ -342,10 +379,7 @@ func main() {
 		parts := strings.Split(*bot, "-")
 		OS, model, CPU_or_GPU := parts[1], parts[3], parts[4]
 
-		commonFlags := []string{
-			"--nativeFonts",
-			strconv.FormatBool(strings.Contains(*bot, "NativeFonts")),
-		}
+		commonFlags := []string{}
 
 		run := func(sources []string, extraFlags string) {
 			kickoff(sources, append(strings.Fields(extraFlags), commonFlags...))
@@ -374,7 +408,11 @@ func main() {
 		if CPU_or_GPU == "CPU" {
 			commonFlags = append(commonFlags, "-b", "cpu")
 
-			// FM's default flags are equivalent to --config srgb in DM.
+			// Run GMs once using native fonts, then switch to portable fonts for everything else.
+			run(gms, "--nativeFonts true")
+			commonFlags = append(commonFlags, "--nativeFonts", "false")
+
+			// FM's default ct/gamut/tf flags are equivalent to --config srgb in DM.
 			run(gms, "")
 			run(imgs, "")
 			run(svgs, "")
@@ -402,8 +440,8 @@ func main() {
 		}
 	}
 
-	wg.Wait()
+	pendingKickoffs.Wait()
 	if failures > 0 {
-		fatal(fmt.Errorf("%v runs of %v failed after retries.\n", failures, fm))
+		fatal(ctx, fmt.Errorf("%v runs of %v failed after retries.\n", failures, fm))
 	}
 }
