@@ -301,6 +301,10 @@ int IRGenerator::convertArraySize(std::unique_ptr<Expression> size) {
 
 void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, const Type* baseType,
                                       Variable::Storage storage) {
+    if (this->strictES2Mode() && baseType->isArray()) {
+        this->errorReporter().error(offset, "array size must appear after variable name");
+    }
+
     if (baseType->componentType().isOpaque() && storage != Variable::Storage::kGlobal) {
         this->errorReporter().error(
                 offset,
@@ -2391,20 +2395,45 @@ std::unique_ptr<Expression> IRGenerator::convertConstructor(int offset,
     if (type.isVector() || type.isMatrix()) {
         return this->convertCompoundConstructor(offset, type, std::move(args));
     }
-    if (type.isArray()) {
-        // Convert each constructor argument to the array's component type.
-        const Type& base = type.componentType();
-        for (std::unique_ptr<Expression>& argument : args) {
-            argument = this->coerce(std::move(argument), base);
-            if (!argument) {
-                return nullptr;
-            }
-        }
-        return std::make_unique<Constructor>(offset, &type, std::move(args));
+    if (type.isArray() && type.columns() > 0) {
+        return this->convertArrayConstructor(offset, type, std::move(args));
     }
 
     this->errorReporter().error(offset, "cannot construct '" + type.displayName() + "'");
     return nullptr;
+}
+
+std::unique_ptr<Expression> IRGenerator::convertArrayConstructor(int offset,
+                                                                 const Type& type,
+                                                                 ExpressionArray args) {
+    SkASSERTF(type.isArray() && type.columns() > 0, "%s", type.description().c_str());
+
+    // ES2 doesn't support first-class array types.
+    if (this->strictES2Mode()) {
+        this->errorReporter().error(
+                offset, "construction of array type '" + type.displayName() + "' is not supported");
+        return nullptr;
+    }
+
+    // Check that the number of constructor arguments matches the array size.
+    if (type.columns() != args.count()) {
+        this->errorReporter().error(
+                offset,
+                String::printf("invalid arguments to '%s' constructor "
+                               "(expected %d elements, but found %d)",
+                               type.displayName().c_str(), type.columns(), args.count()));
+        return nullptr;
+    }
+
+    // Convert each constructor argument to the array's component type.
+    const Type& base = type.componentType();
+    for (std::unique_ptr<Expression>& argument : args) {
+        argument = this->coerce(std::move(argument), base);
+        if (!argument) {
+            return nullptr;
+        }
+    }
+    return std::make_unique<Constructor>(offset, &type, std::move(args));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& expression) {

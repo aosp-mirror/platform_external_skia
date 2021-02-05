@@ -68,6 +68,7 @@ sksl_error_tests = [
   "/sksl/errors/ArgumentCountMismatch.sksl",
   "/sksl/errors/ArgumentMismatch.sksl",
   "/sksl/errors/ArgumentModifiers.sksl",
+  "/sksl/errors/ArrayConstructorElementCount.sksl",
   "/sksl/errors/ArrayIndexOutOfRange.sksl",
   "/sksl/errors/ArrayReturnTypes.sksl",
   "/sksl/errors/ArrayTooManyDimensions.sksl",
@@ -337,6 +338,7 @@ sksl_shared_tests = [
   "/sksl/shared/Height.sksl",
   "/sksl/shared/HelloWorld.sksl",
   "/sksl/shared/Hex.sksl",
+  "/sksl/shared/HexUnsigned.sksl",
   "/sksl/shared/InstanceID.vert",
   "/sksl/shared/InterfaceBlockNamed.sksl",
   "/sksl/shared/InterfaceBlockNamedArray.sksl",
@@ -527,6 +529,7 @@ sksl_rte_tests = [
 ]
 
 sksl_rte_error_tests = [
+  "/sksl/runtime_errors/FirstClassArrays.rte",
   "/sksl/runtime_errors/IllegalIndexing.rte",
   "/sksl/runtime_errors/IllegalOperators.rte",
   "/sksl/runtime_errors/IllegalStatements.rte",
