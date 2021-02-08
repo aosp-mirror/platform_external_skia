@@ -548,7 +548,7 @@ namespace skvm {
         int r_bits,  g_bits,  b_bits,  a_bits,
             r_shift, g_shift, b_shift, a_shift;
     };
-    bool SkColorType_to_PixelFormat(SkColorType, PixelFormat*);
+    PixelFormat SkColorType_to_PixelFormat(SkColorType);
 
     SK_BEGIN_REQUIRE_DENSE
     struct Instruction {
@@ -583,7 +583,7 @@ namespace skvm {
         Builder();
         explicit Builder(Features);
 
-        Program done(const char* debug_name = nullptr) const;
+        Program done(const char* debug_name = nullptr, bool allow_jit=true) const;
 
         // Mostly for debugging, tests, etc.
         std::vector<Instruction> program() const { return fProgram; }
@@ -876,7 +876,7 @@ namespace skvm {
         I32   to_unorm(int bits, F32);   // E.g.   to_unorm(8, x) -> round(x * 255)
 
         Color   load(PixelFormat, Ptr ptr);
-        bool   store(PixelFormat, Ptr ptr, Color);
+        void   store(PixelFormat, Ptr ptr, Color);
         Color gather(PixelFormat, Ptr ptr, int offset, I32 index);
         Color gather(PixelFormat f, Uniform u, I32 index) {
             return gather(f, u.ptr, u.offset, index);
@@ -951,7 +951,7 @@ namespace skvm {
     public:
         Program(const std::vector<OptimizedInstruction>& instructions,
                 const std::vector<int>& strides,
-                const char* debug_name);
+                const char* debug_name, bool allow_jit);
 
         Program();
         ~Program();
@@ -979,7 +979,6 @@ namespace skvm {
         bool empty() const;
 
         bool hasJIT() const;  // Has this Program been JITted?
-        void dropJIT();       // If hasJIT(), drop it, forcing interpreter fallback.
 
         void dump(SkWStream* = nullptr) const;
 
@@ -993,6 +992,7 @@ namespace skvm {
                  Assembler*) const;
 
         void waitForLLVM() const;
+        void dropJIT();
 
         struct Impl;
         std::unique_ptr<Impl> fImpl;
@@ -1240,7 +1240,7 @@ namespace skvm {
     SI F32 from_unorm(int bits, I32 x) { return x->from_unorm(bits,x); }
     SI I32   to_unorm(int bits, F32 x) { return x->  to_unorm(bits,x); }
 
-    SI bool store(PixelFormat f, Ptr p, Color c) { return c->store(f,p,c); }
+    SI void store(PixelFormat f, Ptr p, Color c) { return c->store(f,p,c); }
 
     SI Color gather(PixelFormat f, Ptr p, int off, I32 ix) { return ix->gather(f,p,off,ix); }
     SI Color gather(PixelFormat f, Uniform u     , I32 ix) { return ix->gather(f,u,ix); }
