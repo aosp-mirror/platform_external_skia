@@ -432,7 +432,6 @@ void GrOpsTask::endFlush(GrDrawingManager* drawingMgr) {
     this->deleteOps();
     fClipAllocators.reset();
 
-    fDeferredProxies.reset();
     fSampledProxies.reset();
     fAuditTrail = nullptr;
 
@@ -674,11 +673,18 @@ void GrOpsTask::setColorLoadOp(GrLoadOp op, std::array<float, 4> color) {
     }
 }
 
+void GrOpsTask::reset() {
+    fSampledProxies.reset();
+    fClipAllocators.reset();
+    fClippedContentBounds = SkIRect::MakeEmpty();
+    fTotalBounds = SkRect::MakeEmpty();
+    fOpChains.reset();
+    fRenderPassXferBarriers = GrXferBarrierFlags::kNone;
+}
+
 int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
-    GrOpsTask* last = this;
-    int addlDeferredProxyCount = 0;
-    int addlProxyCount = 0;
-    int addlOpChainCount = 0;
+    // Find the index of the last color-clearing task. -1 indicates this or "there are none."
+    int indexOfLastColorClear = -1;
     int mergedCount = 0;
     for (const sk_sp<GrRenderTask>& task : tasks) {
         auto opsTask = task->asOpsTask();
@@ -687,28 +693,51 @@ int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
         }
         SkASSERT(fTargetSwizzle == opsTask->fTargetSwizzle);
         SkASSERT(fTargetOrigin == opsTask->fTargetOrigin);
+        if (GrLoadOp::kClear == opsTask->fColorLoadOp) {
+            indexOfLastColorClear = &task - tasks.begin();
+        }
         mergedCount += 1;
-        addlDeferredProxyCount += opsTask->fDeferredProxies.count();
+    }
+    if (0 == mergedCount) {
+        return 0;
+    }
+
+    SkSpan<const sk_sp<GrOpsTask>> opsTasks(reinterpret_cast<const sk_sp<GrOpsTask>*>(tasks.data()),
+                                            SkToSizeT(mergedCount));
+    if (indexOfLastColorClear >= 0) {
+        // If any dropped task needs to preserve stencil, for now just bail on the merge.
+        // Could keep the merge and insert a clear op, but might be tricky due to closed task.
+        if (fMustPreserveStencil) {
+            return 0;
+        }
+        for (const auto& opsTask : opsTasks.first(indexOfLastColorClear)) {
+            if (opsTask->fMustPreserveStencil) {
+                return 0;
+            }
+        }
+        // Clear `this` and forget about the tasks pre-color-clear.
+        this->reset();
+        opsTasks = opsTasks.last(opsTasks.count() - indexOfLastColorClear);
+        // Copy the color-clear into `this`.
+        fColorLoadOp = GrLoadOp::kClear;
+        fLoadClearColor = opsTasks.front()->fLoadClearColor;
+    }
+    int addlProxyCount = 0;
+    int addlOpChainCount = 0;
+    for (const auto& opsTask : opsTasks) {
         addlProxyCount += opsTask->fSampledProxies.count();
         addlOpChainCount += opsTask->fOpChains.count();
         fClippedContentBounds.join(opsTask->fClippedContentBounds);
         fTotalBounds.join(opsTask->fTotalBounds);
         fRenderPassXferBarriers |= opsTask->fRenderPassXferBarriers;
         SkDEBUGCODE(fNumClips += opsTask->fNumClips);
-        last = opsTask;
     }
-    if (last == this) {
-        return 0;
-    }
+
     fLastClipStackGenID = SK_InvalidUniqueID;
-    fDeferredProxies.reserve_back(addlDeferredProxyCount);
     fSampledProxies.reserve_back(addlProxyCount);
     fOpChains.reserve_back(addlOpChainCount);
-    fClipAllocators.reserve_back(mergedCount);
-    for (const sk_sp<GrRenderTask>& task : tasks.first(mergedCount)) {
-        auto opsTask = reinterpret_cast<GrOpsTask*>(task.get());
-        fDeferredProxies.move_back_n(opsTask->fDeferredProxies.count(),
-                                     opsTask->fDeferredProxies.data());
+    fClipAllocators.reserve_back(opsTasks.count());
+    for (const auto& opsTask : opsTasks) {
         fSampledProxies.move_back_n(opsTask->fSampledProxies.count(),
                                     opsTask->fSampledProxies.data());
         fOpChains.move_back_n(opsTask->fOpChains.count(),
@@ -716,18 +745,16 @@ int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
         SkASSERT(1 == opsTask->fClipAllocators.count());
         fClipAllocators.push_back(std::move(opsTask->fClipAllocators[0]));
         opsTask->fClipAllocators.reset();
-        opsTask->fDeferredProxies.reset();
         opsTask->fSampledProxies.reset();
         opsTask->fOpChains.reset();
     }
-    fMustPreserveStencil = last->fMustPreserveStencil;
+    fMustPreserveStencil = opsTasks.back()->fMustPreserveStencil;
     return mergedCount;
 }
 
 bool GrOpsTask::resetForFullscreenClear(CanDiscardPreviousOps canDiscardPreviousOps) {
     if (CanDiscardPreviousOps::kYes == canDiscardPreviousOps || this->isEmpty()) {
         this->deleteOps();
-        fDeferredProxies.reset();
         fSampledProxies.reset();
 
         // If the opsTask is using a render target which wraps a vulkan command buffer, we can't do
@@ -865,38 +892,25 @@ void GrOpsTask::handleInternalAllocationFailure() {
 }
 
 void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
-    for (int i = 0; i < fDeferredProxies.count(); ++i) {
-        SkASSERT(!fDeferredProxies[i]->isInstantiated());
-        // We give all the deferred proxies a write usage at the very start of flushing. This
-        // locks them out of being reused for the entire flush until they are read - and then
-        // they can be recycled. This is a bit unfortunate because a flush can proceed in waves
-        // with sub-flushes. The deferred proxies only need to be pinned from the start of
-        // the sub-flush in which they appear.
-        alloc->addInterval(fDeferredProxies[i], 0, 0, GrResourceAllocator::ActualUse::kNo);
-    }
-
     GrSurfaceProxy* targetProxy = this->target(0);
 
     // Add the interval for all the writes to this GrOpsTasks's target
     if (fOpChains.count()) {
         unsigned int cur = alloc->curOp();
 
-        alloc->addInterval(targetProxy, cur, cur + fOpChains.count() - 1,
-                           GrResourceAllocator::ActualUse::kYes);
+        alloc->addInterval(targetProxy, cur, cur + fOpChains.count() - 1);
     } else {
         // This can happen if there is a loadOp (e.g., a clear) but no other draws. In this case we
         // still need to add an interval for the destination so we create a fake op# for
         // the missing clear op.
-        alloc->addInterval(targetProxy, alloc->curOp(), alloc->curOp(),
-                           GrResourceAllocator::ActualUse::kYes);
+        alloc->addInterval(targetProxy, alloc->curOp(), alloc->curOp());
         alloc->incOps();
     }
 
     auto gather = [ alloc SkDEBUGCODE(, this) ] (GrSurfaceProxy* p, GrMipmapped) {
         alloc->addInterval(p,
                            alloc->curOp(),
-                           alloc->curOp(),
-                           GrResourceAllocator::ActualUse::kYes
+                           alloc->curOp()
                            SkDEBUGCODE(, this->target(0) == p));
     };
     for (const OpChain& recordedOp : fOpChains) {

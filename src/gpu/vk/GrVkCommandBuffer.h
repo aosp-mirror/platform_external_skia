@@ -18,12 +18,10 @@
 class GrVkBuffer;
 class GrVkFramebuffer;
 class GrVkImage;
-class GrVkMeshBuffer;
 class GrVkPipeline;
 class GrVkPipelineState;
 class GrVkRenderPass;
 class GrVkRenderTarget;
-class GrVkTransferBuffer;
 
 class GrVkCommandBuffer {
 public:
@@ -98,13 +96,13 @@ public:
               uint32_t firstInstance);
 
     void drawIndirect(const GrVkGpu* gpu,
-                      const GrVkMeshBuffer* indirectBuffer,
+                      sk_sp<const GrBuffer> indirectBuffer,
                       VkDeviceSize offset,
                       uint32_t drawCount,
                       uint32_t stride);
 
     void drawIndexedIndirect(const GrVkGpu* gpu,
-                             const GrVkMeshBuffer* indirectBuffer,
+                             sk_sp<const GrBuffer> indirectBuffer,
                              VkDeviceSize offset,
                              uint32_t drawCount,
                              uint32_t stride);
@@ -213,7 +211,7 @@ public:
     static GrVkPrimaryCommandBuffer* Create(GrVkGpu* gpu, VkCommandPool cmdPool);
 
     void begin(GrVkGpu* gpu);
-    void end(GrVkGpu* gpu);
+    void end(GrVkGpu* gpu, bool abandoningBuffer = false);
 
     // Begins render pass on this command buffer. The framebuffer from GrVkRenderTarget will be used
     // in the render pass.
@@ -275,26 +273,29 @@ public:
     void copyImageToBuffer(const GrVkGpu* gpu,
                            GrVkImage* srcImage,
                            VkImageLayout srcLayout,
-                           GrVkTransferBuffer* dstBuffer,
+                           sk_sp<GrGpuBuffer> dstBuffer,
                            uint32_t copyRegionCount,
                            const VkBufferImageCopy* copyRegions);
 
+    // All uses of copyBufferToImage are done with buffers from our staging manager. The staging
+    // manager will handle making sure the command buffer refs the buffer. Thus we just pass in the
+    // raw VkBuffer here and don't worry about refs.
     void copyBufferToImage(const GrVkGpu* gpu,
-                           GrVkTransferBuffer* srcBuffer,
+                           VkBuffer srcBuffer,
                            GrVkImage* dstImage,
                            VkImageLayout dstLayout,
                            uint32_t copyRegionCount,
                            const VkBufferImageCopy* copyRegions);
 
     void copyBuffer(GrVkGpu* gpu,
-                    GrVkBuffer* srcBuffer,
+                    sk_sp<GrGpuBuffer> srcBuffer,
                     GrVkBuffer* dstBuffer,
                     uint32_t regionCount,
                     const VkBufferCopy* regions);
 
     void copyBuffer(GrVkGpu* gpu,
-                    GrVkBuffer* srcBuffer,
-                    sk_sp<GrVkBuffer2> dstBuffer,
+                    sk_sp<GrGpuBuffer> srcBuffer,
+                    sk_sp<GrGpuBuffer> dstBuffer,
                     uint32_t regionCount,
                     const VkBufferCopy* regions);
 

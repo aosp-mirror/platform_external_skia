@@ -16,7 +16,10 @@ class GrVkGpu;
 
 class GrVkBuffer2 : public GrGpuBuffer {
 public:
-    static sk_sp<GrVkBuffer2> MakeUniform(GrVkGpu* gpu, size_t size);
+    static sk_sp<GrVkBuffer2> Make(GrVkGpu* gpu,
+                                   size_t size,
+                                   GrGpuBufferType bufferType,
+                                   GrAccessPattern accessPattern);
 
     VkBuffer vkBuffer() const { return fBuffer; }
 
@@ -31,11 +34,6 @@ public:
     const VkDescriptorSet* uniformDescriptorSet() const;
 
 private:
-    static sk_sp<GrVkBuffer2> Make(GrVkGpu* gpu,
-                                   size_t size,
-                                   GrGpuBufferType bufferType,
-                                   GrAccessPattern accessPattern);
-
     GrVkBuffer2(GrVkGpu* gpu,
                 size_t sizeInBytes,
                 GrGpuBufferType bufferType,

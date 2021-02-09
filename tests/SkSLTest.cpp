@@ -161,6 +161,16 @@ SKSL_TEST(SkSLScalarConversionConstructorsES2, "shared/ScalarConversionConstruct
 SKSL_TEST(SkSLStackingVectorCasts,             "shared/StackingVectorCasts.sksl")
 SKSL_TEST(SkSLStaticIf,                        "shared/StaticIf.sksl")
 SKSL_TEST(SkSLSwizzleBoolConstants,            "shared/SwizzleBoolConstants.sksl")
+SKSL_TEST(SkSLSwizzleByConstantIndex,          "shared/SwizzleByConstantIndex.sksl")
+SKSL_TEST(SkSLSwizzleConstants,                "shared/SwizzleConstants.sksl")
+SKSL_TEST(SkSLSwizzleLTRB,                     "shared/SwizzleLTRB.sksl")
+SKSL_TEST(SkSLSwizzleOpt,                      "shared/SwizzleOpt.sksl")
+SKSL_TEST(SkSLSwizzleScalar,                   "shared/SwizzleScalar.sksl")
+SKSL_TEST(SkSLTernaryAsLValueEntirelyFoldable, "shared/TernaryAsLValueEntirelyFoldable.sksl")
+SKSL_TEST(SkSLTernaryAsLValueFoldableTest,     "shared/TernaryAsLValueFoldableTest.sksl")
+SKSL_TEST(SkSLUnaryPositiveNegative,           "shared/UnaryPositiveNegative.sksl")
+SKSL_TEST(SkSLUnusedVariables,                 "shared/UnusedVariables.sksl")
+SKSL_TEST(SkSLVectorConstructors,              "shared/VectorConstructors.sksl")
 
 /*
 // Incompatible with Runtime Effects because calling a function before its definition is disallowed.
@@ -195,5 +205,6 @@ SKSL_TEST(SkSLMatricesNonsquare,               "shared/MatricesNonsquare.sksl")
 SKSL_TEST(SkSLOperatorsES3,                    "shared/OperatorsES3.sksl")
 SKSL_TEST(SkSLResizeMatrixNonsquare,           "shared/ResizeMatrixNonsquare.sksl")
 SKSL_TEST(SkSLScalarConversionConstructorsES3, "shared/ScalarConversionConstructorsES3.sksl")
+SKSL_TEST(SkSLSwizzleByIndex,                  "shared/SwizzleByIndex.sksl")
 SKSL_TEST(SkSLWhileLoopControlFlow,            "shared/WhileLoopControlFlow.sksl")
 */

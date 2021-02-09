@@ -7,10 +7,12 @@
 
 #include "src/gpu/vk/GrVkBuffer2.h"
 
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/vk/GrVkDescriptorSet.h"
 #include "src/gpu/vk/GrVkGpu.h"
 #include "src/gpu/vk/GrVkMemory.h"
-#include "src/gpu/vk/GrVkTransferBuffer.h"
 #include "src/gpu/vk/GrVkUtil.h"
 
 #define VK_CALL(GPU, X) GR_VK_CALL(GPU->vkInterface(), X)
@@ -30,10 +32,6 @@ GrVkBuffer2::GrVkBuffer2(GrVkGpu* gpu,
     SkASSERT(accessPattern != kDynamic_GrAccessPattern || this->isVkMappable());
     SkASSERT(bufferType != GrGpuBufferType::kUniform || uniformDescriptorSet);
     this->registerWithCache(SkBudgeted::kYes);
-}
-
-sk_sp<GrVkBuffer2> GrVkBuffer2::MakeUniform(GrVkGpu* gpu, size_t size) {
-    return Make(gpu, size, GrGpuBufferType::kUniform, kDynamic_GrAccessPattern);
 }
 
 static const GrVkDescriptorSet* make_uniform_desc_set(GrVkGpu* gpu, VkBuffer buffer, size_t size) {
@@ -73,6 +71,9 @@ sk_sp<GrVkBuffer2> GrVkBuffer2::Make(GrVkGpu* gpu,
     VkBuffer buffer;
     GrVkAlloc alloc;
 
+    // The only time we don't require mappable buffers is when we have a static access pattern and
+    // we're on a device where gpu only memory has faster reads on the gpu than memory that is also
+    // mappable on the cpu. Protected memory always uses mappable buffers.
     bool requiresMappable = gpu->protectedContext() ||
                             accessPattern == kDynamic_GrAccessPattern ||
                             accessPattern == kStream_GrAccessPattern ||
@@ -162,6 +163,9 @@ void GrVkBuffer2::vkMap(size_t size) {
         SkASSERT(fAlloc.fSize > 0);
         SkASSERT(fAlloc.fSize >= size);
         fMapPtr = GrVkMemory::MapAlloc(this->getVkGpu(), fAlloc);
+        if (fMapPtr && this->intendedType() == GrGpuBufferType::kXferGpuToCpu) {
+            GrVkMemory::InvalidateMappedAlloc(this->getVkGpu(), fAlloc, 0, size);
+        }
     }
 }
 
@@ -202,19 +206,15 @@ void GrVkBuffer2::copyCpuDataToGpuBuffer(const void* src, size_t size) {
     if ((size <= 65536) && (0 == (size & 0x3)) && !gpu->vkCaps().avoidUpdateBuffers()) {
         gpu->updateBuffer(sk_ref_sp(this), src, /*offset=*/0, size);
     } else {
-        sk_sp<GrVkTransferBuffer> transferBuffer =
-                GrVkTransferBuffer::Make(gpu, size, GrVkBuffer::kCopyRead_Type,
-                                         kStream_GrAccessPattern);
+        GrResourceProvider* resourceProvider = gpu->getContext()->priv().resourceProvider();
+        sk_sp<GrGpuBuffer> transferBuffer = resourceProvider->createBuffer(
+                size, GrGpuBufferType::kXferCpuToGpu, kDynamic_GrAccessPattern, src);
         if (!transferBuffer) {
             return;
         }
 
-        char* buffer = (char*)transferBuffer->map();
-        memcpy(buffer, src, size);
-        transferBuffer->unmap();
-
-        gpu->copyBuffer(transferBuffer.get(), sk_ref_sp(this), /*srcOffset=*/0, /*dstOffset=*/0,
-                        size);
+        gpu->copyBuffer(std::move(transferBuffer), sk_ref_sp(this), /*srcOffset=*/0,
+                        /*dstOffset=*/0, size);
     }
 
     this->addMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT,
