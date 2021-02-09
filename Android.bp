@@ -867,7 +867,6 @@ cc_library_static {
           "src/gpu/vk/GrVkInterface.cpp",
           "src/gpu/vk/GrVkMSAALoadManager.cpp",
           "src/gpu/vk/GrVkMemory.cpp",
-          "src/gpu/vk/GrVkMeshBuffer.cpp",
           "src/gpu/vk/GrVkOpsRenderPass.cpp",
           "src/gpu/vk/GrVkPipeline.cpp",
           "src/gpu/vk/GrVkPipelineState.cpp",
