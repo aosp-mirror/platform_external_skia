@@ -69,6 +69,8 @@
 
 namespace SkSL {
 
+using RefKind = VariableReference::RefKind;
+
 class AutoSource {
 public:
     AutoSource(Compiler* compiler, const String* source)
@@ -236,18 +238,6 @@ const ParsedModule& Compiler::loadRuntimeEffectModule() {
         fRuntimeEffectModule.fSymbols->addAlias("mat2", fContext->fTypes.fFloat2x2.get());
         fRuntimeEffectModule.fSymbols->addAlias("mat3", fContext->fTypes.fFloat3x3.get());
         fRuntimeEffectModule.fSymbols->addAlias("mat4", fContext->fTypes.fFloat4x4.get());
-
-        fRuntimeEffectModule.fSymbols->addAlias("mat2x2", fContext->fTypes.fFloat2x2.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat2x3", fContext->fTypes.fFloat2x3.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat2x4", fContext->fTypes.fFloat2x4.get());
-
-        fRuntimeEffectModule.fSymbols->addAlias("mat3x2", fContext->fTypes.fFloat3x2.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat3x3", fContext->fTypes.fFloat3x3.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat3x4", fContext->fTypes.fFloat3x4.get());
-
-        fRuntimeEffectModule.fSymbols->addAlias("mat4x2", fContext->fTypes.fFloat4x2.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat4x3", fContext->fTypes.fFloat4x3.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat4x4", fContext->fTypes.fFloat4x4.get());
     }
     return fRuntimeEffectModule;
 }
@@ -370,141 +360,13 @@ ParsedModule Compiler::parseModule(Program::Kind kind, ModuleData data, const Pa
     return {module.fSymbols, std::move(intrinsics)};
 }
 
-// add the definition created by assigning to the lvalue to the definition set
-void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expression>* expr,
-                             DefinitionMap* definitions) {
-    switch (lvalue->kind()) {
-        case Expression::Kind::kVariableReference: {
-            const Variable& var = *lvalue->as<VariableReference>().variable();
-            if (var.storage() == Variable::Storage::kLocal) {
-                definitions->set(&var, expr);
-            }
-            break;
-        }
-        case Expression::Kind::kSwizzle:
-            // We consider the variable written to as long as at least some of its components have
-            // been written to. This will lead to some false negatives (we won't catch it if you
-            // write to foo.x and then read foo.y), but being stricter could lead to false positives
-            // (we write to foo.x, and then pass foo to a function which happens to only read foo.x,
-            // but since we pass foo as a whole it is flagged as an error) unless we perform a much
-            // more complicated whole-program analysis. This is probably good enough.
-            this->addDefinition(lvalue->as<Swizzle>().base().get(),
-                                (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                definitions);
-            break;
-        case Expression::Kind::kIndex:
-            // see comments in Swizzle
-            this->addDefinition(lvalue->as<IndexExpression>().base().get(),
-                                (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                definitions);
-            break;
-        case Expression::Kind::kFieldAccess:
-            // see comments in Swizzle
-            this->addDefinition(lvalue->as<FieldAccess>().base().get(),
-                                (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                definitions);
-            break;
-        case Expression::Kind::kTernary:
-            // To simplify analysis, we just pretend that we write to both sides of the ternary.
-            // This allows for false positives (meaning we fail to detect that a variable might not
-            // have been assigned), but is preferable to false negatives.
-            this->addDefinition(lvalue->as<TernaryExpression>().ifTrue().get(),
-                                (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                definitions);
-            this->addDefinition(lvalue->as<TernaryExpression>().ifFalse().get(),
-                                (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                definitions);
-            break;
-        default:
-            // not an lvalue, can't happen
-            SkASSERT(false);
-    }
-}
-
-// add local variables defined by this node to the set
-void Compiler::addDefinitions(const BasicBlock::Node& node, DefinitionMap* definitions) {
-    if (node.isExpression()) {
-        Expression* expr = node.expression()->get();
-        switch (expr->kind()) {
-            case Expression::Kind::kBinary: {
-                BinaryExpression* b = &expr->as<BinaryExpression>();
-                if (b->getOperator() == Token::Kind::TK_EQ) {
-                    this->addDefinition(b->left().get(), &b->right(), definitions);
-                } else if (Operators::IsAssignment(b->getOperator())) {
-                    this->addDefinition(
-                                  b->left().get(),
-                                  (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                  definitions);
-
-                }
-                break;
-            }
-            case Expression::Kind::kFunctionCall: {
-                const FunctionCall& c = expr->as<FunctionCall>();
-                const std::vector<const Variable*>& parameters = c.function().parameters();
-                for (size_t i = 0; i < parameters.size(); ++i) {
-                    if (parameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
-                        this->addDefinition(
-                                  c.arguments()[i].get(),
-                                  (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                  definitions);
-                    }
-                }
-                break;
-            }
-            case Expression::Kind::kPrefix: {
-                const PrefixExpression* p = &expr->as<PrefixExpression>();
-                if (p->getOperator() == Token::Kind::TK_MINUSMINUS ||
-                    p->getOperator() == Token::Kind::TK_PLUSPLUS) {
-                    this->addDefinition(
-                                  p->operand().get(),
-                                  (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                  definitions);
-                }
-                break;
-            }
-            case Expression::Kind::kPostfix: {
-                const PostfixExpression* p = &expr->as<PostfixExpression>();
-                if (p->getOperator() == Token::Kind::TK_MINUSMINUS ||
-                    p->getOperator() == Token::Kind::TK_PLUSPLUS) {
-                    this->addDefinition(
-                                  p->operand().get(),
-                                  (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                  definitions);
-                }
-                break;
-            }
-            case Expression::Kind::kVariableReference: {
-                const VariableReference* v = &expr->as<VariableReference>();
-                if (v->refKind() != VariableReference::RefKind::kRead) {
-                    this->addDefinition(
-                                  v,
-                                  (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
-                                  definitions);
-                }
-                break;
-            }
-            default:
-                break;
-        }
-    } else if (node.isStatement()) {
-        Statement* stmt = node.statement()->get();
-        if (stmt->is<VarDeclaration>()) {
-            VarDeclaration& vd = stmt->as<VarDeclaration>();
-            if (vd.value()) {
-                definitions->set(&vd.var(), &vd.value());
-            }
-        }
-    }
-}
-
 void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
     BasicBlock& block = cfg->fBlocks[blockId];
 
     // compute definitions after this block
     DefinitionMap after = block.fBefore;
     for (const BasicBlock::Node& n : block.fNodes) {
-        this->addDefinitions(n, &after);
+        after.addDefinitions(*fContext, n);
     }
 
     // propagate definitions to exits
@@ -518,7 +380,7 @@ void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
             if (!exitDef) {
                 // exit has no definition for it, just copy it and reprocess exit block
                 processedSet->reset(exitId);
-                exit.fBefore[var] = e1;
+                exit.fBefore.set(var, e1);
             } else {
                 // exit has a (possibly different) value already defined
                 std::unique_ptr<Expression>* e2 = *exitDef;
@@ -534,23 +396,6 @@ void Compiler::scanCFG(CFG* cfg, BlockId blockId, SkBitSet* processedSet) {
             }
         }
     }
-}
-
-// returns a map which maps all local variables in the function to null, indicating that their value
-// is initially unknown
-static DefinitionMap compute_start_state(const CFG& cfg) {
-    DefinitionMap result;
-    for (const auto& block : cfg.fBlocks) {
-        for (const auto& node : block.fNodes) {
-            if (node.isStatement()) {
-                const Statement* s = node.statement()->get();
-                if (s->is<VarDeclaration>()) {
-                    result[&s->as<VarDeclaration>().var()] = nullptr;
-                }
-            }
-        }
-    }
-    return result;
 }
 
 /**
@@ -593,7 +438,7 @@ static bool dead_assignment(const BinaryExpression& b, ProgramUsage* usage) {
 }
 
 void Compiler::computeDataFlow(CFG* cfg) {
-    cfg->fBlocks[cfg->fStart].fBefore = compute_start_state(*cfg);
+    cfg->fBlocks[cfg->fStart].fBefore.computeStartState(*cfg);
 
     // We set bits in the "processed" set after a block has been scanned.
     SkBitSet processedSet(cfg->fBlocks.size());
@@ -807,28 +652,6 @@ static void vectorize_right(BasicBlock* b,
     vectorize(b, iter, bin.left()->type(), &bin.right(), optimizationContext);
 }
 
-// Mark that an expression which we were writing to is no longer being written to
-static void clear_write(Expression& expr) {
-    switch (expr.kind()) {
-        case Expression::Kind::kVariableReference: {
-            expr.as<VariableReference>().setRefKind(VariableReference::RefKind::kRead);
-            break;
-        }
-        case Expression::Kind::kFieldAccess:
-            clear_write(*expr.as<FieldAccess>().base());
-            break;
-        case Expression::Kind::kSwizzle:
-            clear_write(*expr.as<Swizzle>().base());
-            break;
-        case Expression::Kind::kIndex:
-            clear_write(*expr.as<IndexExpression>().base());
-            break;
-        default:
-            SK_ABORT("shouldn't be writing to this kind of expression\n");
-            break;
-    }
-}
-
 void Compiler::simplifyExpression(DefinitionMap& definitions,
                                   BasicBlock& b,
                                   std::vector<BasicBlock::Node>::iterator* iter,
@@ -859,7 +682,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
             const Variable* var = ref.variable();
             if (ref.refKind() != VariableReference::RefKind::kWrite &&
                 ref.refKind() != VariableReference::RefKind::kPointer &&
-                var->storage() == Variable::Storage::kLocal && !definitions[var] &&
+                var->storage() == Variable::Storage::kLocal && !definitions.get(var) &&
                 optimizationContext->fSilences.find(var) == optimizationContext->fSilences.end()) {
                 optimizationContext->fSilences.insert(var);
                 this->error(expr->fOffset,
@@ -1013,25 +836,25 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     break;
                 case Token::Kind::TK_PLUSEQ:
                     if (is_constant(right, 0)) {
-                        clear_write(left);
+                        Analysis::UpdateRefKind(&left, RefKind::kRead);
                         delete_right(&b, iter, optimizationContext);
                     }
                     break;
                 case Token::Kind::TK_MINUSEQ:
                     if (is_constant(right, 0)) {
-                        clear_write(left);
+                        Analysis::UpdateRefKind(&left, RefKind::kRead);
                         delete_right(&b, iter, optimizationContext);
                     }
                     break;
                 case Token::Kind::TK_STAREQ:
                     if (is_constant(right, 1)) {
-                        clear_write(left);
+                        Analysis::UpdateRefKind(&left, RefKind::kRead);
                         delete_right(&b, iter, optimizationContext);
                     }
                     break;
                 case Token::Kind::TK_SLASHEQ:
                     if (is_constant(right, 1)) {
-                        clear_write(left);
+                        Analysis::UpdateRefKind(&left, RefKind::kRead);
                         delete_right(&b, iter, optimizationContext);
                     }
                     break;
@@ -1673,7 +1496,7 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
                 if (optimizationContext.fNeedsRescan) {
                     break;
                 }
-                this->addDefinitions(*iter, &definitions);
+                definitions.addDefinitions(*fContext, *iter);
             }
 
             if (optimizationContext.fNeedsRescan) {
