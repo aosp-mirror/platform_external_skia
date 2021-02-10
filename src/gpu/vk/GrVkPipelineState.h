@@ -16,7 +16,7 @@
 
 class GrPipeline;
 class GrStencilSettings;
-class GrVkBuffer2;
+class GrVkBuffer;
 class GrVkCommandBuffer;
 class GrVkDescriptorPool;
 class GrVkDescriptorSet;
@@ -45,6 +45,7 @@ public:
             const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
             const UniformInfoArray& uniforms,
             uint32_t uniformSize,
+            bool usePushConstants,
             const UniformInfoArray& samplers,
             std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
             std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
