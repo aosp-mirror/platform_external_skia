@@ -15,10 +15,8 @@
 #include "src/gpu/vk/GrVkSemaphore.h"
 #include "src/gpu/vk/GrVkUtil.h"
 
-class GrVkBuffer;
 class GrVkFramebuffer;
 class GrVkImage;
-class GrVkMeshBuffer;
 class GrVkPipeline;
 class GrVkPipelineState;
 class GrVkRenderPass;
@@ -97,13 +95,13 @@ public:
               uint32_t firstInstance);
 
     void drawIndirect(const GrVkGpu* gpu,
-                      const GrVkMeshBuffer* indirectBuffer,
+                      sk_sp<const GrBuffer> indirectBuffer,
                       VkDeviceSize offset,
                       uint32_t drawCount,
                       uint32_t stride);
 
     void drawIndexedIndirect(const GrVkGpu* gpu,
-                             const GrVkMeshBuffer* indirectBuffer,
+                             sk_sp<const GrBuffer> indirectBuffer,
                              VkDeviceSize offset,
                              uint32_t drawCount,
                              uint32_t stride);
@@ -290,24 +288,12 @@ public:
 
     void copyBuffer(GrVkGpu* gpu,
                     sk_sp<GrGpuBuffer> srcBuffer,
-                    GrVkBuffer* dstBuffer,
-                    uint32_t regionCount,
-                    const VkBufferCopy* regions);
-
-    void copyBuffer(GrVkGpu* gpu,
-                    sk_sp<GrGpuBuffer> srcBuffer,
                     sk_sp<GrGpuBuffer> dstBuffer,
                     uint32_t regionCount,
                     const VkBufferCopy* regions);
 
     void updateBuffer(GrVkGpu* gpu,
-                      GrVkBuffer* dstBuffer,
-                      VkDeviceSize dstOffset,
-                      VkDeviceSize dataSize,
-                      const void* data);
-
-    void updateBuffer(GrVkGpu* gpu,
-                      sk_sp<GrVkBuffer2> dstBuffer,
+                      sk_sp<GrVkBuffer> dstBuffer,
                       VkDeviceSize dstOffset,
                       VkDeviceSize dataSize,
                       const void* data);
