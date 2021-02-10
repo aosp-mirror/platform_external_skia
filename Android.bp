@@ -308,7 +308,7 @@ cc_library_static {
         "src/effects/SkTableColorFilter.cpp",
         "src/effects/SkTableMaskFilter.cpp",
         "src/effects/SkTrimPathEffect.cpp",
-        "src/effects/imagefilters/SkAlphaThresholdImageFilter.cpp",
+        "src/effects/imagefilters/SkAlphaThresholdFilter.cpp",
         "src/effects/imagefilters/SkArithmeticImageFilter.cpp",
         "src/effects/imagefilters/SkBlurImageFilter.cpp",
         "src/effects/imagefilters/SkColorFilterImageFilter.cpp",
