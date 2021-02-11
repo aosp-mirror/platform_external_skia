@@ -65,6 +65,11 @@ static void test_one_permutation(skiatest::Reporter* r,
                                                                   4, 5, 6,
                                                                   7, 8, 9});
     set_uniform(&builder, "unknownInput",     1.0f);
+    set_uniform(&builder, "testMatrix2x2",    std::array<float,4>{1, 2,
+                                                                  3, 4});
+    set_uniform(&builder, "testMatrix3x3",    std::array<float,9>{1, 2, 3,
+                                                                  4, 5, 6,
+                                                                  7, 8, 9});
 
     sk_sp<SkShader> shader = builder.makeShader(/*localMatrix=*/nullptr, /*isOpaque=*/true);
     if (!shader) {
@@ -125,6 +130,7 @@ SKSL_TEST(SkSLBoolFolding,                     "folding/BoolFolding.sksl")
 SKSL_TEST(SkSLIntFoldingES2,                   "folding/IntFoldingES2.sksl")
 SKSL_TEST(SkSLFloatFolding,                    "folding/FloatFolding.sksl")
 SKSL_TEST(SkSLMatrixFoldingES2,                "folding/MatrixFoldingES2.sksl")
+SKSL_TEST_CPU(SkSLSelfAssignment,              "folding/SelfAssignment.sksl")
 SKSL_TEST(SkSLShortCircuitBoolFolding,         "folding/ShortCircuitBoolFolding.sksl")
 SKSL_TEST(SkSLVectorScalarFolding,             "folding/VectorScalarFolding.sksl")
 SKSL_TEST(SkSLVectorVectorFolding,             "folding/VectorVectorFolding.sksl")
@@ -156,6 +162,7 @@ SKSL_TEST(SkSLGeometricIntrinsics,             "shared/GeometricIntrinsics.sksl"
 SKSL_TEST(SkSLHelloWorld,                      "shared/HelloWorld.sksl")
 SKSL_TEST(SkSLHex,                             "shared/Hex.sksl")
 SKSL_TEST(SkSLMatrices,                        "shared/Matrices.sksl")
+SKSL_TEST(SkSLMatrixEquality,                  "shared/MatrixEquality.sksl")
 SKSL_TEST(SkSLMultipleAssignments,             "shared/MultipleAssignments.sksl")
 SKSL_TEST(SkSLNegatedVectorLiteral,            "shared/NegatedVectorLiteral.sksl")
 SKSL_TEST(SkSLNumberCasts,                     "shared/NumberCasts.sksl")
@@ -181,12 +188,13 @@ SKSL_TEST(SkSLVectorConstructors,              "shared/VectorConstructors.sksl")
 /*
 // Incompatible with Runtime Effects because calling a function before its definition is disallowed.
 // (This was done to prevent recursion, as required by ES2.)
-SKSL_TEST(SkSLFunctionPrototype,       "shared/FunctionPrototype.sksl")
+SKSL_TEST(SkSLFunctionPrototype,               "shared/FunctionPrototype.sksl")
 */
 
 /*
 TODO(skia:10939): enable this test when Runtime Effects supports structs in function signatures
-SKSL_TEST(SkSLStructsInFunctions,      "shared/StructsInFunctions.sksl")
+SKSL_TEST(SkSLSelfAssignment,                  "folding/SelfAssignment.sksl")
+SKSL_TEST(SkSLStructsInFunctions,              "shared/StructsInFunctions.sksl")
 */
 
 /*
