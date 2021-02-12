@@ -281,6 +281,7 @@ LoadedModule Compiler::loadModule(Program::Kind kind,
     Program::Settings settings;
     SkASSERT(fIRGenerator->fCanInline);
     fIRGenerator->fCanInline = false;
+    settings.fReplaceSettings = false;
     ParsedModule baseModule = {base, /*fIntrinsics=*/nullptr};
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule,
@@ -945,15 +946,14 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                         currBit <<= 1;
                     }
-                    auto optimized = std::unique_ptr<Expression>(
-                            new Constructor(c.fOffset, &c.type(), std::move(flattened)));
-                    // No fUsage change; no references have been added or removed anywhere.
+                    std::unique_ptr<Expression> replacement(new Constructor(c.fOffset, &c.type(),
+                                                                            std::move(flattened)));
+                    // We're replacing an expression with a cloned version; we'll need a rescan.
+                    // No fUsage change: `float2(float(x), y)` and `float2(x, y)` have equivalent
+                    // reference counts.
+                    try_replace_expression(&b, iter, &replacement);
                     optimizationContext->fUpdated = true;
-                    if (!try_replace_expression(&b, iter, &optimized)) {
-                        optimizationContext->fNeedsRescan = true;
-                        return;
-                    }
-                    SkASSERT((*iter)->isExpression());
+                    optimizationContext->fNeedsRescan = true;
                     break;
                 }
             }
