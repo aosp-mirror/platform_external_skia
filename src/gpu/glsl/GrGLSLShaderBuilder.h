@@ -17,11 +17,13 @@
 
 #include <stdarg.h>
 
-namespace SkSL {
-    class FunctionDeclaration;
-}  // namespace SkSL
-
 class GrGLSLColorSpaceXformHelper;
+
+namespace SkSL {
+namespace dsl {
+class DSLStatement;
+} // namespace dsl
+} // namespace SkSL
 
 /**
   base class for all shaders builders
@@ -90,6 +92,8 @@ public:
        this->definitions().append(";\n");
     }
 
+    void definitionAppend(const char* str) { this->definitions().append(str); }
+
     void declareGlobal(const GrShaderVar&);
 
     // Generates a unique variable name for holding the result of a temporary expression when it's
@@ -112,6 +116,8 @@ public:
     void codeAppend(const char* str) { this->code().append(str); }
 
     void codeAppend(const char* str, size_t length) { this->code().append(str, length); }
+
+    void codeAppend(SkSL::dsl::DSLStatement stmt);
 
     void codePrependf(const char format[], ...) SK_PRINTF_LIKE(2, 3) {
        va_list args;
@@ -144,9 +150,7 @@ public:
                       const char* body,
                       bool forceInline = false);
 
-    void emitFunction(const SkSL::FunctionDeclaration* decl,
-                      const char* mangledName,
-                      const char* body);
+    void emitFunction(const char* declaration, const char* body);
 
     /**
      * Combines the various parts of the shader to create a single finalized shader string.
@@ -183,8 +187,6 @@ protected:
                             const char* mangledName,
                             SkSpan<const GrShaderVar> args,
                             bool forceInline);
-
-    void appendFunctionDecl(const SkSL::FunctionDeclaration* decl, const char* mangledName);
 
     /**
      * Features that should only be enabled internally by the builders.

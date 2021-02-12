@@ -281,6 +281,7 @@ LoadedModule Compiler::loadModule(Program::Kind kind,
     Program::Settings settings;
     SkASSERT(fIRGenerator->fCanInline);
     fIRGenerator->fCanInline = false;
+    settings.fReplaceSettings = false;
     ParsedModule baseModule = {base, /*fIntrinsics=*/nullptr};
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule,
@@ -435,6 +436,50 @@ static bool dead_assignment(const BinaryExpression& b, ProgramUsage* usage) {
         return false;
     }
     return is_dead(*b.left(), usage);
+}
+
+/**
+ * Returns true if both expression trees are the same. The left side is expected to be an lvalue.
+ * This only needs to check for trees that can plausibly terminate in a variable, so some basic
+ * candidates like `FloatLiteral` are missing.
+ */
+static bool is_matching_expression_tree(const Expression& left, const Expression& right) {
+    if (left.kind() != right.kind() || left.type() != right.type()) {
+        return false;
+    }
+
+    switch (left.kind()) {
+        case Expression::Kind::kIntLiteral:
+            return left.as<IntLiteral>().value() == right.as<IntLiteral>().value();
+
+        case Expression::Kind::kFieldAccess:
+            return left.as<FieldAccess>().fieldIndex() == right.as<FieldAccess>().fieldIndex() &&
+                   is_matching_expression_tree(*left.as<FieldAccess>().base(),
+                                               *right.as<FieldAccess>().base());
+
+        case Expression::Kind::kIndex:
+            return is_matching_expression_tree(*left.as<IndexExpression>().index(),
+                                               *right.as<IndexExpression>().index()) &&
+                   is_matching_expression_tree(*left.as<IndexExpression>().base(),
+                                               *right.as<IndexExpression>().base());
+
+        case Expression::Kind::kSwizzle:
+            return left.as<Swizzle>().components() == right.as<Swizzle>().components() &&
+                   is_matching_expression_tree(*left.as<Swizzle>().base(),
+                                               *right.as<Swizzle>().base());
+
+        case Expression::Kind::kVariableReference:
+            return left.as<VariableReference>().variable() ==
+                   right.as<VariableReference>().variable();
+
+        default:
+            return false;
+    }
+}
+
+static bool self_assignment(const BinaryExpression& b) {
+    return b.getOperator() == Token::Kind::TK_EQ &&
+           is_matching_expression_tree(*b.left(), *b.right());
 }
 
 void Compiler::computeDataFlow(CFG* cfg) {
@@ -707,7 +752,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
         }
         case Expression::Kind::kBinary: {
             BinaryExpression* bin = &expr->as<BinaryExpression>();
-            if (dead_assignment(*bin, optimizationContext->fUsage)) {
+            if (dead_assignment(*bin, optimizationContext->fUsage) || self_assignment(*bin)) {
                 delete_left(&b, iter, optimizationContext);
                 break;
             }
@@ -901,15 +946,14 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                         currBit <<= 1;
                     }
-                    auto optimized = std::unique_ptr<Expression>(
-                            new Constructor(c.fOffset, &c.type(), std::move(flattened)));
-                    // No fUsage change; no references have been added or removed anywhere.
+                    std::unique_ptr<Expression> replacement(new Constructor(c.fOffset, &c.type(),
+                                                                            std::move(flattened)));
+                    // We're replacing an expression with a cloned version; we'll need a rescan.
+                    // No fUsage change: `float2(float(x), y)` and `float2(x, y)` have equivalent
+                    // reference counts.
+                    try_replace_expression(&b, iter, &replacement);
                     optimizationContext->fUpdated = true;
-                    if (!try_replace_expression(&b, iter, &optimized)) {
-                        optimizationContext->fNeedsRescan = true;
-                        return;
-                    }
-                    SkASSERT((*iter)->isExpression());
+                    optimizationContext->fNeedsRescan = true;
                     break;
                 }
             }

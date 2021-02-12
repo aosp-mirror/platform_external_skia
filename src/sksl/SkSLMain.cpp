@@ -414,10 +414,14 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
                             return decl->var().name();
                         }
 
-                        String defineFunction(const SkSL::FunctionDeclaration* decl,
-                                              String body) override {
-                            fOutput += (decl->description() + "{" + body + "}");
-                            return decl->name();
+                        void defineFunction(const char* decl,
+                                            const char* body,
+                                            bool /*isMain*/) override {
+                            fOutput += String(decl) + "{" + body + "}";
+                        }
+
+                        void defineStruct(const char* definition) override {
+                            fOutput += definition;
                         }
 
                         String sampleChild(int index, String coords) override {

@@ -25,6 +25,7 @@
 #include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLStatement.h"
+#include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
@@ -56,14 +57,19 @@ private:
     void write(const String& s);
     void write(StringFragment s);
 
+    String typeName(const Type& type);
     void writeType(const Type& type);
 
     void writeFunction(const FunctionDefinition& f);
 
     void writeModifiers(const Modifiers& modifiers);
 
+    // Handles arrays correctly, eg: `float x[2]`
+    String typedVariable(const Type& type, StringFragment name);
+
     void writeVarDeclaration(const VarDeclaration& var);
     void writeGlobalVarDeclaration(const GlobalVarDeclaration& g);
+    void writeStructDefinition(const StructDefinition& s);
 
     void writeExpression(const Expression& expr, Precedence parentPrecedence);
     void writeFunctionCall(const FunctionCall& c);
@@ -106,6 +112,7 @@ private:
 
     std::unordered_map<const Variable*, String>            fUniformNames;
     std::unordered_map<const FunctionDeclaration*, String> fFunctionNames;
+    std::unordered_map<const Type*, String>                fStructNames;
 
     StringStream* fBuffer = nullptr;
     bool          fCastReturnsToHalf = false;
@@ -288,8 +295,36 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
         fCastReturnsToHalf = false;
     }
 
-    String fnName = fCallbacks->defineFunction(&f.declaration(), body.fBuffer.str());
+    String fnName =
+            isMain ? "main" : fCallbacks->getMangledName(String(f.declaration().name()).c_str());
+
+    // This is similar to decl->description(), but substitutes a mangled name, and handles
+    // modifiers on parameters (eg inout).
+    const FunctionDeclaration& decl = f.declaration();
+    String declString =
+            String::printf("%s %s(", this->typeName(decl.returnType()).c_str(), fnName.c_str());
+    const char* separator = "";
+    for (auto p : decl.parameters()) {
+        // TODO: Handle arrays
+        const char* typeModifier = "";
+        switch (p->modifiers().fFlags & (SkSL::Modifiers::kIn_Flag | SkSL::Modifiers::kOut_Flag)) {
+            case SkSL::Modifiers::kOut_Flag:
+                typeModifier = "out ";
+                break;
+            case SkSL::Modifiers::kIn_Flag | SkSL::Modifiers::kOut_Flag:
+                typeModifier = "inout ";
+                break;
+            default:
+                break;
+        }
+        declString.appendf("%s%s%s %s", separator, typeModifier, this->typeName(p->type()).c_str(),
+                           String(p->name()).c_str());
+        separator = ", ";
+    }
+    declString.append(")");
+
     fFunctionNames.insert({&f.declaration(), std::move(fnName)});
+    fCallbacks->defineFunction(declString.c_str(), body.fBuffer.str().c_str(), isMain);
 }
 
 void PipelineStageCodeGenerator::writeGlobalVarDeclaration(const GlobalVarDeclaration& g) {
@@ -304,6 +339,18 @@ void PipelineStageCodeGenerator::writeGlobalVarDeclaration(const GlobalVarDeclar
     }
 }
 
+void PipelineStageCodeGenerator::writeStructDefinition(const StructDefinition& s) {
+    const Type& type = s.type();
+    String mangledName = fCallbacks->getMangledName(String(type.name()).c_str());
+    String definition = "struct " + mangledName + " {\n";
+    for (const auto& f : type.fields()) {
+        definition += this->typedVariable(*f.fType, f.fName) + ";\n";
+    }
+    definition += "};\n";
+    fStructNames.insert({&type, std::move(mangledName)});
+    fCallbacks->defineStruct(definition.c_str());
+}
+
 void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& e) {
     switch (e.kind()) {
         case ProgramElement::Kind::kGlobalVar:
@@ -316,10 +363,12 @@ void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& e) {
             // Runtime effects don't allow calls to undefined functions, so prototypes are never
             // necessary. If we do support them, they should emit calls to emitFunctionPrototype.
             break;
-        // Custom types (enums and structs) are ignored (so they don't yet work in runtime effects).
+        case ProgramElement::Kind::kStructDefinition:
+            this->writeStructDefinition(e.as<StructDefinition>());
+            break;
+        // Enums are ignored (so they don't yet work in runtime effects).
         // We need to emit their declarations (via callback), with name mangling support.
         case ProgramElement::Kind::kEnum:              // skbug.com/11296
-        case ProgramElement::Kind::kStructDefinition:  // skbug.com/10939
 
         case ProgramElement::Kind::kExtension:
         case ProgramElement::Kind::kInterfaceBlock:
@@ -331,8 +380,13 @@ void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& e) {
     }
 }
 
+String PipelineStageCodeGenerator::typeName(const Type& type) {
+    auto it = fStructNames.find(&type);
+    return it != fStructNames.end() ? it->second : type.name();
+}
+
 void PipelineStageCodeGenerator::writeType(const Type& type) {
-    this->write(type.name());
+    this->write(this->typeName(type));
 }
 
 void PipelineStageCodeGenerator::writeExpression(const Expression& expr,
@@ -491,16 +545,19 @@ void PipelineStageCodeGenerator::writeModifiers(const Modifiers& modifiers) {
     }
 }
 
+String PipelineStageCodeGenerator::typedVariable(const Type& type, StringFragment name) {
+    const Type& baseType = type.isArray() ? type.componentType() : type;
+
+    String decl = this->typeName(baseType) + " " + name;
+    if (type.isArray()) {
+        decl += "[" + to_string(type.columns()) + "]";
+    }
+    return decl;
+}
+
 void PipelineStageCodeGenerator::writeVarDeclaration(const VarDeclaration& var) {
     this->writeModifiers(var.var().modifiers());
-    this->writeType(var.baseType());
-    this->write(" ");
-    this->write(var.var().name());
-    if (var.arraySize() > 0) {
-        this->write("[");
-        this->write(to_string(var.arraySize()));
-        this->write("]");
-    }
+    this->write(this->typedVariable(var.var().type(), var.var().name()));
     if (var.value()) {
         this->write(" = ");
         this->writeExpression(*var.value(), Precedence::kTopLevel);
