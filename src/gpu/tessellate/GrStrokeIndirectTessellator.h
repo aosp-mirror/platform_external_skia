@@ -31,10 +31,6 @@ public:
     void draw(GrOpFlushState*) const override;
 
 private:
-    void writeInstance(GrVertexWriter*, const SkPoint[4], SkPoint lastControlPoint,
-                       int numTotalEdges);
-    void writeCircleInstance(GrVertexWriter*, SkPoint center, int numEdgesForCircles);
-
     int fResolveLevelCounts[kMaxResolveLevel + 1] = {0};  // # of instances at each resolve level.
     int fTotalInstanceCount = 0;  // Total number of stroke instances we will draw.
 
@@ -51,10 +47,6 @@ private:
     // Stores the in-order chop locations for all chops indicated by fResolveLevels.
     float* fChopTs = nullptr;
     SkDEBUGCODE(int fChopTsArrayCount = 0;)
-
-    // A "circle" is a stroke-width circle drawn as a 180-degree point stroke. We draw them at cusp
-    // points on curves and for round caps.
-    int8_t fResolveLevelForCircles;
 
     // GPU buffers for drawing.
     sk_sp<const GrBuffer> fDrawIndirectBuffer;

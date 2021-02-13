@@ -84,11 +84,10 @@ public:
     const String* fOldSource;
 };
 
-Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
+Compiler::Compiler(const ShaderCapsClass* caps)
         : fContext(std::make_shared<Context>(/*errors=*/*this))
         , fCaps(caps)
         , fInliner(fContext.get())
-        , fFlags(flags)
         , fErrorCount(0) {
     SkASSERT(fCaps);
     fRootSymbolTable = std::make_shared<SymbolTable>(this, /*builtin=*/true);
@@ -281,6 +280,7 @@ LoadedModule Compiler::loadModule(Program::Kind kind,
     Program::Settings settings;
     SkASSERT(fIRGenerator->fCanInline);
     fIRGenerator->fCanInline = false;
+    settings.fReplaceSettings = false;
     ParsedModule baseModule = {base, /*fIntrinsics=*/nullptr};
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule,
@@ -945,15 +945,14 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                         currBit <<= 1;
                     }
-                    auto optimized = std::unique_ptr<Expression>(
-                            new Constructor(c.fOffset, &c.type(), std::move(flattened)));
-                    // No fUsage change; no references have been added or removed anywhere.
+                    std::unique_ptr<Expression> replacement(new Constructor(c.fOffset, &c.type(),
+                                                                            std::move(flattened)));
+                    // We're replacing an expression with a cloned version; we'll need a rescan.
+                    // No fUsage change: `float2(float(x), y)` and `float2(x, y)` have equivalent
+                    // reference counts.
+                    try_replace_expression(&b, iter, &replacement);
                     optimizationContext->fUpdated = true;
-                    if (!try_replace_expression(&b, iter, &optimized)) {
-                        optimizationContext->fNeedsRescan = true;
-                        return;
-                    }
-                    SkASSERT((*iter)->isExpression());
+                    optimizationContext->fNeedsRescan = true;
                     break;
                 }
             }
@@ -1411,12 +1410,13 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
                             found = true;
                             break;
                         } else {
-                            if (s.isStatic() && !(fFlags & kPermitInvalidStaticTests_Flag) &&
-                                optimizationContext->fSilences.find(&s) ==
-                                optimizationContext->fSilences.end()) {
-                                this->error(s.fOffset,
-                                            "static switch contains non-static conditional break");
-                                optimizationContext->fSilences.insert(&s);
+                            if (s.isStatic() &&
+                                !fIRGenerator->fSettings->fPermitInvalidStaticTests) {
+                                auto [iter, didInsert] = optimizationContext->fSilences.insert(&s);
+                                if (didInsert) {
+                                    this->error(s.fOffset, "static switch contains non-static "
+                                                           "conditional break");
+                                }
                             }
                             return; // can't simplify
                         }
@@ -1429,12 +1429,13 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
                         if (newBlock) {
                             (*iter)->setStatement(std::move(newBlock), usage);
                         } else {
-                            if (s.isStatic() && !(fFlags & kPermitInvalidStaticTests_Flag) &&
-                                optimizationContext->fSilences.find(&s) ==
-                                optimizationContext->fSilences.end()) {
-                                this->error(s.fOffset,
-                                            "static switch contains non-static conditional break");
-                                optimizationContext->fSilences.insert(&s);
+                            if (s.isStatic() &&
+                                !fIRGenerator->fSettings->fPermitInvalidStaticTests) {
+                                auto [iter, didInsert] = optimizationContext->fSilences.insert(&s);
+                                if (didInsert) {
+                                    this->error(s.fOffset, "static switch contains non-static "
+                                                           "conditional break");
+                                }
                             }
                             return; // can't simplify
                         }
@@ -1560,16 +1561,16 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
                 switch (s.kind()) {
                     case Statement::Kind::kIf:
                         if (s.as<IfStatement>().isStatic() &&
-                            !(fFlags & kPermitInvalidStaticTests_Flag)) {
+                            !fIRGenerator->fSettings->fPermitInvalidStaticTests) {
                             this->error(s.fOffset, "static if has non-static test");
                         }
                         ++iter;
                         break;
                     case Statement::Kind::kSwitch:
                         if (s.as<SwitchStatement>().isStatic() &&
-                            !(fFlags & kPermitInvalidStaticTests_Flag) &&
+                            !fIRGenerator->fSettings->fPermitInvalidStaticTests &&
                             optimizationContext.fSilences.find(&s) ==
-                            optimizationContext.fSilences.end()) {
+                                    optimizationContext.fSilences.end()) {
                             this->error(s.fOffset, "static switch has non-static test");
                         }
                         ++iter;
