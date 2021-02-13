@@ -749,6 +749,7 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
             std::vector<SpvId> argumentIds;
             for (size_t i = 0; i < arguments.size(); i++) {
                 if (function.parameters()[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
+                    // TODO(skia:11052): swizzled lvalues won't work with getPointer()
                     argumentIds.push_back(this->getLValue(*arguments[i], out)->getPointer());
                 } else {
                     argumentIds.push_back(this->writeExpression(*arguments[i], out));
@@ -773,6 +774,7 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
             std::vector<SpvId> argumentIds;
             for (size_t i = 0; i < arguments.size(); i++) {
                 if (function.parameters()[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
+                    // TODO(skia:11052): swizzled lvalues won't work with getPointer()
                     argumentIds.push_back(this->getLValue(*arguments[i], out)->getPointer());
                 } else {
                     argumentIds.push_back(this->writeExpression(*arguments[i], out));
@@ -1077,6 +1079,14 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
     return result;
 }
 
+namespace {
+struct TempVar {
+    SpvId spvId;
+    const Type* type;
+    std::unique_ptr<SPIRVCodeGenerator::LValue> lvalue;
+};
+}
+
 SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream& out) {
     const FunctionDeclaration& function = c.function();
     if (function.isBuiltin() && !function.definition()) {
@@ -1088,8 +1098,8 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
         fErrors.error(c.fOffset, "function '" + function.description() + "' is not defined");
         return -1;
     }
-    // stores (variable, type, lvalue) pairs to extract and save after the function call is complete
-    std::vector<std::tuple<SpvId, const Type*, std::unique_ptr<LValue>>> lvalues;
+    // Temp variables are used to write back out-parameters after the function call is complete.
+    std::vector<TempVar> tempVars;
     std::vector<SpvId> argumentIds;
     for (size_t i = 0; i < arguments.size(); i++) {
         // id of temporary variable that we will use to hold this argument, or 0 if it is being
@@ -1100,7 +1110,7 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
         if (is_out(*function.parameters()[i])) {
             std::unique_ptr<LValue> lv = this->getLValue(*arguments[i], out);
             SpvId ptr = lv->getPointer();
-            if (ptr) {
+            if (ptr != (SpvId) -1) {
                 argumentIds.push_back(ptr);
                 continue;
             } else {
@@ -1109,16 +1119,15 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
                 // update the lvalue.
                 tmpValueId = lv->load(out);
                 tmpVar = this->nextId();
-                lvalues.push_back(std::make_tuple(tmpVar, &arguments[i]->type(), std::move(lv)));
+                tempVars.push_back(TempVar{tmpVar, &arguments[i]->type(), std::move(lv)});
             }
         } else {
-            // see getFunctionType for an explanation of why we're always using pointer parameters
+            // See getFunctionType for an explanation of why we're always using pointer parameters.
             tmpValueId = this->writeExpression(*arguments[i], out);
             tmpVar = this->nextId();
         }
         this->writeInstruction(SpvOpVariable,
-                               this->getPointerType(arguments[i]->type(),
-                                                    SpvStorageClassFunction),
+                               this->getPointerType(arguments[i]->type(), SpvStorageClassFunction),
                                tmpVar,
                                SpvStorageClassFunction,
                                fVariableBuffer);
@@ -1133,14 +1142,12 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
     for (SpvId id : argumentIds) {
         this->writeWord(id, out);
     }
-    // now that the call is complete, we may need to update some lvalues with the new values of out
-    // arguments
-    for (const auto& tuple : lvalues) {
+    // Now that the call is complete, we copy temp out-variables back to their real lvalues.
+    for (const TempVar& tempVar : tempVars) {
         SpvId load = this->nextId();
-        this->writeInstruction(SpvOpLoad, getType(*std::get<1>(tuple)), load, std::get<0>(tuple),
-                               out);
-        this->writePrecisionModifier(*std::get<1>(tuple), load);
-        std::get<2>(tuple)->store(load, out);
+        this->writeInstruction(SpvOpLoad, getType(*tempVar.type), load, tempVar.spvId, out);
+        this->writePrecisionModifier(*tempVar.type, load);
+        tempVar.lvalue->store(load, out);
     }
     return result;
 }
@@ -1932,28 +1939,6 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
                 return std::make_unique<SwizzleLValue>(*this, base, swizzle.components(),
                                                        swizzle.base()->type(), type, precision);
             }
-        }
-        case Expression::Kind::kTernary: {
-            const TernaryExpression& t = expr.as<TernaryExpression>();
-            SpvId test = this->writeExpression(*t.test(), out);
-            SpvId end = this->nextId();
-            SpvId ifTrueLabel = this->nextId();
-            SpvId ifFalseLabel = this->nextId();
-            this->writeInstruction(SpvOpSelectionMerge, end, SpvSelectionControlMaskNone, out);
-            this->writeInstruction(SpvOpBranchConditional, test, ifTrueLabel, ifFalseLabel, out);
-            this->writeLabel(ifTrueLabel, out);
-            SpvId ifTrue = this->getLValue(*t.ifTrue(), out)->getPointer();
-            SkASSERT(ifTrue);
-            this->writeInstruction(SpvOpBranch, end, out);
-            ifTrueLabel = fCurrentBlock;
-            SpvId ifFalse = this->getLValue(*t.ifFalse(), out)->getPointer();
-            SkASSERT(ifFalse);
-            ifFalseLabel = fCurrentBlock;
-            this->writeInstruction(SpvOpBranch, end, out);
-            SpvId result = this->nextId();
-            this->writeInstruction(SpvOpPhi, this->getType(*fContext.fTypes.fBool), result, ifTrue,
-                                   ifTrueLabel, ifFalse, ifFalseLabel, out);
-            return std::make_unique<PointerLValue>(*this, result, this->getType(type), precision);
         }
         default: {
             // expr isn't actually an lvalue, create a dummy variable for it. This case happens due
