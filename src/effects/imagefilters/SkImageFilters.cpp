@@ -9,8 +9,6 @@
 
 #include "include/core/SkPaint.h"
 
-#include "src/effects/imagefilters/SkAlphaThresholdFilter.h"
-#include "src/effects/imagefilters/SkArithmeticImageFilter.h"
 #include "src/effects/imagefilters/SkBlurImageFilter.h"
 #include "src/effects/imagefilters/SkColorFilterImageFilter.h"
 #include "src/effects/imagefilters/SkComposeImageFilter.h"
@@ -26,19 +24,12 @@
 #include "src/effects/imagefilters/SkPaintImageFilter.h"
 #include "src/effects/imagefilters/SkPictureImageFilter.h"
 #include "src/effects/imagefilters/SkTileImageFilter.h"
-#include "src/effects/imagefilters/SkXfermodeImageFilter.h"
 
 // TODO (michaelludwig) - Once SkCanvas can draw the results of a filter with any transform, this
 // filter can be moved out of core
 #include "src/core/SkMatrixImageFilter.h"
 
-// Allow kNoCropRect to be referenced (for certain builds, e.g. macOS libFuzzer chromium target,
-// see crbug.com/1139725)
-constexpr SkRect SkImageFilters::CropRect::kNoCropRect;
-
 void SkImageFilters::RegisterFlattenables() {
-    SkAlphaThresholdFilter::RegisterFlattenables();
-    SkArithmeticImageFilter::RegisterFlattenables();
     SkBlurImageFilter::RegisterFlattenables();
     SkColorFilterImageFilter::RegisterFlattenables();
     SkComposeImageFilter::RegisterFlattenables();
@@ -54,31 +45,9 @@ void SkImageFilters::RegisterFlattenables() {
     SkPaintImageFilter::RegisterFlattenables();
     SkPictureImageFilter::RegisterFlattenables();
     SkTileImageFilter::RegisterFlattenables();
-    SkXfermodeImageFilter::RegisterFlattenables();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-sk_sp<SkImageFilter> SkImageFilters::AlphaThreshold(
-        const SkRegion& region, SkScalar innerMin, SkScalar outerMax, sk_sp<SkImageFilter> input,
-        const CropRect& cropRect) {
-    return SkAlphaThresholdFilter::Make(region, innerMin, outerMax, std::move(input), cropRect);
-}
-
-sk_sp<SkImageFilter> SkImageFilters::Arithmetic(
-        SkScalar k1, SkScalar k2, SkScalar k3, SkScalar k4, bool enforcePMColor,
-        sk_sp<SkImageFilter> background, sk_sp<SkImageFilter> foreground,
-        const CropRect& cropRect) {
-    return SkArithmeticImageFilter::Make(k1, k2, k3, k4, enforcePMColor, std::move(background),
-                                         std::move(foreground), cropRect);
-}
-
-sk_sp<SkImageFilter> SkImageFilters::Blend(
-        SkBlendMode mode, sk_sp<SkImageFilter> background, sk_sp<SkImageFilter> foreground,
-        const CropRect& cropRect) {
-    return SkXfermodeImageFilter::Make(mode, std::move(background), std::move(foreground),
-                                       cropRect);
-}
 
 sk_sp<SkImageFilter> SkImageFilters::Blur(
         SkScalar sigmaX, SkScalar sigmaY, SkTileMode tileMode, sk_sp<SkImageFilter> input,

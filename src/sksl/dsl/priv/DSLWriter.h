@@ -106,6 +106,10 @@ public:
         return Instance().fStack.top().fEmitArgs;
     }
 
+    static bool InFragmentProcessor() {
+        return !Instance().fStack.empty();
+    }
+
     /**
      * Pushes a new processor / emitArgs pair for the current thread.
      */
@@ -116,6 +120,8 @@ public:
      * Pops the processor / emitArgs pair associated with the current thread.
      */
     static void EndFragmentProcessor();
+
+    static GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var);
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
     /**
@@ -128,7 +134,9 @@ public:
     static DSLExpression Construct(const SkSL::Type& type, std::vector<DSLExpression> rawArgs);
 
     static DSLExpression ConvertBinary(std::unique_ptr<Expression> left, Token::Kind op,
-                                std::unique_ptr<Expression> right);
+                                       std::unique_ptr<Expression> right);
+
+    static DSLExpression ConvertField(std::unique_ptr<Expression> base, const char* name);
 
     static DSLExpression ConvertIndex(std::unique_ptr<Expression> base,
                                       std::unique_ptr<Expression> index);
