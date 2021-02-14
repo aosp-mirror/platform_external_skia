@@ -152,6 +152,11 @@ private:
      */
     bool isType(StringFragment name);
 
+    /**
+     * Returns true if the passed-in ASTNode is an array type, or false if it is a non-arrayed type.
+     */
+    bool isArrayType(ASTNode::ID type);
+
     // The pointer to the node may be invalidated by modifying the fNodes vector
     ASTNode& getNode(ASTNode::ID id) {
         SkASSERT(id.fValue >= 0 && id.fValue < (int) fFile->fNodes.size());
@@ -171,6 +176,14 @@ private:
     ASTNode::ID enumDeclaration();
 
     ASTNode::ID declaration();
+
+    struct VarDeclarationsPrefix {
+        Modifiers modifiers;
+        ASTNode::ID type;
+        Token name;
+    };
+
+    bool varDeclarationsPrefix(VarDeclarationsPrefix* prefixData);
 
     ASTNode::ID varDeclarationsOrExpressionStatement();
 
