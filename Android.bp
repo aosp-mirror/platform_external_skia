@@ -729,8 +729,6 @@ cc_library_static {
           "src/gpu/effects/generated/GrDitherEffect.cpp",
           "src/gpu/effects/generated/GrEllipseEffect.cpp",
           "src/gpu/effects/generated/GrHSLToRGBFilterEffect.cpp",
-          "src/gpu/effects/generated/GrHighContrastFilterEffect.cpp",
-          "src/gpu/effects/generated/GrLumaColorFilterEffect.cpp",
           "src/gpu/effects/generated/GrMagnifierEffect.cpp",
           "src/gpu/effects/generated/GrMixerEffect.cpp",
           "src/gpu/effects/generated/GrOverrideInputFragmentProcessor.cpp",
