@@ -509,7 +509,7 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                     arguments.size() == 2 &&
                     arguments[1]->kind() == Expression::Kind::kPrefix) {
                     const PrefixExpression& p = (PrefixExpression&) *arguments[1];
-                    if (p.getOperator() == Token::Kind::TK_MINUS) {
+                    if (p.getOperator().kind() == Token::Kind::TK_MINUS) {
                         this->write("atan(");
                         this->writeExpression(*arguments[0], Precedence::kSequence);
                         this->write(", -1.0 * ");
@@ -862,21 +862,21 @@ void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                                               Precedence parentPrecedence) {
     const Expression& left = *b.left();
     const Expression& right = *b.right();
-    Token::Kind op = b.getOperator();
+    Operator op = b.getOperator();
     if (fProgram.fCaps->unfoldShortCircuitAsTernary() &&
-            (op == Token::Kind::TK_LOGICALAND || op == Token::Kind::TK_LOGICALOR)) {
+            (op.kind() == Token::Kind::TK_LOGICALAND || op.kind() == Token::Kind::TK_LOGICALOR)) {
         this->writeShortCircuitWorkaroundExpression(b, parentPrecedence);
         return;
     }
 
-    Precedence precedence = Operators::GetBinaryPrecedence(op);
+    Precedence precedence = op.getBinaryPrecedence();
     if (precedence >= parentPrecedence) {
         this->write("(");
     }
-    bool positionWorkaround = fProgramKind == Program::Kind::kVertex_Kind &&
-                              Operators::IsAssignment(op) &&
-                              left.kind() == Expression::Kind::kFieldAccess &&
-                              is_sk_position((FieldAccess&) left) &&
+    bool positionWorkaround = fProgramKind == ProgramKind::kVertex &&
+                              op.isAssignment() &&
+                              left.is<FieldAccess>() &&
+                              is_sk_position(left.as<FieldAccess>()) &&
                               !right.containsRTAdjust() &&
                               !fProgram.fCaps->canUseFragCoord();
     if (positionWorkaround) {
@@ -884,7 +884,7 @@ void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
     }
     this->writeExpression(left, precedence);
     this->write(" ");
-    this->write(Operators::OperatorName(op));
+    this->write(op.operatorName());
     this->write(" ");
     this->writeExpression(right, precedence);
     if (positionWorkaround) {
@@ -906,14 +906,14 @@ void GLSLCodeGenerator::writeShortCircuitWorkaroundExpression(const BinaryExpres
     // a || b  =>   a ? true : b
     this->writeExpression(*b.left(), Precedence::kTernary);
     this->write(" ? ");
-    if (b.getOperator() == Token::Kind::TK_LOGICALAND) {
+    if (b.getOperator().kind() == Token::Kind::TK_LOGICALAND) {
         this->writeExpression(*b.right(), Precedence::kTernary);
     } else {
         BoolLiteral boolTrue(fContext, -1, true);
         this->writeBoolLiteral(boolTrue);
     }
     this->write(" : ");
-    if (b.getOperator() == Token::Kind::TK_LOGICALAND) {
+    if (b.getOperator().kind() == Token::Kind::TK_LOGICALAND) {
         BoolLiteral boolFalse(fContext, -1, false);
         this->writeBoolLiteral(boolFalse);
     } else {
@@ -944,7 +944,7 @@ void GLSLCodeGenerator::writePrefixExpression(const PrefixExpression& p,
     if (Precedence::kPrefix >= parentPrecedence) {
         this->write("(");
     }
-    this->write(Operators::OperatorName(p.getOperator()));
+    this->write(p.getOperator().operatorName());
     this->writeExpression(*p.operand(), Precedence::kPrefix);
     if (Precedence::kPrefix >= parentPrecedence) {
         this->write(")");
@@ -957,7 +957,7 @@ void GLSLCodeGenerator::writePostfixExpression(const PostfixExpression& p,
         this->write("(");
     }
     this->writeExpression(*p.operand(), Precedence::kPostfix);
-    this->write(Operators::OperatorName(p.getOperator()));
+    this->write(p.getOperator().operatorName());
     if (Precedence::kPostfix >= parentPrecedence) {
         this->write(")");
     }
@@ -1082,8 +1082,8 @@ void GLSLCodeGenerator::writeModifiers(const Modifiers& modifiers,
     } else if (modifiers.fFlags & Modifiers::kIn_Flag) {
         if (globalContext &&
             fProgram.fCaps->generation() < GrGLSLGeneration::k130_GrGLSLGeneration) {
-            this->write(fProgramKind == Program::kVertex_Kind ? "attribute "
-                                                              : "varying ");
+            this->write(fProgramKind == ProgramKind::kVertex ? "attribute "
+                                                             : "varying ");
         } else {
             this->write("in ");
         }
@@ -1332,7 +1332,7 @@ void GLSLCodeGenerator::writeForStatement(const ForStatement& f) {
     if (f.test()) {
         if (fProgram.fCaps->addAndTrueToLoopCondition()) {
             std::unique_ptr<Expression> and_true(new BinaryExpression(
-                    -1, f.test()->clone(), Token::Kind::TK_LOGICALAND,
+                    /*offset=*/-1, f.test()->clone(), Token::Kind::TK_LOGICALAND,
                     std::make_unique<BoolLiteral>(fContext, -1, true),
                     fContext.fTypes.fBool.get()));
             this->writeExpression(*and_true, Precedence::kTopLevel);
@@ -1517,7 +1517,7 @@ void GLSLCodeGenerator::writeInputVars() {
 
 bool GLSLCodeGenerator::generateCode() {
     this->writeHeader();
-    if (Program::kGeometry_Kind == fProgramKind &&
+    if (ProgramKind::kGeometry == fProgramKind &&
         fProgram.fCaps->geometryShaderExtensionString()) {
         this->writeExtension(fProgram.fCaps->geometryShaderExtensionString());
     }
@@ -1548,7 +1548,7 @@ bool GLSLCodeGenerator::generateCode() {
     if (!fProgram.fCaps->canUseFragCoord()) {
         Layout layout;
         switch (fProgram.fKind) {
-            case Program::kVertex_Kind: {
+            case ProgramKind::kVertex: {
                 Modifiers modifiers(layout, Modifiers::kOut_Flag);
                 this->writeModifiers(modifiers, true);
                 if (this->usesPrecisionModifiers()) {
@@ -1557,7 +1557,7 @@ bool GLSLCodeGenerator::generateCode() {
                 this->write("vec4 sk_FragCoord_Workaround;\n");
                 break;
             }
-            case Program::kFragment_Kind: {
+            case ProgramKind::kFragment: {
                 Modifiers modifiers(layout, Modifiers::kIn_Flag);
                 this->writeModifiers(modifiers, true);
                 if (this->usesPrecisionModifiers()) {
