@@ -14,6 +14,7 @@
 #include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLASTNode.h"
 #include "src/sksl/SkSLErrorReporter.h"
+#include "src/sksl/SkSLOperators.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExtension.h"
@@ -120,7 +121,7 @@ public:
      * Program, but ownership is *not* transferred. It is up to the caller to keep them alive.
      */
     IRBundle convertProgram(
-            Program::Kind kind,
+            ProgramKind kind,
             const Program::Settings* settings,
             const ParsedModule& base,
             bool isBuiltinCode,
@@ -185,9 +186,9 @@ private:
     int convertArraySize(const Type& type, int offset, const ASTNode& s);
     int convertArraySize(const Type& type, std::unique_ptr<Expression> s);
     bool containsConstantZero(Expression& expr);
-    bool dividesByZero(Token::Kind op, Expression& right);
+    bool dividesByZero(Operator op, Expression& right);
     std::unique_ptr<Expression> convertBinaryExpression(std::unique_ptr<Expression> left,
-                                                        Token::Kind op,
+                                                        Operator op,
                                                         std::unique_ptr<Expression> right);
     std::unique_ptr<Block> convertBlock(const ASTNode& block);
     std::unique_ptr<Statement> convertBreak(const ASTNode& b);
@@ -245,9 +246,9 @@ private:
     std::unique_ptr<Expression> convertIndex(std::unique_ptr<Expression> base,
                                              std::unique_ptr<Expression> index);
     std::unique_ptr<Expression> convertPostfixExpression(std::unique_ptr<Expression> base,
-                                                         Token::Kind op);
+                                                         Operator op);
     std::unique_ptr<Expression> convertPostfixExpression(const ASTNode& expression);
-    std::unique_ptr<Expression> convertPrefixExpression(Token::Kind op,
+    std::unique_ptr<Expression> convertPrefixExpression(Operator op,
                                                         std::unique_ptr<Expression> base);
     std::unique_ptr<Expression> convertScopeExpression(const ASTNode& expression);
     std::unique_ptr<StructDefinition> convertStructDefinition(const ASTNode& expression);
@@ -280,16 +281,40 @@ private:
     // Runtime effects (and the interpreter, which uses the same CPU runtime) require adherence to
     // the strict rules from The OpenGL ES Shading Language Version 1.00. (Including Appendix A).
     bool strictES2Mode() const {
-        return fKind == Program::kRuntimeEffect_Kind || fKind == Program::kGeneric_Kind;
+        return fKind == ProgramKind::kRuntimeEffect || fKind == ProgramKind::kGeneric;
     }
 
     Program::Inputs fInputs;
     const Program::Settings* fSettings = nullptr;
     const ShaderCapsClass* fCaps = nullptr;
-    Program::Kind fKind;
+    ProgramKind fKind;
 
     std::unique_ptr<ASTFile> fFile;
-    std::unordered_map<String, Program::Settings::Value> fCapsMap;
+
+    struct CapsValue {
+        CapsValue(bool b)         : fKind(kBool_Kind), fValue(b) {}
+        CapsValue(int i)          : fKind(kInt_Kind), fValue(i) {}
+        CapsValue(unsigned int i) : fKind(kInt_Kind), fValue(i) {}
+        CapsValue(float f)        : fKind(kFloat_Kind), fValueF(f) {}
+
+        std::unique_ptr<Expression> literal(const Context& context, int offset) const;
+
+        enum {
+            kBool_Kind,
+            kInt_Kind,
+            kFloat_Kind,
+        } fKind;
+
+        union {
+            int   fValue;  // for kBool_Kind and kInt_Kind
+            float fValueF; // for kFloat_Kind
+        };
+    };
+
+    static void FillCapsMap(const SkSL::ShaderCapsClass& caps,
+                            std::unordered_map<String, CapsValue>* capsMap);
+
+    std::unordered_map<String, CapsValue> fCapsMap;
     std::shared_ptr<SymbolTable> fSymbolTable = nullptr;
     // additional statements that need to be inserted before the one that convertStatement is
     // currently working on

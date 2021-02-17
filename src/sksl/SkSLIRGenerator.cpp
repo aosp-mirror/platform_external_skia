@@ -78,9 +78,9 @@ public:
     std::shared_ptr<SymbolTable> fPrevious;
 };
 
-static void fill_caps(const SkSL::ShaderCapsClass& caps,
-                      std::unordered_map<String, Program::Settings::Value>* capsMap) {
-#define CAP(name) capsMap->insert({String(#name), Program::Settings::Value(caps.name())})
+void IRGenerator::FillCapsMap(const SkSL::ShaderCapsClass& caps,
+                              std::unordered_map<String, CapsValue>* capsMap) {
+#define CAP(name) capsMap->insert({String(#name), CapsValue(caps.name())})
     CAP(fbFetchSupport);
     CAP(fbFetchNeedsCustomOutput);
     CAP(flatInterpolationSupport);
@@ -101,15 +101,33 @@ static void fill_caps(const SkSL::ShaderCapsClass& caps,
 #undef CAP
 }
 
+std::unique_ptr<Expression> IRGenerator::CapsValue::literal(const Context& context,
+                                                            int offset) const {
+    switch (fKind) {
+        case kBool_Kind:
+            return std::make_unique<BoolLiteral>(context, offset, fValue);
+
+        case kInt_Kind:
+            return std::make_unique<IntLiteral>(context, offset, fValue);
+
+        case kFloat_Kind:
+            return std::make_unique<FloatLiteral>(context, offset, fValueF);
+
+        default:
+            SkDEBUGFAILF("unrecognized caps kind: %d", fKind);
+            return nullptr;
+    }
+}
+
 IRGenerator::IRGenerator(const Context* context,
                          const ShaderCapsClass* caps)
         : fContext(*context)
         , fCaps(caps)
         , fModifiers(new ModifiersPool()) {
     if (fCaps) {
-        fill_caps(*fCaps, &fCapsMap);
+        FillCapsMap(*fCaps, &fCapsMap);
     } else {
-        fCapsMap.insert({String("integerSupport"), Program::Settings::Value(true)});
+        fCapsMap.insert({String("integerSupport"), CapsValue(true)});
     }
 
 }
@@ -156,9 +174,9 @@ bool IRGenerator::detectVarDeclarationWithoutScope(const Statement& stmt) {
 }
 
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragment name) {
-    if (fKind != Program::kFragment_Kind &&
-        fKind != Program::kVertex_Kind &&
-        fKind != Program::kGeometry_Kind) {
+    if (fKind != ProgramKind::kFragment &&
+        fKind != ProgramKind::kVertex &&
+        fKind != ProgramKind::kGeometry) {
         this->errorReporter().error(offset, "extensions are not allowed here");
         return nullptr;
     }
@@ -202,7 +220,7 @@ std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& st
         default:
             // it's an expression
             std::unique_ptr<Statement> result = this->convertExpressionStatement(statement);
-            if (fRTAdjust && fKind == Program::kGeometry_Kind) {
+            if (fRTAdjust && fKind == ProgramKind::kGeometry) {
                 SkASSERT(result->kind() == Statement::Kind::kExpression);
                 Expression& expr = *result->as<ExpressionStatement>().expression();
                 if (expr.kind() == Expression::Kind::kFunctionCall) {
@@ -320,7 +338,7 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                 offset,
                 "variables of type '" + baseType->displayName() + "' must be global");
     }
-    if (fKind != Program::kFragmentProcessor_Kind) {
+    if (fKind != ProgramKind::kFragmentProcessor) {
         if ((modifiers.fFlags & Modifiers::kIn_Flag) && baseType->isMatrix()) {
             this->errorReporter().error(offset, "'in' variables may not have matrix type");
         }
@@ -347,7 +365,7 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                                         "'key' is only permitted within fragment processors");
         }
     }
-    if (fKind == Program::kRuntimeEffect_Kind) {
+    if (fKind == ProgramKind::kRuntimeEffect) {
         if ((modifiers.fFlags & Modifiers::kIn_Flag) &&
             *baseType != *fContext.fTypes.fFragmentProcessor) {
             this->errorReporter().error(offset,
@@ -358,7 +376,7 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
         this->errorReporter().error(offset, "'key' is not permitted on 'uniform' variables");
     }
     if (modifiers.fLayout.fMarker.fLength) {
-        if (fKind != Program::kRuntimeEffect_Kind) {
+        if (fKind != ProgramKind::kRuntimeEffect) {
             this->errorReporter().error(offset,
                                         "'marker' is only permitted in runtime effects");
         }
@@ -372,7 +390,7 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
         }
     }
     if (modifiers.fLayout.fFlags & Layout::kSRGBUnpremul_Flag) {
-        if (fKind != Program::kRuntimeEffect_Kind) {
+        if (fKind != ProgramKind::kRuntimeEffect) {
             this->errorReporter().error(offset,
                                         "'srgb_unpremul' is only permitted in runtime effects");
         }
@@ -392,7 +410,7 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
         }
     }
     if (modifiers.fFlags & Modifiers::kVarying_Flag) {
-        if (fKind != Program::kRuntimeEffect_Kind) {
+        if (fKind != ProgramKind::kRuntimeEffect) {
             this->errorReporter().error(offset, "'varying' is only permitted in runtime effects");
         }
         if (!baseType->isFloat() &&
@@ -422,7 +440,7 @@ std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(int offset,
                                                               std::unique_ptr<Expression> value,
                                                               Variable::Storage storage) {
     if (modifiers.fLayout.fLocation == 0 && modifiers.fLayout.fIndex == 0 &&
-        (modifiers.fFlags & Modifiers::kOut_Flag) && fKind == Program::kFragment_Kind &&
+        (modifiers.fFlags & Modifiers::kOut_Flag) && fKind == ProgramKind::kFragment &&
         name != "sk_FragColor") {
         this->errorReporter().error(offset,
                                     "out location=0, index=0 is reserved for sk_FragColor");
@@ -522,9 +540,9 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
 }
 
 std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(const ASTNode& m) {
-    if (fKind != Program::kFragment_Kind &&
-        fKind != Program::kVertex_Kind &&
-        fKind != Program::kGeometry_Kind) {
+    if (fKind != ProgramKind::kFragment &&
+        fKind != ProgramKind::kVertex &&
+        fKind != ProgramKind::kGeometry) {
         this->errorReporter().error(m.fOffset, "layout qualifiers are not allowed here");
         return nullptr;
     }
@@ -532,7 +550,7 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
     SkASSERT(m.fKind == ASTNode::Kind::kModifiers);
     Modifiers modifiers = m.getModifiers();
     if (modifiers.fLayout.fInvocations != -1) {
-        if (fKind != Program::kGeometry_Kind) {
+        if (fKind != ProgramKind::kGeometry) {
             this->errorReporter().error(m.fOffset,
                                         "'invocations' is only legal in geometry shaders");
             return nullptr;
@@ -858,7 +876,7 @@ std::unique_ptr<Statement> IRGenerator::convertContinue(const ASTNode& c) {
 
 std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDiscard);
-    if (fKind != Program::kFragment_Kind && fKind != Program::kFragmentProcessor_Kind) {
+    if (fKind != ProgramKind::kFragment && fKind != ProgramKind::kFragmentProcessor) {
         this->errorReporter().error(d.fOffset,
                                     "discard statement is only permitted in fragment shaders");
         return nullptr;
@@ -934,10 +952,12 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     //                      sk_Position.w);
     SkASSERT(skPerVertex && fRTAdjust);
     auto Ref = [](const Variable* var) -> std::unique_ptr<Expression> {
-        return std::make_unique<VariableReference>(-1, var, VariableReference::RefKind::kRead);
+        return std::make_unique<VariableReference>(/*offset=*/-1, var,
+                                                   VariableReference::RefKind::kRead);
     };
     auto WRef = [](const Variable* var) -> std::unique_ptr<Expression> {
-        return std::make_unique<VariableReference>(-1, var, VariableReference::RefKind::kWrite);
+        return std::make_unique<VariableReference>(/*offset=*/-1, var,
+                                                   VariableReference::RefKind::kWrite);
     };
     auto Field = [&](const Variable* var, int idx) -> std::unique_ptr<Expression> {
         return std::make_unique<FieldAccess>(Ref(var), idx,
@@ -957,8 +977,8 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     };
     auto Op = [&](std::unique_ptr<Expression> left, Token::Kind op,
                   std::unique_ptr<Expression> right) -> std::unique_ptr<Expression> {
-        return std::make_unique<BinaryExpression>(-1, std::move(left), op, std::move(right),
-                                                  fContext.fTypes.fFloat2.get());
+        return std::make_unique<BinaryExpression>(/*offset=*/-1, std::move(left), op,
+                                                  std::move(right), fContext.fTypes.fFloat2.get());
     };
 
     static const ComponentArray kXYIndices{0, 1};
@@ -1050,7 +1070,7 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
                     // normalization, so SkASSERT that we aren't doing that. It is of course
                     // possible to fix this by adding a normalization before each return, but it
                     // will probably never actually be necessary.
-                    SkASSERT(fIRGenerator->fKind != Program::kVertex_Kind ||
+                    SkASSERT(fIRGenerator->fKind != ProgramKind::kVertex ||
                              !fIRGenerator->fRTAdjust ||
                              fFunction->name() != "main");
                     ReturnStatement& r = stmt.as<ReturnStatement>();
@@ -1168,8 +1188,8 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
 
         Modifiers m = pd.fModifiers;
-        if (funcData.fName == "main" && (fKind == Program::kRuntimeEffect_Kind ||
-                                         fKind == Program::kFragmentProcessor_Kind)) {
+        if (funcData.fName == "main" && (fKind == ProgramKind::kRuntimeEffect ||
+                                         fKind == ProgramKind::kFragmentProcessor)) {
             if (i == 0) {
                 // We verify that the type is correct later, for now, if there is a parameter to
                 // a .fp or runtime-effect main(), it's supposed to be the coords:
@@ -1191,7 +1211,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
 
     if (funcData.fName == "main") {
         switch (fKind) {
-            case Program::kRuntimeEffect_Kind: {
+            case ProgramKind::kRuntimeEffect: {
                 // (half4|float4) main()  -or-  (half4|float4) main(float2)
                 if (*returnType != *fContext.fTypes.fHalf4 &&
                     *returnType != *fContext.fTypes.fFloat4) {
@@ -1208,7 +1228,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                 }
                 break;
             }
-            case Program::kFragmentProcessor_Kind: {
+            case ProgramKind::kFragmentProcessor: {
                 if (*returnType != *fContext.fTypes.fHalf4) {
                     this->errorReporter().error(f.fOffset, ".fp 'main' must return 'half4'");
                     return;
@@ -1222,7 +1242,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                 }
                 break;
             }
-            case Program::kGeneric_Kind:
+            case ProgramKind::kGeneric:
                 break;
             default:
                 if (parameters.size()) {
@@ -1328,7 +1348,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (needInvocationIDWorkaround) {
             body = this->applyInvocationIDWorkaround(std::move(body));
         }
-        if (Program::kVertex_Kind == fKind && funcData.fName == "main" && fRTAdjust) {
+        if (ProgramKind::kVertex == fKind && funcData.fName == "main" && fRTAdjust) {
             body->children().push_back(this->getNormalizeSkPositionCode());
         }
         auto result = std::make_unique<FunctionDefinition>(
@@ -1358,9 +1378,9 @@ std::unique_ptr<StructDefinition> IRGenerator::convertStructDefinition(const AST
 }
 
 std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
-    if (fKind != Program::kFragment_Kind &&
-        fKind != Program::kVertex_Kind &&
-        fKind != Program::kGeometry_Kind) {
+    if (fKind != ProgramKind::kFragment &&
+        fKind != ProgramKind::kVertex &&
+        fKind != ProgramKind::kGeometry) {
         this->errorReporter().error(intf.fOffset, "interface block is not allowed here");
         return nullptr;
     }
@@ -1629,7 +1649,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
                     }
 #endif
             }
-            if (fKind == Program::kFragmentProcessor_Kind &&
+            if (fKind == ProgramKind::kFragmentProcessor &&
                 (modifiers.fFlags & Modifiers::kIn_Flag) &&
                 !(modifiers.fFlags & Modifiers::kUniform_Flag) &&
                 !modifiers.fLayout.fKey &&
@@ -1684,7 +1704,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identi
 }
 
 std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
-    if (fKind != Program::kFragmentProcessor_Kind) {
+    if (fKind != ProgramKind::kFragmentProcessor) {
         this->errorReporter().error(s.fOffset, "syntax error");
         return nullptr;
     }
@@ -1720,8 +1740,8 @@ std::unique_ptr<Expression> IRGenerator::coerce(std::unique_ptr<Expression> expr
     return this->convertConstructor(offset, type.scalarTypeForLiteral(), std::move(args));
 }
 
-static bool is_matrix_multiply(const Type& left, Token::Kind op, const Type& right) {
-    if (op != Token::Kind::TK_STAR && op != Token::Kind::TK_STAREQ) {
+static bool is_matrix_multiply(const Type& left, Operator op, const Type& right) {
+    if (op.kind() != Token::Kind::TK_STAR && op.kind() != Token::Kind::TK_STAREQ) {
         return false;
     }
     if (left.isMatrix()) {
@@ -1731,97 +1751,18 @@ static bool is_matrix_multiply(const Type& left, Token::Kind op, const Type& rig
 }
 
 /**
- * Defines the set of logical (comparison) operators.
- */
-static bool op_is_logical(Token::Kind op) {
-    switch (op) {
-        case Token::Kind::TK_LT:
-        case Token::Kind::TK_GT:
-        case Token::Kind::TK_LTEQ:
-        case Token::Kind::TK_GTEQ:
-            return true;
-        default:
-            return false;
-    }
-}
-
-/**
- * Defines the set of operators which are only valid on integral types.
- */
-static bool op_only_valid_for_integral_types(Token::Kind op) {
-    switch (op) {
-        case Token::Kind::TK_SHL:
-        case Token::Kind::TK_SHR:
-        case Token::Kind::TK_BITWISEAND:
-        case Token::Kind::TK_BITWISEOR:
-        case Token::Kind::TK_BITWISEXOR:
-        case Token::Kind::TK_PERCENT:
-        case Token::Kind::TK_SHLEQ:
-        case Token::Kind::TK_SHREQ:
-        case Token::Kind::TK_BITWISEANDEQ:
-        case Token::Kind::TK_BITWISEOREQ:
-        case Token::Kind::TK_BITWISEXOREQ:
-        case Token::Kind::TK_PERCENTEQ:
-            return true;
-        default:
-            return false;
-    }
-}
-
-/**
- * Defines the set of operators which perform vector/matrix math.
- */
-static bool op_valid_for_matrix_or_vector(Token::Kind op) {
-    switch (op) {
-        case Token::Kind::TK_PLUS:
-        case Token::Kind::TK_MINUS:
-        case Token::Kind::TK_STAR:
-        case Token::Kind::TK_SLASH:
-        case Token::Kind::TK_PERCENT:
-        case Token::Kind::TK_SHL:
-        case Token::Kind::TK_SHR:
-        case Token::Kind::TK_BITWISEAND:
-        case Token::Kind::TK_BITWISEOR:
-        case Token::Kind::TK_BITWISEXOR:
-        case Token::Kind::TK_PLUSEQ:
-        case Token::Kind::TK_MINUSEQ:
-        case Token::Kind::TK_STAREQ:
-        case Token::Kind::TK_SLASHEQ:
-        case Token::Kind::TK_PERCENTEQ:
-        case Token::Kind::TK_SHLEQ:
-        case Token::Kind::TK_SHREQ:
-        case Token::Kind::TK_BITWISEANDEQ:
-        case Token::Kind::TK_BITWISEOREQ:
-        case Token::Kind::TK_BITWISEXOREQ:
-            return true;
-        default:
-            return false;
-    }
-}
-
-/*
- * Defines the set of operators allowed by The OpenGL ES Shading Language 1.00, Section 5.1.
- * The set of illegal (reserved) operators are the ones that only make sense with integral types.
- * This is not a coincidence: It's because ES2 doesn't require 'int' to be anything but syntactic
- * sugar for floats with truncation after each operation).
- */
-static bool op_allowed_in_strict_es2_mode(Token::Kind op) {
-    return !op_only_valid_for_integral_types(op);
-}
-
-/**
  * Determines the operand and result types of a binary expression. Returns true if the expression is
  * legal, false otherwise. If false, the values of the out parameters are undefined.
  */
 static bool determine_binary_type(const Context& context,
                                   bool allowNarrowing,
-                                  Token::Kind op,
+                                  Operator op,
                                   const Type& left,
                                   const Type& right,
                                   const Type** outLeftType,
                                   const Type** outRightType,
                                   const Type** outResultType) {
-    switch (op) {
+    switch (op.kind()) {
         case Token::Kind::TK_EQ:  // left = right
             *outLeftType = &left;
             *outRightType = &left;
@@ -1876,7 +1817,7 @@ static bool determine_binary_type(const Context& context,
         return false;
     }
 
-    bool isAssignment = Operators::IsAssignment(op);
+    bool isAssignment = op.isAssignment();
     if (is_matrix_multiply(left, op, right)) {  // left * right
         // Determine final component type.
         if (!determine_binary_type(context, allowNarrowing, op,
@@ -1907,13 +1848,13 @@ static bool determine_binary_type(const Context& context,
     }
 
     bool leftIsVectorOrMatrix = left.isVector() || left.isMatrix();
-    bool validMatrixOrVectorOp = op_valid_for_matrix_or_vector(op);
+    bool validMatrixOrVectorOp = op.isValidForMatrixOrVector();
 
     if (leftIsVectorOrMatrix && validMatrixOrVectorOp && right.isScalar()) {
         if (determine_binary_type(context, allowNarrowing, op, left.componentType(), right,
                                   outLeftType, outRightType, outResultType)) {
             *outLeftType = &(*outLeftType)->toCompound(context, left.columns(), left.rows());
-            if (!op_is_logical(op)) {
+            if (!op.isLogical()) {
                 *outResultType = &(*outResultType)->toCompound(context, left.columns(),
                                                                left.rows());
             }
@@ -1928,7 +1869,7 @@ static bool determine_binary_type(const Context& context,
         if (determine_binary_type(context, allowNarrowing, op, left, right.componentType(),
                                   outLeftType, outRightType, outResultType)) {
             *outRightType = &(*outRightType)->toCompound(context, right.columns(), right.rows());
-            if (!op_is_logical(op)) {
+            if (!op.isLogical()) {
                 *outResultType = &(*outResultType)->toCompound(context, right.columns(),
                                                                right.rows());
             }
@@ -1942,7 +1883,7 @@ static bool determine_binary_type(const Context& context,
                                                 : left.coercionCost(right);
 
     if ((left.isScalar() && right.isScalar()) || (leftIsVectorOrMatrix && validMatrixOrVectorOp)) {
-        if (op_only_valid_for_integral_types(op)) {
+        if (op.isOnlyValidForIntegralTypes()) {
             if (!leftComponentType.isInteger() || !rightComponentType.isInteger()) {
                 return false;
             }
@@ -1960,7 +1901,7 @@ static bool determine_binary_type(const Context& context,
         } else {
             return false;
         }
-        if (op_is_logical(op)) {
+        if (op.isLogical()) {
             *outResultType = context.fTypes.fBool.get();
         }
         return true;
@@ -1975,17 +1916,17 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
     if (!left) {
         return nullptr;
     }
-    Token::Kind op = expression.getToken().fKind;
     std::unique_ptr<Expression> right = this->convertExpression(*(iter++));
     if (!right) {
         return nullptr;
     }
-    return this->convertBinaryExpression(std::move(left), op, std::move(right));
+    return this->convertBinaryExpression(std::move(left), expression.getOperator(),
+                                         std::move(right));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(
                                                                 std::unique_ptr<Expression> left,
-                                                                Token::Kind op,
+                                                                Operator op,
                                                                 std::unique_ptr<Expression> right) {
     if (!left || !right) {
         return nullptr;
@@ -2006,13 +1947,13 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(
     } else {
         rawRightType = &right->type();
     }
-    if (this->strictES2Mode() && !op_allowed_in_strict_es2_mode(op)) {
-        this->errorReporter().error(
-                offset, String("operator '") + Operators::OperatorName(op) + "' is not allowed");
+    if (this->strictES2Mode() && !op.isAllowedInStrictES2Mode()) {
+        this->errorReporter().error(offset,
+                                    String("operator '") + op.operatorName() + "' is not allowed");
         return nullptr;
     }
-    bool isAssignment = Operators::IsAssignment(op);
-    if (isAssignment && !this->setRefKind(*left, op != Token::Kind::TK_EQ
+    bool isAssignment = op.isAssignment();
+    if (isAssignment && !this->setRefKind(*left, op.kind() != Token::Kind::TK_EQ
                                                  ? VariableReference::RefKind::kReadWrite
                                                  : VariableReference::RefKind::kWrite)) {
         return nullptr;
@@ -2020,7 +1961,7 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(
     if (!determine_binary_type(fContext, fSettings->fAllowNarrowingConversions, op,
                                *rawLeftType, *rawRightType, &leftType, &rightType, &resultType)) {
         this->errorReporter().error(
-                offset, String("type mismatch: '") + Operators::OperatorName(op) +
+                offset, String("type mismatch: '") + op.operatorName() +
                                 "' cannot operate on '" + left->type().displayName() + "', '" +
                                 right->type().displayName() + "'");
         return nullptr;
@@ -2441,13 +2382,13 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
     if (!base) {
         return nullptr;
     }
-    return this->convertPrefixExpression(expression.getToken().fKind, std::move(base));
+    return this->convertPrefixExpression(expression.getOperator(), std::move(base));
 }
 
-std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
+std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Operator op,
                                                                  std::unique_ptr<Expression> base) {
     const Type& baseType = base->type();
-    switch (op) {
+    switch (op.kind()) {
         case Token::Kind::TK_PLUS:
             if (!baseType.componentType().isNumber()) {
                 this->errorReporter().error(
@@ -2477,7 +2418,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
         case Token::Kind::TK_PLUSPLUS:
             if (!baseType.isNumber()) {
                 this->errorReporter().error(base->fOffset,
-                                            String("'") + Operators::OperatorName(op) +
+                                            String("'") + op.operatorName() +
                                             "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
@@ -2488,7 +2429,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
         case Token::Kind::TK_MINUSMINUS:
             if (!baseType.isNumber()) {
                 this->errorReporter().error(base->fOffset,
-                                            String("'") + Operators::OperatorName(op) +
+                                            String("'") + op.operatorName() +
                                             "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
@@ -2499,7 +2440,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
         case Token::Kind::TK_LOGICALNOT:
             if (!baseType.isBoolean()) {
                 this->errorReporter().error(base->fOffset,
-                                            String("'") + Operators::OperatorName(op) +
+                                            String("'") + op.operatorName() +
                                             "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
@@ -2512,14 +2453,14 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Token::Kind op,
         case Token::Kind::TK_BITWISENOT:
             if (this->strictES2Mode()) {
                 // GLSL ES 1.00, Section 5.1
-                this->errorReporter().error(base->fOffset,
-                              String("operator '") + Operators::OperatorName(op) +
-                              "' is not allowed");
+                this->errorReporter().error(
+                        base->fOffset,
+                        String("operator '") + op.operatorName() + "' is not allowed");
                 return nullptr;
             }
             if (!baseType.isInteger()) {
                 this->errorReporter().error(base->fOffset,
-                                            String("'") + Operators::OperatorName(op) +
+                                            String("'") + op.operatorName() +
                                             "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
@@ -2717,9 +2658,9 @@ const Type* IRGenerator::typeForSetting(int offset, String name) const {
         return nullptr;
     }
     switch (found->second.fKind) {
-        case Program::Settings::Value::kBool_Kind:  return fContext.fTypes.fBool.get();
-        case Program::Settings::Value::kFloat_Kind: return fContext.fTypes.fFloat.get();
-        case Program::Settings::Value::kInt_Kind:   return fContext.fTypes.fInt.get();
+        case CapsValue::kBool_Kind:  return fContext.fTypes.fBool.get();
+        case CapsValue::kFloat_Kind: return fContext.fTypes.fFloat.get();
+        case CapsValue::kInt_Kind:   return fContext.fTypes.fInt.get();
     }
     SkUNREACHABLE;
     return nullptr;
@@ -2918,15 +2859,15 @@ std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode&
     if (!base) {
         return nullptr;
     }
-    return this->convertPostfixExpression(std::move(base), expression.getToken().fKind);
+    return this->convertPostfixExpression(std::move(base), expression.getOperator());
 }
 
 std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(std::unique_ptr<Expression> base,
-                                                                  Token::Kind op) {
+                                                                  Operator op) {
     const Type& baseType = base->type();
     if (!baseType.isNumber()) {
         this->errorReporter().error(base->fOffset,
-                                    "'" + String(Operators::OperatorName(op)) +
+                                    "'" + String(op.operatorName()) +
                                     "' cannot operate on '" + baseType.displayName() + "'");
         return nullptr;
     }
@@ -3024,7 +2965,7 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
     }
 
     switch (fKind) {
-        case Program::kFragment_Kind:
+        case ProgramKind::kFragment:
             // Vulkan requires certain builtin variables be present, even if they're unused. At one
             // time, validation errors would result if sk_Clockwise was missing. Now, it's just
             // (Adreno) driver bugs that drop or corrupt draws if they're missing.
@@ -3039,7 +2980,7 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
 }
 
 IRGenerator::IRBundle IRGenerator::convertProgram(
-        Program::Kind kind,
+        ProgramKind kind,
         const Program::Settings* settings,
         const ParsedModule& base,
         bool isBuiltinCode,
@@ -3069,7 +3010,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
 
     AutoSymbolTable table(this);
 
-    if (kind == Program::kGeometry_Kind && !fIsBuiltinCode) {
+    if (kind == ProgramKind::kGeometry && !fIsBuiltinCode) {
         // Declare sk_InvocationID programmatically. With invocations support, it's an 'in' builtin.
         // If we're applying the workaround, then it's a plain global.
         bool workaround = fCaps && !fCaps->gsInvocationsSupport();
