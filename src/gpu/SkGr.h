@@ -10,7 +10,6 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkFilterQuality.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/gpu/GrTypes.h"
@@ -208,7 +207,7 @@ GrSurfaceProxyView GrRefCachedBitmapView(GrRecordingContext*, const SkBitmap&, G
  * Creates a new texture with mipmap levels and copies the baseProxy into the base layer.
  */
 sk_sp<GrSurfaceProxy> GrCopyBaseMipMapToTextureProxy(GrRecordingContext*,
-                                                     GrSurfaceProxy* baseProxy,
+                                                     sk_sp<GrSurfaceProxy> baseProxy,
                                                      GrSurfaceOrigin origin,
                                                      SkBudgeted = SkBudgeted::kYes);
 /**

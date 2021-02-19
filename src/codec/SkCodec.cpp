@@ -7,8 +7,10 @@
 
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
+#include "include/core/SkImage.h"
 #include "include/private/SkHalf.h"
 #include "src/codec/SkBmpCodec.h"
 #include "src/codec/SkCodecPriv.h"
@@ -251,7 +253,7 @@ bool zero_rect(const SkImageInfo& dstInfo, void* pixels, size_t rowBytes,
     if (dimensions != srcDimensions) {
         SkRect src = SkRect::Make(srcDimensions);
         SkRect dst = SkRect::Make(dimensions);
-        SkMatrix map = SkMatrix::MakeRectToRect(src, dst, SkMatrix::kFill_ScaleToFit);
+        SkMatrix map = SkMatrix::RectToRect(src, dst);
         SkRect asRect = SkRect::Make(prevRect);
         if (!map.mapRect(&asRect)) {
             return false;
@@ -434,6 +436,30 @@ SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t
     }
 
     return result;
+}
+
+std::tuple<sk_sp<SkImage>, SkCodec::Result> SkCodec::getImage(const SkImageInfo& info,
+                                                              const Options* options) {
+    SkBitmap bm;
+    if (!bm.tryAllocPixels(info)) {
+        return {nullptr, kInternalError};
+    }
+
+    Result result = this->getPixels(info, bm.getPixels(), bm.rowBytes(), options);
+    switch (result) {
+        case kSuccess:
+        case kIncompleteInput:
+        case kErrorInInput:
+            bm.setImmutable();
+            return {bm.asImage(), result};
+
+        default: break;
+    }
+    return {nullptr, result};
+}
+
+std::tuple<sk_sp<SkImage>, SkCodec::Result> SkCodec::getImage() {
+    return this->getImage(this->getInfo(), nullptr);
 }
 
 SkCodec::Result SkCodec::startIncrementalDecode(const SkImageInfo& info, void* pixels,

@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "include/utils/SkNoDrawCanvas.h"
 #include "modules/svg/src/SkSVGTextPriv.h"
 #include "tests/Test.h"
 
@@ -143,6 +144,9 @@ DEF_TEST(Svg_Text_PosProvider, r) {
         },
     };
 
+    const SkSVGTextContext::ShapedTextCallback mock_cb =
+        [](const SkSVGRenderContext&, const sk_sp<SkTextBlob>&, const SkPaint*, const SkPaint*) {};
+
     auto test = [&](const PosTestDesc& tst) {
         auto a = SkSVGText::Make();
         auto b = SkSVGTSpan::Make();
@@ -153,8 +157,15 @@ DEF_TEST(Svg_Text_PosProvider, r) {
         b->setX(tst.xb);
         b->setY(tst.yb);
 
-        SkSVGTextContext tctx(SkSVGPresentationContext(), nullptr);
-        SkSVGLengthContext lctx({0,0});
+        const SkSVGIDMapper mapper;
+        const SkSVGLengthContext lctx({0,0});
+        const SkSVGPresentationContext pctx;
+        SkNoDrawCanvas canvas(0, 0);
+        sk_sp<SkFontMgr> fmgr;
+        sk_sp<skresources::ResourceProvider> rp;
+        const SkSVGRenderContext ctx(&canvas, fmgr, rp, mapper, lctx, pctx, nullptr);
+
+        SkSVGTextContext tctx(ctx, mock_cb);
         SkSVGTextContext::ScopedPosResolver pa(*a, lctx, &tctx, tst.offseta);
         SkSVGTextContext::ScopedPosResolver pb(*b, lctx, &tctx, tst.offsetb);
 

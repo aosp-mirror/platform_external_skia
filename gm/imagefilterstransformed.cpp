@@ -202,12 +202,13 @@ protected:
         filterMatrix.setRotate(fDegrees, 64, 64);
 
         sk_sp<SkImageFilter> filter =
-                SkImageFilter::MakeMatrixFilter(filterMatrix, kLow_SkFilterQuality, nullptr)
+                SkImageFilters::MatrixTransform(filterMatrix,
+                                                SkSamplingOptions(SkFilterMode::kLinear), nullptr)
                              ->makeWithLocalMatrix(localMatrix);
 
         SkPaint p;
         p.setImageFilter(filter);
-        canvas->drawImage(fImage.get(), 128, 128, &p);
+        canvas->drawImage(fImage.get(), 128, 128, SkSamplingOptions(), &p);
     }
 
 private:
@@ -261,10 +262,10 @@ private:
 
         canvas->save();
         canvas->translate(tx, ty);
-        canvas->clipRect(SkRect::MakeIWH(256, 256));
+        canvas->clipRect(SkRect::MakeWH(256, 256));
         canvas->scale(0.5f, 0.5f);
         canvas->translate(128, 128);
-        canvas->drawImage(fImage, 0, 0, &p);
+        canvas->drawImage(fImage, 0, 0, SkSamplingOptions(), &p);
         canvas->restore();
     }
 
@@ -272,7 +273,7 @@ private:
     sk_sp<SkImageFilter> makeDirectFilter(const SkMatrix& matrix) const {
         SkPoint v = {fImage->width() / 2.f, fImage->height() / 2.f};
         sk_sp<SkImageFilter> filter = SkImageFilters::Offset(-v.fX, -v.fY, nullptr);
-        filter = SkImageFilters::MatrixTransform(matrix, SkFilterQuality::kLow_SkFilterQuality,
+        filter = SkImageFilters::MatrixTransform(matrix, SkSamplingOptions(SkFilterMode::kLinear),
                                                  std::move(filter));
         filter = SkImageFilters::Offset(v.fX, v.fY, std::move(filter));
         return filter;
@@ -283,7 +284,7 @@ private:
         SkPoint v = {fImage->width() / 2.f, fImage->height() / 2.f};
         sk_sp<SkImageFilter> offset = SkImageFilters::Offset(-v.fX, -v.fY, nullptr);
         sk_sp<SkImageFilter> filter = SkImageFilters::MatrixTransform(
-                matrix, SkFilterQuality::kLow_SkFilterQuality, nullptr);
+                matrix, SkSamplingOptions(SkFilterMode::kLinear), nullptr);
         filter = SkImageFilters::Compose(std::move(filter), std::move(offset));
         filter = SkImageFilters::Offset(v.fX, v.fY, std::move(filter));
         return filter;
@@ -293,7 +294,7 @@ private:
     sk_sp<SkImageFilter> makeLateComposeFilter(const SkMatrix& matrix) const {
         SkPoint v = {fImage->width() / 2.f, fImage->height() / 2.f};
         sk_sp<SkImageFilter> filter = SkImageFilters::Offset(-v.fX, -v.fY, nullptr);
-        filter = SkImageFilters::MatrixTransform(matrix, SkFilterQuality::kLow_SkFilterQuality,
+        filter = SkImageFilters::MatrixTransform(matrix, SkSamplingOptions(SkFilterMode::kLinear),
                                                  std::move(filter));
         sk_sp<SkImageFilter> offset = SkImageFilters::Offset(v.fX, v.fY, nullptr);
         filter = SkImageFilters::Compose(std::move(offset), std::move(filter));
@@ -305,7 +306,7 @@ private:
         SkPoint v = {fImage->width() / 2.f, fImage->height() / 2.f};
         sk_sp<SkImageFilter> offset = SkImageFilters::Offset(-v.fX, -v.fY, nullptr);
         sk_sp<SkImageFilter> filter = SkImageFilters::MatrixTransform(
-                matrix, SkFilterQuality::kLow_SkFilterQuality, nullptr);
+                matrix, SkSamplingOptions(SkFilterMode::kLinear), nullptr);
         filter = SkImageFilters::Compose(std::move(filter), std::move(offset));
         offset = SkImageFilters::Offset(v.fX, v.fY, nullptr);
         filter = SkImageFilters::Compose(std::move(offset), std::move(filter));

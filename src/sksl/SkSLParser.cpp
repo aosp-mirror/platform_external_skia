@@ -40,6 +40,31 @@ static bool struct_is_too_deeply_nested(const Type& type, int limit) {
     return false;
 }
 
+static int parse_modifier_token(Token::Kind token) {
+    switch (token) {
+        case Token::Kind::TK_UNIFORM:        return Modifiers::kUniform_Flag;
+        case Token::Kind::TK_CONST:          return Modifiers::kConst_Flag;
+        case Token::Kind::TK_IN:             return Modifiers::kIn_Flag;
+        case Token::Kind::TK_OUT:            return Modifiers::kOut_Flag;
+        case Token::Kind::TK_INOUT:          return Modifiers::kIn_Flag | Modifiers::kOut_Flag;
+        case Token::Kind::TK_FLAT:           return Modifiers::kFlat_Flag;
+        case Token::Kind::TK_NOPERSPECTIVE:  return Modifiers::kNoPerspective_Flag;
+        case Token::Kind::TK_READONLY:       return Modifiers::kReadOnly_Flag;
+        case Token::Kind::TK_WRITEONLY:      return Modifiers::kWriteOnly_Flag;
+        case Token::Kind::TK_COHERENT:       return Modifiers::kCoherent_Flag;
+        case Token::Kind::TK_VOLATILE:       return Modifiers::kVolatile_Flag;
+        case Token::Kind::TK_RESTRICT:       return Modifiers::kRestrict_Flag;
+        case Token::Kind::TK_BUFFER:         return Modifiers::kBuffer_Flag;
+        case Token::Kind::TK_HASSIDEEFFECTS: return Modifiers::kHasSideEffects_Flag;
+        case Token::Kind::TK_PLS:            return Modifiers::kPLS_Flag;
+        case Token::Kind::TK_PLSIN:          return Modifiers::kPLSIn_Flag;
+        case Token::Kind::TK_PLSOUT:         return Modifiers::kPLSOut_Flag;
+        case Token::Kind::TK_VARYING:        return Modifiers::kVarying_Flag;
+        case Token::Kind::TK_INLINE:         return Modifiers::kInline_Flag;
+        default:                             return 0;
+    }
+}
+
 class AutoDepth {
 public:
     AutoDepth(Parser* p)
@@ -125,7 +150,7 @@ void Parser::InitLayoutMap() {
 
 Parser::Parser(const char* text, size_t length, SymbolTable& symbols, ErrorReporter& errors)
 : fText(text)
-, fPushback(Token::Kind::TK_INVALID, -1, -1)
+, fPushback(Token::Kind::TK_NONE, -1, -1)
 , fSymbols(symbols)
 , fErrors(errors) {
     fLexer.start(text, length);
@@ -180,6 +205,10 @@ std::unique_ptr<ASTFile> Parser::compilationUnit() {
                 }
                 break;
             }
+            case Token::Kind::TK_INVALID: {
+                this->error(this->peek(), String("invalid token"));
+                return nullptr;
+            }
             default: {
                 ASTNode::ID decl = this->declaration();
                 if (fErrors.errorCount()) {
@@ -195,9 +224,9 @@ std::unique_ptr<ASTFile> Parser::compilationUnit() {
 }
 
 Token Parser::nextRawToken() {
-    if (fPushback.fKind != Token::Kind::TK_INVALID) {
+    if (fPushback.fKind != Token::Kind::TK_NONE) {
         Token result = fPushback;
-        fPushback.fKind = Token::Kind::TK_INVALID;
+        fPushback.fKind = Token::Kind::TK_NONE;
         return result;
     }
     Token result = fLexer.next();
@@ -215,19 +244,19 @@ Token Parser::nextToken() {
 }
 
 void Parser::pushback(Token t) {
-    SkASSERT(fPushback.fKind == Token::Kind::TK_INVALID);
+    SkASSERT(fPushback.fKind == Token::Kind::TK_NONE);
     fPushback = std::move(t);
 }
 
 Token Parser::peek() {
-    if (fPushback.fKind == Token::Kind::TK_INVALID) {
+    if (fPushback.fKind == Token::Kind::TK_NONE) {
         fPushback = this->nextToken();
     }
     return fPushback;
 }
 
 bool Parser::checkNext(Token::Kind kind, Token* result) {
-    if (fPushback.fKind != Token::Kind::TK_INVALID && fPushback.fKind != kind) {
+    if (fPushback.fKind != Token::Kind::TK_NONE && fPushback.fKind != kind) {
         return false;
     }
     Token next = this->nextToken();
@@ -383,7 +412,7 @@ ASTNode::ID Parser::enumDeclaration() {
     if (!this->expect(Token::Kind::TK_LBRACE, "'{'")) {
         return ASTNode::ID::Invalid();
     }
-    fSymbols.add(Type::MakeSimpleType(this->text(name), Type::TypeKind::kEnum));
+    fSymbols.add(Type::MakeEnumType(this->text(name)));
     ASTNode::ID result = this->createNode(name.fOffset, ASTNode::Kind::kEnum, this->text(name));
     if (!this->checkNext(Token::Kind::TK_RBRACE)) {
         Token id;
@@ -459,10 +488,6 @@ ASTNode::ID Parser::declaration() {
     if (!type) {
         return ASTNode::ID::Invalid();
     }
-    if (getNode(type).getTypeData().fIsStructDeclaration &&
-        this->checkNext(Token::Kind::TK_SEMICOLON)) {
-        return ASTNode::ID::Invalid();
-    }
     Token name;
     if (!this->expectIdentifier(&name)) {
         return ASTNode::ID::Invalid();
@@ -502,8 +527,29 @@ ASTNode::ID Parser::declaration() {
     }
 }
 
+/* (varDeclarations | expressionStatement) */
+ASTNode::ID Parser::varDeclarationsOrExpressionStatement() {
+    if (this->isType(this->text(this->peek()))) {
+        // Statements that begin with a typename are most often variable declarations, but
+        // occasionally the type is part of a constructor, and these are actually expression-
+        // statements in disguise. First, attempt the common case: parse it as a vardecl.
+        Checkpoint checkpoint(this);
+        ASTNode::ID node = this->varDeclarations();
+        if (node) {
+            return node;
+        }
+
+        // If this statement wasn't actually a vardecl after all, rewind and try parsing it as an
+        // expression-statement instead.
+        checkpoint.rewind();
+    }
+
+    return this->expressionStatement();
+}
+
 /* modifiers type IDENTIFIER varDeclarationEnd */
 ASTNode::ID Parser::varDeclarations() {
+    Checkpoint checkpoint(this);
     Modifiers modifiers = this->modifiers();
     ASTNode::ID type = this->type();
     if (!type) {
@@ -543,7 +589,7 @@ ASTNode::ID Parser::structDeclaration() {
                         "modifier '" + desc + "' is not permitted on a struct field");
         }
 
-        const Symbol* symbol = fSymbols[(declsNode.begin() + 1)->getTypeData().fName];
+        const Symbol* symbol = fSymbols[(declsNode.begin() + 1)->getString()];
         SkASSERT(symbol);
         const Type* type = &symbol->as<Type>();
         if (type->isOpaque()) {
@@ -586,9 +632,7 @@ ASTNode::ID Parser::structDeclaration() {
         return ASTNode::ID::Invalid();
     }
     fSymbols.add(std::move(newType));
-    return this->createNode(name.fOffset, ASTNode::Kind::kType,
-                            ASTNode::TypeData(this->text(name),
-                                              /*isStructDeclaration=*/true));
+    return this->createNode(name.fOffset, ASTNode::Kind::kType, this->text(name));
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
@@ -1028,88 +1072,14 @@ Modifiers Parser::modifiers() {
     int flags = 0;
     for (;;) {
         // TODO: handle duplicate / incompatible flags
-        switch (peek().fKind) {
-            case Token::Kind::TK_UNIFORM:
-                this->nextToken();
-                flags |= Modifiers::kUniform_Flag;
-                break;
-            case Token::Kind::TK_CONST:
-                this->nextToken();
-                flags |= Modifiers::kConst_Flag;
-                break;
-            case Token::Kind::TK_IN:
-                this->nextToken();
-                flags |= Modifiers::kIn_Flag;
-                break;
-            case Token::Kind::TK_OUT:
-                this->nextToken();
-                flags |= Modifiers::kOut_Flag;
-                break;
-            case Token::Kind::TK_INOUT:
-                this->nextToken();
-                flags |= Modifiers::kIn_Flag;
-                flags |= Modifiers::kOut_Flag;
-                break;
-            case Token::Kind::TK_FLAT:
-                this->nextToken();
-                flags |= Modifiers::kFlat_Flag;
-                break;
-            case Token::Kind::TK_NOPERSPECTIVE:
-                this->nextToken();
-                flags |= Modifiers::kNoPerspective_Flag;
-                break;
-            case Token::Kind::TK_READONLY:
-                this->nextToken();
-                flags |= Modifiers::kReadOnly_Flag;
-                break;
-            case Token::Kind::TK_WRITEONLY:
-                this->nextToken();
-                flags |= Modifiers::kWriteOnly_Flag;
-                break;
-            case Token::Kind::TK_COHERENT:
-                this->nextToken();
-                flags |= Modifiers::kCoherent_Flag;
-                break;
-            case Token::Kind::TK_VOLATILE:
-                this->nextToken();
-                flags |= Modifiers::kVolatile_Flag;
-                break;
-            case Token::Kind::TK_RESTRICT:
-                this->nextToken();
-                flags |= Modifiers::kRestrict_Flag;
-                break;
-            case Token::Kind::TK_BUFFER:
-                this->nextToken();
-                flags |= Modifiers::kBuffer_Flag;
-                break;
-            case Token::Kind::TK_HASSIDEEFFECTS:
-                this->nextToken();
-                flags |= Modifiers::kHasSideEffects_Flag;
-                break;
-            case Token::Kind::TK_PLS:
-                this->nextToken();
-                flags |= Modifiers::kPLS_Flag;
-                break;
-            case Token::Kind::TK_PLSIN:
-                this->nextToken();
-                flags |= Modifiers::kPLSIn_Flag;
-                break;
-            case Token::Kind::TK_PLSOUT:
-                this->nextToken();
-                flags |= Modifiers::kPLSOut_Flag;
-                break;
-            case Token::Kind::TK_VARYING:
-                this->nextToken();
-                flags |= Modifiers::kVarying_Flag;
-                break;
-            case Token::Kind::TK_INLINE:
-                this->nextToken();
-                flags |= Modifiers::kInline_Flag;
-                break;
-            default:
-                return Modifiers(layout, flags);
+        int tokenFlag = parse_modifier_token(peek().fKind);
+        if (!tokenFlag) {
+            break;
         }
+        flags |= tokenFlag;
+        this->nextToken();
     }
+    return Modifiers(layout, flags);
 }
 
 Modifiers Parser::modifiersWithDefaults(int defaultFlags) {
@@ -1157,10 +1127,7 @@ ASTNode::ID Parser::statement() {
         case Token::Kind::TK_CONST:
             return this->varDeclarations();
         case Token::Kind::TK_IDENTIFIER:
-            if (this->isType(this->text(start))) {
-                return this->varDeclarations();
-            }
-            [[fallthrough]];
+            return this->varDeclarationsOrExpressionStatement();
         default:
             return this->expressionStatement();
     }
@@ -1176,8 +1143,7 @@ ASTNode::ID Parser::type() {
         this->error(type, ("no type named '" + this->text(type) + "'").c_str());
         return ASTNode::ID::Invalid();
     }
-    ASTNode::ID result = this->createNode(type.fOffset, ASTNode::Kind::kType);
-    ASTNode::TypeData td(this->text(type), /*isStructDeclaration=*/false);
+    ASTNode::ID result = this->createNode(type.fOffset, ASTNode::Kind::kType, this->text(type));
     bool isArray = false;
     while (this->checkNext(Token::Kind::TK_LBRACKET)) {
         if (isArray) {
@@ -1198,7 +1164,6 @@ ASTNode::ID Parser::type() {
         isArray = true;
         this->expect(Token::Kind::TK_RBRACKET, "']'");
     }
-    getNode(result).setTypeData(td);
     return result;
 }
 

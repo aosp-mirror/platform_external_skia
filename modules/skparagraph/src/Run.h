@@ -143,6 +143,7 @@ public:
     void iterateThroughClusters(const ClusterVisitor& visitor);
 
     std::tuple<bool, ClusterIndex, ClusterIndex> findLimitingClusters(TextRange text) const;
+    std::tuple<bool, TextIndex, TextIndex> findLimitingGraphemes(TextRange text) const;
     SkSpan<const SkGlyphID> glyphs() const {
         return SkSpan<const SkGlyphID>(fGlyphs.begin(), fGlyphs.size());
     }
@@ -392,6 +393,12 @@ public:
 
     SkScalar height() const {
         return ::round((double)fDescent - fAscent + fLeading);
+    }
+
+    void update(SkScalar a, SkScalar d, SkScalar l) {
+        fAscent = a;
+        fDescent = d;
+        fLeading = l;
     }
 
     SkScalar alphabeticBaseline() const { return fLeading / 2 - fAscent; }

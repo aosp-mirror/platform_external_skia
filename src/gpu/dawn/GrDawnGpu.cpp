@@ -133,13 +133,11 @@ GrDawnGpu::GrDawnGpu(GrDirectContext* direct, const GrContextOptions& options,
     this->initCapsAndCompiler(sk_make_sp<GrDawnCaps>(options));
 }
 
-GrDawnGpu::~GrDawnGpu() {
-    this->waitOnAllBusyStagingBuffers();
-}
+GrDawnGpu::~GrDawnGpu() { this->finishOutstandingGpuWork(); }
 
 void GrDawnGpu::disconnect(DisconnectType type) {
     if (DisconnectType::kCleanup == type) {
-        this->waitOnAllBusyStagingBuffers();
+        this->finishOutstandingGpuWork();
     }
     fStagingBufferManager.reset();
     fQueue = nullptr;
@@ -191,7 +189,7 @@ bool GrDawnGpu::onWritePixels(GrSurface* surface, int left, int top, int width, 
 
 bool GrDawnGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
                                    GrColorType textureColorType, GrColorType bufferColorType,
-                                   GrGpuBuffer* transferBuffer, size_t bufferOffset,
+                                   sk_sp<GrGpuBuffer> transferBuffer, size_t bufferOffset,
                                    size_t rowBytes) {
     SkASSERT(!"unimplemented");
     return false;
@@ -199,7 +197,7 @@ bool GrDawnGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int wi
 
 bool GrDawnGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
                                      GrColorType surfaceColorType, GrColorType bufferColorType,
-                                     GrGpuBuffer* transferBuffer, size_t offset) {
+                                     sk_sp<GrGpuBuffer> transferBuffer, size_t offset) {
     SkASSERT(!"unimplemented");
     return false;
 }
@@ -846,6 +844,10 @@ void GrDawnGpu::waitSemaphore(GrSemaphore* semaphore) {
 
 void GrDawnGpu::checkFinishProcs() {
     fFinishCallbacks.check();
+}
+
+void GrDawnGpu::finishOutstandingGpuWork() {
+    this->waitOnAllBusyStagingBuffers();
 }
 
 std::unique_ptr<GrSemaphore> GrDawnGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {

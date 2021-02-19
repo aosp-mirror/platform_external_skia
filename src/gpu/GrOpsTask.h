@@ -17,6 +17,7 @@
 #include "include/private/SkTDArray.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkClipStack.h"
+#include "src/core/SkSpan.h"
 #include "src/core/SkStringUtils.h"
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrAppliedClip.h"
@@ -54,7 +55,7 @@ public:
     void onPrePrepare(GrRecordingContext*) override;
     /**
      * Together these two functions flush all queued up draws to GrCommandBuffer. The return value
-     * of executeOps() indicates whether any commands were actually issued to the GPU.
+     * of onExecute() indicates whether any commands were actually issued to the GPU.
      */
     void onPrepare(GrOpFlushState* flushState) override;
     bool onExecute(GrOpFlushState* flushState) override;
@@ -89,13 +90,20 @@ public:
     // Must only be called if native color buffer clearing is enabled.
     void setColorLoadOp(GrLoadOp op, std::array<float, 4> color = {0, 0, 0, 0});
 
+    // Merge as many opsTasks as possible from the head of 'tasks'. They should all be
+    // renderPass compatible. Return the number of tasks merged into 'this'.
+    int mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks);
+
 #ifdef SK_DEBUG
     int numClips() const override { return fNumClips; }
     void visitProxies_debugOnly(const GrOp::VisitProxyFunc&) const override;
 #endif
 
 #if GR_TEST_UTILS
-    void dump(bool printDependencies) const override;
+    void dump(const SkString& label,
+              SkString indent,
+              bool printDependencies,
+              bool close) const override;
     const char* name() const final { return "Ops"; }
     int numOpChains() const { return fOpChains.count(); }
     const GrOp* getChain(int index) const { return fOpChains[index].head(); }
@@ -234,6 +242,9 @@ private:
 
     ExpectedOutcome onMakeClosed(const GrCaps& caps, SkIRect* targetUpdateBounds) override;
 
+    // Remove all ops, proxies, etc. Used in the merging algorithm when tasks can be skipped.
+    void reset();
+
     friend class OpsTaskTestingAccess;
 
     // The RTC and OpsTask have to work together to handle buffer clears. In most cases, buffer
@@ -247,6 +258,9 @@ private:
     // into the owning DDL.
     GrRecordingContext::Arenas fArenas;
     GrAuditTrail*              fAuditTrail;
+
+    GrSwizzle fTargetSwizzle;
+    GrSurfaceOrigin fTargetOrigin;
 
     GrLoadOp fColorLoadOp = GrLoadOp::kLoad;
     std::array<float, 4> fLoadClearColor = {0, 0, 0, 0};
@@ -264,7 +278,8 @@ private:
 
     // MDB TODO: 4096 for the first allocation of the clip space will be huge overkill.
     // Gather statistics to determine the correct size.
-    SkArenaAllocWithReset fClipAllocator{4096};
+    // TODO: Move the clips onto the recordTimeAllocator after CCPR is removed.
+    SkSTArray<1, std::unique_ptr<SkArenaAlloc>> fClipAllocators;
     SkDEBUGCODE(int fNumClips;)
 
     // TODO: We could look into this being a set if we find we're adding a lot of duplicates that is

@@ -25,14 +25,25 @@ enum class SkSVGTag {
     kClipPath,
     kDefs,
     kEllipse,
+    kFeBlend,
     kFeColorMatrix,
     kFeComposite,
+    kFeDisplacementMap,
+    kFeDistantLight,
     kFeFlood,
+    kFeGaussianBlur,
+    kFeMorphology,
+    kFeOffset,
+    kFePointLight,
+    kFeSpecularLighting,
+    kFeSpotLight,
     kFeTurbulence,
     kFilter,
     kG,
+    kImage,
     kLine,
     kLinearGradient,
+    kMask,
     kPath,
     kPattern,
     kPolygon,
@@ -43,6 +54,7 @@ enum class SkSVGTag {
     kSvg,
     kText,
     kTextLiteral,
+    kTextPath,
     kTSpan,
     kUse
 };
@@ -98,37 +110,43 @@ public:
     virtual bool parseAndSetAttribute(const char* name, const char* value);
 
     // inherited
-    SVG_PRES_ATTR(ClipRule        , SkSVGFillRule  , true)
-    SVG_PRES_ATTR(Color           , SkSVGColorType , true)
-    SVG_PRES_ATTR(FillRule        , SkSVGFillRule  , true)
-    SVG_PRES_ATTR(Fill            , SkSVGPaint     , true)
-    SVG_PRES_ATTR(FillOpacity     , SkSVGNumberType, true)
-    SVG_PRES_ATTR(FontFamily      , SkSVGFontFamily, true)
-    SVG_PRES_ATTR(FontSize        , SkSVGFontSize  , true)
-    SVG_PRES_ATTR(FontStyle       , SkSVGFontStyle , true)
-    SVG_PRES_ATTR(FontWeight      , SkSVGFontWeight, true)
-    SVG_PRES_ATTR(Stroke          , SkSVGPaint     , true)
-    SVG_PRES_ATTR(StrokeDashArray , SkSVGDashArray , true)
-    SVG_PRES_ATTR(StrokeDashOffset, SkSVGLength    , true)
-    SVG_PRES_ATTR(StrokeLineCap   , SkSVGLineCap   , true)
-    SVG_PRES_ATTR(StrokeLineJoin  , SkSVGLineJoin  , true)
-    SVG_PRES_ATTR(StrokeMiterLimit, SkSVGNumberType, true)
-    SVG_PRES_ATTR(StrokeOpacity   , SkSVGNumberType, true)
-    SVG_PRES_ATTR(StrokeWidth     , SkSVGLength    , true)
-    SVG_PRES_ATTR(TextAnchor      , SkSVGTextAnchor, true)
-    SVG_PRES_ATTR(Visibility      , SkSVGVisibility, true)
+    SVG_PRES_ATTR(ClipRule                 , SkSVGFillRule  , true)
+    SVG_PRES_ATTR(Color                    , SkSVGColorType , true)
+    SVG_PRES_ATTR(ColorInterpolation       , SkSVGColorspace, true)
+    SVG_PRES_ATTR(ColorInterpolationFilters, SkSVGColorspace, true)
+    SVG_PRES_ATTR(FillRule                 , SkSVGFillRule  , true)
+    SVG_PRES_ATTR(Fill                     , SkSVGPaint     , true)
+    SVG_PRES_ATTR(FillOpacity              , SkSVGNumberType, true)
+    SVG_PRES_ATTR(FontFamily               , SkSVGFontFamily, true)
+    SVG_PRES_ATTR(FontSize                 , SkSVGFontSize  , true)
+    SVG_PRES_ATTR(FontStyle                , SkSVGFontStyle , true)
+    SVG_PRES_ATTR(FontWeight               , SkSVGFontWeight, true)
+    SVG_PRES_ATTR(Stroke                   , SkSVGPaint     , true)
+    SVG_PRES_ATTR(StrokeDashArray          , SkSVGDashArray , true)
+    SVG_PRES_ATTR(StrokeDashOffset         , SkSVGLength    , true)
+    SVG_PRES_ATTR(StrokeLineCap            , SkSVGLineCap   , true)
+    SVG_PRES_ATTR(StrokeLineJoin           , SkSVGLineJoin  , true)
+    SVG_PRES_ATTR(StrokeMiterLimit         , SkSVGNumberType, true)
+    SVG_PRES_ATTR(StrokeOpacity            , SkSVGNumberType, true)
+    SVG_PRES_ATTR(StrokeWidth              , SkSVGLength    , true)
+    SVG_PRES_ATTR(TextAnchor               , SkSVGTextAnchor, true)
+    SVG_PRES_ATTR(Visibility               , SkSVGVisibility, true)
 
     // not inherited
-    SVG_PRES_ATTR(ClipPath        , SkSVGClip      , false)
-    SVG_PRES_ATTR(Filter          , SkSVGFilterType, false)
-    SVG_PRES_ATTR(Opacity         , SkSVGNumberType, false)
-    SVG_PRES_ATTR(StopColor       , SkSVGColor     , false)
-    SVG_PRES_ATTR(StopOpacity     , SkSVGNumberType, false)
-    SVG_PRES_ATTR(FloodColor      , SkSVGColor     , false)
-    SVG_PRES_ATTR(FloodOpacity    , SkSVGNumberType, false)
+    SVG_PRES_ATTR(ClipPath                 , SkSVGFuncIRI   , false)
+    SVG_PRES_ATTR(Mask                     , SkSVGFuncIRI   , false)
+    SVG_PRES_ATTR(Filter                   , SkSVGFuncIRI   , false)
+    SVG_PRES_ATTR(Opacity                  , SkSVGNumberType, false)
+    SVG_PRES_ATTR(StopColor                , SkSVGColor     , false)
+    SVG_PRES_ATTR(StopOpacity              , SkSVGNumberType, false)
+    SVG_PRES_ATTR(FloodColor               , SkSVGColor     , false)
+    SVG_PRES_ATTR(FloodOpacity             , SkSVGNumberType, false)
+    SVG_PRES_ATTR(LightingColor            , SkSVGColor     , false)
 
 protected:
     SkSVGNode(SkSVGTag);
+
+    static SkMatrix ComputeViewboxMatrix(const SkRect&, const SkRect&, SkSVGPreserveAspectRatio);
 
     // Called before onRender(), to apply local attributes to the context.  Unlike onRender(),
     // onPrepareToRender() bubbles up the inheritance chain: overriders should always call

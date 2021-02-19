@@ -103,9 +103,9 @@ protected:
 
         SkPaint paint;
         paint.setAntiAlias(true);
-        paint.setFilterQuality(kLow_SkFilterQuality);
 
-        canvas->experimental_DrawEdgeAAImageSet(batch, kRectCount, nullptr, nullptr, &paint,
+        canvas->experimental_DrawEdgeAAImageSet(batch, kRectCount, nullptr, nullptr,
+                                                SkSamplingOptions(SkFilterMode::kLinear), &paint,
                                                 SkCanvas::kFast_SrcRectConstraint);
     }
 
@@ -115,13 +115,13 @@ protected:
 
         SkPaint paint;
         paint.setAntiAlias(true);
-        paint.setFilterQuality(kLow_SkFilterQuality);
 
         for (int i = 0; i < kRectCount; ++i) {
             int imageIndex = kImageMode == ImageMode::kShared ? 0 : i;
-            SkIRect srcRect = SkIRect::MakeWH(fImages[imageIndex]->width(),
-                                              fImages[imageIndex]->height());
-            canvas->drawImageRect(fImages[imageIndex].get(), srcRect, fRects[i], &paint,
+            SkRect srcRect = SkRect::MakeIWH(fImages[imageIndex]->width(),
+                                             fImages[imageIndex]->height());
+            canvas->drawImageRect(fImages[imageIndex].get(), srcRect, fRects[i],
+                                  SkSamplingOptions(SkFilterMode::kLinear), &paint,
                                   SkCanvas::kFast_SrcRectConstraint);
         }
     }

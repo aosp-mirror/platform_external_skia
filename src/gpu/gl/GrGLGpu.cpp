@@ -835,7 +835,8 @@ bool GrGLGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
 
 bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
                                  GrColorType textureColorType, GrColorType bufferColorType,
-                                 GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes) {
+                                 sk_sp<GrGpuBuffer> transferBuffer, size_t offset,
+                                 size_t rowBytes) {
     GrGLTexture* glTex = static_cast<GrGLTexture*>(texture);
 
     // Can't transfer compressed data
@@ -854,7 +855,7 @@ bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
 
     SkASSERT(!transferBuffer->isMapped());
     SkASSERT(!transferBuffer->isCpuBuffer());
-    const GrGLBuffer* glBuffer = static_cast<const GrGLBuffer*>(transferBuffer);
+    const GrGLBuffer* glBuffer = static_cast<const GrGLBuffer*>(transferBuffer.get());
     this->bindBuffer(GrGpuBufferType::kXferCpuToGpu, glBuffer);
 
     SkDEBUGCODE(
@@ -906,16 +907,17 @@ bool GrGLGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
 
 bool GrGLGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
                                    GrColorType surfaceColorType, GrColorType dstColorType,
-                                   GrGpuBuffer* transferBuffer, size_t offset) {
-    auto* glBuffer = static_cast<GrGLBuffer*>(transferBuffer);
+                                   sk_sp<GrGpuBuffer> transferBuffer, size_t offset) {
+    auto* glBuffer = static_cast<GrGLBuffer*>(transferBuffer.get());
     this->bindBuffer(GrGpuBufferType::kXferGpuToCpu, glBuffer);
     auto offsetAsPtr = reinterpret_cast<void*>(offset);
     return this->readOrTransferPixelsFrom(surface, left, top, width, height, surfaceColorType,
                                           dstColorType, offsetAsPtr, width);
 }
 
-void GrGLGpu::unbindCpuToGpuXferBuffer() {
-    auto* xferBufferState = this->hwBufferState(GrGpuBufferType::kXferCpuToGpu);
+void GrGLGpu::unbindXferBuffer(GrGpuBufferType type) {
+    SkASSERT(type == GrGpuBufferType::kXferCpuToGpu || type == GrGpuBufferType::kXferGpuToCpu);
+    auto* xferBufferState = this->hwBufferState(type);
     if (!xferBufferState->fBoundBufferUniqueID.isInvalid()) {
         GL_CALL(BindBuffer(xferBufferState->fGLTarget, 0));
         xferBufferState->invalidate();
@@ -1008,7 +1010,7 @@ void GrGLGpu::uploadTexData(SkISize texDims,
 
     bool restoreGLRowLength = false;
 
-    this->unbindCpuToGpuXferBuffer();
+    this->unbindXferBuffer(GrGpuBufferType::kXferCpuToGpu);
     GL_CALL(PixelStorei(GR_GL_UNPACK_ALIGNMENT, 1));
 
     SkISize dims = dstRect.size();
@@ -1449,6 +1451,8 @@ bool GrGLGpu::onUpdateCompressedBackendTexture(const GrBackendTexture& backendTe
                                                const BackendTextureData* data) {
     SkASSERT(data && data->type() != BackendTextureData::Type::kPixmaps);
 
+    this->handleDirtyContext();
+
     GrGLTextureInfo info;
     SkAssertResult(backendTexture.getGLTextureInfo(&info));
 
@@ -1739,14 +1743,22 @@ void GrGLGpu::flushScissorTest(GrScissorTest scissorTest) {
     }
 }
 
-void GrGLGpu::flushScissorRect(const SkIRect& scissor, int rtWidth, int rtHeight,
-                               GrSurfaceOrigin rtOrigin) {
+void GrGLGpu::flushScissorRect(const SkIRect& scissor, int rtHeight, GrSurfaceOrigin rtOrigin) {
     SkASSERT(fHWScissorSettings.fEnabled == TriState::kYes_TriState);
     auto nativeScissor = GrNativeRect::MakeRelativeTo(rtOrigin, rtHeight, scissor);
     if (fHWScissorSettings.fRect != nativeScissor) {
         GL_CALL(Scissor(nativeScissor.fX, nativeScissor.fY, nativeScissor.fWidth,
                         nativeScissor.fHeight));
         fHWScissorSettings.fRect = nativeScissor;
+    }
+}
+
+void GrGLGpu::flushViewport(const SkIRect& viewport, int rtHeight, GrSurfaceOrigin rtOrigin) {
+    auto nativeViewport = GrNativeRect::MakeRelativeTo(rtOrigin, rtHeight, viewport);
+    if (fHWViewport != nativeViewport) {
+        GL_CALL(Viewport(nativeViewport.fX, nativeViewport.fY,
+                         nativeViewport.fWidth, nativeViewport.fHeight));
+        fHWViewport = nativeViewport;
     }
 }
 
@@ -1906,7 +1918,7 @@ void GrGLGpu::clear(const GrScissorState& scissor,
     } else {
         this->flushRenderTarget(glRT);
     }
-    this->flushScissor(scissor, glRT->width(), glRT->height(), origin);
+    this->flushScissor(scissor, glRT->height(), origin);
     this->disableWindowRectangles();
     this->flushColorWrite(true);
     this->flushClearColor(color);
@@ -2045,7 +2057,7 @@ void GrGLGpu::clearStencilClip(const GrScissorState& scissor, bool insideStencil
     GrGLRenderTarget* glRT = static_cast<GrGLRenderTarget*>(target);
     this->flushRenderTargetNoColorWrites(glRT);
 
-    this->flushScissor(scissor, glRT->width(), glRT->height(), origin);
+    this->flushScissor(scissor, glRT->height(), origin);
     this->disableWindowRectangles();
 
     GL_CALL(StencilMask((uint32_t) clipStencilMask));
@@ -2152,6 +2164,7 @@ bool GrGLGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
         SkASSERT(!(rowBytes % bytesPerPixel));
         rowPixelWidth = rowBytes / bytesPerPixel;
     }
+    this->unbindXferBuffer(GrGpuBufferType::kXferGpuToCpu);
     return this->readOrTransferPixelsFrom(surface, left, top, width, height, surfaceColorType,
                                           dstColorType, buffer, rowPixelWidth);
 }
@@ -2198,12 +2211,15 @@ void GrGLGpu::flushRenderTargetNoColorWrites(GrGLRenderTarget* target) {
             GrGLenum status;
             GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
             if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
-                SkDebugf("GrGLGpu::flushRenderTarget glCheckFramebufferStatus %x\n", status);
+                SkDebugf("GrGLGpu::flushRenderTargetNoColorWrites glCheckFramebufferStatus %x\n",
+                         status);
             }
         }
 #endif
         fHWBoundRenderTargetUniqueID = rtID;
-        this->flushViewport(target->width(), target->height());
+        this->flushViewport(SkIRect::MakeSize(target->dimensions()),
+                            target->height(),
+                            kTopLeft_GrSurfaceOrigin); // the origin is irrelevant in this case
     }
     if (this->caps()->workarounds().force_update_scissor_state_when_binding_fbo0) {
         // The driver forgets the correct scissor state when using FBO 0.
@@ -2240,14 +2256,6 @@ void GrGLGpu::flushFramebufferSRGB(bool enable) {
     } else if (!enable && kNo_TriState != fHWSRGBFramebuffer) {
         GL_CALL(Disable(GR_GL_FRAMEBUFFER_SRGB));
         fHWSRGBFramebuffer = kNo_TriState;
-    }
-}
-
-void GrGLGpu::flushViewport(int width, int height) {
-    GrNativeRect viewport = {0, 0, width, height};
-    if (fHWViewport != viewport) {
-        GL_CALL(Viewport(viewport.fX, viewport.fY, viewport.fWidth, viewport.fHeight));
-        fHWViewport = viewport;
     }
 }
 
@@ -2300,7 +2308,7 @@ void GrGLGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resol
         // happens inside flushScissor since resolveRect is already in native device coordinates.
         GrScissorState scissor(rt->dimensions());
         SkAssertResult(scissor.set(resolveRect));
-        this->flushScissor(scissor, rt->width(), rt->height(), kTopLeft_GrSurfaceOrigin);
+        this->flushScissor(scissor, rt->height(), kTopLeft_GrSurfaceOrigin);
         this->disableWindowRectangles();
         GL_CALL(ResolveMultisampleFramebuffer());
     } else {
@@ -3262,7 +3270,9 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst, GrSurface* src, const SkIRect& s
     // We don't swizzle at all in our copies.
     this->bindTexture(0, GrSamplerState::Filter::kNearest, GrSwizzle::RGBA(), srcTex);
     this->bindSurfaceFBOForPixelOps(dst, 0, GR_GL_FRAMEBUFFER, kDst_TempFBOTarget);
-    this->flushViewport(dst->width(), dst->height());
+    this->flushViewport(SkIRect::MakeSize(dst->dimensions()),
+                        dst->height(),
+                        kTopLeft_GrSurfaceOrigin); // the origin is irrelevant in this case
     fHWBoundRenderTargetUniqueID.makeInvalid();
     SkIRect dstRect = SkIRect::MakeXYWH(dstPoint.fX, dstPoint.fY, w, h);
     this->flushProgram(fCopyPrograms[progIdx].fProgram);
@@ -3469,7 +3479,7 @@ bool GrGLGpu::onRegenerateMipMapLevels(GrTexture* texture) {
 
         width = std::max(1, width / 2);
         height = std::max(1, height / 2);
-        this->flushViewport(width, height);
+        this->flushViewport(SkIRect::MakeWH(width, height), height, kTopLeft_GrSurfaceOrigin);
 
         GL_CALL(DrawArrays(GR_GL_TRIANGLE_STRIP, 0, 4));
     }
@@ -3598,6 +3608,8 @@ GrBackendTexture GrGLGpu::onCreateBackendTexture(SkISize dimensions,
 bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
                                      sk_sp<GrRefCntedCallback> finishedCallback,
                                      const BackendTextureData* data) {
+    this->handleDirtyContext();
+
     GrGLTextureInfo info;
     SkAssertResult(backendTexture.getGLTextureInfo(&info));
 
@@ -3907,7 +3919,7 @@ void GrGLGpu::flush(FlushType flushType) {
 
 bool GrGLGpu::onSubmitToGpu(bool syncCpu) {
     if (syncCpu || (!fFinishCallbacks.empty() && !this->caps()->fenceSyncSupport())) {
-        GL_CALL(Finish());
+        this->finishOutstandingGpuWork();
         fFinishCallbacks.callAll(true);
     } else {
         this->flush();
@@ -4014,6 +4026,10 @@ void GrGLGpu::waitSemaphore(GrSemaphore* semaphore) {
 
 void GrGLGpu::checkFinishProcs() {
     fFinishCallbacks.check();
+}
+
+void GrGLGpu::finishOutstandingGpuWork() {
+    GL_CALL(Finish());
 }
 
 void GrGLGpu::clearErrorsAndCheckForOOM() {

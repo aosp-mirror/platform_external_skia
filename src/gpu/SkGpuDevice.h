@@ -116,13 +116,15 @@ public:
 
     void drawDrawable(SkDrawable*, const SkMatrix*, SkCanvas* canvas) override;
 
-    void drawDevice(SkBaseDevice*, const SkPaint&) override;
-    void drawSpecial(SkSpecialImage*, const SkMatrix&, const SkPaint&) override;
+    void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override;
+    void drawSpecial(SkSpecialImage*, const SkMatrix&, const SkSamplingOptions&,
+                     const SkPaint&) override;
 
     void drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], SkCanvas::QuadAAFlags aaFlags,
                         const SkColor4f& color, SkBlendMode mode) override;
     void drawEdgeAAImageSet(const SkCanvas::ImageSetEntry[], int count, const SkPoint dstClips[],
-                            const SkMatrix[], const SkPaint&, SkCanvas::SrcRectConstraint) override;
+                            const SkMatrix[], const SkSamplingOptions&, const SkPaint&,
+                            SkCanvas::SrcRectConstraint) override;
 
     sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
@@ -210,10 +212,12 @@ private:
 
     // FIXME(michaelludwig) - Should be removed in favor of using drawImageQuad with edge flags to
     // for every element in the SkLatticeIter.
-    void drawProducerLattice(GrTextureProducer*, std::unique_ptr<SkLatticeIter>, const SkRect& dst,
-                             const SkPaint&);
-
-    void drawStrokedLine(const SkPoint pts[2], const SkPaint&);
+    void drawViewLattice(GrSurfaceProxyView,
+                         const GrColorInfo& colorInfo,
+                         std::unique_ptr<SkLatticeIter>,
+                         const SkRect& dst,
+                         SkFilterMode,
+                         const SkPaint&);
 
     static std::unique_ptr<GrSurfaceDrawContext> MakeSurfaceDrawContext(GrRecordingContext*,
                                                                         SkBudgeted,

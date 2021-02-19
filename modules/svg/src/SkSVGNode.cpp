@@ -20,6 +20,7 @@ SkSVGNode::SkSVGNode(SkSVGTag t) : fTag(t) {
     fPresentationAttributes.fStopOpacity.set(SkSVGNumberType(1.0f));
     fPresentationAttributes.fFloodColor.set(SkSVGColor(SK_ColorBLACK));
     fPresentationAttributes.fFloodOpacity.set(SkSVGNumberType(1.0f));
+    fPresentationAttributes.fLightingColor.set(SkSVGColor(SK_ColorWHITE));
 }
 
 SkSVGNode::~SkSVGNode() { }
@@ -88,32 +89,90 @@ bool SkSVGNode::parseAndSetAttribute(const char* n, const char* v) {
             SkSVGAttributeParser::parseProperty<decltype(fPresentationAttributes.f##attrName)>( \
                     svgName, n, v))
 
-    return PARSE_AND_SET(   "clip-path"        , ClipPath)
-           || PARSE_AND_SET("clip-rule"        , ClipRule)
-           || PARSE_AND_SET("color"            , Color)
-           || PARSE_AND_SET("fill"             , Fill)
-           || PARSE_AND_SET("fill-opacity"     , FillOpacity)
-           || PARSE_AND_SET("fill-rule"        , FillRule)
-           || PARSE_AND_SET("filter"           , Filter)
-           || PARSE_AND_SET("flood-color"      , FloodColor)
-           || PARSE_AND_SET("flood-opacity"    , FloodOpacity)
-           || PARSE_AND_SET("font-family"      , FontFamily)
-           || PARSE_AND_SET("font-size"        , FontSize)
-           || PARSE_AND_SET("font-style"       , FontStyle)
-           || PARSE_AND_SET("font-weight"      , FontWeight)
-           || PARSE_AND_SET("opacity"          , Opacity)
-           || PARSE_AND_SET("stop-color"       , StopColor)
-           || PARSE_AND_SET("stop-opacity"     , StopOpacity)
-           || PARSE_AND_SET("stroke"           , Stroke)
-           || PARSE_AND_SET("stroke-dasharray" , StrokeDashArray)
-           || PARSE_AND_SET("stroke-dashoffset", StrokeDashOffset)
-           || PARSE_AND_SET("stroke-linecap"   , StrokeLineCap)
-           || PARSE_AND_SET("stroke-linejoin"  , StrokeLineJoin)
-           || PARSE_AND_SET("stroke-miterlimit", StrokeMiterLimit)
-           || PARSE_AND_SET("stroke-opacity"   , StrokeOpacity)
-           || PARSE_AND_SET("stroke-width"     , StrokeWidth)
-           || PARSE_AND_SET("text-anchor"      , TextAnchor)
-           || PARSE_AND_SET("visibility"       , Visibility);
+    return PARSE_AND_SET(   "clip-path"                  , ClipPath)
+           || PARSE_AND_SET("clip-rule"                  , ClipRule)
+           || PARSE_AND_SET("color"                      , Color)
+           || PARSE_AND_SET("color-interpolation"        , ColorInterpolation)
+           || PARSE_AND_SET("color-interpolation-filters", ColorInterpolationFilters)
+           || PARSE_AND_SET("fill"                       , Fill)
+           || PARSE_AND_SET("fill-opacity"               , FillOpacity)
+           || PARSE_AND_SET("fill-rule"                  , FillRule)
+           || PARSE_AND_SET("filter"                     , Filter)
+           || PARSE_AND_SET("flood-color"                , FloodColor)
+           || PARSE_AND_SET("flood-opacity"              , FloodOpacity)
+           || PARSE_AND_SET("font-family"                , FontFamily)
+           || PARSE_AND_SET("font-size"                  , FontSize)
+           || PARSE_AND_SET("font-style"                 , FontStyle)
+           || PARSE_AND_SET("font-weight"                , FontWeight)
+           || PARSE_AND_SET("lighting-color"             , LightingColor)
+           || PARSE_AND_SET("mask"                       , Mask)
+           || PARSE_AND_SET("opacity"                    , Opacity)
+           || PARSE_AND_SET("stop-color"                 , StopColor)
+           || PARSE_AND_SET("stop-opacity"               , StopOpacity)
+           || PARSE_AND_SET("stroke"                     , Stroke)
+           || PARSE_AND_SET("stroke-dasharray"           , StrokeDashArray)
+           || PARSE_AND_SET("stroke-dashoffset"          , StrokeDashOffset)
+           || PARSE_AND_SET("stroke-linecap"             , StrokeLineCap)
+           || PARSE_AND_SET("stroke-linejoin"            , StrokeLineJoin)
+           || PARSE_AND_SET("stroke-miterlimit"          , StrokeMiterLimit)
+           || PARSE_AND_SET("stroke-opacity"             , StrokeOpacity)
+           || PARSE_AND_SET("stroke-width"               , StrokeWidth)
+           || PARSE_AND_SET("text-anchor"                , TextAnchor)
+           || PARSE_AND_SET("visibility"                 , Visibility);
 
 #undef PARSE_AND_SET
+}
+
+// https://www.w3.org/TR/SVG11/coords.html#PreserveAspectRatioAttribute
+SkMatrix SkSVGNode::ComputeViewboxMatrix(const SkRect& viewBox,
+                                         const SkRect& viewPort,
+                                         SkSVGPreserveAspectRatio par) {
+    SkASSERT(!viewBox.isEmpty());
+    SkASSERT(!viewPort.isEmpty());
+
+    auto compute_scale = [&]() -> SkV2 {
+        const auto sx = viewPort.width()  / viewBox.width(),
+                   sy = viewPort.height() / viewBox.height();
+
+        if (par.fAlign == SkSVGPreserveAspectRatio::kNone) {
+            // none -> anisotropic scaling, regardless of fScale
+            return {sx, sy};
+        }
+
+        // isotropic scaling
+        const auto s = par.fScale == SkSVGPreserveAspectRatio::kMeet
+                            ? std::min(sx, sy)
+                            : std::max(sx, sy);
+        return {s, s};
+    };
+
+    auto compute_trans = [&](const SkV2& scale) -> SkV2 {
+        static constexpr float gAlignCoeffs[] = {
+                0.0f, // Min
+                0.5f, // Mid
+                1.0f  // Max
+        };
+
+        const size_t x_coeff = par.fAlign >> 0 & 0x03,
+                     y_coeff = par.fAlign >> 2 & 0x03;
+
+        SkASSERT(x_coeff < SK_ARRAY_COUNT(gAlignCoeffs) &&
+                 y_coeff < SK_ARRAY_COUNT(gAlignCoeffs));
+
+        const auto tx = -viewBox.x() * scale.x,
+                   ty = -viewBox.y() * scale.y,
+                   dx = viewPort.width()  - viewBox.width() * scale.x,
+                   dy = viewPort.height() - viewBox.height() * scale.y;
+
+        return {
+            tx + dx * gAlignCoeffs[x_coeff],
+            ty + dy * gAlignCoeffs[y_coeff]
+        };
+    };
+
+    const auto s = compute_scale(),
+               t = compute_trans(s);
+
+    return SkMatrix::Translate(t.x, t.y) *
+           SkMatrix::Scale(s.x, s.y);
 }

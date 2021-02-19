@@ -28,8 +28,7 @@ public:
     // We will need to revisit this if we want full support for unsigned 64-bit integers,
     // but for now an SKSL_INT (int64_t) will hold every value we care about.
     Literal(const Context& context, int offset, SKSL_INT value)
-        : INHERITED(offset, kExpressionKind, context.fInt_Type.get())
-        , fValue(value) {}
+        : Literal(offset, value, context.fTypes.fIntLiteral.get()) {}
 
     Literal(int offset, int64_t value, const Type* type)
         : INHERITED(offset, kExpressionKind, type)
@@ -51,8 +50,7 @@ public:
         return true;
     }
 
-    ComparisonResult compareConstant(const Context& context,
-                                     const Expression& other) const override {
+    ComparisonResult compareConstant(const Expression& other) const override {
         if (!other.is<IntLiteral>()) {
             return ComparisonResult::kUnknown;
         }
@@ -61,8 +59,7 @@ public:
     }
 
     CoercionCost coercionCost(const Type& target) const override {
-        if (target.isSigned() || target.isUnsigned() || target.isFloat() ||
-            target.typeKind() == Type::TypeKind::kEnum) {
+        if (target.isSigned() || target.isUnsigned() || target.isFloat() || target.isEnum()) {
             return CoercionCost::Free();
         }
         return INHERITED::coercionCost(target);

@@ -602,51 +602,76 @@ int DirectMaskSubRun::glyphCount() const {
     return fGlyphs.glyphs().count();
 }
 
+namespace {
+enum ClipMethod {
+    kClippedOut,
+    kUnclipped,
+    kGPUClipped,
+    kGeometryClipped
+};
+
+std::tuple<ClipMethod, SkIRect>
+calculate_clip(const GrClip* clip, SkRect deviceBounds, SkRect glyphBounds) {
+    if (clip == nullptr && !deviceBounds.intersects(glyphBounds)) {
+        return {kClippedOut, SkIRect::MakeEmpty()};
+    } else if (clip != nullptr) {
+        switch (auto result = clip->preApply(glyphBounds, GrAA::kNo); result.fEffect) {
+            case GrClip::Effect::kClippedOut:
+                return {kClippedOut, SkIRect::MakeEmpty()};
+            case GrClip::Effect::kUnclipped:
+                return {kUnclipped, SkIRect::MakeEmpty()};
+            case GrClip::Effect::kClipped: {
+                if (result.fIsRRect && result.fRRect.isRect()) {
+                    SkRect r = result.fRRect.rect();
+                    if (result.fAA == GrAA::kNo || GrClip::IsPixelAligned(r)) {
+                        SkIRect clipRect = SkIRect::MakeEmpty();
+                        // Clip geometrically during onPrepare using clipRect.
+                        r.round(&clipRect);
+                        if (clipRect.contains(glyphBounds)) {
+                            // If fully within the clip, signal no clipping using the empty rect.
+                            return {kUnclipped, SkIRect::MakeEmpty()};
+                        }
+                        // Use the clipRect to clip the geometry.
+                        return {kGeometryClipped, clipRect};
+                    }
+                    // Partial pixel clipped at this point. Have the GPU handle it.
+                }
+            }
+            break;
+        }
+    }
+    return {kGPUClipped, SkIRect::MakeEmpty()};
+}
+}  // namespace
+
 std::tuple<const GrClip*, GrOp::Owner>
 DirectMaskSubRun::makeAtlasTextOp(const GrClip* clip, const SkMatrixProvider& viewMatrix,
                                   const SkGlyphRunList& glyphRunList,
-        GrSurfaceDrawContext* rtc) const {
+                                  GrSurfaceDrawContext* rtc) const {
     SkASSERT(this->glyphCount() != 0);
 
     const SkMatrix& drawMatrix = viewMatrix.localToDevice();
     const SkPoint drawOrigin = glyphRunList.origin();
 
-    // We can clip geometrically using clipRect and ignore clip if we're not using SDFs or
-    // transformed glyphs, and we have an axis-aligned rectangular non-AA clip.
-    SkIRect clipRect = SkIRect::MakeEmpty();
-
-    // We only need to do clipping work if the SubRun isn't contained by the clip
+    // We can clip geometrically using clipRect and ignore clip when an axis-aligned rectangular
+    // non-AA clip is used. If clipRect is empty, and clip is nullptr, then there is no clipping
+    // needed.
     const SkRect subRunBounds = this->deviceRect(drawMatrix, drawOrigin);
-    const SkRect renderTargetBounds = SkRect::MakeWH(rtc->width(), rtc->height());
+    const SkRect deviceBounds = SkRect::MakeWH(rtc->width(), rtc->height());
+    auto [clipMethod, clipRect] = calculate_clip(clip, deviceBounds, subRunBounds);
 
-    if (clip == nullptr && !renderTargetBounds.intersects(subRunBounds)) {
-        // If the SubRun is completely outside, don't add an op for it.
-        return {nullptr, nullptr};
-    } else if (clip != nullptr) {
-        switch (auto result = clip->preApply(subRunBounds, GrAA::kNo); result.fEffect) {
-            case GrClip::Effect::kClippedOut:
-                // Return nullptr op to indicate no op needed.
-                return {nullptr, nullptr};
-            case GrClip::Effect::kUnclipped:
-                clipRect = SkIRect::MakeEmpty();
-                clip = nullptr;
-                break;
-            case GrClip::Effect::kClipped: {
-                if (result.fIsRRect && result.fRRect.isRect()) {
-                    SkRect r = result.fRRect.rect();
-                    if (result.fAA == GrAA::kNo || GrClip::IsPixelAligned(r)) {
-                        // Clip geometrically during onPrepare using clipRect.
-                        r.round(&clipRect);
-                        if (clipRect.contains(subRunBounds)) {
-                            // If fully within the clip, signal no clipping using the empty rect.
-                            clipRect = SkIRect::MakeEmpty();
-                        }
-                        clip = nullptr;
-                    }
-                }
-            }
+    switch (clipMethod) {
+        case kClippedOut:
+            // Returning nullptr as op means skip this op.
+            return {nullptr, nullptr};
+        case kUnclipped:
+        case kGeometryClipped:
+            // GPU clip is not needed.
+            clip = nullptr;
             break;
-        }
+        case kGPUClipped:
+            // Use the the GPU clip; clipRect is ignored.
+            break;
     }
 
     if (!clipRect.isEmpty()) { SkASSERT(clip == nullptr); }
@@ -1404,8 +1429,8 @@ bool GrTextBlob::canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) {
         return false;
     }
 
-    for (GrSubRun* subRun : this->subRunList()) {
-        if (!subRun->canReuse(paint, drawMatrix)) {
+    for (GrSubRun& subRun : this->fSubRunList) {
+        if (!subRun.canReuse(paint, drawMatrix)) {
             return false;
         }
     }
@@ -1426,7 +1451,7 @@ void GrTextBlob::addMultiMaskFormat(
     auto addSameFormat = [&](const SkZip<SkGlyphVariant, SkPoint>& drawable, GrMaskFormat format) {
         GrSubRun* subRun = addSingle(drawable, strikeSpec, format, this, &fAlloc);
         if (subRun != nullptr) {
-            this->insertSubRun(subRun);
+            fSubRunList.append(subRun);
         } else {
             fSomeGlyphsExcluded = true;
         }
@@ -1458,10 +1483,6 @@ GrTextBlob::GrTextBlob(size_t allocSize,
         , fInitialLuminance{initialLuminance}
         , fAlloc{SkTAddOffset<char>(this, sizeof(GrTextBlob)), allocSize, allocSize/2} { }
 
-void GrTextBlob::insertSubRun(GrSubRun* subRun) {
-    fSubRunList.addToTail(subRun);
-}
-
 void GrTextBlob::processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkStrikeSpec& strikeSpec) {
 
@@ -1476,7 +1497,7 @@ void GrTextBlob::processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawab
                                         strikeSpec,
                                         *this,
                                         &fAlloc);
-    this->insertSubRun(subRun);
+    fSubRunList.append(subRun);
 }
 
 void GrTextBlob::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -1486,7 +1507,7 @@ void GrTextBlob::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawabl
                                    SkScalar maxScale) {
     this->setMinAndMaxScale(minScale, maxScale);
     GrSubRun* subRun = SDFTSubRun::Make(drawables, runFont, strikeSpec, this, &fAlloc);
-    this->insertSubRun(subRun);
+    fSubRunList.append(subRun);
 }
 
 void GrTextBlob::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,

@@ -39,7 +39,7 @@
 #include "src/gpu/GrTextureAdjuster.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureProxyPriv.h"
-#include "src/gpu/SkGr.h"
+#include "src/gpu/GrYUVATextureProxies.h"
 #include "src/gpu/gl/GrGLTexture.h"
 
 #include <cstddef>
@@ -53,12 +53,8 @@ SkImage_Gpu::SkImage_Gpu(sk_sp<GrImageContext> context, uint32_t uniqueID, GrSur
         , fView(std::move(view)) {
 #ifdef SK_DEBUG
     const GrBackendFormat& format = fView.proxy()->backendFormat();
-    GrColorType grCT = SkColorTypeToGrColorType(ct);
     const GrCaps* caps = this->context()->priv().caps();
-    if (caps->isFormatSRGB(format)) {
-        SkASSERT(grCT == GrColorType::kRGBA_8888);
-        grCT = GrColorType::kRGBA_8888_SRGB;
-    }
+    GrColorType grCT = SkColorTypeAndFormatToGrColorType(caps, ct, format);
     SkASSERT(caps->isFormatCompressed(format) ||
              caps->areColorTypeAndFormatCompatible(grCT, format));
 #endif
@@ -81,6 +77,37 @@ GrSemaphoresSubmitted SkImage_Gpu::onFlush(GrDirectContext* dContext, const GrFl
                                          info);
 }
 
+GrBackendTexture SkImage_Gpu::onGetBackendTexture(bool flushPendingGrContextIO,
+                                                  GrSurfaceOrigin* origin) const {
+    auto direct = fContext->asDirectContext();
+    if (!direct) {
+        // This image was created with a DDL context and cannot be instantiated.
+        return GrBackendTexture();  // invalid
+    }
+
+    GrSurfaceProxy* proxy = fView.proxy();
+
+    if (!proxy->isInstantiated()) {
+        auto resourceProvider = direct->priv().resourceProvider();
+
+        if (!proxy->instantiate(resourceProvider)) {
+            return GrBackendTexture();  // invalid
+        }
+    }
+
+    GrTexture* texture = proxy->peekTexture();
+    if (texture) {
+        if (flushPendingGrContextIO) {
+            direct->priv().flushSurface(proxy);
+        }
+        if (origin) {
+            *origin = fView.origin();
+        }
+        return texture->getBackendTexture();
+    }
+    return GrBackendTexture();  // invalid
+}
+
 sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(SkColorType targetCT,
                                                          sk_sp<SkColorSpace> targetCS,
                                                          GrDirectContext* direct) const {
@@ -95,11 +122,11 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(SkColorType targetCT,
     if (!surfaceFillContext) {
         return nullptr;
     }
-
-    auto texFP = GrTextureEffect::Make(*this->view(direct), this->alphaType());
+    auto [view, ct] = this->asView(direct, GrMipmapped(this->hasMipmaps()));
+    auto texFP = GrTextureEffect::Make(std::move(view), this->alphaType());
     auto colorFP = GrColorSpaceXformEffect::Make(std::move(texFP),
                                                  this->colorSpace(), this->alphaType(),
-                                                 targetCS.get(), this->alphaType());
+                                                 targetCS.get(),     this->alphaType());
     SkASSERT(colorFP);
 
     surfaceFillContext->fillWithFP(std::move(colorFP));
@@ -119,7 +146,7 @@ sk_sp<SkImage> SkImage_Gpu::onReinterpretColorSpace(sk_sp<SkColorSpace> newCS) c
 void SkImage_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
                                               const SkIRect& srcRect,
                                               RescaleGamma rescaleGamma,
-                                              SkFilterQuality rescaleQuality,
+                                              RescaleMode rescaleMode,
                                               ReadPixelsCallback callback,
                                               ReadPixelsContext context) {
     auto dContext = fContext->asDirectContext();
@@ -133,7 +160,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
         callback(context, nullptr);
         return;
     }
-    ctx->asyncRescaleAndReadPixels(dContext, info, srcRect, rescaleGamma, rescaleQuality,
+    ctx->asyncRescaleAndReadPixels(dContext, info, srcRect, rescaleGamma, rescaleMode,
                                    callback, context);
 }
 
@@ -142,7 +169,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpac
                                                     const SkIRect& srcRect,
                                                     const SkISize& dstSize,
                                                     RescaleGamma rescaleGamma,
-                                                    SkFilterQuality rescaleQuality,
+                                                    RescaleMode rescaleMode,
                                                     ReadPixelsCallback callback,
                                                     ReadPixelsContext context) {
     auto dContext = fContext->asDirectContext();
@@ -162,7 +189,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpac
                                          srcRect,
                                          dstSize,
                                          rescaleGamma,
-                                         rescaleQuality,
+                                         rescaleMode,
                                          callback,
                                          context);
 }
@@ -307,23 +334,14 @@ sk_sp<SkImage> SkImage::MakeTextureFromCompressed(GrDirectContext* direct, sk_sp
                                    colorType, kOpaque_SkAlphaType, nullptr);
 }
 
-static sk_sp<SkImage> create_image_from_producer(GrRecordingContext* context,
-                                                 GrTextureProducer* producer,
-                                                 uint32_t id, GrMipmapped mipMapped) {
-    auto view = producer->view(mipMapped);
-    if (!view) {
-        return nullptr;
-    }
-    return sk_make_sp<SkImage_Gpu>(sk_ref_sp(context), id, std::move(view),
-                                   GrColorTypeToSkColorType(producer->colorType()),
-                                   producer->alphaType(), sk_ref_sp(producer->colorSpace()));
-}
-
 sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext* dContext,
-                                         GrMipmapped mipMapped,
+                                         GrMipmapped mipmapped,
                                          SkBudgeted budgeted) const {
     if (!dContext) {
         return nullptr;
+    }
+    if (!dContext->priv().caps()->mipmapSupport()) {
+        mipmapped = GrMipmapped::kNo;
     }
 
     if (this->isTextureBacked()) {
@@ -331,34 +349,26 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext* dContext,
             return nullptr;
         }
 
-        // TODO: Don't flatten YUVA images here.
-        const GrSurfaceProxyView* view = as_IB(this)->view(dContext);
-        SkASSERT(view && view->asTextureProxy());
-
-        if (mipMapped == GrMipmapped::kNo || view->asTextureProxy()->mipmapped() == mipMapped ||
-            !dContext->priv().caps()->mipmapSupport()) {
+        if (this->isTextureBacked() && (mipmapped == GrMipmapped::kNo || this->hasMipmaps())) {
             return sk_ref_sp(const_cast<SkImage*>(this));
         }
-        auto copy = GrCopyBaseMipMapToView(dContext, *view, budgeted);
-        if (!copy) {
-            return nullptr;
-        }
-        return sk_make_sp<SkImage_Gpu>(sk_ref_sp(dContext), this->uniqueID(), copy,
-                                       this->colorType(), this->alphaType(), this->refColorSpace());
     }
-
-    auto policy = budgeted == SkBudgeted::kYes ? GrImageTexGenPolicy::kNew_Uncached_Budgeted
-                                               : GrImageTexGenPolicy::kNew_Uncached_Unbudgeted;
-    if (this->isLazyGenerated()) {
-        GrImageTextureMaker maker(dContext, this, policy);
-        return create_image_from_producer(dContext, &maker, this->uniqueID(), mipMapped);
+    GrImageTexGenPolicy policy = budgeted == SkBudgeted::kYes
+                                         ? GrImageTexGenPolicy::kNew_Uncached_Budgeted
+                                         : GrImageTexGenPolicy::kNew_Uncached_Unbudgeted;
+    // TODO: Don't flatten YUVA images here. Add mips to the planes instead.
+    auto [view, ct] = as_IB(this)->asView(dContext, mipmapped, policy);
+    if (!view) {
+        return nullptr;
     }
-
-    if (const SkBitmap* bmp = as_IB(this)->onPeekBitmap()) {
-        GrBitmapTextureMaker maker(dContext, *bmp, policy);
-        return create_image_from_producer(dContext, &maker, this->uniqueID(), mipMapped);
-    }
-    return nullptr;
+    SkASSERT(view.asTextureProxy());
+    SkASSERT(mipmapped == GrMipmapped::kNo ||
+             view.asTextureProxy()->mipmapped() == GrMipmapped::kYes);
+    SkColorInfo colorInfo(GrColorTypeToSkColorType(ct), this->alphaType(), this->refColorSpace());
+    return sk_make_sp<SkImage_Gpu>(sk_ref_sp(dContext),
+                                   this->uniqueID(),
+                                   std::move(view),
+                                   std::move(colorInfo));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -442,7 +452,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrDirectContext* dContext,
         int newWidth = std::min(static_cast<int>(originalPixmap.width() * scale), maxTextureSize);
         int newHeight = std::min(static_cast<int>(originalPixmap.height() * scale), maxTextureSize);
         SkImageInfo info = originalPixmap.info().makeWH(newWidth, newHeight);
-        SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kNone);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
         if (!resized.tryAlloc(info) || !originalPixmap.scalePixels(resized, sampling)) {
             return nullptr;
         }
@@ -573,28 +583,19 @@ bool SkImage::MakeBackendTextureFromSkImage(GrDirectContext* direct,
         return false;
     }
 
-    // Ensure we have a texture backed image.
-    if (!image->isTextureBacked()) {
-        image = image->makeTextureImage(direct);
-        if (!image) {
-            return false;
-        }
-    }
-    SkImage_GpuBase* gpuImage = static_cast<SkImage_GpuBase*>(as_IB(image));
-    GrTexture* texture = gpuImage->getTexture();
-    if (!texture) {
-        // In context-loss cases, we may not have a texture.
-        return false;
-    }
+    auto [view, ct] = as_IB(image)->asView(direct, GrMipmapped::kNo);
 
-    // If the image's context doesn't match the provided context, fail.
-    if (texture->getContext() != direct) {
+    if (!view) {
         return false;
     }
 
     // Flush any pending IO on the texture.
-    direct->priv().flushSurface(as_IB(image)->peekProxy());
+    direct->priv().flushSurface(view.proxy());
 
+    GrTexture* texture = view.asTextureProxy()->peekTexture();
+    if (!texture) {
+        return false;
+    }
     // We must make a copy of the image if the image is not unique, if the GrTexture owned by the
     // image is not unique, or if the texture wraps an external object.
     if (!image->unique() || !texture->unique() ||
@@ -604,14 +605,7 @@ bool SkImage::MakeBackendTextureFromSkImage(GrDirectContext* direct,
         if (!image) {
             return false;
         }
-
-        texture = gpuImage->getTexture();
-        if (!texture) {
-            return false;
-        }
-
-        // Flush to ensure that the copy is completed before we return the texture.
-        direct->priv().flushSurface(as_IB(image)->peekProxy());
+        return MakeBackendTextureFromSkImage(direct, std::move(image), backendTexture, releaseProc);
     }
 
     SkASSERT(!texture->resourcePriv().refsWrappedObjects());
@@ -619,9 +613,30 @@ bool SkImage::MakeBackendTextureFromSkImage(GrDirectContext* direct,
     SkASSERT(image->unique());
 
     // Take a reference to the GrTexture and release the image.
-    sk_sp<GrTexture> textureRef(SkSafeRef(texture));
+    sk_sp<GrTexture> textureRef = sk_ref_sp(texture);
+    view.reset();
     image = nullptr;
+    SkASSERT(textureRef->unique());
 
     // Steal the backend texture from the GrTexture, releasing the GrTexture in the process.
     return GrTexture::StealBackendTexture(std::move(textureRef), backendTexture, releaseProc);
+}
+
+std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Gpu::onAsView(
+        GrRecordingContext* context,
+        GrMipmapped mipmapped,
+        GrImageTexGenPolicy policy) const {
+    if (!fContext->priv().matches(context)) {
+        return {};
+    }
+    if (policy != GrImageTexGenPolicy::kDraw) {
+        return {CopyView(context, fView, mipmapped, policy),
+                SkColorTypeToGrColorType(this->colorType())};
+    }
+    GrColorType ct = SkColorTypeAndFormatToGrColorType(context->priv().caps(),
+                                                       this->colorType(),
+                                                       fView.proxy()->backendFormat());
+    GrColorInfo colorInfo(ct, this->alphaType(), this->refColorSpace());
+    GrTextureAdjuster adjuster(context, fView, colorInfo, this->uniqueID());
+    return {adjuster.view(mipmapped), adjuster.colorType()};
 }

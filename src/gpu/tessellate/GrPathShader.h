@@ -34,37 +34,22 @@ public:
     int tessellationPatchVertexCount() const { return fTessellationPatchVertexCount; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
 
-    static GrProgramInfo* MakeProgramInfo(const GrPathShader* shader, SkArenaAlloc* arena,
-                                          const GrSurfaceProxyView& writeView,
-                                          GrPipeline::InputFlags pipelineFlags,
-                                          GrProcessorSet&& processors, GrAppliedClip&& appliedClip,
-                                          const GrXferProcessor::DstProxyView& dstProxyView,
-                                          GrXferBarrierFlags renderPassXferBarriers,
-                                          GrLoadOp colorLoadOp,
-                                          const GrUserStencilSettings* stencil,
-                                          const GrCaps& caps) {
-        auto* pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(
-                &caps, arena, writeView.swizzle(), std::move(appliedClip), dstProxyView,
-                std::move(processors), pipelineFlags);
-        return MakeProgramInfo(shader, arena, writeView, pipeline, dstProxyView,
-                               renderPassXferBarriers, colorLoadOp, stencil, caps);
-    }
+    struct ProgramArgs {
+        SkArenaAlloc* fArena;
+        const GrSurfaceProxyView& fWriteView;
+        const GrXferProcessor::DstProxyView* fDstProxyView;
+        GrXferBarrierFlags fXferBarrierFlags;
+        GrLoadOp fColorLoadOp;
+        const GrCaps* fCaps;
+    };
 
-    static GrProgramInfo* MakeProgramInfo(const GrPathShader* shader, SkArenaAlloc* arena,
-                                          const GrSurfaceProxyView& writeView,
-                                          const GrPipeline* pipeline,
-                                          const GrXferProcessor::DstProxyView& dstProxyView,
-                                          GrXferBarrierFlags renderPassXferBarriers,
-                                          GrLoadOp colorLoadOp,
-                                          const GrUserStencilSettings* stencil,
-                                          const GrCaps& caps) {
-        return arena->make<GrProgramInfo>(writeView,
-                                          pipeline,
-                                          stencil,
-                                          shader,
-                                          shader->fPrimitiveType,
-                                          shader->fTessellationPatchVertexCount,
-                                          renderPassXferBarriers, colorLoadOp);
+    static GrProgramInfo* MakeProgram(const ProgramArgs& args, const GrPathShader* shader,
+                                      const GrPipeline* pipeline,
+                                      const GrUserStencilSettings* stencil) {
+        return args.fArena->make<GrProgramInfo>(args.fWriteView, pipeline, stencil, shader,
+                                                shader->fPrimitiveType,
+                                                shader->fTessellationPatchVertexCount,
+                                                args.fXferBarrierFlags, args.fColorLoadOp);
     }
 
     // Fills in a 4-point patch in such a way that the shader will recognize it as a conic.

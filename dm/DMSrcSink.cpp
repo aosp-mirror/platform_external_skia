@@ -222,7 +222,7 @@ Result BRDSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
             }
             alpha8_to_gray8(&bitmap);
 
-            canvas->drawBitmap(bitmap, 0, 0);
+            canvas->drawImage(bitmap.asImage(), 0, 0);
             return Result::Ok();
         }
         case kDivisor_Mode: {
@@ -278,7 +278,7 @@ Result BRDSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
                     }
 
                     alpha8_to_gray8(&bitmap);
-                    canvas->drawBitmapRect(bitmap,
+                    canvas->drawImageRect(bitmap.asImage().get(),
                             SkRect::MakeXYWH((SkScalar) scaledBorder, (SkScalar) scaledBorder,
                                     (SkScalar) (subsetWidth / fSampleSize),
                                     (SkScalar) (subsetHeight / fSampleSize)),
@@ -286,7 +286,8 @@ Result BRDSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
                                     (SkScalar) (top / fSampleSize),
                                     (SkScalar) (subsetWidth / fSampleSize),
                                     (SkScalar) (subsetHeight / fSampleSize)),
-                            nullptr);
+                            SkSamplingOptions(), nullptr,
+                            SkCanvas::kStrict_SrcRectConstraint);
                 }
             }
             return Result::Ok();
@@ -405,7 +406,7 @@ static void draw_to_canvas(SkCanvas* canvas, const SkImageInfo& info, void* pixe
     SkBitmap bitmap;
     bitmap.installPixels(info, pixels, rowBytes);
     swap_rb_if_necessary(bitmap, dstColorType);
-    canvas->drawBitmap(bitmap, left, top);
+    canvas->drawImage(bitmap.asImage(), left, top);
 }
 
 // For codec srcs, we want the "draw" step to be a memcpy.  Any interesting color space or
@@ -1040,23 +1041,18 @@ Result ColorCodecSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
         info = canvasInfo.makeDimensions(info.dimensions());
     }
 
-    SkBitmap bitmap;
-    if (!bitmap.tryAllocPixels(info)) {
-        return Result::Fatal("Image(%s) is too large (%d x %d)",
-                             fPath.c_str(), info.width(), info.height());
-    }
-
-    switch (auto r = codec->getPixels(info, bitmap.getPixels(), bitmap.rowBytes())) {
+    auto [image, result] = codec->getImage(info);
+    switch (result) {
         case SkCodec::kSuccess:
         case SkCodec::kErrorInInput:
         case SkCodec::kIncompleteInput:
-            canvas->drawBitmap(bitmap, 0,0);
+            canvas->drawImage(image, 0,0);
             return Result::Ok();
         case SkCodec::kInvalidConversion:
             // TODO(mtklein): why are there formats we can't decode to?
             return Result::Skip("SkCodec can't decode to this format.");
         default:
-            return Result::Fatal("Couldn't getPixels %s. Error code %d", fPath.c_str(), r);
+            return Result::Fatal("Couldn't getPixels %s. Error code %d", fPath.c_str(), result);
     }
 }
 
@@ -1223,9 +1219,8 @@ Result SkottieSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
             {
                 SkAutoCanvasRestore acr(canvas, true);
                 canvas->clipRect(dest, true);
-                canvas->concat(SkMatrix::MakeRectToRect(SkRect::MakeSize(animation->size()),
-                                                        dest,
-                                                        SkMatrix::kCenter_ScaleToFit));
+                canvas->concat(SkMatrix::RectToRect(SkRect::MakeSize(animation->size()), dest,
+                                                    SkMatrix::kCenter_ScaleToFit));
                 animation->seek(t);
                 animation->render(canvas);
             }
@@ -1280,9 +1275,8 @@ Result SkRiveSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
     if (!bounds.isEmpty()) {
         // TODO: tiled frames when we add animation support
         SkAutoCanvasRestore acr(canvas, true);
-        canvas->concat(SkMatrix::MakeRectToRect(bounds,
-                                                SkRect::MakeWH(kTargetSize, kTargetSize),
-                                                SkMatrix::kCenter_ScaleToFit ));
+        canvas->concat(SkMatrix::RectToRect(bounds, SkRect::MakeWH(kTargetSize, kTargetSize),
+                                            SkMatrix::kCenter_ScaleToFit));
         for (const auto& ab : skrive->artboards()) {
             ab->render(canvas);
         }
@@ -1319,13 +1313,17 @@ SVGSrc::SVGSrc(Path path)
     : fName(SkOSPath::Basename(path.c_str()))
     , fScale(1) {
 
-    sk_sp<SkData> data(SkData::MakeFromFileName(path.c_str()));
-    if (!data) {
+    auto stream = SkStream::MakeFromFile(path.c_str());
+    if (!stream) {
         return;
     }
 
-    SkMemoryStream stream(std::move(data));
-    fDom = SkSVGDOM::MakeFromStream(stream);
+    auto rp = skresources::DataURIResourceProviderProxy::Make(
+                  skresources::FileResourceProvider::Make(SkOSPath::Dirname(path.c_str()),
+                                                          /*predecode=*/true),
+                  /*predecode=*/true);
+    fDom = SkSVGDOM::Builder().setResourceProvider(std::move(rp))
+                              .make(*stream);
     if (!fDom) {
         return;
     }
@@ -2207,7 +2205,7 @@ Result ViaUpright::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkS
     canvas.concat(upright);
     SkPaint paint;
     paint.setBlendMode(SkBlendMode::kSrc);
-    canvas.drawBitmap(*bitmap, 0, 0, &paint);
+    canvas.drawImage(bitmap->asImage(), 0, 0, SkSamplingOptions(), &paint);
 
     *bitmap = uprighted;
     return Result::Ok();

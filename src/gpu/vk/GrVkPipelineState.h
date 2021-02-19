@@ -16,6 +16,7 @@
 
 class GrPipeline;
 class GrStencilSettings;
+class GrVkBuffer;
 class GrVkCommandBuffer;
 class GrVkDescriptorPool;
 class GrVkDescriptorSet;
@@ -25,7 +26,6 @@ class GrVkPipeline;
 class GrVkRenderTarget;
 class GrVkSampler;
 class GrVkTexture;
-class GrVkUniformBuffer;
 
 /**
  * This class holds onto a GrVkPipeline object that we use for draws. Besides storing the acutal
@@ -40,11 +40,12 @@ public:
 
     GrVkPipelineState(
             GrVkGpu* gpu,
-            GrVkPipeline* pipeline,
+            sk_sp<const GrVkPipeline> pipeline,
             const GrVkDescriptorSetManager::Handle& samplerDSHandle,
             const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
             const UniformInfoArray& uniforms,
             uint32_t uniformSize,
+            bool usePushConstants,
             const UniformInfoArray& samplers,
             std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
             std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
@@ -109,13 +110,11 @@ private:
     void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin);
 
     // GrManagedResources
-    GrVkPipeline* fPipeline;
+    sk_sp<const GrVkPipeline> fPipeline;
 
     const GrVkDescriptorSetManager::Handle fSamplerDSHandle;
 
     SkSTArray<4, const GrVkSampler*> fImmutableSamplers;
-
-    std::unique_ptr<GrVkUniformBuffer> fUniformBuffer;
 
     // Tracks the current render target uniforms stored in the vertex buffer.
     RenderTargetState fRenderTargetState;

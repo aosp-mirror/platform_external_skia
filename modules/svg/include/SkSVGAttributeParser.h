@@ -8,6 +8,8 @@
 #ifndef SkSVGAttributeParser_DEFINED
 #define SkSVGAttributeParser_DEFINED
 
+#include <vector>
+
 #include "include/private/SkNoncopyable.h"
 #include "modules/svg/include/SkSVGTypes.h"
 #include "src/core/SkTLazy.h"
@@ -18,7 +20,6 @@ public:
 
     bool parseInteger(SkSVGIntegerType*);
     bool parseViewBox(SkSVGViewBoxType*);
-    bool parsePoints(SkSVGPointsType*);
     bool parsePreserveAspectRatio(SkSVGPreserveAspectRatio*);
 
     // TODO: Migrate all parse*() functions to this style (and delete the old version)
@@ -80,6 +81,8 @@ private:
     template <typename F>
     bool advanceWhile(F func);
 
+    bool matchStringToken(const char* token, const char** newPos = nullptr) const;
+
     bool parseWSToken();
     bool parseEOSToken();
     bool parseSepToken();
@@ -93,7 +96,7 @@ private:
     bool parseHexColorToken(SkColor*);
     bool parseColorComponentToken(int32_t*);
     bool parseRGBColorToken(SkColor*);
-    bool parseFuncIRI(SkSVGStringType*);
+    bool parseFuncIRI(SkSVGFuncIRI*);
 
     // Transform helpers
     bool parseMatrixToken(SkMatrix*);
@@ -107,6 +110,9 @@ private:
     // is handled by the passed functor.
     template <typename Func, typename T>
     bool parseParenthesized(const char* prefix, Func, T* result);
+
+    template <typename T>
+    bool parseList(std::vector<T>*);
 
     template <typename T, typename TArray>
     bool parseEnumMap(const TArray& arr, T* result) {

@@ -81,39 +81,6 @@ skvm::Color SkColorFilterBase::program(skvm::Builder* p, skvm::Color c,
     return {};
 }
 
-// This should look familiar... see just above.
-skvm::HalfColor SkColorFilterBase::program(skvm::Builder* p, skvm::HalfColor c,
-                                           SkColorSpace* dstCS,
-                                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
-    skvm::Half original = c.a;
-    if ((c = this->onProgram(p,c, dstCS, uniforms,alloc))) {
-        if (this->isAlphaUnchanged()) {
-            c.a = original;
-        }
-        return c;
-    }
-    //SkDebugf("cannot onProgram %s\n", this->getTypeName());
-    return {};
-}
-
-skvm::Color SkColorFilterBase::onProgram(skvm::Builder* p, skvm::Color c,
-                                         SkColorSpace* dstCS,
-                                         skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
-    if (skvm::HalfColor hc = this->onProgram(p, to_Half(c), dstCS, uniforms, alloc)) {
-        return to_F32(hc);
-    }
-    return {};
-}
-skvm::HalfColor SkColorFilterBase::onProgram(skvm::Builder* p, skvm::HalfColor hc,
-                                             SkColorSpace* dstCS,
-                                             skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
-    if (skvm::Color c = this->onProgram(p, to_F32(hc), dstCS, uniforms, alloc)) {
-        return to_Half(c);
-    }
-    return {};
-}
-
-
 SkColor SkColorFilter::filterColor(SkColor c) const {
     // This is mostly meaningless. We should phase-out this call entirely.
     SkColorSpace* cs = nullptr;
@@ -135,13 +102,31 @@ SkColor4f SkColorFilter::filterColor4f(const SkColor4f& origSrcColor, SkColorSpa
     SkStageRec rec = {
         &pipeline, &alloc, kRGBA_F32_SkColorType, dstCS, dummyPaint, nullptr, matrixProvider
     };
-    as_CFB(this)->onAppendStages(rec, color.fA == 1);
 
-    SkPMColor4f dst;
-    SkRasterPipeline_MemoryCtx dstPtr = { &dst, 0 };
-    pipeline.append(SkRasterPipeline::store_f32, &dstPtr);
-    pipeline.run(0,0, 1,1);
-    return dst.unpremul();
+    if (as_CFB(this)->onAppendStages(rec, color.fA == 1)) {
+        SkPMColor4f dst;
+        SkRasterPipeline_MemoryCtx dstPtr = { &dst, 0 };
+        pipeline.append(SkRasterPipeline::store_f32, &dstPtr);
+        pipeline.run(0,0, 1,1);
+        return dst.unpremul();
+    }
+
+    // This filter doesn't support SkRasterPipeline... try skvm.
+    skvm::Builder b;
+    skvm::Uniforms uni(b.uniform(), 4);
+    if (skvm::Color filtered =
+            as_CFB(this)->program(&b, b.uniformColor(color, &uni), dstCS, &uni, &alloc)) {
+
+        b.store({skvm::PixelFormat::FLOAT, 32,32,32,32, 0,32,64,96},
+                b.varying<SkColor4f>(), unpremul(filtered));
+
+        const bool allow_jit = false;  // We're only filtering one color, no point JITing.
+        b.done("filterColor4f", allow_jit).eval(1, uni.buf.data(), &color);
+        return color;
+    }
+
+    SkASSERT(false);
+    return SkColor4f{0,0,0,0};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

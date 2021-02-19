@@ -46,17 +46,17 @@ DEF_SIMPLE_GM(alpha_image, canvas, 256, 256) {
 
     paint.setColorFilter(make_color_filter());
     paint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 10.0f));
-    canvas->drawImage(image.get(), 16, 16, &paint);
+    canvas->drawImage(image.get(), 16, 16, SkSamplingOptions(), &paint);
 
     paint.setColorFilter(nullptr);
     paint.setShader(SkShaders::Color(SK_ColorCYAN));
-    canvas->drawImage(image.get(), 144, 16, &paint);
+    canvas->drawImage(image.get(), 144, 16, SkSamplingOptions(), &paint);
 
     paint.setColorFilter(make_color_filter());
-    canvas->drawImage(image.get(), 16, 144, &paint);
+    canvas->drawImage(image.get(), 16, 144, SkSamplingOptions(), &paint);
 
     paint.setMaskFilter(nullptr);
-    canvas->drawImage(image.get(), 144, 144, &paint);
+    canvas->drawImage(image.get(), 144, 144, SkSamplingOptions(), &paint);
 }
 
 // Created to demonstrate skbug.com/10556 - GPU backend was failing to apply paint alpha to
@@ -78,7 +78,7 @@ DEF_SIMPLE_GM(alpha_image_alpha_tint, canvas, 152, 80) {
     paint.setColor4f({ 0, 1, 0, 0.5f });
 
     canvas->translate(8, 8);
-    canvas->drawImage(image.get(), 0, 0, &paint);
+    canvas->drawImage(image.get(), 0, 0, SkSamplingOptions(), &paint);
 
     canvas->translate(72, 0);
     paint.setShader(image->makeShader(SkSamplingOptions()));

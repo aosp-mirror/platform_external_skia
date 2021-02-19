@@ -917,13 +917,50 @@ describe('Core canvas behavior', () => {
 
     gm('draw shadow', (canvas) => {
         const lightRadius = 20;
-        const flags = 0;
         const lightPos = [500,500,20];
         const zPlaneParams = [0,0,1];
         const path = starPath(CanvasKit);
+        const textFont = new CanvasKit.Font(null, 24);
+        const textPaint = new CanvasKit.Paint();
 
         canvas.drawShadow(path, zPlaneParams, lightPos, lightRadius,
-                              CanvasKit.BLACK, CanvasKit.MAGENTA, flags);
+                          CanvasKit.BLACK, CanvasKit.MAGENTA, 0);
+        canvas.drawText('Default Flags', 5, 250, textPaint, textFont);
+
+        let bounds = CanvasKit.getShadowLocalBounds(CanvasKit.Matrix.identity(),
+            path, zPlaneParams, lightPos, lightRadius, 0);
+        expectTypedArraysToEqual(bounds, Float32Array.of(-3.64462, -12.67541, 245.50, 242.59164));
+
+        bounds = CanvasKit.getShadowLocalBounds(CanvasKit.M44.identity(),
+            path, zPlaneParams, lightPos, lightRadius, 0);
+        expectTypedArraysToEqual(bounds, Float32Array.of(-3.64462, -12.67541, 245.50, 242.59164));
+
+        // Test that the APIs accept Malloc objs and the Malloced typearray
+        const mZPlane = CanvasKit.Malloc(Float32Array, 3);
+        mZPlane.toTypedArray().set(zPlaneParams);
+        const mLight = CanvasKit.Malloc(Float32Array, 3);
+        const lightTA = mLight.toTypedArray();
+        lightTA.set(lightPos);
+
+        canvas.translate(250, 250);
+        canvas.drawShadow(path, mZPlane, lightTA, lightRadius,
+                          CanvasKit.BLACK, CanvasKit.MAGENTA,
+                          CanvasKit.ShadowTransparentOccluder | CanvasKit.ShadowGeometricOnly | CanvasKit.ShadowDirectionalLight);
+        canvas.drawText('All Flags', 5, 250, textPaint, textFont);
+
+        const outBounds = new Float32Array(4);
+        CanvasKit.getShadowLocalBounds(CanvasKit.Matrix.rotated(Math.PI / 6),
+            path, mZPlane, mLight, lightRadius,
+            CanvasKit.ShadowTransparentOccluder | CanvasKit.ShadowGeometricOnly | CanvasKit.ShadowDirectionalLight,
+            outBounds);
+        expectTypedArraysToEqual(outBounds, Float32Array.of(1.52207, -6.35035, 264.03445, 261.83294));
+
+        CanvasKit.Free(mZPlane);
+        CanvasKit.Free(mLight);
+
+        path.delete();
+        textFont.delete();
+        textPaint.delete();
     });
 
     gm('fractal_noise_shader', (canvas) => {
@@ -958,16 +995,6 @@ describe('Core canvas behavior', () => {
 
     gm('turbulance_tiled_shader', (canvas) => {
         const shader = CanvasKit.Shader.MakeTurbulence(0.1, 0.05, 2, 117, 80, 80);
-        const paint = new CanvasKit.Paint();
-        paint.setColor(CanvasKit.BLACK);
-        paint.setShader(shader);
-        canvas.drawPaint(paint);
-        paint.delete();
-        shader.delete();
-    });
-
-    gm('improved_noise_shader', (canvas) => {
-        const shader = CanvasKit.Shader.MakeImprovedNoise(0.1, 0.05, 2, 10);
         const paint = new CanvasKit.Paint();
         paint.setColor(CanvasKit.BLACK);
         paint.setShader(shader);

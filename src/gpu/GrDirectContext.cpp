@@ -49,12 +49,6 @@
 #   endif
 #endif
 
-#ifdef SK_DISABLE_REDUCE_OPLIST_SPLITTING
-static const bool kDefaultReduceOpsTaskSplitting = false;
-#else
-static const bool kDefaultReduceOpsTaskSplitting = false;
-#endif
-
 #define ASSERT_SINGLE_OWNER GR_ASSERT_SINGLE_OWNER(this->singleOwner())
 
 GrDirectContext::GrDirectContext(GrBackendApi backend, const GrContextOptions& options)
@@ -69,13 +63,18 @@ GrDirectContext::~GrDirectContext() {
         this->flushAndSubmit();
     }
 
+    // We need to make sure all work is finished on the gpu before we start releasing resources.
+    this->syncAllOutstandingGpuWork(/*shouldExecuteWhileAbandoned=*/false);
+
     this->destroyDrawingManager();
-    fMappedBufferManager.reset();
 
     // Ideally we could just let the ptr drop, but resource cache queries this ptr in releaseAll.
     if (fResourceCache) {
         fResourceCache->releaseAll();
     }
+    // This has to be after GrResourceCache::releaseAll so that other threads that are holding
+    // async pixel result don't try to destroy buffers off thread.
+    fMappedBufferManager.reset();
 }
 
 sk_sp<GrContextThreadSafeProxy> GrDirectContext::threadSafeProxy() {
@@ -101,6 +100,9 @@ void GrDirectContext::abandonContext() {
 
     INHERITED::abandonContext();
 
+    // We need to make sure all work is finished on the gpu before we start releasing resources.
+    this->syncAllOutstandingGpuWork(this->caps()->mustSyncGpuDuringAbandon());
+
     fStrikeCache->freeAll();
 
     fMappedBufferManager->abandon();
@@ -112,7 +114,9 @@ void GrDirectContext::abandonContext() {
 
     fGpu->disconnect(GrGpu::DisconnectType::kAbandon);
 
+    // Must be after GrResourceCache::abandonAll().
     fMappedBufferManager.reset();
+
     if (fSmallPathAtlasMgr) {
         fSmallPathAtlasMgr->reset();
     }
@@ -140,12 +144,16 @@ void GrDirectContext::releaseResourcesAndAbandonContext() {
 
     INHERITED::abandonContext();
 
-    fMappedBufferManager.reset();
+    // We need to make sure all work is finished on the gpu before we start releasing resources.
+    this->syncAllOutstandingGpuWork(/*shouldExecuteWhileAbandoned=*/true);
 
     fResourceProvider->abandon();
 
     // Release all resources in the backend 3D API.
     fResourceCache->releaseAll();
+
+    // Must be after GrResourceCache::releaseAll().
+    fMappedBufferManager.reset();
 
     fGpu->disconnect(GrGpu::DisconnectType::kCleanup);
     if (fSmallPathAtlasMgr) {
@@ -191,8 +199,7 @@ bool GrDirectContext::init() {
     SkASSERT(this->threadSafeCache());
 
     fStrikeCache = std::make_unique<GrStrikeCache>();
-    fResourceCache = std::make_unique<GrResourceCache>(this->caps(), this->singleOwner(),
-                                                       this->contextID());
+    fResourceCache = std::make_unique<GrResourceCache>(this->singleOwner(), this->contextID());
     fResourceCache->setProxyProvider(this->proxyProvider());
     fResourceCache->setThreadSafeCache(this->threadSafeCache());
     fResourceProvider = std::make_unique<GrResourceProvider>(fGpu.get(), fResourceCache.get(),
@@ -212,15 +219,6 @@ bool GrDirectContext::init() {
     if (!fShaderErrorHandler) {
         fShaderErrorHandler = GrShaderUtils::DefaultShaderErrorHandler();
     }
-
-    bool reduceOpsTaskSplitting = kDefaultReduceOpsTaskSplitting;
-    if (GrContextOptions::Enable::kNo == this->options().fReduceOpsTaskSplitting) {
-        reduceOpsTaskSplitting = false;
-    } else if (GrContextOptions::Enable::kYes == this->options().fReduceOpsTaskSplitting) {
-        reduceOpsTaskSplitting = true;
-    }
-
-    this->setupDrawingManager(reduceOpsTaskSplitting);
 
     GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
     if (GrContextOptions::Enable::kNo == this->options().fAllowMultipleGlyphCacheTextures ||
@@ -406,6 +404,13 @@ void GrDirectContext::checkAsyncWorkCompletion() {
     }
 }
 
+void GrDirectContext::syncAllOutstandingGpuWork(bool shouldExecuteWhileAbandoned) {
+    if (fGpu && (!this->abandoned() || shouldExecuteWhileAbandoned)) {
+        fGpu->finishOutstandingGpuWork();
+        this->checkAsyncWorkCompletion();
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void GrDirectContext::storeVkPipelineCacheData() {
@@ -505,26 +510,34 @@ static bool update_texture_with_pixmaps(GrGpu* gpu,
                                         const GrBackendTexture& backendTexture,
                                         GrSurfaceOrigin textureOrigin,
                                         sk_sp<GrRefCntedCallback> finishedCallback) {
+    bool flip = textureOrigin == kBottomLeft_GrSurfaceOrigin;
+    bool mustBeTight = !gpu->caps()->writePixelsRowBytesSupport();
+
+    size_t size = 0;
+    for (int i = 0; i < numLevels; ++i) {
+        size_t minRowBytes = srcData[i].info().minRowBytes();
+        if (flip || (mustBeTight && srcData[i].rowBytes() != minRowBytes)) {
+            size += minRowBytes * srcData[i].height();
+        }
+    }
+
     std::unique_ptr<char[]> tempStorage;
-    SkAutoSTArray<15, GrPixmap> tempPixmaps(numLevels);
-    if (textureOrigin == kBottomLeft_GrSurfaceOrigin) {
-        size_t size = 0;
-        for (int i = 0; i < numLevels; ++i) {
-            size += srcData[i].info().minRowBytes()*srcData[i].height();
-        }
+    if (size) {
         tempStorage.reset(new char[size]);
-        size = 0;
-        for (int i = 0; i < numLevels; ++i) {
-            size_t tempRB = srcData[i].info().minRowBytes();
-            tempPixmaps[i] = {srcData[i].info(), tempStorage.get() + size, tempRB};
-            SkAssertResult(GrConvertPixels(tempPixmaps[i], srcData[i], /*flip*/ true));
-            size += tempRB*srcData[i].height();
-        }
-    } else {
-        for (int i = 0; i < numLevels; ++i) {
+    }
+    size = 0;
+    SkAutoSTArray<15, GrPixmap> tempPixmaps(numLevels);
+    for (int i = 0; i < numLevels; ++i) {
+        size_t minRowBytes = srcData[i].info().minRowBytes();
+        if (flip || (mustBeTight && srcData[i].rowBytes() != minRowBytes)) {
+            tempPixmaps[i] = {srcData[i].info(), tempStorage.get() + size, minRowBytes};
+            SkAssertResult(GrConvertPixels(tempPixmaps[i], srcData[i], flip));
+            size += minRowBytes*srcData[i].height();
+        } else {
             tempPixmaps[i] = srcData[i];
         }
     }
+
     GrGpu::BackendTextureData data(tempPixmaps.get());
     return gpu->updateBackendTexture(backendTexture, std::move(finishedCallback), &data);
 }

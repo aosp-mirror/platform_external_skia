@@ -576,7 +576,7 @@ TextLine::ClipContext TextLine::measureTextInsideOneRun(TextRange textRange,
                                                         SkScalar runOffsetInLine,
                                                         SkScalar textOffsetInRunInLine,
                                                         bool includeGhostSpaces,
-                                                        bool limitToClusters) const {
+                                                        bool limitToGraphemes) const {
     ClipContext result = { run, 0, run->size(), 0, SkRect::MakeEmpty(), false };
 
     if (run->fEllipsis) {
@@ -600,17 +600,49 @@ TextLine::ClipContext TextLine::measureTextInsideOneRun(TextRange textRange,
         return result;
     }
     // Find [start:end] clusters for the text
-    bool found;
-    ClusterIndex startIndex;
-    ClusterIndex endIndex;
-    std::tie(found, startIndex, endIndex) = run->findLimitingClusters(textRange);
-    if (!found) {
-        SkASSERT(textRange.empty() || limitToClusters);
-        return result;
-    }
+    Cluster* start = nullptr;
+    Cluster* end = nullptr;
+    do {
+        bool found;
+        ClusterIndex startIndex;
+        ClusterIndex endIndex;
+        std::tie(found, startIndex, endIndex) = run->findLimitingClusters(textRange);
+        if (!found) {
+            return result;
+        }
+        start = &fOwner->cluster(startIndex);
+        end = &fOwner->cluster(endIndex);
 
-    auto start = &fOwner->cluster(startIndex);
-    auto end = &fOwner->cluster(endIndex);
+        if (!limitToGraphemes) {
+            break;
+        }
+
+        // Update textRange by cluster edges
+        if (run->leftToRight()) {
+            if (textRange.start != start->textRange().start) {
+                textRange.start = start->textRange().end;
+            }
+            textRange.end = end->textRange().end;
+        } else {
+            if (textRange.start != end->textRange().start) {
+                textRange.start = end->textRange().end;
+            }
+            textRange.end = start->textRange().end;
+        }
+
+        std::tie(found, startIndex, endIndex) = run->findLimitingGraphemes(textRange);
+        if (startIndex == textRange.start && endIndex == textRange.end) {
+            break;
+        }
+
+        // Some clusters are inside graphemes and we need to adjust them
+        //SkDebugf("Correct range: [%d:%d) -> [%d:%d)\n", textRange.start, textRange.end, startIndex, endIndex);
+        textRange.start = startIndex;
+        textRange.end = endIndex;
+
+        // Move the start until it's on the grapheme edge (and glypheme, too)
+    } while (true);
+
     result.pos = start->startPos();
     result.size = (end->isHardBreak() ? end->startPos() : end->endPos()) - start->startPos();
 
@@ -707,7 +739,7 @@ SkScalar TextLine::iterateThroughSingleRunByStyles(const Run* run,
     if (run->fEllipsis) {
         // Extra efforts to get the ellipsis text style
         ClipContext clipContext = this->measureTextInsideOneRun(run->textRange(), run, runOffset,
-                                                                0, false, false);
+                                                                0, false, true);
         TextRange testRange(run->fClusterStart, run->fClusterStart + 1);
         for (BlockIndex index = fBlockRange.start; index < fBlockRange.end; ++index) {
            auto block = fOwner->styles().begin() + index;
@@ -722,7 +754,7 @@ SkScalar TextLine::iterateThroughSingleRunByStyles(const Run* run,
 
     if (styleType == StyleType::kNone) {
         ClipContext clipContext = this->measureTextInsideOneRun(textRange, run, runOffset,
-                                                                0, false, false);
+                                                                0, false, true);
         if (clipContext.clip.height() > 0) {
             visitor(textRange, TextStyle(), clipContext);
             return clipContext.clip.width();
@@ -762,6 +794,8 @@ SkScalar TextLine::iterateThroughSingleRunByStyles(const Run* run,
                 style = &block->fStyle;
                 if (start != EMPTY_INDEX && style->matchOneAttribute(styleType, *prevStyle)) {
                     size += intersect.width();
+                    // RTL text intervals move backward
+                    start = std::min(intersect.start, start);
                     continue;
                 } else if (start == EMPTY_INDEX ) {
                     // First time only
@@ -781,7 +815,7 @@ SkScalar TextLine::iterateThroughSingleRunByStyles(const Run* run,
         auto runStyleTextRange = TextRange(start, start + size);
         // Measure the text
         ClipContext clipContext = this->measureTextInsideOneRun(runStyleTextRange, run, runOffset,
-                                                                textOffsetInRun, false, false);
+                                                                textOffsetInRun, false, true);
         if (clipContext.clip.height() == 0) {
             continue;
         }
@@ -1103,7 +1137,7 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
     if (SkScalarNearlyZero(this->width())) {
         // TODO: this is one of the flutter changes that have to go away eventually
         //  Empty line is a special case in txtlib
-        auto utf16Index = fOwner->getUTF16Index(this->fClusterRange.start);
+        auto utf16Index = fOwner->getUTF16Index(this->fClusterRange.end);
         return { SkToS32(utf16Index) , kDownstream };
     }
 
@@ -1169,7 +1203,7 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
                                          : SkScalarFloorToInt(delta / averageUtf8Width);
                     insideGlypheme = averageUtf8Width < delta && delta < glyphemePosWidth - averageUtf8Width;
                     center = glyphemePosLeft + averageUtf8Width * insideUtf8Offset + averageUtf8Width / 2;
-                    utf16Index += insideUtf8Offset; // TODO: adding a utf8 offset to a utf16 index
+                    // Keep UTF16 index as is
                 }
                 if ((dx < center) == context.run->leftToRight() || insideGlypheme) {
                     result = { SkToS32(utf16Index), kDownstream };

@@ -46,16 +46,10 @@ GrYUVAImageTextureMaker::GrYUVAImageTextureMaker(GrRecordingContext* context, co
     SkASSERT(as_IB(client)->isYUVA());
 }
 
-GrSurfaceProxyView GrYUVAImageTextureMaker::refOriginalTextureProxyView(GrMipmapped mipMapped) {
-    if (mipMapped == GrMipmapped::kYes) {
-        return fImage->refMippedView(this->context());
-    } else {
-        if (const GrSurfaceProxyView* view = fImage->view(this->context())) {
-            return *view;
-        } else {
-            return {};
-        }
-    }
+GrSurfaceProxyView GrYUVAImageTextureMaker::refOriginalTextureProxyView(GrMipmapped mipmapped) {
+    auto [view, ct] = fImage->asView(this->context(), mipmapped);
+    SkASSERT(ct == this->colorType());
+    return view;
 }
 
 std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProcessor(
@@ -77,12 +71,16 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProc
     }
 
     const auto& caps = *fImage->context()->priv().caps();
-    auto fp = GrYUVtoRGBEffect::Make(fImage->fViews, fImage->fYUVAIndices, fImage->fYUVColorSpace,
-                                     samplerState, caps, textureMatrix, subset, domain);
+    auto fp = GrYUVtoRGBEffect::Make(fImage->fYUVAProxies,
+                                     samplerState,
+                                     caps,
+                                     textureMatrix,
+                                     subset,
+                                     domain);
     if (fImage->fFromColorSpace) {
-        fp = GrColorSpaceXformEffect::Make(std::move(fp), fImage->fFromColorSpace.get(),
-                                           fImage->alphaType(), fImage->colorSpace(),
-                                           kPremul_SkAlphaType);
+        fp = GrColorSpaceXformEffect::Make(std::move(fp),
+                                           fImage->fFromColorSpace.get(), fImage->alphaType(),
+                                           fImage->colorSpace(), kPremul_SkAlphaType);
     }
     return fp;
 }
@@ -96,12 +94,12 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createBicubicFragm
         SkImage::CubicResampler kernel) {
     const auto& caps = *fImage->context()->priv().caps();
     GrSamplerState samplerState(wrapX, wrapY, GrSamplerState::Filter::kNearest);
-    auto fp = GrYUVtoRGBEffect::Make(fImage->fViews, fImage->fYUVAIndices, fImage->fYUVColorSpace,
-                                     samplerState, caps, SkMatrix::I(), subset, domain);
+    auto fp = GrYUVtoRGBEffect::Make(fImage->fYUVAProxies, samplerState, caps, SkMatrix::I(),
+                                     subset, domain);
     fp = GrBicubicEffect::Make(std::move(fp),
                                fImage->alphaType(),
                                textureMatrix,
-                               kernel /*GrBicubicEffect::gMitchell*/,
+                               kernel,
                                GrBicubicEffect::Direction::kXY);
     if (fImage->fFromColorSpace) {
         fp = GrColorSpaceXformEffect::Make(std::move(fp),

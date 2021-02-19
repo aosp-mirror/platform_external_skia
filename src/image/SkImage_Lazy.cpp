@@ -16,7 +16,6 @@
 #include "src/core/SkNextID.h"
 
 #if SK_SUPPORT_GPU
-#include "include/core/SkYUVAIndex.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/GrResourceKey.h"
@@ -31,8 +30,8 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrSamplerState.h"
-#include "src/gpu/GrSurfaceDrawContext.h"
-#include "src/gpu/SkGr.h"
+#include "src/gpu/GrSurfaceFillContext.h"
+#include "src/gpu/GrYUVATextureProxies.h"
 #include "src/gpu/effects/GrYUVtoRGBEffect.h"
 #endif
 
@@ -195,17 +194,6 @@ bool SkImage_Lazy::onIsValid(GrRecordingContext* context) const {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if SK_SUPPORT_GPU
-GrSurfaceProxyView SkImage_Lazy::refView(GrRecordingContext* context, GrMipmapped mipMapped) const {
-    if (!context) {
-        return {};
-    }
-
-    GrImageTextureMaker textureMaker(context, this, GrImageTexGenPolicy::kDraw);
-    return textureMaker.view(mipMapped);
-}
-#endif
-
 sk_sp<SkImage> SkImage_Lazy::onMakeSubset(const SkIRect& subset, GrDirectContext* direct) const {
     // TODO: can we do this more efficiently, by telling the generator we want to
     //       "realize" a subset?
@@ -259,6 +247,14 @@ sk_sp<SkImage> SkImage::MakeFromGenerator(std::unique_ptr<SkImageGenerator> gene
 
 #if SK_SUPPORT_GPU
 
+std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Lazy::onAsView(
+        GrRecordingContext* context,
+        GrMipmapped mipmapped,
+        GrImageTexGenPolicy policy) const {
+    GrImageTextureMaker textureMaker(context, this, policy);
+    return {textureMaker.view(mipmapped), textureMaker.colorType()};
+}
+
 GrSurfaceProxyView SkImage_Lazy::textureProxyViewFromPlanes(GrRecordingContext* ctx,
                                                             SkBudgeted budgeted) const {
     SkYUVAPixmapInfo::SupportedDataTypes supportedDataTypes(*ctx);
@@ -268,7 +264,8 @@ GrSurfaceProxyView SkImage_Lazy::textureProxyViewFromPlanes(GrRecordingContext* 
         return {};
     }
 
-    GrSurfaceProxyView yuvViews[SkYUVASizeInfo::kMaxCount];
+    GrSurfaceProxyView views[SkYUVAInfo::kMaxPlanes];
+    GrColorType pixmapColorTypes[SkYUVAInfo::kMaxPlanes];
     for (int i = 0; i < yuvaPixmaps.numPlanes(); ++i) {
         // If the sizes of the components are not all the same we choose to create exact-match
         // textures for the smaller ones rather than add a texture domain to the draw.
@@ -297,11 +294,12 @@ GrSurfaceProxyView SkImage_Lazy::textureProxyViewFromPlanes(GrRecordingContext* 
         bitmap.setImmutable();
 
         GrBitmapTextureMaker maker(ctx, bitmap, fit);
-        yuvViews[i] = maker.view(GrMipmapped::kNo);
+        views[i] = maker.view(GrMipmapped::kNo);
 
-        if (!yuvViews[i]) {
+        if (!views[i]) {
             return {};
         }
+        pixmapColorTypes[i] = SkColorTypeToGrColorType(bitmap.colorType());
     }
 
     // TODO: investigate preallocating mip maps here
@@ -321,14 +319,13 @@ GrSurfaceProxyView SkImage_Lazy::textureProxyViewFromPlanes(GrRecordingContext* 
         return {};
     }
 
-    SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount];
-    SkAssertResult(yuvaPixmaps.toYUVAIndices(yuvaIndices));
-    std::unique_ptr<GrFragmentProcessor> yuvToRgbProcessor =
-            GrYUVtoRGBEffect::Make(yuvViews,
-                                   yuvaIndices,
-                                   yuvaPixmaps.yuvaInfo().yuvColorSpace(),
-                                   GrSamplerState::Filter::kNearest,
-                                   *ctx->priv().caps());
+    GrYUVATextureProxies yuvaProxies(yuvaPixmaps.yuvaInfo(), views, pixmapColorTypes);
+    SkAssertResult(yuvaProxies.isValid());
+
+    std::unique_ptr<GrFragmentProcessor> fp = GrYUVtoRGBEffect::Make(
+            yuvaProxies,
+            GrSamplerState::Filter::kNearest,
+            *ctx->priv().caps());
 
     // The pixels after yuv->rgb will be in the generator's color space.
     // If onMakeColorTypeAndColorSpace has been called then this will not match this image's
@@ -343,18 +340,11 @@ GrSurfaceProxyView SkImage_Lazy::textureProxyViewFromPlanes(GrRecordingContext* 
 
     // If the caller expects the pixels in a different color space than the one from the image,
     // apply a color conversion to do this.
-    std::unique_ptr<GrFragmentProcessor> colorConversionProcessor =
-            GrColorSpaceXformEffect::Make(std::move(yuvToRgbProcessor),
-                                          srcColorSpace, kOpaque_SkAlphaType,
-                                          dstColorSpace, kOpaque_SkAlphaType);
-    SkMatrix m = SkEncodedOriginToMatrix(yuvaPixmaps.yuvaInfo().origin(),
-                                         this->width(),
-                                         this->height());
-    // The returned matrix is a view matrix but we need a local matrix.
-    SkAssertResult(m.invert(&m));
-    surfaceFillContext->fillWithFP(m, std::move(colorConversionProcessor));
+    fp = GrColorSpaceXformEffect::Make(std::move(fp),
+                                       srcColorSpace, kOpaque_SkAlphaType,
+                                       dstColorSpace, kOpaque_SkAlphaType);
+    surfaceFillContext->fillWithFP(std::move(fp));
 
-    SkASSERT(surfaceFillContext->asTextureProxy());
     return surfaceFillContext->readSurfaceView();
 }
 

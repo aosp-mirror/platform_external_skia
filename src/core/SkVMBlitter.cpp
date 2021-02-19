@@ -170,12 +170,6 @@ namespace {
             }
         }
 
-        skvm::PixelFormat unused;
-        if (!SkColorType_to_PixelFormat(params.dst.colorType(), &unused)) {
-            // All existing SkColorTypes pass this check.  We'd only get here adding new ones.
-            *ok = false;
-        }
-
         return {
             shaderHash,
               clipHash,
@@ -191,7 +185,7 @@ namespace {
                               skvm::Uniforms* uniforms, SkArenaAlloc* alloc) {
         // First two arguments are always uniforms and the destination buffer.
         uniforms->base    = p->uniform();
-        skvm::Arg dst_ptr = p->arg(SkColorTypeBytesPerPixel(params.dst.colorType()));
+        skvm::Ptr dst_ptr = p->arg(SkColorTypeBytesPerPixel(params.dst.colorType()));
         // A SpriteShader (in this file) may next use one argument as its varying source.
         // Subsequent arguments depend on params.coverage:
         //    - Full:      (no more arguments)
@@ -240,8 +234,7 @@ namespace {
         }
 
         // Load the destination color.
-        skvm::PixelFormat dstFormat;
-        SkAssertResult(SkColorType_to_PixelFormat(params.dst.colorType(), &dstFormat));
+        skvm::PixelFormat dstFormat = skvm::SkColorType_to_PixelFormat(params.dst.colorType());
         skvm::Color dst = p->load(dstFormat, dst_ptr);
         if (params.dst.isOpaque()) {
             // When a destination is known opaque, we may assume it both starts and stays fully
@@ -269,8 +262,7 @@ namespace {
                 break;
 
             case Coverage::MaskLCD16: {
-                skvm::PixelFormat fmt;
-                SkAssertResult(SkColorType_to_PixelFormat(kRGB_565_SkColorType, &fmt));
+                skvm::PixelFormat fmt = skvm::SkColorType_to_PixelFormat(kRGB_565_SkColorType);
                 cov = p->load(fmt, p->varying<uint16_t>());
                 cov.a = select(src.a < dst.a, min(cov.r, min(cov.g, cov.b))
                                             , max(cov.r, max(cov.g, cov.b)));
@@ -330,7 +322,7 @@ namespace {
         }
 
         // Write it out!
-        SkAssertResult(store(dstFormat, dst_ptr, src));
+        store(dstFormat, dst_ptr, src);
     }
 
 
@@ -365,8 +357,7 @@ namespace {
                               skvm::Uniforms* uniforms, SkArenaAlloc*) const override {
             const SkColorType ct = fSprite.colorType();
 
-            skvm::PixelFormat fmt;
-            SkAssertResult(SkColorType_to_PixelFormat(ct, &fmt));
+            skvm::PixelFormat fmt = skvm::SkColorType_to_PixelFormat(ct);
 
             skvm::Color c = p->load(fmt, p->arg(SkColorTypeBytesPerPixel(ct)));
 
@@ -563,7 +554,7 @@ namespace {
             : fDevice(device)
             , fSprite(sprite ? *sprite : SkPixmap{})
             , fSpriteOffset(spriteOffset)
-            , fUniforms(kBlitterUniformsCount)
+            , fUniforms(skvm::Ptr{0}, kBlitterUniformsCount)
             , fParams(effective_params(device, sprite, paint, matrices, std::move(clip)))
             , fKey(cache_key(fParams, &fUniforms, &fAlloc, ok))
         {}
@@ -775,10 +766,6 @@ SkBlitter* SkCreateSkVMSpriteBlitter(const SkPixmap& device,
                                      sk_sp<SkShader> clip) {
     if (paint.getMaskFilter()) {
         // TODO: SkVM support for mask filters?  definitely possible!
-        return nullptr;
-    }
-    if (skvm::PixelFormat unused; !SkColorType_to_PixelFormat(sprite.colorType(), &unused)) {
-        // All existing SkColorTypes pass this check.  We'd only get here adding new ones.
         return nullptr;
     }
     bool ok = true;

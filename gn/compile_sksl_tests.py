@@ -6,14 +6,38 @@
 # found in the LICENSE file.
 
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 
+batchCompile = True
+
 skslc = sys.argv[1]
 lang = sys.argv[2]
 settings = sys.argv[3]
-inputs = sys.argv[4:]
+with open(sys.argv[4], 'r') as reader:
+    inputs = shlex.split(reader.read())
+
+def pairwise(iterable):
+    # Iterate over an array pairwise (two elements at a time).
+    a = iter(iterable)
+    return zip(a, a)
+
+def executeWorklist(input, worklist):
+    # Invoke skslc, passing in the worklist.
+    worklist.close()
+    try:
+        output = subprocess.check_output([skslc, worklist.name], stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as err:
+        if err.returncode != 1:
+            print("### " + input + " skslc error:\n")
+            print("\n".join(err.output.splitlines()))
+            sys.exit(err.returncode)
+        pass  # Compile errors (exit code 1) are expected and normal in test code
+
+    # Delete the worklist file now that execution is complete.
+    os.remove(worklist.name)
 
 def makeEmptyFile(path):
     try:
@@ -30,11 +54,16 @@ if settings != "--settings" and settings != "--nosettings":
 targets = []
 worklist = tempfile.NamedTemporaryFile(suffix='.worklist', delete=False)
 
-# Convert the list of command-line inputs into a worklist file sfor skslc.
-for input in inputs:
+# The `inputs` array pairs off input files with their matching output directory, e.g.:
+#     //skia/tests/sksl/shared/test.sksl
+#     //skia/tests/sksl/shared/golden/
+#     //skia/tests/sksl/intrinsics/abs.sksl
+#     //skia/tests/sksl/intrinsics/golden/
+#     ... (etc) ...
+# Here we loop over these inputs and convert them into a worklist file for skslc.
+for input, targetDir in pairwise(inputs):
     noExt, ext = os.path.splitext(input)
     head, tail = os.path.split(noExt)
-    targetDir = os.path.join(head, "golden")
     if not os.path.isdir(targetDir):
         os.mkdir(targetDir)
 
@@ -67,21 +96,24 @@ for input in inputs:
         worklist.write(input + "\n")
         worklist.write(target + ".skvm\n")
         worklist.write(settings + "\n\n")
+    elif lang == "--stage":
+        worklist.write(input + "\n")
+        worklist.write(target + ".stage\n")
+        worklist.write(settings + "\n\n")
     else:
-        sys.exit("### Expected one of: --fp --glsl --metal --spirv --skvm, got " + lang)
+        sys.exit("### Expected one of: --fp --glsl --metal --spirv --skvm --stage, got " + lang)
 
-# Invoke skslc, passing in the worklist.
-worklist.close()
-try:
-    output = subprocess.check_output([skslc, worklist.name], stderr=subprocess.STDOUT)
-except subprocess.CalledProcessError as err:
-    if err.returncode != 1:
-        print("### skslc error:\n")
-        print("\n".join(err.output.splitlines()))
-        sys.exit(err.returncode)
-    pass  # Compile errors (exit code 1) are expected and normal in test code
+    # Compile items one at a time.
+    if not batchCompile:
+        executeWorklist(input, worklist)
+        worklist = tempfile.NamedTemporaryFile(suffix='.worklist', delete=False)
 
-os.remove(worklist.name)
+# Compile everything all in one go.
+if batchCompile:
+    executeWorklist("", worklist)
+else:
+    worklist.close()
+    os.remove(worklist.name)
 
 # A special case cleanup pass, just for CPP and H files: if either one of these files starts with
 # `### Compilation failed`, its sibling should be replaced by an empty file. This improves clarity

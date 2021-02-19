@@ -9,6 +9,7 @@
 
 #include "include/private/SkIDChangeListener.h"
 #include "src/core/SkGeometry.h"
+#include "src/gpu/GrAATriangulator.h"
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrDefaultGeoProcFactory.h"
@@ -116,8 +117,10 @@ public:
         }
         if (fCanMapVB) {
             fVertices = fVertexBuffer->map();
-        } else {
+        }
+        if (!fVertices) {
             fVertices = sk_malloc_throw(eagerCount * stride);
+            fCanMapVB = false;
         }
         fLockStride = stride;
         return fVertices;
@@ -356,8 +359,7 @@ private:
         SkPath path;
         shape.asPath(&path);
 
-        return GrTriangulator::PathToTriangles(path, tol, clipBounds, allocator,
-                                               GrTriangulator::Mode::kNormal, isLinear);
+        return GrTriangulator::PathToTriangles(path, tol, clipBounds, allocator, isLinear);
     }
 
     void createNonAAMesh(Target* target) {
@@ -439,11 +441,8 @@ private:
         SkScalar tol = GrPathUtils::kDefaultTolerance;
         sk_sp<const GrBuffer> vertexBuffer;
         int firstVertex;
-        bool isLinear;
         GrEagerDynamicVertexAllocator allocator(target, &vertexBuffer, &firstVertex);
-        int vertexCount = GrTriangulator::PathToTriangles(path, tol, clipBounds, &allocator,
-                                                          GrTriangulator::Mode::kEdgeAntialias,
-                                                          &isLinear);
+        int vertexCount = GrAATriangulator::PathToAATriangles(path, tol, clipBounds, &allocator);
         if (vertexCount == 0) {
             return;
         }
@@ -490,9 +489,11 @@ private:
         }
 
 #ifdef SK_DEBUG
-        auto mode = (fAntiAlias) ? GrTriangulator::Mode::kEdgeAntialias
-                                 : GrTriangulator::Mode::kNormal;
-        SkASSERT(GrTriangulator::GetVertexStride(mode) == gp->vertexStride());
+        auto vertexStride = sizeof(SkPoint);
+        if (fAntiAlias) {
+            vertexStride += sizeof(float);
+        }
+        SkASSERT(vertexStride == gp->vertexStride());
 #endif
 
         GrPrimitiveType primitiveType = TRIANGULATOR_WIREFRAME ? GrPrimitiveType::kLines

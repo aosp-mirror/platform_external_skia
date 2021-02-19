@@ -133,7 +133,28 @@ private:
     Unit     fUnit;
 };
 
-struct SkSVGIRI {
+// https://www.w3.org/TR/SVG11/linking.html#IRIReference
+class SkSVGIRI {
+public:
+    enum class Type {
+        kLocal,
+        kNonlocal,
+        kDataURI,
+    };
+
+    SkSVGIRI() : fType(Type::kLocal) {}
+    SkSVGIRI(Type t, const SkSVGStringType& iri) : fType(t), fIRI(iri) {}
+
+    Type type() const { return fType; }
+    const SkSVGStringType& iri() const { return fIRI; }
+
+    bool operator==(const SkSVGIRI& other) const {
+        return fType == other.fType && fIRI == other.fIRI;
+    }
+    bool operator!=(const SkSVGIRI& other) const { return !(*this == other); }
+
+private:
+    Type fType;
     SkSVGStringType fIRI;
 };
 
@@ -173,7 +194,7 @@ public:
     SkSVGPaint() : fType(Type::kNone), fColor(SK_ColorBLACK) {}
     explicit SkSVGPaint(Type t) : fType(t), fColor(SK_ColorBLACK) {}
     explicit SkSVGPaint(const SkSVGColor& c) : fType(Type::kColor), fColor(c) {}
-    explicit SkSVGPaint(const SkString& iri)
+    explicit SkSVGPaint(const SkSVGIRI& iri)
         : fType(Type::kIRI), fColor(SK_ColorBLACK), fIRI(iri) {}
 
     SkSVGPaint(const SkSVGPaint&)            = default;
@@ -186,41 +207,39 @@ public:
 
     Type type() const { return fType; }
     const SkSVGColor& color() const { SkASSERT(fType == Type::kColor); return fColor; }
-    const SkString& iri() const { SkASSERT(fType == Type::kIRI); return fIRI; }
+    const SkSVGIRI& iri() const { SkASSERT(fType == Type::kIRI); return fIRI; }
 
 private:
     Type fType;
 
     // Logical union.
     SkSVGColor fColor;
-    SkString   fIRI;
+    SkSVGIRI   fIRI;
 };
 
-class SkSVGClip {
+// <funciri> | none (used for clip/mask/filter properties)
+class SkSVGFuncIRI {
 public:
     enum class Type {
         kNone,
         kIRI,
     };
 
-    SkSVGClip() : fType(Type::kNone) {}
-    explicit SkSVGClip(Type t) : fType(t)           {}
-    explicit SkSVGClip(const SkString& iri) : fType(Type::kIRI), fIRI(iri) {}
+    SkSVGFuncIRI() : fType(Type::kNone) {}
+    explicit SkSVGFuncIRI(Type t) : fType(t) {}
+    explicit SkSVGFuncIRI(SkSVGIRI&& iri) : fType(Type::kIRI), fIRI(std::move(iri)) {}
 
-    SkSVGClip(const SkSVGClip&)            = default;
-    SkSVGClip& operator=(const SkSVGClip&) = default;
-
-    bool operator==(const SkSVGClip& other) const {
+    bool operator==(const SkSVGFuncIRI& other) const {
         return fType == other.fType && fIRI == other.fIRI;
     }
-    bool operator!=(const SkSVGClip& other) const { return !(*this == other); }
+    bool operator!=(const SkSVGFuncIRI& other) const { return !(*this == other); }
 
     Type type() const { return fType; }
-    const SkString& iri() const { SkASSERT(fType == Type::kIRI); return fIRI; }
+    const SkSVGIRI& iri() const { SkASSERT(fType == Type::kIRI); return fIRI; }
 
 private:
     Type           fType;
-    SkString       fIRI;
+    SkSVGIRI       fIRI;
 };
 
 enum class SkSVGLineCap {
@@ -569,35 +588,7 @@ private:
     Type fType;
 };
 
-class SkSVGFilterType {
-public:
-    enum class Type {
-        kNone,
-        kIRI,
-        kInherit,
-    };
-
-    SkSVGFilterType() : fType(Type::kNone) {}
-    explicit SkSVGFilterType(Type t) : fType(t) {}
-    explicit SkSVGFilterType(const SkString& iri) : fType(Type::kIRI), fIRI(iri) {}
-
-    bool operator==(const SkSVGFilterType& other) const {
-        return fType == other.fType && fIRI == other.fIRI;
-    }
-    bool operator!=(const SkSVGFilterType& other) const { return !(*this == other); }
-
-    const SkString& iri() const {
-        SkASSERT(fType == Type::kIRI);
-        return fIRI;
-    }
-
-    Type type() const { return fType; }
-
-private:
-    Type fType;
-    SkString fIRI;
-};
-
+// https://www.w3.org/TR/SVG11/filters.html#FilterPrimitiveInAttribute
 class SkSVGFeInputType {
 public:
     enum class Type {
@@ -608,9 +599,10 @@ public:
         kFillPaint,
         kStrokePaint,
         kFilterPrimitiveReference,
+        kUnspecified,
     };
 
-    SkSVGFeInputType() : fType(Type::kSourceGraphic) {}
+    SkSVGFeInputType() : fType(Type::kUnspecified) {}
     explicit SkSVGFeInputType(Type t) : fType(t) {}
     explicit SkSVGFeInputType(const SkSVGStringType& id)
             : fType(Type::kFilterPrimitiveReference), fId(id) {}
@@ -679,6 +671,12 @@ struct SkSVGFeTurbulenceType {
 enum class SkSVGXmlSpace {
     kDefault,
     kPreserve,
+};
+
+enum class SkSVGColorspace {
+    kAuto,
+    kSRGB,
+    kLinearRGB,
 };
 
 #endif // SkSVGTypes_DEFINED

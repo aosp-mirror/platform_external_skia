@@ -20,11 +20,11 @@ GrDDLTask::GrDDLTask(GrDrawingManager* drawingMgr,
         , fOffset(offset) {
     (void) fOffset;  // fOffset will be used shortly
 
-    for (const sk_sp<GrRenderTask>& task : fDDL->priv().renderTasks()) {
+    for (auto& task : fDDL->priv().renderTasks()) {
         SkASSERT(task->isClosed());
 
         for (int i = 0; i < task->numTargets(); ++i) {
-            drawingMgr->setLastRenderTask(task->target(i).proxy(), task.get());
+            drawingMgr->setLastRenderTask(task->target(i), task.get());
         }
     }
 
@@ -51,6 +51,10 @@ void GrDDLTask::disown(GrDrawingManager* drawingManager) {
 }
 
 bool GrDDLTask::onIsUsed(GrSurfaceProxy* proxy) const {
+    if (proxy == fDDLTarget.get()) {
+        return true;
+    }
+
     for (auto& task : fDDL->priv().renderTasks()) {
         if (task->isUsed(proxy)) {
             return true;
@@ -104,3 +108,36 @@ bool GrDDLTask::onExecute(GrOpFlushState* flushState) {
 
     return anyCommandsIssued;
 }
+
+#if GR_TEST_UTILS
+void GrDDLTask::dump(const SkString& label,
+                     SkString indent,
+                     bool printDependencies,
+                     bool close) const {
+    INHERITED::dump(label, indent, printDependencies, false);
+
+    SkDebugf("%sDDL Target: ", indent.c_str());
+    if (fDDLTarget) {
+        SkString proxyStr = fDDLTarget->dump();
+        SkDebugf("%s", proxyStr.c_str());
+    }
+    SkDebugf("\n");
+
+    SkDebugf("%s%d sub-tasks\n", indent.c_str(), fDDL->priv().numRenderTasks());
+
+    SkString subIndent(indent);
+    subIndent.append("    ");
+
+    int index = 0;
+    for (auto& task : fDDL->priv().renderTasks()) {
+        SkString subLabel;
+        subLabel.printf("sub-task %d/%d", index++, fDDL->priv().numRenderTasks());
+        task->dump(subLabel, subIndent, printDependencies, true);
+    }
+
+    if (close) {
+        SkDebugf("%s--------------------------------------------------------------\n\n",
+                 indent.c_str());
+    }
+}
+#endif

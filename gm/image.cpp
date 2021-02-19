@@ -79,13 +79,12 @@ static void test_surface(SkCanvas* canvas, SkSurface* surf, bool usePaint) {
 
     drawContents(surf, SK_ColorBLUE);
 
+    SkSamplingOptions sampling;
     SkPaint paint;
-//    paint.setFilterBitmap(true);
-//    paint.setAlpha(0x80);
 
-    canvas->drawImage(imgR, 0, 0, usePaint ? &paint : nullptr);
-    canvas->drawImage(imgG, 0, 80, usePaint ? &paint : nullptr);
-    surf->draw(canvas, 0, 160, usePaint ? &paint : nullptr);
+    canvas->drawImage(imgR, 0, 0, sampling, usePaint ? &paint : nullptr);
+    canvas->drawImage(imgG, 0, 80, sampling, usePaint ? &paint : nullptr);
+    surf->draw(canvas, 0, 160, SkSamplingOptions(), usePaint ? &paint : nullptr);
 
     SkRect src1, src2, src3;
     src1.setIWH(surf->width(), surf->height());
@@ -99,10 +98,13 @@ static void test_surface(SkCanvas* canvas, SkSurface* surf, bool usePaint) {
     dst3.setLTRB(0, 400, 65, 465);
     dst4.setLTRB(0, 480, 65, 545);
 
-    canvas->drawImageRect(imgR, src1, dst1, usePaint ? &paint : nullptr);
-    canvas->drawImageRect(imgG, src2, dst2, usePaint ? &paint : nullptr);
-    canvas->drawImageRect(imgR, src3, dst3, usePaint ? &paint : nullptr);
-    canvas->drawImageRect(imgG, dst4, usePaint ? &paint : nullptr);
+    canvas->drawImageRect(imgR, src1, dst1, sampling, usePaint ? &paint : nullptr,
+                          SkCanvas::kStrict_SrcRectConstraint);
+    canvas->drawImageRect(imgG, src2, dst2, sampling, usePaint ? &paint : nullptr,
+                          SkCanvas::kStrict_SrcRectConstraint);
+    canvas->drawImageRect(imgR, src3, dst3, sampling, usePaint ? &paint : nullptr,
+                          SkCanvas::kStrict_SrcRectConstraint);
+    canvas->drawImageRect(imgG, dst4, sampling, usePaint ? &paint : nullptr);
 }
 
 class ImageGM : public skiagm::GM {
@@ -181,13 +183,13 @@ DEF_GM( return new ImageGM; )
 static void draw_pixmap(SkCanvas* canvas, const SkPixmap& pmap) {
     SkBitmap bitmap;
     bitmap.installPixels(pmap);
-    canvas->drawBitmap(bitmap, 0, 0, nullptr);
+    canvas->drawImage(bitmap.asImage(), 0, 0);
 }
 
 static void show_scaled_pixels(SkCanvas* canvas, SkImage* image) {
     SkAutoCanvasRestore acr(canvas, true);
 
-    canvas->drawImage(image, 0, 0, nullptr);
+    canvas->drawImage(image, 0, 0);
     canvas->translate(110, 10);
 
     const SkImageInfo info = SkImageInfo::MakeN32Premul(40, 40);
@@ -379,7 +381,7 @@ DEF_SIMPLE_GPU_GM(new_texture_image, context, rtc, canvas, 280, 60) {
 }
 
 static void draw_pixmap(SkCanvas* canvas, const SkPixmap& pm, SkScalar x, SkScalar y) {
-    canvas->drawImage(SkImage::MakeRasterCopy(pm), x, y, nullptr);
+    canvas->drawImage(SkImage::MakeRasterCopy(pm), x, y);
 }
 
 static void slam_ff(const SkPixmap& pm) {
@@ -453,7 +455,7 @@ DEF_SIMPLE_GM_CAN_FAIL(image_subset, canvas, errorMsg, 440, 220) {
         return skiagm::DrawResult::kFail;
     }
 
-    canvas->drawImage(img, 10, 10, nullptr);
+    canvas->drawImage(img, 10, 10);
     auto sub = img->makeSubset({100, 100, 200, 200});
     canvas->drawImage(sub, 220, 10);
     sub = serial_deserial(sub.get());

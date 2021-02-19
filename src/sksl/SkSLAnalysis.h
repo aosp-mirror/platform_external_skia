@@ -17,6 +17,7 @@ namespace SkSL {
 
 class ErrorReporter;
 class Expression;
+class ForStatement;
 class FunctionDeclaration;
 class FunctionDefinition;
 struct LoadedModule;
@@ -26,6 +27,7 @@ class ProgramUsage;
 class Statement;
 class Variable;
 class VariableReference;
+enum class VariableRefKind : int8_t;
 
 /**
  * Provides utilities for analyzing SkSL statically before it's composed into a full program.
@@ -47,10 +49,12 @@ struct Analysis {
 
     struct AssignmentInfo {
         VariableReference* fAssignedVar = nullptr;
-        bool fIsSwizzled = false;
     };
     static bool IsAssignable(Expression& expr, AssignmentInfo* info,
                              ErrorReporter* errors = nullptr);
+
+    // Updates the `refKind` field of every VariableReference found within `expr`.
+    static void UpdateRefKind(Expression* expr, VariableRefKind refKind);
 
     // A "trivial" expression is one where we'd feel comfortable cloning it multiple times in
     // the code, without worrying about incurring a performance penalty. Examples:
@@ -66,6 +70,23 @@ struct Analysis {
     // - half4(myColor.a)
     // - myStruct.myArrayField[7].xyz
     static bool IsTrivialExpression(const Expression& expr);
+
+    struct UnrollableLoopInfo {
+        const Variable* fIndex;
+        double fStart;
+        double fDelta;
+        int fCount;
+    };
+
+    // Ensures that 'loop' meets the strict requirements of The OpenGL ES Shading Language 1.00,
+    // Appendix A, Section 4.
+    // Information about the loop's structure are placed in outLoopInfo (if not nullptr).
+    // If the function returns false, specific reasons are reported via errors (if not nullptr).
+    static bool ForLoopIsValidForES2(const ForStatement& loop,
+                                     UnrollableLoopInfo* outLoopInfo,
+                                     ErrorReporter* errors);
+
+    static void ValidateIndexingForES2(const ProgramElement& pe, ErrorReporter& errors);
 };
 
 /**

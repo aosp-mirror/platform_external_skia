@@ -23,7 +23,6 @@
     #include "include/effects/SkDiscretePathEffect.h"
     #include "include/effects/SkGradientShader.h"
     #include "include/effects/SkHighContrastFilter.h"
-    #include "include/effects/SkLayerDrawLooper.h"
     #include "include/effects/SkLumaColorFilter.h"
     #include "include/effects/SkOverdrawColorFilter.h"
     #include "include/effects/SkPerlinNoiseShader.h"
@@ -31,6 +30,7 @@
     #include "include/effects/SkShaderMaskFilter.h"
     #include "include/effects/SkTableColorFilter.h"
     #include "src/core/SkColorFilter_Matrix.h"
+    #include "src/core/SkImageFilter_Base.h"
     #include "src/core/SkRecordedDrawable.h"
     #include "src/effects/SkDashImpl.h"
     #include "src/effects/SkEmbossMaskFilter.h"
@@ -49,6 +49,10 @@
     #include "include/effects/SkImageFilters.h"
     #include "src/core/SkLocalMatrixImageFilter.h"
     #include "src/core/SkMatrixImageFilter.h"
+
+#ifdef SK_SUPPORT_LEGACY_DRAWLOOPER
+    #include "include/effects/SkLayerDrawLooper.h"
+#endif
 
     /*
      *  Register most effects for deserialization.
@@ -101,7 +105,9 @@
         SkPathEffect::RegisterFlattenables();
 
         // Misc.
+#ifdef SK_SUPPORT_LEGACY_DRAWLOOPER
         SK_REGISTER_FLATTENABLE(SkLayerDrawLooper);
+#endif
         SK_REGISTER_FLATTENABLE(SkRecordedDrawable);
     }
 
@@ -114,6 +120,7 @@
      */
     void SkFlattenable::PrivateInitializer::InitImageFilters() {
         SkImageFilters::RegisterFlattenables();
+        SkRegisterAlphaThresholdImageFilterFlattenable();
         SK_REGISTER_FLATTENABLE(SkLocalMatrixImageFilter);
         SK_REGISTER_FLATTENABLE(SkMatrixImageFilter);
     }

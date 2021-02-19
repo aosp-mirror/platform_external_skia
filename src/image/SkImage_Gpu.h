@@ -12,7 +12,6 @@
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
 #include "src/gpu/GrSurfaceProxyView.h"
-#include "src/gpu/SkGr.h"
 #include "src/image/SkImage_GpuBase.h"
 
 class GrDirectContext;
@@ -20,26 +19,34 @@ class GrRecordingContext;
 class GrTexture;
 
 class SkBitmap;
-struct SkYUVAIndex;
 
-class SkImage_Gpu : public SkImage_GpuBase {
+class SkImage_Gpu final : public SkImage_GpuBase {
 public:
     SkImage_Gpu(sk_sp<GrImageContext>, uint32_t uniqueID, GrSurfaceProxyView, SkColorType,
                 SkAlphaType, sk_sp<SkColorSpace>);
+    SkImage_Gpu(sk_sp<GrImageContext> context,
+                uint32_t uniqueID,
+                GrSurfaceProxyView view,
+                SkColorInfo info)
+            : SkImage_Gpu(std::move(context),
+                          uniqueID,
+                          std::move(view),
+                          info.colorType(),
+                          info.alphaType(),
+                          info.refColorSpace()) {}
+
     ~SkImage_Gpu() override;
+
+    bool onHasMipmaps() const override {
+        return fView.asTextureProxy()->mipmapped() == GrMipmapped::kYes;
+    }
 
     GrSemaphoresSubmitted onFlush(GrDirectContext*, const GrFlushInfo&) override;
 
-    GrTextureProxy* peekProxy() const override {
-        return fView.asTextureProxy();
-    }
+    GrTextureProxy* peekProxy() const override { return fView.asTextureProxy(); }
 
-    const GrSurfaceProxyView* view(GrRecordingContext* context) const override {
-        if (!fView.proxy()) {
-            return nullptr;
-        }
-        return &fView;
-    }
+    GrBackendTexture onGetBackendTexture(bool flushPendingGrContextIO,
+                                         GrSurfaceOrigin* origin) const final;
 
     bool onIsTextureBacked() const override {
         SkASSERT(fView.proxy());
@@ -54,7 +61,7 @@ public:
     void onAsyncRescaleAndReadPixels(const SkImageInfo&,
                                      const SkIRect& srcRect,
                                      RescaleGamma,
-                                     SkFilterQuality,
+                                     RescaleMode,
                                      ReadPixelsCallback,
                                      ReadPixelsContext) override;
 
@@ -63,7 +70,7 @@ public:
                                            const SkIRect& srcRect,
                                            const SkISize& dstSize,
                                            RescaleGamma,
-                                           SkFilterQuality,
+                                           RescaleMode,
                                            ReadPixelsCallback,
                                            ReadPixelsContext) override;
 
@@ -83,6 +90,10 @@ public:
                                              PromiseImageTextureContext textureContext);
 
 private:
+    std::tuple<GrSurfaceProxyView, GrColorType> onAsView(GrRecordingContext*,
+                                                         GrMipmapped,
+                                                         GrImageTexGenPolicy) const override;
+
     GrSurfaceProxyView fView;
 
     using INHERITED = SkImage_GpuBase;

@@ -195,8 +195,9 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
         }
     }
 
-    TestReadPixels(reporter, context0, surfaceContext.get(), pixels.get(), "EGLImageTest-read");
+    //TestReadPixels(reporter, context0, surfaceContext.get(), pixels.get(), "EGLImageTest-read");
 
+    SkDebugf("type: %d\n", surfaceContext->asTextureProxy()->textureType());
     // We should not be able to write to an EXTERNAL texture
     TestWritePixels(reporter, context0, surfaceContext.get(), false, "EGLImageTest-write");
 
@@ -204,7 +205,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     // TODO: why do we always need to draw to copy from an external texture?
     TestCopyFromSurface(reporter,
                         context0,
-                        surfaceContext->asSurfaceProxy(),
+                        surfaceContext->asSurfaceProxyRef(),
                         surfaceContext->origin(),
                         colorInfo.colorType(),
                         pixels.get(),

@@ -8,10 +8,10 @@
 #ifndef GrSurfaceContext_DEFINED
 #define GrSurfaceContext_DEFINED
 
-#include "include/core/SkFilterQuality.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSurface.h"
 #include "src/gpu/GrClientMappedBufferManager.h"
 #include "src/gpu/GrColorInfo.h"
@@ -104,13 +104,14 @@ public:
     using ReadPixelsCallback = SkImage::ReadPixelsCallback;
     using ReadPixelsContext  = SkImage::ReadPixelsContext;
     using RescaleGamma       = SkImage::RescaleGamma;
+    using RescaleMode        = SkImage::RescaleMode;
 
     // GPU implementation for SkImage:: and SkSurface::asyncRescaleAndReadPixels.
     void asyncRescaleAndReadPixels(GrDirectContext*,
                                    const SkImageInfo& info,
                                    const SkIRect& srcRect,
                                    RescaleGamma rescaleGamma,
-                                   SkFilterQuality rescaleQuality,
+                                   RescaleMode,
                                    ReadPixelsCallback callback,
                                    ReadPixelsContext callbackContext);
 
@@ -121,7 +122,7 @@ public:
                                          const SkIRect& srcRect,
                                          SkISize dstSize,
                                          RescaleGamma rescaleGamma,
-                                         SkFilterQuality rescaleQuality,
+                                         RescaleMode,
                                          ReadPixelsCallback callback,
                                          ReadPixelsContext context);
 
@@ -160,31 +161,32 @@ public:
      * different size than srcRect. Though, it could be relaxed to allow non-scaling color
      * conversions.
      */
-    std::unique_ptr<GrSurfaceDrawContext> rescale(const GrImageInfo& info,
+    std::unique_ptr<GrSurfaceFillContext> rescale(const GrImageInfo& info,
                                                   GrSurfaceOrigin,
                                                   SkIRect srcRect,
                                                   SkImage::RescaleGamma,
-                                                  SkFilterQuality);
+                                                  SkImage::RescaleMode);
 
     /**
-     * Like the above but allows the caller ot specify a destination draw context and
+     * Like the above but allows the caller ot specify a destination fill context and
      * rect within that context. The dst rect must be contained by the dst or this will fail.
      */
-    bool rescaleInto(GrSurfaceDrawContext* dst,
+    bool rescaleInto(GrSurfaceFillContext* dst,
                      SkIRect dstRect,
                      SkIRect srcRect,
                      SkImage::RescaleGamma,
-                     SkFilterQuality);
+                     SkImage::RescaleMode);
 
     GrAuditTrail* auditTrail();
 
 #if GR_TEST_UTILS
-    bool testCopy(GrSurfaceProxy* src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
-        return this->copy(src, srcRect, dstPoint);
+    bool testCopy(sk_sp<GrSurfaceProxy> src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
+        return this->copy(std::move(src), srcRect, dstPoint);
     }
 
-    bool testCopy(GrSurfaceProxy* src) {
-        return this->copy(src, SkIRect::MakeSize(src->dimensions()), {0, 0});
+    bool testCopy(sk_sp<GrSurfaceProxy> src) {
+        auto rect = SkIRect::MakeSize(src->dimensions());
+        return this->copy(std::move(src), rect, {0, 0});
     }
 #endif
 
@@ -240,7 +242,7 @@ private:
      *       regions will not be shifted. The 'src' must have the same origin as the backing proxy
      *       of fSurfaceContext.
      */
-    bool copy(GrSurfaceProxy* src, const SkIRect& srcRect, const SkIPoint& dstPoint);
+    bool copy(sk_sp<GrSurfaceProxy> src, SkIRect srcRect, SkIPoint dstPoint);
 
     class AsyncReadResult;
 

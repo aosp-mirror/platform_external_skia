@@ -11,6 +11,13 @@
 #include "modules/skshaper/include/SkShaper.h"
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGText.h"
+#include "src/core/SkTLazy.h"
+
+#include <functional>
+#include <tuple>
+
+class SkContourMeasure;
+struct SkRSXform;
 
 // SkSVGTextContext is responsible for sequencing input text chars into "chunks".
 // A single text chunk can span multiple structural elements (<text>, <tspan>, etc),
@@ -25,16 +32,21 @@
 // [1] https://www.w3.org/TR/SVG11/text.html#TextLayoutIntroduction
 class SkSVGTextContext final : SkShaper::RunHandler {
 public:
+    using ShapedTextCallback = std::function<void(const SkSVGRenderContext&,
+                                                  const sk_sp<SkTextBlob>&,
+                                                  const SkPaint*,
+                                                  const SkPaint*)>;
 
     // Helper for encoding optional positional attributes.
     class PosAttrs {
     public:
         // TODO: rotate
         enum Attr : size_t {
-            kX  = 0,
-            kY  = 1,
-            kDx = 2,
-            kDy = 3,
+            kX      = 0,
+            kY      = 1,
+            kDx     = 2,
+            kDy     = 3,
+            kRotate = 4,
         };
 
         float  operator[](Attr a) const { return fStorage[a]; }
@@ -42,13 +54,21 @@ public:
 
         bool has(Attr a) const { return fStorage[a] != kNone; }
         bool hasAny()    const {
-            return this->has(kX) || this->has(kY) || this->has(kDx) || this->has(kDy);
+            return this->has(kX)
+                || this->has(kY)
+                || this->has(kDx)
+                || this->has(kDy)
+                || this->has(kRotate);
         }
+
+        void setImplicitRotate(bool imp) { fImplicitRotate = imp; }
+        bool isImplicitRotate() const { return fImplicitRotate; }
 
     private:
         static constexpr auto kNone = std::numeric_limits<float>::infinity();
 
-        float fStorage[4] = { kNone, kNone, kNone, kNone };
+        float fStorage[5]     = { kNone, kNone, kNone, kNone, kNone };
+        bool  fImplicitRotate = false;
     };
 
     // Helper for cascading position attribute resolution (x, y, dx, dy, rotate) [1]:
@@ -71,31 +91,43 @@ public:
         PosAttrs resolve(size_t charIndex) const;
 
     private:
-        SkSVGTextContext*        fTextContext;
-        const ScopedPosResolver* fParent;          // parent resolver (fallback)
-        const size_t             fCharIndexOffset; // start index for the current resolver
-        const std::vector<float> fX,
-                                 fY,
-                                 fDx,
-                                 fDy;
+        SkSVGTextContext*         fTextContext;
+        const ScopedPosResolver*  fParent;          // parent resolver (fallback)
+        const size_t              fCharIndexOffset; // start index for the current resolver
+        const std::vector<float>  fX,
+                                  fY,
+                                  fDx,
+                                  fDy;
+        const std::vector<float>& fRotate;
 
         // cache for the last known index with explicit positioning
         mutable size_t           fLastPosIndex = std::numeric_limits<size_t>::max();
 
     };
 
-    SkSVGTextContext(const SkSVGPresentationContext&, sk_sp<SkFontMgr>);
+    SkSVGTextContext(const SkSVGRenderContext&,
+                     const ShapedTextCallback&,
+                     const SkSVGTextPath* = nullptr);
+    ~SkSVGTextContext() override;
 
-    // Queues codepoints for rendering.
-    void appendFragment(const SkString&, const SkSVGRenderContext&, SkSVGXmlSpace);
+    // Shape and queue codepoints for final alignment.
+    void shapeFragment(const SkString&, const SkSVGRenderContext&, SkSVGXmlSpace);
 
-    // Perform actual rendering for queued codepoints.
+    // Perform final adjustments and push shaped blobs to the callback.
     void flushChunk(const SkSVGRenderContext& ctx);
 
+    const ShapedTextCallback& getCallback() const { return fCallback; }
+
 private:
+    struct PositionAdjustment {
+        SkVector offset;
+        float    rotation;
+    };
+
     struct ShapeBuffer {
-        SkSTArray<128, char    , true> fUtf8;
-        SkSTArray<128, SkVector, true> fUtf8PosAdjust; // per-utf8-char cumulative pos adjustments
+        SkSTArray<128, char              , true> fUtf8;
+        // per-utf8-char cumulative pos adjustments
+        SkSTArray<128, PositionAdjustment, true> fUtf8PosAdjust;
 
         void reserve(size_t size) {
             fUtf8.reserve_back(SkToInt(size));
@@ -107,20 +139,38 @@ private:
             fUtf8PosAdjust.reset();
         }
 
-        void append(SkUnichar, SkVector);
+        void append(SkUnichar, PositionAdjustment);
     };
 
     struct RunRec {
-        SkFont                       font;
-        std::unique_ptr<SkPaint>     fillPaint,
-                                     strokePaint;
-        std::unique_ptr<SkGlyphID[]> glyphs;
-        std::unique_ptr<SkPoint[]>   glyphPos;
-        size_t                       glyphCount;
-        SkVector                     advance;
+        SkFont                                font;
+        std::unique_ptr<SkPaint>              fillPaint,
+                                              strokePaint;
+        std::unique_ptr<SkGlyphID[]>          glyphs;        // filled by SkShaper
+        std::unique_ptr<SkPoint[]>            glyphPos;      // filled by SkShaper
+        std::unique_ptr<PositionAdjustment[]> glyhPosAdjust; // deferred positioning adjustments
+        size_t                                glyphCount;
+        SkVector                              advance;
+    };
+
+    // Caches path information to accelerate position lookups.
+    class PathData {
+    public:
+        PathData(const SkSVGRenderContext&, const SkSVGTextPath&);
+
+        SkMatrix getMatrixAt(float offset) const;
+
+        float length() const { return fLength; }
+
+    private:
+        std::vector<sk_sp<SkContourMeasure>> fContours;
+        float                                fLength = 0; // total path length
     };
 
     void shapePendingBuffer(const SkFont&);
+
+    SkRSXform computeGlyphXform(SkGlyphID, const SkFont&, const SkPoint& glyph_pos,
+                                const PositionAdjustment&) const;
 
     // SkShaper callbacks
     void beginLine() override {}
@@ -131,16 +181,19 @@ private:
     void commitLine() override {}
 
     // http://www.w3.org/TR/SVG11/text.html#TextLayout
+    const SkSVGRenderContext&       fRenderContext; // original render context
+    const ShapedTextCallback&       fCallback;
     const std::unique_ptr<SkShaper> fShaper;
     std::vector<RunRec>             fRuns;
-    const ScopedPosResolver*        fPosResolver = nullptr;
+    const ScopedPosResolver*        fPosResolver  = nullptr;
+    std::unique_ptr<PathData>       fPathData;
 
     // shaper state
     ShapeBuffer                     fShapeBuffer;
     std::vector<uint32_t>           fShapeClusterBuffer;
 
     // chunk state
-    SkPoint                         fChunkPos;             // current text chunk position
+    SkPoint                         fChunkPos     = {0,0}; // current text chunk position
     SkVector                        fChunkAdvance = {0,0}; // cumulative advance
     float                           fChunkAlignmentFactor; // current chunk alignment
 
@@ -148,8 +201,8 @@ private:
     size_t                          fCurrentCharIndex = 0;
 
     // cached for access from SkShaper callbacks.
-    const SkPaint*                  fCurrentFill;
-    const SkPaint*                  fCurrentStroke;
+    SkTLazy<SkPaint>                fCurrentFill;
+    SkTLazy<SkPaint>                fCurrentStroke;
 
     bool                            fPrevCharSpace = true; // WS filter state
 };

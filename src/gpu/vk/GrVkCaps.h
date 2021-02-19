@@ -156,11 +156,22 @@ public:
 
     uint32_t maxInputAttachmentDescriptors() const { return fMaxInputAttachmentDescriptors; }
 
-    bool preferCachedCpuMemory() const { return fPreferCachedCpuMemory; }
-
     bool mustInvalidatePrimaryCmdBufferStateAfterClearAttachments() const {
         return fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments;
     }
+
+    // For host visible allocations, this returns true if we require that they are coherent. This
+    // is used to work around bugs for devices that don't handle non-coherent memory correctly.
+    bool mustUseCoherentHostVisibleMemory() const { return fMustUseCoherentHostVisibleMemory; }
+
+    // Returns whether a pure GPU accessible buffer is more performant to read than a buffer that is
+    // also host visible. If so then in some cases we may prefer the cost of doing a copy to the
+    // buffer. This typically would only be the case for buffers that are written once and read
+    // many times on the gpu.
+    bool gpuOnlyBuffersMorePerformant() const { return fGpuOnlyBuffersMorePerformant; }
+
+    // The max draw count that can be passed into indirect draw calls.
+    uint32_t  maxDrawIndirectDrawCount() const { return fMaxDrawIndirectDrawCount; }
 
     /**
      * Helpers used by canCopySurface. In all cases if the SampleCnt parameter is zero that means
@@ -208,9 +219,13 @@ public:
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 
-    GrProgramDesc makeDesc(GrRenderTarget*, const GrProgramInfo&) const override;
+    GrProgramDesc makeDesc(GrRenderTarget*,
+                           const GrProgramInfo&,
+                           ProgramDescOverrideFlags) const override;
 
     GrInternalSurfaceFlags getExtraSurfaceFlagsForDeferredRT() const override;
+
+    VkShaderStageFlags getPushConstantStageFlags() const;
 
     // If true then when doing MSAA draws, we will prefer to discard the msaa attachment on load
     // and stores. The use of this feature for specific draws depends on the render target having a
@@ -219,6 +234,10 @@ public:
     // like normal.
     // This flag is similar to enabling gl render to texture for msaa rendering.
     bool preferDiscardableMSAAAttachment() const { return fPreferDiscardableMSAAAttachment; }
+
+    bool mustLoadFullImageWithDiscardableMSAA() const {
+        return fMustLoadFullImageWithDiscardableMSAA;
+    }
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -351,6 +370,9 @@ private:
     bool fPreferPrimaryOverSecondaryCommandBuffers = true;
     bool fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments = false;
 
+    bool fMustUseCoherentHostVisibleMemory = false;
+    bool fGpuOnlyBuffersMorePerformant = false;
+
     // We default this to 100 since we already cap the max render tasks at 100 before doing a
     // submission in the GrDrawingManager, so we shouldn't be going over 100 secondary command
     // buffers per primary anyways.
@@ -358,9 +380,10 @@ private:
 
     uint32_t fMaxInputAttachmentDescriptors = 0;
 
-    bool fPreferCachedCpuMemory = true;
-
     bool fPreferDiscardableMSAAAttachment = false;
+    bool fMustLoadFullImageWithDiscardableMSAA = false;
+
+    uint32_t fMaxDrawIndirectDrawCount = 0;
 
     using INHERITED = GrCaps;
 };

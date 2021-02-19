@@ -19,7 +19,11 @@ class SkSVGFe : public SkSVGHiddenContainer {
 public:
     static bool IsFilterEffect(const sk_sp<SkSVGNode>& node) {
         return node->tag() == SkSVGTag::kFeTurbulence || node->tag() == SkSVGTag::kFeColorMatrix ||
-               node->tag() == SkSVGTag::kFeComposite || node->tag() == SkSVGTag::kFeFlood;
+               node->tag() == SkSVGTag::kFeComposite || node->tag() == SkSVGTag::kFeFlood ||
+               node->tag() == SkSVGTag::kFeGaussianBlur || node->tag() == SkSVGTag::kFeOffset ||
+               node->tag() == SkSVGTag::kFeBlend || node->tag() == SkSVGTag::kFeMorphology ||
+               node->tag() == SkSVGTag::kFeDisplacementMap ||
+               node->tag() == SkSVGTag::kFeSpecularLighting;
     }
 
     sk_sp<SkImageFilter> makeImageFilter(const SkSVGRenderContext& ctx,
@@ -28,7 +32,18 @@ public:
     // https://www.w3.org/TR/SVG11/filters.html#FilterPrimitiveSubRegion
     SkRect resolveFilterSubregion(const SkSVGRenderContext&, const SkSVGFilterContext&) const;
 
-    SVG_ATTR(In, SkSVGFeInputType, SkSVGFeInputType(SkSVGFeInputType::Type::kSourceGraphic))
+    /**
+     * Resolves the colorspace within which this filter effect should be applied.
+     * Spec: https://www.w3.org/TR/SVG11/painting.html#ColorInterpolationProperties
+     * 'color-interpolation-filters' property.
+     */
+    virtual SkSVGColorspace resolveColorspace(const SkSVGRenderContext&,
+                                              const SkSVGFilterContext&) const;
+
+    /** Propagates any inherited presentation attributes in the given context. */
+    void applyProperties(SkSVGRenderContext*) const;
+
+    SVG_ATTR(In, SkSVGFeInputType, SkSVGFeInputType())
     SVG_ATTR(Result, SkSVGStringType, SkSVGStringType())
     SVG_OPTIONAL_ATTR(X, SkSVGLength)
     SVG_OPTIONAL_ATTR(Y, SkSVGLength)
@@ -46,6 +61,13 @@ protected:
     bool parseAndSetAttribute(const char*, const char*) override;
 
 private:
+    /**
+     * Resolves the rect specified by the x, y, width and height attributes (if specified) on this
+     * filter effect. These attributes are resolved according to the given length context and
+     * the value of 'primitiveUnits' on the parent <filter> element.
+     */
+    SkRect resolveBoundaries(const SkSVGRenderContext&, const SkSVGFilterContext&) const;
+
     using INHERITED = SkSVGHiddenContainer;
 };
 

@@ -27,6 +27,8 @@ SkSVGPresentationAttributes SkSVGPresentationAttributes::MakeInitial() {
     result.fVisibility.set(SkSVGVisibility(SkSVGVisibility::Type::kVisible));
 
     result.fColor.set(SkSVGColorType(SK_ColorBLACK));
+    result.fColorInterpolation.set(SkSVGColorspace::kSRGB);
+    result.fColorInterpolationFilters.set(SkSVGColorspace::kLinearRGB);
 
     result.fFontFamily.init("Sans");
     result.fFontStyle.init(SkSVGFontStyle::Type::kNormal);
@@ -38,6 +40,7 @@ SkSVGPresentationAttributes SkSVGPresentationAttributes::MakeInitial() {
     result.fStopOpacity.set(SkSVGNumberType(1));
     result.fFloodColor.set(SkSVGColor(SK_ColorBLACK));
     result.fFloodOpacity.set(SkSVGNumberType(1));
+    result.fLightingColor.set(SkSVGColor(SK_ColorWHITE));
 
     return result;
 }

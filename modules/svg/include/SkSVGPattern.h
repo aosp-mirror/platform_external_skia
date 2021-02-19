@@ -19,17 +19,17 @@ public:
         return sk_sp<SkSVGPattern>(new SkSVGPattern());
     }
 
-    void setX(const SkSVGLength&);
-    void setY(const SkSVGLength&);
-    void setWidth(const SkSVGLength&);
-    void setHeight(const SkSVGLength&);
-    void setHref(const SkSVGStringType&);
-    void setPatternTransform(const SkSVGTransformType&);
+    SVG_ATTR(Href, SkSVGIRI, SkSVGIRI())
+    SVG_OPTIONAL_ATTR(X               , SkSVGLength)
+    SVG_OPTIONAL_ATTR(Y               , SkSVGLength)
+    SVG_OPTIONAL_ATTR(Width           , SkSVGLength)
+    SVG_OPTIONAL_ATTR(Height          , SkSVGLength)
+    SVG_OPTIONAL_ATTR(PatternTransform, SkSVGTransformType)
 
 protected:
     SkSVGPattern();
 
-    void onSetAttribute(SkSVGAttribute, const SkSVGValue&) override;
+    bool parseAndSetAttribute(const char*, const char*) override;
 
     bool onAsPaint(const SkSVGRenderContext&, SkPaint*) const override;
 
@@ -40,9 +40,7 @@ private:
                                     fWidth,
                                     fHeight;
         SkTLazy<SkSVGTransformType> fPatternTransform;
-    } fAttributes;
-
-    SkSVGStringType    fHref;
+    };
 
     const SkSVGPattern* resolveHref(const SkSVGRenderContext&, PatternAttributes*) const;
     const SkSVGPattern* hrefTarget(const SkSVGRenderContext&) const;

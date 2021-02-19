@@ -402,62 +402,12 @@ void DebugCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData*
     this->addDrawCommand(new DrawAnnotationCommand(rect, key, sk_ref_sp(value)));
 }
 
-#ifdef SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
-void DebugCanvas::onDrawImage(const SkImage* image,
-                              SkScalar       left,
-                              SkScalar       top,
-                              const SkPaint* paint) {
-    this->addDrawCommand(new DrawImageCommand(image, left, top, paint));
-}
-
-void DebugCanvas::onDrawImageLattice(const SkImage* image,
-                                     const Lattice& lattice,
-                                     const SkRect&  dst,
-                                     const SkPaint* paint) {
-    this->addDrawCommand(new DrawImageLatticeCommand(image, lattice, dst, paint));
-}
-
-void DebugCanvas::onDrawImageRect(const SkImage*    image,
-                                  const SkRect*     src,
-                                  const SkRect&     dst,
-                                  const SkPaint*    paint,
-                                  SrcRectConstraint constraint) {
-    if (fnextDrawImageRectLayerId != -1 && fLayerManager) {
-        // This drawImageRect command would have drawn the offscreen buffer for a layer.
-        // On Android, we recorded an SkPicture of the commands that drew to the layer.
-        // To render the layer as it would have looked on the frame this DebugCanvas draws, we need
-        // to call fLayerManager->getLayerAsImage(id). This must be done just before
-        // drawTo(command), since it depends on the index into the layer's commands
-        // (managed by fLayerManager)
-        // Instead of adding a DrawImageRectCommand, we need a deferred command, that when
-        // executed, will call drawImageRect(fLayerManager->getLayerAsImage())
-        this->addDrawCommand(new DrawImageRectLayerCommand(
-            fLayerManager, fnextDrawImageRectLayerId, fFrame, src, dst, paint, constraint));
-    } else {
-        this->addDrawCommand(new DrawImageRectCommand(image, src, dst, paint, constraint));
-    }
-    // Reset expectation so next drawImageRect is not special.
-    fnextDrawImageRectLayerId = -1;
-}
-void DebugCanvas::onDrawAtlas(const SkImage*   image,
-                               const SkRSXform xform[],
-                               const SkRect    tex[],
-                               const SkColor   colors[],
-                               int             count,
-                               SkBlendMode     bmode,
-                               const SkRect*   cull,
-                               const SkPaint*  paint) {
-    this->addDrawCommand(
-            new DrawAtlasCommand(image, xform, tex, colors, count, bmode, cull, paint));
-}
-#endif
-
 void DebugCanvas::onDrawImage2(const SkImage*           image,
                                SkScalar                 left,
                                SkScalar                 top,
-                               const SkSamplingOptions& sampling,   // todo
+                               const SkSamplingOptions& sampling,
                                const SkPaint*           paint) {
-    this->addDrawCommand(new DrawImageCommand(image, left, top, paint));
+    this->addDrawCommand(new DrawImageCommand(image, left, top, sampling, paint));
 }
 
 void DebugCanvas::onDrawImageLattice2(const SkImage* image,
@@ -465,13 +415,13 @@ void DebugCanvas::onDrawImageLattice2(const SkImage* image,
                                       const SkRect&  dst,
                                       SkFilterMode filter,   // todo
                                       const SkPaint* paint) {
-    this->addDrawCommand(new DrawImageLatticeCommand(image, lattice, dst, paint));
+    this->addDrawCommand(new DrawImageLatticeCommand(image, lattice, dst, filter, paint));
 }
 
 void DebugCanvas::onDrawImageRect2(const SkImage*           image,
                                    const SkRect&            src,
                                    const SkRect&            dst,
-                                   const SkSamplingOptions& sampling,   // todo
+                                   const SkSamplingOptions& sampling,
                                    const SkPaint*           paint,
                                    SrcRectConstraint        constraint) {
     if (fnextDrawImageRectLayerId != -1 && fLayerManager) {
@@ -484,9 +434,10 @@ void DebugCanvas::onDrawImageRect2(const SkImage*           image,
         // Instead of adding a DrawImageRectCommand, we need a deferred command, that when
         // executed, will call drawImageRect(fLayerManager->getLayerAsImage())
         this->addDrawCommand(new DrawImageRectLayerCommand(
-            fLayerManager, fnextDrawImageRectLayerId, fFrame, &src, dst, paint, constraint));
+            fLayerManager, fnextDrawImageRectLayerId, fFrame, src, dst, sampling,
+                                                           paint, constraint));
     } else {
-        this->addDrawCommand(new DrawImageRectCommand(image, &src, dst, paint, constraint));
+        this->addDrawCommand(new DrawImageRectCommand(image, src, dst, sampling, paint, constraint));
     }
     // Reset expectation so next drawImageRect is not special.
     fnextDrawImageRectLayerId = -1;
@@ -588,7 +539,7 @@ void DebugCanvas::onDrawAtlas2(const SkImage*           image,
                                const SkRect*            cull,
                                const SkPaint*           paint) {
     this->addDrawCommand(
-            new DrawAtlasCommand(image, xform, tex, colors, count, bmode, cull, paint));
+            new DrawAtlasCommand(image, xform, tex, colors, count, bmode, sampling, cull, paint));
 }
 
 void DebugCanvas::onDrawShadowRec(const SkPath& path, const SkDrawShadowRec& rec) {
@@ -607,14 +558,15 @@ void DebugCanvas::onDrawEdgeAAQuad(const SkRect&    rect,
     this->addDrawCommand(new DrawEdgeAAQuadCommand(rect, clip, aa, color, mode));
 }
 
-void DebugCanvas::onDrawEdgeAAImageSet(const ImageSetEntry set[],
-                                       int                 count,
-                                       const SkPoint       dstClips[],
-                                       const SkMatrix      preViewMatrices[],
-                                       const SkPaint*      paint,
-                                       SrcRectConstraint   constraint) {
+void DebugCanvas::onDrawEdgeAAImageSet2(const ImageSetEntry set[],
+                                        int                 count,
+                                        const SkPoint       dstClips[],
+                                        const SkMatrix      preViewMatrices[],
+                                        const SkSamplingOptions& sampling,
+                                        const SkPaint*      paint,
+                                        SrcRectConstraint   constraint) {
     this->addDrawCommand(new DrawEdgeAAImageSetCommand(
-            set, count, dstClips, preViewMatrices, paint, constraint));
+            set, count, dstClips, preViewMatrices, sampling, paint, constraint));
 }
 
 void DebugCanvas::willRestore() {

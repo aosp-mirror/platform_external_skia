@@ -77,8 +77,23 @@ public:
     // values in the dst rect corresponding to the area clipped by the src rect are not overwritten.
     // This method is not guaranteed to succeed depending on the type of surface, formats, etc, and
     // the backend-specific limitations.
-    bool newCopyRenderTask(GrSurfaceProxyView srcView, const SkIRect& srcRect,
-                           GrSurfaceProxyView dstView, const SkIPoint& dstPoint);
+    bool newCopyRenderTask(sk_sp<GrSurfaceProxy> src,
+                           SkIRect srcRect,
+                           sk_sp<GrSurfaceProxy> dst,
+                           SkIPoint dstPoint,
+                           GrSurfaceOrigin);
+
+    // Adds a task that writes the data from the passed GrMipLevels to dst. The lifetime of the
+    // pixel data in the levels should be tied to the passed SkData. srcColorType is the color
+    // type of the GrMipLevels. dstColorType is the color type being used with dst and must
+    // be compatible with dst's format according to GrCaps::areColorTypeAndFormatCompatible().
+    bool newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
+                            SkIRect rect,
+                            GrColorType srcColorType,
+                            GrColorType dstColorType,
+                            const GrMipLevel[],
+                            int levelCount,
+                            sk_sp<SkData> storage);
 
     GrRecordingContext* getContext() { return fContext; }
 
@@ -92,6 +107,10 @@ public:
     // Returns a direct pointer to the coverage counting path renderer, or null if it is not
     // supported and turned on.
     GrCoverageCountingPathRenderer* getCoverageCountingPathRenderer();
+
+    // Returns a direct pointer to the tessellation path renderer, or null if it is not supported
+    // and turned on.
+    GrPathRenderer* getTessellationPathRenderer();
 
     void flushIfNecessary();
 
@@ -116,7 +135,8 @@ public:
     void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
 
     void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
-    void createDDLTask(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest,
+    void createDDLTask(sk_sp<const SkDeferredDisplayList>,
+                       sk_sp<GrRenderTargetProxy> newDest,
                        SkIPoint offset);
 
 private:
@@ -126,10 +146,7 @@ private:
 
     bool wasAbandoned() const;
 
-    // Closes the target's dependent render tasks (or, if not in sorting/opsTask-splitting-reduction
-    // mode, closes fActiveOpsTask) in preparation for us opening a new opsTask that will write to
-    // 'target'.
-    void closeRenderTasksForNewRenderTask(GrSurfaceProxy* target);
+    void closeActiveOpsTask();
 
     // return true if any GrRenderTasks were actually executed; false otherwise
     bool executeRenderTasks(int startIndex, int stopIndex, GrOpFlushState*,
@@ -138,6 +155,7 @@ private:
     void removeRenderTasks(int startIndex, int stopIndex);
 
     void sortTasks();
+    void reorderTasks();
 
     void closeAllTasks();
 
@@ -182,27 +200,9 @@ private:
 
     GrTokenTracker                    fTokenTracker;
     bool                              fFlushing;
-    bool                              fReduceOpsTaskSplitting;
+    const bool                        fReduceOpsTaskSplitting;
 
     SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
-
-    void addDDLTarget(GrSurfaceProxy* newTarget, GrRenderTargetProxy* ddlTarget) {
-        fDDLTargets.set(newTarget->uniqueID().asUInt(), ddlTarget);
-    }
-    bool isDDLTarget(GrSurfaceProxy* newTarget) {
-        return SkToBool(fDDLTargets.find(newTarget->uniqueID().asUInt()));
-    }
-    GrRenderTargetProxy* getDDLTarget(GrSurfaceProxy* newTarget) {
-        auto entry = fDDLTargets.find(newTarget->uniqueID().asUInt());
-        return entry ? *entry : nullptr;
-    }
-    void clearDDLTargets() { fDDLTargets.reset(); }
-
-    // We play a trick with lazy proxies to retarget the base target of a DDL to the SkSurface
-    // it is replayed on. 'fDDLTargets' stores this mapping from SkSurface unique proxy ID
-    // to the DDL's lazy proxy.
-    // Note: we do not expect a whole lot of these per flush
-    SkTHashMap<uint32_t, GrRenderTargetProxy*> fDDLTargets;
 
     struct SurfaceIDKeyTraits {
         static uint32_t GetInvalidKey() {

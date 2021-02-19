@@ -7,77 +7,158 @@
 
 #include "src/sksl/ir/SkSLConstructor.h"
 
+#include "src/sksl/ir/SkSLBoolLiteral.h"
+#include "src/sksl/ir/SkSLFloatLiteral.h"
+#include "src/sksl/ir/SkSLIntLiteral.h"
+#include "src/sksl/ir/SkSLPrefixExpression.h"
+
 namespace SkSL {
 
 std::unique_ptr<Expression> Constructor::constantPropagate(const IRGenerator& irGenerator,
                                                            const DefinitionMap& definitions) {
-    if (this->arguments().size() == 1 && this->arguments()[0]->is<IntLiteral>()) {
-        const Context& context = irGenerator.fContext;
-        const Type& type = this->type();
-        SKSL_INT intValue = this->arguments()[0]->as<IntLiteral>().value();
+    // Handle conversion constructors of literal values.
+    if (this->arguments().size() == 1) {
+        return SimplifyConversion(this->type(), *this->arguments().front());
+    }
+    return nullptr;
+}
 
-        if (type.isFloat()) {
+std::unique_ptr<Expression> Constructor::SimplifyConversion(const Type& constructorType,
+                                                            const Expression& expr) {
+    if (expr.is<IntLiteral>()) {
+        SKSL_INT value = expr.as<IntLiteral>().value();
+        if (constructorType.isFloat()) {
             // promote float(1) to 1.0
-            return std::make_unique<FloatLiteral>(context, fOffset, intValue);
-        } else if (type.isInteger()) {
+            return std::make_unique<FloatLiteral>(expr.fOffset, (SKSL_FLOAT)value,
+                                                  &constructorType);
+        } else if (constructorType.isInteger()) {
             // promote uint(1) to 1u
-            return std::make_unique<IntLiteral>(fOffset, intValue, &type);
-        } else if (&type == context.fBool_Type.get()) {
-            // promote bool(k) to true/false
-            return std::make_unique<BoolLiteral>(context, fOffset, intValue != 0);
+            return std::make_unique<IntLiteral>(expr.fOffset, value, &constructorType);
+        } else if (constructorType.isBoolean()) {
+            // promote bool(1) to true/false
+            return std::make_unique<BoolLiteral>(expr.fOffset, value != 0, &constructorType);
+        }
+    } else if (expr.is<FloatLiteral>()) {
+        float value = expr.as<FloatLiteral>().value();
+        if (constructorType.isFloat()) {
+            // promote float(1.23) to 1.23
+            return std::make_unique<FloatLiteral>(expr.fOffset, value, &constructorType);
+        } else if (constructorType.isInteger()) {
+            // promote uint(1.23) to 1u
+            return std::make_unique<IntLiteral>(expr.fOffset, (SKSL_INT)value, &constructorType);
+        } else if (constructorType.isBoolean()) {
+            // promote bool(1.23) to true/false
+            return std::make_unique<BoolLiteral>(expr.fOffset, value != 0.0f, &constructorType);
+        }
+    } else if (expr.is<BoolLiteral>()) {
+        bool value = expr.as<BoolLiteral>().value();
+        if (constructorType.isFloat()) {
+            // promote float(true) to 1.0
+            return std::make_unique<FloatLiteral>(expr.fOffset, value ? 1.0f : 0.0f,
+                                                  &constructorType);
+        } else if (constructorType.isInteger()) {
+            // promote uint(true) to 1u
+            return std::make_unique<IntLiteral>(expr.fOffset, value ? 1 : 0, &constructorType);
+        } else if (constructorType.isBoolean()) {
+            // promote bool(true) to true/false
+            return std::make_unique<BoolLiteral>(expr.fOffset, value, &constructorType);
         }
     }
     return nullptr;
 }
 
-Expression::ComparisonResult Constructor::compareConstant(const Context& context,
-                                                          const Expression& other) const {
+Expression::ComparisonResult Constructor::compareConstant(const Expression& other) const {
     if (!other.is<Constructor>()) {
         return ComparisonResult::kUnknown;
     }
     const Constructor& c = other.as<Constructor>();
     const Type& myType = this->type();
-    const Type& otherType = c.type();
-    SkASSERT(myType == otherType);
-    if (otherType.isVector()) {
-        bool isFloat = otherType.columns() > 1 ? otherType.componentType().isFloat()
-                                             : otherType.isFloat();
-        for (int i = 0; i < myType.columns(); i++) {
-            if (isFloat) {
+    SkASSERT(myType == c.type());
+
+    if (myType.isVector()) {
+        if (myType.componentType().isFloat()) {
+            for (int i = 0; i < myType.columns(); i++) {
                 if (this->getFVecComponent(i) != c.getFVecComponent(i)) {
                     return ComparisonResult::kNotEqual;
                 }
-            } else if (this->getIVecComponent(i) != c.getIVecComponent(i)) {
-                return ComparisonResult::kNotEqual;
+            }
+            return ComparisonResult::kEqual;
+        }
+        if (myType.componentType().isInteger()) {
+            for (int i = 0; i < myType.columns(); i++) {
+                if (this->getIVecComponent(i) != c.getIVecComponent(i)) {
+                    return ComparisonResult::kNotEqual;
+                }
+            }
+            return ComparisonResult::kEqual;
+        }
+        if (myType.componentType().isBoolean()) {
+            for (int i = 0; i < myType.columns(); i++) {
+                if (this->getBVecComponent(i) != c.getBVecComponent(i)) {
+                    return ComparisonResult::kNotEqual;
+                }
+            }
+            return ComparisonResult::kEqual;
+        }
+    }
+
+    if (myType.isMatrix()) {
+        for (int col = 0; col < myType.columns(); col++) {
+            for (int row = 0; row < myType.rows(); row++) {
+                if (getMatComponent(col, row) != c.getMatComponent(col, row)) {
+                    return ComparisonResult::kNotEqual;
+                }
             }
         }
         return ComparisonResult::kEqual;
     }
-    // shouldn't be possible to have a constant constructor that isn't a vector or matrix;
-    // a constant scalar constructor should have been collapsed down to the appropriate
-    // literal
-    SkASSERT(myType.isMatrix());
-    for (int col = 0; col < myType.columns(); col++) {
-        for (int row = 0; row < myType.rows(); row++) {
-            if (getMatComponent(col, row) != c.getMatComponent(col, row)) {
-                return ComparisonResult::kNotEqual;
-            }
-        }
-    }
-    return ComparisonResult::kEqual;
+
+    SkDEBUGFAILF("compareConstant unexpected type: %s", myType.description().c_str());
+    return ComparisonResult::kUnknown;
 }
 
 template <typename ResultType>
+ResultType Constructor::getConstantValue(const Expression& expr) const {
+    const Type& type = expr.type();
+    SkASSERT(type.isScalar());
+    if (type.isFloat()) {
+        return ResultType(expr.getConstantFloat());
+    } else if (type.isInteger()) {
+        return ResultType(expr.getConstantInt());
+    } else if (type.isBoolean()) {
+        return ResultType(expr.getConstantBool());
+    }
+    SkDEBUGFAILF("unrecognized kind of constant value: %s", expr.description().c_str());
+    return ResultType(0);
+}
+
+template <typename ResultType>
+ResultType Constructor::getInnerVecComponent(const Expression& expr, int position) const {
+    const Type& type = expr.type().componentType();
+    if (type.isFloat()) {
+        return ResultType(expr.getVecComponent<SKSL_FLOAT>(position));
+    } else if (type.isInteger()) {
+        return ResultType(expr.getVecComponent<SKSL_INT>(position));
+    } else if (type.isBoolean()) {
+        return ResultType(expr.getVecComponent<bool>(position));
+    }
+    SkDEBUGFAILF("unrecognized type of constant: %s", expr.description().c_str());
+    return ResultType(0);
+};
+
+template <typename ResultType>
 ResultType Constructor::getVecComponent(int index) const {
+    static_assert(std::is_same<ResultType, SKSL_FLOAT>::value ||
+                  std::is_same<ResultType, SKSL_INT>::value ||
+                  std::is_same<ResultType, bool>::value);
+
     SkASSERT(this->type().isVector());
+    SkASSERT(this->isCompileTimeConstant());
+
     if (this->arguments().size() == 1 &&
         this->arguments()[0]->type().isScalar()) {
         // This constructor just wraps a scalar. Propagate out the value.
-        if (std::is_floating_point<ResultType>::value) {
-            return this->arguments()[0]->getConstantFloat();
-        } else {
-            return this->arguments()[0]->getConstantInt();
-        }
+        return this->getConstantValue<ResultType>(*this->arguments()[0]);
     }
 
     // Walk through all the constructor arguments until we reach the index we're searching for.
@@ -91,53 +172,16 @@ ResultType Constructor::getVecComponent(int index) const {
         if (arg->type().isScalar()) {
             if (index == current) {
                 // We're on the proper argument, and it's a scalar; fetch it.
-                if (std::is_floating_point<ResultType>::value) {
-                    return arg->getConstantFloat();
-                } else {
-                    return arg->getConstantInt();
-                }
+                return this->getConstantValue<ResultType>(*arg);
             }
             current++;
             continue;
         }
 
-        switch (arg->kind()) {
-            case Kind::kConstructor: {
-                const Constructor& constructor = arg->as<Constructor>();
-                if (current + constructor.type().columns() > index) {
-                    // We've found a constructor that overlaps the proper argument. Descend into
-                    // it, honoring the type.
-                    return constructor.componentType().isFloat()
-                              ? ResultType(constructor.getVecComponent<SKSL_FLOAT>(index - current))
-                              : ResultType(constructor.getVecComponent<SKSL_INT>(index - current));
-                }
-                break;
-            }
-            case Kind::kPrefix: {
-                const PrefixExpression& prefix = arg->as<PrefixExpression>();
-                if (current + prefix.type().columns() > index) {
-                    // We found a prefix operator that contains the proper argument. Descend
-                    // into it. We only support for constant propagation of the unary minus, so
-                    // we shouldn't see any other tokens here.
-                    SkASSERT(prefix.getOperator() == Token::Kind::TK_MINUS);
-
-                    const Expression& operand = *prefix.operand();
-                    if (operand.type().isVector()) {
-                        return operand.type().componentType().isFloat()
-                                ? -ResultType(operand.getVecComponent<SKSL_FLOAT>(index - current))
-                                : -ResultType(operand.getVecComponent<SKSL_INT>(index - current));
-                    } else {
-                        return operand.type().isFloat()
-                                ? -ResultType(operand.getConstantFloat())
-                                : -ResultType(operand.getConstantInt());
-                    }
-                }
-                break;
-            }
-            default: {
-                SkDEBUGFAILF("unexpected component %d { %s } in %s\n",
-                             index, arg->description().c_str(), description().c_str());
-                break;
+        if (arg->type().isVector()) {
+            if (current + arg->type().columns() > index) {
+                // We've found an expression that encompasses the proper argument. Descend into it.
+                return this->getInnerVecComponent<ResultType>(*arg, index - current);
             }
         }
 
@@ -145,11 +189,12 @@ ResultType Constructor::getVecComponent(int index) const {
     }
 
     SkDEBUGFAILF("failed to find vector component %d in %s\n", index, description().c_str());
-    return -1;
+    return ResultType(0);
 }
 
-template int Constructor::getVecComponent(int) const;
-template float Constructor::getVecComponent(int) const;
+template SKSL_INT Constructor::getVecComponent(int) const;
+template SKSL_FLOAT Constructor::getVecComponent(int) const;
+template bool Constructor::getVecComponent(int) const;
 
 SKSL_FLOAT Constructor::getMatComponent(int col, int row) const {
     SkDEBUGCODE(const Type& myType = this->type();)
@@ -164,14 +209,14 @@ SKSL_FLOAT Constructor::getMatComponent(int col, int row) const {
             // 0 x 0
             // 0 0 x
             // return x if col == row
-            return col == row ? this->arguments()[0]->getConstantFloat() : 0.0;
+            return col == row ? this->getConstantValue<SKSL_FLOAT>(*this->arguments()[0]) : 0.0;
         }
         if (argType.isMatrix()) {
-            SkASSERT(this->arguments()[0]->kind() == Expression::Kind::kConstructor);
+            SkASSERT(this->arguments()[0]->is<Constructor>());
             // single matrix argument. make sure we're within the argument's bounds.
             if (col < argType.columns() && row < argType.rows()) {
                 // within bounds, defer to argument
-                return ((Constructor&) *this->arguments()[0]).getMatComponent(col, row);
+                return this->arguments()[0]->as<Constructor>().getMatComponent(col, row);
             }
             // out of bounds
             return 0.0;
@@ -192,7 +237,7 @@ SKSL_FLOAT Constructor::getMatComponent(int col, int row) const {
         }
         currentIndex += argType.columns();
     }
-    ABORT("can't happen, matrix component out of bounds");
+    SK_ABORT("can't happen, matrix component out of bounds");
 }
 
 SKSL_INT Constructor::getConstantInt() const {
@@ -201,10 +246,12 @@ SKSL_INT Constructor::getConstantInt() const {
     SkASSERT(this->type().columns() == 1);
     SkASSERT(this->type().isInteger());
 
-    // The inner argument might actually be a float! `int(1.0)` is a valid cast.
+    // This might be a cast, meaning the inner argument would actually be a different scalar type.
     const Expression& expr = *this->arguments().front();
-    SkASSERT(expr.type().isScalar());
-    return expr.type().isInteger() ? expr.getConstantInt() : (SKSL_INT)expr.getConstantFloat();
+    SkASSERT(expr.type().isInteger() || expr.type().isFloat() || expr.type().isBoolean());
+    return expr.type().isInteger() ? expr.getConstantInt() :
+             expr.type().isFloat() ? (SKSL_INT)expr.getConstantFloat() :
+                                     (SKSL_INT)expr.getConstantBool();
 }
 
 SKSL_FLOAT Constructor::getConstantFloat() const {
@@ -213,10 +260,26 @@ SKSL_FLOAT Constructor::getConstantFloat() const {
     SkASSERT(this->type().columns() == 1);
     SkASSERT(this->type().isFloat());
 
-    // The inner argument might actually be an integer! `float(1)` is a valid cast.
+    // This might be a cast, meaning the inner argument would actually be a different scalar type.
     const Expression& expr = *this->arguments().front();
-    SkASSERT(expr.type().isScalar());
-    return expr.type().isFloat() ? expr.getConstantFloat() : (SKSL_FLOAT)expr.getConstantInt();
+    SkASSERT(expr.type().isInteger() || expr.type().isFloat() || expr.type().isBoolean());
+    return   expr.type().isFloat() ? expr.getConstantFloat() :
+           expr.type().isInteger() ? (SKSL_FLOAT)expr.getConstantInt() :
+                                     (SKSL_FLOAT)expr.getConstantBool();
+}
+
+bool Constructor::getConstantBool() const {
+    // We're looking for scalar Boolean constructors only, i.e. `bool(true)`.
+    SkASSERT(this->arguments().size() == 1);
+    SkASSERT(this->type().columns() == 1);
+    SkASSERT(this->type().isBoolean());
+
+    // This might be a cast, meaning the inner argument would actually be a different scalar type.
+    const Expression& expr = *this->arguments().front();
+    SkASSERT(expr.type().isInteger() || expr.type().isFloat() || expr.type().isBoolean());
+    return expr.type().isBoolean() ? expr.getConstantBool() :
+           expr.type().isInteger() ? (bool)expr.getConstantInt() :
+                                     (bool)expr.getConstantFloat();
 }
 
 }  // namespace SkSL

@@ -121,7 +121,7 @@ static void draw(SkCanvas* canvas,
                  SkColorType colorType,
                  const char text[]) {
     SkASSERT(src.colorType() == colorType);
-    canvas->drawBitmap(src, 0.0f, 0.0f);
+    canvas->drawImage(src.asImage(), 0.0f, 0.0f);
     canvas->drawSimpleText(text, strlen(text), SkTextEncoding::kUTF8, 0.0f, 12.0f, font, p);
 }
 
@@ -249,7 +249,7 @@ DEF_SIMPLE_GM(all_variants_8888, canvas, 4 * SCALE + 30, 2 * SCALE + 10) {
             for (auto colorType : {kRGBA_8888_SkColorType, kBGRA_8888_SkColorType}) {
                 SkBitmap bm;
                 make_color_test_bitmap_variant(colorType, alphaType, colorSpace, &bm);
-                canvas->drawBitmap(bm, 0.0f, 0.0f);
+                canvas->drawImage(bm.asImage(), 0.0f, 0.0f);
                 canvas->translate(SCALE + 10, 0.0f);
             }
             canvas->restore();

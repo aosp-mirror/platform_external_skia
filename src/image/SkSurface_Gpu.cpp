@@ -142,7 +142,7 @@ void SkSurface_Gpu::onWritePixels(const SkPixmap& src, int x, int y) {
 void SkSurface_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
                                                 const SkIRect& srcRect,
                                                 RescaleGamma rescaleGamma,
-                                                SkFilterQuality rescaleQuality,
+                                                RescaleMode rescaleMode,
                                                 ReadPixelsCallback callback,
                                                 ReadPixelsContext context) {
     auto* sdc = this->fDevice->surfaceDrawContext();
@@ -151,7 +151,7 @@ void SkSurface_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
     if (!dContext) {
         return;
     }
-    sdc->asyncRescaleAndReadPixels(dContext, info, srcRect, rescaleGamma, rescaleQuality, callback,
+    sdc->asyncRescaleAndReadPixels(dContext, info, srcRect, rescaleGamma, rescaleMode, callback,
                                    context);
 }
 
@@ -160,7 +160,7 @@ void SkSurface_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSp
                                                       const SkIRect& srcRect,
                                                       const SkISize& dstSize,
                                                       RescaleGamma rescaleGamma,
-                                                      SkFilterQuality rescaleQuality,
+                                                      RescaleMode rescaleMode,
                                                       ReadPixelsCallback callback,
                                                       ReadPixelsContext context) {
     auto* sdc = this->fDevice->surfaceDrawContext();
@@ -175,7 +175,7 @@ void SkSurface_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSp
                                          srcRect,
                                          dstSize,
                                          rescaleGamma,
-                                         rescaleQuality,
+                                         rescaleMode,
                                          callback,
                                          context);
 }
@@ -268,7 +268,8 @@ bool SkSurface_Gpu::onCharacterize(SkSurfaceCharacterization* characterization) 
     return true;
 }
 
-void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPaint* paint) {
+void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
+                           const SkSamplingOptions& sampling, const SkPaint* paint) {
     // If the dst is also GPU we try to not force a new image snapshot (by calling the base class
     // onDraw) since that may not always perform the copy-on-write optimization.
     auto tryDraw = [&] {
@@ -296,11 +297,11 @@ void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPai
         image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(canvasContext), kNeedNewImageUniqueID,
                                         std::move(view), info.colorType(), info.alphaType(),
                                         info.refColorSpace());
-        canvas->drawImage(image, x, y, paint);
+        canvas->drawImage(image.get(), x, y, sampling, paint);
         return true;
     };
     if (!tryDraw()) {
-        INHERITED::onDraw(canvas, x, y, paint);
+        INHERITED::onDraw(canvas, x, y, sampling, paint);
     }
 }
 
@@ -383,7 +384,7 @@ bool SkSurface_Gpu::onDraw(sk_sp<const SkDeferredDisplayList> ddl, SkIPoint offs
         return false;
     }
 
-    direct->priv().createDDLTask(std::move(ddl), sdc->asRenderTargetProxy(), offset);
+    direct->priv().createDDLTask(std::move(ddl), sdc->asRenderTargetProxyRef(), offset);
     return true;
 }
 

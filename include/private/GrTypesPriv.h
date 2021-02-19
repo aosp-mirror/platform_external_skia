@@ -66,26 +66,6 @@ enum class GrPrimitiveRestart : bool {
     kYes = true
 };
 
-struct GrDrawIndirectCommand {
-    uint32_t fVertexCount;
-    uint32_t fInstanceCount;
-    uint32_t fBaseVertex;
-    uint32_t fBaseInstance;
-};
-
-static_assert(sizeof(GrDrawIndirectCommand) == 16, "GrDrawIndirectCommand must be tightly packed");
-
-struct GrDrawIndexedIndirectCommand {
-    uint32_t fIndexCount;
-    uint32_t fInstanceCount;
-    uint32_t fBaseIndex;
-    int32_t fBaseVertex;
-    uint32_t fBaseInstance;
-};
-
-static_assert(sizeof(GrDrawIndexedIndirectCommand) == 20,
-              "GrDrawIndexedIndirectCommand must be tightly packed");
-
 /**
  * Should a created surface be texturable?
  */
@@ -304,6 +284,9 @@ static inline GrQuadAAFlags SkToGrQuadAAFlags(unsigned flags) {
 enum GrSLType {
     kVoid_GrSLType,
     kBool_GrSLType,
+    kBool2_GrSLType,
+    kBool3_GrSLType,
+    kBool4_GrSLType,
     kByte_GrSLType,
     kByte2_GrSLType,
     kByte3_GrSLType,
@@ -340,6 +323,8 @@ enum GrSLType {
     kInt4_GrSLType,
     kUint_GrSLType,
     kUint2_GrSLType,
+    kUint3_GrSLType,
+    kUint4_GrSLType,
     kTexture2DSampler_GrSLType,
     kTextureExternalSampler_GrSLType,
     kTexture2DRectSampler_GrSLType,
@@ -407,6 +392,9 @@ static constexpr bool GrSLTypeIsFloatType(GrSLType type) {
         case kTextureExternalSampler_GrSLType:
         case kTexture2DRectSampler_GrSLType:
         case kBool_GrSLType:
+        case kBool2_GrSLType:
+        case kBool3_GrSLType:
+        case kBool4_GrSLType:
         case kByte_GrSLType:
         case kByte2_GrSLType:
         case kByte3_GrSLType:
@@ -429,6 +417,8 @@ static constexpr bool GrSLTypeIsFloatType(GrSLType type) {
         case kInt4_GrSLType:
         case kUint_GrSLType:
         case kUint2_GrSLType:
+        case kUint3_GrSLType:
+        case kUint4_GrSLType:
         case kTexture2D_GrSLType:
         case kSampler_GrSLType:
         case kInput_GrSLType:
@@ -453,6 +443,7 @@ static constexpr int GrSLTypeVecLength(GrSLType type) {
 
         case kFloat2_GrSLType:
         case kHalf2_GrSLType:
+        case kBool2_GrSLType:
         case kByte2_GrSLType:
         case kUByte2_GrSLType:
         case kShort2_GrSLType:
@@ -463,20 +454,24 @@ static constexpr int GrSLTypeVecLength(GrSLType type) {
 
         case kFloat3_GrSLType:
         case kHalf3_GrSLType:
+        case kBool3_GrSLType:
         case kByte3_GrSLType:
         case kUByte3_GrSLType:
         case kShort3_GrSLType:
         case kUShort3_GrSLType:
         case kInt3_GrSLType:
+        case kUint3_GrSLType:
             return 3;
 
         case kFloat4_GrSLType:
         case kHalf4_GrSLType:
+        case kBool4_GrSLType:
         case kByte4_GrSLType:
         case kUByte4_GrSLType:
         case kShort4_GrSLType:
         case kUShort4_GrSLType:
         case kInt4_GrSLType:
+        case kUint4_GrSLType:
             return 4;
 
         case kFloat2x2_GrSLType:
@@ -554,7 +549,12 @@ static constexpr bool GrSLTypeIsCombinedSamplerType(GrSLType type) {
         case kInt4_GrSLType:
         case kUint_GrSLType:
         case kUint2_GrSLType:
+        case kUint3_GrSLType:
+        case kUint4_GrSLType:
         case kBool_GrSLType:
+        case kBool2_GrSLType:
+        case kBool3_GrSLType:
+        case kBool4_GrSLType:
         case kByte_GrSLType:
         case kByte2_GrSLType:
         case kByte3_GrSLType:
@@ -676,8 +676,9 @@ enum class GrGpuBufferType {
     kDrawIndirect,
     kXferCpuToGpu,
     kXferGpuToCpu,
+    kUniform,
 };
-static const int kGrGpuBufferTypeCount = static_cast<int>(GrGpuBufferType::kXferGpuToCpu) + 1;
+static const int kGrGpuBufferTypeCount = static_cast<int>(GrGpuBufferType::kUniform) + 1;
 
 /**
  * Provides a performance hint regarding the frequency at which a data store will be accessed.
@@ -780,7 +781,7 @@ enum class GpuPathRenderers {
     kAALinearizing     =   1 << 6,
     kSmall             =   1 << 7,
     kTriangulating     =   1 << 8,
-    kDefault           = ((1 << 9) - 1) & ~kTessellation  // All but kTessellation.
+    kDefault           = ((1 << 9) - 1)  // All path renderers.
 };
 
 /**

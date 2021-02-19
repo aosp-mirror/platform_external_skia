@@ -302,7 +302,7 @@ public:
      */
     bool transferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
                           GrColorType textureColorType, GrColorType bufferColorType,
-                          GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes);
+                          sk_sp<GrGpuBuffer> transferBuffer, size_t offset, size_t rowBytes);
 
     /**
      * Reads the pixels from a rectangle of a surface into a buffer. Use
@@ -327,7 +327,7 @@ public:
      */
     bool transferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
                             GrColorType surfaceColorType, GrColorType bufferColorType,
-                            GrGpuBuffer* transferBuffer, size_t offset);
+                            sk_sp<GrGpuBuffer> transferBuffer, size_t offset);
 
     // Called to perform a surface to surface copy. Fallbacks to issuing a draw from the src to dst
     // take place at higher levels and this function implement faster copy paths. The rect
@@ -392,6 +392,7 @@ public:
     virtual void addFinishedProc(GrGpuFinishedProc finishedProc,
                                  GrGpuFinishedContext finishedContext) = 0;
     virtual void checkFinishProcs() = 0;
+    virtual void finishOutstandingGpuWork() = 0;
 
     virtual void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) {}
 
@@ -787,7 +788,7 @@ private:
 
     // called when the 3D context state is unknown. Subclass should emit any
     // assumed 3D context state and dirty any state cache.
-    virtual void onResetContext(uint32_t resetBits) = 0;
+    virtual void onResetContext(uint32_t resetBits) {}
 
     // Implementation of resetTextureBindings.
     virtual void onResetTextureBindings() {}
@@ -848,12 +849,13 @@ private:
     // overridden by backend-specific derived class to perform the texture transfer
     virtual bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height,
                                     GrColorType textiueColorType, GrColorType bufferColorType,
-                                    GrGpuBuffer* transferBuffer, size_t offset,
+                                    sk_sp<GrGpuBuffer> transferBuffer, size_t offset,
                                     size_t rowBytes) = 0;
     // overridden by backend-specific derived class to perform the surface transfer
     virtual bool onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height,
                                       GrColorType surfaceColorType, GrColorType bufferColorType,
-                                      GrGpuBuffer* transferBuffer, size_t offset) = 0;
+                                      sk_sp<GrGpuBuffer> transferBuffer,
+                                      size_t offset) = 0;
 
     // overridden by backend-specific derived class to perform the resolve
     virtual void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect) = 0;

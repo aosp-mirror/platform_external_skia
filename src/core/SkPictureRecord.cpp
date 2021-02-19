@@ -535,87 +535,6 @@ void SkPictureRecord::onDrawPath(const SkPath& path, const SkPaint& paint) {
     this->validate(initialOffset, size);
 }
 
-#ifdef SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
-void SkPictureRecord::onDrawImage(const SkImage* image, SkScalar x, SkScalar y,
-                                  const SkPaint* paint) {
-    // op + paint_index + image_index + x + y
-    size_t size = 3 * kUInt32Size + 2 * sizeof(SkScalar);
-    size_t initialOffset = this->addDraw(DRAW_IMAGE, &size);
-    this->addPaintPtr(paint);
-    this->addImage(image);
-    this->addScalar(x);
-    this->addScalar(y);
-    this->validate(initialOffset, size);
-}
-
-void SkPictureRecord::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                                      const SkPaint* paint, SrcRectConstraint constraint) {
-    // id + paint_index + image_index + bool_for_src + constraint
-    size_t size = 5 * kUInt32Size;
-    if (src) {
-        size += sizeof(*src);   // + rect
-    }
-    size += sizeof(dst);        // + rect
-
-    size_t initialOffset = this->addDraw(DRAW_IMAGE_RECT, &size);
-    this->addPaintPtr(paint);
-    this->addImage(image);
-    this->addRectPtr(src);  // may be null
-    this->addRect(dst);
-    this->addInt(constraint);
-    this->validate(initialOffset, size);
-}
-
-void SkPictureRecord::onDrawImageLattice(const SkImage* image, const Lattice& lattice,
-                                         const SkRect& dst, const SkPaint* paint) {
-    size_t latticeSize = SkCanvasPriv::WriteLattice(nullptr, lattice);
-    // op + paint index + image index + lattice + dst rect
-    size_t size = 3 * kUInt32Size + latticeSize + sizeof(dst);
-    size_t initialOffset = this->addDraw(DRAW_IMAGE_LATTICE, &size);
-    this->addPaintPtr(paint);
-    this->addImage(image);
-    (void)SkCanvasPriv::WriteLattice(fWriter.reservePad(latticeSize), lattice);
-    this->addRect(dst);
-    this->validate(initialOffset, size);
-}
-
-void SkPictureRecord::onDrawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],
-                                  const SkColor colors[], int count, SkBlendMode mode,
-                                  const SkRect* cull, const SkPaint* paint) {
-    // [op + paint-index + atlas-index + flags + count] + [xform] + [tex] + [*colors + mode] + cull
-    size_t size = 5 * kUInt32Size + count * sizeof(SkRSXform) + count * sizeof(SkRect);
-    uint32_t flags = 0;
-    if (colors) {
-        flags |= DRAW_ATLAS_HAS_COLORS;
-        size += count * sizeof(SkColor);
-        size += sizeof(uint32_t);   // xfermode::mode
-    }
-    if (cull) {
-        flags |= DRAW_ATLAS_HAS_CULL;
-        size += sizeof(SkRect);
-    }
-
-    size_t initialOffset = this->addDraw(DRAW_ATLAS, &size);
-    this->addPaintPtr(paint);
-    this->addImage(atlas);
-    this->addInt(flags);
-    this->addInt(count);
-    fWriter.write(xform, count * sizeof(SkRSXform));
-    fWriter.write(tex, count * sizeof(SkRect));
-
-    // write optional parameters
-    if (colors) {
-        fWriter.write(colors, count * sizeof(SkColor));
-        this->addInt((int)mode);
-    }
-    if (cull) {
-        fWriter.write(cull, sizeof(SkRect));
-    }
-    this->validate(initialOffset, size);
-}
-
-#endif
-
 void SkPictureRecord::onDrawImage2(const SkImage* image, SkScalar x, SkScalar y,
                                    const SkSamplingOptions& sampling, const SkPaint* paint) {
     // op + paint_index + image_index + x + y
@@ -850,11 +769,12 @@ void SkPictureRecord::onDrawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4]
     this->validate(initialOffset, size);
 }
 
-void SkPictureRecord::onDrawEdgeAAImageSet(const SkCanvas::ImageSetEntry set[], int count,
-                                           const SkPoint dstClips[],
-                                           const SkMatrix preViewMatrices[],
-                                           const SkPaint* paint,
-                                           SkCanvas::SrcRectConstraint constraint) {
+void SkPictureRecord::onDrawEdgeAAImageSet2(const SkCanvas::ImageSetEntry set[], int count,
+                                            const SkPoint dstClips[],
+                                            const SkMatrix preViewMatrices[],
+                                            const SkSamplingOptions& sampling,
+                                            const SkPaint* paint,
+                                            SkCanvas::SrcRectConstraint constraint) {
     static constexpr size_t kMatrixSize = 9 * sizeof(SkScalar); // *not* sizeof(SkMatrix)
     // op + count + paint + constraint + (image index, src rect, dst rect, alpha, aa flags,
     // hasClip(int), matrixIndex) * cnt + totalClipCount + dstClips + totalMatrixCount + matrices
@@ -863,10 +783,12 @@ void SkPictureRecord::onDrawEdgeAAImageSet(const SkCanvas::ImageSetEntry set[], 
 
     size_t size = 6 * kUInt32Size + sizeof(SkPoint) * totalDstClipCount +
                   kMatrixSize * totalMatrixCount +
-                  (4 * kUInt32Size + 2 * sizeof(SkRect) + sizeof(SkScalar)) * count;
-    size_t initialOffset = this->addDraw(DRAW_EDGEAA_IMAGE_SET, &size);
+                  (4 * kUInt32Size + 2 * sizeof(SkRect) + sizeof(SkScalar)) * count +
+                  SkSamplingPriv::kFlatSize;
+    size_t initialOffset = this->addDraw(DRAW_EDGEAA_IMAGE_SET2, &size);
     this->addInt(count);
     this->addPaintPtr(paint);
+    this->addSampling(sampling);
     this->addInt((int) constraint);
     for (int i = 0; i < count; ++i) {
         this->addImage(set[i].fImage.get());

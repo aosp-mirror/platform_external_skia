@@ -53,15 +53,7 @@ protected:
     void onDrawArc(const SkRect&, SkScalar, SkScalar, bool, const SkPaint&) override {}
     void onDrawRRect(const SkRRect&, const SkPaint&) override {}
     void onDrawPath(const SkPath&, const SkPaint&) override {}
-#ifdef SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
-    void onDrawImage(const SkImage*, SkScalar, SkScalar, const SkPaint*) override {}
-    void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*,
-                         SrcRectConstraint) override {}
-    void onDrawImageLattice(const SkImage*, const Lattice&, const SkRect&,
-                            const SkPaint*) override {}
-    void onDrawAtlas(const SkImage*, const SkRSXform[], const SkRect[], const SkColor[],
-                     int, SkBlendMode, const SkRect*, const SkPaint*) override {}
-#endif
+
     void onDrawImage2(const SkImage*, SkScalar, SkScalar, const SkSamplingOptions&,
                       const SkPaint*) override {}
     void onDrawImageRect2(const SkImage*, const SkRect&, const SkRect&, const SkSamplingOptions&,
@@ -77,8 +69,9 @@ protected:
 
     void onDrawEdgeAAQuad(const SkRect&, const SkPoint[4], QuadAAFlags, const SkColor4f&,
                           SkBlendMode) override {}
-    void onDrawEdgeAAImageSet(const ImageSetEntry[], int, const SkPoint[],
-                              const SkMatrix[], const SkPaint*, SrcRectConstraint) override {}
+    void onDrawEdgeAAImageSet2(const ImageSetEntry[], int, const SkPoint[], const SkMatrix[],
+                               const SkSamplingOptions&, const SkPaint*,
+                               SrcRectConstraint) override {}
 
 private:
     using INHERITED = SkCanvasVirtualEnforcer<SkCanvas>;

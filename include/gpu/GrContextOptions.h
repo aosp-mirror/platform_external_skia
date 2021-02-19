@@ -174,8 +174,7 @@ struct SK_API GrContextOptions {
     Enable fUseDrawInsteadOfClear = Enable::kDefault;
 
     /**
-     * Allow Ganesh to more aggressively reorder operations.
-     * Eventually this will just be what is done and will not be optional.
+     * Experimental: Allow Ganesh to more aggressively reorder operations.
      */
     Enable fReduceOpsTaskSplitting = Enable::kDefault;
 
@@ -247,12 +246,6 @@ struct SK_API GrContextOptions {
      */
 
     /**
-     * If non-zero, overrides the maximum size of a tile for sw-backed images and bitmaps rendered
-     * by SkGpuDevice.
-     */
-    int  fMaxTileSizeOverride = 0;
-
-    /**
      * Prevents use of dual source blending, to test that all xfer modes work correctly without it.
      */
     bool fSuppressDualSourceBlending = false;
@@ -292,6 +285,11 @@ struct SK_API GrContextOptions {
      * Randomly generate a (false) GL_OUT_OF_MEMORY error
      */
     bool fRandomGLOOM = false;
+
+    /**
+     * Force off support for write pixels row bytes in caps.
+     */
+    bool fDisallowWritePixelRowBytes = false;
 
     /**
      * Include or exclude specific GPU path renderers.
