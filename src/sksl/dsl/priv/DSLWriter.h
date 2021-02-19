@@ -43,6 +43,8 @@ class DSLWriter {
 public:
     DSLWriter(SkSL::Compiler* compiler);
 
+    ~DSLWriter();
+
     /**
      * Returns the Compiler used by DSL operations in the current thread.
      */
@@ -179,8 +181,10 @@ public:
     static void SetInstance(std::unique_ptr<DSLWriter> instance);
 
 private:
-    SkSL::Program::Settings fSettings;
+    SkSL::ProgramConfig fConfig;
     SkSL::Compiler* fCompiler;
+    std::shared_ptr<SkSL::SymbolTable> fOldSymbolTable;
+    SkSL::ProgramConfig* fOldConfig;
     std::vector<std::unique_ptr<SkSL::ProgramElement>> fProgramElements;
     ErrorHandler* fErrorHandler = nullptr;
     bool fMangle = true;
