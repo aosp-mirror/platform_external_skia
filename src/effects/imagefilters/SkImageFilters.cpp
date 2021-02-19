@@ -9,9 +9,6 @@
 
 #include "include/core/SkPaint.h"
 
-#include "src/effects/imagefilters/SkDisplacementMapEffect.h"
-#include "src/effects/imagefilters/SkDropShadowImageFilter.h"
-#include "src/effects/imagefilters/SkImageSource.h"
 #include "src/effects/imagefilters/SkLightingImageFilter.h"
 #include "src/effects/imagefilters/SkMagnifierImageFilter.h"
 #include "src/effects/imagefilters/SkMatrixConvolutionImageFilter.h"
@@ -28,9 +25,6 @@
 
 void SkImageFilters::RegisterFlattenables() {
     SkDilateImageFilter::RegisterFlattenables();
-    SkDisplacementMapEffect::RegisterFlattenables();
-    SkDropShadowImageFilter::RegisterFlattenables();
-    SkImageSource::RegisterFlattenables();
     SkLightingImageFilter::RegisterFlattenables();
     SkMagnifierImageFilter::RegisterFlattenables();
     SkMatrixConvolutionImageFilter::RegisterFlattenables();
@@ -42,49 +36,6 @@ void SkImageFilters::RegisterFlattenables() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-sk_sp<SkImageFilter> SkImageFilters::DisplacementMap(
-        SkColorChannel xChannelSelector, SkColorChannel yChannelSelector, SkScalar scale,
-        sk_sp<SkImageFilter> displacement, sk_sp<SkImageFilter> color, const CropRect& cropRect) {
-    return SkDisplacementMapEffect::Make(xChannelSelector, yChannelSelector, scale,
-                                         std::move(displacement), std::move(color), cropRect);
-}
-
-sk_sp<SkImageFilter> SkImageFilters::DropShadow(
-        SkScalar dx, SkScalar dy, SkScalar sigmaX, SkScalar sigmaY, SkColor color,
-        sk_sp<SkImageFilter> input, const CropRect& cropRect) {
-    // TODO (michaelludwig) - Once SkDropShadowImageFilter is fully hidden, this can be updated to
-    // pass a constant bool into the internal factory.
-    return SkDropShadowImageFilter::Make(
-            dx, dy, sigmaX, sigmaY, color,
-            SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
-            std::move(input), cropRect);
-}
-
-sk_sp<SkImageFilter> SkImageFilters::DropShadowOnly(
-        SkScalar dx, SkScalar dy, SkScalar sigmaX, SkScalar sigmaY, SkColor color,
-        sk_sp<SkImageFilter> input, const CropRect& cropRect) {
-    // TODO (michaelludwig) - Once SkDropShadowImageFilter is fully hidden, this can be updated to
-    // pass a constant bool into the internal factory.
-    return SkDropShadowImageFilter::Make(dx, dy, sigmaX, sigmaY, color,
-                                         SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode,
-                                         std::move(input), cropRect);
-}
-
-sk_sp<SkImageFilter> SkImageFilters::Image(
-        sk_sp<SkImage> image, const SkRect& srcRect, const SkRect& dstRect,
-        const SkSamplingOptions& sampling) {
-    return SkImageSource::Make(std::move(image), srcRect, dstRect, sampling);
-}
-
-sk_sp<SkImageFilter> SkImageFilters::Image(sk_sp<SkImage> image,
-                                           const SkSamplingOptions& sampling) {
-    if (image) {
-        auto r = SkRect::MakeIWH(image->width(), image->height());
-        return Image(std::move(image), r, r, sampling);
-    }
-    return nullptr;
-}
 
 sk_sp<SkImageFilter> SkImageFilters::Magnifier(
         const SkRect& srcRect, SkScalar inset, sk_sp<SkImageFilter> input,
