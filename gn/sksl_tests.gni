@@ -175,6 +175,7 @@ sksl_error_tests = [
   "/sksl/errors/UndeclaredFunction.sksl",
   "/sksl/errors/UndefinedFunction.sksl",
   "/sksl/errors/UndefinedSymbol.sksl",
+  "/sksl/errors/UniformVarWithInitializerExpression.sksl",
   "/sksl/errors/UnknownDivideByZero.sksl",
   "/sksl/errors/Unreachable.sksl",
   "/sksl/errors/UnsupportedGLSLIdentifiers.sksl",
@@ -543,6 +544,7 @@ sksl_settings_tests = [
 sksl_rte_tests = [
   "/sksl/runtime/ArrayIndexing.rte",
   "/sksl/runtime/ConversionConstructors.rte",
+  "/sksl/runtime/GlobalVariables.rte",
   "/sksl/runtime/LoopInt.rte",
   "/sksl/runtime/LoopFloat.rte",
   "/sksl/runtime/SampleWithConstantMatrix.rte",
@@ -554,6 +556,7 @@ sksl_rte_tests = [
 
 sksl_rte_error_tests = [
   "/sksl/runtime_errors/FirstClassArrays.rte",
+  "/sksl/runtime_errors/IllegalArrayOps.rte",
   "/sksl/runtime_errors/IllegalIndexing.rte",
   "/sksl/runtime_errors/IllegalOperators.rte",
   "/sksl/runtime_errors/IllegalStatements.rte",

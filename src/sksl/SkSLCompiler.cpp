@@ -10,6 +10,7 @@
 #include <memory>
 #include <unordered_set>
 
+#include "src/core/SkScopeExit.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCFGGenerator.h"
@@ -19,6 +20,7 @@
 #include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/SkSLMetalCodeGenerator.h"
 #include "src/sksl/SkSLOperators.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLRehydrator.h"
 #include "src/sksl/SkSLSPIRVCodeGenerator.h"
 #include "src/sksl/SkSLSPIRVtoHLSL.h"
@@ -278,16 +280,21 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
     }
     const String* source = fRootSymbolTable->takeOwnershipOfString(std::move(text));
     AutoSource as(this, source);
-    Program::Settings settings;
+
     SkASSERT(fIRGenerator->fCanInline);
     fIRGenerator->fCanInline = false;
-    settings.fReplaceSettings = false;
+
+    ProgramConfig config;
+    config.fKind = kind;
+    config.fSettings.fReplaceSettings = false;
+
+    fContext->fConfig = &config;
+    SK_AT_SCOPE_EXIT(fContext->fConfig = nullptr);
 
     ParsedModule baseModule = {base, /*fIntrinsics=*/nullptr};
-    IRGenerator::IRBundle ir =
-            fIRGenerator->convertProgram(kind, &settings, baseModule,
-                                         /*isBuiltinCode=*/true, source->c_str(), source->length(),
-                                         /*externalFunctions=*/nullptr);
+    IRGenerator::IRBundle ir = fIRGenerator->convertProgram(baseModule, /*isBuiltinCode=*/true,
+                                                            source->c_str(), source->length(),
+                                                            /*externalFunctions=*/nullptr);
     SkASSERT(ir.fSharedElements.empty());
     LoadedModule module = { kind, std::move(ir.fSymbolTable), std::move(ir.fElements) };
     fIRGenerator->fCanInline = true;
@@ -1413,7 +1420,7 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
                             break;
                         } else {
                             if (s.isStatic() &&
-                                !fIRGenerator->fSettings->fPermitInvalidStaticTests) {
+                                !fContext->fConfig->fSettings.fPermitInvalidStaticTests) {
                                 auto [iter, didInsert] = optimizationContext->fSilences.insert(&s);
                                 if (didInsert) {
                                     this->error(s.fOffset, "static switch contains non-static "
@@ -1432,7 +1439,7 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
                             (*iter)->setStatement(std::move(newBlock), usage);
                         } else {
                             if (s.isStatic() &&
-                                !fIRGenerator->fSettings->fPermitInvalidStaticTests) {
+                                !fContext->fConfig->fSettings.fPermitInvalidStaticTests) {
                                 auto [iter, didInsert] = optimizationContext->fSilences.insert(&s);
                                 if (didInsert) {
                                     this->error(s.fOffset, "static switch contains non-static "
@@ -1578,9 +1585,16 @@ std::unique_ptr<Program> Compiler::convertProgram(
     // *then* configure the inliner with the settings for this program.
     const ParsedModule& baseModule = this->moduleForProgramKind(kind);
 
+    // Update our context to point to the program configuration for the duration of compilation.
+    auto config = std::make_unique<ProgramConfig>(ProgramConfig{kind, settings});
+
+    SkASSERT(!fContext->fConfig);
+    fContext->fConfig = config.get();
+    SK_AT_SCOPE_EXIT(fContext->fConfig = nullptr);
+
     fErrorText = "";
     fErrorCount = 0;
-    fInliner.reset(fIRGenerator->fModifiers.get(), &settings);
+    fInliner.reset(fIRGenerator->fModifiers.get());
 
     // Not using AutoSource, because caller is likely to call errorText() if we fail to compile
     std::unique_ptr<String> textPtr(new String(std::move(text)));
@@ -1593,12 +1607,11 @@ std::unique_ptr<Program> Compiler::convertProgram(
         pool = Pool::Create();
         pool->attachToThread();
     }
-    IRGenerator::IRBundle ir =
-            fIRGenerator->convertProgram(kind, &settings, baseModule, /*isBuiltinCode=*/false,
-                                         textPtr->c_str(), textPtr->size(), externalFunctions);
-    auto program = std::make_unique<Program>(kind,
-                                             std::move(textPtr),
-                                             settings,
+    IRGenerator::IRBundle ir = fIRGenerator->convertProgram(baseModule, /*isBuiltinCode=*/false,
+                                                            textPtr->c_str(), textPtr->size(),
+                                                            externalFunctions);
+    auto program = std::make_unique<Program>(std::move(textPtr),
+                                             std::move(config),
                                              fCaps,
                                              fContext,
                                              std::move(ir.fElements),
@@ -1661,7 +1674,7 @@ void Compiler::verifyStaticTests(const Program& program) {
     };
 
     // If invalid static tests are permitted, we don't need to check anything.
-    if (fIRGenerator->fSettings->fPermitInvalidStaticTests) {
+    if (fContext->fConfig->fSettings.fPermitInvalidStaticTests) {
         return;
     }
 
@@ -1676,12 +1689,20 @@ void Compiler::verifyStaticTests(const Program& program) {
 
 bool Compiler::optimize(LoadedModule& module) {
     SkASSERT(!fErrorCount);
-    Program::Settings settings;
-    fIRGenerator->fKind = module.fKind;
-    fIRGenerator->fSettings = &settings;
-    std::unique_ptr<ProgramUsage> usage = Analysis::GetUsage(module);
 
-    fInliner.reset(fModifiers.back().get(), &settings);
+    // Create a temporary program configuration with default settings.
+    ProgramConfig config;
+    config.fKind = module.fKind;
+
+    // Update our context to point to this configuration for the duration of compilation.
+    SkASSERT(!fContext->fConfig);
+    fContext->fConfig = &config;
+    SK_AT_SCOPE_EXIT(fContext->fConfig = nullptr);
+
+    // Reset the Inliner.
+    fInliner.reset(fModifiers.back().get());
+
+    std::unique_ptr<ProgramUsage> usage = Analysis::GetUsage(module);
 
     while (fErrorCount == 0) {
         bool madeChanges = false;
@@ -1705,8 +1726,6 @@ bool Compiler::optimize(LoadedModule& module) {
 
 bool Compiler::optimize(Program& program) {
     SkASSERT(!fErrorCount);
-    fIRGenerator->fKind = program.fKind;
-    fIRGenerator->fSettings = &program.fSettings;
     ProgramUsage* usage = program.fUsage.get();
 
     while (fErrorCount == 0) {
@@ -1724,7 +1743,7 @@ bool Compiler::optimize(Program& program) {
 
         // Remove dead functions. We wait until after analysis so that we still report errors,
         // even in unused code.
-        if (program.fSettings.fRemoveDeadFunctions) {
+        if (program.fConfig->fSettings.fRemoveDeadFunctions) {
             auto isDeadFunction = [&](const ProgramElement* element) {
                 if (!element->is<FunctionDefinition>()) {
                     return false;
@@ -1749,7 +1768,7 @@ bool Compiler::optimize(Program& program) {
                     program.fSharedElements.end());
         }
 
-        if (program.fKind != ProgramKind::kFragmentProcessor) {
+        if (program.fConfig->fKind != ProgramKind::kFragmentProcessor) {
             // Remove declarations of dead global variables
             auto isDeadVariable = [&](const ProgramElement* element) {
                 if (!element->is<GlobalVarDeclaration>()) {
@@ -1795,7 +1814,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     AutoSource as(this, program.fSource.get());
     SPIRVCodeGenerator cg(fContext.get(), &program, this, &buffer);
     bool result = cg.generateCode();
-    if (result && program.fSettings.fValidateSPIRV) {
+    if (result && program.fConfig->fSettings.fValidateSPIRV) {
         spvtools::SpirvTools tools(SPV_ENV_VULKAN_1_0);
         const String& data = buffer.str();
         SkASSERT(0 == data.size() % 4);
