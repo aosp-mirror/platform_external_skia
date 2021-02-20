@@ -191,18 +191,6 @@ private:
                                                         std::unique_ptr<Expression> right);
     std::unique_ptr<Block> convertBlock(const ASTNode& block);
     std::unique_ptr<Statement> convertBreak(const ASTNode& b);
-    std::unique_ptr<Expression> convertArrayConstructor(int offset,
-                                                        const Type& type,
-                                                        ExpressionArray args);
-    std::unique_ptr<Expression> convertScalarConstructor(int offset,
-                                                         const Type& type,
-                                                         ExpressionArray params);
-    std::unique_ptr<Expression> convertCompoundConstructor(int offset,
-                                                           const Type& type,
-                                                           ExpressionArray params);
-    std::unique_ptr<Expression> convertConstructor(int offset,
-                                                   const Type& type,
-                                                   ExpressionArray params);
     std::unique_ptr<Statement> convertContinue(const ASTNode& c);
     std::unique_ptr<Statement> convertDiscard(const ASTNode& d);
     std::unique_ptr<Statement> convertDo(std::unique_ptr<Statement> stmt,
@@ -280,8 +268,7 @@ private:
     // Runtime effects (and the interpreter, which uses the same CPU runtime) require adherence to
     // the strict rules from The OpenGL ES Shading Language Version 1.00. (Including Appendix A).
     bool strictES2Mode() const {
-        return this->programKind() == ProgramKind::kRuntimeEffect ||
-               this->programKind() == ProgramKind::kGeneric;
+        return fContext.fConfig->strictES2Mode();
     }
 
     Program::Inputs fInputs;
