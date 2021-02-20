@@ -12,36 +12,75 @@
 #include "src/gpu/GrSTArenaList.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
 #include "src/gpu/tessellate/GrPathShader.h"
+#include "src/gpu/tessellate/GrStrokeTessellateShader.h"
 
 class GrRecordingContext;
 
 // Prepares GPU data for, and then draws a stroke's tessellated geometry.
 class GrStrokeTessellator {
 public:
-    // Called before draw(). Prepares GPU buffers containing the geometry to tessellate.
-    virtual void prepare(GrMeshDrawOp::Target*, const SkMatrix&, const GrSTArenaList<SkPath>&,
-                         const SkStrokeRec&, int totalCombinedVerbCnt) = 0;
+    using ShaderFlags = GrStrokeTessellateShader::ShaderFlags;
 
-    // Issues draw calls for the tessellated stroie. The caller is responsible for binding its
+    struct PathStroke {
+        PathStroke(const SkPath& path, const SkStrokeRec& stroke, const SkPMColor4f& color)
+                : fPath(path), fStroke(stroke), fColor(color) {}
+        SkPath fPath;
+        SkStrokeRec fStroke;
+        SkPMColor4f fColor;
+    };
+
+    GrStrokeTessellator(ShaderFlags shaderFlags, GrSTArenaList<PathStroke>&& pathStrokeList)
+            : fShaderFlags(shaderFlags), fPathStrokeList(std::move(pathStrokeList)) {}
+
+    // Called before draw(). Prepares GPU buffers containing the geometry to tessellate.
+    virtual void prepare(GrMeshDrawOp::Target*, const SkMatrix&) = 0;
+
+    // Issues draw calls for the tessellated stroke. The caller is responsible for binding its
     // desired pipeline ahead of time.
     virtual void draw(GrOpFlushState*) const = 0;
 
     virtual ~GrStrokeTessellator() {}
-};
-
-// Base class for ops that render opaque, constant-color strokes by linearizing them into sorted
-// "parametric" and "radial" edges. See GrStrokeTessellateShader.
-class GrStrokeTessellateOp : public GrDrawOp {
-public:
-    // The provided matrix must be a similarity matrix for the time being. This is so we can
-    // bootstrap this Op on top of GrStrokeGeometry with minimal modifications.
-    //
-    // Patches can overlap, so until a stencil technique is implemented, the provided paint must be
-    // a constant blended color.
-    GrStrokeTessellateOp(GrAAType, const SkMatrix&, const SkPath&, const SkStrokeRec&, GrPaint&&);
 
 protected:
+    const ShaderFlags fShaderFlags;
+    const GrSTArenaList<PathStroke> fPathStrokeList;
+};
+
+// Renders strokes by linearizing them into sorted "parametric" and "radial" edges. See
+// GrStrokeTessellateShader.
+class GrStrokeTessellateOp : public GrDrawOp {
+public:
+    GrStrokeTessellateOp(GrAAType, const SkMatrix&, const SkPath&, const SkStrokeRec&, GrPaint&&);
+
+private:
+    using ShaderFlags = GrStrokeTessellateShader::ShaderFlags;
+    using PathStroke = GrStrokeTessellator::PathStroke;
     DEFINE_OP_CLASS_ID
+
+    SkStrokeRec& headStroke() { return fPathStrokeList.head().fStroke; }
+    SkPMColor4f& headColor() { return fPathStrokeList.head().fColor; }
+    GrStrokeTessellateOp* nextInChain() const {
+        return static_cast<GrStrokeTessellateOp*>(this->GrDrawOp::nextInChain());
+    }
+
+    // Returns whether it is a good tradeoff to use the dynamic states flagged in the given
+    // bitfield. Dynamic states improve batching, but if they aren't already enabled, they come at
+    // the cost of having to write out more data with each patch or instance.
+    bool shouldUseDynamicStates(ShaderFlags neededDynamicStates) const {
+        // Use the dynamic states if either (1) they are all already enabled anyway, or (2) we don't
+        // have many verbs.
+        constexpr static int kMaxVerbsToEnableDynamicState = 50;
+        bool anyStateDisabled = (bool)(~fShaderFlags & neededDynamicStates);
+        bool allStatesEnabled = !anyStateDisabled;
+        return allStatesEnabled || (fTotalCombinedVerbCnt <= kMaxVerbsToEnableDynamicState);
+    }
+
+    bool canUseHardwareTessellation(const GrCaps& caps) {
+        SkASSERT(!fStencilProgram && !fFillProgram);  // Ensure we haven't std::moved fProcessors.
+        // Our back door for HW tessellation shaders isn't currently capable of passing varyings to
+        // the fragment shader, so if the processors have varyings we need to use indirect draws.
+        return caps.shaderCaps()->tessellationSupport() && !fProcessors.usesVaryingCoords();
+    }
 
     const char* name() const override { return "GrStrokeTessellateOp"; }
     void visitProxies(const VisitProxyFunc& fn) const override;
@@ -63,14 +102,11 @@ protected:
 
     const GrAAType fAAType;
     const SkMatrix fViewMatrix;
-    const SkStrokeRec fStroke;
-    SkPMColor4f fColor;
-    bool fNeedsStencil = false;
-    GrProcessorSet fProcessors;
-
-    GrSTArenaList<SkPath> fPathList;
+    ShaderFlags fShaderFlags = ShaderFlags::kNone;
+    GrSTArenaList<PathStroke> fPathStrokeList;
     int fTotalCombinedVerbCnt = 0;
-    bool fHasConics = false;
+    GrProcessorSet fProcessors;
+    bool fNeedsStencil = false;
 
     GrStrokeTessellator* fTessellator = nullptr;
     const GrProgramInfo* fStencilProgram = nullptr;  // Only used if the stroke has transparency.
