@@ -332,9 +332,9 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kConstructor: {
             const Constructor& constructor = expression.as<Constructor>();
-            return std::make_unique<Constructor>(offset,
-                                                 constructor.type().clone(symbolTableForExpression),
-                                                 argList(constructor.arguments()));
+            return Constructor::Make(*fContext, offset,
+                                     *constructor.type().clone(symbolTableForExpression),
+                                     argList(constructor.arguments()));
         }
         case Expression::Kind::kExternalFunctionCall: {
             const ExternalFunctionCall& externalCall = expression.as<ExternalFunctionCall>();
@@ -373,7 +373,7 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kSwizzle: {
             const Swizzle& s = expression.as<Swizzle>();
-            return std::make_unique<Swizzle>(*fContext, expr(s.base()), s.components());
+            return Swizzle::Make(*fContext, expr(s.base()), s.components());
         }
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = expression.as<TernaryExpression>();
