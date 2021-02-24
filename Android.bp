@@ -770,6 +770,7 @@ cc_library_static {
           "src/gpu/gl/GrGLVertexArray.cpp",
           "src/gpu/gl/builders/GrGLProgramBuilder.cpp",
           "src/gpu/gl/builders/GrGLShaderStringBuilder.cpp",
+          "src/gpu/gl/egl/GrGLMakeEGLInterface.cpp",
           "src/gpu/gl/egl/GrGLMakeNativeInterface_egl.cpp",
           "src/gpu/glsl/GrGLSL.cpp",
           "src/gpu/glsl/GrGLSLBlend.cpp",
