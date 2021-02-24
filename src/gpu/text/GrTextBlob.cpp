@@ -1210,6 +1210,34 @@ UP<GrSubRun> SDFTSubRun::Make(
             has_some_antialiasing(runFont));
 }
 
+static std::tuple<GrAtlasTextOp::MaskType, uint32_t, bool> calculate_sdf_parameters(
+        const GrSurfaceDrawContext& rtc,
+        const SkMatrix& drawMatrix,
+        bool useLCDText,
+        bool isAntiAliased) {
+    const GrColorInfo& colorInfo = rtc.colorInfo();
+    const SkSurfaceProps& props = rtc.surfaceProps();
+    bool isBGR = SkPixelGeometryIsBGR(props.pixelGeometry());
+    bool isLCD = useLCDText && SkPixelGeometryIsH(props.pixelGeometry());
+    using MT = GrAtlasTextOp::MaskType;
+    MT maskType = !isAntiAliased ? MT::kAliasedDistanceField
+                                 : isLCD ? (isBGR ? MT::kLCDBGRDistanceField
+                                                  : MT::kLCDDistanceField)
+                                         : MT::kGrayscaleDistanceField;
+
+    bool useGammaCorrectDistanceTable = colorInfo.isLinearlyBlended();
+    uint32_t DFGPFlags = drawMatrix.isSimilarity() ? kSimilarity_DistanceFieldEffectFlag : 0;
+    DFGPFlags |= drawMatrix.isScaleTranslate() ? kScaleOnly_DistanceFieldEffectFlag : 0;
+    DFGPFlags |= useGammaCorrectDistanceTable ? kGammaCorrect_DistanceFieldEffectFlag : 0;
+    DFGPFlags |= MT::kAliasedDistanceField == maskType ? kAliased_DistanceFieldEffectFlag : 0;
+
+    if (isLCD) {
+        DFGPFlags |= kUseLCD_DistanceFieldEffectFlag;
+        DFGPFlags |= MT::kLCDBGRDistanceField == maskType ? kBGR_DistanceFieldEffectFlag : 0;
+    }
+    return {maskType, DFGPFlags, useGammaCorrectDistanceTable};
+}
+
 std::tuple<const GrClip*, GrOp::Owner >
 SDFTSubRun::makeAtlasTextOp(const GrClip* clip,
                             const SkMatrixProvider& viewMatrix,
@@ -1225,26 +1253,8 @@ SDFTSubRun::makeAtlasTextOp(const GrClip* clip,
     GrPaint grPaint;
     SkPMColor4f drawingColor = calculate_colors(rtc, drawPaint, viewMatrix, fMaskFormat, &grPaint);
 
-    const GrColorInfo& colorInfo = rtc->colorInfo();
-    const SkSurfaceProps& props = rtc->surfaceProps();
-    bool isBGR = SkPixelGeometryIsBGR(props.pixelGeometry());
-    bool isLCD = fUseLCDText && SkPixelGeometryIsH(props.pixelGeometry());
-    using MT = GrAtlasTextOp::MaskType;
-    MT maskType = !fAntiAliased ? MT::kAliasedDistanceField
-                                : isLCD ? (isBGR ? MT::kLCDBGRDistanceField
-                                                 : MT::kLCDDistanceField)
-                                        : MT::kGrayscaleDistanceField;
-
-    bool useGammaCorrectDistanceTable = colorInfo.isLinearlyBlended();
-    uint32_t DFGPFlags = drawMatrix.isSimilarity() ? kSimilarity_DistanceFieldEffectFlag : 0;
-    DFGPFlags |= drawMatrix.isScaleTranslate() ? kScaleOnly_DistanceFieldEffectFlag : 0;
-    DFGPFlags |= useGammaCorrectDistanceTable ? kGammaCorrect_DistanceFieldEffectFlag : 0;
-    DFGPFlags |= MT::kAliasedDistanceField == maskType ? kAliased_DistanceFieldEffectFlag : 0;
-
-    if (isLCD) {
-        DFGPFlags |= kUseLCD_DistanceFieldEffectFlag;
-        DFGPFlags |= MT::kLCDBGRDistanceField == maskType ? kBGR_DistanceFieldEffectFlag : 0;
-    }
+    auto [maskType, DFGPFlags, useGammaCorrectDistanceTable] =
+        calculate_sdf_parameters(*rtc, drawMatrix, fUseLCDText, fAntiAliased);
 
     GrRecordingContext* const context = rtc->recordingContext();
     GrAtlasTextOp::Geometry* geometry = GrAtlasTextOp::Geometry::Make(
@@ -1480,6 +1490,30 @@ GrTextBlob::GrTextBlob(int allocSize,
         , fInitialMatrix{drawMatrix}
         , fInitialLuminance{initialLuminance} { }
 
+void GrTextBlob::makeSubRuns(SkGlyphRunListPainter* painter,
+                             const SkGlyphRunList& glyphRunList,
+                             const SkMatrix& drawMatrix,
+                             SkPoint drawOrigin,
+                             const SkPaint& runPaint,
+                             const SkSurfaceProps& props,
+                             bool contextSupportsDistanceFieldText,
+                             const GrSDFTOptions& options) {
+    SkAutoSpinlock lock{fSpinLock};
+    if (!fSubRunsCreated) {
+        for (auto& glyphRun : glyphRunList) {
+            painter->processGlyphRun(glyphRun,
+                                     drawMatrix,
+                                     drawOrigin,
+                                     runPaint,
+                                     props,
+                                     contextSupportsDistanceFieldText,
+                                     options,
+                                     this);
+        }
+        fSubRunsCreated = true;
+    }
+}
+
 void GrTextBlob::processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkStrikeSpec& strikeSpec) {
 
@@ -1542,7 +1576,7 @@ GrBagOfBytes::Block::Block(char* previous, char* startOfBlock)
         : fBlockStart{startOfBlock}
         , fPrevious{reinterpret_cast<Block*>(previous)} {}
 
-char* GrBagOfBytes::alignedBytes(int size, int alignment) {
+void* GrBagOfBytes::alignedBytes(int size, int alignment) {
     SkASSERT_RELEASE(0 < size && size < kMaxByteSize);
     SkASSERT_RELEASE(0 < alignment && alignment <= kMaxAlignment);
     SkASSERT_RELEASE(SkIsPow2(alignment));
@@ -1582,6 +1616,6 @@ GrSubRunAllocator::GrSubRunAllocator(char* bytes, int size, int firstHeapAllocat
 GrSubRunAllocator::GrSubRunAllocator(int firstHeapAllocation)
         : GrSubRunAllocator(nullptr, 0, firstHeapAllocation) {}
 
-char* GrSubRunAllocator::alignedBytes(int unsafeSize, int unsafeAlignment) {
+void* GrSubRunAllocator::alignedBytes(int unsafeSize, int unsafeAlignment) {
     return fAlloc.alignedBytes(unsafeSize, unsafeAlignment);
 }
