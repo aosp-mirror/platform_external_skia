@@ -19,7 +19,6 @@
   #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR 0
 
   // Legacy flags
-  #define SK_IGNORE_GPU_DITHER
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
 
   // Staging flags
