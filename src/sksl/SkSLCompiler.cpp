@@ -88,14 +88,13 @@ public:
 };
 
 Compiler::Compiler(const ShaderCapsClass* caps)
-        : fContext(std::make_shared<Context>(/*errors=*/*this))
-        , fCaps(caps)
+        : fContext(std::make_shared<Context>(/*errors=*/*this, *caps))
         , fInliner(fContext.get())
         , fErrorCount(0) {
-    SkASSERT(fCaps);
+    SkASSERT(caps);
     fRootSymbolTable = std::make_shared<SymbolTable>(this, /*builtin=*/true);
     fPrivateSymbolTable = std::make_shared<SymbolTable>(fRootSymbolTable, /*builtin=*/true);
-    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), fCaps);
+    fIRGenerator = std::make_unique<IRGenerator>(fContext.get());
 
 #define TYPE(t) fContext->fTypes.f ## t .get()
 
@@ -1427,7 +1426,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
         String text,
         const Program::Settings& settings,
         const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
-    ATRACE_ANDROID_FRAMEWORK("SkSL::Compiler::convertProgram");
+    TRACE_EVENT0("skia.gpu", "SkSL::Compiler::convertProgram");
 
     SkASSERT(!externalFunctions || (kind == ProgramKind::kGeneric));
 
@@ -1453,7 +1452,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
     // Enable node pooling while converting and optimizing the program for a performance boost.
     // The Program will take ownership of the pool.
     std::unique_ptr<Pool> pool;
-    if (fCaps->useNodePools()) {
+    if (fContext->fCaps.useNodePools()) {
         pool = Pool::Create();
         pool->attachToThread();
     }
@@ -1462,7 +1461,6 @@ std::unique_ptr<Program> Compiler::convertProgram(
                                                             externalFunctions);
     auto program = std::make_unique<Program>(std::move(textPtr),
                                              std::move(config),
-                                             fCaps,
                                              fContext,
                                              std::move(ir.fElements),
                                              std::move(ir.fSharedElements),
@@ -1558,6 +1556,8 @@ bool Compiler::optimize(LoadedModule& module) {
         bool madeChanges = false;
 
         // Scan and optimize based on the control-flow graph for each function.
+        // TODO(skia:11365): we always perform CFG-based optimization here to reduce Settings into
+        // their final form. We should do this optimization in our Make functions instead.
         for (const auto& element : module.fElements) {
             if (element->is<FunctionDefinition>()) {
                 madeChanges |= this->scanCFG(element->as<FunctionDefinition>(), usage.get());
@@ -1582,9 +1582,11 @@ bool Compiler::optimize(Program& program) {
         bool madeChanges = false;
 
         // Scan and optimize based on the control-flow graph for each function.
-        for (const auto& element : program.ownedElements()) {
-            if (element->is<FunctionDefinition>()) {
-                madeChanges |= this->scanCFG(element->as<FunctionDefinition>(), usage);
+        if (program.fConfig->fSettings.fControlFlowAnalysis) {
+            for (const auto& element : program.ownedElements()) {
+                if (element->is<FunctionDefinition>()) {
+                    madeChanges |= this->scanCFG(element->as<FunctionDefinition>(), usage);
+                }
             }
         }
 
@@ -1712,7 +1714,7 @@ bool Compiler::toSPIRV(Program& program, String* out) {
 }
 
 bool Compiler::toGLSL(Program& program, OutputStream& out) {
-    ATRACE_ANDROID_FRAMEWORK("SkSL::Compiler::toGLSL");
+    TRACE_EVENT0("skia.gpu", "SkSL::Compiler::toGLSL");
     AutoSource as(this, program.fSource.get());
     GLSLCodeGenerator cg(fContext.get(), &program, this, &out);
     bool result = cg.generateCode();

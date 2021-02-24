@@ -426,21 +426,20 @@ void GrSurfaceDrawContext::drawGlyphRunList(const GrClip* clip,
         blob = GrTextBlob::Make(glyphRunList, drawMatrix);
         if (canCache) {
             blob->addKey(key);
-            textBlobCache->add(glyphRunList, blob);
+            // The blob may already have been created on a different thread. Use the first one
+            // that was there.
+            blob = textBlobCache->addOrReturnExisting(glyphRunList, blob);
         }
 
-        // TODO(herb): redo processGlyphRunList to handle shifted draw matrix.
         bool supportsSDFT = fContext->priv().caps()->shaderCaps()->supportsDistanceFieldText();
-        for (auto& glyphRun : glyphRunList) {
-            fGlyphPainter.processGlyphRun(glyphRun,
-                                          viewMatrix.localToDevice(),
-                                          drawOrigin,
-                                          drawPaint,
-                                          fSurfaceProps,
-                                          supportsSDFT,
-                                          options,
-                                          blob.get());
-        }
+        blob->makeSubRuns(&fGlyphPainter,
+                          glyphRunList,
+                          viewMatrix.localToDevice(),
+                          drawOrigin,
+                          drawPaint,
+                          fSurfaceProps,
+                          supportsSDFT,
+                          options);
     }
 
     for (const GrSubRun& subRun : blob->subRunList()) {
