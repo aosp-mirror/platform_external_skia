@@ -603,62 +603,6 @@ bool ApplyStroke(SkPath& path, StrokeOpts opts) {
     return p.getFillPath(path, &path, nullptr, opts.precision);
 }
 
-// Text Shaping abstraction
-
-#ifndef SK_NO_FONTS
-struct ShapedTextOpts {
-    SkFont font;
-    bool leftToRight;
-    std::string text;
-    SkScalar width;
-};
-
-std::unique_ptr<SkShaper> shaper;
-
-static sk_sp<SkTextBlob> do_shaping(const ShapedTextOpts& opts, SkPoint* pt) {
-    SkTextBlobBuilderRunHandler builder(opts.text.c_str(), {0, 0});
-    if (!shaper) {
-        shaper = SkShaper::Make();
-    }
-    shaper->shape(opts.text.c_str(), opts.text.length(),
-                  opts.font, opts.leftToRight,
-                  opts.width, &builder);
-    *pt = builder.endPoint();
-    return builder.makeBlob();
-}
-
-// TODO(kjlubick) ShapedText is a very thin veneer around SkTextBlob - can probably remove it.
-class ShapedText {
- public:
-    ShapedText(ShapedTextOpts opts) : fOpts(opts) {}
-
-    SkRect getBounds() {
-        this->init();
-        return SkRect::MakeLTRB(0, 0, fOpts.width, fPoint.y());
-    }
-
-    SkTextBlob* blob() {
-        this->init();
-        return fBlob.get();
-    }
- private:
-    const ShapedTextOpts fOpts;
-    SkPoint fPoint;
-    sk_sp<SkTextBlob> fBlob;
-
-    void init() {
-        if (!fBlob) {
-            fBlob = do_shaping(fOpts, &fPoint);
-        }
-    }
-};
-
-void drawShapedText(SkCanvas& canvas, ShapedText st, SkScalar x,
-                    SkScalar y, const SkPaint& paint) {
-    canvas.drawTextBlob(st.blob(), x, y, paint);
-}
-#endif //SK_NO_FONTS
-
 // This function is private, we call it in interface.js
 void computeTonalColors(uintptr_t cPtrAmbi /* float * */, uintptr_t cPtrSpot /* float * */) {
     // private methods accepting colors take pointers to floats already copied into wasm memory.
@@ -1045,7 +989,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                       flags);
         }))
 #ifndef SK_NO_FONTS
-        .function("_drawShapedText", &drawShapedText)
         .function("_drawSimpleText", optional_override([](SkCanvas& self, uintptr_t /* char* */ sptr,
                                                           size_t len, SkScalar x, SkScalar y, const SkFont& font,
                                                           const SkPaint& paint) {
@@ -1201,31 +1144,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("getSize", &SkFont::getSize)
         .function("getSkewX", &SkFont::getSkewX)
         .function("getTypeface", &SkFont::getTypeface, allow_raw_pointers())
-        .function("_getWidths", optional_override([](SkFont& self, uintptr_t /* char* */ sptr,
-                                                     size_t strLen, size_t expectedCodePoints,
-                                                     uintptr_t /* SkScalar* */ wptr) -> bool {
-            char* str = reinterpret_cast<char*>(sptr);
-            SkScalar* widths = reinterpret_cast<SkScalar*>(wptr);
-
-            SkGlyphID* glyphStorage = new SkGlyphID[expectedCodePoints];
-            int actualCodePoints = self.textToGlyphs(str, strLen, SkTextEncoding::kUTF8,
-                                                     glyphStorage, expectedCodePoints);
-            if (actualCodePoints != expectedCodePoints) {
-                SkDebugf("Actually %d glyphs, expected only %d\n",
-                         actualCodePoints, expectedCodePoints);
-                return false;
-            }
-
-            self.getWidths(glyphStorage, actualCodePoints, widths);
-            delete[] glyphStorage;
-            return true;
-        }))
-        .function("measureText", optional_override([](SkFont& self, std::string text) {
-            // TODO(kjlubick): Remove this API
-            // Need to maybe add a helper in interface.js that supports UTF-8
-            // Otherwise, go with std::wstring and set UTF-32 encoding.
-            return self.measureText(text.c_str(), text.length(), SkTextEncoding::kUTF8);
-        }))
         .function("setEdging", &SkFont::setEdging)
         .function("setEmbeddedBitmaps", &SkFont::setEmbeddedBitmaps)
         .function("setHinting", &SkFont::setHinting)
@@ -1235,14 +1153,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("setSkewX", &SkFont::setSkewX)
         .function("setSubpixel", &SkFont::setSubpixel)
         .function("setTypeface", &SkFont::setTypeface, allow_raw_pointers());
-
-    class_<ShapedText>("ShapedText")
-        .constructor<ShapedTextOpts>()
-        .function("_getBounds", optional_override([](ShapedText& self,
-                                                     uintptr_t /* float* */ fPtr)->void {
-            SkRect* output = reinterpret_cast<SkRect*>(fPtr);
-            output[0] = self.getBounds();
-        }));
 
     class_<SkFontMgr>("FontMgr")
         .smart_ptr<sk_sp<SkFontMgr>>("sk_sp<FontMgr>")
@@ -1767,6 +1677,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .field("columns", &RuntimeEffectUniform::columns)
         .field("rows",    &RuntimeEffectUniform::rows)
         .field("slot",    &RuntimeEffectUniform::slot);
+
+    constant("rt_effect", true);
 #endif
 
     class_<SkSurface>("Surface")
@@ -2018,14 +1930,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
     // A value object is much simpler than a class - it is returned as a JS
     // object and does not require delete().
     // https://emscripten.org/docs/porting/connecting_cpp_and_javascript/embind.html#value-types
-
-#ifndef SK_NO_FONTS
-    value_object<ShapedTextOpts>("ShapedTextOpts")
-        .field("font",        &ShapedTextOpts::font)
-        .field("leftToRight", &ShapedTextOpts::leftToRight)
-        .field("text",        &ShapedTextOpts::text)
-        .field("width",       &ShapedTextOpts::width);
-#endif
 
     value_object<SimpleImageInfo>("ImageInfo")
         .field("width",      &SimpleImageInfo::width)
