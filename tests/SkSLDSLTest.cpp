@@ -39,7 +39,8 @@ public:
     }
 
     ~ExpectError() override {
-        REPORTER_ASSERT(fReporter, !fMsg);
+        REPORTER_ASSERT(fReporter, !fMsg,
+                        "Error mismatch: expected:\n%sbut no error occurred\n", fMsg);
         SetErrorHandler(nullptr);
     }
 
@@ -1027,13 +1028,32 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFunction, r, ctxInfo) {
     EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
                  "void main(half2 coords) { (sk_FragColor = half4(coords, 0.0, 1.0)); }");
 
-    DSLWriter::ProgramElements().clear();
-    Var x(kFloat, "x");
-    DSLFunction(kFloat, "sqr", x).define(
-        Return(x * x)
-    );
-    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
-    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0], "float sqr(float x) { return (x * x); }");
+    {
+        DSLWriter::ProgramElements().clear();
+        Var x(kFloat, "x");
+        DSLFunction sqr(kFloat, "sqr", x);
+        sqr.define(
+            Return(x * x)
+        );
+        EXPECT_EQUAL(sqr(sk_FragCoord().x()), "sqr(sk_FragCoord.x)");
+        REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
+        EXPECT_EQUAL(*DSLWriter::ProgramElements()[0], "float sqr(float x) { return (x * x); }");
+    }
+
+    {
+        DSLWriter::ProgramElements().clear();
+        Var x(kFloat2, "x");
+        Var y(kFloat2, "y");
+        DSLFunction dot(kFloat2, "dot", x, y);
+        dot.define(
+            Return(x * x + y * y)
+        );
+        EXPECT_EQUAL(dot(Float2(1.0f, 2.0f), Float2(3.0f, 4.0f)),
+                     "dot(float2(1.0, 2.0), float2(3.0, 4.0))");
+        REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
+        EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
+                "float2 dot(float2 x, float2 y) { return ((x * x) + (y * y)); }");
+    }
 
     {
         ExpectError error(r, "error: expected 'float', but found 'bool'\n");
@@ -1119,20 +1139,32 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSwitch, r, ctxInfo) {
     Statement x = Switch(5,
         Case(0, a = 0, Break()),
         Case(1, a = 1, Continue()),
+        Case(2, a = 2  /*Fallthrough*/),
         Default(Discard())
     );
-    EXPECT_EQUAL(x,
-        "switch (5) { case 0: (a = 0.0); break; case 1: (a = 1.0); continue; default: discard; }");
+    EXPECT_EQUAL(x, R"(
+        switch (5) {
+            case 0: (a = 0.0); break;
+            case 1: (a = 1.0); continue;
+            case 2: (a = 2.0);
+            default: discard;
+        }
+    )");
 
-    Statement y = Switch(b);
-    EXPECT_EQUAL(y, "switch (b) {}");
+    EXPECT_EQUAL(Switch(b),
+                "switch (b) {}");
 
-    Statement z = Switch(b, Default(), Case(0), Case(1));
-    EXPECT_EQUAL(z, "switch (b) { default: case 0: case 1: }");
+    EXPECT_EQUAL(Switch(b, Default(), Case(0), Case(1)),
+                "switch (b) { default: case 0: case 1: }");
 
     {
-        ExpectError error(r, "error: duplicate case value\n");
+        ExpectError error(r, "error: duplicate case value '0'\n");
         Switch(0, Case(0), Case(0)).release();
+    }
+
+    {
+        ExpectError error(r, "error: duplicate default case\n");
+        Switch(0, Default(a = 0), Default(a = 1)).release();
     }
 
     {
