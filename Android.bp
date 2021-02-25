@@ -1990,6 +1990,7 @@ cc_test {
         "tests/SkResourceCacheTest.cpp",
         "tests/SkRuntimeEffectTest.cpp",
         "tests/SkSLCross.cpp",
+        "tests/SkSLDSLErrorLineNumbers.cpp",
         "tests/SkSLDSLTest.cpp",
         "tests/SkSLFPTestbed.cpp",
         "tests/SkSLGLSLTestbed.cpp",
