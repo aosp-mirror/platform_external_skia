@@ -88,14 +88,13 @@ public:
 };
 
 Compiler::Compiler(const ShaderCapsClass* caps)
-        : fContext(std::make_shared<Context>(/*errors=*/*this))
-        , fCaps(caps)
+        : fContext(std::make_shared<Context>(/*errors=*/*this, *caps))
         , fInliner(fContext.get())
         , fErrorCount(0) {
-    SkASSERT(fCaps);
+    SkASSERT(caps);
     fRootSymbolTable = std::make_shared<SymbolTable>(this, /*builtin=*/true);
     fPrivateSymbolTable = std::make_shared<SymbolTable>(fRootSymbolTable, /*builtin=*/true);
-    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), fCaps);
+    fIRGenerator = std::make_unique<IRGenerator>(fContext.get());
 
 #define TYPE(t) fContext->fTypes.f ## t .get()
 
@@ -143,7 +142,6 @@ Compiler::Compiler(const ShaderCapsClass* caps)
         TYPE(Sampler2DRect),
 
         TYPE(ISampler2D),
-        TYPE(Image2D), TYPE(IImage2D),
         TYPE(SubpassInput), TYPE(SubpassInputMS),
 
         TYPE(Sampler),
@@ -1172,184 +1170,6 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
     }
 }
 
-static bool contains_exit(Statement& stmt, bool conditionalExits) {
-    class ContainsExit : public ProgramVisitor {
-    public:
-        ContainsExit(bool e) : fConditionalExits(e) {}
-
-        bool visitStatement(const Statement& stmt) override {
-            switch (stmt.kind()) {
-                case Statement::Kind::kBlock:
-                    return INHERITED::visitStatement(stmt);
-
-                case Statement::Kind::kReturn:
-                    // Returns are an early exit regardless of the surrounding control structures.
-                    return fConditionalExits ? fInConditional : !fInConditional;
-
-                case Statement::Kind::kContinue:
-                    // Continues are an early exit from switches, but not loops.
-                    return !fInLoop &&
-                           (fConditionalExits ? fInConditional : !fInConditional);
-
-                case Statement::Kind::kBreak:
-                    // Breaks cannot escape from switches or loops.
-                    return !fInLoop && !fInSwitch &&
-                           (fConditionalExits ? fInConditional : !fInConditional);
-
-                case Statement::Kind::kIf: {
-                    ++fInConditional;
-                    bool result = INHERITED::visitStatement(stmt);
-                    --fInConditional;
-                    return result;
-                }
-
-                case Statement::Kind::kFor:
-                case Statement::Kind::kDo: {
-                    // Loops are treated as conditionals because a loop could potentially execute
-                    // zero times. We don't have a straightforward way to determine that a loop
-                    // definitely executes at least once.
-                    ++fInConditional;
-                    ++fInLoop;
-                    bool result = INHERITED::visitStatement(stmt);
-                    --fInLoop;
-                    --fInConditional;
-                    return result;
-                }
-
-                case Statement::Kind::kSwitch: {
-                    ++fInSwitch;
-                    bool result = INHERITED::visitStatement(stmt);
-                    --fInSwitch;
-                    return result;
-                }
-
-                default:
-                    return false;
-            }
-        }
-
-        bool fConditionalExits = false;
-        int fInConditional = 0;
-        int fInLoop = 0;
-        int fInSwitch = 0;
-        using INHERITED = ProgramVisitor;
-    };
-
-    return ContainsExit{conditionalExits}.visitStatement(stmt);
-}
-
-// Finds unconditional exits from a switch-case. Returns true if this statement unconditionally
-// causes an exit from this switch (via continue, break or return).
-static bool contains_unconditional_exit(Statement& stmt) {
-    return contains_exit(stmt, /*conditionalExits=*/false);
-}
-
-// Finds conditional exits from a switch-case. Returns true if this statement contains a conditional
-// that wraps a potential exit from the switch (via continue, break or return).
-static bool contains_conditional_exit(Statement& stmt) {
-    return contains_exit(stmt, /*conditionalExits=*/true);
-}
-
-static void move_all_but_break(std::unique_ptr<Statement>& stmt, StatementArray* target) {
-    switch (stmt->kind()) {
-        case Statement::Kind::kBlock: {
-            // Recurse into the block.
-            Block& block = static_cast<Block&>(*stmt);
-
-            StatementArray blockStmts;
-            blockStmts.reserve_back(block.children().size());
-            for (std::unique_ptr<Statement>& stmt : block.children()) {
-                move_all_but_break(stmt, &blockStmts);
-            }
-
-            target->push_back(std::make_unique<Block>(block.fOffset, std::move(blockStmts),
-                                                      block.symbolTable(), block.isScope()));
-            break;
-        }
-
-        case Statement::Kind::kBreak:
-            // Do not append a break to the target.
-            break;
-
-        default:
-            // Append normal statements to the target.
-            target->push_back(std::move(stmt));
-            break;
-    }
-}
-
-// Returns a block containing all of the statements that will be run if the given case matches
-// (which, owing to the statements being owned by unique_ptrs, means the switch itself will be
-// broken by this call and must then be discarded).
-// Returns null (and leaves the switch unmodified) if no such simple reduction is possible, such as
-// when break statements appear inside conditionals.
-static std::unique_ptr<Statement> block_for_case(SwitchStatement* switchStatement,
-                                                 SwitchCase* caseToCapture) {
-    // We have to be careful to not move any of the pointers until after we're sure we're going to
-    // succeed, so before we make any changes at all, we check the switch-cases to decide on a plan
-    // of action. First, find the switch-case we are interested in.
-    auto iter = switchStatement->cases().begin();
-    for (; iter != switchStatement->cases().end(); ++iter) {
-        if (iter->get() == caseToCapture) {
-            break;
-        }
-    }
-
-    // Next, walk forward through the rest of the switch. If we find a conditional break, we're
-    // stuck and can't simplify at all. If we find an unconditional break, we have a range of
-    // statements that we can use for simplification.
-    auto startIter = iter;
-    Statement* stripBreakStmt = nullptr;
-    for (; iter != switchStatement->cases().end(); ++iter) {
-        for (std::unique_ptr<Statement>& stmt : (*iter)->statements()) {
-            if (contains_conditional_exit(*stmt)) {
-                // We can't reduce switch-cases to a block when they have conditional exits.
-                return nullptr;
-            }
-            if (contains_unconditional_exit(*stmt)) {
-                // We found an unconditional exit. We can use this block, but we need to strip
-                // out a break statement if it has one.
-                stripBreakStmt = stmt.get();
-                break;
-            }
-        }
-
-        if (stripBreakStmt) {
-            break;
-        }
-    }
-
-    // We fell off the bottom of the switch or encountered a break. We know the range of statements
-    // that we need to move over, and we know it's safe to do so.
-    StatementArray caseStmts;
-
-    // We can move over most of the statements as-is.
-    while (startIter != iter) {
-        for (std::unique_ptr<Statement>& stmt : (*startIter)->statements()) {
-            caseStmts.push_back(std::move(stmt));
-        }
-        ++startIter;
-    }
-
-    // For the last statement, we need to move what we can, stopping at a break if there is one.
-    if (stripBreakStmt != nullptr) {
-        for (std::unique_ptr<Statement>& stmt : (*startIter)->statements()) {
-            if (stmt.get() == stripBreakStmt) {
-                move_all_but_break(stmt, &caseStmts);
-                stripBreakStmt = nullptr;
-                break;
-            }
-
-            caseStmts.push_back(std::move(stmt));
-        }
-    }
-
-    SkASSERT(stripBreakStmt == nullptr);  // Verify that we fixed the unconditional break.
-
-    // Return our newly-synthesized block.
-    return std::make_unique<Block>(/*offset=*/-1, std::move(caseStmts), switchStatement->symbols());
-}
-
 void Compiler::simplifyStatement(DefinitionMap& definitions,
                                  BasicBlock& b,
                                  std::vector<BasicBlock::Node>::iterator* iter,
@@ -1419,6 +1239,8 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
             break;
         }
         case Statement::Kind::kSwitch: {
+            // TODO(skia:11319): this optimization logic is redundant with the static-switch
+            // optimization code found in SwitchStatement.cpp.
             SwitchStatement& s = stmt->as<SwitchStatement>();
             int64_t switchValue;
             if (ConstantFolder::GetConstantInt(*s.value(), &switchValue)) {
@@ -1433,7 +1255,8 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
                     int64_t caseValue;
                     SkAssertResult(ConstantFolder::GetConstantInt(*c->value(), &caseValue));
                     if (caseValue == switchValue) {
-                        std::unique_ptr<Statement> newBlock = block_for_case(&s, c.get());
+                        std::unique_ptr<Statement> newBlock =
+                                SwitchStatement::BlockForCase(&s.cases(), c.get(), s.symbols());
                         if (newBlock) {
                             (*iter)->setStatement(std::move(newBlock), usage);
                             found = true;
@@ -1454,7 +1277,8 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
                 if (!found) {
                     // no matching case. use default if it exists, or kill the whole thing
                     if (defaultCase) {
-                        std::unique_ptr<Statement> newBlock = block_for_case(&s, defaultCase);
+                        std::unique_ptr<Statement> newBlock =
+                                SwitchStatement::BlockForCase(&s.cases(), defaultCase, s.symbols());
                         if (newBlock) {
                             (*iter)->setStatement(std::move(newBlock), usage);
                         } else {
@@ -1602,7 +1426,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
         String text,
         const Program::Settings& settings,
         const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
-    ATRACE_ANDROID_FRAMEWORK("SkSL::Compiler::convertProgram");
+    TRACE_EVENT0("skia.gpu", "SkSL::Compiler::convertProgram");
 
     SkASSERT(!externalFunctions || (kind == ProgramKind::kGeneric));
 
@@ -1628,7 +1452,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
     // Enable node pooling while converting and optimizing the program for a performance boost.
     // The Program will take ownership of the pool.
     std::unique_ptr<Pool> pool;
-    if (fCaps->useNodePools()) {
+    if (fContext->fCaps.useNodePools()) {
         pool = Pool::Create();
         pool->attachToThread();
     }
@@ -1637,7 +1461,6 @@ std::unique_ptr<Program> Compiler::convertProgram(
                                                             externalFunctions);
     auto program = std::make_unique<Program>(std::move(textPtr),
                                              std::move(config),
-                                             fCaps,
                                              fContext,
                                              std::move(ir.fElements),
                                              std::move(ir.fSharedElements),
@@ -1733,6 +1556,8 @@ bool Compiler::optimize(LoadedModule& module) {
         bool madeChanges = false;
 
         // Scan and optimize based on the control-flow graph for each function.
+        // TODO(skia:11365): we always perform CFG-based optimization here to reduce Settings into
+        // their final form. We should do this optimization in our Make functions instead.
         for (const auto& element : module.fElements) {
             if (element->is<FunctionDefinition>()) {
                 madeChanges |= this->scanCFG(element->as<FunctionDefinition>(), usage.get());
@@ -1757,9 +1582,11 @@ bool Compiler::optimize(Program& program) {
         bool madeChanges = false;
 
         // Scan and optimize based on the control-flow graph for each function.
-        for (const auto& element : program.ownedElements()) {
-            if (element->is<FunctionDefinition>()) {
-                madeChanges |= this->scanCFG(element->as<FunctionDefinition>(), usage);
+        if (program.fConfig->fSettings.fControlFlowAnalysis) {
+            for (const auto& element : program.ownedElements()) {
+                if (element->is<FunctionDefinition>()) {
+                    madeChanges |= this->scanCFG(element->as<FunctionDefinition>(), usage);
+                }
             }
         }
 
@@ -1887,7 +1714,7 @@ bool Compiler::toSPIRV(Program& program, String* out) {
 }
 
 bool Compiler::toGLSL(Program& program, OutputStream& out) {
-    ATRACE_ANDROID_FRAMEWORK("SkSL::Compiler::toGLSL");
+    TRACE_EVENT0("skia.gpu", "SkSL::Compiler::toGLSL");
     AutoSource as(this, program.fSource.get());
     GLSLCodeGenerator cg(fContext.get(), &program, this, &out);
     bool result = cg.generateCode();

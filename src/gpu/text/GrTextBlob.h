@@ -106,7 +106,7 @@ public:
         return this->allocateBytes(size, alignof(T));
     }
 
-    char* alignedBytes(int unsafeSize, int unsafeAlignment);
+    void* alignedBytes(int unsafeSize, int unsafeAlignment);
 
 private:
     // 16 seems to be a good number for alignment. If a use case for larger alignments is found,
@@ -236,7 +236,7 @@ public:
         return std::unique_ptr<T[], ArrayDestroyer>{array, ArrayDestroyer{n}};
     }
 
-    char* alignedBytes(int size, int alignment);
+    void* alignedBytes(int size, int alignment);
 
 private:
     GrBagOfBytes fAlloc;
@@ -302,7 +302,7 @@ public:
 
     // Given an already cached subRun, can this subRun handle this combination paint, matrix, and
     // position.
-    virtual bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) = 0;
+    virtual bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) const = 0;
 
     // Return the underlying atlas SubRun if it exists. Otherwise, return nullptr.
     // * Don't use this API. It is only to support testing.
@@ -338,6 +338,8 @@ struct GrSubRunList {
     bool isEmpty() const { return fHead == nullptr; }
     Iterator begin() { return Iterator{ fHead.get()}; }
     Iterator end() { return Iterator{nullptr}; }
+    Iterator begin() const { return Iterator{ fHead.get()}; }
+    Iterator end() const { return Iterator{nullptr}; }
     GrSubRun& front() const {return *fHead; }
 
     std::unique_ptr<GrSubRun, GrSubRunAllocator::Destroyer> fHead{nullptr};
@@ -397,6 +399,16 @@ public:
     void* operator new(size_t);
     void* operator new(size_t, void* p);
 
+    void makeSubRuns(
+            SkGlyphRunListPainter* painter,
+            const SkGlyphRunList& glyphRunList,
+            const SkMatrix& drawMatrix,
+            SkPoint drawOrigin,
+            const SkPaint& runPaint,
+            const SkSurfaceProps& props,
+            bool contextSupportsDistanceFieldText,
+            const GrSDFTOptions& options) SK_EXCLUDES(fSpinLock);
+
     static const Key& GetKey(const GrTextBlob& blob);
     static uint32_t Hash(const Key& key);
 
@@ -404,28 +416,27 @@ public:
     bool hasPerspective() const;
     const SkMatrix& initialMatrix() const { return fInitialMatrix; }
 
-    void setMinAndMaxScale(SkScalar scaledMin, SkScalar scaledMax);
     std::tuple<SkScalar, SkScalar> scaleBounds() const {
         return {fMaxMinScale, fMinMaxScale};
     }
 
-    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix);
+    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) const;
 
     const Key& key() const;
     size_t size() const;
+
+    const GrSubRunList& subRunList() const {
+        return fSubRunList;
+    }
+
+private:
+    GrTextBlob(int allocSize, const SkMatrix& drawMatrix, SkColor initialLuminance);
 
     template<typename AddSingleMaskFormat>
     void addMultiMaskFormat(
             AddSingleMaskFormat addSingle,
             const SkZip<SkGlyphVariant, SkPoint>& drawables,
             const SkStrikeSpec& strikeSpec);
-
-    GrSubRunList& subRunList() {
-        return fSubRunList;
-    }
-
-private:
-    GrTextBlob(int allocSize, const SkMatrix& drawMatrix, SkColor initialLuminance);
 
     // Methods to satisfy SkGlyphRunPainterInterface
     void processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -440,6 +451,14 @@ private:
                            SkScalar maxScale) override;
     void processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkStrikeSpec& strikeSpec) override;
+
+    // The run must be created only once.
+    bool fSubRunsCreated SK_GUARDED_BY(fSpinLock) {false};
+
+    // This lock guards makeSubRuns, but also guards addMultiMaskFormat, processDeviceMasks,
+    // processSourcePaths, processSourceSDFT, and processSourceMasks. These are callbacks, and
+    // there is no way for the annotation system to track the lock through processGlyphRun.
+    mutable SkSpinlock fSpinLock;
 
     // The allocator must come first because it needs to be destroyed last. Other fields of this
     // structure may have pointers into it.
