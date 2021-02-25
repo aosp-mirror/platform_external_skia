@@ -832,22 +832,6 @@ StringFragment Parser::layoutCode() {
     return code;
 }
 
-/** (EQ IDENTIFIER('identity'))? */
-Layout::Key Parser::layoutKey() {
-    if (this->peek().fKind == Token::Kind::TK_EQ) {
-        this->expect(Token::Kind::TK_EQ, "'='");
-        Token key;
-        if (this->expect(Token::Kind::TK_IDENTIFIER, "an identifer", &key)) {
-            if (this->text(key) == "identity") {
-                return Layout::kIdentity_Key;
-            } else {
-                this->error(key, "unsupported layout key");
-            }
-        }
-    }
-    return Layout::kKey_Key;
-}
-
 Layout::CType Parser::layoutCType() {
     if (this->expect(Token::Kind::TK_EQ, "'='")) {
         Token t = this->nextToken();
@@ -892,19 +876,17 @@ Layout Parser::layout() {
     int set = -1;
     int builtin = -1;
     int inputAttachmentIndex = -1;
-    Layout::Format format = Layout::Format::kUnspecified;
     Layout::Primitive primitive = Layout::kUnspecified_Primitive;
     int maxVertices = -1;
     int invocations = -1;
     StringFragment marker;
     StringFragment when;
-    Layout::Key key = Layout::kNo_Key;
     Layout::CType ctype = Layout::CType::kDefault;
     if (this->checkNext(Token::Kind::TK_LAYOUT)) {
         if (!this->expect(Token::Kind::TK_LPAREN, "'('")) {
             return Layout(flags, location, offset, binding, index, set, builtin,
-                          inputAttachmentIndex, format, primitive, maxVertices, invocations, marker,
-                          when, key, ctype);
+                          inputAttachmentIndex, primitive, maxVertices, invocations, marker, when,
+                          ctype);
         }
         for (;;) {
             Token t = this->nextToken();
@@ -951,6 +933,9 @@ Layout Parser::layout() {
                     case LayoutToken::SRGB_UNPREMUL:
                         flags |= Layout::kSRGBUnpremul_Flag;
                         break;
+                    case LayoutToken::KEY:
+                        flags |= Layout::kKey_Flag;
+                        break;
                     case LayoutToken::POINTS:
                         primitive = Layout::kPoints_Primitive;
                         break;
@@ -984,9 +969,6 @@ Layout Parser::layout() {
                     case LayoutToken::WHEN:
                         when = this->layoutCode();
                         break;
-                    case LayoutToken::KEY:
-                        key = this->layoutKey();
-                        break;
                     case LayoutToken::CTYPE:
                         ctype = this->layoutCType();
                         break;
@@ -994,8 +976,6 @@ Layout Parser::layout() {
                         this->error(t, ("'" + text + "' is not a valid layout qualifier").c_str());
                         break;
                 }
-            } else if (Layout::ReadFormat(text, &format)) {
-               // AST::ReadFormat stored the result in 'format'.
             } else {
                 this->error(t, ("'" + text + "' is not a valid layout qualifier").c_str());
             }
@@ -1008,7 +988,7 @@ Layout Parser::layout() {
         }
     }
     return Layout(flags, location, offset, binding, index, set, builtin, inputAttachmentIndex,
-                  format, primitive, maxVertices, invocations, marker, when, key, ctype);
+                  primitive, maxVertices, invocations, marker, when, ctype);
 }
 
 /* layout? (UNIFORM | CONST | IN | OUT | INOUT | LOWP | MEDIUMP | HIGHP | FLAT | NOPERSPECTIVE |
