@@ -105,8 +105,7 @@ private:
  */
 class IRGenerator {
 public:
-    IRGenerator(const Context* context,
-                const ShaderCapsClass* caps);
+    IRGenerator(const Context* context);
 
     struct IRBundle {
         std::vector<std::unique_ptr<ProgramElement>> fElements;
@@ -202,12 +201,6 @@ private:
     std::unique_ptr<Statement> convertDo(std::unique_ptr<Statement> stmt,
                                          std::unique_ptr<Expression> test);
     std::unique_ptr<Statement> convertDo(const ASTNode& d);
-    std::unique_ptr<Statement> convertSwitch(int offset,
-                                             bool isStatic,
-                                             std::unique_ptr<Expression> value,
-                                             ExpressionArray caseValues,
-                                             SkTArray<StatementArray> caseStatements,
-                                             std::shared_ptr<SymbolTable> symbolTable);
     std::unique_ptr<Statement> convertSwitch(const ASTNode& s);
     std::unique_ptr<Expression> convertBinaryExpression(const ASTNode& expression);
     std::unique_ptr<Extension> convertExtension(int offset, StringFragment name);
@@ -277,8 +270,11 @@ private:
         return fContext.fConfig->strictES2Mode();
     }
 
+    const ShaderCapsClass& caps() const {
+        return fContext.fCaps;
+    }
+
     Program::Inputs fInputs;
-    const ShaderCapsClass* fCaps = nullptr;
 
     std::unique_ptr<ASTFile> fFile;
 

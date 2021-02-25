@@ -589,6 +589,7 @@ if (skia_compile_processors || skia_compile_sksl_tests) {
   executable("skslc") {
     defines = [
       "SKSL_STANDALONE",
+      "SK_DISABLE_TRACING",
       "SK_ENABLE_SPIRV_VALIDATION",
     ]
     sources = [
@@ -2276,6 +2277,7 @@ if (skia_enable_tools) {
       "fuzz/FuzzCommon.cpp",
       "fuzz/FuzzCommon.h",
       "fuzz/FuzzCreateDDL.cpp",
+      "fuzz/FuzzDDLThreading.cpp",
       "fuzz/FuzzDrawFunctions.cpp",
       "fuzz/FuzzEncoders.cpp",
       "fuzz/FuzzGradients.cpp",

@@ -119,17 +119,10 @@ std::unique_ptr<Expression> IRGenerator::CapsValue::literal(const Context& conte
     }
 }
 
-IRGenerator::IRGenerator(const Context* context,
-                         const ShaderCapsClass* caps)
+IRGenerator::IRGenerator(const Context* context)
         : fContext(*context)
-        , fCaps(caps)
         , fModifiers(new ModifiersPool()) {
-    if (fCaps) {
-        FillCapsMap(*fCaps, &fCapsMap);
-    } else {
-        fCapsMap.insert({String("integerSupport"), CapsValue(true)});
-    }
-
+    FillCapsMap(context->fCaps, &fCapsMap);
 }
 
 void IRGenerator::pushSymbolTable() {
@@ -360,7 +353,7 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
             this->errorReporter().error(offset,
                                         "'ctype' is only permitted within fragment processors");
         }
-        if (modifiers.fLayout.fKey) {
+        if (modifiers.fLayout.fFlags & Layout::kKey_Flag) {
             this->errorReporter().error(offset,
                                         "'key' is only permitted within fragment processors");
         }
@@ -372,7 +365,8 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                                         "'in' variables not permitted in runtime effects");
         }
     }
-    if (modifiers.fLayout.fKey && (modifiers.fFlags & Modifiers::kUniform_Flag)) {
+    if ((modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
+        (modifiers.fFlags & Modifiers::kUniform_Flag)) {
         this->errorReporter().error(offset, "'key' is not permitted on 'uniform' variables");
     }
     if (modifiers.fLayout.fMarker.fLength) {
@@ -454,6 +448,10 @@ std::unique_ptr<Variable> IRGenerator::convertVar(int offset, const Modifiers& m
 
 std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(std::unique_ptr<Variable> var,
                                                               std::unique_ptr<Expression> value) {
+    if ((var->modifiers().fFlags & Modifiers::kConst_Flag) && !value) {
+        this->errorReporter().error(var->fOffset, "'const' variables must be initialized");
+        return nullptr;
+    }
     if (value) {
         if (var->type().isOpaque()) {
             this->errorReporter().error(
@@ -580,15 +578,15 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
             return nullptr;
         }
         fInvocations = modifiers.fLayout.fInvocations;
-        if (fCaps && !fCaps->gsInvocationsSupport()) {
+        if (!this->caps().gsInvocationsSupport()) {
             modifiers.fLayout.fInvocations = -1;
             if (modifiers.fLayout.description() == "") {
                 return nullptr;
             }
         }
     }
-    if (modifiers.fLayout.fMaxVertices != -1 && fInvocations > 0 && fCaps &&
-        !fCaps->gsInvocationsSupport()) {
+    if (modifiers.fLayout.fMaxVertices != -1 && fInvocations > 0 &&
+        !this->caps().gsInvocationsSupport()) {
         modifiers.fLayout.fMaxVertices *= fInvocations;
     }
     return std::make_unique<ModifiersDeclaration>(fModifiers->addToPool(modifiers));
@@ -771,56 +769,6 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     return this->convertDo(std::move(statement), std::move(test));
 }
 
-std::unique_ptr<Statement> IRGenerator::convertSwitch(
-                                                int offset,
-                                                bool isStatic,
-                                                std::unique_ptr<Expression> value,
-                                                ExpressionArray caseValues,
-                                                SkTArray<StatementArray> caseStatements,
-                                                std::shared_ptr<SymbolTable> symbolTable) {
-    SkASSERT(caseValues.size() == caseStatements.size());
-    if (this->strictES2Mode()) {
-        this->errorReporter().error(offset, "switch statements are not supported");
-        return nullptr;
-    }
-
-    if (!value->type().isEnum()) {
-        value = this->coerce(std::move(value), *fContext.fTypes.fInt);
-        if (!value) {
-            return nullptr;
-        }
-    }
-    SkTHashSet<SKSL_INT> intValues;
-    std::vector<std::unique_ptr<SwitchCase>> cases;
-    for (size_t i = 0; i < caseValues.size(); ++i) {
-        int caseOffset;
-        std::unique_ptr<Expression> caseValue;
-        if (caseValues[i]) {
-            caseOffset = caseValues[i]->fOffset;
-            caseValue = this->coerce(std::move(caseValues[i]), value->type());
-            if (!caseValue) {
-                return nullptr;
-            }
-            SKSL_INT v = 0;
-            if (!ConstantFolder::GetConstantInt(*caseValue, &v)) {
-                this->errorReporter().error(caseValue->fOffset,
-                                            "case value must be a constant integer");
-                return nullptr;
-            }
-            if (intValues.contains(v)) {
-                this->errorReporter().error(caseValue->fOffset, "duplicate case value");
-            }
-            intValues.add(v);
-        } else {
-            caseOffset = offset;
-        }
-        cases.push_back(std::make_unique<SwitchCase>(caseOffset, std::move(caseValue),
-                                                     std::move(caseStatements[i])));
-    }
-    return std::make_unique<SwitchStatement>(offset, isStatic, std::move(value),
-                                             std::move(cases), symbolTable);
-}
-
 std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
     SkASSERT(s.fKind == ASTNode::Kind::kSwitch);
 
@@ -854,8 +802,8 @@ std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
         }
         caseStatements.push_back(std::move(statements));
     }
-    return this->convertSwitch(s.fOffset, s.getBool(), std::move(value), std::move(caseValues),
-                               std::move(caseStatements), fSymbolTable);
+    return SwitchStatement::Make(fContext, s.fOffset, s.getBool(), std::move(value),
+                                 std::move(caseValues), std::move(caseStatements), fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertExpressionStatement(const ASTNode& s) {
@@ -1358,7 +1306,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             fSymbolTable->addWithoutOwnership(param);
         }
         bool needInvocationIDWorkaround = fInvocations != -1 && funcData.fName == "main" &&
-                                          fCaps && !fCaps->gsInvocationsSupport();
+                                          !this->caps().gsInvocationsSupport();
         std::unique_ptr<Block> body = this->convertBlock(*iter);
         if (!body) {
             return;
@@ -1662,7 +1610,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
                 case SK_FRAGCOORD_BUILTIN:
                     fInputs.fFlipY = true;
                     if (this->settings().fFlipY &&
-                        (!fCaps || !fCaps->fragCoordConventionsExtensionString())) {
+                        !this->caps().fragCoordConventionsExtensionString()) {
                         fInputs.fRTHeight = true;
                     }
 #endif
@@ -1670,7 +1618,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
             if (this->programKind() == ProgramKind::kFragmentProcessor &&
                 (modifiers.fFlags & Modifiers::kIn_Flag) &&
                 !(modifiers.fFlags & Modifiers::kUniform_Flag) &&
-                !modifiers.fLayout.fKey &&
+                !(modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
                 modifiers.fLayout.fBuiltin == -1 &&
                 var->type() != *fContext.fTypes.fFragmentProcessor &&
                 var->type().typeKind() != Type::TypeKind::kSampler) {
@@ -2796,7 +2744,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
     if (this->programKind() == ProgramKind::kGeometry && !fIsBuiltinCode) {
         // Declare sk_InvocationID programmatically. With invocations support, it's an 'in' builtin.
         // If we're applying the workaround, then it's a plain global.
-        bool workaround = fCaps && !fCaps->gsInvocationsSupport();
+        bool workaround = !this->caps().gsInvocationsSupport();
         Modifiers m;
         if (!workaround) {
             m.fFlags = Modifiers::kIn_Flag;
