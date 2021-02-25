@@ -832,22 +832,6 @@ StringFragment Parser::layoutCode() {
     return code;
 }
 
-/** (EQ IDENTIFIER('identity'))? */
-Layout::Key Parser::layoutKey() {
-    if (this->peek().fKind == Token::Kind::TK_EQ) {
-        this->expect(Token::Kind::TK_EQ, "'='");
-        Token key;
-        if (this->expect(Token::Kind::TK_IDENTIFIER, "an identifer", &key)) {
-            if (this->text(key) == "identity") {
-                return Layout::kIdentity_Key;
-            } else {
-                this->error(key, "unsupported layout key");
-            }
-        }
-    }
-    return Layout::kKey_Key;
-}
-
 Layout::CType Parser::layoutCType() {
     if (this->expect(Token::Kind::TK_EQ, "'='")) {
         Token t = this->nextToken();
@@ -892,112 +876,134 @@ Layout Parser::layout() {
     int set = -1;
     int builtin = -1;
     int inputAttachmentIndex = -1;
-    Layout::Format format = Layout::Format::kUnspecified;
     Layout::Primitive primitive = Layout::kUnspecified_Primitive;
     int maxVertices = -1;
     int invocations = -1;
     StringFragment marker;
     StringFragment when;
-    Layout::Key key = Layout::kNo_Key;
     Layout::CType ctype = Layout::CType::kDefault;
     if (this->checkNext(Token::Kind::TK_LAYOUT)) {
         if (!this->expect(Token::Kind::TK_LPAREN, "'('")) {
             return Layout(flags, location, offset, binding, index, set, builtin,
-                          inputAttachmentIndex, format, primitive, maxVertices, invocations, marker,
-                          when, key, ctype);
+                          inputAttachmentIndex, primitive, maxVertices, invocations, marker, when,
+                          ctype);
         }
         for (;;) {
             Token t = this->nextToken();
             String text = this->text(t);
+            auto setFlag = [&](Layout::Flag f) {
+                if (flags & f) {
+                    this->error(t, "layout qualifier '" + text + "' appears more than once");
+                }
+                flags |= f;
+            };
+            auto setPrimitive = [&](Layout::Primitive p) {
+                if (flags & Layout::kPrimitive_Flag) {
+                    this->error(t, "only one primitive-type layout qualifier is allowed");
+                }
+                flags |= Layout::kPrimitive_Flag;
+                primitive = p;
+            };
+
             auto found = layoutTokens->find(text);
             if (found != layoutTokens->end()) {
                 switch (found->second) {
+                    case LayoutToken::ORIGIN_UPPER_LEFT:
+                        setFlag(Layout::kOriginUpperLeft_Flag);
+                        break;
+                    case LayoutToken::OVERRIDE_COVERAGE:
+                        setFlag(Layout::kOverrideCoverage_Flag);
+                        break;
+                    case LayoutToken::PUSH_CONSTANT:
+                        setFlag(Layout::kPushConstant_Flag);
+                        break;
+                    case LayoutToken::BLEND_SUPPORT_ALL_EQUATIONS:
+                        setFlag(Layout::kBlendSupportAllEquations_Flag);
+                        break;
+                    case LayoutToken::TRACKED:
+                        setFlag(Layout::kTracked_Flag);
+                        break;
+                    case LayoutToken::SRGB_UNPREMUL:
+                        setFlag(Layout::kSRGBUnpremul_Flag);
+                        break;
+                    case LayoutToken::KEY:
+                        setFlag(Layout::kKey_Flag);
+                        break;
                     case LayoutToken::LOCATION:
+                        setFlag(Layout::kLocation_Flag);
                         location = this->layoutInt();
                         break;
                     case LayoutToken::OFFSET:
+                        setFlag(Layout::kOffset_Flag);
                         offset = this->layoutInt();
                         break;
                     case LayoutToken::BINDING:
+                        setFlag(Layout::kBinding_Flag);
                         binding = this->layoutInt();
                         break;
                     case LayoutToken::INDEX:
+                        setFlag(Layout::kIndex_Flag);
                         index = this->layoutInt();
                         break;
                     case LayoutToken::SET:
+                        setFlag(Layout::kSet_Flag);
                         set = this->layoutInt();
                         break;
                     case LayoutToken::BUILTIN:
+                        setFlag(Layout::kBuiltin_Flag);
                         builtin = this->layoutInt();
                         break;
                     case LayoutToken::INPUT_ATTACHMENT_INDEX:
+                        setFlag(Layout::kInputAttachmentIndex_Flag);
                         inputAttachmentIndex = this->layoutInt();
                         break;
-                    case LayoutToken::ORIGIN_UPPER_LEFT:
-                        flags |= Layout::kOriginUpperLeft_Flag;
-                        break;
-                    case LayoutToken::OVERRIDE_COVERAGE:
-                        flags |= Layout::kOverrideCoverage_Flag;
-                        break;
-                    case LayoutToken::BLEND_SUPPORT_ALL_EQUATIONS:
-                        flags |= Layout::kBlendSupportAllEquations_Flag;
-                        break;
-                    case LayoutToken::PUSH_CONSTANT:
-                        flags |= Layout::kPushConstant_Flag;
-                        break;
-                    case LayoutToken::TRACKED:
-                        flags |= Layout::kTracked_Flag;
-                        break;
-                    case LayoutToken::SRGB_UNPREMUL:
-                        flags |= Layout::kSRGBUnpremul_Flag;
-                        break;
                     case LayoutToken::POINTS:
-                        primitive = Layout::kPoints_Primitive;
+                        setPrimitive(Layout::kPoints_Primitive);
                         break;
                     case LayoutToken::LINES:
-                        primitive = Layout::kLines_Primitive;
+                        setPrimitive(Layout::kLines_Primitive);
                         break;
                     case LayoutToken::LINE_STRIP:
-                        primitive = Layout::kLineStrip_Primitive;
+                        setPrimitive(Layout::kLineStrip_Primitive);
                         break;
                     case LayoutToken::LINES_ADJACENCY:
-                        primitive = Layout::kLinesAdjacency_Primitive;
+                        setPrimitive(Layout::kLinesAdjacency_Primitive);
                         break;
                     case LayoutToken::TRIANGLES:
-                        primitive = Layout::kTriangles_Primitive;
+                        setPrimitive(Layout::kTriangles_Primitive);
                         break;
                     case LayoutToken::TRIANGLE_STRIP:
-                        primitive = Layout::kTriangleStrip_Primitive;
+                        setPrimitive(Layout::kTriangleStrip_Primitive);
                         break;
                     case LayoutToken::TRIANGLES_ADJACENCY:
-                        primitive = Layout::kTrianglesAdjacency_Primitive;
+                        setPrimitive(Layout::kTrianglesAdjacency_Primitive);
                         break;
                     case LayoutToken::MAX_VERTICES:
+                        setFlag(Layout::kMaxVertices_Flag);
                         maxVertices = this->layoutInt();
                         break;
                     case LayoutToken::INVOCATIONS:
+                        setFlag(Layout::kInvocations_Flag);
                         invocations = this->layoutInt();
                         break;
                     case LayoutToken::MARKER:
+                        setFlag(Layout::kMarker_Flag);
                         marker = this->layoutCode();
                         break;
                     case LayoutToken::WHEN:
+                        setFlag(Layout::kWhen_Flag);
                         when = this->layoutCode();
                         break;
-                    case LayoutToken::KEY:
-                        key = this->layoutKey();
-                        break;
                     case LayoutToken::CTYPE:
+                        setFlag(Layout::kCType_Flag);
                         ctype = this->layoutCType();
                         break;
                     default:
-                        this->error(t, ("'" + text + "' is not a valid layout qualifier").c_str());
+                        this->error(t, "'" + text + "' is not a valid layout qualifier");
                         break;
                 }
-            } else if (Layout::ReadFormat(text, &format)) {
-               // AST::ReadFormat stored the result in 'format'.
             } else {
-                this->error(t, ("'" + text + "' is not a valid layout qualifier").c_str());
+                this->error(t, "'" + text + "' is not a valid layout qualifier");
             }
             if (this->checkNext(Token::Kind::TK_RPAREN)) {
                 break;
@@ -1008,7 +1014,7 @@ Layout Parser::layout() {
         }
     }
     return Layout(flags, location, offset, binding, index, set, builtin, inputAttachmentIndex,
-                  format, primitive, maxVertices, invocations, marker, when, key, ctype);
+                  primitive, maxVertices, invocations, marker, when, ctype);
 }
 
 /* layout? (UNIFORM | CONST | IN | OUT | INOUT | LOWP | MEDIUMP | HIGHP | FLAT | NOPERSPECTIVE |

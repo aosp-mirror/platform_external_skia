@@ -115,7 +115,6 @@ std::unique_ptr<GrFragmentProcessor> GrYUVtoRGBEffect::Make(const GrYUVATextureP
             }
         }
         if (subset) {
-            SkASSERT(samplerState.mipmapped() == GrMipmapped::kNo);
             if (makeLinearWithSnap) {
                 // The plane is subsampled and we have an overall subset on the image. We're
                 // emulating do_fancy_upsampling using linear filtering but snapping look ups to the
@@ -219,7 +218,7 @@ SkString GrYUVtoRGBEffect::onDumpInfo() const {
 }
 #endif
 
-GrGLSLFragmentProcessor* GrYUVtoRGBEffect::onCreateGLSLInstance() const {
+std::unique_ptr<GrGLSLFragmentProcessor> GrYUVtoRGBEffect::onMakeProgramImpl() const {
     class GrGLSLYUVtoRGBEffect : public GrGLSLFragmentProcessor {
     public:
         GrGLSLYUVtoRGBEffect() {}
@@ -270,7 +269,6 @@ GrGLSLFragmentProcessor* GrYUVtoRGBEffect::onCreateGLSLInstance() const {
                         args.fUniformHandler->getUniformCStr(fColorSpaceMatrixVar),
                         args.fUniformHandler->getUniformCStr(fColorSpaceTranslateVar));
             }
-
             if (hasAlpha) {
                 // premultiply alpha
                 fragBuilder->codeAppendf("color.rgb *= color.a;");
@@ -308,7 +306,7 @@ GrGLSLFragmentProcessor* GrYUVtoRGBEffect::onCreateGLSLInstance() const {
         UniformHandle fColorSpaceTranslateVar;
     };
 
-    return new GrGLSLYUVtoRGBEffect;
+    return std::make_unique<GrGLSLYUVtoRGBEffect>();
 }
 void GrYUVtoRGBEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                              GrProcessorKeyBuilder* b) const {

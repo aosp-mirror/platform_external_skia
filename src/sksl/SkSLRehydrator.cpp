@@ -102,18 +102,15 @@ Layout Rehydrator::layout() {
             int set = this->readS8();
             int builtin = this->readS16();
             int inputAttachmentIndex = this->readS8();
-            int format = this->readS8();
             int primitive = this->readS8();
             int maxVertices = this->readS8();
             int invocations = this->readS8();
             StringFragment marker = this->readString();
             StringFragment when = this->readString();
-            int key = this->readS8();
             int ctype = this->readS8();
             return Layout(flags, location, offset, binding, index, set, builtin,
-                          inputAttachmentIndex, (Layout::Format) format,
-                          (Layout::Primitive) primitive, maxVertices, invocations, marker, when,
-                          (Layout::Key) key, (Layout::CType) ctype);
+                          inputAttachmentIndex, (Layout::Primitive)primitive, maxVertices,
+                          invocations, marker, when, (Layout::CType)ctype);
         }
         default:
             SkASSERT(false);
