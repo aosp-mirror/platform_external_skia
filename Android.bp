@@ -456,6 +456,7 @@ cc_library_static {
         "src/sksl/ir/SkSLExpressionStatement.cpp",
         "src/sksl/ir/SkSLForStatement.cpp",
         "src/sksl/ir/SkSLIfStatement.cpp",
+        "src/sksl/ir/SkSLPostfixExpression.cpp",
         "src/sksl/ir/SkSLPrefixExpression.cpp",
         "src/sksl/ir/SkSLSetting.cpp",
         "src/sksl/ir/SkSLSwitchStatement.cpp",
