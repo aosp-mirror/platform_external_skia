@@ -79,58 +79,9 @@ public:
     std::shared_ptr<SymbolTable> fPrevious;
 };
 
-void IRGenerator::FillCapsMap(const SkSL::ShaderCapsClass& caps,
-                              std::unordered_map<String, CapsValue>* capsMap) {
-#define CAP(name) capsMap->insert({String(#name), CapsValue(caps.name())})
-    CAP(fbFetchSupport);
-    CAP(fbFetchNeedsCustomOutput);
-    CAP(flatInterpolationSupport);
-    CAP(noperspectiveInterpolationSupport);
-    CAP(externalTextureSupport);
-    CAP(mustEnableAdvBlendEqs);
-    CAP(mustDeclareFragmentShaderOutput);
-    CAP(mustDoOpBetweenFloorAndAbs);
-    CAP(mustGuardDivisionEvenAfterExplicitZeroCheck);
-    CAP(inBlendModesFailRandomlyForAllZeroVec);
-    CAP(atan2ImplementedAsAtanYOverX);
-    CAP(canUseAnyFunctionInShader);
-    CAP(floatIs32Bits);
-    CAP(integerSupport);
-    CAP(builtinFMASupport);
-    CAP(builtinDeterminantSupport);
-#undef CAP
-}
-
-std::unique_ptr<Expression> IRGenerator::CapsValue::literal(const Context& context,
-                                                            int offset) const {
-    switch (fKind) {
-        case kBool_Kind:
-            return std::make_unique<BoolLiteral>(context, offset, fValue);
-
-        case kInt_Kind:
-            return std::make_unique<IntLiteral>(context, offset, fValue);
-
-        case kFloat_Kind:
-            return std::make_unique<FloatLiteral>(context, offset, fValueF);
-
-        default:
-            SkDEBUGFAILF("unrecognized caps kind: %d", fKind);
-            return nullptr;
-    }
-}
-
-IRGenerator::IRGenerator(const Context* context,
-                         const ShaderCapsClass* caps)
+IRGenerator::IRGenerator(const Context* context)
         : fContext(*context)
-        , fCaps(caps)
-        , fModifiers(new ModifiersPool()) {
-    if (fCaps) {
-        FillCapsMap(*fCaps, &fCapsMap);
-    } else {
-        fCapsMap.insert({String("integerSupport"), CapsValue(true)});
-    }
-
-}
+        , fModifiers(new ModifiersPool()) {}
 
 void IRGenerator::pushSymbolTable() {
     auto childSymTable = std::make_shared<SymbolTable>(std::move(fSymbolTable), fIsBuiltinCode);
@@ -585,15 +536,15 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
             return nullptr;
         }
         fInvocations = modifiers.fLayout.fInvocations;
-        if (fCaps && !fCaps->gsInvocationsSupport()) {
+        if (!this->caps().gsInvocationsSupport()) {
             modifiers.fLayout.fInvocations = -1;
             if (modifiers.fLayout.description() == "") {
                 return nullptr;
             }
         }
     }
-    if (modifiers.fLayout.fMaxVertices != -1 && fInvocations > 0 && fCaps &&
-        !fCaps->gsInvocationsSupport()) {
+    if (modifiers.fLayout.fMaxVertices != -1 && fInvocations > 0 &&
+        !this->caps().gsInvocationsSupport()) {
         modifiers.fLayout.fMaxVertices *= fInvocations;
     }
     return std::make_unique<ModifiersDeclaration>(fModifiers->addToPool(modifiers));
@@ -1313,7 +1264,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             fSymbolTable->addWithoutOwnership(param);
         }
         bool needInvocationIDWorkaround = fInvocations != -1 && funcData.fName == "main" &&
-                                          fCaps && !fCaps->gsInvocationsSupport();
+                                          !this->caps().gsInvocationsSupport();
         std::unique_ptr<Block> body = this->convertBlock(*iter);
         if (!body) {
             return;
@@ -1617,7 +1568,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
                 case SK_FRAGCOORD_BUILTIN:
                     fInputs.fFlipY = true;
                     if (this->settings().fFlipY &&
-                        (!fCaps || !fCaps->fragCoordConventionsExtensionString())) {
+                        !this->caps().fragCoordConventionsExtensionString()) {
                         fInputs.fRTHeight = true;
                     }
 #endif
@@ -2395,30 +2346,6 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
                    : Swizzle::Make(fContext, std::move(base), components);
 }
 
-const Type* IRGenerator::typeForSetting(int offset, String name) const {
-    auto found = fCapsMap.find(name);
-    if (found == fCapsMap.end()) {
-        this->errorReporter().error(offset, "unknown capability flag '" + name + "'");
-        return nullptr;
-    }
-    switch (found->second.fKind) {
-        case CapsValue::kBool_Kind:  return fContext.fTypes.fBool.get();
-        case CapsValue::kFloat_Kind: return fContext.fTypes.fFloat.get();
-        case CapsValue::kInt_Kind:   return fContext.fTypes.fInt.get();
-    }
-    SkUNREACHABLE;
-    return nullptr;
-}
-
-std::unique_ptr<Expression> IRGenerator::valueForSetting(int offset, String name) const {
-    auto found = fCapsMap.find(name);
-    if (found == fCapsMap.end()) {
-        this->errorReporter().error(offset, "unknown capability flag '" + name + "'");
-        return nullptr;
-    }
-    return found->second.literal(fContext, offset);
-}
-
 std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type& type,
                                                           StringFragment field) {
     const ProgramElement* enumElement = nullptr;
@@ -2565,17 +2492,9 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
     StringFragment field = fieldNode.getString();
     const Type& baseType = base->type();
     if (baseType == *fContext.fTypes.fSkCaps) {
-        if (this->settings().fReplaceSettings && !fIsBuiltinCode) {
-            return this->valueForSetting(fieldNode.fOffset, field);
-        }
-        const Type* type = this->typeForSetting(fieldNode.fOffset, field);
-        if (!type) {
-            return nullptr;
-        }
-        return std::make_unique<Setting>(fieldNode.fOffset, field, type);
+        return Setting::Make(fContext, fieldNode.fOffset, field);
     }
     switch (baseType.typeKind()) {
-        case Type::TypeKind::kOther:
         case Type::TypeKind::kStruct:
             return this->convertField(std::move(base), field);
         default:
@@ -2751,7 +2670,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
     if (this->programKind() == ProgramKind::kGeometry && !fIsBuiltinCode) {
         // Declare sk_InvocationID programmatically. With invocations support, it's an 'in' builtin.
         // If we're applying the workaround, then it's a plain global.
-        bool workaround = fCaps && !fCaps->gsInvocationsSupport();
+        bool workaround = !this->caps().gsInvocationsSupport();
         Modifiers m;
         if (!workaround) {
             m.fFlags = Modifiers::kIn_Flag;
