@@ -634,23 +634,6 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
                                    fSymbolTable);
 }
 
-std::unique_ptr<Statement> IRGenerator::convertDo(std::unique_ptr<Statement> stmt,
-                                                  std::unique_ptr<Expression> test) {
-    if (this->strictES2Mode()) {
-        this->errorReporter().error(stmt->fOffset, "do-while loops are not supported");
-        return nullptr;
-    }
-
-    test = this->coerce(std::move(test), *fContext.fTypes.fBool);
-    if (!test) {
-        return nullptr;
-    }
-    if (this->detectVarDeclarationWithoutScope(*stmt)) {
-        return nullptr;
-    }
-    return std::make_unique<DoStatement>(stmt->fOffset, std::move(stmt), std::move(test));
-}
-
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDo);
     auto iter = d.begin();
@@ -662,7 +645,10 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (!test) {
         return nullptr;
     }
-    return this->convertDo(std::move(statement), std::move(test));
+    if (this->detectVarDeclarationWithoutScope(*statement)) {
+        return nullptr;
+    }
+    return DoStatement::Make(fContext, std::move(statement), std::move(test));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
@@ -707,7 +693,7 @@ std::unique_ptr<Statement> IRGenerator::convertExpressionStatement(const ASTNode
     if (!e) {
         return nullptr;
     }
-    return std::unique_ptr<Statement>(new ExpressionStatement(std::move(e)));
+    return ExpressionStatement::Make(fContext, std::move(e));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertReturn(int offset,
@@ -785,12 +771,12 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
 
     StatementArray loopBody;
     loopBody.reserve_back(2);
-    loopBody.push_back(std::make_unique<ExpressionStatement>(this->call(/*offset=*/-1,
-                                                                        *invokeDecl,
-                                                                        ExpressionArray{})));
-    loopBody.push_back(std::make_unique<ExpressionStatement>(this->call(/*offset=*/-1,
-                                                                        std::move(endPrimitive),
-                                                                        ExpressionArray{})));
+    loopBody.push_back(ExpressionStatement::Make(fContext, this->call(/*offset=*/-1,
+                                                                      *invokeDecl,
+                                                                      ExpressionArray{})));
+    loopBody.push_back(ExpressionStatement::Make(fContext, this->call(/*offset=*/-1,
+                                                                      std::move(endPrimitive),
+                                                                      ExpressionArray{})));
     auto assignment = std::make_unique<BinaryExpression>(
             /*offset=*/-1,
             std::make_unique<VariableReference>(/*offset=*/-1, loopIdx,
@@ -798,7 +784,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
             Token::Kind::TK_EQ,
             std::make_unique<IntLiteral>(fContext, /*offset=*/-1, /*value=*/0),
             fContext.fTypes.fInt.get());
-    auto initializer = std::make_unique<ExpressionStatement>(std::move(assignment));
+    auto initializer = ExpressionStatement::Make(fContext, std::move(assignment));
     auto loop = ForStatement::Make(
             fContext, /*offset=*/-1, std::move(initializer), std::move(test), std::move(next),
             std::make_unique<Block>(/*offset=*/-1, std::move(loopBody)), fSymbolTable);
@@ -865,7 +851,7 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     std::unique_ptr<Expression> result = Op(Pos(), Token::Kind::TK_EQ,
                                  Constructor::Make(fContext, /*offset=*/-1,
                                                    *fContext.fTypes.fFloat4, std::move(children)));
-    return std::make_unique<ExpressionStatement>(std::move(result));
+    return ExpressionStatement::Make(fContext, std::move(result));
 }
 
 void IRGenerator::checkModifiers(int offset, const Modifiers& modifiers, int permitted) {
@@ -2173,6 +2159,10 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Operator op,
                                             String("'") + op.operatorName() +
                                             "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
+            }
+            if (baseType.isLiteral()) {
+                // The expression `~123` is no longer a literal; coerce to the actual type.
+                base = this->coerce(std::move(base), baseType.scalarTypeForLiteral());
             }
             break;
         default:
