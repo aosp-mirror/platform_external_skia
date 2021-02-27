@@ -65,7 +65,12 @@ struct Analysis {
     static bool IsAssignable(Expression& expr, AssignmentInfo* info,
                              ErrorReporter* errors = nullptr);
 
+    // Updates the `refKind` field of exactly one VariableReference inside `expr`.
+    // `expr` must be `IsAssignable`; returns an error otherwise.
+    static bool MakeAssignmentExpr(Expression* expr, VariableRefKind kind, ErrorReporter* errors);
+
     // Updates the `refKind` field of every VariableReference found within `expr`.
+    // `expr` is allowed to have zero, one, or multiple VariableReferences.
     static void UpdateRefKind(Expression* expr, VariableRefKind refKind);
 
     // A "trivial" expression is one where we'd feel comfortable cloning it multiple times in
@@ -82,6 +87,21 @@ struct Analysis {
     // - half4(myColor.a)
     // - myStruct.myArrayField[7].xyz
     static bool IsTrivialExpression(const Expression& expr);
+
+    // Is 'expr' a constant-expression, as defined by GLSL 1.0, section 5.10? A constant expression
+    // is one of:
+    //
+    // - A literal value
+    // - A global or local variable qualified as 'const', excluding function parameters
+    // - An expression formed by an operator on operands that are constant expressions, including
+    //   getting an element of a constant vector or a constant matrix, or a field of a constant
+    //   structure
+    // - A constructor whose arguments are all constant expressions
+    //
+    // GLSL (but not SkSL, yet - skbug.com/10835) also provides:
+    // - A built-in function call whose arguments are all constant expressions, with the exception
+    //   of the texture lookup functions
+    static bool IsConstantExpression(const Expression& expr);
 
     struct UnrollableLoopInfo {
         const Variable* fIndex;
