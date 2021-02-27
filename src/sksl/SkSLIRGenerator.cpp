@@ -561,69 +561,22 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
     if (!ifTrue) {
         return nullptr;
     }
+    if (this->detectVarDeclarationWithoutScope(*ifTrue)) {
+        return nullptr;
+    }
     std::unique_ptr<Statement> ifFalse;
     if (iter != n.end()) {
         ifFalse = this->convertStatement(*(iter++));
         if (!ifFalse) {
             return nullptr;
         }
+        if (this->detectVarDeclarationWithoutScope(*ifFalse)) {
+            return nullptr;
+        }
     }
     bool isStatic = n.getBool();
-    return this->convertIf(n.fOffset, isStatic, std::move(test), std::move(ifTrue),
-                           std::move(ifFalse));
-}
-
-std::unique_ptr<Statement> IRGenerator::convertIf(int offset, bool isStatic,
-                                                  std::unique_ptr<Expression> test,
-                                                  std::unique_ptr<Statement> ifTrue,
-                                                  std::unique_ptr<Statement> ifFalse) {
-    test = this->coerce(std::move(test), *fContext.fTypes.fBool);
-    if (!test) {
-        return nullptr;
-    }
-    if (this->detectVarDeclarationWithoutScope(*ifTrue)) {
-        return nullptr;
-    }
-    if (ifFalse && this->detectVarDeclarationWithoutScope(*ifFalse)) {
-        return nullptr;
-    }
-    if (test->is<BoolLiteral>()) {
-        // Static Boolean values can fold down to a single branch.
-        if (test->as<BoolLiteral>().value()) {
-            return ifTrue;
-        }
-        if (ifFalse) {
-            return ifFalse;
-        }
-        // False, but no else-clause. Not an error, so don't return null!
-        return std::make_unique<Nop>();
-    }
-    return std::make_unique<IfStatement>(offset, isStatic, std::move(test), std::move(ifTrue),
-                                         std::move(ifFalse));
-}
-
-std::unique_ptr<Statement> IRGenerator::convertFor(int offset,
-                                                   std::unique_ptr<Statement> initializer,
-                                                   std::unique_ptr<Expression> test,
-                                                   std::unique_ptr<Expression> next,
-                                                   std::unique_ptr<Statement> statement) {
-    if (test) {
-        test = this->coerce(std::move(test), *fContext.fTypes.fBool);
-        if (!test) {
-            return nullptr;
-        }
-    }
-
-    auto forStmt =
-            std::make_unique<ForStatement>(offset, std::move(initializer), std::move(test),
-                                           std::move(next), std::move(statement), fSymbolTable);
-    if (this->strictES2Mode()) {
-        if (!Analysis::ForLoopIsValidForES2(*forStmt, /*outLoopInfo=*/nullptr,
-                                            &this->errorReporter())) {
-            return nullptr;
-        }
-    }
-    return std::move(forStmt);
+    return IfStatement::Make(fContext, n.fOffset, isStatic, std::move(test),
+                             std::move(ifTrue), std::move(ifFalse));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
@@ -659,27 +612,8 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
         return nullptr;
     }
 
-    return this->convertFor(f.fOffset, std::move(initializer), std::move(test), std::move(next),
-                            std::move(statement));
-}
-
-std::unique_ptr<Statement> IRGenerator::convertWhile(int offset, std::unique_ptr<Expression> test,
-                                                     std::unique_ptr<Statement> statement) {
-    if (this->strictES2Mode()) {
-        this->errorReporter().error(offset, "while loops are not supported");
-        return nullptr;
-    }
-
-    test = this->coerce(std::move(test), *fContext.fTypes.fBool);
-    if (!test) {
-        return nullptr;
-    }
-    if (this->detectVarDeclarationWithoutScope(*statement)) {
-        return nullptr;
-    }
-
-    return std::make_unique<ForStatement>(offset, /*initializer=*/nullptr, std::move(test),
-                                          /*next=*/nullptr, std::move(statement), fSymbolTable);
+    return ForStatement::Make(fContext, f.fOffset, std::move(initializer), std::move(test),
+                              std::move(next), std::move(statement), fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
@@ -693,7 +627,11 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     if (!statement) {
         return nullptr;
     }
-    return this->convertWhile(w.fOffset, std::move(test), std::move(statement));
+    if (this->detectVarDeclarationWithoutScope(*statement)) {
+        return nullptr;
+    }
+    return ForStatement::MakeWhile(fContext, w.fOffset, std::move(test), std::move(statement),
+                                   fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertDo(std::unique_ptr<Statement> stmt,
@@ -861,11 +799,9 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
             std::make_unique<IntLiteral>(fContext, /*offset=*/-1, /*value=*/0),
             fContext.fTypes.fInt.get());
     auto initializer = std::make_unique<ExpressionStatement>(std::move(assignment));
-    auto loop = std::make_unique<ForStatement>(/*offset=*/-1,
-                                               std::move(initializer),
-                                               std::move(test), std::move(next),
-                                               std::make_unique<Block>(-1, std::move(loopBody)),
-                                               fSymbolTable);
+    auto loop = ForStatement::Make(
+            fContext, /*offset=*/-1, std::move(initializer), std::move(test), std::move(next),
+            std::make_unique<Block>(/*offset=*/-1, std::move(loopBody)), fSymbolTable);
     StatementArray children;
     children.push_back(std::move(loop));
     return std::make_unique<Block>(/*offset=*/-1, std::move(children));
