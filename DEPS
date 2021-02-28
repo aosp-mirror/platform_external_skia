@@ -7,16 +7,16 @@ vars = {
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@9b1c569b14e90765cdd7c07e449400e88f1d6c45",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@d24398b3e36175d08e74261a1a0a2c8a27a00dd6",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and shaderc and tint for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@0a295c027d81316cac4442323cb422dbc54a4d92",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@6cbef93c73ceff40010e74533d461f80e2afbd51",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@a82a4944a7f2496639f34a89c9923be5908b80aa",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
   "third_party/externals/shaderc"         : "https://chromium.googlesource.com/external/github.com/google/shaderc@8d081127ee28ff5df8123c994c00bc66a57e9e9c",
-  "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@80cb20de7ca4f16ee21ee2e031913bd1c30a1d1e",
+  "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@c1f7e904176d02369405b64e251391f9e9758428",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
   "third_party/externals/expat"           : "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git@e976867fb57a0cd87e3b0fe05d59e0ed63c6febb",
