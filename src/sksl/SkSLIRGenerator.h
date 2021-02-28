@@ -150,8 +150,13 @@ private:
      */
     std::unique_ptr<ModifiersPool> releaseModifiers();
 
-    void checkModifiers(int offset, const Modifiers& modifiers, int permitted);
-    void checkVarDeclaration(int offset, const Modifiers& modifiers, const Type* baseType,
+    void checkModifiers(int offset,
+                        const Modifiers& modifiers,
+                        int permittedModifierFlags,
+                        int permittedLayoutFlags);
+    void checkVarDeclaration(int offset,
+                             const Modifiers& modifiers,
+                             const Type* baseType,
                              Variable::Storage storage);
     std::unique_ptr<Variable> convertVar(int offset, const Modifiers& modifiers,
                                          const Type* baseType, StringFragment name, bool isArray,
@@ -194,8 +199,6 @@ private:
     std::unique_ptr<Statement> convertBreak(const ASTNode& b);
     std::unique_ptr<Statement> convertContinue(const ASTNode& c);
     std::unique_ptr<Statement> convertDiscard(const ASTNode& d);
-    std::unique_ptr<Statement> convertDo(std::unique_ptr<Statement> stmt,
-                                         std::unique_ptr<Expression> test);
     std::unique_ptr<Statement> convertDo(const ASTNode& d);
     std::unique_ptr<Statement> convertSwitch(const ASTNode& s);
     std::unique_ptr<Expression> convertBinaryExpression(const ASTNode& expression);
@@ -218,11 +221,7 @@ private:
     std::unique_ptr<Expression> convertIndexExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertIndex(std::unique_ptr<Expression> base,
                                              std::unique_ptr<Expression> index);
-    std::unique_ptr<Expression> convertPostfixExpression(std::unique_ptr<Expression> base,
-                                                         Operator op);
     std::unique_ptr<Expression> convertPostfixExpression(const ASTNode& expression);
-    std::unique_ptr<Expression> convertPrefixExpression(Operator op,
-                                                        std::unique_ptr<Expression> base);
     std::unique_ptr<Expression> convertScopeExpression(const ASTNode& expression);
     std::unique_ptr<StructDefinition> convertStructDefinition(const ASTNode& expression);
     std::unique_ptr<Expression> convertTypeField(int offset, const Type& type,

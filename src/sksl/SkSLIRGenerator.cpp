@@ -376,7 +376,8 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                      Modifiers::kFlat_Flag | Modifiers::kVarying_Flag |
                      Modifiers::kNoPerspective_Flag;
     }
-    this->checkModifiers(offset, modifiers, permitted);
+    // TODO(skbug.com/11301): Migrate above checks into building a mask of permitted layout flags
+    this->checkModifiers(offset, modifiers, permitted, /*permittedLayoutFlags=*/~0);
 }
 
 std::unique_ptr<Variable> IRGenerator::convertVar(int offset, const Modifiers& modifiers,
@@ -406,9 +407,16 @@ std::unique_ptr<Variable> IRGenerator::convertVar(int offset, const Modifiers& m
 
 std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(std::unique_ptr<Variable> var,
                                                               std::unique_ptr<Expression> value) {
-    if ((var->modifiers().fFlags & Modifiers::kConst_Flag) && !value) {
-        this->errorReporter().error(var->fOffset, "'const' variables must be initialized");
-        return nullptr;
+    if (var->modifiers().fFlags & Modifiers::kConst_Flag) {
+        if (!value) {
+            this->errorReporter().error(var->fOffset, "'const' variables must be initialized");
+            return nullptr;
+        }
+        if (!Analysis::IsConstantExpression(*value)) {
+            this->errorReporter().error(
+                    value->fOffset, "'const' variable initializer must be a constant expression");
+            return nullptr;
+        }
     }
     if (value) {
         if (var->type().isOpaque()) {
@@ -634,23 +642,6 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
                                    fSymbolTable);
 }
 
-std::unique_ptr<Statement> IRGenerator::convertDo(std::unique_ptr<Statement> stmt,
-                                                  std::unique_ptr<Expression> test) {
-    if (this->strictES2Mode()) {
-        this->errorReporter().error(stmt->fOffset, "do-while loops are not supported");
-        return nullptr;
-    }
-
-    test = this->coerce(std::move(test), *fContext.fTypes.fBool);
-    if (!test) {
-        return nullptr;
-    }
-    if (this->detectVarDeclarationWithoutScope(*stmt)) {
-        return nullptr;
-    }
-    return std::make_unique<DoStatement>(stmt->fOffset, std::move(stmt), std::move(test));
-}
-
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDo);
     auto iter = d.begin();
@@ -662,7 +653,10 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (!test) {
         return nullptr;
     }
-    return this->convertDo(std::move(statement), std::move(test));
+    if (this->detectVarDeclarationWithoutScope(*statement)) {
+        return nullptr;
+    }
+    return DoStatement::Make(fContext, std::move(statement), std::move(test));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
@@ -707,7 +701,7 @@ std::unique_ptr<Statement> IRGenerator::convertExpressionStatement(const ASTNode
     if (!e) {
         return nullptr;
     }
-    return std::unique_ptr<Statement>(new ExpressionStatement(std::move(e)));
+    return ExpressionStatement::Make(fContext, std::move(e));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertReturn(int offset,
@@ -775,7 +769,8 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
             Token::Kind::TK_LT,
             std::make_unique<IntLiteral>(fContext, /*offset=*/-1, fInvocations),
             fContext.fTypes.fBool.get());
-    auto next = std::make_unique<PostfixExpression>(
+    auto next = PostfixExpression::Make(
+            fContext,
             std::make_unique<VariableReference>(/*offset=*/-1, loopIdx,
                                                 VariableReference::RefKind::kReadWrite),
             Token::Kind::TK_PLUSPLUS);
@@ -785,12 +780,12 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
 
     StatementArray loopBody;
     loopBody.reserve_back(2);
-    loopBody.push_back(std::make_unique<ExpressionStatement>(this->call(/*offset=*/-1,
-                                                                        *invokeDecl,
-                                                                        ExpressionArray{})));
-    loopBody.push_back(std::make_unique<ExpressionStatement>(this->call(/*offset=*/-1,
-                                                                        std::move(endPrimitive),
-                                                                        ExpressionArray{})));
+    loopBody.push_back(ExpressionStatement::Make(fContext, this->call(/*offset=*/-1,
+                                                                      *invokeDecl,
+                                                                      ExpressionArray{})));
+    loopBody.push_back(ExpressionStatement::Make(fContext, this->call(/*offset=*/-1,
+                                                                      std::move(endPrimitive),
+                                                                      ExpressionArray{})));
     auto assignment = std::make_unique<BinaryExpression>(
             /*offset=*/-1,
             std::make_unique<VariableReference>(/*offset=*/-1, loopIdx,
@@ -798,7 +793,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
             Token::Kind::TK_EQ,
             std::make_unique<IntLiteral>(fContext, /*offset=*/-1, /*value=*/0),
             fContext.fTypes.fInt.get());
-    auto initializer = std::make_unique<ExpressionStatement>(std::move(assignment));
+    auto initializer = ExpressionStatement::Make(fContext, std::move(assignment));
     auto loop = ForStatement::Make(
             fContext, /*offset=*/-1, std::move(initializer), std::move(test), std::move(next),
             std::make_unique<Block>(/*offset=*/-1, std::move(loopBody)), fSymbolTable);
@@ -865,29 +860,66 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     std::unique_ptr<Expression> result = Op(Pos(), Token::Kind::TK_EQ,
                                  Constructor::Make(fContext, /*offset=*/-1,
                                                    *fContext.fTypes.fFloat4, std::move(children)));
-    return std::make_unique<ExpressionStatement>(std::move(result));
+    return ExpressionStatement::Make(fContext, std::move(result));
 }
 
-void IRGenerator::checkModifiers(int offset, const Modifiers& modifiers, int permitted) {
+void IRGenerator::checkModifiers(int offset,
+                                 const Modifiers& modifiers,
+                                 int permittedModifierFlags,
+                                 int permittedLayoutFlags) {
     int flags = modifiers.fFlags;
-    #define CHECK(flag, name)                                                            \
-        if (!flags) return;                                                              \
-        if (flags & flag) {                                                              \
-            if (!(permitted & flag)) {                                                   \
-                this->errorReporter().error(offset, "'" name "' is not permitted here"); \
-            }                                                                            \
-            flags &= ~flag;                                                              \
+    auto checkModifier = [&](Modifiers::Flag flag, const char* name) {
+        if (flags & flag) {
+            if (!(permittedModifierFlags & flag)) {
+                this->errorReporter().error(offset, "'" + String(name) + "' is not permitted here");
+            }
+            flags &= ~flag;
         }
-    CHECK(Modifiers::kConst_Flag,          "const")
-    CHECK(Modifiers::kIn_Flag,             "in")
-    CHECK(Modifiers::kOut_Flag,            "out")
-    CHECK(Modifiers::kUniform_Flag,        "uniform")
-    CHECK(Modifiers::kFlat_Flag,           "flat")
-    CHECK(Modifiers::kNoPerspective_Flag,  "noperspective")
-    CHECK(Modifiers::kHasSideEffects_Flag, "sk_has_side_effects")
-    CHECK(Modifiers::kVarying_Flag,        "varying")
-    CHECK(Modifiers::kInline_Flag,         "inline")
+    };
+
+    checkModifier(Modifiers::kConst_Flag,          "const");
+    checkModifier(Modifiers::kIn_Flag,             "in");
+    checkModifier(Modifiers::kOut_Flag,            "out");
+    checkModifier(Modifiers::kUniform_Flag,        "uniform");
+    checkModifier(Modifiers::kFlat_Flag,           "flat");
+    checkModifier(Modifiers::kNoPerspective_Flag,  "noperspective");
+    checkModifier(Modifiers::kHasSideEffects_Flag, "sk_has_side_effects");
+    checkModifier(Modifiers::kVarying_Flag,        "varying");
+    checkModifier(Modifiers::kInline_Flag,         "inline");
     SkASSERT(flags == 0);
+
+    int layoutFlags = modifiers.fLayout.fFlags;
+    auto checkLayout = [&](Layout::Flag flag, const char* name) {
+        if (layoutFlags & flag) {
+            if (!(permittedLayoutFlags & flag)) {
+                this->errorReporter().error(
+                        offset, "layout qualifier '" + String(name) + "' is not permitted here");
+            }
+            layoutFlags &= ~flag;
+        }
+    };
+
+    checkLayout(Layout::kOriginUpperLeft_Flag,          "origin_upper_left");
+    checkLayout(Layout::kOverrideCoverage_Flag,         "override_coverage");
+    checkLayout(Layout::kPushConstant_Flag,             "push_constant");
+    checkLayout(Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations");
+    checkLayout(Layout::kTracked_Flag,                  "tracked");
+    checkLayout(Layout::kSRGBUnpremul_Flag,             "srgb_unpremul");
+    checkLayout(Layout::kKey_Flag,                      "key");
+    checkLayout(Layout::kLocation_Flag,                 "location");
+    checkLayout(Layout::kOffset_Flag,                   "offset");
+    checkLayout(Layout::kBinding_Flag,                  "binding");
+    checkLayout(Layout::kIndex_Flag,                    "index");
+    checkLayout(Layout::kSet_Flag,                      "set");
+    checkLayout(Layout::kBuiltin_Flag,                  "builtin");
+    checkLayout(Layout::kInputAttachmentIndex_Flag,     "input_attachment_index");
+    checkLayout(Layout::kPrimitive_Flag,                "primitive-type");
+    checkLayout(Layout::kMaxVertices_Flag,              "max_vertices");
+    checkLayout(Layout::kInvocations_Flag,              "invocations");
+    checkLayout(Layout::kMarker_Flag,                   "marker");
+    checkLayout(Layout::kWhen_Flag,                     "when");
+    checkLayout(Layout::kCType_Flag,                    "ctype");
+    SkASSERT(layoutFlags == 0);
 }
 
 void IRGenerator::finalizeFunction(FunctionDefinition& f) {
@@ -1016,16 +1048,17 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         return;
     }
     const ASTNode::FunctionData& funcData = f.getFunctionData();
-    this->checkModifiers(f.fOffset, funcData.fModifiers, Modifiers::kHasSideEffects_Flag |
-                                                         Modifiers::kInline_Flag);
+    this->checkModifiers(f.fOffset, funcData.fModifiers,
+                         Modifiers::kHasSideEffects_Flag | Modifiers::kInline_Flag,
+                         /*permittedLayoutFlags=*/0);
     std::vector<const Variable*> parameters;
     for (size_t i = 0; i < funcData.fParameterCount; ++i) {
         const ASTNode& param = *(iter++);
         SkASSERT(param.fKind == ASTNode::Kind::kParameter);
         ASTNode::ParameterData pd = param.getParameterData();
-        this->checkModifiers(param.fOffset, pd.fModifiers, Modifiers::kConst_Flag |
-                                                           Modifiers::kIn_Flag |
-                                                           Modifiers::kOut_Flag);
+        this->checkModifiers(param.fOffset, pd.fModifiers,
+                             Modifiers::kConst_Flag | Modifiers::kIn_Flag | Modifiers::kOut_Flag,
+                             /*permittedLayoutFlags=*/0);
         auto paramIter = param.begin();
         const Type* type = this->convertType(*(paramIter++));
         if (!type) {
@@ -1792,9 +1825,12 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(
         return nullptr;
     }
     bool isAssignment = op.isAssignment();
-    if (isAssignment && !this->setRefKind(*left, op.kind() != Token::Kind::TK_EQ
-                                                 ? VariableReference::RefKind::kReadWrite
-                                                 : VariableReference::RefKind::kWrite)) {
+    if (isAssignment &&
+        !Analysis::MakeAssignmentExpr(left.get(),
+                                      op.kind() != Token::Kind::TK_EQ
+                                              ? VariableReference::RefKind::kReadWrite
+                                              : VariableReference::RefKind::kWrite,
+                                      &fContext.fErrors)) {
         return nullptr;
     }
     if (!determine_binary_type(fContext, this->settings().fAllowNarrowingConversions, op,
@@ -1988,9 +2024,11 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         }
         const Modifiers& paramModifiers = function.parameters()[i]->modifiers();
         if (paramModifiers.fFlags & Modifiers::kOut_Flag) {
-            if (!this->setRefKind(*arguments[i], paramModifiers.fFlags & Modifiers::kIn_Flag
-                                                          ? VariableReference::RefKind::kReadWrite
-                                                          : VariableReference::RefKind::kPointer)) {
+            if (!Analysis::MakeAssignmentExpr(arguments[i].get(),
+                                              paramModifiers.fFlags & Modifiers::kIn_Flag
+                                                      ? VariableReference::RefKind::kReadWrite
+                                                      : VariableReference::RefKind::kPointer,
+                                              &fContext.fErrors)) {
                 return nullptr;
             }
         }
@@ -2092,93 +2130,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
     if (!base) {
         return nullptr;
     }
-    return this->convertPrefixExpression(expression.getOperator(), std::move(base));
-}
-
-std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(Operator op,
-                                                                 std::unique_ptr<Expression> base) {
-    const Type& baseType = base->type();
-    switch (op.kind()) {
-        case Token::Kind::TK_PLUS:
-            if (!baseType.componentType().isNumber()) {
-                this->errorReporter().error(
-                        base->fOffset, "'+' cannot operate on '" + baseType.displayName() + "'");
-                return nullptr;
-            }
-            return base;
-
-        case Token::Kind::TK_MINUS:
-            if (!baseType.componentType().isNumber()) {
-                this->errorReporter().error(
-                        base->fOffset, "'-' cannot operate on '" + baseType.displayName() + "'");
-                return nullptr;
-            }
-            if (base->is<IntLiteral>()) {
-                return std::make_unique<IntLiteral>(base->fOffset,
-                                                    -base->as<IntLiteral>().value(),
-                                                    &base->type());
-            }
-            if (base->is<FloatLiteral>()) {
-                return std::make_unique<FloatLiteral>(base->fOffset,
-                                                      -base->as<FloatLiteral>().value(),
-                                                      &base->type());
-            }
-            return std::make_unique<PrefixExpression>(Token::Kind::TK_MINUS, std::move(base));
-
-        case Token::Kind::TK_PLUSPLUS:
-            if (!baseType.isNumber()) {
-                this->errorReporter().error(base->fOffset,
-                                            String("'") + op.operatorName() +
-                                            "' cannot operate on '" + baseType.displayName() + "'");
-                return nullptr;
-            }
-            if (!this->setRefKind(*base, VariableReference::RefKind::kReadWrite)) {
-                return nullptr;
-            }
-            break;
-        case Token::Kind::TK_MINUSMINUS:
-            if (!baseType.isNumber()) {
-                this->errorReporter().error(base->fOffset,
-                                            String("'") + op.operatorName() +
-                                            "' cannot operate on '" + baseType.displayName() + "'");
-                return nullptr;
-            }
-            if (!this->setRefKind(*base, VariableReference::RefKind::kReadWrite)) {
-                return nullptr;
-            }
-            break;
-        case Token::Kind::TK_LOGICALNOT:
-            if (!baseType.isBoolean()) {
-                this->errorReporter().error(base->fOffset,
-                                            String("'") + op.operatorName() +
-                                            "' cannot operate on '" + baseType.displayName() + "'");
-                return nullptr;
-            }
-            if (base->is<BoolLiteral>()) {
-                return std::make_unique<BoolLiteral>(base->fOffset,
-                                                     !base->as<BoolLiteral>().value(),
-                                                     &base->type());
-            }
-            break;
-        case Token::Kind::TK_BITWISENOT:
-            if (this->strictES2Mode()) {
-                // GLSL ES 1.00, Section 5.1
-                this->errorReporter().error(
-                        base->fOffset,
-                        String("operator '") + op.operatorName() + "' is not allowed");
-                return nullptr;
-            }
-            if (!baseType.isInteger()) {
-                this->errorReporter().error(base->fOffset,
-                                            String("'") + op.operatorName() +
-                                            "' cannot operate on '" + baseType.displayName() + "'");
-                return nullptr;
-            }
-            break;
-        default:
-            SK_ABORT("unsupported prefix operator\n");
-    }
-    return std::make_unique<PrefixExpression>(op, std::move(base));
+    return PrefixExpression::Make(fContext, expression.getOperator(), std::move(base));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression> base,
@@ -2457,22 +2409,7 @@ std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode&
     if (!base) {
         return nullptr;
     }
-    return this->convertPostfixExpression(std::move(base), expression.getOperator());
-}
-
-std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(std::unique_ptr<Expression> base,
-                                                                  Operator op) {
-    const Type& baseType = base->type();
-    if (!baseType.isNumber()) {
-        this->errorReporter().error(base->fOffset,
-                                    "'" + String(op.operatorName()) +
-                                    "' cannot operate on '" + baseType.displayName() + "'");
-        return nullptr;
-    }
-    if (!this->setRefKind(*base, VariableReference::RefKind::kReadWrite)) {
-        return nullptr;
-    }
-    return std::make_unique<PostfixExpression>(std::move(base), op);
+    return PostfixExpression::Make(fContext, std::move(base), expression.getOperator());
 }
 
 void IRGenerator::checkValid(const Expression& expr) {
@@ -2496,17 +2433,6 @@ void IRGenerator::checkValid(const Expression& expr) {
             }
             break;
     }
-}
-
-bool IRGenerator::setRefKind(Expression& expr, VariableReference::RefKind kind) {
-    Analysis::AssignmentInfo info;
-    if (!Analysis::IsAssignable(expr, &info, &this->errorReporter())) {
-        return false;
-    }
-    if (info.fAssignedVar) {
-        info.fAssignedVar->setRefKind(kind);
-    }
-    return true;
 }
 
 void IRGenerator::findAndDeclareBuiltinVariables() {
