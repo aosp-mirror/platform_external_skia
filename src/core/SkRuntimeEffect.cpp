@@ -146,19 +146,18 @@ struct Key {
 };
 SK_END_REQUIRE_DENSE;
 
-static SkMutex gCacheLock;
 
-static SkLRUCache<Key, sk_sp<SkRuntimeEffect>>* cache() {
-    gCacheLock.assertHeld();
+static std::tuple<SkAutoMutexExclusive, SkLRUCache<Key, sk_sp<SkRuntimeEffect>>*> locked_cache() {
+    static auto* mutex = new SkMutex;
     static auto* cache = new SkLRUCache<Key, sk_sp<SkRuntimeEffect>>(11/*totally arbitrary*/);
-    return cache;
+    return { *mutex, cache };
 }
 
 SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& options) {
     Key key(sksl, options);
     {
-        SkAutoMutexExclusive _(gCacheLock);
-        if (sk_sp<SkRuntimeEffect>* found = cache()->find(key)) {
+        auto [locked, cache] = locked_cache();
+        if (sk_sp<SkRuntimeEffect>* found = cache->find(key)) {
             return Result{*found, SkString()};
         }
     }
@@ -284,8 +283,8 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& opti
                                                       usesSampleCoords,
                                                       allowColorFilter));
     {
-        SkAutoMutexExclusive _(gCacheLock);
-        cache()->insert_or_update(key, effect);
+        auto [locked, cache] = locked_cache();
+        cache->insert_or_update(key, effect);
     }
     return Result{std::move(effect), SkString()};
 }
