@@ -279,6 +279,9 @@ func main() {
 					defer endStep(ctx)
 					if failures := worker(ctx, w.Sources, w.Flags); failures > 0 {
 						atomic.AddInt32(w.Failures, int32(failures))
+						if !*local { // Uninteresting to see on local runs.
+							failStep(ctx, fmt.Errorf("%v reruns failed\n", failures))
+						}
 					}
 				}()
 			}
@@ -327,7 +330,7 @@ func main() {
 			if *failures > 0 {
 				atomic.AddInt32(&totalFailures, *failures)
 				if !*local { // Uninteresting to see on local runs.
-					failStep(ctx, fmt.Errorf("%v runs failed\n", *failures))
+					failStep(ctx, fmt.Errorf("%v total reruns failed\n", *failures))
 				}
 			}
 			endStep(ctx)
@@ -394,10 +397,15 @@ func main() {
 		parts := strings.Split(*bot, "-")
 		OS, model, CPU_or_GPU := parts[1], parts[3], parts[4]
 
-		commonFlags := []string{}
+		// Bots use portable fonts except where we explicitly opt-in to native fonts.
+		defaultFlags := []string{"--nonativeFonts"}
 
 		run := func(sources []string, extraFlags string) {
-			kickoff(sources, append(strings.Fields(extraFlags), commonFlags...))
+			// Default then extra to allow overriding the defaults.
+			flags := []string{}
+			flags = append(flags, defaultFlags...)
+			flags = append(flags, strings.Fields(extraFlags)...)
+			kickoff(sources, flags)
 		}
 
 		gms := shorthands["gms"]
@@ -420,19 +428,21 @@ func main() {
 			imgs = filter(imgs, func(s string) bool { return !rawExts[normalizedExt(s)] })
 		}
 
-		if CPU_or_GPU == "CPU" {
-			commonFlags = append(commonFlags, "-b", "cpu")
+		if strings.Contains(*bot, "TSAN") {
+			// Run each test a few times in parallel to uncover races.
+			defaultFlags = append(defaultFlags, "--race", "4")
+		}
 
-			// Run GMs once using native fonts, then switch to portable fonts for everything else.
-			run(gms, "--nativeFonts true")
-			commonFlags = append(commonFlags, "--nativeFonts", "false")
+		if CPU_or_GPU == "CPU" {
+			defaultFlags = append(defaultFlags, "-b", "cpu")
 
 			// FM's default ct/gamut/tf flags are equivalent to --config srgb in DM.
 			run(gms, "")
+			run(gms, "--nativeFonts")
 			run(imgs, "")
 			run(svgs, "")
-			run(skps, "")
-			run(tests, "")
+			run(skps, "--clipW 1000 --clipH 1000")
+			run(tests, "--race 0") // Several unit tests are not reentrant.
 
 			if model == "GCE" {
 				run(gms, "--ct g8 --legacy")                      // --config g8
