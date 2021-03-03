@@ -16,6 +16,7 @@
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
+#include "src/core/SkTaskGroup.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/utils/SkOSPath.h"
@@ -33,6 +34,7 @@
 
 #include <chrono>
 #include <functional>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -75,9 +77,13 @@ static DEFINE_double(rasterDPI, SK_ScalarDefaultRasterDPI,
                      "DPI for rasterized content in vector backends like --backend pdf.");
 static DEFINE_bool(PDFA, false, "Create PDF/A with --backend pdf?");
 
+static DEFINE_int(clipW, INT_MAX, "Limit source width.");
+static DEFINE_int(clipH, INT_MAX, "Limit source height.");
+
 static DEFINE_bool   (cpuDetect, true, "Detect CPU features for runtime optimizations?");
 static DEFINE_string2(writePath, w, "", "Write .pngs to this directory if set.");
 static DEFINE_bool   (quick, false, "Skip image hashing and encoding?");
+static DEFINE_int    (race, 0, "If >0, use threads to induce race conditions?");
 
 static DEFINE_string(writeShaders, "", "Write GLSL shaders to this directory if set.");
 
@@ -368,6 +374,7 @@ extern bool gSkVMJITViaDylib;
 int main(int argc, char** argv) {
     CommandLineFlags::Parse(argc, argv);
     SetupCrashHandler();
+    SkTaskGroup::Enabler enabled(FLAGS_race);
 
     if (FLAGS_cpuDetect) {
         SkGraphics::Init();
@@ -419,8 +426,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const int replicas = std::max(1, FLAGS_race);
+
     SkTArray<Source> sources;
-    for (const SkString& name : FLAGS_sources) {
+    for (const SkString& name : FLAGS_sources)
+    for (int replica = 0; replica < replicas; replica++) {
         Source* source = &sources.push_back();
         source->name = name;
 
@@ -545,11 +555,17 @@ int main(int argc, char** argv) {
                                           : SkColorSpace::MakeRGB(tf,gamut);
     const SkColorInfo color_info{ct,at,cs};
 
-    AutoreleasePool pool;
-    for (auto source : sources) {
+    for (int i = 0; i < sources.count(); i += replicas)
+    SkTaskGroup{}.batch(replicas, [=](int replica) {
+        Source source = sources[i+replica];
+
+        AutoreleasePool pool;
         const auto start = std::chrono::steady_clock::now();
 
-        const SkImageInfo info = SkImageInfo::Make(source.size, color_info);
+        auto [w,h] = source.size;
+        w = std::min(w, FLAGS_clipW);
+        h = std::min(h, FLAGS_clipH);
+        const SkImageInfo info = SkImageInfo::Make({w,h}, color_info);
 
         auto draw = [&source](SkCanvas* canvas) {
             Result result = source.draw(canvas);
@@ -586,17 +602,22 @@ int main(int argc, char** argv) {
                 break;
         }
 
-        if (!image && !blob) {
-            fprintf(stdout, "%50s  skipped\n", source.name.c_str());
-            fflush(stdout);
-            continue;
-        }
-
         // We read back a bitmap even when --quick is set and we won't use it,
         // to keep us honest about deferred work, flushing pipelines, etc.
         SkBitmap bitmap;
         if (image && !image->asLegacyBitmap(&bitmap)) {
             SK_ABORT("SkImage::asLegacyBitmap() failed.");
+        }
+
+        // Our --race replicas have done their job by now if they're going to catch anything.
+        if (replica != 0) {
+            return;
+        }
+
+        if (!image && !blob) {
+            fprintf(stdout, "%50s  skipped\n", source.name.c_str());
+            fflush(stdout);
+            return;
         }
 
         SkString md5;
@@ -639,8 +660,8 @@ int main(int argc, char** argv) {
                 md5.c_str(),
                 (int)std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
         fflush(stdout);
-        pool.drain();
-    }
+    });
+
 
     if (!FLAGS_writeShaders.isEmpty()) {
         sk_mkdir(FLAGS_writeShaders[0]);

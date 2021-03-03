@@ -88,6 +88,10 @@ struct Analysis {
     // - myStruct.myArrayField[7].xyz
     static bool IsTrivialExpression(const Expression& expr);
 
+    // Returns true if both expression trees are the same. The left side is expected to be an
+    // lvalue. Intended for use by the optimizer; won't necessarily catch complex cases.
+    static bool IsSelfAssignment(const Expression& left, const Expression& right);
+
     // Is 'expr' a constant-expression, as defined by GLSL 1.0, section 5.10? A constant expression
     // is one of:
     //
@@ -110,11 +114,15 @@ struct Analysis {
         int fCount;
     };
 
-    // Ensures that 'loop' meets the strict requirements of The OpenGL ES Shading Language 1.00,
+    // Ensures that a for-loop meets the strict requirements of The OpenGL ES Shading Language 1.00,
     // Appendix A, Section 4.
     // Information about the loop's structure are placed in outLoopInfo (if not nullptr).
     // If the function returns false, specific reasons are reported via errors (if not nullptr).
-    static bool ForLoopIsValidForES2(const ForStatement& loop,
+    static bool ForLoopIsValidForES2(int offset,
+                                     const Statement* loopInitializer,
+                                     const Expression* loopTest,
+                                     const Expression* loopNext,
+                                     const Statement* loopStatement,
                                      UnrollableLoopInfo* outLoopInfo,
                                      ErrorReporter* errors);
 
