@@ -14841,9 +14841,8 @@
         "os:Debian-10.3",
         "pool:Skia"
       ],
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Debian10-Clang-GCE-CPU-AVX2-x86_64-Debug-All-ASAN": {
       "casSpec": "test",
@@ -14904,9 +14903,8 @@
           "clang_linux/bin"
         ]
       },
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Debian10-Clang-GCE-CPU-AVX2-x86_64-Release-All-MSAN": {
       "casSpec": "test",
@@ -14967,9 +14965,8 @@
           "clang_linux/bin"
         ]
       },
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Debian10-Clang-GCE-CPU-AVX2-x86_64-Release-All-TSAN": {
       "casSpec": "test",
@@ -15030,9 +15027,8 @@
           "clang_linux/bin"
         ]
       },
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Mac-Clang-VMware7.1-CPU-AVX-x86_64-Debug-All": {
       "casSpec": "test",
@@ -15079,9 +15075,8 @@
         "os:Mac-10.15.7",
         "pool:Skia"
       ],
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Mac-Clang-VMware7.1-CPU-AVX-x86_64-Debug-All-ASAN": {
       "casSpec": "test",
@@ -15128,9 +15123,8 @@
         "os:Mac-10.15.7",
         "pool:Skia"
       ],
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Mac-Clang-VMware7.1-CPU-AVX-x86_64-Release-All-TSAN": {
       "casSpec": "test",
@@ -15177,9 +15171,8 @@
         "os:Mac-10.15.7",
         "pool:Skia"
       ],
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Win-Clang-GCE-CPU-AVX2-x86_64-Debug-All": {
       "casSpec": "test",
@@ -15227,9 +15220,8 @@
         "os:Windows-Server-17763",
         "pool:Skia"
       ],
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Win-Clang-GCE-CPU-AVX2-x86_64-Debug-All-ASAN": {
       "casSpec": "test",
@@ -15277,9 +15269,8 @@
         "os:Windows-Server-17763",
         "pool:Skia"
       ],
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "FM-Win-MSVC-GCE-CPU-AVX2-x86_64-Debug-All": {
       "casSpec": "test",
@@ -15327,9 +15318,8 @@
         "os:Windows-Server-17763",
         "pool:Skia"
       ],
-      "expiration_ns": 900000000000,
       "max_attempts": 1,
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "Fuzz-Debian10-Clang": {
       "casSpec": "whole-repo",
