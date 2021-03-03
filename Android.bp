@@ -451,6 +451,7 @@ cc_library_static {
         "src/sksl/dsl/DSLVar.cpp",
         "src/sksl/dsl/priv/DSLFPs.cpp",
         "src/sksl/dsl/priv/DSLWriter.cpp",
+        "src/sksl/ir/SkSLBinaryExpression.cpp",
         "src/sksl/ir/SkSLConstructor.cpp",
         "src/sksl/ir/SkSLDoStatement.cpp",
         "src/sksl/ir/SkSLExpressionStatement.cpp",
