@@ -1582,9 +1582,8 @@ func (b *jobBuilder) fm() {
 			"--bot", b.Name,
 			"--gold="+strconv.FormatBool(!b.matchExtraConfig("SAN")),
 			"build/fm${EXECUTABLE_SUFFIX}")
-		b.serviceAccount(b.cfg.ServiceAccountCompile)
+		b.serviceAccount(b.cfg.ServiceAccountUploadGM)
 		b.swarmDimensions()
-		b.expiration(15 * time.Minute)
 		b.attempts(1)
 
 		if b.isLinux() && b.matchExtraConfig("SAN") {

@@ -583,8 +583,8 @@ std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
         }
     }
     bool isStatic = n.getBool();
-    return IfStatement::Make(fContext, n.fOffset, isStatic, std::move(test),
-                             std::move(ifTrue), std::move(ifFalse));
+    return IfStatement::Convert(fContext, n.fOffset, isStatic, std::move(test),
+                                std::move(ifTrue), std::move(ifFalse));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
@@ -620,8 +620,8 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
         return nullptr;
     }
 
-    return ForStatement::Make(fContext, f.fOffset, std::move(initializer), std::move(test),
-                              std::move(next), std::move(statement), fSymbolTable);
+    return ForStatement::Convert(fContext, f.fOffset, std::move(initializer), std::move(test),
+                                 std::move(next), std::move(statement), fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
@@ -638,8 +638,8 @@ std::unique_ptr<Statement> IRGenerator::convertWhile(const ASTNode& w) {
     if (this->detectVarDeclarationWithoutScope(*statement)) {
         return nullptr;
     }
-    return ForStatement::MakeWhile(fContext, w.fOffset, std::move(test), std::move(statement),
-                                   fSymbolTable);
+    return ForStatement::ConvertWhile(fContext, w.fOffset, std::move(test), std::move(statement),
+                                      fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
@@ -656,7 +656,7 @@ std::unique_ptr<Statement> IRGenerator::convertDo(const ASTNode& d) {
     if (this->detectVarDeclarationWithoutScope(*statement)) {
         return nullptr;
     }
-    return DoStatement::Make(fContext, std::move(statement), std::move(test));
+    return DoStatement::Convert(fContext, std::move(statement), std::move(test));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
@@ -692,8 +692,8 @@ std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
         }
         caseStatements.push_back(std::move(statements));
     }
-    return SwitchStatement::Make(fContext, s.fOffset, s.getBool(), std::move(value),
-                                 std::move(caseValues), std::move(caseStatements), fSymbolTable);
+    return SwitchStatement::Convert(fContext, s.fOffset, s.getBool(), std::move(value),
+                                    std::move(caseValues), std::move(caseStatements), fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertExpressionStatement(const ASTNode& s) {
@@ -852,9 +852,10 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
             Op(Swizzle(Pos(), kWWIndices), Token::Kind::TK_STAR, Swizzle(Adjust(), kYWIndices))));
     children.push_back(std::make_unique<FloatLiteral>(fContext, /*offset=*/-1, /*value=*/0.0));
     children.push_back(Swizzle(Pos(), kWIndex));
-    std::unique_ptr<Expression> result = Op(Pos(), Token::Kind::TK_EQ,
-                                 Constructor::Make(fContext, /*offset=*/-1,
-                                                   *fContext.fTypes.fFloat4, std::move(children)));
+    std::unique_ptr<Expression> result =
+            Op(Pos(), Token::Kind::TK_EQ,
+               Constructor::Convert(fContext, /*offset=*/-1, *fContext.fTypes.fFloat4,
+                                    std::move(children)));
     return ExpressionStatement::Make(fContext, std::move(result));
 }
 
@@ -927,6 +928,22 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
         ~Finalizer() override {
             SkASSERT(!fBreakableLevel);
             SkASSERT(!fContinuableLevel);
+
+            if (!fEncounteredReturnValue && this->functionReturnsValue()) {
+                // It's a non-void function, but it never created a result expression--that is, it
+                // never returned anything.
+                fIRGenerator->errorReporter().error(
+                        fFunction->fOffset,
+                        "function '" + fFunction->name() + "' exits without returning a value");
+            }
+        }
+
+        bool functionReturnsValue() const {
+            return fFunction->returnType() != *fIRGenerator->fContext.fTypes.fVoid;
+        }
+
+        bool encounteredReturnValue() const {
+            return fEncounteredReturnValue;
         }
 
         bool visitStatement(Statement& stmt) override {
@@ -939,22 +956,28 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
                     SkASSERT(fIRGenerator->programKind() != ProgramKind::kVertex ||
                              !fIRGenerator->fRTAdjust ||
                              fFunction->name() != "main");
-                    ReturnStatement& r = stmt.as<ReturnStatement>();
+
+                    // Verify that the return statement matches the function's return type.
+                    ReturnStatement& returnStmt = stmt.as<ReturnStatement>();
                     const Type& returnType = fFunction->returnType();
-                    std::unique_ptr<Expression> result;
-                    if (r.expression()) {
-                        if (returnType == *fIRGenerator->fContext.fTypes.fVoid) {
-                            fIRGenerator->errorReporter().error(r.fOffset,
-                                                     "may not return a value from a void function");
+                    if (returnStmt.expression()) {
+                        if (this->functionReturnsValue()) {
+                            // Coerce return expression to the function's return type.
+                            returnStmt.setExpression(fIRGenerator->coerce(
+                                    std::move(returnStmt.expression()), returnType));
+                            fEncounteredReturnValue = true;
                         } else {
-                            result = fIRGenerator->coerce(std::move(r.expression()), returnType);
+                            // Returning something from a function with a void return type.
+                            fIRGenerator->errorReporter().error(returnStmt.fOffset,
+                                                     "may not return a value from a void function");
                         }
-                    } else if (returnType != *fIRGenerator->fContext.fTypes.fVoid) {
-                        fIRGenerator->errorReporter().error(r.fOffset,
-                                                    "expected function to return '" +
-                                                    returnType.displayName() + "'");
+                    } else {
+                        if (this->functionReturnsValue()) {
+                            // Returning nothing from a function with a non-void return type.
+                            fIRGenerator->errorReporter().error(returnStmt.fOffset,
+                                  "expected function to return '" + returnType.displayName() + "'");
+                        }
                     }
-                    r.setExpression(std::move(result));
                     break;
                 }
                 case Statement::Kind::kDo:
@@ -997,6 +1020,8 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
         int fBreakableLevel = 0;
         // how deeply nested we are in continuable constructs (for, do).
         int fContinuableLevel = 0;
+        // have we found a return statement with a return value?
+        bool fEncounteredReturnValue = false;
 
         using INHERITED = ProgramWriter;
     };
@@ -1605,8 +1630,8 @@ std::unique_ptr<Expression> IRGenerator::convertBinaryExpression(const ASTNode& 
     if (!right) {
         return nullptr;
     }
-    return BinaryExpression::Make(fContext, std::move(left), expression.getOperator(),
-                                  std::move(right));
+    return BinaryExpression::Convert(fContext, std::move(left), expression.getOperator(),
+                                     std::move(right));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode& node) {
@@ -1624,8 +1649,8 @@ std::unique_ptr<Expression> IRGenerator::convertTernaryExpression(const ASTNode&
     if (!ifFalse) {
         return nullptr;
     }
-    return TernaryExpression::Make(fContext, std::move(test),
-                                   std::move(ifTrue), std::move(ifFalse));
+    return TernaryExpression::Convert(fContext, std::move(test),
+                                      std::move(ifTrue), std::move(ifFalse));
 }
 
 void IRGenerator::copyIntrinsicIfNeeded(const FunctionDeclaration& function) {
@@ -1748,10 +1773,10 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
                                               ExpressionArray arguments) {
     switch (functionValue->kind()) {
         case Expression::Kind::kTypeReference:
-            return Constructor::Make(fContext,
-                                     offset,
-                                     functionValue->as<TypeReference>().value(),
-                                     std::move(arguments));
+            return Constructor::Convert(fContext,
+                                        offset,
+                                        functionValue->as<TypeReference>().value(),
+                                        std::move(arguments));
         case Expression::Kind::kExternalFunctionReference: {
             const ExternalFunction& f = functionValue->as<ExternalFunctionReference>().function();
             int count = f.callParameterCount();
@@ -1814,7 +1839,7 @@ std::unique_ptr<Expression> IRGenerator::convertPrefixExpression(const ASTNode& 
     if (!base) {
         return nullptr;
     }
-    return PrefixExpression::Make(fContext, expression.getOperator(), std::move(base));
+    return PrefixExpression::Convert(fContext, expression.getOperator(), std::move(base));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression> base,
@@ -1853,17 +1878,14 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
     }
 
     ComponentArray components;
-    bool found01 = false;
     bool foundXYZW = false;
     for (char field : fields) {
         switch (field) {
             case '0':
                 components.push_back(SwizzleComponent::ZERO);
-                found01 = true;
                 break;
             case '1':
                 components.push_back(SwizzleComponent::ONE);
-                found01 = true;
                 break;
             case 'x':
             case 'r':
@@ -1914,8 +1936,7 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
         return nullptr;
     }
 
-    return found01 ? Swizzle::MakeWith01(fContext, std::move(base), components)
-                   : Swizzle::Make(fContext, std::move(base), components);
+    return Swizzle::Convert(fContext, std::move(base), components);
 }
 
 std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type& type,
@@ -2064,7 +2085,7 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
     StringFragment field = fieldNode.getString();
     const Type& baseType = base->type();
     if (baseType == *fContext.fTypes.fSkCaps) {
-        return Setting::Make(fContext, fieldNode.fOffset, field);
+        return Setting::Convert(fContext, fieldNode.fOffset, field);
     }
     switch (baseType.typeKind()) {
         case Type::TypeKind::kStruct:
@@ -2093,7 +2114,7 @@ std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode&
     if (!base) {
         return nullptr;
     }
-    return PostfixExpression::Make(fContext, std::move(base), expression.getOperator());
+    return PostfixExpression::Convert(fContext, std::move(base), expression.getOperator());
 }
 
 void IRGenerator::checkValid(const Expression& expr) {
