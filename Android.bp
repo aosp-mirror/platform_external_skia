@@ -716,6 +716,7 @@ cc_library_static {
           "src/gpu/GrTextureRenderTargetProxy.cpp",
           "src/gpu/GrTextureResolveRenderTask.cpp",
           "src/gpu/GrThreadSafeCache.cpp",
+          "src/gpu/GrThreadSafePipelineBuilder.cpp",
           "src/gpu/GrTransferFromRenderTask.cpp",
           "src/gpu/GrTriangulator.cpp",
           "src/gpu/GrUniformDataManager.cpp",
