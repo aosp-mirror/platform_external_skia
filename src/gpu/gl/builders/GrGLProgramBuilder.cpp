@@ -106,7 +106,7 @@ bool GrGLProgramBuilder::compileAndAttachShaders(const SkSL::String& glsl,
                                                    programId,
                                                    type,
                                                    glsl,
-                                                   gpu->stats(),
+                                                   gpu->pipelineBuilder()->stats(),
                                                    errHandler);
     if (!shaderId) {
         return false;
@@ -166,6 +166,7 @@ void GrGLProgramBuilder::storeShaderInCache(const SkSL::Program::Inputs& inputs,
         return;
     }
     sk_sp<SkData> key = SkData::MakeWithoutCopy(this->desc().asKey(), this->desc().keyLength());
+    const SkString& description = this->desc().description();
     if (fGpu->glCaps().programBinarySupport()) {
         // binary cache
         GrGLsizei length = 0;
@@ -186,7 +187,7 @@ void GrGLProgramBuilder::storeShaderInCache(const SkSL::Program::Inputs& inputs,
             writer.writePad32(binary.get(), length);
 
             auto data = writer.snapshotAsData();
-            this->gpu()->getContext()->priv().getPersistentCache()->store(*key, *data);
+            this->gpu()->getContext()->priv().getPersistentCache()->store(*key, *data, description);
         }
     } else {
         // source cache, plus metadata to allow for a complete precompile
@@ -203,7 +204,7 @@ void GrGLProgramBuilder::storeShaderInCache(const SkSL::Program::Inputs& inputs,
 
         auto data = GrPersistentCacheUtils::PackCachedShaders(isSkSL ? kSKSL_Tag : kGLSL_Tag,
                                                               shaders, &inputs, 1, &meta);
-        this->gpu()->getContext()->priv().getPersistentCache()->store(*key, *data);
+        this->gpu()->getContext()->priv().getPersistentCache()->store(*key, *data, description);
     }
 }
 
@@ -614,7 +615,8 @@ bool GrGLProgramBuilder::PrecompileProgram(GrGLPrecompiledProgram* precompiledPr
         }
 
         if (GrGLuint shaderID = GrGLCompileAndAttachShader(gpu->glContext(), programID, type, glsl,
-                                                           gpu->stats(), errorHandler)) {
+                                                           gpu->pipelineBuilder()->stats(),
+                                                           errorHandler)) {
             shadersToDelete.push_back(shaderID);
             return true;
         } else {
