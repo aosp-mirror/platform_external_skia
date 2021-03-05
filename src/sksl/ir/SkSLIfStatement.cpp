@@ -48,7 +48,7 @@ std::unique_ptr<Statement> IfStatement::Convert(const Context& context, int offs
 
 static std::unique_ptr<Statement> replace_empty_with_nop(std::unique_ptr<Statement> stmt,
                                                          bool isEmpty) {
-    return (!isEmpty || (stmt && stmt->is<Nop>())) ? std::move(stmt)
+    return (stmt && (!isEmpty || stmt->is<Nop>())) ? std::move(stmt)
                                                    : std::make_unique<Nop>();
 }
 
