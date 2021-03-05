@@ -80,38 +80,13 @@ static bool processor_meta_data_fits(uint32_t classID, size_t keySize) {
 }
 
 /**
- * A function which emits a meta key into the key builder.  This is required because shader code may
- * be dependent on properties of the effect that the effect itself doesn't use
- * in its key (e.g. the pixel format of textures used). So we create a meta-key for
- * every effect using this function. It is also responsible for inserting the effect's class ID
- * which must be different for every GrProcessor subclass. It can fail if an effect uses too many
- * transforms, etc, for the space allotted in the meta-key.  NOTE, both FPs and GPs share this
- * function because it is hairy, though FPs do not have attribs, and GPs do not have transforms
+ * Functions which emit a meta key into the key builder. These are required because shader code may
+ * be dependent on properties of the effect that the effect itself doesn't use in its key (e.g. the
+ * pixel format of textures used). So we create a meta-key for every effect.
+ * It is also responsible for inserting the effect's class ID which must be different for every
+ * GrProcessor subclass. It can fail if an effect uses too many transforms, etc, for the space
+ * allotted in the meta-key.
  */
-static bool gen_fp_meta_key(const GrFragmentProcessor& fp,
-                            const GrCaps& caps,
-                            uint32_t transformKey,
-                            GrProcessorKeyBuilder* b) {
-    size_t processorKeySize = b->sizeInBits();
-    uint32_t classID = fp.classID();
-
-    if (!processor_meta_data_fits(classID, processorKeySize)) {
-        return false;
-    }
-
-    fp.visitTextureEffects([&](const GrTextureEffect& te) {
-        const GrBackendFormat& backendFormat = te.view().proxy()->backendFormat();
-        uint32_t samplerKey = sampler_key(backendFormat.textureType(), te.view().swizzle(), caps);
-        b->add32(samplerKey);
-        caps.addExtraSamplerKey(b, te.samplerState(), backendFormat);
-    });
-
-    b->addBits(kClassIDBits, classID,          "fpClassID");
-    b->addBits(kKeySizeBits, processorKeySize, "fpKeySize");
-    b->add32(transformKey,                     "fpTransforms");
-    return true;
-}
-
 static bool gen_pp_meta_key(const GrPrimitiveProcessor& pp,
                             const GrCaps& caps,
                             GrProcessorKeyBuilder* b) {
@@ -145,6 +120,21 @@ static bool gen_xp_meta_key(const GrXferProcessor& xp, GrProcessorKeyBuilder* b)
 static bool gen_frag_proc_and_meta_keys(const GrFragmentProcessor& fp,
                                         const GrCaps& caps,
                                         GrProcessorKeyBuilder* b) {
+    b->addString([&](){ return fp.name(); });
+    b->addBits(kClassIDBits, fp.classID(), "fpClassID");
+    b->addBits(GrPrimitiveProcessor::kCoordTransformKeyBits,
+               GrPrimitiveProcessor::ComputeCoordTransformsKey(fp), "fpTransforms");
+
+    fp.visitTextureEffects([&](const GrTextureEffect& te) {
+        const GrBackendFormat& backendFormat = te.view().proxy()->backendFormat();
+        uint32_t samplerKey = sampler_key(backendFormat.textureType(), te.view().swizzle(), caps);
+        b->add32(samplerKey, "fpSamplerKey");
+        caps.addExtraSamplerKey(b, te.samplerState(), backendFormat);
+    });
+
+    fp.getGLSLProcessorKey(*caps.shaderCaps(), b);
+    b->add32(fp.numChildProcessors(), "fpNumChildren");
+
     for (int i = 0; i < fp.numChildProcessors(); ++i) {
         if (auto child = fp.childProcessor(i)) {
             if (!gen_frag_proc_and_meta_keys(*child, caps, b)) {
@@ -152,14 +142,12 @@ static bool gen_frag_proc_and_meta_keys(const GrFragmentProcessor& fp,
             }
         } else {
             // Fold in a sentinel value as the "class ID" for any null children
-            b->add32(GrProcessor::ClassID::kNull_ClassID);
+            b->addString([&](){ return "Null"; });
+            b->addBits(kClassIDBits, GrProcessor::ClassID::kNull_ClassID, "fpClassID");
         }
     }
 
-    b->addString([&](){ return fp.name(); });
-    fp.getGLSLProcessorKey(*caps.shaderCaps(), b);
-
-    return gen_fp_meta_key(fp, caps, GrPrimitiveProcessor::ComputeCoordTransformsKey(fp), b);
+    return true;
 }
 
 bool GrProgramDesc::Build(GrProgramDesc* desc,
@@ -177,15 +165,15 @@ bool GrProgramDesc::Build(GrProgramDesc* desc,
     // bindings in use or other descriptor field settings) it should be set
     // to a canonical value to avoid duplicate programs with different keys.
 
-    desc->key().reset();
-    GrProcessorKeyBuilder b(&desc->key());
+    GrProcessorKeyBuilder* b = desc->key();
+    b->reset();
 
     const GrPrimitiveProcessor& primitiveProcessor = programInfo.primProc();
-    b.addString([&](){ return primitiveProcessor.name(); });
-    primitiveProcessor.getGLSLProcessorKey(*caps.shaderCaps(), &b);
-    primitiveProcessor.getAttributeKey(&b);
-    if (!gen_pp_meta_key(primitiveProcessor, caps, &b)) {
-        desc->key().reset();
+    b->addString([&](){ return primitiveProcessor.name(); });
+    primitiveProcessor.getGLSLProcessorKey(*caps.shaderCaps(), b);
+    primitiveProcessor.getAttributeKey(b);
+    if (!gen_pp_meta_key(primitiveProcessor, caps, b)) {
+        b->reset();
         return false;
     }
 
@@ -193,8 +181,8 @@ bool GrProgramDesc::Build(GrProgramDesc* desc,
     int numColorFPs = 0, numCoverageFPs = 0;
     for (int i = 0; i < pipeline.numFragmentProcessors(); ++i) {
         const GrFragmentProcessor& fp = pipeline.getFragmentProcessor(i);
-        if (!gen_frag_proc_and_meta_keys(fp, caps, &b)) {
-            desc->key().reset();
+        if (!gen_frag_proc_and_meta_keys(fp, caps, b)) {
+            b->reset();
             return false;
         }
         if (pipeline.isColorFragmentProcessor(i)) {
@@ -211,34 +199,34 @@ bool GrProgramDesc::Build(GrProgramDesc* desc,
         origin = pipeline.dstProxyView().origin();
         originIfDstTexture = &origin;
     }
-    b.addString([&](){ return xp.name(); });
-    xp.getGLSLProcessorKey(*caps.shaderCaps(), &b, originIfDstTexture, pipeline.dstSampleType());
-    if (!gen_xp_meta_key(xp, &b)) {
-        desc->key().reset();
+    b->addString([&](){ return xp.name(); });
+    xp.getGLSLProcessorKey(*caps.shaderCaps(), b, originIfDstTexture, pipeline.dstSampleType());
+    if (!gen_xp_meta_key(xp, b)) {
+        b->reset();
         return false;
     }
 
     if (programInfo.requestedFeatures() & GrProcessor::CustomFeatures::kSampleLocations) {
         SkASSERT(pipeline.isHWAntialiasState());
-        b.add32(renderTarget->getSamplePatternKey());
+        b->add32(renderTarget->getSamplePatternKey());
     }
 
     // Add "header" metadata
-    b.addBits(16, pipeline.writeSwizzle().asKey(), "writeSwizzle");
-    b.addBits( 1, numColorFPs,    "numColorFPs");
-    b.addBits( 2, numCoverageFPs, "numCoverageFPs");
+    b->addBits(16, pipeline.writeSwizzle().asKey(), "writeSwizzle");
+    b->addBits(1, numColorFPs,    "numColorFPs");
+    b->addBits(2, numCoverageFPs, "numCoverageFPs");
     // If we knew the shader won't depend on origin, we could skip this (and use the same program
     // for both origins). Instrumenting all fragment processors would be difficult and error prone.
-    b.addBits( 2, GrGLSLFragmentShaderBuilder::KeyForSurfaceOrigin(programInfo.origin()), "origin");
-    b.addBits( 1, static_cast<uint32_t>(programInfo.requestedFeatures()), "requestedFeatures");
-    b.addBits( 1, pipeline.snapVerticesToPixelCenters(), "snapVertices");
+    b->addBits(2, GrGLSLFragmentShaderBuilder::KeyForSurfaceOrigin(programInfo.origin()), "origin");
+    b->addBits(1, static_cast<uint32_t>(programInfo.requestedFeatures()), "requestedFeatures");
+    b->addBits(1, pipeline.snapVerticesToPixelCenters(), "snapVertices");
     // The base descriptor only stores whether or not the primitiveType is kPoints. Backend-
     // specific versions (e.g., Vulkan) require more detail
-    b.addBits( 1, (programInfo.primitiveType() == GrPrimitiveType::kPoints), "isPoints");
+    b->addBits(1, (programInfo.primitiveType() == GrPrimitiveType::kPoints), "isPoints");
 
     // Put a clean break between the "common" data written by this function, and any backend data
     // appended later. The initial key length will just be this portion (rounded to 4 bytes).
-    b.flush();
+    b->flush();
     desc->fInitialKeyLength = desc->keyLength();
 
     return true;
