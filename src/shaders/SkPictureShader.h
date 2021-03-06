@@ -16,6 +16,10 @@ class SkArenaAlloc;
 class SkBitmap;
 class SkPicture;
 
+#ifdef SK_SUPPORT_LEGACY_PICTURESHADER_MATH
+#include "src/shaders/SkPictureShader.h.legacy"
+#else
+
 /*
  * An SkPictureShader can be used to draw SkPicture-based patterns.
  *
@@ -24,8 +28,6 @@ class SkPicture;
  */
 class SkPictureShader : public SkShaderBase {
 public:
-    ~SkPictureShader() override;
-
     enum FilterEnum {
         kNearest,           // SkFilterMode::kNearest
         kLinear,            // SkFilterMode::kLinear
@@ -60,10 +62,11 @@ private:
     SkPictureShader(sk_sp<SkPicture>, SkTileMode, SkTileMode, FilterEnum,
                     const SkMatrix*, const SkRect*);
 
-    sk_sp<SkShader> refBitmapShader(const SkMatrix&, SkTCopyOnFirstWrite<SkMatrix>* localMatrix,
-                                    SkColorType dstColorType, SkColorSpace* dstColorSpace,
-                                    SkFilterMode paintFilter,
-                                    const int maxTextureSize = 0) const;
+    sk_sp<SkShader> rasterShader(const SkMatrix&, SkTCopyOnFirstWrite<SkMatrix>* localMatrix,
+                                 SkColorType dstColorType, SkColorSpace* dstColorSpace,
+                                 SkFilterMode paintFilter) const;
+
+    sk_sp<SkShader> makeShader(const SkImage*, SkFilterMode paintFilter) const;
 
     class PictureShaderContext : public Context {
     public:
@@ -86,10 +89,8 @@ private:
     SkTileMode          fTmx, fTmy;
     FilterEnum          fFilter;
 
-    const uint32_t            fUniqueID;
-    mutable std::atomic<bool> fAddedToCache;
-
     using INHERITED = SkShaderBase;
 };
+#endif  // !legacy
 
 #endif // SkPictureShader_DEFINED
