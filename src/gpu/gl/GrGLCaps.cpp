@@ -594,6 +594,12 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     fPreferVRAMUseOverFlushes = !isANGLE;
 #endif
 
+    if (kARM_GrGLVendor == ctxInfo.vendor()) {
+        // ARM seems to do better with larger quantities of fine triangles, as opposed to using the
+        // sample mask. (At least in our current round rect op.)
+        fPreferTrianglesOverSampleMask = true;
+    }
+
     if (kChromium_GrGLDriver == ctxInfo.driver()) {
         fMustClearUploadedBufferData = true;
     }
@@ -4590,8 +4596,7 @@ GrProgramDesc GrGLCaps::makeDesc(GrRenderTarget* rt,
                                  ProgramDescOverrideFlags overrideFlags) const {
     SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
     GrProgramDesc desc;
-    SkDEBUGCODE(bool result =) GrProgramDesc::Build(&desc, rt, programInfo, *this);
-    SkASSERT(result == desc.isValid());
+    GrProgramDesc::Build(&desc, rt, programInfo, *this);
     return desc;
 }
 
