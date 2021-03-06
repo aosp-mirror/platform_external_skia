@@ -892,6 +892,9 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
             break;
         }
         case Expression::Kind::kConstructor: {
+            // TODO(skia:11319): this optimization logic is redundant with the optimization code
+            // found in SkSLConstructor.cpp.
+
             // Find constructors embedded inside constructors and flatten them out where possible.
             //   -  float4(float2(1, 2), 3, 4)                -->  float4(1, 2, 3, 4)
             //   -  float4(w, float3(sin(x), cos(y), tan(z))) -->  float4(w, sin(x), cos(y), tan(z))
@@ -1388,14 +1391,6 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
         madeChanges |= optimizationContext.fUpdated;
     } while (optimizationContext.fUpdated);
     SkASSERT(!optimizationContext.fNeedsRescan);
-
-    // check for missing return
-    if (f.declaration().returnType() != *fContext->fTypes.fVoid) {
-        if (cfg.fBlocks[cfg.fExit].fIsReachable) {
-            this->error(f.fOffset, String("function '" + String(f.declaration().name()) +
-                                          "' can exit without returning a value"));
-        }
-    }
 
     return madeChanges;
 }
