@@ -12,6 +12,7 @@
 #include <memory>
 #include <unordered_set>
 
+#include "include/private/SkSLLayout.h"
 #include "include/private/SkTArray.h"
 #include "src/core/SkScopeExit.h"
 #include "src/sksl/SkSLAnalysis.h"
@@ -44,7 +45,6 @@
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLLayout.h"
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
@@ -619,6 +619,9 @@ std::unique_ptr<Statement> IRGenerator::convertFor(const ASTNode& f) {
     if (!statement) {
         return nullptr;
     }
+    if (this->detectVarDeclarationWithoutScope(*statement)) {
+        return nullptr;
+    }
 
     return ForStatement::Convert(fContext, f.fOffset, std::move(initializer), std::move(test),
                                  std::move(next), std::move(statement), fSymbolTable);
@@ -928,22 +931,10 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
         ~Finalizer() override {
             SkASSERT(!fBreakableLevel);
             SkASSERT(!fContinuableLevel);
-
-            if (!fEncounteredReturnValue && this->functionReturnsValue()) {
-                // It's a non-void function, but it never created a result expression--that is, it
-                // never returned anything.
-                fIRGenerator->errorReporter().error(
-                        fFunction->fOffset,
-                        "function '" + fFunction->name() + "' exits without returning a value");
-            }
         }
 
         bool functionReturnsValue() const {
             return fFunction->returnType() != *fIRGenerator->fContext.fTypes.fVoid;
-        }
-
-        bool encounteredReturnValue() const {
-            return fEncounteredReturnValue;
         }
 
         bool visitStatement(Statement& stmt) override {
@@ -965,7 +956,6 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
                             // Coerce return expression to the function's return type.
                             returnStmt.setExpression(fIRGenerator->coerce(
                                     std::move(returnStmt.expression()), returnType));
-                            fEncounteredReturnValue = true;
                         } else {
                             // Returning something from a function with a void return type.
                             fIRGenerator->errorReporter().error(returnStmt.fOffset,
@@ -1020,12 +1010,17 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
         int fBreakableLevel = 0;
         // how deeply nested we are in continuable constructs (for, do).
         int fContinuableLevel = 0;
-        // have we found a return statement with a return value?
-        bool fEncounteredReturnValue = false;
 
         using INHERITED = ProgramWriter;
     };
-    Finalizer(this, &f.declaration()).visitStatement(*f.body());
+
+    Finalizer finalizer{this, &f.declaration()};
+    finalizer.visitStatement(*f.body());
+
+    if (finalizer.functionReturnsValue() && Analysis::CanExitWithoutReturningValue(f)) {
+        this->errorReporter().error(f.fOffset, "function '" + f.declaration().name() +
+                                               "' can exit without returning a value");
+    }
 }
 
 void IRGenerator::convertFunction(const ASTNode& f) {

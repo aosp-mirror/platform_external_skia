@@ -20,12 +20,12 @@ class GrProgramInfo;
 class GrRenderTarget;
 class GrShaderCaps;
 
-class GrKeyBuilder {
+class GrProcessorKeyBuilder {
 public:
-    GrKeyBuilder() = default;
-    GrKeyBuilder(const GrKeyBuilder& other) = default;
+    GrProcessorKeyBuilder() = default;
+    GrProcessorKeyBuilder(const GrProcessorKeyBuilder& other) = default;
 
-    void reset() { *this = GrKeyBuilder{}; }
+    void reset() { *this = GrProcessorKeyBuilder{}; }
 
     void addBits(uint32_t numBits, uint32_t val, const char* label) {
         SkASSERT(numBits > 0 && numBits <= 32);
@@ -55,14 +55,24 @@ public:
         }
     }
 
+    void addBool(bool b, const char* label) {
+        this->addBits(1, b, label);
+    }
+
+    void add32(uint32_t v, const char* label = "unknown") {
+        this->addBits(32, v, label);
+    }
+
     template <typename StringFunc>
-    void addString(StringFunc&& sf) {
+    void appendComment(StringFunc&& sf) {
         #ifdef SK_DEBUG
             fDescription.append(sf());
             fDescription.append("\n");
         #endif
     }
 
+    // Introduces a word-boundary in the key. Must be called before using the key with any cache,
+    // but can also be called to create a break between generic data and backend-specific data.
     void flush() {
         if (fBitsUsed) {
             fData.push_back(fCurValue);
@@ -82,19 +92,15 @@ public:
         return (fData.count() + (fBitsUsed ? 1 : 0)) * sizeof(uint32_t);
     }
 
-    size_t sizeInBits() const {
-        return (fData.count() * sizeof(uint32_t) * CHAR_BIT) + fBitsUsed;
-    }
+    GrProcessorKeyBuilder& operator=(const GrProcessorKeyBuilder& other) = default;
 
-    GrKeyBuilder& operator=(const GrKeyBuilder& other) = default;
-
-    bool operator==(const GrKeyBuilder& that) const {
+    bool operator==(const GrProcessorKeyBuilder& that) const {
         return fBitsUsed == that.fBitsUsed &&
                fCurValue == that.fCurValue &&
                fData == that.fData;
     }
 
-    bool operator!= (const GrKeyBuilder& other) const {
+    bool operator!= (const GrProcessorKeyBuilder& other) const {
         return !(*this == other);
     }
 
@@ -194,10 +200,10 @@ protected:
         return true;
     }
 
-    GrKeyBuilder& key() { return fKey; }
+    GrProcessorKeyBuilder* key() { return &fKey; }
 
 private:
-    GrKeyBuilder fKey;
+    GrProcessorKeyBuilder fKey;
     uint32_t fInitialKeyLength = 0;
 };
 

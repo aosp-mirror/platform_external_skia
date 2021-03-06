@@ -8,8 +8,8 @@
 #ifndef SkSLAnalysis_DEFINED
 #define SkSLAnalysis_DEFINED
 
+#include "include/private/SkSLDefines.h"
 #include "include/private/SkSLSampleUsage.h"
-#include "src/sksl/SkSLDefines.h"
 
 #include <memory>
 
@@ -47,6 +47,13 @@ struct Analysis {
      * causes an exit from this switch (via continue, break or return).
      */
     static bool SwitchCaseContainsUnconditionalExit(Statement& stmt);
+
+    /**
+     * A switch-case "falls through" when it doesn't have an unconditional exit.
+     */
+    static bool SwitchCaseFallsThrough(Statement& stmt) {
+        return !SwitchCaseContainsUnconditionalExit(stmt);
+    }
 
     /**
      * Finds conditional exits from a switch-case. Returns true if this statement contains a
@@ -127,6 +134,9 @@ struct Analysis {
                                      ErrorReporter* errors);
 
     static void ValidateIndexingForES2(const ProgramElement& pe, ErrorReporter& errors);
+
+    // Detects functions that fail to return a value on at least one path.
+    static bool CanExitWithoutReturningValue(const FunctionDefinition& funcDef);
 };
 
 /**
