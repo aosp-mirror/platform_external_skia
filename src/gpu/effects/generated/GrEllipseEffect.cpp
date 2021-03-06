@@ -31,29 +31,30 @@ public:
         auto radii = _outer.radii;
         (void)radii;
         prevRadii = float2(-1.0);
-        ellipseVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
-                                                      kFloat4_GrSLType, "ellipse");
+        ellipseVar = args.fUniformHandler->addUniform(
+                &_outer, kFragment_GrShaderFlag, kFloat4_GrSLType, "ellipse");
         if (!sk_Caps.floatIs32Bits) {
-            scaleVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
-                                                        kFloat2_GrSLType, "scale");
+            scaleVar = args.fUniformHandler->addUniform(
+                    &_outer, kFragment_GrShaderFlag, kFloat2_GrSLType, "scale");
         }
         fragBuilder->codeAppendf(
                 R"SkSL(float2 prevCenter;
 float2 prevRadii = float2(%f, %f);
 float2 d = sk_FragCoord.xy - %s.xy;
-@if (!sk_Caps.floatIs32Bits) {
+const bool medPrecision = !sk_Caps.floatIs32Bits;
+@if (medPrecision) {
     d *= %s.y;
 }
 float2 Z = d * %s.zw;
 float implicit = dot(Z, d) - 1.0;
 float grad_dot = 4.0 * dot(Z, Z);
-@if (!sk_Caps.floatIs32Bits) {
+@if (medPrecision) {
     grad_dot = max(grad_dot, 6.1036000261083245e-05);
 } else {
     grad_dot = max(grad_dot, 1.1754999560161448e-38);
 }
 float approx_dist = implicit * inversesqrt(grad_dot);
-@if (!sk_Caps.floatIs32Bits) {
+@if (medPrecision) {
     approx_dist *= %s.x;
 }
 half alpha;
@@ -73,7 +74,9 @@ half alpha;
     default:
         discard;
 })SkSL",
-                prevRadii.fX, prevRadii.fY, args.fUniformHandler->getUniformCStr(ellipseVar),
+                prevRadii.fX,
+                prevRadii.fY,
+                args.fUniformHandler->getUniformCStr(ellipseVar),
                 scaleVar.isValid() ? args.fUniformHandler->getUniformCStr(scaleVar) : "float2(0)",
                 args.fUniformHandler->getUniformCStr(ellipseVar),
                 scaleVar.isValid() ? args.fUniformHandler->getUniformCStr(scaleVar) : "float2(0)",
@@ -159,7 +162,11 @@ std::unique_ptr<GrFragmentProcessor> GrEllipseEffect::clone() const {
 #if GR_TEST_UTILS
 SkString GrEllipseEffect::onDumpInfo() const {
     return SkStringPrintf("(edgeType=%d, center=float2(%f, %f), radii=float2(%f, %f))",
-                          (int)edgeType, center.fX, center.fY, radii.fX, radii.fY);
+                          (int)edgeType,
+                          center.fX,
+                          center.fY,
+                          radii.fX,
+                          radii.fY);
 }
 #endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrEllipseEffect);
