@@ -493,7 +493,9 @@ class FillRRectOp::Processor::Impl : public GrGLSLGeometryProcessor {
         v->codeAppendf("float aa_bloat_multiplier = %i;",
                        (proc.fFlags & ProcessorFlags::kMSAAEnabled)
                                ? 2    // Outset an entire pixel (2 radii).
-                               : 1);  // Outset one half pixel (1 radius).
+                       : (!(proc.fFlags & ProcessorFlags::kFakeNonAA))
+                               ? 1    // Outset one half pixel (1 radius).
+                               : 0);  // No AA bloat.
 
         // Unpack vertex attribs.
         v->codeAppend("float2 corner = corner_and_radius_outsets.xy;");
@@ -652,7 +654,7 @@ class FillRRectOp::Processor::Impl : public GrGLSLGeometryProcessor {
             f->codeAppendf("}");
         }
         if (proc.fFlags & ProcessorFlags::kFakeNonAA) {
-            f->codeAppendf("coverage = round(coverage);");
+            f->codeAppendf("coverage = (coverage >= .5) ? 1 : 0;");
         }
         f->codeAppendf("%s = half4(coverage);", args.fOutputCoverage);
     }
