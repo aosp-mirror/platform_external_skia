@@ -2067,6 +2067,7 @@ cc_test {
         "tests/WangsFormulaTest.cpp",
         "tests/WebpTest.cpp",
         "tests/WindowRectanglesTest.cpp",
+        "tests/WrappedSurfaceCopyOnWriteTest.cpp",
         "tests/WritePixelsTest.cpp",
         "tests/Writer32Test.cpp",
         "tests/YUVCacheTest.cpp",
