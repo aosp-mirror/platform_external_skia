@@ -1057,7 +1057,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     for (size_t i = 0; i < funcData.fParameterCount; ++i) {
         const ASTNode& param = *(iter++);
         SkASSERT(param.fKind == ASTNode::Kind::kParameter);
-        ASTNode::ParameterData pd = param.getParameterData();
+        const ASTNode::ParameterData& pd = param.getParameterData();
         this->checkModifiers(param.fOffset, pd.fModifiers,
                              Modifiers::kConst_Flag | Modifiers::kIn_Flag | Modifiers::kOut_Flag,
                              /*permittedLayoutFlags=*/0);
@@ -1281,7 +1281,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
     }
 
     SkASSERT(intf.fKind == ASTNode::Kind::kInterfaceBlock);
-    ASTNode::InterfaceBlockData id = intf.getInterfaceBlockData();
+    const ASTNode::InterfaceBlockData& id = intf.getInterfaceBlockData();
     std::shared_ptr<SymbolTable> old = fSymbolTable;
     std::shared_ptr<SymbolTable> symbols;
     std::vector<Type::Field> fields;
@@ -1554,7 +1554,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
                 bool valid = false;
                 for (const auto& decl : fFile->root()) {
                     if (decl.fKind == ASTNode::Kind::kSection) {
-                        ASTNode::SectionData section = decl.getSectionData();
+                        const ASTNode::SectionData& section = decl.getSectionData();
                         if (section.fName == "setData") {
                             valid = true;
                             break;
@@ -1604,7 +1604,7 @@ std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
         return nullptr;
     }
 
-    ASTNode::SectionData section = s.getSectionData();
+    const ASTNode::SectionData& section = s.getSectionData();
     return std::make_unique<Section>(s.fOffset, section.fName, section.fArgument,
                                                 section.fText);
 }
@@ -2014,44 +2014,7 @@ std::unique_ptr<Expression> IRGenerator::convertIndexExpression(const ASTNode& i
     if (!converted) {
         return nullptr;
     }
-    return this->convertIndex(std::move(base), std::move(converted));
-}
-
-std::unique_ptr<Expression> IRGenerator::convertIndex(std::unique_ptr<Expression> base,
-                                                      std::unique_ptr<Expression> index) {
-    // Convert an index expression with an expression inside of it: `arr[a * 3]`.
-    const Type& baseType = base->type();
-    if (!baseType.isArray() && !baseType.isMatrix() && !baseType.isVector()) {
-        this->errorReporter().error(base->fOffset,
-                                    "expected array, but found '" + baseType.displayName() + "'");
-        return nullptr;
-    }
-    if (!index->type().isInteger()) {
-        index = this->coerce(std::move(index), *fContext.fTypes.fInt);
-        if (!index) {
-            return nullptr;
-        }
-    }
-    // Perform compile-time bounds checking on constant indices.
-    if (index->is<IntLiteral>()) {
-        SKSL_INT indexValue = index->as<IntLiteral>().value();
-
-        const int upperBound = (baseType.isArray() && baseType.columns() == Type::kUnsizedArray)
-                                       ? INT_MAX
-                                       : baseType.columns();
-        if (indexValue < 0 || indexValue >= upperBound) {
-            this->errorReporter().error(base->fOffset, "index " + to_string(indexValue) +
-                                                       " out of range for '" +
-                                                       baseType.displayName() + "'");
-            return nullptr;
-        }
-        // Constant array indexes on vectors can be converted to swizzles: `myHalf4.z`.
-        // (Using a swizzle gives our optimizer a bit more to work with, compared to array indices.)
-        if (baseType.isVector()) {
-            return Swizzle::Make(fContext, std::move(base), ComponentArray{(int8_t)indexValue});
-        }
-    }
-    return std::make_unique<IndexExpression>(fContext, std::move(base), std::move(index));
+    return IndexExpression::Convert(fContext, std::move(base), std::move(converted));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertCallExpression(const ASTNode& callNode) {
@@ -2077,7 +2040,7 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
     if (!base) {
         return nullptr;
     }
-    StringFragment field = fieldNode.getString();
+    const StringFragment& field = fieldNode.getString();
     const Type& baseType = base->type();
     if (baseType == *fContext.fTypes.fSkCaps) {
         return Setting::Convert(fContext, fieldNode.fOffset, field);
@@ -2099,7 +2062,7 @@ std::unique_ptr<Expression> IRGenerator::convertScopeExpression(const ASTNode& s
         this->errorReporter().error(scopeNode.fOffset, "'::' must follow a type name");
         return nullptr;
     }
-    StringFragment member = scopeNode.getString();
+    const StringFragment& member = scopeNode.getString();
     return this->convertTypeField(base->fOffset, base->as<TypeReference>().value(), member);
 }
 
