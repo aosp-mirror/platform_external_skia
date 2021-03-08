@@ -456,6 +456,7 @@ cc_library_static {
         "src/sksl/ir/SkSLConstructor.cpp",
         "src/sksl/ir/SkSLDoStatement.cpp",
         "src/sksl/ir/SkSLExpressionStatement.cpp",
+        "src/sksl/ir/SkSLFieldAccess.cpp",
         "src/sksl/ir/SkSLForStatement.cpp",
         "src/sksl/ir/SkSLIfStatement.cpp",
         "src/sksl/ir/SkSLIndexExpression.cpp",
