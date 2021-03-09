@@ -35,10 +35,6 @@
 #include "src/image/SkImage_Base.h"
 #endif
 
-#ifdef SK_SUPPORT_LEGACY_PICTURESHADER_MATH
-#include "src/shaders/SkPictureShader.cpp.legacy"
-#else
-
 sk_sp<SkShader> SkPicture::makeShader(SkTileMode tmx, SkTileMode tmy, SkFilterMode filter,
                                       const SkMatrix* localMatrix, const SkRect* tile) const {
     if (localMatrix && !localMatrix->invert(nullptr)) {
@@ -445,7 +441,7 @@ std::unique_ptr<GrFragmentProcessor> SkPictureShader::asFragmentProcessor(
 
     GrProxyProvider* provider = ctx->priv().proxyProvider();
     GrSurfaceProxyView view;
-    if (auto proxy = provider->findProxyByUniqueKey(key)) {
+    if (auto proxy = provider->findOrCreateProxyByUniqueKey(key)) {
         view = GrSurfaceProxyView(proxy, kTopLeft_GrSurfaceOrigin, GrSwizzle());
     } else {
         const int msaaSampleCount = 0;
@@ -474,5 +470,3 @@ std::unique_ptr<GrFragmentProcessor> SkPictureShader::asFragmentProcessor(
                                  *ctx->priv().caps());
 }
 #endif
-
-#endif  // !legacy
