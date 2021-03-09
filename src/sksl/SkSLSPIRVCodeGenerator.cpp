@@ -238,10 +238,7 @@ void SPIRVCodeGenerator::writeOpCode(SpvOp_ opCode, int length, OutputStream& ou
         case SpvOpMemberDecorate:
             break;
         default:
-            if (gSkSLControlFlowAnalysis &&
-                fProgram.fConfig->fSettings.fOptimize &&
-                fProgram.fConfig->fSettings.fControlFlowAnalysis &&
-                fProgram.fConfig->fSettings.fDeadCodeElimination) {
+            if (fProgram.fConfig->fSettings.fDeadCodeElimination) {
                 // When dead-code elimination is enabled, all code should be reachable and an
                 // associated block should already exist.
                 SkASSERT(fCurrentBlock);
@@ -543,9 +540,12 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
                                        type.columns(), fConstantBuffer);
                 break;
             case Type::TypeKind::kMatrix:
-                this->writeInstruction(SpvOpTypeMatrix, result,
-                                       this->getType(index_type(fContext, type), layout),
-                                       type.columns(), fConstantBuffer);
+                this->writeInstruction(
+                        SpvOpTypeMatrix,
+                        result,
+                        this->getType(IndexExpression::IndexType(fContext, type), layout),
+                        type.columns(),
+                        fConstantBuffer);
                 break;
             case Type::TypeKind::kStruct:
                 this->writeStruct(type, layout, result);
