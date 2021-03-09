@@ -469,7 +469,7 @@ std::unique_ptr<Expression> Rehydrator::expression() {
             std::unique_ptr<Expression> base = this->expression();
             int index = this->readU8();
             FieldAccess::OwnerKind ownerKind = (FieldAccess::OwnerKind) this->readU8();
-            return std::make_unique<FieldAccess>(std::move(base), index, ownerKind);
+            return FieldAccess::Make(fContext, std::move(base), index, ownerKind);
         }
         case Rehydrator::kFloatLiteral_Command: {
             const Type* type = this->type();
@@ -492,7 +492,7 @@ std::unique_ptr<Expression> Rehydrator::expression() {
         case Rehydrator::kIndex_Command: {
             std::unique_ptr<Expression> base = this->expression();
             std::unique_ptr<Expression> index = this->expression();
-            return std::make_unique<IndexExpression>(fContext, std::move(base), std::move(index));
+            return IndexExpression::Make(fContext, std::move(base), std::move(index));
         }
         case Rehydrator::kIntLiteral_Command: {
             const Type* type = this->type();
