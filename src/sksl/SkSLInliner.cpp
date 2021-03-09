@@ -345,7 +345,7 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kFieldAccess: {
             const FieldAccess& f = expression.as<FieldAccess>();
-            return std::make_unique<FieldAccess>(expr(f.base()), f.fieldIndex(), f.ownerKind());
+            return FieldAccess::Make(*fContext, expr(f.base()), f.fieldIndex(), f.ownerKind());
         }
         case Expression::Kind::kFunctionCall: {
             const FunctionCall& funcCall = expression.as<FunctionCall>();
@@ -358,8 +358,7 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kIndex: {
             const IndexExpression& idx = expression.as<IndexExpression>();
-            return std::make_unique<IndexExpression>(*fContext, expr(idx.base()),
-                                                     expr(idx.index()));
+            return IndexExpression::Make(*fContext, expr(idx.base()), expr(idx.index()));
         }
         case Expression::Kind::kPrefix: {
             const PrefixExpression& p = expression.as<PrefixExpression>();
