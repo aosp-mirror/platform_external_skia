@@ -8,13 +8,13 @@
 #include "src/sksl/SkSLAnalysis.h"
 
 #include "include/private/SkSLModifiers.h"
+#include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLSampleUsage.h"
+#include "include/private/SkSLStatement.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
-#include "src/sksl/ir/SkSLStatement.h"
 
 // ProgramElements
 #include "src/sksl/ir/SkSLEnum.h"
@@ -183,6 +183,21 @@ private:
 class ProgramUsageVisitor : public ProgramVisitor {
 public:
     ProgramUsageVisitor(ProgramUsage* usage, int delta) : fUsage(usage), fDelta(delta) {}
+
+    bool visitStatement(const Statement& s) override {
+        if (s.is<VarDeclaration>()) {
+            // Add all declared variables to the usage map (even if never otherwise accessed).
+            const VarDeclaration& vd = s.as<VarDeclaration>();
+            ProgramUsage::VariableCounts& counts = fUsage->fVariableCounts[&vd.var()];
+            counts.fDeclared += fDelta;
+            SkASSERT(counts.fDeclared >= 0);
+            if (vd.value()) {
+                // The initial-value expression, when present, counts as a write.
+                counts.fWrite += fDelta;
+            }
+        }
+        return INHERITED::visitStatement(s);
+    }
 
     bool visitExpression(const Expression& e) override {
         if (e.is<FunctionCall>()) {
@@ -581,12 +596,9 @@ std::unique_ptr<ProgramUsage> Analysis::GetUsage(const LoadedModule& module) {
 }
 
 ProgramUsage::VariableCounts ProgramUsage::get(const Variable& v) const {
-    VariableCounts result = { 0, v.initialValue() ? 1 : 0 };
-    if (const VariableCounts* counts = fVariableCounts.find(&v)) {
-        result.fRead += counts->fRead;
-        result.fWrite += counts->fWrite;
-    }
-    return result;
+    const VariableCounts* counts = fVariableCounts.find(&v);
+    SkASSERT(counts);
+    return *counts;
 }
 
 bool ProgramUsage::isDead(const Variable& v) const {
@@ -700,33 +712,53 @@ bool Analysis::IsTrivialExpression(const Expression& expr) {
             IsTrivialExpression(*expr.as<IndexExpression>().base()));
 }
 
-bool Analysis::IsSelfAssignment(const Expression& left, const Expression& right) {
+bool Analysis::IsSameExpressionTree(const Expression& left, const Expression& right) {
     if (left.kind() != right.kind() || left.type() != right.type()) {
         return false;
     }
 
-    // This isn't a fully exhaustive list of expressions that could be involved in a self-
-    // assignment, particularly when arrays are involved; for instance, `x[y+1] = x[y+1]` isn't
-    // detected because we don't look at BinaryExpressions. Since this is intended to be used for
-    // optimization purposes, handling the common cases is sufficient.
+    // This isn't a fully exhaustive list of expressions by any stretch of the imagination; for
+    // instance, `x[y+1] = x[y+1]` isn't detected because we don't look at BinaryExpressions.
+    // Since this is intended to be used for optimization purposes, handling the common cases is
+    // sufficient.
     switch (left.kind()) {
         case Expression::Kind::kIntLiteral:
             return left.as<IntLiteral>().value() == right.as<IntLiteral>().value();
 
+        case Expression::Kind::kFloatLiteral:
+            return left.as<FloatLiteral>().value() == right.as<FloatLiteral>().value();
+
+        case Expression::Kind::kBoolLiteral:
+            return left.as<BoolLiteral>().value() == right.as<BoolLiteral>().value();
+
+        case Expression::Kind::kConstructor: {
+            const Constructor& leftCtor = left.as<Constructor>();
+            const Constructor& rightCtor = right.as<Constructor>();
+            if (leftCtor.arguments().count() != rightCtor.arguments().count()) {
+                return false;
+            }
+            for (int index = 0; index < leftCtor.arguments().count(); ++index) {
+                if (!IsSameExpressionTree(*leftCtor.arguments()[index],
+                                          *rightCtor.arguments()[index])) {
+                    return false;
+                }
+            }
+            return true;
+        }
         case Expression::Kind::kFieldAccess:
             return left.as<FieldAccess>().fieldIndex() == right.as<FieldAccess>().fieldIndex() &&
-                   IsSelfAssignment(*left.as<FieldAccess>().base(),
-                                    *right.as<FieldAccess>().base());
+                   IsSameExpressionTree(*left.as<FieldAccess>().base(),
+                                        *right.as<FieldAccess>().base());
 
         case Expression::Kind::kIndex:
-            return IsSelfAssignment(*left.as<IndexExpression>().index(),
-                                    *right.as<IndexExpression>().index()) &&
-                   IsSelfAssignment(*left.as<IndexExpression>().base(),
-                                    *right.as<IndexExpression>().base());
+            return IsSameExpressionTree(*left.as<IndexExpression>().index(),
+                                        *right.as<IndexExpression>().index()) &&
+                   IsSameExpressionTree(*left.as<IndexExpression>().base(),
+                                        *right.as<IndexExpression>().base());
 
         case Expression::Kind::kSwizzle:
             return left.as<Swizzle>().components() == right.as<Swizzle>().components() &&
-                   IsSelfAssignment(*left.as<Swizzle>().base(), *right.as<Swizzle>().base());
+                   IsSameExpressionTree(*left.as<Swizzle>().base(), *right.as<Swizzle>().base());
 
         case Expression::Kind::kVariableReference:
             return left.as<VariableReference>().variable() ==
@@ -1158,12 +1190,7 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
             if (sc.value() && this->visitExpression(*sc.value())) {
                 return true;
             }
-            for (auto& stmt : sc.statements()) {
-                if (stmt && this->visitStatement(*stmt)) {
-                    return true;
-                }
-            }
-            return false;
+            return this->visitStatement(*sc.statement());
         }
         case Statement::Kind::kDo: {
             auto& d = s.template as<DoStatement>();

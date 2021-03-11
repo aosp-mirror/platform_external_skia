@@ -11,6 +11,8 @@
 #include <unordered_set>
 
 #include "include/private/SkSLModifiers.h"
+#include "include/private/SkSLProgramElement.h"
+#include "include/private/SkSLStatement.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
@@ -33,10 +35,8 @@
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSetting.h"
-#include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/ir/SkSLSwitchCase.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
@@ -409,14 +409,9 @@ std::unique_ptr<Statement> Rehydrator::statement() {
             cases.reserve(caseCount);
             for (int i = 0; i < caseCount; ++i) {
                 std::unique_ptr<Expression> value = this->expression();
-                int statementCount = this->readU8();
-                StatementArray statements;
-                statements.reserve_back(statementCount);
-                for (int j = 0; j < statementCount; ++j) {
-                    statements.push_back(this->statement());
-                }
+                std::unique_ptr<Statement> statement = this->statement();
                 cases.push_back(std::make_unique<SwitchCase>(/*offset=*/-1, std::move(value),
-                                                             std::move(statements)));
+                                                             std::move(statement)));
             }
             return SwitchStatement::Make(fContext, /*offset=*/-1, isStatic, std::move(expr),
                                          std::move(cases), fSymbolTable);

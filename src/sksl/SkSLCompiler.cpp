@@ -76,7 +76,7 @@ namespace SkSL {
 // These flags allow tools like Viewer or Nanobench to override the compiler's ProgramSettings.
 bool gSkSLOptimizer = true;
 bool gSkSLInliner = true;
-bool gSkSLControlFlowAnalysis = true;
+bool gSkSLControlFlowAnalysis = false;
 
 using RefKind = VariableReference::RefKind;
 
@@ -468,7 +468,7 @@ static bool dead_assignment(const BinaryExpression& b, ProgramUsage* usage) {
 
 static bool self_assignment(const BinaryExpression& b) {
     return b.getOperator().kind() == Token::Kind::TK_EQ &&
-           Analysis::IsSelfAssignment(*b.left(), *b.right());
+           Analysis::IsSameExpressionTree(*b.left(), *b.right());
 }
 
 void Compiler::computeDataFlow(CFG* cfg) {
