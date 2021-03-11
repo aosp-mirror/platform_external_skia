@@ -13,6 +13,7 @@
 
 #include "include/private/SkSLDefines.h"
 #include "include/private/SkSLModifiers.h"
+#include "include/private/SkSLProgramElement.h"
 #include "include/private/SkTHash.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLProgramSettings.h"
@@ -20,7 +21,6 @@
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
 #ifdef SK_VULKAN
@@ -43,7 +43,11 @@ class Pool;
  */
 class ProgramUsage {
 public:
-    struct VariableCounts { int fRead = 0; int fWrite = 0; };
+    struct VariableCounts {
+        int fDeclared = 0;
+        int fRead = 0;
+        int fWrite = 0;
+    };
     VariableCounts get(const Variable&) const;
     bool isDead(const Variable&) const;
 
