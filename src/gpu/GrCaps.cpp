@@ -50,7 +50,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fPerformColorClearsAsDraws = false;
     fAvoidLargeIndexBufferDraws = false;
     fPerformStencilClearsAsDraws = false;
-    fAllowCoverageCounting = false;
     fTransferFromBufferToTextureSupport = false;
     fTransferFromSurfaceToBufferSupport = false;
     fWritePixelsRowBytesSupport = false;
@@ -134,8 +133,6 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
         fPerformColorClearsAsDraws = true;
         fPerformStencilClearsAsDraws = true;
     }
-
-    fAllowCoverageCounting = !options.fDisableCoverageCountingPaths;
 
     fMaxTextureSize = std::min(fMaxTextureSize, options.fMaxTextureSizeOverride);
 #if GR_TEST_UTILS
@@ -235,7 +232,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Use draws for color clears", fPerformColorClearsAsDraws);
     writer->appendBool("Avoid Large IndexBuffer Draws", fAvoidLargeIndexBufferDraws);
     writer->appendBool("Use draws for stencil clip clears", fPerformStencilClearsAsDraws);
-    writer->appendBool("Allow coverage counting shortcuts", fAllowCoverageCounting);
     writer->appendBool("Supports transfers from buffers to textures",
                        fTransferFromBufferToTextureSupport);
     writer->appendBool("Supports transfers from textures to buffers",
@@ -383,6 +379,11 @@ GrCaps::SupportedRead GrCaps::supportedReadPixelsColorType(GrColorType srcColorT
 
 GrBackendFormat GrCaps::getDefaultBackendFormat(GrColorType colorType,
                                                 GrRenderable renderable) const {
+    // Unknown color types are always an invalid format, so early out before calling virtual.
+    if (colorType == GrColorType::kUnknown) {
+        return {};
+    }
+
     auto format = this->onGetDefaultBackendFormat(colorType);
     if (!this->isFormatTexturable(format)) {
         return {};

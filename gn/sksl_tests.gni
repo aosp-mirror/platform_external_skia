@@ -490,6 +490,7 @@ sksl_inliner_tests = [
   "/sksl/inliner/InlinerManglesNames.sksl",
   "/sksl/inliner/InlinerWrapsEarlyReturnsWithForLoop.sksl",
   "/sksl/inliner/InlinerWrapsSwitchWithReturnInsideWithForLoop.sksl",
+  "/sksl/inliner/NoInline.sksl",
   "/sksl/inliner/ShortCircuitEvaluationsCannotInlineRightHandSide.sksl",
   "/sksl/inliner/StaticSwitch.sksl",
   "/sksl/inliner/StructsCanBeInlinedSafely.sksl",
@@ -557,6 +558,7 @@ sksl_settings_tests = [
 
 sksl_rte_tests = [
   "/sksl/runtime/ArrayIndexing.rte",
+  "/sksl/runtime/ConstPreservation.rte",
   "/sksl/runtime/ConversionConstructors.rte",
   "/sksl/runtime/GlobalVariables.rte",
   "/sksl/runtime/LoopInt.rte",
