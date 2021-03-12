@@ -65,9 +65,6 @@ struct ARGB3DVertex {
     AtlasPt atlasPos;
 };
 
-template<typename T>
-using UP = std::unique_ptr<T, GrSubRunAllocator::Destroyer>;
-
 GrAtlasTextOp::MaskType op_mask_type(GrMaskFormat grMaskFormat) {
     switch (grMaskFormat) {
         case kA8_GrMaskFormat:   return GrAtlasTextOp::MaskType::kGrayscaleCoverage;
@@ -186,11 +183,11 @@ public:
 
     GrAtlasSubRun* testingOnly_atlasSubRun() override;
 
-    static UP<GrSubRun> Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                             bool isAntiAliased,
-                             const SkStrikeSpec& strikeSpec,
-                             const GrTextBlob& blob,
-                             GrSubRunAllocator* alloc);
+    static GrSubRunOwner Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                              bool isAntiAliased,
+                              const SkStrikeSpec& strikeSpec,
+                              const GrTextBlob& blob,
+                              GrSubRunAllocator* alloc);
 
 private:
     struct PathGlyph {
@@ -274,12 +271,11 @@ bool PathSubRun::canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) cons
     return true;
 }
 
-auto PathSubRun::Make(
-        const SkZip<SkGlyphVariant, SkPoint>& drawables,
-        bool isAntiAliased,
-        const SkStrikeSpec& strikeSpec,
-        const GrTextBlob& blob,
-        GrSubRunAllocator* alloc) -> UP<GrSubRun> {
+GrSubRunOwner PathSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                               bool isAntiAliased,
+                               const SkStrikeSpec& strikeSpec,
+                               const GrTextBlob& blob,
+                               GrSubRunAllocator* alloc) {
     auto pathData = alloc->makeUniqueArray<PathGlyph>(
             drawables.size(),
             [&](int i){
@@ -448,11 +444,11 @@ public:
                      GlyphVector glyphs,
                      bool glyphsOutOfBounds);
 
-    static UP<GrSubRun> Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                             const SkStrikeSpec& strikeSpec,
-                             GrMaskFormat format,
-                             GrTextBlob* blob,
-                             GrSubRunAllocator* alloc);
+    static GrSubRunOwner Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                              const SkStrikeSpec& strikeSpec,
+                              GrMaskFormat format,
+                              GrTextBlob* blob,
+                              GrSubRunAllocator* alloc);
 
     void draw(const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
@@ -510,11 +506,11 @@ DirectMaskSubRun::DirectMaskSubRun(GrMaskFormat format,
         , fSomeGlyphsExcluded{glyphsOutOfBounds}
         , fGlyphs{glyphs} {}
 
-UP<GrSubRun> DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                    const SkStrikeSpec& strikeSpec,
-                                    GrMaskFormat format,
-                                    GrTextBlob* blob,
-                                    GrSubRunAllocator* alloc) {
+GrSubRunOwner DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                                     const SkStrikeSpec& strikeSpec,
+                                     GrMaskFormat format,
+                                     GrTextBlob* blob,
+                                     GrSubRunAllocator* alloc) {
     DevicePosition* glyphLeftTop = alloc->makePODArray<DevicePosition>(drawables.size());
     GlyphVector::Variant* glyphIDs = alloc->makePODArray<GlyphVector::Variant>(drawables.size());
 
@@ -834,11 +830,11 @@ public:
                           SkSpan<const VertexData> vertexData,
                           GlyphVector glyphs);
 
-    static UP<GrSubRun> Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                             const SkStrikeSpec& strikeSpec,
-                             GrMaskFormat format,
-                             GrTextBlob* blob,
-                             GrSubRunAllocator* alloc);
+    static GrSubRunOwner Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                              const SkStrikeSpec& strikeSpec,
+                              GrMaskFormat format,
+                              GrTextBlob* blob,
+                              GrSubRunAllocator* alloc);
 
     void draw(const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
@@ -894,11 +890,11 @@ TransformedMaskSubRun::TransformedMaskSubRun(GrMaskFormat format,
         , fVertexData{vertexData}
         , fGlyphs{glyphs} { }
 
-UP<GrSubRun> TransformedMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                         const SkStrikeSpec& strikeSpec,
-                                         GrMaskFormat format,
-                                         GrTextBlob* blob,
-                                         GrSubRunAllocator* alloc) {
+GrSubRunOwner TransformedMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                                          const SkStrikeSpec& strikeSpec,
+                                          GrMaskFormat format,
+                                          GrTextBlob* blob,
+                                          GrSubRunAllocator* alloc) {
     SkRect bounds = SkRectPriv::MakeLargestInverted();
 
     SkScalar strikeToSource = strikeSpec.strikeToSourceRatio();
@@ -1084,11 +1080,11 @@ public:
                bool useLCDText,
                bool antiAliased);
 
-    static UP<GrSubRun> Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                             const SkFont& runFont,
-                             const SkStrikeSpec& strikeSpec,
-                             GrTextBlob* blob,
-                             GrSubRunAllocator* alloc);
+    static GrSubRunOwner Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                              const SkFont& runFont,
+                              const SkStrikeSpec& strikeSpec,
+                              GrTextBlob* blob,
+                              GrSubRunAllocator* alloc);
 
     void draw(const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
@@ -1157,13 +1153,11 @@ bool has_some_antialiasing(const SkFont& font ) {
            || edging == SkFont::Edging::kSubpixelAntiAlias;
 }
 
-UP<GrSubRun> SDFTSubRun::Make(
-        const SkZip<SkGlyphVariant, SkPoint>& drawables,
-        const SkFont& runFont,
-        const SkStrikeSpec& strikeSpec,
-        GrTextBlob* blob,
-        GrSubRunAllocator* alloc) {
-
+GrSubRunOwner SDFTSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
+                               const SkFont& runFont,
+                               const SkStrikeSpec& strikeSpec,
+                               GrTextBlob* blob,
+                               GrSubRunAllocator* alloc) {
     SkRect bounds = SkRectPriv::MakeLargestInverted();
     auto mapper = [&, strikeToSource=strikeSpec.strikeToSourceRatio()](const auto& d) {
         auto& [variant, pos] = d;
@@ -1334,7 +1328,104 @@ GrAtlasSubRun* SDFTSubRun::testingOnly_atlasSubRun() {
 }  // namespace
 
 // -- GrTextBlob::Key ------------------------------------------------------------------------------
-GrTextBlob::Key::Key() { sk_bzero(this, sizeof(Key)); }
+
+static SkColor compute_canonical_color(const SkPaint& paint, bool lcd) {
+    SkColor canonicalColor = SkPaintPriv::ComputeLuminanceColor(paint);
+    if (lcd) {
+        // This is the correct computation for canonicalColor, but there are tons of cases where LCD
+        // can be modified. For now we just regenerate if any run in a textblob has LCD.
+        // TODO figure out where all of these modifications are and see if we can incorporate that
+        //      logic at a higher level *OR* use sRGB
+        //canonicalColor = SkMaskGamma::CanonicalColor(canonicalColor);
+
+        // TODO we want to figure out a way to be able to use the canonical color on LCD text,
+        // see the note above.  We pick a placeholder value for LCD text to ensure we always match
+        // the same key
+        return SK_ColorTRANSPARENT;
+    } else {
+        // A8, though can have mixed BMP text but it shouldn't matter because BMP text won't have
+        // gamma corrected masks anyways, nor color
+        U8CPU lum = SkComputeLuminance(SkColorGetR(canonicalColor),
+                                       SkColorGetG(canonicalColor),
+                                       SkColorGetB(canonicalColor));
+        // reduce to our finite number of bits
+        canonicalColor = SkMaskGamma::CanonicalColor(SkColorSetRGB(lum, lum, lum));
+    }
+    return canonicalColor;
+}
+
+auto GrTextBlob::Key::Make(const SkGlyphRunList& glyphRunList,
+                           const SkSurfaceProps& surfaceProps,
+                           const GrColorInfo& colorInfo,
+                           const SkMatrix& drawMatrix,
+                           const GrSDFTControl& control) -> std::tuple<bool, Key> {
+
+    // Get the first paint to use as the key paint.
+    const SkPaint& drawPaint = glyphRunList.paint();
+
+    SkMaskFilterBase::BlurRec blurRec;
+    // It might be worth caching these things, but its not clear at this time
+    // TODO for animated mask filters, this will fill up our cache.  We need a safeguard here
+    const SkMaskFilter* maskFilter = drawPaint.getMaskFilter();
+    bool canCache = glyphRunList.canCache() &&
+                    !(drawPaint.getPathEffect() ||
+                        (maskFilter && !as_MFB(maskFilter)->asABlur(&blurRec)));
+
+    // If we're doing linear blending, then we can disable the gamma hacks.
+    // Otherwise, leave them on. In either case, we still want the contrast boost:
+    // TODO: Can we be even smarter about mask gamma based on the dest transfer function?
+    SkScalerContextFlags scalerContextFlags = colorInfo.isLinearlyBlended()
+                                              ? SkScalerContextFlags::kBoostContrast
+                                              : SkScalerContextFlags::kFakeGammaAndBoostContrast;
+
+    GrTextBlob::Key key;
+    if (canCache) {
+        bool hasLCD = glyphRunList.anyRunsLCD();
+
+        // We canonicalize all non-lcd draws to use kUnknown_SkPixelGeometry
+        SkPixelGeometry pixelGeometry =
+                hasLCD ? surfaceProps.pixelGeometry() : kUnknown_SkPixelGeometry;
+
+        GrColor canonicalColor = compute_canonical_color(drawPaint, hasLCD);
+
+        key.fPixelGeometry = pixelGeometry;
+        key.fUniqueID = glyphRunList.uniqueID();
+        key.fStyle = drawPaint.getStyle();
+        if (key.fStyle != SkPaint::kFill_Style) {
+            key.fFrameWidth = drawPaint.getStrokeWidth();
+            key.fMiterLimit = drawPaint.getStrokeMiter();
+            key.fJoin = drawPaint.getStrokeJoin();
+        }
+        key.fHasBlur = maskFilter != nullptr;
+        if (key.fHasBlur) {
+            key.fBlurRec = blurRec;
+        }
+        key.fCanonicalColor = canonicalColor;
+        key.fScalerContextFlags = scalerContextFlags;
+
+        // Calculate the set of drawing types.
+        key.fSetOfDrawingTypes = 0;
+        for (auto& run : glyphRunList) {
+            key.fSetOfDrawingTypes |= control.drawingType(run.font(), drawPaint, drawMatrix);
+        }
+
+        if (key.fSetOfDrawingTypes & GrSDFTControl::kDirect) {
+            // Store the fractional offset of the position. We know that the matrix can't be
+            // perspective at this point.
+            SkPoint mappedOrigin = drawMatrix.mapOrigin();
+            key.fDrawMatrix = drawMatrix;
+            key.fDrawMatrix.setTranslateX(
+                    mappedOrigin.x() - SkScalarFloorToScalar(mappedOrigin.x()));
+            key.fDrawMatrix.setTranslateY(
+                    mappedOrigin.y() - SkScalarFloorToScalar(mappedOrigin.y()));
+        } else {
+            // For path and SDFT, the matrix doesn't matter.
+            key.fDrawMatrix = SkMatrix::I();
+        }
+    }
+
+    return {canCache, key};
+}
 
 bool GrTextBlob::Key::operator==(const GrTextBlob::Key& that) const {
     if (fUniqueID != that.fUniqueID) { return false; }
@@ -1380,7 +1471,10 @@ void* GrTextBlob::operator new(size_t, void* p) { return p; }
 
 GrTextBlob::~GrTextBlob() = default;
 
-sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList, const SkMatrix& drawMatrix) {
+sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList,
+                                   const SkMatrix& drawMatrix,
+                                   const GrSDFTControl& control,
+                                   SkGlyphRunListPainter* painter) {
     // The difference in alignment from the per-glyph data to the SubRun;
     constexpr size_t alignDiff =
             alignof(DirectMaskSubRun) - alignof(DirectMaskSubRun::DevicePosition);
@@ -1401,6 +1495,14 @@ sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList, const SkM
     SkColor initialLuminance = SkPaintPriv::ComputeLuminanceColor(glyphRunList.paint());
     sk_sp<GrTextBlob> blob{new (allocation)
                             GrTextBlob(bytesNeededForSubRun, drawMatrix, initialLuminance)};
+
+    for (auto& glyphRun : glyphRunList) {
+        painter->processGlyphRun(glyphRun,
+                                 drawMatrix,
+                                 glyphRunList.paint(),
+                                 control,
+                                 blob.get());
+    }
 
     return blob;
 }
@@ -1446,7 +1548,7 @@ void GrTextBlob::addMultiMaskFormat(
     if (drawables.empty()) { return; }
 
     auto addSameFormat = [&](const SkZip<SkGlyphVariant, SkPoint>& drawable, GrMaskFormat format) {
-        UP<GrSubRun> subRun = addSingle(drawable, strikeSpec, format, this, &fAlloc);
+        GrSubRunOwner subRun = addSingle(drawable, strikeSpec, format, this, &fAlloc);
         if (subRun != nullptr) {
             fSubRunList.append(std::move(subRun));
         } else {
@@ -1479,20 +1581,6 @@ GrTextBlob::GrTextBlob(int allocSize,
         , fSize{allocSize}
         , fInitialMatrix{drawMatrix}
         , fInitialLuminance{initialLuminance} { }
-
-void GrTextBlob::makeSubRuns(SkGlyphRunListPainter* painter,
-                             const SkGlyphRunList& glyphRunList,
-                             const SkMatrix& drawMatrix,
-                             const SkPaint& runPaint,
-                             const GrSDFTControl& control) {
-    for (auto& glyphRun : glyphRunList) {
-        painter->processGlyphRun(glyphRun,
-                                 drawMatrix,
-                                 runPaint,
-                                 control,
-                                 this);
-    }
-}
 
 void GrTextBlob::processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkStrikeSpec& strikeSpec) {

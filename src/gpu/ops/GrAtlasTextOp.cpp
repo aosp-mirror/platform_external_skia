@@ -31,7 +31,33 @@
 #include "src/gpu/GrDrawOpTest.h"
 #endif
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+#include <new>
+#include <utility>
+
+// If we have thread local, then cache memory for a single GrAtlasTextOp.
+#if !defined(GR_OP_ALLOCATE_USE_POOL) && defined(GR_HAS_THREAD_LOCAL)
+static thread_local void* gCache = nullptr;
+void* GrAtlasTextOp::operator new(size_t s) {
+    if (gCache != nullptr) {
+        return std::exchange(gCache, nullptr);
+    }
+
+    return ::operator new(s);
+}
+
+void GrAtlasTextOp::operator delete(void* bytes) noexcept {
+    if (gCache == nullptr) {
+        gCache = bytes;
+        return;
+    }
+    ::operator delete(bytes);
+}
+
+void GrAtlasTextOp::ClearCache() {
+    ::operator delete(gCache);
+    gCache = nullptr;
+}
+#endif
 
 GrAtlasTextOp::GrAtlasTextOp(MaskType maskType,
                              bool needsTransform,
@@ -486,14 +512,9 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
     GrSDFTControl control =
             rContext->priv().getSDFTControl(rtc->surfaceProps().isUseDeviceIndependentFonts());
 
-    sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, drawMatrix);
     SkGlyphRunListPainter* painter = rtc->glyphRunPainter();
-    painter->processGlyphRun(
-            *glyphRunList.begin(),
-            drawMatrix,
-            glyphRunList.paint(),
-            control,
-            blob.get());
+    sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, drawMatrix, control, painter);
+
     if (blob->subRunList().isEmpty()) {
         return nullptr;
     }

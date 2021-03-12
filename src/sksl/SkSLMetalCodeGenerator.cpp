@@ -1849,20 +1849,20 @@ void MetalCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
     this->writeExpression(*s.value(), Precedence::kTopLevel);
     this->writeLine(") {");
     fIndentation++;
-    for (const std::unique_ptr<SwitchCase>& c : s.cases()) {
-        if (c->value()) {
+    for (const std::unique_ptr<Statement>& stmt : s.cases()) {
+        const SwitchCase& c = stmt->as<SwitchCase>();
+        if (c.value()) {
             this->write("case ");
-            this->writeExpression(*c->value(), Precedence::kTopLevel);
+            this->writeExpression(*c.value(), Precedence::kTopLevel);
             this->writeLine(":");
         } else {
             this->writeLine("default:");
         }
-        fIndentation++;
-        for (const auto& stmt : c->statements()) {
-            this->writeStatement(*stmt);
-            this->writeLine();
+        if (!c.statement()->isEmpty()) {
+            fIndentation++;
+            this->writeStatement(*c.statement());
+            fIndentation--;
         }
-        fIndentation--;
     }
     fIndentation--;
     this->write("}");
@@ -2321,10 +2321,8 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Statemen
         case Statement::Kind::kSwitch: {
             const SwitchStatement& sw = s->as<SwitchStatement>();
             Requirements result = this->requirements(sw.value().get());
-            for (const std::unique_ptr<SwitchCase>& sc : sw.cases()) {
-                for (const auto& st : sc->statements()) {
-                    result |= this->requirements(st.get());
-                }
+            for (const std::unique_ptr<Statement>& sc : sw.cases()) {
+                result |= this->requirements(sc->as<SwitchCase>().statement().get());
             }
             return result;
         }
