@@ -22,14 +22,15 @@
 namespace SkSL {
 
 std::unique_ptr<Statement> SwitchStatement::clone() const {
-    std::vector<std::unique_ptr<SwitchCase>> cloned;
-    for (const std::unique_ptr<SwitchCase>& sc : this->cases()) {
-        cloned.emplace_back(&sc->clone().release()->as<SwitchCase>());
+    StatementArray cases;
+    cases.reserve_back(this->cases().size());
+    for (const std::unique_ptr<Statement>& stmt : this->cases()) {
+        cases.push_back(stmt->clone());
     }
     return std::make_unique<SwitchStatement>(fOffset,
                                              this->isStatic(),
                                              this->value()->clone(),
-                                             std::move(cloned),
+                                             std::move(cases),
                                              SymbolTable::WrapIfBuiltin(this->symbols()));
 }
 
@@ -47,18 +48,19 @@ String SwitchStatement::description() const {
 }
 
 static std::forward_list<const SwitchCase*> find_duplicate_case_values(
-        const std::vector<std::unique_ptr<SwitchCase>>& cases) {
+        const StatementArray& cases) {
     std::forward_list<const SwitchCase*> duplicateCases;
     SkTHashSet<SKSL_INT> intValues;
     bool foundDefault = false;
 
-    for (const std::unique_ptr<SwitchCase>& sc : cases) {
+    for (const std::unique_ptr<Statement>& stmt : cases) {
+        const SwitchCase* sc = &stmt->as<SwitchCase>();
         const std::unique_ptr<Expression>& valueExpr = sc->value();
 
         // A null case-value indicates the `default` switch-case.
         if (!valueExpr) {
             if (foundDefault) {
-                duplicateCases.push_front(sc.get());
+                duplicateCases.push_front(sc);
                 continue;
             }
             foundDefault = true;
@@ -70,7 +72,7 @@ static std::forward_list<const SwitchCase*> find_duplicate_case_values(
         SKSL_INT intValue = 0;
         SkAssertResult(ConstantFolder::GetConstantInt(*valueExpr, &intValue));
         if (intValues.contains(intValue)) {
-            duplicateCases.push_front(sc.get());
+            duplicateCases.push_front(sc);
             continue;
         }
         intValues.add(intValue);
@@ -107,16 +109,16 @@ static void move_all_but_break(std::unique_ptr<Statement>& stmt, StatementArray*
     }
 }
 
-std::unique_ptr<Statement> SwitchStatement::BlockForCase(
-        std::vector<std::unique_ptr<SwitchCase>>* cases,
-        SwitchCase* caseToCapture,
-        std::shared_ptr<SymbolTable> symbolTable) {
+std::unique_ptr<Statement> SwitchStatement::BlockForCase(StatementArray* cases,
+                                                         SwitchCase* caseToCapture,
+                                                         std::shared_ptr<SymbolTable> symbolTable) {
     // We have to be careful to not move any of the pointers until after we're sure we're going to
     // succeed, so before we make any changes at all, we check the switch-cases to decide on a plan
     // of action. First, find the switch-case we are interested in.
     auto iter = cases->begin();
     for (; iter != cases->end(); ++iter) {
-        if (iter->get() == caseToCapture) {
+        const SwitchCase& sc = (*iter)->as<SwitchCase>();
+        if (&sc == caseToCapture) {
             break;
         }
     }
@@ -127,20 +129,15 @@ std::unique_ptr<Statement> SwitchStatement::BlockForCase(
     auto startIter = iter;
     Statement* stripBreakStmt = nullptr;
     for (; iter != cases->end(); ++iter) {
-        for (std::unique_ptr<Statement>& stmt : (*iter)->statements()) {
-            if (Analysis::SwitchCaseContainsConditionalExit(*stmt)) {
-                // We can't reduce switch-cases to a block when they have conditional exits.
-                return nullptr;
-            }
-            if (Analysis::SwitchCaseContainsUnconditionalExit(*stmt)) {
-                // We found an unconditional exit. We can use this block, but we'll need to strip
-                // out the break statement if there is one.
-                stripBreakStmt = stmt.get();
-                break;
-            }
+        std::unique_ptr<Statement>& stmt = (*iter)->as<SwitchCase>().statement();
+        if (Analysis::SwitchCaseContainsConditionalExit(*stmt)) {
+            // We can't reduce switch-cases to a block when they have conditional exits.
+            return nullptr;
         }
-
-        if (stripBreakStmt) {
+        if (Analysis::SwitchCaseContainsUnconditionalExit(*stmt)) {
+            // We found an unconditional exit. We can use this block, but we'll need to strip
+            // out the break statement if there is one.
+            stripBreakStmt = stmt.get();
             break;
         }
     }
@@ -148,31 +145,20 @@ std::unique_ptr<Statement> SwitchStatement::BlockForCase(
     // We fell off the bottom of the switch or encountered a break. We know the range of statements
     // that we need to move over, and we know it's safe to do so.
     StatementArray caseStmts;
-    caseStmts.reserve_back(std::distance(startIter, iter));
+    caseStmts.reserve_back(std::distance(startIter, iter) + 1);
 
     // We can move over most of the statements as-is.
     while (startIter != iter) {
-        for (std::unique_ptr<Statement>& stmt : (*startIter)->statements()) {
-            caseStmts.push_back(std::move(stmt));
-        }
+        caseStmts.push_back(std::move((*startIter)->as<SwitchCase>().statement()));
         ++startIter;
     }
 
     // If we found an unconditional break at the end, we need to move what we can while avoiding
     // that break.
     if (stripBreakStmt != nullptr) {
-        for (std::unique_ptr<Statement>& stmt : (*startIter)->statements()) {
-            if (stmt.get() == stripBreakStmt) {
-                move_all_but_break(stmt, &caseStmts);
-                stripBreakStmt = nullptr;
-                break;
-            }
-
-            caseStmts.push_back(std::move(stmt));
-        }
+        SkASSERT((*startIter)->as<SwitchCase>().statement().get() == stripBreakStmt);
+        move_all_but_break((*startIter)->as<SwitchCase>().statement(), &caseStmts);
     }
-
-    SkASSERT(stripBreakStmt == nullptr);  // Verify that we stripped any unconditional break.
 
     // Return our newly-synthesized block.
     return std::make_unique<Block>(caseToCapture->fOffset, std::move(caseStmts),
@@ -184,7 +170,7 @@ std::unique_ptr<Statement> SwitchStatement::Convert(const Context& context,
                                                     bool isStatic,
                                                     std::unique_ptr<Expression> value,
                                                     ExpressionArray caseValues,
-                                                    SkTArray<StatementArray> caseStatements,
+                                                    StatementArray caseStatements,
                                                     std::shared_ptr<SymbolTable> symbolTable) {
     SkASSERT(caseValues.size() == caseStatements.size());
     if (context.fConfig->strictES2Mode()) {
@@ -199,7 +185,7 @@ std::unique_ptr<Statement> SwitchStatement::Convert(const Context& context,
         }
     }
 
-    std::vector<std::unique_ptr<SwitchCase>> cases;
+    StatementArray cases;
     for (int i = 0; i < caseValues.count(); ++i) {
         int caseOffset;
         std::unique_ptr<Expression> caseValue;
@@ -249,34 +235,39 @@ std::unique_ptr<Statement> SwitchStatement::Make(const Context& context,
                                                  int offset,
                                                  bool isStatic,
                                                  std::unique_ptr<Expression> value,
-                                                 std::vector<std::unique_ptr<SwitchCase>> cases,
+                                                 StatementArray cases,
                                                  std::shared_ptr<SymbolTable> symbolTable) {
+    // Confirm that every statement in `cases` is a SwitchCase.
+    SkASSERT(std::all_of(cases.begin(), cases.end(), [&](const std::unique_ptr<Statement>& stmt) {
+        return stmt->is<SwitchCase>();
+    }));
+
     // Confirm that every switch-case has been coerced to the proper type.
-    SkASSERT(std::all_of(cases.begin(), cases.end(), [&](const std::unique_ptr<SwitchCase>& sc) {
-        return !sc->value() ||  // `default` case has a null value
-               value->type() == sc->value()->type();
+    SkASSERT(std::all_of(cases.begin(), cases.end(), [&](const std::unique_ptr<Statement>& stmt) {
+        return !stmt->as<SwitchCase>().value() ||  // `default` case has a null value
+               value->type() == stmt->as<SwitchCase>().value()->type();
     }));
 
     // Confirm that every switch-case value is unique.
     SkASSERT(find_duplicate_case_values(cases).empty());
 
     // Flatten @switch statements.
-    if (isStatic || (context.fConfig->fSettings.fOptimize &&
-                     !context.fConfig->fSettings.fControlFlowAnalysis)) {
+    if (isStatic || context.fConfig->fSettings.fOptimize) {
         SKSL_INT switchValue;
         if (ConstantFolder::GetConstantInt(*value, &switchValue)) {
             SwitchCase* defaultCase = nullptr;
             SwitchCase* matchingCase = nullptr;
-            for (const std::unique_ptr<SwitchCase>& sc : cases) {
-                if (!sc->value()) {
-                    defaultCase = sc.get();
+            for (const std::unique_ptr<Statement>& stmt : cases) {
+                SwitchCase& sc = stmt->as<SwitchCase>();
+                if (!sc.value()) {
+                    defaultCase = &sc;
                     continue;
                 }
 
                 SKSL_INT caseValue;
-                SkAssertResult(ConstantFolder::GetConstantInt(*sc->value(), &caseValue));
+                SkAssertResult(ConstantFolder::GetConstantInt(*sc.value(), &caseValue));
                 if (caseValue == switchValue) {
-                    matchingCase = sc.get();
+                    matchingCase = &sc;
                     break;
                 }
             }
