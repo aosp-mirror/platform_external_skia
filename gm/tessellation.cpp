@@ -170,8 +170,8 @@ void TessellationTestTriShader::Impl::writeFragmentShader(
     f->codeAppendf(R"(
             half3 d = half3(1 - barycentric_coord/fwidth(barycentric_coord));
             half coverage = max(max(d.x, d.y), d.z);
-            %s = half4(0, coverage, coverage, 1);
-            %s = half4(1);)", color, coverage);
+            half4 %s = half4(0, coverage, coverage, 1);
+            const half4 %s = half4(1);)", color, coverage);
 }
 
 class TessellationTestRectShader : public GrGeometryProcessor {
@@ -287,8 +287,8 @@ void TessellationTestRectShader::Impl::writeFragmentShader(
                     coverage = half(max(coverage, 1 - barycentric_coord[i]/fwidths[i]));
                 }
             }
-            %s = half4(coverage, 0, coverage, 1);
-            %s = half4(1);)", color, coverage);
+            half4 %s = half4(coverage, 0, coverage, 1);
+            const half4 %s = half4(1);)", color, coverage);
 }
 
 
