@@ -13,7 +13,6 @@
 #include <vector>
 #include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLAnalysis.h"
-#include "src/sksl/SkSLCFGGenerator.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLInliner.h"
@@ -179,41 +178,20 @@ private:
     const ParsedModule& loadPublicModule();
     const ParsedModule& loadRuntimeEffectModule();
 
-    void scanCFG(CFG* cfg, BlockId block, SkBitSet* processedSet);
-    void computeDataFlow(CFG* cfg);
-
     /** Verifies that @if and @switch statements were actually optimized away. */
     void verifyStaticTests(const Program& program);
 
-    /**
-     * Simplifies the expression pointed to by iter (in both the IR and CFG structures), if
-     * possible.
-     */
-    void simplifyExpression(DefinitionMap& definitions,
-                            BasicBlock& b,
-                            std::vector<BasicBlock::Node>::iterator* iter,
-                            OptimizationContext* context);
-
-    /**
-     * Simplifies the statement pointed to by iter (in both the IR and CFG structures), if
-     * possible.
-     */
-    void simplifyStatement(DefinitionMap& definitions,
-                           BasicBlock& b,
-                           std::vector<BasicBlock::Node>::iterator* iter,
-                           OptimizationContext* context);
-
-    /**
-     * Optimizes a function based on control flow analysis. Returns true if changes were made.
-     */
-    bool scanCFG(FunctionDefinition& f, ProgramUsage* usage);
-
-    /**
-     * Optimize every function in the program.
-     */
+    /** Optimize every function in the program. */
     bool optimize(Program& program);
 
+    /** Optimize the module. */
     bool optimize(LoadedModule& module);
+
+    /** Eliminates unused functions from a Program, according to the stats in ProgramUsage. */
+    bool removeDeadFunctions(Program& program, ProgramUsage* usage);
+
+    /** Eliminates unreferenced globals from a Program, according to the stats in ProgramUsage. */
+    bool removeDeadGlobalVariables(Program& program, ProgramUsage* usage);
 
     Position position(int offset);
 

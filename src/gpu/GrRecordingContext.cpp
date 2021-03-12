@@ -21,6 +21,7 @@
 #include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrSkSLFP.h"
+#include "src/gpu/ops/GrAtlasTextOp.h"
 #include "src/gpu/text/GrTextBlobCache.h"
 
 GrRecordingContext::ProgramData::ProgramData(std::unique_ptr<const GrProgramDesc> desc,
@@ -42,7 +43,9 @@ GrRecordingContext::GrRecordingContext(sk_sp<GrContextThreadSafeProxy> proxy)
     fProxyProvider = std::make_unique<GrProxyProvider>(this);
 }
 
-GrRecordingContext::~GrRecordingContext() = default;
+GrRecordingContext::~GrRecordingContext() {
+    GrAtlasTextOp::ClearCache();
+}
 
 int GrRecordingContext::maxSurfaceSampleCountForColorType(SkColorType colorType) const {
     GrBackendFormat format =
@@ -62,9 +65,6 @@ bool GrRecordingContext::init() {
     prcOptions.fGpuPathRenderers = this->options().fGpuPathRenderers;
 #endif
     // FIXME: Once this is removed from Chrome and Android, rename to fEnable"".
-    if (!this->options().fDisableCoverageCountingPaths) {
-        prcOptions.fGpuPathRenderers |= GpuPathRenderers::kCoverageCounting;
-    }
     if (this->options().fDisableDistanceFieldPaths) {
         prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kSmall;
     }

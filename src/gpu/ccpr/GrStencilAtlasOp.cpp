@@ -55,7 +55,8 @@ class StencilResolveProcessor::Impl : public GrGLSLGeometryProcessor {
 
         // Just output "1" for coverage. This will be modulated by the MSAA stencil test.
         GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
-        f->codeAppendf("%s = %s = half4(1);", args.fOutputColor, args.fOutputCoverage);
+        f->codeAppendf("const half4 %s = half4(1), %s = half4(1);",
+                       args.fOutputColor, args.fOutputCoverage);
     }
 
     void setData(const GrGLSLProgramDataManager&, const GrPrimitiveProcessor&) override {}
@@ -69,11 +70,11 @@ GrGLSLPrimitiveProcessor* StencilResolveProcessor::createGLSLInstance(const GrSh
 
 GrOp::Owner GrStencilAtlasOp::Make(
         GrRecordingContext* context, sk_sp<const GrCCPerFlushResources> resources,
-        FillBatchID fillBatchID, StrokeBatchID strokeBatchID, int baseStencilResolveInstance,
+        FillBatchID fillBatchID, int baseStencilResolveInstance,
         int endStencilResolveInstance, const SkISize& drawBounds) {
 
     return GrOp::Make<GrStencilAtlasOp>(
-            context, std::move(resources), fillBatchID, strokeBatchID, baseStencilResolveInstance,
+            context, std::move(resources), fillBatchID, baseStencilResolveInstance,
             endStencilResolveInstance, drawBounds);
 }
 
