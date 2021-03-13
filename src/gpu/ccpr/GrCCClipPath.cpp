@@ -13,9 +13,8 @@
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/ccpr/GrCCPerFlushResources.h"
 
-void GrCCClipPath::init(
-        const SkPath& deviceSpacePath, const SkIRect& accessRect,
-        GrCCAtlas::CoverageType atlasCoverageType, const GrCaps& caps) {
+void GrCCClipPath::init(const SkPath& deviceSpacePath, const SkIRect& accessRect,
+                        const GrCaps& caps) {
     SkASSERT(!this->isInitialized());
 
     fAtlasLazyProxy = GrCCAtlas::MakeLazyAtlasProxy(
@@ -41,23 +40,19 @@ void GrCCClipPath::init(
                 return GrSurfaceProxy::LazyCallbackResult(
                         std::move(texture), true,
                         GrSurfaceProxy::LazyInstantiationKeyMode::kUnsynced);
-            },
-            atlasCoverageType, caps, GrSurfaceProxy::UseAllocator::kYes);
+            }, caps, GrSurfaceProxy::UseAllocator::kYes);
 
     fDeviceSpacePath = deviceSpacePath;
     fDeviceSpacePath.getBounds().roundOut(&fPathDevIBounds);
     fAccessRect = accessRect;
 }
 
-void GrCCClipPath::accountForOwnPath(GrCCPerFlushResourceSpecs* specs) const {
+void GrCCClipPath::accountForOwnPath(GrCCAtlas::Specs* specs) const {
     SkASSERT(this->isInitialized());
-
-    ++specs->fNumClipPaths;
-    specs->fRenderedPathStats.statPath(fDeviceSpacePath);
 
     SkIRect ibounds;
     if (ibounds.intersect(fAccessRect, fPathDevIBounds)) {
-        specs->fRenderedAtlasSpecs.accountForSpace(ibounds.width(), ibounds.height());
+        specs->accountForSpace(ibounds.width(), ibounds.height());
     }
 }
 
@@ -66,7 +61,7 @@ void GrCCClipPath::renderPathInAtlas(GrCCPerFlushResources* resources,
     SkASSERT(this->isInitialized());
     SkASSERT(!fHasAtlas);
     fAtlas = resources->renderDeviceSpacePathInAtlas(
-            fAccessRect, fDeviceSpacePath, fPathDevIBounds, GrFillRuleForSkPath(fDeviceSpacePath),
-            &fDevToAtlasOffset);
+            onFlushRP, fAccessRect, fDeviceSpacePath, fPathDevIBounds,
+            GrFillRuleForSkPath(fDeviceSpacePath), &fDevToAtlasOffset);
     SkDEBUGCODE(fHasAtlas = true);
 }

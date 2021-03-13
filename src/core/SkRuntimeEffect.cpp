@@ -428,7 +428,8 @@ public:
                          size_t childCount)
             : fEffect(std::move(effect))
             , fUniforms(std::move(uniforms))
-            , fChildren(children, children + childCount) {}
+            , fChildren(children, children + childCount)
+            , fIsAlphaUnchanged(this->computeIsAlphaUnchanged()) {}
 
 #if SK_SUPPORT_GPU
     GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
@@ -499,7 +500,76 @@ public:
                                    /*device=*/zeroCoord, /*local=*/zeroCoord, sampleChild);
     }
 
-    uint32_t onGetFlags() const override {
+    SkPMColor4f onFilterColor4f(const SkPMColor4f& color, SkColorSpace* dstCS) const override {
+        fEffect->fColorFilterProgramOnce([&]{
+            // While color filters are often transient, runtime effects are longer lived & cached.
+            // So: We build and save a program on the *effect* that can filter a single color,
+            // without baking in anything tied to a particular instance (uniforms or children).
+            skvm::Builder p;
+
+            // We allocate a uniform color for each child in the SkSL. When we run this program
+            // later, these uniform values are replaced with either the results of the child,
+            // or the input color (if the child is nullptr). These Uniform ids are loads from the
+            // *first* arg ptr.
+            skvm::Uniforms childColorUniforms{p.uniform(), 0};
+            std::vector<skvm::Color> childColors;
+            for (size_t i = 0; i < fChildren.size(); ++i) {
+                childColors.push_back(
+                        p.uniformColor(/*placeholder*/ SkColors::kWhite, &childColorUniforms));
+            }
+            auto sampleChild = [&](int ix, skvm::Coord /*coord*/) { return childColors[ix]; };
+
+            // For SkSL uniforms, we reserve space and allocate skvm Uniform ids for each one.
+            // When we run the program, these ids will be loads from the *second* arg ptr, the
+            // uniform data of the specific color filter instance.
+            skvm::Uniforms skslUniforms{p.uniform(), 0};
+            std::vector<skvm::Val> uniform;
+            for (int i = 0; i < (int)fEffect->uniformSize() / 4; i++) {
+                uniform.push_back(p.uniform32(skslUniforms.push(/*placeholder*/ 0)).id);
+            }
+
+            // Emit the skvm instructions for the SkSL
+            skvm::Coord zeroCoord = { p.splat(0.0f), p.splat(0.0f) };
+            skvm::Color result = SkSL::ProgramToSkVM(*fEffect->fBaseProgram,
+                                                     fEffect->fMain,
+                                                     &p,
+                                                     uniform,
+                                                     /*device=*/zeroCoord,
+                                                     /*local=*/zeroCoord,
+                                                     sampleChild);
+
+            // Then store the result to the *third* arg ptr
+            p.store({skvm::PixelFormat::FLOAT, 32,32,32,32, 0,32,64,96}, p.arg(16), result);
+
+            // We'll use this program to filter one color at a time, don't bother with jit
+            fEffect->fColorFilterProgram =
+                    std::make_unique<skvm::Program>(p.done(nullptr, /*allow_jit=*/false));
+        });
+
+        // At this point, we have a "generic" program for filtering a single color
+
+        // Get our specific uniform values
+        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, nullptr, dstCS);
+
+        // There should be no way for a color filter (which can't use "marker") to fail here
+        SkASSERT(inputs && fEffect->fColorFilterProgram);
+
+        // We defined sampling any child as returning a uniform color. Here, assemble a buffer
+        // containing those colors. For any null children, the sample result is just the input
+        // color. For non-null children, it's the result of that child filtering the input color.
+        SkSTArray<1, SkPMColor4f, true> inputColors;
+        for (const auto &child : fChildren) {
+            inputColors.push_back(child ? as_CFB(child)->onFilterColor4f(color, dstCS) : color);
+        }
+
+        SkPMColor4f result;
+        fEffect->fColorFilterProgram->eval(1, inputColors.begin(), inputs->data(), result.vec());
+        return result;
+    }
+
+    bool onIsAlphaUnchanged() const override { return fIsAlphaUnchanged; }
+
+    bool computeIsAlphaUnchanged() const {
         skvm::Builder  p;
         SkColorSpace*  dstCS = sk_srgb_singleton();  // This _shouldn't_ matter for alpha.
         skvm::Uniforms uniforms{p.uniform(), 0};
@@ -508,10 +578,7 @@ public:
         skvm::Color in = p.load({skvm::PixelFormat::FLOAT, 32,32,32,32, 0,32,64,96}, p.arg(16)),
                    out = this->onProgram(&p,in,dstCS,&uniforms,&alloc);
 
-        if (out.a.id == in.a.id) {
-            return SkColorFilter::kAlphaUnchanged_Flag;
-        }
-        return 0;
+        return out.a.id == in.a.id;
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
@@ -533,6 +600,7 @@ private:
     sk_sp<SkRuntimeEffect> fEffect;
     sk_sp<SkData> fUniforms;
     std::vector<sk_sp<SkColorFilter>> fChildren;
+    const bool fIsAlphaUnchanged;
 };
 
 sk_sp<SkFlattenable> SkRuntimeColorFilter::CreateProc(SkReadBuffer& buffer) {

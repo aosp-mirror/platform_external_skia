@@ -39,7 +39,6 @@ public:
     bool isInitialized() const { return fAtlasLazyProxy != nullptr; }
     void init(const SkPath& deviceSpacePath,
               const SkIRect& desc,
-              GrCCAtlas::CoverageType atlasCoverageType,
               const GrCaps&);
 
     void addAccess(const SkIRect& accessRect) {
@@ -59,7 +58,7 @@ public:
         return fPathDevIBounds;
     }
 
-    void accountForOwnPath(GrCCPerFlushResourceSpecs*) const;
+    void accountForOwnPath(GrCCAtlas::Specs*) const;
     void renderPathInAtlas(GrCCPerFlushResources*, GrOnFlushResourceProvider*);
 
     const SkIVector& atlasTranslate() const {

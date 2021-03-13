@@ -22,6 +22,7 @@
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/ops/GrAtlasTextOp.h"
+#include "src/gpu/text/GrTextBlob.h"
 #include "src/gpu/text/GrTextBlobCache.h"
 
 GrRecordingContext::ProgramData::ProgramData(std::unique_ptr<const GrProgramDesc> desc,
@@ -95,12 +96,16 @@ void GrRecordingContext::destroyDrawingManager() {
     fDrawingManager.reset();
 }
 
-GrRecordingContext::Arenas::Arenas(GrMemoryPool* opMemoryPool, SkArenaAlloc* recordTimeAllocator)
+GrRecordingContext::Arenas::Arenas(GrMemoryPool* opMemoryPool,
+                                   SkArenaAlloc* recordTimeAllocator,
+                                   GrSubRunAllocator* subRunAllocator)
         : fOpMemoryPool(opMemoryPool)
-        , fRecordTimeAllocator(recordTimeAllocator) {
+        , fRecordTimeAllocator(recordTimeAllocator)
+        , fRecordTimeSubRunAllocator(subRunAllocator) {
     // OwnedArenas should instantiate these before passing the bare pointer off to this struct.
     SkASSERT(opMemoryPool);
     SkASSERT(recordTimeAllocator);
+    SkASSERT(subRunAllocator);
 }
 
 // Must be defined here so that std::unique_ptr can see the sizes of the various pools, otherwise
@@ -111,6 +116,7 @@ GrRecordingContext::OwnedArenas::~OwnedArenas() {}
 GrRecordingContext::OwnedArenas& GrRecordingContext::OwnedArenas::operator=(OwnedArenas&& a) {
     fOpMemoryPool = std::move(a.fOpMemoryPool);
     fRecordTimeAllocator = std::move(a.fRecordTimeAllocator);
+    fRecordTimeSubRunAllocator = std::move(a.fRecordTimeSubRunAllocator);
     return *this;
 }
 
@@ -127,7 +133,11 @@ GrRecordingContext::Arenas GrRecordingContext::OwnedArenas::get() {
         fRecordTimeAllocator = std::make_unique<SkArenaAlloc>(sizeof(GrPipeline) * 100);
     }
 
-    return {fOpMemoryPool.get(), fRecordTimeAllocator.get()};
+    if (!fRecordTimeSubRunAllocator) {
+        fRecordTimeSubRunAllocator = std::make_unique<GrSubRunAllocator>();
+    }
+
+    return {fOpMemoryPool.get(), fRecordTimeAllocator.get(), fRecordTimeSubRunAllocator.get()};
 }
 
 GrRecordingContext::OwnedArenas&& GrRecordingContext::detachArenas() {
