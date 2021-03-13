@@ -472,11 +472,11 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
                     // This function doesn't return a value, but has early returns, so we've wrapped
                     // it in a for loop. Use a continue to jump to the end of the loop and "leave"
                     // the function.
-                    return std::make_unique<ContinueStatement>(offset);
+                    return ContinueStatement::Make(offset);
                 } else {
                     // This function doesn't exit early or return a value. A return statement at the
                     // end is a no-op and can be treated as such.
-                    return std::make_unique<Nop>();
+                    return Nop::Make();
                 }
             }
 
@@ -486,7 +486,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             SkASSERT(resultExpr);
             if (returnComplexity <= ReturnComplexity::kSingleSafeReturn) {
                 *resultExpr = expr(r.expression());
-                return std::make_unique<Nop>();
+                return Nop::Make();
             }
 
             // For more complex functions, assign their result into a variable.
@@ -505,7 +505,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
                 StatementArray block;
                 block.reserve_back(2);
                 block.push_back(std::move(assignment));
-                block.push_back(std::make_unique<ContinueStatement>(offset));
+                block.push_back(ContinueStatement::Make(offset));
                 return std::make_unique<Block>(offset, std::move(block), /*symbols=*/nullptr,
                                                /*isScope=*/true);
             }
@@ -635,7 +635,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
             arguments.size() +  // Function arguments (copy out-params back)
             1);                 // Block for inlined code
 
-    inlinedBody.children().push_back(std::make_unique<InlineMarker>(&call->function()));
+    inlinedBody.children().push_back(InlineMarker::Make(&call->function()));
 
     std::unique_ptr<Expression> resultExpr;
     if (returnComplexity > ReturnComplexity::kSingleSafeReturn &&
@@ -691,9 +691,9 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         // int _1_loop = 0;
         symbolTable = std::make_shared<SymbolTable>(std::move(symbolTable), caller->isBuiltin());
         const Type* intType = fContext->fTypes.fInt.get();
-        std::unique_ptr<Expression> initialValue = std::make_unique<IntLiteral>(/*offset=*/-1,
-                                                                                /*value=*/0,
-                                                                                intType);
+        std::unique_ptr<Expression> initialValue = IntLiteral::Make(/*offset=*/-1,
+                                                                    /*value=*/0,
+                                                                    intType);
         InlineVariable loopVar = this->makeInlineVariable("loop", intType, symbolTable.get(),
                                                           Modifiers{}, caller->isBuiltin(),
                                                           &initialValue);
@@ -703,7 +703,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
                 *fContext,
                 std::make_unique<VariableReference>(/*offset=*/-1, loopVar.fVarSymbol),
                 Token::Kind::TK_LT,
-                std::make_unique<IntLiteral>(/*offset=*/-1, /*value=*/1, intType));
+                IntLiteral::Make(/*offset=*/-1, /*value=*/1, intType));
 
         // _1_loop++
         std::unique_ptr<Expression> increment = PostfixExpression::Make(
@@ -754,9 +754,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     } else if (function.declaration().returnType() == *fContext->fTypes.fVoid) {
         // It's a void function, so it doesn't actually result in anything, but we have to return
         // something non-null as a standin.
-        inlinedCall.fReplacementExpr = std::make_unique<BoolLiteral>(*fContext,
-                                                                     offset,
-                                                                     /*value=*/false);
+        inlinedCall.fReplacementExpr = BoolLiteral::Make(*fContext, offset, /*value=*/false);
     } else {
         // It's a non-void function, but it never created a result expression--that is, it never
         // returned anything on any path! This should have been detected in the function finalizer.
