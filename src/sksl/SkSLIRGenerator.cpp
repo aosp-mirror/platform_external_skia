@@ -141,7 +141,7 @@ std::unique_ptr<ModifiersPool> IRGenerator::releaseModifiers() {
     return result;
 }
 
-std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& statement) {
+std::unique_ptr<Statement> IRGenerator::convertStatement(const ASTNode& statement) {
     switch (statement.fKind) {
         case ASTNode::Kind::kBlock:
             return this->convertBlock(statement);
@@ -181,31 +181,13 @@ std::unique_ptr<Statement> IRGenerator::convertSingleStatement(const ASTNode& st
                         statements.reserve_back(2);
                         statements.push_back(getNormalizeSkPositionCode());
                         statements.push_back(std::move(result));
-                        return std::make_unique<Block>(statement.fOffset, std::move(statements),
-                                                       fSymbolTable);
+                        return Block::Make(statement.fOffset, std::move(statements),
+                                           fSymbolTable, /*isScope=*/true);
                     }
                 }
             }
             return result;
     }
-}
-
-std::unique_ptr<Statement> IRGenerator::convertStatement(const ASTNode& statement) {
-    StatementArray oldExtraStatements = std::move(fExtraStatements);
-    std::unique_ptr<Statement> result = this->convertSingleStatement(statement);
-    if (!result) {
-        fExtraStatements = std::move(oldExtraStatements);
-        return nullptr;
-    }
-    if (fExtraStatements.size()) {
-        fExtraStatements.push_back(std::move(result));
-        auto block = std::make_unique<Block>(/*offset=*/-1, std::move(fExtraStatements),
-                                             /*symbols=*/nullptr, /*isScope=*/false);
-        fExtraStatements = std::move(oldExtraStatements);
-        return std::move(block);
-    }
-    fExtraStatements = std::move(oldExtraStatements);
-    return result;
 }
 
 std::unique_ptr<Block> IRGenerator::convertBlock(const ASTNode& block) {
@@ -219,7 +201,7 @@ std::unique_ptr<Block> IRGenerator::convertBlock(const ASTNode& block) {
         }
         statements.push_back(std::move(statement));
     }
-    return std::make_unique<Block>(block.fOffset, std::move(statements), fSymbolTable);
+    return Block::Make(block.fOffset, std::move(statements), fSymbolTable);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertVarDeclarationStatement(const ASTNode& s) {
@@ -228,12 +210,7 @@ std::unique_ptr<Statement> IRGenerator::convertVarDeclarationStatement(const AST
     if (decls.empty()) {
         return nullptr;
     }
-    if (decls.size() == 1) {
-        return std::move(decls.front());
-    } else {
-        return std::make_unique<Block>(s.fOffset, std::move(decls), /*symbols=*/nullptr,
-                                       /*isScope=*/false);
-    }
+    return Block::MakeUnscoped(s.fOffset, std::move(decls));
 }
 
 int IRGenerator::convertArraySize(const Type& type, int offset, const ASTNode& s) {
@@ -686,11 +663,7 @@ std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
         }
         ++childIter;
 
-        auto caseBlock = std::make_unique<Block>(c.fOffset,
-                                                 StatementArray{},
-                                                 /*symbols=*/nullptr,
-                                                 /*isScope=*/false);
-        StatementArray& statements = caseBlock->children();
+        StatementArray statements;
         for (; childIter != c.end(); ++childIter) {
             std::unique_ptr<Statement> converted = this->convertStatement(*childIter);
             if (!converted) {
@@ -698,7 +671,8 @@ std::unique_ptr<Statement> IRGenerator::convertSwitch(const ASTNode& s) {
             }
             statements.push_back(std::move(converted));
         }
-        caseStatements.push_back(std::move(caseBlock));
+
+        caseStatements.push_back(Block::MakeUnscoped(c.fOffset, std::move(statements)));
     }
     return SwitchStatement::Convert(fContext, s.fOffset, s.getBool(), std::move(value),
                                     std::move(caseValues), std::move(caseStatements), fSymbolTable);
@@ -794,12 +768,15 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
             Token::Kind::TK_EQ,
             IntLiteral::Make(fContext, /*offset=*/-1, /*value=*/0));
     auto initializer = ExpressionStatement::Make(fContext, std::move(assignment));
-    auto loop = ForStatement::Make(
-            fContext, /*offset=*/-1, std::move(initializer), std::move(test), std::move(next),
-            std::make_unique<Block>(/*offset=*/-1, std::move(loopBody)), fSymbolTable);
+    auto loop = ForStatement::Make(fContext, /*offset=*/-1,
+                                   std::move(initializer),
+                                   std::move(test),
+                                   std::move(next),
+                                   Block::Make(/*offset=*/-1, std::move(loopBody)),
+                                   fSymbolTable);
     StatementArray children;
     children.push_back(std::move(loop));
-    return std::make_unique<Block>(/*offset=*/-1, std::move(children));
+    return Block::Make(/*offset=*/-1, std::move(children));
 }
 
 std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {

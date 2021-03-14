@@ -189,18 +189,16 @@ public:
     }
 
     /**
-     * Fills a rect with a paint and a localMatrix.
+     * Fills a block of pixels with a paint and a localMatrix, respecting the clip.
      */
-    void fillRectWithLocalMatrix(const GrClip* clip,
-                                 GrPaint&& paint,
-                                 GrAA aa,
-                                 const SkMatrix& viewMatrix,
-                                 const SkRect& rect,
-                                 const SkMatrix& localMatrix) {
-        DrawQuad quad{GrQuad::MakeFromRect(rect, viewMatrix),
-                      GrQuad::MakeFromRect(rect, localMatrix),
-                      aa == GrAA::kYes ? GrQuadAAFlags::kAll : GrQuadAAFlags::kNone};
-        this->drawFilledQuad(clip, std::move(paint), aa, &quad);
+    void fillPixelsWithLocalMatrix(const GrClip* clip,
+                                   GrPaint&& paint,
+                                   const SkIRect& bounds,
+                                   const SkMatrix& localMatrix) {
+        SkRect rect = SkRect::Make(bounds);
+        DrawQuad quad{GrQuad::MakeFromRect(rect, SkMatrix::I()),
+                      GrQuad::MakeFromRect(rect, localMatrix), GrQuadAAFlags::kNone};
+        this->drawFilledQuad(clip, std::move(paint), GrAA::kNo, &quad);
     }
 
     /**
@@ -367,23 +365,6 @@ public:
                         const SkMatrix& viewMatrix,
                         const SkPath& path,
                         const SkDrawShadowRec& rec);
-
-    /**
-     * Shortcut for filling a SkPath consisting of nested rrects using a paint. The result is
-     * undefined if outer does not contain inner.
-     *
-     * @param paint        describes how to color pixels.
-     * @param GrAA         Controls whether rrects edges are antialiased
-     * @param viewMatrix   transformation matrix
-     * @param outer        the outer roundrect
-     * @param inner        the inner roundrect
-     */
-    void drawDRRect(const GrClip*,
-                    GrPaint&&,
-                    GrAA,
-                    const SkMatrix& viewMatrix,
-                    const SkRRect& outer,
-                    const SkRRect& inner);
 
     /**
      * Draws a path.
@@ -583,6 +564,15 @@ public:
         this->drawFilledQuad(clip, std::move(paint), doStencilMSAA, &quad, ss);
     }
 
+    // Fills the user stencil bits with a non-zero value at every sample inside the path. This will
+    // likely be implemented with a Redbook algorithm, but it is not guaranteed. The samples being
+    // rendered to must be zero initially.
+    bool stencilPath(const GrHardClip*,
+                     GrAA doStencilMSAA,
+                     const SkMatrix& viewMatrix,
+                     const SkPath&);
+
+    // Same as for stencilPath, but for an NVPR path object.
     void stencilPath(const GrHardClip*,
                      GrAA doStencilMSAA,
                      const SkMatrix& viewMatrix,
@@ -658,14 +648,6 @@ private:
     void setNeedsStencil(bool useMixedSamplesIfNotMSAA);
 
     void internalStencilClear(const SkIRect* scissor, bool insideStencilMask);
-
-    // Only consumes the GrPaint if successful.
-    bool drawFilledDRRect(const GrClip* clip,
-                          GrPaint&& paint,
-                          GrAA,
-                          const SkMatrix& viewMatrix,
-                          const SkRRect& origOuter,
-                          const SkRRect& origInner);
 
     // If the drawn quad's paint is a const blended color, provide it as a non-null pointer to
     // 'constColor', which enables the draw-as-clear optimization. Otherwise it is assumed the paint
