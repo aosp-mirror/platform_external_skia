@@ -387,10 +387,10 @@ void GrSurfaceDrawContext::drawPaint(const GrClip* clip,
                                      const SkMatrix& viewMatrix) {
     // Start with the render target, since that is the maximum content we could possibly fill.
     // drawFilledQuad() will automatically restrict it to clip bounds for us if possible.
-    SkRect r = this->asSurfaceProxy()->getBoundsRect();
     if (!paint.numTotalFragmentProcessors()) {
         // The paint is trivial so we won't need to use local coordinates, so skip calculating the
         // inverse view matrix.
+        SkRect r = this->asSurfaceProxy()->getBoundsRect();
         this->fillRectToRect(clip, std::move(paint), GrAA::kNo, SkMatrix::I(), r, r);
     } else {
         // Use the inverse view matrix to arrive at appropriate local coordinates for the paint.
@@ -398,8 +398,8 @@ void GrSurfaceDrawContext::drawPaint(const GrClip* clip,
         if (!viewMatrix.invert(&localMatrix)) {
             return;
         }
-        this->fillRectWithLocalMatrix(clip, std::move(paint), GrAA::kNo, SkMatrix::I(), r,
-                                      localMatrix);
+        SkIRect bounds = SkIRect::MakeSize(this->asSurfaceProxy()->dimensions());
+        this->fillPixelsWithLocalMatrix(clip, std::move(paint), bounds, localMatrix);
     }
 }
 
@@ -746,6 +746,43 @@ void GrSurfaceDrawContext::internalStencilClear(const SkIRect* scissor, bool ins
     }
 }
 
+bool GrSurfaceDrawContext::stencilPath(const GrHardClip* clip,
+                                       GrAA doStencilMSAA,
+                                       const SkMatrix& viewMatrix,
+                                       const SkPath& path) {
+    SkIRect clipBounds = clip ? clip->getConservativeBounds()
+                              : SkIRect::MakeSize(this->dimensions());
+    GrStyledShape shape(path, GrStyledShape::DoSimplify::kNo);
+
+    GrPathRenderer::CanDrawPathArgs canDrawArgs;
+    canDrawArgs.fCaps = fContext->priv().caps();
+    canDrawArgs.fProxy = this->asRenderTargetProxy();
+    canDrawArgs.fClipConservativeBounds = &clipBounds;
+    canDrawArgs.fViewMatrix = &viewMatrix;
+    canDrawArgs.fShape = &shape;
+    canDrawArgs.fPaint = nullptr;
+    canDrawArgs.fAAType = (doStencilMSAA == GrAA::kYes) ? GrAAType::kMSAA : GrAAType::kNone;
+    canDrawArgs.fHasUserStencilSettings = false;
+    canDrawArgs.fTargetIsWrappedVkSecondaryCB = this->wrapsVkSecondaryCB();
+    GrPathRenderer* pr = this->drawingManager()->getPathRenderer(
+            canDrawArgs, false, GrPathRendererChain::DrawType::kStencil);
+    if (!pr) {
+        SkDebugf("WARNING: No path renderer to stencil path.\n");
+        return false;
+    }
+
+    GrPathRenderer::StencilPathArgs args;
+    args.fContext = fContext;
+    args.fRenderTargetContext = this;
+    args.fClip = clip;
+    args.fClipConservativeBounds = &clipBounds;
+    args.fViewMatrix = &viewMatrix;
+    args.fShape = &shape;
+    args.fDoStencilMSAA = doStencilMSAA;
+    pr->stencilPath(args);
+    return true;
+}
+
 void GrSurfaceDrawContext::stencilPath(const GrHardClip* clip,
                                        GrAA doStencilMSAA,
                                        const SkMatrix& viewMatrix,
@@ -937,7 +974,8 @@ void GrSurfaceDrawContext::drawRRect(const GrClip* origClip,
     }
     if (!op && style.isSimpleFill()) {
         assert_alive(paint);
-        op = GrFillRRectOp::Make(fContext, std::move(paint), viewMatrix, rrect, aaType);
+        op = GrFillRRectOp::Make(fContext, std::move(paint), viewMatrix, rrect,
+                                 GrAA(aaType != GrAAType::kNone));
     }
     if (!op && GrAAType::kCoverage == aaType) {
         assert_alive(paint);
@@ -1164,126 +1202,6 @@ bool GrSurfaceDrawContext::drawFastShadow(const GrClip* clip,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool GrSurfaceDrawContext::drawFilledDRRect(const GrClip* clip,
-                                            GrPaint&& paint,
-                                            GrAA aa,
-                                            const SkMatrix& viewMatrix,
-                                            const SkRRect& origOuter,
-                                            const SkRRect& origInner) {
-    SkASSERT(!origInner.isEmpty());
-    SkASSERT(!origOuter.isEmpty());
-
-    SkTCopyOnFirstWrite<SkRRect> inner(origInner), outer(origOuter);
-
-    GrAAType aaType = this->chooseAAType(aa);
-
-    if (GrAAType::kMSAA == aaType) {
-        return false;
-    }
-
-    if (GrAAType::kCoverage == aaType && SkRRectPriv::IsCircle(*inner)
-                                      && SkRRectPriv::IsCircle(*outer)) {
-        auto outerR = outer->width() / 2.f;
-        auto innerR = inner->width() / 2.f;
-        auto cx = outer->getBounds().fLeft + outerR;
-        auto cy = outer->getBounds().fTop + outerR;
-        if (SkScalarNearlyEqual(cx, inner->getBounds().fLeft + innerR) &&
-            SkScalarNearlyEqual(cy, inner->getBounds().fTop + innerR)) {
-            auto avgR = (innerR + outerR) / 2.f;
-            auto circleBounds = SkRect::MakeLTRB(cx - avgR, cy - avgR, cx + avgR, cy + avgR);
-            SkStrokeRec stroke(SkStrokeRec::kFill_InitStyle);
-            stroke.setStrokeStyle(outerR - innerR);
-            auto op = GrOvalOpFactory::MakeOvalOp(fContext, std::move(paint), viewMatrix,
-                                                  circleBounds, GrStyle(stroke, nullptr),
-                                                  this->caps()->shaderCaps());
-            if (op) {
-                this->addDrawOp(clip, std::move(op));
-                return true;
-            }
-            assert_alive(paint);
-        }
-    }
-
-    GrClipEdgeType innerEdgeType, outerEdgeType;
-    if (GrAAType::kCoverage == aaType) {
-        innerEdgeType = GrClipEdgeType::kInverseFillAA;
-        outerEdgeType = GrClipEdgeType::kFillAA;
-    } else {
-        innerEdgeType = GrClipEdgeType::kInverseFillBW;
-        outerEdgeType = GrClipEdgeType::kFillBW;
-    }
-
-    SkMatrix inverseVM;
-    if (!viewMatrix.isIdentity()) {
-        if (!origInner.transform(viewMatrix, inner.writable())) {
-            return false;
-        }
-        if (!origOuter.transform(viewMatrix, outer.writable())) {
-            return false;
-        }
-        if (!viewMatrix.invert(&inverseVM)) {
-            return false;
-        }
-    } else {
-        inverseVM.reset();
-    }
-
-    const auto& caps = *this->caps()->shaderCaps();
-    // TODO these need to be a geometry processors
-    auto [success, fp] = GrRRectEffect::Make(/*inputFP=*/nullptr, innerEdgeType, *inner, caps);
-    if (!success) {
-        return false;
-    }
-
-    std::tie(success, fp) = GrRRectEffect::Make(std::move(fp), outerEdgeType, *outer, caps);
-    if (!success) {
-        return false;
-    }
-
-    paint.setCoverageFragmentProcessor(std::move(fp));
-
-    SkRect bounds = outer->getBounds();
-    if (GrAAType::kCoverage == aaType) {
-        bounds.outset(SK_ScalarHalf, SK_ScalarHalf);
-    }
-
-    this->fillRectWithLocalMatrix(clip, std::move(paint), GrAA::kNo, SkMatrix::I(), bounds,
-                                  inverseVM);
-    return true;
-}
-
-void GrSurfaceDrawContext::drawDRRect(const GrClip* clip,
-                                      GrPaint&& paint,
-                                      GrAA aa,
-                                      const SkMatrix& viewMatrix,
-                                      const SkRRect& outer,
-                                      const SkRRect& inner) {
-    ASSERT_SINGLE_OWNER
-    RETURN_IF_ABANDONED
-    SkDEBUGCODE(this->validate();)
-    GR_CREATE_TRACE_MARKER_CONTEXT("GrSurfaceDrawContext", "drawDRRect", fContext);
-
-    SkASSERT(!outer.isEmpty());
-    SkASSERT(!inner.isEmpty());
-
-    AutoCheckFlush acf(this->drawingManager());
-
-    if (this->drawFilledDRRect(clip, std::move(paint), aa, viewMatrix, outer, inner)) {
-        return;
-    }
-    assert_alive(paint);
-
-    SkPath path;
-    path.setIsVolatile(true);
-    path.addRRect(inner);
-    path.addRRect(outer);
-    path.setFillType(SkPathFillType::kEvenOdd);
-    this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
-                                     GrStyledShape(path, DoSimplify::kNo));
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 void GrSurfaceDrawContext::drawRegion(const GrClip* clip,
                                       GrPaint&& paint,
                                       GrAA aa,
@@ -1363,7 +1281,7 @@ void GrSurfaceDrawContext::drawOval(const GrClip* clip,
         // ovals the exact same way we do round rects.
         assert_alive(paint);
         op = GrFillRRectOp::Make(fContext, std::move(paint), viewMatrix, SkRRect::MakeOval(oval),
-                                 aaType);
+                                 GrAA(aaType != GrAAType::kNone));
     }
     if (!op && GrAAType::kCoverage == aaType) {
         assert_alive(paint);
