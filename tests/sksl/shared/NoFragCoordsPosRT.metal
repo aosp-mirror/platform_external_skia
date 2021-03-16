@@ -1,8 +1,11 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+using namespace metal;
 struct Uniforms {
     float4 sk_RTAdjust;
 };
 struct Inputs {
-    float4 pos;
+    float4 pos  [[attribute(0)]];
 };
 struct Outputs {
     float4 sk_Position [[position]];

@@ -1,3 +1,6 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+using namespace metal;
 struct S {
     float f;
     array<float, 5> af;
@@ -12,8 +15,13 @@ struct Inputs {
 struct Outputs {
     float4 sk_FragColor [[color(0)]];
 };
-
+struct Globals {
+    float4 globalVar;
+    S globalStruct;
+};
 fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _uniforms [[buffer(0)]], bool _frontFacing [[front_facing]], float4 _fragCoord [[position]]) {
+    Globals _globals{{}, {}};
+    (void)_globals;
     Outputs _out;
     (void)_out;
     int i;
@@ -39,8 +47,9 @@ fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _unifo
     s.af[1] = 0.0;
     s.h4.zxy = float3(9.0);
     s.ah4[2].yw = float2(5.0);
+    _globals.globalVar = float4(0.0);
+    _globals.globalStruct.f = 0.0;
     float l;
-    float r;
     l = 0.0;
     ai[0] += ai4[0].x;
     s.f = 1.0;
