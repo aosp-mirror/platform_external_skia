@@ -8,12 +8,14 @@
 #ifndef GrResourceAllocator_DEFINED
 #define GrResourceAllocator_DEFINED
 
+#include "include/private/SkTHash.h"
+
 #include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/GrHashMapWithCache.h"
 #include "src/gpu/GrSurface.h"
 #include "src/gpu/GrSurfaceProxy.h"
 
 #include "src/core/SkArenaAlloc.h"
-#include "src/core/SkTDynamicHash.h"
 #include "src/core/SkTMultiMap.h"
 
 class GrResourceProvider;
@@ -107,8 +109,6 @@ private:
     void recycleSurface(sk_sp<GrSurface> surface);
     sk_sp<GrSurface> findSurfaceFor(const GrSurfaceProxy* proxy);
 
-    void determineRecyclability();
-
     struct FreePoolTraits {
         static const GrScratchKey& GetKey(const GrSurface& s) {
             return s.resourcePriv().getScratchKey();
@@ -119,16 +119,14 @@ private:
     };
     typedef SkTMultiMap<GrSurface, GrScratchKey, FreePoolTraits> FreePoolMultiMap;
 
-    typedef SkTDynamicHash<Interval, unsigned int> IntvlHash;
+    typedef SkTHashMap<uint32_t, Interval*, GrCheapHash> IntvlHash;
 
     class Interval {
     public:
         Interval(GrSurfaceProxy* proxy, unsigned int start, unsigned int end)
             : fProxy(proxy)
-            , fProxyID(proxy->uniqueID().asUInt())
             , fStart(start)
-            , fEnd(end)
-            , fNext(nullptr) {
+            , fEnd(end) {
             SkASSERT(proxy);
 #if GR_TRACK_INTERVAL_CREATION
             fUniqueID = CreateUniqueID();
@@ -147,11 +145,10 @@ private:
         const Interval* next() const { return fNext; }
         Interval* next() { return fNext; }
 
-        void markAsRecyclable() { fIsRecyclable = true;}
-        bool isRecyclable() const { return fIsRecyclable; }
+        bool isSurfaceRecyclable() const;
 
         void addUse() { fUses++; }
-        int uses() { return fUses; }
+        int uses() const { return fUses; }
 
         void extendEnd(unsigned int newEnd) {
             if (newEnd > fEnd) {
@@ -162,20 +159,12 @@ private:
             }
         }
 
-        // for SkTDynamicHash
-        static const uint32_t& GetKey(const Interval& intvl) {
-            return intvl.fProxyID;
-        }
-        static uint32_t Hash(const uint32_t& key) { return key; }
-
     private:
         GrSurfaceProxy*  fProxy;
-        uint32_t         fProxyID; // This is here b.c. DynamicHash requires a ref to the key
         unsigned int     fStart;
         unsigned int     fEnd;
-        Interval*        fNext;
+        Interval*        fNext = nullptr;
         unsigned int     fUses = 0;
-        bool             fIsRecyclable = false;
 
 #if GR_TRACK_INTERVAL_CREATION
         uint32_t        fUniqueID;
@@ -201,7 +190,6 @@ private:
         Interval* popHead();
         void insertByIncreasingStart(Interval*);
         void insertByIncreasingEnd(Interval*);
-        Interval* detachAll();
 
     private:
         SkDEBUGCODE(void validate() const;)

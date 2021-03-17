@@ -13,7 +13,6 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
-#include "src/gpu/GrTextureProxy.h"
 
 #if GR_TRACK_INTERVAL_CREATION
     #include <atomic>
@@ -27,21 +26,6 @@
         return id;
     }
 #endif
-
-void GrResourceAllocator::determineRecyclability() {
-    for (Interval* cur = fIntvlList.peekHead(); cur; cur = cur->next()) {
-        if (cur->proxy()->canSkipResourceAllocator()) {
-            // These types of proxies can slip in here if they require a stencil buffer
-            continue;
-        }
-
-        if (!cur->proxy()->refCntGreaterThan(cur->uses())) {
-            // All the refs on the proxy are known to the resource allocator thus no one
-            // should be holding onto it outside of Ganesh.
-            cur->markAsRecyclable();
-        }
-    }
-}
 
 GrResourceAllocator::~GrResourceAllocator() {
     SkASSERT(fIntvlList.empty());
@@ -72,8 +56,10 @@ void GrResourceAllocator::addInterval(GrSurfaceProxy* proxy, unsigned int start,
         }
         return;
     }
-    if (Interval* intvl = fIntvlHash.find(proxy->uniqueID().asUInt())) {
+    uint32_t proxyID = proxy->uniqueID().asUInt();
+    if (Interval** intvlPtr = fIntvlHash.find(proxyID)) {
         // Revise the interval for an existing use
+        Interval* intvl = *intvlPtr;
 #ifdef SK_DEBUG
         if (0 == start && 0 == end) {
             // This interval is for the initial upload to a deferred proxy. Due to the vagaries
@@ -100,7 +86,13 @@ void GrResourceAllocator::addInterval(GrSurfaceProxy* proxy, unsigned int start,
         newIntvl->addUse();
     }
     fIntvlList.insertByIncreasingStart(newIntvl);
-    fIntvlHash.add(newIntvl);
+    fIntvlHash.set(proxyID, newIntvl);
+}
+
+bool GrResourceAllocator::Interval::isSurfaceRecyclable() const {
+    // All the refs on the proxy are known to the resource allocator thus no one
+    // should be holding onto it outside of Ganesh.
+    return !fProxy->refCntGreaterThan(fUses);
 }
 
 GrResourceAllocator::Interval* GrResourceAllocator::IntervalList::popHead() {
@@ -193,13 +185,6 @@ void GrResourceAllocator::IntervalList::validate() const {
 }
 #endif
 
- GrResourceAllocator::Interval* GrResourceAllocator::IntervalList::detachAll() {
-    Interval* tmp = fHead;
-    fHead = nullptr;
-    fTail = nullptr;
-    return tmp;
-}
-
 // 'surface' can be reused. Add it back to the free pool.
 void GrResourceAllocator::recycleSurface(sk_sp<GrSurface> surface) {
     const GrScratchKey &key = surface->resourcePriv().getScratchKey();
@@ -225,15 +210,14 @@ void GrResourceAllocator::recycleSurface(sk_sp<GrSurface> surface) {
 // First try to reuse one of the recently allocated/used GrSurfaces in the free pool.
 // If we can't find a useable one, create a new one.
 sk_sp<GrSurface> GrResourceAllocator::findSurfaceFor(const GrSurfaceProxy* proxy) {
-    if (proxy->asTextureProxy() && proxy->asTextureProxy()->getUniqueKey().isValid()) {
-        // First try to reattach to a cached version if the proxy is uniquely keyed
-        if (sk_sp<GrSurface> surface = fResourceProvider->findByUniqueKey<GrSurface>(
-                proxy->asTextureProxy()->getUniqueKey())) {
+    if (const auto& uniqueKey = proxy->getUniqueKey(); uniqueKey.isValid()) {
+        // First try to reattach to a cached surface if the proxy is uniquely keyed
+        if (sk_sp<GrSurface> surface = fResourceProvider->findByUniqueKey<GrSurface>(uniqueKey)) {
             return surface;
         }
     }
 
-    // First look in the free pool
+    // Then look in the free pool
     GrScratchKey key;
 
     proxy->priv().computeScratchKey(*fResourceProvider->caps(), &key);
@@ -265,7 +249,7 @@ void GrResourceAllocator::expire(unsigned int curIndex) {
         SkASSERT(!intvl->next());
 
         if (GrSurface* surf = intvl->proxy()->peekSurface()) {
-            if (intvl->isRecyclable()) {
+            if (intvl->isSurfaceRecyclable()) {
                 this->recycleSurface(sk_ref_sp(surf));
             }
         }
@@ -286,11 +270,7 @@ bool GrResourceAllocator::assign() {
     this->dumpIntervals();
 #endif
 
-    // TODO: Can this be done inline during the main iteration?
-    this->determineRecyclability();
-
-    Interval* cur = nullptr;
-    while ((cur = fIntvlList.popHead())) {
+    while (Interval* cur = fIntvlList.popHead()) {
         this->expire(cur->start());
 
         if (cur->proxy()->isInstantiated()) {
@@ -304,15 +284,11 @@ bool GrResourceAllocator::assign() {
                 fFailedInstantiation = true;
             }
         } else if (sk_sp<GrSurface> surface = this->findSurfaceFor(cur->proxy())) {
-            // TODO: make getUniqueKey virtual on GrSurfaceProxy
-            GrTextureProxy* texProxy = cur->proxy()->asTextureProxy();
-
-            if (texProxy && texProxy->getUniqueKey().isValid()) {
+            if (const auto& uniqueKey = cur->proxy()->getUniqueKey(); uniqueKey.isValid()) {
                 if (!surface->getUniqueKey().isValid()) {
-                    fResourceProvider->assignUniqueKeyToResource(texProxy->getUniqueKey(),
-                                                                 surface.get());
+                    fResourceProvider->assignUniqueKeyToResource(uniqueKey, surface.get());
                 }
-                SkASSERT(surface->getUniqueKey() == texProxy->getUniqueKey());
+                SkASSERT(surface->getUniqueKey() == uniqueKey);
             }
 
 #if GR_ALLOCATION_SPEW
