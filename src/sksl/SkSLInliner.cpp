@@ -63,6 +63,11 @@ static int count_returns_at_end_of_control_flow(const FunctionDefinition& funcDe
             this->visitProgramElement(funcDef);
         }
 
+        bool visitExpression(const Expression& expr) override {
+            // Do not recurse into expressions.
+            return false;
+        }
+
         bool visitStatement(const Statement& stmt) override {
             switch (stmt.kind()) {
                 case Statement::Kind::kBlock: {
@@ -98,6 +103,11 @@ static int count_returns_in_continuable_constructs(const FunctionDefinition& fun
     public:
         CountReturnsInContinuableConstructs(const FunctionDefinition& funcDef) {
             this->visitProgramElement(funcDef);
+        }
+
+        bool visitExpression(const Expression& expr) override {
+            // Do not recurse into expressions.
+            return false;
         }
 
         bool visitStatement(const Statement& stmt) override {
@@ -190,6 +200,11 @@ class CountReturnsWithLimit : public ProgramVisitor {
 public:
     CountReturnsWithLimit(const FunctionDefinition& funcDef, int limit) : fLimit(limit) {
         this->visitProgramElement(funcDef);
+    }
+
+    bool visitExpression(const Expression& expr) override {
+        // Do not recurse into expressions.
+        return false;
     }
 
     bool visitStatement(const Statement& stmt) override {
@@ -644,7 +659,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
 
     std::unique_ptr<Expression> resultExpr;
     if (returnComplexity > ReturnComplexity::kSingleSafeReturn &&
-        function.declaration().returnType() != *fContext->fTypes.fVoid) {
+        !function.declaration().returnType().isVoid()) {
         // Create a variable to hold the result in the extra statements. We don't need to do this
         // for void-return functions, or in cases that are simple enough that we can just replace
         // the function-call node with the result expression.
@@ -761,7 +776,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     if (resultExpr) {
         // Return our result expression as-is.
         inlinedCall.fReplacementExpr = std::move(resultExpr);
-    } else if (function.declaration().returnType() == *fContext->fTypes.fVoid) {
+    } else if (function.declaration().returnType().isVoid()) {
         // It's a void function, so it doesn't actually result in anything, but we have to return
         // something non-null as a standin.
         inlinedCall.fReplacementExpr = BoolLiteral::Make(*fContext, offset, /*value=*/false);
