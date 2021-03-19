@@ -566,6 +566,7 @@ int main(int argc, char** argv) {
     // Create a context.
     GrContextOptions ctxOptions;
     SetCtxOptionsFromCommonFlags(&ctxOptions);
+    ctxOptions.fAlwaysAntialias = config->getUseDMSAA();
     sk_gpu_test::GrContextFactory factory(ctxOptions);
     sk_gpu_test::ContextInfo ctxInfo =
         factory.getContextInfo(config->getContextType(), config->getContextOverrides());
@@ -601,8 +602,7 @@ int main(int argc, char** argv) {
     SkImageInfo info =
             SkImageInfo::Make(width, height, config->getColorType(), config->getAlphaType(),
                               sk_ref_sp(config->getColorSpace()));
-    uint32_t flags = config->getUseDIText() ? SkSurfaceProps::kUseDeviceIndependentFonts_Flag : 0;
-    SkSurfaceProps props(flags, kRGB_H_SkPixelGeometry);
+    SkSurfaceProps props(config->getSurfaceFlags(), kRGB_H_SkPixelGeometry);
     sk_sp<SkSurface> surface =
         SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, config->getSamples(), &props);
     if (!surface) {

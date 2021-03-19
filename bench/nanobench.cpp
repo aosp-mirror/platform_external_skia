@@ -247,11 +247,10 @@ struct GPUTarget : public Target {
     }
     bool init(SkImageInfo info, Benchmark* bench) override {
         GrContextOptions options = grContextOpts;
+        options.fAlwaysAntialias = config.useDMSAA;
         bench->modifyGrContextOptions(&options);
         this->factory = std::make_unique<GrContextFactory>(options);
-        uint32_t flags = this->config.useDFText ? SkSurfaceProps::kUseDeviceIndependentFonts_Flag :
-                                                  0;
-        SkSurfaceProps props(flags, kRGB_H_SkPixelGeometry);
+        SkSurfaceProps props(this->config.surfaceFlags, kRGB_H_SkPixelGeometry);
         this->surface = SkSurface::MakeRenderTarget(
                 this->factory->get(this->config.ctxType, this->config.ctxOverrides),
                 SkBudgeted::kNo, info, this->config.samples, &props);
@@ -471,6 +470,7 @@ static void create_config(const SkCommandLineConfig* config, SkTArray<Config>* c
         const auto ctxType = gpuConfig->getContextType();
         const auto ctxOverrides = gpuConfig->getContextOverrides();
         const auto sampleCount = gpuConfig->getSamples();
+        const auto useDMSAA = gpuConfig->getUseDMSAA();
         const auto colorType = gpuConfig->getColorType();
         auto colorSpace = gpuConfig->getColorSpace();
         if (gpuConfig->getSurfType() != SkCommandLineConfigGpu::SurfType::kDefault) {
@@ -501,9 +501,10 @@ static void create_config(const SkCommandLineConfig* config, SkTArray<Config>* c
             kPremul_SkAlphaType,
             sk_ref_sp(colorSpace),
             sampleCount,
+            useDMSAA,
             ctxType,
             ctxOverrides,
-            gpuConfig->getUseDIText()
+            gpuConfig->getSurfaceFlags()
         };
 
         configs->push_back(target);
@@ -519,7 +520,7 @@ static void create_config(const SkCommandLineConfig* config, SkTArray<Config>* c
             }                                                                  \
             Config config = {                                                  \
                 SkString(#name), Benchmark::backend, color, alpha, colorSpace, \
-                0, kBogusContextType, kBogusContextOverrides, false            \
+                0, false, kBogusContextType, kBogusContextOverrides, 0         \
             };                                                                 \
             configs->push_back(config);                                        \
             return;                                                            \
