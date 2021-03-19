@@ -63,6 +63,11 @@ static int count_returns_at_end_of_control_flow(const FunctionDefinition& funcDe
             this->visitProgramElement(funcDef);
         }
 
+        bool visitExpression(const Expression& expr) override {
+            // Do not recurse into expressions.
+            return false;
+        }
+
         bool visitStatement(const Statement& stmt) override {
             switch (stmt.kind()) {
                 case Statement::Kind::kBlock: {
@@ -91,40 +96,6 @@ static int count_returns_at_end_of_control_flow(const FunctionDefinition& funcDe
     };
 
     return CountReturnsAtEndOfControlFlow{funcDef}.fNumReturns;
-}
-
-static int count_returns_in_continuable_constructs(const FunctionDefinition& funcDef) {
-    class CountReturnsInContinuableConstructs : public ProgramVisitor {
-    public:
-        CountReturnsInContinuableConstructs(const FunctionDefinition& funcDef) {
-            this->visitProgramElement(funcDef);
-        }
-
-        bool visitStatement(const Statement& stmt) override {
-            switch (stmt.kind()) {
-                case Statement::Kind::kDo:
-                case Statement::Kind::kFor: {
-                    ++fInsideContinuableConstruct;
-                    bool result = INHERITED::visitStatement(stmt);
-                    --fInsideContinuableConstruct;
-                    return result;
-                }
-
-                case Statement::Kind::kReturn:
-                    fNumReturns += (fInsideContinuableConstruct > 0) ? 1 : 0;
-                    [[fallthrough]];
-
-                default:
-                    return INHERITED::visitStatement(stmt);
-            }
-        }
-
-        int fNumReturns = 0;
-        int fInsideContinuableConstruct = 0;
-        using INHERITED = ProgramVisitor;
-    };
-
-    return CountReturnsInContinuableConstructs{funcDef}.fNumReturns;
 }
 
 static bool contains_recursive_call(const FunctionDeclaration& funcDecl) {
@@ -192,6 +163,11 @@ public:
         this->visitProgramElement(funcDef);
     }
 
+    bool visitExpression(const Expression& expr) override {
+        // Do not recurse into expressions.
+        return false;
+    }
+
     bool visitStatement(const Statement& stmt) override {
         switch (stmt.kind()) {
             case Statement::Kind::kReturn: {
@@ -200,14 +176,12 @@ public:
                 return (fNumReturns >= fLimit) || INHERITED::visitStatement(stmt);
             }
             case Statement::Kind::kVarDeclaration: {
-                ++fNumNonReturnStatements;
                 if (fScopedBlockDepth > 1) {
                     fVariablesInBlocks = true;
                 }
                 return INHERITED::visitStatement(stmt);
             }
             case Statement::Kind::kBlock: {
-                // Don't count Block as a statement.
                 int depthIncrement = stmt.as<Block>().isScope() ? 1 : 0;
                 fScopedBlockDepth += depthIncrement;
                 bool result = INHERITED::visitStatement(stmt);
@@ -221,18 +195,12 @@ public:
                 }
                 return result;
             }
-            case Statement::Kind::kNop:
-            case Statement::Kind::kInlineMarker:
-                // Don't count no-op statements.
-                return false;
             default:
-                ++fNumNonReturnStatements;
                 return INHERITED::visitStatement(stmt);
         }
     }
 
     int fNumReturns = 0;
-    int fNumNonReturnStatements = 0;
     int fDeepestReturn = 0;
     int fLimit = 0;
     int fScopedBlockDepth = 0;
@@ -254,10 +222,7 @@ Inliner::ReturnComplexity Inliner::GetReturnComplexity(const FunctionDefinition&
     if (counter.fVariablesInBlocks && counter.fDeepestReturn > 1) {
         return ReturnComplexity::kScopedReturns;
     }
-    if (counter.fNumNonReturnStatements > 0) {
-        return ReturnComplexity::kSingleSafeReturn;
-    }
-    return ReturnComplexity::kOnlySingleReturn;
+    return ReturnComplexity::kSingleSafeReturn;
 }
 
 void Inliner::ensureScopedBlocks(Statement* inlinedBody, Statement* parentStmt) {
@@ -479,16 +444,9 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
         case Statement::Kind::kReturn: {
             const ReturnStatement& r = statement.as<ReturnStatement>();
             if (!r.expression()) {
-                if (returnComplexity >= ReturnComplexity::kEarlyReturns) {
-                    // This function doesn't return a value, but has early returns, so we've wrapped
-                    // it in a for loop. Use a continue to jump to the end of the loop and "leave"
-                    // the function.
-                    return ContinueStatement::Make(offset);
-                } else {
-                    // This function doesn't exit early or return a value. A return statement at the
-                    // end is a no-op and can be treated as such.
-                    return Nop::Make();
-                }
+                // This function doesn't return a value. We won't inline functions with early
+                // returns, so a return statement is a no-op and can be treated as such.
+                return Nop::Make();
             }
 
             // If a function only contains a single return, and it doesn't reference variables from
@@ -510,15 +468,6 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
                             Token::Kind::TK_EQ,
                             expr(r.expression())));
 
-            // Early returns are wrapped in a for loop; we need to synthesize a continue statement
-            // to "leave" the function.
-            if (returnComplexity >= ReturnComplexity::kEarlyReturns) {
-                StatementArray block;
-                block.reserve_back(2);
-                block.push_back(std::move(assignment));
-                block.push_back(ContinueStatement::Make(offset));
-                return Block::Make(offset, std::move(block), /*symbols=*/nullptr, /*isScope=*/true);
-            }
             // Functions without early returns aren't wrapped in a for loop and don't need to worry
             // about breaking out of the control flow.
             return assignment;
@@ -543,13 +492,12 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             // We assign unique names to inlined variables--scopes hide most of the problems in this
             // regard, but see `InlinerAvoidsVariableNameOverlap` for a counterexample where unique
             // names are important.
-            auto name = std::make_unique<String>(fMangler.uniqueName(variable.name(),
-                                                                     symbolTableForStatement));
-            const String* namePtr = symbolTableForStatement->takeOwnershipOfString(std::move(name));
+            const String* name = symbolTableForStatement->takeOwnershipOfString(
+                    fMangler.uniqueName(variable.name(), symbolTableForStatement));
             auto clonedVar = std::make_unique<Variable>(
                                                      offset,
                                                      &variable.modifiers(),
-                                                     namePtr->c_str(),
+                                                     name->c_str(),
                                                      variable.type().clone(symbolTableForStatement),
                                                      isBuiltinCode,
                                                      variable.storage());
@@ -582,29 +530,25 @@ Inliner::InlineVariable Inliner::makeInlineVariable(const String& baseName,
         type = &type->scalarTypeForLiteral();
     }
 
+    // Out parameters aren't supported.
+    SkASSERT(!(modifiers.fFlags & Modifiers::kOut_Flag));
+
     // Provide our new variable with a unique name, and add it to our symbol table.
-    const String* namePtr = symbolTable->takeOwnershipOfString(
-            std::make_unique<String>(fMangler.uniqueName(baseName, symbolTable)));
-    StringFragment nameFrag{namePtr->c_str(), namePtr->length()};
+    const String* name =
+            symbolTable->takeOwnershipOfString(fMangler.uniqueName(baseName, symbolTable));
 
     // Create our new variable and add it to the symbol table.
     InlineVariable result;
     auto var = std::make_unique<Variable>(/*offset=*/-1,
                                           fModifiers->addToPool(Modifiers()),
-                                          nameFrag,
+                                          name->c_str(),
                                           type,
                                           isBuiltinCode,
                                           Variable::Storage::kLocal);
 
-    // Prepare the variable declaration (taking extra care with `out` params to not clobber any
-    // initial value).
-    if (*initialValue && (modifiers.fFlags & Modifiers::kOut_Flag)) {
-        result.fVarDecl = std::make_unique<VarDeclaration>(var.get(), type, /*arraySize=*/0,
-                                                           (*initialValue)->clone());
-    } else {
-        result.fVarDecl = std::make_unique<VarDeclaration>(var.get(), type, /*arraySize=*/0,
-                                                           std::move(*initialValue));
-    }
+    // Create our variable declaration.
+    result.fVarDecl = std::make_unique<VarDeclaration>(var.get(), type, /*arraySize=*/0,
+                                                       std::move(*initialValue));
     var->setDeclaration(&result.fVarDecl->as<VarDeclaration>());
     result.fVarSymbol = symbolTable->add(std::move(var));
     return result;
@@ -612,6 +556,7 @@ Inliner::InlineVariable Inliner::makeInlineVariable(const String& baseName,
 
 Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
                                          std::shared_ptr<SymbolTable> symbolTable,
+                                         const ProgramUsage& usage,
                                          const FunctionDeclaration* caller) {
     // Inlining is more complicated here than in a typical compiler, because we have to have a
     // high-level IR and can't just drop statements into the middle of an expression or even use
@@ -629,22 +574,21 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     ExpressionArray& arguments = call->arguments();
     const int offset = call->fOffset;
     const FunctionDefinition& function = *call->function().definition();
+    const Block& body = function.body()->as<Block>();
     const ReturnComplexity returnComplexity = GetReturnComplexity(function);
-    bool hasEarlyReturn = (returnComplexity >= ReturnComplexity::kEarlyReturns);
 
-    InlinedCall inlinedCall;
-    StatementArray inlinedBlockStmts;
-    inlinedBlockStmts.reserve_back(1 +                 // Inline marker
-                                   1 +                 // Result variable
-                                   arguments.size() +  // Function arguments (passing in)
-                                   arguments.size() +  // Function arguments (copy out-params back)
-                                   1);                 // Block for inlined code
+    StatementArray inlineStatements;
+    int expectedStmtCount = 1 +                      // Inline marker
+                            1 +                      // Result variable
+                            arguments.size() +       // Function argument temp-vars
+                            body.children().size();  // Inlined code
 
-    inlinedBlockStmts.push_back(InlineMarker::Make(&call->function()));
+    inlineStatements.reserve_back(expectedStmtCount);
+    inlineStatements.push_back(InlineMarker::Make(&call->function()));
 
     std::unique_ptr<Expression> resultExpr;
     if (returnComplexity > ReturnComplexity::kSingleSafeReturn &&
-        function.declaration().returnType() != *fContext->fTypes.fVoid) {
+        !function.declaration().returnType().isVoid()) {
         // Create a variable to hold the result in the extra statements. We don't need to do this
         // for void-return functions, or in cases that are simple enough that we can just replace
         // the function-call node with the result expression.
@@ -653,115 +597,50 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
                                                       &function.declaration().returnType(),
                                                       symbolTable.get(), Modifiers{},
                                                       caller->isBuiltin(), &noInitialValue);
-        inlinedBlockStmts.push_back(std::move(var.fVarDecl));
+        inlineStatements.push_back(std::move(var.fVarDecl));
         resultExpr = std::make_unique<VariableReference>(/*offset=*/-1, var.fVarSymbol);
     }
 
     // Create variables in the extra statements to hold the arguments, and assign the arguments to
     // them.
     VariableRewriteMap varMap;
-    std::vector<int> argsToCopyBack;
-    for (int i = 0; i < (int) arguments.size(); ++i) {
-        const Variable* param = function.declaration().parameters()[i];
-        bool isOutParam = param->modifiers().fFlags & Modifiers::kOut_Flag;
-
+    for (int i = 0; i < arguments.count(); ++i) {
         // If this argument can be inlined trivially (e.g. a swizzle, or a constant array index)...
+        const Variable* param = function.declaration().parameters()[i];
         if (Analysis::IsTrivialExpression(*arguments[i])) {
-            // ... and it's an `out` param, or it isn't written to within the inline function...
-            if (isOutParam || !Analysis::StatementWritesToVariable(*function.body(), *param)) {
+            // ... and isn't written to within the inline function...
+            const ProgramUsage::VariableCounts& paramUsage = usage.get(*param);
+            if (!paramUsage.fWrite) {
                 // ... we don't need to copy it at all! We can just use the existing expression.
                 varMap[param] = arguments[i]->clone();
                 continue;
             }
         }
-        if (isOutParam) {
-            argsToCopyBack.push_back(i);
-        }
         InlineVariable var = this->makeInlineVariable(param->name(), &arguments[i]->type(),
                                                       symbolTable.get(), param->modifiers(),
                                                       caller->isBuiltin(), &arguments[i]);
-        inlinedBlockStmts.push_back(std::move(var.fVarDecl));
+        inlineStatements.push_back(std::move(var.fVarDecl));
         varMap[param] = std::make_unique<VariableReference>(/*offset=*/-1, var.fVarSymbol);
     }
 
-    const Block& body = function.body()->as<Block>();
-    StatementArray* inlineStatements;
-
-    if (hasEarlyReturn) {
-        // Since we output to backends that don't have a goto statement (which would normally be
-        // used to perform an early return), we fake it by wrapping the function in a single-
-        // iteration for loop, and use a continue statement to jump to the end of the loop
-        // prematurely.
-
-        // int _1_loop = 0;
-        symbolTable = std::make_shared<SymbolTable>(std::move(symbolTable), caller->isBuiltin());
-        const Type* intType = fContext->fTypes.fInt.get();
-        std::unique_ptr<Expression> initialValue = IntLiteral::Make(/*offset=*/-1,
-                                                                    /*value=*/0,
-                                                                    intType);
-        InlineVariable loopVar = this->makeInlineVariable("loop", intType, symbolTable.get(),
-                                                          Modifiers{}, caller->isBuiltin(),
-                                                          &initialValue);
-
-        // _1_loop < 1;
-        std::unique_ptr<Expression> test = BinaryExpression::Make(
-                *fContext,
-                std::make_unique<VariableReference>(/*offset=*/-1, loopVar.fVarSymbol),
-                Token::Kind::TK_LT,
-                IntLiteral::Make(/*offset=*/-1, /*value=*/1, intType));
-
-        // _1_loop++
-        std::unique_ptr<Expression> increment = PostfixExpression::Make(
-                *fContext,
-                std::make_unique<VariableReference>(/*offset=*/-1, loopVar.fVarSymbol,
-                                                    VariableReference::RefKind::kReadWrite),
-                Token::Kind::TK_PLUSPLUS);
-
-        // {...}
-        auto innerBlock = Block::Make(offset, StatementArray{},
-                                      /*symbols=*/nullptr, /*isScope=*/true);
-        inlineStatements = &innerBlock->children();
-
-        // for (int _1_loop = 0; _1_loop < 1; _1_loop++) {...}
-        inlinedBlockStmts.push_back(ForStatement::Make(*fContext, /*offset=*/-1,
-                                                       std::move(loopVar.fVarDecl),
-                                                       std::move(test),
-                                                       std::move(increment),
-                                                       std::move(innerBlock),
-                                                       symbolTable));
-    } else {
-        // No early returns, so we can just dump the code into our existing scopeless block.
-        inlineStatements = &inlinedBlockStmts;
-    }
-
-    inlineStatements->reserve_back(body.children().size() + argsToCopyBack.size());
     for (const std::unique_ptr<Statement>& stmt : body.children()) {
-        inlineStatements->push_back(this->inlineStatement(offset, &varMap, symbolTable.get(),
-                                                          &resultExpr, returnComplexity, *stmt,
-                                                          caller->isBuiltin()));
+        inlineStatements.push_back(this->inlineStatement(offset, &varMap, symbolTable.get(),
+                                                         &resultExpr, returnComplexity, *stmt,
+                                                         caller->isBuiltin()));
     }
 
-    // Copy back the values of `out` parameters into their real destinations.
-    for (int i : argsToCopyBack) {
-        const Variable* p = function.declaration().parameters()[i];
-        SkASSERT(varMap.find(p) != varMap.end());
-        inlineStatements->push_back(ExpressionStatement::Make(
-                *fContext,
-                BinaryExpression::Make(*fContext,
-                                       clone_with_ref_kind(*arguments[i], VariableRefKind::kWrite),
-                                       Token::Kind::TK_EQ,
-                                       std::move(varMap[p]))));
-    }
+    SkASSERT(inlineStatements.count() <= expectedStmtCount);
 
     // Wrap all of the generated statements in a block. We need a real Block here, so we can't use
     // MakeUnscoped. This is because we need to add another child statement to the Block later.
-    inlinedCall.fInlinedBody = Block::Make(offset, std::move(inlinedBlockStmts),
+    InlinedCall inlinedCall;
+    inlinedCall.fInlinedBody = Block::Make(offset, std::move(inlineStatements),
                                            /*symbols=*/nullptr, /*isScope=*/false);
 
     if (resultExpr) {
         // Return our result expression as-is.
         inlinedCall.fReplacementExpr = std::move(resultExpr);
-    } else if (function.declaration().returnType() == *fContext->fTypes.fVoid) {
+    } else if (function.declaration().returnType().isVoid()) {
         // It's a void function, so it doesn't actually result in anything, but we have to return
         // something non-null as a standin.
         inlinedCall.fReplacementExpr = BoolLiteral::Make(*fContext, offset, /*value=*/false);
@@ -800,11 +679,15 @@ bool Inliner::isSafeToInline(const FunctionDefinition* functionDef) {
         return false;
     }
 
-    // We don't have any mechanism to simulate early returns within a construct that supports
-    // continues (for/do/while), so we can't inline if there's a return inside one.
-    bool hasReturnInContinuableConstruct =
-            (count_returns_in_continuable_constructs(*functionDef) > 0);
-    return !hasReturnInContinuableConstruct;
+    // We don't allow inlining a function with out parameters. (See skia:11326 for rationale.)
+    for (const Variable* param : functionDef->declaration().parameters()) {
+        if (param->modifiers().fFlags & Modifiers::Flag::kOut_Flag) {
+            return false;
+        }
+    }
+
+    // We don't have a mechanism to simulate early returns, so we can't inline if there is one.
+    return GetReturnComplexity(*functionDef) < ReturnComplexity::kEarlyReturns;
 }
 
 // A candidate function for inlining, containing everything that `inlineCall` needs.
@@ -1204,7 +1087,7 @@ bool Inliner::analyze(const std::vector<std::unique_ptr<ProgramElement>>& elemen
         }
 
         // Convert the function call to its inlined equivalent.
-        InlinedCall inlinedCall = this->inlineCall(&funcCall, candidate.fSymbols,
+        InlinedCall inlinedCall = this->inlineCall(&funcCall, candidate.fSymbols, *usage,
                                                    &candidate.fEnclosingFunction->declaration());
 
         // Stop if an error was detected during the inlining process.

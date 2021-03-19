@@ -135,6 +135,10 @@ SKSL_TEST(SkSLShortCircuitBoolFolding,         "folding/ShortCircuitBoolFolding.
 SKSL_TEST(SkSLVectorScalarFolding,             "folding/VectorScalarFolding.sksl")
 SKSL_TEST(SkSLVectorVectorFolding,             "folding/VectorVectorFolding.sksl")
 
+// TODO(skia:11052): SPIR-V does not yet honor `out` param semantics correctly
+SKSL_TEST_CPU(SkSLInlinerHonorsGLSLOutParamSemantics,
+              "inliner/InlinerHonorsGLSLOutParamSemantics.sksl")
+
 SKSL_TEST(SkSLIntrinsicAbsFloat,               "intrinsics/AbsFloat.sksl")
 SKSL_TEST(SkSLIntrinsicCeil,                   "intrinsics/Ceil.sksl")
 SKSL_TEST(SkSLIntrinsicClampFloat,             "intrinsics/ClampFloat.sksl")
@@ -147,7 +151,9 @@ SKSL_TEST(SkSLArrayTypes,                      "shared/ArrayTypes.sksl")
 SKSL_TEST(SkSLAssignment,                      "shared/Assignment.sksl")
 SKSL_TEST(SkSLCastsRoundTowardZero,            "shared/CastsRoundTowardZero.sksl")
 SKSL_TEST(SkSLCommaMixedTypes,                 "shared/CommaMixedTypes.sksl")
-SKSL_TEST(SkSLCommaSideEffects,                "shared/CommaSideEffects.sksl")
+// This test causes the Adreno 330 driver to crash, and does not pass on Quadro P400 in wasm.
+// The CPU test confirms that we can get it right, even if not all drivers do.
+SKSL_TEST_CPU(SkSLCommaSideEffects,            "shared/CommaSideEffects.sksl")
 SKSL_TEST(SkSLConstantIf,                      "shared/ConstantIf.sksl")
 SKSL_TEST(SkSLConstVariableComparison,         "shared/ConstVariableComparison.sksl")
 SKSL_TEST(SkSLDeadIfStatement,                 "shared/DeadIfStatement.sksl")
@@ -167,8 +173,8 @@ SKSL_TEST(SkSLMultipleAssignments,             "shared/MultipleAssignments.sksl"
 SKSL_TEST(SkSLNegatedVectorLiteral,            "shared/NegatedVectorLiteral.sksl")
 SKSL_TEST(SkSLNumberCasts,                     "shared/NumberCasts.sksl")
 SKSL_TEST(SkSLOperatorsES2,                    "shared/OperatorsES2.sksl")
-// TODO(skia:11748): The OutParams test generates invalid SPIR-V when inlining is off.
-SKSL_TEST_CPU(SkSLOutParams,                   "shared/OutParams.sksl")
+SKSL_TEST(SkSLOutParams,                       "shared/OutParams.sksl")
+SKSL_TEST(SkSLOutParamsNoInline,               "shared/OutParamsNoInline.sksl")
 SKSL_TEST(SkSLOutParamsTricky,                 "shared/OutParamsTricky.sksl")
 SKSL_TEST(SkSLResizeMatrix,                    "shared/ResizeMatrix.sksl")
 SKSL_TEST(SkSLReturnsValueOnEveryPathES2,      "shared/ReturnsValueOnEveryPathES2.sksl")

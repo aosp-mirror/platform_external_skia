@@ -50,7 +50,6 @@ private:
     using VariableRewriteMap = std::unordered_map<const Variable*, std::unique_ptr<Expression>>;
 
     enum class ReturnComplexity {
-        kOnlySingleReturn,
         kSingleSafeReturn,
         kScopedReturns,
         kEarlyReturns,
@@ -94,6 +93,7 @@ private:
     };
     InlinedCall inlineCall(FunctionCall*,
                            std::shared_ptr<SymbolTable>,
+                           const ProgramUsage&,
                            const FunctionDeclaration* caller);
 
     /** Creates a scratch variable for the inliner to use. */
