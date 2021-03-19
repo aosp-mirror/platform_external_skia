@@ -230,7 +230,7 @@ int IRGenerator::convertArraySize(const Type& type, std::unique_ptr<Expression> 
     if (!size) {
         return 0;
     }
-    if (type == *fContext.fTypes.fVoid) {
+    if (type.isVoid()) {
         this->errorReporter().error(size->fOffset, "type 'void' may not be used in an array");
         return 0;
     }
@@ -908,7 +908,7 @@ void IRGenerator::checkModifiers(int offset,
     SkASSERT(layoutFlags == 0);
 }
 
-void IRGenerator::finalizeFunction(FunctionDefinition& f) {
+void IRGenerator::finalizeFunction(const FunctionDeclaration& funcDecl, Statement* body) {
     class Finalizer : public ProgramWriter {
     public:
         Finalizer(IRGenerator* irGenerator, const FunctionDeclaration* function)
@@ -921,7 +921,7 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
         }
 
         bool functionReturnsValue() const {
-            return fFunction->returnType() != *fIRGenerator->fContext.fTypes.fVoid;
+            return !fFunction->returnType().isVoid();
         }
 
         bool visitStatement(Statement& stmt) override {
@@ -1001,12 +1001,12 @@ void IRGenerator::finalizeFunction(FunctionDefinition& f) {
         using INHERITED = ProgramWriter;
     };
 
-    Finalizer finalizer{this, &f.declaration()};
-    finalizer.visitStatement(*f.body());
+    Finalizer finalizer{this, &funcDecl};
+    finalizer.visitStatement(*body);
 
-    if (finalizer.functionReturnsValue() && Analysis::CanExitWithoutReturningValue(f)) {
-        this->errorReporter().error(f.fOffset, "function '" + f.declaration().name() +
-                                               "' can exit without returning a value");
+    if (Analysis::CanExitWithoutReturningValue(funcDecl, *body)) {
+        this->errorReporter().error(funcDecl.fOffset, "function '" + funcDecl.name() +
+                                                      "' can exit without returning a value");
     }
 }
 
@@ -1029,8 +1029,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                                     "functions may not return structs containing arrays");
         return;
     }
-    if (!fIsBuiltinCode && *returnType != *fContext.fTypes.fVoid &&
-        returnType->componentType().isOpaque()) {
+    if (!fIsBuiltinCode && !returnType->isVoid() && returnType->componentType().isOpaque()) {
         this->errorReporter().error(
                 f.fOffset,
                 "functions may not return opaque type '" + returnType->displayName() + "'");
@@ -1240,9 +1239,9 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (ProgramKind::kVertex == this->programKind() && funcData.fName == "main" && fRTAdjust) {
             body->children().push_back(this->getNormalizeSkPositionCode());
         }
+        this->finalizeFunction(*decl, body.get());
         auto result = std::make_unique<FunctionDefinition>(
                 f.fOffset, decl, fIsBuiltinCode, std::move(body), std::move(fReferencedIntrinsics));
-        this->finalizeFunction(*result);
         decl->setDefinition(result.get());
         result->setSource(&f);
         fProgramElements->push_back(std::move(result));
@@ -1447,7 +1446,7 @@ const Type* IRGenerator::convertType(const ASTNode& type, bool allowVoid) {
     }
     const Type* result = &symbol->as<Type>();
     const bool isArray = (type.begin() != type.end());
-    if (*result == *fContext.fTypes.fVoid && !allowVoid) {
+    if (result->isVoid() && !allowVoid) {
         this->errorReporter().error(type.fOffset,
                                     "type '" + name + "' not allowed in this context");
         return nullptr;
