@@ -325,10 +325,11 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
         }
         case Expression::Kind::kFunctionCall: {
             const FunctionCall& funcCall = expression.as<FunctionCall>();
-            return std::make_unique<FunctionCall>(offset,
-                                                  funcCall.type().clone(symbolTableForExpression),
-                                                  &funcCall.function(),
-                                                  argList(funcCall.arguments()));
+            return FunctionCall::Make(*fContext,
+                                      offset,
+                                      funcCall.type().clone(symbolTableForExpression),
+                                      funcCall.function(),
+                                      argList(funcCall.arguments()));
         }
         case Expression::Kind::kFunctionReference:
             return expression.clone();
@@ -605,12 +606,14 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     // them.
     VariableRewriteMap varMap;
     for (int i = 0; i < arguments.count(); ++i) {
-        // If this argument can be inlined trivially (e.g. a swizzle, or a constant array index)...
+        // If the parameter isn't written to within the inline function ...
         const Variable* param = function.declaration().parameters()[i];
-        if (Analysis::IsTrivialExpression(*arguments[i])) {
-            // ... and isn't written to within the inline function...
-            const ProgramUsage::VariableCounts& paramUsage = usage.get(*param);
-            if (!paramUsage.fWrite) {
+        const ProgramUsage::VariableCounts& paramUsage = usage.get(*param);
+        if (!paramUsage.fWrite) {
+            // ... and can be inlined trivially (e.g. a swizzle, or a constant array index),
+            // or any expression without side effects that is only accessed at most once...
+            if ((paramUsage.fRead > 1) ? Analysis::IsTrivialExpression(*arguments[i])
+                                       : !arguments[i]->hasSideEffects()) {
                 // ... we don't need to copy it at all! We can just use the existing expression.
                 varMap[param] = arguments[i]->clone();
                 continue;
@@ -926,7 +929,7 @@ public:
                 this->addInlineCandidate(expr);
                 break;
             }
-            case Expression::Kind::kIndex:{
+            case Expression::Kind::kIndex: {
                 IndexExpression& indexExpr = (*expr)->as<IndexExpression>();
                 this->visitExpression(&indexExpr.base());
                 this->visitExpression(&indexExpr.index());
@@ -1074,17 +1077,13 @@ bool Inliner::analyze(const std::vector<std::unique_ptr<ProgramElement>>& elemen
     this->buildCandidateList(elements, symbols, usage, &candidateList);
 
     // Inline the candidates where we've determined that it's safe to do so.
-    std::unordered_set<const std::unique_ptr<Statement>*> enclosingStmtSet;
+    using StatementRemappingTable = std::unordered_map<std::unique_ptr<Statement>*,
+                                                       std::unique_ptr<Statement>*>;
+    StatementRemappingTable statementRemappingTable;
+
     bool madeChanges = false;
     for (const InlineCandidate& candidate : candidateList.fCandidates) {
         FunctionCall& funcCall = (*candidate.fCandidateExpr)->as<FunctionCall>();
-
-        // Inlining two expressions using the same enclosing statement in the same inlining pass
-        // does not work properly. If this happens, skip it; we'll get it in the next pass.
-        auto [unusedIter, inserted] = enclosingStmtSet.insert(candidate.fEnclosingStmt);
-        if (!inserted) {
-            continue;
-        }
 
         // Convert the function call to its inlined equivalent.
         InlinedCall inlinedCall = this->inlineCall(&funcCall, candidate.fSymbols, *usage,
@@ -1101,6 +1100,16 @@ bool Inliner::analyze(const std::vector<std::unique_ptr<ProgramElement>>& elemen
         // Add references within the inlined body
         usage->add(inlinedCall.fInlinedBody.get());
 
+        // Look up the enclosing statement; remap it if necessary.
+        std::unique_ptr<Statement>* enclosingStmt = candidate.fEnclosingStmt;
+        for (;;) {
+            auto iter = statementRemappingTable.find(enclosingStmt);
+            if (iter == statementRemappingTable.end()) {
+                break;
+            }
+            enclosingStmt = iter->second;
+        }
+
         // Move the enclosing statement to the end of the unscoped Block containing the inlined
         // function, then replace the enclosing statement with that Block.
         // Before:
@@ -1109,13 +1118,17 @@ bool Inliner::analyze(const std::vector<std::unique_ptr<ProgramElement>>& elemen
         // After:
         //     fInlinedBody = null
         //     fEnclosingStmt = Block{ stmt1, stmt2, stmt3, stmt4 }
-        inlinedCall.fInlinedBody->children().push_back(std::move(*candidate.fEnclosingStmt));
-        *candidate.fEnclosingStmt = std::move(inlinedCall.fInlinedBody);
+        inlinedCall.fInlinedBody->children().push_back(std::move(*enclosingStmt));
+        *enclosingStmt = std::move(inlinedCall.fInlinedBody);
 
         // Replace the candidate function call with our replacement expression.
         usage->replace(candidate.fCandidateExpr->get(), inlinedCall.fReplacementExpr.get());
         *candidate.fCandidateExpr = std::move(inlinedCall.fReplacementExpr);
         madeChanges = true;
+
+        // If anything else pointed at our enclosing statement, it's now pointing at a Block
+        // containing many other statements as well. Maintain a fix-up table to account for this.
+        statementRemappingTable[enclosingStmt] = &(*enclosingStmt)->as<Block>().children().back();
 
         // Stop inlining if we've reached our hard cap on new statements.
         if (fInlinedStatementCounter >= kInlinedStatementLimit) {

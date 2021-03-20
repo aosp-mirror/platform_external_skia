@@ -44,7 +44,6 @@ public:
     bool shaderDerivativeSupport() const { return fShaderDerivativeSupport; }
     bool geometryShaderSupport() const { return fGeometryShaderSupport; }
     bool gsInvocationsSupport() const { return fGSInvocationsSupport; }
-    bool pathRenderingSupport() const { return fPathRenderingSupport; }
     bool dstReadInShaderSupport() const { return fDstReadInShaderSupport; }
     bool dualSourceBlendingSupport() const { return fDualSourceBlendingSupport; }
     bool integerSupport() const { return fIntegerSupport; }
@@ -175,6 +174,9 @@ public:
     // least some cases.
     bool canUseDoLoops() const { return fCanUseDoLoops; }
 
+    // Some GPUs produce poor results when enabling Metal's fastmath option
+    bool canUseFastMath() const { return fCanUseFastMath; }
+
     // By default, SkSL pools IR nodes per-program. To debug memory corruption, it is sometimes
     // helpful to disable that feature.
     bool useNodePools() const { return fUseNodePools; }
@@ -263,7 +265,6 @@ private:
     bool fShaderDerivativeSupport           : 1;
     bool fGeometryShaderSupport             : 1;
     bool fGSInvocationsSupport              : 1;
-    bool fPathRenderingSupport              : 1;
     bool fDstReadInShaderSupport            : 1;
     bool fDualSourceBlendingSupport         : 1;
     bool fIntegerSupport                    : 1;
@@ -308,6 +309,7 @@ private:
     bool fCanOnlyUseSampleMaskWithStencil             : 1;
     bool fColorSpaceMathNeedsFloat                    : 1;
     bool fCanUseDoLoops                               : 1;
+    bool fCanUseFastMath                              : 1;
 
     // This controls behavior of the SkSL compiler, not the code we generate
     bool fUseNodePools : 1;
