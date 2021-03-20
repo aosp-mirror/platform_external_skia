@@ -902,9 +902,10 @@ int GrReducedClip::numAnalyticElements() const {
     return fCCPRClipPaths.size() + fNumAnalyticElements;
 }
 
-std::unique_ptr<GrFragmentProcessor> GrReducedClip::finishAndDetachAnalyticElements(
-        GrRecordingContext* context, const SkMatrixProvider& matrixProvider,
-        GrCoverageCountingPathRenderer* ccpr, uint32_t opsTaskID) {
+GrFPResult GrReducedClip::finishAndDetachAnalyticElements(GrRecordingContext* context,
+                                                          const SkMatrixProvider& matrixProvider,
+                                                          GrCoverageCountingPathRenderer* ccpr,
+                                                          uint32_t opsTaskID) {
     // Combine the analytic FP with any CCPR clip processors.
     std::unique_ptr<GrFragmentProcessor> clipFP = std::move(fAnalyticFP);
     fNumAnalyticElements = 0;
@@ -912,8 +913,12 @@ std::unique_ptr<GrFragmentProcessor> GrReducedClip::finishAndDetachAnalyticEleme
     for (const SkPath& ccprClipPath : fCCPRClipPaths) {
         SkASSERT(ccpr);
         SkASSERT(fHasScissor);
-        clipFP = ccpr->makeClipProcessor(std::move(clipFP), opsTaskID, ccprClipPath,
-                                         fScissor, *fCaps);
+        bool success;
+        std::tie(success, clipFP) = ccpr->makeClipProcessor(std::move(clipFP), opsTaskID,
+                                                            ccprClipPath, fScissor, *fCaps);
+        if (!success) {
+            return GrFPFailure(nullptr);
+        }
     }
     fCCPRClipPaths.reset();
 
@@ -922,7 +927,7 @@ std::unique_ptr<GrFragmentProcessor> GrReducedClip::finishAndDetachAnalyticEleme
     if (fShader != nullptr) {
         static const GrColorInfo kCoverageColorInfo{GrColorType::kUnknown, kPremul_SkAlphaType,
                                                     nullptr};
-        GrFPArgs args(context, matrixProvider, SkSamplingOptions(), &kCoverageColorInfo);
+        GrFPArgs args(context, matrixProvider, &kCoverageColorInfo);
         shaderFP = as_SB(fShader)->asFragmentProcessor(args);
         if (shaderFP != nullptr) {
             shaderFP = GrFragmentProcessor::MulInputByChildAlpha(std::move(shaderFP));
@@ -930,5 +935,5 @@ std::unique_ptr<GrFragmentProcessor> GrReducedClip::finishAndDetachAnalyticEleme
     }
 
     // Compose the clip and shader FPs.
-    return GrFragmentProcessor::Compose(std::move(shaderFP), std::move(clipFP));
+    return GrFPSuccess(GrFragmentProcessor::Compose(std::move(shaderFP), std::move(clipFP)));
 }
