@@ -2,8 +2,10 @@
 #include <simd/simd.h>
 using namespace metal;
 struct Uniforms {
-    float2 a;
-    float2 b;
+    float2 ah;
+    float2 bh;
+    float2 af;
+    float2 bf;
 };
 struct Inputs {
 };
@@ -14,6 +16,7 @@ struct Outputs {
 fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _uniforms [[buffer(0)]], bool _frontFacing [[front_facing]], float4 _fragCoord [[position]]) {
     Outputs _out;
     (void)_out;
-    _out.sk_FragColor.x = _uniforms.a.x * _uniforms.b.y - _uniforms.a.y * _uniforms.b.x;
+    _out.sk_FragColor.x = _uniforms.ah.x * _uniforms.bh.y - _uniforms.ah.y * _uniforms.bh.x;
+    _out.sk_FragColor.y = _uniforms.af.x * _uniforms.bf.y - _uniforms.af.y * _uniforms.bf.x;
     return _out;
 }

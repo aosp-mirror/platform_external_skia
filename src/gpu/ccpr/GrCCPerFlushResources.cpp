@@ -18,10 +18,10 @@
 
 GrCCPerFlushResources::GrCCPerFlushResources(GrOnFlushResourceProvider* onFlushRP,
                                              const GrCCAtlas::Specs& specs)
-        : fRenderedAtlasStack(specs, onFlushRP->caps()) {
+        : fAtlasSpecs(specs) {
 }
 
-const GrCCAtlas* GrCCPerFlushResources::renderDeviceSpacePathInAtlas(
+std::unique_ptr<GrCCAtlas> GrCCPerFlushResources::renderDeviceSpacePathInAtlas(
         GrOnFlushResourceProvider* onFlushRP, const SkIRect& clipIBounds, const SkPath& devPath,
         const SkIRect& devPathIBounds, GrFillRule fillRule, SkIVector* devToAtlasOffset) {
     SkASSERT(!devPath.isEmpty());
@@ -35,25 +35,37 @@ const GrCCAtlas* GrCCPerFlushResources::renderDeviceSpacePathInAtlas(
         enableScissorInAtlas = GrScissorTest::kEnabled;
     }
 
-    this->placeRenderedPathInAtlas(onFlushRP, clippedPathIBounds, enableScissorInAtlas,
-                                   devToAtlasOffset);
+    auto retiredAtlas = this->placeRenderedPathInAtlas(onFlushRP, clippedPathIBounds,
+                                                       enableScissorInAtlas, devToAtlasOffset);
 
     SkMatrix atlasMatrix = SkMatrix::Translate(devToAtlasOffset->fX, devToAtlasOffset->fY);
     this->enqueueRenderedPath(devPath, fillRule, clippedPathIBounds, atlasMatrix,
                               enableScissorInAtlas, *devToAtlasOffset);
 
-    return &fRenderedAtlasStack.current();
+    return retiredAtlas;
 }
 
-void GrCCPerFlushResources::placeRenderedPathInAtlas(
+std::unique_ptr<GrCCAtlas> GrCCPerFlushResources::placeRenderedPathInAtlas(
         GrOnFlushResourceProvider* onFlushRP, const SkIRect& clippedPathIBounds,
         GrScissorTest scissorTest, SkIVector* devToAtlasOffset) {
-    if (GrCCAtlas* retiredAtlas =
-                fRenderedAtlasStack.addRect(clippedPathIBounds, devToAtlasOffset)) {
-        // We did not fit in the previous coverage count atlas and it was retired. Render the
-        // retired atlas.
-        this->flushRenderedPaths(onFlushRP, retiredAtlas);
+    std::unique_ptr<GrCCAtlas> retiredAtlas;
+    SkIPoint16 location;
+    if (!fAtlas ||
+        !fAtlas->addRect(clippedPathIBounds.width(), clippedPathIBounds.height(), &location)) {
+        // The retired atlas is out of room and can't grow any bigger.
+        if (fAtlas) {
+            this->flushRenderedPaths(onFlushRP);
+            retiredAtlas = std::move(fAtlas);
+        }
+        fAtlas = std::make_unique<GrCCAtlas>(fAtlasSpecs, *onFlushRP->caps());
+        SkASSERT(clippedPathIBounds.width() <= fAtlasSpecs.fMinWidth);
+        SkASSERT(clippedPathIBounds.height() <= fAtlasSpecs.fMinHeight);
+        SkAssertResult(fAtlas->addRect(clippedPathIBounds.width(), clippedPathIBounds.height(),
+                                       &location));
     }
+    devToAtlasOffset->set(location.x() - clippedPathIBounds.left(),
+                          location.y() - clippedPathIBounds.top());
+    return retiredAtlas;
 }
 
 void GrCCPerFlushResources::enqueueRenderedPath(const SkPath& path, GrFillRule fillRule,
@@ -131,9 +143,9 @@ static void draw_stencil_to_coverage(GrOnFlushResourceProvider* onFlushRP,
     surfaceDrawContext->addDrawOp(nullptr, std::move(coverOp));
 }
 
-void GrCCPerFlushResources::flushRenderedPaths(GrOnFlushResourceProvider* onFlushRP,
-                                               GrCCAtlas* atlas) {
-    auto surfaceDrawContext = atlas->instantiate(onFlushRP);
+void GrCCPerFlushResources::flushRenderedPaths(GrOnFlushResourceProvider* onFlushRP) {
+    SkASSERT(fAtlas);
+    auto surfaceDrawContext = fAtlas->instantiate(onFlushRP);
     if (!surfaceDrawContext) {
         for (int i = 0; i < (int)SK_ARRAY_COUNT(fAtlasPaths); ++i) {
             fAtlasPaths[i].fUberPath.reset();
@@ -163,7 +175,7 @@ void GrCCPerFlushResources::flushRenderedPaths(GrOnFlushResourceProvider* onFlus
     }
 
     draw_stencil_to_coverage(onFlushRP, surfaceDrawContext.get(),
-                             SkRect::MakeSize(SkSize::Make(atlas->drawBounds())));
+                             SkRect::MakeSize(SkSize::Make(fAtlas->drawBounds())));
 
     if (surfaceDrawContext->asSurfaceProxy()->requiresManualMSAAResolve()) {
         onFlushRP->addTextureResolveTask(sk_ref_sp(surfaceDrawContext->asTextureProxy()),
@@ -171,9 +183,9 @@ void GrCCPerFlushResources::flushRenderedPaths(GrOnFlushResourceProvider* onFlus
     }
 }
 
-bool GrCCPerFlushResources::finalize(GrOnFlushResourceProvider* onFlushRP) {
-    if (!fRenderedAtlasStack.empty()) {
-        this->flushRenderedPaths(onFlushRP, &fRenderedAtlasStack.current());
+std::unique_ptr<GrCCAtlas> GrCCPerFlushResources::finalize(GrOnFlushResourceProvider* onFlushRP) {
+    if (fAtlas) {
+        this->flushRenderedPaths(onFlushRP);
     }
 #ifdef SK_DEBUG
     // These paths should have been rendered and reset to empty by this point.
@@ -182,5 +194,5 @@ bool GrCCPerFlushResources::finalize(GrOnFlushResourceProvider* onFlushRP) {
         SkASSERT(fAtlasPaths[i].fScissoredPaths.empty());
     }
 #endif
-    return true;
+    return std::move(fAtlas);
 }
