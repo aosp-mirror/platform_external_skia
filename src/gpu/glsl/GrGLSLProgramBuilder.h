@@ -41,7 +41,7 @@ public:
 
     GrSurfaceOrigin origin() const { return fProgramInfo.origin(); }
     const GrPipeline& pipeline() const { return fProgramInfo.pipeline(); }
-    const GrPrimitiveProcessor& primitiveProcessor() const { return fProgramInfo.primProc(); }
+    const GrGeometryProcessor& geometryProcessor() const { return fProgramInfo.geomProc(); }
     GrProcessor::CustomFeatures processorFeatures() const {
         return fProgramInfo.requestedFeatures();
     }
@@ -50,16 +50,6 @@ public:
     }
     bool hasPointSize() const { return fProgramInfo.primitiveType() == GrPrimitiveType::kPoints; }
     virtual SkSL::Compiler* shaderCompiler() const = 0;
-
-    // TODO: stop passing in the renderTarget for just the sampleLocations
-    int effectiveSampleCnt() {
-        SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
-        return fRenderTarget->getSampleLocations().count();
-    }
-    const SkTArray<SkPoint>& getSampleLocations() {
-        SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
-        return fRenderTarget->getSampleLocations();
-    }
 
     const GrProgramDesc& desc() const { return fDesc; }
 
@@ -174,7 +164,7 @@ private:
     bool checkSamplerCounts();
 
 #ifdef SK_DEBUG
-    void verify(const GrPrimitiveProcessor&);
+    void verify(const GrGeometryProcessor&);
     void verify(const GrFragmentProcessor&);
     void verify(const GrXferProcessor&);
 #endif
