@@ -226,6 +226,7 @@ sksl_spirv_tests = [
   "/sksl/spirv/LayoutMultipleOf4.sksl",
   "/sksl/spirv/LayoutOutOfOrder.sksl",
   "/sksl/spirv/OpaqueTypeInArray.sksl",
+  "/sksl/workarounds/RewriteMatrixVectorMultiply.sksl",
   "/sksl/errors/UndefinedFunction.sksl",
 ]
 
@@ -394,7 +395,6 @@ sksl_shared_tests = [
   "/sksl/shared/ReturnsValueOnEveryPathES2.sksl",
   "/sksl/shared/ReturnsValueOnEveryPathES3.sksl",
   "/sksl/shared/SampleLocations.vert",
-  "/sksl/shared/SampleMask.sksl",
   "/sksl/shared/ScalarConversionConstructorsES2.sksl",
   "/sksl/shared/ScalarConversionConstructorsES3.sksl",
   "/sksl/shared/ScopedSymbol.sksl",
@@ -545,6 +545,7 @@ sksl_settings_tests = [
   "/sksl/workarounds/NegatedAtan.sksl",
   "/sksl/workarounds/PowWithConstantExponent.sksl",
   "/sksl/workarounds/RewriteDoWhileLoops.sksl",
+  "/sksl/workarounds/RewriteMatrixVectorMultiply.sksl",
   "/sksl/workarounds/TernaryShortCircuit.sksl",
 ]
 

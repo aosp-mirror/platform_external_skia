@@ -74,9 +74,9 @@ public:
     };
 
     struct Options {
-        // Sets an upper limit on the acceptable amount of code growth from inlining.
-        // By default, runtime effects don't run the inliner directly.
-        int inlineThreshold = 0;
+        // For testing purposes, completely disable the inliner. (Normally, Runtime Effects don't
+        // run the inliner directly, but they still get an inlining pass once they are painted.)
+        bool forceNoInline = false;
     };
 
     // If the effect is compiled successfully, `effect` will be non-null.
@@ -148,6 +148,7 @@ public:
 private:
     SkRuntimeEffect(SkString sksl,
                     std::unique_ptr<SkSL::Program> baseProgram,
+                    const Options& options,
                     const SkSL::FunctionDefinition& main,
                     std::vector<Uniform>&& uniforms,
                     std::vector<SkString>&& children,
