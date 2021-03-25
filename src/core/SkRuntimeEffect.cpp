@@ -131,7 +131,8 @@ static bool init_uniform_type(const SkSL::Context& ctx,
 SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& options) {
     SkSL::SharedCompiler compiler;
     SkSL::Program::Settings settings;
-    settings.fInlineThreshold = options.inlineThreshold;
+    settings.fInlineThreshold = 0;
+    settings.fForceNoInline = options.forceNoInline;
     settings.fAllowNarrowingConversions = true;
     auto program = compiler->convertProgram(SkSL::ProgramKind::kRuntimeEffect,
                                             SkSL::String(sksl.c_str(), sksl.size()),
@@ -243,6 +244,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& opti
 
     sk_sp<SkRuntimeEffect> effect(new SkRuntimeEffect(std::move(sksl),
                                                       std::move(program),
+                                                      options,
                                                       *main,
                                                       std::move(uniforms),
                                                       std::move(children),
@@ -313,6 +315,7 @@ size_t SkRuntimeEffect::Uniform::sizeInBytes() const {
 
 SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
                                  std::unique_ptr<SkSL::Program> baseProgram,
+                                 const Options& options,
                                  const SkSL::FunctionDefinition& main,
                                  std::vector<Uniform>&& uniforms,
                                  std::vector<SkString>&& children,
@@ -332,6 +335,14 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
         , fAllowColorFilter(allowColorFilter) {
     SkASSERT(fBaseProgram);
     SkASSERT(fChildren.size() == fSampleUsages.size());
+
+    // Everything from SkRuntimeEffect::Options which could influence the compiled result needs to
+    // be accounted for in `fHash`. If you've added a new field to Options and caused the static-
+    // assert below to trigger, please incorporate your field into `fHash` and update KnownOptions
+    // to match the layout of Options.
+    struct KnownOptions { bool b; };
+    static_assert(sizeof(Options) == sizeof(KnownOptions));
+    fHash = SkOpts::hash_fn(&options.forceNoInline, sizeof(options.forceNoInline), fHash);
 }
 
 SkRuntimeEffect::~SkRuntimeEffect() = default;
