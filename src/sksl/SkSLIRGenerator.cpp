@@ -1010,6 +1010,8 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         return;
     }
     const ASTNode::FunctionData& funcData = f.getFunctionData();
+
+    // Check function modifiers.
     this->checkModifiers(
             f.fOffset,
             funcData.fModifiers,
@@ -1020,6 +1022,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         this->errorReporter().error(f.fOffset, "functions cannot be both 'inline' and 'noinline'");
     }
 
+    // Check modifiers on each function parameter.
     std::vector<const Variable*> parameters;
     for (size_t i = 0; i < funcData.fParameterCount; ++i) {
         const ASTNode& param = *(iter++);
@@ -1071,6 +1074,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
                parameters[idx]->modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN;
     };
 
+    // Check the function signature of `main`.
     if (funcData.fName == "main") {
         switch (this->programKind()) {
             case ProgramKind::kRuntimeEffect: {
@@ -1115,7 +1119,7 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         }
     }
 
-    // find existing declaration
+    // Find existing declarations and report conflicts.
     const FunctionDeclaration* decl = nullptr;
     const Symbol* entry = (*fSymbolTable)[funcData.fName];
     if (entry) {
@@ -1180,6 +1184,13 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         Modifiers declModifiers = funcData.fModifiers;
         if (!fIsBuiltinCode) {
             declModifiers.fFlags |= Modifiers::kHasSideEffects_Flag;
+        }
+
+        if (fContext.fConfig->fSettings.fForceNoInline) {
+            // Apply the `noinline` modifier to every function. This allows us to test Runtime
+            // Effects without any inlining, even when the code is later added to a paint.
+            declModifiers.fFlags &= ~Modifiers::kInline_Flag;
+            declModifiers.fFlags |= Modifiers::kNoInline_Flag;
         }
 
         // Create a new declaration.
@@ -2060,12 +2071,11 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
             fSharedElements->begin(), scanner.fNewElements.begin(), scanner.fNewElements.end());
 }
 
-IRGenerator::IRBundle IRGenerator::convertProgram(
-        const ParsedModule& base,
-        bool isBuiltinCode,
-        const char* text,
-        size_t length,
-        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
+void IRGenerator::start(const ParsedModule& base,
+                        bool isBuiltinCode,
+                        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions,
+                        std::vector<std::unique_ptr<ProgramElement>>* elements,
+                        std::vector<const ProgramElement*>* sharedElements) {
     fSymbolTable = base.fSymbols;
     fIntrinsics = base.fIntrinsics.get();
     if (fIntrinsics) {
@@ -2073,19 +2083,12 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
     }
     fIsBuiltinCode = isBuiltinCode;
 
-    std::vector<std::unique_ptr<ProgramElement>> elements;
-    std::vector<const ProgramElement*> sharedElements;
-
-    fProgramElements = &elements;
-    fSharedElements = &sharedElements;
-
     fInputs.reset();
     fInvocations = -1;
     fRTAdjust = nullptr;
     fRTAdjustInterfaceBlock = nullptr;
     fDefinedStructs.clear();
-
-    AutoSymbolTable table(this);
+    this->pushSymbolTable();
 
     if (this->programKind() == ProgramKind::kGeometry && !fIsBuiltinCode) {
         // Declare sk_InvocationID programmatically. With invocations support, it's an 'in' builtin.
@@ -2112,69 +2115,9 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
             fSymbolTable->addWithoutOwnership(ef.get());
         }
     }
+}
 
-    Parser parser(text, length, *fSymbolTable, this->errorReporter());
-    fFile = parser.compilationUnit();
-    if (this->errorReporter().errorCount()) {
-        return {};
-    }
-    SkASSERT(fFile);
-    for (const auto& decl : fFile->root()) {
-        switch (decl.fKind) {
-            case ASTNode::Kind::kVarDeclarations:
-                this->convertGlobalVarDeclarations(decl);
-                break;
-
-            case ASTNode::Kind::kEnum:
-                this->convertEnum(decl);
-                break;
-
-            case ASTNode::Kind::kFunction:
-                this->convertFunction(decl);
-                break;
-
-            case ASTNode::Kind::kModifiers: {
-                std::unique_ptr<ModifiersDeclaration> f = this->convertModifiersDeclaration(decl);
-                if (f) {
-                    fProgramElements->push_back(std::move(f));
-                }
-                break;
-            }
-            case ASTNode::Kind::kInterfaceBlock: {
-                std::unique_ptr<InterfaceBlock> i = this->convertInterfaceBlock(decl);
-                if (i) {
-                    fProgramElements->push_back(std::move(i));
-                }
-                break;
-            }
-            case ASTNode::Kind::kExtension: {
-                std::unique_ptr<Extension> e = this->convertExtension(decl.fOffset,
-                                                                      decl.getString());
-                if (e) {
-                    fProgramElements->push_back(std::move(e));
-                }
-                break;
-            }
-            case ASTNode::Kind::kSection: {
-                std::unique_ptr<Section> s = this->convertSection(decl);
-                if (s) {
-                    fProgramElements->push_back(std::move(s));
-                }
-                break;
-            }
-            case ASTNode::Kind::kType: {
-                std::unique_ptr<StructDefinition> s = this->convertStructDefinition(decl);
-                if (s) {
-                    fProgramElements->push_back(std::move(s));
-                }
-                break;
-            }
-            default:
-                SkDEBUGFAILF("unsupported declaration: %s\n", decl.description().c_str());
-                break;
-        }
-    }
-
+IRGenerator::IRBundle IRGenerator::finish() {
     // Variables defined in the pre-includes need their declaring elements added to the program
     if (!fIsBuiltinCode && fIntrinsics) {
         this->findAndDeclareBuiltinVariables();
@@ -2207,8 +2150,88 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
         }
     }
 
-    return IRBundle{std::move(elements), std::move(sharedElements), this->releaseModifiers(),
-                    fSymbolTable, fInputs};
+    IRBundle result{std::move(*fProgramElements), std::move(*fSharedElements),
+                    this->releaseModifiers(), fSymbolTable, fInputs};
+    fSymbolTable = nullptr;
+    return result;
+}
+
+IRGenerator::IRBundle IRGenerator::convertProgram(
+        const ParsedModule& base,
+        bool isBuiltinCode,
+        const char* text,
+        size_t length,
+        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
+    std::vector<std::unique_ptr<ProgramElement>> elements;
+    std::vector<const ProgramElement*> sharedElements;
+
+    fProgramElements = &elements;
+    fSharedElements = &sharedElements;
+
+    this->start(base, isBuiltinCode, externalFunctions, &elements, &sharedElements);
+
+    Parser parser(text, length, *fSymbolTable, this->errorReporter());
+    fFile = parser.compilationUnit();
+    if (this->errorReporter().errorCount() == 0) {
+        SkASSERT(fFile);
+        for (const auto& decl : fFile->root()) {
+            switch (decl.fKind) {
+                case ASTNode::Kind::kVarDeclarations:
+                    this->convertGlobalVarDeclarations(decl);
+                    break;
+
+                case ASTNode::Kind::kEnum:
+                    this->convertEnum(decl);
+                    break;
+
+                case ASTNode::Kind::kFunction:
+                    this->convertFunction(decl);
+                    break;
+
+                case ASTNode::Kind::kModifiers: {
+                    std::unique_ptr<ModifiersDeclaration> f =
+                                                            this->convertModifiersDeclaration(decl);
+                    if (f) {
+                        fProgramElements->push_back(std::move(f));
+                    }
+                    break;
+                }
+                case ASTNode::Kind::kInterfaceBlock: {
+                    std::unique_ptr<InterfaceBlock> i = this->convertInterfaceBlock(decl);
+                    if (i) {
+                        fProgramElements->push_back(std::move(i));
+                    }
+                    break;
+                }
+                case ASTNode::Kind::kExtension: {
+                    std::unique_ptr<Extension> e = this->convertExtension(decl.fOffset,
+                                                                          decl.getString());
+                    if (e) {
+                        fProgramElements->push_back(std::move(e));
+                    }
+                    break;
+                }
+                case ASTNode::Kind::kSection: {
+                    std::unique_ptr<Section> s = this->convertSection(decl);
+                    if (s) {
+                        fProgramElements->push_back(std::move(s));
+                    }
+                    break;
+                }
+                case ASTNode::Kind::kType: {
+                    std::unique_ptr<StructDefinition> s = this->convertStructDefinition(decl);
+                    if (s) {
+                        fProgramElements->push_back(std::move(s));
+                    }
+                    break;
+                }
+                default:
+                    SkDEBUGFAILF("unsupported declaration: %s\n", decl.description().c_str());
+                    break;
+            }
+        }
+    }
+    return this->finish();
 }
 
 }  // namespace SkSL
