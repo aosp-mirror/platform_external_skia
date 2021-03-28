@@ -2242,6 +2242,14 @@ static std::unique_ptr<Expression> create_literal_1(const Context& context, cons
     }
 }
 
+SpvId SPIRVCodeGenerator::writeReciprocal(const Type& type, SpvId value, OutputStream& out) {
+    SkASSERT(type.isFloat());
+    SpvId one = this->writeFloatLiteral({/*offset=*/-1, /*value=*/1, &type});
+    SpvId reciprocal = this->nextId(&type);
+    this->writeInstruction(SpvOpFDiv, this->getType(type), reciprocal, one, value, out);
+    return reciprocal;
+}
+
 SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs, Operator op,
                                                 const Type& rightType, SpvId rhs,
                                                 const Type& resultType, OutputStream& out) {
@@ -2255,18 +2263,21 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
     // handling in SPIR-V
     if (this->getActualType(leftType) != this->getActualType(rightType)) {
         if (leftType.isVector() && rightType.isNumber()) {
-            if (op.kind() == Token::Kind::TK_SLASH) {
-                SpvId one = this->writeExpression(*create_literal_1(fContext, rightType), out);
-                SpvId inverse = this->nextId(&rightType);
-                this->writeInstruction(SpvOpFDiv, this->getType(rightType), inverse, one, rhs, out);
-                rhs = inverse;
-                op = Token::Kind::TK_STAR;
-            }
-            if (op.kind() == Token::Kind::TK_STAR) {
-                SpvId result = this->nextId(&resultType);
-                this->writeInstruction(SpvOpVectorTimesScalar, this->getType(resultType),
-                                       result, lhs, rhs, out);
-                return result;
+            if (resultType.componentType().isFloat()) {
+                switch (op.kind()) {
+                    case Token::Kind::TK_SLASH: {
+                        rhs = this->writeReciprocal(rightType, rhs, out);
+                        [[fallthrough]];
+                    }
+                    case Token::Kind::TK_STAR: {
+                        SpvId result = this->nextId(&resultType);
+                        this->writeInstruction(SpvOpVectorTimesScalar, this->getType(resultType),
+                                               result, lhs, rhs, out);
+                        return result;
+                    }
+                    default:
+                        break;
+                }
             }
             // promote number to vector
             const Type& vecType = leftType;
@@ -2280,11 +2291,13 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
             rhs = vec;
             operandType = &leftType;
         } else if (rightType.isVector() && leftType.isNumber()) {
-            if (op.kind() == Token::Kind::TK_STAR) {
-                SpvId result = this->nextId(&resultType);
-                this->writeInstruction(SpvOpVectorTimesScalar, this->getType(resultType),
-                                       result, rhs, lhs, out);
-                return result;
+            if (resultType.componentType().isFloat()) {
+                if (op.kind() == Token::Kind::TK_STAR) {
+                    SpvId result = this->nextId(&resultType);
+                    this->writeInstruction(SpvOpVectorTimesScalar, this->getType(resultType),
+                                           result, rhs, lhs, out);
+                    return result;
+                }
             }
             // promote number to vector
             const Type& vecType = rightType;
@@ -2445,14 +2458,14 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
 }
 
 SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, OutputStream& out) {
-    const Expression& left = *b.left();
-    const Expression& right = *b.right();
+    const Expression* left = b.left().get();
+    const Expression* right = b.right().get();
     Operator op = b.getOperator();
     // handle cases where we don't necessarily evaluate both LHS and RHS
     switch (op.kind()) {
         case Token::Kind::TK_EQ: {
-            SpvId rhs = this->writeExpression(right, out);
-            this->getLValue(left, out)->store(rhs, out);
+            SpvId rhs = this->writeExpression(*right, out);
+            this->getLValue(*left, out)->store(rhs, out);
             return rhs;
         }
         case Token::Kind::TK_LOGICALAND:
@@ -2466,15 +2479,32 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
     std::unique_ptr<LValue> lvalue;
     SpvId lhs;
     if (op.isAssignment()) {
-        lvalue = this->getLValue(left, out);
+        lvalue = this->getLValue(*left, out);
         lhs = lvalue->load(out);
     } else {
         lvalue = nullptr;
-        lhs = this->writeExpression(left, out);
+        lhs = this->writeExpression(*left, out);
     }
-    SpvId rhs = this->writeExpression(right, out);
-    SpvId result = this->writeBinaryExpression(left.type(), lhs, op.removeAssignment(),
-                                               right.type(), rhs, b.type(), out);
+
+    SpvId rhs = (SpvId)-1;
+    if (op.kind() == Token::Kind::TK_SLASH && right->is<FloatLiteral>()) {
+        float rhsValue = right->as<FloatLiteral>().value();
+        if (std::isfinite(rhsValue) && rhsValue != 0.0f) {
+            // Rewrite floating-point division by a literal into multiplication by the reciprocal.
+            // This converts `expr / 2` into `expr * 0.5`
+            // This improves codegen, especially for certain types of divides (e.g. vector/scalar).
+            op = Operator(Token::Kind::TK_STAR);
+            FloatLiteral reciprocal{right->fOffset, 1.0f / rhsValue, &right->type()};
+            rhs = this->writeExpression(reciprocal, out);
+        }
+    }
+
+    if (rhs == (SpvId)-1) {
+        rhs = this->writeExpression(*right, out);
+    }
+
+    SpvId result = this->writeBinaryExpression(left->type(), lhs, op.removeAssignment(),
+                                               right->type(), rhs, b.type(), out);
     if (lvalue) {
         lvalue->store(result, out);
     }
