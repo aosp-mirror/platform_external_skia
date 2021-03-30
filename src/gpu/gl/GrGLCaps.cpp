@@ -563,9 +563,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     GR_GL_GetIntegerv(gli, GR_GL_MAX_RENDERBUFFER_SIZE, &fMaxRenderTargetSize);
-    // Our render targets are always created with textures as the color
-    // attachment, hence this min:
-    fMaxRenderTargetSize = std::min(fMaxTextureSize, fMaxRenderTargetSize);
     fMaxPreferredRenderTargetSize = fMaxRenderTargetSize;
 
     if (kARM_GrGLVendor == ctxInfo.vendor()) {
@@ -4067,13 +4064,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fTiledRenderingSupport = false;
     }
 
-    if (kQualcomm_GrGLVendor == ctxInfo.vendor() || kATI_GrGLVendor == ctxInfo.vendor()) {
-        // The sample mask round rect op draws nothing on several Adreno and Radeon bots. Other ops
-        // that use sample mask while rendering to stencil seem to work fine.
-        // http://skbug.com/8921
-        shaderCaps->fCanOnlyUseSampleMaskWithStencil = true;
-    }
-
     if (ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D9) {
         formatWorkarounds->fDisallowBGRA8ReadPixels = true;
     }
@@ -4102,6 +4092,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (kAdreno530_GrGLRenderer == ctxInfo.renderer()) {
         shaderCaps->fUseNodePools = false;
     }
+
+    // skbug.com/11204. Avoid recursion issue in GrSurfaceContext::writePixels.
+    if (fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO) {
+        fReuseScratchTextures = false;
+    }
 }
 
 void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
@@ -4116,7 +4111,6 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fDetachStencilFromMSAABuffersBeforeReadPixels);
         SkASSERT(!fDontSetBaseOrMaxLevelForExternalTextures);
         SkASSERT(!fNeverDisableColorWrites);
-        SkASSERT(!fShaderCaps->fCanOnlyUseSampleMaskWithStencil);
     }
     if (options.fShaderCacheStrategy < GrContextOptions::ShaderCacheStrategy::kBackendBinary) {
         fProgramBinarySupport = false;
@@ -4518,12 +4512,12 @@ uint64_t GrGLCaps::computeFormatKey(const GrBackendFormat& format) const {
     return (uint64_t)(glFormat);
 }
 
-GrProgramDesc GrGLCaps::makeDesc(GrRenderTarget* rt,
+GrProgramDesc GrGLCaps::makeDesc(GrRenderTarget* /* rt */,
                                  const GrProgramInfo& programInfo,
                                  ProgramDescOverrideFlags overrideFlags) const {
     SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
     GrProgramDesc desc;
-    GrProgramDesc::Build(&desc, rt, programInfo, *this);
+    GrProgramDesc::Build(&desc, programInfo, *this);
     return desc;
 }
 

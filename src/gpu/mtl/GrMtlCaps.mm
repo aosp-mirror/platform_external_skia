@@ -26,6 +26,8 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
+GR_NORETAIN_BEGIN
+
 GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice> device,
                      MTLFeatureSet featureSet)
         : INHERITED(contextOptions) {
@@ -263,7 +265,7 @@ bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy
                                   dst == src);
 }
 
-void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
+void GrMtlCaps::initGrCaps(id<MTLDevice> device) {
     // Max vertex attribs is the same on all devices
     fMaxVertexAttributes = 31;
 
@@ -1096,7 +1098,7 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
                                   ProgramDescOverrideFlags overrideFlags) const {
     SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
     GrProgramDesc desc;
-    GrProgramDesc::Build(&desc, rt, programInfo, *this);
+    GrProgramDesc::Build(&desc, programInfo, *this);
 
     GrProcessorKeyBuilder b(desc.key());
 
@@ -1212,3 +1214,5 @@ void GrMtlCaps::onDumpJSON(SkJSONWriter* writer) const {
 #else
 void GrMtlCaps::onDumpJSON(SkJSONWriter* writer) const { }
 #endif
+
+GR_NORETAIN_END

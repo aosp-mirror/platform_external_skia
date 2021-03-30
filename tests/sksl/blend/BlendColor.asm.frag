@@ -8,7 +8,7 @@ OpName %sk_Clockwise "sk_Clockwise"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "src"
 OpMemberName %_UniformBuffer 1 "dst"
-OpName %_blend_set_color_luminance "_blend_set_color_luminance"
+OpName %_blend_set_color_luminance_h3h3hh3 "_blend_set_color_luminance_h3h3hh3"
 OpName %lum "lum"
 OpName %result "result"
 OpName %minComp "minComp"
@@ -28,30 +28,47 @@ OpMemberDecorate %_UniformBuffer 1 RelaxedPrecision
 OpDecorate %_UniformBuffer Block
 OpDecorate %11 Binding 0
 OpDecorate %11 DescriptorSet 0
+OpDecorate %lum RelaxedPrecision
+OpDecorate %23 RelaxedPrecision
+OpDecorate %27 RelaxedPrecision
 OpDecorate %28 RelaxedPrecision
+OpDecorate %result RelaxedPrecision
 OpDecorate %30 RelaxedPrecision
+OpDecorate %31 RelaxedPrecision
 OpDecorate %32 RelaxedPrecision
 OpDecorate %33 RelaxedPrecision
 OpDecorate %34 RelaxedPrecision
+OpDecorate %35 RelaxedPrecision
 OpDecorate %36 RelaxedPrecision
+OpDecorate %minComp RelaxedPrecision
 OpDecorate %40 RelaxedPrecision
+OpDecorate %41 RelaxedPrecision
 OpDecorate %42 RelaxedPrecision
+OpDecorate %43 RelaxedPrecision
 OpDecorate %44 RelaxedPrecision
+OpDecorate %45 RelaxedPrecision
+OpDecorate %maxComp RelaxedPrecision
 OpDecorate %49 RelaxedPrecision
+OpDecorate %50 RelaxedPrecision
 OpDecorate %51 RelaxedPrecision
+OpDecorate %52 RelaxedPrecision
 OpDecorate %53 RelaxedPrecision
+OpDecorate %54 RelaxedPrecision
 OpDecorate %56 RelaxedPrecision
 OpDecorate %61 RelaxedPrecision
 OpDecorate %62 RelaxedPrecision
 OpDecorate %67 RelaxedPrecision
 OpDecorate %68 RelaxedPrecision
 OpDecorate %69 RelaxedPrecision
+OpDecorate %70 RelaxedPrecision
 OpDecorate %71 RelaxedPrecision
 OpDecorate %72 RelaxedPrecision
 OpDecorate %73 RelaxedPrecision
 OpDecorate %74 RelaxedPrecision
 OpDecorate %75 RelaxedPrecision
 OpDecorate %76 RelaxedPrecision
+OpDecorate %77 RelaxedPrecision
+OpDecorate %78 RelaxedPrecision
 OpDecorate %79 RelaxedPrecision
 OpDecorate %80 RelaxedPrecision
 OpDecorate %81 RelaxedPrecision
@@ -60,38 +77,62 @@ OpDecorate %86 RelaxedPrecision
 OpDecorate %92 RelaxedPrecision
 OpDecorate %93 RelaxedPrecision
 OpDecorate %94 RelaxedPrecision
+OpDecorate %95 RelaxedPrecision
 OpDecorate %96 RelaxedPrecision
 OpDecorate %97 RelaxedPrecision
 OpDecorate %98 RelaxedPrecision
 OpDecorate %99 RelaxedPrecision
+OpDecorate %100 RelaxedPrecision
 OpDecorate %101 RelaxedPrecision
 OpDecorate %102 RelaxedPrecision
 OpDecorate %103 RelaxedPrecision
+OpDecorate %105 RelaxedPrecision
+OpDecorate %106 RelaxedPrecision
+OpDecorate %107 RelaxedPrecision
 OpDecorate %108 RelaxedPrecision
 OpDecorate %109 RelaxedPrecision
+OpDecorate %_0_alpha RelaxedPrecision
 OpDecorate %118 RelaxedPrecision
+OpDecorate %119 RelaxedPrecision
 OpDecorate %122 RelaxedPrecision
+OpDecorate %123 RelaxedPrecision
 OpDecorate %124 RelaxedPrecision
+OpDecorate %_1_sda RelaxedPrecision
 OpDecorate %127 RelaxedPrecision
+OpDecorate %128 RelaxedPrecision
 OpDecorate %130 RelaxedPrecision
+OpDecorate %131 RelaxedPrecision
+OpDecorate %132 RelaxedPrecision
+OpDecorate %_2_dsa RelaxedPrecision
 OpDecorate %135 RelaxedPrecision
+OpDecorate %136 RelaxedPrecision
 OpDecorate %138 RelaxedPrecision
+OpDecorate %139 RelaxedPrecision
+OpDecorate %140 RelaxedPrecision
 OpDecorate %141 RelaxedPrecision
 OpDecorate %143 RelaxedPrecision
 OpDecorate %145 RelaxedPrecision
 OpDecorate %149 RelaxedPrecision
+OpDecorate %150 RelaxedPrecision
 OpDecorate %151 RelaxedPrecision
 OpDecorate %152 RelaxedPrecision
 OpDecorate %153 RelaxedPrecision
 OpDecorate %155 RelaxedPrecision
+OpDecorate %156 RelaxedPrecision
 OpDecorate %157 RelaxedPrecision
 OpDecorate %158 RelaxedPrecision
 OpDecorate %159 RelaxedPrecision
+OpDecorate %160 RelaxedPrecision
+OpDecorate %161 RelaxedPrecision
+OpDecorate %162 RelaxedPrecision
 OpDecorate %164 RelaxedPrecision
+OpDecorate %165 RelaxedPrecision
 OpDecorate %167 RelaxedPrecision
+OpDecorate %168 RelaxedPrecision
 OpDecorate %169 RelaxedPrecision
 OpDecorate %170 RelaxedPrecision
 OpDecorate %171 RelaxedPrecision
+OpDecorate %172 RelaxedPrecision
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
@@ -119,7 +160,7 @@ OpDecorate %171 RelaxedPrecision
 %int = OpTypeInt 32 1
 %int_1 = OpConstant %int 1
 %int_0 = OpConstant %int 0
-%_blend_set_color_luminance = OpFunction %v3float None %15
+%_blend_set_color_luminance_h3h3hh3 = OpFunction %v3float None %15
 %18 = OpFunctionParameter %_ptr_Function_v3float
 %19 = OpFunctionParameter %_ptr_Function_float
 %20 = OpFunctionParameter %_ptr_Function_v3float
@@ -263,7 +304,7 @@ OpStore %142 %141
 OpStore %144 %143
 %145 = OpLoad %v3float %_2_dsa
 OpStore %146 %145
-%147 = OpFunctionCall %v3float %_blend_set_color_luminance %142 %144 %146
+%147 = OpFunctionCall %v3float %_blend_set_color_luminance_h3h3hh3 %142 %144 %146
 %148 = OpAccessChain %_ptr_Uniform_v4float %11 %int_1
 %149 = OpLoad %v4float %148
 %150 = OpVectorShuffle %v3float %149 %149 0 1 2

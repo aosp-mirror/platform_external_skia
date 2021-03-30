@@ -898,11 +898,8 @@ void SkGpuDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
         return;
     }
 
-    // Create a fragment processor for atlas image. Filter-quality reduction is disabled because the
-    // SkRSXform matrices might include scale or non-trivial rotation.
-    GrFPArgs fpArgs(fContext.get(), this->asMatrixProvider(), sampling,
-                    &fSurfaceDrawContext->colorInfo());
-    fpArgs.fAllowFilterQualityReduction = false;
+    // Create a fragment processor for atlas image.
+    GrFPArgs fpArgs(fContext.get(), this->asMatrixProvider(), &fSurfaceDrawContext->colorInfo());
 
     std::unique_ptr<GrFragmentProcessor> shaderFP = as_SB(shader)->asFragmentProcessor(fpArgs);
     if (shaderFP == nullptr) {
@@ -930,7 +927,7 @@ void SkGpuDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkGpuDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList) {
+void SkGpuDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawGlyphRunList", fContext.get());
 
@@ -939,7 +936,8 @@ void SkGpuDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList) {
         return;
     }
 
-    fSurfaceDrawContext->drawGlyphRunList(this->clip(), this->asMatrixProvider(), glyphRunList);
+    fSurfaceDrawContext->drawGlyphRunList(
+            this->clip(), this->asMatrixProvider(), glyphRunList, paint);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

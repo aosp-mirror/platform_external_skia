@@ -35,6 +35,7 @@
 #include "src/core/SkOSFile.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/GrShaderUtils.h"
 #include "src/utils/SkJSONWriter.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/AutoreleasePool.h"
@@ -79,10 +80,6 @@ extern bool gSkVMJITViaDylib;
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/gl/GrGLUtil.h"
 #include "tools/gpu/GrContextFactory.h"
-
-namespace SkSL {
-extern bool gSkSLInliner;
-}
 
 using sk_gpu_test::ContextInfo;
 using sk_gpu_test::GrContextFactory;
@@ -141,7 +138,8 @@ static DEFINE_string(benchType,  "",
 
 static DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
 static DEFINE_bool(skvm, false, "sets gUseSkVMBlitter");
-static DEFINE_bool(jit, true, "sets gSkVMAllowJIT and gSkVMJITViaDylib");
+static DEFINE_bool(jit, true, "JIT SkVM?");
+static DEFINE_bool(dylib, false, "JIT via dylib (much slower compile but easier to debug/profile)");
 
 static DEFINE_bool2(pre_log, p, false,
                     "Log before running each test. May be incomprehensible when threading");
@@ -1155,6 +1153,15 @@ static void start_keepalive() {
     (void)intentionallyLeaked;
 }
 
+class NanobenchShaderErrorHandler : public GrContextOptions::ShaderErrorHandler {
+    void compileError(const char* shader, const char* errors) override {
+        // Nanobench should abort if any shader can't compile. Failure is much better than
+        // reporting meaningless performance metrics.
+        SkSL::String message = GrShaderUtils::BuildShaderErrorMessage(shader, errors);
+        SK_ABORT("\n%s", message.c_str());
+    }
+};
+
 int main(int argc, char** argv) {
     CommandLineFlags::Parse(argc, argv);
 
@@ -1168,6 +1175,9 @@ int main(int argc, char** argv) {
     SkTaskGroup::Enabler enabled(FLAGS_threads);
 
     SetCtxOptionsFromCommonFlags(&grContextOpts);
+
+    NanobenchShaderErrorHandler errorHandler;
+    grContextOpts.fShaderErrorHandler = &errorHandler;
 
     if (kAutoTuneLoops != FLAGS_loops) {
         FLAGS_samples     = 1;
@@ -1244,8 +1254,8 @@ int main(int argc, char** argv) {
 
     gSkForceRasterPipelineBlitter = FLAGS_forceRasterPipeline;
     gUseSkVMBlitter = FLAGS_skvm;
-    gSkVMAllowJIT = gSkVMJITViaDylib = FLAGS_jit;
-    SkSL::gSkSLInliner = false;  // Temporary experiment
+    gSkVMAllowJIT = FLAGS_jit;
+    gSkVMJITViaDylib = FLAGS_dylib;
 
     int runs = 0;
     BenchmarkStream benchStream;

@@ -20,6 +20,8 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
+GR_NORETAIN_BEGIN
+
 GrMtlOpsRenderPass::GrMtlOpsRenderPass(GrMtlGpu* gpu, GrRenderTarget* rt, GrSurfaceOrigin origin,
                                        const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
                                        const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo)
@@ -83,7 +85,7 @@ bool GrMtlOpsRenderPass::onBindPipeline(const GrProgramInfo& programInfo,
     }
 
     fActivePipelineState->setData(fRenderTarget, programInfo);
-    fCurrentVertexStride = programInfo.primProc().vertexStride();
+    fCurrentVertexStride = programInfo.geomProc().vertexStride();
 
     if (!fActiveRenderCmdEncoder) {
         fActiveRenderCmdEncoder =
@@ -120,12 +122,12 @@ void GrMtlOpsRenderPass::onSetScissorRect(const SkIRect& scissor) {
                                                    fOrigin, scissor);
 }
 
-bool GrMtlOpsRenderPass::onBindTextures(const GrPrimitiveProcessor& primProc,
-                                        const GrSurfaceProxy* const primProcTextures[],
+bool GrMtlOpsRenderPass::onBindTextures(const GrGeometryProcessor& geomProc,
+                                        const GrSurfaceProxy* const geomProcTextures[],
                                         const GrPipeline& pipeline) {
     SkASSERT(fActivePipelineState);
     SkASSERT(fActiveRenderCmdEncoder);
-    fActivePipelineState->setTextures(primProc, pipeline, primProcTextures);
+    fActivePipelineState->setTextures(geomProc, pipeline, geomProcTextures);
     fActivePipelineState->bindTextures(fActiveRenderCmdEncoder);
     return true;
 }
@@ -446,3 +448,5 @@ void GrMtlOpsRenderPass::resetBufferBindings() {
         fBufferBindings[i].fBuffer = nil;
     }
 }
+
+GR_NORETAIN_END

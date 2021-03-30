@@ -171,22 +171,18 @@ public:
     /**
      * Maps a rectangle of shader coordinates to a rectangle and fills that rectangle.
      *
-     * @param paint        describes how to color pixels.
+     * @param GrPaint      describes how to color pixels.
      * @param GrAA         Controls whether rect is antialiased
-     * @param viewMatrix   transformation matrix which applies to rectToDraw
+     * @param SkMatrix     transformation matrix which applies to rectToDraw
      * @param rectToDraw   the rectangle to draw
      * @param localRect    the rectangle of shader coordinates applied to rectToDraw
      */
-    void fillRectToRect(const GrClip* clip,
-                        GrPaint&& paint,
-                        GrAA aa,
-                        const SkMatrix& viewMatrix,
+    void fillRectToRect(const GrClip*,
+                        GrPaint&&,
+                        GrAA,
+                        const SkMatrix&,
                         const SkRect& rectToDraw,
-                        const SkRect& localRect) {
-        DrawQuad quad{GrQuad::MakeFromRect(rectToDraw, viewMatrix), GrQuad(localRect),
-                      aa == GrAA::kYes ? GrQuadAAFlags::kAll : GrQuadAAFlags::kNone};
-        this->drawFilledQuad(clip, std::move(paint), aa, &quad);
-    }
+                        const SkRect& localRect);
 
     /**
      * Fills a block of pixels with a paint and a localMatrix, respecting the clip.
@@ -254,27 +250,20 @@ public:
      * specifies the rectangle to draw in local coords which will be transformed by 'viewMatrix' to
      * device space.
      */
-    void drawTexture(const GrClip* clip,
-                     GrSurfaceProxyView view,
-                     SkAlphaType srcAlphaType,
-                     GrSamplerState::Filter filter,
-                     GrSamplerState::MipmapMode mm,
-                     SkBlendMode mode,
-                     const SkPMColor4f& color,
+    void drawTexture(const GrClip*,
+                     GrSurfaceProxyView,
+                     SkAlphaType,
+                     GrSamplerState::Filter,
+                     GrSamplerState::MipmapMode,
+                     SkBlendMode,
+                     const SkPMColor4f&,
                      const SkRect& srcRect,
                      const SkRect& dstRect,
-                     GrAA aa,
-                     GrQuadAAFlags edgeAA,
-                     SkCanvas::SrcRectConstraint constraint,
-                     const SkMatrix& viewMatrix,
-                     sk_sp<GrColorSpaceXform> texXform) {
-        const SkRect* subset = constraint == SkCanvas::kStrict_SrcRectConstraint ?
-                &srcRect : nullptr;
-        DrawQuad quad{GrQuad::MakeFromRect(dstRect, viewMatrix), GrQuad(srcRect), edgeAA};
-
-        this->drawTexturedQuad(clip, std::move(view), srcAlphaType, std::move(texXform), filter, mm,
-                               color, mode, aa, &quad, subset);
-    }
+                     GrAA,
+                     GrQuadAAFlags,
+                     SkCanvas::SrcRectConstraint,
+                     const SkMatrix&,
+                     sk_sp<GrColorSpaceXform>);
 
     /**
      * Variant of drawTexture that instead draws the texture applied to 'dstQuad' transformed by
@@ -512,7 +501,8 @@ public:
      */
     void drawGlyphRunList(const GrClip*,
                           const SkMatrixProvider& viewMatrix,
-                          const SkGlyphRunList& glyphRunList);
+                          const SkGlyphRunList& glyphRunList,
+                          const SkPaint& paint);
 
     /**
      * Draw the text specified by the SkGlyphRunList.
@@ -522,7 +512,8 @@ public:
      */
     void drawGlyphRunListWithCache(const GrClip*,
                                    const SkMatrixProvider& viewMatrix,
-                                   const SkGlyphRunList& glyphRunList);
+                                   const SkGlyphRunList& glyphRunList,
+                                   const SkPaint& paint);
 
     /**
      * Draw the text specified by the SkGlyphRunList.
@@ -532,7 +523,8 @@ public:
      */
     void drawGlyphRunListNoCache(const GrClip*,
                                  const SkMatrixProvider& viewMatrix,
-                                 const SkGlyphRunList& glyphRunList);
+                                 const SkGlyphRunList& glyphRunList,
+                                 const SkPaint& paint);
 
     /**
      * Adds the necessary signal and wait semaphores and adds the passed in SkDrawable to the
@@ -663,20 +655,18 @@ private:
 
     void internalStencilClear(const SkIRect* scissor, bool insideStencilMask);
 
-    // If the drawn quad's paint is a const blended color, provide it as a non-null pointer to
-    // 'constColor', which enables the draw-as-clear optimization. Otherwise it is assumed the paint
-    // requires some form of shading that invalidates using a clear op.
-    //
-    // The non-const pointers should be the original draw request on input, and will be updated as
-    // appropriate depending on the returned optimization level.
-    //
     // 'stencilSettings' are provided merely for decision making purposes; When non-null,
     // optimization strategies that submit special ops are avoided.
+    //
+    // 'aa' and 'quad' should be the original draw request on input, and will be updated as
+    // appropriate depending on the returned optimization level.
+    //
+    // If kSubmitted is returned, the provided paint was consumed. Otherwise it is left unchanged.
     QuadOptimization attemptQuadOptimization(const GrClip* clip,
-                                             const SkPMColor4f* constColor,
                                              const GrUserStencilSettings* stencilSettings,
                                              GrAA* aa,
-                                             DrawQuad* quad);
+                                             DrawQuad* quad,
+                                             GrPaint* paint);
 
     // If stencil settings, 'ss', are non-null, AA controls MSAA or no AA. If they are null, then AA
     // can choose between coverage, MSAA as per chooseAAType(). This will always attempt to apply

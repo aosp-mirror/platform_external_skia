@@ -162,7 +162,7 @@ void GrVkPipelineStateBuilder::storeShadersInCache(const SkSL::String shaders[],
     // to the key right after the base key.
     sk_sp<SkData> key = SkData::MakeWithoutCopy(this->desc().asKey(),
                                                 this->desc().initialKeyLength()+4);
-    SkString description = GrProgramDesc::Describe(fRenderTarget, fProgramInfo, *this->caps());
+    SkString description = GrProgramDesc::Describe(fProgramInfo, *this->caps());
 
     sk_sp<SkData> data = GrPersistentCacheUtils::PackCachedShaders(isSkSL ? kSKSL_Tag : kSPIRV_Tag,
                                                                    shaders,
@@ -277,7 +277,7 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
                                                         &shaders[kFragment_GrShaderType],
                                                         &inputs[kFragment_GrShaderType]);
 
-        if (this->primitiveProcessor().willUseGeoShader()) {
+        if (this->geometryProcessor().willUseGeoShader()) {
             success = success && this->createVkShaderModule(VK_SHADER_STAGE_GEOMETRY_BIT,
                                                             *sksl[kGeometry_GrShaderType],
                                                             &shaderModules[kGeometry_GrShaderType],

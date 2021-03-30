@@ -1,15 +1,15 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %_entrypoint "_entrypoint" %sk_FragColor %sk_Clockwise
-OpExecutionMode %_entrypoint OriginUpperLeft
+OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_FragColor %sk_Clockwise
+OpExecutionMode %_entrypoint_v OriginUpperLeft
 OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "colorGreen"
 OpMemberName %_UniformBuffer 1 "colorRed"
-OpName %_entrypoint "_entrypoint"
-OpName %test_int "test_int"
+OpName %_entrypoint_v "_entrypoint_v"
+OpName %test_int_b "test_int_b"
 OpName %one "one"
 OpName %two "two"
 OpName %result "result"
@@ -29,7 +29,15 @@ OpDecorate %_UniformBuffer Block
 OpDecorate %11 Binding 0
 OpDecorate %11 DescriptorSet 0
 OpDecorate %86 RelaxedPrecision
+OpDecorate %88 RelaxedPrecision
+OpDecorate %93 RelaxedPrecision
+OpDecorate %95 RelaxedPrecision
+OpDecorate %96 RelaxedPrecision
+OpDecorate %97 RelaxedPrecision
+OpDecorate %98 RelaxedPrecision
+OpDecorate %106 RelaxedPrecision
 OpDecorate %107 RelaxedPrecision
+OpDecorate %112 RelaxedPrecision
 OpDecorate %142 RelaxedPrecision
 OpDecorate %144 RelaxedPrecision
 OpDecorate %145 RelaxedPrecision
@@ -71,13 +79,13 @@ OpDecorate %145 RelaxedPrecision
 %false = OpConstantFalse %bool
 %float_0 = OpConstant %float 0
 %_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
-%_entrypoint = OpFunction %void None %16
+%_entrypoint_v = OpFunction %void None %16
 %17 = OpLabel
 %18 = OpFunctionCall %v4float %main
 OpStore %sk_FragColor %18
 OpReturn
 OpFunctionEnd
-%test_int = OpFunction %bool None %19
+%test_int_b = OpFunction %bool None %19
 %20 = OpLabel
 %one = OpVariable %_ptr_Function_int Function
 %two = OpVariable %_ptr_Function_int Function
@@ -185,7 +193,7 @@ OpStore %117 %116
 OpSelectionMerge %133 None
 OpBranchConditional %130 %132 %133
 %132 = OpLabel
-%134 = OpFunctionCall %bool %test_int
+%134 = OpFunctionCall %bool %test_int_b
 OpBranch %133
 %133 = OpLabel
 %135 = OpPhi %bool %false %76 %134 %132

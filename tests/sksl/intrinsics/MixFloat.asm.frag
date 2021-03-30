@@ -1,8 +1,8 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %_entrypoint "_entrypoint" %sk_FragColor %sk_Clockwise
-OpExecutionMode %_entrypoint OriginUpperLeft
+OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_FragColor %sk_Clockwise
+OpExecutionMode %_entrypoint_v OriginUpperLeft
 OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
 OpName %_UniformBuffer "_UniformBuffer"
@@ -11,7 +11,7 @@ OpMemberName %_UniformBuffer 1 "colorRed"
 OpMemberName %_UniformBuffer 2 "colorBlack"
 OpMemberName %_UniformBuffer 3 "colorWhite"
 OpMemberName %_UniformBuffer 4 "testInputs"
-OpName %_entrypoint "_entrypoint"
+OpName %_entrypoint_v "_entrypoint_v"
 OpName %main "main"
 OpName %expectedBW "expectedBW"
 OpName %expectedWT "expectedWT"
@@ -32,44 +32,73 @@ OpMemberDecorate %_UniformBuffer 4 RelaxedPrecision
 OpDecorate %_UniformBuffer Block
 OpDecorate %10 Binding 0
 OpDecorate %10 DescriptorSet 0
+OpDecorate %expectedBW RelaxedPrecision
+OpDecorate %24 RelaxedPrecision
+OpDecorate %expectedWT RelaxedPrecision
+OpDecorate %27 RelaxedPrecision
 OpDecorate %34 RelaxedPrecision
 OpDecorate %37 RelaxedPrecision
 OpDecorate %39 RelaxedPrecision
+OpDecorate %40 RelaxedPrecision
 OpDecorate %48 RelaxedPrecision
 OpDecorate %50 RelaxedPrecision
 OpDecorate %52 RelaxedPrecision
+OpDecorate %54 RelaxedPrecision
 OpDecorate %62 RelaxedPrecision
 OpDecorate %64 RelaxedPrecision
 OpDecorate %65 RelaxedPrecision
+OpDecorate %66 RelaxedPrecision
 OpDecorate %74 RelaxedPrecision
 OpDecorate %76 RelaxedPrecision
 OpDecorate %77 RelaxedPrecision
+OpDecorate %78 RelaxedPrecision
 OpDecorate %87 RelaxedPrecision
+OpDecorate %88 RelaxedPrecision
 OpDecorate %91 RelaxedPrecision
+OpDecorate %92 RelaxedPrecision
 OpDecorate %93 RelaxedPrecision
+OpDecorate %94 RelaxedPrecision
 OpDecorate %101 RelaxedPrecision
+OpDecorate %102 RelaxedPrecision
 OpDecorate %105 RelaxedPrecision
+OpDecorate %106 RelaxedPrecision
 OpDecorate %107 RelaxedPrecision
 OpDecorate %108 RelaxedPrecision
+OpDecorate %109 RelaxedPrecision
 OpDecorate %118 RelaxedPrecision
+OpDecorate %119 RelaxedPrecision
 OpDecorate %122 RelaxedPrecision
+OpDecorate %123 RelaxedPrecision
 OpDecorate %124 RelaxedPrecision
 OpDecorate %125 RelaxedPrecision
+OpDecorate %126 RelaxedPrecision
 OpDecorate %135 RelaxedPrecision
 OpDecorate %137 RelaxedPrecision
 OpDecorate %138 RelaxedPrecision
 OpDecorate %139 RelaxedPrecision
 OpDecorate %147 RelaxedPrecision
+OpDecorate %148 RelaxedPrecision
 OpDecorate %151 RelaxedPrecision
+OpDecorate %152 RelaxedPrecision
 OpDecorate %153 RelaxedPrecision
+OpDecorate %154 RelaxedPrecision
 OpDecorate %161 RelaxedPrecision
+OpDecorate %162 RelaxedPrecision
 OpDecorate %164 RelaxedPrecision
+OpDecorate %165 RelaxedPrecision
+OpDecorate %166 RelaxedPrecision
 OpDecorate %167 RelaxedPrecision
+OpDecorate %168 RelaxedPrecision
 OpDecorate %176 RelaxedPrecision
+OpDecorate %177 RelaxedPrecision
 OpDecorate %179 RelaxedPrecision
+OpDecorate %180 RelaxedPrecision
+OpDecorate %181 RelaxedPrecision
 OpDecorate %182 RelaxedPrecision
+OpDecorate %183 RelaxedPrecision
 OpDecorate %191 RelaxedPrecision
 OpDecorate %193 RelaxedPrecision
+OpDecorate %194 RelaxedPrecision
 OpDecorate %195 RelaxedPrecision
 OpDecorate %204 RelaxedPrecision
 OpDecorate %206 RelaxedPrecision
@@ -116,7 +145,7 @@ OpDecorate %207 RelaxedPrecision
 %166 = OpConstantComposite %v2float %float_0 %float_0_5
 %181 = OpConstantComposite %v3float %float_0 %float_0_5 %float_0
 %194 = OpConstantComposite %v4float %float_0 %float_0_5 %float_0 %float_1
-%_entrypoint = OpFunction %void None %15
+%_entrypoint_v = OpFunction %void None %15
 %16 = OpLabel
 %17 = OpFunctionCall %v4float %main
 OpStore %sk_FragColor %17

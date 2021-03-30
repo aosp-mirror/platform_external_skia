@@ -8,13 +8,13 @@ OpName %sk_Clockwise "sk_Clockwise"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "src"
 OpMemberName %_UniformBuffer 1 "dst"
-OpName %_blend_set_color_luminance "_blend_set_color_luminance"
+OpName %_blend_set_color_luminance_h3h3hh3 "_blend_set_color_luminance_h3h3hh3"
 OpName %lum "lum"
 OpName %result "result"
 OpName %minComp "minComp"
 OpName %maxComp "maxComp"
-OpName %_blend_set_color_saturation_helper "_blend_set_color_saturation_helper"
-OpName %_blend_set_color_saturation "_blend_set_color_saturation"
+OpName %_blend_set_color_saturation_helper_h3h3h "_blend_set_color_saturation_helper_h3h3h"
+OpName %_blend_set_color_saturation_h3h3h3 "_blend_set_color_saturation_h3h3h3"
 OpName %sat "sat"
 OpName %main "main"
 OpName %_0_alpha "_0_alpha"
@@ -31,30 +31,47 @@ OpMemberDecorate %_UniformBuffer 1 RelaxedPrecision
 OpDecorate %_UniformBuffer Block
 OpDecorate %13 Binding 0
 OpDecorate %13 DescriptorSet 0
+OpDecorate %lum RelaxedPrecision
+OpDecorate %25 RelaxedPrecision
+OpDecorate %29 RelaxedPrecision
 OpDecorate %30 RelaxedPrecision
+OpDecorate %result RelaxedPrecision
 OpDecorate %32 RelaxedPrecision
+OpDecorate %33 RelaxedPrecision
 OpDecorate %34 RelaxedPrecision
 OpDecorate %35 RelaxedPrecision
 OpDecorate %36 RelaxedPrecision
+OpDecorate %37 RelaxedPrecision
 OpDecorate %38 RelaxedPrecision
+OpDecorate %minComp RelaxedPrecision
 OpDecorate %42 RelaxedPrecision
+OpDecorate %43 RelaxedPrecision
 OpDecorate %44 RelaxedPrecision
+OpDecorate %45 RelaxedPrecision
 OpDecorate %46 RelaxedPrecision
+OpDecorate %47 RelaxedPrecision
+OpDecorate %maxComp RelaxedPrecision
 OpDecorate %51 RelaxedPrecision
+OpDecorate %52 RelaxedPrecision
 OpDecorate %53 RelaxedPrecision
+OpDecorate %54 RelaxedPrecision
 OpDecorate %55 RelaxedPrecision
+OpDecorate %56 RelaxedPrecision
 OpDecorate %58 RelaxedPrecision
 OpDecorate %63 RelaxedPrecision
 OpDecorate %64 RelaxedPrecision
 OpDecorate %69 RelaxedPrecision
 OpDecorate %70 RelaxedPrecision
 OpDecorate %71 RelaxedPrecision
+OpDecorate %72 RelaxedPrecision
 OpDecorate %73 RelaxedPrecision
 OpDecorate %74 RelaxedPrecision
 OpDecorate %75 RelaxedPrecision
 OpDecorate %76 RelaxedPrecision
 OpDecorate %77 RelaxedPrecision
 OpDecorate %78 RelaxedPrecision
+OpDecorate %79 RelaxedPrecision
+OpDecorate %80 RelaxedPrecision
 OpDecorate %81 RelaxedPrecision
 OpDecorate %82 RelaxedPrecision
 OpDecorate %83 RelaxedPrecision
@@ -63,80 +80,139 @@ OpDecorate %88 RelaxedPrecision
 OpDecorate %94 RelaxedPrecision
 OpDecorate %95 RelaxedPrecision
 OpDecorate %96 RelaxedPrecision
+OpDecorate %97 RelaxedPrecision
 OpDecorate %98 RelaxedPrecision
 OpDecorate %99 RelaxedPrecision
 OpDecorate %100 RelaxedPrecision
 OpDecorate %101 RelaxedPrecision
+OpDecorate %102 RelaxedPrecision
 OpDecorate %103 RelaxedPrecision
 OpDecorate %104 RelaxedPrecision
 OpDecorate %105 RelaxedPrecision
+OpDecorate %107 RelaxedPrecision
+OpDecorate %108 RelaxedPrecision
+OpDecorate %109 RelaxedPrecision
 OpDecorate %110 RelaxedPrecision
 OpDecorate %111 RelaxedPrecision
 OpDecorate %116 RelaxedPrecision
+OpDecorate %117 RelaxedPrecision
 OpDecorate %118 RelaxedPrecision
+OpDecorate %119 RelaxedPrecision
 OpDecorate %124 RelaxedPrecision
 OpDecorate %125 RelaxedPrecision
+OpDecorate %126 RelaxedPrecision
 OpDecorate %127 RelaxedPrecision
+OpDecorate %128 RelaxedPrecision
 OpDecorate %129 RelaxedPrecision
 OpDecorate %130 RelaxedPrecision
 OpDecorate %131 RelaxedPrecision
+OpDecorate %132 RelaxedPrecision
 OpDecorate %133 RelaxedPrecision
+OpDecorate %134 RelaxedPrecision
 OpDecorate %135 RelaxedPrecision
 OpDecorate %136 RelaxedPrecision
 OpDecorate %137 RelaxedPrecision
+OpDecorate %138 RelaxedPrecision
+OpDecorate %139 RelaxedPrecision
+OpDecorate %sat RelaxedPrecision
 OpDecorate %147 RelaxedPrecision
+OpDecorate %148 RelaxedPrecision
 OpDecorate %149 RelaxedPrecision
+OpDecorate %150 RelaxedPrecision
 OpDecorate %151 RelaxedPrecision
+OpDecorate %152 RelaxedPrecision
 OpDecorate %155 RelaxedPrecision
+OpDecorate %156 RelaxedPrecision
 OpDecorate %157 RelaxedPrecision
+OpDecorate %158 RelaxedPrecision
 OpDecorate %159 RelaxedPrecision
+OpDecorate %160 RelaxedPrecision
 OpDecorate %161 RelaxedPrecision
 OpDecorate %162 RelaxedPrecision
+OpDecorate %163 RelaxedPrecision
 OpDecorate %164 RelaxedPrecision
+OpDecorate %165 RelaxedPrecision
 OpDecorate %170 RelaxedPrecision
+OpDecorate %171 RelaxedPrecision
 OpDecorate %172 RelaxedPrecision
+OpDecorate %173 RelaxedPrecision
 OpDecorate %178 RelaxedPrecision
 OpDecorate %180 RelaxedPrecision
 OpDecorate %183 RelaxedPrecision
+OpDecorate %184 RelaxedPrecision
 OpDecorate %185 RelaxedPrecision
+OpDecorate %186 RelaxedPrecision
 OpDecorate %191 RelaxedPrecision
+OpDecorate %192 RelaxedPrecision
 OpDecorate %194 RelaxedPrecision
+OpDecorate %197 RelaxedPrecision
 OpDecorate %198 RelaxedPrecision
+OpDecorate %199 RelaxedPrecision
 OpDecorate %201 RelaxedPrecision
+OpDecorate %204 RelaxedPrecision
 OpDecorate %205 RelaxedPrecision
+OpDecorate %206 RelaxedPrecision
 OpDecorate %207 RelaxedPrecision
+OpDecorate %208 RelaxedPrecision
 OpDecorate %213 RelaxedPrecision
+OpDecorate %214 RelaxedPrecision
 OpDecorate %216 RelaxedPrecision
+OpDecorate %219 RelaxedPrecision
 OpDecorate %220 RelaxedPrecision
+OpDecorate %221 RelaxedPrecision
 OpDecorate %222 RelaxedPrecision
+OpDecorate %223 RelaxedPrecision
 OpDecorate %228 RelaxedPrecision
+OpDecorate %229 RelaxedPrecision
 OpDecorate %231 RelaxedPrecision
+OpDecorate %234 RelaxedPrecision
 OpDecorate %235 RelaxedPrecision
+OpDecorate %236 RelaxedPrecision
 OpDecorate %238 RelaxedPrecision
+OpDecorate %241 RelaxedPrecision
+OpDecorate %_0_alpha RelaxedPrecision
 OpDecorate %250 RelaxedPrecision
+OpDecorate %251 RelaxedPrecision
 OpDecorate %254 RelaxedPrecision
+OpDecorate %255 RelaxedPrecision
 OpDecorate %256 RelaxedPrecision
+OpDecorate %_1_sda RelaxedPrecision
 OpDecorate %259 RelaxedPrecision
+OpDecorate %260 RelaxedPrecision
 OpDecorate %262 RelaxedPrecision
+OpDecorate %263 RelaxedPrecision
+OpDecorate %264 RelaxedPrecision
+OpDecorate %_2_dsa RelaxedPrecision
 OpDecorate %267 RelaxedPrecision
+OpDecorate %268 RelaxedPrecision
 OpDecorate %270 RelaxedPrecision
+OpDecorate %271 RelaxedPrecision
+OpDecorate %272 RelaxedPrecision
 OpDecorate %273 RelaxedPrecision
 OpDecorate %275 RelaxedPrecision
 OpDecorate %279 RelaxedPrecision
 OpDecorate %281 RelaxedPrecision
 OpDecorate %285 RelaxedPrecision
+OpDecorate %286 RelaxedPrecision
 OpDecorate %287 RelaxedPrecision
 OpDecorate %288 RelaxedPrecision
 OpDecorate %289 RelaxedPrecision
 OpDecorate %291 RelaxedPrecision
+OpDecorate %292 RelaxedPrecision
 OpDecorate %293 RelaxedPrecision
 OpDecorate %294 RelaxedPrecision
 OpDecorate %295 RelaxedPrecision
+OpDecorate %296 RelaxedPrecision
+OpDecorate %297 RelaxedPrecision
+OpDecorate %298 RelaxedPrecision
 OpDecorate %300 RelaxedPrecision
+OpDecorate %301 RelaxedPrecision
 OpDecorate %303 RelaxedPrecision
+OpDecorate %304 RelaxedPrecision
 OpDecorate %305 RelaxedPrecision
 OpDecorate %306 RelaxedPrecision
 OpDecorate %307 RelaxedPrecision
+OpDecorate %308 RelaxedPrecision
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
@@ -167,7 +243,7 @@ OpDecorate %307 RelaxedPrecision
 %int = OpTypeInt 32 1
 %int_1 = OpConstant %int 1
 %int_0 = OpConstant %int 0
-%_blend_set_color_luminance = OpFunction %v3float None %17
+%_blend_set_color_luminance_h3h3hh3 = OpFunction %v3float None %17
 %20 = OpFunctionParameter %_ptr_Function_v3float
 %21 = OpFunctionParameter %_ptr_Function_float
 %22 = OpFunctionParameter %_ptr_Function_v3float
@@ -273,7 +349,7 @@ OpReturnValue %111
 %93 = OpLabel
 OpUnreachable
 OpFunctionEnd
-%_blend_set_color_saturation_helper = OpFunction %v3float None %112
+%_blend_set_color_saturation_helper_h3h3h = OpFunction %v3float None %112
 %113 = OpFunctionParameter %_ptr_Function_v3float
 %114 = OpFunctionParameter %_ptr_Function_float
 %115 = OpLabel
@@ -306,7 +382,7 @@ OpReturnValue %139
 %123 = OpLabel
 OpUnreachable
 OpFunctionEnd
-%_blend_set_color_saturation = OpFunction %v3float None %140
+%_blend_set_color_saturation_h3h3h3 = OpFunction %v3float None %140
 %141 = OpFunctionParameter %_ptr_Function_v3float
 %142 = OpFunctionParameter %_ptr_Function_v3float
 %143 = OpLabel
@@ -361,7 +437,7 @@ OpBranchConditional %174 %175 %176
 OpStore %179 %178
 %180 = OpLoad %float %sat
 OpStore %181 %180
-%182 = OpFunctionCall %v3float %_blend_set_color_saturation_helper %179 %181
+%182 = OpFunctionCall %v3float %_blend_set_color_saturation_helper_h3h3h %179 %181
 OpReturnValue %182
 %176 = OpLabel
 %183 = OpLoad %v3float %141
@@ -377,7 +453,7 @@ OpBranchConditional %187 %188 %189
 OpStore %193 %192
 %194 = OpLoad %float %sat
 OpStore %195 %194
-%196 = OpFunctionCall %v3float %_blend_set_color_saturation_helper %193 %195
+%196 = OpFunctionCall %v3float %_blend_set_color_saturation_helper_h3h3h %193 %195
 %197 = OpVectorShuffle %v3float %196 %196 0 2 1
 OpReturnValue %197
 %189 = OpLabel
@@ -386,7 +462,7 @@ OpReturnValue %197
 OpStore %200 %199
 %201 = OpLoad %float %sat
 OpStore %202 %201
-%203 = OpFunctionCall %v3float %_blend_set_color_saturation_helper %200 %202
+%203 = OpFunctionCall %v3float %_blend_set_color_saturation_helper_h3h3h %200 %202
 %204 = OpVectorShuffle %v3float %203 %203 1 2 0
 OpReturnValue %204
 %190 = OpLabel
@@ -407,7 +483,7 @@ OpBranchConditional %209 %210 %211
 OpStore %215 %214
 %216 = OpLoad %float %sat
 OpStore %217 %216
-%218 = OpFunctionCall %v3float %_blend_set_color_saturation_helper %215 %217
+%218 = OpFunctionCall %v3float %_blend_set_color_saturation_helper_h3h3h %215 %217
 %219 = OpVectorShuffle %v3float %218 %218 1 0 2
 OpReturnValue %219
 %211 = OpLabel
@@ -424,7 +500,7 @@ OpBranchConditional %224 %225 %226
 OpStore %230 %229
 %231 = OpLoad %float %sat
 OpStore %232 %231
-%233 = OpFunctionCall %v3float %_blend_set_color_saturation_helper %230 %232
+%233 = OpFunctionCall %v3float %_blend_set_color_saturation_helper_h3h3h %230 %232
 %234 = OpVectorShuffle %v3float %233 %233 2 0 1
 OpReturnValue %234
 %226 = OpLabel
@@ -433,7 +509,7 @@ OpReturnValue %234
 OpStore %237 %236
 %238 = OpLoad %float %sat
 OpStore %239 %238
-%240 = OpFunctionCall %v3float %_blend_set_color_saturation_helper %237 %239
+%240 = OpFunctionCall %v3float %_blend_set_color_saturation_helper_h3h3h %237 %239
 %241 = OpVectorShuffle %v3float %240 %240 2 1 0
 OpReturnValue %241
 %227 = OpLabel
@@ -481,13 +557,13 @@ OpStore %_2_dsa %272
 OpStore %274 %273
 %275 = OpLoad %v3float %_1_sda
 OpStore %276 %275
-%277 = OpFunctionCall %v3float %_blend_set_color_saturation %274 %276
+%277 = OpFunctionCall %v3float %_blend_set_color_saturation_h3h3h3 %274 %276
 OpStore %278 %277
 %279 = OpLoad %float %_0_alpha
 OpStore %280 %279
 %281 = OpLoad %v3float %_2_dsa
 OpStore %282 %281
-%283 = OpFunctionCall %v3float %_blend_set_color_luminance %278 %280 %282
+%283 = OpFunctionCall %v3float %_blend_set_color_luminance_h3h3hh3 %278 %280 %282
 %284 = OpAccessChain %_ptr_Uniform_v4float %13 %int_1
 %285 = OpLoad %v4float %284
 %286 = OpVectorShuffle %v3float %285 %285 0 1 2

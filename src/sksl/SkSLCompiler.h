@@ -32,7 +32,6 @@
 #define SK_HEIGHT_BUILTIN              10012
 #define SK_FRAGCOORD_BUILTIN              15
 #define SK_CLOCKWISE_BUILTIN              17
-#define SK_SAMPLEMASK_BUILTIN             20
 #define SK_VERTEXID_BUILTIN               42
 #define SK_INSTANCEID_BUILTIN             43
 #define SK_INVOCATIONID_BUILTIN            8
@@ -74,8 +73,9 @@ struct ParsedModule {
  */
 class SK_API Compiler : public ErrorReporter {
 public:
-    static constexpr const char* RTADJUST_NAME  = "sk_RTAdjust";
-    static constexpr const char* PERVERTEX_NAME = "sk_PerVertex";
+    static constexpr const char FRAGCOLOR_NAME[]  = "sk_FragColor";
+    static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
+    static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
 
     struct OptimizationContext {
         // nodes we have already reported errors for and should not error on again

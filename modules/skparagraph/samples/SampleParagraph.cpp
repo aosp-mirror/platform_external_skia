@@ -3451,55 +3451,65 @@ protected:
     SkString name() override { return SkString("Paragraph59"); }
 
     void onDrawContent(SkCanvas* canvas) override {
-        canvas->drawColor(SK_ColorWHITE);
+        canvas->drawColor(SK_ColorYELLOW);
 
         auto fontCollection = getFontCollection();
         fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
         fontCollection->enableFontFallback();
 
-        ParagraphStyle paragraph_style;
-        paragraph_style.setTextHeightBehavior(TextHeightBehavior::kDisableAll);
+        SkPaint paint;
+        paint.setColor(SK_ColorBLUE);
+        canvas->drawRect(SkRect::MakeWH(300, 100), paint);
 
-        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        ParagraphStyle paragraph_style;
         TextStyle text_style;
         text_style.setFontFamilies({SkString("Roboto")});
-        text_style.setFontSize(32);
-        text_style.setHeight(5.0);
-        text_style.setHeightOverride(true);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        text_style.setFontSize(36);
         text_style.setColor(SK_ColorBLACK);
-        SkPaint red;
-        red.setColor(SK_ColorRED);
-        text_style.setBackgroundColor(red);
+        paint.setColor(SK_ColorWHITE);
+        text_style.setBackgroundColor(paint);
         builder.pushStyle(text_style);
-        builder.addText("Item 1\nItem 2\n");
-
+        builder.addText("aaa bbb ");
+        PlaceholderStyle placeholder_style;
+        placeholder_style.fHeight = 8;
+        placeholder_style.fWidth = 300;
+        placeholder_style.fBaseline = TextBaseline::kAlphabetic;
+        placeholder_style.fAlignment = PlaceholderAlignment::kBottom;
+        builder.pushStyle(text_style);
+        builder.addPlaceholder(placeholder_style);
+        placeholder_style.fHeight = 20;
+        builder.pushStyle(text_style);
+        builder.addPlaceholder(placeholder_style);
         auto paragraph = builder.Build();
-        paragraph->layout(width());
+        paragraph->layout(290);
         paragraph->paint(canvas, 0, 0);
 
-        auto impl = static_cast<ParagraphImpl*>(paragraph.get());
-        if (this->isVerbose()) {
-            for (auto& run : impl->runs()) {
-                size_t index = 0;
-                for (auto glyph : run.glyphs()) {
-                    if (glyph == 0) {
-                        SkDebugf("Unresolved: %d\n", index);
-                    }
-                    ++index;
-                }
-            }
-            for (auto& line : impl->lines()) {
-                auto metric = line.getMetrics();
-                SkDebugf("Line: %f %f/%f %f %f\n", line.height(), metric.fAscent, metric.fUnscaledAscent, metric.fDescent, metric.fBaseline);
-            }
+        auto placeholders = paragraph->getRectsForPlaceholders();
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setColor(SK_ColorRED);
+        for (auto& p : placeholders) {
+            canvas->drawRect(p.rect, paint);
+            paint.setColor(SK_ColorGREEN);
         }
 
-        SkDebugf("Height: %f\n", paragraph->getHeight());
+        if (this->isVerbose()) {
+            auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+            for (auto& line : impl->lines()) {
+                SkDebugf("@%f +%f\n", line.offset().fY, line.height());
+            }
+        }
     }
 
 private:
     using INHERITED = Sample;
 };
+
+/*
+ *             WidgetSpan(child: Container(width: 300.0, height: 20.0, color: Colors.red)),
+            WidgetSpan(child: Container(width: 300.0, height: 8.0, color: Colors.green)),
+            TextSpan(text: 'Text', style: TextStyle(fontSize: 36.0)),
+ */
 
 }  // namespace
 

@@ -66,7 +66,7 @@ float2 eval_rational_cubic(float4x3 P, float T) {
 class GrStencilPathShader::Impl : public GrGLSLGeometryProcessor {
 protected:
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-        const auto& shader = args.fGP.cast<GrStencilPathShader>();
+        const auto& shader = args.fGeomProc.cast<GrStencilPathShader>();
         args.fVaryingHandler->emitAttributes(shader);
         auto v = args.fVertBuilder;
 
@@ -94,8 +94,8 @@ protected:
     }
 
     void setData(const GrGLSLProgramDataManager& pdman,
-                 const GrPrimitiveProcessor& primProc) override {
-        const auto& shader = primProc.cast<GrStencilPathShader>();
+                 const GrGeometryProcessor& geomProc) override {
+        const auto& shader = geomProc.cast<GrStencilPathShader>();
         if (!shader.viewMatrix().isIdentity()) {
             pdman.setSkMatrix(fViewMatrixUniform, shader.viewMatrix());
         }
@@ -104,11 +104,11 @@ protected:
     GrGLSLUniformHandler::UniformHandle fViewMatrixUniform;
 };
 
-GrGLSLPrimitiveProcessor* GrStencilPathShader::createGLSLInstance(const GrShaderCaps&) const {
+GrGLSLGeometryProcessor* GrStencilPathShader::createGLSLInstance(const GrShaderCaps&) const {
     return new Impl;
 }
 
-SkString GrCubicTessellateShader::getTessControlShaderGLSL(const GrGLSLPrimitiveProcessor*,
+SkString GrCubicTessellateShader::getTessControlShaderGLSL(const GrGLSLGeometryProcessor*,
                                                            const char* versionAndExtensionDecls,
                                                            const GrGLSLUniformHandler&,
                                                            const GrShaderCaps&) const {
@@ -165,8 +165,10 @@ SkString GrCubicTessellateShader::getTessControlShaderGLSL(const GrGLSLPrimitive
 }
 
 SkString GrCubicTessellateShader::getTessEvaluationShaderGLSL(
-        const GrGLSLPrimitiveProcessor*, const char* versionAndExtensionDecls,
-        const GrGLSLUniformHandler&, const GrShaderCaps&) const {
+        const GrGLSLGeometryProcessor*,
+        const char* versionAndExtensionDecls,
+        const GrGLSLUniformHandler&,
+        const GrShaderCaps&) const {
     SkString code(versionAndExtensionDecls);
     code.append(kSkSLTypeDefs);
     code.append(kEvalRationalCubicFn);
@@ -199,7 +201,7 @@ SkString GrCubicTessellateShader::getTessEvaluationShaderGLSL(
     return code;
 }
 
-SkString GrWedgeTessellateShader::getTessControlShaderGLSL(const GrGLSLPrimitiveProcessor*,
+SkString GrWedgeTessellateShader::getTessControlShaderGLSL(const GrGLSLGeometryProcessor*,
                                                            const char* versionAndExtensionDecls,
                                                            const GrGLSLUniformHandler&,
                                                            const GrShaderCaps&) const {
@@ -246,8 +248,10 @@ SkString GrWedgeTessellateShader::getTessControlShaderGLSL(const GrGLSLPrimitive
 }
 
 SkString GrWedgeTessellateShader::getTessEvaluationShaderGLSL(
-        const GrGLSLPrimitiveProcessor*, const char* versionAndExtensionDecls,
-        const GrGLSLUniformHandler&, const GrShaderCaps&) const {
+        const GrGLSLGeometryProcessor*,
+        const char* versionAndExtensionDecls,
+        const GrGLSLUniformHandler&,
+        const GrShaderCaps&) const {
     SkString code(versionAndExtensionDecls);
     code.append(kSkSLTypeDefs);
     code.append(kEvalRationalCubicFn);
@@ -348,7 +352,7 @@ sk_sp<const GrGpuBuffer> GrMiddleOutCubicShader::FindOrMakeMiddleOutIndexBuffer(
 
 class GrMiddleOutCubicShader::Impl : public GrStencilPathShader::Impl {
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-        const auto& shader = args.fGP.cast<GrMiddleOutCubicShader>();
+        const auto& shader = args.fGeomProc.cast<GrMiddleOutCubicShader>();
         args.fVaryingHandler->emitAttributes(shader);
         args.fVertBuilder->defineConstantf("int", "kMaxVertexID", "%i", 1 << kMaxResolveLevel);
         args.fVertBuilder->defineConstantf("float", "kInverseMaxVertexID",
@@ -383,6 +387,6 @@ class GrMiddleOutCubicShader::Impl : public GrStencilPathShader::Impl {
     }
 };
 
-GrGLSLPrimitiveProcessor* GrMiddleOutCubicShader::createGLSLInstance(const GrShaderCaps&) const {
+GrGLSLGeometryProcessor* GrMiddleOutCubicShader::createGLSLInstance(const GrShaderCaps&) const {
     return new Impl;
 }

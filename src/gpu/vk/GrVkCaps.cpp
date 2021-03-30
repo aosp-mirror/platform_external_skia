@@ -598,12 +598,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     if (kImagination_VkVendor == properties.vendorID) {
         fShaderCaps->fAtan2ImplementedAsAtanYOverX = true;
     }
-
-    if (kQualcomm_VkVendor == properties.vendorID) {
-        // The sample mask round rect op draws nothing on Adreno for the srcmode gm.
-        // http://skbug.com/8921
-        fShaderCaps->fCanOnlyUseSampleMaskWithStencil = true;
-    }
 }
 
 void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
@@ -651,9 +645,6 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     if (fDriverBugWorkarounds.max_texture_size_limit_4096) {
         fMaxTextureSize = std::min(fMaxTextureSize, 4096);
     }
-    // Our render targets are always created with textures as the color
-    // attachment, hence this min:
-    fMaxRenderTargetSize = std::min(fMaxTextureSize, fMaxRenderTargetSize);
 
     // TODO: check if RT's larger than 4k incur a performance cost on ARM.
     fMaxPreferredRenderTargetSize = fMaxRenderTargetSize;
@@ -724,6 +715,10 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties,
     shaderCaps->fSampleMaskSupport = true;
 
     shaderCaps->fShaderDerivativeSupport = true;
+
+    // ARM GPUs calculate `matrix * vector` in SPIR-V at full precision, even when the inputs are
+    // RelaxedPrecision. Rewriting the multiply as a sum of vector*scalar fixes this. (skia:11769)
+    shaderCaps->fRewriteMatrixVectorMultiply = (kARM_VkVendor == properties.vendorID);
 
     // FIXME: http://skbug.com/7733: Disable geometry shaders until Intel/Radeon GMs draw correctly.
     // shaderCaps->fGeometryShaderSupport =
@@ -1775,7 +1770,7 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
                                  const GrProgramInfo& programInfo,
                                  ProgramDescOverrideFlags overrideFlags) const {
     GrProgramDesc desc;
-    GrProgramDesc::Build(&desc, rt, programInfo, *this);
+    GrProgramDesc::Build(&desc, programInfo, *this);
 
     GrProcessorKeyBuilder b(desc.key());
 

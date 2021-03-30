@@ -462,7 +462,7 @@ public:
         b->add32(fVertexPosition.isInitialized());
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const final;
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
 
 private:
     friend class GLSLMeshTestProcessor;
@@ -494,10 +494,10 @@ private:
 };
 
 class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&) final {}
+    void setData(const GrGLSLProgramDataManager&, const GrGeometryProcessor&) final {}
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) final {
-        const GrMeshTestProcessor& mp = args.fGP.cast<GrMeshTestProcessor>();
+        const GrMeshTestProcessor& mp = args.fGeomProc.cast<GrMeshTestProcessor>();
         GrGLSLVertexBuilder* v = args.fVertBuilder;
         GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
 
@@ -523,7 +523,7 @@ class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
     }
 };
 
-GrGLSLPrimitiveProcessor* GrMeshTestProcessor::createGLSLInstance(const GrShaderCaps&) const {
+GrGLSLGeometryProcessor* GrMeshTestProcessor::createGLSLInstance(const GrShaderCaps&) const {
     return new GLSLMeshTestProcessor;
 }
 

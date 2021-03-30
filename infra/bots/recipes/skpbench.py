@@ -95,6 +95,7 @@ def skpbench_steps(api):
         '--allPathsVolatile',
         '--suffix', "_volatile",
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_*svg.skp'),
+        api.path.join(api.flavor.device_dirs.skp_dir, 'desk_motionmark*.skp'),
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_chalkboard.skp')]
   else:
     skpbench_args += [api.flavor.device_dirs.skp_dir]
@@ -192,7 +193,7 @@ def GenTests(api):
       api.step_data('get swarming task id',
           stdout=api.raw_io.output('123456'))
     )
-    if 'Win' in builder and not 'LenovoYogaC630' in builder:
+    if 'Win' in builder:
       test += api.platform('win', 64)
     yield test
 

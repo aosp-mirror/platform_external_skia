@@ -98,7 +98,7 @@ public:
 
 private:
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-        const auto& shader = args.fGP.cast<GrStrokeTessellateShader>();
+        const auto& shader = args.fGeomProc.cast<GrStrokeTessellateShader>();
         auto* uniHandler = args.fUniformHandler;
         auto* v = args.fVertBuilder;
 
@@ -414,8 +414,8 @@ private:
     }
 
     void setData(const GrGLSLProgramDataManager& pdman,
-                 const GrPrimitiveProcessor& primProc) override {
-        const auto& shader = primProc.cast<GrStrokeTessellateShader>();
+                 const GrGeometryProcessor& geomProc) override {
+        const auto& shader = geomProc.cast<GrStrokeTessellateShader>();
         const auto& stroke = shader.fStroke;
 
         if (!shader.hasDynamicStroke()) {
@@ -460,10 +460,12 @@ private:
 };
 
 SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
-        const GrGLSLPrimitiveProcessor* glslPrimProc, const char* versionAndExtensionDecls,
-        const GrGLSLUniformHandler& uniformHandler, const GrShaderCaps& shaderCaps) const {
+        const GrGLSLGeometryProcessor* glslGeomProc,
+        const char* versionAndExtensionDecls,
+        const GrGLSLUniformHandler& uniformHandler,
+        const GrShaderCaps& shaderCaps) const {
     SkASSERT(fMode == Mode::kTessellation);
-    auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslPrimProc);
+    auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslGeomProc);
 
     SkString code(versionAndExtensionDecls);
     // Run 3 invocations: 1 for each section that the vertex shader chopped the curve into.
@@ -818,10 +820,12 @@ static void append_eval_stroke_edge_fn(SkString* code, bool hasConics) {
 }
 
 SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
-        const GrGLSLPrimitiveProcessor* glslPrimProc, const char* versionAndExtensionDecls,
-        const GrGLSLUniformHandler& uniformHandler, const GrShaderCaps& shaderCaps) const {
+        const GrGLSLGeometryProcessor* glslGeomProc,
+        const char* versionAndExtensionDecls,
+        const GrGLSLUniformHandler& uniformHandler,
+        const GrShaderCaps& shaderCaps) const {
     SkASSERT(fMode == Mode::kTessellation);
-    auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslPrimProc);
+    auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslGeomProc);
 
     SkString code(versionAndExtensionDecls);
     code.append("layout(quads, equal_spacing, ccw) in;\n");
@@ -991,7 +995,7 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
 
 class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-        const auto& shader = args.fGP.cast<GrStrokeTessellateShader>();
+        const auto& shader = args.fGeomProc.cast<GrStrokeTessellateShader>();
         SkPaint::Join joinType = shader.fStroke.getJoin();
         args.fVaryingHandler->emitAttributes(shader);
 
@@ -1103,10 +1107,6 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             // The stroke section needs at least two edges. Don't assign more to the join than
             // "numTotalEdges - 2".
             numEdgesInJoin = min(numEdgesInJoin, numTotalEdges - 2);
-            // Lines give all their extra edges to the join.
-            if (numParametricSegments == 1) {
-                numEdgesInJoin = numTotalEdges - 2;
-            }
             // Negative argsAttr.z means the join is a chop, and chop joins get exactly one segment.
             if (argsAttr.z < 0) {
                 // +2 because we emit the beginning and ending edges twice (see above comment).
@@ -1130,16 +1130,8 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
         // NOTE: Since the curve is not allowed to inflect, we can just check F'(.5) x F''(.5).
         // NOTE: F'(.5) x F''(.5) has the same sign as (P2 - P0) x (P3 - P1)
         float turn = cross(P[2] - P[0], P[3] - P[1]);
-
-        float numCombinedSegments;
-        float outset = ((sk_VertexID & 1) == 0) ? +1 : -1;
         float combinedEdgeID = float(sk_VertexID >> 1) - numEdgesInJoin;
         if (combinedEdgeID < 0) {
-            // We belong to the preceding join. The first and final edges get duplicated, so we only
-            // have "numEdgesInJoin - 2" segments.
-            numCombinedSegments = numEdgesInJoin - 2;
-            numParametricSegments = 1;  // Joins don't have parametric segments.
-            P = float4x2(P[0], P[0], P[0], P[0]);  // Colocate all points on the junction point.
             tan1 = tan0;
             // Don't let tan0 become zero. The code as-is isn't built to handle that case. tan0=0
             // means the join is disabled, and to disable it with the existing code we can leave
@@ -1148,10 +1140,29 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
                 tan0 = P[0] - lastControlPoint;
             }
             turn = cross(tan0, tan1);
-            // Shift combinedEdgeID to the range [-1, numCombinedSegments]. This duplicates the
-            // first edge and lands one edge at the very end of the join. (The duplicated final edge
-            // will actually come from the section of our strip that belongs to the stroke.)
-            combinedEdgeID += numCombinedSegments + 1;
+        }
+
+        // Calculate the curve's starting angle and rotation.
+        float angle0 = atan2(tan0);
+        float cosTheta = cosine_between_vectors(tan0, tan1);
+        float rotation = acos(cosTheta);
+        if (turn < 0) {
+            // Adjust sign of rotation to match the direction the curve turns.
+            rotation = -rotation;
+        }
+
+        float numRadialSegments;
+        float outset = ((sk_VertexID & 1) == 0) ? +1 : -1;
+        if (combinedEdgeID < 0) {
+            // We belong to the preceding join. The first and final edges get duplicated, so we only
+            // have "numEdgesInJoin - 2" segments.
+            numRadialSegments = numEdgesInJoin - 2;
+            numParametricSegments = 1;  // Joins don't have parametric segments.
+            P = float4x2(P[0], P[0], P[0], P[0]);  // Colocate all points on the junction point.
+            // Shift combinedEdgeID to the range [-1, numRadialSegments]. This duplicates the first
+            // edge and lands one edge at the very end of the join. (The duplicated final edge will
+            // actually come from the section of our strip that belongs to the stroke.)
+            combinedEdgeID += numRadialSegments + 1;
             // We normally restrict the join on one side of the junction, but if the tangents are
             // nearly equivalent this could theoretically result in bad seaming and/or cracks on the
             // side we don't put it on. If the tangents are nearly equivalent then we leave the join
@@ -1170,23 +1181,14 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             combinedEdgeID = max(combinedEdgeID, 0);
         } else {
             // We belong to the stroke.
-            numCombinedSegments = numTotalEdges - numEdgesInJoin - 1;
+            float maxCombinedSegments = numTotalEdges - numEdgesInJoin - 1;
+            numRadialSegments = max(ceil(abs(rotation) * NUM_RADIAL_SEGMENTS_PER_RADIAN), 1);
+            numRadialSegments = min(numRadialSegments, maxCombinedSegments);
+            numParametricSegments = min(numParametricSegments,
+                                        maxCombinedSegments - numRadialSegments + 1);
         }
 
-        // Don't take more parametric segments than there are total segments.
-        numParametricSegments = min(numParametricSegments, numCombinedSegments);
-
-        // Any leftover edges go to radial segments.
-        float numRadialSegments = numCombinedSegments + 1 - numParametricSegments;
-
-        // Calculate the curve's starting angle and rotation.
-        float angle0 = atan2(tan0);
-        float cosTheta = cosine_between_vectors(tan0, tan1);
-        float rotation = acos(cosTheta);
-        if (turn < 0) {
-            // Adjust sign of rotation to match the direction the curve turns.
-            rotation = -rotation;
-        }
+        float numCombinedSegments = numParametricSegments + numRadialSegments - 1;
         float radsPerSegment = rotation / numRadialSegments;)");
 
         if (joinType == SkPaint::kMiter_Join || shader.hasDynamicStroke()) {
@@ -1197,24 +1199,19 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             })", shader.hasDynamicStroke() ? "JOIN_TYPE > 0/*Is the join a miter type?*/" : "true");
         }
 
-        args.fVertBuilder->codeAppendf(R"(
-        float2 tangent, strokeCoord;
-        eval_stroke_edge(P, w, numParametricSegments, combinedEdgeID, tan0, radsPerSegment, angle0,
-                         tangent, strokeCoord);)");
-
         args.fVertBuilder->codeAppend(R"(
-        if (combinedEdgeID == 0) {
-            // Edges at the beginning of their section use P[0] and tan0. This ensures crack-free
-            // seaming between instances.
-            strokeCoord = P[0];
-            tangent = tan0;
-        }
-
-        if (combinedEdgeID == numCombinedSegments) {
-            // Edges at the end of their section use P[1] and tan1. This ensures crack-free seaming
-            // between instances.
-            strokeCoord = P[3];
-            tangent = tan1;
+        float2 strokeCoord, tangent;
+        if (0 < combinedEdgeID && combinedEdgeID < numCombinedSegments) {
+            eval_stroke_edge(P, w, numParametricSegments, combinedEdgeID, tan0, radsPerSegment,
+                             angle0, tangent, strokeCoord);
+        } else {
+            // Edges at the beginning and end of the strip use exact endpoints and tangents. This
+            // ensures crack-free seaming between instances.
+            strokeCoord = (combinedEdgeID == 0) ? P[0] : P[3];
+            tangent = (combinedEdgeID == 0) ? tan0 : tan1;
+            if (combinedEdgeID > numCombinedSegments) {
+                outset = 0;  // The strip has more edges than we need. Drop this one.
+            }
         }
 
         float2 ortho = normalize(float2(tangent.y, -tangent.x));
@@ -1256,8 +1253,8 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
     }
 
     void setData(const GrGLSLProgramDataManager& pdman,
-                 const GrPrimitiveProcessor& primProc) override {
-        const auto& shader = primProc.cast<GrStrokeTessellateShader>();
+                 const GrGeometryProcessor& geomProc) override {
+        const auto& shader = geomProc.cast<GrStrokeTessellateShader>();
         const auto& stroke = shader.fStroke;
 
         if (!shader.hasDynamicStroke()) {
@@ -1306,7 +1303,7 @@ void GrStrokeTessellateShader::getGLSLProcessorKey(const GrShaderCaps&,
                                                    GrProcessorKeyBuilder* b) const {
     bool keyNeedsJoin = (fMode == Mode::kIndirect) && !(fShaderFlags & ShaderFlags::kDynamicStroke);
     SkASSERT(fStroke.getJoin() >> 2 == 0);
-    // Attribs get worked into the key automatically during GrPrimitiveProcessor::getAttributeKey().
+    // Attribs get worked into the key automatically during GrGeometryProcessor::getAttributeKey().
     // When color is in a uniform, it's always wide. kWideColor doesn't need to be considered here.
     uint32_t key = (uint32_t)(fShaderFlags & ~ShaderFlags::kWideColor);
     key = (key << 1) | (uint32_t)fMode;
@@ -1316,8 +1313,7 @@ void GrStrokeTessellateShader::getGLSLProcessorKey(const GrShaderCaps&,
     b->add32(key);
 }
 
-GrGLSLPrimitiveProcessor* GrStrokeTessellateShader::createGLSLInstance(
-        const GrShaderCaps&) const {
-    return (fMode == Mode::kTessellation) ?
-            (GrGLSLPrimitiveProcessor*)new TessellationImpl : new IndirectImpl;
+GrGLSLGeometryProcessor* GrStrokeTessellateShader::createGLSLInstance(const GrShaderCaps&) const {
+    return (fMode == Mode::kTessellation) ? (GrGLSLGeometryProcessor*)new TessellationImpl
+                                          : new IndirectImpl;
 }

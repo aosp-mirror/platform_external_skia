@@ -216,7 +216,8 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
     AutoOutputStream outputToExtraFunctions(this, &fExtraFunctions, &fIndentation);
     const FunctionDeclaration& function = call.function();
 
-    String name = "_skOutParamHelper" + to_string(fSwizzleHelperCount++) + "_" + function.name();
+    String name = "_skOutParamHelper" + to_string(fSwizzleHelperCount++) +
+                  "_" + function.mangledName();
     const char* separator = "";
 
     // Emit a prototype for the function we'll be calling through to in our helper.
@@ -299,7 +300,7 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
         this->write(" _skResult = ");
     }
 
-    this->writeName(function.name());
+    this->writeName(function.mangledName());
     this->write("(");
     separator = "";
     this->writeFunctionRequirementArgs(function, separator);
@@ -384,7 +385,7 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         // array indices.)
         this->write(getOutParamHelper(c, arguments, outVars));
     } else {
-        this->write(function.name());
+        this->write(function.mangledName());
     }
 
     this->write("(");
@@ -1456,7 +1457,7 @@ int MetalCodeGenerator::getUniformSet(const Modifiers& m) {
 bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) {
     fRTHeightName = fProgram.fInputs.fRTHeight ? "_globals._anonInterface0->u_skRTHeight" : "";
     const char* separator = "";
-    if ("main" == f.name()) {
+    if (f.isMain()) {
         switch (fProgram.fConfig->fKind) {
             case ProgramKind::kFragment:
                 this->write("fragment Outputs fragmentMain");
@@ -1528,7 +1529,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
     } else {
         this->writeType(f.returnType());
         this->write(" ");
-        this->writeName(f.name());
+        this->writeName(f.mangledName());
         this->write("(");
         this->writeFunctionRequirementParams(f, separator);
     }
@@ -1586,7 +1587,7 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
 
     this->writeLine(" {");
 
-    if (f.declaration().name() == "main") {
+    if (f.declaration().isMain()) {
         this->writeGlobalInit();
         this->writeLine("    Outputs _out;");
         this->writeLine("    (void)_out;");
@@ -1603,7 +1604,7 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
                 this->finishLine();
             }
         }
-        if (f.declaration().name() == "main") {
+        if (f.declaration().isMain()) {
             // If the main function doesn't end with a return, we need to synthesize one here.
             if (!is_block_ending_with_return(f.body().get())) {
                 this->writeReturnStatementFromMain();
@@ -1890,7 +1891,7 @@ void MetalCodeGenerator::writeReturnStatementFromMain() {
 }
 
 void MetalCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
-    if (fCurrentFunction && fCurrentFunction->name() == "main") {
+    if (fCurrentFunction && fCurrentFunction->isMain()) {
         if (r.expression()) {
             if (r.expression()->type() == *fContext.fTypes.fHalf4) {
                 this->write("_out.sk_FragColor = ");

@@ -8,7 +8,7 @@ OpName %sk_Clockwise "sk_Clockwise"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "src"
 OpMemberName %_UniformBuffer 1 "dst"
-OpName %_blend_overlay_component "_blend_overlay_component"
+OpName %_blend_overlay_component_hh2h2 "_blend_overlay_component_hh2h2"
 OpName %main "main"
 OpName %_0_result "_0_result"
 OpDecorate %sk_FragColor RelaxedPrecision
@@ -23,47 +23,75 @@ OpDecorate %_UniformBuffer Block
 OpDecorate %11 Binding 0
 OpDecorate %11 DescriptorSet 0
 OpDecorate %21 RelaxedPrecision
+OpDecorate %22 RelaxedPrecision
 OpDecorate %23 RelaxedPrecision
 OpDecorate %24 RelaxedPrecision
+OpDecorate %25 RelaxedPrecision
 OpDecorate %32 RelaxedPrecision
+OpDecorate %33 RelaxedPrecision
 OpDecorate %34 RelaxedPrecision
 OpDecorate %35 RelaxedPrecision
+OpDecorate %36 RelaxedPrecision
 OpDecorate %37 RelaxedPrecision
 OpDecorate %38 RelaxedPrecision
+OpDecorate %39 RelaxedPrecision
 OpDecorate %40 RelaxedPrecision
+OpDecorate %41 RelaxedPrecision
 OpDecorate %42 RelaxedPrecision
 OpDecorate %43 RelaxedPrecision
+OpDecorate %44 RelaxedPrecision
 OpDecorate %45 RelaxedPrecision
+OpDecorate %46 RelaxedPrecision
 OpDecorate %47 RelaxedPrecision
 OpDecorate %48 RelaxedPrecision
 OpDecorate %49 RelaxedPrecision
+OpDecorate %50 RelaxedPrecision
 OpDecorate %51 RelaxedPrecision
+OpDecorate %52 RelaxedPrecision
 OpDecorate %53 RelaxedPrecision
 OpDecorate %54 RelaxedPrecision
 OpDecorate %55 RelaxedPrecision
 OpDecorate %56 RelaxedPrecision
+OpDecorate %_0_result RelaxedPrecision
 OpDecorate %66 RelaxedPrecision
+OpDecorate %67 RelaxedPrecision
 OpDecorate %71 RelaxedPrecision
+OpDecorate %72 RelaxedPrecision
 OpDecorate %76 RelaxedPrecision
+OpDecorate %77 RelaxedPrecision
 OpDecorate %80 RelaxedPrecision
+OpDecorate %81 RelaxedPrecision
 OpDecorate %85 RelaxedPrecision
+OpDecorate %86 RelaxedPrecision
 OpDecorate %89 RelaxedPrecision
+OpDecorate %90 RelaxedPrecision
 OpDecorate %94 RelaxedPrecision
+OpDecorate %95 RelaxedPrecision
 OpDecorate %98 RelaxedPrecision
+OpDecorate %99 RelaxedPrecision
 OpDecorate %100 RelaxedPrecision
 OpDecorate %102 RelaxedPrecision
+OpDecorate %103 RelaxedPrecision
 OpDecorate %104 RelaxedPrecision
 OpDecorate %105 RelaxedPrecision
+OpDecorate %106 RelaxedPrecision
 OpDecorate %107 RelaxedPrecision
 OpDecorate %108 RelaxedPrecision
 OpDecorate %111 RelaxedPrecision
+OpDecorate %112 RelaxedPrecision
 OpDecorate %114 RelaxedPrecision
+OpDecorate %115 RelaxedPrecision
 OpDecorate %116 RelaxedPrecision
+OpDecorate %117 RelaxedPrecision
 OpDecorate %119 RelaxedPrecision
+OpDecorate %120 RelaxedPrecision
 OpDecorate %122 RelaxedPrecision
+OpDecorate %123 RelaxedPrecision
 OpDecorate %124 RelaxedPrecision
+OpDecorate %125 RelaxedPrecision
 OpDecorate %126 RelaxedPrecision
 OpDecorate %127 RelaxedPrecision
+OpDecorate %128 RelaxedPrecision
 OpDecorate %129 RelaxedPrecision
 OpDecorate %130 RelaxedPrecision
 %float = OpTypeFloat 32
@@ -90,7 +118,7 @@ OpDecorate %130 RelaxedPrecision
 %int_1 = OpConstant %int 1
 %float_1 = OpConstant %float 1
 %v3float = OpTypeVector %float 3
-%_blend_overlay_component = OpFunction %float None %15
+%_blend_overlay_component_hh2h2 = OpFunction %float None %15
 %17 = OpFunctionParameter %_ptr_Function_v2float
 %18 = OpFunctionParameter %_ptr_Function_v2float
 %19 = OpLabel
@@ -154,7 +182,7 @@ OpStore %68 %67
 %71 = OpLoad %v4float %69
 %72 = OpVectorShuffle %v2float %71 %71 0 3
 OpStore %73 %72
-%74 = OpFunctionCall %float %_blend_overlay_component %68 %73
+%74 = OpFunctionCall %float %_blend_overlay_component_hh2h2 %68 %73
 %75 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %76 = OpLoad %v4float %75
 %77 = OpVectorShuffle %v2float %76 %76 1 3
@@ -163,7 +191,7 @@ OpStore %78 %77
 %80 = OpLoad %v4float %79
 %81 = OpVectorShuffle %v2float %80 %80 1 3
 OpStore %82 %81
-%83 = OpFunctionCall %float %_blend_overlay_component %78 %82
+%83 = OpFunctionCall %float %_blend_overlay_component_hh2h2 %78 %82
 %84 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %85 = OpLoad %v4float %84
 %86 = OpVectorShuffle %v2float %85 %85 2 3
@@ -172,7 +200,7 @@ OpStore %87 %86
 %89 = OpLoad %v4float %88
 %90 = OpVectorShuffle %v2float %89 %89 2 3
 OpStore %91 %90
-%92 = OpFunctionCall %float %_blend_overlay_component %87 %91
+%92 = OpFunctionCall %float %_blend_overlay_component_hh2h2 %87 %91
 %93 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %94 = OpLoad %v4float %93
 %95 = OpCompositeExtract %float %94 3

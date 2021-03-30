@@ -225,14 +225,10 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
                                            std::unique_ptr<GrFragmentProcessor>* shaderProcessor,
                                            SkBlendMode* primColorMode,
                                            GrPaint* grPaint) {
-    // TODO: take sampling directly
-    SkSamplingOptions sampling(skPaint.getFilterQuality(),
-                               SkSamplingOptions::kMedium_asMipmapLinear);
-
     // Convert SkPaint color to 4f format in the destination color space
     SkColor4f origColor = SkColor4fPrepForDst(skPaint.getColor4f(), dstColorInfo);
 
-    GrFPArgs fpArgs(context, matrixProvider, sampling, &dstColorInfo);
+    GrFPArgs fpArgs(context, matrixProvider, &dstColorInfo);
 
     // Setup the initial color considering the shader, the SkPaint color, and the presence or not
     // of per-vertex colors.
@@ -433,15 +429,11 @@ bool SkPaintToGrPaintWithTexture(GrRecordingContext* context,
                                  std::unique_ptr<GrFragmentProcessor> fp,
                                  bool textureIsAlphaOnly,
                                  GrPaint* grPaint) {
-    // TODO: take sampling directly
-    SkSamplingOptions sampling(paint.getFilterQuality(),
-                               SkSamplingOptions::kMedium_asMipmapLinear);
-
     std::unique_ptr<GrFragmentProcessor> shaderFP;
     if (textureIsAlphaOnly) {
         if (const auto* shader = as_SB(paint.getShader())) {
             shaderFP = shader->asFragmentProcessor(
-                    GrFPArgs(context, matrixProvider, sampling, &dstColorInfo));
+                    GrFPArgs(context, matrixProvider, &dstColorInfo));
             if (!shaderFP) {
                 return false;
             }
@@ -459,45 +451,4 @@ bool SkPaintToGrPaintWithTexture(GrRecordingContext* context,
 
     return SkPaintToGrPaintReplaceShader(context, dstColorInfo, paint, matrixProvider,
                                          std::move(shaderFP), grPaint);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-std::tuple<GrSamplerState::Filter,
-           GrSamplerState::MipmapMode,
-           SkCubicResampler>
-GrInterpretSamplingOptions(SkISize imageDims,
-                           const SkSamplingOptions& sampling,
-                           const SkMatrix& viewM,
-                           const SkMatrix& localM,
-                           bool sharpenMipmappedTextures,
-                           bool allowFilterQualityReduction) {
-    using Filter = GrSamplerState::Filter;
-    using MipmapMode = GrSamplerState::MipmapMode;
-
-    if (sampling.useCubic) {
-        SkASSERT(GrValidCubicResampler(sampling.cubic));
-        return {Filter::kNearest, MipmapMode::kNone, sampling.cubic};
-    }
-
-    Filter     f = sampling.filter;
-    MipmapMode m = sampling.mipmap;
-    if (allowFilterQualityReduction && (m != MipmapMode::kNone)) {
-        SkMatrix matrix;
-        matrix.setConcat(viewM, localM);
-        // With sharp mips, we bias lookups by -0.5. That means our final LOD is >= 0 until
-        // the computed LOD is >= 0.5. At what scale factor does a texture get an LOD of
-        // 0.5?
-        //
-        // Want:  0       = log2(1/s) - 0.5
-        //        0.5     = log2(1/s)
-        //        2^0.5   = 1/s
-        //        1/2^0.5 = s
-        //        2^0.5/2 = s
-        SkScalar mipScale = sharpenMipmappedTextures ? SK_ScalarRoot2Over2 : SK_Scalar1;
-        if (matrix.getMinScale() >= mipScale) {
-            m = MipmapMode::kNone;
-        }
-    }
-    return {f, m, kInvalidCubicResampler};
 }

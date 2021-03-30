@@ -43,7 +43,7 @@ GrShaderCaps::GrShaderCaps(const GrContextOptions& options) {
     fRemovePowWithConstantExponent = false;
     fMustWriteToFragColor = false;
     fNoDefaultPrecisionForExternalSamplers = false;
-    fCanOnlyUseSampleMaskWithStencil = false;
+    fRewriteMatrixVectorMultiply = false;
     fFlatInterpolationSupport = false;
     fPreferFlatInterpolation = false;
     fNoPerspectiveInterpolationSupport = false;
@@ -124,7 +124,7 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Must write to sk_FragColor [workaround]", fMustWriteToFragColor);
     writer->appendBool("Don't add default precision statement for samplerExternalOES",
                        fNoDefaultPrecisionForExternalSamplers);
-    writer->appendBool("Can only use sample mask with stencil", fCanOnlyUseSampleMaskWithStencil);
+    writer->appendBool("Rewrite matrix-vector multiply", fRewriteMatrixVectorMultiply);
     writer->appendBool("Flat interpolation support", fFlatInterpolationSupport);
     writer->appendBool("Prefer flat interpolation", fPreferFlatInterpolation);
     writer->appendBool("No perspective interpolation support", fNoPerspectiveInterpolationSupport);
@@ -173,6 +173,7 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fRemovePowWithConstantExponent);
         SkASSERT(!fMustWriteToFragColor);
         SkASSERT(!fNoDefaultPrecisionForExternalSamplers);
+        SkASSERT(!fRewriteMatrixVectorMultiply);
     }
     if (!options.fEnableExperimentalHardwareTessellation) {
         fMaxTessellationSegments = 0;

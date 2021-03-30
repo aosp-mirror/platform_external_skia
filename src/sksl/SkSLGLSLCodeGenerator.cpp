@@ -703,7 +703,7 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         }
     }
     if (!nameWritten) {
-        this->write(function.name());
+        this->write(function.mangledName());
     }
     this->write("(");
     const char* separator = "";
@@ -803,10 +803,6 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             break;
         case SK_CLOCKWISE_BUILTIN:
             this->write(fProgram.fConfig->fSettings.fFlipY ? "(!gl_FrontFacing)" : "gl_FrontFacing");
-            break;
-        case SK_SAMPLEMASK_BUILTIN:
-            SkASSERT(this->caps().sampleMaskSupport());
-            this->write("gl_SampleMask");
             break;
         case SK_VERTEXID_BUILTIN:
             this->write("gl_VertexID");
@@ -997,7 +993,7 @@ void GLSLCodeGenerator::writeSetting(const Setting& s) {
 void GLSLCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) {
     this->writeTypePrecision(f.returnType());
     this->writeType(f.returnType());
-    this->write(" " + f.name() + "(");
+    this->write(" " + f.mangledName() + "(");
     const char* separator = "";
     for (const auto& param : f.parameters()) {
         this->write(separator);

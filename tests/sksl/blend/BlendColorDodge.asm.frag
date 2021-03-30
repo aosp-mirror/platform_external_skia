@@ -8,7 +8,7 @@ OpName %sk_Clockwise "sk_Clockwise"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "src"
 OpMemberName %_UniformBuffer 1 "dst"
-OpName %_color_dodge_component "_color_dodge_component"
+OpName %_color_dodge_component_hh2h2 "_color_dodge_component_hh2h2"
 OpName %delta "delta"
 OpName %main "main"
 OpDecorate %sk_FragColor RelaxedPrecision
@@ -23,58 +23,88 @@ OpDecorate %_UniformBuffer Block
 OpDecorate %11 Binding 0
 OpDecorate %11 DescriptorSet 0
 OpDecorate %20 RelaxedPrecision
+OpDecorate %21 RelaxedPrecision
 OpDecorate %27 RelaxedPrecision
+OpDecorate %28 RelaxedPrecision
 OpDecorate %30 RelaxedPrecision
+OpDecorate %31 RelaxedPrecision
 OpDecorate %32 RelaxedPrecision
 OpDecorate %33 RelaxedPrecision
+OpDecorate %delta RelaxedPrecision
 OpDecorate %36 RelaxedPrecision
+OpDecorate %37 RelaxedPrecision
 OpDecorate %38 RelaxedPrecision
+OpDecorate %39 RelaxedPrecision
 OpDecorate %40 RelaxedPrecision
 OpDecorate %41 RelaxedPrecision
 OpDecorate %46 RelaxedPrecision
+OpDecorate %47 RelaxedPrecision
 OpDecorate %48 RelaxedPrecision
+OpDecorate %49 RelaxedPrecision
 OpDecorate %50 RelaxedPrecision
 OpDecorate %51 RelaxedPrecision
+OpDecorate %52 RelaxedPrecision
 OpDecorate %53 RelaxedPrecision
+OpDecorate %54 RelaxedPrecision
 OpDecorate %55 RelaxedPrecision
 OpDecorate %56 RelaxedPrecision
 OpDecorate %57 RelaxedPrecision
 OpDecorate %58 RelaxedPrecision
+OpDecorate %59 RelaxedPrecision
 OpDecorate %60 RelaxedPrecision
+OpDecorate %61 RelaxedPrecision
 OpDecorate %62 RelaxedPrecision
 OpDecorate %63 RelaxedPrecision
 OpDecorate %64 RelaxedPrecision
 OpDecorate %66 RelaxedPrecision
+OpDecorate %67 RelaxedPrecision
 OpDecorate %68 RelaxedPrecision
+OpDecorate %69 RelaxedPrecision
 OpDecorate %70 RelaxedPrecision
+OpDecorate %71 RelaxedPrecision
 OpDecorate %72 RelaxedPrecision
 OpDecorate %73 RelaxedPrecision
 OpDecorate %74 RelaxedPrecision
 OpDecorate %75 RelaxedPrecision
 OpDecorate %76 RelaxedPrecision
+OpDecorate %77 RelaxedPrecision
 OpDecorate %78 RelaxedPrecision
 OpDecorate %79 RelaxedPrecision
+OpDecorate %80 RelaxedPrecision
 OpDecorate %81 RelaxedPrecision
+OpDecorate %82 RelaxedPrecision
 OpDecorate %83 RelaxedPrecision
 OpDecorate %84 RelaxedPrecision
 OpDecorate %85 RelaxedPrecision
 OpDecorate %86 RelaxedPrecision
+OpDecorate %87 RelaxedPrecision
 OpDecorate %88 RelaxedPrecision
+OpDecorate %89 RelaxedPrecision
 OpDecorate %90 RelaxedPrecision
 OpDecorate %91 RelaxedPrecision
 OpDecorate %92 RelaxedPrecision
 OpDecorate %100 RelaxedPrecision
+OpDecorate %101 RelaxedPrecision
 OpDecorate %105 RelaxedPrecision
+OpDecorate %106 RelaxedPrecision
 OpDecorate %110 RelaxedPrecision
+OpDecorate %111 RelaxedPrecision
 OpDecorate %114 RelaxedPrecision
+OpDecorate %115 RelaxedPrecision
 OpDecorate %119 RelaxedPrecision
+OpDecorate %120 RelaxedPrecision
 OpDecorate %123 RelaxedPrecision
+OpDecorate %124 RelaxedPrecision
 OpDecorate %128 RelaxedPrecision
+OpDecorate %129 RelaxedPrecision
 OpDecorate %131 RelaxedPrecision
+OpDecorate %132 RelaxedPrecision
 OpDecorate %133 RelaxedPrecision
 OpDecorate %135 RelaxedPrecision
+OpDecorate %136 RelaxedPrecision
 OpDecorate %137 RelaxedPrecision
 OpDecorate %138 RelaxedPrecision
+OpDecorate %139 RelaxedPrecision
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
@@ -97,7 +127,7 @@ OpDecorate %138 RelaxedPrecision
 %int = OpTypeInt 32 1
 %int_0 = OpConstant %int 0
 %int_1 = OpConstant %int 1
-%_color_dodge_component = OpFunction %float None %15
+%_color_dodge_component_hh2h2 = OpFunction %float None %15
 %17 = OpFunctionParameter %_ptr_Function_v2float
 %18 = OpFunctionParameter %_ptr_Function_v2float
 %19 = OpLabel
@@ -199,7 +229,7 @@ OpStore %102 %101
 %105 = OpLoad %v4float %103
 %106 = OpVectorShuffle %v2float %105 %105 0 3
 OpStore %107 %106
-%108 = OpFunctionCall %float %_color_dodge_component %102 %107
+%108 = OpFunctionCall %float %_color_dodge_component_hh2h2 %102 %107
 %109 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %110 = OpLoad %v4float %109
 %111 = OpVectorShuffle %v2float %110 %110 1 3
@@ -208,7 +238,7 @@ OpStore %112 %111
 %114 = OpLoad %v4float %113
 %115 = OpVectorShuffle %v2float %114 %114 1 3
 OpStore %116 %115
-%117 = OpFunctionCall %float %_color_dodge_component %112 %116
+%117 = OpFunctionCall %float %_color_dodge_component_hh2h2 %112 %116
 %118 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %119 = OpLoad %v4float %118
 %120 = OpVectorShuffle %v2float %119 %119 2 3
@@ -217,7 +247,7 @@ OpStore %121 %120
 %123 = OpLoad %v4float %122
 %124 = OpVectorShuffle %v2float %123 %123 2 3
 OpStore %125 %124
-%126 = OpFunctionCall %float %_color_dodge_component %121 %125
+%126 = OpFunctionCall %float %_color_dodge_component_hh2h2 %121 %125
 %127 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %128 = OpLoad %v4float %127
 %129 = OpCompositeExtract %float %128 3

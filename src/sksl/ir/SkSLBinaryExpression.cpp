@@ -8,9 +8,60 @@
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
+#include "src/sksl/ir/SkSLBoolLiteral.h"
+#include "src/sksl/ir/SkSLIndexExpression.h"
+#include "src/sksl/ir/SkSLSetting.h"
+#include "src/sksl/ir/SkSLSwizzle.h"
+#include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLType.h"
 
 namespace SkSL {
+
+static bool is_low_precision_matrix_vector_multiply(const Expression& left,
+                                                    const Operator& op,
+                                                    const Expression& right,
+                                                    const Type& resultType) {
+    return !resultType.highPrecision() &&
+           op.kind() == Token::Kind::TK_STAR &&
+           left.type().isMatrix() &&
+           right.type().isVector() &&
+           left.type().rows() == right.type().columns() &&
+           Analysis::IsTrivialExpression(left) &&
+           Analysis::IsTrivialExpression(right);
+}
+
+static std::unique_ptr<Expression> rewrite_matrix_vector_multiply(const Context& context,
+                                                                  const Expression& left,
+                                                                  const Operator& op,
+                                                                  const Expression& right,
+                                                                  const Type& resultType) {
+    // Rewrite m33 * v3 as (m[0] * v[0] + m[1] * v[1] + m[2] * v[2])
+    std::unique_ptr<Expression> sum;
+    for (int n = 0; n < left.type().rows(); ++n) {
+        // Get mat[N] with an index expression.
+        std::unique_ptr<Expression> matN = IndexExpression::Make(
+                context, left.clone(), IntLiteral::Make(context, left.fOffset, n));
+        // Get vec[N] with a swizzle expression.
+        std::unique_ptr<Expression> vecN = Swizzle::Make(
+                context, right.clone(), ComponentArray{(SkSL::SwizzleComponent::Type)n});
+        // Multiply them together.
+        const Type* matNType = &matN->type();
+        std::unique_ptr<Expression> product =
+                BinaryExpression::Make(context, std::move(matN), op, std::move(vecN), matNType);
+        // Sum all the components together.
+        if (!sum) {
+            sum = std::move(product);
+        } else {
+            sum = BinaryExpression::Make(context,
+                                         std::move(sum),
+                                         Operator(Token::Kind::TK_PLUS),
+                                         std::move(product),
+                                         matNType);
+        }
+    }
+
+    return sum;
+}
 
 std::unique_ptr<Expression> BinaryExpression::Convert(const Context& context,
                                                       std::unique_ptr<Expression> left,
@@ -124,8 +175,40 @@ std::unique_ptr<Expression> BinaryExpression::Make(const Context& context,
         }
     }
 
-    return std::make_unique<BinaryExpression>(offset, std::move(left), op, std::move(right),
-                                              resultType);
+    if (context.fConfig->fSettings.fOptimize) {
+        // When sk_Caps.rewriteMatrixVectorMultiply is set, we rewrite medium-precision
+        // matrix * vector multiplication as:
+        //   (sk_Caps.rewriteMatrixVectorMultiply ? (mat[0]*vec[0] + ... + mat[N]*vec[N])
+        //                                        : mat * vec)
+        if (is_low_precision_matrix_vector_multiply(*left, op, *right, *resultType)) {
+            // Look up `sk_Caps.rewriteMatrixVectorMultiply`.
+            auto caps = Setting::Convert(context, left->fOffset, "rewriteMatrixVectorMultiply");
+
+            bool capsBitIsTrue = caps->is<BoolLiteral>() && caps->as<BoolLiteral>().value();
+            if (capsBitIsTrue || !caps->is<BoolLiteral>()) {
+                // Rewrite the multiplication as a sum of vector-scalar products.
+                std::unique_ptr<Expression> rewrite =
+                        rewrite_matrix_vector_multiply(context, *left, op, *right, *resultType);
+
+                // If we know the caps bit is true, return the rewritten expression directly.
+                if (capsBitIsTrue) {
+                    return rewrite;
+                }
+
+                // Return a ternary expression:
+                //     sk_Caps.rewriteMatrixVectorMultiply ? (rewrite) : (mat * vec)
+                return TernaryExpression::Make(
+                        context,
+                        std::move(caps),
+                        std::move(rewrite),
+                        std::make_unique<BinaryExpression>(offset, std::move(left), op,
+                                                           std::move(right), resultType));
+            }
+        }
+    }
+
+    return std::make_unique<BinaryExpression>(offset, std::move(left), op,
+                                              std::move(right), resultType);
 }
 
 bool BinaryExpression::CheckRef(const Expression& expr) {

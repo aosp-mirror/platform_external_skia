@@ -281,9 +281,8 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
     // explicitly cast any returns (from main) to half4. This is only strictly necessary
     // if the return type is float4 - injecting it unconditionally reduces the risk of an
     // obscure bug.
-    bool isMain = f.declaration().name() == "main";
-
-    if (isMain) {
+    const FunctionDeclaration& decl = f.declaration();
+    if (decl.isMain()) {
         fCastReturnsToHalf = true;
     }
 
@@ -292,20 +291,23 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
         this->writeLine();
     }
 
-    if (isMain) {
+    if (decl.isMain()) {
         fCastReturnsToHalf = false;
     }
 
-    String fnName =
-            isMain ? "main" : fCallbacks->getMangledName(String(f.declaration().name()).c_str());
+    String fnName = decl.isMain() ? decl.name()
+                                  : fCallbacks->getMangledName(String(decl.name()).c_str());
 
-    // This is similar to decl->description(), but substitutes a mangled name, and handles
-    // modifiers on parameters (eg inout).
-    const FunctionDeclaration& decl = f.declaration();
+    // This is similar to decl.description(), but substitutes a mangled name, and handles modifiers
+    // on the function (e.g. `inline`) and its parameters (e.g. `inout`).
     String declString =
-            String::printf("%s %s(", this->typeName(decl.returnType()).c_str(), fnName.c_str());
+            String::printf("%s%s%s %s(",
+                           (decl.modifiers().fFlags & Modifiers::kInline_Flag) ? "inline " : "",
+                           (decl.modifiers().fFlags & Modifiers::kNoInline_Flag) ? "noinline " : "",
+                           this->typeName(decl.returnType()).c_str(),
+                           fnName.c_str());
     const char* separator = "";
-    for (auto p : decl.parameters()) {
+    for (const Variable* p : decl.parameters()) {
         // TODO: Handle arrays
         declString.appendf("%s%s%s %s",
                            separator,
@@ -316,8 +318,8 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
     }
     declString.append(")");
 
-    fFunctionNames.insert({&f.declaration(), std::move(fnName)});
-    fCallbacks->defineFunction(declString.c_str(), body.fBuffer.str().c_str(), isMain);
+    fFunctionNames.insert({&decl, std::move(fnName)});
+    fCallbacks->defineFunction(declString.c_str(), body.fBuffer.str().c_str(), decl.isMain());
 }
 
 void PipelineStageCodeGenerator::writeGlobalVarDeclaration(const GlobalVarDeclaration& g) {
