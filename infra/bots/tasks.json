@@ -2220,7 +2220,7 @@
     },
     "Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit": {
       "tasks": [
-        "Upload-Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit"
+        "Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit"
       ]
     },
     "Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-CanvasKit": {
@@ -2230,7 +2230,7 @@
     },
     "Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit": {
       "tasks": [
-        "Upload-Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit"
+        "Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit"
       ]
     },
     "Test-Debian10-EMCC-GCE-GPU-AVX2-wasm-Release-All-CanvasKit": {
@@ -14791,7 +14791,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -14845,7 +14845,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -14907,7 +14907,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -14969,7 +14969,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -15026,7 +15026,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -15074,7 +15074,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -15122,7 +15122,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -15170,7 +15170,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -15219,7 +15219,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -15268,7 +15268,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -16525,7 +16525,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -19971,7 +19971,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20055,7 +20055,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20134,7 +20134,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20213,7 +20213,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20292,7 +20292,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20371,7 +20371,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20455,7 +20455,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20534,7 +20534,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20613,7 +20613,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20696,7 +20696,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20784,7 +20784,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20877,7 +20877,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -20960,7 +20960,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21048,7 +21048,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21136,7 +21136,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21219,7 +21219,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21302,7 +21302,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21494,7 +21494,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -21565,7 +21565,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -21737,7 +21737,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21815,7 +21815,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21893,7 +21893,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -21971,7 +21971,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22049,7 +22049,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22127,7 +22127,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22205,7 +22205,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22284,7 +22284,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22363,7 +22363,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22441,7 +22441,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22519,7 +22519,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22597,7 +22597,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22680,7 +22680,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22758,7 +22758,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22841,7 +22841,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -22919,7 +22919,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -23008,7 +23008,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -23070,7 +23070,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -23140,7 +23140,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -23210,7 +23210,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -23282,7 +23282,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -23524,7 +23524,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -23612,7 +23612,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -23694,7 +23694,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -23777,7 +23777,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -23860,7 +23860,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -23943,7 +23943,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24026,7 +24026,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24109,7 +24109,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -24187,7 +24187,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24270,7 +24270,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -24348,7 +24348,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         }
       ],
       "command": [
@@ -24426,7 +24426,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24509,7 +24509,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24592,7 +24592,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24675,7 +24675,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24758,7 +24758,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24841,7 +24841,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -24924,7 +24924,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25007,7 +25007,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25090,7 +25090,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25173,7 +25173,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25256,7 +25256,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25339,7 +25339,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25422,7 +25422,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25505,7 +25505,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25588,7 +25588,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25671,7 +25671,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25754,7 +25754,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25837,7 +25837,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -25920,7 +25920,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -26003,7 +26003,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -26086,7 +26086,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -26169,7 +26169,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -26253,7 +26253,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -26337,7 +26337,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -32679,7 +32679,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -32764,7 +32764,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -32849,7 +32849,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -32934,7 +32934,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33019,7 +33019,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33104,7 +33104,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33189,7 +33189,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33274,7 +33274,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33359,7 +33359,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33444,7 +33444,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33529,7 +33529,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33614,7 +33614,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33699,7 +33699,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33784,7 +33784,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33869,7 +33869,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -33954,7 +33954,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34039,7 +34039,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34123,7 +34123,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34207,7 +34207,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34291,7 +34291,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34375,7 +34375,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34460,7 +34460,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34544,7 +34544,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34634,7 +34634,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34728,7 +34728,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34817,7 +34817,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34911,7 +34911,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -34990,7 +34990,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35080,7 +35080,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35174,7 +35174,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35262,7 +35262,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35356,7 +35356,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35445,7 +35445,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35538,7 +35538,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35626,7 +35626,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35719,7 +35719,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35812,7 +35812,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35900,7 +35900,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -35989,7 +35989,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36082,7 +36082,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36170,7 +36170,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36263,7 +36263,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36351,7 +36351,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36444,7 +36444,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36533,7 +36533,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36622,7 +36622,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36711,7 +36711,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36800,7 +36800,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -36857,6 +36857,11 @@
       "casSpec": "pathkit",
       "cipd_packages": [
         {
+          "name": "infra/gsutil",
+          "path": "cipd_bin_packages",
+          "version": "version:4.46"
+        },
+        {
           "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
@@ -36878,7 +36883,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test_pathkit",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit\",\"gold_hashes_url\":\"https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit\",\"gold_hashes_url\":\"https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt\",\"gs_bucket\":\"skia-infra-gm\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -36910,7 +36915,8 @@
       "max_attempts": 2,
       "outputs": [
         "test"
-      ]
+      ],
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-CanvasKit": {
       "caches": [
@@ -36993,6 +36999,11 @@
       "casSpec": "pathkit",
       "cipd_packages": [
         {
+          "name": "infra/gsutil",
+          "path": "cipd_bin_packages",
+          "version": "version:4.46"
+        },
+        {
           "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
@@ -37014,7 +37025,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test_pathkit",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit\",\"gold_hashes_url\":\"https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit\",\"gold_hashes_url\":\"https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt\",\"gs_bucket\":\"skia-infra-gm\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -37046,7 +37057,8 @@
       "max_attempts": 2,
       "outputs": [
         "test"
-      ]
+      ],
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "Test-Debian10-EMCC-GCE-GPU-AVX2-wasm-Release-All-CanvasKit": {
       "caches": [
@@ -37156,7 +37168,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37242,7 +37254,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37328,7 +37340,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37414,7 +37426,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37500,7 +37512,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37584,7 +37596,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37668,7 +37680,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37752,7 +37764,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37836,7 +37848,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -37920,7 +37932,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38004,7 +38016,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38083,7 +38095,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38166,7 +38178,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38245,7 +38257,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38328,7 +38340,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38407,7 +38419,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38490,7 +38502,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38575,7 +38587,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38660,7 +38672,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38745,7 +38757,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38829,7 +38841,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38913,7 +38925,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -38992,7 +39004,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39075,7 +39087,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39159,7 +39171,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39243,7 +39255,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39327,7 +39339,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39411,7 +39423,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39495,7 +39507,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39579,7 +39591,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39663,7 +39675,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39747,7 +39759,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39831,7 +39843,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39915,7 +39927,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -39994,7 +40006,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40077,7 +40089,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40161,7 +40173,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40245,7 +40257,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40329,7 +40341,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40413,7 +40425,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40497,7 +40509,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40580,7 +40592,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40669,7 +40681,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40753,7 +40765,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40841,7 +40853,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -40925,7 +40937,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41013,7 +41025,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41092,7 +41104,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41180,7 +41192,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41264,7 +41276,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41348,7 +41360,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41436,7 +41448,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41519,7 +41531,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41607,7 +41619,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41685,7 +41697,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41773,7 +41785,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41851,7 +41863,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -41935,7 +41947,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42019,7 +42031,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42113,7 +42125,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42285,7 +42297,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42368,7 +42380,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42451,7 +42463,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42534,7 +42546,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42617,7 +42629,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42700,7 +42712,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42783,7 +42795,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42866,7 +42878,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -42949,7 +42961,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43032,7 +43044,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43115,7 +43127,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43198,7 +43210,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43281,7 +43293,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43364,7 +43376,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43452,7 +43464,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43535,7 +43547,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43618,7 +43630,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43701,7 +43713,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43784,7 +43796,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43867,7 +43879,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -43955,7 +43967,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44038,7 +44050,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44121,7 +44133,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44204,7 +44216,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44287,7 +44299,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44370,7 +44382,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44453,7 +44465,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44536,7 +44548,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44619,7 +44631,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44702,7 +44714,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44785,7 +44797,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44868,7 +44880,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -44951,7 +44963,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45034,7 +45046,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45117,7 +45129,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45200,7 +45212,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45283,7 +45295,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45366,7 +45378,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45449,7 +45461,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45532,7 +45544,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45615,7 +45627,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45698,7 +45710,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45781,7 +45793,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45864,7 +45876,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -45947,7 +45959,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46030,7 +46042,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46113,7 +46125,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46196,7 +46208,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46279,7 +46291,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46362,7 +46374,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46445,7 +46457,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46528,7 +46540,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46611,7 +46623,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46694,7 +46706,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46777,7 +46789,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46860,7 +46872,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -46943,7 +46955,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47026,7 +47038,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47109,7 +47121,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47192,7 +47204,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47275,7 +47287,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47358,7 +47370,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47441,7 +47453,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47524,7 +47536,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47607,7 +47619,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47690,7 +47702,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47773,7 +47785,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47856,7 +47868,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -47939,7 +47951,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48022,7 +48034,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48105,7 +48117,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48188,7 +48200,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48272,7 +48284,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48356,7 +48368,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48440,7 +48452,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48524,7 +48536,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48608,7 +48620,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48692,7 +48704,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48776,7 +48788,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48860,7 +48872,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -48944,7 +48956,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49028,7 +49040,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49112,7 +49124,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49195,7 +49207,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49278,7 +49290,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49361,7 +49373,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49444,7 +49456,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49527,7 +49539,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49610,7 +49622,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49693,7 +49705,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49776,7 +49788,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -49859,7 +49871,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:310"
+          "version": "version:311"
         },
         {
           "name": "skia/bots/svg",
@@ -60463,140 +60475,6 @@
       "io_timeout_ns": 3600000000000,
       "max_attempts": 2,
       "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Upload-Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "run-recipe",
-      "cipd_packages": [
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "upload_dm_results",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit\",\"gs_bucket\":\"skia-infra-gm\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"output_ignored\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Test-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-highmem-2",
-        "os:Debian-10.3",
-        "pool:Skia"
-      ],
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 3600000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 3600000000000,
-      "max_attempts": 2,
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Upload-Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "run-recipe",
-      "cipd_packages": [
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:14be8b751c0fb567535f520f8a7bc60c3f40b378"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "upload_dm_results",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit\",\"gs_bucket\":\"skia-infra-gm\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"output_ignored\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Test-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-highmem-2",
-        "os:Debian-10.3",
-        "pool:Skia"
-      ],
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 3600000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 3600000000000,
-      "max_attempts": 2,
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "Upload-Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All": {
       "caches": [
