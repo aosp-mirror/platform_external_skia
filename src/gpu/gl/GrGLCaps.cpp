@@ -563,9 +563,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     GR_GL_GetIntegerv(gli, GR_GL_MAX_RENDERBUFFER_SIZE, &fMaxRenderTargetSize);
-    // Our render targets are always created with textures as the color
-    // attachment, hence this min:
-    fMaxRenderTargetSize = std::min(fMaxTextureSize, fMaxRenderTargetSize);
     fMaxPreferredRenderTargetSize = fMaxRenderTargetSize;
 
     if (kARM_GrGLVendor == ctxInfo.vendor()) {
@@ -4094,6 +4091,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // program allocations aren't reused.  (crbug.com/1147008, crbug.com/1164271)
     if (kAdreno530_GrGLRenderer == ctxInfo.renderer()) {
         shaderCaps->fUseNodePools = false;
+    }
+
+    // skbug.com/11204. Avoid recursion issue in GrSurfaceContext::writePixels.
+    if (fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO) {
+        fReuseScratchTextures = false;
     }
 }
 
