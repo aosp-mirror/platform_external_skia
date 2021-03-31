@@ -18,6 +18,7 @@
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
@@ -243,6 +244,7 @@ private:
     Value writeExpression(const Expression& expr);
     Value writeBinaryExpression(const BinaryExpression& b);
     Value writeConstructor(const Constructor& c);
+    Value writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
     Value writeFunctionCall(const FunctionCall& c);
     Value writeExternalFunctionCall(const ExternalFunctionCall& c);
     Value writeFieldAccess(const FieldAccess& expr);
@@ -330,6 +332,7 @@ static inline bool is_uniform(const SkSL::Variable& var) {
 
 static size_t slot_count(const Type& type) {
     switch (type.typeKind()) {
+        case Type::TypeKind::kFragmentProcessor:
         case Type::TypeKind::kOther:
         case Type::TypeKind::kVoid:
             return 0;
@@ -373,7 +376,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
 
             // For most variables, fVariableMap stores an index into fSlots, but for fragment
             // processors (child shaders), fVariableMap stores the index to pass to fSampleChild().
-            if (var.type() == *fProgram.fContext->fTypes.fFragmentProcessor) {
+            if (var.type().isFragmentProcessor()) {
                 fVariableMap[&var] = fpCount++;
                 continue;
             }
@@ -770,6 +773,26 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
     return {};
 }
 
+Value SkVMGenerator::writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c) {
+    const Type& dstType = c.type();
+    SkASSERT(dstType.isMatrix());
+    SkASSERT(c.argument()->type() == dstType.componentType());
+
+    Value src = this->writeExpression(*c.argument());
+    Value dst(dstType.rows() * dstType.columns());
+    size_t dstIndex = 0;
+
+    // Matrix-from-scalar builds a diagonal scale matrix
+    for (int c = 0; c < dstType.columns(); ++c) {
+        for (int r = 0; r < dstType.rows(); ++r) {
+            dst[dstIndex++] = (c == r ? f32(src) : fBuilder->splat(0.0f));
+        }
+    }
+
+    SkASSERT(dstIndex == dst.slots());
+    return dst;
+}
+
 size_t SkVMGenerator::fieldSlotOffset(const FieldAccess& expr) {
     size_t offset = 0;
     for (int i = 0; i < expr.fieldIndex(); ++i) {
@@ -983,7 +1006,7 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
     if (found->second == Intrinsic::kSample) {
         // Sample is very special, the first argument is an FP, which can't be evaluated
         const Context& ctx = *fProgram.fContext;
-        if (nargs > 2 || c.arguments()[0]->type() != *ctx.fTypes.fFragmentProcessor ||
+        if (nargs > 2 || !c.arguments()[0]->type().isFragmentProcessor() ||
             (nargs == 2 && (c.arguments()[1]->type() != *ctx.fTypes.fFloat2 &&
                             c.arguments()[1]->type() != *ctx.fTypes.fFloat3x3))) {
             SkDEBUGFAIL("Invalid call to sample");
@@ -1422,6 +1445,8 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return fBuilder->splat(e.as<BoolLiteral>().value() ? ~0 : 0);
         case Expression::Kind::kConstructor:
             return this->writeConstructor(e.as<Constructor>());
+        case Expression::Kind::kConstructorDiagonalMatrix:
+            return this->writeConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>());
         case Expression::Kind::kFieldAccess:
             return this->writeFieldAccess(e.as<FieldAccess>());
         case Expression::Kind::kIndex:
@@ -1791,7 +1816,7 @@ bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* buil
         if (e->is<GlobalVarDeclaration>()) {
             const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
             const Variable& var = decl.declaration()->as<VarDeclaration>().var();
-            if (var.type() == *program.fContext->fTypes.fFragmentProcessor) {
+            if (var.type().isFragmentProcessor()) {
                 childSlots++;
             } else if (is_uniform(var)) {
                 uniformSlots += slot_count(var.type());
