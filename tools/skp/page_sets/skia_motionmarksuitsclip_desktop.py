@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 # pylint: disable=W0401,W0614
@@ -17,28 +17,25 @@ class SkiaBuildbotDesktopPage(page_module.Page):
         name=url,
         page_set=page_set,
         shared_page_state_class=shared_page_state.SharedDesktopPageState)
-    self.archive_data_file = 'data/skia_intelwiki_desktop.json'
+    self.archive_data_file = 'data/skia_motionmarksuitsclip_desktop.json'
 
   def RunNavigateSteps(self, action_runner):
     action_runner.Navigate(self.url)
     action_runner.Wait(20)
 
-  def RunPageInteractions(self, action_runner):
-    with action_runner.CreateGestureInteraction('ScrollAction'):
-      action_runner.ScrollPage()
 
-
-class SkiaIntelwikiDesktopPageSet(story.StorySet):
+class SkiaMotionmarksuitsclipDesktopPageSet(story.StorySet):
 
   """ Pages designed to represent the median, not highly optimized web """
 
   def __init__(self):
-    super(SkiaIntelwikiDesktopPageSet, self).__init__(
-      archive_data_file='data/skia_intelwiki_desktop.json')
+    super(SkiaMotionmarksuitsclipDesktopPageSet, self).__init__(
+      archive_data_file='data/skia_motionmarksuitsclip_desktop.json')
 
     urls_list = [
-      # go/skia-skps-3-19
-      'https://en.wikipedia.org/wiki/Intel_Graphics_Technology',
+      # Why: from skbug.com/11817
+      ('https://storage.googleapis.com/skia-recreateskps-bot-hosted-pages/'
+       'desk_motionmark_suits_clip.svg'),
     ]
 
     for url in urls_list:
