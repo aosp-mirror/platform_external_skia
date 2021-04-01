@@ -983,29 +983,9 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     shaderCaps->fBuiltinDeterminantSupport = ctxInfo.glslGeneration() >= k150_GrGLSLGeneration;
 
     if (GR_IS_GR_WEBGL(standard)) {
-        // WebGL 1.0 doesn't support do-while loops.
-        shaderCaps->fCanUseDoLoops = version >= GR_GL_VER(2, 0);
+      // WebGL 1.0 doesn't support do-while loops.
+      shaderCaps->fCanUseDoLoops = version >= GR_GL_VER(2, 0);
     }
-
-    if (GR_IS_GR_GL_ES(standard) &&
-        (ctxInfo.driver() != kChromium_GrGLDriver) &&
-        (ctxInfo.driver() != kANGLE_GrGLDriver)) {
-        // Inlining SkSL helper functions improves draw performance on many GLES drivers (e.g.
-        // Mali/Adreno). Chromium on Windows also identifies itself to us as GLES, but is actually
-        // ANGLE under the hood, so we make an exception for that case.
-        shaderCaps->fEnableSkSLInliner = true;
-    }
-
-#ifdef SK_BUILD_FOR_WIN
-    if (ctxInfo.driver() == kIntel_GrGLDriver ||
-        (ctxInfo.driver() == kANGLE_GrGLDriver &&
-         ctxInfo.angleVendor() == GrGLANGLEVendor::kIntel &&
-         ctxInfo.angleBackend() == GrGLANGLEBackend::kOpenGL)) {
-        // The Intel driver on Windows produces incorrect results on clip_shader test slides when
-        // the inliner is off. (Example: http://screen/5dpPVnJukBAcyKb)
-        shaderCaps->fEnableSkSLInliner = true;
-    }
-#endif
 }
 
 void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions,
