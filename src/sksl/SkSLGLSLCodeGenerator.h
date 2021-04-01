@@ -137,14 +137,18 @@ protected:
 
     void writeConstructor(const Constructor& c, Precedence parentPrecedence);
 
-    void writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
+    void writeSingleArgumentConstructor(const SingleArgumentConstructor& c,
                                         Precedence parentPrecedence);
+
+    void writeMultiArgumentConstructor(const MultiArgumentConstructor& c,
+                                       Precedence parentPrecedence);
 
     virtual void writeFieldAccess(const FieldAccess& f);
 
     virtual void writeSwizzle(const Swizzle& swizzle);
 
     virtual void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
+
     void writeShortCircuitWorkaroundExpression(const BinaryExpression& b,
                                                Precedence parentPrecedence);
 
