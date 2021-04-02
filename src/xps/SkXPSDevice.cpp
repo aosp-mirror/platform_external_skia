@@ -318,6 +318,10 @@ bool SkXPSDevice::endSheet() {
 }
 
 static HRESULT subset_typeface(const SkXPSDevice::TypefaceUse& current) {
+    //The CreateFontPackage API is only supported on desktop, not in UWP
+    #if defined(SK_WINUWP)
+    return E_NOTIMPL;
+    #else
     //CreateFontPackage wants unsigned short.
     //Microsoft, Y U NO stdint.h?
     std::vector<unsigned short> keepList;
@@ -410,6 +414,7 @@ static HRESULT subset_typeface(const SkXPSDevice::TypefaceUse& current) {
         "Could not set new stream for subsetted font.");
 
     return S_OK;
+    #endif //SK_WINUWP
 }
 
 bool SkXPSDevice::endPortfolio() {
@@ -1887,9 +1892,7 @@ static bool text_must_be_pathed(const SkPaint& paint, const SkMatrix& matrix) {
     ;
 }
 
-void SkXPSDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList) {
-
-    const SkPaint& paint = glyphRunList.paint();
+void SkXPSDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
     for (const auto& run : glyphRunList) {
         const SkGlyphID* glyphIDs = run.glyphsIDs().data();
         size_t glyphCount = run.glyphsIDs().size();

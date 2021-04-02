@@ -101,8 +101,8 @@ public:
 
     /**
      * Returns a fragment processor that composes two fragment processors `f` and `g` into f(g(x)).
-     * This is equivalent to running them in series. This is not the same as transfer-mode
-     * composition; there is no blending step.
+     * This is equivalent to running them in series (`g`, then `f`). This is not the same as
+     * transfer-mode composition; there is no blending step.
      */
     static std::unique_ptr<GrFragmentProcessor> Compose(std::unique_ptr<GrFragmentProcessor> f,
                                                         std::unique_ptr<GrFragmentProcessor> g);
@@ -116,7 +116,7 @@ public:
     // The FP this was registered with as a child function. This will be null if this is a root.
     const GrFragmentProcessor* parent() const { return fParent; }
 
-    GrGLSLFragmentProcessor* createGLSLInstance() const;
+    std::unique_ptr<GrGLSLFragmentProcessor> makeProgramImpl() const;
 
     void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
         this->onGetGLSLProcessorKey(caps, b);
@@ -383,6 +383,11 @@ protected:
         fFlags |= kUsesSampleCoordsDirectly_Flag;
     }
 
+    void mergeOptimizationFlags(OptimizationFlags flags) {
+        SkASSERT((flags & ~kAll_OptimizationFlags) == 0);
+        fFlags &= (flags | ~kAll_OptimizationFlags);
+    }
+
 private:
     virtual SkPMColor4f constantOutputForConstantInput(const SkPMColor4f& /* inputColor */) const {
         SK_ABORT("Subclass must override this if advertising this optimization.");
@@ -391,7 +396,7 @@ private:
     /** Returns a new instance of the appropriate *GL* implementation class
         for the given GrFragmentProcessor; caller is responsible for deleting
         the object. */
-    virtual GrGLSLFragmentProcessor* onCreateGLSLInstance() const = 0;
+    virtual std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const = 0;
 
     /** Implemented using GLFragmentProcessor::GenKey as described in this class's comment. */
     virtual void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const = 0;
@@ -482,6 +487,7 @@ static inline GrFPResult GrFPFailure(std::unique_ptr<GrFragmentProcessor> fp) {
     return {false, std::move(fp)};
 }
 static inline GrFPResult GrFPSuccess(std::unique_ptr<GrFragmentProcessor> fp) {
+    SkASSERT(fp);
     return {true, std::move(fp)};
 }
 

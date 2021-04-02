@@ -153,7 +153,7 @@ TextLine::TextLine(ParagraphImpl* owner,
 
     // TODO: This is the fix for flutter. Must be removed...
     for (auto cluster = &start; cluster != &end; ++cluster) {
-        if (!cluster->run()->isPlaceholder()) {
+        if (!cluster->run().isPlaceholder()) {
             fShift += cluster->getHalfLetterSpacing();
             break;
         }
@@ -415,7 +415,7 @@ void TextLine::justify(SkScalar maxWidth) {
     bool whitespacePatch = false;
     this->iterateThroughClustersInGlyphsOrder(false, false,
         [&whitespacePatches, &textLen, &whitespacePatch](const Cluster* cluster, bool ghost) {
-            if (cluster->isWhitespaces()) {
+            if (cluster->isWhitespaceBreak()) {
                 if (!whitespacePatch) {
                     whitespacePatch = true;
                     ++whitespacePatches;
@@ -441,14 +441,14 @@ void TextLine::justify(SkScalar maxWidth) {
     this->iterateThroughClustersInGlyphsOrder(false, true, [&](const Cluster* cluster, bool ghost) {
 
         if (ghost) {
-            if (cluster->run()->leftToRight()) {
+            if (cluster->run().leftToRight()) {
                 shiftCluster(cluster, ghostShift, ghostShift);
             }
             return true;
         }
 
         auto prevShift = shift;
-        if (cluster->isWhitespaces()) {
+        if (cluster->isWhitespaceBreak()) {
             if (!whitespacePatch) {
                 shift += step;
                 whitespacePatch = true;
@@ -470,22 +470,22 @@ void TextLine::justify(SkScalar maxWidth) {
 
 void TextLine::shiftCluster(const Cluster* cluster, SkScalar shift, SkScalar prevShift) {
 
-    auto run = cluster->run();
+    auto& run = cluster->run();
     auto start = cluster->startPos();
     auto end = cluster->endPos();
 
-    if (end == run->size()) {
+    if (end == run.size()) {
         // Set the same shift for the fake last glyph (to avoid all extra checks)
         ++end;
     }
 
-    if (run->fJustificationShifts.empty()) {
+    if (run.fJustificationShifts.empty()) {
         // Do not fill this array until needed
-        run->fJustificationShifts.push_back_n(run->size() + 1, { 0, 0 });
+        run.fJustificationShifts.push_back_n(run.size() + 1, { 0, 0 });
     }
 
     for (size_t pos = start; pos < end; ++pos) {
-        run->fJustificationShifts[pos] = { shift, prevShift };
+        run.fJustificationShifts[pos] = { shift, prevShift };
     }
 }
 
@@ -525,7 +525,7 @@ void TextLine::createEllipsis(SkScalar maxWidth, const SkString& ellipsis, bool)
     }
 }
 
-std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, Run* run) {
+std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Run& run) {
 
     class ShapeHandler final : public SkShaper::RunHandler {
     public:
@@ -561,10 +561,10 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, Run* run)
         SkString fEllipsis;
     };
 
-    ShapeHandler handler(run->heightMultiplier(), ellipsis);
+    ShapeHandler handler(run.heightMultiplier(), ellipsis);
     std::unique_ptr<SkShaper> shaper = SkShaper::MakeShapeDontWrapOrReorder();
     SkASSERT_RELEASE(shaper != nullptr);
-    shaper->shape(ellipsis.c_str(), ellipsis.size(), run->font(), true,
+    shaper->shape(ellipsis.c_str(), ellipsis.size(), run.font(), true,
                   std::numeric_limits<SkScalar>::max(), &handler);
     handler.run()->fTextRange = TextRange(0, ellipsis.size());
     handler.run()->fOwner = fOwner;
@@ -1137,7 +1137,7 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
     if (SkScalarNearlyZero(this->width())) {
         // TODO: this is one of the flutter changes that have to go away eventually
         //  Empty line is a special case in txtlib
-        auto utf16Index = fOwner->getUTF16Index(this->fClusterRange.end);
+        auto utf16Index = fOwner->getUTF16Index(this->fTextRange.end);
         return { SkToS32(utf16Index) , kDownstream };
     }
 
@@ -1148,21 +1148,29 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
             bool keepLooking = true;
             *runWidthInLine = this->iterateThroughSingleRunByStyles(
             run, runOffsetInLine, textRange, StyleType::kNone,
-            [this, dx, &result, &keepLooking]
+            [this, run, dx, &result, &keepLooking]
             (TextRange textRange, const TextStyle& style, const TextLine::ClipContext& context) {
 
                 SkScalar offsetX = this->offset().fX;
                 if (dx < context.clip.fLeft + offsetX) {
                     // All the other runs are placed right of this one
                     auto utf16Index = fOwner->getUTF16Index(context.run->globalClusterIndex(context.pos));
-                    result = { SkToS32(utf16Index), kDownstream };
+                    if (run->leftToRight()) {
+                        result = { SkToS32(utf16Index), kDownstream };
+                    } else {
+                        result = { SkToS32(utf16Index + 1), kUpstream };
+                    }
                     return keepLooking = false;
                 }
 
                 if (dx >= context.clip.fRight + offsetX) {
                     // We have to keep looking ; just in case keep the last one as the closest
                     auto utf16Index = fOwner->getUTF16Index(context.run->globalClusterIndex(context.pos + context.size));
-                    result = { SkToS32(utf16Index), kUpstream };
+                    if (run->leftToRight()) {
+                        result = {SkToS32(utf16Index), kUpstream};
+                    } else {
+                        result = {SkToS32(utf16Index), kDownstream};
+                    }
                     return keepLooking = true;
                 }
 

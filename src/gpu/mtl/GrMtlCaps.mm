@@ -10,6 +10,7 @@
 #include "include/core/SkRect.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "src/core/SkCompressedDataUtils.h"
+#include "src/core/SkReadBuffer.h"
 #include "src/gpu/GrBackendUtils.h"
 #include "src/gpu/GrProcessor.h"
 #include "src/gpu/GrProgramDesc.h"
@@ -33,6 +34,10 @@ GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice>
     this->initFeatureSet(featureSet);
     this->initGrCaps(device);
     this->initShaderCaps();
+    if (!contextOptions.fDisableDriverCorrectnessWorkarounds) {
+        this->applyDriverCorrectnessWorkarounds(contextOptions, device);
+    }
+
     this->initFormatTable();
     this->initStencilFormat(device);
 
@@ -473,6 +478,16 @@ void GrMtlCaps::initShaderCaps() {
     shaderCaps->fHalfIs32Bits = false;
 
     shaderCaps->fMaxFragmentSamplers = 16;
+
+    shaderCaps->fCanUseFastMath = true;
+}
+
+void GrMtlCaps::applyDriverCorrectnessWorkarounds(const GrContextOptions&,
+                                                  const id<MTLDevice> device) {
+    // TODO: We may need to disable the fastmath option on Intel devices to avoid corruption
+//    if ([device.name rangeOfString:@"Intel"].location != NSNotFound) {
+//        fShaderCaps->fCanUseFastMath = false;
+//    }
 }
 
 // Define this so we can use it to initialize arrays and work around
@@ -1081,13 +1096,11 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
                                   ProgramDescOverrideFlags overrideFlags) const {
     SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
     GrProgramDesc desc;
-    if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
-        SkASSERT(!desc.isValid());
-        return desc;
-    }
+    GrProgramDesc::Build(&desc, programInfo, *this);
 
-    GrProcessorKeyBuilder b(&desc.key());
+    GrProcessorKeyBuilder b(desc.key());
 
+    // If ordering here is changed, update getStencilPixelFormat() below
     b.add32(programInfo.backendFormat().asMtlFormat());
 
     b.add32(programInfo.numRasterSamples());
@@ -1099,7 +1112,7 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
 #endif
 
     b.add32(rt && rt->getStencilAttachment() ? this->preferredStencilFormat()
-                                             : MTLPixelFormatInvalid);
+                                              : MTLPixelFormatInvalid);
     b.add32((uint32_t)programInfo.isStencilEnabled());
     // Stencil samples don't seem to be tracked in the MTLRenderPipeline
 
@@ -1107,7 +1120,20 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
 
     b.add32(programInfo.primitiveTypeKey());
 
+    b.flush();
     return desc;
+}
+
+MTLPixelFormat GrMtlCaps::getStencilPixelFormat(const GrProgramDesc& desc) {
+    // Set up read buffer to point to platform-dependent part of the key
+    SkReadBuffer readBuffer(desc.asKey() + desc.initialKeyLength()/sizeof(uint32_t),
+                            desc.keyLength() - desc.initialKeyLength());
+    // skip backend format
+    readBuffer.readUInt();
+    // skip raster samples
+    readBuffer.readUInt();
+
+    return (MTLPixelFormat) readBuffer.readUInt();
 }
 
 #if GR_TEST_UTILS

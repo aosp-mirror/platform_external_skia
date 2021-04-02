@@ -14,19 +14,16 @@
 #include "include/core/SkM44.h"
 #include "include/core/SkTypes.h"
 
-#include "src/effects/imagefilters/SkArithmeticImageFilter.h"
-
 #include "src/gpu/GrFragmentProcessor.h"
 
 class GrArithmeticProcessor : public GrFragmentProcessor {
 public:
     static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> srcFP,
                                                      std::unique_ptr<GrFragmentProcessor> dstFP,
-                                                     const ArithmeticFPInputs& inputs) {
-        return std::unique_ptr<GrFragmentProcessor>(new GrArithmeticProcessor(
-                std::move(srcFP), std::move(dstFP),
-                SkV4{inputs.fK[0], inputs.fK[1], inputs.fK[2], inputs.fK[3]},
-                inputs.fEnforcePMColor));
+                                                     const SkV4& k,
+                                                     bool enforcePMColor) {
+        return std::unique_ptr<GrFragmentProcessor>(
+                new GrArithmeticProcessor(std::move(srcFP), std::move(dstFP), k, enforcePMColor));
     }
     GrArithmeticProcessor(const GrArithmeticProcessor& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
@@ -45,7 +42,7 @@ private:
         this->registerChild(std::move(srcFP), SkSL::SampleUsage::PassThrough());
         this->registerChild(std::move(dstFP), SkSL::SampleUsage::PassThrough());
     }
-    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
+    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;
 #if GR_TEST_UTILS

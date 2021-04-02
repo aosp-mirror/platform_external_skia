@@ -39,6 +39,7 @@
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/ManagedBackendTexture.h"
+#include "tools/gpu/ProxyUtils.h"
 
 using namespace sk_gpu_test;
 
@@ -404,9 +405,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkImage_makeTextureImage, reporter, contextIn
             GrTextureProxy* origProxy = nullptr;
             bool origIsMippedTexture = false;
 
-            if (auto sp = as_IB(image)->peekProxy()) {
-                origProxy = sp->asTextureProxy();
-                SkASSERT(origProxy);
+            if ((origProxy = sk_gpu_test::GetTextureImageProxy(image.get(), dContext))) {
                 REPORTER_ASSERT(reporter, (origProxy->mipmapped() == GrMipmapped::kYes) ==
                                           image->hasMipmaps());
                 origIsMippedTexture = image->hasMipmaps();
@@ -425,7 +424,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkImage_makeTextureImage, reporter, contextIn
                     ERRORF(reporter, "makeTextureImage returned non-texture image.");
                     continue;
                 }
-                GrTextureProxy* copyProxy = as_IB(texImage)->peekProxy()->asTextureProxy();
+
+                GrTextureProxy* copyProxy = sk_gpu_test::GetTextureImageProxy(texImage.get(),
+                                                                              dContext);
                 SkASSERT(copyProxy);
                 // Did we ask for MIPs on a context that supports them?
                 bool validRequestForMips = (mipmapped == GrMipmapped::kYes &&
@@ -443,7 +444,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkImage_makeTextureImage, reporter, contextIn
                         ERRORF(reporter, "makeTextureImage made unnecessary texture copy.");
                     }
                 } else {
-                    auto* texProxy = as_IB(texImage)->peekProxy()->asTextureProxy();
+                    GrTextureProxy* texProxy = sk_gpu_test::GetTextureImageProxy(texImage.get(),
+                                                                                 dContext);
                     REPORTER_ASSERT(reporter, !texProxy->getUniqueKey().isValid());
                     REPORTER_ASSERT(reporter, texProxy->isBudgeted() == budgeted);
                 }
@@ -981,11 +983,9 @@ static void test_cross_context_image(skiatest::Reporter* reporter, const GrConte
             refImg.reset(nullptr); // force a release of the image
 
             otherTestContext->makeCurrent();
-            surface->flushAndSubmit();
-
-            // This is specifically here for vulkan to guarantee the command buffer will finish
+            // Sync is specifically here for vulkan to guarantee the command buffer will finish
             // which is when we call the ReleaseProc.
-            otherCtx->priv().getGpu()->testingOnly_flushGpuAndSync();
+            surface->flushAndSubmit(true);
         }
 
         // Case #6: Verify that only one context can be using the image at a time
@@ -1149,6 +1149,23 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(makeBackendTexture, reporter, ctxInfo) {
 
         context->flushAndSubmit();
     }
+}
+
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageBackendAccessAbandoned_Gpu, reporter, ctxInfo) {
+    auto dContext = ctxInfo.directContext();
+    sk_sp<SkImage> image(create_gpu_image(ctxInfo.directContext()));
+    if (!image) {
+        return;
+    }
+
+    GrBackendTexture beTex = image->getBackendTexture(true);
+    REPORTER_ASSERT(reporter, beTex.isValid());
+
+    dContext->abandonContext();
+
+    // After abandoning the context the backend texture should not be valid.
+    beTex = image->getBackendTexture(true);
+    REPORTER_ASSERT(reporter, !beTex.isValid());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

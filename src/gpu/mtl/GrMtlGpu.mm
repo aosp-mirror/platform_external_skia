@@ -15,9 +15,11 @@
 #include "src/gpu/GrDataUtils.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/GrThreadSafePipelineBuilder.h"
 #include "src/gpu/mtl/GrMtlBuffer.h"
 #include "src/gpu/mtl/GrMtlCommandBuffer.h"
 #include "src/gpu/mtl/GrMtlOpsRenderPass.h"
+#include "src/gpu/mtl/GrMtlPipelineStateBuilder.h"
 #include "src/gpu/mtl/GrMtlSemaphore.h"
 #include "src/gpu/mtl/GrMtlTexture.h"
 #include "src/gpu/mtl/GrMtlTextureRenderTarget.h"
@@ -118,6 +120,8 @@ sk_sp<GrGpu> GrMtlGpu::Make(const GrMtlBackendContext& context, const GrContextO
 
     id<MTLDevice> device = (__bridge id<MTLDevice>)(context.fDevice.get());
     id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>)(context.fQueue.get());
+
+
     MTLFeatureSet featureSet;
     if (!get_feature_set(device, &featureSet)) {
         return nullptr;
@@ -165,6 +169,14 @@ void GrMtlGpu::disconnect(DisconnectType type) {
         this->destroyResources();
         fDisconnected = true;
     }
+}
+
+GrThreadSafePipelineBuilder* GrMtlGpu::pipelineBuilder() {
+    return nullptr;
+}
+
+sk_sp<GrThreadSafePipelineBuilder> GrMtlGpu::refPipelineBuilder() {
+    return nullptr;
 }
 
 void GrMtlGpu::destroyResources() {
@@ -886,15 +898,18 @@ bool GrMtlGpu::createMtlTextureForBackendSurface(MTLPixelFormat mtlFormat,
         return false;
     }
 
-    MTLTextureDescriptor* desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat: mtlFormat
-                                                           width: dimensions.width()
-                                                          height: dimensions.height()
-                                                       mipmapped: mipMapped == GrMipmapped::kYes];
+    auto desc = [[MTLTextureDescriptor alloc] init];
+    desc.pixelFormat = mtlFormat;
+    desc.width = dimensions.width();
+    desc.height = dimensions.height();
+    if (mipMapped == GrMipMapped::kYes) {
+        desc.mipmapLevelCount = 1 + SkPrevLog2(std::max(dimensions.width(), dimensions.height()));
+    }
     if (@available(macOS 10.11, iOS 9.0, *)) {
         desc.storageMode = MTLStorageModePrivate;
-        desc.usage = texturable == GrTexturable::kYes ? MTLTextureUsageShaderRead : 0;
-        desc.usage |= renderable == GrRenderable::kYes ? MTLTextureUsageRenderTarget : 0;
+        MTLTextureUsage usage = texturable == GrTexturable::kYes ? MTLTextureUsageShaderRead : 0;
+        usage |= renderable == GrRenderable::kYes ? MTLTextureUsageRenderTarget : 0;
+        desc.usage = usage;
     }
     if (sampleCnt != 1) {
         desc.sampleCount = sampleCnt;
@@ -1073,8 +1088,21 @@ void GrMtlGpu::deleteBackendTexture(const GrBackendTexture& tex) {
     // Nothing to do here, will get cleaned up when the GrBackendTexture object goes away
 }
 
-bool GrMtlGpu::compile(const GrProgramDesc&, const GrProgramInfo&) {
-    return false;
+bool GrMtlGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) {
+
+    GrThreadSafePipelineBuilder::Stats::ProgramCacheResult stat;
+
+    auto pipelineState = this->resourceProvider().findOrCreateCompatiblePipelineState(
+                                 desc, programInfo, &stat);
+    if (!pipelineState) {
+        return false;
+    }
+
+    return stat != GrThreadSafePipelineBuilder::Stats::ProgramCacheResult::kHit;
+}
+
+bool GrMtlGpu::precompileShader(const SkData& key, const SkData& data) {
+    return this->resourceProvider().precompileShader(key, data);
 }
 
 #if GR_TEST_UTILS
@@ -1128,14 +1156,10 @@ void GrMtlGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&
 
     GrMtlTextureInfo info;
     if (rt.getMtlTextureInfo(&info)) {
-        this->testingOnly_flushGpuAndSync();
+        this->submitToGpu(true);
         // Nothing else to do here, will get cleaned up when the GrBackendRenderTarget
         // is deleted.
     }
-}
-
-void GrMtlGpu::testingOnly_flushGpuAndSync() {
-    this->submitCommandBuffer(kForce_SyncQueue);
 }
 #endif // GR_TEST_UTILS
 
@@ -1434,15 +1458,12 @@ void GrMtlGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect&) {
 }
 
 void GrMtlGpu::resolveTexture(id<MTLTexture> resolveTexture, id<MTLTexture> colorTexture) {
-    auto renderPassDesc = [MTLRenderPassDescriptor renderPassDescriptor];
-    renderPassDesc.colorAttachments[0].texture = colorTexture;
-    renderPassDesc.colorAttachments[0].slice = 0;
-    renderPassDesc.colorAttachments[0].level = 0;
-    renderPassDesc.colorAttachments[0].resolveTexture = resolveTexture;
-    renderPassDesc.colorAttachments[0].slice = 0;
-    renderPassDesc.colorAttachments[0].level = 0;
-    renderPassDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
-    renderPassDesc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+    auto renderPassDesc = [[MTLRenderPassDescriptor alloc] init];
+    auto colorAttachment = renderPassDesc.colorAttachments[0];
+    colorAttachment.texture = colorTexture;
+    colorAttachment.resolveTexture = resolveTexture;
+    colorAttachment.loadAction = MTLLoadActionLoad;
+    colorAttachment.storeAction = MTLStoreActionMultisampleResolve;
 
     id<MTLRenderCommandEncoder> cmdEncoder =
             this->commandBuffer()->getRenderCommandEncoder(renderPassDesc, nullptr, nullptr);

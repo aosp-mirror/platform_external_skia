@@ -42,7 +42,6 @@ def skpbench_steps(api):
   """benchmark Skia using skpbench."""
   is_vulkan = 'Vulkan' in api.vars.builder_name
   is_android = 'Android' in api.vars.builder_name
-  is_ccpr = 'CCPR' in api.vars.builder_name
   is_all_paths_volatile = 'AllPathsVolatile' in api.vars.builder_name
   is_mskp = 'Mskp' in api.vars.builder_name
   is_ddl = 'DDL' in api.vars.builder_name
@@ -89,24 +88,19 @@ def skpbench_steps(api):
     skpbench_args += [
         '--adb',
         '--adb_binary', ADB_BINARY]
-  if is_ccpr:
-    skpbench_args += [
-        '--pr', 'ccpr', '--cc', '--nocache',
-        api.path.join(api.flavor.device_dirs.skp_dir, 'desk_*svg.skp'),
-        api.path.join(api.flavor.device_dirs.skp_dir, 'desk_chalkboard.skp')]
-  elif is_mskp:
+  if is_mskp:
     skpbench_args += [api.flavor.device_dirs.mskp_dir]
   elif is_all_paths_volatile:
     skpbench_args += [
-        # nvpr takes every path when enabled, which isn't always the best choice
-        # for volatile paths.
-        '--pr', '~nvpr',
         '--allPathsVolatile',
         '--suffix', "_volatile",
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_*svg.skp'),
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_chalkboard.skp')]
   else:
     skpbench_args += [api.flavor.device_dirs.skp_dir]
+
+  if api.properties.get('reduce_ops_task_splitting') == 'true':
+    skpbench_args += ['--reduceOpsTaskSplitting']
 
   api.run(api.python, 'skpbench',
       script=skpbench_dir.join('skpbench.py'),
@@ -168,10 +162,6 @@ def RunSteps(api):
 TEST_BUILDERS = [
   ('Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-'
    'Android_Skpbench_Mskp'),
-  ('Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-'
-   'Android_CCPR_Skpbench'),
-  ('Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-'
-   'Android_ReduceOpsTaskSplitting_Skpbench'),
   ('Perf-Android-Clang-GalaxyS20-GPU-MaliG77-arm64-Release-All-'
    'Android_AllPathsVolatile_Skpbench'),
   ('Perf-Android-Clang-GalaxyS20-GPU-MaliG77-arm64-Release-All-'
@@ -202,7 +192,7 @@ def GenTests(api):
       api.step_data('get swarming task id',
           stdout=api.raw_io.output('123456'))
     )
-    if 'Win' in builder and not 'LenovoYogaC630' in builder:
+    if 'Win' in builder:
       test += api.platform('win', 64)
     yield test
 
@@ -213,7 +203,8 @@ def GenTests(api):
     api.properties(buildername=b,
                    revision='abc123',
                    path_config='kitchen',
-                   swarm_out_dir='[SWARM_OUT_DIR]') +
+                   swarm_out_dir='[SWARM_OUT_DIR]',
+                   reduce_ops_task_splitting='true') +
     api.path.exists(
         api.path['start_dir'].join('skia'),
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',

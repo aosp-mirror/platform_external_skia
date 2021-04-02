@@ -7,13 +7,15 @@
 
 #include "src/gpu/glsl/GrGLSLShaderBuilder.h"
 
+#include "include/sksl/DSL.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrShaderVar.h"
 #include "src/gpu/GrSwizzle.h"
 #include "src/gpu/glsl/GrGLSLBlend.h"
 #include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
-#include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/dsl/priv/DSLWriter.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
 
 GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
     : fProgramBuilder(program)
@@ -48,11 +50,8 @@ SkString GrGLSLShaderBuilder::getMangledFunctionName(const char* baseName) {
 
 void GrGLSLShaderBuilder::appendFunctionDecl(GrSLType returnType,
                                              const char* mangledName,
-                                             SkSpan<const GrShaderVar> args,
-                                             bool forceInline) {
-    this->functions().appendf("%s%s %s(", forceInline ? "inline " : "",
-                                          GrGLSLTypeString(returnType),
-                                          mangledName);
+                                             SkSpan<const GrShaderVar> args) {
+    this->functions().appendf("%s %s(", GrGLSLTypeString(returnType), mangledName);
     for (size_t i = 0; i < args.size(); ++i) {
         if (i > 0) {
             this->functions().append(", ");
@@ -63,58 +62,36 @@ void GrGLSLShaderBuilder::appendFunctionDecl(GrSLType returnType,
     this->functions().append(")");
 }
 
-void GrGLSLShaderBuilder::appendFunctionDecl(const SkSL::FunctionDeclaration* decl,
-                                             const char* mangledName) {
-    // This function is similar to decl->description(), but substitutes mangledName, and handles
-    // modifiers on parameters (eg inout).
-    this->functions().appendf("%s %s(", decl->returnType().displayName().c_str(), mangledName);
-    const char* separator = "";
-    for (auto p : decl->parameters()) {
-        // TODO: Handle arrays
-        const char* typeModifier = "";
-        switch (p->modifiers().fFlags & (SkSL::Modifiers::kIn_Flag | SkSL::Modifiers::kOut_Flag)) {
-            case SkSL::Modifiers::kOut_Flag:
-                typeModifier = "out ";
-                break;
-            case SkSL::Modifiers::kIn_Flag | SkSL::Modifiers::kOut_Flag:
-                typeModifier = "inout ";
-                break;
-            default:
-                break;
-        }
-        this->functions().appendf("%s%s%s %s", separator, typeModifier,
-                                  p->type().displayName().c_str(), SkString(p->name()).c_str());
-        separator = ", ";
-    }
-    this->functions().append(")");
-}
-
 void GrGLSLShaderBuilder::emitFunction(GrSLType returnType,
                                        const char* mangledName,
                                        SkSpan<const GrShaderVar> args,
-                                       const char* body,
-                                       bool forceInline) {
-    this->appendFunctionDecl(returnType, mangledName, args, forceInline);
+                                       const char* body) {
+    this->appendFunctionDecl(returnType, mangledName, args);
     this->functions().appendf(" {\n"
                               "%s"
                               "}\n\n", body);
 }
 
-void GrGLSLShaderBuilder::emitFunction(const SkSL::FunctionDeclaration* decl,
-                                       const char* mangledName,
-                                       const char* body) {
-    this->appendFunctionDecl(decl, mangledName);
-    this->functions().appendf(" {\n"
+void GrGLSLShaderBuilder::emitFunction(const char* declaration, const char* body) {
+    this->functions().appendf("%s {\n"
                               "%s"
-                              "}\n\n", body);
+                              "}\n\n", declaration, body);
 }
 
 void GrGLSLShaderBuilder::emitFunctionPrototype(GrSLType returnType,
                                                 const char* mangledName,
-                                                SkSpan<const GrShaderVar> args,
-                                                bool forceInline) {
-    this->appendFunctionDecl(returnType, mangledName, args, forceInline);
+                                                SkSpan<const GrShaderVar> args) {
+    this->appendFunctionDecl(returnType, mangledName, args);
     this->functions().append(";\n");
+}
+
+void GrGLSLShaderBuilder::codeAppend(std::unique_ptr<SkSL::Statement> stmt) {
+    SkASSERT(SkSL::dsl::DSLWriter::CurrentProcessor());
+    SkASSERT(stmt);
+    this->codeAppend(stmt->description().c_str());
+    if (stmt->is<SkSL::VarDeclaration>()) {
+        fDeclarations.push_back(std::move(stmt));
+    }
 }
 
 static inline void append_texture_swizzle(SkString* out, GrSwizzle swizzle) {
@@ -263,7 +240,7 @@ void GrGLSLShaderBuilder::appendColorGamutXform(SkString* out,
                 GrShaderVar("color", useFloat ? kFloat4_GrSLType : kHalf4_GrSLType)};
         SkString body;
         if (colorXformHelper->applyUnpremul()) {
-            body.appendf("color = %s(color);", useFloat ? "unpremul_float" : "unpremul");
+            body.append("color = unpremul(color);");
         }
         if (colorXformHelper->applySrcTF()) {
             body.appendf("color.r = %s(half(color.r));", srcTFFuncName.c_str());

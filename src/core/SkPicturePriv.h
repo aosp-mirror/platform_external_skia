@@ -35,6 +35,15 @@ public:
         return picture->asSkBigPicture();
     }
 
+    static uint64_t MakeSharedID(uint32_t pictureID) {
+        uint64_t sharedID = SkSetFourByteTag('p', 'i', 'c', 't');
+        return (sharedID << 32) | pictureID;
+    }
+
+    static void AddedToCache(const SkPicture* pic) {
+        pic->fAddedToCache.store(true);
+    }
+
     // V35: Store SkRect (rather then width & height) in header
     // V36: Remove (obsolete) alphatype from SkColorTable
     // V37: Added shadow only option to SkDropShadowImageFilter (last version to record CLEAR)
@@ -95,10 +104,12 @@ public:
         kSamplingInDrawImage_Version        = 81,
         kPictureShaderFilterParam_Version   = 82,
         kMatrixImageFilterSampling_Version  = 83,
+        kImageFilterImageSampling_Version   = 84,
+        kNoFilterQualityShaders_Version     = 85,
 
         // Only SKPs within the min/current picture version range (inclusive) can be read.
         kMin_Version     = kEdgeAAQuadColor4f_Version,
-        kCurrent_Version = kMatrixImageFilterSampling_Version
+        kCurrent_Version = kNoFilterQualityShaders_Version
     };
 
     static_assert(SkPicturePriv::kMin_Version <= SkPicturePriv::kCubicResamplerImageShader_Version,

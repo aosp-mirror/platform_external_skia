@@ -8,7 +8,6 @@
 #ifndef SkMatrixPriv_DEFINE
 #define SkMatrixPriv_DEFINE
 
-#include "include/core/SkFilterQuality.h"
 #include "include/core/SkM44.h"
 #include "include/core/SkMatrix.h"
 #include "include/private/SkNx.h"
@@ -147,10 +146,6 @@ public:
 
     static void MapHomogeneousPointsWithStride(const SkMatrix& mx, SkPoint3 dst[], size_t dstStride,
                                                const SkPoint3 src[], size_t srcStride, int count);
-
-    // Returns the recommended filterquality, assuming the caller originally wanted kHigh (bicubic)
-    static SkFilterQuality AdjustHighQualityFilterLevel(const SkMatrix&,
-                                                        bool matrixIsInverse = false);
 
     static bool PostIDiv(SkMatrix* matrix, int divx, int divy) {
         return matrix->postIDiv(divx, divy);

@@ -426,7 +426,6 @@ void GrOpsTask::addDrawOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
                    &dstProxyView, caps);
 }
 
-
 void GrOpsTask::endFlush(GrDrawingManager* drawingMgr) {
     fLastClipStackGenID = SK_InvalidUniqueID;
     this->deleteOps();
@@ -869,6 +868,13 @@ void GrOpsTask::visitProxies_debugOnly(const GrOp::VisitProxyFunc& func) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void GrOpsTask::onCanSkip() {
+    this->deleteOps();
+    fDeferredProxies.reset();
+    fColorLoadOp = GrLoadOp::kLoad;
+    SkASSERT(this->isNoOp());
+}
+
 bool GrOpsTask::onIsUsed(GrSurfaceProxy* proxyToCheck) const {
     bool used = false;
 
@@ -882,22 +888,6 @@ bool GrOpsTask::onIsUsed(GrSurfaceProxy* proxyToCheck) const {
     }
 
     return used;
-}
-
-void GrOpsTask::handleInternalAllocationFailure() {
-    bool hasUninstantiatedProxy = false;
-    auto checkInstantiation = [&hasUninstantiatedProxy](GrSurfaceProxy* p, GrMipmapped) {
-        if (!p->isInstantiated()) {
-            hasUninstantiatedProxy = true;
-        }
-    };
-    for (OpChain& recordedOp : fOpChains) {
-        hasUninstantiatedProxy = false;
-        recordedOp.visitProxies(checkInstantiation);
-        if (hasUninstantiatedProxy) {
-            recordedOp.setSkipExecuteFlag();
-        }
-    }
 }
 
 void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {

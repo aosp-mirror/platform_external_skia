@@ -12,6 +12,7 @@
 #include "src/sksl/SkSLCPPUniformCTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLHCodeGenerator.h"
+#include "src/sksl/ir/SkSLEnum.h"
 
 #include <algorithm>
 
@@ -72,10 +73,10 @@ void CPPCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                                              Precedence parentPrecedence) {
     const Expression& left = *b.left();
     const Expression& right = *b.right();
-    Token::Kind op = b.getOperator();
-    if (op == Token::Kind::TK_PERCENT) {
+    Operator op = b.getOperator();
+    if (op.kind() == Token::Kind::TK_PERCENT) {
         // need to use "%%" instead of "%" b/c the code will be inside of a printf
-        Precedence precedence = Operators::GetBinaryPrecedence(op);
+        Precedence precedence = op.getBinaryPrecedence();
         if (precedence >= parentPrecedence) {
             this->write("(");
         }
@@ -344,32 +345,6 @@ void CPPCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
     INHERITED::writeSwitchStatement(s);
 }
 
-void CPPCodeGenerator::writeFieldAccess(const FieldAccess& access) {
-    if (access.base()->type().name() == "fragmentProcessor") {
-        // Special field access on fragment processors are converted into function calls on
-        // GrFragmentProcessor's getters.
-        if (!access.base()->is<VariableReference>()) {
-            fErrors.error(access.base()->fOffset, "fragmentProcessor must be a reference\n");
-            return;
-        }
-
-        const Type::Field& field =
-                fContext.fTypes.fFragmentProcessor->fields()[access.fieldIndex()];
-        const Variable& var = *access.base()->as<VariableReference>().variable();
-        String cppAccess = String::printf("_outer.childProcessor(%d)->%s()",
-                                          this->getChildFPIndex(var),
-                                          String(field.fName).c_str());
-
-        if (fCPPMode) {
-            this->write(cppAccess.c_str());
-        } else {
-            writeRuntimeValue(*field.fType, Layout(), cppAccess);
-        }
-        return;
-    }
-    INHERITED::writeFieldAccess(access);
-}
-
 int CPPCodeGenerator::getChildFPIndex(const Variable& var) const {
     int index = 0;
     for (const ProgramElement* p : fProgram.elements()) {
@@ -388,7 +363,7 @@ int CPPCodeGenerator::getChildFPIndex(const Variable& var) const {
 }
 
 String CPPCodeGenerator::getSampleVarName(const char* prefix, int sampleCounter) {
-    return String::printf("%s%zu", prefix, sampleCounter);
+    return String::printf("%s%d", prefix, sampleCounter);
 }
 
 void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
@@ -540,7 +515,7 @@ static const char* glsltype_string(const Context& context, const Type& type) {
 }
 
 void CPPCodeGenerator::prepareHelperFunction(const FunctionDeclaration& decl) {
-    if (decl.isBuiltin() || decl.name() == "main") {
+    if (decl.isBuiltin() || decl.isMain()) {
         return;
     }
 
@@ -582,7 +557,7 @@ void CPPCodeGenerator::writeFunction(const FunctionDefinition& f) {
     OutputStream* oldOut = fOut;
     StringStream buffer;
     fOut = &buffer;
-    if (decl.name() == "main") {
+    if (decl.isMain()) {
         fInMain = true;
         for (const std::unique_ptr<Statement>& s : f.body()->as<Block>().children()) {
             this->writeStatement(*s);
@@ -1264,7 +1239,37 @@ void CPPCodeGenerator::writeTest() {
     }
 }
 
+static int bits_needed(uint32_t v) {
+    int bits = 1;
+    while (v >= (1u << bits)) {
+        bits++;
+    }
+    return bits;
+}
+
 void CPPCodeGenerator::writeGetKey() {
+    auto bitsForEnum = [&](const Type& type) {
+        for (const ProgramElement* e : fProgram.elements()) {
+            if (!e->is<Enum>() || type.name() != e->as<Enum>().typeName()) {
+                continue;
+            }
+            SKSL_INT minVal = 0, maxVal = 0;
+            auto gatherEnumRange = [&](StringFragment, SKSL_INT value) {
+                minVal = std::min(minVal, value);
+                maxVal = std::max(maxVal, value);
+            };
+            e->as<Enum>().foreach(gatherEnumRange);
+            if (minVal < 0) {
+                // Found a negative value in the enum, just use 32 bits
+                return 32;
+            }
+            SkASSERT(SkTFitsIn<uint32_t>(maxVal));
+            return bits_needed(maxVal);
+        }
+        SK_ABORT("Didn't find declaring element for enum type!");
+        return 32;
+    };
+
     this->writef("void %s::onGetGLSLProcessorKey(const GrShaderCaps& caps, "
                                                 "GrProcessorKeyBuilder* b) const {\n",
                  fFullName.c_str());
@@ -1276,64 +1281,61 @@ void CPPCodeGenerator::writeGetKey() {
             const Type& varType = var.type();
             String nameString(var.name());
             const char* name = nameString.c_str();
-            if (var.modifiers().fLayout.fKey != Layout::kNo_Key &&
-                (var.modifiers().fFlags & Modifiers::kUniform_Flag)) {
-                fErrors.error(var.fOffset, "layout(key) may not be specified on uniforms");
-            }
-            switch (var.modifiers().fLayout.fKey) {
-                case Layout::kKey_Key:
-                    if (is_private(var)) {
-                        this->writef("%s %s =",
-                                        HCodeGenerator::FieldType(fContext, varType,
-                                                                  var.modifiers().fLayout).c_str(),
-                                        String(var.name()).c_str());
-                        if (decl.value()) {
-                            fCPPMode = true;
-                            this->writeExpression(*decl.value(), Precedence::kAssignment);
-                            fCPPMode = false;
-                        } else {
-                            this->writef("%s", default_value(var).c_str());
-                        }
-                        this->write(";\n");
-                    }
-                    if (var.modifiers().fLayout.fWhen.fLength) {
-                        this->writef("if (%s) {", String(var.modifiers().fLayout.fWhen).c_str());
-                    }
-                    if (varType == *fContext.fTypes.fHalf4) {
-                        this->writef("    uint16_t red = SkFloatToHalf(%s.fR);\n",
-                                     HCodeGenerator::FieldName(name).c_str());
-                        this->writef("    uint16_t green = SkFloatToHalf(%s.fG);\n",
-                                     HCodeGenerator::FieldName(name).c_str());
-                        this->writef("    uint16_t blue = SkFloatToHalf(%s.fB);\n",
-                                     HCodeGenerator::FieldName(name).c_str());
-                        this->writef("    uint16_t alpha = SkFloatToHalf(%s.fA);\n",
-                                     HCodeGenerator::FieldName(name).c_str());
-                        this->write("    b->add32(((uint32_t)red << 16) | green);\n");
-                        this->write("    b->add32(((uint32_t)blue << 16) | alpha);\n");
-                    } else if (varType == *fContext.fTypes.fHalf ||
-                               varType == *fContext.fTypes.fFloat) {
-                        this->writef("    b->add32(sk_bit_cast<uint32_t>(%s));\n",
-                                     HCodeGenerator::FieldName(name).c_str());
-                    } else if (varType.isInteger() || varType.isBoolean() || varType.isEnum()) {
-                        this->writef("    b->add32((uint32_t) %s);\n",
-                                     HCodeGenerator::FieldName(name).c_str());
+            if (var.modifiers().fLayout.fFlags & Layout::kKey_Flag) {
+                if (var.modifiers().fFlags & Modifiers::kUniform_Flag) {
+                    fErrors.error(var.fOffset, "layout(key) may not be specified on uniforms");
+                }
+                if (is_private(var)) {
+                    this->writef(
+                            "%s %s =",
+                            HCodeGenerator::FieldType(fContext, varType, var.modifiers().fLayout)
+                                    .c_str(),
+                            String(var.name()).c_str());
+                    if (decl.value()) {
+                        fCPPMode = true;
+                        this->writeExpression(*decl.value(), Precedence::kAssignment);
+                        fCPPMode = false;
                     } else {
-                        SK_ABORT("NOT YET IMPLEMENTED: automatic key handling for %s\n",
-                              varType.displayName().c_str());
+                        this->writef("%s", default_value(var).c_str());
                     }
-                    if (var.modifiers().fLayout.fWhen.fLength) {
-                        this->write("}");
-                    }
-                    break;
-                case Layout::kIdentity_Key:
-                    if (!varType.isMatrix()) {
-                        fErrors.error(var.fOffset, "layout(key=identity) requires matrix type");
-                    }
-                    this->writef("    b->add32(%s.isIdentity() ? 1 : 0);\n",
+                    this->write(";\n");
+                }
+                if (var.modifiers().fLayout.fWhen.fLength) {
+                    this->writef("if (%s) {", String(var.modifiers().fLayout.fWhen).c_str());
+                }
+                if (varType == *fContext.fTypes.fHalf4) {
+                    this->writef("    uint16_t red = SkFloatToHalf(%s.fR);\n",
                                  HCodeGenerator::FieldName(name).c_str());
-                    break;
-                case Layout::kNo_Key:
-                    break;
+                    this->writef("    uint16_t green = SkFloatToHalf(%s.fG);\n",
+                                 HCodeGenerator::FieldName(name).c_str());
+                    this->writef("    uint16_t blue = SkFloatToHalf(%s.fB);\n",
+                                 HCodeGenerator::FieldName(name).c_str());
+                    this->writef("    uint16_t alpha = SkFloatToHalf(%s.fA);\n",
+                                 HCodeGenerator::FieldName(name).c_str());
+                    this->writef("    b->add32(((uint32_t)red << 16) | green, \"%s.rg\");\n", name);
+                    this->writef("    b->add32(((uint32_t)blue << 16) | alpha, \"%s.ba\");\n",
+                                 name);
+                } else if (varType == *fContext.fTypes.fHalf ||
+                           varType == *fContext.fTypes.fFloat) {
+                    this->writef("    b->add32(sk_bit_cast<uint32_t>(%s), \"%s\");\n",
+                                 HCodeGenerator::FieldName(name).c_str(), name);
+                } else if (varType.isBoolean()) {
+                    this->writef("    b->addBool(%s, \"%s\");\n",
+                                 HCodeGenerator::FieldName(name).c_str(), name);
+                } else if (varType.isEnum()) {
+                    this->writef("    b->addBits(%d, (uint32_t) %s, \"%s\");\n",
+                                 bitsForEnum(varType), HCodeGenerator::FieldName(name).c_str(),
+                                 name);
+                } else if (varType.isInteger()) {
+                    this->writef("    b->add32((uint32_t) %s, \"%s\");\n",
+                                 HCodeGenerator::FieldName(name).c_str(), name);
+                } else {
+                    SK_ABORT("NOT YET IMPLEMENTED: automatic key handling for %s\n",
+                             varType.displayName().c_str());
+                }
+                if (var.modifiers().fLayout.fWhen.fLength) {
+                    this->write("}");
+                }
             }
         }
     }
@@ -1412,8 +1414,8 @@ bool CPPCodeGenerator::generateCode() {
         }
     }
     this->writef("};\n"
-                 "GrGLSLFragmentProcessor* %s::onCreateGLSLInstance() const {\n"
-                 "    return new GrGLSL%s();\n"
+                 "std::unique_ptr<GrGLSLFragmentProcessor> %s::onMakeProgramImpl() const {\n"
+                 "    return std::make_unique<GrGLSL%s>();\n"
                  "}\n",
                  fullName, baseName);
     this->writeGetKey();

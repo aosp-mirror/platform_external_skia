@@ -8,12 +8,28 @@
 #ifndef GrDrawIndirectCommand_DEFINED
 #define GrDrawIndirectCommand_DEFINED
 
-#include "src/gpu/GrCaps.h"
-#include <array>
+#include <stdint.h>
+#include <utility>
 
-// Draw commands on the GPU are simple tuples of uint32_t. The ordering is backend-specific.
-using GrDrawIndirectCommand = std::array<uint32_t, 4>;
-using GrDrawIndexedIndirectCommand = std::array<uint32_t, 5>;
+struct GrDrawIndirectCommand {
+    uint32_t fVertexCount;
+    uint32_t fInstanceCount;
+    int32_t fBaseVertex;
+    uint32_t fBaseInstance;
+};
+
+static_assert(sizeof(GrDrawIndirectCommand) == 16, "GrDrawIndirectCommand must be tightly packed");
+
+struct GrDrawIndexedIndirectCommand {
+    uint32_t fIndexCount;
+    uint32_t fInstanceCount;
+    uint32_t fBaseIndex;
+    int32_t fBaseVertex;
+    uint32_t fBaseInstance;
+};
+
+static_assert(sizeof(GrDrawIndexedIndirectCommand) == 20,
+              "GrDrawIndexedIndirectCommand must be tightly packed");
 
 // Helper for writing commands to an indirect draw buffer. Usage:
 //
@@ -34,10 +50,14 @@ public:
         return *this;
     }
 
+    bool operator==(const GrDrawIndirectWriter& that) { return fData == that.fData; }
+
     bool isValid() const { return fData != nullptr; }
 
+    GrDrawIndirectWriter makeOffset(int drawCount) const { return {fData + drawCount}; }
+
     inline void write(uint32_t instanceCount, uint32_t baseInstance, uint32_t vertexCount,
-                      uint32_t baseVertex, const GrCaps&) {
+                      int32_t baseVertex) {
         *fData++ = {vertexCount, instanceCount, baseVertex, baseInstance};
     }
 
@@ -65,10 +85,14 @@ public:
         return *this;
     }
 
+    bool operator==(const GrDrawIndexedIndirectWriter& that) { return fData == that.fData; }
+
     bool isValid() const { return fData != nullptr; }
 
+    GrDrawIndexedIndirectWriter makeOffset(int drawCount) const { return {fData + drawCount}; }
+
     inline void writeIndexed(uint32_t indexCount, uint32_t baseIndex, uint32_t instanceCount,
-                             uint32_t baseInstance, uint32_t baseVertex, const GrCaps&) {
+                             uint32_t baseInstance, int32_t baseVertex) {
         *fData++ = {indexCount, instanceCount, baseIndex, baseVertex, baseInstance};
     }
 

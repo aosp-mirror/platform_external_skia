@@ -7,6 +7,7 @@
 
 #include "src/gpu/dawn/GrDawnProgramBuilder.h"
 
+#include "src/gpu/GrAutoLocaleSetter.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/GrStencilSettings.h"
@@ -263,6 +264,8 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
                                                  bool hasDepthStencil,
                                                  wgpu::TextureFormat depthStencilFormat,
                                                  GrProgramDesc* desc) {
+    GrAutoLocaleSetter als("C");
+
     GrDawnProgramBuilder builder(gpu, renderTarget, programInfo, desc);
     if (!builder.emitAndInstallProcs()) {
         return nullptr;
@@ -277,16 +280,16 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
 
     SkSL::Program::Inputs vertInputs, fragInputs;
     bool flipY = programInfo.origin() != kTopLeft_GrSurfaceOrigin;
-    auto vsModule = builder.createShaderModule(builder.fVS, SkSL::Program::kVertex_Kind, flipY,
+    auto vsModule = builder.createShaderModule(builder.fVS, SkSL::ProgramKind::kVertex, flipY,
                                                &vertInputs);
-    auto fsModule = builder.createShaderModule(builder.fFS, SkSL::Program::kFragment_Kind, flipY,
+    auto fsModule = builder.createShaderModule(builder.fFS, SkSL::ProgramKind::kFragment, flipY,
                                                &fragInputs);
     GrSPIRVUniformHandler::UniformInfoArray& uniforms = builder.fUniformHandler.fUniforms;
     uint32_t uniformBufferSize = builder.fUniformHandler.fCurrentUBOOffset;
     sk_sp<GrDawnProgram> result(new GrDawnProgram(uniforms, uniformBufferSize));
     result->fGeometryProcessor = std::move(builder.fGeometryProcessor);
     result->fXferProcessor = std::move(builder.fXferProcessor);
-    result->fFragmentProcessors = std::move(builder.fFragmentProcessors);
+    result->fFPImpls = std::move(builder.fFPImpls);
     std::vector<wgpu::BindGroupLayoutEntry> uniformLayoutEntries;
     if (0 != uniformBufferSize) {
         wgpu::BindGroupLayoutEntry entry;
@@ -345,11 +348,11 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
     std::vector<wgpu::VertexBufferLayoutDescriptor> inputs;
 
     std::vector<wgpu::VertexAttributeDescriptor> vertexAttributes;
-    const GrPrimitiveProcessor& primProc = programInfo.primProc();
+    const GrGeometryProcessor& geomProc = programInfo.geomProc();
     int i = 0;
-    if (primProc.numVertexAttributes() > 0) {
+    if (geomProc.numVertexAttributes() > 0) {
         size_t offset = 0;
-        for (const auto& attrib : primProc.vertexAttributes()) {
+        for (const auto& attrib : geomProc.vertexAttributes()) {
             wgpu::VertexAttributeDescriptor attribute;
             attribute.shaderLocation = i;
             attribute.offset = offset;
@@ -366,9 +369,9 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
         inputs.push_back(input);
     }
     std::vector<wgpu::VertexAttributeDescriptor> instanceAttributes;
-    if (primProc.numInstanceAttributes() > 0) {
+    if (geomProc.numInstanceAttributes() > 0) {
         size_t offset = 0;
-        for (const auto& attrib : primProc.instanceAttributes()) {
+        for (const auto& attrib : geomProc.instanceAttributes()) {
             wgpu::VertexAttributeDescriptor attribute;
             attribute.shaderLocation = i;
             attribute.offset = offset;
@@ -426,7 +429,7 @@ GrDawnProgramBuilder::GrDawnProgramBuilder(GrDawnGpu* gpu,
 }
 
 wgpu::ShaderModule GrDawnProgramBuilder::createShaderModule(const GrGLSLShaderBuilder& builder,
-                                                            SkSL::Program::Kind kind,
+                                                            SkSL::ProgramKind kind,
                                                             bool flipY,
                                                             SkSL::Program::Inputs* inputs) {
     wgpu::Device device = fGpu->device();
@@ -495,14 +498,13 @@ wgpu::BindGroup GrDawnProgram::setUniformData(GrDawnGpu* gpu, const GrRenderTarg
     }
     this->setRenderTargetState(renderTarget, programInfo.origin());
     const GrPipeline& pipeline = programInfo.pipeline();
-    const GrPrimitiveProcessor& primProc = programInfo.primProc();
-    fGeometryProcessor->setData(fDataManager, primProc);
+    const GrGeometryProcessor& geomProc = programInfo.geomProc();
+    fGeometryProcessor->setData(fDataManager, geomProc);
 
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
-        auto& pipelineFP = programInfo.pipeline().getFragmentProcessor(i);
-        auto& baseGLSLFP = *fFragmentProcessors[i];
-        for (auto [fp, glslFP] : GrGLSLFragmentProcessor::ParallelRange(pipelineFP, baseGLSLFP)) {
-            glslFP.setData(fDataManager, fp);
+        auto& fp = programInfo.pipeline().getFragmentProcessor(i);
+        for (auto [fp, impl] : GrGLSLFragmentProcessor::ParallelRange(fp, *fFPImpls[i])) {
+            impl.setData(fDataManager, fp);
         }
     }
 
@@ -513,19 +515,19 @@ wgpu::BindGroup GrDawnProgram::setUniformData(GrDawnGpu* gpu, const GrRenderTarg
 }
 
 wgpu::BindGroup GrDawnProgram::setTextures(GrDawnGpu* gpu,
-                                           const GrPrimitiveProcessor& primProc,
+                                           const GrGeometryProcessor& geomProc,
                                            const GrPipeline& pipeline,
-                                           const GrSurfaceProxy* const primProcTextures[]) {
+                                           const GrSurfaceProxy* const geomProcTextures[]) {
     if (fBindGroupLayouts.size() < 2) {
         return nullptr;
     }
     std::vector<wgpu::BindGroupEntry> bindings;
     int binding = 0;
-    if (primProcTextures) {
-        for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
-            SkASSERT(primProcTextures[i]->asTextureProxy());
-            auto& sampler = primProc.textureSampler(i);
-            set_texture(gpu, sampler.samplerState(), primProcTextures[i]->peekTexture(), &bindings,
+    if (geomProcTextures) {
+        for (int i = 0; i < geomProc.numTextureSamplers(); ++i) {
+            SkASSERT(geomProcTextures[i]->asTextureProxy());
+            auto& sampler = geomProc.textureSampler(i);
+            set_texture(gpu, sampler.samplerState(), geomProcTextures[i]->peekTexture(), &bindings,
                         &binding);
         }
     }

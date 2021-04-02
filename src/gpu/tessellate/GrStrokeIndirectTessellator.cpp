@@ -64,18 +64,39 @@ template<int N> SK_ALWAYS_INLINE vec<N> unchecked_mix(vec<N> a, vec<N> b, vec<N>
 // in batches.
 class ResolveLevelCounter {
 public:
-    ResolveLevelCounter(const SkStrokeRec& stroke, GrStrokeTessellateShader::Tolerances tolerances,
-                        int* resolveLevelCounts) :
+    constexpr static int8_t kMaxResolveLevel = GrStrokeIndirectTessellator::kMaxResolveLevel;
+
+    ResolveLevelCounter(const SkMatrix& viewMatrix, int* resolveLevelCounts)
+            : fResolveLevelCounts(resolveLevelCounts) {
+        if (!viewMatrix.getMinMaxScales(fMatrixMinMaxScales.data())) {
+            fMatrixMinMaxScales.fill(1);
+        }
+    }
+
+    void updateTolerances(float strokeWidth, bool isRoundJoin) {
+        this->flush();
+        fTolerances = GrStrokeTessellateShader::Tolerances::Make(fMatrixMinMaxScales.data(),
+                                                                 strokeWidth);
+        fResolveLevelForCircles = SkTPin<float>(
+                sk_float_nextlog2(fTolerances.fNumRadialSegmentsPerRadian * SK_ScalarPI),
+                1, kMaxResolveLevel);
+        fIsRoundJoin = isRoundJoin;
 #if USE_SIMD
-            fWangsTermQuadratic(GrWangsFormula::length_term<2>(tolerances.fParametricIntolerance)),
-            fWangsTermCubic(GrWangsFormula::length_term<3>(tolerances.fParametricIntolerance)),
+        fWangsTermQuadratic = GrWangsFormula::length_term<2>(fTolerances.fParametricIntolerance);
+        fWangsTermCubic = GrWangsFormula::length_term<3>(fTolerances.fParametricIntolerance);
 #endif
-            fIsRoundJoin(stroke.getJoin() == SkPaint::kRound_Join),
-            fTolerances(tolerances),
-            fResolveLevelCounts(resolveLevelCounts) {
     }
 
     bool isRoundJoin() const { return fIsRoundJoin; }
+
+    // Accounts for 180-degree point strokes, which render as circles with diameters equal to the
+    // stroke width. We draw circles at cusp points on curves and for round caps.
+    //
+    // Returns the resolveLevel to use when drawing these circles.
+    int8_t countCircles(int numCircles) {
+        fResolveLevelCounts[fResolveLevelForCircles] += numCircles;
+        return fResolveLevelForCircles;
+    }
 
 #if !USE_SIMD
     bool SK_WARN_UNUSED_RESULT countLine(const SkPoint pts[2], SkPoint lastControlPoint,
@@ -130,7 +151,7 @@ private:
         float numCombinedSegments =
                 fTolerances.fNumRadialSegmentsPerRadian * rotation + numParametricSegments;
         int8_t resolveLevel = sk_float_nextlog2(numCombinedSegments);
-        resolveLevel = std::min(resolveLevel, GrStrokeIndirectTessellator::kMaxResolveLevel);
+        resolveLevel = std::min(resolveLevel, kMaxResolveLevel);
         ++fResolveLevelCounts[(*resolveLevelPtr = resolveLevel)];
     }
 
@@ -386,7 +407,7 @@ private:
         bits += (1u << 23) - 1u;  // Increment the exponent for non-powers-of-2.
         // This will make negative values, denorms, and negative exponents all < 0.
         auto exp = (skvx::bit_pun<ivec<N>>(bits) >> 23) - 127;
-        auto level = skvx::pin<N,int>(exp, 0, GrStrokeIndirectTessellator::kMaxResolveLevel);
+        auto level = skvx::pin<N,int>(exp, 0, kMaxResolveLevel);
 
         switch (count) {
             default: SkUNREACHABLE;
@@ -405,31 +426,31 @@ private:
         float fCubicChopTs[8];
     };
 
-    const float fWangsTermQuadratic;
-    const float fWangsTermCubic;
+    float fWangsTermQuadratic;
+    float fWangsTermCubic;
 
 #endif
-    const bool fIsRoundJoin;
-    const GrStrokeTessellateShader::Tolerances fTolerances;
     int* const fResolveLevelCounts;
+    std::array<float, 2> fMatrixMinMaxScales;
+    GrStrokeTessellateShader::Tolerances fTolerances;
+    int fResolveLevelForCircles;
+    bool fIsRoundJoin;
 };
 
 }  // namespace
 
-GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(
-        const SkMatrix& viewMatrix, const GrSTArenaList<SkPath>& pathList,
-        const SkStrokeRec& stroke, int totalCombinedVerbCnt, SkArenaAlloc* alloc) {
-    SkASSERT(!fTotalInstanceCount);
-    SkASSERT(!fResolveLevels);
-    SkASSERT(!fResolveLevelArrayCount);
-    SkASSERT(!fChopTsArrayCount);
-
+GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(ShaderFlags shaderFlags,
+                                                         const SkMatrix& viewMatrix,
+                                                         PathStrokeList* pathStrokeList,
+                                                         int totalCombinedVerbCnt,
+                                                         SkArenaAlloc* alloc)
+        : GrStrokeTessellator(shaderFlags, std::move(pathStrokeList)) {
     // The maximum potential number of values we will need in fResolveLevels is:
     //
     //   * 3 segments per verb (from two chops)
     //   * Plus 1 extra resolveLevel per verb that says how many chops it needs
-    //   * Plus 2 final resolveLevels for square caps at the very end not initiated by a "kMoveTo".
-    //
+    //   * Plus 2 final resolveLevels for square or round caps at the very end not initiated by a
+    //     "kMoveTo".
     int resolveLevelAllocCount = totalCombinedVerbCnt * (3 + 1) + 2;
     fResolveLevels = alloc->makeArrayDefault<int8_t>(resolveLevelAllocCount);
     int8_t* nextResolveLevel = fResolveLevels;
@@ -439,15 +460,22 @@ GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(
     fChopTs = alloc->makeArrayDefault<float>(chopTAllocCount);
     float* nextChopTs = fChopTs;
 
-    auto tolerances = GrStrokeTessellateShader::Tolerances::MakePreTransform(viewMatrix, stroke);
-    fResolveLevelForCircles =
-            std::max(sk_float_nextlog2(tolerances.fNumRadialSegmentsPerRadian * SK_ScalarPI), 1);
-    ResolveLevelCounter counter(stroke, tolerances, fResolveLevelCounts);
+    ResolveLevelCounter counter(viewMatrix, fResolveLevelCounts);
 
+    float lastStrokeWidth = -1;
     SkPoint lastControlPoint = {0,0};
-    for (const SkPath& path : pathList) {
+    for (PathStrokeList* pathStroke = fPathStrokeList; pathStroke; pathStroke = pathStroke->fNext) {
+        const SkStrokeRec& stroke = pathStroke->fStroke;
+        SkASSERT(stroke.getWidth() >= 0);  // Otherwise we can't initialize lastStrokeWidth=-1.
+        if (stroke.getWidth() != lastStrokeWidth ||
+            (stroke.getJoin() == SkPaint::kRound_Join) != counter.isRoundJoin()) {
+            counter.updateTolerances(stroke.getWidth(), (stroke.getJoin() == SkPaint::kRound_Join));
+            lastStrokeWidth = stroke.getWidth();
+        }
+        fMaxNumExtraEdgesInJoin = std::max(fMaxNumExtraEdgesInJoin,
+                GrStrokeTessellateShader::NumExtraEdgesInIndirectJoin(stroke.getJoin()));
         // Iterate through each verb in the stroke, counting its resolveLevel(s).
-        GrStrokeIterator iter(path, &stroke, &viewMatrix);
+        GrStrokeIterator iter(pathStroke->fPath, &stroke, &viewMatrix);
         while (iter.next()) {
             using Verb = GrStrokeIterator::Verb;
             Verb verb = iter.verb();
@@ -494,7 +522,6 @@ GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(
                     if (counter.countLine(pts, lastControlPoint, nextResolveLevel)) {
                         ++nextResolveLevel;
                     }
-                    ++fTotalInstanceCount;
                     break;
                 case Verb::kConic:
                     // We use the same quadratic formula for conics, ignoring w. This is pretty
@@ -509,39 +536,41 @@ GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(
                     SkVector b = pts[2] - pts[1];
                     if (a.cross(b) == 0 && a.dot(b) < 0) {
                         // The curve has a cusp. Draw two lines and a circle instead of a quad.
-                        *nextResolveLevel++ = -1;  // -1 signals a cusp.
+                        int8_t cuspResolveLevel = counter.countCircles(1);
+                        *nextResolveLevel++ = -cuspResolveLevel;  // Negative signals a cusp.
                         if (counter.countLine(pts, lastControlPoint, nextResolveLevel)) {
                             ++nextResolveLevel;
                         }
-                        ++fResolveLevelCounts[fResolveLevelForCircles];  // Circle instance.
                         ++fResolveLevelCounts[0];  // Second line instance.
-                        fTotalInstanceCount += 3;
                     } else {
                         counter.countQuad(pts, lastControlPoint, nextResolveLevel++);
-                        ++fTotalInstanceCount;
                     }
                     break;
                 }
                 case Verb::kCubic: {
-                    bool areCusps = false;
+                    int8_t cuspResolveLevel = 0;
+                    bool areCusps;
                     int numChops = GrPathUtils::findCubicConvex180Chops(pts, nextChopTs, &areCusps);
                     if (areCusps && numChops > 0) {
-                        fResolveLevelCounts[fResolveLevelForCircles] += numChops;
-                        fTotalInstanceCount += numChops;
+                        cuspResolveLevel = counter.countCircles(numChops);
                     }
                     if (numChops == 0) {
                         counter.countCubic(pts, lastControlPoint, nextResolveLevel);
                     } else if (numChops == 1) {
                         // A negative resolveLevel indicates how many chops the curve needs, and
                         // whether they are cusps.
-                        *nextResolveLevel++ = -((1 << 1) | (int)areCusps);
+                        static_assert(kMaxResolveLevel <= 0xf);
+                        SkASSERT(cuspResolveLevel <= 0xf);
+                        *nextResolveLevel++ = -((1 << 4) | cuspResolveLevel);
                         counter.countChoppedCubic(pts, nextChopTs[0], lastControlPoint,
                                                   nextResolveLevel);
                     } else {
                         SkASSERT(numChops == 2);
                         // A negative resolveLevel indicates how many chops the curve needs, and
                         // whether they are cusps.
-                        *nextResolveLevel++ = -((2 << 1) | (int)areCusps);
+                        static_assert(kMaxResolveLevel <= 0xf);
+                        SkASSERT(cuspResolveLevel <= 0xf);
+                        *nextResolveLevel++ = -((2 << 4) | cuspResolveLevel);
                         SkPoint pts_[10];
                         SkChopCubicAt(pts, pts_, nextChopTs, 2);
                         counter.countCubic(pts_, lastControlPoint, nextResolveLevel);
@@ -550,13 +579,11 @@ GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(
                     }
                     nextResolveLevel += numChops + 1;
                     nextChopTs += numChops;
-                    fTotalInstanceCount += numChops + 1;
                     break;
                 }
                 case Verb::kCircle:
                     // The iterator implements round caps as circles.
-                    ++fResolveLevelCounts[fResolveLevelForCircles];
-                    ++fTotalInstanceCount;
+                    *nextResolveLevel++ = counter.countCircles(1);
                     break;
                 case Verb::kMoveWithinContour:
                 case Verb::kContourFinished:
@@ -568,6 +595,14 @@ GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(
     }
     counter.flush();
 
+    for (int resolveLevelInstanceCount : fResolveLevelCounts) {
+        fTotalInstanceCount += resolveLevelInstanceCount;
+        if (resolveLevelInstanceCount) {
+            ++fChainedDrawIndirectCount;
+        }
+    }
+    fChainedInstanceCount = fTotalInstanceCount;
+
 #ifdef SK_DEBUG
     SkASSERT(nextResolveLevel <= fResolveLevels + resolveLevelAllocCount);
     fResolveLevelArrayCount = nextResolveLevel - fResolveLevels;
@@ -577,104 +612,201 @@ GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(
 #endif
 }
 
+void GrStrokeIndirectTessellator::addToChain(GrStrokeIndirectTessellator* tessellator) {
+    SkASSERT(tessellator->fShaderFlags == fShaderFlags);
+
+    fChainedInstanceCount += tessellator->fChainedInstanceCount;
+    tessellator->fChainedInstanceCount = 0;
+
+    fChainedDrawIndirectCount += tessellator->fChainedDrawIndirectCount;
+    tessellator->fChainedDrawIndirectCount = 0;
+
+    fMaxNumExtraEdgesInJoin = std::max(tessellator->fMaxNumExtraEdgesInJoin,
+                                       fMaxNumExtraEdgesInJoin);
+    tessellator->fMaxNumExtraEdgesInJoin = 0;
+
+    *fChainTail = tessellator;
+    fChainTail = tessellator->fChainTail;
+    tessellator->fChainTail = nullptr;
+}
+
+namespace {
+
 constexpr static int num_edges_in_resolve_level(int resolveLevel) {
-    // A resolveLevel means the instance is composed of 2^resolveLevel line segments.
+    // A "resolveLevel" means the stroke is composed of 2^resolveLevel line segments.
     int numSegments = 1 << resolveLevel;
-    // There are edges at the beginning and end both, so there is always one more edge than there
-    // are segments.
+    // There are edges both at the beginning and end of a stroke, so there is always one more edge
+    // than there are segments.
     int numStrokeEdges = numSegments + 1;
     return numStrokeEdges;
 }
 
-void GrStrokeIndirectTessellator::writeInstance(GrVertexWriter* instanceWriter,
-                                                const SkPoint pts[4], SkPoint lastControlPoint,
-                                                int numTotalEdges) {
-    instanceWriter->writeArray(pts, 4);
-    instanceWriter->write(lastControlPoint, float(numTotalEdges));
-}
+// Partitions the instance buffer into bins for each resolveLevel. Writes out indirect draw commands
+// per bin. Provides methods to write strokes to their respective bins.
+class BinningInstanceWriter {
+public:
+    using ShaderFlags = GrStrokeTessellateShader::ShaderFlags;
+    using DynamicStroke = GrStrokeTessellateShader::DynamicStroke;
+    constexpr static int kNumBins = GrStrokeIndirectTessellator::kMaxResolveLevel + 1;
 
-void GrStrokeIndirectTessellator::writeCircleInstance(GrVertexWriter* instanceWriter,
-                                                      SkPoint center, int numEdgesForCircles) {
-    // An empty stroke is a special case that denotes a circle, or 180-degree point stroke.
-    instanceWriter->fill(center, 5);
-    // Mark numTotalEdges negative so the shader assigns the least possible number of edges to its
-    // (empty) preceding join.
-    instanceWriter->write(float(-numEdgesForCircles));
-}
+    BinningInstanceWriter(GrDrawIndirectWriter* indirectWriter, GrVertexWriter* instanceWriter,
+                          ShaderFlags shaderFlags, size_t instanceStride, int baseInstance,
+                          int numExtraEdgesInJoin, const int resolveLevelCounts[kNumBins])
+            : fShaderFlags(shaderFlags) {
+        SkASSERT(numExtraEdgesInJoin == 3 || numExtraEdgesInJoin == 4);
+        // Partition the instance buffer into bins and write out indirect draw commands per bin.
+        int runningInstanceCount = 0;
+        for (int i = 0; i < kNumBins; ++i) {
+            if (resolveLevelCounts[i]) {
+                int numEdges = numExtraEdgesInJoin + num_edges_in_resolve_level(i);
+                indirectWriter->write(resolveLevelCounts[i], baseInstance + runningInstanceCount,
+                                      numEdges * 2, 0);
+                fInstanceWriters[i] = instanceWriter->makeOffset(instanceStride *
+                                                                 runningInstanceCount);
+                fNumEdgesPerResolveLevel[i] = numEdges;
+#ifdef SK_DEBUG
+            } else {
+                fInstanceWriters[i] = {nullptr};
+            }
+            if (i > 0) {
+                fEndWriters[i - 1] = instanceWriter->makeOffset(instanceStride *
+                                                                runningInstanceCount);
+#endif
+            }
+            runningInstanceCount += resolveLevelCounts[i];
+        }
+        SkDEBUGCODE(fEndWriters[kNumBins - 1] =
+                            instanceWriter->makeOffset(instanceStride * runningInstanceCount));
+        *instanceWriter = instanceWriter->makeOffset(instanceStride * runningInstanceCount);
+    }
 
-void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMatrix& viewMatrix,
-                                          const GrSTArenaList<SkPath>& pathList,
-                                          const SkStrokeRec& stroke, int totalCombinedVerbCnt) {
+    void updateDynamicStroke(const SkStrokeRec& stroke) {
+        SkASSERT(fShaderFlags & ShaderFlags::kDynamicStroke);
+        fDynamicStroke.set(stroke);
+    }
+
+    void updateDynamicColor(const SkPMColor4f& color) {
+        SkASSERT(fShaderFlags & ShaderFlags::kDynamicColor);
+        bool wideColor = fShaderFlags & ShaderFlags::kWideColor;
+        SkASSERT(wideColor || color.fitsInBytes());
+        fDynamicColor.set(color, wideColor);
+    }
+
+    void writeStroke(int8_t resolveLevel, const SkPoint pts[4], SkPoint prevControlPoint,
+                     bool isInternalChop = false) {
+        SkASSERT(0 <= resolveLevel && resolveLevel < kNumBins);
+        float numEdges = fNumEdgesPerResolveLevel[resolveLevel];
+        fInstanceWriters[resolveLevel].writeArray(pts, 4);
+        fInstanceWriters[resolveLevel].write(prevControlPoint,
+                                             // Negative numEdges will tell the GPU that this stroke
+                                             // instance follows a chop, and round joins from
+                                             // chopping always get exactly one segment.
+                                             (isInternalChop) ? -numEdges : +numEdges);
+        this->writeDynamicAttribs(resolveLevel);
+    }
+
+    // Writes out a 180-degree point stroke, which renders as a circle with a diameter equal to the
+    // stroke width. These should be drawn at at cusp points on curves and for round caps.
+    void writeCircle(int8_t resolveLevel, SkPoint center) {
+        SkASSERT(0 <= resolveLevel && resolveLevel < kNumBins);
+        // An empty stroke is a special case that denotes a circle, or 180-degree point stroke.
+        fInstanceWriters[resolveLevel].fill(center, 5);
+        // Mark numTotalEdges negative so the shader assigns the least possible number of edges to
+        // its (empty) preceding join.
+        fInstanceWriters[resolveLevel].write(-fNumEdgesPerResolveLevel[resolveLevel]);
+        this->writeDynamicAttribs(resolveLevel);
+    }
+
+#ifdef SK_DEBUG
+    ~BinningInstanceWriter() {
+        for (int i = 0; i < kNumBins; ++i) {
+            if (fInstanceWriters[i].isValid()) {
+                SkASSERT(fInstanceWriters[i] == fEndWriters[i]);
+            }
+        }
+    }
+#endif
+
+private:
+    void writeDynamicAttribs(int8_t resolveLevel) {
+        if (fShaderFlags & ShaderFlags::kDynamicStroke) {
+            fInstanceWriters[resolveLevel].write(fDynamicStroke);
+        }
+        if (fShaderFlags & ShaderFlags::kDynamicColor) {
+            fInstanceWriters[resolveLevel].write(fDynamicColor);
+        }
+    }
+
+    const ShaderFlags fShaderFlags;
+    GrVertexWriter fInstanceWriters[kNumBins];
+    float fNumEdgesPerResolveLevel[kNumBins];
+    SkDEBUGCODE(GrVertexWriter fEndWriters[kNumBins];)
+
+    // Stateful values for the dynamic state (if any) that will get written out with each instance.
+    DynamicStroke fDynamicStroke;
+    GrVertexColor fDynamicColor;
+};
+
+}  // namespace
+
+void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target,
+                                          const SkMatrix& viewMatrix) {
     SkASSERT(fResolveLevels);
     SkASSERT(!fDrawIndirectBuffer);
     SkASSERT(!fInstanceBuffer);
-    SkASSERT(!fDrawIndirectCount);
 
-    if (!fTotalInstanceCount) {
+    if (!fChainedDrawIndirectCount) {
         return;
     }
+    SkASSERT(fChainedDrawIndirectCount > 0);
+    SkASSERT(fChainedInstanceCount > 0);
 
-    const GrCaps& caps = target->caps();
-
-    // Allocate enough indirect commands for every resolve level. We will putBack the unused ones
-    // at the end.
-    GrDrawIndirectWriter indirectWriter = target->makeDrawIndirectSpace(kMaxResolveLevel + 1,
+    // Allocate indirect draw commands.
+    GrDrawIndirectWriter indirectWriter = target->makeDrawIndirectSpace(fChainedDrawIndirectCount,
                                                                         &fDrawIndirectBuffer,
                                                                         &fDrawIndirectOffset);
     if (!indirectWriter.isValid()) {
         SkASSERT(!fDrawIndirectBuffer);
         return;
     }
-
-    size_t instanceStride = GrStrokeTessellateShader::kIndirectInstanceBaseStride;
+    SkDEBUGCODE(auto endIndirectWriter = indirectWriter.makeOffset(fChainedDrawIndirectCount));
 
     // We already know the instance count. Allocate an instance for each.
     int baseInstance;
-    GrVertexWriter baseWriter = {target->makeVertexSpace(instanceStride, fTotalInstanceCount,
-                                                         &fInstanceBuffer, &baseInstance)};
-    if (!baseWriter.isValid()) {
+    size_t instanceStride = GrStrokeTessellateShader::IndirectInstanceStride(fShaderFlags);
+    GrVertexWriter instanceWriter = {target->makeVertexSpace(instanceStride, fChainedInstanceCount,
+                                                             &fInstanceBuffer, &baseInstance)};
+    if (!instanceWriter.isValid()) {
         SkASSERT(!fInstanceBuffer);
         fDrawIndirectBuffer.reset();
         return;
     }
+    SkDEBUGCODE(auto endInstanceWriter = instanceWriter.makeOffset(instanceStride *
+                                                                   fChainedInstanceCount);)
 
-    // Fill out our drawIndirect commands and determine the layout of the instance buffer.
-    int numExtraEdgesInJoin =
-            GrStrokeTessellateShader::NumExtraEdgesInIndirectJoin(stroke.getJoin());
-    int currentInstanceIdx = 0;
-    float numEdgesPerResolveLevel[kMaxResolveLevel];
-    GrVertexWriter instanceWriters[kMaxResolveLevel + 1];
-    SkDEBUGCODE(GrVertexWriter endWriters[kMaxResolveLevel];)
-    for (int i = 0; i <= kMaxResolveLevel; ++i) {
-        if (fResolveLevelCounts[i]) {
-            int numEdges = numExtraEdgesInJoin + num_edges_in_resolve_level(i);
-            indirectWriter.write(fResolveLevelCounts[i], baseInstance + currentInstanceIdx,
-                                 numEdges * 2, 0, caps);
-            ++fDrawIndirectCount;
-            numEdgesPerResolveLevel[i] = numEdges;
-            instanceWriters[i] = baseWriter.makeOffset(instanceStride * currentInstanceIdx);
-#ifdef SK_DEBUG
-        } else {
-            instanceWriters[i] = {nullptr};
-        }
-        if (i > 0) {
-            endWriters[i - 1] = baseWriter.makeOffset(instanceStride * currentInstanceIdx);
-            SkASSERT(currentInstanceIdx <= fTotalInstanceCount);
-#endif
-        }
-        currentInstanceIdx += fResolveLevelCounts[i];
+    // Fill in the indirect-draw and instance buffers.
+    for (auto* tess = this; tess; tess = tess->fNextInChain) {
+        tess->writeBuffers(&indirectWriter, &instanceWriter, viewMatrix, instanceStride,
+                           baseInstance, fMaxNumExtraEdgesInJoin);
+        baseInstance += tess->fTotalInstanceCount;
     }
-    SkASSERT(currentInstanceIdx == fTotalInstanceCount);
-    SkASSERT(fDrawIndirectCount);
-    target->putBackIndirectDraws(kMaxResolveLevel + 1 - fDrawIndirectCount);
 
-    GrVertexWriter* instanceWriterForCircles = &instanceWriters[fResolveLevelForCircles];
-    float numEdgesForCircles = numEdgesPerResolveLevel[fResolveLevelForCircles];
+    SkASSERT(indirectWriter == endIndirectWriter);
+    SkASSERT(instanceWriter == endInstanceWriter);
+}
+
+void GrStrokeIndirectTessellator::writeBuffers(GrDrawIndirectWriter* indirectWriter,
+                                               GrVertexWriter* instanceWriter,
+                                               const SkMatrix& viewMatrix,
+                                               size_t instanceStride, int baseInstance,
+                                               int numExtraEdgesInJoin) {
+    BinningInstanceWriter binningWriter(indirectWriter, instanceWriter, fShaderFlags,
+                                        instanceStride, baseInstance, numExtraEdgesInJoin,
+                                        fResolveLevelCounts);
 
     SkPoint scratchBuffer[4 + 10];
     SkPoint* scratch = scratchBuffer;
 
-    bool isRoundJoin = (stroke.getJoin() == SkPaint::kRound_Join);
     int8_t* nextResolveLevel = fResolveLevels;
     float* nextChopTs = fChopTs;
 
@@ -684,8 +816,17 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
     int8_t resolveLevel;
 
     // Now write out each instance to its resolveLevel's designated location in the instance buffer.
-    for (const SkPath& path : pathList) {
-        GrStrokeIterator iter(path, &stroke, &viewMatrix);
+    for (PathStrokeList* pathStroke = fPathStrokeList; pathStroke; pathStroke = pathStroke->fNext) {
+        const SkStrokeRec& stroke = pathStroke->fStroke;
+        SkASSERT(stroke.getJoin() != SkPaint::kMiter_Join || numExtraEdgesInJoin == 4);
+        bool isRoundJoin = (stroke.getJoin() == SkPaint::kRound_Join);
+        if (fShaderFlags & ShaderFlags::kDynamicStroke) {
+            binningWriter.updateDynamicStroke(stroke);
+        }
+        if (fShaderFlags & ShaderFlags::kDynamicColor) {
+            binningWriter.updateDynamicColor(pathStroke->fColor);
+        }
+        GrStrokeIterator iter(pathStroke->fPath, &stroke, &viewMatrix);
         bool hasLastControlPoint = false;
         while (iter.next()) {
             using Verb = GrStrokeIterator::Verb;
@@ -694,7 +835,7 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
             Verb verb = iter.verb();
             switch (verb) {
                 case Verb::kCircle:
-                    this->writeCircleInstance(instanceWriterForCircles, pts[0], numEdgesForCircles);
+                    binningWriter.writeCircle(*nextResolveLevel++, pts[0]);
                     [[fallthrough]];
                 case Verb::kMoveWithinContour:
                     // The next verb won't be joined to anything.
@@ -705,9 +846,7 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
                     SkASSERT(hasLastControlPoint);
                     if (firstCubic) {
                         // Emit the initial cubic that we deferred at the beginning.
-                        this->writeInstance(&instanceWriters[firstResolveLevel], firstCubic,
-                                            lastControlPoint,
-                                            numEdgesPerResolveLevel[firstResolveLevel]);
+                        binningWriter.writeStroke(firstResolveLevel, firstCubic, lastControlPoint);
                         firstCubic = nullptr;
                     }
                     hasLastControlPoint = false;
@@ -724,16 +863,15 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
                     resolveLevel = *nextResolveLevel++;
                     if (resolveLevel < 0) {
                         // The curve has a cusp. Draw two lines and a circle instead of a quad.
-                        SkASSERT(resolveLevel == -1);
+                        int8_t cuspResolveLevel = -resolveLevel;
                         float cuspT = SkFindQuadMidTangent(pts);
                         SkPoint cusp = SkEvalQuadAt(pts, cuspT);
-                        resolveLevel = (isRoundJoin) ? *nextResolveLevel++ : 0;
                         numChops = 1;
                         scratch[0] = scratch[1] = pts[0];
                         scratch[2] = scratch[3] = scratch[4] = cusp;
                         scratch[5] = scratch[6] = pts[2];
-                        this->writeCircleInstance(instanceWriterForCircles, cusp,
-                                                  numEdgesForCircles);
+                        binningWriter.writeCircle(cuspResolveLevel, cusp);
+                        resolveLevel = (isRoundJoin) ? *nextResolveLevel++ : 0;
                     } else {
                         GrPathUtils::convertQuadToCubic(pts, scratch);
                     }
@@ -743,18 +881,17 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
                     resolveLevel = *nextResolveLevel++;
                     if (resolveLevel < 0) {
                         // The curve has a cusp. Draw two lines and a cusp instead of a conic.
-                        SkASSERT(resolveLevel == -1);
+                        int8_t cuspResolveLevel = -resolveLevel;
                         SkPoint cusp;
                         SkConic conic(pts, iter.w());
                         float cuspT = conic.findMidTangent();
                         conic.evalAt(cuspT, &cusp);
-                        resolveLevel = (isRoundJoin) ? *nextResolveLevel++ : 0;
                         numChops = 1;
                         scratch[0] = scratch[1] = pts[0];
                         scratch[2] = scratch[3] = scratch[4] = cusp;
                         scratch[5] = scratch[6] = pts[2];
-                        this->writeCircleInstance(instanceWriterForCircles, cusp,
-                                                  numEdgesForCircles);
+                        binningWriter.writeCircle(cuspResolveLevel, cusp);
+                        resolveLevel = (isRoundJoin) ? *nextResolveLevel++ : 0;
                     } else {
                         GrPathShader::WriteConicPatch(pts, iter.w(), scratch);
                     }
@@ -765,14 +902,14 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
                     if (resolveLevel < 0) {
                         // A negative resolveLevel indicates how many chops the curve needs, and
                         // whether they are cusps.
-                        numChops = -resolveLevel >> 1;
+                        numChops = -resolveLevel >> 4;
                         SkChopCubicAt(pts, scratch, nextChopTs, numChops);
                         nextChopTs += numChops;
                         pts_ = scratch;
-                        if (-resolveLevel & 1) {  // Are the chop points cusps?
+                        // Are the chop points cusps?
+                        if (int8_t cuspResolveLevel = (-resolveLevel & 0xf)) {
                             for (int i = 1; i <= numChops; ++i) {
-                                this->writeCircleInstance(instanceWriterForCircles, pts_[i*3],
-                                                          numEdgesForCircles);
+                                binningWriter.writeCircle(cuspResolveLevel, pts_[i*3]);
                             }
                         }
                         resolveLevel = *nextResolveLevel++;
@@ -788,12 +925,7 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
                     // Increment the scratch pts in case that's where our first cubic is stored.
                     scratch += 4;
                 } else {
-                    int numEdges = numEdgesPerResolveLevel[resolveLevel];
-                    this->writeInstance(&instanceWriters[resolveLevel], pts_, lastControlPoint,
-                                        // Negative numEdges will tell the GPU that this stroke
-                                        // instance follows a chop, and round joins from chopping
-                                        // always get exactly one segment.
-                                        (i == 0) ? numEdges : -numEdges);
+                    binningWriter.writeStroke(resolveLevel, pts_, lastControlPoint, (i != 0));
                 }
                 // Determine the last control point.
                 if (pts_[2] != pts_[3] && verb != Verb::kConic) {  // Conics use pts_[3] for w.
@@ -818,30 +950,19 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const Sk
         }
     }
 
-#ifdef SK_DEBUG
     SkASSERT(nextResolveLevel == fResolveLevels + fResolveLevelArrayCount);
     SkASSERT(nextChopTs == fChopTs + fChopTsArrayCount);
-    auto* finalWriter = &instanceWriters[kMaxResolveLevel];
-    for (int i = kMaxResolveLevel - 1; i >= 0; --i) {
-        if (instanceWriters[i].isValid()) {
-            SkASSERT(instanceWriters[i] == endWriters[i]);
-            if (!finalWriter->isValid()) {
-                finalWriter = &instanceWriters[i];
-            }
-        }
-    }
-    SkASSERT(*finalWriter == baseWriter.makeOffset(fTotalInstanceCount * instanceStride));
-#endif
 }
 
 void GrStrokeIndirectTessellator::draw(GrOpFlushState* flushState) const {
-    if (!fInstanceBuffer) {
+    if (!fDrawIndirectBuffer) {
         return;
     }
 
-    SkASSERT(fDrawIndirectCount);
-    SkASSERT(fTotalInstanceCount > 0);
+    SkASSERT(fChainedDrawIndirectCount > 0);
+    SkASSERT(fChainedInstanceCount > 0);
 
     flushState->bindBuffers(nullptr, fInstanceBuffer, nullptr);
-    flushState->drawIndirect(fDrawIndirectBuffer.get(), fDrawIndirectOffset, fDrawIndirectCount);
+    flushState->drawIndirect(fDrawIndirectBuffer.get(), fDrawIndirectOffset,
+                             fChainedDrawIndirectCount);
 }

@@ -408,19 +408,17 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         fPreferFullscreenClears = true;
     }
 
-    // TODO: Once we are confident we've removed all the reads of vertex and index buffers remove
-    // using this.
-    if (kQualcomm_VkVendor == properties.vendorID || kARM_VkVendor == properties.vendorID) {
-        // On Qualcomm and ARM mapping a gpu buffer and doing both reads and writes to it is slow.
-        // Thus for index and vertex buffers we will force to use a cpu side buffer and then copy
-        // the whole buffer up to the gpu.
-        fBufferMapThreshold = SK_MaxS32;
-    }
-
     if (properties.vendorID == kNvidia_VkVendor || properties.vendorID == kAMD_VkVendor) {
         // On discrete GPUs it can be faster to read gpu only memory compared to memory that is also
         // mappable on the host.
         fGpuOnlyBuffersMorePerformant = true;
+
+        // On discrete GPUs we try to use special DEVICE_LOCAL and HOST_VISIBLE memory for our
+        // cpu write, gpu read buffers. This memory is not ideal to be kept persistently mapped.
+        // Some discrete GPUs do not expose this special memory, however we still disable
+        // persistently mapped buffers for all of them since most GPUs with updated drivers do
+        // expose it. If this becomes an issue we can try to be more fine grained.
+        fShouldPersistentlyMapCpuToGpuBuffers = false;
     }
 
     if (kQualcomm_VkVendor == properties.vendorID) {
@@ -443,12 +441,6 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
     if (fNativeDrawIndirectSupport) {
         fMaxDrawIndirectDrawCount = properties.limits.maxDrawIndirectCount;
         SkASSERT(fMaxDrawIndirectDrawCount == 1 || features.features.multiDrawIndirect);
-    }
-
-    if (kARM_VkVendor == properties.vendorID) {
-        // ARM seems to do better with more fine triangles as opposed to using the sample mask.
-        // (At least in our current round rect op.)
-        fPreferTrianglesOverSampleMask = true;
     }
 
 #ifdef SK_BUILD_FOR_UNIX
@@ -476,11 +468,11 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
 void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDeviceProperties& properties) {
 #if defined(SK_BUILD_FOR_WIN)
     if (kNvidia_VkVendor == properties.vendorID || kIntel_VkVendor == properties.vendorID) {
-        fMustSleepOnTearDown = true;
+        fMustSyncCommandBuffersWithQueue = true;
     }
 #elif defined(SK_BUILD_FOR_ANDROID)
     if (kImagination_VkVendor == properties.vendorID) {
-        fMustSleepOnTearDown = true;
+        fMustSyncCommandBuffersWithQueue = true;
     }
 #endif
 
@@ -564,18 +556,18 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // GrCaps workarounds
     ////////////////////////////////////////////////////////////////////////////
 
-    // The GTX660 bot experiences crashes and incorrect rendering with MSAA CCPR. Block this path
-    // renderer on non-mixed-sampled NVIDIA.
+    // The GTX660 bot was experiencing crashes and incorrect rendering with MSAA CCPR. Block this
+    // path renderer on non-mixed-sampled NVIDIA.
     // NOTE: We may lose mixed samples support later if the context options suppress dual source
     // blending, but that shouldn't be an issue because MSAA CCPR seems to work fine (even without
     // mixed samples) on later NVIDIA hardware where mixed samples would be supported.
     if ((kNvidia_VkVendor == properties.vendorID) && !fMixedSamplesSupport) {
-        fDriverDisableMSAACCPR = true;
+        fDriverDisableMSAAClipAtlas = true;
     }
 
 #ifdef SK_BUILD_FOR_ANDROID
-    // MSAA CCPR is slow on Android. http://skbug.com/9676
-    fDriverDisableMSAACCPR = true;
+    // MSAA CCPR was slow on Android. http://skbug.com/9676
+    fDriverDisableMSAAClipAtlas = true;
 #endif
 
     if (kARM_VkVendor == properties.vendorID) {
@@ -605,12 +597,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
 
     if (kImagination_VkVendor == properties.vendorID) {
         fShaderCaps->fAtan2ImplementedAsAtanYOverX = true;
-    }
-
-    if (kQualcomm_VkVendor == properties.vendorID) {
-        // The sample mask round rect op draws nothing on Adreno for the srcmode gm.
-        // http://skbug.com/8921
-        fShaderCaps->fCanOnlyUseSampleMaskWithStencil = true;
     }
 }
 
@@ -732,6 +718,10 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties,
     shaderCaps->fSampleMaskSupport = true;
 
     shaderCaps->fShaderDerivativeSupport = true;
+
+    // ARM GPUs calculate `matrix * vector` in SPIR-V at full precision, even when the inputs are
+    // RelaxedPrecision. Rewriting the multiply as a sum of vector*scalar fixes this. (skia:11769)
+    shaderCaps->fRewriteMatrixVectorMultiply = (kARM_VkVendor == properties.vendorID);
 
     // FIXME: http://skbug.com/7733: Disable geometry shaders until Intel/Radeon GMs draw correctly.
     // shaderCaps->fGeometryShaderSupport =
@@ -1554,12 +1544,13 @@ GrCaps::SurfaceReadPixelsSupport GrVkCaps::surfaceSupportsReadPixels(
         return SurfaceReadPixelsSupport::kUnsupported;
     }
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
+        auto texAttachment = tex->textureAttachment();
         // We can't directly read from a VkImage that has a ycbcr sampler.
-        if (tex->ycbcrConversionInfo().isValid()) {
+        if (texAttachment->ycbcrConversionInfo().isValid()) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
         // We can't directly read from a compressed format
-        if (GrVkFormatIsCompressed(tex->imageFormat())) {
+        if (GrVkFormatIsCompressed(texAttachment->imageFormat())) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
         return SurfaceReadPixelsSupport::kSupported;
@@ -1579,7 +1570,7 @@ bool GrVkCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     // We can't write to a texture that has a ycbcr sampler.
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
         // We can't directly read from a VkImage that has a ycbcr sampler.
-        if (tex->ycbcrConversionInfo().isValid()) {
+        if (tex->textureAttachment()->ycbcrConversionInfo().isValid()) {
             return false;
         }
     }
@@ -1756,12 +1747,13 @@ void GrVkCaps::addExtraSamplerKey(GrProcessorKeyBuilder* b,
 
     GrVkSampler::Key key = GrVkSampler::GenerateKey(samplerState, *ycbcrInfo);
 
-    size_t numInts = (sizeof(key) + 3) / 4;
-
-    uint32_t* tmp = b->add32n(numInts);
-
-    tmp[numInts - 1] = 0;
+    constexpr size_t numInts = (sizeof(key) + 3) / 4;
+    uint32_t tmp[numInts];
     memcpy(tmp, &key, sizeof(key));
+
+    for (size_t i = 0; i < numInts; ++i) {
+        b->add32(tmp[i]);
+    }
 }
 
 /**
@@ -1781,12 +1773,9 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
                                  const GrProgramInfo& programInfo,
                                  ProgramDescOverrideFlags overrideFlags) const {
     GrProgramDesc desc;
-    if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
-        SkASSERT(!desc.isValid());
-        return desc;
-    }
+    GrProgramDesc::Build(&desc, programInfo, *this);
 
-    GrProcessorKeyBuilder b(&desc.key());
+    GrProcessorKeyBuilder b(desc.key());
 
     // This will become part of the sheared off key used to persistently cache
     // the SPIRV code. It needs to be added right after the base key so that,
@@ -1818,8 +1807,8 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
     if (rt) {
         GrVkRenderTarget* vkRT = (GrVkRenderTarget*) rt;
 
-        SkASSERT(!needsResolve ||
-                 (vkRT->resolveAttachmentView() && vkRT->supportsInputAttachmentUsage()));
+        SkASSERT(!needsResolve || (vkRT->resolveAttachment() &&
+                                   vkRT->resolveAttachment()->supportsInputAttachmentUsage()));
 
         bool needsStencil = programInfo.numStencilSamples() || programInfo.isStencilEnabled();
         // TODO: support failure in getSimpleRenderPass
@@ -1870,6 +1859,7 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
         b.add32(!programInfo.isMixedSampled() ? 0 : programInfo.numRasterSamples());
     }
 
+    b.flush();
     return desc;
 }
 

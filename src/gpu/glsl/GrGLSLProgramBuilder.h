@@ -11,17 +11,19 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
-#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/glsl/GrGLSLXferProcessor.h"
 #include "src/sksl/SkSLCompiler.h"
 
+#include <vector>
+
 class GrProgramDesc;
+class GrRenderTarget;
 class GrShaderVar;
 class GrGLSLVaryingHandler;
 class SkString;
@@ -32,14 +34,14 @@ public:
     using UniformHandle      = GrGLSLUniformHandler::UniformHandle;
     using SamplerHandle      = GrGLSLUniformHandler::SamplerHandle;
 
-    virtual ~GrGLSLProgramBuilder() {}
+    virtual ~GrGLSLProgramBuilder();
 
     virtual const GrCaps* caps() const = 0;
     const GrShaderCaps* shaderCaps() const { return this->caps()->shaderCaps(); }
 
     GrSurfaceOrigin origin() const { return fProgramInfo.origin(); }
     const GrPipeline& pipeline() const { return fProgramInfo.pipeline(); }
-    const GrPrimitiveProcessor& primitiveProcessor() const { return fProgramInfo.primProc(); }
+    const GrGeometryProcessor& geometryProcessor() const { return fProgramInfo.geomProc(); }
     GrProcessor::CustomFeatures processorFeatures() const {
         return fProgramInfo.requestedFeatures();
     }
@@ -48,16 +50,6 @@ public:
     }
     bool hasPointSize() const { return fProgramInfo.primitiveType() == GrPrimitiveType::kPoints; }
     virtual SkSL::Compiler* shaderCompiler() const = 0;
-
-    // TODO: stop passing in the renderTarget for just the sampleLocations
-    int effectiveSampleCnt() {
-        SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
-        return fRenderTarget->getSampleLocations().count();
-    }
-    const SkTArray<SkPoint>& getSampleLocations() {
-        SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
-        return fRenderTarget->getSampleLocations();
-    }
 
     const GrProgramDesc& desc() const { return fDesc; }
 
@@ -117,9 +109,9 @@ public:
 
     GrGLSLBuiltinUniformHandles  fUniformHandles;
 
-    std::unique_ptr<GrGLSLPrimitiveProcessor> fGeometryProcessor;
-    std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
-    std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
+    std::unique_ptr<GrGLSLGeometryProcessor> fGeometryProcessor;
+    std::unique_ptr<GrGLSLXferProcessor>     fXferProcessor;
+    std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fFPImpls;
 
 protected:
     explicit GrGLSLProgramBuilder(GrRenderTarget*, const GrProgramDesc&, const GrProgramInfo&);
@@ -172,7 +164,7 @@ private:
     bool checkSamplerCounts();
 
 #ifdef SK_DEBUG
-    void verify(const GrPrimitiveProcessor&);
+    void verify(const GrGeometryProcessor&);
     void verify(const GrFragmentProcessor&);
     void verify(const GrXferProcessor&);
 #endif

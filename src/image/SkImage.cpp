@@ -37,6 +37,7 @@
 #include "src/image/SkImage_Gpu.h"
 #endif
 #include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContextThreadSafeProxy.h"
 
 SkImage::SkImage(const SkImageInfo& info, uint32_t uniqueID)
         : fInfo(info)
@@ -137,20 +138,11 @@ SkColorSpace* SkImage::colorSpace() const { return fInfo.colorSpace(); }
 
 sk_sp<SkColorSpace> SkImage::refColorSpace() const { return fInfo.refColorSpace(); }
 
-#ifdef SK_SUPPORT_LEGACY_IMPLICIT_FILTERQUALITY
-sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
-                                    const SkMatrix* localMatrix) const {
-    const SkSamplingOptions* inherit_from_paint = nullptr;
-    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, inherit_from_paint,
-                               localMatrix);
-}
-#endif
-
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkSamplingOptions& sampling,
                                     const SkMatrix* localMatrix) const {
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy,
-                               &sampling, localMatrix);
+                               sampling, localMatrix);
 }
 
 sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) const {
@@ -213,6 +205,8 @@ sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset, GrDirectContext* direc
 #if SK_SUPPORT_GPU
 
 bool SkImage::isTextureBacked() const { return as_IB(this)->onIsTextureBacked(); }
+
+size_t SkImage::textureSize() const { return as_IB(this)->onTextureSize(); }
 
 GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
                                             GrSurfaceOrigin* origin) const {
@@ -585,6 +579,29 @@ sk_sp<SkImage> SkImage::MakeFromYUVAPixmaps(GrRecordingContext* context,
 }
 
 sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext*, GrMipmapped, SkBudgeted) const {
+    return nullptr;
+}
+
+sk_sp<SkImage> SkImage::MakePromiseTexture(sk_sp<GrContextThreadSafeProxy>,
+                                           const GrBackendFormat&,
+                                           SkISize,
+                                           GrMipmapped,
+                                           GrSurfaceOrigin,
+                                           SkColorType,
+                                           SkAlphaType,
+                                           sk_sp<SkColorSpace>,
+                                           PromiseImageTextureFulfillProc,
+                                           PromiseImageTextureReleaseProc,
+                                           PromiseImageTextureContext) {
+    return nullptr;
+}
+
+sk_sp<SkImage> SkImage::MakePromiseYUVATexture(sk_sp<GrContextThreadSafeProxy>,
+                                               const GrYUVABackendTextureInfo&,
+                                               sk_sp<SkColorSpace>,
+                                               PromiseImageTextureFulfillProc,
+                                               PromiseImageTextureReleaseProc,
+                                               PromiseImageTextureContext[]) {
     return nullptr;
 }
 

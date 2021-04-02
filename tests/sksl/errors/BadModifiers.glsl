@@ -1,39 +1,24 @@
 ### Compilation failed:
 
-error: 3: 'const' is not permitted here
-error: 3: 'in' is not permitted here
-error: 3: 'out' is not permitted here
-error: 3: 'uniform' is not permitted here
-error: 3: 'flat' is not permitted here
-error: 3: 'noperspective' is not permitted here
-error: 3: 'readonly' is not permitted here
-error: 3: 'writeonly' is not permitted here
-error: 3: 'coherent' is not permitted here
-error: 3: 'volatile' is not permitted here
-error: 3: 'restrict' is not permitted here
-error: 3: 'buffer' is not permitted here
-error: 3: '__pixel_localEXT' is not permitted here
-error: 3: '__pixel_local_inEXT' is not permitted here
-error: 3: '__pixel_local_outEXT' is not permitted here
-error: 3: 'varying' is not permitted here
-error: 7: 'const' is not permitted here
-error: 7: 'uniform' is not permitted here
-error: 7: 'flat' is not permitted here
-error: 7: 'noperspective' is not permitted here
-error: 7: 'readonly' is not permitted here
-error: 7: 'writeonly' is not permitted here
-error: 7: 'coherent' is not permitted here
-error: 7: 'volatile' is not permitted here
-error: 7: 'restrict' is not permitted here
-error: 7: 'buffer' is not permitted here
-error: 7: 'sk_has_side_effects' is not permitted here
-error: 7: '__pixel_localEXT' is not permitted here
-error: 7: '__pixel_local_inEXT' is not permitted here
-error: 7: '__pixel_local_outEXT' is not permitted here
-error: 7: 'varying' is not permitted here
-error: 7: 'inline' is not permitted here
-error: 11: 'in uniform' variables only permitted within fragment processors
-error: 11: 'varying' is only permitted in runtime effects
-error: 11: 'sk_has_side_effects' is not permitted here
-error: 11: 'inline' is not permitted here
-36 errors
+error: 1: 'const' is not permitted here
+error: 1: 'in' is not permitted here
+error: 1: 'out' is not permitted here
+error: 1: 'uniform' is not permitted here
+error: 1: 'flat' is not permitted here
+error: 1: 'noperspective' is not permitted here
+error: 1: 'varying' is not permitted here
+error: 1: functions cannot be both 'inline' and 'noinline'
+error: 4: 'uniform' is not permitted here
+error: 4: 'flat' is not permitted here
+error: 4: 'noperspective' is not permitted here
+error: 4: 'sk_has_side_effects' is not permitted here
+error: 4: 'varying' is not permitted here
+error: 4: 'inline' is not permitted here
+error: 4: 'noinline' is not permitted here
+error: 6: 'in uniform' variables only permitted within fragment processors
+error: 6: 'varying' is only permitted in runtime effects
+error: 6: 'sk_has_side_effects' is not permitted here
+error: 6: 'inline' is not permitted here
+error: 6: 'noinline' is not permitted here
+error: 6: 'const' variables must be initialized
+21 errors

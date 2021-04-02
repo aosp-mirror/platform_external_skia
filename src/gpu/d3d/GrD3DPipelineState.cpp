@@ -24,9 +24,9 @@ GrD3DPipelineState::GrD3DPipelineState(
         const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
         const UniformInfoArray& uniforms, uint32_t uniformSize,
         uint32_t numSamplers,
-        std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
+        std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
         std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
-        std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fragmentProcessors,
+        std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls,
         size_t vertexStride,
         size_t instanceStride)
     : fPipelineState(std::move(pipelineState))
@@ -34,7 +34,7 @@ GrD3DPipelineState::GrD3DPipelineState(
     , fBuiltinUniformHandles(builtinUniformHandles)
     , fGeometryProcessor(std::move(geometryProcessor))
     , fXferProcessor(std::move(xferProcessor))
-    , fFragmentProcessors(std::move(fragmentProcessors))
+    , fFPImpls(std::move(fpImpls))
     , fDataManager(uniforms, uniformSize)
     , fNumSamplers(numSamplers)
     , fVertexStride(vertexStride)
@@ -45,12 +45,11 @@ void GrD3DPipelineState::setAndBindConstants(GrD3DGpu* gpu,
                                              const GrProgramInfo& programInfo) {
     this->setRenderTargetState(renderTarget, programInfo.origin());
 
-    fGeometryProcessor->setData(fDataManager, programInfo.primProc());
+    fGeometryProcessor->setData(fDataManager, programInfo.geomProc());
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
-        auto& pipelineFP = programInfo.pipeline().getFragmentProcessor(i);
-        auto& baseGLSLFP = *fFragmentProcessors[i];
-        for (auto [fp, glslFP] : GrGLSLFragmentProcessor::ParallelRange(pipelineFP, baseGLSLFP)) {
-            glslFP.setData(fDataManager, fp);
+        auto& fp = programInfo.pipeline().getFragmentProcessor(i);
+        for (auto [fp, impl] : GrGLSLFragmentProcessor::ParallelRange(fp, *fFPImpls[i])) {
+            impl.setData(fDataManager, fp);
         }
     }
 
@@ -89,19 +88,20 @@ void GrD3DPipelineState::setRenderTargetState(const GrRenderTarget* rt, GrSurfac
     }
 }
 
-void GrD3DPipelineState::setAndBindTextures(GrD3DGpu* gpu, const GrPrimitiveProcessor& primProc,
-                                            const GrSurfaceProxy* const primProcTextures[],
+void GrD3DPipelineState::setAndBindTextures(GrD3DGpu* gpu,
+                                            const GrGeometryProcessor& geomProc,
+                                            const GrSurfaceProxy* const geomProcTextures[],
                                             const GrPipeline& pipeline) {
-    SkASSERT(primProcTextures || !primProc.numTextureSamplers());
+    SkASSERT(geomProcTextures || !geomProc.numTextureSamplers());
 
     std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> shaderResourceViews(fNumSamplers);
     std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> samplers(fNumSamplers);
     unsigned int currTextureBinding = 0;
 
-    for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
-        SkASSERT(primProcTextures[i]->asTextureProxy());
-        const auto& sampler = primProc.textureSampler(i);
-        auto texture = static_cast<GrD3DTexture*>(primProcTextures[i]->peekTexture());
+    for (int i = 0; i < geomProc.numTextureSamplers(); ++i) {
+        SkASSERT(geomProcTextures[i]->asTextureProxy());
+        const auto& sampler = geomProc.textureSampler(i);
+        auto texture = static_cast<GrD3DTexture*>(geomProcTextures[i]->peekTexture());
         shaderResourceViews[currTextureBinding] = texture->shaderResourceView();
         samplers[currTextureBinding++] =
                 gpu->resourceProvider().findOrCreateCompatibleSampler(sampler.samplerState());

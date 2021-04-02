@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "include/private/SkSLProgramElement.h"
+#include "include/private/SkSLStatement.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTPin.h"
 #include "src/sksl/SkSLCodeGenerator.h"
@@ -32,9 +34,7 @@
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
-#include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
@@ -43,6 +43,15 @@
 
 #include <algorithm>
 #include <unordered_map>
+
+namespace {
+    // sksl allows the optimizations of fast_mul(), so we want to use that most of the time.
+    // This little sneaky snippet of code lets us use ** as a fast multiply infix operator.
+    struct FastF32 { skvm::F32 val; };
+    static FastF32 operator*(skvm::F32 y) { return {y}; }
+    static skvm::F32 operator*(skvm::F32 x, FastF32 y) { return fast_mul(x, y.val); }
+    static skvm::F32 operator*(float     x, FastF32 y) { return fast_mul(x, y.val); }
+}
 
 namespace SkSL {
 
@@ -268,7 +277,6 @@ private:
 
     const skvm::Coord fLocalCoord;
     const SampleChildFn fSampleChild;
-    const std::unordered_map<String, Intrinsic> fIntrinsics;
 
     // [Variable, first slot in fSlots]
     std::unordered_map<const Variable*, size_t> fVariableMap;
@@ -323,6 +331,7 @@ static inline bool is_uniform(const SkSL::Variable& var) {
 static size_t slot_count(const Type& type) {
     switch (type.typeKind()) {
         case Type::TypeKind::kOther:
+        case Type::TypeKind::kVoid:
             return 0;
         case Type::TypeKind::kStruct: {
             size_t slots = 0;
@@ -348,65 +357,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
         : fProgram(program)
         , fBuilder(builder)
         , fLocalCoord(local)
-        , fSampleChild(std::move(sampleChild))
-        , fIntrinsics {
-            { "radians", Intrinsic::kRadians },
-            { "degrees", Intrinsic::kDegrees },
-            { "sin",     Intrinsic::kSin },
-            { "cos",     Intrinsic::kCos },
-            { "tan",     Intrinsic::kTan },
-            { "asin",    Intrinsic::kASin },
-            { "acos",    Intrinsic::kACos },
-            { "atan",    Intrinsic::kATan },
-
-            { "pow",  Intrinsic::kPow },
-            { "exp",  Intrinsic::kExp },
-            { "log",  Intrinsic::kLog },
-            { "exp2", Intrinsic::kExp2 },
-            { "log2", Intrinsic::kLog2 },
-            { "sqrt", Intrinsic::kSqrt },
-            { "inversesqrt", Intrinsic::kInverseSqrt },
-
-            { "abs",   Intrinsic::kAbs },
-            { "sign",  Intrinsic::kSign },
-            { "floor", Intrinsic::kFloor },
-            { "ceil",  Intrinsic::kCeil },
-            { "fract", Intrinsic::kFract },
-            { "mod",   Intrinsic::kMod },
-
-            { "min",        Intrinsic::kMin },
-            { "max",        Intrinsic::kMax },
-            { "clamp",      Intrinsic::kClamp },
-            { "saturate",   Intrinsic::kSaturate },
-            { "mix",        Intrinsic::kMix },
-            { "step",       Intrinsic::kStep },
-            { "smoothstep", Intrinsic::kSmoothstep },
-
-            { "length",      Intrinsic::kLength },
-            { "distance",    Intrinsic::kDistance },
-            { "dot",         Intrinsic::kDot },
-            { "cross",       Intrinsic::kCross },
-            { "normalize",   Intrinsic::kNormalize },
-            { "faceforward", Intrinsic::kFaceforward },
-            { "reflect",     Intrinsic::kReflect },
-            { "refract",     Intrinsic::kRefract },
-
-            { "matrixCompMult", Intrinsic::kMatrixCompMult },
-            { "inverse",        Intrinsic::kInverse },
-
-            { "lessThan",         Intrinsic::kLessThan },
-            { "lessThanEqual",    Intrinsic::kLessThanEqual },
-            { "greaterThan",      Intrinsic::kGreaterThan },
-            { "greaterThanEqual", Intrinsic::kGreaterThanEqual },
-            { "equal",            Intrinsic::kEqual },
-            { "notEqual",         Intrinsic::kNotEqual },
-
-            { "any", Intrinsic::kAny },
-            { "all", Intrinsic::kAll },
-            { "not", Intrinsic::kNot },
-
-            { "sample", Intrinsic::kSample },
-        } {
+        , fSampleChild(std::move(sampleChild)) {
     fConditionMask = fLoopMask = fBuilder->splat(0xffff'ffff);
 
     // Now, add storage for each global variable (including uniforms) to fSlots, and entries in
@@ -415,8 +366,9 @@ SkVMGenerator::SkVMGenerator(const Program& program,
     size_t fpCount = 0;
     for (const ProgramElement* e : fProgram.elements()) {
         if (e->is<GlobalVarDeclaration>()) {
-            const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
-            const Variable& var = decl.declaration()->as<VarDeclaration>().var();
+            const GlobalVarDeclaration& gvd = e->as<GlobalVarDeclaration>();
+            const VarDeclaration& decl = gvd.declaration()->as<VarDeclaration>();
+            const Variable& var = decl.var();
             SkASSERT(fVariableMap.find(&var) == fVariableMap.end());
 
             // For most variables, fVariableMap stores an index into fSlots, but for fragment
@@ -430,8 +382,10 @@ SkVMGenerator::SkVMGenerator(const Program& program,
             // special types like 'void'. Of those, only fragment processors are legal variables.
             SkASSERT(!var.type().isOpaque());
 
-            size_t nslots = slot_count(var.type());
-            fVariableMap[&var] = fSlots.size();
+            // getSlot() allocates space for the variable's value in fSlots, initializes it to zero,
+            // and populates fVariableMap.
+            size_t slot   = this->getSlot(var),
+                   nslots = slot_count(var.type());
 
             if (int builtin = var.modifiers().fLayout.fBuiltin; builtin >= 0) {
                 // builtin variables are system-defined, with special semantics. The only builtin
@@ -439,10 +393,10 @@ SkVMGenerator::SkVMGenerator(const Program& program,
                 switch (builtin) {
                     case SK_FRAGCOORD_BUILTIN:
                         SkASSERT(nslots == 4);
-                        fSlots.insert(fSlots.end(), {device.x.id,
-                                                     device.y.id,
-                                                     fBuilder->splat(0.0f).id,
-                                                     fBuilder->splat(1.0f).id});
+                        fSlots[slot + 0] = device.x.id;
+                        fSlots[slot + 1] = device.y.id;
+                        fSlots[slot + 2] = fBuilder->splat(0.0f).id;
+                        fSlots[slot + 3] = fBuilder->splat(1.0f).id;
                         break;
                     default:
                         SkDEBUGFAIL("Unsupported builtin");
@@ -450,11 +404,14 @@ SkVMGenerator::SkVMGenerator(const Program& program,
             } else if (is_uniform(var)) {
                 // For uniforms, copy the supplied IDs over
                 SkASSERT(uniformIter + nslots <= uniforms.end());
-                fSlots.insert(fSlots.end(), uniformIter, uniformIter + nslots);
+                std::copy(uniformIter, uniformIter + nslots, fSlots.begin() + slot);
                 uniformIter += nslots;
-            } else {
-                // For other globals, initialize them to zero
-                fSlots.insert(fSlots.end(), nslots, fBuilder->splat(0.0f).id);
+            } else if (decl.value()) {
+                // For other globals, populate with the initializer expression (if there is one)
+                Value val = this->writeExpression(*decl.value());
+                for (size_t i = 0; i < nslots; ++i) {
+                    fSlots[slot + i] = val[i];
+                }
             }
         }
     }
@@ -508,8 +465,6 @@ size_t SkVMGenerator::getSlot(const Variable& v) {
         return entry->second;
     }
 
-    SkASSERT(!is_uniform(v));  // Should have been added at construction time
-
     size_t slot   = fSlots.size(),
            nslots = slot_count(v.type());
     fSlots.resize(slot + nslots, fBuilder->splat(0.0f).id);
@@ -520,8 +475,8 @@ size_t SkVMGenerator::getSlot(const Variable& v) {
 Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
     const Expression& left = *b.left();
     const Expression& right = *b.right();
-    Token::Kind op = b.getOperator();
-    if (op == Token::Kind::TK_EQ) {
+    Operator op = b.getOperator();
+    if (op.kind() == Token::Kind::TK_EQ) {
         return this->writeStore(left, this->writeExpression(right));
     }
 
@@ -529,14 +484,14 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
     const Type& rType = right.type();
     bool lVecOrMtx = (lType.isVector() || lType.isMatrix());
     bool rVecOrMtx = (rType.isVector() || rType.isMatrix());
-    bool isAssignment = Operators::IsAssignment(op);
+    bool isAssignment = op.isAssignment();
     if (isAssignment) {
-        op = Operators::RemoveAssignment(op);
+        op = op.removeAssignment();
     }
     Type::NumberKind nk = base_number_kind(lType);
 
     // A few ops require special treatment:
-    switch (op) {
+    switch (op.kind()) {
         case Token::Kind::TK_LOGICALAND: {
             SkASSERT(!isAssignment);
             SkASSERT(nk == Type::NumberKind::kBoolean);
@@ -567,7 +522,7 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
           rVal = this->writeExpression(right);
 
     // Special case for M*V, V*M, M*M (but not V*V!)
-    if (op == Token::Kind::TK_STAR
+    if (op.kind() == Token::Kind::TK_STAR
         && lVecOrMtx && rVecOrMtx && !(lType.isVector() && rType.isVector())) {
         int rCols = rType.columns(),
             rRows = rType.rows(),
@@ -615,7 +570,7 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
         return skvm::F32{};
     };
 
-    switch (op) {
+    switch (op.kind()) {
         case Token::Kind::TK_EQEQ: {
             SkASSERT(!isAssignment);
             Value cmp = binary([](skvm::F32 x, skvm::F32 y) { return x == y; },
@@ -656,7 +611,7 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
             return binary([](skvm::F32 x, skvm::F32 y) { return x - y; },
                           [](skvm::I32 x, skvm::I32 y) { return x - y; });
         case Token::Kind::TK_STAR:
-            return binary([](skvm::F32 x, skvm::F32 y) { return x * y; },
+            return binary([](skvm::F32 x, skvm::F32 y) { return x ** y; },
                           [](skvm::I32 x, skvm::I32 y) { return x * y; });
         case Token::Kind::TK_SLASH:
             // Minimum spec (GLSL ES 1.0) has very loose requirements for integer operations.
@@ -875,10 +830,10 @@ Value SkVMGenerator::writeMatrixInverse2x2(const Value& m) {
     skvm::F32 idet = 1.0f / (a*d - b*c);
 
     Value result(m.slots());
-    result[0] = ( d * idet);
-    result[1] = (-b * idet);
-    result[2] = (-c * idet);
-    result[3] = ( a * idet);
+    result[0] = ( d ** idet);
+    result[1] = (-b ** idet);
+    result[2] = (-c ** idet);
+    result[3] = ( a ** idet);
     return result;
 }
 
@@ -891,15 +846,15 @@ Value SkVMGenerator::writeMatrixInverse3x3(const Value& m) {
                              a11*a23*a32 - a12*a21*a33 - a13*a22*a31);
 
     Value result(m.slots());
-    result[0] = ((a22*a33 - a23*a32) * idet);
-    result[1] = ((a23*a31 - a21*a33) * idet);
-    result[2] = ((a21*a32 - a22*a31) * idet);
-    result[3] = ((a13*a32 - a12*a33) * idet);
-    result[4] = ((a11*a33 - a13*a31) * idet);
-    result[5] = ((a12*a31 - a11*a32) * idet);
-    result[6] = ((a12*a23 - a13*a22) * idet);
-    result[7] = ((a13*a21 - a11*a23) * idet);
-    result[8] = ((a11*a22 - a12*a21) * idet);
+    result[0] = ((a22**a33 - a23**a32) ** idet);
+    result[1] = ((a23**a31 - a21**a33) ** idet);
+    result[2] = ((a21**a32 - a22**a31) ** idet);
+    result[3] = ((a13**a32 - a12**a33) ** idet);
+    result[4] = ((a11**a33 - a13**a31) ** idet);
+    result[5] = ((a12**a31 - a11**a32) ** idet);
+    result[6] = ((a12**a23 - a13**a22) ** idet);
+    result[7] = ((a13**a21 - a11**a23) ** idet);
+    result[8] = ((a11**a22 - a12**a21) ** idet);
     return result;
 }
 
@@ -910,20 +865,20 @@ Value SkVMGenerator::writeMatrixInverse4x4(const Value& m) {
               a02 = f32(m[2]), a12 = f32(m[6]), a22 = f32(m[10]), a32 = f32(m[14]),
               a03 = f32(m[3]), a13 = f32(m[7]), a23 = f32(m[11]), a33 = f32(m[15]);
 
-    skvm::F32 b00 = a00*a11 - a01*a10,
-              b01 = a00*a12 - a02*a10,
-              b02 = a00*a13 - a03*a10,
-              b03 = a01*a12 - a02*a11,
-              b04 = a01*a13 - a03*a11,
-              b05 = a02*a13 - a03*a12,
-              b06 = a20*a31 - a21*a30,
-              b07 = a20*a32 - a22*a30,
-              b08 = a20*a33 - a23*a30,
-              b09 = a21*a32 - a22*a31,
-              b10 = a21*a33 - a23*a31,
-              b11 = a22*a33 - a23*a32;
+    skvm::F32 b00 = a00**a11 - a01**a10,
+              b01 = a00**a12 - a02**a10,
+              b02 = a00**a13 - a03**a10,
+              b03 = a01**a12 - a02**a11,
+              b04 = a01**a13 - a03**a11,
+              b05 = a02**a13 - a03**a12,
+              b06 = a20**a31 - a21**a30,
+              b07 = a20**a32 - a22**a30,
+              b08 = a20**a33 - a23**a30,
+              b09 = a21**a32 - a22**a31,
+              b10 = a21**a33 - a23**a31,
+              b11 = a22**a33 - a23**a32;
 
-    skvm::F32 idet = 1.0f / (b00*b11 - b01*b10 + b02*b09 + b03*b08 - b04*b07 + b05*b06);
+    skvm::F32 idet = 1.0f / (b00**b11 - b01**b10 + b02**b09 + b03**b08 - b04**b07 + b05**b06);
 
     b00 *= idet;
     b01 *= idet;
@@ -959,8 +914,66 @@ Value SkVMGenerator::writeMatrixInverse4x4(const Value& m) {
 }
 
 Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
-    auto found = fIntrinsics.find(c.function().name());
-    if (found == fIntrinsics.end()) {
+    static std::unordered_map<String, Intrinsic> intrinsics {
+        { "radians", Intrinsic::kRadians },
+        { "degrees", Intrinsic::kDegrees },
+        { "sin",     Intrinsic::kSin },
+        { "cos",     Intrinsic::kCos },
+        { "tan",     Intrinsic::kTan },
+        { "asin",    Intrinsic::kASin },
+        { "acos",    Intrinsic::kACos },
+        { "atan",    Intrinsic::kATan },
+
+        { "pow",  Intrinsic::kPow },
+        { "exp",  Intrinsic::kExp },
+        { "log",  Intrinsic::kLog },
+        { "exp2", Intrinsic::kExp2 },
+        { "log2", Intrinsic::kLog2 },
+        { "sqrt", Intrinsic::kSqrt },
+        { "inversesqrt", Intrinsic::kInverseSqrt },
+
+        { "abs",   Intrinsic::kAbs },
+        { "sign",  Intrinsic::kSign },
+        { "floor", Intrinsic::kFloor },
+        { "ceil",  Intrinsic::kCeil },
+        { "fract", Intrinsic::kFract },
+        { "mod",   Intrinsic::kMod },
+
+        { "min",        Intrinsic::kMin },
+        { "max",        Intrinsic::kMax },
+        { "clamp",      Intrinsic::kClamp },
+        { "saturate",   Intrinsic::kSaturate },
+        { "mix",        Intrinsic::kMix },
+        { "step",       Intrinsic::kStep },
+        { "smoothstep", Intrinsic::kSmoothstep },
+
+        { "length",      Intrinsic::kLength },
+        { "distance",    Intrinsic::kDistance },
+        { "dot",         Intrinsic::kDot },
+        { "cross",       Intrinsic::kCross },
+        { "normalize",   Intrinsic::kNormalize },
+        { "faceforward", Intrinsic::kFaceforward },
+        { "reflect",     Intrinsic::kReflect },
+        { "refract",     Intrinsic::kRefract },
+
+        { "matrixCompMult", Intrinsic::kMatrixCompMult },
+        { "inverse",        Intrinsic::kInverse },
+
+        { "lessThan",         Intrinsic::kLessThan },
+        { "lessThanEqual",    Intrinsic::kLessThanEqual },
+        { "greaterThan",      Intrinsic::kGreaterThan },
+        { "greaterThanEqual", Intrinsic::kGreaterThanEqual },
+        { "equal",            Intrinsic::kEqual },
+        { "notEqual",         Intrinsic::kNotEqual },
+
+        { "any", Intrinsic::kAny },
+        { "all", Intrinsic::kAll },
+        { "not", Intrinsic::kNot },
+
+        { "sample", Intrinsic::kSample } };
+
+    auto found = intrinsics.find(c.function().name());
+    if (found == intrinsics.end()) {
         SkDEBUGFAILF("Missing intrinsic: '%s'", String(c.function().name()).c_str());
         return {};
     }
@@ -989,11 +1002,11 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
             } else {
                 // matrix sampling
                 SkASSERT(arg.slots() == 9);
-                skvm::F32 x = f32(arg[0])*coord.x + f32(arg[3])*coord.y + f32(arg[6]),
-                          y = f32(arg[1])*coord.x + f32(arg[4])*coord.y + f32(arg[7]),
-                          w = f32(arg[2])*coord.x + f32(arg[5])*coord.y + f32(arg[8]);
-                x = x * (1.0f / w);
-                y = y * (1.0f / w);
+                skvm::F32 x = f32(arg[0])**coord.x + f32(arg[3])**coord.y + f32(arg[6]),
+                          y = f32(arg[1])**coord.x + f32(arg[4])**coord.y + f32(arg[7]),
+                          w = f32(arg[2])**coord.x + f32(arg[5])**coord.y + f32(arg[8]);
+                x = x ** (1.0f / w);
+                y = y ** (1.0f / w);
                 coord = {x, y};
             }
         }
@@ -1110,7 +1123,7 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
         case Intrinsic::kSmoothstep:
             return ternary([](skvm::F32 edge0, skvm::F32 edge1, skvm::F32 x) {
                 skvm::F32 t = skvm::clamp01((x - edge0) / (edge1 - edge0));
-                return t * t * (3 - 2 * t);
+                return t ** t ** (3 - 2 ** t);
             });
 
         case Intrinsic::kLength: return skvm::sqrt(dot(args[0], args[0]));
@@ -1123,14 +1136,14 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
             skvm::F32 ax = f32(args[0][0]), ay = f32(args[0][1]), az = f32(args[0][2]),
                       bx = f32(args[1][0]), by = f32(args[1][1]), bz = f32(args[1][2]);
             Value result(3);
-            result[0] = ay*bz - az*by;
-            result[1] = az*bx - ax*bz;
-            result[2] = ax*by - ay*bx;
+            result[0] = ay**bz - az**by;
+            result[1] = az**bx - ax**bz;
+            result[2] = ax**by - ay**bx;
             return result;
         }
         case Intrinsic::kNormalize: {
             skvm::F32 invLen = 1.0f / skvm::sqrt(dot(args[0], args[0]));
-            return unary(args[0], [&](skvm::F32 x) { return x * invLen; });
+            return unary(args[0], [&](skvm::F32 x) { return x ** invLen; });
         }
         case Intrinsic::kFaceforward: {
             const Value &N    = args[0],
@@ -1146,7 +1159,7 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
 
             skvm::F32 dotNI = dot(N, I);
             return binary([&](skvm::F32 i, skvm::F32 n) {
-                return i - 2*dotNI*n;
+                return i - 2**dotNI**n;
             });
         }
         case Intrinsic::kRefract: {
@@ -1155,14 +1168,14 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
             skvm::F32   eta = f32(args[2]);
 
             skvm::F32 dotNI = dot(N, I),
-                      k     = 1 - eta*eta*(1 - dotNI*dotNI);
+                      k     = 1 - eta**eta**(1 - dotNI**dotNI);
             return binary([&](skvm::F32 i, skvm::F32 n) {
-                return select(k<0, 0.0f, eta*i - (eta*dotNI + sqrt(k))*n);
+                return select(k<0, 0.0f, eta**i - (eta**dotNI + sqrt(k))**n);
             });
         }
 
         case Intrinsic::kMatrixCompMult:
-            return binary([](skvm::F32 x, skvm::F32 y) { return x * y; });
+            return binary([](skvm::F32 x, skvm::F32 y) { return x ** y; });
         case Intrinsic::kInverse: {
             switch (args[0].slots()) {
                 case  4: return this->writeMatrixInverse2x2(args[0]);
@@ -1302,10 +1315,10 @@ Value SkVMGenerator::writeExternalFunctionCall(const ExternalFunctionCall& c) {
 Value SkVMGenerator::writePrefixExpression(const PrefixExpression& p) {
     Value val = this->writeExpression(*p.operand());
 
-    switch (p.getOperator()) {
+    switch (p.getOperator().kind()) {
         case Token::Kind::TK_PLUSPLUS:
         case Token::Kind::TK_MINUSMINUS: {
-            bool incr = p.getOperator() == Token::Kind::TK_PLUSPLUS;
+            bool incr = p.getOperator().kind() == Token::Kind::TK_PLUSPLUS;
 
             switch (base_number_kind(p.type())) {
                 case Type::NumberKind::kFloat:
@@ -1341,13 +1354,13 @@ Value SkVMGenerator::writePrefixExpression(const PrefixExpression& p) {
 }
 
 Value SkVMGenerator::writePostfixExpression(const PostfixExpression& p) {
-    switch (p.getOperator()) {
+    switch (p.getOperator().kind()) {
         case Token::Kind::TK_PLUSPLUS:
         case Token::Kind::TK_MINUSMINUS: {
             Value old = this->writeExpression(*p.operand()),
                   val = old;
             SkASSERT(val.slots() == 1);
-            bool incr = p.getOperator() == Token::Kind::TK_PLUSPLUS;
+            bool incr = p.getOperator().kind() == Token::Kind::TK_PLUSPLUS;
 
             switch (base_number_kind(p.type())) {
                 case Type::NumberKind::kFloat:
@@ -1527,7 +1540,9 @@ void SkVMGenerator::writeContinueStatement() {
 void SkVMGenerator::writeForStatement(const ForStatement& f) {
     // We require that all loops be ES2-compliant (unrollable), and actually unroll them here
     Analysis::UnrollableLoopInfo loop;
-    SkAssertResult(Analysis::ForLoopIsValidForES2(f, &loop, /*errors=*/nullptr));
+    SkAssertResult(Analysis::ForLoopIsValidForES2(f.fOffset, f.initializer().get(), f.test().get(),
+                                                  f.next().get(), f.statement().get(), &loop,
+                                                  /*errors=*/nullptr));
     SkASSERT(slot_count(loop.fIndex->type()) == 1);
 
     size_t indexSlot = this->getSlot(*loop.fIndex);

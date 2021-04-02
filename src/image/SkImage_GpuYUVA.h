@@ -34,15 +34,13 @@ public:
 
     GrSemaphoresSubmitted onFlush(GrDirectContext*, const GrFlushInfo&) override;
 
-    // This returns the single backing proxy if the YUV channels have already been flattened but
-    // nullptr if they have not.
-    GrTextureProxy* peekProxy() const override;
-
     bool onIsTextureBacked() const override {
         // We should have YUVA proxies or a RGBA proxy,but not both.
         SkASSERT(fYUVAProxies.isValid() != SkToBool(fRGBView));
         return true;
     }
+
+    size_t onTextureSize() const override;
 
     sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType, sk_sp<SkColorSpace>,
                                                 GrDirectContext*) const final;
@@ -60,16 +58,6 @@ public:
         return SkToBool(fRGBView.proxy());
     }
 #endif
-
-    /**
-     * This is the implementation of SkDeferredDisplayListRecorder::makeYUVAPromiseTexture.
-     */
-    static sk_sp<SkImage> MakePromiseYUVATexture(GrRecordingContext*,
-                                                 const GrYUVABackendTextureInfo&,
-                                                 sk_sp<SkColorSpace> imageColorSpace,
-                                                 PromiseImageTextureFulfillProc textureFulfillProc,
-                                                 PromiseImageTextureReleaseProc textureReleaseProc,
-                                                 PromiseImageTextureContext textureContexts[]);
 
 private:
     SkImage_GpuYUVA(sk_sp<GrImageContext>, const SkImage_GpuYUVA* image, sk_sp<SkColorSpace>);

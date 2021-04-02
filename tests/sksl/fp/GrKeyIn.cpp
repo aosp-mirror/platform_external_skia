@@ -30,16 +30,16 @@ private:
     void onSetData(const GrGLSLProgramDataManager& pdman, const GrFragmentProcessor& _proc) override {
     }
 };
-GrGLSLFragmentProcessor* GrKeyIn::onCreateGLSLInstance() const {
-    return new GrGLSLKeyIn();
+std::unique_ptr<GrGLSLFragmentProcessor> GrKeyIn::onMakeProgramImpl() const {
+    return std::make_unique<GrGLSLKeyIn>();
 }
 void GrKeyIn::onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
     uint16_t red = SkFloatToHalf(color.fR);
     uint16_t green = SkFloatToHalf(color.fG);
     uint16_t blue = SkFloatToHalf(color.fB);
     uint16_t alpha = SkFloatToHalf(color.fA);
-    b->add32(((uint32_t)red << 16) | green);
-    b->add32(((uint32_t)blue << 16) | alpha);
+    b->add32(((uint32_t)red << 16) | green, "color.rg");
+    b->add32(((uint32_t)blue << 16) | alpha, "color.ba");
 }
 bool GrKeyIn::onIsEqual(const GrFragmentProcessor& other) const {
     const GrKeyIn& that = other.cast<GrKeyIn>();

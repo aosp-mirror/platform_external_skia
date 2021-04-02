@@ -336,10 +336,10 @@ sk_sp<GrGpu> GrGLGpu::Make(sk_sp<const GrGLInterface> interface, const GrContext
     return sk_sp<GrGpu>(new GrGLGpu(std::move(glContext), direct));
 }
 
-GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* direct)
-        : GrGpu(direct)
+GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* dContext)
+        : GrGpu(dContext)
         , fGLContext(std::move(ctx))
-        , fProgramCache(new ProgramCache(this))
+        , fProgramCache(new ProgramCache(dContext->priv().options().fRuntimeProgramCacheSize))
         , fHWProgramID(0)
         , fTempSrcFBOID(0)
         , fTempDstFBOID(0)
@@ -372,10 +372,6 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* direct)
     }
     static_assert(kGrGpuBufferTypeCount == SK_ARRAY_COUNT(fHWBufferState));
 
-    if (this->glCaps().shaderCaps()->pathRenderingSupport()) {
-        fPathRendering = std::make_unique<GrGLPathRendering>(this);
-    }
-
     if (this->glCaps().useSamplerObjects()) {
         fSamplerObjectCache = std::make_unique<SamplerObjectCache>(this);
     }
@@ -384,9 +380,11 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* direct)
 GrGLGpu::~GrGLGpu() {
     // Ensure any GrGpuResource objects get deleted first, since they may require a working GrGLGpu
     // to release the resources held by the objects themselves.
-    fPathRendering.reset();
     fCopyProgramArrayBuffer.reset();
     fMipmapProgramArrayBuffer.reset();
+    if (fProgramCache) {
+        fProgramCache->reset();
+    }
 
     fHWProgram.reset();
     if (fHWProgramID) {
@@ -461,6 +459,7 @@ void GrGLGpu::disconnect(DisconnectType type) {
     }
 
     fHWProgram.reset();
+    fProgramCache->reset();
     fProgramCache.reset();
 
     fHWProgramID = 0;
@@ -476,10 +475,15 @@ void GrGLGpu::disconnect(DisconnectType type) {
         fMipmapPrograms[i].fProgram = 0;
     }
 
-    if (this->glCaps().shaderCaps()->pathRenderingSupport()) {
-        this->glPathRendering()->disconnect(type);
-    }
     fFinishCallbacks.callAll(/* doDelete */ DisconnectType::kCleanup == type);
+}
+
+GrThreadSafePipelineBuilder* GrGLGpu::pipelineBuilder() {
+    return fProgramCache.get();
+}
+
+sk_sp<GrThreadSafePipelineBuilder> GrGLGpu::refPipelineBuilder() {
+    return fProgramCache;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -592,12 +596,6 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
         fHWBoundRenderTargetUniqueID.makeInvalid();
         fHWSRGBFramebuffer = kUnknown_TriState;
         fBoundDrawFramebuffer = 0;
-    }
-
-    if (resetBits & kPathRendering_GrGLBackendState) {
-        if (this->caps()->shaderCaps()->pathRenderingSupport()) {
-            this->glPathRendering()->resetContext();
-        }
     }
 
     // we assume these values
@@ -1805,7 +1803,8 @@ void GrGLGpu::disableWindowRectangles() {
 bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget, const GrProgramInfo& programInfo) {
     this->handleDirtyContext();
 
-    sk_sp<GrGLProgram> program = fProgramCache->findOrCreateProgram(renderTarget, programInfo);
+    sk_sp<GrGLProgram> program = fProgramCache->findOrCreateProgram(this->getContext(),
+                                                                    renderTarget, programInfo);
     if (!program) {
         GrCapsDebugf(this->caps(), "Failed to create program!\n");
         return false;
@@ -2915,7 +2914,6 @@ void GrGLGpu::onFBOChanged() {
 }
 
 void GrGLGpu::bindFramebuffer(GrGLenum target, GrGLuint fboid) {
-    fStats.incRenderTargetBinds();
     GL_CALL(BindFramebuffer(target, fboid));
     if (target == GR_GL_FRAMEBUFFER || target == GR_GL_DRAW_FRAMEBUFFER) {
         fBoundDrawFramebuffer = fboid;
@@ -3062,18 +3060,19 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
     SkSL::String sksl(vshaderTxt.c_str(), vshaderTxt.size());
     SkSL::Program::Settings settings;
     SkSL::String glsl;
-    std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(this, SkSL::Program::kVertex_Kind,
+    std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(this, SkSL::ProgramKind::kVertex,
                                                           sksl, settings, &glsl, errorHandler);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fCopyPrograms[progIdx].fProgram,
-                                                  GR_GL_VERTEX_SHADER, glsl, &fStats, errorHandler);
+                                                  GR_GL_VERTEX_SHADER, glsl, fProgramCache->stats(),
+                                                  errorHandler);
     SkASSERT(program->fInputs.isEmpty());
 
     sksl.assign(fshaderTxt.c_str(), fshaderTxt.size());
-    program = GrSkSLtoGLSL(this, SkSL::Program::kFragment_Kind, sksl, settings, &glsl,
+    program = GrSkSLtoGLSL(this, SkSL::ProgramKind::kFragment, sksl, settings, &glsl,
                            errorHandler);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fCopyPrograms[progIdx].fProgram,
-                                                  GR_GL_FRAGMENT_SHADER, glsl, &fStats,
-                                                  errorHandler);
+                                                  GR_GL_FRAGMENT_SHADER, glsl,
+                                                  fProgramCache->stats(), errorHandler);
     SkASSERT(program->fInputs.isEmpty());
 
     GL_CALL(LinkProgram(fCopyPrograms[progIdx].fProgram));
@@ -3215,18 +3214,19 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
     SkSL::String sksl(vshaderTxt.c_str(), vshaderTxt.size());
     SkSL::Program::Settings settings;
     SkSL::String glsl;
-    std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(this, SkSL::Program::kVertex_Kind,
+    std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(this, SkSL::ProgramKind::kVertex,
                                                           sksl, settings, &glsl, errorHandler);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fMipmapPrograms[progIdx].fProgram,
-                                                  GR_GL_VERTEX_SHADER, glsl, &fStats, errorHandler);
+                                                  GR_GL_VERTEX_SHADER, glsl,
+                                                  fProgramCache->stats(), errorHandler);
     SkASSERT(program->fInputs.isEmpty());
 
     sksl.assign(fshaderTxt.c_str(), fshaderTxt.size());
-    program = GrSkSLtoGLSL(this, SkSL::Program::kFragment_Kind, sksl, settings, &glsl,
+    program = GrSkSLtoGLSL(this, SkSL::ProgramKind::kFragment, sksl, settings, &glsl,
                            errorHandler);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fMipmapPrograms[progIdx].fProgram,
-                                                  GR_GL_FRAGMENT_SHADER, glsl, &fStats,
-                                                  errorHandler);
+                                                  GR_GL_FRAGMENT_SHADER, glsl,
+                                                  fProgramCache->stats(), errorHandler);
     SkASSERT(program->fInputs.isEmpty());
 
     GL_CALL(LinkProgram(fMipmapPrograms[progIdx].fProgram));
@@ -3673,16 +3673,15 @@ void GrGLGpu::deleteBackendTexture(const GrBackendTexture& tex) {
 }
 
 bool GrGLGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) {
-    SkASSERT(!(GrProcessor::CustomFeatures::kSampleLocations & programInfo.requestedFeatures()));
+    GrThreadSafePipelineBuilder::Stats::ProgramCacheResult stat;
 
-    Stats::ProgramCacheResult stat;
-
-    sk_sp<GrGLProgram> tmp = fProgramCache->findOrCreateProgram(desc, programInfo, &stat);
+    sk_sp<GrGLProgram> tmp = fProgramCache->findOrCreateProgram(this->getContext(),
+                                                                desc, programInfo, &stat);
     if (!tmp) {
         return false;
     }
 
-    return stat != Stats::ProgramCacheResult::kHit;
+    return stat != GrThreadSafePipelineBuilder::Stats::ProgramCacheResult::kHit;
 }
 
 #if GR_TEST_UTILS
@@ -3863,10 +3862,6 @@ void GrGLGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget& 
             this->deleteFramebuffer(info.fFBOID);
         }
     }
-}
-
-void GrGLGpu::testingOnly_flushGpuAndSync() {
-    GL_CALL(Finish());
 }
 #endif
 

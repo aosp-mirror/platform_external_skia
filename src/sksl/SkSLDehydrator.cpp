@@ -9,6 +9,9 @@
 
 #include <map>
 
+#include "include/private/SkSLProgramElement.h"
+#include "include/private/SkSLStatement.h"
+#include "include/private/SkSLSymbol.h"
 #include "src/sksl/SkSLRehydrator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
@@ -31,15 +34,12 @@
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSetting.h"
-#include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/ir/SkSLSwitchCase.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
-#include "src/sksl/ir/SkSLSymbol.h"
 #include "src/sksl/ir/SkSLSymbolAlias.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
@@ -89,13 +89,11 @@ void Dehydrator::write(Layout l) {
         this->writeS8(l.fSet);
         this->writeS16(l.fBuiltin);
         this->writeS8(l.fInputAttachmentIndex);
-        this->writeS8((int) l.fFormat);
         this->writeS8(l.fPrimitive);
         this->writeS8(l.fMaxVertices);
         this->writeS8(l.fInvocations);
         this->write(l.fMarker);
         this->write(l.fWhen);
-        this->writeS8(l.fKey);
         this->writeS8((int) l.fCType);
     }
 }
@@ -262,9 +260,8 @@ void Dehydrator::write(const Expression* e) {
                 const BinaryExpression& b = e->as<BinaryExpression>();
                 this->writeCommand(Rehydrator::kBinary_Command);
                 this->write(b.left().get());
-                this->writeU8((int) b.getOperator());
+                this->writeU8((int) b.getOperator().kind());
                 this->write(b.right().get());
-                this->write(b.type());
                 break;
             }
             case Expression::Kind::kBoolLiteral: {
@@ -273,6 +270,9 @@ void Dehydrator::write(const Expression* e) {
                 this->writeU8(b.value());
                 break;
             }
+            case Expression::Kind::kCodeString:
+                SkDEBUGFAIL("shouldn't be able to receive kCodeString here");
+                break;
             case Expression::Kind::kConstructor: {
                 const Constructor& c = e->as<Constructor>();
                 this->writeCommand(Rehydrator::kConstructor_Command);
@@ -332,14 +332,14 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kPostfix: {
                 const PostfixExpression& p = e->as<PostfixExpression>();
                 this->writeCommand(Rehydrator::kPostfix_Command);
-                this->writeU8((int) p.getOperator());
+                this->writeU8((int) p.getOperator().kind());
                 this->write(p.operand().get());
                 break;
             }
             case Expression::Kind::kPrefix: {
                 const PrefixExpression& p = e->as<PrefixExpression>();
                 this->writeCommand(Rehydrator::kPrefix_Command);
-                this->writeU8((int) p.getOperator());
+                this->writeU8((int) p.getOperator().kind());
                 this->write(p.operand().get());
                 break;
             }
@@ -347,7 +347,6 @@ void Dehydrator::write(const Expression* e) {
                 const Setting& s = e->as<Setting>();
                 this->writeCommand(Rehydrator::kSetting_Command);
                 this->write(s.name());
-                this->write(s.type());
                 break;
             }
             case Expression::Kind::kSwizzle: {
@@ -463,12 +462,10 @@ void Dehydrator::write(const Statement* s) {
                 AutoDehydratorSymbolTable symbols(this, ss.symbols());
                 this->write(ss.value().get());
                 this->writeU8(ss.cases().size());
-                for (const std::unique_ptr<SwitchCase>& sc : ss.cases()) {
-                    this->write(sc->value().get());
-                    this->writeU8(sc->statements().size());
-                    for (const std::unique_ptr<Statement>& stmt : sc->statements()) {
-                        this->write(stmt.get());
-                    }
+                for (const std::unique_ptr<Statement>& stmt : ss.cases()) {
+                    const SwitchCase& sc = stmt->as<SwitchCase>();
+                    this->write(sc.value().get());
+                    this->write(sc.statement().get());
                 }
                 break;
             }

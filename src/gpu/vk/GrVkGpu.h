@@ -43,6 +43,9 @@ public:
     void disconnect(DisconnectType) override;
     bool disconnected() const { return fDisconnected; }
 
+    GrThreadSafePipelineBuilder* pipelineBuilder() override;
+    sk_sp<GrThreadSafePipelineBuilder> refPipelineBuilder() override;
+
     const GrVkInterface* vkInterface() const { return fInterface.get(); }
     const GrVkCaps& vkCaps() const { return *fVkCaps; }
 
@@ -96,8 +99,6 @@ public:
                                                                int sampleCnt,
                                                                GrProtected) override;
     void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) override;
-
-    void testingOnly_flushGpuAndSync() override;
 
     void resetShaderCacheForTesting() const override {
         fResourceProvider.resetShaderCacheForTesting();
@@ -325,11 +326,11 @@ private:
                               const SkIPoint& dstPoint);
 
     // helpers for onCreateTexture and writeTexturePixels
-    bool uploadTexDataLinear(GrVkTexture* tex, int left, int top, int width, int height,
+    bool uploadTexDataLinear(GrVkAttachment* tex, int left, int top, int width, int height,
                              GrColorType colorType, const void* data, size_t rowBytes);
-    bool uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int width, int height,
+    bool uploadTexDataOptimal(GrVkAttachment* tex, int left, int top, int width, int height,
                               GrColorType colorType, const GrMipLevel texels[], int mipLevelCount);
-    bool uploadTexDataCompressed(GrVkTexture* tex, SkImage::CompressionType compression,
+    bool uploadTexDataCompressed(GrVkAttachment* tex, SkImage::CompressionType compression,
                                  VkFormat vkFormat, SkISize dimensions, GrMipmapped mipMapped,
                                  const void* data, size_t dataSize);
     void resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect& srcRect,

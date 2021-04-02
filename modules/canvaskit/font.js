@@ -1,21 +1,16 @@
 CanvasKit._extraInitializations = CanvasKit._extraInitializations || [];
 CanvasKit._extraInitializations.push(function() {
 
-  // str can be either a text string or a ShapedText object
   CanvasKit.Canvas.prototype.drawText = function(str, x, y, paint, font) {
-    if (typeof str === 'string') {
-      // lengthBytesUTF8 and stringToUTF8Array are defined in the emscripten
-      // JS.  See https://kripken.github.io/emscripten-site/docs/api_reference/preamble.js.html#stringToUTF8
-      var strLen = lengthBytesUTF8(str);
-      // Add 1 for null terminator, which we need when copying/converting, but can ignore
-      // when we call into Skia.
-      var strPtr = CanvasKit._malloc(strLen + 1);
-      stringToUTF8(str, strPtr, strLen + 1);
-      this._drawSimpleText(strPtr, strLen, x, y, font, paint);
-      CanvasKit._free(strPtr);
-    } else {
-      this._drawShapedText(str, x, y, paint);
-    }
+    // lengthBytesUTF8 and stringToUTF8Array are defined in the emscripten
+    // JS.  See https://kripken.github.io/emscripten-site/docs/api_reference/preamble.js.html#stringToUTF8
+    var strLen = lengthBytesUTF8(str);
+    // Add 1 for null terminator, which we need when copying/converting, but can ignore
+    // when we call into Skia.
+    var strPtr = CanvasKit._malloc(strLen + 1);
+    stringToUTF8(str, strPtr, strLen + 1);
+    this._drawSimpleText(strPtr, strLen, x, y, font, paint);
+    CanvasKit._free(strPtr);
   };
 
   // Glyphs should be a Uint32Array of glyph ids, e.g. provided by Font.getGlyphIDs.
@@ -93,37 +88,6 @@ CanvasKit._extraInitializations.push(function() {
     return rv;
   };
 
-  // Returns an array of the widths of the glyphs in this string.
-  // TODO(kjlubick) Remove this API - getGlyphWidths is the better API.
-  CanvasKit.Font.prototype.getWidths = function(str) {
-    // add 1 for null terminator
-    var codePoints = str.length + 1;
-    // lengthBytesUTF8 and stringToUTF8Array are defined in the emscripten
-    // JS.  See https://kripken.github.io/emscripten-site/docs/api_reference/preamble.js.html#stringToUTF8
-    // Add 1 for null terminator
-    var strBytes = lengthBytesUTF8(str) + 1;
-    var strPtr = CanvasKit._malloc(strBytes);
-    stringToUTF8(str, strPtr, strBytes);
-
-    var bytesPerFloat = 4;
-    // allocate widths == numCodePoints
-    var widthPtr = CanvasKit._malloc(codePoints * bytesPerFloat);
-    if (!this._getWidths(strPtr, strBytes, codePoints, widthPtr)) {
-      Debug('Could not compute widths');
-      CanvasKit._free(strPtr);
-      CanvasKit._free(widthPtr);
-      return null;
-    }
-    // reminder, this shouldn't copy the data, just is a nice way to
-    // wrap 4 bytes together into a float.
-    var widths = new Float32Array(CanvasKit.HEAPU8.buffer, widthPtr, codePoints);
-    // This copies the data so we can free the CanvasKit memory
-    var retVal = Array.from(widths);
-    CanvasKit._free(strPtr);
-    CanvasKit._free(widthPtr);
-    return retVal;
-  };
-
   // arguments should all be arrayBuffers or be an array of arrayBuffers.
   CanvasKit.FontMgr.FromData = function() {
     if (!arguments.length) {
@@ -171,19 +135,6 @@ CanvasKit._extraInitializations.push(function() {
     return font;
   };
 
-  // Clients can pass in a Float32Array with length 4 to this and the results
-  // will be copied into that array. Otherwise, a new TypedArray will be allocated
-  // and returned.
-  CanvasKit.ShapedText.prototype.getBounds = function(optionalOutputArray) {
-    this._getBounds(_scratchFourFloatsAPtr);
-    var ta = _scratchFourFloatsA['toTypedArray']();
-    if (optionalOutputArray) {
-      optionalOutputArray.set(ta);
-      return optionalOutputArray;
-    }
-    return ta.slice();
-  };
-
   CanvasKit.TextBlob.MakeOnPath = function(str, path, font, initialOffset) {
     if (!str || !str.length) {
       Debug('ignoring 0 length string');
@@ -202,7 +153,8 @@ CanvasKit._extraInitializations.push(function() {
       initialOffset = 0;
     }
 
-    var widths = font.getWidths(str);
+    var ids = font.getGlyphIDs(str);
+    var widths = font.getGlyphWidths(ids);
 
     var rsx = new CanvasKit.RSXFormBuilder();
     var meas = new CanvasKit.ContourMeasureIter(path, false, 1);

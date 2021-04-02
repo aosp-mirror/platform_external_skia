@@ -8,7 +8,7 @@
 #ifndef SKSL_DSL_FPS
 #define SKSL_DSL_FPS
 
-#include "src/sksl/dsl/DSL.h"
+#include "include/sksl/DSL.h"
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
@@ -22,6 +22,12 @@ void StartFragmentProcessor(GrGLSLFragmentProcessor* processor,
                             GrGLSLFragmentProcessor::EmitArgs* emitArgs);
 
 void EndFragmentProcessor();
+
+DSLVar sk_SampleCoord();
+
+DSLExpression SampleChild(int index, DSLExpression coords = DSLExpression());
+
+GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var);
 
 } // namespace dsl
 

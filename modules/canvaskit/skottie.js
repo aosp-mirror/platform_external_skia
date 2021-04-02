@@ -7,7 +7,14 @@
 
 // prop_filter_prefix is an optional string acting as a name filter for selecting
 // "interesting" Lottie properties (surfaced in the embedded player controls)
-CanvasKit.MakeManagedAnimation = function(json, assets, prop_filter_prefix) {
+
+// soundMap is an optional object that maps string names to AudioPlayers
+// AudioPlayers manage a single audio layer with a seek function
+
+// logger is an optional logging object, expected to provide two functions:
+//   - onError(err_str, json_node_str)
+//   - onWarning(wrn_str, json_node_str)
+CanvasKit.MakeManagedAnimation = function(json, assets, prop_filter_prefix, soundMap, logger) {
   if (!CanvasKit._MakeManagedAnimation) {
     throw 'Not compiled with MakeManagedAnimation';
   }
@@ -15,7 +22,8 @@ CanvasKit.MakeManagedAnimation = function(json, assets, prop_filter_prefix) {
     prop_filter_prefix = '';
   }
   if (!assets) {
-    return CanvasKit._MakeManagedAnimation(json, 0, nullptr, nullptr, nullptr, prop_filter_prefix);
+    return CanvasKit._MakeManagedAnimation(json, 0, nullptr, nullptr, nullptr, prop_filter_prefix,
+                                           soundMap, logger);
   }
   var assetNamePtrs = [];
   var assetDataPtrs = [];
@@ -49,7 +57,8 @@ CanvasKit.MakeManagedAnimation = function(json, assets, prop_filter_prefix) {
   var assetSizesPtr = copy1dArray(assetSizes,    "HEAPU32");
 
   var anim = CanvasKit._MakeManagedAnimation(json, assetKeys.length, namesPtr,
-                                             assetsPtr, assetSizesPtr, prop_filter_prefix);
+                                             assetsPtr, assetSizesPtr, prop_filter_prefix,
+                                             soundMap, logger);
 
   // The C++ code has made copies of the asset and string data, so free our copies.
   CanvasKit._free(namesPtr);
@@ -111,7 +120,7 @@ CanvasKit.MakeManagedAnimation = function(json, assets, prop_filter_prefix) {
 
     CanvasKit.ManagedAnimation.prototype.setColor = function(key, color) {
       var cPtr = copyColorToWasm(color);
-      this._setColor(key, cPtr);
+      return this._setColor(key, cPtr);
     };
 
     CanvasKit.ManagedAnimation.prototype.size = function(optSize) {

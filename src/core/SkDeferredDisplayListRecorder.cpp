@@ -163,7 +163,7 @@ bool SkDeferredDisplayListRecorder::init() {
             [lazyProxyData = fLazyProxyData](GrResourceProvider* resourceProvider,
                                              const GrSurfaceProxy::LazySurfaceDesc&) {
                 // The proxy backing the destination surface had better have been instantiated
-                // prior to the this one (i.e., the proxy backing the DLL's surface).
+                // prior to this one (i.e., the proxy backing the DDL's surface).
                 // Fulfill this lazy proxy with the destination surface's GrRenderTarget.
                 SkASSERT(lazyProxyData->fReplayDest->peekSurface());
                 auto surface = sk_ref_sp<GrSurface>(lazyProxyData->fReplayDest->peekSurface());
@@ -234,6 +234,7 @@ sk_sp<SkDeferredDisplayList> SkDeferredDisplayListRecorder::detach() {
     return ddl;
 }
 
+#ifndef SK_MAKE_PROMISE_TEXTURE_DISABLE_LEGACY_API
 sk_sp<SkImage> SkDeferredDisplayListRecorder::makePromiseTexture(
         const GrBackendFormat& backendFormat,
         int width,
@@ -246,31 +247,38 @@ sk_sp<SkImage> SkDeferredDisplayListRecorder::makePromiseTexture(
         PromiseImageTextureFulfillProc textureFulfillProc,
         PromiseImageTextureReleaseProc textureReleaseProc,
         PromiseImageTextureContext textureContext) {
-    return SkImage_Gpu::MakePromiseTexture(fContext.get(),
-                                           backendFormat,
-                                           {width, height},
-                                           mipMapped,
-                                           origin,
-                                           colorType,
-                                           alphaType,
-                                           std::move(colorSpace),
-                                           textureFulfillProc,
-                                           textureReleaseProc,
-                                           textureContext);
+    if (!fContext) {
+        return nullptr;
+    }
+    return SkImage::MakePromiseTexture(fContext->threadSafeProxy(),
+                                       backendFormat,
+                                       {width, height},
+                                       mipMapped,
+                                       origin,
+                                       colorType,
+                                       alphaType,
+                                       std::move(colorSpace),
+                                       textureFulfillProc,
+                                       textureReleaseProc,
+                                       textureContext);
 }
 
 sk_sp<SkImage> SkDeferredDisplayListRecorder::makeYUVAPromiseTexture(
-        const GrYUVABackendTextureInfo& yuvaBackendTextureInfo,
+        const GrYUVABackendTextureInfo& backendTextureInfo,
         sk_sp<SkColorSpace> imageColorSpace,
         PromiseImageTextureFulfillProc textureFulfillProc,
         PromiseImageTextureReleaseProc textureReleaseProc,
         PromiseImageTextureContext textureContexts[]) {
-    return SkImage_GpuYUVA::MakePromiseYUVATexture(fContext.get(),
-                                                   yuvaBackendTextureInfo,
-                                                   std::move(imageColorSpace),
-                                                   textureFulfillProc,
-                                                   textureReleaseProc,
-                                                   textureContexts);
+    if (!fContext) {
+        return nullptr;
+    }
+    return SkImage::MakePromiseYUVATexture(fContext->threadSafeProxy(),
+                                           backendTextureInfo,
+                                           std::move(imageColorSpace),
+                                           textureFulfillProc,
+                                           textureReleaseProc,
+                                           textureContexts);
 }
+#endif // !SK_MAKE_PROMISE_TEXTURE_DISABLE_LEGACY_API
 
 #endif

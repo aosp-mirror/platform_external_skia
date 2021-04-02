@@ -8,6 +8,7 @@
 #include "src/sksl/dsl/priv/DSLFPs.h"
 
 #include "src/sksl/dsl/priv/DSLWriter.h"
+#include "src/sksl/ir/SkSLCodeStringExpression.h"
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
@@ -22,6 +23,23 @@ void StartFragmentProcessor(GrGLSLFragmentProcessor* processor,
 
 void EndFragmentProcessor() {
     DSLWriter::EndFragmentProcessor();
+}
+
+DSLVar sk_SampleCoord() {
+    return DSLVar("sk_SampleCoord");
+}
+
+DSLExpression SampleChild(int index, DSLExpression coords) {
+    std::unique_ptr<SkSL::Expression> coordsExpr = coords.release();
+    SkString code = DSLWriter::CurrentProcessor()->invokeChild(index, *DSLWriter::CurrentEmitArgs(),
+                                                              coordsExpr ? coordsExpr->description()
+                                                                         : "");
+    return DSLExpression(std::make_unique<SkSL::CodeStringExpression>(code.c_str(),
+                                                         DSLWriter::Context().fTypes.fHalf4.get()));
+}
+
+GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var) {
+    return DSLWriter::VarUniformHandle(var);
 }
 
 } // namespace dsl

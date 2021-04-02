@@ -271,12 +271,13 @@ static void run_ddl_benchmark(sk_gpu_test::TestContext* testContext, GrDirectCon
 
     promiseImageHelper.uploadAllToGPU(nullptr, context);
 
-    DDLTileHelper tiles(context, dstCharacterization, viewport, FLAGS_ddlTilingWidthHeight,
+    DDLTileHelper tiles(context, dstCharacterization, viewport,
+                        FLAGS_ddlTilingWidthHeight, FLAGS_ddlTilingWidthHeight,
                         /* addRandomPaddingToDst */ false);
 
     tiles.createBackendTextures(nullptr, context);
 
-    tiles.createSKPPerTile(compressedPictureData.get(), promiseImageHelper);
+    tiles.createSKP(context->threadSafeProxy(), compressedPictureData.get(), promiseImageHelper);
 
     // In comparable modes, there is no GPU thread. The following pointers are all null.
     // Otherwise, we transfer testContext onto the GPU thread until after the bench.
@@ -565,6 +566,7 @@ int main(int argc, char** argv) {
     // Create a context.
     GrContextOptions ctxOptions;
     SetCtxOptionsFromCommonFlags(&ctxOptions);
+    ctxOptions.fAlwaysAntialias = config->getUseDMSAA();
     sk_gpu_test::GrContextFactory factory(ctxOptions);
     sk_gpu_test::ContextInfo ctxInfo =
         factory.getContextInfo(config->getContextType(), config->getContextOverrides());
@@ -600,8 +602,7 @@ int main(int argc, char** argv) {
     SkImageInfo info =
             SkImageInfo::Make(width, height, config->getColorType(), config->getAlphaType(),
                               sk_ref_sp(config->getColorSpace()));
-    uint32_t flags = config->getUseDIText() ? SkSurfaceProps::kUseDeviceIndependentFonts_Flag : 0;
-    SkSurfaceProps props(flags, kRGB_H_SkPixelGeometry);
+    SkSurfaceProps props(config->getSurfaceFlags(), kRGB_H_SkPixelGeometry);
     sk_sp<SkSurface> surface =
         SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, config->getSamples(), &props);
     if (!surface) {

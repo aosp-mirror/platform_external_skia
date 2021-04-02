@@ -8,6 +8,7 @@
 #ifndef SKSL_SWIZZLE
 #define SKSL_SWIZZLE
 
+#include "include/private/SkSLDefines.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/SkSLUtil.h"
@@ -30,6 +31,19 @@ struct Swizzle final : public Expression {
             , fComponents(components) {
         SkASSERT(this->components().size() >= 1 && this->components().size() <= 4);
     }
+
+    // Swizzle::Convert permits component arrays containing ZERO or ONE, does typechecking, reports
+    // errors via ErrorReporter, and returns an expression that combines constructors and native
+    // swizzles (comprised solely of X/Y/W/Z).
+    static std::unique_ptr<Expression> Convert(const Context& context,
+                                               std::unique_ptr<Expression> base,
+                                               ComponentArray inComponents);
+
+    // Swizzle::Make does not permit ZERO or ONE in the component array, just X/Y/Z/W; errors are
+    // reported via ASSERT.
+    static std::unique_ptr<Expression> Make(const Context& context,
+                                            std::unique_ptr<Expression> expr,
+                                            ComponentArray inComponents);
 
     std::unique_ptr<Expression>& base() {
         return fBase;

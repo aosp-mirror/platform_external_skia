@@ -18,7 +18,7 @@ static const bool gPrintSKSL = false;
 static const bool gPrintGLSL = false;
 
 std::unique_ptr<SkSL::Program> GrSkSLtoGLSL(const GrGLGpu* gpu,
-                                            SkSL::Program::Kind programKind,
+                                            SkSL::ProgramKind programKind,
                                             const SkSL::String& sksl,
                                             const SkSL::Program::Settings& settings,
                                             SkSL::String* glsl,
@@ -55,8 +55,9 @@ GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
                                     GrGLuint programId,
                                     GrGLenum type,
                                     const SkSL::String& glsl,
-                                    GrGpu::Stats* stats,
+                                    GrThreadSafePipelineBuilder::Stats* stats,
                                     GrContextOptions::ShaderErrorHandler* errorHandler) {
+    TRACE_EVENT0_ALWAYS("skia.shaders", "driver_compile_shader");
     const GrGLInterface* gli = glCtx.glInterface();
 
     // Specify GLSL source to the driver.
@@ -75,6 +76,7 @@ GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
     bool checkCompiled = !glCtx.caps()->skipErrorChecks();
 
     if (checkCompiled) {
+        ATRACE_ANDROID_FRAMEWORK("checkCompiled");
         GrGLint compiled = GR_GL_INIT_ZERO;
         GR_GL_CALL(gli, GetShaderiv(shaderId, GR_GL_COMPILE_STATUS, &compiled));
 

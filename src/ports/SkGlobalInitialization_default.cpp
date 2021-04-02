@@ -22,8 +22,6 @@
     #include "include/effects/SkCornerPathEffect.h"
     #include "include/effects/SkDiscretePathEffect.h"
     #include "include/effects/SkGradientShader.h"
-    #include "include/effects/SkHighContrastFilter.h"
-    #include "include/effects/SkLumaColorFilter.h"
     #include "include/effects/SkOverdrawColorFilter.h"
     #include "include/effects/SkPerlinNoiseShader.h"
     #include "include/effects/SkRuntimeEffect.h"
@@ -77,9 +75,7 @@
 
         // Color filters.
         SkColorFilter_Matrix::RegisterFlattenables();
-        SkLumaColorFilter::RegisterFlattenable();
         SkColorFilterBase::RegisterFlattenables();
-        SkHighContrastFilter::RegisterFlattenables();
         SkTableColorFilter::RegisterFlattenables();
 
         // Shader & color filter.
@@ -119,8 +115,24 @@
      *  SK_DISABLE_EFFECT_SERIALIZATION, or modify/replace this file as needed.
      */
     void SkFlattenable::PrivateInitializer::InitImageFilters() {
-        SkImageFilters::RegisterFlattenables();
         SkRegisterAlphaThresholdImageFilterFlattenable();
+        SkRegisterArithmeticImageFilterFlattenable();
+        SkRegisterBlendImageFilterFlattenable();
+        SkRegisterBlurImageFilterFlattenable();
+        SkRegisterColorFilterImageFilterFlattenable();
+        SkRegisterComposeImageFilterFlattenable();
+        SkRegisterDisplacementMapImageFilterFlattenable();
+        SkRegisterDropShadowImageFilterFlattenable();
+        SkRegisterImageImageFilterFlattenable();
+        SkRegisterLightingImageFilterFlattenables();
+        SkRegisterMagnifierImageFilterFlattenable();
+        SkRegisterMatrixConvolutionImageFilterFlattenable();
+        SkRegisterMergeImageFilterFlattenable();
+        SkRegisterMorphologyImageFilterFlattenables();
+        SkRegisterOffsetImageFilterFlattenable();
+        SkRegisterPictureImageFilterFlattenable();
+        SkRegisterShaderImageFilterFlattenable();
+        SkRegisterTileImageFilterFlattenable();
         SK_REGISTER_FLATTENABLE(SkLocalMatrixImageFilter);
         SK_REGISTER_FLATTENABLE(SkMatrixImageFilter);
     }

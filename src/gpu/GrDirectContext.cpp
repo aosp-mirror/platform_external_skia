@@ -51,8 +51,18 @@
 
 #define ASSERT_SINGLE_OWNER GR_ASSERT_SINGLE_OWNER(this->singleOwner())
 
+GrDirectContext::DirectContextID GrDirectContext::DirectContextID::Next() {
+    static std::atomic<uint32_t> nextID{1};
+    uint32_t id;
+    do {
+        id = nextID.fetch_add(1, std::memory_order_relaxed);
+    } while (id == SK_InvalidUniqueID);
+    return DirectContextID(id);
+}
+
 GrDirectContext::GrDirectContext(GrBackendApi backend, const GrContextOptions& options)
-        : INHERITED(GrContextThreadSafeProxyPriv::Make(backend, options)) {
+        : INHERITED(GrContextThreadSafeProxyPriv::Make(backend, options))
+        , fDirectContextID(DirectContextID::Next()) {
 }
 
 GrDirectContext::~GrDirectContext() {
@@ -190,7 +200,7 @@ bool GrDirectContext::init() {
         return false;
     }
 
-    fThreadSafeProxy->priv().init(fGpu->refCaps());
+    fThreadSafeProxy->priv().init(fGpu->refCaps(), fGpu->refPipelineBuilder());
     if (!INHERITED::init()) {
         return false;
     }
@@ -199,12 +209,14 @@ bool GrDirectContext::init() {
     SkASSERT(this->threadSafeCache());
 
     fStrikeCache = std::make_unique<GrStrikeCache>();
-    fResourceCache = std::make_unique<GrResourceCache>(this->singleOwner(), this->contextID());
+    fResourceCache = std::make_unique<GrResourceCache>(this->singleOwner(),
+                                                       this->directContextID(),
+                                                       this->contextID());
     fResourceCache->setProxyProvider(this->proxyProvider());
     fResourceCache->setThreadSafeCache(this->threadSafeCache());
     fResourceProvider = std::make_unique<GrResourceProvider>(fGpu.get(), fResourceCache.get(),
                                                              this->singleOwner());
-    fMappedBufferManager = std::make_unique<GrClientMappedBufferManager>(this->contextID());
+    fMappedBufferManager = std::make_unique<GrClientMappedBufferManager>(this->directContextID());
 
     fDidTestPMConversions = false;
 
@@ -311,10 +323,6 @@ void GrDirectContext::performDeferredCleanup(std::chrono::milliseconds msNotUsed
 
     fResourceCache->purgeAsNeeded();
     fResourceCache->purgeResourcesNotUsedSince(purgeTime);
-
-    if (auto ccpr = this->drawingManager()->getCoverageCountingPathRenderer()) {
-        ccpr->purgeCacheEntriesOlderThan(this->proxyProvider(), purgeTime);
-    }
 
     // The textBlob Cache doesn't actually hold any GPU resource but this is a convenient
     // place to purge stale blobs
@@ -432,22 +440,6 @@ void GrDirectContext::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) c
     fResourceCache->dumpMemoryStatistics(traceMemoryDump);
     traceMemoryDump->dumpNumericValue("skia/gr_text_blob_cache", "size", "bytes",
                                       this->getTextBlobCache()->usedBytes());
-}
-
-size_t GrDirectContext::ComputeImageSize(sk_sp<SkImage> image, GrMipmapped mipMapped,
-                                         bool useNextPow2) {
-    if (!image->isTextureBacked()) {
-        return 0;
-    }
-    SkImage_GpuBase* gpuImage = static_cast<SkImage_GpuBase*>(as_IB(image.get()));
-    GrTextureProxy* proxy = gpuImage->peekProxy();
-    if (!proxy) {
-        return 0;
-    }
-
-    int colorSamplesPerPixel = 1;
-    return GrSurface::ComputeSize(proxy->backendFormat(), image->dimensions(),
-                                  colorSamplesPerPixel, mipMapped, useNextPow2);
 }
 
 GrBackendTexture GrDirectContext::createBackendTexture(int width, int height,

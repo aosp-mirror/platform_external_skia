@@ -21,6 +21,7 @@
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/GrThreadSafePipelineBuilder.h"
 #include "src/gpu/dawn/GrDawnAttachment.h"
 #include "src/gpu/dawn/GrDawnBuffer.h"
 #include "src/gpu/dawn/GrDawnCaps.h"
@@ -143,6 +144,14 @@ void GrDawnGpu::disconnect(DisconnectType type) {
     fQueue = nullptr;
     fDevice = nullptr;
     INHERITED::disconnect(type);
+}
+
+GrThreadSafePipelineBuilder* GrDawnGpu::pipelineBuilder() {
+    return nullptr;
+}
+
+sk_sp<GrThreadSafePipelineBuilder> GrDawnGpu::refPipelineBuilder() {
+    return nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -521,10 +530,6 @@ void GrDawnGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget
     }
 }
 
-void GrDawnGpu::testingOnly_flushGpuAndSync() {
-    this->submitToGpu(true);
-}
-
 #endif
 
 void GrDawnGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
@@ -708,7 +713,7 @@ bool GrDawnGpu::onRegenerateMipMapLevels(GrTexture* tex) {
         "    texCoord = texCoords[sk_VertexID];\n"
         "}\n";
     SkSL::String vsSPIRV =
-        this->SkSLToSPIRV(vs, SkSL::Program::kVertex_Kind, false, 0, nullptr);
+        this->SkSLToSPIRV(vs, SkSL::ProgramKind::kVertex, false, 0, nullptr);
 
     const char* fs =
         "layout(set = 0, binding = 0) uniform sampler samp;\n"
@@ -718,7 +723,7 @@ bool GrDawnGpu::onRegenerateMipMapLevels(GrTexture* tex) {
         "    sk_FragColor = sample(makeSampler2D(tex, samp), texCoord);\n"
         "}\n";
     SkSL::String fsSPIRV =
-        this->SkSLToSPIRV(fs, SkSL::Program::kFragment_Kind, false, 0, nullptr);
+        this->SkSLToSPIRV(fs, SkSL::ProgramKind::kFragment, false, 0, nullptr);
 
     wgpu::ProgrammableStageDescriptor vsDesc;
     vsDesc.module = this->createShaderModule(vsSPIRV);
@@ -929,8 +934,9 @@ void GrDawnGpu::moveStagingBuffersToBusyAndMapAsync() {
     fSubmittedStagingBuffers.clear();
 }
 
-SkSL::String GrDawnGpu::SkSLToSPIRV(const char* shaderString, SkSL::Program::Kind kind, bool flipY,
+SkSL::String GrDawnGpu::SkSLToSPIRV(const char* shaderString, SkSL::ProgramKind kind, bool flipY,
                                     uint32_t rtHeightOffset, SkSL::Program::Inputs* inputs) {
+    auto errorHandler = this->getContext()->priv().getShaderErrorHandler();
     SkSL::Program::Settings settings;
     settings.fFlipY = flipY;
     settings.fRTHeightOffset = rtHeightOffset;
@@ -941,8 +947,7 @@ SkSL::String GrDawnGpu::SkSLToSPIRV(const char* shaderString, SkSL::Program::Kin
         shaderString,
         settings);
     if (!program) {
-        SkDebugf("SkSL error:\n%s\n", this->shaderCompiler()->errorText().c_str());
-        SkASSERT(false);
+        errorHandler->compileError(shaderString, this->shaderCompiler()->errorText().c_str());
         return "";
     }
     if (inputs) {
@@ -950,6 +955,7 @@ SkSL::String GrDawnGpu::SkSLToSPIRV(const char* shaderString, SkSL::Program::Kin
     }
     SkSL::String code;
     if (!this->shaderCompiler()->toSPIRV(*program, &code)) {
+        errorHandler->compileError(shaderString, this->shaderCompiler()->errorText().c_str());
         return "";
     }
     return code;

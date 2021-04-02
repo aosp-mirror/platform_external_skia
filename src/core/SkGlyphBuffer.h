@@ -169,8 +169,10 @@ public:
     // floating point don't guarantee that, so force it to integer.
     void startGPUDevice(
             const SkZip<const SkGlyphID, const SkPoint>& source,
-            SkPoint origin, const SkMatrix& viewMatrix,
+            const SkMatrix& drawMatrix,
             const SkGlyphPositionRoundingSpec& roundingSpec);
+
+    SkString dumpInput() const;
 
     // The input of SkPackedGlyphIDs
     SkZip<SkGlyphVariant, SkPoint> input() {

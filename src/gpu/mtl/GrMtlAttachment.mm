@@ -18,7 +18,8 @@ GrMtlAttachment::GrMtlAttachment(GrMtlGpu* gpu,
                                  SkISize dimensions,
                                  UsageFlags supportedUsages,
                                  const id<MTLTexture> view)
-        : GrAttachment(gpu, dimensions, supportedUsages, view.sampleCount, GrProtected::kNo)
+        : GrAttachment(gpu, dimensions, supportedUsages, view.sampleCount, GrMipmapped::kNo,
+                       GrProtected::kNo)
         , fView(view) {
     this->registerWithCache(SkBudgeted::kYes);
 }
@@ -27,11 +28,10 @@ sk_sp<GrMtlAttachment> GrMtlAttachment::MakeStencil(GrMtlGpu* gpu,
                                                     SkISize dimensions,
                                                     int sampleCnt,
                                                     MTLPixelFormat format) {
-    MTLTextureDescriptor* desc =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
-                                                               width:dimensions.width()
-                                                              height:dimensions.height()
-                                                           mipmapped:NO];
+    auto desc = [[MTLTextureDescriptor alloc] init];
+    desc.pixelFormat = format;
+    desc.width = dimensions.width();
+    desc.height = dimensions.height();
     if (@available(macOS 10.11, iOS 9.0, *)) {
         desc.storageMode = MTLStorageModePrivate;
         desc.usage = MTLTextureUsageRenderTarget;

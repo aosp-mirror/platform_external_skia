@@ -484,5 +484,22 @@ static inline const SkImageFilter_Base* as_IFB(const SkImageFilter* filter) {
  * into these types, so their registration functions are exposed here.
  */
 void SkRegisterAlphaThresholdImageFilterFlattenable();
+void SkRegisterArithmeticImageFilterFlattenable();
+void SkRegisterBlendImageFilterFlattenable();
+void SkRegisterBlurImageFilterFlattenable();
+void SkRegisterColorFilterImageFilterFlattenable();
+void SkRegisterComposeImageFilterFlattenable();
+void SkRegisterDisplacementMapImageFilterFlattenable();
+void SkRegisterDropShadowImageFilterFlattenable();
+void SkRegisterImageImageFilterFlattenable();
+void SkRegisterLightingImageFilterFlattenables();
+void SkRegisterMagnifierImageFilterFlattenable();
+void SkRegisterMatrixConvolutionImageFilterFlattenable();
+void SkRegisterMergeImageFilterFlattenable();
+void SkRegisterMorphologyImageFilterFlattenables();
+void SkRegisterOffsetImageFilterFlattenable();
+void SkRegisterPictureImageFilterFlattenable();
+void SkRegisterShaderImageFilterFlattenable();
+void SkRegisterTileImageFilterFlattenable();
 
 #endif // SkImageFilter_Base_DEFINED

@@ -25,7 +25,7 @@ public:
     bool generateCode() override;
 
 private:
-    using Precedence = Operators::Precedence;
+    using Precedence = Operator::Precedence;
 
     void writef(const char* s, va_list va) SK_PRINTF_LIKE(2, 0);
 
@@ -44,8 +44,6 @@ private:
     void writeIntLiteral(const IntLiteral& i) override;
 
     void writeSwizzle(const Swizzle& swizzle) override;
-
-    void writeFieldAccess(const FieldAccess& access) override;
 
     void writeVariableReference(const VariableReference& ref) override;
 

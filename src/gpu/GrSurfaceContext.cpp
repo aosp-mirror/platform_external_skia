@@ -28,8 +28,9 @@
 #include "src/gpu/effects/GrBicubicEffect.h"
 #include "src/gpu/effects/generated/GrColorMatrixFragmentProcessor.h"
 
-#define ASSERT_SINGLE_OWNER        GR_ASSERT_SINGLE_OWNER(this->singleOwner())
-#define RETURN_FALSE_IF_ABANDONED  if (this->fContext->abandoned()) { return false; }
+#define ASSERT_SINGLE_OWNER         GR_ASSERT_SINGLE_OWNER(this->singleOwner())
+#define RETURN_FALSE_IF_ABANDONED   if (this->fContext->abandoned()) { return false;   }
+#define RETURN_NULLPTR_IF_ABANDONED if (this->fContext->abandoned()) { return nullptr; }
 
 std::unique_ptr<GrSurfaceContext> GrSurfaceContext::Make(GrRecordingContext* context,
                                                          GrSurfaceProxyView readView,
@@ -371,6 +372,10 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
         return false;
     }
 
+    if (src.rowBytes() % src.info().bpp()) {
+        return false;
+    }
+
     src = src.clip(this->dimensions(), &pt);
     if (!src.hasPixels()) {
         return false;
@@ -498,7 +503,7 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
     bool convert = premul || unpremul || needColorConversion || makeTight ||
                    (src.colorType() != allowedColorType) || flip;
 
-    if (convert || !src.ownsPixels()) {
+    if (convert) {
         GrImageInfo tmpInfo(allowedColorType,
                             this->colorInfo().alphaType(),
                             this->colorInfo().refColorSpace(),
@@ -514,7 +519,7 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
     GrMipLevel level;
     level.fPixels = src.addr();
     level.fRowBytes = src.rowBytes();
-    return dContext->priv().drawingManager()->newWritePixelsTask(
+    bool result = dContext->priv().drawingManager()->newWritePixelsTask(
             this->asSurfaceProxyRef(),
             SkIRect::MakePtSize(pt, src.dimensions()),
             src.colorType(),
@@ -522,6 +527,12 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
             &level,
             1,
             src.pixelStorage());
+    if (result && !src.ownsPixels()) {
+        // If the pixmap doesn't own its pixels then we must flush so that they are pushed to
+        // the GPU driver before we return.
+        dContext->priv().flushSurface(dstProxy);
+    }
+    return result;
 }
 
 void GrSurfaceContext::asyncRescaleAndReadPixels(GrDirectContext* dContext,
@@ -633,10 +644,13 @@ void GrSurfaceContext::asyncRescaleAndReadPixels(GrDirectContext* dContext,
 
 class GrSurfaceContext::AsyncReadResult : public SkImage::AsyncReadResult {
 public:
-    AsyncReadResult(uint32_t inboxID) : fInboxID(inboxID) {}
+    AsyncReadResult(GrDirectContext::DirectContextID intendedRecipient)
+        : fIntendedRecipient(intendedRecipient) {
+    }
+
     ~AsyncReadResult() override {
         for (int i = 0; i < fPlanes.count(); ++i) {
-            fPlanes[i].releaseMappedBuffer(fInboxID);
+            fPlanes[i].releaseMappedBuffer(fIntendedRecipient);
         }
     }
 
@@ -695,10 +709,10 @@ private:
         Plane& operator=(const Plane&) = delete;
         Plane& operator=(Plane&&) = default;
 
-        void releaseMappedBuffer(uint32_t inboxID) {
+        void releaseMappedBuffer(GrDirectContext::DirectContextID intendedRecipient) {
             if (fMappedBuffer) {
                 GrClientMappedBufferManager::BufferFinishedMessageBus::Post(
-                        {std::move(fMappedBuffer), inboxID});
+                        {std::move(fMappedBuffer), intendedRecipient});
             }
         }
 
@@ -720,7 +734,7 @@ private:
         size_t fRowBytes;
     };
     SkSTArray<3, Plane> fPlanes;
-    uint32_t fInboxID;
+    GrDirectContext::DirectContextID fIntendedRecipient;
 };
 
 void GrSurfaceContext::asyncReadPixels(GrDirectContext* dContext,
@@ -743,7 +757,8 @@ void GrSurfaceContext::asyncReadPixels(GrDirectContext* dContext,
     if (!transferResult.fTransferBuffer) {
         auto ii = SkImageInfo::Make(rect.size(), colorType, this->colorInfo().alphaType(),
                                     this->colorInfo().refColorSpace());
-        auto result = std::make_unique<AsyncReadResult>(0);
+        static const GrDirectContext::DirectContextID kInvalid;
+        auto result = std::make_unique<AsyncReadResult>(kInvalid);
         GrPixmap pm = GrPixmap::Allocate(ii);
         result->addCpuPlane(pm.pixelStorage(), pm.rowBytes());
 
@@ -775,10 +790,11 @@ void GrSurfaceContext::asyncReadPixels(GrDirectContext* dContext,
                                             std::move(transferResult)};
     auto finishCallback = [](GrGpuFinishedContext c) {
         const auto* context = reinterpret_cast<const FinishContext*>(c);
-        auto result = std::make_unique<AsyncReadResult>(context->fMappedBufferManager->inboxID());
+        auto manager = context->fMappedBufferManager;
+        auto result = std::make_unique<AsyncReadResult>(manager->owningDirectContext());
         size_t rowBytes = context->fSize.width() * SkColorTypeBytesPerPixel(context->fColorType);
         if (!result->addTransferResult(context->fTransferResult, context->fSize, rowBytes,
-                                       context->fMappedBufferManager)) {
+                                       manager)) {
             result.reset();
         }
         (*context->fClientCallback)(context->fClientContext, std::move(result));
@@ -993,7 +1009,7 @@ void GrSurfaceContext::asyncRescaleAndReadPixelsYUV420(GrDirectContext* dContext
             callback(callbackContext, nullptr);
             return;
         }
-        auto result = std::make_unique<AsyncReadResult>(dContext->priv().contextID());
+        auto result = std::make_unique<AsyncReadResult>(dContext->directContextID());
         result->addCpuPlane(yPmp.pixelStorage(), yPmp.rowBytes());
         result->addCpuPlane(uPmp.pixelStorage(), uPmp.rowBytes());
         result->addCpuPlane(vPmp.pixelStorage(), vPmp.rowBytes());
@@ -1022,8 +1038,8 @@ void GrSurfaceContext::asyncRescaleAndReadPixelsYUV420(GrDirectContext* dContext
                                             std::move(vTransfer)};
     auto finishCallback = [](GrGpuFinishedContext c) {
         const auto* context = reinterpret_cast<const FinishContext*>(c);
-        auto result = std::make_unique<AsyncReadResult>(context->fMappedBufferManager->inboxID());
         auto manager = context->fMappedBufferManager;
+        auto result = std::make_unique<AsyncReadResult>(manager->owningDirectContext());
         size_t rowBytes = SkToSizeT(context->fSize.width());
         if (!result->addTransferResult(context->fYTransfer, context->fSize, rowBytes, manager)) {
             (*context->fClientCallback)(context->fClientContext, nullptr);
@@ -1053,9 +1069,11 @@ void GrSurfaceContext::asyncRescaleAndReadPixelsYUV420(GrDirectContext* dContext
                                   flushInfo);
 }
 
-bool GrSurfaceContext::copy(sk_sp<GrSurfaceProxy> src, SkIRect srcRect, SkIPoint dstPoint) {
+sk_sp<GrRenderTask> GrSurfaceContext::copy(sk_sp<GrSurfaceProxy> src,
+                                           SkIRect srcRect,
+                                           SkIPoint dstPoint) {
     ASSERT_SINGLE_OWNER
-    RETURN_FALSE_IF_ABANDONED
+    RETURN_NULLPTR_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
     GR_AUDIT_TRAIL_AUTO_FRAME(this->auditTrail(), "GrSurfaceContextPriv::copy");
 
@@ -1065,11 +1083,11 @@ bool GrSurfaceContext::copy(sk_sp<GrSurfaceProxy> src, SkIRect srcRect, SkIPoint
     SkASSERT(src->backendFormat() == this->asSurfaceProxy()->backendFormat());
 
     if (this->asSurfaceProxy()->framebufferOnly()) {
-        return false;
+        return nullptr;
     }
 
     if (!caps->canCopySurface(this->asSurfaceProxy(), src.get(), srcRect, dstPoint)) {
-        return false;
+        return nullptr;
     }
 
     return this->drawingManager()->newCopyRenderTask(std::move(src),

@@ -8,16 +8,17 @@
 #ifndef SKSL_DSLWRITER
 #define SKSL_DSLWRITER
 
+#include "include/private/SkSLModifiers.h"
+#include "include/private/SkSLStatement.h"
+#include "include/sksl/DSLExpression.h"
+#include "include/sksl/DSLStatement.h"
 #include "src/sksl/SkSLMangler.h"
-#include "src/sksl/dsl/DSLExpression.h"
-#include "src/sksl/dsl/DSLStatement.h"
+#include "src/sksl/SkSLOperators.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLProgram.h"
-#include "src/sksl/ir/SkSLStatement.h"
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-
 #include <stack>
 
 class AutoDSLContext;
@@ -27,8 +28,10 @@ namespace SkSL {
 class Compiler;
 class Context;
 class IRGenerator;
+class ProgramElement;
 class SymbolTable;
 class Type;
+class Variable;
 
 namespace dsl {
 
@@ -41,6 +44,8 @@ class ErrorHandler;
 class DSLWriter {
 public:
     DSLWriter(SkSL::Compiler* compiler);
+
+    ~DSLWriter();
 
     /**
      * Returns the Compiler used by DSL operations in the current thread.
@@ -71,6 +76,8 @@ public:
      */
     static const std::shared_ptr<SkSL::SymbolTable>& SymbolTable();
 
+    static void Reset();
+
     /**
      * Returns the final pointer to a pooled Modifiers object that should be used to represent the
      * given modifiers.
@@ -80,7 +87,18 @@ public:
     /**
      * Returns the SkSL variable corresponding to a DSLVar.
      */
-    static const SkSL::Variable& Var(const DSLVar& var);
+    static const SkSL::Variable& Var(DSLVar& var);
+
+    /**
+     * Returns the SkSL declaration corresponding to a DSLVar.
+     */
+    static std::unique_ptr<SkSL::Statement> Declaration(DSLVar& var);
+
+    /**
+     * For use in testing only: marks the variable as having been declared, so that it can be
+     * destroyed without generating errors.
+     */
+    static void MarkDeclared(DSLVar& var);
 
     /**
      * Returns the (possibly mangled) final name that should be used for an entity with the given
@@ -106,6 +124,10 @@ public:
         return Instance().fStack.top().fEmitArgs;
     }
 
+    static bool InFragmentProcessor() {
+        return !Instance().fStack.empty();
+    }
+
     /**
      * Pushes a new processor / emitArgs pair for the current thread.
      */
@@ -116,32 +138,40 @@ public:
      * Pops the processor / emitArgs pair associated with the current thread.
      */
     static void EndFragmentProcessor();
+
+    static GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var);
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+
+    static std::unique_ptr<SkSL::Expression> Call(const FunctionDeclaration& function,
+                                                  ExpressionArray arguments);
 
     /**
      * Reports an error if the argument is null. Returns its argument unmodified.
      */
     static std::unique_ptr<SkSL::Expression> Check(std::unique_ptr<SkSL::Expression> expr);
 
-    static DSLExpression Coerce(std::unique_ptr<Expression> left, const SkSL::Type& type);
+    static DSLPossibleExpression Coerce(std::unique_ptr<Expression> left, const SkSL::Type& type);
 
-    static DSLExpression Construct(const SkSL::Type& type, std::vector<DSLExpression> rawArgs);
+    static DSLPossibleExpression Construct(const SkSL::Type& type,
+                                           std::vector<DSLExpression> rawArgs);
 
-    static DSLExpression ConvertBinary(std::unique_ptr<Expression> left, Token::Kind op,
-                                std::unique_ptr<Expression> right);
+    static std::unique_ptr<Expression> ConvertBinary(std::unique_ptr<Expression> left, Operator op,
+                                                     std::unique_ptr<Expression> right);
 
-    static DSLExpression ConvertIndex(std::unique_ptr<Expression> base,
-                                      std::unique_ptr<Expression> index);
+    static std::unique_ptr<SkSL::Expression> ConvertField(std::unique_ptr<Expression> base,
+                                                          const char* name);
 
-    static DSLExpression ConvertPostfix(std::unique_ptr<Expression> expr, Token::Kind op);
+    static std::unique_ptr<Expression> ConvertIndex(std::unique_ptr<Expression> base,
+                                                    std::unique_ptr<Expression> index);
 
-    static DSLExpression ConvertPrefix(Token::Kind op, std::unique_ptr<Expression> expr);
+    static std::unique_ptr<Expression> ConvertPostfix(std::unique_ptr<Expression> expr,
+                                                      Operator op);
 
-    static DSLStatement ConvertSwitch(std::unique_ptr<Expression> value,
-                                      ExpressionArray caseValues,
-                                      SkTArray<SkSL::StatementArray> caseStatements);
+    static std::unique_ptr<Expression> ConvertPrefix(Operator op, std::unique_ptr<Expression> expr);
 
-    static void Ignore(std::unique_ptr<SkSL::Expression>&) {}
+    static DSLPossibleStatement ConvertSwitch(std::unique_ptr<Expression> value,
+                                              ExpressionArray caseValues,
+                                              SkTArray<SkSL::StatementArray> caseStatements);
 
     /**
      * Sets the ErrorHandler associated with the current thread. This object will be notified when
@@ -156,7 +186,7 @@ public:
      * Notifies the current ErrorHandler that a DSL error has occurred. With a null ErrorHandler
      * (the default), any errors will be dumped to stderr and a fatal exception will be generated.
      */
-    static void ReportError(const char* msg);
+    static void ReportError(const char* msg, PositionInfo* info = nullptr);
 
     /**
      * Returns whether name mangling is enabled. This should always be enabled outside of tests.
@@ -170,11 +200,15 @@ public:
     static void SetInstance(std::unique_ptr<DSLWriter> instance);
 
 private:
-    SkSL::Program::Settings fSettings;
+    SkSL::ProgramConfig fConfig;
     SkSL::Compiler* fCompiler;
+    std::unique_ptr<Pool> fPool;
+    std::shared_ptr<SkSL::SymbolTable> fOldSymbolTable;
+    SkSL::ProgramConfig* fOldConfig;
     std::vector<std::unique_ptr<SkSL::ProgramElement>> fProgramElements;
     ErrorHandler* fErrorHandler = nullptr;
     bool fMangle = true;
+    bool fMarkVarsDeclared = false;
     Mangler fMangler;
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
     struct StackFrame {
@@ -185,6 +219,7 @@ private:
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
     friend class DSLCore;
+    friend class DSLVar;
     friend class ::AutoDSLContext;
 };
 

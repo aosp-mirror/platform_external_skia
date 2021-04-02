@@ -28,6 +28,7 @@
 #include "src/image/SkSurface_Gpu.h"
 #include "tests/Test.h"
 #include "tools/gpu/ManagedBackendTexture.h"
+#include "tools/gpu/ProxyUtils.h"
 
 DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkImageLayoutTest, reporter, ctxInfo) {
     auto dContext = ctxInfo.directContext();
@@ -72,14 +73,14 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkImageLayoutTest, reporter, ctxInfo) {
             mbet->releaseContext());
     REPORTER_ASSERT(reporter, wrappedImage.get());
 
-    GrSurfaceProxy* proxy = as_IB(wrappedImage)->peekProxy();
+    GrSurfaceProxy* proxy = sk_gpu_test::GetTextureImageProxy(wrappedImage.get(), dContext);
     REPORTER_ASSERT(reporter, proxy);
     REPORTER_ASSERT(reporter, proxy->isInstantiated());
     GrTexture* texture = proxy->peekTexture();
     REPORTER_ASSERT(reporter, texture);
 
     // Verify that modifying the layout via the GrVkTexture is reflected in the GrBackendTexture
-    GrVkTexture* vkTexture = static_cast<GrVkTexture*>(texture);
+    GrVkAttachment* vkTexture = static_cast<GrVkTexture*>(texture)->textureAttachment();
     REPORTER_ASSERT(reporter, initLayout == vkTexture->currentLayout());
     vkTexture->updateImageLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
@@ -179,7 +180,7 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkTransitionExternalQueueTest, reporter, ctxInfo)
     REPORTER_ASSERT(reporter, newVkInfo.fCurrentQueueFamily == vkGpu->queueIndex());
 
     image.reset();
-    gpu->testingOnly_flushGpuAndSync();
+    dContext->submit(true);
     dContext->deleteBackendTexture(backendTex);
 }
 #endif

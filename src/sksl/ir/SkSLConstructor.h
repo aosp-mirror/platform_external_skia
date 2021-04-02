@@ -27,9 +27,19 @@ class Constructor final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kConstructor;
 
-    Constructor(int offset, const Type* type, ExpressionArray arguments)
-        : INHERITED(offset, kExpressionKind, type)
+    Constructor(int offset, const Type& type, ExpressionArray arguments)
+        : INHERITED(offset, kExpressionKind, &type)
         , fArguments(std::move(arguments)) {}
+
+    // Use Constructor::Convert to create, typecheck and simplify constructor expressions.
+    // Reports errors via the ErrorReporter. This can return null on error, so be careful.
+    // TODO(skia:11032): Unlike most Expressions, there isn't a failsafe Constructor::Make which
+    // always returns an IRNode, because Constructor creation is currently quite complex and
+    // duplicating big chunks of its logic isn't worth it. Splitting up Constructor would help.
+    static std::unique_ptr<Expression> Convert(const Context& context,
+                                               int offset,
+                                               const Type& type,
+                                               ExpressionArray args);
 
     ExpressionArray& arguments() {
         return fArguments;
@@ -38,9 +48,6 @@ public:
     const ExpressionArray& arguments() const {
         return fArguments;
     }
-
-    std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
-                                                  const DefinitionMap& definitions) override;
 
     // If the passed-in expression is a literal, performs a constructor-conversion of the literal
     // value to the constructor's type and returns that converted value as a new literal. e.g., the
@@ -65,7 +72,7 @@ public:
         for (const std::unique_ptr<Expression>& arg: this->arguments()) {
             cloned.push_back(arg->clone());
         }
-        return std::make_unique<Constructor>(fOffset, &this->type(), std::move(cloned));
+        return std::make_unique<Constructor>(fOffset, this->type(), std::move(cloned));
     }
 
     String description() const override {
@@ -145,8 +152,22 @@ public:
     bool getConstantBool() const override;
 
 private:
-    template <typename ResultType>
-    ResultType getConstantValue(const Expression& expr) const;
+    static std::unique_ptr<Expression> MakeScalarConstructor(const Context& context,
+                                                             int offset,
+                                                             const Type& type,
+                                                             ExpressionArray args);
+
+    static std::unique_ptr<Expression> MakeCompoundConstructor(const Context& context,
+                                                               int offset,
+                                                               const Type& type,
+                                                               ExpressionArray args);
+
+    static std::unique_ptr<Expression> MakeArrayConstructor(const Context& context,
+                                                            int offset,
+                                                            const Type& type,
+                                                            ExpressionArray args);
+
+    template <typename ResultType> ResultType getConstantValue(const Expression& expr) const;
 
     template <typename ResultType>
     ResultType getInnerVecComponent(const Expression& expr, int position) const;

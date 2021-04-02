@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
+#include "include/private/SkSLIRNode.h"
+#include "include/sksl/DSL.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/sksl/SkSLIRGenerator.h"
-#include "src/sksl/dsl/DSL.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
-#include "src/sksl/ir/SkSLIRNode.h"
 
 #include "tests/Test.h"
 
@@ -18,11 +18,19 @@
 
 using namespace SkSL::dsl;
 
+/**
+ * In addition to issuing an automatic Start() and End(), disables mangling and optionally
+ * auto-declares variables during its lifetime. Variable auto-declaration simplifies testing so we
+ * don't have to sprinkle all the tests with a bunch of Declare(foo).release() calls just to avoid
+ * errors, especially given that some of the variables have options that make them an error to
+ * actually declare.
+ */
 class AutoDSLContext {
 public:
-    AutoDSLContext(GrGpu* gpu) {
+    AutoDSLContext(GrGpu* gpu, bool markVarsDeclared = true) {
         Start(gpu->shaderCompiler());
         DSLWriter::Instance().fMangle = false;
+        DSLWriter::Instance().fMarkVarsDeclared = markVarsDeclared;
     }
 
     ~AutoDSLContext() {
@@ -39,11 +47,12 @@ public:
     }
 
     ~ExpectError() override {
-        REPORTER_ASSERT(fReporter, !fMsg);
+        REPORTER_ASSERT(fReporter, !fMsg,
+                        "Error mismatch: expected:\n%sbut no error occurred\n", fMsg);
         SetErrorHandler(nullptr);
     }
 
-    void handleError(const char* msg) override {
+    void handleError(const char* msg, PositionInfo* pos) override {
         REPORTER_ASSERT(fReporter, !strcmp(msg, fMsg),
                         "Error mismatch: expected:\n%sbut received:\n%s", fMsg, msg);
         fMsg = nullptr;
@@ -73,12 +82,9 @@ static bool whitespace_insensitive_compare(const char* a, const char* b) {
     }
 }
 
-static bool whitespace_insensitive_compare(DSLStatement& stmt, const char* description) {
-    return whitespace_insensitive_compare(stmt.release()->description().c_str(), description);
-}
-
-static bool whitespace_insensitive_compare(SkSL::IRNode& node, const char* description) {
-    return whitespace_insensitive_compare(node.description().c_str(), description);
+// for use from SkSLDSLOnlyTest.cpp
+void StartDSL(const sk_gpu_test::ContextInfo ctxInfo) {
+    Start(ctxInfo.directContext()->priv().getGpu()->shaderCompiler());
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLStartup, r, ctxInfo) {
@@ -103,6 +109,29 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLStartup, r, ctxInfo) {
     REPORTER_ASSERT(r, !whitespace_insensitive_compare("a b c  d", "\n\n\nabc"));
 }
 
+static SkSL::String stringize(DSLStatement& stmt)          { return stmt.release()->description(); }
+static SkSL::String stringize(DSLPossibleStatement& stmt)  { return stmt.release()->description(); }
+static SkSL::String stringize(DSLExpression& expr)         { return expr.release()->description(); }
+static SkSL::String stringize(DSLPossibleExpression& expr) { return expr.release()->description(); }
+static SkSL::String stringize(SkSL::IRNode& node)  { return node.description(); }
+
+template <typename T>
+static void expect_equal(skiatest::Reporter* r, int lineNumber, T& input, const char* expected) {
+    SkSL::String actual = stringize(input);
+    if (!whitespace_insensitive_compare(expected, actual.c_str())) {
+        ERRORF(r, "(Failed on line %d)\nExpected: %s\n  Actual: %s\n",
+                  lineNumber, expected, actual.c_str());
+    }
+}
+
+template <typename T>
+static void expect_equal(skiatest::Reporter* r, int lineNumber, T&& dsl, const char* expected) {
+    // This overload allows temporary values to be passed to expect_equal.
+    return expect_equal(r, lineNumber, dsl, expected);
+}
+
+#define EXPECT_EQUAL(a, b)  expect_equal(r, __LINE__, (a), (b))
+
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFloat, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Expression e1 = Float(std::numeric_limits<float>::max());
@@ -113,32 +142,24 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFloat, r, ctxInfo) {
     REPORTER_ASSERT(r, atof(e2.release()->description().c_str()) ==
                        std::numeric_limits<float>::min());
 
-    Expression e3 = Float2(0);
-    REPORTER_ASSERT(r, e3.release()->description() == "float2(0.0)");
-
-    Expression e4 = Float2(-0.5, 1);
-    REPORTER_ASSERT(r, e4.release()->description() == "float2(-0.5, 1.0)");
-
-    Expression e5 = Float3(0.75);
-    REPORTER_ASSERT(r, e5.release()->description() == "float3(0.75)");
-
-    Expression e6 = Float3(Float2(0, 1), -2);
-    REPORTER_ASSERT(r, e6.release()->description() == "float3(float2(0.0, 1.0), -2.0)");
-
-    Expression e7 = Float3(0, 1, 2);
-    REPORTER_ASSERT(r, e7.release()->description() == "float3(0.0, 1.0, 2.0)");
-
-    Expression e8 = Float4(0);
-    REPORTER_ASSERT(r, e8.release()->description() == "float4(0.0)");
-
-    Expression e9 = Float4(Float2(0, 1), Float2(2, 3));
-    REPORTER_ASSERT(r, e9.release()->description() == "float4(float2(0.0, 1.0), float2(2.0, 3.0))");
-
-    Expression e10 = Float4(0, 1, Float2(2, 3));
-    REPORTER_ASSERT(r, e10.release()->description() == "float4(0.0, 1.0, float2(2.0, 3.0))");
-
-    Expression e11 = Float4(0, 1, 2, 3);
-    REPORTER_ASSERT(r, e11.release()->description() == "float4(0.0, 1.0, 2.0, 3.0)");
+    EXPECT_EQUAL(Float2(0),
+                "float2(0.0)");
+    EXPECT_EQUAL(Float2(-0.5, 1),
+                "float2(-0.5, 1.0)");
+    EXPECT_EQUAL(Float3(0.75),
+                "float3(0.75)");
+    EXPECT_EQUAL(Float3(Float2(0, 1), -2),
+                "float3(0.0, 1.0, -2.0)");
+    EXPECT_EQUAL(Float3(0, 1, 2),
+                "float3(0.0, 1.0, 2.0)");
+    EXPECT_EQUAL(Float4(0),
+                "float4(0.0)");
+    EXPECT_EQUAL(Float4(Float2(0, 1), Float2(2, 3)),
+                "float4(0.0, 1.0, 2.0, 3.0)");
+    EXPECT_EQUAL(Float4(0, 1, Float2(2, 3)),
+                "float4(0.0, 1.0, 2.0, 3.0)");
+    EXPECT_EQUAL(Float4(0, 1, 2, 3),
+                "float4(0.0, 1.0, 2.0, 3.0)");
 
     {
         ExpectError error(r, "error: floating point value is infinite\n");
@@ -166,39 +187,31 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFloat, r, ctxInfo) {
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLHalf, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Expression e1 = Half(std::numeric_limits<float>::max());
-    REPORTER_ASSERT(r, atof(e1.release()->description().c_str()) ==
-                       std::numeric_limits<float>::max());
+    REPORTER_ASSERT(r,
+                    atof(e1.release()->description().c_str()) == std::numeric_limits<float>::max());
 
     Expression e2 = Half(std::numeric_limits<float>::min());
-    REPORTER_ASSERT(r, atof(e2.release()->description().c_str()) ==
-                       std::numeric_limits<float>::min());
+    REPORTER_ASSERT(r,
+                    atof(e2.release()->description().c_str()) == std::numeric_limits<float>::min());
 
-    Expression e3 = Half2(0);
-    REPORTER_ASSERT(r, e3.release()->description() == "half2(0.0)");
-
-    Expression e4 = Half2(-0.5, 1);
-    REPORTER_ASSERT(r, e4.release()->description() == "half2(-0.5, 1.0)");
-
-    Expression e5 = Half3(0.75);
-    REPORTER_ASSERT(r, e5.release()->description() == "half3(0.75)");
-
-    Expression e6 = Half3(Half2(0, 1), -2);
-    REPORTER_ASSERT(r, e6.release()->description() == "half3(half2(0.0, 1.0), -2.0)");
-
-    Expression e7 = Half3(0, 1, 2);
-    REPORTER_ASSERT(r, e7.release()->description() == "half3(0.0, 1.0, 2.0)");
-
-    Expression e8 = Half4(0);
-    REPORTER_ASSERT(r, e8.release()->description() == "half4(0.0)");
-
-    Expression e9 = Half4(Half2(0, 1), Half2(2, 3));
-    REPORTER_ASSERT(r, e9.release()->description() == "half4(half2(0.0, 1.0), half2(2.0, 3.0))");
-
-    Expression e10 = Half4(0, 1, Half2(2, 3));
-    REPORTER_ASSERT(r, e10.release()->description() == "half4(0.0, 1.0, half2(2.0, 3.0))");
-
-    Expression e11 = Half4(0, 1, 2, 3);
-    REPORTER_ASSERT(r, e11.release()->description() == "half4(0.0, 1.0, 2.0, 3.0)");
+    EXPECT_EQUAL(Half2(0),
+                "half2(0.0)");
+    EXPECT_EQUAL(Half2(-0.5, 1),
+                "half2(-0.5, 1.0)");
+    EXPECT_EQUAL(Half3(0.75),
+                "half3(0.75)");
+    EXPECT_EQUAL(Half3(Half2(0, 1), -2),
+                "half3(0.0, 1.0, -2.0)");
+    EXPECT_EQUAL(Half3(0, 1, 2),
+                "half3(0.0, 1.0, 2.0)");
+    EXPECT_EQUAL(Half4(0),
+                "half4(0.0)");
+    EXPECT_EQUAL(Half4(Half2(0, 1), Half2(2, 3)),
+                "half4(0.0, 1.0, 2.0, 3.0)");
+    EXPECT_EQUAL(Half4(0, 1, Half2(2, 3)),
+                "half4(0.0, 1.0, 2.0, 3.0)");
+    EXPECT_EQUAL(Half4(0, 1, 2, 3),
+                "half4(0.0, 1.0, 2.0, 3.0)");
 
     {
         ExpectError error(r, "error: floating point value is infinite\n");
@@ -225,35 +238,27 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLHalf, r, ctxInfo) {
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLInt, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    Expression e1 = Int(std::numeric_limits<int32_t>::max());
-    REPORTER_ASSERT(r, e1.release()->description() == "2147483647");
 
-    Expression e2 = Int2(std::numeric_limits<int32_t>::min());
-    REPORTER_ASSERT(r, e2.release()->description() == "int2(-2147483648)");
-
-    Expression e3 = Int2(0, 1);
-    REPORTER_ASSERT(r, e3.release()->description() == "int2(0, 1)");
-
-    Expression e4 = Int3(0);
-    REPORTER_ASSERT(r, e4.release()->description() == "int3(0)");
-
-    Expression e5 = Int3(Int2(0, 1), -2);
-    REPORTER_ASSERT(r, e5.release()->description() == "int3(int2(0, 1), -2)");
-
-    Expression e6 = Int3(0, 1, 2);
-    REPORTER_ASSERT(r, e6.release()->description() == "int3(0, 1, 2)");
-
-    Expression e7 = Int4(0);
-    REPORTER_ASSERT(r, e7.release()->description() == "int4(0)");
-
-    Expression e8 = Int4(Int2(0, 1), Int2(2, 3));
-    REPORTER_ASSERT(r, e8.release()->description() == "int4(int2(0, 1), int2(2, 3))");
-
-    Expression e9 = Int4(0, 1, Int2(2, 3));
-    REPORTER_ASSERT(r, e9.release()->description() == "int4(0, 1, int2(2, 3))");
-
-    Expression e10 = Int4(0, 1, 2, 3);
-    REPORTER_ASSERT(r, e10.release()->description() == "int4(0, 1, 2, 3)");
+    EXPECT_EQUAL(Int(std::numeric_limits<int32_t>::max()),
+                "2147483647");
+    EXPECT_EQUAL(Int2(std::numeric_limits<int32_t>::min()),
+                "int2(-2147483648)");
+    EXPECT_EQUAL(Int2(0, 1),
+                "int2(0, 1)");
+    EXPECT_EQUAL(Int3(0),
+                "int3(0)");
+    EXPECT_EQUAL(Int3(Int2(0, 1), -2),
+                "int3(0, 1, -2)");
+    EXPECT_EQUAL(Int3(0, 1, 2),
+                "int3(0, 1, 2)");
+    EXPECT_EQUAL(Int4(0),
+                "int4(0)");
+    EXPECT_EQUAL(Int4(Int2(0, 1), Int2(2, 3)),
+                "int4(0, 1, 2, 3)");
+    EXPECT_EQUAL(Int4(0, 1, Int2(2, 3)),
+                "int4(0, 1, 2, 3)");
+    EXPECT_EQUAL(Int4(0, 1, 2, 3),
+                "int4(0, 1, 2, 3)");
 
     {
         ExpectError error(r, "error: invalid arguments to 'int2' constructor (expected 2 scalars,"
@@ -270,35 +275,27 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLInt, r, ctxInfo) {
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLShort, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    Expression e1 = Short(std::numeric_limits<int16_t>::max());
-    REPORTER_ASSERT(r, e1.release()->description() == "32767");
 
-    Expression e2 = Short2(std::numeric_limits<int16_t>::min());
-    REPORTER_ASSERT(r, e2.release()->description() == "short2(-32768)");
-
-    Expression e3 = Short2(0, 1);
-    REPORTER_ASSERT(r, e3.release()->description() == "short2(0, 1)");
-
-    Expression e4 = Short3(0);
-    REPORTER_ASSERT(r, e4.release()->description() == "short3(0)");
-
-    Expression e5 = Short3(Short2(0, 1), -2);
-    REPORTER_ASSERT(r, e5.release()->description() == "short3(short2(0, 1), -2)");
-
-    Expression e6 = Short3(0, 1, 2);
-    REPORTER_ASSERT(r, e6.release()->description() == "short3(0, 1, 2)");
-
-    Expression e7 = Short4(0);
-    REPORTER_ASSERT(r, e7.release()->description() == "short4(0)");
-
-    Expression e8 = Short4(Short2(0, 1), Short2(2, 3));
-    REPORTER_ASSERT(r, e8.release()->description() == "short4(short2(0, 1), short2(2, 3))");
-
-    Expression e9 = Short4(0, 1, Short2(2, 3));
-    REPORTER_ASSERT(r, e9.release()->description() == "short4(0, 1, short2(2, 3))");
-
-    Expression e10 = Short4(0, 1, 2, 3);
-    REPORTER_ASSERT(r, e10.release()->description() == "short4(0, 1, 2, 3)");
+    EXPECT_EQUAL(Short(std::numeric_limits<int16_t>::max()),
+                "32767");
+    EXPECT_EQUAL(Short2(std::numeric_limits<int16_t>::min()),
+                "short2(-32768)");
+    EXPECT_EQUAL(Short2(0, 1),
+                "short2(0, 1)");
+    EXPECT_EQUAL(Short3(0),
+                "short3(0)");
+    EXPECT_EQUAL(Short3(Short2(0, 1), -2),
+                "short3(0, 1, -2)");
+    EXPECT_EQUAL(Short3(0, 1, 2),
+                "short3(0, 1, 2)");
+    EXPECT_EQUAL(Short4(0),
+                "short4(0)");
+    EXPECT_EQUAL(Short4(Short2(0, 1), Short2(2, 3)),
+                "short4(0, 1, 2, 3)");
+    EXPECT_EQUAL(Short4(0, 1, Short2(2, 3)),
+                "short4(0, 1, 2, 3)");
+    EXPECT_EQUAL(Short4(0, 1, 2, 3),
+                "short4(0, 1, 2, 3)");
 
     {
         ExpectError error(r, "error: invalid arguments to 'short2' constructor (expected 2 scalars,"
@@ -315,33 +312,25 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLShort, r, ctxInfo) {
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBool, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    Expression e1 = Bool2(false);
-    REPORTER_ASSERT(r, e1.release()->description() == "bool2(false)");
 
-    Expression e2 = Bool2(false, true);
-    REPORTER_ASSERT(r, e2.release()->description() == "bool2(false, true)");
-
-    Expression e3 = Bool3(false);
-    REPORTER_ASSERT(r, e3.release()->description() == "bool3(false)");
-
-    Expression e4 = Bool3(Bool2(false, true), false);
-    REPORTER_ASSERT(r, e4.release()->description() == "bool3(bool2(false, true), false)");
-
-    Expression e5 = Bool3(false, true, false);
-    REPORTER_ASSERT(r, e5.release()->description() == "bool3(false, true, false)");
-
-    Expression e6 = Bool4(false);
-    REPORTER_ASSERT(r, e6.release()->description() == "bool4(false)");
-
-    Expression e7 = Bool4(Bool2(false, true), Bool2(false, true));
-    REPORTER_ASSERT(r, e7.release()->description() == "bool4(bool2(false, true), "
-                                                      "bool2(false, true))");
-
-    Expression e8 = Bool4(false, true, Bool2(false, true));
-    REPORTER_ASSERT(r, e8.release()->description() == "bool4(false, true, bool2(false, true))");
-
-    Expression e9 = Bool4(false, true, false, true);
-    REPORTER_ASSERT(r, e9.release()->description() == "bool4(false, true, false, true)");
+    EXPECT_EQUAL(Bool2(false),
+                "bool2(false)");
+    EXPECT_EQUAL(Bool2(false, true),
+                "bool2(false, true)");
+    EXPECT_EQUAL(Bool3(false),
+                "bool3(false)");
+    EXPECT_EQUAL(Bool3(Bool2(false, true), false),
+                "bool3(false, true, false)");
+    EXPECT_EQUAL(Bool3(false, true, false),
+                "bool3(false, true, false)");
+    EXPECT_EQUAL(Bool4(false),
+                "bool4(false)");
+    EXPECT_EQUAL(Bool4(Bool2(false, true), Bool2(false, true)),
+                "bool4(false, true, false, true)");
+    EXPECT_EQUAL(Bool4(false, true, Bool2(false, true)),
+                "bool4(false, true, false, true)");
+    EXPECT_EQUAL(Bool4(false, true, false, true),
+                "bool4(false, true, false, true)");
 
     {
         ExpectError error(r, "error: invalid arguments to 'bool2' constructor (expected 2 scalars,"
@@ -359,138 +348,149 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBool, r, ctxInfo) {
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLPlus, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kFloat, "a"), b(kFloat, "b");
-    Expression e1 = a + b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a + b)");
 
-    Expression e2 = a + 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a + 1.0)");
-
-    Expression e3 = 0.5 + a + -99;
-    REPORTER_ASSERT(r, e3.release()->description() == "((0.5 + a) + -99.0)");
-
-    Expression e4 = a += b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a += (b + 1.0))");
+    EXPECT_EQUAL(a + b,
+               "(a + b)");
+    EXPECT_EQUAL(a + 1,
+               "(a + 1.0)");
+    EXPECT_EQUAL(0.5 + a + -99,
+              "((0.5 + a) + -99.0)");
+    EXPECT_EQUAL(a += b + 1,
+               "(a += (b + 1.0))");
+    EXPECT_EQUAL(+a,
+                 "a");
+    EXPECT_EQUAL(+(a + b),
+                 "(a + b)");
 
     {
         ExpectError error(r, "error: type mismatch: '+' cannot operate on 'bool2', 'float'\n");
-        (Bool2(true) + a).release();
+        DSLExpression((Bool2(true) + a)).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '+=' cannot operate on 'float', 'bool2'\n");
-        (a += Bool2(true)).release();
+        DSLExpression((a += Bool2(true))).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1.0 += a).release();
+        DSLExpression((1.0 += a)).release();
+    }
+
+    {
+        ExpectError error(r, "error: '+' cannot operate on 'bool'\n");
+        Var c(kBool);
+        DSLExpression(+c);
     }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLMinus, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
-    Expression e1 = a - b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a - b)");
 
-    Expression e2 = a - 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a - 1)");
-
-    Expression e3 = 2 - a - b;
-    REPORTER_ASSERT(r, e3.release()->description() == "((2 - a) - b)");
-
-    Expression e4 = a -= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a -= (b + 1))");
+    EXPECT_EQUAL(a - b,
+               "(a - b)");
+    EXPECT_EQUAL(a - 1,
+               "(a - 1)");
+    EXPECT_EQUAL(2 - a - b,
+              "((2 - a) - b)");
+    EXPECT_EQUAL(a -= b + 1,
+               "(a -= (b + 1))");
+    EXPECT_EQUAL(-a,
+                "-a");
+    EXPECT_EQUAL(-(a - b),
+                "-(a - b)");
 
     {
         ExpectError error(r, "error: type mismatch: '-' cannot operate on 'bool2', 'int'\n");
-        (Bool2(true) - a).release();
+        DSLExpression(Bool2(true) - a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '-=' cannot operate on 'int', 'bool2'\n");
-        (a -= Bool2(true)).release();
+        DSLExpression(a -= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1.0 -= a).release();
+        DSLExpression(1.0 -= a).release();
+    }
+
+    {
+        ExpectError error(r, "error: '-' cannot operate on 'bool'\n");
+        Var c(kBool);
+        DSLExpression(-c);
     }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLMultiply, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kFloat, "a"), b(kFloat, "b");
-    Expression e1 = a * b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a * b)");
 
-    Expression e2 = a * 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a * 1.0)");
-
-    Expression e3 = 0.5 * a * -99;
-    REPORTER_ASSERT(r, e3.release()->description() == "((0.5 * a) * -99.0)");
-
-    Expression e4 = a *= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a *= (b + 1.0))");
+    EXPECT_EQUAL(a * b,
+               "(a * b)");
+    EXPECT_EQUAL(a * 2,
+               "(a * 2.0)");
+    EXPECT_EQUAL(0.5 * a * -99,
+              "((0.5 * a) * -99.0)");
+    EXPECT_EQUAL(a *= b + 1,
+               "(a *= (b + 1.0))");
 
     {
         ExpectError error(r, "error: type mismatch: '*' cannot operate on 'bool2', 'float'\n");
-        (Bool2(true) * a).release();
+        DSLExpression(Bool2(true) * a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '*=' cannot operate on 'float', 'bool2'\n");
-        (a *= Bool2(true)).release();
+        DSLExpression(a *= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1.0 *= a).release();
+        DSLExpression(1.0 *= a).release();
     }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDivide, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kFloat, "a"), b(kFloat, "b");
-    Expression e1 = a / b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a / b)");
 
-    Expression e2 = a / 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a / 1.0)");
-
-    Expression e3 = 0.5 / a / -99;
-    REPORTER_ASSERT(r, e3.release()->description() == "((0.5 / a) / -99.0)");
-
-    Expression e4 = b / (a - 1);
-    REPORTER_ASSERT(r, e4.release()->description() == "(b / (a - 1.0))");
-
-    Expression e5 = a /= b + 1;
-    REPORTER_ASSERT(r, e5.release()->description() == "(a /= (b + 1.0))");
+    EXPECT_EQUAL(a / b,
+               "(a / b)");
+    EXPECT_EQUAL(a / 2,
+               "(a / 2.0)");
+    EXPECT_EQUAL(0.5 / a / -99,
+              "((0.5 / a) / -99.0)");
+    EXPECT_EQUAL(b / (a - 1),
+               "(b / (a - 1.0))");
+    EXPECT_EQUAL(a /= b + 1,
+               "(a /= (b + 1.0))");
 
     {
         ExpectError error(r, "error: type mismatch: '/' cannot operate on 'bool2', 'float'\n");
-        (Bool2(true) / a).release();
+        DSLExpression(Bool2(true) / a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '/=' cannot operate on 'float', 'bool2'\n");
-        (a /= Bool2(true)).release();
+        DSLExpression(a /= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1.0 /= a).release();
+        DSLExpression(1.0 /= a).release();
     }
 
     {
         ExpectError error(r, "error: division by zero\n");
-        (a /= 0).release();
+        DSLExpression(a /= 0).release();
     }
 
     {
         Var c(kFloat2, "c");
         ExpectError error(r, "error: division by zero\n");
-        (c /= Float2(Float(0), 1)).release();
+        DSLExpression(c /= Float2(Float(0), 1)).release();
     }
 }
 
@@ -498,41 +498,41 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLMod, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a % b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a % b)");
+    EXPECT_EQUAL(e1, "(a % b)");
 
     Expression e2 = a % 2;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a % 2)");
+    EXPECT_EQUAL(e2, "(a % 2)");
 
     Expression e3 = 10 % a % -99;
-    REPORTER_ASSERT(r, e3.release()->description() == "((10 % a) % -99)");
+    EXPECT_EQUAL(e3, "((10 % a) % -99)");
 
     Expression e4 = a %= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a %= (b + 1))");
+    EXPECT_EQUAL(e4, "(a %= (b + 1))");
 
     {
         ExpectError error(r, "error: type mismatch: '%' cannot operate on 'bool2', 'int'\n");
-        (Bool2(true) % a).release();
+        DSLExpression(Bool2(true) % a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '%=' cannot operate on 'int', 'bool2'\n");
-        (a %= Bool2(true)).release();
+        DSLExpression(a %= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1 %= a).release();
+        DSLExpression(1 %= a).release();
     }
 
     {
         ExpectError error(r, "error: division by zero\n");
-        (a %= 0).release();
+        DSLExpression(a %= 0).release();
     }
 
     {
         Var c(kInt2, "c");
         ExpectError error(r, "error: division by zero\n");
-        (c %= Int2(Int(0), 1)).release();
+        DSLExpression(c %= Int2(Int(0), 1)).release();
     }
 }
 
@@ -540,30 +540,30 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLShl, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a << b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a << b)");
+    EXPECT_EQUAL(e1, "(a << b)");
 
     Expression e2 = a << 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a << 1)");
+    EXPECT_EQUAL(e2, "(a << 1)");
 
     Expression e3 = 1 << a << 2;
-    REPORTER_ASSERT(r, e3.release()->description() == "((1 << a) << 2)");
+    EXPECT_EQUAL(e3, "((1 << a) << 2)");
 
     Expression e4 = a <<= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a <<= (b + 1))");
+    EXPECT_EQUAL(e4, "(a <<= (b + 1))");
 
     {
         ExpectError error(r, "error: type mismatch: '<<' cannot operate on 'bool2', 'int'\n");
-        (Bool2(true) << a).release();
+        DSLExpression(Bool2(true) << a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '<<=' cannot operate on 'int', 'bool2'\n");
-        (a <<= Bool2(true)).release();
+        DSLExpression(a <<= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1 <<= a).release();
+        DSLExpression(1 <<= a).release();
     }
 }
 
@@ -571,30 +571,30 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLShr, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a >> b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a >> b)");
+    EXPECT_EQUAL(e1, "(a >> b)");
 
     Expression e2 = a >> 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a >> 1)");
+    EXPECT_EQUAL(e2, "(a >> 1)");
 
     Expression e3 = 1 >> a >> 2;
-    REPORTER_ASSERT(r, e3.release()->description() == "((1 >> a) >> 2)");
+    EXPECT_EQUAL(e3, "((1 >> a) >> 2)");
 
     Expression e4 = a >>= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a >>= (b + 1))");
+    EXPECT_EQUAL(e4, "(a >>= (b + 1))");
 
     {
         ExpectError error(r, "error: type mismatch: '>>' cannot operate on 'bool2', 'int'\n");
-        (Bool2(true) >> a).release();
+        DSLExpression(Bool2(true) >> a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '>>=' cannot operate on 'int', 'bool2'\n");
-        (a >>= Bool2(true)).release();
+        DSLExpression(a >>= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1 >>= a).release();
+        DSLExpression(1 >>= a).release();
     }
 }
 
@@ -602,30 +602,30 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBitwiseAnd, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a & b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a & b)");
+    EXPECT_EQUAL(e1, "(a & b)");
 
     Expression e2 = a & 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a & 1)");
+    EXPECT_EQUAL(e2, "(a & 1)");
 
     Expression e3 = 1 & a & 2;
-    REPORTER_ASSERT(r, e3.release()->description() == "((1 & a) & 2)");
+    EXPECT_EQUAL(e3, "((1 & a) & 2)");
 
     Expression e4 = a &= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a &= (b + 1))");
+    EXPECT_EQUAL(e4, "(a &= (b + 1))");
 
     {
         ExpectError error(r, "error: type mismatch: '&' cannot operate on 'bool2', 'int'\n");
-        (Bool2(true) & a).release();
+        DSLExpression(Bool2(true) & a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '&=' cannot operate on 'int', 'bool2'\n");
-        (a &= Bool2(true)).release();
+        DSLExpression(a &= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1 &= a).release();
+        DSLExpression(1 &= a).release();
     }
 }
 
@@ -633,30 +633,30 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBitwiseOr, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a | b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a | b)");
+    EXPECT_EQUAL(e1, "(a | b)");
 
     Expression e2 = a | 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a | 1)");
+    EXPECT_EQUAL(e2, "(a | 1)");
 
     Expression e3 = 1 | a | 2;
-    REPORTER_ASSERT(r, e3.release()->description() == "((1 | a) | 2)");
+    EXPECT_EQUAL(e3, "((1 | a) | 2)");
 
     Expression e4 = a |= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a |= (b + 1))");
+    EXPECT_EQUAL(e4, "(a |= (b + 1))");
 
     {
         ExpectError error(r, "error: type mismatch: '|' cannot operate on 'bool2', 'int'\n");
-        (Bool2(true) | a).release();
+        DSLExpression(Bool2(true) | a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '|=' cannot operate on 'int', 'bool2'\n");
-        (a |= Bool2(true)).release();
+        DSLExpression(a |= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1 |= a).release();
+        DSLExpression(1 |= a).release();
     }
 }
 
@@ -664,30 +664,30 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBitwiseXor, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a ^ b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a ^ b)");
+    EXPECT_EQUAL(e1, "(a ^ b)");
 
     Expression e2 = a ^ 1;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a ^ 1)");
+    EXPECT_EQUAL(e2, "(a ^ 1)");
 
     Expression e3 = 1 ^ a ^ 2;
-    REPORTER_ASSERT(r, e3.release()->description() == "((1 ^ a) ^ 2)");
+    EXPECT_EQUAL(e3, "((1 ^ a) ^ 2)");
 
     Expression e4 = a ^= b + 1;
-    REPORTER_ASSERT(r, e4.release()->description() == "(a ^= (b + 1))");
+    EXPECT_EQUAL(e4, "(a ^= (b + 1))");
 
     {
         ExpectError error(r, "error: type mismatch: '^' cannot operate on 'bool2', 'int'\n");
-        (Bool2(true) ^ a).release();
+        DSLExpression(Bool2(true) ^ a).release();
     }
 
     {
         ExpectError error(r, "error: type mismatch: '^=' cannot operate on 'int', 'bool2'\n");
-        (a ^= Bool2(true)).release();
+        DSLExpression(a ^= Bool2(true)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (1 ^= a).release();
+        DSLExpression(1 ^= a).release();
     }
 }
 
@@ -695,17 +695,17 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLLogicalAnd, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kBool, "a"), b(kBool, "b");
     Expression e1 = a && b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a && b)");
+    EXPECT_EQUAL(e1, "(a && b)");
 
     Expression e2 = a && true && b;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a && b)");
+    EXPECT_EQUAL(e2, "(a && b)");
 
     Expression e3 = a && false && b;
-    REPORTER_ASSERT(r, e3.release()->description() == "false");
+    EXPECT_EQUAL(e3, "false");
 
     {
         ExpectError error(r, "error: type mismatch: '&&' cannot operate on 'bool', 'int'\n");
-        (a && 5).release();
+        DSLExpression(a && 5).release();
     }
 }
 
@@ -713,17 +713,17 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLLogicalOr, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kBool, "a"), b(kBool, "b");
     Expression e1 = a || b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a || b)");
+    EXPECT_EQUAL(e1, "(a || b)");
 
     Expression e2 = a || true || b;
-    REPORTER_ASSERT(r, e2.release()->description() == "true");
+    EXPECT_EQUAL(e2, "true");
 
     Expression e3 = a || false || b;
-    REPORTER_ASSERT(r, e3.release()->description() == "(a || b)");
+    EXPECT_EQUAL(e3, "(a || b)");
 
     {
         ExpectError error(r, "error: type mismatch: '||' cannot operate on 'bool', 'int'\n");
-        (a || 5).release();
+        DSLExpression(a || 5).release();
     }
 }
 
@@ -731,24 +731,24 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLComma, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = (a += b, b);
-    REPORTER_ASSERT(r, e1.release()->description() == "((a += b) , b)");
+    EXPECT_EQUAL(e1, "((a += b) , b)");
 
     Expression e2 = (a += b, b += b, Int2(a));
-    REPORTER_ASSERT(r, e2.release()->description() == "(((a += b) , (b += b)) , int2(a))");
+    EXPECT_EQUAL(e2, "(((a += b) , (b += b)) , int2(a))");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLEqual, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a == b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a == b)");
+    EXPECT_EQUAL(e1, "(a == b)");
 
     Expression e2 = a == 5;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a == 5)");
+    EXPECT_EQUAL(e2, "(a == 5)");
 
     {
         ExpectError error(r, "error: type mismatch: '==' cannot operate on 'int', 'bool2'\n");
-        (a == Bool2(true)).release();
+        DSLExpression(a == Bool2(true)).release();
     }
 }
 
@@ -756,14 +756,14 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLNotEqual, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a != b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a != b)");
+    EXPECT_EQUAL(e1, "(a != b)");
 
     Expression e2 = a != 5;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a != 5)");
+    EXPECT_EQUAL(e2, "(a != 5)");
 
     {
         ExpectError error(r, "error: type mismatch: '!=' cannot operate on 'int', 'bool2'\n");
-        (a != Bool2(true)).release();
+        DSLExpression(a != Bool2(true)).release();
     }
 }
 
@@ -771,14 +771,14 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLGreaterThan, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a > b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a > b)");
+    EXPECT_EQUAL(e1, "(a > b)");
 
     Expression e2 = a > 5;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a > 5)");
+    EXPECT_EQUAL(e2, "(a > 5)");
 
     {
         ExpectError error(r, "error: type mismatch: '>' cannot operate on 'int', 'bool2'\n");
-        (a > Bool2(true)).release();
+        DSLExpression(a > Bool2(true)).release();
     }
 }
 
@@ -786,14 +786,14 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLGreaterThanOrEqual, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a >= b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a >= b)");
+    EXPECT_EQUAL(e1, "(a >= b)");
 
     Expression e2 = a >= 5;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a >= 5)");
+    EXPECT_EQUAL(e2, "(a >= 5)");
 
     {
         ExpectError error(r, "error: type mismatch: '>=' cannot operate on 'int', 'bool2'\n");
-        (a >= Bool2(true)).release();
+        DSLExpression(a >= Bool2(true)).release();
     }
 }
 
@@ -801,14 +801,14 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLLessThan, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a < b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a < b)");
+    EXPECT_EQUAL(e1, "(a < b)");
 
     Expression e2 = a < 5;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a < 5)");
+    EXPECT_EQUAL(e2, "(a < 5)");
 
     {
         ExpectError error(r, "error: type mismatch: '<' cannot operate on 'int', 'bool2'\n");
-        (a < Bool2(true)).release();
+        DSLExpression(a < Bool2(true)).release();
     }
 }
 
@@ -816,14 +816,14 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLLessThanOrEqual, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = a <= b;
-    REPORTER_ASSERT(r, e1.release()->description() == "(a <= b)");
+    EXPECT_EQUAL(e1, "(a <= b)");
 
     Expression e2 = a <= 5;
-    REPORTER_ASSERT(r, e2.release()->description() == "(a <= 5)");
+    EXPECT_EQUAL(e2, "(a <= 5)");
 
     {
         ExpectError error(r, "error: type mismatch: '<=' cannot operate on 'int', 'bool2'\n");
-        (a <= Bool2(true)).release();
+        DSLExpression(a <= Bool2(true)).release();
     }
 }
 
@@ -831,11 +831,11 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLLogicalNot, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kInt, "b");
     Expression e1 = !(a <= b);
-    REPORTER_ASSERT(r, e1.release()->description() == "!(a <= b)");
+    EXPECT_EQUAL(e1, "!(a <= b)");
 
     {
         ExpectError error(r, "error: '!' cannot operate on 'int'\n");
-        (!a).release();
+        DSLExpression(!a).release();
     }
 }
 
@@ -843,11 +843,11 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBitwiseNot, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kBool, "b");
     Expression e1 = ~a;
-    REPORTER_ASSERT(r, e1.release()->description() == "~a");
+    EXPECT_EQUAL(e1, "~a");
 
     {
         ExpectError error(r, "error: '~' cannot operate on 'bool'\n");
-        (~b).release();
+        DSLExpression(~b).release();
     }
 }
 
@@ -855,29 +855,29 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLIncrement, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kBool, "b");
     Expression e1 = ++a;
-    REPORTER_ASSERT(r, e1.release()->description() == "++a");
+    EXPECT_EQUAL(e1, "++a");
 
     Expression e2 = a++;
-    REPORTER_ASSERT(r, e2.release()->description() == "a++");
+    EXPECT_EQUAL(e2, "a++");
 
     {
         ExpectError error(r, "error: '++' cannot operate on 'bool'\n");
-        (++b).release();
+        DSLExpression(++b).release();
     }
 
     {
         ExpectError error(r, "error: '++' cannot operate on 'bool'\n");
-        (b++).release();
+        DSLExpression(b++).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (++(a + 1)).release();
+        DSLExpression(++(a + 1)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        ((a + 1)++).release();
+        DSLExpression((a + 1)++).release();
     }
 }
 
@@ -885,52 +885,52 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDecrement, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kInt, "a"), b(kBool, "b");
     Expression e1 = --a;
-    REPORTER_ASSERT(r, e1.release()->description() == "--a");
+    EXPECT_EQUAL(e1, "--a");
 
     Expression e2 = a--;
-    REPORTER_ASSERT(r, e2.release()->description() == "a--");
+    EXPECT_EQUAL(e2, "a--");
 
     {
         ExpectError error(r, "error: '--' cannot operate on 'bool'\n");
-        (--b).release();
+        DSLExpression(--b).release();
     }
 
     {
         ExpectError error(r, "error: '--' cannot operate on 'bool'\n");
-        (b--).release();
+        DSLExpression(b--).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        (--(a + 1)).release();
+        DSLExpression(--(a + 1)).release();
     }
 
     {
         ExpectError error(r, "error: cannot assign to this expression\n");
-        ((a + 1)--).release();
+        DSLExpression((a + 1)--).release();
     }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBlock, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
     Statement x = Block();
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(x, "{ }"));
-    Var a(kInt, "a"), b(kInt, "b");
-    Statement y = Block(Declare(a, 1), Declare(b, 2), a = b);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(y, "{ int a = 1; int b = 2; (a = b); }"));
+    EXPECT_EQUAL(x, "{ }");
+    Var a(kInt, "a", 1), b(kInt, "b", 2);
+    Statement y = Block(Declare(a), Declare(b), a = b);
+    EXPECT_EQUAL(y, "{ int a = 1; int b = 2; (a = b); }");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBreak, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    Var i(kInt, "i");
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
+    Var i(kInt, "i", 0);
     DSLFunction(kVoid, "success").define(
-        For(Declare(i, 0), i < 10, ++i, Block(
+        For(Declare(i), i < 10, ++i, Block(
             If(i > 5, Break())
         ))
     );
     REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(*DSLWriter::ProgramElements()[0],
-            "void success() { for (int i = 0; (i < 10); ++i) { if ((i > 5)) break; } }"));
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
+                 "void success() { for (int i = 0; (i < 10); ++i) { if ((i > 5)) break; } }");
 
     {
         ExpectError error(r, "error: break statement must be inside a loop or switch\n");
@@ -941,16 +941,16 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBreak, r, ctxInfo) {
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLContinue, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    Var i(kInt, "i");
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
+    Var i(kInt, "i", 0);
     DSLFunction(kVoid, "success").define(
-        For(Declare(i, 0), i < 10, ++i, Block(
+        For(Declare(i), i < 10, ++i, Block(
             If(i < 5, Continue())
         ))
     );
     REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(*DSLWriter::ProgramElements()[0],
-            "void success() { for (int i = 0; (i < 10); ++i) { if ((i < 5)) continue; } }"));
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
+                 "void success() { for (int i = 0; (i < 10); ++i) { if ((i < 5)) continue; } }");
 
     {
         ExpectError error(r, "error: continue statement must be inside a loop\n");
@@ -961,34 +961,41 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLContinue, r, ctxInfo) {
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDeclare, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    Var a(kHalf4, "a"), b(kHalf4, "b");
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
+    Var a(kHalf4, "a"), b(kHalf4, "b", Half4(1));
     Statement x = Declare(a);
-    REPORTER_ASSERT(r, x.release()->description() == "half4 a;");
-    Statement y = Declare(b, Half4(1));
-    REPORTER_ASSERT(r, y.release()->description() == "half4 b = half4(1.0);");
+    EXPECT_EQUAL(x, "half4 a;");
+    Statement y = Declare(b);
+    EXPECT_EQUAL(y, "half4 b = half4(1.0);");
 
     {
-        Var c(kHalf4, "c");
+        Var c(kHalf4, "c", 1);
         ExpectError error(r, "error: expected 'half4', but found 'int'\n");
-        Declare(c, 1).release();
+        Declare(c).release();
+    }
+
+    {
+        Var d(kInt, "d");
+        Declare(d).release();
+        ExpectError error(r, "error: variable has already been declared\n");
+        Declare(d).release();
     }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDiscard, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Statement x = If(Sqrt(1) > 0, Discard());
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(x, "if ((sqrt(1.0) > 0.0)) discard;"));
+    EXPECT_EQUAL(x, "if ((sqrt(1.0) > 0.0)) discard;");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDo, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Statement x = Do(Block(), true);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(x, "do {} while (true);"));
+    EXPECT_EQUAL(x, "do {} while (true);");
 
     Var a(kFloat, "a"), b(kFloat, "b");
     Statement y = Do(Block(a++, --b), a != b);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(y, "do { a++; --b; } while ((a != b));"));
+    EXPECT_EQUAL(y, "do { a++; --b; } while ((a != b));");
 
     {
         ExpectError error(r, "error: expected 'bool', but found 'int'\n");
@@ -997,14 +1004,13 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDo, r, ctxInfo) {
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFor, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
     Statement x = For(Statement(), Expression(), Expression(), Block());
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(x, "for (;;) {}"));
+    EXPECT_EQUAL(x, "for (;;) {}");
 
-    Var i(kInt, "i");
-    Statement y = For(Declare(i, 0), i < 10, ++i, i += 5);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(y,
-                                                      "for (int i = 0; (i < 10); ++i) (i += 5);"));
+    Var i(kInt, "i", 0);
+    Statement y = For(Declare(i), i < 10, ++i, i += 5);
+    EXPECT_EQUAL(y, "for (int i = 0; (i < 10); ++i) (i += 5);");
 
     {
         ExpectError error(r, "error: expected 'bool', but found 'int'\n");
@@ -1013,28 +1019,45 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFor, r, ctxInfo) {
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFunction, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    DSLWriter::ProgramElements().clear();
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
     Var coords(kHalf2, "coords");
     DSLFunction(kVoid, "main", coords).define(
         sk_FragColor() = Half4(coords, 0, 1)
     );
     REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(*DSLWriter::ProgramElements()[0],
-            "void main(half2 coords) { (sk_FragColor = half4(coords, 0.0, 1.0)); }"));
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
+                 "void main(half2 coords) { (sk_FragColor = half4(coords, 0.0, 1.0)); }");
 
-    DSLWriter::ProgramElements().clear();
-    Var x(kFloat, "x");
-    DSLFunction(kFloat, "sqr", x).define(
-        Return(x * x)
-    );
-    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(*DSLWriter::ProgramElements()[0],
-            "float sqr(float x) { return (x * x); }"));
+    {
+        DSLWriter::Reset();
+        Var x(kFloat, "x");
+        DSLFunction sqr(kFloat, "sqr", x);
+        sqr.define(
+            Return(x * x)
+        );
+        EXPECT_EQUAL(sqr(sk_FragCoord().x()), "sqr(sk_FragCoord.x)");
+        REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
+        EXPECT_EQUAL(*DSLWriter::ProgramElements()[0], "float sqr(float x) { return (x * x); }");
+    }
+
+    {
+        DSLWriter::Reset();
+        Var x(kFloat2, "x");
+        Var y(kFloat2, "y");
+        DSLFunction dot(kFloat2, "dot", x, y);
+        dot.define(
+            Return(x * x + y * y)
+        );
+        EXPECT_EQUAL(dot(Float2(1.0f, 2.0f), Float2(3.0f, 4.0f)),
+                     "dot(float2(1.0, 2.0), float2(3.0, 4.0))");
+        REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
+        EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
+                "float2 dot(float2 x, float2 y) { return ((x * x) + (y * y)); }");
+    }
 
     {
         ExpectError error(r, "error: expected 'float', but found 'bool'\n");
-        DSLWriter::ProgramElements().clear();
+        DSLWriter::Reset();
         DSLFunction(kFloat, "broken").define(
             Return(true)
         );
@@ -1042,38 +1065,73 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFunction, r, ctxInfo) {
 
     {
         ExpectError error(r, "error: expected function to return 'float'\n");
-        DSLWriter::ProgramElements().clear();
+        DSLWriter::Reset();
         DSLFunction(kFloat, "broken").define(
             Return()
         );
     }
 
     {
+        ExpectError error(r, "error: function 'broken' can exit without returning a value\n");
+        DSLWriter::Reset();
+        Var x(kFloat, "x", 0);
+        DSLFunction(kFloat, "broken").define(
+            Declare(x),
+            If(x == 1, Return(x))
+        );
+    }
+
+    {
         ExpectError error(r, "error: may not return a value from a void function\n");
-        DSLWriter::ProgramElements().clear();
+        DSLWriter::Reset();
         DSLFunction(kVoid, "broken").define(
             Return(0)
         );
     }
 
-/* TODO: detect this case
     {
-        ExpectError error(r, "error: expected function to return 'float'\n");
-        DSLWriter::ProgramElements().clear();
+        ExpectError error(r, "error: function 'broken' can exit without returning a value\n");
+        DSLWriter::Reset();
         DSLFunction(kFloat, "broken").define(
         );
     }
-*/
+
+    {
+        ExpectError error(r, "error: using an already-declared variable as a function parameter\n");
+        DSLWriter::Reset();
+        DSLVar p(kFloat);
+        Declare(p).release();
+        DSLFunction(kVoid, "broken", p).define(
+        );
+    }
+
+    {
+        ExpectError error(r, "error: variable has already been declared\n");
+        DSLWriter::Reset();
+        DSLVar p(kFloat);
+        DSLFunction(kVoid, "broken", p).define(
+        );
+        Declare(p).release();
+    }
+
+    {
+        ExpectError error(r, "error: variables used as function parameters cannot have initial "
+                             "values\n");
+        DSLWriter::Reset();
+        DSLVar p(kFloat, 1);
+        DSLFunction(kVoid, "broken", p).define(
+        );
+    }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLIf, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kFloat, "a"), b(kFloat, "b");
     Statement x = If(a > b, a -= b);
-    REPORTER_ASSERT(r, x.release()->description() == "if ((a > b)) (a -= b);");
+    EXPECT_EQUAL(x, "if ((a > b)) (a -= b);");
 
     Statement y = If(a > b, a -= b, b -= a);
-    REPORTER_ASSERT(r, y.release()->description() == "if ((a > b)) (a -= b); else (b -= a);");
+    EXPECT_EQUAL(y, "if ((a > b)) (a -= b); else (b -= a);");
 
     {
         ExpectError error(r, "error: expected 'bool', but found 'float'\n");
@@ -1085,10 +1143,27 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLReturn, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
 
     Statement x = Return();
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(x, "return;"));
+    EXPECT_EQUAL(x, "return;");
 
     Statement y = Return(true);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(y, "return true;"));
+    EXPECT_EQUAL(y, "return true;");
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSelect, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    Var a(kInt, "a");
+    Expression x = Select(a > 0, 1, -1);
+    EXPECT_EQUAL(x, "((a > 0) ? 1 : -1)");
+
+    {
+        ExpectError error(r, "error: expected 'bool', but found 'int'\n");
+        DSLExpression x = Select(a, 1, -1);
+    }
+
+    {
+        ExpectError error(r, "error: ternary operator result mismatch: 'float2', 'float3'\n");
+        DSLExpression x = Select(a > 0, Float2(1), Float3(1));
+    }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSwitch, r, ctxInfo) {
@@ -1096,42 +1171,41 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSwitch, r, ctxInfo) {
 
     Var a(kFloat, "a"), b(kInt, "b");
 
-    Statement x = Switch(5,
+    Statement x = Switch(b,
         Case(0, a = 0, Break()),
         Case(1, a = 1, Continue()),
+        Case(2, a = 2  /*Fallthrough*/),
         Default(Discard())
     );
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(x,
-        "switch (5) { case 0: (a = 0.0); break; case 1: (a = 1.0); continue; default: discard; }"));
+    EXPECT_EQUAL(x, R"(
+        switch (b) {
+            case 0: (a = 0.0); break;
+            case 1: (a = 1.0); continue;
+            case 2: (a = 2.0);
+            default: discard;
+        }
+    )");
 
-    Statement y = Switch(b);
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(y,
-        "switch (b) {}"));
+    EXPECT_EQUAL(Switch(b),
+                "switch (b) {}");
 
-    Statement z = Switch(b, Default(), Case(0), Case(1));
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(z,
-        "switch (b) { default: case 0: case 1: }"));
+    EXPECT_EQUAL(Switch(b, Default(), Case(0), Case(1)),
+                "switch (b) { default: case 0: case 1: }");
 
     {
-        ExpectError error(r, "error: duplicate case value\n");
-        Switch(0, Case(0), Case(0)).release();
+        ExpectError error(r, "error: duplicate case value '0'\n");
+        DSLStatement(Switch(0, Case(0), Case(0))).release();
+    }
+
+    {
+        ExpectError error(r, "error: duplicate default case\n");
+        DSLStatement(Switch(0, Default(a = 0), Default(a = 1))).release();
     }
 
     {
         ExpectError error(r, "error: case value must be a constant integer\n");
         Var b(kInt);
-        Switch(0, Case(b)).release();
-    }
-
-    {
-        ExpectError error(r, "error: continue statement must be inside a loop\n");
-        DSLFunction(kVoid, "fail").define(
-            Switch(5,
-                Case(0, a = 0, Break()),
-                Case(1, a = 1, Continue()),
-                Default(Discard())
-            )
-        );
+        DSLStatement(Switch(0, Case(b))).release();
     }
 }
 
@@ -1139,99 +1213,69 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSwizzle, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(kFloat4, "a");
 
-    Expression e1 = a.x();
-    REPORTER_ASSERT(r, e1.release()->description() == "a.x");
-
-    Expression e2 = a.y();
-    REPORTER_ASSERT(r, e2.release()->description() == "a.y");
-
-    Expression e3 = a.z();
-    REPORTER_ASSERT(r, e3.release()->description() == "a.z");
-
-    Expression e4 = a.w();
-    REPORTER_ASSERT(r, e4.release()->description() == "a.w");
-
-    Expression e5 = a.r();
-    REPORTER_ASSERT(r, e5.release()->description() == "a.x");
-
-    Expression e6 = a.g();
-    REPORTER_ASSERT(r, e6.release()->description() == "a.y");
-
-    Expression e7 = a.b();
-    REPORTER_ASSERT(r, e7.release()->description() == "a.z");
-
-    Expression e8 = a.a();
-    REPORTER_ASSERT(r, e8.release()->description() == "a.w");
-
-    Expression e9 = Swizzle(a, R);
-    REPORTER_ASSERT(r, e9.release()->description() == "a.x");
-
-    Expression e10 = Swizzle(a, ZERO, G);
-    REPORTER_ASSERT(r, e10.release()->description() == "float2(a.y, float(0)).yx");
-
-    Expression e11 = Swizzle(a, B, G, G);
-    REPORTER_ASSERT(r, e11.release()->description() == "a.zyy");
-
-    Expression e12 = Swizzle(a, R, G, B, ONE);
-    REPORTER_ASSERT(r, e12.release()->description() == "float4(a.xyz, float(1))");
-
-    Expression e13 = Swizzle(a, R, G, B, ONE).r();
-    REPORTER_ASSERT(r, e13.release()->description() == "float4(a.xyz, float(1)).x");
-}
-
-DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLTernary, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
-    Var a(kInt, "a");
-    Expression x = Ternary(a > 0, 1, -1);
-    REPORTER_ASSERT(r, x.release()->description() == "((a > 0) ? 1 : -1)");
-
-    {
-        ExpectError error(r, "error: expected 'bool', but found 'int'\n");
-        Ternary(a, 1, -1).release();
-    }
-
-    {
-        ExpectError error(r, "error: ternary operator result mismatch: 'float2', 'float3'\n");
-        Ternary(a > 0, Float2(1), Float3(1)).release();
-    }
+    EXPECT_EQUAL(a.x(),
+                "a.x");
+    EXPECT_EQUAL(a.y(),
+                "a.y");
+    EXPECT_EQUAL(a.z(),
+                "a.z");
+    EXPECT_EQUAL(a.w(),
+                "a.w");
+    EXPECT_EQUAL(a.r(),
+                "a.x");
+    EXPECT_EQUAL(a.g(),
+                "a.y");
+    EXPECT_EQUAL(a.b(),
+                "a.z");
+    EXPECT_EQUAL(a.a(),
+                "a.w");
+    EXPECT_EQUAL(Swizzle(a, R),
+                "a.x");
+    EXPECT_EQUAL(Swizzle(a, ZERO, G),
+                "float2(0.0, a.y)");
+    EXPECT_EQUAL(Swizzle(a, B, G, G),
+                "a.zyy");
+    EXPECT_EQUAL(Swizzle(a, R, G, B, ONE),
+                "float4(a.xyz, 1.0)");
+    EXPECT_EQUAL(Swizzle(a, B, G, R, ONE).r(),
+                "a.z");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLWhile, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Statement x = While(true, Block());
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(x, "for (; true;) {}"));
+    EXPECT_EQUAL(x, "for (; true;) {}");
 
     Var a(kFloat, "a"), b(kFloat, "b");
     Statement y = While(a != b, Block(a++, --b));
-    REPORTER_ASSERT(r, whitespace_insensitive_compare(y, "for (; (a != b);) { a++; --b; }"));
+    EXPECT_EQUAL(y, "for (; (a != b);) { a++; --b; }");
 
     {
         ExpectError error(r, "error: expected 'bool', but found 'int'\n");
-        While(7, Block()).release();
+        DSLStatement x = While(7, Block());
     }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLIndex, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
     Var a(Array(kInt, 5), "a"), b(kInt, "b");
-    Expression e1 = a[0];
-    REPORTER_ASSERT(r, e1.release()->description() == "a[0]");
-    Expression e2 = a[b];
-    REPORTER_ASSERT(r, e2.release()->description() == "a[b]");
+
+    EXPECT_EQUAL(a[0], "a[0]");
+    EXPECT_EQUAL(a[b], "a[b]");
 
     {
         ExpectError error(r, "error: expected 'int', but found 'bool'\n");
-        a[true].release();
+        DSLExpression x = a[true];
     }
 
     {
         ExpectError error(r, "error: expected array, but found 'int'\n");
-        b[0].release();
+        DSLExpression x = b[0];
     }
 
     {
         ExpectError error(r, "error: index -1 out of range for 'int[5]'\n");
-        a[-1].release();
+        DSLExpression x = a[-1];
     }
 }
 
@@ -1242,48 +1286,48 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBuiltins, r, ctxInfo) {
     Var a(kHalf4, "a"), b(kHalf4, "b"), c(kHalf4, "c");
     Var h3(kHalf3, "h3");
     Var b4(kBool4, "b4");
-    REPORTER_ASSERT(r, Abs(a).release()->description()                 == "abs(a)");
-    REPORTER_ASSERT(r, All(b4).release()->description()                == "all(b4)");
-    REPORTER_ASSERT(r, Any(b4).release()->description()                == "any(b4)");
-    REPORTER_ASSERT(r, Ceil(a).release()->description()                == "ceil(a)");
-    REPORTER_ASSERT(r, Clamp(a, 0, 1).release()->description()         == "clamp(a, 0.0, 1.0)");
-    REPORTER_ASSERT(r, Cos(a).release()->description()                 == "cos(a)");
-    REPORTER_ASSERT(r, Cross(h3, h3).release()->description()          == "cross(h3, h3)");
-    REPORTER_ASSERT(r, Degrees(a).release()->description()             == "degrees(a)");
-    REPORTER_ASSERT(r, Distance(a, b).release()->description()         == "distance(a, b)");
-    REPORTER_ASSERT(r, Dot(a, b).release()->description()              == "dot(a, b)");
-    REPORTER_ASSERT(r, Equal(a, b).release()->description()            == "equal(a, b)");
-    REPORTER_ASSERT(r, Exp(a).release()->description()                 == "exp(a)");
-    REPORTER_ASSERT(r, Exp2(a).release()->description()                == "exp2(a)");
-    REPORTER_ASSERT(r, Faceforward(a, b, c).release()->description()   == "faceforward(a, b, c)");
-    REPORTER_ASSERT(r, Floor(a).release()->description()               == "floor(a)");
-    REPORTER_ASSERT(r, Fract(a).release()->description()               == "fract(a)");
-    REPORTER_ASSERT(r, GreaterThan(a, b).release()->description()      == "greaterThan(a, b)");
-    REPORTER_ASSERT(r, GreaterThanEqual(a, b).release()->description() == "greaterThanEqual(a, b)");
-    REPORTER_ASSERT(r, Inversesqrt(a).release()->description()         == "inversesqrt(a)");
-    REPORTER_ASSERT(r, LessThan(a, b).release()->description()         == "lessThan(a, b)");
-    REPORTER_ASSERT(r, LessThanEqual(a, b).release()->description()    == "lessThanEqual(a, b)");
-    REPORTER_ASSERT(r, Length(a).release()->description()              == "length(a)");
-    REPORTER_ASSERT(r, Log(a).release()->description()                 == "log(a)");
-    REPORTER_ASSERT(r, Log2(a).release()->description()                == "log2(a)");
-    REPORTER_ASSERT(r, Max(a, b).release()->description()              == "max(a, b)");
-    REPORTER_ASSERT(r, Min(a, b).release()->description()              == "min(a, b)");
-    REPORTER_ASSERT(r, Mix(a, b, c).release()->description()           == "mix(a, b, c)");
-    REPORTER_ASSERT(r, Mod(a, b).release()->description()              == "mod(a, b)");
-    REPORTER_ASSERT(r, Normalize(a).release()->description()           == "normalize(a)");
-    REPORTER_ASSERT(r, NotEqual(a, b).release()->description()         == "notEqual(a, b)");
-    REPORTER_ASSERT(r, Pow(a, b).release()->description()              == "pow(a, b)");
-    REPORTER_ASSERT(r, Radians(a).release()->description()             == "radians(a)");
-    REPORTER_ASSERT(r, Reflect(a, b).release()->description()          == "reflect(a, b)");
-    REPORTER_ASSERT(r, Refract(a, b, 1).release()->description()       == "refract(a, b, 1.0)");
-    REPORTER_ASSERT(r, Saturate(a).release()->description()            == "saturate(a)");
-    REPORTER_ASSERT(r, Sign(a).release()->description()                == "sign(a)");
-    REPORTER_ASSERT(r, Sin(a).release()->description()                 == "sin(a)");
-    REPORTER_ASSERT(r, Smoothstep(a, b, c).release()->description()    == "smoothstep(a, b, c)");
-    REPORTER_ASSERT(r, Sqrt(a).release()->description()                == "sqrt(a)");
-    REPORTER_ASSERT(r, Step(a, b).release()->description()             == "step(a, b)");
-    REPORTER_ASSERT(r, Tan(a).release()->description()                 == "tan(a)");
-    REPORTER_ASSERT(r, Unpremul(a).release()->description()            == "unpremul(a)");
+    EXPECT_EQUAL(Abs(a),                 "abs(a)");
+    EXPECT_EQUAL(All(b4),                "all(b4)");
+    EXPECT_EQUAL(Any(b4),                "any(b4)");
+    EXPECT_EQUAL(Ceil(a),                "ceil(a)");
+    EXPECT_EQUAL(Clamp(a, 0, 1),         "clamp(a, 0.0, 1.0)");
+    EXPECT_EQUAL(Cos(a),                 "cos(a)");
+    EXPECT_EQUAL(Cross(h3, h3),          "cross(h3, h3)");
+    EXPECT_EQUAL(Degrees(a),             "degrees(a)");
+    EXPECT_EQUAL(Distance(a, b),         "distance(a, b)");
+    EXPECT_EQUAL(Dot(a, b),              "dot(a, b)");
+    EXPECT_EQUAL(Equal(a, b),            "equal(a, b)");
+    EXPECT_EQUAL(Exp(a),                 "exp(a)");
+    EXPECT_EQUAL(Exp2(a),                "exp2(a)");
+    EXPECT_EQUAL(Faceforward(a, b, c),   "faceforward(a, b, c)");
+    EXPECT_EQUAL(Floor(a),               "floor(a)");
+    EXPECT_EQUAL(Fract(a),               "fract(a)");
+    EXPECT_EQUAL(GreaterThan(a, b),      "greaterThan(a, b)");
+    EXPECT_EQUAL(GreaterThanEqual(a, b), "greaterThanEqual(a, b)");
+    EXPECT_EQUAL(Inversesqrt(a),         "inversesqrt(a)");
+    EXPECT_EQUAL(LessThan(a, b),         "lessThan(a, b)");
+    EXPECT_EQUAL(LessThanEqual(a, b),    "lessThanEqual(a, b)");
+    EXPECT_EQUAL(Length(a),              "length(a)");
+    EXPECT_EQUAL(Log(a),                 "log(a)");
+    EXPECT_EQUAL(Log2(a),                "log2(a)");
+    EXPECT_EQUAL(Max(a, b),              "max(a, b)");
+    EXPECT_EQUAL(Min(a, b),              "min(a, b)");
+    EXPECT_EQUAL(Mix(a, b, c),           "mix(a, b, c)");
+    EXPECT_EQUAL(Mod(a, b),              "mod(a, b)");
+    EXPECT_EQUAL(Normalize(a),           "normalize(a)");
+    EXPECT_EQUAL(NotEqual(a, b),         "notEqual(a, b)");
+    EXPECT_EQUAL(Pow(a, b),              "pow(a, b)");
+    EXPECT_EQUAL(Radians(a),             "radians(a)");
+    EXPECT_EQUAL(Reflect(a, b),          "reflect(a, b)");
+    EXPECT_EQUAL(Refract(a, b, 1),       "refract(a, b, 1.0)");
+    EXPECT_EQUAL(Saturate(a),            "saturate(a)");
+    EXPECT_EQUAL(Sign(a),                "sign(a)");
+    EXPECT_EQUAL(Sin(a),                 "sin(a)");
+    EXPECT_EQUAL(Smoothstep(a, b, c),    "smoothstep(a, b, c)");
+    EXPECT_EQUAL(Sqrt(a),                "sqrt(a)");
+    EXPECT_EQUAL(Step(a, b),             "step(a, b)");
+    EXPECT_EQUAL(Tan(a),                 "tan(a)");
+    EXPECT_EQUAL(Unpremul(a),            "unpremul(a)");
 
     // these calls all go through the normal channels, so it ought to be sufficient to prove that
     // one of them reports errors correctly
@@ -1294,36 +1338,75 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBuiltins, r, ctxInfo) {
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLModifiers, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
 
-    Var v1(kConst_Modifier, kInt, "v1");
+    Var v1(kConst_Modifier, kInt, "v1", 0);
     Statement d1 = Declare(v1);
-    REPORTER_ASSERT(r, d1.release()->description() == "const int v1;");
+    EXPECT_EQUAL(d1, "const int v1 = 0;");
 
     // Most modifiers require an appropriate context to be legal. We can't yet give them that
     // context, so we can't as yet Declare() variables with these modifiers.
     // TODO: better tests when able
     Var v2(kIn_Modifier, kInt, "v2");
     REPORTER_ASSERT(r, DSLWriter::Var(v2).modifiers().fFlags == SkSL::Modifiers::kIn_Flag);
+    DSLWriter::MarkDeclared(v2);
 
     Var v3(kOut_Modifier, kInt, "v3");
     REPORTER_ASSERT(r, DSLWriter::Var(v3).modifiers().fFlags == SkSL::Modifiers::kOut_Flag);
+    DSLWriter::MarkDeclared(v3);
 
-    Var v4(kUniform_Modifier, kInt, "v4");
-    REPORTER_ASSERT(r, DSLWriter::Var(v4).modifiers().fFlags == SkSL::Modifiers::kUniform_Flag);
+    Var v4(kFlat_Modifier, kInt, "v4");
+    REPORTER_ASSERT(r, DSLWriter::Var(v4).modifiers().fFlags == SkSL::Modifiers::kFlat_Flag);
+    DSLWriter::MarkDeclared(v4);
 
-    Var v5(kFlat_Modifier, kInt, "v5");
-    REPORTER_ASSERT(r, DSLWriter::Var(v5).modifiers().fFlags == SkSL::Modifiers::kFlat_Flag);
-
-    Var v6(kNoPerspective_Modifier, kInt, "v6");
-    REPORTER_ASSERT(r, DSLWriter::Var(v6).modifiers().fFlags ==
+    Var v5(kNoPerspective_Modifier, kInt, "v5");
+    REPORTER_ASSERT(r, DSLWriter::Var(v5).modifiers().fFlags ==
                        SkSL::Modifiers::kNoPerspective_Flag);
+    DSLWriter::MarkDeclared(v5);
 
-    Var v7(kIn_Modifier | kOut_Modifier, kInt, "v7");
+    Var v6(kIn_Modifier | kOut_Modifier, kInt, "v6");
+    REPORTER_ASSERT(r, DSLWriter::Var(v6).modifiers().fFlags ==
+                       (SkSL::Modifiers::kIn_Flag | SkSL::Modifiers::kOut_Flag));
+    DSLWriter::MarkDeclared(v6);
+
+    Var v7(kInOut_Modifier, kInt, "v7");
     REPORTER_ASSERT(r, DSLWriter::Var(v7).modifiers().fFlags ==
                        (SkSL::Modifiers::kIn_Flag | SkSL::Modifiers::kOut_Flag));
+    DSLWriter::MarkDeclared(v7);
 
-    Var v8(kInOut_Modifier, kInt, "v8");
-    REPORTER_ASSERT(r, DSLWriter::Var(v8).modifiers().fFlags ==
-                       (SkSL::Modifiers::kIn_Flag | SkSL::Modifiers::kOut_Flag));
+    Var v8(kUniform_Modifier, kInt, "v8");
+    REPORTER_ASSERT(r, DSLWriter::Var(v8).modifiers().fFlags == SkSL::Modifiers::kUniform_Flag);
+    // Uniforms do not need to be explicitly declared
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLStruct, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
+
+    DSLType simpleStruct = Struct("SimpleStruct",
+        Field(kFloat, "x"),
+        Field(kBool, "b"),
+        Field(Array(kFloat, 3), "a")
+    );
+    DSLVar result(simpleStruct, "result");
+    DSLFunction(simpleStruct, "returnStruct").define(
+        Declare(result),
+        result.field("x") = 123,
+        result.field("b") = result.field("x") > 0,
+        result.field("a")[0] = result.field("x"),
+        Return(result)
+    );
+    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 2);
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
+                 "struct SimpleStruct { float x; bool b; float[3] a; };");
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[1],
+                 "SimpleStruct returnStruct() { SimpleStruct result; (result.x = 123.0);"
+                 "(result.b = (result.x > 0.0)); (result.a[0] = result.x); return result; }");
+
+    Struct("NestedStruct",
+        Field(kInt, "x"),
+        Field(simpleStruct, "simple")
+    );
+    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 3);
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[2],
+                 "struct NestedStruct { int x; SimpleStruct simple; };");
 }

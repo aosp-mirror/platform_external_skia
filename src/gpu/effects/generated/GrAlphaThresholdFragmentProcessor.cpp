@@ -29,10 +29,10 @@ public:
         (void)innerThreshold;
         auto outerThreshold = _outer.outerThreshold;
         (void)outerThreshold;
-        innerThresholdVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
-                                                             kHalf_GrSLType, "innerThreshold");
-        outerThresholdVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
-                                                             kHalf_GrSLType, "outerThreshold");
+        innerThresholdVar = args.fUniformHandler->addUniform(
+                &_outer, kFragment_GrShaderFlag, kHalf_GrSLType, "innerThreshold");
+        outerThresholdVar = args.fUniformHandler->addUniform(
+                &_outer, kFragment_GrShaderFlag, kHalf_GrSLType, "outerThreshold");
         SkString _sample0 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(half4 color = %s;)SkSL", _sample0.c_str());
@@ -53,7 +53,8 @@ if (mask_color.w < 0.5) {
 }
 return color;
 )SkSL",
-                _sample1.c_str(), args.fUniformHandler->getUniformCStr(outerThresholdVar),
+                _sample1.c_str(),
+                args.fUniformHandler->getUniformCStr(outerThresholdVar),
                 args.fUniformHandler->getUniformCStr(outerThresholdVar),
                 args.fUniformHandler->getUniformCStr(outerThresholdVar),
                 args.fUniformHandler->getUniformCStr(innerThresholdVar),
@@ -74,8 +75,9 @@ private:
     UniformHandle innerThresholdVar;
     UniformHandle outerThresholdVar;
 };
-GrGLSLFragmentProcessor* GrAlphaThresholdFragmentProcessor::onCreateGLSLInstance() const {
-    return new GrGLSLAlphaThresholdFragmentProcessor();
+std::unique_ptr<GrGLSLFragmentProcessor> GrAlphaThresholdFragmentProcessor::onMakeProgramImpl()
+        const {
+    return std::make_unique<GrGLSLAlphaThresholdFragmentProcessor>();
 }
 void GrAlphaThresholdFragmentProcessor::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                               GrProcessorKeyBuilder* b) const {}
@@ -114,7 +116,7 @@ std::unique_ptr<GrFragmentProcessor> GrAlphaThresholdFragmentProcessor::TestCrea
     }
     maskChild = GrProcessorUnitTest::MakeChildFP(testData);
 
-    return GrAlphaThresholdFragmentProcessor::Make(std::move(inputChild), std::move(maskChild),
-                                                   innerThresh, outerThresh);
+    return GrAlphaThresholdFragmentProcessor::Make(
+            std::move(inputChild), std::move(maskChild), innerThresh, outerThresh);
 }
 #endif

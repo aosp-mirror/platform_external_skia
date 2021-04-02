@@ -22,21 +22,29 @@ public:
     // become an issue if we try to draw a stroke with an astronomically wide width.
     constexpr static int8_t kMaxResolveLevel = 15;
 
-    GrStrokeIndirectTessellator(const SkMatrix&, const GrSTArenaList<SkPath>&,
-                                const SkStrokeRec&, int totalCombinedVerbCnt, SkArenaAlloc*);
+    GrStrokeIndirectTessellator(ShaderFlags, const SkMatrix&, PathStrokeList*,
+                                int totalCombinedVerbCnt, SkArenaAlloc*);
 
-    void prepare(GrMeshDrawOp::Target*, const SkMatrix&, const GrSTArenaList<SkPath>&,
-                 const SkStrokeRec&, int totalCombinedVerbCnt) override;
+    // Adds the given tessellator to our chain. The chained tessellators all append to a shared
+    // indirect draw list during prepare().
+    void addToChain(GrStrokeIndirectTessellator*);
+
+    void prepare(GrMeshDrawOp::Target*, const SkMatrix&) override;
 
     void draw(GrOpFlushState*) const override;
 
 private:
-    void writeInstance(GrVertexWriter*, const SkPoint[4], SkPoint lastControlPoint,
-                       int numTotalEdges);
-    void writeCircleInstance(GrVertexWriter*, SkPoint center, int numEdgesForCircles);
+    // Called during prepare(). Appends our indirect-draw commands and instance data onto the
+    // provided writers.
+    void writeBuffers(GrDrawIndirectWriter*, GrVertexWriter*, const SkMatrix&,
+                      size_t instanceStride, int baseInstance, int numExtraEdgesInJoin);
 
     int fResolveLevelCounts[kMaxResolveLevel + 1] = {0};  // # of instances at each resolve level.
     int fTotalInstanceCount = 0;  // Total number of stroke instances we will draw.
+    // Total number of indirect draw commands in the chain, or zero if we are not the chain head.
+    int fChainedDrawIndirectCount = 0;
+    // Total number of stroke instances in the entire chain, or zero if we are not the chain head.
+    int fChainedInstanceCount = 0;
 
     // This array holds a resolveLevel for each stroke in the path, stored in the iteration order of
     // GrStrokeIterator. If a stroke needs to be chopped, the array will contain a negative number
@@ -52,15 +60,19 @@ private:
     float* fChopTs = nullptr;
     SkDEBUGCODE(int fChopTsArrayCount = 0;)
 
-    // A "circle" is a stroke-width circle drawn as a 180-degree point stroke. We draw them at cusp
-    // points on curves and for round caps.
-    int8_t fResolveLevelForCircles;
+    // Bevel, miter, and round joins require us to add different numbers of additional edges onto
+    // their triangle strips. When using dynamic stroke, we just append the maximum required number
+    // of additional edges to every instance.
+    int fMaxNumExtraEdgesInJoin = 0;
+
+    // Chained tessellators. These all append to our shared indirect draw list during prepare().
+    GrStrokeIndirectTessellator* fNextInChain = nullptr;
+    GrStrokeIndirectTessellator** fChainTail = &fNextInChain;  // Null if we are not the chain head.
 
     // GPU buffers for drawing.
     sk_sp<const GrBuffer> fDrawIndirectBuffer;
     sk_sp<const GrBuffer> fInstanceBuffer;
     size_t fDrawIndirectOffset;
-    int fDrawIndirectCount = 0;
 
     friend class GrOp;  // For ctor.
 

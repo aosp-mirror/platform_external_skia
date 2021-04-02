@@ -94,6 +94,7 @@ public:
     GrProgramDesc makeDesc(GrRenderTarget*,
                            const GrProgramInfo&,
                            ProgramDescOverrideFlags) const override;
+    MTLPixelFormat getStencilPixelFormat(const GrProgramDesc& desc);
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -107,6 +108,8 @@ private:
 
     void initGrCaps(const id<MTLDevice> device);
     void initShaderCaps();
+
+    void applyDriverCorrectnessWorkarounds(const GrContextOptions&, const id<MTLDevice>);
 
     void initFormatTable();
 

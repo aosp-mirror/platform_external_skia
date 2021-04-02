@@ -1614,6 +1614,8 @@ size_t SkMatrix::readFromMemory(const void* buffer, size_t length) {
     }
     memcpy(fMat, buffer, sizeInMemory);
     this->setTypeMask(kUnknown_Mask);
+    // Figure out the type now so that we're thread-safe
+    (void)this->getType();
     return sizeInMemory;
 }
 
@@ -1832,38 +1834,6 @@ void SkRSXform::toTriStrip(SkScalar width, SkScalar height, SkPoint strip[4]) co
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-SkFilterQuality SkMatrixPriv::AdjustHighQualityFilterLevel(const SkMatrix& matrix,
-                                                           bool matrixIsInverse) {
-#ifdef SK_SUPPORT_LEGACY_ADJUSTHQHEURISTIC
-    if (matrix.isIdentity()) {
-        return kNone_SkFilterQuality;
-    }
-
-    auto is_minimizing = [&](SkScalar scale) {
-        return matrixIsInverse ? scale > 1 : scale < 1;
-    };
-
-    SkScalar scales[2];
-    if (!matrix.getMinMaxScales(scales) || is_minimizing(scales[0])) {
-        // Bicubic doesn't handle arbitrary minimization well, as src texels can be skipped
-        // entirely,
-        return kMedium_SkFilterQuality;
-    }
-
-    // At this point if scales[1] == SK_Scalar1 then the matrix doesn't do any scaling.
-    if (scales[1] == SK_Scalar1) {
-        if (matrix.rectStaysRect() && SkScalarIsInt(matrix.getTranslateX()) &&
-                                      SkScalarIsInt(matrix.getTranslateY())) {
-            return kNone_SkFilterQuality;
-        } else {
-            // Use bilerp to handle rotation or fractional translation.
-            return kLow_SkFilterQuality;
-        }
-    }
-#endif
-    return kHigh_SkFilterQuality;
-}
 
 SkScalar SkMatrixPriv::DifferentialAreaScale(const SkMatrix& m, const SkPoint& p) {
     //              [m00 m01 m02]                                 [f(u,v)]

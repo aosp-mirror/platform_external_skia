@@ -96,14 +96,6 @@ DEF_TEST(SkRuntimeEffectInvalid_SkCapsDisallowed, r) {
                            "unknown identifier 'sk_Caps'");
 }
 
-DEF_TEST(SkRuntimeEffectInvalid_LateErrors, r) {
-    // Errors that aren't caught until later in the compilation process (during optimize())
-    test_invalid_effect(r, "half4 main() { return half4(1); return half4(0); }", "unreachable");
-    test_invalid_effect(r, "half4 badFunc() {}"
-                           "half4 main() { return badFunc(); }",
-                           "without returning");
-}
-
 DEF_TEST(SkRuntimeEffectInvalidColorFilters, r) {
     auto test = [r](const char* sksl) {
         auto [effect, errorText] = SkRuntimeEffect::Make(SkString(sksl));
@@ -131,7 +123,7 @@ public:
             : fReporter(r), fSurface(std::move(surface)) {}
 
     void build(const char* src) {
-        auto[effect, errorText] = SkRuntimeEffect::Make(SkString(src));
+        auto [effect, errorText] = SkRuntimeEffect::Make(SkString(src));
         if (!effect) {
             REPORT_FAILURE(fReporter, "effect",
                            SkStringPrintf("Effect didn't compile: %s", errorText.c_str()));
@@ -322,7 +314,7 @@ DEF_TEST(SkRuntimeShaderBuilderReuse, r) {
         half4 main() { return half4(x); }
     )";
 
-    sk_sp<SkRuntimeEffect> effect = std::get<0>(SkRuntimeEffect::Make(SkString(kSource)));
+    sk_sp<SkRuntimeEffect> effect = SkRuntimeEffect::Make(SkString(kSource)).effect;
     REPORTER_ASSERT(r, effect);
 
     // Test passes if this sequence doesn't assert.  skbug.com/10667
@@ -341,7 +333,7 @@ DEF_TEST(SkRuntimeShaderBuilderSetUniforms, r) {
         half4 main() { return half4(x); }
     )";
 
-    sk_sp<SkRuntimeEffect> effect = std::get<0>(SkRuntimeEffect::Make(SkString(kSource)));
+    sk_sp<SkRuntimeEffect> effect = SkRuntimeEffect::Make(SkString(kSource)).effect;
     REPORTER_ASSERT(r, effect);
 
     SkRuntimeShaderBuilder b(std::move(effect));
@@ -400,4 +392,65 @@ DEF_TEST(SkRuntimeColorFilterSingleColor, r) {
     REPORTER_ASSERT(r, c.fG == 0.25f);
     REPORTER_ASSERT(r, c.fB == 0.5625f);
     REPORTER_ASSERT(r, c.fA == 1.0f);
+}
+
+static void test_RuntimeEffectStructNameReuse(skiatest::Reporter* r, GrRecordingContext* rContext) {
+    // Test that two different runtime effects can reuse struct names in a single paint operation
+    auto [childEffect, err] = SkRuntimeEffect::Make(SkString(
+        "uniform shader paint;"
+        "struct S { half4 rgba; };"
+        "void process(inout S s) { s.rgba.rgb *= 0.5; }"
+        "half4 main() { S s; s.rgba = sample(paint); process(s); return s.rgba; }"
+    ));
+    REPORTER_ASSERT(r, childEffect, "%s\n", err.c_str());
+    sk_sp<SkShader> nullChild = nullptr;
+    sk_sp<SkShader> child = childEffect->makeShader(/*uniforms=*/nullptr, &nullChild,
+                                                    /*childCount=*/1, /*localMatrix=*/nullptr,
+                                                    /*isOpaque=*/false);
+
+    SkImageInfo info = SkImageInfo::Make(2, 2, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+    sk_sp<SkSurface> surface = rContext
+                                    ? SkSurface::MakeRenderTarget(rContext, SkBudgeted::kNo, info)
+                                    : SkSurface::MakeRaster(info);
+    REPORTER_ASSERT(r, surface);
+
+    TestEffect effect(r, surface);
+    effect.build(
+            "uniform shader child;"
+            "struct S { float2 coord; };"
+            "void process(inout S s) { s.coord = s.coord.yx; }"
+            "half4 main(float2 p) { S s; s.coord = p; process(s); return sample(child, s.coord); "
+            "}");
+    effect.child("child") = child;
+    effect.test(0xFF00407F, [](SkCanvas*, SkPaint* paint) {
+        paint->setColor4f({0.99608f, 0.50196f, 0.0f, 1.0f});
+    });
+}
+
+DEF_TEST(SkRuntimeStructNameReuse, r) {
+    test_RuntimeEffectStructNameReuse(r, nullptr);
+}
+
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRuntimeStructNameReuse_GPU, r, ctxInfo) {
+    test_RuntimeEffectStructNameReuse(r, ctxInfo.directContext());
+}
+
+DEF_TEST(SkRuntimeColorFilterFlags, r) {
+    {   // Here's a non-trivial filter that doesn't change alpha.
+        auto [effect, err] = SkRuntimeEffect::Make(SkString{
+                "uniform shader input; half4 main() { return sample(input) + half4(1,1,1,0); }"});
+        REPORTER_ASSERT(r, effect && err.isEmpty());
+        sk_sp<SkColorFilter> input = nullptr,
+                            filter = effect->makeColorFilter(SkData::MakeEmpty(), &input, 1);
+        REPORTER_ASSERT(r, filter && filter->isAlphaUnchanged());
+    }
+
+    {  // Here's one that definitely changes alpha.
+        auto [effect, err] = SkRuntimeEffect::Make(SkString{
+                "uniform shader input; half4 main() { return sample(input) + half4(0,0,0,4); }"});
+        REPORTER_ASSERT(r, effect && err.isEmpty());
+        sk_sp<SkColorFilter> input = nullptr,
+                            filter = effect->makeColorFilter(SkData::MakeEmpty(), &input, 1);
+        REPORTER_ASSERT(r, filter && !filter->isAlphaUnchanged());
+    }
 }

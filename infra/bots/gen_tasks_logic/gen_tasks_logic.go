@@ -22,11 +22,30 @@ import (
 	"strings"
 	"time"
 
+	"go.skia.org/infra/go/cas/rbe"
 	"go.skia.org/infra/go/cipd"
 	"go.skia.org/infra/task_scheduler/go/specs"
 )
 
 const (
+	CAS_CANVASKIT    = "canvaskit"
+	CAS_COMPILE      = "compile"
+	CAS_EMPTY        = "empty" // TODO(borenet): It'd be nice if this wasn't necessary.
+	CAS_LOTTIE_CI    = "lottie-ci"
+	CAS_LOTTIE_WEB   = "lottie-web"
+	CAS_PATHKIT      = "pathkit"
+	CAS_PERF         = "perf"
+	CAS_PUPPETEER    = "puppeteer"
+	CAS_RUN_RECIPE   = "run-recipe"
+	CAS_RECIPES      = "recipes"
+	CAS_SKOTTIE_WASM = "skottie-wasm"
+	CAS_SKPBENCH     = "skpbench"
+	CAS_SKQP         = "skqp"
+	CAS_TASK_DRIVERS = "task-drivers"
+	CAS_TEST         = "test"
+	CAS_WASM_GM      = "wasm-gm"
+	CAS_WHOLE_REPO   = "whole-repo"
+
 	BUILD_TASK_DRIVERS_PREFIX  = "Housekeeper-PerCommit-BuildTaskDrivers"
 	BUNDLE_RECIPES_NAME        = "Housekeeper-PerCommit-BundleRecipes"
 	ISOLATE_GCLOUD_LINUX_NAME  = "Housekeeper-PerCommit-IsolateGCloudLinux"
@@ -115,6 +134,29 @@ var (
 		},
 	}
 
+	// CAS_SPEC_LOTTIE_CI is a CasSpec which includes the files needed for
+	// lottie-ci.  This is global so that it can be overridden by other
+	// repositories which import this file.
+	CAS_SPEC_LOTTIE_CI = &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/run_recipe.py",
+			"skia/infra/lottiecap",
+			"skia/tools/lottie-web-perf",
+			"skia/tools/lottiecap",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	}
+
+	// CAS_SPEC_WHOLE_REPO is a CasSpec which includes the entire repo. This is
+	// global so that it can be overridden by other repositories which import
+	// this file.
+	CAS_SPEC_WHOLE_REPO = &specs.CasSpec{
+		Root:     "..",
+		Paths:    []string{"skia"},
+		Excludes: []string{rbe.ExcludeGitDir},
+	}
+
 	// TODO(borenet): This hacky and bad.
 	CIPD_PKG_LUCI_AUTH = cipd.MustGetPackage("infra/tools/luci-auth/${platform}")
 
@@ -149,40 +191,50 @@ var (
 
 	// ISOLATE_ASSET_MAPPING maps the name of an asset to the configuration
 	// for how the CIPD package should be installed for a given task.
-	ISOLATE_ASSET_MAPPING = map[string]isolateAssetCfg{
+	ISOLATE_ASSET_MAPPING = map[string]uploadAssetCASCfg{
 		"gcloud_linux": {
-			isolateTaskName: ISOLATE_GCLOUD_LINUX_NAME,
-			path:            "gcloud_linux",
+			uploadTaskName: ISOLATE_GCLOUD_LINUX_NAME,
+			path:           "gcloud_linux",
 		},
 		"skimage": {
-			isolateTaskName: ISOLATE_SKIMAGE_NAME,
-			path:            "skimage",
+			uploadTaskName: ISOLATE_SKIMAGE_NAME,
+			path:           "skimage",
 		},
 		"skp": {
-			isolateTaskName: ISOLATE_SKP_NAME,
-			path:            "skp",
+			uploadTaskName: ISOLATE_SKP_NAME,
+			path:           "skp",
 		},
 		"svg": {
-			isolateTaskName: ISOLATE_SVG_NAME,
-			path:            "svg",
+			uploadTaskName: ISOLATE_SVG_NAME,
+			path:           "svg",
 		},
 		"mskp": {
-			isolateTaskName: ISOLATE_MSKP_NAME,
-			path:            "mskp",
+			uploadTaskName: ISOLATE_MSKP_NAME,
+			path:           "mskp",
 		},
 		"android_ndk_linux": {
-			isolateTaskName: ISOLATE_NDK_LINUX_NAME,
-			path:            "android_ndk_linux",
+			uploadTaskName: ISOLATE_NDK_LINUX_NAME,
+			path:           "android_ndk_linux",
 		},
 		"android_sdk_linux": {
-			isolateTaskName: ISOLATE_SDK_LINUX_NAME,
-			path:            "android_sdk_linux",
+			uploadTaskName: ISOLATE_SDK_LINUX_NAME,
+			path:           "android_sdk_linux",
 		},
 		"win_toolchain": {
-			alwaysIsolate:   true,
-			isolateTaskName: ISOLATE_WIN_TOOLCHAIN_NAME,
-			path:            "win_toolchain",
+			alwaysIsolate:  true,
+			uploadTaskName: ISOLATE_WIN_TOOLCHAIN_NAME,
+			path:           "win_toolchain",
 		},
+	}
+
+	// Enable reduceOpsTaskSplitting option on these models
+	// skbug.com/10877#c27
+	REDUCE_OPS_TASK_SPLITTING_MODELS = []string{
+		"AndroidOne",
+		"GalaxyS20",
+		"Nexus5x",
+		"Nexus7",
+		"NUC7i5BNK",
 	}
 )
 
@@ -213,6 +265,10 @@ type Config struct {
 
 	// List of task names for which we'll never upload results.
 	NoUpload []string `json:"no_upload"`
+
+	// PathToSkia is the relative path from the root of the current checkout to
+	// the root of the Skia checkout.
+	PathToSkia string `json:"path_to_skia"`
 
 	// Swarming pool used for triggering tasks.
 	Pool string `json:"pool"`
@@ -316,18 +372,144 @@ func GenTasks(cfg *Config) {
 
 	// Create Tasks and Jobs.
 	builder := &builder{
-		TasksCfgBuilder:  b,
-		cfg:              cfg,
-		jobNameSchema:    schema,
-		jobs:             jobs,
-		relpathBaseDir:   relpathBaseDir,
-		relpathTargetDir: relpathTargetDir,
+		TasksCfgBuilder: b,
+		cfg:             cfg,
+		jobNameSchema:   schema,
+		jobs:            jobs,
 	}
 	for _, name := range jobs {
 		jb := newJobBuilder(builder, name)
 		jb.genTasksForJob()
 		jb.finish()
 	}
+
+	// Create CasSpecs.
+	b.MustAddCasSpec(CAS_CANVASKIT, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/run_recipe.py",
+			"skia/infra/canvaskit",
+			"skia/modules/canvaskit",
+			"skia/modules/pathkit/perf/perfReporter.js",
+			"skia/modules/pathkit/tests/testReporter.js",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_EMPTY, specs.EmptyCasSpec)
+	b.MustAddCasSpec(CAS_LOTTIE_CI, CAS_SPEC_LOTTIE_CI)
+	b.MustAddCasSpec(CAS_LOTTIE_WEB, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/run_recipe.py",
+			"skia/tools/lottie-web-perf",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_PATHKIT, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/run_recipe.py",
+			"skia/infra/pathkit",
+			"skia/modules/pathkit",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_PERF, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/assets",
+			"skia/infra/bots/run_recipe.py",
+			"skia/platform_tools/ios/bin",
+			"skia/resources",
+			"skia/tools/valgrind.supp",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_PUPPETEER, &specs.CasSpec{
+		Root: "../skia", // Needed for other repos.
+		Paths: []string{
+			"tools/perf-canvaskit-puppeteer",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_RECIPES, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/config/recipes.cfg",
+			"skia/infra/bots/bundle_recipes.sh",
+			"skia/infra/bots/README.recipes.md",
+			"skia/infra/bots/recipe_modules",
+			"skia/infra/bots/recipes",
+			"skia/infra/bots/recipes.py",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_RUN_RECIPE, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/run_recipe.py",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_SKOTTIE_WASM, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/run_recipe.py",
+			"skia/tools/skottie-wasm-perf",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_SKPBENCH, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/assets",
+			"skia/infra/bots/run_recipe.py",
+			"skia/tools/skpbench",
+			"skia/tools/valgrind.supp",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_SKQP, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/run_recipe.py",
+			"skia/infra/skqp",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_TASK_DRIVERS, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/go.mod",
+			"skia/go.sum",
+			"skia/infra/bots/build_task_drivers.sh",
+			"skia/infra/bots/run_recipe.py",
+			"skia/infra/bots/task_drivers",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_TEST, &specs.CasSpec{
+		Root: "..",
+		Paths: []string{
+			"skia/infra/bots/assets",
+			"skia/infra/bots/run_recipe.py",
+			"skia/platform_tools/ios/bin",
+			"skia/resources",
+			"skia/tools/valgrind.supp",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_WASM_GM, &specs.CasSpec{
+		Root: "../skia", // Needed for other repos.
+		Paths: []string{
+			"resources",
+			"tools/run-wasm-gm-tests",
+		},
+		Excludes: []string{rbe.ExcludeGitDir},
+	})
+	b.MustAddCasSpec(CAS_WHOLE_REPO, CAS_SPEC_WHOLE_REPO)
+	generateCompileCAS(b, cfg)
+
 	builder.MustFinish()
 }
 
@@ -356,11 +538,9 @@ func getCallingDirName() string {
 // builder is a wrapper for specs.TasksCfgBuilder.
 type builder struct {
 	*specs.TasksCfgBuilder
-	cfg              *Config
-	jobNameSchema    *JobNameSchema
-	jobs             []string
-	relpathBaseDir   string
-	relpathTargetDir string
+	cfg           *Config
+	jobNameSchema *JobNameSchema
+	jobs          []string
 }
 
 // marshalJson encodes the given data as JSON and fixes escaping of '<' which Go
@@ -386,7 +566,7 @@ func (b *taskBuilder) kitchenTaskNoBundle(recipe string, outputDir string) {
 	python := "cipd_bin_packages/vpython${EXECUTABLE_SUFFIX}"
 	b.cmd(python, "-u", "skia/infra/bots/run_recipe.py", "${ISOLATED_OUTDIR}", recipe, b.getRecipeProps(), b.cfg.Project)
 	// Most recipes want this isolate; they can override if necessary.
-	b.isolate("swarm_recipe.isolate")
+	b.cas(CAS_RUN_RECIPE)
 	b.timeout(time.Hour)
 	b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin")
 	b.Spec.ExtraTags = map[string]string{
@@ -440,12 +620,11 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 			ec = strings.Split(val, "_")
 			ignore := []string{
 				"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind",
-				"ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
+				"ReleaseAndAbandonGpuContext", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
 				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "OOPRDDL", "T8888",
 				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM",
-				"GpuTess", "NonNVPR", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
-				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2",
-				"ReduceOpsTaskSplitting"}
+				"GpuTess", "DMSAA", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
+				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -540,6 +719,8 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Mac10.13":   "Mac-10.13.6",
 			"Mac10.14":   "Mac-10.14.3",
 			"Mac10.15.1": "Mac-10.15.1",
+			"Mac10.15.7": "Mac-10.15.7", // Same as 'Mac', but explicit.
+			"Mac11":      "Mac-11.1",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-18363",
@@ -563,10 +744,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			// ChOps VMs are at a newer version of MacOS.
 			d["os"] = "Mac-10.15.7"
 		}
-		if b.parts["model"] == "LenovoYogaC630" {
-			// This is currently a unique snowflake.
-			d["os"] = "Windows-10"
-		}
 		if b.parts["model"] == "iPhone6" {
 			// This is the latest iOS that supports iPhone6.
 			d["os"] = "iOS-12.4.5"
@@ -585,8 +762,9 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			// For Android, the device type is a better dimension
 			// than CPU or GPU.
 			deviceInfo, ok := map[string][]string{
-				"AndroidOne":      {"sprout", "MOB30Q"},
-				"GalaxyS6":        {"zerofltetmo", "NRD90M_G920TUVS6FRC1"},
+				"AndroidOne": {"sprout", "MOB30Q"},
+				// S6 dimensions are more general than we would like. See skbug.com/11337 for context.
+				"GalaxyS6":        {"universal7420", "NRD90M"},
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
 				"GalaxyS9":        {"starlte", "QP1A.190711.020"},     // This is Android10.
 				"GalaxyS20":       {"exynos990", "QP1A.190711.020"},
@@ -640,6 +818,9 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			d["docker_installed"] = "true"
 		} else if b.cpu() || b.extraConfig("CanvasKit", "Docker", "SwiftShader") {
 			modelMapping, ok := map[string]map[string]string{
+				"AppleM1": {
+					"MacMini9.1": "arm64-64-Apple_M1",
+				},
 				"AVX": {
 					"VMware7.1": "x86-64-E5-2697_v2",
 				},
@@ -655,9 +836,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				},
 				"Rome": {
 					"GCE": "x86-64-AMD_Rome_GCE",
-				},
-				"Snapdragon850": {
-					"LenovoYogaC630": "arm64-64-Snapdragon850",
 				},
 				"SwiftShader": {
 					"GCE": "x86-64-Haswell_GCE",
@@ -684,7 +862,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"Adreno630":     "Adreno630",
 					"GT610":         "10de:104a-23.21.13.9101",
 					"GTX660":        "10de:11c0-26.21.14.4120",
-					"GTX960":        "10de:1401-26.21.14.4120",
+					"GTX960":        "10de:1401-27.21.14.5671",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
 					"IntelIris540":  "8086:1926-26.20.100.7463",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
@@ -773,16 +951,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 	b.dimension(dims...)
 }
 
-// relpath returns the relative path to the given file from the config file.
-func (b *builder) relpath(f string) string {
-	target := filepath.Join(b.relpathTargetDir, f)
-	rv, err := filepath.Rel(b.relpathBaseDir, target)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return rv
-}
-
 // bundleRecipes generates the task to bundle and isolate the recipes. Returns
 // the name of the task, which may be added as a dependency.
 func (b *jobBuilder) bundleRecipes() string {
@@ -793,7 +961,7 @@ func (b *jobBuilder) bundleRecipes() string {
 		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
 		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin")
 		b.idempotent()
-		b.isolate("recipes.isolate")
+		b.cas(CAS_RECIPES)
 	})
 	return BUNDLE_RECIPES_NAME
 }
@@ -812,7 +980,7 @@ func (b *jobBuilder) buildTaskDrivers(goos, goarch string) string {
 		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
 		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
 		b.idempotent()
-		b.isolate("task_drivers.isolate")
+		b.cas(CAS_TASK_DRIVERS)
 	})
 	return name
 }
@@ -840,7 +1008,7 @@ func (b *jobBuilder) updateGoDeps() {
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
-		b.isolate("empty.isolate")
+		b.cas(CAS_EMPTY)
 		b.serviceAccount(b.cfg.ServiceAccountRecreateSKPs)
 	})
 }
@@ -881,7 +1049,7 @@ func (b *jobBuilder) createDockerImage(wasm bool) string {
 		)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
-		b.isolate("empty.isolate")
+		b.cas(CAS_EMPTY)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		b.usesDocker()
@@ -914,7 +1082,7 @@ func (b *jobBuilder) createPushAppsFromSkiaDockerImage() {
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.dep(b.createDockerImage(false))
 		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
-		b.isolate("empty.isolate")
+		b.cas(CAS_EMPTY)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		b.usesDocker()
@@ -946,7 +1114,7 @@ func (b *jobBuilder) createPushAppsFromWASMDockerImage() {
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.dep(b.createDockerImage(true))
 		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
-		b.isolate("empty.isolate")
+		b.cas(CAS_EMPTY)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		b.usesDocker()
@@ -993,10 +1161,10 @@ func (b *jobBuilder) compile() string {
 	} else {
 		b.addTask(name, func(b *taskBuilder) {
 			recipe := "compile"
-			isolate := "compile.isolate"
+			casSpec := CAS_COMPILE
 			if b.extraConfig("NoDEPS", "CMake", "CommandBuffer", "Flutter", "SKQP") {
 				recipe = "sync_and_compile"
-				isolate = "swarm_recipe.isolate"
+				casSpec = CAS_RUN_RECIPE
 				b.recipeProps(EXTRA_PROPS)
 				b.usesGit()
 				if !b.extraConfig("NoDEPS") {
@@ -1006,7 +1174,7 @@ func (b *jobBuilder) compile() string {
 				b.idempotent()
 			}
 			b.kitchenTask(recipe, OUTPUT_BUILD)
-			b.isolate(isolate)
+			b.cas(casSpec)
 			b.serviceAccount(b.cfg.ServiceAccountCompile)
 			b.swarmDimensions()
 			if b.extraConfig("Docker", "LottieWeb", "SKQP", "CMake") || b.compiler("EMCC") {
@@ -1115,7 +1283,7 @@ func (b *jobBuilder) checkGeneratedFiles() {
 // checkGnToBp verifies that the gn_to_bp.py script continues to work.
 func (b *jobBuilder) checkGnToBp() {
 	b.addTask(b.Name, func(b *taskBuilder) {
-		b.isolate("compile.isolate")
+		b.cas(CAS_COMPILE)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.cmd("./run_gn_to_bp",
 			"--local=false",
@@ -1146,7 +1314,7 @@ func (b *jobBuilder) housekeeper() {
 // should add as a dependency.
 func (b *jobBuilder) g3FrameworkCanary() {
 	b.addTask(b.Name, func(b *taskBuilder) {
-		b.isolate("empty.isolate")
+		b.cas(CAS_EMPTY)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.cmd("./g3_canary",
 			"--local=false",
@@ -1184,13 +1352,10 @@ func (b *jobBuilder) infra() {
 		}
 		b.recipeProp("repository", specs.PLACEHOLDER_REPO)
 		b.kitchenTask("infra", OUTPUT_NONE)
-		b.isolate("infra_tests.isolate")
+		b.cas(CAS_WHOLE_REPO)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.cipd(specs.CIPD_PKGS_GSUTIL...)
 		b.idempotent()
-		// Repos which call into Skia's gen_tasks.go should define their own
-		// infra_tests.isolate and therefore should not use relpath().
-		b.Spec.Isolate = "infra_tests.isolate"
 		b.usesGo()
 	})
 }
@@ -1281,6 +1446,13 @@ func (b *taskBuilder) commonTestPerfAssets() {
 	}
 }
 
+// directUpload adds prerequisites for uploading to GCS.
+func (b *taskBuilder) directUpload(gsBucket, serviceAccount string) {
+	b.recipeProp("gs_bucket", gsBucket)
+	b.serviceAccount(serviceAccount)
+	b.cipd(specs.CIPD_PKGS_GSUTIL...)
+}
+
 // dm generates a Test task using dm.
 func (b *jobBuilder) dm() {
 	compileTaskName := ""
@@ -1288,32 +1460,48 @@ func (b *jobBuilder) dm() {
 	if !b.extraConfig("LottieWeb") {
 		compileTaskName = b.compile()
 	}
+	directUpload := false
 	b.addTask(b.Name, func(b *taskBuilder) {
-		isolate := "test_skia_bundled.isolate"
+		cas := CAS_TEST
 		recipe := "test"
 		if b.extraConfig("SKQP") {
-			isolate = "skqp.isolate"
+			cas = CAS_SKQP
 			recipe = "skqp_test"
 			if b.cpu("Emulator") {
 				recipe = "test_skqp_emulator"
 			}
 		} else if b.extraConfig("OpenCL") {
-			// TODO(dogben): Longer term we may not want this to be called a "Test" task, but until we start
-			// running hs_bench or kx, it will be easier to fit into the current job name schema.
+			// TODO(dogben): Longer term we may not want this to be called a
+			// "Test" task, but until we start running hs_bench or kx, it will
+			// be easier to fit into the current job name schema.
 			recipe = "compute_test"
 		} else if b.extraConfig("PathKit") {
-			isolate = "pathkit.isolate"
+			cas = CAS_PATHKIT
 			recipe = "test_pathkit"
 		} else if b.extraConfig("CanvasKit") {
-			isolate = "canvaskit.isolate"
+			cas = CAS_CANVASKIT
 			recipe = "test_canvaskit"
+			if b.doUpload() {
+				b.directUpload(b.cfg.GsBucketGm, b.cfg.ServiceAccountUploadGM)
+				directUpload = true
+			}
 		} else if b.extraConfig("LottieWeb") {
-			// lottie_ci.isolate differs from lottie_web.isolate in that it includes more of the files,
-			// especially those brought in via DEPS in the lottie-ci repo. The main difference between
-			// Perf.+LottieWeb and Test.+LottieWeb is that the former pulls in the lottie build via
-			// npm and the latter always tests at lottie's ToT.
-			isolate = "lottie_ci.isolate"
+			// CAS_LOTTIE_CI differs from CAS_LOTTIE_WEB in that it includes
+			// more of the files, especially those brought in via DEPS in the
+			// lottie-ci repo. The main difference between Perf.+LottieWeb and
+			// Test.+LottieWeb is that the former pulls in the lottie build via
+			// npm and the latter always tests at lottie's
+			// ToT.
+			cas = CAS_LOTTIE_CI
 			recipe = "test_lottie_web"
+		} else {
+			// Default recipe supports direct upload.
+			// TODO(http://skbug.com/11785): Windows jobs are unable to extract gsutil.
+			// https://bugs.chromium.org/p/chromium/issues/detail?id=1192611
+			if b.doUpload() && !b.matchOs("Win") {
+				b.directUpload(b.cfg.GsBucketGm, b.cfg.ServiceAccountUploadGM)
+				directUpload = true
+			}
 		}
 		b.recipeProp("gold_hashes_url", b.cfg.GoldHashesURL)
 		b.recipeProps(EXTRA_PROPS)
@@ -1326,7 +1514,7 @@ func (b *jobBuilder) dm() {
 			b.dmFlags(iidStr)
 		}
 		b.kitchenTask(recipe, OUTPUT_TEST)
-		b.isolate(isolate)
+		b.cas(cas)
 		b.swarmDimensions()
 		if b.extraConfig("CanvasKit", "Docker", "LottieWeb", "PathKit", "SKQP") {
 			b.usesDocker()
@@ -1367,7 +1555,7 @@ func (b *jobBuilder) dm() {
 
 	// Upload results if necessary. TODO(kjlubick): If we do coverage analysis at the same
 	// time as normal tests (which would be nice), cfg.json needs to have Coverage removed.
-	if b.doUpload() {
+	if b.doUpload() && !directUpload {
 		uploadName := fmt.Sprintf("%s%s%s", PREFIX_UPLOAD, b.jobNameSchema.Sep, b.Name)
 		depName := b.Name
 		b.addTask(uploadName, func(b *taskBuilder) {
@@ -1398,7 +1586,7 @@ func (b *jobBuilder) fm() {
 
 	b.addTask(b.Name, func(b *taskBuilder) {
 		b.asset("skimage", "skp", "svg")
-		b.isolate("test_skia_bundled.isolate")
+		b.cas(CAS_TEST)
 		b.dep(b.buildTaskDrivers(goos, "amd64"), b.compile())
 		b.cmd("./fm_driver${EXECUTABLE_SUFFIX}",
 			"--local=false",
@@ -1411,9 +1599,8 @@ func (b *jobBuilder) fm() {
 			"--bot", b.Name,
 			"--gold="+strconv.FormatBool(!b.matchExtraConfig("SAN")),
 			"build/fm${EXECUTABLE_SUFFIX}")
-		b.serviceAccount(b.cfg.ServiceAccountCompile)
+		b.serviceAccount(b.cfg.ServiceAccountUploadGM)
 		b.swarmDimensions()
-		b.expiration(15 * time.Minute)
 		b.attempts(1)
 
 		if b.isLinux() && b.matchExtraConfig("SAN") {
@@ -1441,7 +1628,7 @@ func (b *jobBuilder) fm() {
 // Canary-G3 does not use this path because it is very different from other autorollers.
 func (b *jobBuilder) canary(rollerName string) {
 	b.addTask(b.Name, func(b *taskBuilder) {
-		b.isolate("empty.isolate")
+		b.cas(CAS_EMPTY)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.cmd("./canary",
 			"--local=false",
@@ -1473,8 +1660,8 @@ func (b *jobBuilder) puppeteer() {
 		b.cipd(CIPD_PKG_LUCI_AUTH)
 		b.dep(b.buildTaskDrivers("linux", "amd64"), compileTaskName)
 		b.output(OUTPUT_PERF)
-		b.timeout(20 * time.Minute)
-		b.isolate("perf_puppeteer.isolate")
+		b.timeout(60 * time.Minute)
+		b.cas(CAS_PUPPETEER)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 
 		webglversion := "2"
@@ -1585,7 +1772,7 @@ func (b *jobBuilder) cifuzz() {
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.output("cifuzz_out")
 		b.timeout(60 * time.Minute)
-		b.isolate("whole_repo.isolate")
+		b.cas(CAS_WHOLE_REPO)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.cmd(
 			"./cifuzz",
@@ -1611,31 +1798,33 @@ func (b *jobBuilder) perf() {
 	doUpload := b.release() && b.doUpload()
 	b.addTask(b.Name, func(b *taskBuilder) {
 		recipe := "perf"
-		isolate := "perf_skia_bundled.isolate"
+		cas := CAS_PERF
 		if b.extraConfig("Skpbench") {
 			recipe = "skpbench"
-			isolate = "skpbench_skia_bundled.isolate"
+			cas = CAS_SKPBENCH
 		} else if b.extraConfig("PathKit") {
-			isolate = "pathkit.isolate"
+			cas = CAS_PATHKIT
 			recipe = "perf_pathkit"
 		} else if b.extraConfig("CanvasKit") {
-			isolate = "canvaskit.isolate"
+			cas = CAS_CANVASKIT
 			recipe = "perf_canvaskit"
 		} else if b.extraConfig("SkottieTracing") {
 			recipe = "perf_skottietrace"
 		} else if b.extraConfig("SkottieWASM") {
 			recipe = "perf_skottiewasm_lottieweb"
-			isolate = "skottie_wasm.isolate"
+			cas = CAS_SKOTTIE_WASM
 		} else if b.extraConfig("LottieWeb") {
 			recipe = "perf_skottiewasm_lottieweb"
-			isolate = "lottie_web.isolate"
+			cas = CAS_LOTTIE_WEB
 		}
 		b.recipeProps(EXTRA_PROPS)
 		if recipe == "perf" {
 			b.nanobenchFlags(doUpload)
+		} else if recipe == "skpbench" {
+			b.skpbenchFlags()
 		}
 		b.kitchenTask(recipe, OUTPUT_PERF)
-		b.isolate(isolate)
+		b.cas(cas)
 		b.swarmDimensions()
 		if b.extraConfig("CanvasKit", "Docker", "PathKit") {
 			b.usesDocker()
@@ -1710,7 +1899,7 @@ func (b *jobBuilder) presubmit() {
 		})
 		b.recipeProps(EXTRA_PROPS)
 		b.kitchenTaskNoBundle("run_presubmit", OUTPUT_NONE)
-		b.isolate("run_recipe.isolate")
+		b.cas(CAS_RUN_RECIPE)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		// Use MACHINE_TYPE_LARGE because it seems to save time versus
 		// MEDIUM and we want presubmit to be fast.
@@ -1736,7 +1925,7 @@ func (b *jobBuilder) compileWasmGMTests(compileName string) {
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.output("wasm_out")
 		b.timeout(60 * time.Minute)
-		b.isolate("compile.isolate")
+		b.cas(CAS_COMPILE)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.cache(CACHES_DOCKER...)
 		// For now, we only have one compile mode - a GPU release mode. This should be sufficient to
@@ -1771,7 +1960,7 @@ func (b *jobBuilder) runWasmGMTests() {
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.dep(compileTaskName)
 		b.timeout(60 * time.Minute)
-		b.isolate("wasm_gm_tests.isolate")
+		b.cas(CAS_WASM_GM)
 		b.serviceAccount(b.cfg.ServiceAccountUploadGM)
 		b.cmd(
 			"./run_wasm_gm_tests",

@@ -304,8 +304,7 @@ public:
 
     skvm::Color onProgram(skvm::Builder*,
                           skvm::Coord, skvm::Coord, skvm::Color,
-                          const SkMatrixProvider&, const SkMatrix*,
-                          SkFilterQuality, const SkColorInfo&,
+                          const SkMatrixProvider&, const SkMatrix*, const SkColorInfo&,
                           skvm::Uniforms*, SkArenaAlloc*) const override {
         // TODO?
         return {};
@@ -628,8 +627,8 @@ public:
     int numOctaves() const { return fNumOctaves; }
 
 private:
-    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override {
-        return new GrGLPerlinNoise;
+    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
+        return std::make_unique<GrGLPerlinNoise>();
     }
 
     void onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {

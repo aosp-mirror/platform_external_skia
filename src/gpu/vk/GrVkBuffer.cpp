@@ -107,11 +107,11 @@ sk_sp<GrVkBuffer> GrVkBuffer::Make(GrVkGpu* gpu,
             break;
         case GrGpuBufferType::kXferCpuToGpu:
             bufInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-            allocUsage = BufferUsage::kCpuWritesGpuReads;
+            allocUsage = BufferUsage::kTransfersFromCpuToGpu;
             break;
         case GrGpuBufferType::kXferGpuToCpu:
             bufInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            allocUsage = BufferUsage::kGpuWritesCpuReads;
+            allocUsage = BufferUsage::kTransfersFromGpuToCpu;
             break;
     }
     // We may not always get a mappable buffer for non dynamic access buffers. Thus we set the

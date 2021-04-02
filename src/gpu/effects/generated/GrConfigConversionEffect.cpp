@@ -41,19 +41,20 @@ public:
 }
 return color;
 )SkSL",
-                _sample0.c_str(), (int)_outer.pmConversion);
+                _sample0.c_str(),
+                (int)_outer.pmConversion);
     }
 
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman,
                    const GrFragmentProcessor& _proc) override {}
 };
-GrGLSLFragmentProcessor* GrConfigConversionEffect::onCreateGLSLInstance() const {
-    return new GrGLSLConfigConversionEffect();
+std::unique_ptr<GrGLSLFragmentProcessor> GrConfigConversionEffect::onMakeProgramImpl() const {
+    return std::make_unique<GrGLSLConfigConversionEffect>();
 }
 void GrConfigConversionEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                      GrProcessorKeyBuilder* b) const {
-    b->add32((uint32_t)pmConversion);
+    b->addBits(1, (uint32_t)pmConversion, "pmConversion");
 }
 bool GrConfigConversionEffect::onIsEqual(const GrFragmentProcessor& other) const {
     const GrConfigConversionEffect& that = other.cast<GrConfigConversionEffect>();
@@ -78,8 +79,8 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrConfigConversionEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrConfigConversionEffect::TestCreate(
         GrProcessorTestData* data) {
-    PMConversion pmConv = static_cast<PMConversion>(
-            data->fRandom->nextULessThan((int)PMConversion::kPMConversionCnt));
+    PMConversion pmConv =
+            static_cast<PMConversion>(data->fRandom->nextRangeU(0, (int)PMConversion::kLast));
     return std::unique_ptr<GrFragmentProcessor>(
             new GrConfigConversionEffect(GrProcessorUnitTest::MakeChildFP(data), pmConv));
 }

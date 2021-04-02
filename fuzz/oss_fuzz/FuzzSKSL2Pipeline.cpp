@@ -8,7 +8,6 @@
 #include "src/gpu/GrShaderCaps.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLPipelineStageCodeGenerator.h"
-#include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
@@ -19,7 +18,7 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
     SkSL::Compiler compiler(caps.get());
     SkSL::Program::Settings settings;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-                                                    SkSL::Program::kRuntimeEffect_Kind,
+                                                    SkSL::ProgramKind::kRuntimeEffect,
                                                     SkSL::String((const char*) bytes->data(),
                                                                  bytes->size()),
                                                     settings);
@@ -34,9 +33,9 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
             return decl->var().name();
         }
 
-        String defineFunction(const SkSL::FunctionDeclaration* decl, String /*body*/) override {
-            return decl->name();
-        }
+        void defineFunction(const char* /*decl*/, const char* /*body*/, bool /*isMain*/) override {}
+        void defineStruct(const char* /*definition*/) override {}
+        void declareGlobal(const char* /*declaration*/) override {}
 
         String sampleChild(int index, String coords) override {
             return SkSL::String::printf("sample(%d%s%s)", index, coords.empty() ? "" : ", ",

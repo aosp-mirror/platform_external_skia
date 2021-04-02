@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "include/private/SkSLProgramElement.h"
+#include "include/private/SkSLStatement.h"
 #include "src/sksl/SkSLCodeGenerator.h"
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/SkSLStringStream.h"
@@ -36,10 +38,8 @@
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSetting.h"
-#include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
@@ -68,7 +68,7 @@ public:
     bool generateCode() override;
 
 protected:
-    using Precedence = Operators::Precedence;
+    using Precedence = Operator::Precedence;
 
     typedef int Requirements;
     static constexpr Requirements kNo_Requirements       = 0;
@@ -109,7 +109,7 @@ protected:
         kTexture_IntrinsicKind,
     };
 
-    static const char* OperatorName(Token::Kind op);
+    static const char* OperatorName(Operator op);
 
     class GlobalStructVisitor;
     void visitGlobalStruct(GlobalStructVisitor* visitor);
@@ -125,6 +125,8 @@ protected:
     void write(const String& s);
 
     void writeLine(const String& s);
+
+    void finishLine();
 
     void writeHeader();
 
@@ -289,7 +291,6 @@ protected:
     const Context& fContext;
     String fFunctionHeader;
     StringStream fExtraFunctions;
-    Program::Kind fProgramKind;
     int fVarCount = 0;
     int fIndentation = 0;
     bool fAtLineStart = false;

@@ -8,12 +8,11 @@
 #ifndef GrGLSLFragmentProcessor_DEFINED
 #define GrGLSLFragmentProcessor_DEFINED
 
+#include "include/private/SkSLString.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrShaderVar.h"
-#include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
-#include "src/sksl/SkSLString.h"
 
 class GrProcessor;
 class GrProcessorKeyBuilder;
@@ -22,13 +21,9 @@ class GrGLSLFPFragmentBuilder;
 
 class GrGLSLFragmentProcessor {
 public:
-    GrGLSLFragmentProcessor() {}
+    GrGLSLFragmentProcessor() = default;
 
-    virtual ~GrGLSLFragmentProcessor() {
-        for (int i = 0; i < fChildProcessors.count(); ++i) {
-            delete fChildProcessors[i];
-        }
-    }
+    virtual ~GrGLSLFragmentProcessor() = default;
 
     using UniformHandle      = GrGLSLUniformHandler::UniformHandle;
     using SamplerHandle      = GrGLSLUniformHandler::SamplerHandle;
@@ -103,16 +98,14 @@ public:
                  const GrFragmentProcessor& fp,
                  const char* inputColor,
                  const char* sampleCoord,
-                 const TransformedCoordVars& transformedCoordVars,
-                 bool forceInline)
+                 const TransformedCoordVars& transformedCoordVars)
                 : fFragBuilder(fragBuilder)
                 , fUniformHandler(uniformHandler)
                 , fShaderCaps(caps)
                 , fFp(fp)
                 , fInputColor(inputColor ? inputColor : "half4(1.0)")
                 , fSampleCoord(sampleCoord)
-                , fTransformedCoords(transformedCoordVars)
-                , fForceInline(forceInline) {}
+                , fTransformedCoords(transformedCoordVars) {}
         GrGLSLFPFragmentBuilder* fFragBuilder;
         GrGLSLUniformHandler* fUniformHandler;
         const GrShaderCaps* fShaderCaps;
@@ -120,7 +113,6 @@ public:
         const char* fInputColor;
         const char* fSampleCoord;
         const TransformedCoordVars& fTransformedCoords;
-        bool fForceInline;
     };
 
     virtual void emitCode(EmitArgs&) = 0;
@@ -131,7 +123,9 @@ public:
 
     int numChildProcessors() const { return fChildProcessors.count(); }
 
-    GrGLSLFragmentProcessor* childProcessor(int index) const { return fChildProcessors[index]; }
+    GrGLSLFragmentProcessor* childProcessor(int index) const {
+        return fChildProcessors[index].get();
+    }
 
     void emitChildFunction(int childIndex, EmitArgs& parentArgs);
 
@@ -247,7 +241,7 @@ private:
     // one per child; either not present or empty string if not yet emitted
     SkTArray<SkString> fFunctionNames;
 
-    SkTArray<GrGLSLFragmentProcessor*, true> fChildProcessors;
+    SkTArray<std::unique_ptr<GrGLSLFragmentProcessor>, true> fChildProcessors;
 
     friend class GrFragmentProcessor;
 };

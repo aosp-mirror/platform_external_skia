@@ -8,8 +8,11 @@
 #include "src/sksl/ir/SkSLType.h"
 
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLFunctionReference.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLType.h"
+#include "src/sksl/ir/SkSLTypeReference.h"
 
 namespace SkSL {
 
@@ -238,5 +241,52 @@ const Type* Type::clone(SymbolTable* symbolTable) const {
             return nullptr;
     }
 }
+
+std::unique_ptr<Expression> Type::coerceExpression(std::unique_ptr<Expression> expr,
+                                                   const Context& context) const {
+    if (!expr) {
+        return nullptr;
+    }
+    const int offset = expr->fOffset;
+    if (expr->is<FunctionReference>()) {
+        context.fErrors.error(offset, "expected '(' to begin function call");
+        return nullptr;
+    }
+    if (expr->is<TypeReference>()) {
+        context.fErrors.error(offset, "expected '(' to begin constructor invocation");
+        return nullptr;
+    }
+    if (expr->type() == *this) {
+        return expr;
+    }
+
+    const Program::Settings& settings = context.fConfig->fSettings;
+    if (!expr->coercionCost(*this).isPossible(settings.fAllowNarrowingConversions)) {
+        context.fErrors.error(offset, "expected '" + this->displayName() + "', but found '" +
+                                      expr->type().displayName() + "'");
+        return nullptr;
+    }
+
+    ExpressionArray args;
+    args.push_back(std::move(expr));
+    if (!this->isScalar()) {
+        return Constructor::Convert(context, offset, *this, std::move(args));
+    }
+    return Constructor::Convert(context, offset, this->scalarTypeForLiteral(), std::move(args));
+}
+
+bool Type::isOrContainsArray() const {
+    if (this->isStruct()) {
+        for (const Field& f : this->fields()) {
+            if (f.fType->isOrContainsArray()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    return this->isArray();
+}
+
 
 }  // namespace SkSL

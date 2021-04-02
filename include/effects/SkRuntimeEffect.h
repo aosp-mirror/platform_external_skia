@@ -9,25 +9,29 @@
 #define SkRuntimeEffect_DEFINED
 
 #include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkString.h"
-#include "include/private/GrTypesPriv.h"
+#include "include/private/SkOnce.h"
 #include "include/private/SkSLSampleUsage.h"
 
-#include <string>
 #include <vector>
 
-#if SK_SUPPORT_GPU
-#include "include/gpu/GrContextOptions.h"
-#endif
-
+class GrFragmentProcessor;
+class GrRecordingContext;
 class SkColorFilter;
+class SkImage;
 class SkShader;
 
 namespace SkSL {
 class FunctionDefinition;
 struct Program;
 }  // namespace SkSL
+
+namespace skvm {
+class Program;
+}  // namespace skvm
 
 /*
  * SkRuntimeEffect supports creating custom SkShader and SkColorFilter objects using Skia's SkSL
@@ -58,7 +62,6 @@ public:
         SkString  name;
         size_t    offset;
         Type      type;
-        GrSLType  gpuType;
         int       count;
         uint32_t  flags;
         uint32_t  marker;
@@ -73,9 +76,9 @@ public:
     };
 
     struct Options {
-        // Sets an upper limit on the acceptable amount of code growth from inlining.
-        // By default, runtime effects don't run the inliner directly.
-        int inlineThreshold = 0;
+        // For testing purposes, completely disable the inliner. (Normally, Runtime Effects don't
+        // run the inliner directly, but they still get an inlining pass once they are painted.)
+        bool forceNoInline = false;
     };
 
     // If the effect is compiled successfully, `effect` will be non-null.
@@ -87,18 +90,15 @@ public:
 
     static Result Make(SkString sksl, const Options& options);
 
-    // Older/deprecated version of the Make() API:
-    using EffectResult = std::tuple<sk_sp<SkRuntimeEffect>, SkString>;
-    static EffectResult Make(SkString sksl) {
-        Result result = Make(sksl, Options{});
-        return EffectResult{std::move(result.effect), std::move(result.errorText)};
-    }
+    // We can't use a default argument for `options` due to a bug in Clang.
+    // https://bugs.llvm.org/show_bug.cgi?id=36684
+    static Result Make(SkString sksl) { return Make(std::move(sksl), Options{}); }
 
     sk_sp<SkShader> makeShader(sk_sp<SkData> uniforms,
                                sk_sp<SkShader> children[],
                                size_t childCount,
                                const SkMatrix* localMatrix,
-                               bool isOpaque);
+                               bool isOpaque) const;
 
     sk_sp<SkImage> makeImage(GrRecordingContext*,
                              sk_sp<SkData> uniforms,
@@ -106,12 +106,12 @@ public:
                              size_t childCount,
                              const SkMatrix* localMatrix,
                              SkImageInfo resultInfo,
-                             bool mipmapped);
+                             bool mipmapped) const;
 
-    sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> uniforms);
+    sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> uniforms) const;
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> uniforms,
                                          sk_sp<SkColorFilter> children[],
-                                         size_t childCount);
+                                         size_t childCount) const;
 
     const SkString& source() const { return fSkSL; }
 
@@ -147,9 +147,18 @@ public:
     static void RegisterFlattenables();
     ~SkRuntimeEffect() override;
 
+#if SK_SUPPORT_GPU
+    // For internal use.
+    std::unique_ptr<GrFragmentProcessor> makeFP(GrRecordingContext*,
+                                                sk_sp<SkData> uniforms,
+                                                std::unique_ptr<GrFragmentProcessor> children[],
+                                                size_t childCount) const;
+#endif
+
 private:
     SkRuntimeEffect(SkString sksl,
                     std::unique_ptr<SkSL::Program> baseProgram,
+                    const Options& options,
                     const SkSL::FunctionDefinition& main,
                     std::vector<Uniform>&& uniforms,
                     std::vector<SkString>&& children,
@@ -160,6 +169,8 @@ private:
 
     uint32_t hash() const { return fHash; }
     bool usesSampleCoords() const { return fUsesSampleCoords; }
+
+    const skvm::Program* getFilterColorProgram();
 
 #if SK_SUPPORT_GPU
     friend class GrSkSLFP;      // fBaseProgram, fSampleUsages
@@ -179,35 +190,16 @@ private:
     std::vector<SkSL::SampleUsage> fSampleUsages;
     std::vector<Varying>  fVaryings;
 
+    SkOnce fColorFilterProgramOnce;
+    std::unique_ptr<skvm::Program> fColorFilterProgram;
+
     bool   fUsesSampleCoords;
     bool   fAllowColorFilter;
 };
 
-/**
- * SkRuntimeShaderBuilder is a utility to simplify creating SkShader objects from SkRuntimeEffects.
- *
- * NOTE: Like SkRuntimeEffect, this API is experimental and subject to change!
- *
- * Given an SkRuntimeEffect, the SkRuntimeShaderBuilder manages creating an input data block and
- * provides named access to the 'uniform' variables in that block, as well as named access
- * to a list of child shader slots. Usage:
- *
- *   sk_sp<SkRuntimeEffect> effect = ...;
- *   SkRuntimeShaderBuilder builder(effect);
- *   builder.uniform("some_uniform_float")  = 3.14f;
- *   builder.uniform("some_uniform_matrix") = SkM44::Rotate(...);
- *   builder.child("some_child_effect")     = mySkImage->makeShader(...);
- *   ...
- *   sk_sp<SkShader> shader = builder.makeShader(nullptr, false);
- *
- * Note that SkRuntimeShaderBuilder is built entirely on the public API of SkRuntimeEffect,
- * so can be used as-is or serve as inspiration for other interfaces or binding techniques.
- */
-class SkRuntimeShaderBuilder {
+/** Base class for SkRuntimeShaderBuilder, defined below. */
+template <typename Child> class SkRuntimeEffectBuilder {
 public:
-    SkRuntimeShaderBuilder(sk_sp<SkRuntimeEffect>);
-    ~SkRuntimeShaderBuilder();
-
     struct BuilderUniform {
         // Copy 'val' to this variable. No type conversion is performed - 'val' must be same
         // size as expected by the effect. Information about the variable can be queried by
@@ -258,14 +250,21 @@ public:
             return true;
         }
 
-        SkRuntimeShaderBuilder*         fOwner;
+        SkRuntimeEffectBuilder*         fOwner;
         const SkRuntimeEffect::Uniform* fVar;    // nullptr if the variable was not found
     };
 
     struct BuilderChild {
-        BuilderChild& operator=(const sk_sp<SkShader>& val);
+        template <typename C> BuilderChild& operator=(C&& val) {
+            if (fIndex < 0) {
+                SkDEBUGFAIL("Assigning to missing child");
+            } else {
+                fOwner->fChildren[fIndex] = std::forward<C>(val);
+            }
+            return *this;
+        }
 
-        SkRuntimeShaderBuilder* fOwner;
+        SkRuntimeEffectBuilder* fOwner;
         int                     fIndex;  // -1 if the child was not found
     };
 
@@ -274,6 +273,64 @@ public:
     BuilderUniform uniform(const char* name) { return { this, fEffect->findUniform(name) }; }
     BuilderChild child(const char* name) { return { this, fEffect->findChild(name) }; }
 
+protected:
+    SkRuntimeEffectBuilder() = delete;
+    explicit SkRuntimeEffectBuilder(sk_sp<SkRuntimeEffect> effect)
+            : fEffect(std::move(effect))
+            , fUniforms(SkData::MakeUninitialized(fEffect->uniformSize()))
+            , fChildren(fEffect->children().count()) {}
+
+    SkRuntimeEffectBuilder(SkRuntimeEffectBuilder&&) = default;
+    SkRuntimeEffectBuilder(const SkRuntimeEffectBuilder&) = default;
+
+    SkRuntimeEffectBuilder& operator=(SkRuntimeEffectBuilder&&) = delete;
+    SkRuntimeEffectBuilder& operator=(const SkRuntimeEffectBuilder&) = delete;
+
+    sk_sp<SkData> uniforms() { return fUniforms; }
+    Child* children() { return fChildren.data(); }
+    size_t numChildren() { return fChildren.size(); }
+
+private:
+    void* writableUniformData() {
+        if (!fUniforms->unique()) {
+            fUniforms = SkData::MakeWithCopy(fUniforms->data(), fUniforms->size());
+        }
+        return fUniforms->writable_data();
+    }
+
+    sk_sp<SkRuntimeEffect> fEffect;
+    sk_sp<SkData>          fUniforms;
+    std::vector<Child>     fChildren;
+};
+
+/**
+ * SkRuntimeShaderBuilder is a utility to simplify creating SkShader objects from SkRuntimeEffects.
+ *
+ * NOTE: Like SkRuntimeEffect, this API is experimental and subject to change!
+ *
+ * Given an SkRuntimeEffect, the SkRuntimeShaderBuilder manages creating an input data block and
+ * provides named access to the 'uniform' variables in that block, as well as named access
+ * to a list of child shader slots. Usage:
+ *
+ *   sk_sp<SkRuntimeEffect> effect = ...;
+ *   SkRuntimeShaderBuilder builder(effect);
+ *   builder.uniform("some_uniform_float")  = 3.14f;
+ *   builder.uniform("some_uniform_matrix") = SkM44::Rotate(...);
+ *   builder.child("some_child_effect")     = mySkImage->makeShader(...);
+ *   ...
+ *   sk_sp<SkShader> shader = builder.makeShader(nullptr, false);
+ *
+ * Note that SkRuntimeShaderBuilder is built entirely on the public API of SkRuntimeEffect,
+ * so can be used as-is or serve as inspiration for other interfaces or binding techniques.
+ */
+class SK_API SkRuntimeShaderBuilder : public SkRuntimeEffectBuilder<sk_sp<SkShader>> {
+public:
+    explicit SkRuntimeShaderBuilder(sk_sp<SkRuntimeEffect>);
+    // This is currently required by Android Framework but may go away if that dependency
+    // can be removed.
+    SkRuntimeShaderBuilder(const SkRuntimeShaderBuilder&) = default;
+    ~SkRuntimeShaderBuilder();
+
     sk_sp<SkShader> makeShader(const SkMatrix* localMatrix, bool isOpaque);
     sk_sp<SkImage> makeImage(GrRecordingContext*,
                              const SkMatrix* localMatrix,
@@ -281,11 +338,7 @@ public:
                              bool mipmapped);
 
 private:
-    void* writableUniformData();
-
-    sk_sp<SkRuntimeEffect>       fEffect;
-    sk_sp<SkData>                fUniforms;
-    std::vector<sk_sp<SkShader>> fChildren;
+    using INHERITED = SkRuntimeEffectBuilder<sk_sp<SkShader>>;
 };
 
 #endif

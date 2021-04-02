@@ -8,13 +8,12 @@
 #ifndef SKSL_VARDECLARATIONS
 #define SKSL_VARDECLARATIONS
 
+#include "include/private/SkSLProgramElement.h"
+#include "include/private/SkSLStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
-#include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
 namespace SkSL {
-
 
 namespace dsl {
     class DSLCore;
@@ -39,6 +38,17 @@ public:
             , fArraySize(arraySize)
             , fValue(std::move(value)) {}
 
+    // Does proper error checking and type coercion; reports errors via ErrorReporter.
+    static std::unique_ptr<Statement> Convert(const Context& context,
+                                              Variable* var,
+                                              std::unique_ptr<Expression> value);
+
+    // Reports errors via ASSERT.
+    static std::unique_ptr<Statement> Make(const Context& context,
+                                           Variable* var,
+                                           const Type* baseType,
+                                           int arraySize,
+                                           std::unique_ptr<Expression> value);
     const Type& baseType() const {
         return fBaseType;
     }
@@ -63,27 +73,9 @@ public:
         return fValue;
     }
 
-    std::unique_ptr<Statement> clone() const override {
-        return std::make_unique<VarDeclaration>(&this->var(),
-                                                &this->baseType(),
-                                                fArraySize,
-                                                this->value() ? this->value()->clone() : nullptr);
-    }
+    std::unique_ptr<Statement> clone() const override;
 
-    String description() const override {
-        String result = this->var().modifiers().description() + this->baseType().description() +
-                        " " + this->var().name();
-        if (this->arraySize() > 0) {
-            result.appendf("[%d]", this->arraySize());
-        } else if (this->arraySize() == Type::kUnsizedArray){
-            result += "[]";
-        }
-        if (this->value()) {
-            result += " = " + this->value()->description();
-        }
-        result += ";";
-        return result;
-    }
+    String description() const override;
 
 private:
     const Variable* fVar;
@@ -91,7 +83,7 @@ private:
     int fArraySize;  // zero means "not an array", Type::kUnsizedArray means var[]
     std::unique_ptr<Expression> fValue;
 
-    friend class dsl::DSLCore;
+    friend class IRGenerator;
 
     using INHERITED = Statement;
 };

@@ -15,7 +15,7 @@
 #include "src/sksl/SkSLGLSLCodeGenerator.h"
 
 std::unique_ptr<SkSL::Program> GrSkSLtoGLSL(const GrGLGpu* gpu,
-                                            SkSL::Program::Kind programKind,
+                                            SkSL::ProgramKind programKind,
                                             const SkSL::String& sksl,
                                             const SkSL::Program::Settings& settings,
                                             SkSL::String* glsl,
@@ -25,7 +25,7 @@ GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
                                     GrGLuint programId,
                                     GrGLenum type,
                                     const SkSL::String& glsl,
-                                    GrGpu::Stats*,
+                                    GrThreadSafePipelineBuilder::Stats*,
                                     GrContextOptions::ShaderErrorHandler* errorHandler);
 
 #endif

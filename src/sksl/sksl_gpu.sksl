@@ -256,8 +256,6 @@ half4 sample(sampler1D s, float2 P, float bias);
 half4 sample(sampler2D s, float3 P);
 half4 sample(sampler2D s, float3 P, float bias);
 
-float4 imageLoad(image2D image, int2 P);
-int4 imageLoad(iimage2D image, int2 P);
 $genType dFdx($genType p);
 $genType dFdy($genType p);
 $genHType dFdx($genHType p);
@@ -337,6 +335,12 @@ half4 blend_lighten(half4 src, half4 dst) {
 }
 
 half _guarded_divide(half n, half d) {
+    return sk_Caps.mustGuardDivisionEvenAfterExplicitZeroCheck
+            ? n/(d + 0.00000001)
+            : n/d;
+}
+
+half3 _guarded_divide(half3 n, half d) {
     return sk_Caps.mustGuardDivisionEvenAfterExplicitZeroCheck
             ? n/(d + 0.00000001)
             : n/d;
@@ -427,11 +431,13 @@ half3 _blend_set_color_luminance(half3 hueSatColor, half alpha, half3 lumColor) 
     half minComp = min(min(result.r, result.g), result.b);
     half maxComp = max(max(result.r, result.g), result.b);
     if (minComp < 0 && lum != minComp) {
-        result = lum + (result - lum) * lum/(lum - minComp);
+        result = lum + (result - lum) * _guarded_divide(lum, (lum - minComp));
     }
-    return (maxComp > alpha && maxComp != lum)
-        ? lum + ((result - lum) * (alpha - lum))/(maxComp - lum)
-        : result;
+    if (maxComp > alpha && maxComp != lum) {
+        return lum + _guarded_divide((result - lum) * (alpha - lum), (maxComp - lum));
+    } else {
+        return result;
+    }
 }
 
 half _blend_color_saturation(half3 color) {
@@ -439,9 +445,13 @@ half _blend_color_saturation(half3 color) {
 }
 
 half3 _blend_set_color_saturation_helper(half3 minMidMax, half sat) {
-    return (minMidMax.r < minMidMax.b)
-            ? half3(0, sat*(minMidMax.g - minMidMax.r)/(minMidMax.b - minMidMax.r), sat)
-            : half3(0);
+    if (minMidMax.r < minMidMax.b) {
+        return half3(0,
+                    _guarded_divide(sat*(minMidMax.g - minMidMax.r), (minMidMax.b - minMidMax.r)),
+                    sat);
+    } else {
+        return half3(0);
+    }
 }
 
 half3 _blend_set_color_saturation(half3 hueLumColor, half3 satColor) {
@@ -560,13 +570,13 @@ half4 blend(SkBlendMode mode, half4 src, half4 dst) {
         case SkBlendMode::kSaturation: return blend_saturation(src, dst);
         case SkBlendMode::kColor:      return blend_color(src, dst);
         case SkBlendMode::kLuminosity: return blend_luminosity(src, dst);
-    }
-    return half4(0);  // Avoids "'blend' can exit without returning a value."
+        default: return half4(0);  // Avoids "'blend' can exit without returning a value."
+   }
 }
 
 // The max() guards against division by zero when the incoming color is transparent black
-half4 unpremul(half4 color)         { return half4(color.rgb / max(color.a, 0.0001), color.a); }
-float4 unpremul_float(float4 color) { return float4(color.rgb / max(color.a, 0.0001), color.a); }
+half4  unpremul(half4 color)  { return half4(color.rgb / max(color.a, 0.0001), color.a); }
+float4 unpremul(float4 color) { return float4(color.rgb / max(color.a, 0.0001), color.a); }
 
 float2 proj(float3 p) { return p.xy / p.z; }
 

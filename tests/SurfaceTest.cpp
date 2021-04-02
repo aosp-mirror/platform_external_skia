@@ -33,6 +33,7 @@
 #include "tools/ToolUtils.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
 #include "tools/gpu/ManagedBackendTexture.h"
+#include "tools/gpu/ProxyUtils.h"
 
 #include <functional>
 #include <initializer_list>
@@ -369,6 +370,46 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceBackendHandleAccessIDs_Gpu, reporter, 
     }
 }
 
+// No CPU test.
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceAbandonPostFlush_Gpu, reporter, ctxInfo) {
+    auto direct = ctxInfo.directContext();
+    sk_sp<SkSurface> surface = create_gpu_surface(direct, kPremul_SkAlphaType, nullptr);
+    if (!surface) {
+        return;
+    }
+    // This flush can put command buffer refs on the GrGpuResource for the surface.
+    surface->flush();
+    direct->abandonContext();
+    // We pass the test if we don't hit any asserts or crashes when the ref on the surface goes away
+    // after we abanonded the context. One thing specifically this checks is to make sure we're
+    // correctly handling the mix of normal refs and command buffer refs, and correctly deleting
+    // the object at the right time.
+}
+
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceBackendAccessAbandoned_Gpu, reporter, ctxInfo) {
+    auto dContext = ctxInfo.directContext();
+    sk_sp<SkSurface> surface = create_gpu_surface(dContext, kPremul_SkAlphaType, nullptr);
+    if (!surface) {
+        return;
+    }
+
+    GrBackendRenderTarget beRT =
+            surface->getBackendRenderTarget(SkSurface::kFlushRead_BackendHandleAccess);
+    REPORTER_ASSERT(reporter, beRT.isValid());
+    GrBackendTexture beTex =
+            surface->getBackendTexture(SkSurface::kFlushRead_BackendHandleAccess);
+    REPORTER_ASSERT(reporter, beTex.isValid());
+
+    surface->flush();
+    dContext->abandonContext();
+
+    // After abandoning the context none of the backend surfaces should be valid.
+    beRT = surface->getBackendRenderTarget(SkSurface::kFlushRead_BackendHandleAccess);
+    REPORTER_ASSERT(reporter, !beRT.isValid());
+    beTex = surface->getBackendTexture(SkSurface::kFlushRead_BackendHandleAccess);
+    REPORTER_ASSERT(reporter, !beTex.isValid());
+}
+
 // Verify that the right canvas commands trigger a copy on write.
 static void test_copy_on_write(skiatest::Reporter* reporter, SkSurface* surface) {
     SkCanvas* canvas = surface->getCanvas();
@@ -481,18 +522,19 @@ static void test_crbug263329(skiatest::Reporter* reporter,
     canvas2->clear(5);
     sk_sp<SkImage> image4(surface2->makeImageSnapshot());
 
-    SkImage_GpuBase* gpuImage1 = static_cast<SkImage_GpuBase*>(as_IB(image1));
-    SkImage_GpuBase* gpuImage2 = static_cast<SkImage_GpuBase*>(as_IB(image2));
-    SkImage_GpuBase* gpuImage3 = static_cast<SkImage_GpuBase*>(as_IB(image3));
-    SkImage_GpuBase* gpuImage4 = static_cast<SkImage_GpuBase*>(as_IB(image4));
+    auto imageProxy = [ctx = surface1->recordingContext()](SkImage* img) {
+        GrTextureProxy* proxy = sk_gpu_test::GetTextureImageProxy(img, ctx);
+        SkASSERT(proxy);
+        return proxy;
+    };
 
-    REPORTER_ASSERT(reporter, gpuImage4->peekProxy() != gpuImage3->peekProxy());
+    REPORTER_ASSERT(reporter, imageProxy(image4.get()) != imageProxy(image3.get()));
     // The following assertion checks crbug.com/263329
-    REPORTER_ASSERT(reporter, gpuImage4->peekProxy() != gpuImage2->peekProxy());
-    REPORTER_ASSERT(reporter, gpuImage4->peekProxy() != gpuImage1->peekProxy());
-    REPORTER_ASSERT(reporter, gpuImage3->peekProxy() != gpuImage2->peekProxy());
-    REPORTER_ASSERT(reporter, gpuImage3->peekProxy() != gpuImage1->peekProxy());
-    REPORTER_ASSERT(reporter, gpuImage2->peekProxy() != gpuImage1->peekProxy());
+    REPORTER_ASSERT(reporter, imageProxy(image4.get()) != imageProxy(image2.get()));
+    REPORTER_ASSERT(reporter, imageProxy(image4.get()) != imageProxy(image1.get()));
+    REPORTER_ASSERT(reporter, imageProxy(image3.get()) != imageProxy(image2.get()));
+    REPORTER_ASSERT(reporter, imageProxy(image3.get()) != imageProxy(image1.get()));
+    REPORTER_ASSERT(reporter, imageProxy(image2.get()) != imageProxy(image1.get()));
 }
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceCRBug263329_Gpu, reporter, ctxInfo) {
     for (auto& surface_func : { &create_gpu_surface, &create_gpu_scratch_surface }) {
@@ -531,18 +573,15 @@ static SkBudgeted is_budgeted(const sk_sp<SkSurface>& surf) {
     return proxy->isBudgeted();
 }
 
-static SkBudgeted is_budgeted(SkImage* image) {
-    return ((SkImage_Gpu*)image)->peekProxy()->isBudgeted();
-}
-
-static SkBudgeted is_budgeted(const sk_sp<SkImage> image) {
-    return is_budgeted(image.get());
+static SkBudgeted is_budgeted(SkImage* image, GrRecordingContext* rc) {
+    return sk_gpu_test::GetTextureImageProxy(image, rc)->isBudgeted();
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceBudget, reporter, ctxInfo) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(8,8);
+    GrDirectContext* dContext = ctxInfo.directContext();
     for (auto budgeted : { SkBudgeted::kNo, SkBudgeted::kYes }) {
-        auto surface(SkSurface::MakeRenderTarget(ctxInfo.directContext(), budgeted, info));
+        auto surface(SkSurface::MakeRenderTarget(dContext, budgeted, info));
         SkASSERT(surface);
         REPORTER_ASSERT(reporter, budgeted == is_budgeted(surface));
 
@@ -551,14 +590,14 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceBudget, reporter, ctxInfo) {
         // Initially the image shares a texture with the surface, and the
         // the budgets should always match.
         REPORTER_ASSERT(reporter, budgeted == is_budgeted(surface));
-        REPORTER_ASSERT(reporter, budgeted == is_budgeted(image));
+        REPORTER_ASSERT(reporter, budgeted == is_budgeted(image.get(), dContext));
 
         // Now trigger copy-on-write
         surface->getCanvas()->clear(SK_ColorBLUE);
 
         // They don't share a texture anymore but the budgets should still match.
         REPORTER_ASSERT(reporter, budgeted == is_budgeted(surface));
-        REPORTER_ASSERT(reporter, budgeted == is_budgeted(image));
+        REPORTER_ASSERT(reporter, budgeted == is_budgeted(image.get(), dContext));
     }
 }
 

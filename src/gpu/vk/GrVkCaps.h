@@ -75,10 +75,11 @@ public:
         return SkToBool(FormatInfo::kBlitSrc_Flag & flags);
     }
 
-    // Sometimes calls to QueueWaitIdle return before actually signalling the fences
-    // on the command buffers even though they have completed. This causes an assert to fire when
-    // destroying the command buffers. Therefore we add a sleep to make sure the fence signals.
-    bool mustSleepOnTearDown() const { return fMustSleepOnTearDown; }
+    // On some GPUs (Windows Nvidia and Imagination) calls to QueueWaitIdle return before actually
+    // signalling the fences on the command buffers even though they have completed. This causes
+    // issues when then deleting the command buffers. Therefore we additionally will call
+    // vkWaitForFences on each outstanding command buffer to make sure the driver signals the fence.
+    bool mustSyncCommandBuffersWithQueue() const { return fMustSyncCommandBuffersWithQueue; }
 
     // Returns true if we should always make dedicated allocations for VkImages.
     bool shouldAlwaysUseDedicatedImageMemory() const {
@@ -169,6 +170,13 @@ public:
     // buffer. This typically would only be the case for buffers that are written once and read
     // many times on the gpu.
     bool gpuOnlyBuffersMorePerformant() const { return fGpuOnlyBuffersMorePerformant; }
+
+    // For our CPU write and GPU read buffers (vertex, uniform, etc.), should we keep these buffers
+    // persistently mapped. In general the answer will be yes. The main case we don't do this is
+    // when using special memory that is DEVICE_LOCAL and HOST_VISIBLE on discrete GPUs.
+    bool shouldPersistentlyMapCpuToGpuBuffers() const {
+        return fShouldPersistentlyMapCpuToGpuBuffers;
+    }
 
     // The max draw count that can be passed into indirect draw calls.
     uint32_t  maxDrawIndirectDrawCount() const { return fMaxDrawIndirectDrawCount; }
@@ -345,7 +353,7 @@ private:
 
     SkSTArray<1, GrVkYcbcrConversionInfo> fYcbcrInfos;
 
-    bool fMustSleepOnTearDown = false;
+    bool fMustSyncCommandBuffersWithQueue = false;
     bool fShouldAlwaysUseDedicatedImageMemory = false;
 
     bool fAvoidUpdateBuffers = false;
@@ -372,6 +380,7 @@ private:
 
     bool fMustUseCoherentHostVisibleMemory = false;
     bool fGpuOnlyBuffersMorePerformant = false;
+    bool fShouldPersistentlyMapCpuToGpuBuffers = true;
 
     // We default this to 100 since we already cap the max render tasks at 100 before doing a
     // submission in the GrDrawingManager, so we shouldn't be going over 100 secondary command

@@ -184,6 +184,10 @@ static bool detect_shader_settings(const SkSL::String& text,
                     static auto s_rewriteLoopCaps = Factory::RewriteDoWhileLoops();
                     *caps = s_rewriteLoopCaps.get();
                 }
+                if (settingsText.consumeSuffix(" RewriteMatrixVectorMultiply")) {
+                    static auto s_rewriteMatVecMulCaps = Factory::RewriteMatrixVectorMultiply();
+                    *caps = s_rewriteMatVecMulCaps.get();
+                }
                 if (settingsText.consumeSuffix(" ShaderDerivativeExtensionString")) {
                     static auto s_derivativeCaps = Factory::ShaderDerivativeExtensionString();
                     *caps = s_derivativeCaps.get();
@@ -268,18 +272,18 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
         return ResultCode::kInputError;
     }
 
-    SkSL::Program::Kind kind;
+    SkSL::ProgramKind kind;
     const SkSL::String& inputPath = args[1];
     if (inputPath.endsWith(".vert")) {
-        kind = SkSL::Program::kVertex_Kind;
+        kind = SkSL::ProgramKind::kVertex;
     } else if (inputPath.endsWith(".frag") || inputPath.endsWith(".sksl")) {
-        kind = SkSL::Program::kFragment_Kind;
+        kind = SkSL::ProgramKind::kFragment;
     } else if (inputPath.endsWith(".geom")) {
-        kind = SkSL::Program::kGeometry_Kind;
+        kind = SkSL::ProgramKind::kGeometry;
     } else if (inputPath.endsWith(".fp")) {
-        kind = SkSL::Program::kFragmentProcessor_Kind;
+        kind = SkSL::ProgramKind::kFragmentProcessor;
     } else if (inputPath.endsWith(".rte")) {
-        kind = SkSL::Program::kRuntimeEffect_Kind;
+        kind = SkSL::ProgramKind::kRuntimeEffect;
     } else {
         printf("input filename must end in '.vert', '.frag', '.geom', '.fp', '.rte', or '.sksl'\n");
         return ResultCode::kInputError;
@@ -313,9 +317,9 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
         puts(errorText);
     };
 
-    auto compileProgram = [&](SkSL::Compiler::Flags flags, const auto& writeFn) -> ResultCode {
+    auto compileProgram = [&](const auto& writeFn) -> ResultCode {
         SkSL::FileOutputStream out(outputPath);
-        SkSL::Compiler compiler(caps, flags);
+        SkSL::Compiler compiler(caps);
         if (!out.isValid()) {
             printf("error writing '%s'\n", outputPath.c_str());
             return ResultCode::kOutputError;
@@ -334,14 +338,12 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
 
     if (outputPath.endsWith(".spirv")) {
         return compileProgram(
-                SkSL::Compiler::kNone_Flags,
                 [](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     return compiler.toSPIRV(program, out);
                 });
     } else if (outputPath.endsWith(".asm.frag") || outputPath.endsWith(".asm.vert") ||
                outputPath.endsWith(".asm.geom")) {
         return compileProgram(
-                SkSL::Compiler::kNone_Flags,
                 [](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     // Compile program to SPIR-V assembly in a string-stream.
                     SkSL::StringStream assembly;
@@ -362,33 +364,30 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
                 });
     } else if (outputPath.endsWith(".glsl")) {
         return compileProgram(
-                SkSL::Compiler::kNone_Flags,
                 [](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     return compiler.toGLSL(program, out);
                 });
     } else if (outputPath.endsWith(".metal")) {
         return compileProgram(
-                SkSL::Compiler::kNone_Flags,
                 [](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     return compiler.toMetal(program, out);
                 });
     } else if (outputPath.endsWith(".h")) {
         settings.fReplaceSettings = false;
+        settings.fPermitInvalidStaticTests = true;
         return compileProgram(
-                SkSL::Compiler::kPermitInvalidStaticTests_Flag,
                 [&](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     return compiler.toH(program, base_name(inputPath.c_str(), "Gr", ".fp"), out);
                 });
     } else if (outputPath.endsWith(".cpp")) {
         settings.fReplaceSettings = false;
+        settings.fPermitInvalidStaticTests = true;
         return compileProgram(
-                SkSL::Compiler::kPermitInvalidStaticTests_Flag,
                 [&](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     return compiler.toCPP(program, base_name(inputPath.c_str(), "Gr", ".fp"), out);
                 });
     } else if (outputPath.endsWith(".skvm")) {
         return compileProgram(
-                SkSL::Compiler::kNone_Flags,
                 [](SkSL::Compiler&, SkSL::Program& program, SkSL::OutputStream& out) {
                     skvm::Builder builder{skvm::Features{}};
                     if (!SkSL::testingOnly_ProgramToSkVMShader(program, &builder)) {
@@ -400,37 +399,49 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
                     return true;
                 });
     } else if (outputPath.endsWith(".stage")) {
-        return compileProgram(SkSL::Compiler::kNone_Flags,
+        return compileProgram(
                 [](SkSL::Compiler&, SkSL::Program& program, SkSL::OutputStream& out) {
                     class Callbacks : public SkSL::PipelineStage::Callbacks {
                     public:
                         using String = SkSL::String;
 
+                        String getMangledName(const char* name) override {
+                            return String(name) + "_0";
+                        }
+
                         String declareUniform(const SkSL::VarDeclaration* decl) override {
                             fOutput += decl->description();
-                            if (decl->var().type().name() == "fragmentProcessor") {
-                                fChildNames.push_back(decl->var().name());
-                            }
                             return decl->var().name();
                         }
 
-                        String defineFunction(const SkSL::FunctionDeclaration* decl,
-                                              String body) override {
-                            fOutput += (decl->description() + "{" + body + "}");
-                            return decl->name();
+                        void defineFunction(const char* decl,
+                                            const char* body,
+                                            bool /*isMain*/) override {
+                            fOutput += String(decl) + "{" + body + "}";
+                        }
+
+                        void defineStruct(const char* definition) override {
+                            fOutput += definition;
+                        }
+
+                        void declareGlobal(const char* declaration) override {
+                            fOutput += declaration;
                         }
 
                         String sampleChild(int index, String coords) override {
-                            return String::printf("sample(%s%s%s)", fChildNames[index].c_str(),
-                                                  coords.empty() ? "" : ", ", coords.c_str());
+                            return String::printf("sample(child_%d%s%s)",
+                                                  index,
+                                                  coords.empty() ? "" : ", ",
+                                                  coords.c_str());
                         }
                         String sampleChildWithMatrix(int index, String matrix) override {
-                            return String::printf("sample(%s%s%s)", fChildNames[index].c_str(),
-                                                  matrix.empty() ? "" : ", ", matrix.c_str());
+                            return String::printf("sample(child_%d%s%s)",
+                                                  index,
+                                                  matrix.empty() ? "" : ", ",
+                                                  matrix.c_str());
                         }
 
                         String              fOutput;
-                        std::vector<String> fChildNames;
                     };
                     Callbacks callbacks;
                     SkSL::PipelineStage::ConvertProgram(program, "_coords", &callbacks);
@@ -444,8 +455,9 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
             printf("error writing '%s'\n", outputPath.c_str());
             return ResultCode::kOutputError;
         }
-        SkSL::LoadedModule module = compiler.loadModule(
-                kind, SkSL::Compiler::MakeModulePath(inputPath.c_str()), nullptr);
+        SkSL::LoadedModule module =
+                compiler.loadModule(kind, SkSL::Compiler::MakeModulePath(inputPath.c_str()),
+                                    /*base=*/nullptr, /*dehydrate=*/true);
         SkSL::Dehydrator dehydrator;
         dehydrator.write(*module.fSymbols);
         dehydrator.write(module.fElements);
@@ -465,8 +477,8 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
             return ResultCode::kOutputError;
         }
     } else {
-        printf("expected output path to end with one of: .glsl, .metal, .spirv, .asm.frag, "
-               ".asm.vert, .asm.geom, .cpp, .h (got '%s')\n", outputPath.c_str());
+        printf("expected output path to end with one of: .glsl, .metal, .spirv, .asm.frag, .skvm, "
+               ".stage, .asm.vert, .asm.geom, .cpp, .h (got '%s')\n", outputPath.c_str());
         return ResultCode::kConfigurationError;
     }
     return ResultCode::kSuccess;

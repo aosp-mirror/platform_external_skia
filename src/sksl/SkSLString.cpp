@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "src/sksl/SkSLString.h"
-
+#include "include/private/SkSLString.h"
 #include "src/sksl/SkSLUtil.h"
 #include <algorithm>
+#include <cinttypes>
 #include <errno.h>
 #include <limits.h>
 #include <locale>
@@ -202,19 +202,19 @@ bool operator!=(const char* s1, StringFragment s2) {
 }
 
 String to_string(int32_t value) {
-    return SkSL::String::printf("%d", value);
+    return SkSL::String(std::to_string(value));
 }
 
 String to_string(uint32_t value) {
-    return SkSL::String::printf("%u", value);
+    return SkSL::String(std::to_string(value));
 }
 
 String to_string(int64_t value) {
-    return SkSL::String::printf("%lld", value);
+    return SkSL::String(std::to_string(value));
 }
 
 String to_string(uint64_t value) {
-    return SkSL::String::printf("%llu", value);
+    return SkSL::String(std::to_string(value));
 }
 
 String to_string(double value) {

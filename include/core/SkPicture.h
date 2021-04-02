@@ -11,6 +11,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 
@@ -20,7 +21,6 @@ struct SkDeserialProcs;
 class SkImage;
 class SkMatrix;
 struct SkSerialProcs;
-class SkShader;
 class SkStream;
 class SkWStream;
 
@@ -38,6 +38,7 @@ class SkWStream;
 */
 class SK_API SkPicture : public SkRefCnt {
 public:
+    ~SkPicture() override;
 
     /** Recreates SkPicture that was serialized into a stream. Returns constructed SkPicture
         if successful; otherwise, returns nullptr. Fails if data does not permit
@@ -90,16 +91,9 @@ public:
     */
     class SK_API AbortCallback {
     public:
-
-        /** Has no effect.
-
-            @return  abstract class cannot be instantiated
-        */
-        AbortCallback() {}
-
         /** Has no effect.
         */
-        virtual ~AbortCallback() {}
+        virtual ~AbortCallback() = default;
 
         /** Stops SkPicture playback when some condition is met. A subclass of
             AbortCallback provides an override for abort() that can stop SkPicture::playback.
@@ -116,6 +110,11 @@ public:
         example: https://fiddle.skia.org/c/@Picture_AbortCallback_abort
         */
         virtual bool abort() = 0;
+
+    protected:
+        AbortCallback() = default;
+        AbortCallback(const AbortCallback&) = delete;
+        AbortCallback& operator=(const AbortCallback&) = delete;
     };
 
     /** Replays the drawing commands on the specified canvas. In the case that the
@@ -231,11 +230,9 @@ public:
     sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, SkFilterMode mode,
                                const SkMatrix* localMatrix, const SkRect* tileRect) const;
 
-    // DEPRECATED
-    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy,
-                               const SkMatrix* localMatrix, const SkRect* tileRect) const;
-    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy,
-                               const SkMatrix* localMatrix = nullptr) const;
+    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, SkFilterMode mode) const {
+        return this->makeShader(tmx, tmy, mode, nullptr, nullptr);
+    }
 
 private:
     // Allowed subclasses.
@@ -277,6 +274,7 @@ private:
     class SkPictureData* backport() const;
 
     uint32_t fUniqueID;
+    mutable std::atomic<bool> fAddedToCache{false};
 };
 
 #endif

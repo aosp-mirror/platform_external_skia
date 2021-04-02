@@ -400,11 +400,6 @@ public:
 
     void storeVkPipelineCacheData();
 
-    // Returns the gpu memory size of the the texture that backs the passed in SkImage. Returns 0 if
-    // the SkImage is not texture backed. For external format textures this will also return 0 as we
-    // cannot determine the correct size.
-    static size_t ComputeImageSize(sk_sp<SkImage> image, GrMipmapped, bool useNextPow2 = false);
-
     /**
      * Retrieve the default GrBackendFormat for a given SkColorType and renderability.
      * It is guaranteed that this backend format will be the one used by the following
@@ -796,6 +791,25 @@ public:
     SkString dump() const;
 #endif
 
+    class DirectContextID {
+    public:
+        static GrDirectContext::DirectContextID Next();
+
+        DirectContextID() : fID(SK_InvalidUniqueID) {}
+
+        bool operator==(const DirectContextID& that) const { return fID == that.fID; }
+        bool operator!=(const DirectContextID& that) const { return !(*this == that); }
+
+        void makeInvalid() { fID = SK_InvalidUniqueID; }
+        bool isValid() const { return fID != SK_InvalidUniqueID; }
+
+    private:
+        constexpr DirectContextID(uint32_t id) : fID(id) {}
+        uint32_t fID;
+    };
+
+    DirectContextID directContextID() const { return fDirectContextID; }
+
     // Provides access to functions that aren't part of the public API.
     GrDirectContextPriv priv();
     const GrDirectContextPriv priv() const;  // NOLINT(readability-const-return-type)
@@ -824,6 +838,7 @@ private:
     // bool is used for this signal.
     void syncAllOutstandingGpuWork(bool shouldExecuteWhileAbandoned);
 
+    const DirectContextID                   fDirectContextID;
     // fTaskGroup must appear before anything that uses it (e.g. fGpu), so that it is destroyed
     // after all of its users. Clients of fTaskGroup will generally want to ensure that they call
     // wait() on it as they are being destroyed, to avoid the possibility of pending tasks being

@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+ - Skottie accessors for dynamic text properties (text string, font size).
+ - Optional sampling parameter to drawAtlas (paint filter-quality is ignored/deprecated)
+
+## [0.25.0] - 2021-03-02
+
+### Added
+ - A full build of CanvasKit is now in /bin/full.
+ - `CanvasKit.rt_effect` to test if the RuntimeEffect code was compiled in.
+
+### Breaking
+ - The `ShapedText` type has been removed. Clients who want ShapedText should use the
+   Paragraph APIs.
+
+### Removed
+ - `Font.measureText`, which had been previously deprecated. Clients should use either
+   Paragraph APIs or `Font.getGlyphWidths` instead (the latter does no shaping).
+ - `Font.getWidths`, which had been previously deprecated. Clients should use `Font.getGlyphWidths`.
+
+### Type Changes (index.d.ts)
+ - Documentation added for `managed_skottie`, `particles`, and `skottie` feature constants.
+
+## [0.24.0] - 2021-02-18
+
+### Added
+ - The Skottie factory (MakeManagedAnimation) now accepts an optional logger object.
+
+### Breaking
+ - `CanvasKit.getDataBytes` has been removed, as has the Data type. The 2 APIS that returned
+   Data now return Uint8Array containing the bytes directly. These are `Image.encodeToData`
+   (now named `Image.encodeToBytes`) and `SkPicture.serialize`. These APIs return null if
+   the encoding or serialization failed.
+
+### Type Changes (index.d.ts)
+ - `Image.encodeToDataWithFormat` was incorrectly documented as its own thing.
+
 ## [0.23.0] - 2021-02-04
 
 ### Added
@@ -130,7 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `CanvasKit.MakePathFromCmds`; Was deprecated in favor of `CanvasKit.Path.MakeFromCmds`.
  - `new CanvasKit.Path(path)` in favor of existing `path.copy()`.
  - Unused internal APIs (_getRasterN32PremulSurface, Drawable)
- - `measureText` from the CanvasContext2D emulation layer du to deprecation of measureText.
+ - `measureText` from the CanvasContext2D emulation layer due to deprecation of measureText.
 
 ### Deprecated
  - `Font.getWidths` in favor of `Font.getGlyphIDs` and `Font.getGlyphWidths`.

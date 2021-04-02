@@ -9,7 +9,6 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/GrShaderCaps.h"
 
 #include "fuzz/Fuzz.h"
@@ -63,13 +62,13 @@ static bool FuzzSkRuntimeEffect_Once(sk_sp<SkData> bytes, const SkRuntimeEffect:
 }
 
 bool FuzzSkRuntimeEffect(sk_sp<SkData> bytes) {
-    // Inline nothing
+    // Test once with the inliner disabled...
     SkRuntimeEffect::Options options;
-    options.inlineThreshold = 0;
+    options.forceNoInline = true;
     bool result = FuzzSkRuntimeEffect_Once(bytes, options);
 
-    // Inline everything
-    options.inlineThreshold = std::numeric_limits<int>::max();
+    // ... and then with the inliner enabled.
+    options.forceNoInline = false;
     result = FuzzSkRuntimeEffect_Once(bytes, options) || result;
 
     return result;

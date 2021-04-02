@@ -21,8 +21,7 @@
 #include "src/core/SkStringUtils.h"
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrAppliedClip.h"
-#include "src/gpu/GrPathRendering.h"
-#include "src/gpu/GrPrimitiveProcessor.h"
+#include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrRenderTask.h"
 #include "src/gpu/ops/GrDrawOp.h"
 #include "src/gpu/ops/GrOp.h"
@@ -181,9 +180,8 @@ private:
                              const DstProxyView*, const GrAppliedClip*, const GrCaps&,
                              GrRecordingContext::Arenas*, GrAuditTrail*);
 
-        void setSkipExecuteFlag() { fSkipExecute = true; }
         bool shouldExecute() const {
-            return SkToBool(this->head()) && !fSkipExecute;
+            return SkToBool(this->head());
         }
 
     private:
@@ -222,16 +220,11 @@ private:
         DstProxyView fDstProxyView;
         GrAppliedClip* fAppliedClip;
         SkRect fBounds;
-
-        // We set this flag to true if any of the ops' proxies fail to instantiate so that we know
-        // not to try and draw the op.
-        bool fSkipExecute = false;
     };
 
+    void onCanSkip() override;
 
     bool onIsUsed(GrSurfaceProxy*) const override;
-
-    void handleInternalAllocationFailure() override;
 
     void gatherProxyIntervals(GrResourceAllocator*) const override;
 

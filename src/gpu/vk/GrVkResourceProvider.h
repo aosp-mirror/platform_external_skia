@@ -17,6 +17,7 @@
 #include "src/gpu/GrManagedResource.h"
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrResourceHandle.h"
+#include "src/gpu/GrThreadSafePipelineBuilder.h"
 #include "src/gpu/vk/GrVkDescriptorPool.h"
 #include "src/gpu/vk/GrVkDescriptorSetManager.h"
 #include "src/gpu/vk/GrVkPipelineStateBuilder.h"
@@ -41,6 +42,14 @@ class GrVkResourceProvider {
 public:
     GrVkResourceProvider(GrVkGpu* gpu);
     ~GrVkResourceProvider();
+
+    GrThreadSafePipelineBuilder* pipelineStateCache() {
+        return fPipelineStateCache.get();
+    }
+
+    sk_sp<GrThreadSafePipelineBuilder> refPipelineStateCache() {
+        return fPipelineStateCache;
+    }
 
     // Set up any initial vk objects
     void init();
@@ -103,6 +112,8 @@ public:
 
     void checkCommandBuffers();
 
+    void forceSyncAllCommandBuffers();
+
     // We must add the finishedProc to all active command buffers since we may have flushed work
     // that the client cares about before they explicitly called flush and the GPU may reorder
     // command execution. So we make sure all previously submitted work finishes before we call the
@@ -137,7 +148,7 @@ public:
             const GrProgramDesc&,
             const GrProgramInfo&,
             VkRenderPass compatibleRenderPass,
-            GrGpu::Stats::ProgramCacheResult* stat);
+            GrThreadSafePipelineBuilder::Stats::ProgramCacheResult* stat);
 
     sk_sp<const GrVkPipeline> findOrCreateMSAALoadPipeline(
             const GrVkRenderPass& renderPass,
@@ -208,10 +219,10 @@ public:
 
 private:
 
-    class PipelineStateCache : public ::SkNoncopyable {
+    class PipelineStateCache : public GrThreadSafePipelineBuilder {
     public:
         PipelineStateCache(GrVkGpu* gpu);
-        ~PipelineStateCache();
+        ~PipelineStateCache() override;
 
         void release();
         GrVkPipelineState* findOrCreatePipelineState(GrRenderTarget*,
@@ -221,7 +232,7 @@ private:
         GrVkPipelineState* findOrCreatePipelineState(const GrProgramDesc& desc,
                                                      const GrProgramInfo& programInfo,
                                                      VkRenderPass compatibleRenderPass,
-                                                     GrGpu::Stats::ProgramCacheResult* stat) {
+                                                     Stats::ProgramCacheResult* stat) {
             return this->findOrCreatePipelineState(nullptr, desc, programInfo,
                                                    compatibleRenderPass, false, stat);
         }
@@ -234,7 +245,7 @@ private:
                                                      const GrProgramInfo&,
                                                      VkRenderPass compatibleRenderPass,
                                                      bool overrideSubpassForResolveLoad,
-                                                     GrGpu::Stats::ProgramCacheResult*);
+                                                     Stats::ProgramCacheResult*);
 
         struct DescHash {
             uint32_t operator()(const GrProgramDesc& desc) const {
@@ -311,7 +322,7 @@ private:
     SkTDynamicHash<GrVkSamplerYcbcrConversion, GrVkSamplerYcbcrConversion::Key> fYcbcrConversions;
 
     // Cache of GrVkPipelineStates
-    PipelineStateCache* fPipelineStateCache;
+    sk_sp<PipelineStateCache> fPipelineStateCache;
 
     SkSTArray<4, std::unique_ptr<GrVkDescriptorSetManager>> fDescriptorSetManagers;
 

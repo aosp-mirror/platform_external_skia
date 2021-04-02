@@ -38,7 +38,7 @@ public:
     bool onIsEqual(const GrFragmentProcessor& that) const override { return this == &that; }
 
 private:
-    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
+    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
 
     float fXOffset;
     float fYOffset;
@@ -61,8 +61,8 @@ class GLSLSampleMatrixVariableEffect : public GrGLSLFragmentProcessor {
     }
 };
 
-GrGLSLFragmentProcessor* SampleMatrixVariableEffect::onCreateGLSLInstance() const {
-    return new GLSLSampleMatrixVariableEffect();
+std::unique_ptr<GrGLSLFragmentProcessor> SampleMatrixVariableEffect::onMakeProgramImpl() const {
+    return std::make_unique<GLSLSampleMatrixVariableEffect>();
 }
 
 DEF_SIMPLE_GPU_GM(sample_matrix_variable, ctx, rtCtx, canvas, 512, 256) {
@@ -96,8 +96,7 @@ DEF_SIMPLE_GPU_GM(sample_matrix_variable, ctx, rtCtx, canvas, 512, 256) {
         SkMatrix matrix;
         SkSimpleMatrixProvider matrixProvider(matrix);
         GrColorInfo colorInfo;
-        GrFPArgs args(ctx, matrixProvider, SkSamplingOptions(SkCubicResampler::Mitchell()),
-                      &colorInfo);
+        GrFPArgs args(ctx, matrixProvider, &colorInfo);
         std::unique_ptr<GrFragmentProcessor> gradientFP = as_SB(shader)->asFragmentProcessor(args);
         draw(std::move(gradientFP), -128, 256, 256, 0);
     }

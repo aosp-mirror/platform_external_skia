@@ -150,11 +150,6 @@ VkResult GrVkAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer, BufferUsa
             info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             info.preferredFlags = 0;
             break;
-        case BufferUsage::kCpuOnly:
-            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-            info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-            break;
         case BufferUsage::kCpuWritesGpuReads:
             // When doing cpu writes and gpu reads the general rule of thumb is to use coherent
             // memory. Though this depends on the fact that we are not doing any cpu reads and the
@@ -168,11 +163,15 @@ VkResult GrVkAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer, BufferUsa
             // these gpu cache read access are typically lower bandwidth than non-cached memory.
             // For now Skia doesn't really have a need or want of this type of memory. But if we
             // ever do we could pass in an AllocationPropertyFlag that requests the cached property.
-            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            info.requiredFlags =
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
             info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             break;
-        case BufferUsage::kGpuWritesCpuReads:
+        case BufferUsage::kTransfersFromCpuToGpu:
+            info.requiredFlags =
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            break;
+        case BufferUsage::kTransfersFromGpuToCpu:
             info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
             info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
             break;
@@ -198,13 +197,6 @@ VkResult GrVkAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer, BufferUsa
 
     VmaAllocation allocation;
     VkResult result = vmaAllocateMemoryForBuffer(fAllocator, buffer, &info, &allocation, nullptr);
-    if (VK_SUCCESS != result) {
-        if (usage == BufferUsage::kCpuWritesGpuReads) {
-            // We try again but this time drop the requirement for cached
-            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            result = vmaAllocateMemoryForBuffer(fAllocator, buffer, &info, &allocation, nullptr);
-        }
-    }
     if (VK_SUCCESS == result) {
         *backendMemory = (GrVkBackendMemory)allocation;
     }

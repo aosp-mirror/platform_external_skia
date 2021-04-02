@@ -355,11 +355,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
                          if (indexed) {
                              int baseIndex = 1 + y * 6;
                              indexedIndirectWriter.writeIndexed(6, baseIndex, kBoxCountX,
-                                                                y * kBoxCountX, baseVertex,
-                                                                *dContext->priv().caps());
+                                                                y * kBoxCountX, baseVertex);
                          } else {
-                             indirectWriter.write(kBoxCountX, y * kBoxCountX, 4, baseVertex,
-                                                  *dContext->priv().caps());
+                             indirectWriter.write(kBoxCountX, y * kBoxCountX, 4, baseVertex);
                          }
                      }
                  },
@@ -464,7 +462,7 @@ public:
         b->add32(fVertexPosition.isInitialized());
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const final;
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
 
 private:
     friend class GLSLMeshTestProcessor;
@@ -496,16 +494,18 @@ private:
 };
 
 class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&) final {}
+    void setData(const GrGLSLProgramDataManager&, const GrGeometryProcessor&) final {}
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) final {
-        const GrMeshTestProcessor& mp = args.fGP.cast<GrMeshTestProcessor>();
+        const GrMeshTestProcessor& mp = args.fGeomProc.cast<GrMeshTestProcessor>();
+        GrGLSLVertexBuilder* v = args.fVertBuilder;
+        GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
 
         GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
         varyingHandler->emitAttributes(mp);
+        f->codeAppendf("half4 %s;", args.fOutputColor);
         varyingHandler->addPassThroughAttribute(mp.inColor(), args.fOutputColor);
 
-        GrGLSLVertexBuilder* v = args.fVertBuilder;
         if (!mp.fInstanceLocation.isInitialized()) {
             v->codeAppendf("float2 vertex = %s;", mp.fVertexPosition.name());
         } else {
@@ -519,12 +519,11 @@ class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
         }
         gpArgs->fPositionVar.set(kFloat2_GrSLType, "vertex");
 
-        GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
-        f->codeAppendf("%s = half4(1);", args.fOutputCoverage);
+        f->codeAppendf("const half4 %s = half4(1);", args.fOutputCoverage);
     }
 };
 
-GrGLSLPrimitiveProcessor* GrMeshTestProcessor::createGLSLInstance(const GrShaderCaps&) const {
+GrGLSLGeometryProcessor* GrMeshTestProcessor::createGLSLInstance(const GrShaderCaps&) const {
     return new GLSLMeshTestProcessor;
 }
 

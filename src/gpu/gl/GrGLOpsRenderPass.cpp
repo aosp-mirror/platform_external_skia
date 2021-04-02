@@ -49,12 +49,12 @@ void GrGLOpsRenderPass::onSetScissorRect(const SkIRect& scissor) {
     fGpu->flushScissorRect(scissor, fRenderTarget->height(), fOrigin);
 }
 
-bool GrGLOpsRenderPass::onBindTextures(const GrPrimitiveProcessor& primProc,
-                                       const GrSurfaceProxy* const primProcTextures[],
+bool GrGLOpsRenderPass::onBindTextures(const GrGeometryProcessor& geomProc,
+                                       const GrSurfaceProxy* const geomProcTextures[],
                                        const GrPipeline& pipeline) {
     GrGLProgram* program = fGpu->currentProgram();
     SkASSERT(program);
-    program->bindTextures(primProc, primProcTextures, pipeline);
+    program->bindTextures(geomProc, geomProcTextures, pipeline);
     return true;
 }
 
@@ -286,7 +286,6 @@ void GrGLOpsRenderPass::multiDrawArraysANGLEOrWebGL(const GrBuffer* drawIndirect
     while (drawCount) {
         int countInBatch = std::min(drawCount, kMaxDrawCountPerBatch);
         for (int i = 0; i < countInBatch; ++i) {
-            // TODO: SkASSERT(caps.drawIndirectSignature() == standard);
             auto [vertexCount, instanceCount, baseVertex, baseInstance] = cmds[i];
             fFirsts[i] = baseVertex;
             fCounts[i] = vertexCount;
@@ -360,7 +359,6 @@ void GrGLOpsRenderPass::multiDrawElementsANGLEOrWebGL(const GrBuffer* drawIndire
     while (drawCount) {
         int countInBatch = std::min(drawCount, kMaxDrawCountPerBatch);
         for (int i = 0; i < countInBatch; ++i) {
-            // TODO: SkASSERT(caps.drawIndirectSignature() == standard);
             auto [indexCount, instanceCount, baseIndex, baseVertex, baseInstance] = cmds[i];
             fCounts[i] = indexCount;
             fIndices[i] = this->offsetForBaseIndex(baseIndex);
