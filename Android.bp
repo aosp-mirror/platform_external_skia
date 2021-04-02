@@ -453,6 +453,7 @@ cc_library_static {
         "src/sksl/ir/SkSLBinaryExpression.cpp",
         "src/sksl/ir/SkSLBlock.cpp",
         "src/sksl/ir/SkSLConstructor.cpp",
+        "src/sksl/ir/SkSLConstructorArray.cpp",
         "src/sksl/ir/SkSLConstructorDiagonalMatrix.cpp",
         "src/sksl/ir/SkSLDoStatement.cpp",
         "src/sksl/ir/SkSLExpressionStatement.cpp",
