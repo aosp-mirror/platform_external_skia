@@ -10,10 +10,13 @@
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 
 namespace SkSL {
+
+static ExpressionArray negate_operands(const Context& context, ExpressionArray operands);
 
 static std::unique_ptr<Expression> negate_operand(const Context& context,
                                                   std::unique_ptr<Expression> operand) {
@@ -41,12 +44,22 @@ static std::unique_ptr<Expression> negate_operand(const Context& context,
             }
             break;
 
+        case Expression::Kind::kConstructorDiagonalMatrix:
+            // Convert `-matrix(literal)` into `matrix(-literal)`.
+            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+                ConstructorDiagonalMatrix& ctor = operand->as<ConstructorDiagonalMatrix>();
+                return ConstructorDiagonalMatrix::Make(
+                        context, ctor.fOffset, ctor.type(),
+                        negate_operand(context, std::move(ctor.argument())));
+            }
+            break;
+
         case Expression::Kind::kConstructor:
             // To be consistent with prior behavior, the conversion of a negated constructor into a
             // constructor of negative values is only performed when optimization is on.
             // Conceptually it's pretty similar to the int/float optimizations above, though.
             if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
-                const Constructor& ctor = value->as<Constructor>();
+                Constructor& ctor = operand->as<Constructor>();
 
                 // We've found a negated constant constructor, e.g.:
                 //     -float4(float3(floatLiteral(1)), floatLiteral(2))
@@ -54,13 +67,9 @@ static std::unique_ptr<Expression> negate_operand(const Context& context,
                 //     float4(-float3(floatLiteral(1)), floatLiteral(-2))
                 // Recursion will continue to push negation inwards as deeply as possible:
                 //     float4(float3(floatLiteral(-1)), floatLiteral(-2))
-                ExpressionArray args;
-                args.reserve_back(ctor.arguments().size());
-                for (const std::unique_ptr<Expression>& arg : ctor.arguments()) {
-                    args.push_back(negate_operand(context, arg->clone()));
-                }
-                auto negatedCtor = Constructor::Convert(context, ctor.fOffset,
-                                                        ctor.type(), std::move(args));
+                auto negatedCtor = Constructor::Convert(
+                        context, ctor.fOffset, ctor.type(),
+                        negate_operands(context, std::move(ctor.arguments())));
                 SkASSERT(negatedCtor);
                 return negatedCtor;
             }
@@ -72,6 +81,13 @@ static std::unique_ptr<Expression> negate_operand(const Context& context,
 
     // No simplified form; convert expression to Prefix(TK_MINUS, expression).
     return std::make_unique<PrefixExpression>(Token::Kind::TK_MINUS, std::move(operand));
+}
+
+static ExpressionArray negate_operands(const Context& context, ExpressionArray operands) {
+    for (std::unique_ptr<Expression>& arg : operands) {
+        arg = negate_operand(context, std::move(arg));
+    }
+    return operands;
 }
 
 static std::unique_ptr<Expression> logical_not_operand(const Context& context,
@@ -166,11 +182,10 @@ std::unique_ptr<Expression> PrefixExpression::Convert(const Context& context,
             break;
 
         default:
-            SK_ABORT("unsupported prefix operator\n");
+            SK_ABORT("unsupported prefix operator");
     }
 
     return PrefixExpression::Make(context, op, std::move(base));
-
 }
 
 std::unique_ptr<Expression> PrefixExpression::Make(const Context& context, Operator op,
