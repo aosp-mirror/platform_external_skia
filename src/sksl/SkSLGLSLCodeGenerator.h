@@ -21,6 +21,7 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
@@ -136,11 +137,18 @@ protected:
 
     void writeConstructor(const Constructor& c, Precedence parentPrecedence);
 
+    void writeSingleArgumentConstructor(const SingleArgumentConstructor& c,
+                                        Precedence parentPrecedence);
+
+    void writeMultiArgumentConstructor(const MultiArgumentConstructor& c,
+                                       Precedence parentPrecedence);
+
     virtual void writeFieldAccess(const FieldAccess& f);
 
     virtual void writeSwizzle(const Swizzle& swizzle);
 
     virtual void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
+
     void writeShortCircuitWorkaroundExpression(const BinaryExpression& b,
                                                Precedence parentPrecedence);
 
